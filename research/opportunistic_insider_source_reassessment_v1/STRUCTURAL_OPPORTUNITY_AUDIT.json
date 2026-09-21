@@ -1,0 +1,835 @@
+{
+  "classification": {
+    "owners_with_any_form4a": 33856,
+    "owners_with_any_history": 84973,
+    "rule": "At each calendar-year start, use only original-Form-4 P/S transaction months from the prior three complete calendar years whose filing date is before the cutoff. Require activity in all three; common month in all three => routine and absorbing, otherwise opportunistic; insufficient history => unclassified; after a public Form 4/A => amendment_ambiguous.",
+    "status_cell_counts": {
+      "amendment_ambiguous": 203158,
+      "opportunistic": 25664,
+      "routine": 42150,
+      "unclassified": 918650
+    }
+  },
+  "method_notes": [
+    "Owner history admits a transaction month only when its original filing date is earlier than the annual classification cutoff; transaction date alone is never treated as public availability.",
+    "Filing date is the bulk data's day-level public-availability proxy; acceptance timestamp is unavailable in the quarterly tables.",
+    "A transaction is counted once by accession plus NONDERIV_TRANS_SK.",
+    "Because the bulk table does not link a transaction row to one co-filer, multi-owner and missing-owner filings are excluded from both owner-history construction and CMP opportunity attribution rather than copied to every owner.",
+    "After an owner's first public Form 4/A, that owner fails closed as amendment_ambiguous because the bulk schema lacks a reliable original-row replacement key.",
+    "An event filed on or after the owner's first Form 4/A is excluded immediately, including within the same calendar year.",
+    "CIK/entity collision checks use only mappings observed on or before each event's filing date; future collisions do not alter earlier eligibility.",
+    "The sole associated owner must be classified opportunistic as of that filing year.",
+    "The one-slot indicator measures only whether a month offers at least one structurally eligible event; it does not rank names or test returns."
+  ],
+  "monthly": [
+    {
+      "distinct_entities": 4,
+      "distinct_opportunistic_owners": 4,
+      "month": "2017-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 4
+    },
+    {
+      "distinct_entities": 10,
+      "distinct_opportunistic_owners": 11,
+      "month": "2017-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 13
+    },
+    {
+      "distinct_entities": 21,
+      "distinct_opportunistic_owners": 22,
+      "month": "2017-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 34
+    },
+    {
+      "distinct_entities": 3,
+      "distinct_opportunistic_owners": 3,
+      "month": "2017-04",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 3
+    },
+    {
+      "distinct_entities": 28,
+      "distinct_opportunistic_owners": 30,
+      "month": "2017-05",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 49
+    },
+    {
+      "distinct_entities": 16,
+      "distinct_opportunistic_owners": 17,
+      "month": "2017-06",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 22
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2017-07",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 9
+    },
+    {
+      "distinct_entities": 16,
+      "distinct_opportunistic_owners": 17,
+      "month": "2017-08",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 23
+    },
+    {
+      "distinct_entities": 8,
+      "distinct_opportunistic_owners": 8,
+      "month": "2017-09",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 16
+    },
+    {
+      "distinct_entities": 2,
+      "distinct_opportunistic_owners": 2,
+      "month": "2017-10",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 2
+    },
+    {
+      "distinct_entities": 22,
+      "distinct_opportunistic_owners": 25,
+      "month": "2017-11",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 34
+    },
+    {
+      "distinct_entities": 11,
+      "distinct_opportunistic_owners": 11,
+      "month": "2017-12",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 21
+    },
+    {
+      "distinct_entities": 3,
+      "distinct_opportunistic_owners": 3,
+      "month": "2018-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 3
+    },
+    {
+      "distinct_entities": 16,
+      "distinct_opportunistic_owners": 18,
+      "month": "2018-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 28
+    },
+    {
+      "distinct_entities": 15,
+      "distinct_opportunistic_owners": 18,
+      "month": "2018-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 28
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2018-04",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 11
+    },
+    {
+      "distinct_entities": 14,
+      "distinct_opportunistic_owners": 17,
+      "month": "2018-05",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 35
+    },
+    {
+      "distinct_entities": 13,
+      "distinct_opportunistic_owners": 15,
+      "month": "2018-06",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 26
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2018-07",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 5
+    },
+    {
+      "distinct_entities": 18,
+      "distinct_opportunistic_owners": 20,
+      "month": "2018-08",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 29
+    },
+    {
+      "distinct_entities": 7,
+      "distinct_opportunistic_owners": 8,
+      "month": "2018-09",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 12
+    },
+    {
+      "distinct_entities": 17,
+      "distinct_opportunistic_owners": 16,
+      "month": "2018-10",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 23
+    },
+    {
+      "distinct_entities": 25,
+      "distinct_opportunistic_owners": 28,
+      "month": "2018-11",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 57
+    },
+    {
+      "distinct_entities": 26,
+      "distinct_opportunistic_owners": 24,
+      "month": "2018-12",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 53
+    },
+    {
+      "distinct_entities": 8,
+      "distinct_opportunistic_owners": 9,
+      "month": "2019-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 28
+    },
+    {
+      "distinct_entities": 14,
+      "distinct_opportunistic_owners": 15,
+      "month": "2019-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 38
+    },
+    {
+      "distinct_entities": 15,
+      "distinct_opportunistic_owners": 15,
+      "month": "2019-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 39
+    },
+    {
+      "distinct_entities": 4,
+      "distinct_opportunistic_owners": 4,
+      "month": "2019-04",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 8
+    },
+    {
+      "distinct_entities": 28,
+      "distinct_opportunistic_owners": 31,
+      "month": "2019-05",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 47
+    },
+    {
+      "distinct_entities": 15,
+      "distinct_opportunistic_owners": 22,
+      "month": "2019-06",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 29
+    },
+    {
+      "distinct_entities": 7,
+      "distinct_opportunistic_owners": 7,
+      "month": "2019-07",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 8
+    },
+    {
+      "distinct_entities": 25,
+      "distinct_opportunistic_owners": 26,
+      "month": "2019-08",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 37
+    },
+    {
+      "distinct_entities": 10,
+      "distinct_opportunistic_owners": 10,
+      "month": "2019-09",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 16
+    },
+    {
+      "distinct_entities": 4,
+      "distinct_opportunistic_owners": 4,
+      "month": "2019-10",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 25
+    },
+    {
+      "distinct_entities": 9,
+      "distinct_opportunistic_owners": 9,
+      "month": "2019-11",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 15
+    },
+    {
+      "distinct_entities": 10,
+      "distinct_opportunistic_owners": 11,
+      "month": "2019-12",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 14
+    },
+    {
+      "distinct_entities": 7,
+      "distinct_opportunistic_owners": 6,
+      "month": "2020-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 13
+    },
+    {
+      "distinct_entities": 15,
+      "distinct_opportunistic_owners": 17,
+      "month": "2020-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 29
+    },
+    {
+      "distinct_entities": 51,
+      "distinct_opportunistic_owners": 55,
+      "month": "2020-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 112
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2020-04",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 10
+    },
+    {
+      "distinct_entities": 18,
+      "distinct_opportunistic_owners": 20,
+      "month": "2020-05",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 35
+    },
+    {
+      "distinct_entities": 7,
+      "distinct_opportunistic_owners": 7,
+      "month": "2020-06",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 40
+    },
+    {
+      "distinct_entities": 2,
+      "distinct_opportunistic_owners": 2,
+      "month": "2020-07",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 2
+    },
+    {
+      "distinct_entities": 8,
+      "distinct_opportunistic_owners": 10,
+      "month": "2020-08",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 32
+    },
+    {
+      "distinct_entities": 11,
+      "distinct_opportunistic_owners": 11,
+      "month": "2020-09",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 24
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2020-10",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 9
+    },
+    {
+      "distinct_entities": 7,
+      "distinct_opportunistic_owners": 8,
+      "month": "2020-11",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 17
+    },
+    {
+      "distinct_entities": 10,
+      "distinct_opportunistic_owners": 8,
+      "month": "2020-12",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 17
+    },
+    {
+      "distinct_entities": 3,
+      "distinct_opportunistic_owners": 3,
+      "month": "2021-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 4
+    },
+    {
+      "distinct_entities": 3,
+      "distinct_opportunistic_owners": 3,
+      "month": "2021-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 3
+    },
+    {
+      "distinct_entities": 12,
+      "distinct_opportunistic_owners": 12,
+      "month": "2021-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 15
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2021-04",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 5
+    },
+    {
+      "distinct_entities": 10,
+      "distinct_opportunistic_owners": 11,
+      "month": "2021-05",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 20
+    },
+    {
+      "distinct_entities": 14,
+      "distinct_opportunistic_owners": 14,
+      "month": "2021-06",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 22
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2021-07",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 10
+    },
+    {
+      "distinct_entities": 13,
+      "distinct_opportunistic_owners": 13,
+      "month": "2021-08",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 23
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2021-09",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 8
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 6,
+      "month": "2021-10",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 8
+    },
+    {
+      "distinct_entities": 15,
+      "distinct_opportunistic_owners": 15,
+      "month": "2021-11",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 21
+    },
+    {
+      "distinct_entities": 14,
+      "distinct_opportunistic_owners": 15,
+      "month": "2021-12",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 30
+    },
+    {
+      "distinct_entities": 4,
+      "distinct_opportunistic_owners": 4,
+      "month": "2022-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 5
+    },
+    {
+      "distinct_entities": 12,
+      "distinct_opportunistic_owners": 12,
+      "month": "2022-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 17
+    },
+    {
+      "distinct_entities": 15,
+      "distinct_opportunistic_owners": 17,
+      "month": "2022-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 27
+    },
+    {
+      "distinct_entities": 7,
+      "distinct_opportunistic_owners": 7,
+      "month": "2022-04",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 13
+    },
+    {
+      "distinct_entities": 27,
+      "distinct_opportunistic_owners": 29,
+      "month": "2022-05",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 56
+    },
+    {
+      "distinct_entities": 14,
+      "distinct_opportunistic_owners": 16,
+      "month": "2022-06",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 29
+    },
+    {
+      "distinct_entities": 7,
+      "distinct_opportunistic_owners": 7,
+      "month": "2022-07",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 7
+    },
+    {
+      "distinct_entities": 15,
+      "distinct_opportunistic_owners": 15,
+      "month": "2022-08",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 36
+    },
+    {
+      "distinct_entities": 19,
+      "distinct_opportunistic_owners": 18,
+      "month": "2022-09",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 77
+    },
+    {
+      "distinct_entities": 4,
+      "distinct_opportunistic_owners": 4,
+      "month": "2022-10",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 21
+    },
+    {
+      "distinct_entities": 15,
+      "distinct_opportunistic_owners": 15,
+      "month": "2022-11",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 20
+    },
+    {
+      "distinct_entities": 15,
+      "distinct_opportunistic_owners": 16,
+      "month": "2022-12",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 46
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 6,
+      "month": "2023-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 11
+    },
+    {
+      "distinct_entities": 9,
+      "distinct_opportunistic_owners": 12,
+      "month": "2023-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 25
+    },
+    {
+      "distinct_entities": 31,
+      "distinct_opportunistic_owners": 34,
+      "month": "2023-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 52
+    },
+    {
+      "distinct_entities": 7,
+      "distinct_opportunistic_owners": 8,
+      "month": "2023-04",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 10
+    },
+    {
+      "distinct_entities": 22,
+      "distinct_opportunistic_owners": 28,
+      "month": "2023-05",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 42
+    },
+    {
+      "distinct_entities": 12,
+      "distinct_opportunistic_owners": 14,
+      "month": "2023-06",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 19
+    },
+    {
+      "distinct_entities": 4,
+      "distinct_opportunistic_owners": 4,
+      "month": "2023-07",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 8
+    },
+    {
+      "distinct_entities": 19,
+      "distinct_opportunistic_owners": 20,
+      "month": "2023-08",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 52
+    },
+    {
+      "distinct_entities": 11,
+      "distinct_opportunistic_owners": 11,
+      "month": "2023-09",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 19
+    },
+    {
+      "distinct_entities": 8,
+      "distinct_opportunistic_owners": 9,
+      "month": "2023-10",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 13
+    },
+    {
+      "distinct_entities": 13,
+      "distinct_opportunistic_owners": 13,
+      "month": "2023-11",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 28
+    },
+    {
+      "distinct_entities": 12,
+      "distinct_opportunistic_owners": 14,
+      "month": "2023-12",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 33
+    },
+    {
+      "distinct_entities": 1,
+      "distinct_opportunistic_owners": 1,
+      "month": "2024-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 1
+    },
+    {
+      "distinct_entities": 14,
+      "distinct_opportunistic_owners": 14,
+      "month": "2024-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 35
+    },
+    {
+      "distinct_entities": 6,
+      "distinct_opportunistic_owners": 6,
+      "month": "2024-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 13
+    },
+    {
+      "distinct_entities": 6,
+      "distinct_opportunistic_owners": 8,
+      "month": "2024-04",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 12
+    },
+    {
+      "distinct_entities": 13,
+      "distinct_opportunistic_owners": 12,
+      "month": "2024-05",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 20
+    },
+    {
+      "distinct_entities": 10,
+      "distinct_opportunistic_owners": 11,
+      "month": "2024-06",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 13
+    },
+    {
+      "distinct_entities": 2,
+      "distinct_opportunistic_owners": 3,
+      "month": "2024-07",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 5
+    },
+    {
+      "distinct_entities": 9,
+      "distinct_opportunistic_owners": 9,
+      "month": "2024-08",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 15
+    },
+    {
+      "distinct_entities": 4,
+      "distinct_opportunistic_owners": 4,
+      "month": "2024-09",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 8
+    },
+    {
+      "distinct_entities": 4,
+      "distinct_opportunistic_owners": 3,
+      "month": "2024-10",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 7
+    },
+    {
+      "distinct_entities": 10,
+      "distinct_opportunistic_owners": 10,
+      "month": "2024-11",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 13
+    },
+    {
+      "distinct_entities": 11,
+      "distinct_opportunistic_owners": 16,
+      "month": "2024-12",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 26
+    },
+    {
+      "distinct_entities": 3,
+      "distinct_opportunistic_owners": 3,
+      "month": "2025-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 22
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2025-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 7
+    },
+    {
+      "distinct_entities": 18,
+      "distinct_opportunistic_owners": 18,
+      "month": "2025-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 65
+    },
+    {
+      "distinct_entities": 7,
+      "distinct_opportunistic_owners": 7,
+      "month": "2025-04",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 120
+    },
+    {
+      "distinct_entities": 17,
+      "distinct_opportunistic_owners": 17,
+      "month": "2025-05",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 147
+    },
+    {
+      "distinct_entities": 9,
+      "distinct_opportunistic_owners": 11,
+      "month": "2025-06",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 24
+    },
+    {
+      "distinct_entities": 1,
+      "distinct_opportunistic_owners": 1,
+      "month": "2025-07",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 2
+    },
+    {
+      "distinct_entities": 9,
+      "distinct_opportunistic_owners": 9,
+      "month": "2025-08",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 12
+    },
+    {
+      "distinct_entities": 4,
+      "distinct_opportunistic_owners": 4,
+      "month": "2025-09",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 4
+    },
+    {
+      "distinct_entities": 2,
+      "distinct_opportunistic_owners": 2,
+      "month": "2025-10",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 3
+    },
+    {
+      "distinct_entities": 16,
+      "distinct_opportunistic_owners": 17,
+      "month": "2025-11",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 21
+    },
+    {
+      "distinct_entities": 5,
+      "distinct_opportunistic_owners": 5,
+      "month": "2025-12",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 7
+    },
+    {
+      "distinct_entities": 3,
+      "distinct_opportunistic_owners": 3,
+      "month": "2026-01",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 3
+    },
+    {
+      "distinct_entities": 8,
+      "distinct_opportunistic_owners": 8,
+      "month": "2026-02",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 9
+    },
+    {
+      "distinct_entities": 12,
+      "distinct_opportunistic_owners": 13,
+      "month": "2026-03",
+      "one_slot_occupancy_indicator": 1,
+      "opportunistic_purchase_transaction_rows": 16
+    }
+  ],
+  "schema_version": 1,
+  "scope": "structural_opportunity_only_no_market_bars_no_economic_outcomes",
+  "summary": {
+    "distinct_entities": 447,
+    "distinct_entity_month_opportunities": 1225,
+    "distinct_opportunistic_owners": 560,
+    "distinct_opportunistic_purchase_accessions": 1659,
+    "entities_with_repeat_events": 274,
+    "events_per_month_max": 147,
+    "events_per_month_median": 19,
+    "events_per_month_min": 1,
+    "events_per_month_p90": 47.0,
+    "filing_latency_calendar_days": {
+      "count": 2649,
+      "max": 838,
+      "median": 1,
+      "min": 0,
+      "negative_count": 0,
+      "p90": 4.0,
+      "p99": 118.07999999999993
+    },
+    "months_with_at_least_one_event": 111,
+    "months_with_zero_events": 0,
+    "one_slot_structural_occupancy_rate": 1.0,
+    "share_of_transaction_rows_from_repeat_entities": 0.9346923367308418,
+    "total_opportunistic_purchase_transaction_rows": 2649
+  },
+  "window": {
+    "end_month": "2026-03",
+    "months": 111,
+    "start_month": "2017-01"
+  }
+}

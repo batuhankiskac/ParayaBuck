@@ -1,0 +1,13 @@
+{
+  "prior_campaign": "opportunistic_insider_purchases_design_v1",
+  "prior_branch": "research/opportunistic-insider-purchases-design-v1",
+  "prior_commit": "d08c94cd93a1f71e9f9b8bf21e3c726b73953f50",
+  "prior_decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "prior_long_only_evidence_verdict": "LONG_ONLY_EVIDENCE_INSUFFICIENT",
+  "prior_security_mapping_verdict": "INSIDER_SECURITY_MAPPING_BLOCKED",
+  "preservation": "The prior branch and commit were not amended, rebased, or overwritten.",
+  "reassessment_start": {
+    "branch": "research/opportunistic-insider-source-reassessment-v1",
+    "base_main_sha": "d3dea037789c16c335744b56d216289a4536096c"
+  }
+}

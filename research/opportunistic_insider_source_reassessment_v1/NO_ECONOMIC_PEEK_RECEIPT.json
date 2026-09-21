@@ -1,0 +1,29 @@
+{
+  "status": "NO_ECONOMIC_PEEK_VERIFIED",
+  "campaign": "opportunistic_insider_source_reassessment_v1",
+  "allowed_outputs": [
+    "source availability and hashes",
+    "schema and field semantics",
+    "mapping coverage and ambiguity counts",
+    "owner classification state counts",
+    "filing latency",
+    "monthly event opportunity counts",
+    "external literature results"
+  ],
+  "not_computed": [
+    "candidate returns",
+    "PnL or NAV",
+    "Sharpe or other risk-adjusted metrics",
+    "drawdown",
+    "hit rate",
+    "information coefficient",
+    "bucket or parameter sweep",
+    "transaction-cost backtest",
+    "correlation or combination with V3 outcomes"
+  ],
+  "price_or_bar_files_opened_by_structural_script": false,
+  "candidate_frozen": false,
+  "economic_test_authorized": false,
+  "paper_change_authorized": false,
+  "live_change_authorized": false
+}

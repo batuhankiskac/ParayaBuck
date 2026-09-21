@@ -1,0 +1,15 @@
+{
+  "campaign": "opportunistic_insider_source_reassessment_v1",
+  "decision": "REASSESSMENT_CONFIRMS_DESIGN_REJECT",
+  "official_source_verdict": "OFFICIAL_SEC_BULK_SOURCE_USABLE_WITH_ONE_CURRENT_QUARTER_ACCESS_GAP",
+  "security_mapping_verdict": "INSIDER_SECURITY_MAPPING_FEASIBLE_FAIL_CLOSED",
+  "classification_verdict": "CMP_CALENDAR_CLASSIFICATION_FEASIBLE_FAIL_CLOSED",
+  "modern_long_leg_verdict": "MODERN_LIQUID_LONG_LEG_EVIDENCE_INSUFFICIENT",
+  "one_slot_verdict": "ONE_SLOT_RULE_NOT_DEFENSIBLE",
+  "primary_reason": "The prior source and mapping blockers can be narrowed enough to count a conservative structural subset, but modern liquid long-only evidence remains insufficient and no external evidence validates concentrating the signal into one slot.",
+  "economic_test_authorized": false,
+  "combination_test_authorized": false,
+  "candidate_frozen": false,
+  "paper_change_authorized": false,
+  "live_change_authorized": false
+}

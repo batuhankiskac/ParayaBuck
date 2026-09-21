@@ -1,0 +1,96 @@
+{
+  "boundary_fixtures": [
+    {
+      "actual": "44",
+      "expected": "44",
+      "name": "distinct_1_to_49",
+      "pass": true
+    },
+    {
+      "actual": "1",
+      "expected": "1",
+      "name": "five_high_outliers",
+      "pass": true
+    },
+    {
+      "actual": "7",
+      "expected": "7",
+      "name": "heavy_ties",
+      "pass": true
+    },
+    {
+      "actual": "44",
+      "expected": "44",
+      "name": "single_extreme_outlier",
+      "pass": true
+    },
+    {
+      "actual": "below",
+      "expected": "below",
+      "name": "formation_just_below",
+      "pass": true
+    },
+    {
+      "actual": "equal",
+      "expected": "equal",
+      "name": "formation_equal",
+      "pass": true
+    },
+    {
+      "actual": "above",
+      "expected": "above",
+      "name": "formation_just_above",
+      "pass": true
+    }
+  ],
+  "candidate": "AV49_D1_NORMALRET_M1_LONG / DESIGN_V2",
+  "comparison": {
+    "exact_structural_match": true,
+    "mismatched_decision_sessions": [],
+    "runner_comparison_sha256": "8baed348f477f4f12746c1f27bc7c7a2b8214a2c35fe5271260a82a1e6515e33",
+    "runner_decision_count": 115,
+    "runner_reconstruction_sha256": "590a08a139c2dcf8c9b0e452f0d258291879b2848d8369539af2b8a5248ca28e",
+    "verifier_comparison_sha256": "8baed348f477f4f12746c1f27bc7c7a2b8214a2c35fe5271260a82a1e6515e33",
+    "verifier_decision_count": 115
+  },
+  "coverage": {
+    "bars_rows_through_endpoint": 11681230,
+    "decision_count": 115,
+    "lifetime_records": 9010,
+    "reserved_target_count": 0,
+    "sessions_through_endpoint": 2658
+  },
+  "economic_outputs_produced": 0,
+  "evidence_retention": "Runner retains full per-boundary evidence; verifier retains independent hashes and exact comparison results.",
+  "gates": {
+    "independent_structural_match": true,
+    "month_end_first_open_schedule": true,
+    "quantile_uniqueness": true,
+    "reserved_roles_zero_targets": true,
+    "runner_economic_outputs_zero": true
+  },
+  "independent_reconstruction_sha256": "a5e2db4b2561fdc351bd2c8c31d7c4a312512c09d6089012c1851cd186229d52",
+  "inputs": {
+    "bars": {
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "corporate_actions": {
+      "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "lifetimes": {
+      "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+      "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    }
+  },
+  "quantile_rule": {
+    "one_based_order_statistic": 44,
+    "sample_size": 49,
+    "zero_based_index": 43
+  },
+  "runner_output": "research/abnormal_volume_readiness_v2/RUNNER_OUTPUT.json",
+  "schema_version": 2,
+  "status": "PASS",
+  "verifier": "independent-readiness-v2-verifier-v1"
+}

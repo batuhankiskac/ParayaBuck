@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "stage": "abnormal_volume_readiness_v2",
+  "candidate": "AV49_D1_NORMALRET_M1_LONG / DESIGN_V2",
+  "status": "PASS_SCOPE_LIMITED",
+  "candidate_targets_calculated": true,
+  "target_scope": "causal structural reconstruction only",
+  "future_returns_read": false,
+  "candidate_pnl_or_nav_calculated": false,
+  "performance_statistics_calculated": false,
+  "economic_parameter_sweep_run": false,
+  "fill_price_persisted_or_used": false,
+  "fill_session_use": "presence and positive opening print validation only",
+  "reviewer": "/root/readiness_v2_verifier_impl",
+  "independent_verification_status": "PASS",
+  "scope_limit": "Repository artifacts and process outputs cannot prove the absence of unpersisted external reads.",
+  "economic_outputs_produced": 0
+}

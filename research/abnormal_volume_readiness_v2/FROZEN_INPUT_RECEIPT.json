@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "candidate": "AV49_D1_NORMALRET_M1_LONG / DESIGN_V2",
+  "frozen_design_v2_sha": "a39cf6dfc72a4a4aa92d95b3f760626e2ce216c6",
+  "updated_main_sha": "980c6b90b7f316bcec6a9466dfc9b0e1756cc748",
+  "files": [
+    {"path": "research/abnormal_volume_design_repair_v1/CANDIDATE_DESIGN_V2.md", "sha256": "ecb1b89dd39b819a01e8893a8d3a2ef3a6d8814228d4f85f09aa4f1952e351eb"},
+    {"path": "research/abnormal_volume_design_repair_v1/FUTURE_TEST_PROTOCOL_V2.md", "sha256": "18e3a0990dd14c58166d565115ff6da6704fee755d400321440dbd005f779c4b"},
+    {"path": "research/abnormal_volume_design_repair_v1/QUANTILE_SPECIFICATION.md", "sha256": "6b535cf5ce7f6a03b8bfa315a9e2bfa80883a1ef4a030bc4a42a46c9421649be"},
+    {"path": "research/abnormal_volume_design_repair_v1/DESIGN_DIFF_FROM_V1.md", "sha256": "46b67d9cb3c70ae0fa51252cdc5be1c8f5e29b9d5c2edfdf1f197ad3b7f6d9e5"},
+    {"path": "research/abnormal_volume_design_repair_v1/NO_ECONOMIC_PEEK_RECEIPT.json", "sha256": "9f0cb91ec9d8aa21c263989e124bd636b755e5bae351cf427fc83aad73e45c59"},
+    {"path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv", "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"},
+    {"path": "data/historical/equity_entity_lifetimes_full_v5.csv", "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"},
+    {"path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv", "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"},
+    {"path": "config/settings.yaml", "sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"}
+  ],
+  "canonical_endpoint": "2026-07-30",
+  "partial_2026_07_31_rows_allowed": 0,
+  "economic_inputs_or_outputs_allowed": false
+}

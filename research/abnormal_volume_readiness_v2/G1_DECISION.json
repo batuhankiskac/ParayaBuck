@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "candidate": "AV49_D1_NORMALRET_M1_LONG / DESIGN_V2",
+  "frozen_design_v2_sha": "a39cf6dfc72a4a4aa92d95b3f760626e2ce216c6",
+  "decision": "G1_READY_FOR_FROZEN_ECONOMIC_TEST",
+  "gates": {
+    "G1.1_data_identity": "PASS",
+    "G1.2_signal_identity": "PASS",
+    "G1.3_quantile_uniqueness": "PASS",
+    "G1.4_PIT_49_session_history": "PASS",
+    "G1.5_middle_40_formation_return": "PASS",
+    "G1.6_month_end_decision_timing": "PASS",
+    "G1.7_first_next_month_open_fill": "PASS",
+    "G1.8_no_extra_day_bug": "PASS",
+    "G1.9_lifecycle": "PASS",
+    "G1.10_split_consistent_dollar_volume": "PASS",
+    "G1.11_missing_data_fail_closed": "PASS",
+    "G1.12_reserved_roles": "PASS",
+    "G1.13_deterministic_replay": "PASS",
+    "G1.14_independent_verifier": "PASS"
+  },
+  "runner_decisions": 115,
+  "verifier_decisions": 115,
+  "mismatched_decision_sessions": [],
+  "economic_gates_evaluated": false,
+  "economic_outputs_produced": 0,
+  "authorization": "ONE_SEPARATELY_CONTROLLED_FROZEN_ECONOMIC_EXPERIMENT"
+}

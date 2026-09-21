@@ -1,0 +1,36 @@
+{
+  "schema_version": 2,
+  "status": "PASS",
+  "focused_readiness_and_contract_tests": {
+    "passed": 72,
+    "failed": 0
+  },
+  "readiness_unit_tests": {
+    "passed": 14,
+    "failed": 0
+  },
+  "canonical_runner": {
+    "status": "PASS",
+    "decisions": 115,
+    "bars_consumed": 11681230,
+    "repeated_output_byte_identical": true,
+    "output_sha256": "cfa881156725f471736f7db8de6255b9696a62e0f93977290ea7b9e9fd3cd675"
+  },
+  "independent_verifier": {
+    "status": "PASS",
+    "decisions": 115,
+    "mismatched_decision_sessions": [],
+    "comparison_sha256": "8baed348f477f4f12746c1f27bc7c7a2b8214a2c35fe5271260a82a1e6515e33"
+  },
+  "full_pytest": {
+    "sandbox": "1132 passed, 1 skipped, 6 loopback socket tests blocked by PermissionError, 2 warnings",
+    "permitted_loopback_rerun": "6 passed",
+    "effective_result": "1138 passed, 1 skipped, 2 warnings"
+  },
+  "ruff_check": "PASS",
+  "ruff_format_check": "PASS_254_FILES",
+  "mypy": "PASS_137_SOURCE_FILES",
+  "git_diff_check": "PASS",
+  "economic_tests_run": false,
+  "economic_outputs_produced": 0
+}

@@ -1,0 +1,57 @@
+{
+  "abnormal_volume_intensity_distribution_eligible": {
+    "count": 1730,
+    "maximum": 22.483954665958745,
+    "median": 1.2469021922516543,
+    "minimum": 1.0004433605009557,
+    "p25": 1.1295837704536649,
+    "p75": 1.501432269869203
+  },
+  "average_middle_40_conditioned_count": 15.043478260869565,
+  "average_pit_pool": 287.504347826087,
+  "average_signal_eligible_before_middle_40": 55.25217391304348,
+  "decisions_with_fewer_than_six_selections": 26,
+  "definitions": {
+    "abnormal_volume_eligible_before_return_condition": "final eligible plus formation_return_outside_middle_40 exclusions",
+    "descriptive_quantiles": "linear interpolation on ordered observed values; diagnostics only",
+    "formation_return_percentile": "one-based average return rank divided by 50",
+    "middle_40_conditioned_count": "final eligible after volume-rank and return-rank gates, before top-six selection",
+    "valid_decision_cross_section": "evaluated_count > 0 under the frozen PIT scanner"
+  },
+  "eligible_record_count": 1730,
+  "formation_return_percentile_distribution_eligible": {
+    "count": 1730,
+    "maximum": 0.7,
+    "median": 0.52,
+    "minimum": 0.32,
+    "p25": 0.4,
+    "p75": 0.62
+  },
+  "note": "No diagnostic was used to alter the frozen signal or gates.",
+  "percentage_decisions_with_fewer_than_six_selections": 0.22608695652173913,
+  "q90_threshold_distribution_eligible_dollars": {
+    "count": 1730,
+    "maximum": 53907461465.0,
+    "median": 417333747.89,
+    "minimum": 100942985.0,
+    "p25": 276295046.2475,
+    "p75": 732037640.005
+  },
+  "scheduled_monthly_decisions": 115,
+  "schema_version": "abnormal-volume-signal-diagnostics-v1",
+  "selected_name_count_distribution": {
+    "0": 8,
+    "1": 1,
+    "2": 4,
+    "3": 4,
+    "4": 5,
+    "5": 4,
+    "6": 89
+  },
+  "selected_record_count": 595,
+  "selected_records_with_duplicate_q90_reference_value_count": 0,
+  "selected_records_with_duplicate_q90_reference_value_frequency": 0.0,
+  "threshold_equality_count": 0,
+  "threshold_equality_frequency": 0.0,
+  "valid_decision_cross_sections": 115
+}

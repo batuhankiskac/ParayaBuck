@@ -1,0 +1,182 @@
+{
+  "contribution_basis": "entity-aggregated gross price P&L plus dividends before slippage, spread, and fees",
+  "largest_absolute_contribution_share": 0.0405144105454154,
+  "largest_negative_contributor": {
+    "dividend_cash": 0.0,
+    "entity_id": "b3ce91f9-c7b2-4ab2-9a16-57fb17e06294",
+    "gross_pnl": -5557.544737449172,
+    "realized_pnl": -5563.695006821912,
+    "symbols": [
+      "GLW"
+    ],
+    "transaction_cost": 6.150269372739718
+  },
+  "largest_positive_contributor": {
+    "dividend_cash": 0.0,
+    "entity_id": "363b9094-c5ae-4899-bbc0-f94b27c87a6e",
+    "gross_pnl": 9915.659402871433,
+    "realized_pnl": 9905.424713351476,
+    "symbols": [
+      "LITE"
+    ],
+    "transaction_cost": 10.234689519956973
+  },
+  "maximum_realized_concentration": 0.19763221491694277,
+  "median_target_holdings": 6,
+  "post_overlay_target_position_count_distribution": {
+    "0": 20,
+    "1": 1,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 2,
+    "6": 80
+  },
+  "pre_overlay_signal_selection_count_distribution": {
+    "0": 8,
+    "1": 1,
+    "2": 4,
+    "3": 4,
+    "4": 5,
+    "5": 4,
+    "6": 89
+  },
+  "prespecified_leave_one_dominant_name_out": {
+    "development": {
+      "actual_decision_count": 60,
+      "annualized_realized_turnover": 9.379851549802254,
+      "annualized_target_turnover": 4.685466624299231,
+      "annualized_volatility": 0.10790336180507563,
+      "average_exposure": 0.40028214190061573,
+      "average_positions": 4.324861000794281,
+      "cagr": 0.032607623883011305,
+      "calmar": 0.22299087500656659,
+      "fill_count": 509,
+      "max_drawdown": 0.14622851218486443,
+      "maximum_realized_concentration": 0.19763221491694277,
+      "maximum_target_concentration": 0.1,
+      "median_exposure": 0.5458941960482336,
+      "net_total_return": 0.1742295187980778,
+      "positive_month_ratio": 0.5666666666666667,
+      "profit_factor": 1.193083849239686,
+      "realized_notional_turnover": 9.332511107506237,
+      "scheduled_decision_count": 60,
+      "sharpe": 0.3506196218002475,
+      "sortino": 0.4405095201478933,
+      "transaction_costs": 1571.7629800097711,
+      "worst_month": -0.05465173789975364
+    },
+    "full": {
+      "actual_decision_count": 114,
+      "annualized_realized_turnover": 9.915093438366005,
+      "annualized_target_turnover": 4.956144518258412,
+      "annualized_volatility": 0.10255148485769347,
+      "average_exposure": 0.42243734035002356,
+      "average_positions": 4.56857855361596,
+      "cagr": 0.029096083217117652,
+      "calmar": 0.19305157461729494,
+      "fill_count": 1029,
+      "max_drawdown": 0.15071663245843847,
+      "maximum_realized_concentration": 0.19763221491694277,
+      "maximum_target_concentration": 0.1,
+      "median_exposure": 0.5460511092566211,
+      "net_total_return": 0.3164514023627272,
+      "positive_month_ratio": 0.5565217391304348,
+      "profit_factor": 1.136231908984692,
+      "realized_notional_turnover": 9.890392571793729,
+      "scheduled_decision_count": 114,
+      "sharpe": 0.33053807913294914,
+      "sortino": 0.4256481918892807,
+      "transaction_costs": 3325.1417473145184,
+      "worst_month": -0.058106376544003635
+    },
+    "omitted_entity_id": "363b9094-c5ae-4899-bbc0-f94b27c87a6e",
+    "omitted_symbols": [
+      "LITE"
+    ],
+    "validation": {
+      "actual_decision_count": 54,
+      "annualized_realized_turnover": 10.499968617914526,
+      "annualized_target_turnover": 5.251922530427829,
+      "annualized_volatility": 0.09641036888490166,
+      "average_exposure": 0.44675590604122195,
+      "average_positions": 4.836094158674804,
+      "cagr": 0.025272567803944934,
+      "calmar": 0.18252031712180994,
+      "fill_count": 520,
+      "max_drawdown": 0.13846440879827418,
+      "maximum_realized_concentration": 0.13960571807169078,
+      "maximum_target_concentration": 0.1,
+      "median_exposure": 0.5462454318978844,
+      "net_total_return": 0.12111932231973288,
+      "positive_month_ratio": 0.5454545454545454,
+      "profit_factor": 1.0932462120912452,
+      "realized_notional_turnover": 10.455004422469703,
+      "scheduled_decision_count": 54,
+      "sharpe": 0.3069828589521498,
+      "sortino": 0.40503516137177165,
+      "transaction_costs": 1753.3787673047477,
+      "worst_month": -0.058106376544003635
+    }
+  },
+  "schema_version": "abnormal-volume-concentration-diagnostics-v1",
+  "top_5_absolute_contribution_shares": [
+    {
+      "absolute_contribution_share": 0.0405144105454154,
+      "dividend_cash": 0.0,
+      "entity_id": "363b9094-c5ae-4899-bbc0-f94b27c87a6e",
+      "gross_pnl": 9915.659402871433,
+      "realized_pnl": 9905.424713351476,
+      "symbols": [
+        "LITE"
+      ],
+      "transaction_cost": 10.234689519956973
+    },
+    {
+      "absolute_contribution_share": 0.04002373324217473,
+      "dividend_cash": 0.0,
+      "entity_id": "b1dca6a5-6502-455d-8c80-de5b83faba76",
+      "gross_pnl": 9795.56907081045,
+      "realized_pnl": 9785.005862180034,
+      "symbols": [
+        "AMC"
+      ],
+      "transaction_cost": 10.563208630415337
+    },
+    {
+      "absolute_contribution_share": 0.03369780648171275,
+      "dividend_cash": 0.0,
+      "entity_id": "fa85d280-d0fe-45db-972a-278dceb2f7ac",
+      "gross_pnl": 8247.336372374983,
+      "realized_pnl": 8236.628242987994,
+      "symbols": [
+        "FLEX"
+      ],
+      "transaction_cost": 10.708129386988267
+    },
+    {
+      "absolute_contribution_share": 0.022707582014396873,
+      "dividend_cash": 0.0,
+      "entity_id": "b3ce91f9-c7b2-4ab2-9a16-57fb17e06294",
+      "gross_pnl": -5557.544737449172,
+      "realized_pnl": -5563.695006821912,
+      "symbols": [
+        "GLW"
+      ],
+      "transaction_cost": 6.150269372739718
+    },
+    {
+      "absolute_contribution_share": 0.021498561315448424,
+      "dividend_cash": 573.4117951074562,
+      "entity_id": "0dd35bf7-a49c-4068-bce0-8e40b700454d",
+      "gross_pnl": 5261.644160335853,
+      "realized_pnl": 4645.813672574683,
+      "symbols": [
+        "XOM"
+      ],
+      "transaction_cost": 42.41869265371423
+    }
+  ],
+  "unique_traded_entities": 269,
+  "unique_traded_symbols": 269
+}

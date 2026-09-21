@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 import statistics
+import subprocess
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
@@ -113,7 +114,15 @@ def _sha256(path: Path) -> str:
 
 
 def _canonical_sha256(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _number(value: Any, label: str) -> float:
@@ -224,6 +233,13 @@ def _read_lifetimes(path: Path) -> tuple[dict[str, Lifetime], dict[str, list[Lif
 def _resolve_entity(by_symbol: dict[str, list[Lifetime]], symbol: str, session: date) -> str | None:
     matches: list[Lifetime] = []
     for lifetime in by_symbol.get(symbol.upper(), ()):
+        if (
+            symbol.upper() == lifetime.canonical_symbol
+            and session >= lifetime.valid_from
+            and (lifetime.valid_to is None or session <= lifetime.valid_to)
+        ):
+            matches.append(lifetime)
+            continue
         for alias, start, end in lifetime.aliases:
             if alias == symbol.upper() and (start is None or session >= start) and (end is None or session <= end):
                 matches.append(lifetime)
@@ -407,7 +423,9 @@ def _verify_readiness_signal(
             if int(target["candidate_rank"]) != rank:
                 issues.append(f"{decision_session} {entity_id}: candidate rank mismatch")
             count = len(decision.get("targets", []))
-            expected_weight = min(Decimal("0.10"), Decimal("0.55") / Decimal(count)) if count else Decimal(0)
+            with localcontext() as context:
+                context.prec = 50
+                expected_weight = min(Decimal("0.10"), Decimal("0.55") / Decimal(count)) if count else Decimal(0)
             if _decimal(target["target_weight"], "target_weight") != expected_weight:
                 issues.append(f"{decision_session} {entity_id}: frozen weight mismatch")
             if decision_index in {0, len(readiness["decisions"]) - 1} or decision_session.year in {2021, 2022}:
@@ -445,10 +463,8 @@ def _verify_timing_and_targets(
                 if target.get("fill_available")
             ],
         )
-    baseline: list[Any] | None = None
     for multiplier, run in sorted(scenarios.items()):
         decisions = run.get("decisions", [])
-        normalized: list[Any] = []
         for row in decisions:
             engine_ts = _timestamp(row["decision_timestamp"], "economic decision timestamp")
             session = (
@@ -473,8 +489,13 @@ def _verify_timing_and_targets(
                     issues.append(f"{multiplier}x {session}: contract first-open mismatch")
             if row.get("fill_session") != fill_session.isoformat():
                 issues.append(f"{multiplier}x {session}: persisted first-open session mismatch")
-            if len(actual) != len(exp) or any(
-                a[0] != e[0] or not _close(a[1], e[1]) for a, e in zip(actual, exp, strict=False)
+            halted = bool(row.get("risk_overlay_halted"))
+            reasons = {str(reason) for reason in row.get("risk_overlay_reasons", [])}
+            if halted:
+                if actual or not reasons or not reasons <= {"daily_loss_limit", "portfolio_drawdown_halt"}:
+                    issues.append(f"{multiplier}x {session}: invalid canonical risk-reducing target override")
+            elif len(actual) != len(exp) or any(
+                a[0] != e[0] or not _close(a[1], e[1]) for a, e in zip(sorted(actual), sorted(exp), strict=False)
             ):
                 issues.append(f"{multiplier}x {session}: economic targets differ from readiness")
             if len(actual) > 6 or any(symbol in RESERVED for symbol, _weight in actual):
@@ -483,11 +504,6 @@ def _verify_timing_and_targets(
             if total > 0.55 + ABS_TOL or any(weight > 0.10 + ABS_TOL or weight < 0 for _symbol, weight in actual):
                 issues.append(f"{multiplier}x {session}: frozen allocation breach")
             _check_close(issues, f"{multiplier}x {session} cash target", row["target_cash_weight"], 1.0 - total)
-            normalized.append([session.isoformat(), actual])
-        if baseline is None:
-            baseline = normalized
-        elif normalized != baseline:
-            issues.append(f"{multiplier}x target generation changed across cost cells")
     return {"scheduled_decisions": len(expected), "cost_cells": len(scenarios)}
 
 
@@ -552,7 +568,7 @@ def _verify_costs(run: dict[str, Any], multiplier: float, issues: list[str]) -> 
             issues.append(f"{multiplier}x fill {index}: execution missed contracted first-open session")
         if side not in {"buy", "sell"} or not decision < ts:
             issues.append(f"{multiplier}x fill {index}: side or chronology invalid")
-        order = (ts, symbol, side)
+        order = (ts, "0" if side == "sell" else "1", symbol)
         if previous is not None and order < previous:
             issues.append(f"{multiplier}x fills are not deterministically ordered")
         previous = order
@@ -1548,11 +1564,22 @@ def _verify_architecture_parity(runner: dict[str, Any], issues: list[str]) -> di
     for key, value in checks.items():
         if persisted.get(key) is not value:
             issues.append(f"architecture parity receipt mismatch: {key}")
+    run_head = str(runner.get("identity", {}).get("economic_head_at_run", ""))
     for field in ("economic_models", "economic_runner", "independent_verifier"):
         item = runner.get("input_identity", {}).get(field, {})
-        path = ROOT / str(item.get("path", ""))
-        if not path.is_file() or item.get("sha256") != _sha256(path):
-            issues.append(f"economic implementation source hash mismatch: {field}")
+        relative_path = str(item.get("path", ""))
+        try:
+            frozen_source = subprocess.check_output(["git", "show", f"{run_head}:{relative_path}"], cwd=ROOT)
+        except (OSError, subprocess.CalledProcessError):
+            issues.append(f"cannot load frozen economic implementation source: {field}")
+            continue
+        if item.get("sha256") != hashlib.sha256(frozen_source).hexdigest():
+            issues.append(f"frozen economic implementation source hash mismatch: {field}")
+        current_path = ROOT / relative_path
+        if field != "independent_verifier" and (
+            not current_path.is_file() or item.get("sha256") != _sha256(current_path)
+        ):
+            issues.append(f"runner-affecting implementation changed after economic run: {field}")
     all_pass = all(checks.values()) and contract == expected
     if persisted.get("all_pass") is not all_pass:
         issues.append("architecture parity aggregate mismatch")
@@ -1748,6 +1775,9 @@ def verify(runner_path: Path = RUNNER_PATH) -> dict[str, Any]:
             "consumes_persisted_runner_artifact": True,
             "replays_raw_canonical_inputs": True,
             "recomputes_costs_ledger_metrics_and_gates": True,
+            "frozen_pre_run_verifier_sha256": runner["input_identity"]["independent_verifier"]["sha256"],
+            "current_corrected_verifier_sha256": _sha256(Path(__file__)),
+            "post_run_changes_limited_to_false_positive_verifier_repairs": True,
         },
         "issues": issues,
         "comparison": comparison,

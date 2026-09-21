@@ -1,0 +1,39 @@
+{
+  "annualized_realized_one_way_turnover": 9.938198800529989,
+  "annualized_target_one_way_turnover": 4.9671315585357565,
+  "average_cash_percentage": 0.5758298523845626,
+  "average_realized_exposure": 0.4241268879855662,
+  "average_target_exposure_after_risk_overlay": 0.4234782608695652,
+  "average_target_exposure_before_risk_overlay": 0.478695652173913,
+  "cost_multiplier": 1.0,
+  "costs": {
+    "cost_to_positive_gross_profit": 0.017753931563986775,
+    "fees": 109.09429542435437,
+    "slippage": 2161.8191571312636,
+    "spread": 1080.9095785656318,
+    "total": 3351.8230311212496
+  },
+  "engine_decisions": 115,
+  "failed_first_open_executions": 0,
+  "filled_target_notional_ratio": 0.9998860006805949,
+  "fills": 1032,
+  "first_open_expirations": 0,
+  "lifecycle_induced_exits": 7,
+  "metric_actual_decision_count": 114,
+  "monthly_rebalance_completion": 0.9998860006805949,
+  "orders": 1032,
+  "risk_overlay_halted_decisions": 12,
+  "risk_overlay_reason_counts": {
+    "daily_loss_limit": 12,
+    "portfolio_drawdown_halt": 7
+  },
+  "scheduled_signal_decisions": 115,
+  "schema_version": "abnormal-volume-turnover-diagnostics-v1",
+  "unfilled_partial_target_notional_ratio": 0.0001139993194051987,
+  "unused_allocation_sources": [
+    "Frozen 0.55 candidate allocation leaves at least 0.45 target cash.",
+    "Fewer than six valid selections leave additional cash under the 0.10 per-name cap.",
+    "Canonical risk-overlay halts set affected monthly targets to cash.",
+    "Price drift and execution frictions create realized exposure differences between rebalances."
+  ]
+}

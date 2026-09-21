@@ -1,0 +1,145 @@
+{
+  "all_mandatory_gates_pass": false,
+  "gates": {
+    "G1": {
+      "evidence": "Pinned identity, readiness reconstruction, causal timing, lifecycle, control parity, and independent verification pass.",
+      "status": "PASS"
+    },
+    "G2": {
+      "observed": {
+        "cagr": 0.03704677337090878,
+        "net_total_return": 0.41724811772652637
+      },
+      "status": "PASS",
+      "threshold": "full 1x return > 0 and CAGR > 0"
+    },
+    "G3": {
+      "observed": {
+        "cagr": 0.032607623883011305,
+        "net_total_return": 0.1742295187980778
+      },
+      "status": "PASS",
+      "threshold": "development 1x return > 0 and CAGR > 0"
+    },
+    "G4": {
+      "observed": {
+        "cagr": 0.04191939095990316,
+        "max_drawdown": 0.13846440879827418,
+        "net_total_return": 0.2069600491539325,
+        "sharpe": 0.4650062079309228
+      },
+      "status": "PASS",
+      "threshold": "validation return/CAGR/Sharpe > 0 and maxDD <= 0.30"
+    },
+    "G5": {
+      "observed": {
+        "calmar": 0.245804147602122,
+        "max_drawdown": 0.15071663245843847,
+        "sharpe": 0.4024581394562929,
+        "sortino": 0.5199650827951326
+      },
+      "status": "PASS",
+      "threshold": "full Sharpe >= 0.35, Sortino >= 0.45, Calmar >= 0.20, maxDD <= 0.30"
+    },
+    "G6": {
+      "observed": {
+        "2.0": {
+          "full": {
+            "cagr": 0.03384486689823496,
+            "net_total_return": 0.37585269423478507,
+            "sharpe": 0.37250280995796914
+          },
+          "validation": {
+            "cagr": 0.038487828375477484,
+            "net_total_return": 0.18885823251000433,
+            "sharpe": 0.43133027049311906
+          }
+        },
+        "3.0": {
+          "full": {
+            "cagr": 0.030651009526010187,
+            "net_total_return": 0.33564354171766353,
+            "sharpe": 0.34253585813944815
+          },
+          "validation": {
+            "cagr": 0.03506551756474008,
+            "net_total_return": 0.17101728005183459,
+            "sharpe": 0.3976614266333632
+          }
+        }
+      },
+      "status": "PASS",
+      "threshold": "2x full/validation return and CAGR > 0; 3x full return/CAGR/Sharpe > 0"
+    },
+    "G7": {
+      "observed": {
+        "annualized_realized_turnover": 9.938198800529989,
+        "cost_to_positive_gross_profit": 0.017753931563986775,
+        "filled_target_notional_ratio": 0.9998860006805949,
+        "unfilled_partial_target_notional_ratio": 0.00011399931940514474
+      },
+      "status": "PASS",
+      "threshold": "annualized one-way turnover <= 12; fill >= 0.95; unfilled <= 0.05; costs <= 0.35 of positive gross profit"
+    },
+    "G8": {
+      "failed_clause": "Only 74.7826% of decisions held at least four names, below 90%.",
+      "observed": {
+        "decisions_with_at_least_four_ratio": 0.7478260869565218,
+        "largest_absolute_contribution_share": 0.0405144105454154,
+        "loo_full_cagr": 0.029096083217117652,
+        "loo_full_return": 0.3164514023627272,
+        "loo_validation_cagr": 0.025272567803944934,
+        "loo_validation_return": 0.12111932231973288,
+        "maximum_target_concentration": 0.1,
+        "median_target_holdings": 6
+      },
+      "status": "FAIL",
+      "threshold": "median holdings >= 5; >= 90% decisions hold >= 4; target <= 0.10; absolute contribution share <= 0.35; positive full/validation LOO return and CAGR"
+    },
+    "G9": {
+      "failed_clauses": [
+        "Maximum realized exposure 0.6114493547 exceeded 0.60.",
+        "Minimum realized cash 0.3885506453 fell below 0.40."
+      ],
+      "observed": {
+        "extra_privilege": false,
+        "maximum_actual_positions": 6,
+        "maximum_realized_exposure": 0.6114493546957258,
+        "maximum_target_exposure": 0.5499999999999999,
+        "minimum_realized_cash": 0.38855064530427413
+      },
+      "status": "FAIL",
+      "threshold": "target equity <= 0.55; realized gross <= 0.60; cash >= 0.40; positions <= 6; no privilege"
+    }
+  },
+  "independent_verifier_agreement": {
+    "G1": {
+      "status": "PASS"
+    },
+    "G2": {
+      "status": "PASS"
+    },
+    "G3": {
+      "status": "PASS"
+    },
+    "G4": {
+      "status": "PASS"
+    },
+    "G5": {
+      "status": "PASS"
+    },
+    "G6": {
+      "status": "PASS"
+    },
+    "G7": {
+      "status": "PASS"
+    },
+    "G8": {
+      "status": "FAIL"
+    },
+    "G9": {
+      "status": "FAIL"
+    }
+  },
+  "schema_version": "abnormal-volume-gates-v1"
+}

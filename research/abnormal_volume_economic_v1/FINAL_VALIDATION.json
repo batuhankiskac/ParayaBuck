@@ -1,0 +1,26 @@
+{
+  "schema_version": "abnormal-volume-final-validation-v1",
+  "status": "PASS",
+  "checks": {
+    "economic_runner_and_verifier_tests": "18 passed",
+    "focused_month_end_quantile_lifecycle_cost_ledger_verifier_tests": "108 passed",
+    "full_pytest_sandbox": "1132 passed, 1 skipped; 6 localhost-bind tests blocked only by sandbox PermissionError",
+    "localhost_bind_tests_outside_sandbox": "6 passed",
+    "ruff_check": "PASS",
+    "ruff_format_check": "PASS",
+    "mypy_src": "PASS",
+    "py_compile_research_harness": "PASS",
+    "json_validation": "PASS",
+    "git_diff_check": "PASS",
+    "production_isolation": "PASS"
+  },
+  "production_state": {
+    "local_main_sha": "980c6b90b7f316bcec6a9466dfc9b0e1756cc748",
+    "origin_main_sha": "980c6b90b7f316bcec6a9466dfc9b0e1756cc748",
+    "paper_equity_strategy": "equity_residual_momentum_v3",
+    "live_enabled": false,
+    "production_promotion_performed": false,
+    "protected_runtime_paths_unchanged": true
+  },
+  "candidate_rerun_performed_during_validation": false
+}

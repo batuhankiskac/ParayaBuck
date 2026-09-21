@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate": "AV49_D1_NORMALRET_M1_LONG / DESIGN_V2",
+  "production_main_sha": "980c6b90b7f316bcec6a9466dfc9b0e1756cc748",
+  "origin_main_sha": "980c6b90b7f316bcec6a9466dfc9b0e1756cc748",
+  "frozen_design_v2_sha": "a39cf6dfc72a4a4aa92d95b3f760626e2ce216c6",
+  "validated_readiness_v2_sha": "ec37b0f1671191f1842f5f952977bb60c772fa4b",
+  "economic_branch_base_sha": "ec37b0f1671191f1842f5f952977bb60c772fa4b",
+  "protocol": "FUTURE_TEST_PROTOCOL_V2",
+  "canonical_endpoint": "2026-07-30",
+  "authorities": [
+    {"path": "research/abnormal_volume_design_repair_v1/ORIGINAL_BLOCKER_RECEIPT.json", "sha256": "8a421fcd0959ff22d8d18401b6d1b5fc8e4fbd3772258c8b5bca0d874ba1a7bf"},
+    {"path": "research/abnormal_volume_design_repair_v1/NO_ECONOMIC_PEEK_RECEIPT.json", "sha256": "9f0cb91ec9d8aa21c263989e124bd636b755e5bae351cf427fc83aad73e45c59"},
+    {"path": "research/abnormal_volume_design_repair_v1/QUANTILE_ESTIMATOR_RESEARCH.md", "sha256": "5befc50919d42419b3fe80b085ed6092b1f01bca05ce34a076393606c0829eea"},
+    {"path": "research/abnormal_volume_design_repair_v1/QUANTILE_SPECIFICATION.md", "sha256": "6b535cf5ce7f6a03b8bfa315a9e2bfa80883a1ef4a030bc4a42a46c9421649be"},
+    {"path": "research/abnormal_volume_design_repair_v1/DESIGN_DIFF_FROM_V1.md", "sha256": "46b67d9cb3c70ae0fa51252cdc5be1c8f5e29b9d5c2edfdf1f197ad3b7f6d9e5"},
+    {"path": "research/abnormal_volume_design_repair_v1/CANDIDATE_DESIGN_V2.md", "sha256": "ecb1b89dd39b819a01e8893a8d3a2ef3a6d8814228d4f85f09aa4f1952e351eb"},
+    {"path": "research/abnormal_volume_design_repair_v1/FUTURE_TEST_PROTOCOL_V2.md", "sha256": "18e3a0990dd14c58166d565115ff6da6704fee755d400321440dbd005f779c4b"},
+    {"path": "research/abnormal_volume_design_repair_v1/DESIGN_REPAIR_DECISION.json", "sha256": "59f25942c589d6f2e433de9ddb19464f5de77516a11247a50e07befa9fc7c81b"},
+    {"path": "research/abnormal_volume_design_repair_v1/FINAL_DESIGN_REPAIR_REPORT.md", "sha256": "8831435e5283e91f7f95d82509dc86eac5cf5482b7e8f92b6656f7f6d4deb02e"},
+    {"path": "research/abnormal_volume_readiness_v2/FROZEN_INPUT_RECEIPT.json", "sha256": "b502a6f8e263093524626880843fad98cd55d58923ccbcff55e1b039471e227a"},
+    {"path": "research/abnormal_volume_readiness_v2/G1_DECISION.json", "sha256": "793885b1451d4a80a5c97d09d5acc2b94b3c470b01ff197ffab8eb99768c24e1"},
+    {"path": "research/abnormal_volume_readiness_v2/FINAL_READINESS_REPORT.md", "sha256": "cbe1c60e0d78c32e96c769784582716a5d6305e4790d9feaae5602f14b613da7"},
+    {"path": "research/abnormal_volume_readiness_v2/READINESS_TEST_RESULTS.json", "sha256": "5f92dd25c7950a4f61bdded1fef0a9bdb4edfe655218d74d857ddd54342bdce3"},
+    {"path": "research/abnormal_volume_readiness_v2/RUNNER_OUTPUT.json", "sha256": "cfa881156725f471736f7db8de6255b9696a62e0f93977290ea7b9e9fd3cd675"},
+    {"path": "research/abnormal_volume_readiness_v2/EXTRA_DAY_REGRESSION_AUDIT.md", "sha256": "22079eafeda099d1f320bcfafd6f042e3af7552eca29e69fc7010a5eed2589d1"},
+    {"path": "research/abnormal_volume_readiness_v2/INDEPENDENT_VERIFICATION.json", "sha256": "b837e3f02b4a9ca0dee56030884dba68ef5fc7596723da744e4ebd34e679288e"}
+  ],
+  "canonical_data": [
+    {"path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv", "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"},
+    {"path": "data/historical/equity_entity_lifetimes_full_v5.csv", "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"},
+    {"path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv", "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"},
+    {"path": "config/settings.yaml", "sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"}
+  ]
+}

@@ -112,6 +112,6 @@ No production, PAPER, LIVE, configuration, crypto, or broker-order state changed
 
 All raw arm results, source attribution, parity, exposure, diagnostics, verification, and gate inputs are in this directory.
 
-## Final research branch SHA
+## Verification-time branch SHA
 
 `997fd9f592e1449aeeca6f45af7229cb24f23c11`

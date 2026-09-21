@@ -454,7 +454,7 @@ def _final_report(decision: str, validity: str, gates: dict[str, Any], metrics: 
             "",
             "All raw arm results, source attribution, parity, exposure, diagnostics, verification, and gate inputs are in this directory.",
             "",
-            "## Final research branch SHA",
+            "## Verification-time branch SHA",
             "",
             f"`{_git('rev-parse', 'HEAD')}`",
         ]

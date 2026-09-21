@@ -32,6 +32,41 @@ The shared account contract is maximum gross exposure `0.60`, cash buffer
 Crypto remains a separate current PAPER sleeve at allocation `0.05`; it is
 outside this equity baseline's alpha comparison.
 
+## Target and realized exposure semantics
+
+Governance conclusion: `TARGET_AND_REALIZED_GROSS_DISTINCT`.
+
+The production risk contract constrains decisions and order-caused exposure;
+it is not a continuous mark-to-market liquidation rule. At decision time
+`t_d`, `target_gross(t_d)` is the risk-adjusted expected post-trade account
+gross, including immutable external exposure exactly once. It must not exceed
+`min(max_gross_exposure_pct, 1 - cash_buffer_pct)`, and `target_cash(t_d)` must
+remain at least the corresponding cash buffer. Every BUY submission or
+re-plan uses a fresh account snapshot and must not increase broker gross beyond
+the available headroom.
+
+`realized_gross(t) = sum_i(abs(q_i(t)) * P_i(t)) / account_equity(t)` and
+`realized_cash(t) = account_cash(t) / account_equity(t)` are separate marked-
+to-market quantities. Market moves between scheduled decisions, execution
+prices and fees, lot rounding, and partial fills may move realized gross or
+realized cash across the target boundary without a trade-caused policy
+violation. The current protocol has no continuous gross-drift liquidation
+rule. At the next eligible decision or BUY re-plan, current realized exposure
+is an input and new buys have no headroom until the risk-adjusted target is
+within bounds.
+
+Future research protocols must name the constrained quantity and timing. A
+bare statement such as `gross <= 60%` is insufficient. A protocol must state
+whether it constrains target gross, realized gross, target cash, realized cash,
+a continuous intraperiod limit, or a rebalance-time limit. If realized gross or
+cash is a conjunctive gate, freeze before outcomes its valuation source,
+observation cadence, tolerance, execution/fee treatment, permitted breach
+duration, and remediation behavior.
+
+This clarification is prospective only. It does not reinterpret any frozen
+historical gate, including the abnormal-volume experiment's explicit G9
+requirement on realized gross and realized cash; that gate remains failed.
+
 ## Dataset identity
 
 The corrected baseline uses the following frozen historical inputs:

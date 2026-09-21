@@ -177,3 +177,51 @@ follow-up.
 The process-only branch for this update is
 `maintenance/research-consolidation-2026-09-v2`; it carries only the research
 register, this inventory, and the extracted generic combination methodology.
+
+## Abnormal-volume and MAX closure audit — 2026-09-21
+
+This closure began from a clean checkout after
+`git fetch --all --prune --tags`. Local `main` and `origin/main` were both
+`980c6b90b7f316bcec6a9466dfc9b0e1756cc748`. Fifteen pre-existing annotated
+archive tags were present. The starting remote contained `main`, four of the
+five abnormal-volume branches (design repair was local-only), and the MAX
+design branch. No other unknown or active campaign branch was present.
+
+The count below is branch-only / main-only commits, or ahead / behind `main`.
+Branch tips matched their remote-tracking refs wherever a remote branch
+existed.
+
+| Branch | Tip | Ahead / behind main | Campaign | Final state | Unique production code? | Archive needed? | Action |
+|---|---|---:|---|---|---|---|---|
+| `research/abnormal-volume-design-v1` | `4f454f5deb4c77151b574f87c29228c859cfc884` | 1 / 1 | Abnormal-volume design V1 | `DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST`; superseded by V2 | No; research Markdown/JSON only | Yes | Tag, then delete local/remote |
+| `research/abnormal-volume-readiness-v1` | `93e85169b9e1417902d3c13ac91fc1c304dda4f8` | 2 / 1 | Abnormal-volume readiness V1 | `G1_BLOCKED_DATA_OR_EXECUTION` | No; research evidence only | Yes | Tag, then delete local/remote |
+| `research/abnormal-volume-design-repair-v1` | `a39cf6dfc72a4a4aa92d95b3f760626e2ce216c6` | 1 / 0 | Abnormal-volume design V2 repair | `QUANTILE_SPEC_REPAIRED`; pre-outcome | No; research Markdown/JSON only | Yes | Tag, then delete local; no remote existed |
+| `research/abnormal-volume-readiness-v2` | `ec37b0f1671191f1842f5f952977bb60c772fa4b` | 2 / 0 | Abnormal-volume readiness V2 | `G1_READY_FOR_FROZEN_ECONOMIC_TEST` | No; executable harness/tests only under `research/` | Yes | Tag, then delete local/remote |
+| `research/abnormal-volume-economic-v1` | `693b86a16bb7363e98be46aeb25d164c384fe9aa` | 5 / 0 | Abnormal-volume economic V1 | valid `RESEARCH_REJECT`; `ALPHA_REJECTED` | No; executable harness/tests/results only under `research/` | Yes | Tag, then delete local/remote |
+| `research/max-lottery-design-v1` | `405103908acd7b872df2d9663fa8166e6d793020` | 1 / 1 | MAX / lottery design V1 | `DESIGN_BLOCKED_DATA_OR_EXECUTION`; no economics | No; research Markdown/JSON only | Yes | Tag, then delete local/remote |
+
+For every branch above,
+`git diff --name-only main...<branch> -- src config scripts tests pyproject.toml Makefile`
+was empty. Candidate signal code, readiness/economic runners, independent
+verifiers, candidate-specific tests, and generated evidence are research-only
+and are not eligible for merge. The only generic correctness result discovered
+during the abnormal-volume campaign is the candidate-neutral month-end/
+first-open primitive already integrated on `main` at `980c6b9`; its fresh V3
+parity evidence was exact. This closure therefore merges documentation only.
+
+The archive plan adds these exact annotated tag targets:
+
+| Archive tag | Target | Durable decision/status |
+|---|---|---|
+| `archive/research/abnormal-volume-design-v1-2026-09` | `4f454f5deb4c77151b574f87c29228c859cfc884` | `DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST`; superseded design |
+| `archive/research/abnormal-volume-readiness-v1-2026-09` | `93e85169b9e1417902d3c13ac91fc1c304dda4f8` | `G1_BLOCKED_DATA_OR_EXECUTION` |
+| `archive/research/abnormal-volume-design-repair-v1-2026-09` | `a39cf6dfc72a4a4aa92d95b3f760626e2ce216c6` | pre-outcome `QUANTILE_SPEC_REPAIRED` |
+| `archive/research/abnormal-volume-readiness-v2-2026-09` | `ec37b0f1671191f1842f5f952977bb60c772fa4b` | `G1_READY_FOR_FROZEN_ECONOMIC_TEST` |
+| `archive/research/abnormal-volume-economic-v1-2026-09` | `693b86a16bb7363e98be46aeb25d164c384fe9aa` | valid `RESEARCH_REJECT`; `ALPHA_REJECTED` |
+| `archive/research/max-lottery-design-v1-2026-09` | `405103908acd7b872df2d9663fa8166e6d793020` | `DESIGN_BLOCKED_DATA_OR_EXECUTION`; no economics |
+
+The process-only documentation branch is
+`maintenance/research-consolidation-abnormal-volume-2026-09`. It carries only
+the research register, this inventory, and future-protocol exposure-semantics
+clarification. It receives no archive tag and is deleted after its
+documentation commit is merged to `main`.

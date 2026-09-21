@@ -23,6 +23,8 @@ are listed explicitly and are separate from research conclusions.
 | `equity_v3_baseline_protocol_repair_v1` | `research/v3-baseline-protocol-repair-v1` | `96910de6a54a3d3154996cad865308c3fff127ed` / 2026-09-18 | V2 validity, parity, and independent verification passed | `CORRECTED_V3_BASELINE_VALID` | Baseline, not an alpha test | No runtime/configuration change | Closed; current canonical V3 baseline/control | `archive/research/v3-baseline-protocol-repair-v1-2026-09` |
 | `equity_52week_high_close_v1` | design: `research/52week-high-design-v1`; readiness: `research/52week-high-readiness-v1`; economic: `research/52week-high-economic-v1` | `2d53ba1985a60c67bb727e1092124df08c220842` / 2026-09-21 | `RESEARCH_RUN_VALID`; readiness was `G1_READY_FOR_FROZEN_ECONOMIC_TEST` | `RESEARCH_REJECT` | `ALPHA_REJECTED` | Generic correctness fixes were already merged to `main`; no candidate code merged | Closed; no combination experiment warranted | design/readiness/economic tags listed below |
 | `equity_information_discreteness_continuous_v1` | design: `research/information-discreteness-design-v1`; standalone: `research/information-discreteness-economic-v1`; combination: `research/v3-id-complementarity-v1` | `a5d355eb8b8045e0438d435312fcc23e59cb3936` / 2026-09-21 | standalone and combination runs valid | standalone `RESEARCH_REJECT`; combination `COMBINATION_REJECT` | `ALPHA_VALID_PORTFOLIO_REJECTED` | No | Closed; standalone alpha remains valid, but no canonical 5+1 slot | design/economic/combination tags listed below |
+| `equity_abnormal_volume_v1` | design V1: `research/abnormal-volume-design-v1`; readiness V1: `research/abnormal-volume-readiness-v1`; design V2: `research/abnormal-volume-design-repair-v1`; readiness V2: `research/abnormal-volume-readiness-v2`; economic: `research/abnormal-volume-economic-v1` | `693b86a16bb7363e98be46aeb25d164c384fe9aa` / 2026-09-21 | `RESEARCH_RUN_VALID`; independent verification passed with zero issues | `RESEARCH_REJECT` | `ALPHA_REJECTED` | Generic scheduler primitive was already on `main`; no candidate code merged | Closed; no retuning or complementarity test | five archive tags listed below |
+| `equity_max_lottery_design_v1` | `research/max-lottery-design-v1` | `405103908acd7b872df2d9663fa8166e6d793020` / 2026-09-21 | Pre-outcome design review; no economic candidate frozen or run | `DESIGN_BLOCKED_DATA_OR_EXECUTION` | Design-stage block, not an alpha classification | No | Closed; requires a new pre-outcome design campaign if blockers are resolved | `archive/research/max-lottery-design-v1-2026-09` |
 
 The branch `maintenance/reserved-equity-role-isolation-v1` was an exact alias
 of current `main` (`bdfa55ea...`) with no unique commit or evidence. It is not
@@ -235,6 +237,96 @@ Evidence is preserved by:
 The candidate-independent architecture and governance rules extracted from the
 campaign are documented in
 [`core_satellite_combination_policy_v1.md`](core_satellite_combination_policy_v1.md).
+
+### Abnormal volume — `equity_abnormal_volume_v1`
+
+The original pre-outcome design at
+`4f454f5deb4c77151b574f87c29228c859cfc884` froze
+`AV49_D1_NORMALRET_M1_LONG` and returned
+`DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST`. The intended candidate used a
+split-consistent dollar-volume shock, 49 prior sessions, one-day formation,
+middle-40% formation-return conditioning, a month-end decision, entry at the
+next month's first tradable open, calendar-month holding, and at most six
+equal-weight long names.
+
+Readiness V1 at `93e85169b9e1417902d3c13ac91fc1c304dda4f8`
+returned `G1_BLOCKED_DATA_OR_EXECUTION` before any economics were inspected.
+It found two pre-outcome issues: `Q0.90(DV[t-49:t-1])` did not specify its
+quantile estimator/interpolation convention
+(`FROZEN_Q90_CONVENTION_UNSPECIFIED`), and the then-generic monthly path
+decided on the first completed new-month bar and filled on the following
+session, adding an unintended extra session.
+
+The scheduler issue was fixed separately and generically on production `main`
+at `980c6b90b7f316bcec6a9466dfc9b0e1756cc748`. The candidate-neutral
+`month_end_first_open` contract now maps the completed final exchange session
+of month M to the first tradable open of M+1, with no later-session fallback.
+Fresh canonical V3 replay remained exactly equal to its pre-fix baseline, and
+no production strategy or configuration changed. This correctness primitive
+is not evidence for the rejected alpha and must not be attributed to it.
+
+Design V2 at `a39cf6dfc72a4a4aa92d95b3f760626e2ce216c6`
+was a pre-outcome specification repair; the original V1 commit stayed
+immutable and no economics had been seen. For ordered reference values
+`x_(1) <= ... <= x_(49)`, the repository convention is
+`j = 1 + floor(9 * (n-1) / 10)`. With `n = 49`, `j = 44`, so
+`Q0.90 = x_(44)`, zero-based index 43, with no interpolation and no
+deduplication. The repaired identity is
+`AV49_D1_NORMALRET_M1_LONG / DESIGN_V2`.
+
+Readiness V2 at `ec37b0f1671191f1842f5f952977bb60c772fa4b`
+returned `G1_READY_FOR_FROZEN_ECONOMIC_TEST`. It processed 11,681,230 causal
+bars through 2026-07-30 and excluded 5,602 partial 2026-07-31 rows. Across 115
+month-end boundaries it reconstructed 1,730 eligible signals and 595
+structural targets; first-open availability was 595/595 and ordinary targets
+for SPY, SH, PSQ, and DOG were all zero. The runner replay was deterministic,
+the independent verifier agreed exactly, and no economic output was inspected.
+
+The one authorized frozen economic experiment ended at
+`693b86a16bb7363e98be46aeb25d164c384fe9aa`. It was
+`RESEARCH_RUN_VALID`, independent verification passed with zero issues, its
+formal result was `RESEARCH_REJECT`, and its durable classification is
+`ALPHA_REJECTED`. Full-period 1x evidence was net return 41.72%, CAGR 3.70%,
+Sharpe 0.402, and maximum drawdown 15.07%; cost robustness remained positive
+through 3x. V3 economically outperformed the candidate, but that comparison
+was diagnostic only and did not determine rejection.
+
+Frozen gates G1-G7 passed. G8 failed substantively because only 74.78% of
+decisions held at least four names versus the frozen 90% minimum. Widening the
+middle-40% band, lowering the abnormal-volume threshold, changing `top_n`,
+cadence, or eligibility would be prohibited post-outcome retuning. G9 also
+failed under its frozen wording: realized gross reached 61.14% and realized
+cash fell to 38.86%, versus limits of gross <=60% and cash >=40%. Later
+candidate-neutral clarification of target-versus-realized exposure semantics
+does not retroactively change that failure.
+
+The candidate produced positive standalone economics but failed the complete
+conjunctive G1-G9 acceptance contract. It is not eligible for the canonical
+5+1 complementarity experiment, and no retuning is authorized. Evidence is
+preserved by:
+
+- `archive/research/abnormal-volume-design-v1-2026-09`;
+- `archive/research/abnormal-volume-readiness-v1-2026-09`;
+- `archive/research/abnormal-volume-design-repair-v1-2026-09`;
+- `archive/research/abnormal-volume-readiness-v2-2026-09`;
+- `archive/research/abnormal-volume-economic-v1-2026-09`.
+
+### MAX / lottery preference — `equity_max_lottery_design_v1`
+
+The pre-outcome MAX design review ended at
+`405103908acd7b872df2d9663fa8166e6d793020` with
+`DESIGN_BLOCKED_DATA_OR_EXECUTION`. No economic candidate was frozen or run,
+so this is a design-stage block rather than `ALPHA_REJECTED`.
+
+The principal blockers were: the broad historical `US_EQUITY` universe is not
+a point-in-time common-stock-only taxonomy and could make LOW-MAX select bond
+or defensive ETFs, ETNs, or preferred-like products; the then-generic monthly
+scheduler had the extra-session behavior later fixed independently; published
+support was stronger for long-short/high-MAX underperformance than for a
+six-name long-only LOW-MAX alpha; MAX substantially overlaps V3's residual-
+volatility filtering and sizing; and liquid/scaleable replication evidence was
+weaker. Evidence is preserved by
+`archive/research/max-lottery-design-v1-2026-09`.
 
 ## Production boundary
 

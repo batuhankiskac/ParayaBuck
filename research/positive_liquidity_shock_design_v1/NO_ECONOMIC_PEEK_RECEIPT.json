@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "campaign": "positive_liquidity_shock_design_v1",
+  "verification": "NO_ECONOMIC_PEEK_VERIFIED",
+  "structural_inputs_only": true,
+  "candidate_forward_returns_calculated": false,
+  "candidate_pnl_calculated": false,
+  "candidate_nav_calculated": false,
+  "candidate_cagr_calculated": false,
+  "candidate_sharpe_calculated": false,
+  "candidate_sortino_calculated": false,
+  "candidate_drawdown_calculated": false,
+  "candidate_ic_calculated": false,
+  "candidate_hit_rate_calculated": false,
+  "future_return_buckets_calculated": false,
+  "economic_parameter_comparison_performed": false,
+  "candidate_v3_outcome_correlation_calculated": false,
+  "permitted_diagnostics": [
+    "contemporaneous score component correlations",
+    "scoreable-universe counts",
+    "missing and zero-volume counts",
+    "split-basis invariance fixtures"
+  ],
+  "audit_script": "run_structural_opportunity_audit.py",
+  "audit_status": "STRUCTURAL_ONLY_NO_FUTURE_RETURNS",
+  "review_note": "Published paper results were reviewed as external design evidence; no local candidate economic outcome was calculated."
+}

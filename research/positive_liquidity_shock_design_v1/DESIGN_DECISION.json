@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "campaign": "positive_liquidity_shock_design_v1",
+  "decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "formula_uniquely_reconstructed": true,
+  "sign_orientation_verified": true,
+  "verdicts": {
+    "primary_long_leg": "POSITIVE_LIQUIDITY_SHOCK_LONG_LEG_SUPPORTED",
+    "original_liquid_stock_evidence": "LIQUID_STOCK_EFFECT_SUFFICIENT_FOR_TEST",
+    "modern_evidence": "MODERN_LIQUIDITY_SHOCK_EVIDENCE_INSUFFICIENT",
+    "abnormal_volume_distinctness": "LIQUIDITY_SHOCK_DISTINCT_FROM_CLOSED_AV_HYPOTHESIS",
+    "scanner_interaction": "SCANNER_REMOVES_CORE_ANOMALY_POPULATION",
+    "broad_universe": "UNIVERSE_LIMITATION_INVALIDATES_LIQUIDITY_SHOCK_TEST",
+    "six_slot": "LIQUIDITY_SHOCK_PREMIUM_REQUIRES_DIVERSIFICATION",
+    "one_slot": "ONE_SLOT_ALPHA_DENSITY_UNSUPPORTED"
+  },
+  "decision_basis": [
+    "No sufficient modern U.S. large/liquid concentrated long-only evidence was found.",
+    "The fixed scanner removes the small/illiquid segment where the published effect is strongest.",
+    "Diversified portfolio evidence does not validate a top-six or one-slot expression.",
+    "The historical broad US_EQUITY universe lacks complete PIT product taxonomy for honest extreme-rank interpretation."
+  ],
+  "structurally_measurable": true,
+  "candidate_frozen": false,
+  "frozen_economic_test_authorized": false,
+  "combination_test_authorized": false,
+  "paper_change_authorized": false,
+  "live_change_authorized": false,
+  "production_change_authorized": false,
+  "no_economic_peek_verified": true
+}

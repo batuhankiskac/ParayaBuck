@@ -1,0 +1,25 @@
+{
+  "candidate_run_started": true,
+  "fresh_control_parity": {
+    "expected_counts": {
+      "curve_points": 2406,
+      "fills": 2054,
+      "targets": 495,
+      "terminal_events": 5
+    },
+    "expected_fill_hash": "cb46efe20372da28f40626b7a86f2421cebb8761ee5d7b4350861eae6d142160",
+    "expected_target_hash": "b3b0bbec1b5767bcfe08838c2c849fd80486851473ad1c776a485fdc8966031e",
+    "expected_terminal_hash": "85cef16704d7bf8e208eaa879cca10289986951f1854c3188826f3810797fbe7",
+    "fill_hash": "cb46efe20372da28f40626b7a86f2421cebb8761ee5d7b4350861eae6d142160",
+    "fresh_counts": {
+      "curve_points": 2406,
+      "fills": 2054,
+      "targets": 495,
+      "terminal_events": 5
+    },
+    "max_metric_difference_from_readiness": 0.0,
+    "passed": true,
+    "target_hash": "b3b0bbec1b5767bcfe08838c2c849fd80486851473ad1c776a485fdc8966031e",
+    "terminal_hash": "85cef16704d7bf8e208eaa879cca10289986951f1854c3188826f3810797fbe7"
+  }
+}

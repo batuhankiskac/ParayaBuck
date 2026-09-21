@@ -1,0 +1,810 @@
+{
+  "actual_decisions": 114,
+  "all_decisions_nyse_month_end": true,
+  "all_execution_timestamps_after_decision": true,
+  "decision_rows": [
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-01-31T05:00:00+00:00",
+      "first_execution_timestamp": "2017-02-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-01-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-02-28T05:00:00+00:00",
+      "first_execution_timestamp": "2017-03-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-02-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-03-31T04:00:00+00:00",
+      "first_execution_timestamp": "2017-04-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-03-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-04-28T04:00:00+00:00",
+      "first_execution_timestamp": "2017-05-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-04-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-05-31T04:00:00+00:00",
+      "first_execution_timestamp": "2017-06-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-05-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-06-30T04:00:00+00:00",
+      "first_execution_timestamp": "2017-07-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-06-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-07-31T04:00:00+00:00",
+      "first_execution_timestamp": "2017-08-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-07-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-08-31T04:00:00+00:00",
+      "first_execution_timestamp": "2017-09-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-08-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-09-29T04:00:00+00:00",
+      "first_execution_timestamp": "2017-10-02T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-09-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-10-31T04:00:00+00:00",
+      "first_execution_timestamp": "2017-11-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-10-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-11-30T05:00:00+00:00",
+      "first_execution_timestamp": "2017-12-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-11-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2017-12-29T05:00:00+00:00",
+      "first_execution_timestamp": "2018-01-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2017-12-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-01-31T05:00:00+00:00",
+      "first_execution_timestamp": "2018-02-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-01-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-02-28T05:00:00+00:00",
+      "first_execution_timestamp": "2018-03-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-02-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-03-29T04:00:00+00:00",
+      "first_execution_timestamp": "2018-04-02T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-03-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-04-30T04:00:00+00:00",
+      "first_execution_timestamp": "2018-05-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-04-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-05-31T04:00:00+00:00",
+      "first_execution_timestamp": "2018-06-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-05-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-06-29T04:00:00+00:00",
+      "first_execution_timestamp": "2018-07-02T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-06-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-07-31T04:00:00+00:00",
+      "first_execution_timestamp": "2018-08-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-07-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-08-31T04:00:00+00:00",
+      "first_execution_timestamp": "2018-09-04T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-08-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-09-28T04:00:00+00:00",
+      "first_execution_timestamp": "2018-10-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-09-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-10-31T04:00:00+00:00",
+      "first_execution_timestamp": "2018-11-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-10-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-11-30T05:00:00+00:00",
+      "first_execution_timestamp": "2018-12-03T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-11-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2018-12-31T05:00:00+00:00",
+      "first_execution_timestamp": "2019-01-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2018-12-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-01-31T05:00:00+00:00",
+      "first_execution_timestamp": "2019-02-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-01-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-02-28T05:00:00+00:00",
+      "first_execution_timestamp": "2019-03-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-02-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-03-29T04:00:00+00:00",
+      "first_execution_timestamp": "2019-04-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-03-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-04-30T04:00:00+00:00",
+      "first_execution_timestamp": "2019-05-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-04-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-05-31T04:00:00+00:00",
+      "first_execution_timestamp": "2019-06-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-05-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-06-28T04:00:00+00:00",
+      "first_execution_timestamp": "2019-07-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-06-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-07-31T04:00:00+00:00",
+      "first_execution_timestamp": "2019-08-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-07-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-08-30T04:00:00+00:00",
+      "first_execution_timestamp": "2019-09-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-08-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-09-30T04:00:00+00:00",
+      "first_execution_timestamp": "2019-10-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-09-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-10-31T04:00:00+00:00",
+      "first_execution_timestamp": "2019-11-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-10-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-11-29T05:00:00+00:00",
+      "first_execution_timestamp": "2019-12-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-11-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2019-12-31T05:00:00+00:00",
+      "first_execution_timestamp": "2020-01-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2019-12-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-01-31T05:00:00+00:00",
+      "first_execution_timestamp": "2020-02-03T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-01-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-02-28T05:00:00+00:00",
+      "first_execution_timestamp": "2020-03-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-02-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-03-31T04:00:00+00:00",
+      "first_execution_timestamp": "2020-04-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-03-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-04-30T04:00:00+00:00",
+      "first_execution_timestamp": "2020-05-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-04-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-05-29T04:00:00+00:00",
+      "first_execution_timestamp": "2020-06-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-05-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-06-30T04:00:00+00:00",
+      "first_execution_timestamp": "2020-07-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-06-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-07-31T04:00:00+00:00",
+      "first_execution_timestamp": "2020-08-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-07-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-08-31T04:00:00+00:00",
+      "first_execution_timestamp": "2020-09-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-08-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-09-30T04:00:00+00:00",
+      "first_execution_timestamp": "2020-10-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-09-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-10-30T04:00:00+00:00",
+      "first_execution_timestamp": "2020-11-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-10-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-11-30T05:00:00+00:00",
+      "first_execution_timestamp": "2020-12-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-11-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2020-12-31T05:00:00+00:00",
+      "first_execution_timestamp": "2021-01-04T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2020-12-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-01-29T05:00:00+00:00",
+      "first_execution_timestamp": "2021-02-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-01-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-02-26T05:00:00+00:00",
+      "first_execution_timestamp": "2021-03-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-02-26"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-03-31T04:00:00+00:00",
+      "first_execution_timestamp": "2021-04-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-03-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-04-30T04:00:00+00:00",
+      "first_execution_timestamp": "2021-05-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-04-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-05-28T04:00:00+00:00",
+      "first_execution_timestamp": "2021-06-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-05-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-06-30T04:00:00+00:00",
+      "first_execution_timestamp": "2021-07-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-06-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-07-30T04:00:00+00:00",
+      "first_execution_timestamp": "2021-08-02T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-07-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-08-31T04:00:00+00:00",
+      "first_execution_timestamp": "2021-09-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-08-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-09-30T04:00:00+00:00",
+      "first_execution_timestamp": "2021-10-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-09-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-10-29T04:00:00+00:00",
+      "first_execution_timestamp": "2021-11-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-10-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-11-30T05:00:00+00:00",
+      "first_execution_timestamp": "2021-12-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-11-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2021-12-31T05:00:00+00:00",
+      "first_execution_timestamp": "2022-01-03T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2021-12-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-01-31T05:00:00+00:00",
+      "first_execution_timestamp": "2022-02-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-01-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-02-28T05:00:00+00:00",
+      "first_execution_timestamp": "2022-03-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-02-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-03-31T04:00:00+00:00",
+      "first_execution_timestamp": "2022-04-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-03-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-04-29T04:00:00+00:00",
+      "first_execution_timestamp": "2022-05-02T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-04-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-05-31T04:00:00+00:00",
+      "first_execution_timestamp": "2022-06-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-05-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-06-30T04:00:00+00:00",
+      "first_execution_timestamp": "2022-07-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-06-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-07-29T04:00:00+00:00",
+      "first_execution_timestamp": "2022-08-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-07-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-08-31T04:00:00+00:00",
+      "first_execution_timestamp": "2022-09-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-08-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-09-30T04:00:00+00:00",
+      "first_execution_timestamp": "2022-10-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-09-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-10-31T04:00:00+00:00",
+      "first_execution_timestamp": "2022-11-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-10-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-11-30T05:00:00+00:00",
+      "first_execution_timestamp": "2022-12-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-11-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2022-12-30T05:00:00+00:00",
+      "first_execution_timestamp": "2023-01-03T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2022-12-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-01-31T05:00:00+00:00",
+      "first_execution_timestamp": "2023-02-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-01-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-02-28T05:00:00+00:00",
+      "first_execution_timestamp": "2023-03-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-02-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-03-31T04:00:00+00:00",
+      "first_execution_timestamp": "2023-04-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-03-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-04-28T04:00:00+00:00",
+      "first_execution_timestamp": "2023-05-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-04-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-05-31T04:00:00+00:00",
+      "first_execution_timestamp": "2023-06-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-05-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-06-30T04:00:00+00:00",
+      "first_execution_timestamp": "2023-07-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-06-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-07-31T04:00:00+00:00",
+      "first_execution_timestamp": "2023-08-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-07-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-08-31T04:00:00+00:00",
+      "first_execution_timestamp": "2023-09-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-08-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-09-29T04:00:00+00:00",
+      "first_execution_timestamp": "2023-10-02T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-09-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-10-31T04:00:00+00:00",
+      "first_execution_timestamp": "2023-11-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-10-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-11-30T05:00:00+00:00",
+      "first_execution_timestamp": "2023-12-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-11-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2023-12-29T05:00:00+00:00",
+      "first_execution_timestamp": "2024-01-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2023-12-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-01-31T05:00:00+00:00",
+      "first_execution_timestamp": "2024-02-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-01-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-02-29T05:00:00+00:00",
+      "first_execution_timestamp": "2024-03-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-02-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-03-28T04:00:00+00:00",
+      "first_execution_timestamp": "2024-04-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-03-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-04-30T04:00:00+00:00",
+      "first_execution_timestamp": "2024-05-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-04-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-05-31T04:00:00+00:00",
+      "first_execution_timestamp": "2024-06-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-05-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-06-28T04:00:00+00:00",
+      "first_execution_timestamp": "2024-07-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-06-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-07-31T04:00:00+00:00",
+      "first_execution_timestamp": "2024-08-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-07-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-08-30T04:00:00+00:00",
+      "first_execution_timestamp": "2024-09-03T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-08-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-09-30T04:00:00+00:00",
+      "first_execution_timestamp": "2024-10-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-09-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-10-31T04:00:00+00:00",
+      "first_execution_timestamp": "2024-11-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-10-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-11-29T05:00:00+00:00",
+      "first_execution_timestamp": "2024-12-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-11-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2024-12-31T05:00:00+00:00",
+      "first_execution_timestamp": "2025-01-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2024-12-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-01-31T05:00:00+00:00",
+      "first_execution_timestamp": "2025-02-03T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-01-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-02-28T05:00:00+00:00",
+      "first_execution_timestamp": "2025-03-03T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-02-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-03-31T04:00:00+00:00",
+      "first_execution_timestamp": "2025-04-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-03-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-04-30T04:00:00+00:00",
+      "first_execution_timestamp": "2025-05-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-04-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-05-30T04:00:00+00:00",
+      "first_execution_timestamp": "2025-06-02T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-05-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-06-30T04:00:00+00:00",
+      "first_execution_timestamp": "2025-07-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-06-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-07-31T04:00:00+00:00",
+      "first_execution_timestamp": "2025-08-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-07-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-08-29T04:00:00+00:00",
+      "first_execution_timestamp": "2025-09-02T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-08-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-09-30T04:00:00+00:00",
+      "first_execution_timestamp": "2025-10-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-09-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-10-31T04:00:00+00:00",
+      "first_execution_timestamp": "2025-11-03T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-10-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-11-28T05:00:00+00:00",
+      "first_execution_timestamp": "2025-12-01T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-11-28"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2025-12-31T05:00:00+00:00",
+      "first_execution_timestamp": "2026-01-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2025-12-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2026-01-30T05:00:00+00:00",
+      "first_execution_timestamp": "2026-02-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2026-01-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2026-02-27T05:00:00+00:00",
+      "first_execution_timestamp": "2026-03-02T05:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2026-02-27"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2026-03-31T04:00:00+00:00",
+      "first_execution_timestamp": "2026-04-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2026-03-31"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2026-04-30T04:00:00+00:00",
+      "first_execution_timestamp": "2026-05-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2026-04-30"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2026-05-29T04:00:00+00:00",
+      "first_execution_timestamp": "2026-06-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2026-05-29"
+    },
+    {
+      "all_executions_after_decision": true,
+      "decision_timestamp": "2026-06-30T04:00:00+00:00",
+      "first_execution_timestamp": "2026-07-01T04:00:00+00:00",
+      "is_last_nyse_session_of_month": true,
+      "nyse_session_date": "2026-06-30"
+    }
+  ],
+  "first_decision": "2017-01-31T05:00:00+00:00",
+  "last_decision": "2026-06-30T04:00:00+00:00",
+  "scheduled_decisions": 114,
+  "skipped_decisions": 0,
+  "source": "CANDIDATE_B_SIGNAL_RANK_AUDIT.json + ECONOMIC_RESULTS.json"
+}

@@ -1,0 +1,1033 @@
+{
+  "at_least_five_target_fraction": 0.8508771929824561,
+  "attribution_only_largest_entity_removal": "not rerun or re-optimized",
+  "largest_positive_pnl_share": 0.03065397795642316,
+  "largest_positive_pnl_symbol": "AMD",
+  "maximum_realized_concentration": 0.12935995868807243,
+  "positive_pnl_contribution_ranking": [
+    {
+      "positive_realized_pnl": 4718.074881606831,
+      "share": 0.03065397795642316,
+      "symbol": "AMD"
+    },
+    {
+      "positive_realized_pnl": 4293.526227732061,
+      "share": 0.027895627272325047,
+      "symbol": "ALNY"
+    },
+    {
+      "positive_realized_pnl": 3686.8451222310696,
+      "share": 0.023953937133597916,
+      "symbol": "ANET"
+    },
+    {
+      "positive_realized_pnl": 3680.2734673008995,
+      "share": 0.023911240192489164,
+      "symbol": "CMG"
+    },
+    {
+      "positive_realized_pnl": 3646.760142497513,
+      "share": 0.023693499536491015,
+      "symbol": "APH"
+    },
+    {
+      "positive_realized_pnl": 3599.4494392587912,
+      "share": 0.023386115425264545,
+      "symbol": "LLY"
+    },
+    {
+      "positive_realized_pnl": 3543.753104843443,
+      "share": 0.023024248721097228,
+      "symbol": "AFRM"
+    },
+    {
+      "positive_realized_pnl": 3383.983740785424,
+      "share": 0.02198620530575442,
+      "symbol": "FSLR"
+    },
+    {
+      "positive_realized_pnl": 3383.872994704462,
+      "share": 0.021985485773315928,
+      "symbol": "CDNS"
+    },
+    {
+      "positive_realized_pnl": 3147.974863534028,
+      "share": 0.020452823343338304,
+      "symbol": "ALB"
+    },
+    {
+      "positive_realized_pnl": 2895.0451723506794,
+      "share": 0.018809504537974465,
+      "symbol": "A"
+    },
+    {
+      "positive_realized_pnl": 2721.945891817704,
+      "share": 0.017684854831710492,
+      "symbol": "AMP"
+    },
+    {
+      "positive_realized_pnl": 2689.946792103996,
+      "share": 0.01747695230327175,
+      "symbol": "DHR"
+    },
+    {
+      "positive_realized_pnl": 2534.6688643790644,
+      "share": 0.01646809036423062,
+      "symbol": "DPZ"
+    },
+    {
+      "positive_realized_pnl": 2523.4474260569714,
+      "share": 0.016395183144316455,
+      "symbol": "RCL"
+    },
+    {
+      "positive_realized_pnl": 2470.8221041518127,
+      "share": 0.016053269228554056,
+      "symbol": "APPS"
+    },
+    {
+      "positive_realized_pnl": 2464.3670452799734,
+      "share": 0.016011329827987062,
+      "symbol": "AAPL"
+    },
+    {
+      "positive_realized_pnl": 2445.66340823428,
+      "share": 0.015889809739372367,
+      "symbol": "CF"
+    },
+    {
+      "positive_realized_pnl": 2322.461637079147,
+      "share": 0.015089350977705673,
+      "symbol": "ASML"
+    },
+    {
+      "positive_realized_pnl": 2164.9601796164507,
+      "share": 0.014066042461770943,
+      "symbol": "CVX"
+    },
+    {
+      "positive_realized_pnl": 2100.8954458131184,
+      "share": 0.013649805121950971,
+      "symbol": "FDX"
+    },
+    {
+      "positive_realized_pnl": 2090.4390180561904,
+      "share": 0.013581868280335046,
+      "symbol": "BSX"
+    },
+    {
+      "positive_realized_pnl": 2056.126388365501,
+      "share": 0.013358934431136135,
+      "symbol": "AMZN"
+    },
+    {
+      "positive_realized_pnl": 2003.4657744027131,
+      "share": 0.013016791218047231,
+      "symbol": "ADBE"
+    },
+    {
+      "positive_realized_pnl": 1943.4255518690038,
+      "share": 0.012626701678514476,
+      "symbol": "TDG"
+    },
+    {
+      "positive_realized_pnl": 1881.9567584698455,
+      "share": 0.01222733051863496,
+      "symbol": "XOM"
+    },
+    {
+      "positive_realized_pnl": 1840.9572943344801,
+      "share": 0.011960951391264556,
+      "symbol": "ADI"
+    },
+    {
+      "positive_realized_pnl": 1756.0421945654464,
+      "share": 0.011409246371355899,
+      "symbol": "ABBV"
+    },
+    {
+      "positive_realized_pnl": 1720.3324851819775,
+      "share": 0.011177235504267174,
+      "symbol": "GEV"
+    },
+    {
+      "positive_realized_pnl": 1610.4987119582431,
+      "share": 0.010463630453953836,
+      "symbol": "DOCU"
+    },
+    {
+      "positive_realized_pnl": 1577.9401399044211,
+      "share": 0.010252092957183424,
+      "symbol": "HPQ"
+    },
+    {
+      "positive_realized_pnl": 1550.1989269803883,
+      "share": 0.010071854501712336,
+      "symbol": "ENPH"
+    },
+    {
+      "positive_realized_pnl": 1510.8684743577728,
+      "share": 0.009816319170467403,
+      "symbol": "DVN"
+    },
+    {
+      "positive_realized_pnl": 1503.4259319954676,
+      "share": 0.009767963954571348,
+      "symbol": "AMAT"
+    },
+    {
+      "positive_realized_pnl": 1463.9868542543109,
+      "share": 0.009511722871070922,
+      "symbol": "COR"
+    },
+    {
+      "positive_realized_pnl": 1430.181250873463,
+      "share": 0.009292083241170184,
+      "symbol": "ARKK"
+    },
+    {
+      "positive_realized_pnl": 1417.6344048824408,
+      "share": 0.009210564666310168,
+      "symbol": "APA"
+    },
+    {
+      "positive_realized_pnl": 1398.8880890703692,
+      "share": 0.009088767287911697,
+      "symbol": "ABT"
+    },
+    {
+      "positive_realized_pnl": 1382.0056827851424,
+      "share": 0.008979079984699063,
+      "symbol": "AXP"
+    },
+    {
+      "positive_realized_pnl": 1379.5782565400223,
+      "share": 0.008963308664303357,
+      "symbol": "ADP"
+    },
+    {
+      "positive_realized_pnl": 1318.8055271291798,
+      "share": 0.008568459927380135,
+      "symbol": "AVGO"
+    },
+    {
+      "positive_realized_pnl": 1265.3377349903446,
+      "share": 0.008221072367256402,
+      "symbol": "DECK"
+    },
+    {
+      "positive_realized_pnl": 1264.1719709866775,
+      "share": 0.008213498239043618,
+      "symbol": "KMI"
+    },
+    {
+      "positive_realized_pnl": 1192.2579977349565,
+      "share": 0.007746263316721593,
+      "symbol": "AMGN"
+    },
+    {
+      "positive_realized_pnl": 1191.7094150095197,
+      "share": 0.007742699099706224,
+      "symbol": "ALGN"
+    },
+    {
+      "positive_realized_pnl": 1172.4071265334742,
+      "share": 0.007617289490850734,
+      "symbol": "ACN"
+    },
+    {
+      "positive_realized_pnl": 1151.8387561702991,
+      "share": 0.007483653974769738,
+      "symbol": "AFL"
+    },
+    {
+      "positive_realized_pnl": 1127.2223421198846,
+      "share": 0.007323717765064944,
+      "symbol": "KSU"
+    },
+    {
+      "positive_realized_pnl": 1105.4093688775868,
+      "share": 0.007181995893811869,
+      "symbol": "CPRT"
+    },
+    {
+      "positive_realized_pnl": 1105.0166043000381,
+      "share": 0.007179444048619845,
+      "symbol": "LOW"
+    },
+    {
+      "positive_realized_pnl": 1095.4809129057974,
+      "share": 0.007117489357112541,
+      "symbol": "CTVA"
+    },
+    {
+      "positive_realized_pnl": 1081.753512636106,
+      "share": 0.007028300559599687,
+      "symbol": "GIS"
+    },
+    {
+      "positive_realized_pnl": 1040.7886405369645,
+      "share": 0.006762146181420951,
+      "symbol": "LNG"
+    },
+    {
+      "positive_realized_pnl": 1032.6181645156917,
+      "share": 0.006709061480958485,
+      "symbol": "CLX"
+    },
+    {
+      "positive_realized_pnl": 994.0714621783334,
+      "share": 0.006458618282536894,
+      "symbol": "JCI"
+    },
+    {
+      "positive_realized_pnl": 966.152456697891,
+      "share": 0.006277224684504116,
+      "symbol": "PEG"
+    },
+    {
+      "positive_realized_pnl": 949.4075819815147,
+      "share": 0.006168430942709146,
+      "symbol": "AMT"
+    },
+    {
+      "positive_realized_pnl": 937.6018400198635,
+      "share": 0.006091727422113808,
+      "symbol": "AIG"
+    },
+    {
+      "positive_realized_pnl": 930.8625678385306,
+      "share": 0.006047941448793571,
+      "symbol": "DG"
+    },
+    {
+      "positive_realized_pnl": 919.0376069387664,
+      "share": 0.00597111306012809,
+      "symbol": "CCJ"
+    },
+    {
+      "positive_realized_pnl": 905.2461119611996,
+      "share": 0.0058815078305297685,
+      "symbol": "XLNX"
+    },
+    {
+      "positive_realized_pnl": 885.5259457685015,
+      "share": 0.005753383212981924,
+      "symbol": "BLK"
+    },
+    {
+      "positive_realized_pnl": 849.6570173944331,
+      "share": 0.005520337878329509,
+      "symbol": "XLE"
+    },
+    {
+      "positive_realized_pnl": 837.7511656367639,
+      "share": 0.00544298393069404,
+      "symbol": "AER"
+    },
+    {
+      "positive_realized_pnl": 819.8416736803998,
+      "share": 0.0053266235113667935,
+      "symbol": "DELL"
+    },
+    {
+      "positive_realized_pnl": 807.9558541920005,
+      "share": 0.0052493997161252625,
+      "symbol": "AZO"
+    },
+    {
+      "positive_realized_pnl": 790.0139887056417,
+      "share": 0.005132828961544818,
+      "symbol": "BKNG"
+    },
+    {
+      "positive_realized_pnl": 774.981395555063,
+      "share": 0.005035160147329478,
+      "symbol": "ACWI"
+    },
+    {
+      "positive_realized_pnl": 744.1701106386885,
+      "share": 0.004834975014126599,
+      "symbol": "CME"
+    },
+    {
+      "positive_realized_pnl": 706.2896623629174,
+      "share": 0.004588860559489235,
+      "symbol": "META"
+    },
+    {
+      "positive_realized_pnl": 704.5336397642657,
+      "share": 0.004577451440435211,
+      "symbol": "PBR"
+    },
+    {
+      "positive_realized_pnl": 681.9584858653615,
+      "share": 0.004430777577186947,
+      "symbol": "AXON"
+    },
+    {
+      "positive_realized_pnl": 656.7326175519149,
+      "share": 0.004266881659759568,
+      "symbol": "ETN"
+    },
+    {
+      "positive_realized_pnl": 631.0268511703056,
+      "share": 0.004099867778931451,
+      "symbol": "ETR"
+    },
+    {
+      "positive_realized_pnl": 628.824782091433,
+      "share": 0.004085560634874574,
+      "symbol": "PLTR"
+    },
+    {
+      "positive_realized_pnl": 611.2321653429585,
+      "share": 0.003971258997122721,
+      "symbol": "STX"
+    },
+    {
+      "positive_realized_pnl": 581.7687197792299,
+      "share": 0.0037798309605835433,
+      "symbol": "PM"
+    },
+    {
+      "positive_realized_pnl": 575.3531440480369,
+      "share": 0.003738148087382774,
+      "symbol": "APD"
+    },
+    {
+      "positive_realized_pnl": 560.5950272783938,
+      "share": 0.003642262583763788,
+      "symbol": "AKAM"
+    },
+    {
+      "positive_realized_pnl": 558.391936702291,
+      "share": 0.0036279488028996614,
+      "symbol": "MCD"
+    },
+    {
+      "positive_realized_pnl": 556.1326882094525,
+      "share": 0.003613270156367886,
+      "symbol": "BALL"
+    },
+    {
+      "positive_realized_pnl": 555.6200530050572,
+      "share": 0.0036099394953144808,
+      "symbol": "DE"
+    },
+    {
+      "positive_realized_pnl": 536.1711830427502,
+      "share": 0.0034835775264898446,
+      "symbol": "BRK.A"
+    },
+    {
+      "positive_realized_pnl": 520.1621122287806,
+      "share": 0.0033795644033095896,
+      "symbol": "CASY"
+    },
+    {
+      "positive_realized_pnl": 519.2646149528508,
+      "share": 0.003373733240726826,
+      "symbol": "CRH"
+    },
+    {
+      "positive_realized_pnl": 517.3345332885974,
+      "share": 0.0033611932361116447,
+      "symbol": "ALXN"
+    },
+    {
+      "positive_realized_pnl": 515.5642214278279,
+      "share": 0.003349691277766816,
+      "symbol": "BNY"
+    },
+    {
+      "positive_realized_pnl": 514.3161243687181,
+      "share": 0.003341582220429346,
+      "symbol": "EOG"
+    },
+    {
+      "positive_realized_pnl": 508.26787391868936,
+      "share": 0.0033022859098317987,
+      "symbol": "AES"
+    },
+    {
+      "positive_realized_pnl": 502.7773589240667,
+      "share": 0.0032666132827883607,
+      "symbol": "WYNN"
+    },
+    {
+      "positive_realized_pnl": 487.37263326929684,
+      "share": 0.0031665266727841463,
+      "symbol": "CDW"
+    },
+    {
+      "positive_realized_pnl": 486.4517931545889,
+      "share": 0.0031605438485844523,
+      "symbol": "AEM"
+    },
+    {
+      "positive_realized_pnl": 483.14611007013,
+      "share": 0.0031390663733546795,
+      "symbol": "ALLY"
+    },
+    {
+      "positive_realized_pnl": 481.84748623402703,
+      "share": 0.0031306290366348286,
+      "symbol": "TSS"
+    },
+    {
+      "positive_realized_pnl": 477.776212595171,
+      "share": 0.0031041774148374323,
+      "symbol": "AWK"
+    },
+    {
+      "positive_realized_pnl": 476.2375408997352,
+      "share": 0.0030941804543360347,
+      "symbol": "EWJ"
+    },
+    {
+      "positive_realized_pnl": 474.7922596376033,
+      "share": 0.003084790264255979,
+      "symbol": "GILD"
+    },
+    {
+      "positive_realized_pnl": 469.4928803738538,
+      "share": 0.0030503594722041203,
+      "symbol": "ADSK"
+    },
+    {
+      "positive_realized_pnl": 469.201783349082,
+      "share": 0.0030484681750109956,
+      "symbol": "AJG"
+    },
+    {
+      "positive_realized_pnl": 464.5158414027151,
+      "share": 0.0030180229691307344,
+      "symbol": "BTI"
+    },
+    {
+      "positive_realized_pnl": 456.46916610729863,
+      "share": 0.0029657426189205684,
+      "symbol": "ACGL"
+    },
+    {
+      "positive_realized_pnl": 442.62424724208057,
+      "share": 0.0028757902870155854,
+      "symbol": "COP"
+    },
+    {
+      "positive_realized_pnl": 439.81199681451466,
+      "share": 0.002857518711261114,
+      "symbol": "CAT"
+    },
+    {
+      "positive_realized_pnl": 433.0246695386213,
+      "share": 0.0028134205174173985,
+      "symbol": "BURL"
+    },
+    {
+      "positive_realized_pnl": 412.30190945472987,
+      "share": 0.0026787819101998056,
+      "symbol": "AGN"
+    },
+    {
+      "positive_realized_pnl": 405.8862919972461,
+      "share": 0.002637098765897616,
+      "symbol": "BA"
+    },
+    {
+      "positive_realized_pnl": 397.9415727713808,
+      "share": 0.0025854808382193032,
+      "symbol": "FICO"
+    },
+    {
+      "positive_realized_pnl": 382.5868295305326,
+      "share": 0.0024857189707961232,
+      "symbol": "EFA"
+    },
+    {
+      "positive_realized_pnl": 381.9287073730621,
+      "share": 0.002481443061105418,
+      "symbol": "EL"
+    },
+    {
+      "positive_realized_pnl": 373.3206932497084,
+      "share": 0.0024255156157368535,
+      "symbol": "CHTR"
+    },
+    {
+      "positive_realized_pnl": 372.9352262575755,
+      "share": 0.0024230111839556125,
+      "symbol": "ADM"
+    },
+    {
+      "positive_realized_pnl": 367.04661093292464,
+      "share": 0.002384752044606339,
+      "symbol": "CL"
+    },
+    {
+      "positive_realized_pnl": 343.50281217474395,
+      "share": 0.0022317847631930475,
+      "symbol": "GEN"
+    },
+    {
+      "positive_realized_pnl": 316.120844286586,
+      "share": 0.00205388037186613,
+      "symbol": "YUM"
+    },
+    {
+      "positive_realized_pnl": 298.5839036134885,
+      "share": 0.0019399404691927012,
+      "symbol": "CRM"
+    },
+    {
+      "positive_realized_pnl": 284.59761461981446,
+      "share": 0.0018490696362231673,
+      "symbol": "ARRS"
+    },
+    {
+      "positive_realized_pnl": 266.1904068054494,
+      "share": 0.001729475488877062,
+      "symbol": "DOV"
+    },
+    {
+      "positive_realized_pnl": 264.64464950268575,
+      "share": 0.0017194324922155167,
+      "symbol": "CMS"
+    },
+    {
+      "positive_realized_pnl": 263.1236211047135,
+      "share": 0.0017095501626314099,
+      "symbol": "CB"
+    },
+    {
+      "positive_realized_pnl": 261.52971043187773,
+      "share": 0.0016991943069369416,
+      "symbol": "RDS.A"
+    },
+    {
+      "positive_realized_pnl": 259.4234317680489,
+      "share": 0.0016855095263110978,
+      "symbol": "MPC"
+    },
+    {
+      "positive_realized_pnl": 245.85863084064016,
+      "share": 0.0015973771589692632,
+      "symbol": "APO"
+    },
+    {
+      "positive_realized_pnl": 226.0258030484751,
+      "share": 0.0014685205635971454,
+      "symbol": "DHI"
+    },
+    {
+      "positive_realized_pnl": 213.58147268561197,
+      "share": 0.0013876680467978068,
+      "symbol": "GD"
+    },
+    {
+      "positive_realized_pnl": 206.3833133784234,
+      "share": 0.0013409006210433785,
+      "symbol": "IAU"
+    },
+    {
+      "positive_realized_pnl": 206.32891088313824,
+      "share": 0.0013405471605890422,
+      "symbol": "ECHO"
+    },
+    {
+      "positive_realized_pnl": 199.59677542442103,
+      "share": 0.0012968075555319705,
+      "symbol": "CHD"
+    },
+    {
+      "positive_realized_pnl": 193.34585598564672,
+      "share": 0.0012561944767886535,
+      "symbol": "RHT"
+    },
+    {
+      "positive_realized_pnl": 191.7897910661816,
+      "share": 0.0012460845101312779,
+      "symbol": "AON"
+    },
+    {
+      "positive_realized_pnl": 189.4834673636373,
+      "share": 0.0012311000095219758,
+      "symbol": "DIS"
+    },
+    {
+      "positive_realized_pnl": 188.69182584576808,
+      "share": 0.0012259566062808032,
+      "symbol": "AME"
+    },
+    {
+      "positive_realized_pnl": 175.63742175031297,
+      "share": 0.001141140356980403,
+      "symbol": "DT"
+    },
+    {
+      "positive_realized_pnl": 174.39827873743457,
+      "share": 0.0011330894753062456,
+      "symbol": "CBOE"
+    },
+    {
+      "positive_realized_pnl": 162.0578272161524,
+      "share": 0.00105291187355168,
+      "symbol": "BP"
+    },
+    {
+      "positive_realized_pnl": 143.83147377099178,
+      "share": 0.0009344927617838625,
+      "symbol": "ILMN"
+    },
+    {
+      "positive_realized_pnl": 133.15552511912514,
+      "share": 0.0008651296628822253,
+      "symbol": "EQIX"
+    },
+    {
+      "positive_realized_pnl": 131.1369589560622,
+      "share": 0.0008520147623732617,
+      "symbol": "PLD"
+    },
+    {
+      "positive_realized_pnl": 125.68671729712281,
+      "share": 0.0008166037967013037,
+      "symbol": "CCI"
+    },
+    {
+      "positive_realized_pnl": 115.50157826825237,
+      "share": 0.0007504295550648995,
+      "symbol": "BNTX"
+    },
+    {
+      "positive_realized_pnl": 114.75423559906963,
+      "share": 0.0007455739675038941,
+      "symbol": "GWPH"
+    },
+    {
+      "positive_realized_pnl": 113.86830706382896,
+      "share": 0.0007398179686120358,
+      "symbol": "CCXI"
+    },
+    {
+      "positive_realized_pnl": 112.15952305075562,
+      "share": 0.0007287157651109334,
+      "symbol": "DLTR"
+    },
+    {
+      "positive_realized_pnl": 110.29503316587859,
+      "share": 0.0007166019192595658,
+      "symbol": "BAX"
+    },
+    {
+      "positive_realized_pnl": 95.92792380547696,
+      "share": 0.0006232568442697253,
+      "symbol": "ARGX"
+    },
+    {
+      "positive_realized_pnl": 92.00557514770142,
+      "share": 0.0005977728084479139,
+      "symbol": "NEE"
+    },
+    {
+      "positive_realized_pnl": 89.1372320325052,
+      "share": 0.000579136790828215,
+      "symbol": "BSV"
+    },
+    {
+      "positive_realized_pnl": 84.72063425760614,
+      "share": 0.0005504415508772894,
+      "symbol": "ALL"
+    },
+    {
+      "positive_realized_pnl": 75.09855329681533,
+      "share": 0.0004879255745376879,
+      "symbol": "CTAS"
+    },
+    {
+      "positive_realized_pnl": 54.61101747313546,
+      "share": 0.0003548152515182647,
+      "symbol": "CIEN"
+    },
+    {
+      "positive_realized_pnl": 52.71513849515266,
+      "share": 0.0003424974664348413,
+      "symbol": "TIP"
+    },
+    {
+      "positive_realized_pnl": 52.23163679562106,
+      "share": 0.00033935608974810947,
+      "symbol": "MBB"
+    },
+    {
+      "positive_realized_pnl": 39.01399554145007,
+      "share": 0.0002534792662960668,
+      "symbol": "BAC"
+    },
+    {
+      "positive_realized_pnl": 36.093243535110716,
+      "share": 0.0002345027409408751,
+      "symbol": "URI"
+    },
+    {
+      "positive_realized_pnl": 30.090112326680515,
+      "share": 0.00019549957622847788,
+      "symbol": "SCHX"
+    },
+    {
+      "positive_realized_pnl": 3.7198357604436545,
+      "share": 2.416828182331011e-05,
+      "symbol": "LMT"
+    },
+    {
+      "positive_realized_pnl": 2.390371615576785,
+      "share": 1.5530571398348683e-05,
+      "symbol": "BFH"
+    },
+    {
+      "positive_realized_pnl": 2.095425326667147,
+      "share": 1.3614265009526451e-05,
+      "symbol": "CPAY"
+    }
+  ],
+  "sector_or_category_context": "unavailable in the frozen canonical input; no sector inference applied",
+  "source": "ECONOMIC_RESULTS.json + GATE_TABLE.json",
+  "unique_filled_symbol_count": 234,
+  "unique_filled_symbols": [
+    "A",
+    "AA",
+    "AAL",
+    "AAOI",
+    "AAPL",
+    "ABBV",
+    "ABT",
+    "ACGL",
+    "ACN",
+    "ACWI",
+    "ADBE",
+    "ADI",
+    "ADM",
+    "ADP",
+    "ADSK",
+    "AEM",
+    "AEP",
+    "AER",
+    "AES",
+    "AFL",
+    "AFRM",
+    "AG",
+    "AGN",
+    "AI",
+    "AIG",
+    "AJG",
+    "AKAM",
+    "ALAB",
+    "ALB",
+    "ALGN",
+    "ALL",
+    "ALLY",
+    "ALNY",
+    "ALXN",
+    "AMAT",
+    "AMD",
+    "AME",
+    "AMGN",
+    "AMP",
+    "AMT",
+    "AMZN",
+    "ANET",
+    "AON",
+    "APA",
+    "APD",
+    "APH",
+    "APO",
+    "APP",
+    "APPS",
+    "APTV",
+    "ARE",
+    "ARGX",
+    "ARKK",
+    "ARRS",
+    "ASML",
+    "ATI",
+    "AVGO",
+    "AWK",
+    "AXON",
+    "AXP",
+    "AZN",
+    "AZO",
+    "BA",
+    "BAC",
+    "BALL",
+    "BAX",
+    "BFH",
+    "BHP",
+    "BILI",
+    "BJ",
+    "BKNG",
+    "BKR",
+    "BLDR",
+    "BLK",
+    "BMY",
+    "BNTX",
+    "BNY",
+    "BP",
+    "BRK.A",
+    "BRO",
+    "BSV",
+    "BSX",
+    "BTI",
+    "BURL",
+    "CASY",
+    "CAT",
+    "CB",
+    "CBOE",
+    "CBRE",
+    "CCI",
+    "CCJ",
+    "CCXI",
+    "CDNS",
+    "CDW",
+    "CE",
+    "CEG",
+    "CELG",
+    "CERN",
+    "CF",
+    "CHD",
+    "CHGG",
+    "CHTR",
+    "CIEN",
+    "CL",
+    "CLF",
+    "CLS",
+    "CLX",
+    "CMCSA",
+    "CME",
+    "CMG",
+    "CMS",
+    "CNC",
+    "CNP",
+    "COP",
+    "COR",
+    "CORZ",
+    "COST",
+    "CPAY",
+    "CPRT",
+    "CRH",
+    "CRM",
+    "CSCO",
+    "CSX",
+    "CTAS",
+    "CTVA",
+    "CVE",
+    "CVNA",
+    "CVX",
+    "DD",
+    "DDOG",
+    "DE",
+    "DECK",
+    "DELL",
+    "DG",
+    "DGX",
+    "DHI",
+    "DHR",
+    "DIS",
+    "DK",
+    "DKNG",
+    "DLR",
+    "DLTR",
+    "DOCU",
+    "DOV",
+    "DPZ",
+    "DT",
+    "DUK",
+    "DVN",
+    "ECHO",
+    "EFA",
+    "EFX",
+    "EL",
+    "ELV",
+    "EMB",
+    "ENPH",
+    "EOG",
+    "EQIX",
+    "ESRX",
+    "ET",
+    "ETN",
+    "ETR",
+    "EW",
+    "EWJ",
+    "EXC",
+    "EXE",
+    "FDX",
+    "FE",
+    "FERG",
+    "FFIV",
+    "FICO",
+    "FOX",
+    "FOXA",
+    "FSLR",
+    "GD",
+    "GEN",
+    "GEV",
+    "GILD",
+    "GIS",
+    "GOOGL",
+    "GWPH",
+    "HPQ",
+    "IAU",
+    "ILMN",
+    "INTC",
+    "ISRG",
+    "ITB",
+    "JCI",
+    "JPM",
+    "KMI",
+    "KSU",
+    "LHX",
+    "LLY",
+    "LMT",
+    "LNG",
+    "LOW",
+    "MBB",
+    "MCD",
+    "META",
+    "MPC",
+    "MSI",
+    "NEE",
+    "NOW",
+    "PBR",
+    "PEG",
+    "PEP",
+    "PLD",
+    "PLTR",
+    "PM",
+    "QID",
+    "RCL",
+    "RDS.A",
+    "RHT",
+    "RSG",
+    "SCHX",
+    "SHEL",
+    "SHPG",
+    "STX",
+    "SU",
+    "TCO",
+    "TDG",
+    "TIP",
+    "TMUS",
+    "TMV",
+    "TSS",
+    "URI",
+    "VICI",
+    "WBC",
+    "WYNN",
+    "XLE",
+    "XLNX",
+    "XOM",
+    "YUM",
+    "ZBH",
+    "ZNGA"
+  ]
+}

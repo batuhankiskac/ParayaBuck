@@ -1,0 +1,49 @@
+{
+  "action_count_after_dedup": 141751,
+  "bar_count": 11686832,
+  "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+  "candidate": "equity_52week_high_close_v1",
+  "candidate_economics_existed_before_run": false,
+  "common_reserved_endpoint": "2026-07-30T04:00:00+00:00",
+  "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+  "design_input_hashes": {
+    "actual_hashes": {
+      "CANDIDATE_DESIGN.md": "37c33a08e4aa4aed7e0dbc97fdce2083b033eaf18462c5e93f1f62fe49adb8b5",
+      "CAUSALITY_AUDIT.md": "78c7c0a191c24ff0fcf95fda2addd8a938b15be0efdb9e0a3132d816c7746359",
+      "DATA_FEASIBILITY.json": "9562161144c5a98d3a63dd7caeb709e481cd0af04e2d958fad12e80cb8209509",
+      "FINAL_DESIGN_REPORT.md": "af883ae6f7a54272c4ad8e856e399a831e7f4ed18834d29224429bed51808fa6",
+      "FUTURE_TEST_PROTOCOL.md": "9ff021dddece81681b25b33df75eaa03c0931e5e5b7eafad4b879e229eb02be1"
+    },
+    "candidate_economics_inspected": false,
+    "corrected_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+    "corrected_origin_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+    "design_sha": "72b51a0e5c03f2ce0a8790b197cf360b26b33cd3",
+    "expected_hashes": {
+      "CANDIDATE_DESIGN.md": "37c33a08e4aa4aed7e0dbc97fdce2083b033eaf18462c5e93f1f62fe49adb8b5",
+      "CAUSALITY_AUDIT.md": "78c7c0a191c24ff0fcf95fda2addd8a938b15be0efdb9e0a3132d816c7746359",
+      "DATA_FEASIBILITY.json": "9562161144c5a98d3a63dd7caeb709e481cd0af04e2d958fad12e80cb8209509",
+      "FINAL_DESIGN_REPORT.md": "af883ae6f7a54272c4ad8e856e399a831e7f4ed18834d29224429bed51808fa6",
+      "FUTURE_TEST_PROTOCOL.md": "9ff021dddece81681b25b33df75eaa03c0931e5e5b7eafad4b879e229eb02be1"
+    },
+    "hashes_match": true,
+    "live_enabled": false,
+    "paper_strategy": "equity_residual_momentum_v3",
+    "starting_main_sha": "db1a6e9e4af4a5000dca0a54a971ce99577c676c",
+    "starting_origin_main_sha": "db1a6e9e4af4a5000dca0a54a971ce99577c676c"
+  },
+  "design_sha": "72b51a0e5c03f2ce0a8790b197cf360b26b33cd3",
+  "economic_branch_sha_at_start": "339d62f404a0b924ec78e3a67d8cddad7cee24c7",
+  "expected_design_sha": "72b51a0e5c03f2ce0a8790b197cf360b26b33cd3",
+  "expected_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "expected_readiness_sha": "339d62f404a0b924ec78e3a67d8cddad7cee24c7",
+  "lifetime_count": 9010,
+  "lifetimes_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+  "live_enabled": false,
+  "main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "origin_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "paper_strategy": "equity_residual_momentum_v3",
+  "readiness_decision": "G1_READY_FOR_FROZEN_ECONOMIC_TEST",
+  "readiness_sha": "339d62f404a0b924ec78e3a67d8cddad7cee24c7",
+  "readiness_verification_passed": true,
+  "universe_hash": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520"
+}

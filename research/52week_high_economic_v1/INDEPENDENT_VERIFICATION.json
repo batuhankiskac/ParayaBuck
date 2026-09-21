@@ -1,0 +1,15 @@
+{
+  "candidate_economics_inspected": true,
+  "ledger_checks": {
+    "all_curve_equity_positive": true,
+    "cash_holdings_nav_persisted": true,
+    "fill_decision_before_execution": true,
+    "terminal_events_persisted": true
+  },
+  "metric_failures": [],
+  "metrics_recomputed": true,
+  "passed": true,
+  "pre_run_control_parity_passed": true,
+  "run_validity": "RESEARCH_RUN_VALID",
+  "signal_failures": []
+}

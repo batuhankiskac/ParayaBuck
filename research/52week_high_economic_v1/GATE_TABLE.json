@@ -1,0 +1,68 @@
+{
+  "all_gates_passed": false,
+  "gates": {
+    "G1": {
+      "passed": true,
+      "reason": "run identity, data, causality, signal and independent metric checks"
+    },
+    "G2": {
+      "passed": false,
+      "reason": "all candidate 1x development/validation/full return and risk metrics positive"
+    },
+    "G3": {
+      "improvements": [
+        -0.6308197375918997,
+        -0.8172217698474401,
+        -0.357053797373249
+      ],
+      "passed": false,
+      "reason": "full-period risk-adjusted displacement"
+    },
+    "G4": {
+      "improvements": [
+        -0.6813089895829195,
+        -0.9025318204993754,
+        -0.3984553793667013
+      ],
+      "passed": false,
+      "reason": "validation support"
+    },
+    "G5": {
+      "passed": false,
+      "reason": "drawdown and Calmar discipline"
+    },
+    "G6": {
+      "passed": false,
+      "reason": "2x/3x cost robustness"
+    },
+    "G7": {
+      "p95_scheduled_turnover": 1.109039791791126,
+      "passed": false,
+      "reason": "turnover/implementation feasibility",
+      "yearly_unfilled_fraction": {
+        "2017": 0.0006739300832574203,
+        "2018": 0.004705191306546645,
+        "2019": 0.0004374385719550329,
+        "2020": 0.0030528617571195654,
+        "2021": 0.0004380309799546954,
+        "2022": 0.0017760005600390132,
+        "2023": 0.00407280242582999,
+        "2024": 0.0025053031105344895,
+        "2025": 0.008165272696746715,
+        "2026": 0.007878209476651266
+      }
+    },
+    "G8": {
+      "at_least_five_target_fraction": 0.8508771929824561,
+      "largest_positive_pnl_share": 0.03065397795642316,
+      "largest_positive_pnl_symbol": "AMD",
+      "passed": false,
+      "reason": "concentration robustness"
+    },
+    "G9": {
+      "passed": true,
+      "reason": "shared capital/scanner/engine and production untouched"
+    }
+  },
+  "run_validity": "RESEARCH_RUN_VALID"
+}

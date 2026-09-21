@@ -1,0 +1,14 @@
+{
+  "candidate_economics_inspected": true,
+  "decision": "RESEARCH_REJECT",
+  "failed_gates": [
+    "G2",
+    "G3",
+    "G4",
+    "G5",
+    "G6",
+    "G7",
+    "G8"
+  ],
+  "run_validity": "RESEARCH_RUN_VALID"
+}

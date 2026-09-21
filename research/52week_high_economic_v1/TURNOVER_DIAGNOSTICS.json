@@ -1,0 +1,84 @@
+{
+  "candidate_b_1x_full": {
+    "annualized_one_way_target_turnover": 9.884621585795783,
+    "annualized_realized_turnover": 9.890026911921638,
+    "annualized_volatility": 0.10064235312837955,
+    "average_exposure": 0.4586311461794486,
+    "average_positions": 5.0,
+    "cagr": 0.0006722724998515783,
+    "calmar": 0.0035517731204726607,
+    "end_timestamp": "2026-07-30T04:00:00+00:00",
+    "fill_count": 1052,
+    "intended_notional": 9984203.348522158,
+    "maximum_drawdown": 0.18927799638342724,
+    "maximum_realized_concentration": 0.12935995868807243,
+    "maximum_target_concentration": 0.09166666666666667,
+    "median_exposure": 0.544604398776116,
+    "net_total_return": 0.006455748973149378,
+    "positive_month_ratio": 0.5478260869565217,
+    "profit_factor": 0.9539324745634706,
+    "realized_turnover_sum": 94.69926567866155,
+    "scheduled_decision_count": 114,
+    "sharpe": 0.05710832446709649,
+    "sortino": 0.06674075020158053,
+    "start_timestamp": "2017-01-03T05:00:00+00:00",
+    "target_turnover_sum": 94.64750844691376,
+    "total_transaction_costs": 3111.287989962036,
+    "unfilled_rejected_fraction": 0.003162797048813361,
+    "unfilled_rejected_intended_notional": 31578.00888545836,
+    "worst_month": -0.09921048834067192
+  },
+  "fill_completion": 0.9968372029511866,
+  "gate_limit": {
+    "annualized_one_way_target_turnover": 6.0,
+    "overall_unfilled": 0.05,
+    "p95_scheduled_turnover": 1.0,
+    "yearly_unfilled": 0.1
+  },
+  "partial_fills_included": true,
+  "rejected_orders_included": true,
+  "scheduled_turnover_p95": 1.109039791791126,
+  "source": "ECONOMIC_RESULTS.json + GATE_TABLE.json",
+  "yearly": {
+    "2017": {
+      "scheduled_decisions": 12,
+      "unfilled_rejected_fraction": 0.0006739300832574203
+    },
+    "2018": {
+      "scheduled_decisions": 12,
+      "unfilled_rejected_fraction": 0.004705191306546645
+    },
+    "2019": {
+      "scheduled_decisions": 12,
+      "unfilled_rejected_fraction": 0.0004374385719550329
+    },
+    "2020": {
+      "scheduled_decisions": 12,
+      "unfilled_rejected_fraction": 0.0030528617571195654
+    },
+    "2021": {
+      "scheduled_decisions": 12,
+      "unfilled_rejected_fraction": 0.0004380309799546954
+    },
+    "2022": {
+      "scheduled_decisions": 12,
+      "unfilled_rejected_fraction": 0.0017760005600390132
+    },
+    "2023": {
+      "scheduled_decisions": 12,
+      "unfilled_rejected_fraction": 0.00407280242582999
+    },
+    "2024": {
+      "scheduled_decisions": 12,
+      "unfilled_rejected_fraction": 0.0025053031105344895
+    },
+    "2025": {
+      "scheduled_decisions": 12,
+      "unfilled_rejected_fraction": 0.008165272696746715
+    },
+    "2026": {
+      "scheduled_decisions": 6,
+      "unfilled_rejected_fraction": 0.007878209476651266
+    }
+  }
+}

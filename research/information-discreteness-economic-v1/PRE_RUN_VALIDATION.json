@@ -26,7 +26,7 @@
   ],
   "economic_output_started": false,
   "endpoint": "2026-07-30T04:00:00+00:00",
-  "head": "c058fc509f8fa69c8512dcef7497a803eb3ea37b",
+  "head": "4fc881ff3d98a6cf51ed19e453ac43520334c68d",
   "live_enabled": false,
   "live_hard_dollar_cap": 0,
   "main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
@@ -34,7 +34,7 @@
   "prior_candidate_b_economic_artifact_found": false,
   "production_or_paper_change_authorized": false,
   "runtime_mode": "paper",
-  "validated_at": "2026-09-21T08:18:23.085138+00:00",
+  "validated_at": "2026-09-21T08:28:10.424216+00:00",
   "validation": [
     "2022-01-03T04:00:00+00:00",
     "2026-07-30T04:00:00+00:00"

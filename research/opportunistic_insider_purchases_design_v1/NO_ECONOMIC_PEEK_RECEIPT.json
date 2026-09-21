@@ -1,0 +1,28 @@
+{
+  "campaign": "opportunistic_insider_purchases_design_v1",
+  "scope": "pre-outcome source and design only",
+  "calculated_new_candidate_future_returns": false,
+  "calculated_new_candidate_nav": false,
+  "calculated_new_candidate_pnl": false,
+  "calculated_new_candidate_cagr": false,
+  "calculated_new_candidate_sharpe": false,
+  "calculated_new_candidate_sortino": false,
+  "calculated_new_candidate_drawdown": false,
+  "calculated_new_candidate_ic": false,
+  "calculated_new_candidate_hit_rate": false,
+  "calculated_new_candidate_bucket_returns": false,
+  "ran_economic_parameter_sweep": false,
+  "calculated_candidate_v3_outcome_correlation": false,
+  "allowed_work": [
+    "primary literature reconstruction",
+    "official source and field audit",
+    "repository capability inspection",
+    "non-economic source coverage and schema counts"
+  ],
+  "historical_price_file_read_for_candidate_outcomes": false,
+  "broker_orders_placed": false,
+  "production_code_changed": false,
+  "production_config_changed": false,
+  "paper_or_live_state_changed": false,
+  "result": "NO_ECONOMIC_PEEK_VERIFIED"
+}

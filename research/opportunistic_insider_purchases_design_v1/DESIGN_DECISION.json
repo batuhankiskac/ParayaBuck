@@ -1,0 +1,19 @@
+{
+  "campaign": "opportunistic_insider_purchases_design_v1",
+  "decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "long_only_evidence_verdict": "LONG_ONLY_EVIDENCE_INSUFFICIENT",
+  "security_mapping_verdict": "INSIDER_SECURITY_MAPPING_BLOCKED",
+  "primary_reason": "The old-sample CMP buy leg is positive, but modern large/liquid public-copy evidence does not establish scalable after-cost alpha and no source establishes one-slot concentration.",
+  "secondary_blockers": [
+    "Code P cannot distinguish open-market from private purchases",
+    "historical first-public-availability is not directly timestamped",
+    "the current lifetime table lacks issuer CIK and security-class identity",
+    "the 10b5-1 structured field begins only on 2023-04-01",
+    "post-filter opportunity supply was not measurable"
+  ],
+  "candidate_frozen": false,
+  "economic_test_authorized": false,
+  "combination_test_authorized": false,
+  "paper_change_authorized": false,
+  "live_change_authorized": false
+}

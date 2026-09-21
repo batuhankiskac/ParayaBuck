@@ -1,0 +1,34 @@
+{
+  "campaign": "opportunistic_insider_purchases_design_v1",
+  "audit_kind": "pre_outcome_counts_only",
+  "official_source_coverage": {
+    "start": "2006-01",
+    "end": "2026-06",
+    "quarters": 82
+  },
+  "local_source_rows": {
+    "bulk_submissions": null,
+    "form4_submissions": null,
+    "nonderivative_code_p_rows": null,
+    "owners_with_sufficient_prior_history": null,
+    "routine_owner_events": null,
+    "opportunistic_owner_events": null,
+    "uniquely_classified_purchase_events": null,
+    "mapped_issuers": null,
+    "qualifying_issuers_by_month": null,
+    "simultaneous_opportunities": null,
+    "months_with_zero_opportunities": null
+  },
+  "why_counts_are_null": [
+    "No official bulk quarter was acquired in this run after the SEC endpoint returned HTTP 403 to a non-personal User-Agent.",
+    "Counting a Code P row as a qualifying open-market common-equity purchase would be false precision.",
+    "The required effective-dated issuer/security crosswalk does not exist.",
+    "A natural slot-ranking rule has not been established."
+  ],
+  "non_economic_counts_completed": {
+    "parayabuck_entity_lifetimes": 9010,
+    "official_bulk_quarters_listed": 82
+  },
+  "contains_forward_price_or_return_fields": false,
+  "opportunity_supply_verdict": "UNMEASURED_BECAUSE_UPSTREAM_SOURCE_AND_MAPPING_GATES_FAILED"
+}

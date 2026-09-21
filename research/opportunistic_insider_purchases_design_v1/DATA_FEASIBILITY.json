@@ -1,0 +1,39 @@
+{
+  "campaign": "opportunistic_insider_purchases_design_v1",
+  "campaign_decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "data_feasibility_status": "BLOCKED",
+  "official_bulk_coverage": {
+    "start": "2006-01-01",
+    "end": "2026-06-30",
+    "quarters_listed": 82,
+    "prior_history_sufficient_for_2017_in_principle": true,
+    "acceptance_timestamp_present": false,
+    "authoritative_for_investment_decisions": false
+  },
+  "repo_capability": {
+    "entity_lifetime_rows": 9010,
+    "effective_symbol_intervals": true,
+    "issuer_cik": false,
+    "security_class": false,
+    "historical_product_taxonomy": false,
+    "raw_edgar_parser": false,
+    "acceptance_event_scheduler": false,
+    "pit_price_liquidity_gate": true,
+    "month_end_first_open": true
+  },
+  "acquisition": {
+    "bulk_quarters_downloaded": 0,
+    "raw_filings_downloaded": 0,
+    "reason": "SEC bulk endpoint rejected a non-personal repository-URL User-Agent with HTTP 403; no personal contact identifier was transmitted without current explicit authorization",
+    "credentials_persisted": false
+  },
+  "material_blockers": [
+    "no authoritative acceptance timestamp in bulk",
+    "Code P does not distinguish open-market from private purchases",
+    "no effective-dated CIK/security-class to ParayaBuck entity crosswalk",
+    "no demonstrated natural one-slot ranking",
+    "opportunity supply after all fail-closed filters is unknown"
+  ],
+  "economics_authorized": false,
+  "decision_precedence": "external long-only evidence failed before unresolved source and mapping work could authorize a test"
+}

@@ -10,21 +10,42 @@ are listed explicitly and are separate from research conclusions.
 
 ## Decision index
 
-| Research ID | Original branch | Final recorded SHA / date | Validity | Verdict | Production changed? | Closed / superseded-by | Archive tag |
-|---|---|---|---|---|---|---|---|
-| `equity_short_term_residual_reversal_v1` | `research/residual-reversal-local-v1` (deleted before this audit) | `a3a54cff64a9312300ef700f2fe9409435a064d3` / 2026-09-16 | `CORRECTED_REPLAY_VALID` | `RESEARCH_REJECT` | No | Closed; superseded the original invalid campaign; no resurrection | `archive/research/residual-reversal-local-v1-2026-09` |
-| `equity_spy_defensive_overlay_v1` | `research/spy-defensive-overlay-v1` | `da9a99b6e23df880fb64afa78d1f38aa70edd5ec` / 2026-09-17 | Valid; independent verification passed | `RESEARCH_REJECT` | No | Closed | `archive/research/spy-defensive-overlay-v1-2026-09` |
-| `equity_v3_volatility_managed_v1` | `research/v3-volatility-managed-v1` | `9dbe4bd78b3276159dd089e4edf4e15b9ed1cb01` / 2026-09-17 | Valid; structural replay and verifier passed | `RESEARCH_REJECT` | No | Closed | `archive/research/v3-volatility-managed-v1-2026-09` |
-| `equity_overnight_intraday_design_v1` | `research/overnight-intraday-design-v1` | `7ec53efecc4d37cab17d0d96f194389b4513a69b` / 2026-09-17 | Design evidence valid; no economic result in this campaign | `DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST` | No | Closed; superseded by the overnight economic result | `archive/research/overnight-intraday-design-v1-2026-09` |
-| `equity_overnight_reversal_v1` | `research/overnight-reversal-v1` | `41e1c9026bb34bbe81f98577844c9eca0523da8a` / 2026-09-18 | `RESEARCH_RUN_VALID`; independent verification passed | `RESEARCH_REJECT` | No | Closed; supersedes the design-only decision | `archive/research/overnight-reversal-v1-2026-09` |
-| `equity_universe_integrity_audit_v1` | `maintenance/equity-universe-integrity-v1` | `180fd12e7bafb5943856229e85e305d5d9906511` / 2026-09-18 | Structural audit; no economic backtest | `UNIVERSE_CONTRACT_AMBIGUOUS_OPERATOR_DECISION_REQUIRED` | No | Closed; superseded/refined by security-master source research and the limitations document | `archive/research/equity-universe-integrity-v1-2026-09` |
-| `equity_security_master_source_v1` | `research/equity-security-master-source-v1` | `70738106760eec86908b846823b25bd6964b5c0c` / 2026-09-18 | Source study valid; historical PIT coverage not proven | `SECURITY_MASTER_CURRENT_ONLY_HISTORICAL_BLOCKED` | No | Closed; informs future source acquisition, no production integration | `archive/research/equity-security-master-source-v1-2026-09` |
-| `equity_v3_reserved_role_corrected_baseline_v1` | `research/v3-reserved-role-corrected-baseline-v1` | `d34efd3b57cc22c766c5351c12201089bdf55480` / 2026-09-18 | Corrected replay internally verified under original protocol | `CORRECTED_V3_BASELINE_FAILED` (superseded) | No; role fix was already on `main` | Closed; superseded by the repaired protocol decision below | `archive/research/v3-reserved-role-corrected-baseline-v1-2026-09` |
-| `equity_v3_baseline_protocol_repair_v1` | `research/v3-baseline-protocol-repair-v1` | `96910de6a54a3d3154996cad865308c3fff127ed` / 2026-09-18 | V2 validity, parity, and independent verification passed | `CORRECTED_V3_BASELINE_VALID` | No runtime/configuration change | Closed; current canonical V3 baseline/control | `archive/research/v3-baseline-protocol-repair-v1-2026-09` |
+| Research ID | Original branch | Final recorded SHA / date | Validity | Verdict | Durable classification | Production changed? | Closed / superseded-by | Archive tag |
+|---|---|---|---|---|---|---|---|---|
+| `equity_short_term_residual_reversal_v1` | `research/residual-reversal-local-v1` (deleted before this audit) | `a3a54cff64a9312300ef700f2fe9409435a064d3` / 2026-09-16 | `CORRECTED_REPLAY_VALID`; valid capital-neutral portfolio test | `RESEARCH_REJECT` | `ALPHA_VALID_PORTFOLIO_REJECTED` | No | Closed; superseded the original invalid campaign; no resurrection | `archive/research/residual-reversal-local-v1-2026-09` |
+| `equity_spy_defensive_overlay_v1` | `research/spy-defensive-overlay-v1` | `da9a99b6e23df880fb64afa78d1f38aa70edd5ec` / 2026-09-17 | Valid; independent verification passed | `RESEARCH_REJECT` | `PORTFOLIO_REJECTED` | No | Closed | `archive/research/spy-defensive-overlay-v1-2026-09` |
+| `equity_v3_volatility_managed_v1` | `research/v3-volatility-managed-v1` | `9dbe4bd78b3276159dd089e4edf4e15b9ed1cb01` / 2026-09-17 | Valid; structural replay and verifier passed | `RESEARCH_REJECT` | `PORTFOLIO_REJECTED` | No | Closed | `archive/research/v3-volatility-managed-v1-2026-09` |
+| `equity_overnight_intraday_design_v1` | `research/overnight-intraday-design-v1` | `7ec53efecc4d37cab17d0d96f194389b4513a69b` / 2026-09-17 | Design evidence valid; no economic result in this campaign | `DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST` | Design only | No | Closed; superseded by the overnight economic result | `archive/research/overnight-intraday-design-v1-2026-09` |
+| `equity_overnight_reversal_v1` | `research/overnight-reversal-v1` | `41e1c9026bb34bbe81f98577844c9eca0523da8a` / 2026-09-18 | `RESEARCH_RUN_VALID`; independent verification passed | `RESEARCH_REJECT` | `ALPHA_REJECTED` | No | Closed; supersedes the design-only decision | `archive/research/overnight-reversal-v1-2026-09` |
+| `equity_universe_integrity_audit_v1` | `maintenance/equity-universe-integrity-v1` | `180fd12e7bafb5943856229e85e305d5d9906511` / 2026-09-18 | Structural audit; no economic backtest | `UNIVERSE_CONTRACT_AMBIGUOUS_OPERATOR_DECISION_REQUIRED` | Not an alpha test | No | Closed; superseded/refined by security-master source research and the limitations document | `archive/research/equity-universe-integrity-v1-2026-09` |
+| `equity_security_master_source_v1` | `research/equity-security-master-source-v1` | `70738106760eec86908b846823b25bd6964b5c0c` / 2026-09-18 | Source study valid; historical PIT coverage not proven | `SECURITY_MASTER_CURRENT_ONLY_HISTORICAL_BLOCKED` | Not an alpha test | No | Closed; informs future source acquisition, no production integration | `archive/research/equity-security-master-source-v1-2026-09` |
+| `equity_v3_reserved_role_corrected_baseline_v1` | `research/v3-reserved-role-corrected-baseline-v1` | `d34efd3b57cc22c766c5351c12201089bdf55480` / 2026-09-18 | Corrected replay internally verified under original protocol | `CORRECTED_V3_BASELINE_FAILED` (superseded) | Baseline, not an alpha test | No; role fix was already on `main` | Closed; superseded by the repaired protocol decision below | `archive/research/v3-reserved-role-corrected-baseline-v1-2026-09` |
+| `equity_v3_baseline_protocol_repair_v1` | `research/v3-baseline-protocol-repair-v1` | `96910de6a54a3d3154996cad865308c3fff127ed` / 2026-09-18 | V2 validity, parity, and independent verification passed | `CORRECTED_V3_BASELINE_VALID` | Baseline, not an alpha test | No runtime/configuration change | Closed; current canonical V3 baseline/control | `archive/research/v3-baseline-protocol-repair-v1-2026-09` |
+| `equity_52week_high_close_v1` | design: `research/52week-high-design-v1`; readiness: `research/52week-high-readiness-v1`; economic: `research/52week-high-economic-v1` | `2d53ba1985a60c67bb727e1092124df08c220842` / 2026-09-21 | `RESEARCH_RUN_VALID`; readiness was `G1_READY_FOR_FROZEN_ECONOMIC_TEST` | `RESEARCH_REJECT` | `ALPHA_REJECTED` | Generic correctness fixes were already merged to `main`; no candidate code merged | Closed; no combination experiment warranted | design/readiness/economic tags listed below |
+| `equity_information_discreteness_continuous_v1` | design: `research/information-discreteness-design-v1`; standalone: `research/information-discreteness-economic-v1`; combination: `research/v3-id-complementarity-v1` | `a5d355eb8b8045e0438d435312fcc23e59cb3936` / 2026-09-21 | standalone and combination runs valid | standalone `RESEARCH_REJECT`; combination `COMBINATION_REJECT` | `ALPHA_VALID_PORTFOLIO_REJECTED` | No | Closed; standalone alpha remains valid, but no canonical 5+1 slot | design/economic/combination tags listed below |
 
 The branch `maintenance/reserved-equity-role-isolation-v1` was an exact alias
 of current `main` (`bdfa55ea...`) with no unique commit or evidence. It is not
 a research campaign and is represented in the archive inventory only.
+
+## Durable classification vocabulary
+
+These classifications keep standalone alpha evidence separate from portfolio
+contribution evidence:
+
+- `ALPHA_REJECTED`: standalone evidence is not strong enough to justify a
+  portfolio-contribution test. Current examples are overnight reversal and
+  52-week high.
+- `ALPHA_VALID_PORTFOLIO_REJECTED`: standalone evidence is positive and
+  credible, but a valid frozen portfolio-contribution test failed. Current
+  examples are residual reversal and information discreteness.
+- `PORTFOLIO_REJECTED`: the hypothesis is itself a portfolio transformation or
+  overlay, rather than an alternative standalone alpha, and its portfolio test
+  failed. Current examples are the SPY defensive overlay and volatility-managed
+  V3.
+- `ALPHA_VALID_PORTFOLIO_ACCEPTED`: reserved for a future candidate that passes
+  both standalone validity and a frozen complementarity test. It does not by
+  itself authorize PAPER or LIVE deployment.
 
 ## Completed campaign records
 
@@ -36,12 +57,15 @@ but the final verdict was `RESEARCH_REJECT`.
 
 The standalone reversal had positive economics at 1x (net return 88.49%, CAGR
 6.84%, Sharpe 0.6483, max drawdown 17.78%), but its capital-neutral treatment
-did not provide the required contribution: CAGR, Sharpe, and Sortino did not
-improve within the frozen tolerance. The six-position account constraint
+was a valid portfolio experiment and did not provide the required contribution:
+CAGR, Sharpe, and Sortino did not improve within the frozen tolerance. The
+six-position account constraint
 created allocation-capacity shortfall on 495/495 treatment decisions, with
 substantial unused sleeve capacity. The original campaign is not to be
 resurrected; the corrected replay is the durable result and is preserved by
-the archive tag above. Production did not change.
+the archive tag above. Its durable classification is therefore
+`ALPHA_VALID_PORTFOLIO_REJECTED`, not `ALPHA_REJECTED`. Production did not
+change.
 
 ### SPY defensive overlay — `equity_spy_defensive_overlay_v1`
 
@@ -143,6 +167,74 @@ max drawdown 20.4359%, and Calmar 0.3607. Validation metrics are net return
 remained positive, and ordinary V3 target eligibility for SPY/SH/PSQ/DOG was
 zero. The full protocol, role, dataset, and cost contract is recorded in
 [`canonical_v3_baseline.md`](canonical_v3_baseline.md).
+
+### 52-week high close — `equity_52week_high_close_v1`
+
+The design campaign at
+`72b51a0e5c03f2ce0a8790b197cf360b26b33cd3` initially concluded
+`DESIGN_BLOCKED_DATA_OR_EXECUTION`. The blocking items were canonical data-loader
+compatibility, corporate-action and lifetime normalization, month-end decision
+semantics, broad-pool-through-t ranking, and all-in effective-dated cost
+scaling. The generic fixes were integrated into production `main` at
+`839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de` before economics. The separate
+research-only timing/ranking harness then reached
+`G1_READY_FOR_FROZEN_ECONOMIC_TEST` at
+`339d62f404a0b924ec78e3a67d8cddad7cee24c7`.
+
+The frozen economic run at
+`2d53ba1985a60c67bb727e1092124df08c220842` was valid but rejected. Candidate B
+returned approximately +0.65% full-period net at 1x and -12.93% in validation;
+full-period net returns at 2x and 3x were approximately -2.28% and -5.12%.
+Only G1 and G9 passed; G2–G8 failed. This is `ALPHA_REJECTED`: the candidate
+failed its own standalone validation, cost, turnover, and concentration
+evidence, not merely a comparison with V3. A portfolio-combination experiment
+is not warranted and the candidate must not be retuned under this campaign.
+
+Evidence is preserved by:
+
+- `archive/research/52week-high-design-v1-2026-09`;
+- `archive/research/52week-high-readiness-v1-2026-09`;
+- `archive/research/52week-high-economic-v1-2026-09`.
+
+### Information discreteness — `equity_information_discreteness_continuous_v1`
+
+The frozen design at `a822083eef4123d960ee7886d52951bfb20b29bd`
+reached `DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST`. It used raw split-adjusted
+simple returns, a 252-return formation window, a 21-return skip, positive PRET,
+ascending information-discreteness rank, monthly decisions, and six
+equal-weight names.
+
+The standalone run at `9dbc44ce9f62b6e2f1b5d233eee77a7fff3df9d3`
+was valid. Its formal frozen displacement-protocol verdict was
+`RESEARCH_REJECT`, but its own economics were positive: full-period 1x net
+return was approximately +57.79%, CAGR 4.88%, and Sharpe 0.446; validation net
+return was approximately +18.68%. It also remained positive at 2x and 3x.
+Accordingly, the standalone alpha classification is `ALPHA_VALID`, not
+`ALPHA_REJECTED`.
+
+The subsequent canonical 5+1 experiment used full six-slot V3 as Control A, a
+matched five-slot V3 core plus reserved satellite cash as Control B, and the
+same five-slot core plus one ID satellite as Treatment C. The current branch tip
+is `a5d355eb8b8045e0438d435312fcc23e59cb3936`; the economic evidence was
+verified at `997fd9f592e1449aeeca6f45af7229cb24f23c11`. The run was
+`COMBINATION_RUN_VALID` and its verdict was `COMBINATION_REJECT`.
+
+At 1x full-period net return, A/B/C were respectively 0.975529, 0.553304, and
+0.508135. The independently attributed satellite P&L was +4,844.72 full-period
+and +1,358.82 in validation. G1, G4, G6, G7, G8, and G9 passed; G2, G3, and G5
+failed. The alpha was real and positive standalone, but it did not earn a
+complementary slot under the frozen shared-ledger architecture. Its durable
+classification is `ALPHA_VALID_PORTFOLIO_REJECTED`.
+
+Evidence is preserved by:
+
+- `archive/research/information-discreteness-design-v1-2026-09`;
+- `archive/research/information-discreteness-economic-v1-2026-09`;
+- `archive/research/v3-id-complementarity-v1-2026-09`.
+
+The candidate-independent architecture and governance rules extracted from the
+campaign are documented in
+[`core_satellite_combination_policy_v1.md`](core_satellite_combination_policy_v1.md).
 
 ## Production boundary
 

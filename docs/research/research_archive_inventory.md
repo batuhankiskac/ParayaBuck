@@ -116,3 +116,64 @@ The temporary documentation branch
 `maintenance/research-archive-consolidation-v1` is process-only and is not a
 campaign branch; it is deleted only after its documentation commit is merged
 to `main`.
+
+## Follow-up consolidation audit — 2026-09-21
+
+This follow-up began from a clean checkout after
+`git fetch --all --prune --tags`. Local `main` and `origin/main` were both
+`839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de`. The commit contains the generic
+canonical backtest data, lifecycle, corporate-action, and effective-dated cost
+correctness fixes required by the 52-week-high readiness campaign.
+
+The count below is branch-only / main-only commits. Local and remote-tracking
+tips matched for every remote research branch.
+
+| Branch | Tip | Ahead / behind main | Unique scope | Production code not on main? | Disposition |
+|---|---|---:|---|---|---|
+| `main` | `839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de` | — | production reference | — | Retain |
+| `maintenance/backtest-canonical-data-cost-correctness-v1` | `839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de` | 0 / 0 | exact main alias; no unique evidence | No | Delete local alias; no tag |
+| `research/52week-high-design-v1` | `72b51a0e5c03f2ce0a8790b197cf360b26b33cd3` | 1 / 1 | 9 design artefacts | No | Register, tag, delete local/remote |
+| `research/52week-high-readiness-v1` | `339d62f404a0b924ec78e3a67d8cddad7cee24c7` | 2 / 0 | 18 readiness harness/evidence files | No; generic fixes are ancestors on main | Register, tag, delete local/remote |
+| `research/52week-high-economic-v1` | `2d53ba1985a60c67bb727e1092124df08c220842` | 3 / 0 | readiness plus 22 candidate economic files | No | Register, tag, delete local/remote |
+| `research/information-discreteness-design-v1` | `a822083eef4123d960ee7886d52951bfb20b29bd` | 1 / 0 | 11 design artefacts | No | Register, tag, delete local/remote |
+| `research/information-discreteness-economic-v1` | `9dbc44ce9f62b6e2f1b5d233eee77a7fff3df9d3` | 9 / 0 | design plus 28 standalone economic files | No | Register, tag, delete local/remote |
+| `research/v3-id-complementarity-v1` | `a5d355eb8b8045e0438d435312fcc23e59cb3936` | 5 / 0 | 33 combination policy/runner/evidence files | No | Extract generic policy, register, tag, delete local/remote |
+
+The 52-week design branch diverged before `839e92cf`; its branch-only commit
+changes only `research/52week_high_design_v1/`. Every other research branch is
+based directly on current `main`. Diffs against `src/`, configuration, packaging,
+and general scripts are empty. The executable additions and tests are all
+candidate-specific research material and are not eligible for production merge.
+
+The nine archive tags already present at the start of this follow-up were:
+
+- `archive/research/equity-security-master-source-v1-2026-09`;
+- `archive/research/equity-universe-integrity-v1-2026-09`;
+- `archive/research/overnight-intraday-design-v1-2026-09`;
+- `archive/research/overnight-reversal-v1-2026-09`;
+- `archive/research/residual-reversal-local-v1-2026-09`;
+- `archive/research/spy-defensive-overlay-v1-2026-09`;
+- `archive/research/v3-baseline-protocol-repair-v1-2026-09`;
+- `archive/research/v3-reserved-role-corrected-baseline-v1-2026-09`;
+- `archive/research/v3-volatility-managed-v1-2026-09`.
+
+The follow-up archive plan adds these exact annotated tag targets:
+
+| Archive tag | Target |
+|---|---|
+| `archive/research/52week-high-design-v1-2026-09` | `72b51a0e5c03f2ce0a8790b197cf360b26b33cd3` |
+| `archive/research/52week-high-readiness-v1-2026-09` | `339d62f404a0b924ec78e3a67d8cddad7cee24c7` |
+| `archive/research/52week-high-economic-v1-2026-09` | `2d53ba1985a60c67bb727e1092124df08c220842` |
+| `archive/research/information-discreteness-design-v1-2026-09` | `a822083eef4123d960ee7886d52951bfb20b29bd` |
+| `archive/research/information-discreteness-economic-v1-2026-09` | `9dbc44ce9f62b6e2f1b5d233eee77a7fff3df9d3` |
+| `archive/research/v3-id-complementarity-v1-2026-09` | `a5d355eb8b8045e0438d435312fcc23e59cb3936` |
+
+The 52-week economic result is `ALPHA_REJECTED`. The information-discreteness
+standalone result remains `ALPHA_VALID`, while its valid canonical 5+1 test is
+`COMBINATION_REJECT`; the combined durable classification is
+`ALPHA_VALID_PORTFOLIO_REJECTED`. No production code is to be merged in this
+follow-up.
+
+The process-only branch for this update is
+`maintenance/research-consolidation-2026-09-v2`; it carries only the research
+register, this inventory, and the extracted generic combination methodology.

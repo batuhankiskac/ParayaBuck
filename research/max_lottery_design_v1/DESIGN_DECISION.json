@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "decision": "DESIGN_BLOCKED_DATA_OR_EXECUTION",
+  "architecture": "D",
+  "architecture_label": "reject_family_in_current_repository_state",
+  "universe_verdict": "UNIVERSE_LIMITATION_INVALIDATES_MAX_TEST",
+  "candidate_frozen": false,
+  "candidate_design_file_created": false,
+  "future_test_protocol_created": false,
+  "primary_blockers": [
+    "No point-in-time ordinary-common-stock taxonomy; broad US_EQUITY can turn LOW-MAX into a product-type classifier.",
+    "No exact final-month-close to first-next-month-open policy; the generic monthly scheduler is one daily bar late."
+  ],
+  "secondary_rejection_evidence": [
+    "Published economics are driven substantially by high-MAX underperformance, not proven standalone low-MAX alpha.",
+    "The proposed six-name long-only translation is unsupported by the diversified long-short literature.",
+    "MAX overlaps strongly with V3's existing residual-volatility eligibility and sizing mechanics.",
+    "Large/liquid and post-publication evidence is mixed to weak, with no decisive MAX-specific net-cost validation."
+  ],
+  "unblock_conditions": [
+    "Verified effective-dated point-in-time common-stock taxonomy with fail-closed unknown types.",
+    "Synthetic proof of final-completed-calendar-month-close decision and first-next-tradable-open execution.",
+    "A new pre-outcome design review that reassesses literature and distinctness without inspecting candidate economics."
+  ],
+  "production_changes": false,
+  "economic_test_authorized": false
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "scope": "max_lottery_design_v1",
+  "verification_status": "PASS_SCOPE_LIMITED_INDEPENDENT_REVIEW",
+  "repository_start_sha": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+  "prohibited_metrics": [
+    "candidate_future_returns",
+    "candidate_nav",
+    "candidate_pnl",
+    "candidate_sharpe",
+    "candidate_cagr",
+    "candidate_max_drawdown",
+    "candidate_rank_ic",
+    "candidate_bucket_returns",
+    "candidate_hit_rate",
+    "candidate_v3_outcome_correlation",
+    "local_parameter_sweep"
+  ],
+  "prohibited_metrics_computed_or_inspected": [],
+  "archived_hidden_candidate_outcomes_inspected": false,
+  "allowed_work_performed": [
+    "repository_and_configuration inspection",
+    "structural bar, lifecycle, and corporate-action counts",
+    "known split-boundary close continuity checks",
+    "primary and high-quality external literature review",
+    "formula and execution-path inspection"
+  ],
+  "independent_reviewer": "/root/max_robustness_literature",
+  "independent_review_note": "Independent read-only review covered git status/log/reflog, all 10 design artifacts, relevant production code/config, dataset manifests/schema, and primary literature. No prohibited metric value, MAX candidate result artifact, backtest, implementation, or parameter sweep was found. This is necessarily scope-limited: repository and artifact evidence cannot prove unseen terminal or browser activity, and no separate command work log exists."
+}

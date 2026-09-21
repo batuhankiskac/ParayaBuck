@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "audit_type": "structural_only_no_economic_outcomes",
+  "status": "PASS_WITH_BLOCKING_LIMITATIONS",
+  "repository_start_sha": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+  "canonical_bars": {
+    "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "rows": 11686832,
+    "entities": 9010,
+    "first_session": "2016-01-04",
+    "last_session": "2026-07-31",
+    "distinct_sessions": 2659,
+    "duplicate_normalized_keys": 0,
+    "missing_csv_fields": 0,
+    "weekend_rows": 0,
+    "invalid_or_nonfinite_ohlcv_rows": 0,
+    "impossible_ohlc_envelope_rows": 0,
+    "session_breadth_min": 3106,
+    "session_breadth_max": 6763,
+    "source": "SIP",
+    "adjustment": "split_adjusted"
+  },
+  "benchmark": {
+    "symbol": "SPY",
+    "rows": 2658,
+    "missing_session": "2026-07-31",
+    "maximum_safe_benchmark_dependent_endpoint": "2026-07-30"
+  },
+  "lifetimes": {
+    "records": 9010,
+    "active_horizon_censored": 6858,
+    "explicit_possible_delisting_terminals": 2151,
+    "unresolved": 1,
+    "unresolved_symbol": "EOSEW",
+    "rename_chains": 1,
+    "pit_tier": "TIER_A_VERIFIED_PIT"
+  },
+  "corporate_actions": {
+    "rows": 143446,
+    "affected_symbols": 5683,
+    "cash_dividends": 141908,
+    "stock_dividends": 61,
+    "forward_splits": 270,
+    "reverse_splits": 1207,
+    "exact_duplicates": 0,
+    "signal_contract": "use already split-adjusted close; do not reapply split rows; keep cash dividends outside a price-return MAX signal"
+  },
+  "known_split_boundary_close_checks": [
+    {"symbol": "AAPL", "ratio": "4:1", "pre_close": 124.81, "post_close": 129.04, "artificial_factor_jump": false},
+    {"symbol": "TSLA", "ratio": "3:1", "pre_close": 297.10, "post_close": 296.07, "artificial_factor_jump": false},
+    {"symbol": "NVDA", "ratio": "10:1", "pre_close": 120.89, "post_close": 121.79, "artificial_factor_jump": false},
+    {"symbol": "GE", "ratio": "1:8 reverse", "pre_close": 103.60, "post_close": 100.60, "artificial_factor_jump": false}
+  ],
+  "max_signal_structural_suitability": {
+    "daily_split_adjusted_close_returns": true,
+    "calendar_month_grouping": true,
+    "pit_entity_membership_and_lifecycle": true,
+    "historical_scanner_snapshots": false,
+    "historical_spread_snapshots": false,
+    "lifecycle": true,
+    "next_open_execution": true,
+    "all_in_cost_model": true,
+    "exact_last_close_to_first_next_month_open_policy": false,
+    "point_in_time_common_stock_taxonomy": false
+  },
+  "blocking_findings": [
+    "Broad US_EQUITY cannot exclude ETFs, ETNs, preferreds, warrants, units, ADRs, and structured products point in time.",
+    "The generic monthly policy fills one daily bar later than the literature-faithful month-end-close to next-month-first-open boundary."
+  ],
+  "economic_metrics_computed": []
+}

@@ -1,0 +1,43 @@
+{
+  "artifact": "information_discreteness_economic_v1_pre_run_validation",
+  "branch": "research/information-discreteness-economic-v1",
+  "candidate": "equity_information_discreteness_continuous_v1",
+  "data": {
+    "actions": {
+      "expected_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "bars": {
+      "expected_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "lifetimes": {
+      "expected_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv",
+      "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    }
+  },
+  "design_branch_sha": "a822083eef4123d960ee7886d52951bfb20b29bd",
+  "development": [
+    "2017-01-03T04:00:00+00:00",
+    "2021-12-31T04:00:00+00:00"
+  ],
+  "economic_output_started": false,
+  "endpoint": "2026-07-30T04:00:00+00:00",
+  "head": "c058fc509f8fa69c8512dcef7497a803eb3ea37b",
+  "live_enabled": false,
+  "live_hard_dollar_cap": 0,
+  "main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "paper_identity": "equity_residual_momentum_v3",
+  "prior_candidate_b_economic_artifact_found": false,
+  "production_or_paper_change_authorized": false,
+  "runtime_mode": "paper",
+  "validated_at": "2026-09-21T08:18:23.085138+00:00",
+  "validation": [
+    "2022-01-03T04:00:00+00:00",
+    "2026-07-30T04:00:00+00:00"
+  ],
+  "worktree_clean_before_economic_run": true
+}

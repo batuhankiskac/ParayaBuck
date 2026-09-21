@@ -62,7 +62,15 @@ def main() -> int:
             raise RuntimeError(f"{name} hash mismatch: {actual}")
         data[name] = {"path": str(path), "sha256": actual, "expected_sha256": expected}
     artifact_found = any(
-        item.name not in {"FROZEN_INPUT_RECEIPT.json", "candidate_strategy.py", "economic_runner.py", "preflight.py"}
+        item.name
+        not in {
+            "FROZEN_INPUT_RECEIPT.json",
+            "candidate_strategy.py",
+            "economic_runner.py",
+            "independent_verifier.py",
+            "preflight.py",
+            "__pycache__",
+        }
         for item in OUTPUT.iterdir()
     )
     payload = {

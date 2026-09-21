@@ -65,6 +65,7 @@ def main() -> int:
         item.name
         not in {
             "FROZEN_INPUT_RECEIPT.json",
+            "PRE_RUN_VALIDATION.json",
             "candidate_strategy.py",
             "economic_runner.py",
             "independent_verifier.py",

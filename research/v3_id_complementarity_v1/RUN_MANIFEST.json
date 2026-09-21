@@ -1,0 +1,53 @@
+{
+  "branch_state": {
+    "branch": "research/v3-id-complementarity-v1",
+    "main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+    "origin_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+    "policy_commit": "cb1b554",
+    "worktree_status": "?? research/v3_id_complementarity_v1/BC_CORE_PARITY.json\n?? research/v3_id_complementarity_v1/B_CORE_TARGET_AUDIT.json\n?? research/v3_id_complementarity_v1/B_DECISION_METADATA.json\n?? research/v3_id_complementarity_v1/B_RESERVATION_AUDIT.json\n?? research/v3_id_complementarity_v1/CONTROL_A_1X_RESULTS.json\n?? research/v3_id_complementarity_v1/CONTROL_A_2X_RESULTS.json\n?? research/v3_id_complementarity_v1/CONTROL_A_3X_RESULTS.json\n?? research/v3_id_complementarity_v1/CONTROL_B_1X_RESULTS.json\n?? research/v3_id_complementarity_v1/CONTROL_B_2X_RESULTS.json\n?? research/v3_id_complementarity_v1/CONTROL_B_3X_RESULTS.json\n?? research/v3_id_complementarity_v1/C_CORE_TARGET_AUDIT.json\n?? research/v3_id_complementarity_v1/C_DECISION_METADATA.json\n?? research/v3_id_complementarity_v1/C_RESERVATION_AUDIT.json\n?? research/v3_id_complementarity_v1/DECISION.json\n?? research/v3_id_complementarity_v1/DIVERSIFICATION_DIAGNOSTICS.json\n?? research/v3_id_complementarity_v1/EXPOSURE_SLOT_AUDIT.json\n?? research/v3_id_complementarity_v1/FINAL_REPORT.md\n?? research/v3_id_complementarity_v1/GATE_TABLE.json\n?? research/v3_id_complementarity_v1/ID_SIGNAL_AUDIT.json\n?? research/v3_id_complementarity_v1/INDEPENDENT_VERIFICATION.json\n?? research/v3_id_complementarity_v1/METRICS.json\n?? research/v3_id_complementarity_v1/RUN_MANIFEST.json\n?? research/v3_id_complementarity_v1/SCHEDULE.json\n?? research/v3_id_complementarity_v1/SOURCE_ATTRIBUTION.json\n?? research/v3_id_complementarity_v1/TREATMENT_C_1X_RESULTS.json\n?? research/v3_id_complementarity_v1/TREATMENT_C_2X_RESULTS.json\n?? research/v3_id_complementarity_v1/TREATMENT_C_3X_RESULTS.json\n?? research/v3_id_complementarity_v1/combination_runner.py\n?? research/v3_id_complementarity_v1/combination_verifier.py"
+  },
+  "broker_orders": false,
+  "candidate_source_sha256": "48a58dfe5c9f878891c03d676f977d344e154ee9043b0794e100fb169a907ce6",
+  "cost_multipliers": [
+    1.0,
+    2.0,
+    3.0
+  ],
+  "data": {
+    "actions": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "bars": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "lifetimes": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv",
+      "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    }
+  },
+  "development_dates": [
+    "2017-01-03",
+    "2021-12-31"
+  ],
+  "endpoint": "2026-07-30T04:00:00+00:00",
+  "experiment": "v3_id_complementarity_v1",
+  "live_enabled": false,
+  "monthly_schedule_count": 127,
+  "paper_identity": "equity_residual_momentum_v3",
+  "paper_live_changes": false,
+  "policy_sha256": "e700f1971a8014838184d56930cc50065d864487f77da391b7e56383f105d225",
+  "production_changes": false,
+  "runtime_mode": "paper",
+  "schedule_policy": "weekly V3 union last completed regular SPY session monthly ID reservation",
+  "universe_hashes": {
+    "control_a_v3": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520",
+    "control_b_treatment_c_candidate_observation": "5e93894abb8f29b6b5f6155b5f3c7ff88dae2adb980b7bdda36c63d4367b4499"
+  },
+  "validation_dates": [
+    "2022-01-03",
+    "2026-07-30"
+  ],
+  "weekly_schedule_count": 552
+}

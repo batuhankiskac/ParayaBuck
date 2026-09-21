@@ -1,0 +1,38 @@
+{
+  "decision": "COMBINATION_REJECT",
+  "gates": {
+    "all_pass": false,
+    "gates": {
+      "G1_validity": true,
+      "G2_id_incremental_value_vs_B": false,
+      "G3_full_portfolio_contribution_vs_A": false,
+      "G4_validation_contribution": true,
+      "G5_cost_robustness": false,
+      "G6_satellite_deployability": true,
+      "G7_turnover_economics": true,
+      "G8_concentration": true,
+      "G9_architecture_production_safety": true
+    },
+    "inputs": {
+      "combined_turnover_c": 16.26358995617942,
+      "core_turnover_a": 17.499789182138368,
+      "full_risk_adjusted_improvements": 0,
+      "id_full_net_pnl": 4844.718413052408,
+      "id_validation_net_pnl": 1358.8200768874547,
+      "satellite_2x_cost": 388.8456739958078,
+      "satellite_2x_gross": 4025.2048045802744,
+      "satellite_active_targets": 103,
+      "satellite_distinct_symbols": 32,
+      "satellite_documented_zero": 11,
+      "satellite_full_cost": 199.08661539979474,
+      "satellite_full_gross": 3753.774996799326,
+      "satellite_largest_abs_symbol_fraction": 0.3329641259563309,
+      "satellite_leave_one_largest_net_pnl": 2701.8086908431387,
+      "satellite_unexplained_zero": 0,
+      "satellite_valid_reservations": 114,
+      "satellite_validation_cost": 111.63752159010501,
+      "satellite_validation_gross": 1470.4575984775597
+    }
+  },
+  "run_validity": "COMBINATION_RUN_VALID"
+}

@@ -1,0 +1,74 @@
+{
+  "experiment": "v3_id_complementarity_v1",
+  "status": "FROZEN_BEFORE_B_C_ECONOMICS",
+  "starting_state": {
+    "branch": "research/v3-id-complementarity-v1",
+    "main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+    "origin_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+    "standalone_design_sha": "a822083eef4123d960ee7886d52951bfb20b29bd",
+    "standalone_economic_sha": "9dbc44ce9f62b6e2f1b5d233eee77a7fff3df9d3",
+    "standalone_branch": "research/information-discreteness-economic-v1",
+    "standalone_verdict": "RESEARCH_REJECT",
+    "production_change": false,
+    "paper_identity": "equity_residual_momentum_v3",
+    "live_enabled": false,
+    "broker_orders": false
+  },
+  "policy": {
+    "path": "research/v3_id_complementarity_v1/CORE_SATELLITE_COMBINATION_POLICY_V1.md",
+    "sha256": "e700f1971a8014838184d56930cc50065d864487f77da391b7e56383f105d225"
+  },
+  "frozen_candidate": {
+    "name": "equity_information_discreteness_continuous_v1",
+    "source": "research/v3_id_complementarity_v1/frozen_candidate_strategy.py",
+    "source_sha256": "48a58dfe5c9f878891c03d676f977d344e154ee9043b0794e100fb169a907ce6",
+    "standalone_source_sha256": "48a58dfe5c9f878891c03d676f977d344e154ee9043b0794e100fb169a907ce6",
+    "formation_returns": 252,
+    "skip_returns": 21,
+    "required_closes": 274,
+    "top_n": 6,
+    "ranking": "ascending ID after positive PRET gate",
+    "cadence": "last completed regular SPY session per calendar month",
+    "failure_policy": "missing-session/lifecycle/identity fail-closed"
+  },
+  "dataset": {
+    "bars": {
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "lifetimes": {
+      "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+      "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    },
+    "corporate_actions": {
+      "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "endpoint": "2026-07-30T04:00:00+00:00",
+    "warmup": "2016",
+    "development": ["2017-01-03", "2021-12-31"],
+    "validation": ["2022-01-03", "2026-07-30"],
+    "timeframe": "1d",
+    "price_model": "split-adjusted bars with explicit dividend cash flows; no split actions reapplied"
+  },
+  "arms": {
+    "control_a": {
+      "strategy": "equity_residual_momentum_v3",
+      "equity_allocation": 0.55,
+      "max_positions": 6
+    },
+    "control_b": {
+      "v3_core_allocation": 0.4583333333333333,
+      "v3_core_max_positions": 5,
+      "satellite_slot": "matched reservation held in cash"
+    },
+    "treatment_c": {
+      "v3_core_allocation": 0.4583333333333333,
+      "v3_core_max_positions": 5,
+      "satellite_allocation": 0.0916666666666667,
+      "satellite_max_positions": 1
+    }
+  },
+  "cost_multipliers": [1.0, 2.0, 3.0],
+  "gates": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9"]
+}

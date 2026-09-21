@@ -135,7 +135,7 @@ def _verify_signals() -> dict[str, object]:
             symbol = str(raw["symbol"])
             if symbol not in remaining:
                 continue
-            timestamp = str(raw["timestamp"])
+            timestamp = datetime.fromisoformat(str(raw["timestamp"]).replace("Z", "+00:00")).isoformat()
             if timestamp in remaining[symbol]:
                 closes[(symbol, timestamp)] = float(raw["close"])
                 remaining[symbol].discard(timestamp)

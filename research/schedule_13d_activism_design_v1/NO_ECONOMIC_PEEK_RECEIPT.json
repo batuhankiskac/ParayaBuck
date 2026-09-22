@@ -1,0 +1,36 @@
+{
+  "schema_version": "no_economic_peek_receipt_v1",
+  "candidate": "public_schedule_13d_activist_stake_disclosures",
+  "economic_data_loaded": false,
+  "candidate_returns_computed": false,
+  "pnl_computed": false,
+  "nav_computed": false,
+  "cagr_computed": false,
+  "sharpe_computed": false,
+  "drawdown_computed": false,
+  "information_coefficient_computed": false,
+  "hit_rate_computed": false,
+  "event_window_local_returns_computed": false,
+  "future_return_buckets_computed": false,
+  "parameter_performance_sweeps_run": false,
+  "v3_outcome_correlation_computed": false,
+  "allowed_inputs_used": [
+    "repository source, configuration, tests, manifests, and research governance documents",
+    "primary academic literature and official SEC rules/guidance",
+    "official SEC master-index filing metadata for counts only"
+  ],
+  "structural_only_fields": [
+    "form type",
+    "filed date",
+    "index CIK/name discovery metadata",
+    "archive filename",
+    "form-row and unique-index-CIK counts"
+  ],
+  "explicitly_not_acquired": [
+    "candidate price path",
+    "candidate future return",
+    "candidate outcome labels for economic selection",
+    "local 13D accession corpus"
+  ],
+  "verdict": "NO_ECONOMIC_PEEK_VERIFIED"
+}

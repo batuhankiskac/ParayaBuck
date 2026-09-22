@@ -1,0 +1,31 @@
+{
+  "schema_version": "schedule_13d_design_decision_v1",
+  "candidate": "public_schedule_13d_activist_stake_disclosures",
+  "decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "primary_reason": "The literature does not establish a robust unconditional return beginning after public dissemination and a realistic next-open fill.",
+  "independent_rejection_reasons": [
+    "The only positive short post-event portfolio result is equal-weighted in a legacy sample; the value-weighted counterpart is null.",
+    "Long-horizon gains are materially conditioned on future outcomes, especially takeovers.",
+    "No natural ex-ante concentrated ranking rule supports a one-slot expression.",
+    "The cited studies do not implement acceptance-time dissemination and next-regular-open execution."
+  ],
+  "implementation_blocks_not_used_as_primary_decision": [
+    "No local raw Schedule 13D accession corpus or validated Item 4 classifier.",
+    "No effective-dated CIK/CUSIP/security-class mapping into canonical lifetimes.",
+    "No event-driven acceptance-to-open research scheduler.",
+    "Qualifying-event occupancy cannot be measured from index metadata alone."
+  ],
+  "gate_verdicts": {
+    "outsider_investability": "OUTSIDER_INVESTABLE_POST_FILING_LONG_LEG_NOT_SUPPORTED",
+    "outcome_dependence": "ACTIVISM_RETURNS_REQUIRE_FUTURE_OUTCOME_INFORMATION",
+    "modern_evidence": "MODERN_POST_FILING_LONG_ONLY_EVIDENCE_INSUFFICIENT",
+    "takeover_dependence": "RETURNS_LARGELY_REQUIRE_FUTURE_TAKEOVER_OUTCOME",
+    "ranking": "NO_DEFENSIBLE_CONCENTRATION_RULE",
+    "one_slot": "ONE_SLOT_13D_THESIS_UNSUPPORTED",
+    "security_mapping": "13D_SECURITY_MAPPING_BLOCKED",
+    "no_economic_peek": "NO_ECONOMIC_PEEK_VERIFIED"
+  },
+  "candidate_design_created": false,
+  "future_test_protocol_created": false,
+  "production_changes": false
+}

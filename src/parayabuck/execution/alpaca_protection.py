@@ -136,7 +136,7 @@ class ProtectionService:
     def _open_protective_orders(self, symbol: str, position_is_long: bool, open_orders: Any = None) -> list[Any]:
         broker = self._broker
         if open_orders is None:
-            orders: Any = broker._client.get_orders(
+            orders: Any = broker._get_open_orders(
                 GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
             )
         else:

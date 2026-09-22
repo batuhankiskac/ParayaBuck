@@ -584,6 +584,10 @@ def test_account_failure_does_not_drop_ingested_bar() -> None:
 
 def test_external_position_is_not_modified_by_default() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = SimpleNamespace(
+        _request=lambda *_args, **_kwargs: [],
+        get=lambda *_args, **_kwargs: [],
+    )
     broker.ledger = None
     broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(
@@ -621,7 +625,7 @@ def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot() -> 
     )
     closed: list[str] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [])
+    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: [])
     broker.ledger = None
     broker._account_id = "acct"
     broker.ledger = SimpleNamespace(
@@ -663,7 +667,7 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
         "open",
     )
     broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [])
+    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: [])
     broker.ledger = None
     broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(

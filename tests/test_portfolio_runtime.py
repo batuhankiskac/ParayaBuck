@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from alpaca.trading.models import Order
 
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 from parayabuck.config import Config
@@ -315,6 +316,29 @@ class _FakeAlpacaClient:
 
     def get_orders(self, *_args: object, **_kwargs: object) -> list[SimpleNamespace]:
         return self.open_orders
+
+    def get(self, path: str, params: dict[str, object] | None = None) -> list[Order]:
+        if path != "/orders":
+            raise ValueError(f"unsupported GET {path}")
+        query = params or {}
+        symbols = query.get("symbols")
+        wanted = {value.replace("/", "") for value in symbols.split(",")} if isinstance(symbols, str) else set()
+        orders: list[Order] = []
+        for index, raw in enumerate(self.open_orders):
+            if wanted and raw.symbol.replace("/", "") not in wanted:
+                continue
+            fields = dict(vars(raw))
+            fields["id"] = str(getattr(raw, "id", "") or f"fake-open-order-{index}")
+            orders.append(Order.model_construct(**fields))
+        direction = str(query.get("direction", "desc"))
+        if direction == "asc":
+            orders.reverse()
+        cursor_key = "before_order_id" if direction == "desc" else "after_order_id"
+        cursor = query.get(cursor_key)
+        if cursor is not None:
+            cursor_index = next((i for i, order in enumerate(orders) if str(order.id) == str(cursor)), None)
+            orders = orders[cursor_index + 1 :] if cursor_index is not None else []
+        return orders[: int(query.get("limit", 50))]
 
     def submit_order(self, request: object) -> SimpleNamespace:
         self.submitted.append(request)

@@ -1,0 +1,38 @@
+{
+  "final_state": "OPEN_ORDER_PAGINATION_REPAIR_ACCEPTED",
+  "decision_date": "2026-09-22",
+  "scope": "Exhaustive Alpaca OPEN-order enumeration for existing production readers",
+  "evidence": {
+    "pre_fix_default_page_reproduced": true,
+    "synthetic_counts_verified": [0, 1, 49, 50, 51, 499, 500, 501, 1001],
+    "api_maximum_page_size": 500,
+    "order_id_cursor_semantics_preserved": true,
+    "filters_and_requested_direction_preserved": true,
+    "later_page_errors_fail_closed_without_returning_partial_results": true,
+    "production_order_readers_route_through_exhaustive_adapter": true,
+    "installed_sdk_dependency_changed": false,
+    "broker_api_or_live_order_called": false
+  },
+  "validation": {
+    "focused_pagination_suite": "18 passed on each of 3 consecutive runs",
+    "affected_execution_and_portfolio_groups": "76 passed",
+    "full_suite": "1156 passed, 1 skipped; 2 deprecation warnings",
+    "full_suite_loopback_permission": "runner required permission for existing tests binding ephemeral 127.0.0.1 sockets",
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "mypy_src": "passed; 133 source files",
+    "git_diff_check": "passed"
+  },
+  "separate_finding": {
+    "endpoint": "GET /v2/account/activities/FILL",
+    "classification": "POTENTIALLY_INCOMPLETE",
+    "description": "Repeated or missing activity page tokens can stop traversal after a partial history that is still processed and may advance the watermark.",
+    "included_in_this_repair": false
+  },
+  "account_capacity_migration": {
+    "v1_status": "INCONCLUSIVE_AND_ARCHIVED_BEFORE_EITHER_ARM_RAN",
+    "maximum_positions_changed": false,
+    "next_action": "RE_FREEZE_ACCOUNT_CAPACITY_MIGRATION_8_V2_FROM_CORRECTED_MAIN",
+    "v2_started": false
+  }
+}

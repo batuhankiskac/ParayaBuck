@@ -468,8 +468,7 @@ class ReconciliationService:
             self._reconcile_stale_ledger_entries(ledger, broker_symbols, fill_activities_reconciled)
         # protection reconciliation — delegated
         open_orders: Any = None
-        client = getattr(broker, "_client", None)
-        get_orders = getattr(client, "get_orders", None) if client is not None else None
+        get_open_orders = getattr(broker, "_get_open_orders", None)
         for position in account.positions:
             is_long = position.qty > 0
             if position.is_flat:
@@ -521,8 +520,10 @@ class ReconciliationService:
 
                 required_qty = total_qty * float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
                 required_qty = broker._round_qty_down(position.symbol, required_qty)
-            if open_orders is None and get_orders is not None:
-                open_orders = get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
+            if open_orders is None:
+                if get_open_orders is None:
+                    raise RuntimeError("Alpaca broker does not support exhaustive open-order retrieval")
+                open_orders = get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
             # use broker's has_protective check (delegates to ProtectionService when wired)
             has_protection = broker._has_protective_order(position.symbol, is_long, required_qty, open_orders)
             if not has_protection and ownership is not None and ownership.broker_order_id and available_qty <= 0:
@@ -593,36 +594,25 @@ class ReconciliationService:
                 ledger.set_protection_state(
                     broker._account_id or "unknown", ownership.entry_client_order_id, ProtectionState.ACTIVE
                 )
-        try:
-            _local_open_ids: set[str] = set()
-            _local_provider = getattr(broker, "portfolio_open_orders", None)
-            if _local_provider is not None:
-                try:
-                    for _o in _local_provider() or ():
-                        _cid = str(getattr(_o, "client_order_id", "")).strip()
-                        if _cid:
-                            _local_open_ids.add(_cid)
-                except Exception:
-                    pass
-            _broker_open_ids: set[str] = set()
+        _local_open_ids: set[str] = set()
+        _local_provider = getattr(broker, "portfolio_open_orders", None)
+        if _local_provider is not None:
             try:
-                _client = getattr(broker, "_client", None)
-                _get_orders = getattr(_client, "get_orders", None) if _client is not None else None
-                if _get_orders is not None:
-                    _broker_orders = _get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
-                    for _bo in _broker_orders or ():
-                        _bcid = str(
-                            getattr(_bo, "client_order_id", "") or self._field(_bo, "client_order_id", "")
-                        ).strip()
-                        if _bcid:
-                            _broker_open_ids.add(_bcid)
+                for _o in _local_provider() or ():
+                    _cid = str(getattr(_o, "client_order_id", "")).strip()
+                    if _cid:
+                        _local_open_ids.add(_cid)
             except Exception:
                 pass
-            for _cid in sorted(_broker_open_ids - _local_open_ids):
-                categories["UNKNOWN_ORDER"].append(_cid)
-            for _cid in sorted(_local_open_ids - _broker_open_ids):
-                categories["MISSING_BROKER_ORDER"].append(_cid)
-                categories["MISSING_LOCAL_ORDER"].append(_cid)
-        except Exception:
-            pass
+        _broker_orders = broker._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
+        _broker_open_ids: set[str] = set()
+        for _bo in _broker_orders or ():
+            _bcid = str(getattr(_bo, "client_order_id", "") or self._field(_bo, "client_order_id", "")).strip()
+            if _bcid:
+                _broker_open_ids.add(_bcid)
+        for _cid in sorted(_broker_open_ids - _local_open_ids):
+            categories["UNKNOWN_ORDER"].append(_cid)
+        for _cid in sorted(_local_open_ids - _broker_open_ids):
+            categories["MISSING_BROKER_ORDER"].append(_cid)
+            categories["MISSING_LOCAL_ORDER"].append(_cid)
         return categories

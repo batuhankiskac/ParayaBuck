@@ -295,3 +295,11 @@ at `c4e9e30` is outside this exit-audit closure and is retained. Thus the prefer
 main-only inventory is not asserted; this preservation does not leave either
 exit audit open. Stage B requires successful exit-audit closure and a clean,
 updated main checkout.
+
+Closure validation: full normal suite `.venv/bin/python -m pytest -q` passed
+with 1,138 passed, 1 skipped, 2 warnings (99.55s). The first sandboxed run had
+six localhost-bind PermissionErrors; rerunning the same full suite with local
+port permission passed without code changes. Independent read-only review
+matched persisted evidence at both exact SHAs; it did not rerun economics.
+Both annotated tags were pushed and their remote peeled SHAs matched the
+above targets. Documentation diff is confined to the two requested files.

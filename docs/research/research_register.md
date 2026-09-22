@@ -460,7 +460,7 @@ Branch `research/position-exit-giveback-audit-v1`, final SHA
 `4444147ae8e53a2b33b0648077ee2589f4920e5d`, is preserved by annotated tag
 `archive/research/position-exit-giveback-audit-v1-2026-09`.
 The persisted independent verification covers 908 equity episodes. Among
-normalized episodes reaching +10%, median profit retention was approximately
+the 103 naturally closed normalized episodes reaching +10%, median profit retention was approximately
 78.8%, and approximately 9.7% eventually closed negative. There was no evidence
 that large equity winners systematically evaporate before exit.
 Durable conclusion: `EQUITY_EXIT_RESEARCH_NOT_CURRENTLY_JUSTIFIED`.
@@ -480,7 +480,7 @@ Branch `research/crypto-exit-giveback-audit-v2`, final SHA
 Canonical replay contained 455 decisions / 388 fills, with 57 independently
 verified position episodes. All 15 naturally closed episodes reaching >=30%
 MFE ended profitable; their median retention was approximately 87.15%.
-Of 50 positive-MFE episodes, 20 eventually closed negative. Higher giveback
+Of 50 naturally closed positive-MFE episodes, 20 eventually closed negative. Higher giveback
 was associated with hysteresis behavior; causality was not established.
 No alternative exit was tested.
 Durable decision: `CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED`.

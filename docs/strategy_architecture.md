@@ -171,8 +171,8 @@ portfolio/risk layer is the ONLY authority that:
 
 - enforces account-level gross exposure and the cash buffer;
 - enforces per-market sleeve and per-asset caps;
-- enforces position counts (equity `max_positions`, crypto
-  `max_crypto_positions`);
+- enforces the account-wide `max_positions` count across equity and crypto,
+  plus the crypto-specific `max_crypto_positions` count;
 - orders SELL before BUY and sizes against the fresh account;
 - halts entries on daily-loss / drawdown breaches (production; backtest
   records shadow events and keeps trading);

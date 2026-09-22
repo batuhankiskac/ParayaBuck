@@ -1,0 +1,56 @@
+# Internal follow-up checklist — full V1–V10 / L1–L9 — 2026-09-22
+
+Use after the vendor reply to find unanswered items. Short inquiry (`NYSE_FIRST_INQUIRY.md`)
+asks 12 grouped questions; this file holds every detailed sub-question. Mark each
+`ANSWERED` / `UNANSWERED`; never infer `UNANSWERED = PASS`.
+
+## Vintage
+
+- [ ] V1.1 bulk archive 2015-12-16→present in contemporaneous layouts (←Q1)
+- [ ] V2.1 original-vs-restated A/B choice (←Q2)
+- [ ] V2.2 restated ranges and marking (←Q2)
+- [ ] V3.1 byte-guarantee vs original distribution (←Q3)
+- [ ] V3.2 replacement/version/revision/checksum/notice retention (←Q3)
+- [ ] V4.1 original incorrect record preserved (←Q3)
+- [ ] V4.2 correction as dated delta with modified-fields (←Q3)
+- [ ] V4.3 arrival date reconstructable separately from effective date (←Q3)
+- [ ] V4.4 intraday replacement vs one immutable generation (←Q3)
+- [ ] V5.1 full+delta throughout archive (←Q1/Q4)
+- [ ] V5.2 delta layout history since v2.1 (←Q4)
+- [ ] V6.1 generation-date/session mapping incl. weekends/holidays (follow-up if unanswered)
+- [ ] V6.2 delta diffed vs prior generated file (follow-up if unanswered)
+- [ ] V7.1 historical taxonomy population vs backfill (←Q6)
+- [ ] V7.2 non-Arca ETP leverage/inverse/asset-class (←Q6)
+- [ ] V7.3 field/code entry dates and original layouts (←Q6)
+- [ ] V8.1 Stock Number issue-level/non-reuse (←Q5)
+- [ ] V8.2 exact new-number event list (←Q5)
+- [ ] V8.3 predecessor/successor links and location (←Q5)
+- [ ] V8.4 Symbol Reuse Flag population plan (←Q5)
+- [ ] V9.1 per-venue representation (←Q7)
+- [ ] V9.2 NMS-approved scope vs every Nasdaq/BZX issue (←Q7)
+- [ ] V9.3 Listing Date first-trade-date caveat historically (←Q7)
+- [ ] V10.1 4-date full+delta evaluation sample (←Q11)
+- [ ] V10.2 byte-identical to archive (←Q11)
+- [ ] V10.3 retain sample bytes/hashes/audit counts (←Q11)
+
+## Licensing
+
+- [ ] L1.1 archive included vs separate/backfill fee (←Q9/Q12)
+- [ ] L1.2 bulk retrieval limits (←Q9)
+- [ ] L2.1 backtesting/research permitted (←Q8)
+- [ ] L2.2 derived classification tables permitted (←Q8)
+- [ ] L3.1 local raw/checksum/backup storage while subscribed (←Q9)
+- [ ] L3.2 derived tables post-termination (←Q9)
+- [ ] L3.3 originals post-termination deletion/certification (←Q9)
+- [ ] L3.4 NYSE-specific term, not Cboe generalized (←Q9)
+- [ ] L4.1 CUSIP/ISIN/Stock Number restrictions/fees (←Q10)
+- [ ] L4.2 removal scope if identifier rights end (←Q10)
+- [ ] L5.1 user/device/contractor/company limits (←Q12)
+- [ ] L5.2 backup/cloud-region permission (←Q12)
+- [ ] L6.1 aggregate-result publication without raw fields (←Q8)
+- [ ] L6.2 methodology-note label description (←Q8)
+- [ ] L7.1 evaluation without contractual acceptance (←Q11)
+- [ ] L7.2 evaluation redistribution prohibition (←Q11)
+- [ ] L8.1 itemized quote: backfill + updates + evaluation + identifiers (←Q12)
+- [ ] L8.2 quote excludes redistribution (←Q12)
+- [ ] L9.1 vendor reconciliation support (←Q12)

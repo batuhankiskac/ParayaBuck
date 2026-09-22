@@ -383,3 +383,50 @@ The process-only documentation branch is
 inventory, the limitations update, and the new public-data policy; it receives
 no archive tag and is deleted after its documentation commit is integrated
 into `main`.
+
+## Public-data Discovery V3 and spin-off design closure — 2026-09-22
+
+The checkout was clean at start. After `git fetch origin --prune --tags`, local
+`main` and live `origin/main` both resolved to
+`82e534f10bba0c7afa0e08a2ba449b3953314c82`. The only non-main local and
+remote branches were the two completed campaigns below. Both had current
+`main` as merge base and exactly one branch-only commit; the branch-only diffs
+added only their respective `research/` evidence directories. No production,
+configuration, strategy, risk, persistence, broker, PAPER or LIVE path differed
+from main.
+
+| Completed branch | Verified local and remote tip | Branch-only evidence | Durable status | Annotated archive tag |
+|---|---|---:|---|---|
+| `research/public-data-alpha-discovery-v3` | `f37820f11e35da1d360600d7adbf10f501e88f09` | 12 text/JSON artifacts in `research/public_data_alpha_discovery_v3/` | `PUBLIC_DATA_DISCOVERY_V3_EXHAUSTED_AFTER_SINGLE_DESIGN_CANDIDATE`; one nominee, no economic peek | `archive/research/public-data-alpha-discovery-v3-2026-09` |
+| `research/spinoff-child-drift-design-v1` | `4b38d4db4a62459b4b60f271ce98beaf1e98f7f9` | 20 text/JSON artifacts in `research/spinoff_child_drift_design_v1/` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; no candidate economic test | `archive/research/spinoff-child-drift-design-v1-2026-09` |
+
+Both tags are annotated, locally verified, and pushed. Live remote peeled tag
+targets match the exact evidence SHAs in the table. The branch tips themselves
+are **not** merged to main; their full reports, source records and receipts are
+recoverable by checking out either tag. The maintenance branch
+`maintenance/public-data-discovery-v3-closure` carries only
+`docs/research/research_register.md` and this inventory, and is not an evidence
+archive tag.
+
+Pre-deletion privacy and no-peek review covered all 32 added evidence files.
+No contact details, credentials, private key, live token shape, private vendor
+dataset, or local candidate-economic result artifact was found. Both no-peek
+receipts deny forward-return/CAR/P&L/Sharpe/CAGR/IC/backtest computations;
+return numbers appearing in spin-off reports are attributed external studies.
+`git diff --check` passed on both evidence branches. Nothing from either
+campaign is registered as a production strategy.
+
+**Archived-count caveat:** the discovery headline reports 32 families
+screened, but its `LONG_LIST.md` contains 33 rows; its printed disposition
+counts sum to 34 and report six concentration rejects where the table has
+five. This unresolved bookkeeping discrepancy is preserved unchanged at the
+specified discovery SHA. It does not change the one shortlisted candidate,
+withheld second slot, or subsequent spin-off design rejection. The main
+[register](research_register.md) identifies the 32-family number as
+campaign-reported rather than independently reconciled.
+
+Before this closure there were 34 local annotated `archive/research/*` tags.
+These two pushed tags bring the local count to 36. After documentation is
+merged and pushed, delete only the two completed research branches locally and
+remotely, then the process-only maintenance branch locally. No unrelated
+branch is in scope.

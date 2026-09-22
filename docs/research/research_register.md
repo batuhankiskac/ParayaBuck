@@ -32,6 +32,8 @@ are listed explicitly and are separate from research conclusions.
 | `equity_share_repurchase_announcement_design_v1` | `research/share-repurchase-announcement-design-v1` | `73fe3e0065c46f813508a08013fb2198629d9bda` / 2026-09-22 | Pre-outcome design review; no local candidate economics | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; no candidate or economic protocol created | `archive/research/share-repurchase-announcement-design-v1-2026-09` |
 | `equity_management_guidance_drift_design_v1` | `research/management-guidance-drift-design-v1` | `9648192713c5d881bf033e4d505780e70273a98a` / 2026-09-22 | Pre-outcome design review; no local candidate economics | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; evidence and concentration failed independently of the licensed-data block | `archive/research/management-guidance-drift-design-v1-2026-09` |
 | `equity_earnings_announcement_return_design_v1` | `research/earnings-announcement-return-design-v1` | `1f7c461be32f11bb23a8c85a89f19621244a270f` / 2026-09-22 | Pre-outcome design review; no local EAR or future return | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; no candidate or economic protocol created | `archive/research/earnings-announcement-return-design-v1-2026-09` |
+| `public-data-alpha-discovery-v3` | `research/public-data-alpha-discovery-v3` | `f37820f11e35da1d360600d7adbf10f501e88f09` / 2026-09-22 | Public/free-data, pre-outcome screen; no candidate economics | `PUBLIC_DATA_DISCOVERY_V3_EXHAUSTED_AFTER_SINGLE_DESIGN_CANDIDATE` | Discovery campaign, not an alpha result | No | Closed; sole shortlist candidate received the design decision below; no untested shortlist candidate remains | `archive/research/public-data-alpha-discovery-v3-2026-09` |
+| `equity_spinoff_child_drift_v1` | `research/spinoff-child-drift-design-v1` | `4b38d4db4a62459b4b60f271ce98beaf1e98f7f9` / 2026-09-22 | Primary-source, pre-outcome child-security design audit; no economic test | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection, not `ALPHA_REJECTED` | No | Closed; reopen only with materially new external evidence | `archive/research/spinoff-child-drift-design-v1-2026-09` |
 
 The branch `maintenance/reserved-equity-role-isolation-v1` was an exact alias
 of current `main` (`bdfa55ea...`) with no unique commit or evidence. It is not
@@ -634,3 +636,63 @@ The cleanup merged no production code. Current `main` remains
 campaign above is registered as a production strategy. The current broad
 historical universe and role isolation are documented separately in
 [`equity_universe_limitations.md`](equity_universe_limitations.md).
+
+## Public-data discovery V3 and spin-off design closure — 2026-09-22
+
+`public-data-alpha-discovery-v3` reported screening 32 families under the
+[public/free-data policy](public_data_research_policy_v1.md) without an economic
+peek. It shortlisted only `equity_spinoff_child_drift_v1`; the second slot was
+intentionally withheld. Patent efficiency remained
+`DEFER_EXTERNAL_DATA_BURDEN` because an adequate free point-in-time
+assignee-to-ticker map was not established. Public FINRA short-interest
+surprise was `REJECT_EVIDENCE`: value-weighted long-side support was weak, with
+stability, publication-cadence and momentum-overlap concerns. No other family
+cleared the joint evidence, concentration, execution and provenance screen.
+Count caveat: the archived `LONG_LIST.md` actually contains 33 rows, while its
+printed disposition counts sum to 34; five rows, rather than its stated six,
+have `REJECT_CONCENTRATION`. The original 32-family headline is therefore a
+campaign-reported count, **not independently reconciled**. No candidate was
+added to the shortlist by this discrepancy. This is
+`PUBLIC_DATA_DISCOVERY_V3_EXHAUSTED_AFTER_SINGLE_DESIGN_CANDIDATE`:
+the campaign's one nominee has now completed design review. It is not a claim
+that future public-data hypotheses cannot exist. Its detailed evidence is at
+`research/public_data_alpha_discovery_v3/` behind
+`archive/research/public-data-alpha-discovery-v3-2026-09`.
+
+The ensuing `equity_spinoff_child_drift_v1` review returned
+`DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` **before economics**. Original studies
+support a historical diversified long leg in newly traded child shares, but
+do not establish a modern liquid-stock top-six or top-one expression or a
+natural, pre-entry rank. The literature-supported holding horizon remains
+long; shortening it solely to free one of six shared account slots is not
+justified. Issuer/SEC filings plausibly identify individual child securities,
+but complete historical mapping, causal regular-way availability, liquid
+six-slot supply and scanner attrition were not established. No local forward
+return, CAR, P&L, Sharpe, CAGR, IC, or candidate backtest was calculated.
+Evidence is at `research/spinoff_child_drift_design_v1/` behind
+`archive/research/spinoff-child-drift-design-v1-2026-09`.
+
+Do not reopen this candidate using `recency × liquidity`, an arbitrary shorter
+hold, a cherry-picked subtype or local outcome-driven ranking. Reopening
+requires materially new **external** child-long, liquid, post-entry and
+concentration evidence before any economics. The durable lesson is that
+issuer-specific public event records can solve part of the historical
+security-taxonomy problem, but source feasibility alone is insufficient:
+diversified event alpha does not imply six-name alpha density, long holds use
+scarce slots, and a natural rank must exist before a backtest. Free/public
+sources are workable, yet they narrow the evidence-qualified opportunity set;
+data availability alone never warrants testing a candidate.
+
+After this closure, `equity_residual_momentum_v3` and
+`crypto_low_variance_hysteresis_v1` remain the equity and crypto incumbents;
+no additional equity alpha is accepted. Short-term residual reversal and
+information discreteness remain standalone-valid but portfolio-rejected.
+Overnight reversal, 52-week high and abnormal volume remain economic rejects.
+MAX/lottery, opportunistic insider purchases, cash-based operating
+profitability (CbOP), positive liquidity shock, Schedule 13D activism, share
+repurchase announcements, management guidance, earnings-announcement return
+and spin-off child drift remain design rejects or blocks, not negative
+economic findings. Commercial security-master procurement stays
+`DEFERRED_EXTERNAL_DATA_NOT_WORTH_PROCUREMENT_BURDEN`.
+
+`NO_UNTESTED_SHORTLIST_CANDIDATE_REMAINS_FROM_PUBLIC_DATA_DISCOVERY_V3`.

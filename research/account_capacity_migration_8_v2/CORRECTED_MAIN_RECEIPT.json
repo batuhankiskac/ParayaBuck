@@ -1,0 +1,87 @@
+{
+  "receipt_type": "corrected_main_readiness_v2",
+  "expected_main_sha": "8e48b301413a679e6d2b097c28e8711c50ab1a8b",
+  "local_main_sha": "8e48b301413a679e6d2b097c28e8711c50ab1a8b",
+  "local_head_sha_before_study_branch": "8e48b301413a679e6d2b097c28e8711c50ab1a8b",
+  "origin_main_sha_live_ls_remote": "8e48b301413a679e6d2b097c28e8711c50ab1a8b",
+  "readiness_worktree_clean_before_branch_creation": true,
+  "branches_before_study_branch_creation": [
+    "main",
+    "origin/HEAD -> origin/main",
+    "origin/main"
+  ],
+  "study_branch": "research/account-capacity-migration-8-v2",
+  "study_branch_created_from": "8e48b301413a679e6d2b097c28e8711c50ab1a8b",
+  "open_order_pagination_repair": {
+    "status": "present_on_corrected_main",
+    "production_path": "AlpacaBroker.all_open_order_symbols delegates to the exhaustive open-order client enumeration",
+    "regression_command": ".venv/bin/pytest -q tests/execution/test_alpaca_order_pagination.py",
+    "result": "18 passed in 1.46s"
+  },
+  "validation": {
+    "full_pytest": "1156 passed, 1 skipped, 2 warnings in 103.62s; rerun with local loopback socket permission",
+    "focused_cross_market_and_pagination_pytest": "41 passed in 3.33s",
+    "ruff_check": "passed",
+    "ruff_format_check": "passed; 251 files already formatted",
+    "strict_mypy_src": "passed; no issues found in 133 source files",
+    "migration_replay_specific_tests": "not run; no shared-account migration replay implementation exists",
+    "audit_json_files": "4 parsed successfully",
+    "credential_pattern_scan_on_v2_audit_packet": "0 hits",
+    "git_diff_check": "passed on staged V2 audit packet"
+  },
+  "corrected_main_incumbent_settings_read_from_config_settings_yaml": {
+    "equity": {
+      "name": "equity_residual_momentum_v3",
+      "version": "3.0.0",
+      "enabled": true,
+      "maximum_allocation": 0.55,
+      "parameters": {
+        "formation_bars": 252,
+        "skip_bars": 21,
+        "beta_window_bars": 273,
+        "residual_vol_window": 63,
+        "top_n": 8,
+        "max_single_weight": 0.1,
+        "ivol_reject_quantile": 0.7,
+        "exclude_symbols": ["SPY"],
+        "rebalance_frequency": "weekly"
+      }
+    },
+    "crypto": {
+      "name": "crypto_low_variance_hysteresis_v1",
+      "version": "1.0.0",
+      "enabled": true,
+      "maximum_allocation": 0.05,
+      "parameters": {
+        "variance_lookback_days": 22,
+        "top_n": 2,
+        "rebalance_hours": 96
+      }
+    },
+    "risk": {
+      "maximum_positions": 6,
+      "maximum_crypto_positions": 2,
+      "maximum_equity_position_pct": 0.1,
+      "maximum_crypto_exposure_pct": 0.1,
+      "maximum_crypto_position_pct": 0.05,
+      "cash_buffer_pct": 0.4,
+      "maximum_gross_exposure_pct": 0.6,
+      "daily_loss_limit_pct": 0.005,
+      "drawdown_halt_pct": 0.05
+    },
+    "backtest_costs": {
+      "initial_cash": 100000,
+      "slippage_bps": 2,
+      "spread_bps": 2,
+      "commission": 0,
+      "crypto_taker_fee_bps": 25,
+      "equity_effective_dated_regulatory_fees": true
+    }
+  },
+  "v2_migration_artifacts_or_outcomes_before_this_run": "none_found",
+  "v1_provenance_tag": "archive/research/account-capacity-migration-8-v1-inconclusive-2026-09",
+  "v1_final_commit": "ede3b3dfadfd5f3f0bdef040a14d20365c8df469",
+  "v1_frozen_spec_commit_is_provenance_only": "3f7d0bc2b443f66b95d67ccb0503f1a0567799f5",
+  "production_configuration_changed": false,
+  "migration_outcomes_generated": false
+}

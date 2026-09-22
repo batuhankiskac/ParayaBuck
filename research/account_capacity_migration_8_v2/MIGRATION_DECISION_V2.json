@@ -1,0 +1,20 @@
+{
+  "decision": "ACCOUNT_ARCHITECTURE_MIGRATION_8_INCONCLUSIVE",
+  "study": "account_capacity_migration_8_v2",
+  "corrected_main_sha": "8e48b301413a679e6d2b097c28e8711c50ab1a8b",
+  "fill_pagination_relevance": "FILL_PAGINATION_IRRELEVANT_TO_MIGRATION_V2",
+  "fill_gate_assumption": "offline replay starts flat, all-cash, with no pending orders and does not read production broker or ledger state",
+  "stop_reason": "No faithful joint equity/crypto historical replay with one evolving shared account ledger is available or demonstrated on corrected main.",
+  "stop_before_freeze": true,
+  "stop_before_outcomes": true,
+  "control": {
+    "maximum_positions": 6
+  },
+  "treatment": {
+    "maximum_positions": 8
+  },
+  "single_variable_comparison_frozen": false,
+  "economic_comparison_performed": false,
+  "production_configuration_changed": false,
+  "next_action": "RESOLVE_SHARED_ACCOUNT_REPLAY_LIMITATION"
+}

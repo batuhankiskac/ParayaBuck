@@ -1,0 +1,19 @@
+{
+  "verification_status": "INDEPENDENT_STOP_GATE_VERIFIED_NO_OUTCOMES",
+  "independent_review": "read-only replay and architecture audit",
+  "corrected_main_sha": "8e48b301413a679e6d2b097c28e8711c50ab1a8b",
+  "checks": {
+    "production_runtime_uses_one_account_snapshot_for_market_decisions": true,
+    "production_simultaneous_ordering_is_crypto_first": true,
+    "production_reserves_slots_from_actual_planned_buys": true,
+    "existing_product_replay_is_single_market_and_owns_separate_engine_state": true,
+    "existing_tests_demonstrate_joint_historical_cash_and_fill_ledger": false,
+    "shared_account_parity_demonstrated": false,
+    "v2_frozen_spec_created": false,
+    "v2_arm_outcomes_or_economic_comparison_created": false,
+    "production_settings_changed": false
+  },
+  "decision_supported": "ACCOUNT_ARCHITECTURE_MIGRATION_8_INCONCLUSIVE",
+  "next_action": "RESOLVE_SHARED_ACCOUNT_REPLAY_LIMITATION",
+  "note": "Outcome-level deterministic, fill, fee, cash, exposure, attribution, and headline metric verification is not applicable because the study correctly stopped before freeze and outcomes."
+}

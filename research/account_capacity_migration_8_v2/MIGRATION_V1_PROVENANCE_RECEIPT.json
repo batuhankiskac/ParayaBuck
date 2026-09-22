@@ -1,0 +1,20 @@
+{
+  "receipt_type": "migration_v1_provenance_v2",
+  "archive_tag": "archive/research/account-capacity-migration-8-v1-inconclusive-2026-09",
+  "tag_object": "a0a86e3fea91e50ab99db6cb97f01794f011b9a6",
+  "final_commit": "ede3b3dfadfd5f3f0bdef040a14d20365c8df469",
+  "decision": "ACCOUNT_ARCHITECTURE_MIGRATION_8_INCONCLUSIVE",
+  "old_study_status": "stopped before either arm; no six-versus-eight outcomes",
+  "old_frozen_spec_commit": "3f7d0bc2b443f66b95d67ccb0503f1a0567799f5",
+  "reuse_allowed": [
+    "the ex-ante reason for cap eight: it can accommodate up to six equity names and two crypto names",
+    "the single-variable proposition maximum_positions six versus eight",
+    "the governance rule to freeze before outcomes"
+  ],
+  "reuse_prohibited": [
+    "the old specification as executable authority",
+    "old source-path, replay, broker-state, dataset, settings, hash, test, or parity claims without re-derivation from corrected main",
+    "any six-versus-eight outcomes, since none exist"
+  ],
+  "corrected_main_for_v2": "8e48b301413a679e6d2b097c28e8711c50ab1a8b"
+}

@@ -1,0 +1,15 @@
+{
+  "candidate": "equity_spinoff_child_drift_v1",
+  "date": "2026-09-22",
+  "scope": "pre-outcome design and public-source research",
+  "candidate_backtest_run": false,
+  "candidate_forward_returns_calculated": false,
+  "candidate_event_car_or_mfe_mae_calculated": false,
+  "candidate_pnl_sharpe_cagr_or_ic_calculated": false,
+  "candidate_parameter_outcomes_compared": false,
+  "candidate_v3_return_correlation_calculated": false,
+  "local_data_access": "Canonical schema and corporate-action type counts only; no candidate return or price path read for outcomes. Existing production scanner/strategy code and policy were inspected.",
+  "published_return_numbers": "Quoted only from primary external literature with their population, benchmark, and event clock; no local economic test.",
+  "test_suite_scope": "Existing project tests may exercise synthetic strategy fixtures; none was a spin-off-child candidate backtest or economic run.",
+  "disposition": "No freeze and no economic-run authorization used."
+}

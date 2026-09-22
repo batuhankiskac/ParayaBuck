@@ -1,0 +1,27 @@
+{
+  "candidate": "equity_spinoff_child_drift_v1",
+  "decision_date": "2026-09-22",
+  "decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "exact_next_action": "CLOSE_AND_ARCHIVE_CANDIDATE",
+  "basis": "Historical all-child evidence does not establish a modern liquid post-entry top-six long leg, any validated ex-ante ranking, or a slot-efficient holding horizon. Independent ex-ante evidence conflicts with classic results. Source, mapping, and structural gates also remain unproven.",
+  "gates": {
+    "primary_literature": "VERIFIED_WITH_CONFLICTING_SAMPLES_AND_LIMITATIONS",
+    "modern_child_post_entry_liquid_evidence": "MODERN_EVIDENCE_INSUFFICIENT",
+    "historical_diversified_child_long_leg": "SUPPORTED_WITH_BENCHMARK_AND_TAKEOVER_SENSITIVITY",
+    "causal_next_open_return": "UNPROVEN",
+    "exact_event_definition": "INVESTIGATIONAL_NARROW_COHORT_ONLY",
+    "free_pit_filing_path": "PLAUSIBLE_FOR_EXAMPLES_NOT_FULL_PERIOD_VERIFIED",
+    "historical_child_security_mapping": "UNPROVEN_AT_SCALE",
+    "structural_event_supply": "UNMEASURED_EVENT_INVENTORY",
+    "top_six_concentration": "UNSUPPORTED",
+    "top_one_concentration": "UNSUPPORTED",
+    "natural_pre_outcome_rank": "NONE_VALIDATED",
+    "slot_time": "UNSUPPORTED_FOR_SIX_OR_ONE_SLOTS",
+    "v3_information_source": "INFORMATIONALLY_DISTINCT_CONDITIONAL_ON_VERIFIED_NEW_CHILD",
+    "regular_way_next_open_execution": "MECHANICALLY_COMPATIBLE_SOURCE_AND_LIQUIDITY_UNVERIFIED"
+  },
+  "candidate_backtest_run": false,
+  "local_candidate_economics_computed": false,
+  "frozen_spec_created": false,
+  "production_registered": false
+}

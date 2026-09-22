@@ -1,0 +1,15 @@
+{
+  "candidate": "equity_spinoff_child_drift_v1",
+  "campaign": "pre-outcome design and source audit only",
+  "date": "2026-09-22",
+  "design_branch": "research/spinoff-child-drift-design-v1",
+  "starting_main_sha": "82e534f10bba0c7afa0e08a2ba449b3953314c82",
+  "remote_main_sha_at_start": "82e534f10bba0c7afa0e08a2ba449b3953314c82",
+  "discovery_branch": "research/public-data-alpha-discovery-v3",
+  "discovery_sha": "f37820f11e35da1d360600d7adbf10f501e88f09",
+  "remote_discovery_sha_at_start": "f37820f11e35da1d360600d7adbf10f501e88f09",
+  "verification": "git ls-remote --heads origin main research/public-data-alpha-discovery-v3; clean local discovery branch switched to main, then new branch created from main",
+  "discovery_recommendation": "RECOMMENDED_NEXT_PUBLIC_DATA_FAMILY: equity_spinoff_child_drift_v1",
+  "discovery_literature_status": "leads only; external web verification unavailable in discovery final pass",
+  "authorization_boundary": "no backtest, forward return, local candidate P&L, optimization, production registration, or PAPER/LIVE change"
+}

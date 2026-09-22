@@ -1,0 +1,91 @@
+{
+  "audit_date": "2026-09-22",
+  "scope": "Structural supply only; no candidate returns or economic measurements",
+  "gate_status": "UNMEASURED_EVENT_INVENTORY",
+  "canonical_period": {
+    "warmup": "2016",
+    "development": "2017-01-03/2021-12-31",
+    "validation": "2022-01-03/2026-07-30"
+  },
+  "canonical_inputs": [
+    {
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "columns": ["timestamp", "symbol", "timeframe", "open", "high", "low", "close", "volume", "market"],
+      "event_identification_capability": false
+    },
+    {
+      "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+      "columns": ["entity_id", "provider_asset_id", "canonical_symbol", "historical_symbol", "valid_from", "valid_to", "first_observed_bar", "last_observed_bar", "current_status", "exchange", "rename_chain", "evidence_class", "pit_quality_tier", "terminal_event_class", "notes"],
+      "event_identification_capability": false
+    },
+    {
+      "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "columns": ["action_type", "symbol", "ex_date", "record_date", "payable_date", "rate", "old_rate", "new_rate", "source_symbol", "target_symbol", "raw_id"],
+      "action_type_counts": {
+        "cash_dividends": 141908,
+        "forward_splits": 270,
+        "reverse_splits": 1207,
+        "stock_dividends": 61
+      },
+      "spinoff_action_type_present": false,
+      "event_identification_capability": false
+    }
+  ],
+  "reason_inventory_cannot_be_built_from_canonical_data_alone": "No row identifies a parent-child distribution, child CIK, historical share class, regular-way start, or filing acceptance time. First-observed-bar and symbol changes cannot establish that a security was a distributed spin-off child. Treating them as events would introduce false positives and possible current-identity leakage.",
+  "metrics": {
+    "verified_spin_events": null,
+    "events_by_year": null,
+    "child_securities_per_event": null,
+    "simultaneously_active_events": null,
+    "mapping_success_count": null,
+    "mapping_ambiguity_count": null,
+    "missing_publication_time_count": null,
+    "scanner_liquidity_attrition": null,
+    "six_position_occupancy": null,
+    "one_position_occupancy": null,
+    "repeat_issuer_count": null
+  },
+  "claims_not_verified": [
+    "10-30 concurrent child securities",
+    "1-2 new child securities monthly",
+    "six concurrent eligible children commonly possible",
+    "one satellite slot continuously or intermittently occupied"
+  ],
+  "external_structural_context_not_canonical_inventory": [
+    {
+      "source": "McConnell, Sibley and Xu, Journal of Portfolio Management, Fall 2015, full text",
+      "url": "https://business.purdue.edu/faculty/mcconnell/publications/The%20Stock%20Price...2013%20jpm.2015.42.1.143.pdf",
+      "sample": "U.S. nontaxable non-REIT spin events originating January 2001 to December 2012",
+      "events": 146,
+      "children": 153,
+      "observed_all_child_22_month_portfolio_range": [10, 33],
+      "limitation": "Historical commercial-source cohort; no post-2015 events, causal free-source mapping denominator, liquid-filter occupancy, or six-slot eligibility proof."
+    },
+    {
+      "source": "Owers and Sergi, Humanities and Social Sciences Communications, 2021, full text",
+      "url": "https://www.nature.com/articles/s41599-021-00807-9",
+      "sample": "U.S. announced voluntary spin-offs, 2007 to 2017",
+      "events": 249,
+      "limitation": "Broader CRSP distribution-code and announcement-stage cohort; not verified strict full-spin child ordinary shares, regular-way entries, or liquid occupancy."
+    }
+  ],
+  "existing_causal_scanner_rules": {
+    "minimum_price_usd": 5.0,
+    "minimum_median_dollar_volume_20d_usd": 20000000.0,
+    "minimum_data_completeness": 0.95,
+    "atr_pct_range": [0.005, 0.12],
+    "status": "Policy reference only; no threshold tuned and no attrition measured. A newly listed child needs enough trailing observations before these fields can be evaluated."
+  },
+  "required_non_economic_acquisition": [
+    "Create event rows from timestamped SEC/issuer public evidence with parent and child identifiers, distribution details, and explicitly documented regular-way session.",
+    "Resolve child CIK to the exact ordinary share class and historical symbol/entity; fail closed on ambiguity.",
+    "Join only verified event rows to canonical entity lifetimes and bars using valid-time identity; count eligible names and slot occupancy without looking ahead or computing returns."
+  ],
+  "repository_references": [
+    "docs/research/canonical_v3_baseline.md",
+    "docs/research/public_data_research_policy_v1.md",
+    "docs/research/equity_universe_limitations.md",
+    "src/parayabuck/universe/scanner.py:293-319",
+    "src/parayabuck/config.py:340-348"
+  ]
+}

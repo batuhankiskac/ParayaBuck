@@ -28,6 +28,10 @@ are listed explicitly and are separate from research conclusions.
 | `equity_opportunistic_insider_purchases_design_v1` | design: `research/opportunistic-insider-purchases-design-v1`; source reassessment: `research/opportunistic-insider-source-reassessment-v1` | `e46e9ae0e1c124138c2143b30d93809a97f4282d` / 2026-09-21 | Two pre-outcome reviews; no local economic outcome inspected | original `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; reassessment `REASSESSMENT_CONFIRMS_DESIGN_REJECT` | Design-stage rejection; source/mapping feasibility improved | No | Closed; no retuning or economic experiment | two archive tags listed below |
 | `equity_cash_based_operating_profitability_design_v1` | `research/cash-based-operating-profitability-design-v1` | `0f77021a2d6a0d08df76f0902da3354e90f95f65` / 2026-09-21 | Pre-outcome design review; no local forward returns | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; exact accounting semantics fail closed | `archive/research/cash-based-operating-profitability-design-v1-2026-09` |
 | `equity_positive_liquidity_shock_design_v1` | `research/positive-liquidity-shock-design-v1` | `15644b3c117535eb94a12eb5099d9d82d10cb2cf` / 2026-09-21 | Pre-outcome design and structural audit; no future-return study | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; measurable but unsuitable for the concentrated architecture | `archive/research/positive-liquidity-shock-design-v1-2026-09` |
+| `equity_schedule_13d_activism_design_v1` | `research/schedule-13d-activism-design-v1` | `c4e9e30039eb4bef8005fdb0700e15a99884070c` / 2026-09-22 | Pre-outcome design and SEC structural audit; no candidate returns | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection, not `ALPHA_REJECTED` | No | Closed; no candidate or economic protocol created | `archive/research/schedule-13d-activism-design-v1-2026-09` |
+| `equity_share_repurchase_announcement_design_v1` | `research/share-repurchase-announcement-design-v1` | `73fe3e0065c46f813508a08013fb2198629d9bda` / 2026-09-22 | Pre-outcome design review; no local candidate economics | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; no candidate or economic protocol created | `archive/research/share-repurchase-announcement-design-v1-2026-09` |
+| `equity_management_guidance_drift_design_v1` | `research/management-guidance-drift-design-v1` | `9648192713c5d881bf033e4d505780e70273a98a` / 2026-09-22 | Pre-outcome design review; no local candidate economics | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; evidence and concentration failed independently of the licensed-data block | `archive/research/management-guidance-drift-design-v1-2026-09` |
+| `equity_earnings_announcement_return_design_v1` | `research/earnings-announcement-return-design-v1` | `1f7c461be32f11bb23a8c85a89f19621244a270f` / 2026-09-22 | Pre-outcome design review; no local EAR or future return | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; no candidate or economic protocol created | `archive/research/earnings-announcement-return-design-v1-2026-09` |
 
 The branch `maintenance/reserved-equity-role-isolation-v1` was an exact alias
 of current `main` (`bdfa55ea...`) with no unique commit or evidence. It is not
@@ -428,6 +432,82 @@ Future discovery should place greater weight on issuer-specific events,
 naturally concentrated signals, slow-decaying public information, mechanisms
 that identify few unusually strong opportunities, and daily next-open
 compatibility. This record does not name or start a new candidate.
+
+## Event-driven pre-outcome wave — 2026-09-22
+
+### Schedule 13D activist stake disclosures — `equity_schedule_13d_activism_design_v1`
+
+The pre-outcome design at
+`c4e9e30039eb4bef8005fdb0700e15a99884070c` returned
+`DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`. No candidate returns or other
+economics were calculated, and no candidate or future economic protocol was
+created. The short post-filing evidence was not sufficiently strong in a
+modern, value-weighted, concentrated form; longer-run gains depended
+materially on future outcomes, especially takeovers; and no filing-time
+natural one-slot ranking rule was defensible.
+
+The SEC structural audit covered 2017-01-03 through 2026-09-21 and counted
+23,705 initial Schedule 13D rows and 82,369 amendment rows. These are filing
+rows, not qualifying activist opportunities or alpha evidence. The 2024 regime
+changed the initial deadline to five business days and the amendment deadline
+to two business days; structured XML became mandatory on 2024-12-18. The
+family remains a design-stage rejection, not `ALPHA_REJECTED`, and is preserved
+by `archive/research/schedule-13d-activism-design-v1-2026-09`.
+
+### Open-market share-repurchase announcements — `equity_share_repurchase_announcement_design_v1`
+
+The pre-outcome design at
+`73fe3e0065c46f813508a08013fb2198629d9bda` returned
+`DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`. Modern large/liquid concentrated
+long-only evidence was insufficient, no natural announcement-time top-one
+ranking was established, and the long holding horizons in the supportive
+literature implied substantial slot-time opportunity cost. A complete
+historical first-public event corpus and security mapping were not established.
+Future repurchase completion was not used to classify events. No candidate
+economics or economic protocol was created. Evidence is preserved by
+`archive/research/share-repurchase-announcement-design-v1-2026-09`.
+
+### Positive management-guidance surprise — `equity_management_guidance_drift_design_v1`
+
+The pre-outcome design at
+`9648192713c5d881bf033e4d505780e70273a98a` returned
+`DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`. A historical positive good-news long
+leg exists, but a literature-faithful forecast surprise requires point-in-time
+analyst consensus. No entitled immutable consensus panel was supplied, and no
+honest free substitute was accepted. Independently of that data block, modern
+U.S. liquid/concentrated evidence was insufficient and diversified evidence did
+not establish within-tail top-one concentration. No local economic result or
+future protocol was created. This is not merely "blocked by analyst data."
+Evidence is preserved by
+`archive/research/management-guidance-drift-design-v1-2026-09`.
+
+### Earnings Announcement Return continuation — `equity_earnings_announcement_return_design_v1`
+
+The pre-outcome design at
+`1f7c461be32f11bb23a8c85a89f19621244a270f` returned
+`DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`. Historical positive EAR long-leg
+evidence exists, but the exact Brandt et al. benchmark requires historical
+CRSP/Compustat-style size and book-to-market membership. Current canonical data
+cannot reproduce it. An independently validated simpler historical definition
+was not substituted for the materially different primary benchmark. Modern
+U.S. evidence and top-six/top-one concentration
+support were insufficient. The campaign resolved the 2007/2008 working-paper
+discrepancy and pinned claims to the 22 January 2008 version. No local EAR,
+future return, economics, candidate design, or future protocol was created.
+Evidence is preserved by
+`archive/research/earnings-announcement-return-design-v1-2026-09`.
+
+### Event-wave lesson
+
+Issuer specificity did not by itself establish post-disclosure alpha. Across
+these four families, public events often realized much of their information
+immediately; longer-run returns could depend on future outcomes unavailable at
+entry; academic group-level effects did not establish top-one alpha density;
+licensed expectation or benchmark data could be essential; and natural event
+strength/ranking was critical. Future discovery should require meaningful
+post-publication persistence, modern liquid-stock long-leg evidence, a natural
+pre-existing concentration variable, manageable slot-time, and point-in-time
+source feasibility. This cleanup does not propose a new candidate.
 
 ## Canonical crypto baseline maintenance
 

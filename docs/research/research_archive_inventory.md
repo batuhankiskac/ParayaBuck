@@ -303,3 +303,50 @@ port permission passed without code changes. Independent read-only review
 matched persisted evidence at both exact SHAs; it did not rerun economics.
 Both annotated tags were pushed and their remote peeled SHAs matched the
 above targets. Documentation diff is confined to the two requested files.
+
+## Event-driven pre-outcome consolidation — 2026-09-22
+
+This consolidation began from a clean checkout after
+`git fetch --all --tags --prune`. Local `main` and `origin/main` were both
+`16db2eaad9061a1669166ef9ab6717853337fafc`, and 27 pre-existing annotated
+`archive/research/*` tags were present. Commit `16db2ea` is two commits newer
+than, and descends from, `b81e9d9fef3744723449f4c019f2a5dd75f2e2cb`;
+the intervening commits are documentation consolidation. The only non-main
+local and remote branches were the four completed campaigns below. Local and
+remote-tracking tips matched exactly; no unrelated active branch was found.
+
+The count is branch-only / main-only commits relative to the starting `main`.
+
+| Branch | Tip | Ahead / behind main | Merge base | Final decision | Unique production code? | Action |
+|---|---|---:|---|---|---|---|
+| `research/schedule-13d-activism-design-v1` | `c4e9e30039eb4bef8005fdb0700e15a99884070c` | 1 / 3 | `754f4060b1eb38593201b2a269e9593d083eb534` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | No; 19 campaign artifacts only | Tag, then delete local/remote |
+| `research/share-repurchase-announcement-design-v1` | `73fe3e0065c46f813508a08013fb2198629d9bda` | 1 / 0 | `16db2eaad9061a1669166ef9ab6717853337fafc` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | No; 19 campaign artifacts only | Tag, then delete local/remote |
+| `research/management-guidance-drift-design-v1` | `9648192713c5d881bf033e4d505780e70273a98a` | 1 / 0 | `16db2eaad9061a1669166ef9ab6717853337fafc` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | No; 22 campaign artifacts only | Tag, then delete local/remote |
+| `research/earnings-announcement-return-design-v1` | `1f7c461be32f11bb23a8c85a89f19621244a270f` | 1 / 0 | `16db2eaad9061a1669166ef9ab6717853337fafc` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | No; 18 campaign artifacts only | Tag, then delete local/remote |
+
+Every branch-only path is confined to its campaign-specific `research/`
+directory. Schedule 13D includes one structural-count helper; the other three
+campaigns contain Markdown and JSON evidence only. No production source,
+configuration, strategy registration, risk, persistence, broker, PAPER, or
+LIVE change is stranded. No candidate design or future economic protocol was
+created, and no local candidate economics were calculated.
+
+The archive plan adds these annotated tag targets:
+
+| Archive tag | Target | Durable decision/status |
+|---|---|---|
+| `archive/research/schedule-13d-activism-design-v1-2026-09` | `c4e9e30039eb4bef8005fdb0700e15a99884070c` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; no economic peek |
+| `archive/research/share-repurchase-announcement-design-v1-2026-09` | `73fe3e0065c46f813508a08013fb2198629d9bda` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; no economic peek |
+| `archive/research/management-guidance-drift-design-v1-2026-09` | `9648192713c5d881bf033e4d505780e70273a98a` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; no economic peek |
+| `archive/research/earnings-announcement-return-design-v1-2026-09` | `1f7c461be32f11bb23a8c85a89f19621244a270f` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; no economic peek |
+
+The pre-deletion privacy audit covered every unique tracked artifact in all
+four campaigns. It found no persisted SEC User-Agent email address, other
+email address, private-key block, recognized provider token/API key,
+secret-valued credential assignment, JWT, or credential-bearing URL. Public
+issuer and source identifiers are not private credentials.
+
+The process-only documentation branch is
+`maintenance/research-consolidation-event-wave-2026-09`. It carries only this
+inventory and the research register, receives no archive tag, and is deleted
+after its documentation commit is integrated into `main`.

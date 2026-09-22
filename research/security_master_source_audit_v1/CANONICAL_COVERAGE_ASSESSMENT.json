@@ -1,0 +1,37 @@
+{
+  "assessment_date": "2026-09-22",
+  "canonical": {
+    "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "entity_lifetimes_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "entity_lifetime_count": 9010,
+    "observed_entity_date_rows": 11686832,
+    "session_dates": 2659,
+    "first_date": "2016-01-04",
+    "last_date": "2026-07-31",
+    "venue_label_counts": {
+      "AMEX": 228,
+      "ARCA": 1783,
+      "BATS": 937,
+      "NASDAQ": 3783,
+      "NYSE": 2279
+    }
+  },
+  "strict_historical_result": {
+    "uniquely_matchable_entity_lifetimes": 0,
+    "strictly_classified_observed_entity_date_rows": 0,
+    "reason": "No entitled 2016-2026 source files or stable source-identifier bridge were acquired. Ticker-only joins are not accepted."
+  },
+  "nyse_public_sample_diagnostic": {
+    "sample_date": "2024-12-03",
+    "sample_sha256": "458598295f6d5341ffac103237fb8f066f0c7f37b339a70294787474b2ddb567",
+    "likely_matchable_but_sample_insufficient": 4635,
+    "unmatched_to_one_day_sample": 4375,
+    "duplicate_sample_sip_symbol_matches": 0,
+    "ambiguous_historical_ticker_reuse": null,
+    "outside_source_venue": 0,
+    "missing_stable_identifier_bridge": 9010,
+    "warning": "The 4635 count is an exact one-day SIP-symbol diagnostic only, not an accepted identity match or PIT coverage result. Zero outside-source-venue means none demonstrated, not universal coverage proof."
+  },
+  "coverage_gate": "NOT_PROVEN",
+  "required_next_measurement": "Acquire an evaluation backfill, map source stable issue identifiers to provider asset IDs using date, venue, lifecycle and class evidence, then report non-overlapping effective intervals as uniquely matched, ambiguous, unmatched, outside coverage, or missing bridge."
+}

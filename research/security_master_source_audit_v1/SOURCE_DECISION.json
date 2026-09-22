@@ -1,0 +1,19 @@
+{
+  "audit_date": "2026-09-22",
+  "primary_outcome": "SECURITY_MASTER_SOURCE_LEAD_VALID_BUT_ENTITLEMENT_REQUIRED",
+  "primary_source_lead": "NYSE Group Security Master",
+  "next_step": "REQUEST_COMMERCIAL_ENTITLEMENT_DETAILS",
+  "vintage_semantics": "VINTAGE_SEMANTICS_UNCLEAR",
+  "coverage_status": "NOT_PROVEN",
+  "price": "COMMERCIAL_QUOTE_REQUIRED",
+  "reasons": [
+    "Official history begins 2015-12-16 and daily full/delta files span the canonical period.",
+    "NYSE Stock Number is documented as non-reused and the taxonomy is broad enough for the target categories.",
+    "The product claims all U.S. NMS securities approved to trade on NYSE Group platforms and the public sample spans all canonical venue labels.",
+    "Public documentation does not prove immutable original daily vintages or correction-arrival reconstruction.",
+    "No entitled historical backfill, stable crosswalk, or contractual backtest/retention permission was obtained."
+  ],
+  "fallback": "If NYSE sample/entitlement fails coverage or taxonomy gates, proceed to a multi-source sample audit using Nasdaq Daily List/Fundamental Data, Cboe BZX reports and SEC issuer/class evidence.",
+  "production_changed": false,
+  "universe_migration_authorized": false
+}

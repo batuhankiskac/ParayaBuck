@@ -1,0 +1,16 @@
+identity_need,NYSE,Nasdaq,Cboe,assessment
+stable_security_id,"Stock Number; never reused; may change for some corporate actions","none documented","none documented",NYSE_STRONGEST
+stable_issuer_id,"none; Issuer Name only","none; no CIK","none",MISSING_USE_SEC_BRIDGE
+symbol,"Stock Symbol; SIP Symbol","Symbol; New Symbol","Symbol; old/new ticker events",AVAILABLE_NOT_AN_ID
+previous_symbol,"Old Stock Symbol/Old SIP only on effective day","old/new symbol event","old/new ticker event",REQUIRES_DAILY_REPLAY
+CUSIP,"CUSIP; Old CUSIP on change day","optional old/new CUSIP; licensed variant","optional old/new CUSIP; CGS entitlement",LICENSE_AND_CHANGE_RISK
+ISIN,"ISIN when available","none documented","none documented",NYSE_ONLY_OPTIONAL
+listing_venue,"Primary Market plus traded flags","Primary Listing Center/Market Category","BZX listing scope",AVAILABLE_EFFECTIVE_HISTORY_UNPROVEN
+listing_date,"Listing Date; non-NYSE may mean first NYSE-group trade","First Date Traded","First Traded Date",SEMANTICS_SOURCE_SPECIFIC
+issuer_CIK,"none","none","none",SEC_BRIDGE_REQUIRED
+fund_series_class,"none","none","none",SEC_SERIES_CLASS_SUPPLEMENT
+ticker_reuse,"Stock Number supports distinction; Symbol Reuse Flag is placeholder","no permanent ID","no permanent ID",FAIL_CLOSED_OUTSIDE_NYSE_ID
+rename_chain,"daily Stock Number plus old symbol","dated change event plus optional CUSIP","dated symbol/ID change events",CONDITIONALLY_SUPPORTED
+relisting,"no universal continuity rule","no universal continuity rule","no universal continuity rule",AMBIGUOUS_WITHOUT_EVENT_EVIDENCE
+merger_successor,"separate corporate-action evidence needed","event reason but no permanent issue ID","event data but no permanent issue ID",EXPLICIT_LINK_REQUIRED
+share_classes,"separate Stock Numbers/issues","separate issue rows; no stable issue ID","separate rows; class taxonomy incomplete",NEVER_COLLAPSE_BY_CIK

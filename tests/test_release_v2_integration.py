@@ -24,6 +24,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from alpaca.trading.models import Order
 
 from parayabuck.config import load_config
 from parayabuck.core.models import Bar, Market
@@ -117,6 +118,7 @@ class _FakeAlpacaClient:
     def __init__(self) -> None:
         self.positions: list[SimpleNamespace] = []
         self.filled_orders: dict[str, SimpleNamespace] = {}
+        self.open_orders: list[SimpleNamespace] = []
 
     def get_account(self) -> SimpleNamespace:
         return SimpleNamespace(
@@ -155,7 +157,12 @@ class _FakeAlpacaClient:
         )
 
     def get_orders(self, *_args: object, **_kwargs: object) -> list[SimpleNamespace]:
-        return []
+        return self.open_orders
+
+    def get(self, path: str, params: dict[str, object] | None = None) -> list[Order]:
+        if path != "/orders":
+            raise ValueError(f"unsupported GET {path}")
+        return [Order.model_construct(**vars(order)) for order in self.open_orders]
 
     def submit_order(self, request: object) -> SimpleNamespace:
         return SimpleNamespace(id=f"broker-{getattr(request, 'client_order_id', '')}")

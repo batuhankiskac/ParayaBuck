@@ -550,12 +550,20 @@ class AlpacaBroker:
         the planner skip any symbol with a working order, managed or not,
         because the bot must not stack orders onto an existing flow.
         """
-        orders = self._client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
+        orders = self._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
         return {
             canonical_symbol(str(self._field(order, "symbol", "")))
             for order in orders or ()
             if self._field(order, "symbol", "")
         }
+
+    def _get_open_orders(self, request: Any) -> Any:
+        """Use the adapter's exhaustive OPEN-order query for every broker path."""
+        adapter = self.__dict__.get("_client_adapter")
+        getter = getattr(adapter, "get_open_orders", None) if adapter is not None else None
+        if getter is None:
+            raise RuntimeError("Alpaca adapter does not support exhaustive open-order retrieval")
+        return getter(request)
 
     def _reconcile_stale_portfolio_ownership(self, symbol: str, market: Market) -> bool:
         """Resolve one stale portfolio symbol against real broker state.
@@ -1394,7 +1402,7 @@ class AlpacaBroker:
             ) from submit_exc
 
     def _has_open_order(self, symbol: str) -> bool:
-        orders = self._client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True))
+        orders = self._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True))
         if not orders:
             return False
         return any(same_symbol(str(self._field(order, "symbol", symbol)), symbol) for order in orders)
@@ -1430,7 +1438,7 @@ class AlpacaBroker:
         if svc is not None:
             return svc._open_protective_orders(symbol, position_is_long, open_orders)  # type: ignore[no-any-return]
         if open_orders is None:
-            orders: Any = self._client.get_orders(
+            orders: Any = self._get_open_orders(
                 GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
             )
         else:

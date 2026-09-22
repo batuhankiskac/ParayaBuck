@@ -18,6 +18,8 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
+from alpaca.trading.models import Order
+
 
 @dataclass
 class _FakeOrder:
@@ -223,6 +225,34 @@ class FakeTradingClient:
             wanted = {s.replace("/", "") for s in symbols}
             return [o for o in self.open_orders if o.symbol.replace("/", "") in wanted]
         return self.open_orders
+
+    def get(self, path: str, params: dict[str, Any] | None = None) -> list[Order]:
+        """Authenticated GET surface used by the production order pager."""
+        if path != "/orders":
+            raise Exception(f"unsupported GET {path}")
+        query = params or {}
+        orders: list[Order] = []
+        symbols = query.get("symbols")
+        wanted = {value.replace("/", "") for value in symbols.split(",")} if isinstance(symbols, str) else set()
+        for index, raw in enumerate(self.open_orders):
+            symbol = str(getattr(raw, "symbol", ""))
+            if wanted and symbol.replace("/", "") not in wanted:
+                continue
+            fields = dict(vars(raw)) if hasattr(raw, "__dict__") else {}
+            fields["id"] = str(getattr(raw, "id", "") or f"fake-open-order-{index}")
+            orders.append(Order.model_construct(**fields))
+
+        direction = str(query.get("direction", "desc"))
+        if direction == "asc":
+            orders.reverse()
+        cursor_key = "before_order_id" if direction == "desc" else "after_order_id"
+        cursor = query.get(cursor_key)
+        if cursor is not None:
+            cursor_index = next((i for i, order in enumerate(orders) if str(order.id) == cursor), None)
+            if cursor_index is None:
+                return []
+            orders = orders[cursor_index + 1 :]
+        return orders[: int(query.get("limit", 50))]
 
     def get_order_by_id(self, request: Any) -> Any:
         self.lookups += 1

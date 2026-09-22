@@ -1,0 +1,65 @@
+{
+  "as_of": "2026-09-22",
+  "campaign": "management_guidance_drift_design_v1",
+  "base_commit": "16db2eaad9061a1669166ef9ab6717853337fafc",
+  "scope": "Root command record and three contributor attestations; independent artifact consistency review, not OS-wide forensic proof",
+  "local_candidate_economic_computations": {
+    "backtest": false,
+    "forward_returns": false,
+    "pnl": false,
+    "nav": false,
+    "cagr": false,
+    "sharpe": false,
+    "drawdown": false,
+    "ic": false,
+    "hit_rate": false,
+    "return_buckets": false,
+    "parameter_performance_comparison": false,
+    "v3_outcome_correlation": false
+  },
+  "candidate_prices_opened": false,
+  "candidate_surprises_computed": false,
+  "permitted_work": [
+    "Primary literature published-statistic transcription",
+    "Official vendor documentation review",
+    "Six purposive issuer disclosure specimens and structural counts",
+    "Production code/config/governance read-only inspection",
+    "Existing normal product test suite with production-isolation verification"
+  ],
+  "normal_tests": {
+    "passed": 1138,
+    "skipped": 1,
+    "warnings": 2,
+    "seconds": 101.28,
+    "candidate_test": false,
+    "protected_paths_unchanged": 10
+  },
+  "contributor_attestations": {
+    "literature": "Primary final-paper review; no candidate data or economics",
+    "source_audit": "Primary issuer examples and typed counts; no market data or economics",
+    "audit_evidence": "Primary external research and design evidence; no candidate data or economics"
+  },
+  "hash_scope": "All campaign artifacts except this receipt and independent verification to avoid circular hashes",
+  "artifact_sha256": {
+    "ANALYST_CONSENSUS_SOURCE_AUDIT.md": "7893ef4b1e368ef0ec0ba044b0e51dbc748ca54813b2ad155fbd154fd56f6d5b",
+    "CAUSALITY_AUDIT.md": "e613b051f3c5990880f1ef2b0ed5ca7d57dd0bb838f59720ffef1a26b0c7ac76",
+    "CONCENTRATION_FEASIBILITY.md": "10beb2fd74e023d7285763afb8ed063c9f7ddf8b684ded2c6a2b5994f088853a",
+    "CURRENT_CAPABILITY_AUDIT.md": "17d98338c0e744a83d6c405e5b984e4ee579728e53abede1dd0f8c0f029f7ffb",
+    "DESIGN_DECISION.json": "a69d7edb50ad3833ff784424896554fcf47ca906932aa9ffe800d48b313e0aef",
+    "DESIGN_RED_TEAM.md": "738b0f6352df89dd9da162eb419c617798f515854dffbfe91ba3f720c749d37a",
+    "FINAL_DESIGN_REPORT.md": "9d3d13e60cc95a8e04cea6b3c13cec8ea5513b8dfc8573d34ca850898b2f8e01",
+    "FORECAST_SURPRISE_SPEC.md": "2c67298aa79666221301ebeeee43d4df41c1fd99505ccadd5342c3ec111d514f",
+    "GAAP_NONGAAP_PERIOD_AUDIT.md": "216760f6abab4d04da2ef452433ec77e4505980d567232d6732043b58022b49b",
+    "GUIDANCE_EXTRACTION_SPEC.md": "14eeb492d340efca5f4018360ab89e36c2ecbec0fa7209e7b0410d37d7aa9ebc",
+    "MANAGEMENT_GUIDANCE_SOURCE_AUDIT.md": "39a9d3bdaf46eb41f35ed35f74bf95bdfe6a04c20738b57cd96472546f25e7b2",
+    "MODERN_EVIDENCE_REVIEW.md": "235a34a202c38c0def9876ce4e9b48f42d551847900373a65ee22ed58d87e90f",
+    "PEAD_DISTINCTNESS_AUDIT.md": "4c9922ae58cee1391125aa9df279e0f7494aefc1eef625c59612d851b823ad9a",
+    "PRIMARY_GUIDANCE_SAMPLE.json": "68e4d2b103b9e430abf7e3c579667c730c05f163e8ae3c456a3de10d574e60fa",
+    "PRIMARY_LITERATURE_REVIEW.md": "0c649202cf683d8450bc80212401dadfb1ca5e26d6f62ed3dbc71da03a1ed01f",
+    "PRIOR_GUIDANCE_REVISION_AUDIT.md": "668a929a9bacb935bb18c98f5514093e9b42eb7bdeac7e96b49cce3d37ea2e5d",
+    "PUBLIC_AVAILABILITY_AUDIT.md": "0e237e5c5f651d585aff0fb83fdbc12fa66aa6b1ab546fbbaf889761efc085bd",
+    "SECURITY_MAPPING_AUDIT.md": "af85c1894b8fbf10d556a3a8bacc3afccf1f66f9024b417b804ce9bb9a970f09",
+    "STRUCTURAL_OPPORTUNITY_AUDIT.json": "d8d4521fa1c38684395b012a734c81f10e49147b2673cbb0f0c86d339f4679ca",
+    "V3_DISTINCTNESS_AUDIT.md": "e81d8775fe110f9b0256c91c394fd7a63ffb0fe25f5e8a57d6f9ae1b8d53623c"
+  }
+}

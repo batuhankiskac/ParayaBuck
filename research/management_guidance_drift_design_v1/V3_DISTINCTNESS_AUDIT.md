@@ -1,0 +1,6 @@
+# V3 distinctness
+The inspected canonical V3 uses residual momentum ranks over 6/9/12 months, a positive 12–1 momentum gate and inverse-volatility weighting. Guidance surprise instead compares a newly public issuer EPS forecast with an independently timestamped prior analyst expectation. No V3 score enters this proposed signal; no blended ranking or local outcome correlation was computed.
+
+External momentum controls support informational distinctness, not portfolio complementarity. Ng Table 4 controls prior raw momentum, which is different from the repository's residual signal. See [PEAD audit](PEAD_DISTINCTNESS_AUDIT.md) for primary citations and control definitions. Neither that result nor issuer specificity proves incremental alpha in the local V3 portfolio.
+
+The current strategy observation list and scanner's active/tradable, price, liquidity, volatility and completeness filters are separate eligibility layers. A future historical event panel would need dated eligibility, not today's survivor list. A standalone experiment would precede combination and would not need to beat V3. None is authorized by this decision. All V3, crypto, scanner and account configuration remain unchanged.

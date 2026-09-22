@@ -1,0 +1,83 @@
+{
+  "as_of": "2026-09-22",
+  "reviewer": "literature contributor; cross-artifact reviewer independent of root decision author",
+  "result": "PASS_WITH_EXPLICIT_EVIDENCE_LIMITS",
+  "decision_reviewed": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "decision_scope": "Requested contemporary concentrated design; not empirical failure of historical guidance drift",
+  "decision_semantics": "Consistent with rejection criteria conveyed in the task: unsupported modern/concentrated expression is decisive, concurrent licensed-data blocks remain separate. Data acquisition alone does not satisfy those evidence gates.",
+  "reviewed_artifacts": [
+    "ANALYST_CONSENSUS_SOURCE_AUDIT.md",
+    "CAUSALITY_AUDIT.md",
+    "CONCENTRATION_FEASIBILITY.md",
+    "CURRENT_CAPABILITY_AUDIT.md",
+    "DESIGN_DECISION.json",
+    "DESIGN_RED_TEAM.md",
+    "FINAL_DESIGN_REPORT.md",
+    "FORECAST_SURPRISE_SPEC.md",
+    "GAAP_NONGAAP_PERIOD_AUDIT.md",
+    "GUIDANCE_EXTRACTION_SPEC.md",
+    "MANAGEMENT_GUIDANCE_SOURCE_AUDIT.md",
+    "MODERN_EVIDENCE_REVIEW.md",
+    "NO_ECONOMIC_PEEK_RECEIPT.json",
+    "PEAD_DISTINCTNESS_AUDIT.md",
+    "PRIMARY_GUIDANCE_SAMPLE.json",
+    "PRIMARY_LITERATURE_REVIEW.md",
+    "PRIOR_GUIDANCE_REVISION_AUDIT.md",
+    "PUBLIC_AVAILABILITY_AUDIT.md",
+    "SECURITY_MAPPING_AUDIT.md",
+    "STRUCTURAL_OPPORTUNITY_AUDIT.json",
+    "V3_DISTINCTNESS_AUDIT.md"
+  ],
+  "primary_source_verification": {
+    "final_publisher_pdf_read_in_full": true,
+    "pages": 31,
+    "journal_pages": "956–986",
+    "temporary_pdf": "/tmp/ng_tuna_verdi_2013_publisher.pdf",
+    "sha256": "aacd7bd0991b5243dbeb1df794908eef8ff094b0c963236be3addbb52414c7de",
+    "table_1_render_inspected": true,
+    "material_version_corrections_retained": [
+      "Summary median rather than unverified 180-day individual recipe",
+      "No final-paper value-weighted table verified",
+      "Mean/median and second/third-day inconsistencies explicit",
+      "Three-month bad-news result unstarred",
+      "Hedge estimates not relabeled long-leg returns",
+      "No within-tail monotonicity inferred from extreme-quintile results"
+    ],
+    "reviewer_authored_primary_review_and_surprise_spec": true
+  },
+  "independently_executed_checks": {
+    "receipt_hashes_verified": 20,
+    "receipt_hash_mismatches": [],
+    "json_documents_parsed_before_this_file": 4,
+    "sample_document_count": 6,
+    "sample_metric_observations": 10,
+    "closed_ranges": 9,
+    "approximate_points": 1,
+    "quarterly_observations": 2,
+    "consensus_matches_in_sample": 0,
+    "candidate_design_absent": true,
+    "future_test_protocol_absent": true
+  },
+  "cross_artifact_findings": [
+    "Structural sample counts describe purposive disclosures, not opportunity supply; unknown population counts remain null.",
+    "Positive historical long-leg and independent practitioner follow-up are acknowledged rather than suppressed by the rejection.",
+    "Licensed product existence is separated from entitlement and a validated PIT consensus join.",
+    "Diversification enum is explicitly qualified as the demonstrated evidence scope, not mathematical necessity.",
+    "No current consensus, prior issuer revision or realized EPS is adopted as a substitute.",
+    "No candidate, alternative horizon sweep, ranking blend or combination experiment is frozen."
+  ],
+  "no_economic_peek": {
+    "own_actions_attestation": "Only primary publication retrieval/text/render review, campaign artifact reads/writes and structural JSON/hash checks; no candidate market data opened, surprise/rank/return calculations, author code execution or economic experiments.",
+    "other_contributors": "Root receipt records three contributor attestations; their complete tool histories are not independently visible to this reviewer.",
+    "root_attestation_received": "No candidate market files or economics; normal suite 1138 passed/1 skipped/2 warnings; ten protected paths unchanged.",
+    "tests_independently_rerun_by_reviewer": false,
+    "production_isolation_independently_recomputed_by_reviewer": false,
+    "scope_limit": "Artifact consistency and visible/attested actions; not OS-wide forensics or proof about unobserved processes."
+  },
+  "unresolved_scientific_limits": [
+    "Exact operational replication requires resolving final-paper inconsistencies and vendor vintage semantics.",
+    "Modern liquid next-open net-cost concentrated efficacy remains unverified.",
+    "Complete source and canonical security/metric/period/consensus coverage remains unverified."
+  ],
+  "blocking_artifact_findings": []
+}

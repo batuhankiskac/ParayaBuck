@@ -1,0 +1,34 @@
+{
+  "as_of": "2026-09-22",
+  "decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "scope": "Requested contemporary concentrated guidance-surprise design, not universal anomaly or empirical alpha rejection",
+  "reason": "User explicitly requires REJECT for insufficient modern long-only evidence or unsupported concentrated expression; both remain unproved in reviewed evidence. These decisive design criteria take precedence over concurrent data blocks.",
+  "gates": {
+    "analyst_consensus": "PIT_ANALYST_CONSENSUS_REQUIRES_LICENSED_SOURCE",
+    "prior_guidance_revision": "PRIOR_GUIDANCE_REVISION_IS_INDEPENDENTLY_SUPPORTED",
+    "long_leg": "GOOD_NEWS_LONG_LEG_SUPPORTED",
+    "modern_evidence": "MODERN_US_GUIDANCE_DRIFT_EVIDENCE_INSUFFICIENT",
+    "pead": "GUIDANCE_SURPRISE_INCREMENTAL_TO_EARNINGS_NEWS",
+    "concentration": "GUIDANCE_DRIFT_REQUIRES_DIVERSIFICATION"
+  },
+  "additional_blocks": [
+    "No acquired entitled PIT analyst benchmark panel",
+    "No causally complete guidance corpus or validated deterministic extraction",
+    "Metric, fiscal-period, split and canonical security joins unvalidated",
+    "Exact academic-to-next-open clock unresolved",
+    "Structural eligible event supply unknown"
+  ],
+  "positive_evidence": [
+    "Published historical good-news long leg",
+    "Independent practitioner follow-up through 2015",
+    "Natural issuer-specific continuous surprise",
+    "Historical PEAD/momentum incrementality",
+    "Approximately three-month externally motivated horizon"
+  ],
+  "candidate_count_frozen": 0,
+  "economic_experiment_authorized": false,
+  "G1_G9_frozen": false,
+  "substitute_selected": false,
+  "production_changes": false,
+  "reconsideration": "Any later source/evidence review must independently resolve all failed and blocked gates before freezing this same hypothesis; buying data alone does not overturn this decision."
+}

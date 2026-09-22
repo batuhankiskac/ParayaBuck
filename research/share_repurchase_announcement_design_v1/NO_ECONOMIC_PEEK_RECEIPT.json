@@ -1,0 +1,71 @@
+{
+  "schema_version": "share_repurchase_no_economic_peek_v1",
+  "status": "NO_ECONOMIC_PEEK_VERIFIED",
+  "as_of": "2026-09-22",
+  "scope": "This campaign only. Artifact/diff inspection and per-agent action attestations, not OS-level file-access or exhaustive hidden-process telemetry.",
+  "candidate_local_calculations": {
+    "forward_returns": false,
+    "event_CAR": false,
+    "PnL": false,
+    "NAV": false,
+    "CAGR": false,
+    "Sharpe": false,
+    "drawdown": false,
+    "IC": false,
+    "hit_rates": false,
+    "future_return_buckets": false,
+    "parameter_search": false,
+    "V3_outcome_correlation": false
+  },
+  "candidate_market_data_loaded": false,
+  "candidate_market_cap_calculated": false,
+  "candidate_signal_or_ranking_computed": false,
+  "allowed_actions_performed": [
+    "Read and count canonical lifetime identity metadata without price bars.",
+    "Aggregate four purposive primary filing sample records by date, issuer and document attributes.",
+    "Review published primary-study estimates with sample and access qualifications.",
+    "Stage A: inspect already persisted exit audit evidence at pinned SHAs and run the existing product test suite."
+  ],
+  "distinctions": [
+    "External published research results are literature evidence, not a local candidate backtest.",
+    "Stage A historical exit evidence is expressly authorized and is not this candidate.",
+    "Existing product tests use their existing fixtures; no buyback candidate or economic runner was introduced.",
+    "A lack of generated artifacts alone cannot prove absence of every possible computation; verification includes actor attestations."
+  ],
+  "actor_attestations": {
+    "root": "No candidate price/outcome data loaded or economics computed; only lifetime metadata and source-sample aggregates. Full command actions reviewed.",
+    "literature": "No candidate market-data access, code execution or economics in own tool stream; primary literature only.",
+    "source_audit": "No candidate market dataset accessed and no candidate economic quantities computed; primary source and timestamp samples only.",
+    "audit_evidence": "No candidate price data, returns or economics; read-only existing Stage A receipts and Stage B independent artifact review."
+  },
+  "independent_reviews": [
+    "INDEPENDENT_DESIGN_VERIFICATION.json",
+    "Source reviewer independently matched sample hash and all structural aggregates; no material findings.",
+    "Literature reviewer checked binary-verdict qualifications and flagged sample labels; labels corrected."
+  ],
+  "production_diff_from_base_main": "empty",
+  "base_main_sha": "16db2eaad9061a1669166ef9ab6717853337fafc",
+  "candidate_design_frozen": false,
+  "future_economic_protocol_frozen": false,
+  "economic_experiment_authorized": false,
+  "artifact_hashes": {
+    "CAUSALITY_AUDIT.md": "8a4e95a6b1d0d2d6e553187418f20d14638d455ce3c9366d16e4d2e6905b80f2",
+    "CURRENT_CAPABILITY_AUDIT.md": "2b6cc14069f5b24909995c4dacf1936d809e531c6a1350ae95347137c93c20b5",
+    "DESIGN_DECISION.json": "ca6e21647bf6bfa4cc178e001ac253a098be0821b39e7f58fce2981ed4f6c05b",
+    "DESIGN_RED_TEAM.md": "3af9065ab22b20fbd751cbddefd7f3100e9e95ab0d404e36bb05f40312c481e4",
+    "EVENT_DEFINITION.md": "80a449c9618ce8382fdfb90a346655c65038b4339bfd4d8cdc8543b9730c6907",
+    "FINAL_DESIGN_REPORT.md": "5ef7a3b614c36b20327c15fd9134294b758544283d9b64ff9dbe74fde1ce82e3",
+    "FUTURE_COMPLETION_DEPENDENCE.md": "ed4c94bae1a25283ea09a3024095e2088d2a734c0576734f9c7a20fddac28415",
+    "MODERN_EVIDENCE_REVIEW.md": "771a5476d1aec20a4ac3891c6cf9420ebb85366768a15e7be1a4b35c64ac8c4e",
+    "PRIMARY_EVENT_SAMPLE.json": "9f7b92a09b9f365cd8f22d7b63ae53119e6ea2b3ee4f9f8033703555bfe0efd7",
+    "PRIMARY_LITERATURE_REVIEW.md": "1ee8a1ac0dfddedd02980a08675f97a0de7085f3812d6dea8163ab1e6b6eb361",
+    "PUBLIC_AVAILABILITY_AUDIT.md": "e447b9a022bf2931e5a58e54e7a96a90b03f855f41c42b7f8d38d921861a56c5",
+    "RANKING_RULE_REVIEW.md": "05d0a17b2cd9cdb300fa37f277b6ff3204ed045158bd5b6a130121848b7166bc",
+    "REPEAT_EVENT_DEDUP_SPEC.md": "f273a9c588c7e625470ab45f389100ccde281b0eb7256ca5e4f6ea4edc35ea28",
+    "SECURITY_MAPPING_AUDIT.md": "0bb97a742a5297d3519b961c1cdec6065c9cd7dff4cae9e3464399bbd7478b51",
+    "SEC_SOURCE_AUDIT.md": "c308e465e759e4025a94dfc0e9fd7e973d68a9d341b35f168fe7a57071d14697",
+    "SLOT_EFFICIENCY_AUDIT.md": "d7d67068126b542452dfe45a2b5608e550bd1eb26c983b38aa98da994c178f5d",
+    "STRUCTURAL_OPPORTUNITY_AUDIT.json": "97067257a6bb238063697f6cfbbb8522ff129c687ce8c25c9aa879bac35b081d"
+  },
+  "hash_scope": "All research artifacts present at receipt creation except this receipt and the separate independent-review receipt, to avoid circular hashes."
+}

@@ -1,0 +1,102 @@
+{
+  "schema_version": "share_repurchase_structural_audit_v1",
+  "as_of": "2026-09-22",
+  "outcome_data_used": false,
+  "scope": "Four purposive primary-document examples only; not an event census or eligible-universe sample",
+  "requested_period": {
+    "start": "2016-01-01",
+    "end": "2026-09-22",
+    "last_year_partial": true
+  },
+  "sample_provenance": {
+    "file": "PRIMARY_EVENT_SAMPLE.json",
+    "sha256": "9f7b92a09b9f365cd8f22d7b63ae53119e6ea2b3ee4f9f8033703555bfe0efd7"
+  },
+  "sample_counts": {
+    "distinct_issuer_ciks": 4,
+    "by_reported_announcement_year": {
+      "2016": 1,
+      "2019": 1,
+      "2024": 1,
+      "2026": 1
+    },
+    "by_reported_announcement_month": {
+      "2016-09": 1,
+      "2019-02": 1,
+      "2024-05": 1,
+      "2026-04": 1
+    },
+    "by_verified_filing_month": {
+      "2016-10": 1,
+      "2019-02": 1,
+      "2024-05": 1
+    },
+    "unknown_filing_dates": 1,
+    "exact_acceptance_timestamps": 2,
+    "acceptance_time_distribution_eastern": {
+      "16:00_to_17:29": 2,
+      "unknown": 2
+    },
+    "first_public_instant_verified": 0,
+    "canonical_mapping_attempted": 0,
+    "canonical_mapped_issuers": 0,
+    "mapping_failed_after_attempt": 0,
+    "mapping_pending": 4,
+    "successor_mentions": 1,
+    "increment_mentions": 1,
+    "additional_authorization_mentions": 1,
+    "same_day_reported_announcement_pairs": 0,
+    "earnings_bundled": 1,
+    "approved_candidate_events": null,
+    "approved_candidate_events_reason": "No candidate frozen and no complete method/timestamp/mapping adjudication; not a zero-supply finding",
+    "sample_record_documents": 4
+  },
+  "full_corpus": {
+    "announcements_by_year": {
+      "2016": null,
+      "2017": null,
+      "2018": null,
+      "2019": null,
+      "2020": null,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null
+    },
+    "announcements_by_month": null,
+    "mapped_issuers": null,
+    "failed_mappings": null,
+    "repeat_authorizations": null,
+    "simultaneous_active_events": null,
+    "event_clustering": null,
+    "possible_occupancy": null,
+    "acceptance_time_distribution": null,
+    "event_source_coverage_fraction": null,
+    "standalone_supply_sufficient": null,
+    "one_slot_supply_sufficient": null,
+    "null_reason": "No exhaustive raw filing corpus, validated first-public event extraction, historical CIK/security bridge or frozen holding horizon. Keyword hits and purposive examples cannot substitute."
+  },
+  "occupancy_design": {
+    "formula_only": "For a future independently justified fixed horizon H, count unique eligible issuer intervals [entry, exit); merge overlapping exposure to one issuer and separately report event arrivals, issuer concentration, empty-slot time and simultaneous demand.",
+    "horizon_selected": false,
+    "occupancy_computed": false,
+    "minimum_six_positions_required": false
+  },
+  "acquisition_attempt": {
+    "endpoint": "https://efts.sec.gov/LATEST/search-index",
+    "query": "\"share repurchase\"",
+    "forms": "8-K",
+    "startdt": "2024-01-01",
+    "enddt": "2024-01-31",
+    "sandbox_result": "DNS unavailable",
+    "network_enabled_result": "SEC HTML: Your Request Originates from an Undeclared Automated Tool",
+    "browser_result": "URL not accessible",
+    "configured_sec_user_agent_present": false,
+    "credentials_persisted": false,
+    "query_hits_available": false,
+    "interpretation": "Access/corpus proof blocked in this run; not evidence that public historical sourcing is impossible."
+  },
+  "decision_use": "Structural sufficiency remains unproved. It cannot authorize READY; independent hypothesis/concentration objections are evaluated separately."
+}

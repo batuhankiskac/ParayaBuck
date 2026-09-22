@@ -1,0 +1,15 @@
+# Event definition — research taxonomy, not a frozen candidate
+
+The family is the first verifiably public issuer disclosure of a new discretionary authorization to repurchase its identified common equity on the open market. Board approval is an underlying corporate decision; the announcement is its public disclosure. Approval date alone never starts the signal clock. Authorization is permission, not a contractual promise to execute.
+
+First public means first disclosure of the identified authorization, not first-ever repurchase in the issuer's history. Whether a genuine successor or increment belongs in an eventual hypothesis must match the cited study and be fixed before economics; routine unchanged renewals are not automatically equivalent.
+
+Retain separate taxonomy values for initial authorization, incremental amount, replacement/successor, unchanged renewal/extension, execution update, completion, suspension and cancellation. Do not infer a genuinely initial program from the word “new”: a successor can replace an exhausted predecessor. Review prior primary disclosures before classifying novelty; missing prior history is unknown, not no prior program.
+
+Exclude tender offers, Dutch auctions, ASRs and privately negotiated transactions as distinct mechanisms. A 10b5-1 plan is an execution arrangement: its adoption or a trade under it is not automatically a new authorization announcement. Actual repurchases, cash-flow statement amounts, quarterly execution tables and completion notices are not announcement signals. Employee tax withholding, preferred/debt repurchases and fund repurchases are outside the operating-company common-equity family.
+
+A broad mandate that permits both open-market and private/ASR/tender alternatives is `MIXED_METHOD`; do not silently call the full amount pure open-market capacity. Inclusion requires reconciliation with the external study's event coding. A mandate permitting private alternatives is not automatically a private-repurchase transaction, and exclusivity must not be invented if the study includes such standard authorizations. Record method ambiguity; do not allocate the full dollar ceiling to open-market execution without evidence. Unknown mechanisms remain unadjudicated. This taxonomy does not impose a new pure-only candidate or infer zero eligible supply.
+
+Store earnings/dividend/guidance/M&A/financing coannouncement flags from information public at the event. Earnings-bundled announcements cannot be attributed solely to buybacks without additional identification. No unavailable earnings-surprise estimate may be fabricated. A future takeover cannot be used to exclude the initial event ex post; an already announced merger/transaction bundle is known contemporaneously and should be flagged or excluded under a frozen scope.
+
+Authoritative examples, with URLs and caveats, are in `PRIMARY_EVENT_SAMPLE.json` and `SEC_SOURCE_AUDIT.md`. None of its records is approved as a causally timed and mapped investment event. No ranking, holding period or candidate eligibility policy is frozen by this taxonomy.

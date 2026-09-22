@@ -1,0 +1,46 @@
+{
+  "schema_version": "share_repurchase_design_decision_v1",
+  "research_family": "Open-market share repurchase announcement underreaction",
+  "decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "decision_date": "2026-09-22",
+  "base_main_sha": "16db2eaad9061a1669166ef9ab6717853337fafc",
+  "primary_reason": "The reviewed evidence does not support one announcement-time ranking and holding rule with sufficient modern liquid-stock post-public information to justify one scarce slot.",
+  "independent_design_reasons": [
+    "Supportive studies use wider portfolios or composite selection; no externally defended single-variable top-one/top-six expression was established.",
+    "Long 12-48 month evidence does not establish sufficient alpha density per slot-year; continuous drift is challenged by subsequent-event attribution.",
+    "Modern persistence evidence is mixed and the required concentrated next-open long-only cost-compatible evidence was not verified."
+  ],
+  "claims_not_made": [
+    "The anomaly is universally zero after publication.",
+    "All profitable announcements require advance completion knowledge.",
+    "Any unrun candidate has failed economic gates.",
+    "A small purposive filing sample measures market-wide event supply."
+  ],
+  "additional_data_execution_blocks": [
+    "No validated complete first-public event corpus for 2016-2026.",
+    "No canonical historical CIK/security-class/entity bridge.",
+    "No canonical PIT market-cap panel if authorization fraction were required."
+  ],
+  "why_reject_not_only_blocked": "Resolving acquisition and mapping would not by itself establish a defensible concentrated ranking or slot horizon. Rejection is a design judgment on this requested thesis, not a local economic null.",
+  "gate_verdicts": {
+    "source": "REPURCHASE_EVENT_SOURCE_BLOCKED",
+    "security_mapping": "REPURCHASE_SECURITY_MAPPING_BLOCKED",
+    "completion": "POST_ANNOUNCEMENT_RETURNS_NOT_DEPENDENT_ON_FUTURE_COMPLETION",
+    "ranking": "NO_DEFENSIBLE_REPURCHASE_CONCENTRATION_RULE",
+    "slot_fit": "REPURCHASE_PREMIUM_REQUIRES_DIVERSIFICATION"
+  },
+  "gate_scope": {
+    "completion": "Historical unconditional announcement selection need not know future completion. This is not affirmative modern return-independence or READY evidence.",
+    "slot_fit": "Supportive evidence is diversified portfolio evidence; requested concentrated expression unproven, not mathematically impossible.",
+    "source_and_mapping": "Current evidence and capability blocked, not inherently unreconstructible."
+  },
+  "candidate_frozen": false,
+  "candidate_design_created": false,
+  "future_test_protocol_created": false,
+  "G1_G9_frozen": false,
+  "economic_experiment_authorized": false,
+  "local_candidate_economics_calculated": false,
+  "production_changes": false,
+  "paper_live_promotion_authorized": false,
+  "reopen_condition": "New independently justified pre-outcome modern concentrated evidence; source/mapping acquisition alone does not reverse this decision."
+}

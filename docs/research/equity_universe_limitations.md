@@ -1,7 +1,10 @@
 # Equity-universe limitations and operator contract
 
-Status: current limitation; no universe policy change was made by the archive
-consolidation.
+Status: current limitation; commercial security-master path deferred 2026-09-22
+(`DEFERRED_EXTERNAL_DATA_NOT_WORTH_PROCUREMENT_BURDEN`). No production or
+universe change. See the security-master closure in
+[`research_register.md`](research_register.md); evidence preserved behind the
+three `archive/research/security-master-*-2026-09` tags.
 
 ## Current operator contract
 
@@ -66,6 +69,13 @@ not inherit the scanner fallback's sector-diversity behavior.
 No sector rule was added during this cleanup.
 
 ## Future resolution gate
+
+The commercial NYSE Group Security Master path was technically promising but
+intentionally deferred: original-vintage semantics stayed unproven from public
+documentation and further proof required vendor contact and commercial
+negotiation. `NO_VENDOR_CONTACT_MADE`; nothing is pending with NYSE.
+Public/free research continues under
+[`public_data_research_policy_v1.md`](public_data_research_policy_v1.md).
 
 A future universe correction requires an operator-approved policy and an
 effective-dated source, at minimum covering the relevant Nasdaq and NYSE/Arca

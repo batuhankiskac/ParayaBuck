@@ -350,3 +350,36 @@ The process-only documentation branch is
 `maintenance/research-consolidation-event-wave-2026-09`. It carries only this
 inventory and the research register, receives no archive tag, and is deleted
 after its documentation commit is integrated into `main`.
+
+## Security-master procurement closure — 2026-09-22
+
+This closure began from clean `main` at
+`91adb80a6157a10457e1b526e4a96b7fb8f293f3` (local and origin matched). The only
+non-main local and remote branches were the three completed security-master
+campaigns below; no unrelated active branch was found.
+
+| Branch | Tip | Ahead / behind main | Unique scope | Production code not on main? | Action |
+|---|---|---:|---|---|---|
+| `research/security-master-source-audit-v1` | `7366ea51ac819de7772ef67cc650869248ea7d07` | 1 / 0 | 17 source-audit artifacts | No; research Markdown/JSON/CSV only | Tag, then delete local/remote |
+| `research/security-master-entitlement-prep-v1` | `951e609042431cfbaad13cc590db4479151f290a` | 1 / 0 | 13 entitlement-prep artifacts | No; research Markdown/JSON only | Tag, then delete local/remote |
+| `research/security-master-vendor-outreach-v1` | `2d5b2b3d36e84851182da7a8f7208be51138d697` | 1 / 0 | 8 outreach-prep artifacts | No; research Markdown/JSON only | Tag, then delete local/remote |
+
+For every branch above,
+`git diff --name-only main...<branch> -- src config scripts tests pyproject.toml Makefile setup.cfg`
+was empty. Durable classification: `DEFERRED_EXTERNAL_DATA_NOT_WORTH_PROCUREMENT_BURDEN`
+(neither `SOURCE_INVALID` nor solved). Outreach facts: `NO_VENDOR_CONTACT_MADE`,
+`NO_PURCHASE`, `NO_CONTRACT_ACCEPTED`, `NO_TRIAL_STARTED`; nothing pending with NYSE.
+
+The archive plan adds these exact annotated tag targets:
+
+| Archive tag | Target | Durable decision/status |
+|---|---|---|
+| `archive/research/security-master-source-audit-v1-2026-09` | `7366ea51ac819de7772ef67cc650869248ea7d07` | `SECURITY_MASTER_SOURCE_LEAD_VALID_BUT_ENTITLEMENT_REQUIRED` |
+| `archive/research/security-master-entitlement-prep-v1-2026-09` | `951e609042431cfbaad13cc590db4479151f290a` | `READY_TO_CONTACT_NYSE`; contact deliberately not made |
+| `archive/research/security-master-vendor-outreach-v1-2026-09` | `2d5b2b3d36e84851182da7a8f7208be51138d697` | `OUTREACH_READY_AWAITING_OPERATOR_SEND_APPROVAL`; superseded by deferral |
+
+The process-only documentation branch is
+`maintenance/public-data-research-reset-v1`. It carries only the register, this
+inventory, the limitations update, and the new public-data policy; it receives
+no archive tag and is deleted after its documentation commit is integrated
+into `main`.

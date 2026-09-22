@@ -578,6 +578,55 @@ profit. These are diagnostic conclusions, not exit-treatment experiments.
 No strategy, risk, persistence, allocation, PAPER, or LIVE behavior changes.
 Large audit artifacts and audit-specific tests remain on archive tags only.
 
+## Security-master procurement closure — 2026-09-22
+
+The three-branch commercial security-master investigation is closed by operator
+governance decision, not by a validity finding. Durable classification:
+`DEFERRED_EXTERNAL_DATA_NOT_WORTH_PROCUREMENT_BURDEN`. This is neither
+`SOURCE_INVALID` nor `SECURITY_MASTER_PROBLEM_SOLVED`.
+
+### Campaign chain
+
+| Step | Branch | Final SHA | Outcome |
+|---|---|---|---|
+| Source audit | `research/security-master-source-audit-v1` | `7366ea51ac819de7772ef67cc650869248ea7d07` | `SECURITY_MASTER_SOURCE_LEAD_VALID_BUT_ENTITLEMENT_REQUIRED`; NYSE Group Security Master lead; vintage `VINTAGE_SEMANTICS_UNCLEAR`, price `COMMERCIAL_QUOTE_REQUIRED` |
+| Entitlement prep | `research/security-master-entitlement-prep-v1` | `951e609042431cfbaad13cc590db4479151f290a` | `READY_TO_CONTACT_NYSE`; spec v4.1 revalidated, samples parse; vintage immutability, correction arrival, backtest/retention rights, pricing vendor-answer-only |
+| Vendor outreach prep | `research/security-master-vendor-outreach-v1` | `2d5b2b3d36e84851182da7a8f7208be51138d697` | `OUTREACH_READY_AWAITING_OPERATOR_SEND_APPROVAL`; send-ready 12-question inquiry drafted |
+
+NYSE Group Security Master was technically promising (documented history from
+2015-12-16, daily full/delta files, non-reused Stock Number, broad taxonomy),
+but original-vintage semantics stayed unproven from public documentation and
+further proof required vendor contact, commercial negotiation, and waiting on
+external responses. The operator intentionally declined that procurement burden.
+
+### Outreach facts
+
+`NO_VENDOR_CONTACT_MADE`. `NO_PURCHASE`. `NO_CONTRACT_ACCEPTED`.
+`NO_TRIAL_STARTED`. No inquiry was sent; no external response exists or is
+pending. No vendor inquiry is to be sent now.
+
+### Standing limitation
+
+Historical `US_EQUITY` remains unproven PIT common-stock-only; contamination by
+ETFs, ETNs, preferreds, warrants, rights, units, and structured products is
+possible. See [`equity_universe_limitations.md`](equity_universe_limitations.md).
+Future candidates depending critically on unavailable historical taxonomy must
+be penalized, restricted to an issuer-linked subset, or rejected/deferred — not
+rescued by reopening commercial procurement.
+
+Evidence is preserved by:
+
+- `archive/research/security-master-source-audit-v1-2026-09`;
+- `archive/research/security-master-entitlement-prep-v1-2026-09`;
+- `archive/research/security-master-vendor-outreach-v1-2026-09`.
+
+### Policy
+
+Research now follows
+[`public_data_research_policy_v1.md`](public_data_research_policy_v1.md):
+public/free/easy-access sources only, until the documented exception rule is
+explicitly satisfied.
+
 ## Production boundary
 
 The cleanup merged no production code. Current `main` remains

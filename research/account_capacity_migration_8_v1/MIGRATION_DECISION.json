@@ -1,0 +1,17 @@
+{
+  "primary_decision": "ACCOUNT_ARCHITECTURE_MIGRATION_8_INCONCLUSIVE",
+  "status": "STOPPED_BEFORE_HISTORICAL_REPLAY",
+  "reason": "The brief's generic-production-correctness stop condition was triggered by an independently isolated broker-wide open-order pagination defect. A research-only shared-account replay and G6 operational capacity proof are not complete.",
+  "freeze_commit_sha": "3f7d0bc2b443f66b95d67ccb0503f1a0567799f5",
+  "control_cap": 6,
+  "treatment_cap": 8,
+  "historical_control_run": false,
+  "historical_treatment_run": false,
+  "economic_output_generated": false,
+  "previous_candidates_run": false,
+  "production_config_changed": false,
+  "no_acceptance_or_rejection_inferred_from_returns": true,
+  "blocking_report": "GENERIC_CORRECTNESS_STOP.md",
+  "exact_next_action": "RESOLVE_SHARED_ACCOUNT_REPLAY_LIMITATION",
+  "specific_next_action": "Isolate and repair the pre-existing broker-wide open-order pagination defect in a separate production correctness task, then re-freeze the migration from updated main and verify shared-account replay and G6 before outcomes."
+}

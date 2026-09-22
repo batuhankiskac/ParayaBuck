@@ -1,0 +1,23 @@
+{
+  "starting_production_main_sha": "df9bf797a428c384fb26adc7f9f99abacf79224b",
+  "audit_commit_sha": "da26dda53777042b58aba28af05779a2bcdd2449",
+  "audit_archive_tag": "archive/research/account-capacity-architecture-audit-v1-2026-09",
+  "audit_archive_tag_pushed": true,
+  "audit_branch_deleted_local_and_remote": true,
+  "audit_conclusion": "POSITION_CAP_ARCHITECTURE_CHANGE_DESERVES_FREEZE",
+  "audit_proposed_treatment": 8,
+  "audit_no_historical_strategy_outcomes_used": true,
+  "consolidated_main_sha": "478b15bd7c56d75735de0d94f456a2b9b9b491e8",
+  "main_documentation": [
+    "docs/research/account_capacity_architecture_decision_v1.md",
+    "docs/strategy_architecture.md"
+  ],
+  "main_production_paths_changed": false,
+  "study_branch": "research/account-capacity-migration-8-v1",
+  "study_branch_base_sha": "478b15bd7c56d75735de0d94f456a2b9b9b491e8",
+  "freeze_commit_sha": "3f7d0bc2b443f66b95d67ccb0503f1a0567799f5",
+  "freeze_spec_json_sha256": "9376525988990e2644fe53eff395a2a55ec410ea4deb95a93d0bf217b7c49efc",
+  "freeze_spec_md_sha256": "ecb8239cafdbd20377d4603fb6c7eaa723f5a028087347cc700b857a6180b481",
+  "no_migration_outcomes_before_freeze": true,
+  "only_allowed_architecture_difference": "risk.max_positions 6 versus 8"
+}

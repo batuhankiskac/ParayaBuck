@@ -1,0 +1,17 @@
+{
+  "verification_status": "STOPPED_BEFORE_PRIMARY_RESULTS",
+  "freeze_commit_sha": "3f7d0bc2b443f66b95d67ccb0503f1a0567799f5",
+  "freeze_spec_json_sha256_rechecked": "9376525988990e2644fe53eff395a2a55ec410ea4deb95a93d0bf217b7c49efc",
+  "freeze_spec_md_sha256_rechecked": "ecb8239cafdbd20377d4603fb6c7eaa723f5a028087347cc700b857a6180b481",
+  "freeze_predates_all_migration_outcomes": true,
+  "pinned_dataset_hashes_verified_before_stop": true,
+  "arm_definition_check": "Control six, treatment eight, only risk.max_positions differs in the committed specification.",
+  "historical_decision_count_check": "NOT_RUN",
+  "historical_fill_count_check": "NOT_RUN",
+  "cash_nav_accounting_check": "NOT_RUN",
+  "cost_check": "NOT_RUN",
+  "exposure_count_and_attribution_check": "NOT_RUN",
+  "economic_metric_reconstruction": "NOT_RUN",
+  "independent_post_result_verification_possible": false,
+  "reason": "A generic production correctness bug triggered the brief's stop condition before replay or outcome generation."
+}

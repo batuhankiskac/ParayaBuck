@@ -1,0 +1,83 @@
+{
+  "spec_version": "account-capacity-migration-8-v1",
+  "frozen_at_utc": "2026-09-22T18:49:21Z",
+  "starting_main_sha": "478b15bd7c56d75735de0d94f456a2b9b9b491e8",
+  "audit_commit_sha": "da26dda53777042b58aba28af05779a2bcdd2449",
+  "audit_archive_tag": "archive/research/account-capacity-architecture-audit-v1-2026-09",
+  "hypothesis": "Moving the shared account position cap from six to eight may remove count-caused equity/crypto sleeve capacity mismatch without changing any other risk, strategy, data, or execution rule.",
+  "arms": {
+    "control_A": {"risk.max_positions": 6},
+    "treatment_B": {"risk.max_positions": 8}
+  },
+  "only_arm_difference": "risk.max_positions",
+  "prohibited_variants": "No other cap, allocation, strategy, cost, timing, liquidity, lifecycle, or data change; no parameter sweep.",
+  "incumbents": {
+    "equity": {"name": "equity_residual_momentum_v3", "version": "3.0.0", "maximum_allocation": 0.55, "top_n": 8, "max_single_weight": 0.1, "rebalance_frequency": "weekly"},
+    "crypto": {"name": "crypto_low_variance_hysteresis_v1", "version": "1.0.0", "maximum_allocation": 0.05, "top_n": 2, "rebalance_hours": 96}
+  },
+  "config": {
+    "path": "config/settings.yaml",
+    "sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+    "global_gross": 0.6,
+    "minimum_target_cash": 0.4,
+    "equity_per_name": 0.1,
+    "crypto_per_name": 0.05,
+    "max_crypto_positions": 2,
+    "daily_loss_limit": 0.005,
+    "drawdown_halt": 0.05,
+    "rebalance_band": 0.005,
+    "minimum_order_notional_usd": 10.0
+  },
+  "datasets": [
+    {"path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv", "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139", "purpose": "equity PIT bars and warmup"},
+    {"path": "data/historical/equity_entity_lifetimes_full_v5.csv", "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596", "purpose": "equity causal membership and lifecycle"},
+    {"path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv", "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23", "purpose": "equity corporate actions"},
+    {"path": "data/historical/crypto_expanded_1h.csv", "sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e", "purpose": "crypto hourly scanner history and complete UTC daily strategy bars"}
+  ],
+  "period": {
+    "first_equity_decision_utc": "2017-01-03T00:00:00Z",
+    "first_allowed_crypto_decision_utc": "2021-04-01T00:00:00Z",
+    "last_decision_utc": "2026-07-30T23:59:59.999999Z",
+    "last_valuation_utc": "2026-07-31T23:59:59Z",
+    "terminal_rule": "Mark remaining holdings at the last causally available price no later than the valuation cutoff; do not force terminal liquidation. Cancel orders without a later eligible fill bar and record them as unfilled; charge costs only for executed fills.",
+    "before_crypto_available": "Crypto sleeve remains cash, subject to actual shared-account cash and exposure rules; do not impute crypto holdings or truncate earlier equity history.",
+    "selection_basis": "Pre-existing canonical equity V3 evaluation window and crypto baseline start, bounded by pinned datasets and next-open settlement; not selected from outcomes.",
+    "validation": "Report 2022-01-03 onward as the pre-existing equity V3 validation partition; there is no independently canonical crypto split, so label this a shared-account diagnostic using the equity boundary. Do not create a new partition after outcomes."
+  },
+  "execution": {
+    "starting_cash_usd": 100000.0,
+    "ledger": "One account cash, position, order and NAV ledger for both markets; no isolated-run blending or cash transfer.",
+    "decision_data": "Only causally completed bars and point-in-time universe/lifecycle state. Equity daily labels are New York midnight labels and become available after that session close; crypto UTC daily buckets become available after 24 complete contiguous hours, never at their 00:00 bucket label.",
+    "same_timestamp_order": "Crypto decision before equity; share one account snapshot, carry executable BUY reservations and unresolved order claims into later decision.",
+    "fills": "Deterministic next tradable open, sells before dependent buys, with canonical participation/quantity/increment and cash limits; partial fills and nonterminal claims persist until resolved.",
+    "broker_failures": "Historical OHLCV does not reveal actual broker rejections or failed exits. Test these as predeclared synthetic parity fixtures; do not claim them as observed historical events.",
+    "drawdown": "Enforce production daily-loss and drawdown entry gates without discretionary operator reset. If an unrecoverable synthetic epoch choice dominates the replay, mark fidelity inconclusive rather than retune.",
+    "slippage_bps": 2.0,
+    "spread_bps_full": 2.0,
+    "commission_usd": 0.0,
+    "crypto_taker_fee_bps": 25.0,
+    "equity_effective_dated_regulatory_fees": true,
+    "cost_multiplier": 1.0,
+    "max_volume_participation": 0.1,
+    "liquidity_lookback_bars": 20
+  },
+  "structural_metrics": [
+    "decision_count_by_strategy", "eligible_entry_requests", "slot_denied_entry_requests", "gross_denied_requests", "sleeve_denied_requests", "per_name_cap_constraints", "pending_order_conflicts", "equity_position_count_distribution", "crypto_position_count_distribution", "total_position_count_distribution", "days_at_global_cap", "requested_equity_target", "achievable_equity_target", "achievable_crypto_target", "count_cap_target_shortfall", "count_attributable_unused_cash", "average_target_gross", "average_realized_gross", "average_target_cash", "average_realized_cash", "order_count", "turnover", "max_name_weight", "target_hhi", "realized_hhi", "crypto_to_equity_crowdout", "equity_to_crypto_crowdout"
+  ],
+  "capacity_attribution_order": ["insufficient_eligible_names", "strategy_signal", "ivol_rejection", "liquidity_filter", "per_name_cap", "sleeve_cap", "gross_cap", "crypto_occupancy", "global_position_count"],
+  "economic_metrics_one_frozen_look": ["total_return", "cagr", "annualized_volatility", "sharpe", "sortino", "max_drawdown", "calmar", "turnover", "costs", "ending_nav"],
+  "hard_gates": {
+    "G1": "Only risk.max_positions differs between otherwise byte-identical arm inputs.",
+    "G2": "Two fresh runs per arm produce byte-identical canonical structural and economic payloads.",
+    "G3": "Both arms obey unchanged account gross, sleeve, per-name, cash and entry-latch constraints at each relevant event; immutable external inventory is accounted separately.",
+    "G4": "No new lookahead or changed source, timestamp or PIT semantics.",
+    "G5": "No production source or configuration change is required to generate results.",
+    "G6": "Eight-position order, open-order and reconciliation load fits verified published broker mechanics and measured local runtime capabilities; unresolved account-specific entitlement prevents acceptance.",
+    "G7": "One shared account cash, gross, count, positions, orders and ledger; no synthetic combination.",
+    "G8": "When actual incumbent demand exceeds six, treatment must demonstrably reduce count-attributable denial/target shortfall. If demand is absent or only a bookkeeping artifact, operational need is unproved. Publish all event dates and magnitudes; do not set a post-outcome cutoff."
+  },
+  "decision_rule": "Accept only if all G1-G8 pass and no fundamentally unintended risk regime appears. Reject if a hard gate fails or eight does not solve the count-caused issue. Mark inconclusive if replay/data/operational evidence cannot support a safe interpretation. Returns are diagnostics, not an acceptance threshold; no ad hoc numeric non-inferiority rule.",
+  "no_retuning": true,
+  "no_production_change": true,
+  "no_previous_candidate_replay": true
+}

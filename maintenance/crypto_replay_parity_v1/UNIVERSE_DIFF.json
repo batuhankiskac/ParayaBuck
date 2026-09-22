@@ -1,0 +1,233 @@
+{
+  "current_hourly_vs_current_daily_adapter": {
+    "eliminated": {
+      "first": {
+        "current": null,
+        "historical": {
+          "BCH/USD": "data_completeness",
+          "DOGE/USD": "data_completeness",
+          "LINK/USD": "data_completeness",
+          "LTC/USD": "data_completeness",
+          "SOL/USD": "data_completeness",
+          "UNI/USD": "data_completeness"
+        },
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 831
+    },
+    "missing_timestamps": {
+      "current_only": [],
+      "historical_only": [
+        "2021-01-02T00:00:00+00:00",
+        "2021-01-11T00:00:00+00:00",
+        "2021-06-22T00:00:00+00:00",
+        "2026-03-12T00:00:00+00:00"
+      ]
+    },
+    "observation_membership": {
+      "first": {
+        "current": null,
+        "historical": [
+          "BTC/USD",
+          "ETH/USD"
+        ],
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 1280
+    },
+    "observation_set": {
+      "first": {
+        "current": null,
+        "historical": [
+          "BTC/USD",
+          "ETH/USD"
+        ],
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 1958
+    },
+    "score_breakdown": {
+      "first": {
+        "current": null,
+        "historical": {
+          "BTC/USD": {
+            "category": "core",
+            "selection_role": "configured_pin",
+            "spread_source": "unavailable",
+            "total": 0.0
+          },
+          "ETH/USD": {
+            "category": "core",
+            "selection_role": "configured_pin",
+            "spread_source": "unavailable",
+            "total": 0.0
+          }
+        },
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 2027
+    },
+    "symbols": {
+      "first": {
+        "current": null,
+        "historical": [
+          "BTC/USD",
+          "ETH/USD"
+        ],
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 817
+    }
+  },
+  "historical_vs_current_daily_contract": {
+    "eliminated": {
+      "first": {
+        "current": null,
+        "historical": {
+          "BCH/USD": "data_completeness",
+          "DOGE/USD": "data_completeness",
+          "LINK/USD": "data_completeness",
+          "LTC/USD": "data_completeness",
+          "SOL/USD": "data_completeness",
+          "UNI/USD": "data_completeness"
+        },
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 831
+    },
+    "missing_timestamps": {
+      "current_only": [],
+      "historical_only": [
+        "2021-01-02T00:00:00+00:00",
+        "2021-01-11T00:00:00+00:00",
+        "2021-06-22T00:00:00+00:00",
+        "2026-03-12T00:00:00+00:00"
+      ]
+    },
+    "observation_membership": {
+      "first": {
+        "current": null,
+        "historical": [
+          "BTC/USD",
+          "ETH/USD"
+        ],
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 1282
+    },
+    "observation_set": {
+      "first": {
+        "current": null,
+        "historical": [
+          "BTC/USD",
+          "ETH/USD"
+        ],
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 1959
+    },
+    "score_breakdown": {
+      "first": {
+        "current": null,
+        "historical": {
+          "BTC/USD": {
+            "category": "core",
+            "selection_role": "configured_pin",
+            "spread_source": "unavailable",
+            "total": 0.0
+          },
+          "ETH/USD": {
+            "category": "core",
+            "selection_role": "configured_pin",
+            "spread_source": "unavailable",
+            "total": 0.0
+          }
+        },
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 2027
+    },
+    "symbols": {
+      "first": {
+        "current": null,
+        "historical": [
+          "BTC/USD",
+          "ETH/USD"
+        ],
+        "timestamp": "2021-01-02T00:00:00+00:00"
+      },
+      "mismatch_count": 817
+    }
+  },
+  "historical_vs_current_same_hourly_adapter": {
+    "eliminated": {
+      "first": null,
+      "mismatch_count": 0
+    },
+    "missing_timestamps": {
+      "current_only": [],
+      "historical_only": []
+    },
+    "observation_membership": {
+      "first": {
+        "current": [
+          "AAVE/USD",
+          "AVAX/USD",
+          "BCH/USD",
+          "BTC/USD",
+          "DOGE/USD",
+          "ETH/USD",
+          "GRT/USD",
+          "LINK/USD",
+          "LTC/USD",
+          "SOL/USD"
+        ],
+        "historical": [
+          "AAVE/USD",
+          "AVAX/USD",
+          "BCH/USD",
+          "BTC/USD",
+          "DOGE/USD",
+          "ETH/USD",
+          "GRT/USD",
+          "LINK/USD",
+          "LTC/USD",
+          "SOL/USD",
+          "UNI/USD"
+        ],
+        "timestamp": "2022-09-17T00:00:00+00:00"
+      },
+      "mismatch_count": 11
+    },
+    "observation_set": {
+      "first": {
+        "current": [
+          "BTC/USD",
+          "ETH/USD",
+          "LINK/USD",
+          "LTC/USD",
+          "UNI/USD",
+          "BCH/USD"
+        ],
+        "historical": [
+          "BCH/USD",
+          "BTC/USD",
+          "ETH/USD",
+          "LINK/USD",
+          "LTC/USD",
+          "UNI/USD"
+        ],
+        "timestamp": "2021-01-14T00:00:00+00:00"
+      },
+      "mismatch_count": 1955
+    },
+    "score_breakdown": {
+      "first": null,
+      "mismatch_count": 0
+    },
+    "symbols": {
+      "first": null,
+      "mismatch_count": 0
+    }
+  }
+}

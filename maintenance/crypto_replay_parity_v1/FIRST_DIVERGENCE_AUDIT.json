@@ -1,0 +1,3206 @@
+{
+  "canonical_comparison": "historical_vs_current_same_hourly_adapter",
+  "causal_chain": [
+    {
+      "finding": "Current context removes noneligible MKR. Inputs and all ranked scores still match; no economic divergence.",
+      "stage": "context_visibility",
+      "timestamp": "2021-04-01T00:00:00+00:00"
+    },
+    {
+      "finding": "First actual snapshot observation membership change: UNI absent current; eligible pools and scanner scores unchanged.",
+      "stage": "observation_membership",
+      "timestamp": "2022-09-17T00:00:00+00:00"
+    },
+    {
+      "finding": "SHIB eligible in same PIT universe but absent current capacity-limited context; both score lists still match because SHIB lacks qualifying observations here.",
+      "stage": "effective_context_eligibility",
+      "timestamp": "2023-03-28T00:00:00+00:00"
+    },
+    {
+      "finding": "Historical SHIB volatility .024949160469622127 ranks third; current omits SHIB. Same-symbol input histories and variance formula unchanged.",
+      "stage": "ranked_candidates",
+      "timestamp": "2023-04-09T00:00:00+00:00"
+    },
+    {
+      "finding": "Historical SHIB ranks first (.018930346236856514): BTC+SHIB target. Current BTC+ETH. First economically different targets/orders.",
+      "stage": "target_and_order",
+      "timestamp": "2023-05-11T00:00:00+00:00"
+    },
+    {
+      "finding": "First different buy is SHIB versus ETH; all subsequent state/cost/NAV differences descend from the changed target.",
+      "stage": "fills_costs_positions_nav",
+      "timestamp": "2023-05-12T00:00:00+00:00"
+    }
+  ],
+  "comparisons": {
+    "current_hourly_vs_current_daily_adapter": {
+      "common_timestamp_decisions": {
+        "account": {
+          "first": {
+            "current": {
+              "cash": 95011.94262617014,
+              "crypto_buying_power": null,
+              "crypto_trading_enabled": true,
+              "daily_pnl": -103.88602925317537,
+              "equity": 99884.95161272747,
+              "fees": 297.23771638613175,
+              "peak_equity": 103167.63842342173,
+              "positions": [
+                {
+                  "avg_price": 27109.047739352023,
+                  "bars_held": 0,
+                  "current_price": 21696.792453,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 0.11189809947489615,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 0.11189809947489615,
+                  "qty_available": 0.11189809947489615,
+                  "stop_price": null,
+                  "symbol": "BTC/USD",
+                  "trailing_stop": null
+                },
+                {
+                  "avg_price": 1567.3400609999999,
+                  "bars_held": 0,
+                  "current_price": 1532.01431,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 1.5960550305599683,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 1.5960550305599683,
+                  "qty_available": 1.5960550305599683,
+                  "stop_price": null,
+                  "symbol": "ETH/USD",
+                  "trailing_stop": null
+                }
+              ],
+              "realized_pnl": 560.7920655089591,
+              "unrealized_pnl": -662.00292300761
+            },
+            "historical": {
+              "cash": 95152.92670415687,
+              "crypto_buying_power": null,
+              "crypto_trading_enabled": true,
+              "daily_pnl": -109.55191217415268,
+              "equity": 99885.3150805691,
+              "fees": 285.05190711312997,
+              "peak_equity": 103167.63842342173,
+              "positions": [
+                {
+                  "avg_price": 27109.047739352023,
+                  "bars_held": 0,
+                  "current_price": 21696.792453,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 0.21811465389013707,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 0.21811465389013707,
+                  "qty_available": 0.21811465389013707,
+                  "stop_price": null,
+                  "symbol": "BTC/USD",
+                  "trailing_stop": null
+                }
+              ],
+              "realized_pnl": 1080.5894705292026,
+              "unrealized_pnl": -1180.4921885477365
+            },
+            "timestamp": "2023-03-08T00:00:00+00:00"
+          },
+          "mismatch_count": 309
+        },
+        "alpha_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.0,
+              "retained": [
+                "ETH/USD",
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "ETH/USD",
+                "BTC/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "ETH/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "historical": {
+              "cash_weight": 0.0,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "ETH/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "timestamp": "2023-03-08T00:00:00+00:00"
+          },
+          "mismatch_count": 68
+        },
+        "eligible_symbols": {
+          "first": {
+            "current": [
+              "BCH/USD",
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-23T00:00:00+00:00"
+          },
+          "mismatch_count": 279
+        },
+        "holdings": {
+          "first": {
+            "current": {
+              "BTC/USD": 0.11189809947489615,
+              "ETH/USD": 1.5960550305599683
+            },
+            "historical": {
+              "BTC/USD": 0.21811465389013707
+            },
+            "timestamp": "2023-03-08T00:00:00+00:00"
+          },
+          "mismatch_count": 309
+        },
+        "missing_timestamps": {
+          "current_only": [],
+          "historical_only": []
+        },
+        "orders": {
+          "first": {
+            "current": [
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2022-05-08T00:00:00+00:00|BTC/USD|buy|100",
+                "created_at": "2022-05-08T00:00:00+00:00",
+                "decision_timestamp": "2022-05-08T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 0.018070434183624022,
+                "side": "buy",
+                "symbol": "BTC/USD"
+              }
+            ],
+            "historical": [
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2022-05-08T00:00:00+00:00|BTC/USD|buy|99",
+                "created_at": "2022-05-08T00:00:00+00:00",
+                "decision_timestamp": "2022-05-08T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 0.018070434183624022,
+                "side": "buy",
+                "symbol": "BTC/USD"
+              }
+            ],
+            "timestamp": "2022-05-08T00:00:00+00:00"
+          },
+          "mismatch_count": 119
+        },
+        "scores": {
+          "first": {
+            "current": [
+              [
+                0.029626611464657098,
+                "BTC/USD"
+              ],
+              [
+                0.04500665478833268,
+                "ETH/USD"
+              ],
+              [
+                0.0638620131498159,
+                "LTC/USD"
+              ],
+              [
+                0.06475845421202464,
+                "UNI/USD"
+              ],
+              [
+                0.06961517134759915,
+                "LINK/USD"
+              ],
+              [
+                0.08702759988474801,
+                "SOL/USD"
+              ],
+              [
+                0.08920631353748915,
+                "BCH/USD"
+              ]
+            ],
+            "historical": [
+              [
+                0.029626611464657098,
+                "BTC/USD"
+              ],
+              [
+                0.04500665478833268,
+                "ETH/USD"
+              ],
+              [
+                0.0638620131498159,
+                "LTC/USD"
+              ],
+              [
+                0.06475845421202464,
+                "UNI/USD"
+              ],
+              [
+                0.06961517134759915,
+                "LINK/USD"
+              ],
+              [
+                0.08702759988474801,
+                "SOL/USD"
+              ],
+              [
+                0.08920631353748915,
+                "BCH/USD"
+              ],
+              [
+                0.27092236755503213,
+                "DOGE/USD"
+              ]
+            ],
+            "timestamp": "2021-04-23T00:00:00+00:00"
+          },
+          "mismatch_count": 208
+        },
+        "target_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.95,
+              "retained": [
+                "ETH/USD",
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "ETH/USD",
+                "BTC/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "ETH/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "historical": {
+              "cash_weight": 0.95,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "ETH/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "timestamp": "2023-03-08T00:00:00+00:00"
+          },
+          "mismatch_count": 68
+        }
+      },
+      "common_window_universe": {
+        "eliminated": {
+          "first": {
+            "current": {
+              "DOGE/USD": "atr_range"
+            },
+            "historical": {},
+            "timestamp": "2021-04-21T00:00:00+00:00"
+          },
+          "mismatch_count": 780
+        },
+        "missing_timestamps": {
+          "current_only": [],
+          "historical_only": []
+        },
+        "observation_membership": {
+          "first": {
+            "current": [
+              "BCH/USD",
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-21T00:00:00+00:00"
+          },
+          "mismatch_count": 1228
+        },
+        "observation_set": {
+          "first": {
+            "current": [
+              "BTC/USD",
+              "ETH/USD",
+              "LTC/USD",
+              "BCH/USD",
+              "DOGE/USD",
+              "LINK/USD",
+              "UNI/USD",
+              "SOL/USD"
+            ],
+            "historical": [
+              "BTC/USD",
+              "ETH/USD",
+              "DOGE/USD",
+              "LINK/USD",
+              "SOL/USD",
+              "UNI/USD",
+              "LTC/USD",
+              "BCH/USD"
+            ],
+            "timestamp": "2021-04-01T00:00:00+00:00"
+          },
+          "mismatch_count": 1877
+        },
+        "score_breakdown": {
+          "first": {
+            "current": {
+              "BCH/USD": {
+                "btc_correlation": "unavailable",
+                "category": "legacy",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 29.71423383,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 87.82762032,
+                "volatility_fit": 18.11338649
+              },
+              "BTC/USD": {
+                "btc_correlation": "unavailable",
+                "category": "core",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 35.0,
+                "selection_role": "configured_pin",
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 94.04205195,
+                "volatility_fit": 19.04205195
+              },
+              "DOGE/USD": {
+                "btc_correlation": "unavailable",
+                "category": "meme",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.87839185,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 91.79885819,
+                "volatility_fit": 18.92046634
+              },
+              "ETH/USD": {
+                "btc_correlation": "unavailable",
+                "category": "core",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 35.0,
+                "selection_role": "configured_pin",
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 93.82127514,
+                "volatility_fit": 18.82127514
+              },
+              "LINK/USD": {
+                "btc_correlation": "unavailable",
+                "category": "defi",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.44896173,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 89.77708153,
+                "volatility_fit": 17.3281198
+              },
+              "LTC/USD": {
+                "btc_correlation": "unavailable",
+                "category": "legacy",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.06536152,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 90.65571187,
+                "volatility_fit": 18.59035036
+              },
+              "SOL/USD": {
+                "btc_correlation": "unavailable",
+                "category": "layer1",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.15191673,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 88.00328854,
+                "volatility_fit": 15.85137181
+              },
+              "UNI/USD": {
+                "btc_correlation": "unavailable",
+                "category": "defi",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.0980026,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 85.42351834,
+                "volatility_fit": 13.32551574
+              }
+            },
+            "historical": {
+              "BCH/USD": {
+                "btc_correlation": 0.71926319,
+                "category": "legacy",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 29.72366868,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 86.52012312,
+                "volatility_fit": 16.79645444
+              },
+              "BTC/USD": {
+                "btc_correlation": "unavailable",
+                "category": "core",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 35.0,
+                "selection_role": "configured_pin",
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 91.49514157,
+                "volatility_fit": 16.49514157
+              },
+              "DOGE/USD": {
+                "btc_correlation": 0.65491395,
+                "category": "meme",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.91142584,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 89.47328283,
+                "volatility_fit": 16.56185699
+              },
+              "ETH/USD": {
+                "btc_correlation": 0.83345007,
+                "category": "core",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 35.0,
+                "selection_role": "configured_pin",
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 91.75886441,
+                "volatility_fit": 16.75886441
+              },
+              "LINK/USD": {
+                "btc_correlation": 0.69487229,
+                "category": "defi",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.44885856,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 89.34152522,
+                "volatility_fit": 16.89266666
+              },
+              "LTC/USD": {
+                "btc_correlation": 0.78607893,
+                "category": "legacy",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.08084847,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 88.77837622,
+                "volatility_fit": 16.69752775
+              },
+              "SOL/USD": {
+                "btc_correlation": 0.51128253,
+                "category": "layer1",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.07079043,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 89.2779298,
+                "volatility_fit": 17.20713937
+              },
+              "UNI/USD": {
+                "btc_correlation": 0.58336348,
+                "category": "defi",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.07510074,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 88.84008103,
+                "volatility_fit": 16.76498029
+              }
+            },
+            "timestamp": "2021-04-01T00:00:00+00:00"
+          },
+          "mismatch_count": 1946
+        },
+        "symbols": {
+          "first": {
+            "current": [
+              "BCH/USD",
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-21T00:00:00+00:00"
+          },
+          "mismatch_count": 766
+        }
+      },
+      "current_metrics": {
+        "cagr": 0.01938030681381031,
+        "ending_equity": 110781.58025723993,
+        "fee_total": 964.7872363469785,
+        "max_drawdown": 0.06191869479737117,
+        "rebalance_count": 477,
+        "sharpe": 0.617335181682578,
+        "slippage_cost_total": 77.18369063634005,
+        "spread_cost_total": 38.59184531817002,
+        "starting_equity": 100000,
+        "total_return": 0.1078158025723992
+      },
+      "current_universe_timeframe": "1d",
+      "data_identical": true,
+      "decisions": {
+        "account": {
+          "first": {
+            "current_sha256": "70877f7f21df670924c5651d86a23294ab444d2273d798b105839a2456c7591c",
+            "historical_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 331
+        },
+        "alpha_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.0,
+              "retained": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "ETH/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "historical": null,
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 90
+        },
+        "eligible_symbols": {
+          "first": {
+            "current": [
+              "BCH/USD",
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-23T00:00:00+00:00"
+          },
+          "mismatch_count": 301
+        },
+        "history": {
+          "first": {
+            "current_sha256": "bab0b2dccfa7ecb4badb6478a55c194cc4a9422ff2b9a1336e264505ae44836c",
+            "historical_sha256": "a45fd3b3db366a490e6d9e4277e2742d67f695045f19f8a88dfd3239ef8501b1",
+            "timestamp": "2021-04-23T00:00:00+00:00"
+          },
+          "mismatch_count": 331
+        },
+        "holdings": {
+          "first": {
+            "current": {
+              "BTC/USD": 0.055181242771085985,
+              "ETH/USD": 0.8111604587240461
+            },
+            "historical": null,
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 331
+        },
+        "missing_timestamps": {
+          "current_only": [
+            "2022-04-30T00:00:00+00:00",
+            "2022-06-05T00:00:00+00:00",
+            "2022-06-09T00:00:00+00:00",
+            "2022-09-05T00:00:00+00:00",
+            "2022-09-21T00:00:00+00:00",
+            "2022-09-25T00:00:00+00:00",
+            "2022-10-03T00:00:00+00:00",
+            "2022-10-15T00:00:00+00:00",
+            "2022-10-23T00:00:00+00:00",
+            "2022-10-31T00:00:00+00:00",
+            "2022-11-12T00:00:00+00:00",
+            "2022-12-10T00:00:00+00:00",
+            "2022-12-18T00:00:00+00:00",
+            "2022-12-26T00:00:00+00:00",
+            "2022-12-30T00:00:00+00:00",
+            "2023-01-03T00:00:00+00:00",
+            "2023-01-07T00:00:00+00:00",
+            "2023-01-11T00:00:00+00:00",
+            "2023-01-19T00:00:00+00:00",
+            "2023-02-16T00:00:00+00:00",
+            "2023-02-28T00:00:00+00:00",
+            "2023-03-04T00:00:00+00:00"
+          ],
+          "historical_only": []
+        },
+        "orders": {
+          "first": {
+            "current": [],
+            "historical": null,
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 141
+        },
+        "scores": {
+          "first": {
+            "current": [
+              [
+                0.029626611464657098,
+                "BTC/USD"
+              ],
+              [
+                0.04500665478833268,
+                "ETH/USD"
+              ],
+              [
+                0.0638620131498159,
+                "LTC/USD"
+              ],
+              [
+                0.06475845421202464,
+                "UNI/USD"
+              ],
+              [
+                0.06961517134759915,
+                "LINK/USD"
+              ],
+              [
+                0.08702759988474801,
+                "SOL/USD"
+              ],
+              [
+                0.08920631353748915,
+                "BCH/USD"
+              ]
+            ],
+            "historical": [
+              [
+                0.029626611464657098,
+                "BTC/USD"
+              ],
+              [
+                0.04500665478833268,
+                "ETH/USD"
+              ],
+              [
+                0.0638620131498159,
+                "LTC/USD"
+              ],
+              [
+                0.06475845421202464,
+                "UNI/USD"
+              ],
+              [
+                0.06961517134759915,
+                "LINK/USD"
+              ],
+              [
+                0.08702759988474801,
+                "SOL/USD"
+              ],
+              [
+                0.08920631353748915,
+                "BCH/USD"
+              ],
+              [
+                0.27092236755503213,
+                "DOGE/USD"
+              ]
+            ],
+            "timestamp": "2021-04-23T00:00:00+00:00"
+          },
+          "mismatch_count": 230
+        },
+        "target_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.95,
+              "retained": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "ETH/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "historical": null,
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 90
+        }
+      },
+      "engine_arguments_identical": true,
+      "first_economic_fill_difference": {
+        "current": {
+          "decision_timestamp": "2023-03-04T00:00:00+00:00",
+          "fee": 5.9319068006087345,
+          "fill_price": 22338.916314,
+          "market": "crypto",
+          "qty": 0.10621655441524092,
+          "reference_price": 22345.62,
+          "side": "sell",
+          "slippage_cost": 0.4746949525344591,
+          "spread_cost": 0.23734747626722955,
+          "symbol": "BTC/USD",
+          "timestamp": "2023-03-05T00:00:00+00:00"
+        },
+        "historical": {
+          "decision_timestamp": "2023-03-08T00:00:00+00:00",
+          "fee": 5.587836611629624,
+          "fill_price": 21695.619361,
+          "market": "crypto",
+          "qty": 0.10302239394325487,
+          "reference_price": 21702.13,
+          "side": "sell",
+          "slippage_cost": 0.447161077253546,
+          "spread_cost": 0.223580538626773,
+          "symbol": "BTC/USD",
+          "timestamp": "2023-03-09T00:00:00+00:00"
+        },
+        "index": 66
+      },
+      "first_fill_difference": {
+        "current": {
+          "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2022-05-08T00:00:00+00:00|BTC/USD|buy|100",
+          "decision_timestamp": "2022-05-08T00:00:00+00:00",
+          "fee": 1.5382236544643133,
+          "fill_price": 34049.511790000004,
+          "market": "crypto",
+          "qty": 0.018070434183624022,
+          "reference_price": 34039.3,
+          "side": "buy",
+          "slippage_cost": 0.12302098606132665,
+          "spread_cost": 0.061510493030663325,
+          "symbol": "BTC/USD",
+          "timestamp": "2022-05-09T00:00:00+00:00"
+        },
+        "historical": {
+          "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2022-05-08T00:00:00+00:00|BTC/USD|buy|99",
+          "decision_timestamp": "2022-05-08T00:00:00+00:00",
+          "fee": 1.5382236544643133,
+          "fill_price": 34049.511790000004,
+          "market": "crypto",
+          "qty": 0.018070434183624022,
+          "reference_price": 34039.3,
+          "side": "buy",
+          "slippage_cost": 0.12302098606132665,
+          "spread_cost": 0.061510493030663325,
+          "symbol": "BTC/USD",
+          "timestamp": "2022-05-09T00:00:00+00:00"
+        },
+        "index": 41
+      },
+      "first_snapshot_difference": {
+        "current": {
+          "cash": 95011.94262617014,
+          "nav": 100018.87577425371,
+          "positions": {
+            "BTC/USD": {
+              "avg_price": 27109.047739352023,
+              "entry_fee": 7.583627301519304,
+              "mark": 22431.13,
+              "qty": 0.11189809947489615
+            },
+            "ETH/USD": {
+              "avg_price": 1567.3400609999999,
+              "entry_fee": 6.253902472393044,
+              "mark": 1564.44,
+              "qty": 1.5960550305599683
+            }
+          },
+          "timestamp": "2023-03-05T00:00:00+00:00"
+        },
+        "historical": {
+          "cash": 95152.92670415687,
+          "nav": 100045.48486047154,
+          "positions": {
+            "BTC/USD": {
+              "avg_price": 27109.047739352023,
+              "entry_fee": 14.782201412399925,
+              "mark": 22431.13,
+              "qty": 0.21811465389013707
+            }
+          },
+          "timestamp": "2023-03-05T00:00:00+00:00"
+        },
+        "index": 702
+      },
+      "historical_metrics": {
+        "cagr": 0.010054542274535727,
+        "ending_equity": 105481.51853584184,
+        "fee_total": 899.9724383338659,
+        "max_drawdown": 0.06191869479737117,
+        "rebalance_count": 455,
+        "sharpe": 0.3469344249544033,
+        "slippage_cost_total": 71.99818443600431,
+        "spread_cost_total": 35.999092218002154,
+        "starting_equity": 100000,
+        "total_return": 0.05481518535841845
+      },
+      "historical_universe_timeframe": "1h",
+      "normalized_daily_bars_identical": true,
+      "terminal_event_counts": [
+        2,
+        4
+      ],
+      "universe": {
+        "eliminated": {
+          "first": {
+            "current": null,
+            "historical": {
+              "BCH/USD": "data_completeness",
+              "DOGE/USD": "data_completeness",
+              "LINK/USD": "data_completeness",
+              "LTC/USD": "data_completeness",
+              "SOL/USD": "data_completeness",
+              "UNI/USD": "data_completeness"
+            },
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 831
+        },
+        "missing_timestamps": {
+          "current_only": [],
+          "historical_only": [
+            "2021-01-02T00:00:00+00:00",
+            "2021-01-11T00:00:00+00:00",
+            "2021-06-22T00:00:00+00:00",
+            "2026-03-12T00:00:00+00:00"
+          ]
+        },
+        "observation_membership": {
+          "first": {
+            "current": null,
+            "historical": [
+              "BTC/USD",
+              "ETH/USD"
+            ],
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 1280
+        },
+        "observation_set": {
+          "first": {
+            "current": null,
+            "historical": [
+              "BTC/USD",
+              "ETH/USD"
+            ],
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 1958
+        },
+        "score_breakdown": {
+          "first": {
+            "current": null,
+            "historical": {
+              "BTC/USD": {
+                "category": "core",
+                "selection_role": "configured_pin",
+                "spread_source": "unavailable",
+                "total": 0.0
+              },
+              "ETH/USD": {
+                "category": "core",
+                "selection_role": "configured_pin",
+                "spread_source": "unavailable",
+                "total": 0.0
+              }
+            },
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 2027
+        },
+        "symbols": {
+          "first": {
+            "current": null,
+            "historical": [
+              "BTC/USD",
+              "ETH/USD"
+            ],
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 817
+        }
+      },
+      "window_identical": true
+    },
+    "historical_vs_current_daily_contract": {
+      "common_timestamp_decisions": {
+        "account": {
+          "first": {
+            "current": {
+              "cash": 95011.94262617014,
+              "crypto_buying_power": null,
+              "crypto_trading_enabled": true,
+              "daily_pnl": -103.88602925317537,
+              "equity": 99884.95161272747,
+              "fees": 297.23771638613175,
+              "peak_equity": 103167.63842342173,
+              "positions": [
+                {
+                  "avg_price": 27109.047739352023,
+                  "bars_held": 0,
+                  "current_price": 21696.792453,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 0.11189809947489615,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 0.11189809947489615,
+                  "qty_available": 0.11189809947489615,
+                  "stop_price": null,
+                  "symbol": "BTC/USD",
+                  "trailing_stop": null
+                },
+                {
+                  "avg_price": 1567.3400609999999,
+                  "bars_held": 0,
+                  "current_price": 1532.01431,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 1.5960550305599683,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 1.5960550305599683,
+                  "qty_available": 1.5960550305599683,
+                  "stop_price": null,
+                  "symbol": "ETH/USD",
+                  "trailing_stop": null
+                }
+              ],
+              "realized_pnl": 560.7920655089591,
+              "unrealized_pnl": -662.00292300761
+            },
+            "historical": {
+              "cash": 95152.92670415687,
+              "crypto_buying_power": null,
+              "crypto_trading_enabled": true,
+              "daily_pnl": -109.55191217415268,
+              "equity": 99885.3150805691,
+              "fees": 285.05190711312997,
+              "peak_equity": 103167.63842342173,
+              "positions": [
+                {
+                  "avg_price": 27109.047739352023,
+                  "bars_held": 0,
+                  "current_price": 21696.792453,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 0.21811465389013707,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 0.21811465389013707,
+                  "qty_available": 0.21811465389013707,
+                  "stop_price": null,
+                  "symbol": "BTC/USD",
+                  "trailing_stop": null
+                }
+              ],
+              "realized_pnl": 1080.5894705292026,
+              "unrealized_pnl": -1180.4921885477365
+            },
+            "timestamp": "2023-03-08T00:00:00+00:00"
+          },
+          "mismatch_count": 307
+        },
+        "alpha_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.0,
+              "retained": [
+                "ETH/USD",
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "ETH/USD",
+                "BTC/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "ETH/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "historical": {
+              "cash_weight": 0.0,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "ETH/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "timestamp": "2023-03-08T00:00:00+00:00"
+          },
+          "mismatch_count": 29
+        },
+        "eligible_symbols": {
+          "first": {
+            "current": [
+              "BCH/USD",
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-23T00:00:00+00:00"
+          },
+          "mismatch_count": 275
+        },
+        "holdings": {
+          "first": {
+            "current": {
+              "BTC/USD": 0.11189809947489615,
+              "ETH/USD": 1.5960550305599683
+            },
+            "historical": {
+              "BTC/USD": 0.21811465389013707
+            },
+            "timestamp": "2023-03-08T00:00:00+00:00"
+          },
+          "mismatch_count": 307
+        },
+        "missing_timestamps": {
+          "current_only": [],
+          "historical_only": []
+        },
+        "orders": {
+          "first": {
+            "current": [
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2022-05-08T00:00:00+00:00|BTC/USD|buy|100",
+                "created_at": "2022-05-08T00:00:00+00:00",
+                "decision_timestamp": "2022-05-08T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 0.018070434183624022,
+                "side": "buy",
+                "symbol": "BTC/USD"
+              }
+            ],
+            "historical": [
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2022-05-08T00:00:00+00:00|BTC/USD|buy|99",
+                "created_at": "2022-05-08T00:00:00+00:00",
+                "decision_timestamp": "2022-05-08T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 0.018070434183624022,
+                "side": "buy",
+                "symbol": "BTC/USD"
+              }
+            ],
+            "timestamp": "2022-05-08T00:00:00+00:00"
+          },
+          "mismatch_count": 114
+        },
+        "scores": {
+          "first": {
+            "current": [
+              [
+                0.029626611464657098,
+                "BTC/USD"
+              ],
+              [
+                0.04500665478833268,
+                "ETH/USD"
+              ],
+              [
+                0.0638620131498159,
+                "LTC/USD"
+              ],
+              [
+                0.06475845421202464,
+                "UNI/USD"
+              ],
+              [
+                0.06961517134759915,
+                "LINK/USD"
+              ],
+              [
+                0.08702759988474801,
+                "SOL/USD"
+              ],
+              [
+                0.08920631353748915,
+                "BCH/USD"
+              ]
+            ],
+            "historical": [
+              [
+                0.029626611464657098,
+                "BTC/USD"
+              ],
+              [
+                0.04500665478833268,
+                "ETH/USD"
+              ],
+              [
+                0.0638620131498159,
+                "LTC/USD"
+              ],
+              [
+                0.06475845421202464,
+                "UNI/USD"
+              ],
+              [
+                0.06961517134759915,
+                "LINK/USD"
+              ],
+              [
+                0.08702759988474801,
+                "SOL/USD"
+              ],
+              [
+                0.08920631353748915,
+                "BCH/USD"
+              ],
+              [
+                0.27092236755503213,
+                "DOGE/USD"
+              ]
+            ],
+            "timestamp": "2021-04-23T00:00:00+00:00"
+          },
+          "mismatch_count": 198
+        },
+        "target_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.95,
+              "retained": [
+                "ETH/USD",
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "ETH/USD",
+                "BTC/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "ETH/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "historical": {
+              "cash_weight": 0.95,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "ETH/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "timestamp": "2023-03-08T00:00:00+00:00"
+          },
+          "mismatch_count": 30
+        }
+      },
+      "common_window_universe": {
+        "eliminated": {
+          "first": {
+            "current": {
+              "DOGE/USD": "atr_range"
+            },
+            "historical": {},
+            "timestamp": "2021-04-21T00:00:00+00:00"
+          },
+          "mismatch_count": 780
+        },
+        "missing_timestamps": {
+          "current_only": [],
+          "historical_only": []
+        },
+        "observation_membership": {
+          "first": {
+            "current": [
+              "BCH/USD",
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-21T00:00:00+00:00"
+          },
+          "mismatch_count": 1230
+        },
+        "observation_set": {
+          "first": {
+            "current": [
+              "BTC/USD",
+              "ETH/USD",
+              "LTC/USD",
+              "BCH/USD",
+              "DOGE/USD",
+              "LINK/USD",
+              "UNI/USD",
+              "SOL/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-01T00:00:00+00:00"
+          },
+          "mismatch_count": 1878
+        },
+        "score_breakdown": {
+          "first": {
+            "current": {
+              "BCH/USD": {
+                "btc_correlation": "unavailable",
+                "category": "legacy",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 29.71423383,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 87.82762032,
+                "volatility_fit": 18.11338649
+              },
+              "BTC/USD": {
+                "btc_correlation": "unavailable",
+                "category": "core",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 35.0,
+                "selection_role": "configured_pin",
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 94.04205195,
+                "volatility_fit": 19.04205195
+              },
+              "DOGE/USD": {
+                "btc_correlation": "unavailable",
+                "category": "meme",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.87839185,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 91.79885819,
+                "volatility_fit": 18.92046634
+              },
+              "ETH/USD": {
+                "btc_correlation": "unavailable",
+                "category": "core",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 35.0,
+                "selection_role": "configured_pin",
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 93.82127514,
+                "volatility_fit": 18.82127514
+              },
+              "LINK/USD": {
+                "btc_correlation": "unavailable",
+                "category": "defi",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.44896173,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 89.77708153,
+                "volatility_fit": 17.3281198
+              },
+              "LTC/USD": {
+                "btc_correlation": "unavailable",
+                "category": "legacy",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.06536152,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 90.65571187,
+                "volatility_fit": 18.59035036
+              },
+              "SOL/USD": {
+                "btc_correlation": "unavailable",
+                "category": "layer1",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.15191673,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 88.00328854,
+                "volatility_fit": 15.85137181
+              },
+              "UNI/USD": {
+                "btc_correlation": "unavailable",
+                "category": "defi",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.0980026,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 85.42351834,
+                "volatility_fit": 13.32551574
+              }
+            },
+            "historical": {
+              "BCH/USD": {
+                "btc_correlation": 0.71926319,
+                "category": "legacy",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 29.72366868,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 86.52012312,
+                "volatility_fit": 16.79645444
+              },
+              "BTC/USD": {
+                "btc_correlation": "unavailable",
+                "category": "core",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 35.0,
+                "selection_role": "configured_pin",
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 91.49514157,
+                "volatility_fit": 16.49514157
+              },
+              "DOGE/USD": {
+                "btc_correlation": 0.65491395,
+                "category": "meme",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.91142584,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 89.47328283,
+                "volatility_fit": 16.56185699
+              },
+              "ETH/USD": {
+                "btc_correlation": 0.83345007,
+                "category": "core",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 35.0,
+                "selection_role": "configured_pin",
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 91.75886441,
+                "volatility_fit": 16.75886441
+              },
+              "LINK/USD": {
+                "btc_correlation": 0.69487229,
+                "category": "defi",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.44885856,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 89.34152522,
+                "volatility_fit": 16.89266666
+              },
+              "LTC/USD": {
+                "btc_correlation": 0.78607893,
+                "category": "legacy",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.08084847,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 88.77837622,
+                "volatility_fit": 16.69752775
+              },
+              "SOL/USD": {
+                "btc_correlation": 0.51128253,
+                "category": "layer1",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.07079043,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 89.2779298,
+                "volatility_fit": 17.20713937
+              },
+              "UNI/USD": {
+                "btc_correlation": 0.58336348,
+                "category": "defi",
+                "data_quality": 25.0,
+                "diversification": 10.0,
+                "liquidity": 32.07510074,
+                "spread_quality": 5.0,
+                "spread_source": "unavailable",
+                "total": 88.84008103,
+                "volatility_fit": 16.76498029
+              }
+            },
+            "timestamp": "2021-04-01T00:00:00+00:00"
+          },
+          "mismatch_count": 1946
+        },
+        "symbols": {
+          "first": {
+            "current": [
+              "BCH/USD",
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-21T00:00:00+00:00"
+          },
+          "mismatch_count": 766
+        }
+      },
+      "current_metrics": {
+        "cagr": 0.01938030681381031,
+        "ending_equity": 110781.58025723993,
+        "fee_total": 964.7872363469785,
+        "max_drawdown": 0.06191869479737117,
+        "rebalance_count": 477,
+        "sharpe": 0.617335181682578,
+        "slippage_cost_total": 77.18369063634005,
+        "spread_cost_total": 38.59184531817002,
+        "starting_equity": 100000,
+        "total_return": 0.1078158025723992
+      },
+      "current_universe_timeframe": "1d",
+      "data_identical": true,
+      "decisions": {
+        "account": {
+          "first": {
+            "current_sha256": "70877f7f21df670924c5651d86a23294ab444d2273d798b105839a2456c7591c",
+            "historical_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 331
+        },
+        "alpha_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.0,
+              "retained": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "ETH/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "historical": null,
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 53
+        },
+        "eligible_symbols": {
+          "first": {
+            "current": [
+              "BCH/USD",
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-23T00:00:00+00:00"
+          },
+          "mismatch_count": 299
+        },
+        "history": {
+          "first": {
+            "current_sha256": "7e0502f175660e75903c82bb00de972b6aa6597739a00505e5bfebef2a12509f",
+            "historical_sha256": "55a2083b760666a33ae13cf60049c09665e848ddc90c09258dcc95be987ebd4f",
+            "timestamp": "2021-04-01T00:00:00+00:00"
+          },
+          "mismatch_count": 477
+        },
+        "holdings": {
+          "first": {
+            "current": {
+              "BTC/USD": 0.055181242771085985,
+              "ETH/USD": 0.8111604587240461
+            },
+            "historical": null,
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 331
+        },
+        "missing_timestamps": {
+          "current_only": [
+            "2022-04-30T00:00:00+00:00",
+            "2022-06-05T00:00:00+00:00",
+            "2022-06-09T00:00:00+00:00",
+            "2022-09-05T00:00:00+00:00",
+            "2022-09-21T00:00:00+00:00",
+            "2022-09-25T00:00:00+00:00",
+            "2022-10-03T00:00:00+00:00",
+            "2022-10-15T00:00:00+00:00",
+            "2022-10-23T00:00:00+00:00",
+            "2022-10-31T00:00:00+00:00",
+            "2022-11-12T00:00:00+00:00",
+            "2022-12-10T00:00:00+00:00",
+            "2022-12-18T00:00:00+00:00",
+            "2022-12-26T00:00:00+00:00",
+            "2022-12-30T00:00:00+00:00",
+            "2023-01-03T00:00:00+00:00",
+            "2023-01-07T00:00:00+00:00",
+            "2023-01-11T00:00:00+00:00",
+            "2023-01-19T00:00:00+00:00",
+            "2023-02-16T00:00:00+00:00",
+            "2023-02-28T00:00:00+00:00",
+            "2023-03-04T00:00:00+00:00",
+            "2023-06-24T00:00:00+00:00",
+            "2025-01-20T00:00:00+00:00"
+          ],
+          "historical_only": []
+        },
+        "orders": {
+          "first": {
+            "current": [],
+            "historical": null,
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 138
+        },
+        "scores": {
+          "first": {
+            "current": [
+              [
+                0.029626611464657098,
+                "BTC/USD"
+              ],
+              [
+                0.04500665478833268,
+                "ETH/USD"
+              ],
+              [
+                0.0638620131498159,
+                "LTC/USD"
+              ],
+              [
+                0.06475845421202464,
+                "UNI/USD"
+              ],
+              [
+                0.06961517134759915,
+                "LINK/USD"
+              ],
+              [
+                0.08702759988474801,
+                "SOL/USD"
+              ],
+              [
+                0.08920631353748915,
+                "BCH/USD"
+              ]
+            ],
+            "historical": [
+              [
+                0.029626611464657098,
+                "BTC/USD"
+              ],
+              [
+                0.04500665478833268,
+                "ETH/USD"
+              ],
+              [
+                0.0638620131498159,
+                "LTC/USD"
+              ],
+              [
+                0.06475845421202464,
+                "UNI/USD"
+              ],
+              [
+                0.06961517134759915,
+                "LINK/USD"
+              ],
+              [
+                0.08702759988474801,
+                "SOL/USD"
+              ],
+              [
+                0.08920631353748915,
+                "BCH/USD"
+              ],
+              [
+                0.27092236755503213,
+                "DOGE/USD"
+              ]
+            ],
+            "timestamp": "2021-04-23T00:00:00+00:00"
+          },
+          "mismatch_count": 222
+        },
+        "target_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.95,
+              "retained": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "ETH/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "historical": null,
+            "timestamp": "2022-04-30T00:00:00+00:00"
+          },
+          "mismatch_count": 54
+        }
+      },
+      "engine_arguments_identical": false,
+      "first_economic_fill_difference": {
+        "current": {
+          "decision_timestamp": "2023-03-04T00:00:00+00:00",
+          "fee": 5.9319068006087345,
+          "fill_price": 22338.916314,
+          "market": "crypto",
+          "qty": 0.10621655441524092,
+          "reference_price": 22345.62,
+          "side": "sell",
+          "slippage_cost": 0.4746949525344591,
+          "spread_cost": 0.23734747626722955,
+          "symbol": "BTC/USD",
+          "timestamp": "2023-03-05T00:00:00+00:00"
+        },
+        "historical": {
+          "decision_timestamp": "2023-03-08T00:00:00+00:00",
+          "fee": 5.587836611629624,
+          "fill_price": 21695.619361,
+          "market": "crypto",
+          "qty": 0.10302239394325487,
+          "reference_price": 21702.13,
+          "side": "sell",
+          "slippage_cost": 0.447161077253546,
+          "spread_cost": 0.223580538626773,
+          "symbol": "BTC/USD",
+          "timestamp": "2023-03-09T00:00:00+00:00"
+        },
+        "index": 66
+      },
+      "first_fill_difference": {
+        "current": {
+          "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2022-05-08T00:00:00+00:00|BTC/USD|buy|100",
+          "decision_timestamp": "2022-05-08T00:00:00+00:00",
+          "fee": 1.5382236544643133,
+          "fill_price": 34049.511790000004,
+          "market": "crypto",
+          "qty": 0.018070434183624022,
+          "reference_price": 34039.3,
+          "side": "buy",
+          "slippage_cost": 0.12302098606132665,
+          "spread_cost": 0.061510493030663325,
+          "symbol": "BTC/USD",
+          "timestamp": "2022-05-09T00:00:00+00:00"
+        },
+        "historical": {
+          "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2022-05-08T00:00:00+00:00|BTC/USD|buy|99",
+          "decision_timestamp": "2022-05-08T00:00:00+00:00",
+          "fee": 1.5382236544643133,
+          "fill_price": 34049.511790000004,
+          "market": "crypto",
+          "qty": 0.018070434183624022,
+          "reference_price": 34039.3,
+          "side": "buy",
+          "slippage_cost": 0.12302098606132665,
+          "spread_cost": 0.061510493030663325,
+          "symbol": "BTC/USD",
+          "timestamp": "2022-05-09T00:00:00+00:00"
+        },
+        "index": 41
+      },
+      "first_snapshot_difference": {
+        "current": {
+          "cash": 95011.94262617014,
+          "nav": 100018.87577425371,
+          "positions": {
+            "BTC/USD": {
+              "avg_price": 27109.047739352023,
+              "entry_fee": 7.583627301519304,
+              "mark": 22431.13,
+              "qty": 0.11189809947489615
+            },
+            "ETH/USD": {
+              "avg_price": 1567.3400609999999,
+              "entry_fee": 6.253902472393044,
+              "mark": 1564.44,
+              "qty": 1.5960550305599683
+            }
+          },
+          "timestamp": "2023-03-05T00:00:00+00:00"
+        },
+        "historical": {
+          "cash": 95152.92670415687,
+          "nav": 100045.48486047154,
+          "positions": {
+            "BTC/USD": {
+              "avg_price": 27109.047739352023,
+              "entry_fee": 14.782201412399925,
+              "mark": 22431.13,
+              "qty": 0.21811465389013707
+            }
+          },
+          "timestamp": "2023-03-05T00:00:00+00:00"
+        },
+        "index": 702
+      },
+      "historical_metrics": {
+        "cagr": 0.018963026648392223,
+        "ending_equity": 110539.89682212163,
+        "fee_total": 1064.3451356248463,
+        "max_drawdown": 0.06191869479737117,
+        "rebalance_count": 453,
+        "sharpe": 0.6007703785106251,
+        "slippage_cost_total": 85.1483147678535,
+        "spread_cost_total": 42.57415738392675,
+        "starting_equity": 100000,
+        "total_return": 0.10539896822121642
+      },
+      "historical_universe_timeframe": "1h",
+      "normalized_daily_bars_identical": true,
+      "terminal_event_counts": [
+        0,
+        4
+      ],
+      "universe": {
+        "eliminated": {
+          "first": {
+            "current": null,
+            "historical": {
+              "BCH/USD": "data_completeness",
+              "DOGE/USD": "data_completeness",
+              "LINK/USD": "data_completeness",
+              "LTC/USD": "data_completeness",
+              "SOL/USD": "data_completeness",
+              "UNI/USD": "data_completeness"
+            },
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 831
+        },
+        "missing_timestamps": {
+          "current_only": [],
+          "historical_only": [
+            "2021-01-02T00:00:00+00:00",
+            "2021-01-11T00:00:00+00:00",
+            "2021-06-22T00:00:00+00:00",
+            "2026-03-12T00:00:00+00:00"
+          ]
+        },
+        "observation_membership": {
+          "first": {
+            "current": null,
+            "historical": [
+              "BTC/USD",
+              "ETH/USD"
+            ],
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 1282
+        },
+        "observation_set": {
+          "first": {
+            "current": null,
+            "historical": [
+              "BTC/USD",
+              "ETH/USD"
+            ],
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 1959
+        },
+        "score_breakdown": {
+          "first": {
+            "current": null,
+            "historical": {
+              "BTC/USD": {
+                "category": "core",
+                "selection_role": "configured_pin",
+                "spread_source": "unavailable",
+                "total": 0.0
+              },
+              "ETH/USD": {
+                "category": "core",
+                "selection_role": "configured_pin",
+                "spread_source": "unavailable",
+                "total": 0.0
+              }
+            },
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 2027
+        },
+        "symbols": {
+          "first": {
+            "current": null,
+            "historical": [
+              "BTC/USD",
+              "ETH/USD"
+            ],
+            "timestamp": "2021-01-02T00:00:00+00:00"
+          },
+          "mismatch_count": 817
+        }
+      },
+      "window_identical": true
+    },
+    "historical_vs_current_same_hourly_adapter": {
+      "common_timestamp_decisions": {
+        "account": {
+          "first": {
+            "current": {
+              "cash": 95983.801965618,
+              "crypto_buying_power": null,
+              "crypto_trading_enabled": true,
+              "daily_pnl": 44.98036810143094,
+              "equity": 101001.70461783296,
+              "fees": 325.04015497632275,
+              "peak_equity": 103167.63842342173,
+              "positions": [
+                {
+                  "avg_price": 27109.047739352023,
+                  "bars_held": 0,
+                  "current_price": 27189.1427145,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 0.09068718115764592,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 0.09068718115764592,
+                  "qty_available": 0.09068718115764592,
+                  "stop_price": null,
+                  "symbol": "BTC/USD",
+                  "trailing_stop": null
+                },
+                {
+                  "avg_price": 1797.5391,
+                  "bars_held": 0,
+                  "current_price": 1816.9875,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 1.404630434355776,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 1.404630434355776,
+                  "qty_available": 1.404630434355776,
+                  "stop_price": null,
+                  "symbol": "ETH/USD",
+                  "trailing_stop": null
+                }
+              ],
+              "realized_pnl": 979.581518897749,
+              "unrealized_pnl": 34.581402060586726
+            },
+            "historical": {
+              "cash": 95983.67488728535,
+              "crypto_buying_power": null,
+              "crypto_trading_enabled": true,
+              "daily_pnl": 25.394119163727737,
+              "equity": 101007.05333134624,
+              "fees": 325.04047187989545,
+              "peak_equity": 103167.63842342173,
+              "positions": [
+                {
+                  "avg_price": 27109.047739352023,
+                  "bars_held": 0,
+                  "current_price": 27189.1427145,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 0.09068718115764592,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 0.09068718115764592,
+                  "qty_available": 0.09068718115764592,
+                  "stop_price": null,
+                  "symbol": "BTC/USD",
+                  "trailing_stop": null
+                },
+                {
+                  "avg_price": 8.6876055e-06,
+                  "bars_held": 0,
+                  "current_price": 8.8e-06,
+                  "highest_high": null,
+                  "initial_risk": null,
+                  "lowest_low": null,
+                  "managed_qty": 290644515.1352198,
+                  "market": "crypto",
+                  "ownership": "managed",
+                  "pending_trailing_stop": null,
+                  "qty": 290644515.1352198,
+                  "qty_available": 290644515.1352198,
+                  "stop_price": null,
+                  "symbol": "SHIB/USD",
+                  "trailing_stop": null
+                }
+              ],
+              "realized_pnl": 979.581518897749,
+              "unrealized_pnl": 39.93043247742755
+            },
+            "timestamp": "2023-05-15T00:00:00+00:00"
+          },
+          "mismatch_count": 290
+        },
+        "alpha_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.0,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "ETH/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "historical": {
+              "cash_weight": 0.0,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "SHIB/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "SHIB/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "timestamp": "2023-05-11T00:00:00+00:00"
+          },
+          "mismatch_count": 57
+        },
+        "eligible_symbols": {
+          "first": {
+            "current": [
+              "AAVE/USD",
+              "AVAX/USD",
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "GRT/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "AAVE/USD",
+              "AVAX/USD",
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "GRT/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SHIB/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2023-03-28T00:00:00+00:00"
+          },
+          "mismatch_count": 195
+        },
+        "holdings": {
+          "first": {
+            "current": {
+              "BTC/USD": 0.09068718115764592,
+              "ETH/USD": 1.404630434355776
+            },
+            "historical": {
+              "BTC/USD": 0.09068718115764592,
+              "SHIB/USD": 290644515.1352198
+            },
+            "timestamp": "2023-05-15T00:00:00+00:00"
+          },
+          "mismatch_count": 290
+        },
+        "missing_timestamps": {
+          "current_only": [],
+          "historical_only": []
+        },
+        "orders": {
+          "first": {
+            "current": [
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|ETH/USD|buy|163",
+                "created_at": "2023-05-11T00:00:00+00:00",
+                "decision_timestamp": "2023-05-11T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 1.404630434355776,
+                "side": "buy",
+                "symbol": "ETH/USD"
+              },
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|BCH/USD|sell|163",
+                "created_at": "2023-05-11T00:00:00+00:00",
+                "decision_timestamp": "2023-05-11T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 19.27494564295035,
+                "side": "sell",
+                "symbol": "BCH/USD"
+              }
+            ],
+            "historical": [
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|SHIB/USD|buy|163",
+                "created_at": "2023-05-11T00:00:00+00:00",
+                "decision_timestamp": "2023-05-11T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 290644515.1352198,
+                "side": "buy",
+                "symbol": "SHIB/USD"
+              },
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|BCH/USD|sell|163",
+                "created_at": "2023-05-11T00:00:00+00:00",
+                "decision_timestamp": "2023-05-11T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 19.27494564295035,
+                "side": "sell",
+                "symbol": "BCH/USD"
+              }
+            ],
+            "timestamp": "2023-05-11T00:00:00+00:00"
+          },
+          "mismatch_count": 103
+        },
+        "scores": {
+          "first": {
+            "current": [
+              [
+                0.02043425309691321,
+                "BTC/USD"
+              ],
+              [
+                0.02410622906126391,
+                "ETH/USD"
+              ],
+              [
+                0.02644739963593102,
+                "BCH/USD"
+              ],
+              [
+                0.028789783010354866,
+                "AVAX/USD"
+              ],
+              [
+                0.028862194407804777,
+                "UNI/USD"
+              ],
+              [
+                0.029508677807546527,
+                "SOL/USD"
+              ],
+              [
+                0.03120219173393954,
+                "AAVE/USD"
+              ],
+              [
+                0.03240710304753463,
+                "LTC/USD"
+              ],
+              [
+                0.03319749635070085,
+                "LINK/USD"
+              ],
+              [
+                0.03467100688962909,
+                "GRT/USD"
+              ],
+              [
+                0.05919888202735489,
+                "DOGE/USD"
+              ]
+            ],
+            "historical": [
+              [
+                0.02043425309691321,
+                "BTC/USD"
+              ],
+              [
+                0.02410622906126391,
+                "ETH/USD"
+              ],
+              [
+                0.024949160469622127,
+                "SHIB/USD"
+              ],
+              [
+                0.02644739963593102,
+                "BCH/USD"
+              ],
+              [
+                0.028789783010354866,
+                "AVAX/USD"
+              ],
+              [
+                0.028862194407804777,
+                "UNI/USD"
+              ],
+              [
+                0.029508677807546527,
+                "SOL/USD"
+              ],
+              [
+                0.03120219173393954,
+                "AAVE/USD"
+              ],
+              [
+                0.03240710304753463,
+                "LTC/USD"
+              ],
+              [
+                0.03319749635070085,
+                "LINK/USD"
+              ],
+              [
+                0.03467100688962909,
+                "GRT/USD"
+              ],
+              [
+                0.05919888202735489,
+                "DOGE/USD"
+              ]
+            ],
+            "timestamp": "2023-04-09T00:00:00+00:00"
+          },
+          "mismatch_count": 178
+        },
+        "target_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.95,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "ETH/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "historical": {
+              "cash_weight": 0.95,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "SHIB/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "SHIB/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "timestamp": "2023-05-11T00:00:00+00:00"
+          },
+          "mismatch_count": 57
+        }
+      },
+      "common_window_universe": {
+        "eliminated": {
+          "first": null,
+          "mismatch_count": 0
+        },
+        "missing_timestamps": {
+          "current_only": [],
+          "historical_only": []
+        },
+        "observation_membership": {
+          "first": {
+            "current": [
+              "AAVE/USD",
+              "AVAX/USD",
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "GRT/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD"
+            ],
+            "historical": [
+              "AAVE/USD",
+              "AVAX/USD",
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "GRT/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2022-09-17T00:00:00+00:00"
+          },
+          "mismatch_count": 11
+        },
+        "observation_set": {
+          "first": {
+            "current": [
+              "BTC/USD",
+              "ETH/USD",
+              "DOGE/USD",
+              "LINK/USD",
+              "SOL/USD",
+              "UNI/USD",
+              "LTC/USD",
+              "BCH/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-04-01T00:00:00+00:00"
+          },
+          "mismatch_count": 1878
+        },
+        "score_breakdown": {
+          "first": null,
+          "mismatch_count": 0
+        },
+        "symbols": {
+          "first": null,
+          "mismatch_count": 0
+        }
+      },
+      "current_metrics": {
+        "cagr": 0.010054542274535727,
+        "ending_equity": 105481.51853584184,
+        "fee_total": 899.9724383338659,
+        "max_drawdown": 0.06191869479737117,
+        "rebalance_count": 455,
+        "sharpe": 0.3469344249544033,
+        "slippage_cost_total": 71.99818443600431,
+        "spread_cost_total": 35.999092218002154,
+        "starting_equity": 100000,
+        "total_return": 0.05481518535841845
+      },
+      "current_universe_timeframe": "1h",
+      "data_identical": true,
+      "decisions": {
+        "account": {
+          "first": {
+            "current_sha256": "d877df8cd1297f699c923d48e5147d8b256430335189008bbb125f7704b793b6",
+            "historical_sha256": "edee34536925ab1b7f6f88286e5190785eb01dbc46d8fb65f614697461c6e1d8",
+            "timestamp": "2023-05-15T00:00:00+00:00"
+          },
+          "mismatch_count": 292
+        },
+        "alpha_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.0,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "ETH/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "historical": {
+              "cash_weight": 0.0,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "SHIB/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "BTC/USD",
+                  "weight": 0.5
+                },
+                {
+                  "rank": 0,
+                  "reason": "t1_hysteresis_low_var",
+                  "symbol": "SHIB/USD",
+                  "weight": 0.5
+                }
+              ]
+            },
+            "timestamp": "2023-05-11T00:00:00+00:00"
+          },
+          "mismatch_count": 59
+        },
+        "eligible_symbols": {
+          "first": {
+            "current": [
+              "AAVE/USD",
+              "AVAX/USD",
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "GRT/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "historical": [
+              "AAVE/USD",
+              "AVAX/USD",
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "GRT/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SHIB/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2023-03-28T00:00:00+00:00"
+          },
+          "mismatch_count": 197
+        },
+        "history": {
+          "first": {
+            "current_sha256": "7e0502f175660e75903c82bb00de972b6aa6597739a00505e5bfebef2a12509f",
+            "historical_sha256": "55a2083b760666a33ae13cf60049c09665e848ddc90c09258dcc95be987ebd4f",
+            "timestamp": "2021-04-01T00:00:00+00:00"
+          },
+          "mismatch_count": 455
+        },
+        "holdings": {
+          "first": {
+            "current": {
+              "BTC/USD": 0.09068718115764592,
+              "ETH/USD": 1.404630434355776
+            },
+            "historical": {
+              "BTC/USD": 0.09068718115764592,
+              "SHIB/USD": 290644515.1352198
+            },
+            "timestamp": "2023-05-15T00:00:00+00:00"
+          },
+          "mismatch_count": 292
+        },
+        "missing_timestamps": {
+          "current_only": [
+            "2023-06-24T00:00:00+00:00",
+            "2025-01-20T00:00:00+00:00"
+          ],
+          "historical_only": []
+        },
+        "orders": {
+          "first": {
+            "current": [
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|ETH/USD|buy|163",
+                "created_at": "2023-05-11T00:00:00+00:00",
+                "decision_timestamp": "2023-05-11T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 1.404630434355776,
+                "side": "buy",
+                "symbol": "ETH/USD"
+              },
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|BCH/USD|sell|163",
+                "created_at": "2023-05-11T00:00:00+00:00",
+                "decision_timestamp": "2023-05-11T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 19.27494564295035,
+                "side": "sell",
+                "symbol": "BCH/USD"
+              }
+            ],
+            "historical": [
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|SHIB/USD|buy|163",
+                "created_at": "2023-05-11T00:00:00+00:00",
+                "decision_timestamp": "2023-05-11T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 290644515.1352198,
+                "side": "buy",
+                "symbol": "SHIB/USD"
+              },
+              {
+                "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|BCH/USD|sell|163",
+                "created_at": "2023-05-11T00:00:00+00:00",
+                "decision_timestamp": "2023-05-11T00:00:00+00:00",
+                "market": "crypto",
+                "qty": 19.27494564295035,
+                "side": "sell",
+                "symbol": "BCH/USD"
+              }
+            ],
+            "timestamp": "2023-05-11T00:00:00+00:00"
+          },
+          "mismatch_count": 105
+        },
+        "scores": {
+          "first": {
+            "current": [
+              [
+                0.02043425309691321,
+                "BTC/USD"
+              ],
+              [
+                0.02410622906126391,
+                "ETH/USD"
+              ],
+              [
+                0.02644739963593102,
+                "BCH/USD"
+              ],
+              [
+                0.028789783010354866,
+                "AVAX/USD"
+              ],
+              [
+                0.028862194407804777,
+                "UNI/USD"
+              ],
+              [
+                0.029508677807546527,
+                "SOL/USD"
+              ],
+              [
+                0.03120219173393954,
+                "AAVE/USD"
+              ],
+              [
+                0.03240710304753463,
+                "LTC/USD"
+              ],
+              [
+                0.03319749635070085,
+                "LINK/USD"
+              ],
+              [
+                0.03467100688962909,
+                "GRT/USD"
+              ],
+              [
+                0.05919888202735489,
+                "DOGE/USD"
+              ]
+            ],
+            "historical": [
+              [
+                0.02043425309691321,
+                "BTC/USD"
+              ],
+              [
+                0.02410622906126391,
+                "ETH/USD"
+              ],
+              [
+                0.024949160469622127,
+                "SHIB/USD"
+              ],
+              [
+                0.02644739963593102,
+                "BCH/USD"
+              ],
+              [
+                0.028789783010354866,
+                "AVAX/USD"
+              ],
+              [
+                0.028862194407804777,
+                "UNI/USD"
+              ],
+              [
+                0.029508677807546527,
+                "SOL/USD"
+              ],
+              [
+                0.03120219173393954,
+                "AAVE/USD"
+              ],
+              [
+                0.03240710304753463,
+                "LTC/USD"
+              ],
+              [
+                0.03319749635070085,
+                "LINK/USD"
+              ],
+              [
+                0.03467100688962909,
+                "GRT/USD"
+              ],
+              [
+                0.05919888202735489,
+                "DOGE/USD"
+              ]
+            ],
+            "timestamp": "2023-04-09T00:00:00+00:00"
+          },
+          "mismatch_count": 180
+        },
+        "target_economic": {
+          "first": {
+            "current": {
+              "cash_weight": 0.95,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "ETH/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "ETH/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "historical": {
+              "cash_weight": 0.95,
+              "retained": [
+                "BTC/USD"
+              ],
+              "risk_multiplier": 1.0,
+              "selected_symbols": [
+                "BTC/USD",
+                "SHIB/USD"
+              ],
+              "weights": [
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "BTC/USD",
+                  "weight": 0.025
+                },
+                {
+                  "rank": 0,
+                  "reason": "portfolio_risk_overlay",
+                  "symbol": "SHIB/USD",
+                  "weight": 0.025
+                }
+              ]
+            },
+            "timestamp": "2023-05-11T00:00:00+00:00"
+          },
+          "mismatch_count": 59
+        }
+      },
+      "engine_arguments_identical": false,
+      "first_economic_fill_difference": {
+        "current": {
+          "decision_timestamp": "2023-05-11T00:00:00+00:00",
+          "fee": 6.312195317011227,
+          "fill_price": 1797.5391,
+          "market": "crypto",
+          "qty": 1.404630434355776,
+          "reference_price": 1797.0,
+          "side": "buy",
+          "slippage_cost": 0.5048241781074659,
+          "spread_cost": 0.25241208905373297,
+          "symbol": "ETH/USD",
+          "timestamp": "2023-05-12T00:00:00+00:00"
+        },
+        "historical": {
+          "decision_timestamp": "2023-05-11T00:00:00+00:00",
+          "fee": 6.312512220583922,
+          "fill_price": 8.6876055e-06,
+          "market": "crypto",
+          "qty": 290644515.1352198,
+          "reference_price": 8.685e-06,
+          "side": "buy",
+          "slippage_cost": 0.5048495227898768,
+          "spread_cost": 0.2524247613949384,
+          "symbol": "SHIB/USD",
+          "timestamp": "2023-05-12T00:00:00+00:00"
+        },
+        "index": 73
+      },
+      "first_fill_difference": {
+        "current": {
+          "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|ETH/USD|buy|163",
+          "decision_timestamp": "2023-05-11T00:00:00+00:00",
+          "fee": 6.312195317011227,
+          "fill_price": 1797.5391,
+          "market": "crypto",
+          "qty": 1.404630434355776,
+          "reference_price": 1797.0,
+          "side": "buy",
+          "slippage_cost": 0.5048241781074659,
+          "spread_cost": 0.25241208905373297,
+          "symbol": "ETH/USD",
+          "timestamp": "2023-05-12T00:00:00+00:00"
+        },
+        "historical": {
+          "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2023-05-11T00:00:00+00:00|SHIB/USD|buy|163",
+          "decision_timestamp": "2023-05-11T00:00:00+00:00",
+          "fee": 6.312512220583922,
+          "fill_price": 8.6876055e-06,
+          "market": "crypto",
+          "qty": 290644515.1352198,
+          "reference_price": 8.685e-06,
+          "side": "buy",
+          "slippage_cost": 0.5048495227898768,
+          "spread_cost": 0.2524247613949384,
+          "symbol": "SHIB/USD",
+          "timestamp": "2023-05-12T00:00:00+00:00"
+        },
+        "index": 73
+      },
+      "first_snapshot_difference": {
+        "current": {
+          "cash": 95983.801965618,
+          "nav": 100955.12617561492,
+          "positions": {
+            "BTC/USD": {
+              "avg_price": 27109.047739352023,
+              "entry_fee": 6.146107808374722,
+              "mark": 26803.72307675,
+              "qty": 0.09068718115764592
+            },
+            "ETH/USD": {
+              "avg_price": 1797.5391,
+              "entry_fee": 6.312195317011227,
+              "mark": 1808.71071671,
+              "qty": 1.404630434355776
+            }
+          },
+          "timestamp": "2023-05-12T00:00:00+00:00"
+        },
+        "historical": {
+          "cash": 95983.67488728535,
+          "nav": 100982.27326886563,
+          "positions": {
+            "BTC/USD": {
+              "avg_price": 27109.047739352023,
+              "entry_fee": 6.146107808374722,
+              "mark": 26803.72307675,
+              "qty": 0.09068718115764592
+            },
+            "SHIB/USD": {
+              "avg_price": 8.6876055e-06,
+              "entry_fee": 6.312512220583922,
+              "mark": 8.835e-06,
+              "qty": 290644515.1352198
+            }
+          },
+          "timestamp": "2023-05-12T00:00:00+00:00"
+        },
+        "index": 770
+      },
+      "historical_metrics": {
+        "cagr": 0.018963026648392223,
+        "ending_equity": 110539.89682212163,
+        "fee_total": 1064.3451356248463,
+        "max_drawdown": 0.06191869479737117,
+        "rebalance_count": 453,
+        "sharpe": 0.6007703785106251,
+        "slippage_cost_total": 85.1483147678535,
+        "spread_cost_total": 42.57415738392675,
+        "starting_equity": 100000,
+        "total_return": 0.10539896822121642
+      },
+      "historical_universe_timeframe": "1h",
+      "normalized_daily_bars_identical": true,
+      "terminal_event_counts": [
+        0,
+        2
+      ],
+      "universe": {
+        "eliminated": {
+          "first": null,
+          "mismatch_count": 0
+        },
+        "missing_timestamps": {
+          "current_only": [],
+          "historical_only": []
+        },
+        "observation_membership": {
+          "first": {
+            "current": [
+              "AAVE/USD",
+              "AVAX/USD",
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "GRT/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD"
+            ],
+            "historical": [
+              "AAVE/USD",
+              "AVAX/USD",
+              "BCH/USD",
+              "BTC/USD",
+              "DOGE/USD",
+              "ETH/USD",
+              "GRT/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "SOL/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2022-09-17T00:00:00+00:00"
+          },
+          "mismatch_count": 11
+        },
+        "observation_set": {
+          "first": {
+            "current": [
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "UNI/USD",
+              "BCH/USD"
+            ],
+            "historical": [
+              "BCH/USD",
+              "BTC/USD",
+              "ETH/USD",
+              "LINK/USD",
+              "LTC/USD",
+              "UNI/USD"
+            ],
+            "timestamp": "2021-01-14T00:00:00+00:00"
+          },
+          "mismatch_count": 1955
+        },
+        "score_breakdown": {
+          "first": null,
+          "mismatch_count": 0
+        },
+        "symbols": {
+          "first": null,
+          "mismatch_count": 0
+        }
+      },
+      "window_identical": true
+    }
+  },
+  "interpretation": {
+    "daily_adapter": "Separate noncanonical comparison; switching 1h scanner input to1d alters eligibility and is not used to force parity.",
+    "no_downstream_independent_bug_claim": true,
+    "primary": "Historical broad-context backtest predates current runtime-sized observation contract.",
+    "unchanged": [
+      "dataset bytes",
+      "normalized daily bars",
+      "common window",
+      "hourly scanner eligible pools",
+      "hourly scanner scores",
+      "low variance formula",
+      "retention rule",
+      "cost configuration",
+      "isolated account mode"
+    ]
+  },
+  "schema": "crypto-first-divergence-v1",
+  "source_change": {
+    "context_visibility_commit": "ac58f34c3d9242150f28c59aedf69a60b6992ab9",
+    "observation_identity_commits": [
+      "352b6a0bc1568ce840b9c8cf7ccf7eeb9d2975f6",
+      "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1"
+    ],
+    "proof": "ac58f34 changes _context to filter history through _effective_observation_symbols and changes completeness gate to same effective context."
+  }
+}

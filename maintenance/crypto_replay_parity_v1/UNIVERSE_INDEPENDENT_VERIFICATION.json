@@ -1,0 +1,30 @@
+{
+  "candidate_checks": 27099,
+  "independence": "Standard library only; no production scanner/candidate/universe imports",
+  "input_sha256": "80eb9868db47cb31909cc55139d49c6a03740263068b099d31eb9693f9bac11e",
+  "limitations": [
+    "Conditioned on input bars and pinned config; hourly mode reads raw CSV independently",
+    "Observation alpha ranking verified separately; score and correlation quality ordering not independently recomputed",
+    "No historical quote spread or broker tradability metadata; unavailable remains unavailable",
+    "Daily14d window cannot supply24 return pairs; correlation unavailable",
+    "Category caps and correlation penalties are not pool eligibility gates",
+    "Daily public adapter is not equivalent to configured runtime1h scanner"
+  ],
+  "metric_receipts_sha256": "e681527a68743ddfa7942e05320caed5407213e2a3e06a04c21b0d4c77b1fcd1",
+  "mismatch_count": 0,
+  "mismatches": [],
+  "pin_eligibility_bypasses": 37,
+  "snapshots_verified": 2033,
+  "status": "PASS",
+  "universe_timeframe": "1d",
+  "verified": [
+    "strict prior14d source-timeframe window",
+    "configured pool intersection",
+    "completeness",
+    "daily median dollar volume",
+    "true range ATR",
+    "eligibility reasons",
+    "pin bypass with available trailing history",
+    "all snapshot boundaries"
+  ]
+}

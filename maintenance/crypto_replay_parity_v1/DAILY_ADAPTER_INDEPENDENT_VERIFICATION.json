@@ -1,0 +1,19 @@
+{
+  "daily_bars": 28890,
+  "decisions": 477,
+  "fills": 436,
+  "full_exits": 55,
+  "independent_production_imports": false,
+  "input_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+  "nav_observations": 1946,
+  "numeric_tolerance": {
+    "absolute": 1e-08,
+    "relative": 1e-10
+  },
+  "replay_file_sha256": "80eb9868db47cb31909cc55139d49c6a03740263068b099d31eb9693f9bac11e",
+  "retained_holds": 855,
+  "scanner_scope": "causal membership/visibility from supplied hashed universe; scanner not reimplemented",
+  "scope": "all decisions, orders, fills, costs, daily cash/positions/NAV and final inventory",
+  "status": "PASS",
+  "vacancy_acquisitions": 59
+}

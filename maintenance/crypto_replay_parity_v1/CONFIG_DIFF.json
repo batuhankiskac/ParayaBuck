@@ -1,0 +1,117 @@
+{
+  "current_config_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+  "current_strategy_parameters": [
+    [
+      "rebalance_hours",
+      96
+    ],
+    [
+      "top_n",
+      2
+    ],
+    [
+      "variance_lookback_days",
+      22
+    ]
+  ],
+  "differences": [
+    {
+      "current": true,
+      "field": "observability.enabled",
+      "historical": null
+    },
+    {
+      "current": 50000,
+      "field": "observability.event_max_events",
+      "historical": null
+    },
+    {
+      "current": 2048,
+      "field": "observability.event_queue_size",
+      "historical": null
+    },
+    {
+      "current": 30,
+      "field": "observability.event_retention_days",
+      "historical": null
+    },
+    {
+      "current": "data/runtime/observability.sqlite3",
+      "field": "observability.journal_path",
+      "historical": null
+    },
+    {
+      "current": 30.0,
+      "field": "observability.snapshot_interval_seconds",
+      "historical": null
+    },
+    {
+      "current": "data/runtime/health_snapshot.json",
+      "field": "observability.snapshot_path",
+      "historical": null
+    },
+    {
+      "current": "crypto_low_variance_hysteresis_v1",
+      "field": "strategy.crypto.name",
+      "historical": "crypto_low_variance_v2"
+    },
+    {
+      "current": 0.55,
+      "field": "strategy.equity.maximum_allocation",
+      "historical": 0.6
+    },
+    {
+      "current": "crypto_low_variance_hysteresis_v1",
+      "field": "universe.crypto.observation_strategy_name",
+      "historical": "crypto_low_variance_v2"
+    },
+    {
+      "current": "1.0.0",
+      "field": "universe.crypto.observation_strategy_version",
+      "historical": "2.0.0"
+    }
+  ],
+  "engine_arguments": {
+    "commission": 0,
+    "crypto_taker_fee_bps": 25.0,
+    "enforce_drawdown_halt": false,
+    "liquidate_at_end": true,
+    "liquidity_lookback_bars": 20,
+    "max_participation_pct": 0.1,
+    "maximum_allocation": 0.05,
+    "minimum_order_notional": 10,
+    "risk_limits": {
+      "daily_loss_limit": 0.005,
+      "drawdown_halt": 0.05,
+      "maximum_crypto": 0.1,
+      "maximum_crypto_asset": 0.05,
+      "maximum_crypto_positions": 2,
+      "maximum_equity": 0.6,
+      "maximum_equity_asset": 0.1,
+      "maximum_gross": 0.6,
+      "maximum_positions": 6,
+      "minimum_cash": 0.4
+    },
+    "slippage_bps": 2.0,
+    "spread_bps": 2.0,
+    "starting_cash": 100000,
+    "turnover_band": 0.005
+  },
+  "engine_arguments_identical": false,
+  "explicit_historical_strategy_override": [
+    [
+      "rebalance_hours",
+      96
+    ],
+    [
+      "top_n",
+      2
+    ],
+    [
+      "variance_lookback_days",
+      22
+    ]
+  ],
+  "historical_config_sha256": "c86dc22012cbd77cb8932e816af8a72e67e3f834ea53d94a9bc3215015ed3eb3",
+  "historical_config_strategy_name_is_not_instantiated_strategy": true
+}

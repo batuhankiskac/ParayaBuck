@@ -1,0 +1,46 @@
+{
+  "schema_version": "ear_structural_opportunity_audit_v1",
+  "as_of_date": "2026-09-22",
+  "scope": "Purposive SEC source-behavior specimens only; not an eligible-event census",
+  "full_2016_2026_event_corpus_available": false,
+  "pit_benchmark_membership_available": false,
+  "sample": {
+    "records": 8,
+    "initial_filings": 7,
+    "amendments": 1,
+    "listed_cik_fields": 8,
+    "canonical_security_mappings_adjudicated": 0,
+    "item_2_02_records": 8,
+    "earnings_exhibits_present": 8,
+    "raw_sec_acceptance_timestamps_present": 8,
+    "acceptance_before_core_open": 2,
+    "acceptance_during_core_hours": 1,
+    "acceptance_after_core_close": 5,
+    "initial_filings_with_release_date_before_acceptance_date": 1,
+    "same_day_issuer_release_times_verified": 0,
+    "weekend_or_holiday_specimens": 0
+  },
+  "population_counts": {
+    "earnings_events_per_year": null,
+    "scoreable_events": null,
+    "ear_computable_events": null,
+    "events_with_full_event_window": null,
+    "mapped_issuers": null,
+    "extreme_positive_events_under_causal_breakpoints": null,
+    "simultaneous_active_events": null,
+    "top_six_availability": null,
+    "event_overlap": null,
+    "holding_occupancy": null,
+    "adequate_standalone_opportunities": null,
+    "adequate_satellite_opportunities": null
+  },
+  "null_reason": "No complete causal earnings-event population, historical security join, exact benchmark membership, or approved alternative signal panel was acquired. Null means unknown, not zero.",
+  "sample_limitations": [
+    "Specimens were selected to expose filing lag, amendment, mixed-item and session-alignment behavior.",
+    "Sample ratios must not be extrapolated to SEC or market coverage.",
+    "A same-day acceptance does not prove the issuer release minute.",
+    "No specimen was scored or classified by EAR."
+  ],
+  "prohibited_outcomes_calculated": false,
+  "candidate_ear_values_calculated": false
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": "ear_no_economic_peek_v1",
+  "as_of_date": "2026-09-22",
+  "base_commit": "16db2eaad9061a1669166ef9ab6717853337fafc",
+  "scope": "Visible root actions, contributor attestations, campaign artifacts and repository diff; not an OS-wide forensic claim",
+  "candidate_calculations": {
+    "ear_values": false,
+    "future_returns": false,
+    "post_event_pnl": false,
+    "nav": false,
+    "cagr": false,
+    "sharpe": false,
+    "drawdown": false,
+    "information_coefficient": false,
+    "hit_rate": false,
+    "return_buckets": false,
+    "economic_parameter_comparison": false,
+    "v3_outcome_correlation": false
+  },
+  "candidate_market_data_opened": false,
+  "permitted_work": [
+    "Published primary-paper result transcription",
+    "Official source and vendor documentation review",
+    "Eight purposive SEC filing specimens and non-economic structural counts",
+    "Read-only production architecture and governance inspection",
+    "Existing normal product test suite and production-isolation verification"
+  ],
+  "contributor_attestations": {
+    "primary_literature": "No local candidate price, EAR, future-return or economic calculation",
+    "modern_evidence": "No local future outcomes, return buckets or candidate economics",
+    "source_benchmark": "No EAR, benchmark return, market return, future return or candidate economics",
+    "root": "No candidate price corpus opened and no candidate outcome calculated"
+  },
+  "normal_test_validation": {
+    "passed": 1138,
+    "skipped": 1,
+    "warnings": 2,
+    "seconds": 101.44,
+    "protected_paths_verified_unchanged": 10,
+    "candidate_test_run": false
+  },
+  "sandbox_test_note": "An earlier restricted run produced six localhost socket-bind PermissionError failures and 1132 passes; the full unrestricted rerun passed.",
+  "candidate_design_file_present": false,
+  "future_test_protocol_file_present": false
+}

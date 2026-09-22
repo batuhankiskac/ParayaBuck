@@ -1,0 +1,34 @@
+{
+  "as_of_date": "2026-09-22",
+  "decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "decision_scope": "Requested modern concentrated long-only EAR design; not a claim that historical diversified EAR continuation never existed",
+  "primary_reason": "The task explicitly requires rejection when modern US EAR evidence is insufficient or concentrated expression is unsupported. Both gates fail. A validated simpler historical announcement-return definition exists, so the decision is not based solely on the licensed primary benchmark.",
+  "gates": {
+    "primary_benchmark": "PRIMARY_EAR_BENCHMARK_REQUIRES_LICENSED_DATA",
+    "entry": "EAR_NEXT_OPEN_IMPLEMENTATION_CAUSALLY_COMPATIBLE",
+    "long_leg": "POSITIVE_EAR_LONG_LEG_SUPPORTED",
+    "modern_evidence": "MODERN_US_EAR_EVIDENCE_INSUFFICIENT",
+    "v3_distinctness": "EAR_INFORMATION_DISTINCT_ENOUGH_FROM_V3",
+    "top_six": "EAR_PREMIUM_REQUIRES_DIVERSIFICATION",
+    "one_slot": "ONE_SLOT_EAR_ALPHA_DENSITY_UNSUPPORTED"
+  },
+  "alternative_definition": {
+    "status": "INDEPENDENTLY_VALIDATED_BUT_NOT_SELECTED",
+    "definition": "Chan et al. additive market-adjusted ABR over [-2,+1] using the CRSP equal-weighted market return",
+    "reason_not_selected": "It is historically supported but materially changes the Brandt window, benchmark, arithmetic and formation schedule; modern concentrated long-only evidence remains insufficient. A Brandt/Chan hybrid is not authorized."
+  },
+  "event_source": "SEC_ITEM_2_02_EVENT_IDENTIFICATION_FEASIBLE_BUT_RDQ_REPLACEMENT_NOT_YET_VALIDATED",
+  "additional_unresolved_requirements": [
+    "Complete causal earnings-event population and historical release-time coverage",
+    "Validated SEC-to-RDQ adaptation and fail-closed security mapping",
+    "Exact primary 2x3 size/book-to-market membership or a separately frozen validated alternative",
+    "Modern large/liquid positive-long-leg evidence after the complete signal is observable",
+    "Within-tail evidence for six-name and one-name concentration",
+    "Population opportunity and occupancy counts"
+  ],
+  "candidate_design_frozen": false,
+  "future_test_protocol_frozen": false,
+  "g1_g9_frozen": false,
+  "economic_experiment_authorized": false,
+  "production_changed": false
+}

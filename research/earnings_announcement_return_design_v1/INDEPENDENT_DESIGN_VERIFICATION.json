@@ -1,0 +1,121 @@
+{
+  "schema_version": "ear_independent_design_verification_v1",
+  "as_of_date": "2026-09-22",
+  "status": "PASS_WITH_DISCLOSED_SCOPE_LIMITATIONS",
+  "review_scope": "All artifacts visible in research/earnings_announcement_return_design_v1 after the January 2008 version correction",
+  "repository_state": {
+    "branch": "research/earnings-announcement-return-design-v1",
+    "head_before_campaign_commit": "16db2eaad9061a1669166ef9ab6717853337fafc",
+    "main": "16db2eaad9061a1669166ef9ab6717853337fafc",
+    "origin_main": "16db2eaad9061a1669166ef9ab6717853337fafc",
+    "visible_worktree_change_scope": "One untracked research/earnings_announcement_return_design_v1 directory; no visible production-file modification"
+  },
+  "mandatory_artifacts": {
+    "expected": 16,
+    "present": 16,
+    "missing": [],
+    "files": [
+      "CURRENT_CAPABILITY_AUDIT.md",
+      "PRIMARY_LITERATURE_REVIEW.md",
+      "MODERN_EVIDENCE_REVIEW.md",
+      "EAR_FORMULA_SPEC.md",
+      "BENCHMARK_DATA_AUDIT.md",
+      "EARNINGS_EVENT_SOURCE_AUDIT.md",
+      "EVENT_TIMING_AUDIT.md",
+      "LONG_ONLY_EVIDENCE_REVIEW.md",
+      "V3_DISTINCTNESS_AUDIT.md",
+      "CONCENTRATION_FEASIBILITY.md",
+      "STRUCTURAL_OPPORTUNITY_AUDIT.json",
+      "CAUSALITY_AUDIT.md",
+      "DESIGN_RED_TEAM.md",
+      "NO_ECONOMIC_PEEK_RECEIPT.json",
+      "DESIGN_DECISION.json",
+      "FINAL_DESIGN_REPORT.md"
+    ]
+  },
+  "conditional_artifacts": {
+    "decision_is_ready": false,
+    "candidate_design_present": false,
+    "future_test_protocol_present": false,
+    "absence_is_correct": true
+  },
+  "json_validation": {
+    "parser": "jq -e",
+    "files_checked": [
+      "DESIGN_DECISION.json",
+      "NO_ECONOMIC_PEEK_RECEIPT.json",
+      "PRIMARY_EARNINGS_EVENT_SAMPLE.json",
+      "STRUCTURAL_OPPORTUNITY_AUDIT.json"
+    ],
+    "all_parsed": true
+  },
+  "required_gate_consistency": {
+    "decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+    "primary_benchmark": "PRIMARY_EAR_BENCHMARK_REQUIRES_LICENSED_DATA",
+    "entry": "EAR_NEXT_OPEN_IMPLEMENTATION_CAUSALLY_COMPATIBLE",
+    "long_leg": "POSITIVE_EAR_LONG_LEG_SUPPORTED",
+    "modern_evidence": "MODERN_US_EAR_EVIDENCE_INSUFFICIENT",
+    "v3_distinctness": "EAR_INFORMATION_DISTINCT_ENOUGH_FROM_V3",
+    "top_six": "EAR_PREMIUM_REQUIRES_DIVERSIFICATION",
+    "one_slot": "ONE_SLOT_EAR_ALPHA_DENSITY_UNSUPPORTED",
+    "precedence_assessment": "Consistent. A separately validated Chan-style alternative prevents the licensed Brandt benchmark from being the sole blocker, while the explicit modern-evidence and concentration failures independently require REJECT under the requested decision rules.",
+    "g1_g9_frozen": false,
+    "economic_experiment_authorized": false
+  },
+  "january_2008_source_consistency": {
+    "source_version": "January 22, 2008",
+    "source_sha256": "d55a0f2cc116437957f282345e31699a0e50598256e53fca12d1d3fc5b9e5b10",
+    "ear5_percent_30_60_90_120_180_240": [1.08, 1.99, 2.42, 2.62, 3.56, 4.61],
+    "ear5_minus_ear1_percent_30_60_90_120_180_240": [1.47, 3.27, 3.73, 4.07, 6.35, 7.55],
+    "table6_monthly_ear1_to_ear5_percent": [-0.16, 0.04, 0.10, 0.24, 0.53],
+    "table6_spread_percent": 0.69,
+    "older_june_2007_values_confined_to_explicit_version_reconciliation": true,
+    "cross_artifact_consistent": true
+  },
+  "sec_sample_recalculation": {
+    "records": 8,
+    "initial_filings": 7,
+    "amendments": 1,
+    "item_2_02_records": 8,
+    "earnings_exhibits_present": 8,
+    "raw_acceptance_timestamps_present": 8,
+    "acceptance_before_core_open": 2,
+    "acceptance_during_core_hours": 1,
+    "acceptance_after_core_close": 5,
+    "initial_filings_with_release_date_before_acceptance_date": 1,
+    "matches_structural_audit": true,
+    "population_counts_are_null_not_zero": true,
+    "sample_is_purposive_not_a_coverage_estimate": true
+  },
+  "no_economic_peek_review": {
+    "visible_scope_result": "PASS",
+    "candidate_ear_values_found": false,
+    "candidate_future_outcomes_found": false,
+    "candidate_economic_metrics_found": false,
+    "published_paper_results_present": true,
+    "permitted_sec_structural_metadata_present": true,
+    "visible_diff_or_worktree_evidence_of_price_corpus_access": false,
+    "basis": "Read every campaign artifact, compared the no-peek receipt to the visible worktree scope and contributor attestations, and searched the artifact set for prohibited-output terminology. Matches were attestations, published literature values, or statements that outcomes were not calculated."
+  },
+  "content_reconciliation": {
+    "issue_found": "CONCENTRATION_FEASIBILITY initially conflated BKSV Table 7 cumulative horizon results with later-announcement results and overstated uniform significance.",
+    "resolution": "The artifact was corrected before this final verification. It now states that Table 7 contains cumulative EAR-by-SUE cells, that all large-stock EAR5 cells are positive and significant at 60 days, and that later horizons are weaker and nonuniform, including insignificant 240-day SUE1 and SUE2 cells.",
+    "remaining_blocking_contradictions": []
+  },
+  "mechanical_checks": {
+    "git_diff_check": "PASS_NO_OUTPUT",
+    "artifact_trailing_whitespace_scan": "PASS",
+    "full_normal_test_suite_rerun_by_this_reviewer": false,
+    "test_result_treatment": "The 1138 passed, 1 skipped, 2 warnings result and protected-path count are recorded campaign evidence from the root run; this reviewer did not independently rerun them."
+  },
+  "reviewer_independence_disclosure": {
+    "authored_by_reviewer": [
+      "PRIMARY_LITERATURE_REVIEW.md",
+      "EAR_FORMULA_SPEC.md",
+      "LONG_ONLY_EVIDENCE_REVIEW.md"
+    ],
+    "independence_limit": "The reviewer is not independent of those three primary-literature artifacts. Their equations and table values were nevertheless cross-checked against the pinned January 22, 2008 source and the other contributors' corrected artifacts.",
+    "os_history_limit": "The reviewer cannot observe complete shell, process, browser, filesystem, or operating-system histories. The no-peek conclusion is limited to visible repository state, campaign artifacts, available contributor attestations, and this review's own actions."
+  },
+  "reviewer_attestation": "This integration review calculated no candidate EAR, future return, P&L, NAV, CAGR, Sharpe ratio, drawdown, information coefficient, hit rate, return bucket, economic parameter comparison, or V3 outcome correlation."
+}

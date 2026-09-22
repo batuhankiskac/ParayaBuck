@@ -1,0 +1,13 @@
+# External risk-practice review
+
+Scope: limited review of official broker and regulator sources, checked 2026-09-22. This is structural guidance only. No historical holdings, strategy results, or candidate economics were consulted.
+
+| Control | Source-backed purpose | Relation to a hard count |
+| --- | --- | --- |
+| Single-name and correlated exposure | FINRA explains that concentration can arise in one holding, asset class, segment, or correlated holdings even when a portfolio contains several names. [Concentration risk](https://www.finra.org/investors/insights/concentration-risk). | A count alone does not bound dollar exposure or factor/sector overlap. Per-name and sleeve limits address distinct dimensions. |
+| Asset allocation and rebalance | FINRA distinguishes allocation among asset classes from diversification within them and calls for rebalancing to maintain the intended mix. [Asset allocation and diversification](https://www.finra.org/investors/investing/investing-basics/asset-allocation-diversification). | A shared equity/crypto name count is a weak proxy for their different sleeve exposures. |
+| Liquidity | FINRA includes the ability to exit efficiently in its concentration assessment. [Concentration risk](https://www.finra.org/investors/insights/concentration-risk). | More names do not automatically improve liquidity; each asset must be screened and order size evaluated. |
+| Gross and financing | Alpaca checks buying power on opening orders and reserves it for outstanding buys. [Orders](https://docs.alpaca.markets/us/docs/orders-at-alpaca). | A count cap is neither a substitute for gross exposure nor a guarantee that concurrent buys are fundable. |
+| Order mechanics | Alpaca allows eligible fractional equities and fractional crypto but applies asset rules and market-specific order constraints. [Fractional Trading](https://docs.alpaca.markets/us/docs/fractional-trading), [Crypto Spot Trading](https://docs.alpaca.markets/us/docs/crypto-trading). | More positions can fragment orders; minimum size/notional and quantity rounding must remain independent controls. |
+
+**Inference from these sources:** professional risk practice treats count as one possible concentration and operating-complexity constraint, not a universal primary exposure limit or a magic number. The sources do not endorse six, eight, or ten for this account. A hard count can still be a sensible conservative operations rule if its intended monitoring capacity, expected order load, and interaction with sleeve limits are documented and tested. Raising it would not relax gross, sleeve, per-name, liquidity, or buying-power controls by itself, but could alter total simultaneous orders and which ranked names survive.

@@ -225,3 +225,50 @@ The process-only documentation branch is
 the research register, this inventory, and future-protocol exposure-semantics
 clarification. It receives no archive tag and is deleted after its
 documentation commit is merged to `main`.
+
+## Second-wave pre-outcome consolidation — 2026-09-22
+
+This consolidation began from a clean checkout after
+`git fetch --all --prune --tags`. Local `main` and `origin/main` were both
+`d3dea037789c16c335744b56d216289a4536096c`. Twenty-one pre-existing annotated
+`archive/research/*` tags were present. The only non-main local and remote
+branches were the four completed campaigns below; there was no unrelated
+active or unclassified branch.
+
+The count is branch-only / main-only commits. Local and remote-tracking tips
+matched exactly.
+
+| Branch | Tip | Ahead / behind main | Campaign | Final decision | Unique production code? | Archive needed? | Action |
+|---|---|---:|---|---|---|---|---|
+| `research/opportunistic-insider-purchases-design-v1` | `d08c94cd93a1f71e9f9b8bf21e3c726b73953f50` | 1 / 0 | Original insider-purchase design | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | No; 17 research artifacts only | Yes | Tag, then delete local/remote |
+| `research/opportunistic-insider-source-reassessment-v1` | `e46e9ae0e1c124138c2143b30d93809a97f4282d` | 1 / 0 | Insider source reassessment | `REASSESSMENT_CONFIRMS_DESIGN_REJECT` | No; 15 research artifacts only | Yes | Tag, then delete local/remote |
+| `research/cash-based-operating-profitability-design-v1` | `0f77021a2d6a0d08df76f0902da3354e90f95f65` | 1 / 0 | Cash-based operating profitability | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | No; 19 research artifacts only | Yes | Tag, then delete local/remote |
+| `research/positive-liquidity-shock-design-v1` | `15644b3c117535eb94a12eb5099d9d82d10cb2cf` | 1 / 0 | Positive liquidity-shock continuation | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | No; 20 research artifacts only | Yes | Tag, then delete local/remote |
+
+Every branch differs from starting `main` only under its campaign-specific
+`research/` directory. The executable additions are research-only source,
+provenance, structural-count, mapping, and audit helpers. They are potentially
+useful evidence and source-capability examples, but are not production runtime
+code and are not merged automatically. No unique production correctness code
+is stranded.
+
+The archive plan adds these annotated tag targets:
+
+| Archive tag | Target | Durable decision/status |
+|---|---|---|
+| `archive/research/opportunistic-insider-purchases-design-v1-2026-09` | `d08c94cd93a1f71e9f9b8bf21e3c726b73953f50` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; no local candidate economics |
+| `archive/research/opportunistic-insider-source-reassessment-v1-2026-09` | `e46e9ae0e1c124138c2143b30d93809a97f4282d` | `REASSESSMENT_CONFIRMS_DESIGN_REJECT`; no local candidate economics |
+| `archive/research/cash-based-operating-profitability-design-v1-2026-09` | `0f77021a2d6a0d08df76f0902da3354e90f95f65` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; no local candidate economics |
+| `archive/research/positive-liquidity-shock-design-v1-2026-09` | `15644b3c117535eb94a12eb5099d9d82d10cb2cf` | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; no local candidate economics |
+
+The pre-deletion privacy audit covered all accessible history for the four
+branches: 534 commits and 4,144 unique blobs (7,107 object/path entries). It
+found no persisted user SEC contact address, private key, recognized live-token
+form, JWT, embedded URI credential, or campaign-persisted email/User-Agent
+contact value. Generic environment/configuration key names and public or
+synthetic material in common ancestor history were not private credentials.
+
+The process-only documentation branch is
+`maintenance/research-consolidation-second-wave-2026-09`. It carries only this
+inventory and the research register, receives no archive tag, and is deleted
+after its documentation commit is integrated into `main`.

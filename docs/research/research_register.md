@@ -25,6 +25,9 @@ are listed explicitly and are separate from research conclusions.
 | `equity_information_discreteness_continuous_v1` | design: `research/information-discreteness-design-v1`; standalone: `research/information-discreteness-economic-v1`; combination: `research/v3-id-complementarity-v1` | `a5d355eb8b8045e0438d435312fcc23e59cb3936` / 2026-09-21 | standalone and combination runs valid | standalone `RESEARCH_REJECT`; combination `COMBINATION_REJECT` | `ALPHA_VALID_PORTFOLIO_REJECTED` | No | Closed; standalone alpha remains valid, but no canonical 5+1 slot | design/economic/combination tags listed below |
 | `equity_abnormal_volume_v1` | design V1: `research/abnormal-volume-design-v1`; readiness V1: `research/abnormal-volume-readiness-v1`; design V2: `research/abnormal-volume-design-repair-v1`; readiness V2: `research/abnormal-volume-readiness-v2`; economic: `research/abnormal-volume-economic-v1` | `693b86a16bb7363e98be46aeb25d164c384fe9aa` / 2026-09-21 | `RESEARCH_RUN_VALID`; independent verification passed with zero issues | `RESEARCH_REJECT` | `ALPHA_REJECTED` | Generic scheduler primitive was already on `main`; no candidate code merged | Closed; no retuning or complementarity test | five archive tags listed below |
 | `equity_max_lottery_design_v1` | `research/max-lottery-design-v1` | `405103908acd7b872df2d9663fa8166e6d793020` / 2026-09-21 | Pre-outcome design review; no economic candidate frozen or run | `DESIGN_BLOCKED_DATA_OR_EXECUTION` | Design-stage block, not an alpha classification | No | Closed; requires a new pre-outcome design campaign if blockers are resolved | `archive/research/max-lottery-design-v1-2026-09` |
+| `equity_opportunistic_insider_purchases_design_v1` | design: `research/opportunistic-insider-purchases-design-v1`; source reassessment: `research/opportunistic-insider-source-reassessment-v1` | `e46e9ae0e1c124138c2143b30d93809a97f4282d` / 2026-09-21 | Two pre-outcome reviews; no local economic outcome inspected | original `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; reassessment `REASSESSMENT_CONFIRMS_DESIGN_REJECT` | Design-stage rejection; source/mapping feasibility improved | No | Closed; no retuning or economic experiment | two archive tags listed below |
+| `equity_cash_based_operating_profitability_design_v1` | `research/cash-based-operating-profitability-design-v1` | `0f77021a2d6a0d08df76f0902da3354e90f95f65` / 2026-09-21 | Pre-outcome design review; no local forward returns | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; exact accounting semantics fail closed | `archive/research/cash-based-operating-profitability-design-v1-2026-09` |
+| `equity_positive_liquidity_shock_design_v1` | `research/positive-liquidity-shock-design-v1` | `15644b3c117535eb94a12eb5099d9d82d10cb2cf` / 2026-09-21 | Pre-outcome design and structural audit; no future-return study | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection | No | Closed; measurable but unsuitable for the concentrated architecture | `archive/research/positive-liquidity-shock-design-v1-2026-09` |
 
 The branch `maintenance/reserved-equity-role-isolation-v1` was an exact alias
 of current `main` (`bdfa55ea...`) with no unique commit or evidence. It is not
@@ -327,6 +330,104 @@ six-name long-only LOW-MAX alpha; MAX substantially overlaps V3's residual-
 volatility filtering and sizing; and liquid/scaleable replication evidence was
 weaker. Evidence is preserved by
 `archive/research/max-lottery-design-v1-2026-09`.
+
+### Opportunistic insider purchases — `equity_opportunistic_insider_purchases_design_v1`
+
+The original pre-outcome design at
+`d08c94cd93a1f71e9f9b8bf21e3c726b73953f50` studied publicly disclosed
+opportunistic insider purchases using the Cohen, Malloy, and Pomorski
+classification concept. It returned
+`DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` without inspecting a local economic
+outcome. The modern large/liquid buy-only evidence was insufficient; the
+headline 82 bp result is buy-minus-sell rather than the buy-only long leg; the
+literature did not validate a top-one/one-slot expression; historical security
+mapping was initially judged blocked; and Form 4 Code P alone does not prove an
+open-market conviction purchase.
+
+The dedicated source reassessment at
+`e46e9ae0e1c124138c2143b30d93809a97f4282d` recovered compliant official SEC
+access and obtained historical Form 4 data from 2013-Q1 through 2026-Q1. The
+2026-Q2 archive remained unavailable in that run because of DNS/network access
+and was recorded as missing. Contemporaneous SEC and repository identity
+evidence made fail-closed historical security mapping more feasible than first
+believed. From 2017-01 through 2026-03 the structural-only audit found 2,649
+eligible transaction rows, 1,659 accessions, and 1,225 entity-month
+opportunities. No subsequent return was calculated.
+
+The reassessment returned `REASSESSMENT_CONFIRMS_DESIGN_REJECT`: the data-access
+and mapping concern materially improved, but modern liquid-stock buy-only
+evidence and a defensible top-one ranking rule still failed. The durable family
+status remains `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`; no economic experiment
+or retuning is authorized. Evidence is preserved by:
+
+- `archive/research/opportunistic-insider-purchases-design-v1-2026-09`;
+- `archive/research/opportunistic-insider-source-reassessment-v1-2026-09`.
+
+#### Reusable SEC source-capability lesson
+
+Future SEC ownership/event research may use the official historical Insider
+Transactions datasets, accession identity, issuer and reporting-owner CIKs,
+as-filed trading symbols, transaction fields, raw-filing provenance where
+needed, and fail-closed historical mapping. This establishes a reusable source
+capability, not that every Form 4 strategy is feasible.
+
+### Cash-based operating profitability — `equity_cash_based_operating_profitability_design_v1`
+
+The pre-outcome design at
+`0f77021a2d6a0d08df76f0902da3354e90f95f65` returned
+`DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`. No economic test or local forward
+return was run. Modern large/liquid U.S. evidence for the exact CbOP long-only
+effect was insufficient for a concentrated experiment, and diversified
+academic portfolios do not validate six-stock or eventual one-stock
+concentration.
+
+SEC accession-vintage fundamentals are conceptually feasible, but exact
+Compustat-to-XBRL accounting semantics create material fail-closed missingness.
+The Apple raw-filing reconstruction reconciled value, context, sign, duplicate
+handling, and arithmetic, yet exact CbOP remained `null`: the prepaid-expense
+input was missing and the available accrued-liabilities concept was not proven
+equivalent to `XACC`. Unknown components were not silently set to zero.
+
+The reusable lesson is: SEC accession-vintage accounting panels are possible,
+but Compustat factor definitions cannot be assumed to map one-to-one into SEC
+XBRL. A missing tag is not automatically zero. The family is closed, with no
+economics or retuning, and is preserved by
+`archive/research/cash-based-operating-profitability-design-v1-2026-09`.
+
+### Positive liquidity-shock continuation — `equity_positive_liquidity_shock_design_v1`
+
+The pre-outcome design at
+`15644b3c117535eb94a12eb5099d9d82d10cb2cf` returned
+`DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS`. No economic test or future-return
+study was run. Modern large/liquid U.S. evidence was insufficient for a
+concentrated long-only implementation; the fixed $20M liquidity floor removes
+much of the small/illiquid population where the published anomaly is strongest;
+the literature supports diversified portfolios rather than top-six/top-one
+concentration; and broad historical `US_EQUITY` lacks comprehensive PIT product
+classification.
+
+Structural feasibility was not the blocker. The audit processed 11,681,230
+canonical rows, and all 115/115 structural months had at least six
+scanner-scoreable names. Those counts establish measurability and opportunity
+supply, not alpha. The family is closed with no retuning and is preserved by
+`archive/research/positive-liquidity-shock-design-v1-2026-09`.
+
+### Second-wave pre-outcome lesson
+
+Opportunistic insider purchases, cash-based operating profitability, and
+positive liquidity shocks were all rejected before local outcomes were viewed.
+This does not imply that the academic anomalies do not exist. The
+repository-specific conclusion is that broad factor evidence often lacks the
+alpha density per occupied slot required by ParayaBuck's concentrated
+architecture. Recurring failure modes were diversified-only evidence,
+small/illiquid concentration, weak modern liquid-stock long legs, no
+literature-supported top-one/top-six expression, and substantial PIT semantic
+burden for external data.
+
+Future discovery should place greater weight on issuer-specific events,
+naturally concentrated signals, slow-decaying public information, mechanisms
+that identify few unusually strong opportunities, and daily next-open
+compatibility. This record does not name or start a new candidate.
 
 ## Production boundary
 

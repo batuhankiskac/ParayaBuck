@@ -1,0 +1,40 @@
+{
+  "focused_pytest": {
+    "passed": 10,
+    "command": ".venv/bin/python -m pytest -q tests/test_crypto_giveback_v2.py tests/test_crypto_giveback_v2_hysteresis.py tests/test_crypto_giveback_v2_verifier.py"
+  },
+  "full_pytest": {
+    "passed": 1148,
+    "skipped": 1,
+    "warnings": 2,
+    "seconds": 101.0,
+    "command": ".venv/bin/python -m pytest -q",
+    "scope": "full normal suite; localhost server fixtures authorized; no broker actions"
+  },
+  "ruff_check": {
+    "status": "PASS",
+    "command": ".venv/bin/ruff check ."
+  },
+  "ruff_format": {
+    "status": "PASS",
+    "files": 260,
+    "command": ".venv/bin/ruff format --check ."
+  },
+  "mypy": {
+    "status": "PASS",
+    "source_files": 140,
+    "command": ".venv/bin/mypy src research/crypto_exit_giveback_audit_v2"
+  },
+  "strict_json": {
+    "status": "PASS",
+    "scope": "all V2 JSON and compressed raw replay; allow_nan=False serialization"
+  },
+  "independent_rebuild": "CANONICAL_AND_ALL_EPISODE_VERIFICATION_PASS",
+  "production_source_config_diff": "empty",
+  "remote_main_verified": "b81e9d9fef3744723449f4c019f2a5dd75f2e2cb",
+  "remote_archive_peeled_verified": "4b7eb4020896453a599c876092ff550216183d07",
+  "remote_maintenance_branch_absent": true,
+  "production_runtime_mode": "paper",
+  "live_enabled": false,
+  "git_diff_check": "PASS"
+}

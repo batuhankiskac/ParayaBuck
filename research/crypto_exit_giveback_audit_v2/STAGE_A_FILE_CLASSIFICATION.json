@@ -1,0 +1,186 @@
+{
+  "maintenance_sha": "4b7eb4020896453a599c876092ff550216183d07",
+  "files": [
+    {
+      "path": "docs/research/canonical_crypto_baseline.md",
+      "classification": "durable canonical documentation",
+      "blob": "b53b79874644d89beb50230fbfc2100f686da345"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/CANONICAL_REPLAY_RECEIPT.json",
+      "classification": "maintenance evidence",
+      "blob": "395ba99c5e3feb0b97e17372c941ab1ebd611b14"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/CONFIG_DIFF.json",
+      "classification": "maintenance evidence",
+      "blob": "0b0c66d0e41f8b8cbc064de586102c53906e124e"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/CURRENT_HOURLY_REPLAY.json.gz",
+      "classification": "maintenance evidence",
+      "blob": "4765b002e6d5ede1ec90bf5c3d6ad95c6e010e91"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/CURRENT_HOURLY_REPLAY_B.json.gz",
+      "classification": "maintenance evidence",
+      "blob": "4765b002e6d5ede1ec90bf5c3d6ad95c6e010e91"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/CURRENT_REPLAY_A.json.gz",
+      "classification": "maintenance evidence",
+      "blob": "b43d991caab797a72255ee1c8d26d7d4dd9ede89"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/CURRENT_REPLAY_B.json.gz",
+      "classification": "maintenance evidence",
+      "blob": "b43d991caab797a72255ee1c8d26d7d4dd9ede89"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/CURRENT_STRATEGY_CONTRACT.md",
+      "classification": "maintenance evidence",
+      "blob": "b049290102cd741246f3c4e6f18fb2227ac5a001"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/DAILY_ADAPTER_INDEPENDENT_VERIFICATION.json",
+      "classification": "maintenance evidence",
+      "blob": "eab9e6b0b36c6b5fa495ca045c8e6b6436186d4c"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/DATA_AUDIT.json",
+      "classification": "maintenance evidence",
+      "blob": "c216daf34ad5956760fb6ada21e9a7d2e7c0f2d9"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/DATA_PROVENANCE_AUDIT.md",
+      "classification": "maintenance evidence",
+      "blob": "5ee6583385ca159ff0f9779100ef65faaad671c3"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/EXECUTION_COST_AUDIT.md",
+      "classification": "maintenance evidence",
+      "blob": "6fc3cfd40612582311763de32b90e05349fd3f6f"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/EXIT_AUDIT_HANDOFF.json",
+      "classification": "maintenance evidence",
+      "blob": "e7fb5c489dc9f1396c61b89f073fbf872df1f21e"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/FINAL_PARITY_REPORT.md",
+      "classification": "maintenance evidence",
+      "blob": "0a1ec9eac4f3d73051ecc97c7cb42cc32a13fb21"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/FIRST_DIVERGENCE_AUDIT.json",
+      "classification": "maintenance evidence",
+      "blob": "e57706b9c69a0c9b8ba068a6bccfccd0ae9e2680"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/HISTORICAL_CONTROL.json",
+      "classification": "maintenance evidence",
+      "blob": "eab570d80b26c9f6bee2ac6b32f218da699e36d8"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/HISTORICAL_CONTROL_INVENTORY.md",
+      "classification": "maintenance evidence",
+      "blob": "13364c44bdb7287ffccfd91f25b0d50ececdc3c9"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/HISTORICAL_CONTROL_PROVENANCE.json",
+      "classification": "maintenance evidence",
+      "blob": "cafc18f0b4e9db74762ba7431e6bccbdf2ddc18b"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/HISTORICAL_REPLAY.json.gz",
+      "classification": "maintenance evidence",
+      "blob": "932a755c32ebe66e36c942a240f7c5ee4343c4a7"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/INDEPENDENT_VERIFICATION.json",
+      "classification": "maintenance evidence",
+      "blob": "7bb55e3cd7dc78efbbe22c7ded2585c2d120759a"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/PRODUCTION_ISOLATION.json",
+      "classification": "maintenance evidence",
+      "blob": "d8aa793ff9e2352161fd051355cbba0baadf60e9"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/ROOT_CAUSE_DECISION.json",
+      "classification": "maintenance evidence",
+      "blob": "fa30ca24ae8319fd1c90122b6fc81cd927537f51"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/STARTING_STATE.json",
+      "classification": "maintenance evidence",
+      "blob": "ea0c9fd489229c8b30f1ffec395e5b4ef782dffa"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/TIME_HYSTERESIS_AUDIT.md",
+      "classification": "maintenance evidence",
+      "blob": "3d44b828b398fb5795fb73eb1a26732f3f73a0f2"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/UNIVERSE_DIFF.json",
+      "classification": "maintenance evidence",
+      "blob": "3ea02af72529bbdc0ae6243ea407fc24776a1de4"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/UNIVERSE_HOURLY_INDEPENDENT_VERIFICATION.json",
+      "classification": "maintenance evidence",
+      "blob": "3100eb6dab69943b05000096974cc7a260487862"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/UNIVERSE_INDEPENDENT_VERIFICATION.json",
+      "classification": "maintenance evidence",
+      "blob": "43bb34fba654652f8b28be327471293c099b8116"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/VALIDATION.json",
+      "classification": "maintenance evidence",
+      "blob": "987f74fd1ca583360571dbb69adb9be693d32809"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/comparison.py",
+      "classification": "maintenance-only code/test",
+      "blob": "d20e50d1416a30fb5d881c8c9a7d591165ae12a7"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/establish_baseline.py",
+      "classification": "maintenance-only code/test",
+      "blob": "d81a3d49b1f032c2993bde8d0c419279f782ccdf"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/runner.py",
+      "classification": "maintenance-only code/test",
+      "blob": "d6d6d1045888532c9f74cfe7ab72bc0a7cec849c"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/universe_verify.py",
+      "classification": "maintenance-only code/test",
+      "blob": "f5a8c7031e0a0626eb4b6ba06f8a642a15f24ef1"
+    },
+    {
+      "path": "maintenance/crypto_replay_parity_v1/verify.py",
+      "classification": "maintenance-only code/test",
+      "blob": "6aa04c667ec999ea037630347d4f8ea214173920"
+    },
+    {
+      "path": "tests/test_crypto_replay_contract.py",
+      "classification": "maintenance-only code/test",
+      "blob": "0ef113dcbd904e08c81ad85ff9e1965ccf89326f"
+    },
+    {
+      "path": "tests/test_crypto_replay_verifier.py",
+      "classification": "maintenance-only code/test",
+      "blob": "1962c96e46ba619d65536ddab9ff09e8ca10de72"
+    },
+    {
+      "path": "tests/test_crypto_universe_independent_verifier.py",
+      "classification": "maintenance-only code/test",
+      "blob": "badf5674b5927c559abf9c24cdb9329b1a690686"
+    }
+  ],
+  "production_runtime_change": false
+}

@@ -1,0 +1,22 @@
+{
+  "old_baseline_status": "SUPERSEDED_HISTORICAL_CONTROL",
+  "original_main_sha": "754f4060b1eb38593201b2a269e9593d083eb534",
+  "post_baseline_main_sha": "b81e9d9fef3744723449f4c019f2a5dd75f2e2cb",
+  "archive_tag": "archive/maintenance/crypto-replay-parity-v1-2026-09",
+  "archive_tag_object": "00722a726b2afcaa86e8ffcb5acee3cdd481c938",
+  "archived_commit": "4b7eb4020896453a599c876092ff550216183d07",
+  "main_files": [
+    "docs/research/canonical_crypto_baseline.md",
+    "docs/research/research_register.md"
+  ],
+  "main_pushed": true,
+  "annotated_tag_pushed": true,
+  "maintenance_local_branch_deleted": true,
+  "maintenance_remote_branch_deleted": true,
+  "production_runtime_changed": false,
+  "v1_branch": "research/position-exit-giveback-audit-v1",
+  "v1_sha": "4444147ae8e53a2b33b0648077ee2589f4920e5d",
+  "v1_equity_status": "MIXED_PROFIT_RETENTION_BEHAVIOR",
+  "v1_crypto_status": "SUPERSEDED_BY_CRYPTO_GIVEBACK_AUDIT_V2_DUE_TO_STALE_BASELINE",
+  "v1_interpretation": "Old crypto audit was inconclusive due to stale baseline, not wrong economics. V1 evidence remains immutable."
+}

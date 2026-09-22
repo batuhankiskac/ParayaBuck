@@ -1,0 +1,25 @@
+{
+  "crypto_decision": "MIXED_PROFIT_RETENTION_BEHAVIOR",
+  "exit_research_decision": "CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED",
+  "canonical_parity": "PASS",
+  "independent_verification": "PASS",
+  "natural_episodes": 55,
+  "terminal_censored_episodes": 2,
+  "large_mfe_at_least_30pct_episodes": 15,
+  "large_mfe_at_least_30pct_profitable_exits": 15,
+  "large_mfe_at_least_30pct_median_retention": 0.8714967086984552,
+  "positive_mfe_winner_to_loser_fraction": 0.4,
+  "rationale": [
+    "Modest-profit round trips and post-peak rank-retention association are material, so no blanket no-problem finding.",
+    "Large earned-profit collapse is not typical: all15 >=30% episodes exit profitably,11 retain at least75%,3 retain below50%,1 below25%.",
+    "Top3 winners provide106.37% of full-account net profit, indicating substantial right-tail dependence.",
+    "Annual small samples and absent independent canonical development/validation split prevent a stable validation claim.",
+    "Under the requested genuinely-yes gate, present evidence does not justify opening an exit-research campaign; this does not prove exits cannot improve."
+  ],
+  "future_exit_families": [],
+  "alternative_exit_tested": false,
+  "current_paper_status": "CURRENT_PAPER_CRYPTO_HISTORY_NOT_AUDITED",
+  "production_changed": false,
+  "v1_crypto_status": "SUPERSEDED_BY_CRYPTO_GIVEBACK_AUDIT_V2_DUE_TO_STALE_BASELINE",
+  "v1_equity_status": "MIXED_PROFIT_RETENTION_BEHAVIOR"
+}

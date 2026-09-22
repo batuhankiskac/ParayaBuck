@@ -272,3 +272,26 @@ The process-only documentation branch is
 `maintenance/research-consolidation-second-wave-2026-09`. It carries only this
 inventory and the research register, receives no archive tag, and is deleted
 after its documentation commit is integrated into `main`.
+
+## Exit-audit closure — 2026-09-22
+
+Fresh `git fetch origin --prune --tags` verified local `main` and `origin/main`
+at `b81e9d9fef3744723449f4c019f2a5dd75f2e2cb`; starting checkout was clean.
+
+| Completed branch | Exact evidence SHA | Annotated archive tag | Durable decision |
+|---|---|---|---|
+| `research/position-exit-giveback-audit-v1` | `4444147ae8e53a2b33b0648077ee2589f4920e5d` | `archive/research/position-exit-giveback-audit-v1-2026-09` | Equity: `EQUITY_EXIT_RESEARCH_NOT_CURRENTLY_JUSTIFIED`; crypto V1: `AUDIT_INCONCLUSIVE_REPLAY_MISMATCH`, superseded by V2 |
+| `research/crypto-exit-giveback-audit-v2` | `4dfd63c80f5b79f14dccf3e9d7aa8890be6cd959` | `archive/research/crypto-exit-giveback-audit-v2-2026-09` | `CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED`; `MIXED_PROFIT_RETENTION_BEHAVIOR` |
+
+Both branch-only diffs contain research artifacts and audit-specific tests;
+no unique production implementation is stranded. Merge only this inventory
+and `docs/research/research_register.md`. Preserve V1 history unchanged.
+Create and push the annotated tags, verify remote peeled targets, commit/push
+durable documentation, then delete the two completed audit branches where
+present. No deletion precedes verified archive protection.
+
+The unrelated local/remote `research/schedule-13d-activism-design-v1` branch
+at `c4e9e30` is outside this exit-audit closure and is retained. Thus the preferred
+main-only inventory is not asserted; this preservation does not leave either
+exit audit open. Stage B requires successful exit-audit closure and a clean,
+updated main checkout.

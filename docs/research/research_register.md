@@ -450,6 +450,54 @@ This is baseline maintenance, not an alpha or exit-research verdict. It enables
 `CRYPTO_GIVEBACK_AUDIT_READY_FOR_RERUN`; it does not itself interpret profit
 retention or authorize a strategy change.
 
+## Exit-audit closure — 2026-09-22
+
+Both valid audits concluded `MIXED_PROFIT_RETENTION_BEHAVIOR`.
+
+### Equity
+
+Branch `research/position-exit-giveback-audit-v1`, final SHA
+`4444147ae8e53a2b33b0648077ee2589f4920e5d`, is preserved by annotated tag
+`archive/research/position-exit-giveback-audit-v1-2026-09`.
+The persisted independent verification covers 908 equity episodes. Among
+normalized episodes reaching +10%, median profit retention was approximately
+78.8%, and approximately 9.7% eventually closed negative. There was no evidence
+that large equity winners systematically evaporate before exit.
+Durable conclusion: `EQUITY_EXIT_RESEARCH_NOT_CURRENTLY_JUSTIFIED`.
+Evidence: `research/position_exit_giveback_audit_v1/` at that tag, especially
+`EQUITY_GIVEBACK_REPORT.md`, `EQUITY_INTERPRETATION.md`, and
+`INDEPENDENT_VERIFICATION.json`.
+
+The same V1 campaign's crypto conclusion remains
+`AUDIT_INCONCLUSIVE_REPLAY_MISMATCH`. That historical finding is preserved,
+not rewritten; its crypto interpretation is superseded by canonical V2 below.
+
+### Crypto canonical-baseline V2
+
+Branch `research/crypto-exit-giveback-audit-v2`, final SHA
+`4dfd63c80f5b79f14dccf3e9d7aa8890be6cd959`, is preserved by annotated tag
+`archive/research/crypto-exit-giveback-audit-v2-2026-09`.
+Canonical replay contained 455 decisions / 388 fills, with 57 independently
+verified position episodes. All 15 naturally closed episodes reaching >=30%
+MFE ended profitable; their median retention was approximately 87.15%.
+Of 50 positive-MFE episodes, 20 eventually closed negative. Higher giveback
+was associated with hysteresis behavior; causality was not established.
+No alternative exit was tested.
+Durable decision: `CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED`.
+Evidence: `research/crypto_exit_giveback_audit_v2/` at that tag, especially
+`AUDIT_DECISION.json`, `SUMMARY.json`, `INDEPENDENT_VERIFICATION.json`, and
+`HYSTERESIS_GIVEBACK_AUDIT.md`.
+
+### Governance
+
+Current evidence does not justify changing V3 exits, crypto hysteresis,
+take-profit behavior, or trailing stops. Reopen only if future live/PAPER
+evidence materially changes, strategy semantics change, or a new pre-outcome
+exit hypothesis is independently justified. MFE is hindsight, not capturable
+profit. These are diagnostic conclusions, not exit-treatment experiments.
+No strategy, risk, persistence, allocation, PAPER, or LIVE behavior changes.
+Large audit artifacts and audit-specific tests remain on archive tags only.
+
 ## Production boundary
 
 The cleanup merged no production code. Current `main` remains

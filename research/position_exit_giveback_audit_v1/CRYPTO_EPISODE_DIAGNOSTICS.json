@@ -1,0 +1,1 @@
+{"episodes":null,"interpretation_permitted":false,"metrics":null,"reason":"Historical canonical control mismatch. Current deterministic raw replay is quarantined in CRYPTO_RAW.json.gz; no episode economics interpreted.","status":"AUDIT_INCONCLUSIVE_REPLAY_MISMATCH","strategy":"crypto_low_variance_hysteresis_v1"}

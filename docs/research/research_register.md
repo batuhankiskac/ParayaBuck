@@ -429,6 +429,27 @@ naturally concentrated signals, slow-decaying public information, mechanisms
 that identify few unusually strong opportunities, and daily next-open
 compatibility. This record does not name or start a new candidate.
 
+## Canonical crypto baseline maintenance
+
+The crypto replay authority was consolidated on 2026-09-22 from
+`maintenance/crypto-replay-parity-v1` at
+`4b7eb4020896453a599c876092ff550216183d07`. Its evidence is preserved by the
+annotated archive tag `archive/maintenance/crypto-replay-parity-v1-2026-09`.
+Only durable documentation was consolidated; no runtime, strategy, allocation,
+risk, PAPER or LIVE configuration changed.
+
+The old historical control is `SUPERSEDED_HISTORICAL_CONTROL`: it predates the
+correction restricting strategy history to the effective observation set.
+Source data and scanner eligibility were unchanged. The current isolated
+hourly-scanner/daily-strategy contract is `CRYPTO_CANONICAL_REPLAY_VALID`, with
+455 decisions and 388 fills, two byte-identical replays and independent
+verification. See [canonical crypto baseline](canonical_crypto_baseline.md)
+for source/data/config identity, hashes, limitations and archived evidence.
+
+This is baseline maintenance, not an alpha or exit-research verdict. It enables
+`CRYPTO_GIVEBACK_AUDIT_READY_FOR_RERUN`; it does not itself interpret profit
+retention or authorize a strategy change.
+
 ## Production boundary
 
 The cleanup merged no production code. Current `main` remains

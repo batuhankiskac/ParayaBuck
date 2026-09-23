@@ -1,0 +1,42 @@
+{
+  "classification": "SIGNAL_SEMANTICS_CHANGED",
+  "common_decision_labels": 454,
+  "corrected_decisions": 454,
+  "corrected_universe_sha256": "e3692166c51a1e84aba7662e3c6156cdc1961989df8f46564caff70d898529c6",
+  "daily_bar_sha256": "92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9",
+  "equal_alpha_target_weights": 448,
+  "equal_eligible_observation_contexts": 451,
+  "equal_raw_rank_lists": 451,
+  "equal_risk_adjusted_target_weights": 446,
+  "first_alpha_target_difference": {
+    "corrected_holdings": {
+      "BTC/USD": 0.04527138567402865,
+      "DOGE/USD": 24607.45182251006,
+      "DOT/USD": 89.89954801116804,
+      "LTC/USD": 4.117434101204999
+    },
+    "corrected_selected": [
+      "LTC/USD",
+      "DOT/USD"
+    ],
+    "label": "2024-08-29T00:00:00+00:00",
+    "old_holdings": {
+      "BTC/USD": 0.04532821716705721,
+      "DOGE/USD": 24625.202869360204,
+      "LTC/USD": 2.6569056727900016
+    },
+    "old_selected": [
+      "LTC/USD",
+      "BTC/USD"
+    ]
+  },
+  "first_rank_difference": {
+    "corrected_label": "2024-09-26T00:00:00+00:00",
+    "index": 287,
+    "old_label": "2024-09-26T00:00:00+00:00"
+  },
+  "meaning": "Outputs changed via execution-dependent holdings and observation pins; alpha formula and parameters did not change.",
+  "old_decisions": 455,
+  "old_universe_sha256": "e3692166c51a1e84aba7662e3c6156cdc1961989df8f46564caff70d898529c6",
+  "terminal_window_note": "One fewer decision because the source-common terminal boundary is 2026-07-31T00:00Z."
+}

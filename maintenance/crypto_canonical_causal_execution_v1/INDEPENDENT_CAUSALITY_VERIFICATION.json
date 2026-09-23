@@ -1,0 +1,33 @@
+{
+  "ending_cash": 105423.13343607534,
+  "freeze_commit": "2b483b1e5022a23a0c34cc3ab15145da342c89d6",
+  "hashes": {
+    "full_payload_sha256": "cdc3004dbbfe1e13e8f9f9deb5ec80ecbe628236210649a68a8f47aa55f33697",
+    "gzip_sha256": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+    "sections": {
+      "curve_timestamps": "80ee49be42c294a2c6a6836a27416b2b285341ec0f87364f389596e85d6567e1",
+      "daily_bars": "92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9",
+      "decisions": "e2919b031944c1a08a8fbecc4019007c21c34218840d3c1ffa10feb420f7f58a",
+      "equity_curve": "e2a89843121f43fe3fe642dc1c3140761efccca246e0bef6e900322908a069c3",
+      "fills": "645d444ff3c95ba2f5eab1f0162acc903275e4642c70c79eb03b8248829e1fba",
+      "final_state": "7689e62a2e80a0452e42f7359c9722d49e25b21cfe38632901bb29bd953ad5ef",
+      "orders": "6d90738ef71a49b02e71532f732763ed837f9686cf595779416ca049b23012ab",
+      "price_events": "ff858d0fe3019731daa7436b406f99fa63a0c60a8f15c877263acb8f1fdb6242",
+      "snapshots": "6a71d86a6f6ac35d18ebf5a47de615cffe4eb45e43c03b8b69d3a389e3087c13",
+      "terminal_events": "7ad9de1ae9bc69eca5794436e0e45868066a49960de3de8d9d86183192d51fba"
+    }
+  },
+  "independent_cash_and_nav_reconciled": true,
+  "old_control_fill_sha256": "c8bf27f1d21846bf754a53a72e5da29416c79dd817162606cecc6ce19fe1e07b",
+  "old_control_full_payload_sha256": "016bc06a7381d19434e6d21b4bafc40f1890abee57b7ead71a9b684ab40fb8dd",
+  "repeat_byte_identical": true,
+  "source_hours": 705541,
+  "status": "PASS",
+  "strict_order_created_before_source_price_event": true,
+  "verified_daily_bars": 28890,
+  "verified_decisions": 454,
+  "verified_fills": 406,
+  "verified_orders": 206,
+  "verified_snapshots": 1945,
+  "verified_terminal_events": 2
+}

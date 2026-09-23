@@ -1,4 +1,31 @@
-# Canonical crypto replay baseline v2
+# Canonical crypto replay baseline
+
+## Current authority: causal execution repair, 2026-09-23
+
+Decision: **CRYPTO_CANONICAL_BASELINE_CAUSAL_REPAIR_ACCEPTED**. The v2 control below is **CRYPTO_CANONICAL_BASELINE_V2_SUPERSEDED_BY_CAUSAL_EXECUTION_REPAIR**. Its same-boundary 2021-04-02 00:00 UTC BTC/ETH opening fills could not follow a decision using the complete 2021-04-01 daily bar. Its record is retained below and under `archive/maintenance/crypto-replay-parity-v1-2026-09` as superseded evidence.
+
+The authoritative isolated control is `maintenance/crypto_canonical_causal_execution_v1/CORRECTED_REPLAY_A.json.gz`; B is byte-identical. It uses the same pinned hourly input (SHA256 `73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e`), complete daily bars (SHA256 `92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9`), universe (SHA256 `e3692166c51a1e84aba7662e3c6156cdc1961989df8f46564caff70d898529c6`), 22-day signal, top two and rank-four retention, 96-hour label cadence, 5% sleeve, 0.005 rebalance band, 20-positive-completed-daily-volume mean, 10% participation, 2bps slippage, 2bps full spread, 25bps crypto taker fee and zero fixed commission. No strategy or production configuration changed.
+
+Each start-labeled hour is complete no earlier than its end. A complete 24-hour UTC daily bar is available at next midnight. The physical decision and order creation are at that availability boundary; a new order uses the first same-symbol pinned hourly **open strictly after** order creation and that day's midnight, with at most one participation-limited attempt per UTC day. Missing hours wait for the next actually observed eligible hour. The source-common precommitted terminal hour is `2026-07-31T00:00:00Z`; terminal positions close at that actual hourly open, and no later daily signal is consumed. See `maintenance/crypto_canonical_causal_execution_v1/FROZEN_CRYPTO_EXECUTION_CONTRACT.md` and its pre-outcome freeze commit `2b483b1e5022a23a0c34cc3ab15145da342c89d6`.
+
+| Quantity | Corrected authority |
+| --- | --- |
+| Decisions / orders / fills | 454 / 206 / 406 |
+| NAV observations / terminal events | 1,945 / 2 |
+| Ending NAV | $105,423.13343608 |
+| Total return / CAGR | 5.42313344% / 0.99548483% |
+| Annualized volatility / Sharpe / Sortino | 3.00349987% / 0.34481718 / 0.48295649 |
+| Max drawdown / Calmar / turnover | 6.23570332% / 0.15964275 / 3.52352964 |
+| Fee / slippage / spread cost | $919.65403033 / $73.57270962 / $36.78635481 |
+| Decisions SHA256 | `e2919b031944c1a08a8fbecc4019007c21c34218840d3c1ffa10feb420f7f58a` |
+| Fills SHA256 | `645d444ff3c95ba2f5eab1f0162acc903275e4642c70c79eb03b8248829e1fba` |
+| Snapshots / equity curve SHA256 | `6a71d86a6f6ac35d18ebf5a47de615cffe4eb45e43c03b8b69d3a389e3087c13` / `e2a89843121f43fe3fe642dc1c3140761efccca246e0bef6e900322908a069c3` |
+| Final state / terminal events SHA256 | `7689e62a2e80a0452e42f7359c9722d49e25b21cfe38632901bb29bd953ad5ef` / `7ad9de1ae9bc69eca5794436e0e45868066a49960de3d8d9d86183192d51fba` |
+| Full JSON / deterministic gzip SHA256 | `cdc3004dbbfe1e13e8f9f9deb5ec80ecbe628236210649a68a8f47aa55f33697` / `8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae` |
+
+The independent CSV and ledger verifier checks source components, decision availability, first eligible hourly opens, every fill's strict causal inequality, quantity/participation, fees, cash, positions, NAV and terminal liquidation. The two outputs are byte-identical. The strategy formula and frozen parameters are unchanged; execution-dependent holdings alter six common alpha target outputs and three later observation/rank contexts. `SIGNAL_SEMANTICS_CHANGED` describes these realized outputs, not a change to the alpha algorithm. This remains a historical fill proxy on pinned hourly data, with the original provider-download and historical tradability limitations stated below. PAPER/LIVE behavior was not modified. Downstream shared-account and crypto exit economics require fresh separate runs.
+
+## Superseded v2 record
 
 Status: **CRYPTO_CANONICAL_REPLAY_VALID**. Historical control: **SUPERSEDED_HISTORICAL_CONTROL**. Governing conclusion: **CRYPTO_HISTORICAL_BASELINE_SUPERSEDED**.
 

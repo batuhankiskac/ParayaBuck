@@ -192,11 +192,25 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
     risk = trace["risk_observations"]
     raw_new = approved_new = count_denied = 0
     count_weight = count_notional = 0.0
+    crowdout: Counter[str] = Counter()
     for row in risk:
         existing = {(market, symbol) for market, symbol, _quantity in row["positions"]}
-        claims = existing | {(market, symbol) for market, symbol in row["reserved"]}
+        reserved = {(market, symbol) for market, symbol in row["reserved"]}
+        claims = existing | reserved
         raw = {symbol: float(weight) for symbol, weight, _rank in row["raw_target"]}
         approved = {symbol: float(weight) for symbol, weight in row["approved_target"]}
+        ranked = {symbol: int(rank) for symbol, _weight, rank in row["raw_target"]}
+        priority = (
+            sorted(raw, key=lambda symbol: (ranked[symbol] or float("inf"), -raw[symbol], symbol))
+            if any(ranked.values())
+            else sorted(raw, key=lambda symbol: (-raw[symbol], symbol))
+        )
+        fixed_current = {symbol for market, symbol in reserved if market == row["market"]}
+        available_without_opposite = max(0, min(cap, 2 if row["market"] == "crypto" else cap) - len(fixed_current))
+        counterfactual_kept = (fixed_current & set(raw)) | set(
+            [symbol for symbol in priority if symbol not in fixed_current][:available_without_opposite]
+        )
+        opposite = {key for key in claims if key[0] != row["market"]}
         for symbol, weight in raw.items():
             if weight <= 0 or (row["market"], symbol) in existing:
                 continue
@@ -211,11 +225,14 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
                 count_denied += 1
                 count_weight += weight
                 count_notional += weight * float(row["equity_at_decision"])
+                if opposite and symbol in counterfactual_kept:
+                    crowdout[f"{'CRYPTO' if row['market'] == 'equity' else 'EQUITY'}_TO_{row['market'].upper()}"] += 1
     require(raw_new == structural["raw_new_symbol_target_openings"], "raw target openings")
     require(approved_new == structural["risk_approved_new_symbol_target_openings"], "approved openings")
     require(count_denied == structural["global_count_denied_target_openings"], "count denied targets")
     close(count_weight, float(structural["count_target_weight_shortfall_sum"]), "count weight")
     close(count_notional, float(structural["count_target_notional_shortfall_sum"]), "count notional")
+    require(dict(crowdout) == structural["crowdout_counts"], "cross-market marginal crowd-out")
     admission = trace["admission_observations"]
     require(len(admission) == structural["global_count_denied_order_admissions"], "admission denials")
     denials = json.loads((OUT / f"{prefix}_SLOT_DENIALS_V3.json").read_text())

@@ -154,8 +154,20 @@ def _summarize(
         adjusted = {symbol: float(weight) for symbol, weight in row["approved_target"]}
         target_requested += sum(raw.values())
         target_approved += sum(adjusted.values())
-        opposite = sum(p[0] != market for p in row["positions"]) + sum(p[0] != market for p in row["reserved"])
-        total_claims = len(existing | {(p[0], p[1]) for p in row["reserved"]})
+        reserved_keys = {(p[0], p[1]) for p in row["reserved"]}
+        opposite_keys = {key for key in existing | reserved_keys if key[0] != market}
+        fixed_current = {symbol for key_market, symbol in reserved_keys if key_market == market}
+        opposite = len(opposite_keys)
+        total_claims = len(existing | reserved_keys)
+        ranked = {symbol: int(rank) for symbol, _weight, rank in row["raw_target"]}
+        priority = (
+            sorted(raw, key=lambda symbol: (ranked[symbol] or float("inf"), -raw[symbol], symbol))
+            if any(ranked.values())
+            else sorted(raw, key=lambda symbol: (-raw[symbol], symbol))
+        )
+        optional = [symbol for symbol in priority if symbol not in fixed_current]
+        counterfactual_capacity = max(0, min(cap, 2 if market == "crypto" else cap) - len(fixed_current))
+        counterfactual_kept = set(optional[:counterfactual_capacity]) | (set(raw) & fixed_current)
         for symbol, weight in raw.items():
             if (market, symbol) in existing or weight <= 0:
                 continue
@@ -193,7 +205,7 @@ def _summarize(
                     if reason == "GLOBAL_POSITION_COUNT"
                     else 0.0,
                     "crowd_out_direction": f"{'CRYPTO' if market == 'equity' else 'EQUITY'}_TO_{market.upper()}"
-                    if reason == "GLOBAL_POSITION_COUNT" and opposite
+                    if reason == "GLOBAL_POSITION_COUNT" and opposite and symbol in counterfactual_kept
                     else "NONE",
                 }
             )

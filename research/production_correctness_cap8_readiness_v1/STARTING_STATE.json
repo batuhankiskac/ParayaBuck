@@ -1,0 +1,22 @@
+{
+  "captured_date": "2026-09-24",
+  "starting_local_main_sha": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+  "starting_origin_main_tracking_sha": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+  "starting_remote_main_verified_sha": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+  "reconciliation_fix_branch_sha": "5229a061b1d5921fc4dffef8c9bb54393b3dd833",
+  "reconciliation_integration_sha": "96254b7de6e045212002cfa807abd448bc6e5d0d",
+  "migration_v3_branch_and_remote_sha": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+  "cap8_parity_v1_substantive_sha": "e99d4226c2b74e23ee7dd6e6b01f1b4ddaadff57",
+  "cap8_parity_v1_local_and_remote_tip": "8d7f0989b3c830a67cf66d8d8dc7dec1d1642b6d",
+  "audit_tip_extra_change": ".fix-worktrees/production-restart-reconciliation-v1 gitlink only; excluded from main",
+  "remote_reconciliation_fix_branch": "absent_at_capture",
+  "preintegration_worktree_status": "all relevant worktrees clean",
+  "archive_tags_present_at_start": [
+    "archive/audit/production-restart-reconciliation-v1-2026-09",
+    "archive/research/account-capacity-migration-8-v3-accepted-2026-09"
+  ],
+  "archive_tag_created_for_campaign": "archive/audit/cap8-production-parity-v1-blocked-2026-09",
+  "production_maximum_positions": 6,
+  "paper_config_changed": false,
+  "live_enabled": false
+}

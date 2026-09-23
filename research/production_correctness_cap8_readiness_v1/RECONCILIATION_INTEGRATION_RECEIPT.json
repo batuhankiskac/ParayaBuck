@@ -1,0 +1,11 @@
+{
+  "decision": "RECONCILIATION_REPAIR_VERIFIED",
+  "starting_main_sha": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+  "fix_branch_sha": "5229a061b1d5921fc4dffef8c9bb54393b3dd833",
+  "local_main_integration_sha": "96254b7de6e045212002cfa807abd448bc6e5d0d",
+  "method": "clean cherry-pick of the repair commit",
+  "focused_tests_after_integration": "70 passed",
+  "accidental_gitlink_included": false,
+  "audit_only_unsafe_tests_included": false,
+  "remote_publication": "not_attempted"
+}

@@ -18,6 +18,7 @@ from parayabuck.execution.portfolio import (
     RiskOverlayDecision,
     TargetToOrderPlanner,
     floor_increment,
+    reserve_opening_order_slots,
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -1083,6 +1084,14 @@ class PortfolioRuntime:
             open_order_sides=open_order_sides,
             decision_id=decision_id,
         )
+        if not any(order.side == PortfolioOrderSide.SELL for order in planned):
+            planned = reserve_opening_order_slots(
+                planned,
+                account,
+                maximum_positions=self.risk_overlay.limits.maximum_positions,
+                reserved_position_keys=reserved_slots,
+                open_order_symbols=tuple(sorted(open_order_symbols)),
+            )
         observed_target = self._with_paper_observability(
             risk.target,
             risk,
@@ -1386,6 +1395,7 @@ class PortfolioRuntime:
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
         open_order_symbols, open_order_sides = self._effective_open_order_constraints()
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys)
         risk = self.risk_overlay.apply(
             adjusted_target,
             account,
@@ -1393,7 +1403,7 @@ class PortfolioRuntime:
             approved_symbols=self.symbols,
             maximum_allocation=maximum_allocation,
             mode=self.mode,
-            reserved_position_keys=self._effective_reserved_position_keys(reserved_position_keys),
+            reserved_position_keys=reserved_slots,
             open_order_symbols=tuple(sorted(open_order_symbols)),
         )
         prices: dict[str, float] = {symbol: series[-1].close for symbol, series in self.history.items() if series}
@@ -1436,6 +1446,13 @@ class PortfolioRuntime:
             )
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
         buy_orders = self._size_buys_to_safe_capacity(buy_orders, account)
+        buy_orders = reserve_opening_order_slots(
+            buy_orders,
+            account,
+            maximum_positions=self.risk_overlay.limits.maximum_positions,
+            reserved_position_keys=reserved_slots,
+            open_order_symbols=tuple(sorted(open_order_symbols)),
+        )
         if not buy_orders:
             log.warning(
                 "Deferred BUY phase has no safe capacity; decision=%s submits nothing",

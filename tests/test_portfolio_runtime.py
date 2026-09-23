@@ -2492,6 +2492,40 @@ class _PositionedBroker(_Broker):
         )
 
 
+def test_paper_runtime_blocks_opening_when_all_six_residual_positions_remain(tmp_path) -> None:
+    """An omitted sub-band position must not be spent as a free slot."""
+    held = ("AAPL", "CMG", "EME", "ETN", "GDDY", "SPY")
+    broker = _PositionedBroker(
+        tuple(
+            PositionSnapshot(
+                symbol, 1.0, 100.0, 100.0, Market.EQUITY, qty_available=1.0, ownership="managed", managed_qty=1.0
+            )
+            for symbol in held
+        )
+    )
+    runtime = PortfolioRuntime(
+        _FixedTargetStrategy({"MSFT": 0.05}),
+        (*held, "MSFT"),
+        broker,
+        PortfolioStateRepository(tmp_path / "runtime.sqlite3"),
+        mode="paper",
+        maximum_allocation=0.50,
+        risk_limits=PortfolioRiskLimits(maximum_positions=6),
+        allow_static_universe=True,
+    )
+    timestamp = datetime(2025, 1, 15, tzinfo=UTC)
+    bars = [
+        Bar(timestamp, symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY) for symbol in (*held, "MSFT")
+    ]
+
+    result = runtime.process_closed_bars(bars, force_scheduled=True)
+
+    assert result.status == "submitted"
+    assert result.risk is not None and result.risk.target.weight_for("MSFT", Market.EQUITY) == 0.05
+    assert result.orders == ()
+    assert broker.submitted == []
+
+
 def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
     """A latched market still runs decisions: SELL exits flow, BUYs are
     dropped instead of freezing the whole decision pipeline."""

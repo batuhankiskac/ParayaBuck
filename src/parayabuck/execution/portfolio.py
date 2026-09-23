@@ -553,6 +553,39 @@ class TargetToOrderPlanner:
         )
 
 
+def reserve_opening_order_slots(
+    orders: tuple[PortfolioOrderRequest, ...],
+    account: AccountSnapshot,
+    *,
+    maximum_positions: int,
+    reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+    open_order_symbols: tuple[str, ...] = (),
+) -> tuple[PortfolioOrderRequest, ...]:
+    """Admit opening BUYs against occupied and working account-wide slots.
+
+    Caller order is the existing deterministic planner priority. A requested
+    exit never releases a slot; only a fresh zero-position snapshot does.
+    """
+    slots = {
+        (position.market, canonical_symbol(position.symbol, position.market))
+        for position in account.positions
+        if not position.is_flat
+    }
+    slots.update((market, canonical_symbol(symbol, market)) for market, symbol in reserved_position_keys)
+    for symbol in open_order_symbols:
+        market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+        slots.add((market, canonical_symbol(symbol, market)))
+    admitted: list[PortfolioOrderRequest] = []
+    for order in orders:
+        key = (order.market, canonical_symbol(order.symbol, order.market))
+        if order.side == PortfolioOrderSide.SELL or key in slots:
+            admitted.append(order)
+        elif len(slots) < maximum_positions:
+            slots.add(key)
+            admitted.append(order)
+    return tuple(admitted)
+
+
 def floor_increment(value: float, increment: float) -> float:
     """Floor ``value`` to a whole multiple of the broker ``increment``.
 

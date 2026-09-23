@@ -1,0 +1,23 @@
+{
+  "schema": "shared-replay-v1-closure-receipt-v1",
+  "starting_main_sha": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+  "evidence_sha": "1c1c21ef1631fd426b4e90188ac446db4eaa0fd2",
+  "archive_tag": "archive/research/shared-account-replay-v1-blocked-2026-09",
+  "remote_peeled_tag_target_verified": true,
+  "replay_branch_was_not_pushed": true,
+  "replay_branch_deleted_locally": true,
+  "replay_implementation_merged_into_production": false,
+  "equity_isolated_parity": "PASS",
+  "crypto_isolated_parity": "PASS",
+  "combined_deterministic": true,
+  "combined_maximum_observed_positions": 7,
+  "combined_over_cap_timestamp_count": 21,
+  "maximum_positions": 6,
+  "cap_8_comparison_performed": false,
+  "migration_economics_performed": false,
+  "decision": "SHARED_ACCOUNT_REPLAY_BLOCKED_BY_GENERIC_CORRECTNESS",
+  "reason": "GLOBAL_POSITION_CAP_INVARIANT_VIOLATION_UNDER_COMBINED_REPLAY",
+  "migration_readiness": "MIGRATION_REPLAY_NOT_READY",
+  "production_root_cause_proven_by_replay_v1": false,
+  "main_closure_commit": "1692526a32c0b61f907faef1eb79c14dd92f7a45"
+}

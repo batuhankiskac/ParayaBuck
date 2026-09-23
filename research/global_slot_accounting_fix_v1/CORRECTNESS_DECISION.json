@@ -1,0 +1,23 @@
+{
+  "schema": "global-slot-accounting-correctness-decision-v1",
+  "decision": "GLOBAL_SLOT_ACCOUNTING_REPAIR_ACCEPTED",
+  "root_cause": "PRODUCTION_REBALANCE_INTERACTION_BUG_CONFIRMED",
+  "maximum_positions": 6,
+  "production_slot_guard": "PASS",
+  "focused_regression_tests": "PASS",
+  "cap6_shared_replay_over_cap_timestamp_count": 0,
+  "equity_isolated_parity": "PASS",
+  "crypto_isolated_parity": "PASS",
+  "full_pytest": "PASS: 1170 passed, 1 skipped",
+  "ruff_check": "PASS",
+  "ruff_format_check": "PASS",
+  "strict_mypy_src": "PASS: 133 source files",
+  "strict_mypy_isolated_replay": "PASS: 2 files",
+  "open_order_pagination_suite": "PASS: 18 passed; 32 focused tests passed together",
+  "json_validation": "PASS",
+  "git_diff_check": "PASS",
+  "credential_pattern_scan": "PASS: no matches in changed files and evidence",
+  "production_configuration_changed": false,
+  "real_broker_orders_created_or_canceled": false,
+  "next_action": "REBUILD_AND_VALIDATE_SHARED_ACCOUNT_REPLAY_V2_FROM_CORRECTED_MAIN"
+}

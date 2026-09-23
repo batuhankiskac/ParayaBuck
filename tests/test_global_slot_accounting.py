@@ -1,0 +1,233 @@
+"""Account-wide occupied/reserved slot proof with synthetic broker state."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from itertools import product
+
+import pytest
+
+from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
+from parayabuck.execution.portfolio import (
+    AssetTradingRules,
+    PortfolioOrderRequest,
+    PortfolioOrderSide,
+    PortfolioRiskLimits,
+    PortfolioRiskOverlay,
+    TargetToOrderPlanner,
+    reserve_opening_order_slots,
+)
+from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
+
+NOW = datetime(2024, 6, 14, tzinfo=UTC)
+EQUITIES = ("ALL", "CMG", "EME", "ETN", "GDDY", "TDG")
+CRYPTOS = ("BCH/USD", "BTC/USD", "LTC/USD")
+
+
+def _position(symbol: str, market: Market, qty: float = 10.0) -> PositionSnapshot:
+    return PositionSnapshot(
+        symbol=symbol,
+        qty=qty,
+        avg_price=100.0,
+        current_price=100.0,
+        market=market,
+        qty_available=qty,
+        ownership="managed",
+        managed_qty=qty,
+    )
+
+
+def _account(positions: tuple[PositionSnapshot, ...]) -> AccountSnapshot:
+    return AccountSnapshot(
+        cash=100_000.0 - sum(position.market_value for position in positions),
+        equity=100_000.0,
+        peak_equity=100_000.0,
+        daily_pnl=0.0,
+        positions=positions,
+    )
+
+
+def _order(
+    symbol: str, market: Market = Market.EQUITY, side: PortfolioOrderSide = PortfolioOrderSide.BUY
+) -> PortfolioOrderRequest:
+    return PortfolioOrderRequest(
+        client_order_id=f"synthetic-{market.value}-{symbol}-{side.value}",
+        decision_id="synthetic",
+        symbol=symbol,
+        market=market,
+        side=side,
+        quantity=1.0,
+        reference_price=100.0,
+        decision_timestamp=NOW,
+        strategy_name="synthetic",
+        strategy_version="1",
+        risk_reducing=side == PortfolioOrderSide.SELL,
+    )
+
+
+@pytest.mark.parametrize(
+    ("held", "reserved", "orders", "expected"),
+    [
+        (6, (), ("NEW1",), ()),
+        (5, (), ("NEW1", "NEW2"), ("NEW1",)),
+        (6, (), ("ALL",), ("ALL",)),
+        (5, ((Market.EQUITY, "PENDING"),), ("NEW1",), ()),
+        (6, (), ("NEW1",), ()),
+        (5, (), ("NEW1", "NEW2", "NEW3"), ("NEW1",)),
+    ],
+)
+def test_opening_slots_are_reserved_in_planner_order(
+    held: int,
+    reserved: tuple[tuple[Market, str], ...],
+    orders: tuple[str, ...],
+    expected: tuple[str, ...],
+) -> None:
+    account = _account(tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES[:held]))
+    planned = tuple(_order(symbol) for symbol in orders)
+    admitted = reserve_opening_order_slots(planned, account, maximum_positions=6, reserved_position_keys=reserved)
+    assert tuple(order.symbol for order in admitted) == expected
+    assert admitted == reserve_opening_order_slots(
+        planned, account, maximum_positions=6, reserved_position_keys=reserved
+    )
+
+
+def test_sell_and_partial_exit_do_not_release_slot_until_broker_is_flat() -> None:
+    held = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES)
+    sell = _order("ALL", side=PortfolioOrderSide.SELL)
+    buy = _order("NEW1")
+    for qty in (10.0, 0.1):
+        account = _account((_position("ALL", Market.EQUITY, qty), *held[1:]))
+        assert reserve_opening_order_slots((sell, buy), account, maximum_positions=6) == (sell,)
+    flat = _account(held[1:])
+    assert reserve_opening_order_slots((buy,), flat, maximum_positions=6) == (buy,)
+
+
+def test_opening_reservation_transitions_to_position_or_releases_once() -> None:
+    held = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES[:5])
+    pending = ((Market.CRYPTO, "BTC/USD"),)
+    second = _order("ETH/USD", Market.CRYPTO)
+    assert (
+        reserve_opening_order_slots((second,), _account(held), maximum_positions=6, reserved_position_keys=pending)
+        == ()
+    )
+    # A canceled/rejected order disappears from both live order sources. A
+    # repeated terminal update cannot release any second slot.
+    assert reserve_opening_order_slots((second,), _account(held), maximum_positions=6) == (second,)
+    assert reserve_opening_order_slots((second,), _account(held), maximum_positions=6) == (second,)
+    filled = _account((*held, _position("BTC/USD", Market.CRYPTO)))
+    assert reserve_opening_order_slots((second,), filled, maximum_positions=6) == ()
+
+
+def test_broker_open_order_symbol_and_cross_market_intents_share_cap() -> None:
+    held = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES[:5])
+    equity = _order("NEW1")
+    crypto = _order("BTC/USD", Market.CRYPTO)
+    assert reserve_opening_order_slots((crypto, equity), _account(held), maximum_positions=6) == (crypto,)
+    assert (
+        reserve_opening_order_slots((equity,), _account(held), maximum_positions=6, open_order_symbols=("BTCUSD",))
+        == ()
+    )
+
+
+def test_production_overlay_and_band_suppressed_ltc_exit_cannot_open_seventh_slot() -> None:
+    held = (
+        *(_position(symbol, Market.EQUITY) for symbol in EQUITIES[:4]),
+        _position("BCH/USD", Market.CRYPTO, 20),
+        _position("LTC/USD", Market.CRYPTO, 1),
+    )
+    account = _account(held)
+    target = TargetPortfolio(
+        strategy_name="synthetic_crypto",
+        strategy_version="1",
+        decision_timestamp=NOW,
+        weights=(TargetWeight("BCH/USD", 0.025), TargetWeight("BTC/USD", 0.025)),
+        cash_weight=0.95,
+    )
+    limits = PortfolioRiskLimits(maximum_positions=6, maximum_crypto_positions=2, maximum_crypto=0.05)
+    risk = PortfolioRiskOverlay(limits).apply(
+        target,
+        account,
+        market=Market.CRYPTO,
+        approved_symbols=CRYPTOS,
+        maximum_allocation=0.05,
+        mode="paper",
+    )
+    rules = {symbol: AssetTradingRules(symbol, Market.CRYPTO, 0.000001, 0.000001, 0.01, 1.0) for symbol in CRYPTOS}
+    planned = TargetToOrderPlanner().plan(
+        risk.target,
+        account,
+        market=Market.CRYPTO,
+        prices={symbol: 100.0 for symbol in CRYPTOS},
+        rules=rules,
+        approved_symbols=CRYPTOS,
+    )
+    assert [(order.symbol, order.side.value) for order in planned] == [("BCH/USD", "buy"), ("BTC/USD", "buy")]
+    assert TargetToOrderPlanner().policy.rebalance_band_pct == 0.005
+    admitted = reserve_opening_order_slots(planned, account, maximum_positions=6)
+    assert [(order.symbol, order.side.value) for order in admitted] == [("BCH/USD", "buy")]
+
+
+def test_executed_sell_still_needs_fresh_zero_position_before_replacement() -> None:
+    held = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES)
+    buy = _order("NEW1")
+    sell = _order("ALL", side=PortfolioOrderSide.SELL)
+    assert reserve_opening_order_slots((sell, buy), _account(held), maximum_positions=6) == (sell,)
+    assert reserve_opening_order_slots((buy,), _account(held[1:]), maximum_positions=6) == (buy,)
+
+
+def test_band_eligible_ltc_sell_does_not_release_slot_at_order_planning() -> None:
+    held = (
+        *(_position(symbol, Market.EQUITY) for symbol in EQUITIES[:4]),
+        _position("BCH/USD", Market.CRYPTO, 20),
+        _position("LTC/USD", Market.CRYPTO, 10),
+    )
+    account = _account(held)
+    target = TargetPortfolio(
+        strategy_name="synthetic_crypto",
+        strategy_version="1",
+        decision_timestamp=NOW,
+        weights=(TargetWeight("BCH/USD", 0.025), TargetWeight("BTC/USD", 0.025)),
+        cash_weight=0.95,
+    )
+    rules = {symbol: AssetTradingRules(symbol, Market.CRYPTO, 0.000001, 0.000001, 0.01, 1.0) for symbol in CRYPTOS}
+    planned = TargetToOrderPlanner().plan(
+        target,
+        account,
+        market=Market.CRYPTO,
+        prices={symbol: 100.0 for symbol in CRYPTOS},
+        rules=rules,
+        approved_symbols=CRYPTOS,
+    )
+    assert any(order.symbol == "LTC/USD" and order.side == PortfolioOrderSide.SELL for order in planned)
+    assert any(order.symbol == "BTC/USD" and order.side == PortfolioOrderSide.BUY for order in planned)
+    admitted = reserve_opening_order_slots(planned, account, maximum_positions=6)
+    assert all(order.symbol != "BTC/USD" for order in admitted)
+    after_confirmed_zero = _account(held[:-1])
+    btc = next(order for order in planned if order.symbol == "BTC/USD")
+    assert reserve_opening_order_slots((btc,), after_confirmed_zero, maximum_positions=6) == (btc,)
+
+
+def test_table_of_mixed_positions_orders_and_partial_exits_never_spends_seventh_slot() -> None:
+    for equities, cryptos, pending_buys, pending_sells, partial in product(
+        range(7), range(3), range(3), range(2), (False, True)
+    ):
+        if equities + cryptos > 6:
+            continue
+        held = tuple(
+            _position(symbol, Market.EQUITY, 0.1 if partial and index == 0 else 10)
+            for index, symbol in enumerate(EQUITIES[:equities])
+        )
+        held += tuple(_position(symbol, Market.CRYPTO) for symbol in CRYPTOS[:cryptos])
+        reserved = tuple((Market.EQUITY, f"PENDING{index}") for index in range(pending_buys))
+        if equities + cryptos + pending_buys > 6:
+            continue
+        if pending_sells and held:
+            reserved += ((held[0].market, held[0].symbol),)
+        candidates = (_order("NEW1"), _order("NEW2"), _order("ETH/USD", Market.CRYPTO))
+        admitted = reserve_opening_order_slots(
+            candidates, _account(held), maximum_positions=6, reserved_position_keys=reserved
+        )
+        occupied = {(position.market, position.symbol) for position in held} | set(reserved)
+        for order in admitted:
+            occupied.add((order.market, order.symbol))
+            assert len(occupied) <= 6

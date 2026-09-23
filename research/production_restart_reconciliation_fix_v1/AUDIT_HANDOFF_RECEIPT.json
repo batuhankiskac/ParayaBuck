@@ -1,0 +1,11 @@
+{
+  "audit_branch": "audit/production-restart-reconciliation-v1",
+  "audit_sha": "3551322b9ac609ed2ee52c0343a14f2dcd408f37",
+  "archive_tag": "archive/audit/production-restart-reconciliation-v1-2026-09",
+  "archive_tag_publication": "local_only",
+  "starting_main_sha": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+  "audit_production_files_changed": "NONE",
+  "audit_account_capacity_files_changed": "NONE",
+  "findings": ["RR-01", "RR-02"],
+  "open_order_pagination": "already_exhaustive"
+}

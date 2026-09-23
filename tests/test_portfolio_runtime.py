@@ -317,6 +317,10 @@ class _FakeAlpacaClient:
     def get_orders(self, *_args: object, **_kwargs: object) -> list[SimpleNamespace]:
         return self.open_orders
 
+    def _request(self, method: str, path: str, data: dict[str, object] | None = None) -> list[dict[str, object]]:
+        assert method == "GET" and path == "/account/activities/FILL"
+        return []
+
     def get(self, path: str, params: dict[str, object] | None = None) -> list[Order]:
         if path != "/orders":
             raise ValueError(f"unsupported GET {path}")
@@ -357,6 +361,20 @@ def _portfolio_broker(
     broker.ledger = ExecutionLedger(str(ledger_path)) if with_ledger and ledger_path is not None else None
     broker.portfolio_owned_quantities = lambda: repo.owned_quantities(broker.account_id)
     broker.portfolio_open_orders = lambda: repo.open_orders(broker.account_id)
+    broker.portfolio_fill_recovered = (
+        lambda client_id, broker_id, qty, price, at, activity_id, fee, *, status="filled": repo.apply_trade_update(
+            client_order_id=client_id,
+            broker_order_id=broker_id,
+            status=status,
+            cumulative_filled_quantity=qty,
+            average_fill_price=price,
+            occurred_at=at,
+            activity_id=activity_id,
+            fee=fee,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+        )
+    )
     broker._account_id = "acct"
     broker._client = client
     broker._asset_cache = {}
@@ -2199,6 +2217,9 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
     # Alpaca confirms the exit order filled at 97_500 while the stream was down.
     client.filled_orders["pbp-exit-sell"] = SimpleNamespace(
         id="broker-exit",
+        client_order_id="pbp-exit-sell",
+        symbol="BTC/USD",
+        side="sell",
         status="filled",
         filled_qty="0.49875",
         filled_avg_price="97500",
@@ -2210,15 +2231,17 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
         client_order_id: str,
         broker_order_id: str,
         filled_qty: float,
-        avg_price: float,
+        avg_price: float | None,
         occurred_at: datetime,
         activity_id: str,
-        fee: float,
+        fee: float | None,
+        *,
+        status: str = "filled",
     ) -> None:
         repo.apply_trade_update(
             client_order_id=client_order_id,
             broker_order_id=broker_order_id,
-            status="filled",
+            status=status,
             cumulative_filled_quantity=filled_qty,
             average_fill_price=avg_price,
             occurred_at=occurred_at,

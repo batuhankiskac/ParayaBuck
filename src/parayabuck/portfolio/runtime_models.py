@@ -96,6 +96,7 @@ class OpenPortfolioOrder:
     side: str
     quantity: float
     cumulative_filled_quantity: float
+    broker_order_id: str = ""
 
 
 @dataclass(frozen=True)

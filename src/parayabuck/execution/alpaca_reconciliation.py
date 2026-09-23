@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from math import isfinite
 from typing import Any
 
 from alpaca.trading.enums import QueryOrderStatus
@@ -141,6 +142,7 @@ class ReconciliationService:
         activities: list[dict[str, Any]] = []
         page_token: str | None = None
         seen_tokens: set[str] = set()
+        seen_activity_ids: set[str] = set()
         try:
             while True:
                 params: dict[str, object] = {"direction": "desc", "page_size": 100}
@@ -149,17 +151,54 @@ class ReconciliationService:
                 if page_token is not None:
                     params["page_token"] = page_token
                 payload = request("GET", "/account/activities/FILL", data=params)
-                page = payload if isinstance(payload, list) else []
-                activities.extend(item for item in page if isinstance(item, dict))
-                if len(page) < 100:
+                if not isinstance(payload, list) or len(payload) > 100:
+                    raise ReconciliationResultError("Invalid FILL activity page")
+                if not payload:
                     break
-                next_token = str(page[-1].get("id", "") or "")
-                if not next_token or next_token in seen_tokens:
-                    log.warning(
-                        "Fill activity pagination stopped at %d activities: page cursor was not honored",
-                        len(activities),
-                    )
-                    break
+                page: list[dict[str, Any]] = []
+                for item in payload:
+                    if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"].strip():
+                        raise ReconciliationResultError("FILL activity without a valid ID")
+                    try:
+                        side = str(item["side"]).lower()
+                        qty = float(item["qty"])
+                        price = float(item["price"])
+                        occurred_at = datetime.fromisoformat(str(item["transaction_time"]))
+                        broker_order_id = str(item["order_id"])
+                        symbol = str(item["symbol"])
+                        if (
+                            side not in {"buy", "sell"}
+                            or not broker_order_id
+                            or not symbol
+                            or not isfinite(qty)
+                            or qty <= 0
+                            or not isfinite(price)
+                            or price <= 0
+                            or occurred_at.tzinfo is None
+                        ):
+                            raise ValueError("Invalid FILL activity fields")
+                        for quantity_field in ("cum_qty", "leaves_qty"):
+                            if quantity_field in item:
+                                value = float(item[quantity_field])
+                                if not isfinite(value) or value < 0:
+                                    raise ValueError(f"Invalid {quantity_field}")
+                        fee_raw = item.get("commission", item.get("fee", 0))
+                        if fee_raw is not None and not isfinite(float(fee_raw)):
+                            raise ValueError("Invalid FILL activity fee")
+                    except (KeyError, TypeError, ValueError) as exc:
+                        raise ReconciliationResultError("Malformed FILL activity") from exc
+                    page.append(item)
+                next_token = page[-1]["id"]
+                if next_token == page_token or next_token in seen_tokens:
+                    raise ReconciliationResultError("FILL activity cursor did not advance")
+                new_items: list[dict[str, Any]] = []
+                for item in page:
+                    if item["id"] not in seen_activity_ids:
+                        new_items.append(item)
+                        seen_activity_ids.add(item["id"])
+                if not new_items:
+                    raise ReconciliationResultError("FILL activity page made no progress")
+                activities.extend(new_items)
                 seen_tokens.add(next_token)
                 page_token = next_token
         except Exception as exc:
@@ -283,6 +322,93 @@ class ReconciliationService:
             watermark_setter(account_id, "fill_activity", applied_watermark)
         return True
 
+    def _recover_portfolio_orders(self, broker_orders: Any) -> None:
+        """Resolve durable nonterminal orders before comparing ownership."""
+        broker = self._broker
+        provider = getattr(broker, "portfolio_open_orders", None)
+        if provider is None:
+            return
+        open_by_client: dict[str, Any] = {}
+        for order in broker_orders:
+            client_id = str(self._field(order, "client_order_id", "") or "").strip()
+            if not client_id or client_id in open_by_client:
+                raise ReconciliationResultError("Broker OPEN list has missing or duplicate client ID")
+            open_by_client[client_id] = order
+        lookup = getattr(broker, "_fetch_broker_order", None)
+        callback = getattr(broker, "portfolio_fill_recovered", None)
+        for local in provider() or ():
+            client_id = str(getattr(local, "client_order_id", "") or "").strip()
+            if not client_id:
+                raise ReconciliationResultError("Local nonterminal order has no client ID")
+            order = open_by_client.get(client_id)
+            if order is None:
+                if lookup is None:
+                    continue  # The final OPEN-ID comparison still fails closed.
+                order = lookup(client_id, str(getattr(local, "broker_order_id", "") or ""))
+            if order is None:
+                continue  # A targeted 404 is not evidence of a terminal outcome.
+            actual_client_id = str(self._field(order, "client_order_id", "") or "")
+            broker_id = str(self._field(order, "id", "") or "")
+            if actual_client_id != client_id or not broker_id:
+                raise ReconciliationResultError(f"Broker order identity mismatch for {client_id}")
+            persisted_id = str(getattr(local, "broker_order_id", "") or "")
+            if persisted_id and persisted_id != broker_id:
+                raise ReconciliationResultError(f"Broker order ID changed for {client_id}")
+            symbol = canonical_symbol(str(self._field(order, "symbol", "") or ""), local.market)
+            side = str(self._normalized_field(order, "side") or "").lower()
+            if symbol != canonical_symbol(local.symbol, local.market) or side != str(local.side).lower():
+                raise ReconciliationResultError(f"Broker order contract mismatch for {client_id}")
+            status = str(self._normalized_field(order, "status") or "").lower()
+            if status == "partially_filled":
+                local_status = "partial_fill"
+            elif status in {"filled", "canceled", "cancelled", "expired", "rejected", "done_for_day"}:
+                local_status = status
+            elif status in {
+                "new",
+                "accepted",
+                "pending_new",
+                "pending_cancel",
+                "pending_replace",
+                "accepted_for_bidding",
+            }:
+                local_status = status
+            else:
+                raise ReconciliationResultError(f"Unrecognized broker order status for {client_id}: {status}")
+            quantity = float(self._field(order, "filled_qty", 0) or 0)
+            average_raw = self._field(order, "filled_avg_price", None)
+            average = float(average_raw) if average_raw is not None else None
+            if (
+                not isfinite(quantity)
+                or (average is not None and not isfinite(average))
+                or quantity < 0
+                or quantity > float(local.quantity) + max(1e-9, float(local.quantity) * 1e-8)
+            ):
+                raise ReconciliationResultError(f"Invalid broker cumulative fill for {client_id}")
+            if (quantity > 0 and (average is None or average <= 0)) or (status == "filled" and quantity <= 0):
+                raise ReconciliationResultError(f"Incomplete broker fill for {client_id}")
+            if callback is None:
+                raise ReconciliationResultError(f"Portfolio order recovery unavailable for {client_id}")
+            timestamp_raw = self._field(order, "filled_at", None) or self._field(order, "updated_at", None)
+            timestamp = (
+                timestamp_raw
+                if isinstance(timestamp_raw, datetime)
+                else datetime.fromisoformat(str(timestamp_raw))
+                if timestamp_raw is not None
+                else datetime.now(UTC)
+            )
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
+            callback(
+                client_id,
+                broker_id,
+                quantity,
+                average,
+                timestamp,
+                f"{client_id}:recovered:{quantity}:{local_status}",
+                None,
+                status=local_status,
+            )
+
     def _reconcile_crypto_exit(self, position: Any) -> None:
         broker = self._broker
         ledger = getattr(broker, "ledger", None)
@@ -401,14 +527,28 @@ class ReconciliationService:
         }
         # Respect test monkeypatch of broker.account (e.g. fake AccountSnapshot) — call via broker so __dict__ override is observed.
         # When not monkeypatched, broker.account() delegates to AccountService anyway.
-        account: AccountSnapshot = broker.account()
+        # Bind account identity before reading account-scoped durable orders.
+        # account() classifies ownership, so it must run after offline fills
+        # have updated local ownership rather than rejecting an explained fill.
+        if not getattr(broker, "_account_id", ""):
+            raw_account = broker._client.get_account()
+            broker._account_id = str(getattr(raw_account, "id", "") or getattr(raw_account, "account_number", ""))
+            if not broker._account_id:
+                raise ReconciliationResultError("Broker account has no identity")
+        broker_orders = broker._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
+        self._recover_portfolio_orders(broker_orders)
         manage_external = bool(getattr(broker, "manage_external_positions", True))
-        portfolio_owned_provider = getattr(broker, "portfolio_owned_quantities", None)
-        portfolio_owned = set(portfolio_owned_provider()) if portfolio_owned_provider is not None else set()
         ledger = getattr(broker, "ledger", None)
         fill_activities_reconciled = True
+        managed: dict[str, Any] = {}
         if ledger is not None:
             fill_activities_reconciled = self._reconcile_fill_activity_fees()
+            if not fill_activities_reconciled:
+                raise ReconciliationResultError("FILL activity backfill incomplete")
+        account: AccountSnapshot = broker.account()
+        portfolio_owned_provider = getattr(broker, "portfolio_owned_quantities", None)
+        portfolio_owned = set(portfolio_owned_provider()) if portfolio_owned_provider is not None else set()
+        if ledger is not None:
             managed = ledger.managed_for_account(broker._account_id or "unknown")
         broker_symbols = {canonical_symbol(p.symbol, p.market) for p in account.positions if not p.is_flat}
         # holdings 7-bucket
@@ -467,8 +607,7 @@ class ReconciliationService:
             self._reconcile_crypto_exit_state(ledger)
             self._reconcile_stale_ledger_entries(ledger, broker_symbols, fill_activities_reconciled)
         # protection reconciliation — delegated
-        open_orders: Any = None
-        get_open_orders = getattr(broker, "_get_open_orders", None)
+        open_orders: Any = broker_orders
         for position in account.positions:
             is_long = position.qty > 0
             if position.is_flat:
@@ -520,10 +659,6 @@ class ReconciliationService:
 
                 required_qty = total_qty * float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
                 required_qty = broker._round_qty_down(position.symbol, required_qty)
-            if open_orders is None:
-                if get_open_orders is None:
-                    raise RuntimeError("Alpaca broker does not support exhaustive open-order retrieval")
-                open_orders = get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
             # use broker's has_protective check (delegates to ProtectionService when wired)
             has_protection = broker._has_protective_order(position.symbol, is_long, required_qty, open_orders)
             if not has_protection and ownership is not None and ownership.broker_order_id and available_qty <= 0:
@@ -597,19 +732,20 @@ class ReconciliationService:
         _local_open_ids: set[str] = set()
         _local_provider = getattr(broker, "portfolio_open_orders", None)
         if _local_provider is not None:
-            try:
-                for _o in _local_provider() or ():
-                    _cid = str(getattr(_o, "client_order_id", "")).strip()
-                    if _cid:
-                        _local_open_ids.add(_cid)
-            except Exception:
-                pass
-        _broker_orders = broker._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
+            for _o in _local_provider() or ():
+                _cid = str(getattr(_o, "client_order_id", "") or "").strip()
+                if not _cid:
+                    raise ReconciliationResultError("Local nonterminal order has no client ID")
+                _local_open_ids.add(_cid)
+        # Protection recovery above may have submitted a new owned stop;
+        # compare against a fresh exhaustive list, not the pre-repair page set.
+        current_broker_orders = broker._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
         _broker_open_ids: set[str] = set()
-        for _bo in _broker_orders or ():
+        for _bo in current_broker_orders or ():
             _bcid = str(getattr(_bo, "client_order_id", "") or self._field(_bo, "client_order_id", "")).strip()
-            if _bcid:
-                _broker_open_ids.add(_bcid)
+            if not _bcid or _bcid in _broker_open_ids:
+                raise ReconciliationResultError("Broker OPEN list has missing or duplicate client ID")
+            _broker_open_ids.add(_bcid)
         for _cid in sorted(_broker_open_ids - _local_open_ids):
             categories["UNKNOWN_ORDER"].append(_cid)
         for _cid in sorted(_local_open_ids - _broker_open_ids):

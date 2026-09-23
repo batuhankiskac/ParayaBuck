@@ -485,6 +485,7 @@ def test_reconcile_returns_7_categories_and_fail_closed(tmp_path: Path) -> None:
     # Create a fake broker with positions and local stale
     client = MagicMock()
     client.get_orders.return_value = []
+    client._request.return_value = []
     broker = AlpacaBroker(api_key="fake", secret_key="fake", paper=True, ledger=ledger)
     broker._client = client  # type: ignore[attr-defined]
     broker._account_id = "acct"  # type: ignore[attr-defined]

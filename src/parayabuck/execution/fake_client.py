@@ -330,12 +330,15 @@ class FakeTradingClient:
                 result = self.script_activities()
                 if isinstance(result, Exception):
                     raise result
-                return result
-            # Return activities paginated
-            return SimpleNamespace(
-                json=lambda: self.activities,
-                status_code=200,
-            )
+                activities = result
+            else:
+                activities = self.activities
+            if not isinstance(activities, list):
+                return activities
+            params = kwargs.get("data") or {}
+            cursor = params.get("page_token")
+            start = next((i + 1 for i, item in enumerate(activities) if item.get("id") == cursor), 0) if cursor else 0
+            return activities[start : start + int(params.get("page_size", 100))]
         raise Exception(f"unsupported _request {method} {path}")
 
     # Helper to inject fill activity

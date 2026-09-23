@@ -117,7 +117,9 @@ def test_fill_activity_recovery_does_not_rebook_existing_broker_order(
         }
     ]
     broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: activities)
+    broker._client = SimpleNamespace(
+        _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+    )
     broker.ledger = ledger
     broker._account_id = "acct"
 

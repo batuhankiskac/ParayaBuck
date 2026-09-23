@@ -1247,7 +1247,9 @@ def test_fill_activity_recovery_merges_activities_of_one_order(tmp_path: Path) -
         },
     ]
     broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: activities)
+    broker._client = SimpleNamespace(
+        _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+    )
     broker.ledger = ledger
     broker._account_id = "acct"
 

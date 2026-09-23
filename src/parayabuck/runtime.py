@@ -1668,17 +1668,19 @@ class EngineRuntime:
         client_order_id: str,
         broker_order_id: str,
         filled_qty: float,
-        avg_price: float,
+        avg_price: float | None,
         occurred_at: datetime,
         activity_id: str,
         fee: float | None,
+        *,
+        status: str = "filled",
     ) -> None:
         """Book a real fill recovered from Alpaca order history at its actual
         price (see AlpacaBroker._reconcile_stale_portfolio_ownership)."""
-        self._portfolio_repository.apply_trade_update(
+        applied = self._portfolio_repository.apply_trade_update(
             client_order_id=client_order_id,
             broker_order_id=broker_order_id,
-            status="filled",
+            status=status,
             cumulative_filled_quantity=filled_qty,
             average_fill_price=avg_price,
             occurred_at=occurred_at,
@@ -1690,6 +1692,8 @@ class EngineRuntime:
             received_at=datetime.now(UTC),
             fee_observed=fee is not None,
         )
+        if not applied:
+            raise RuntimeError(f"Recovered broker order has no durable portfolio row: {client_order_id}")
 
     def _pin_managed_symbols(self) -> None:
         """Keep managed positions observable even after scanner/config removal."""

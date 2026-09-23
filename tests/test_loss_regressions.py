@@ -214,7 +214,7 @@ def test_fill_activity_recovers_exit_pnl_when_stream_was_offline(tmp_path: Path)
     broker._account_id = "acct"
     broker.ledger = ledger
     broker._client = SimpleNamespace(
-        _request=lambda *_args, **_kwargs: [activity],
+        _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else [activity],
     )
 
     broker._reconcile_fill_activity_fees()
@@ -264,7 +264,9 @@ def test_fill_activity_recovers_entry_fill_idempotently(tmp_path: Path) -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker._account_id = "acct"
     broker.ledger = ledger
-    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: activities)
+    broker._client = SimpleNamespace(
+        _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+    )
 
     broker._reconcile_fill_activity_fees()
     broker._reconcile_fill_activity_fees()

@@ -1,0 +1,10 @@
+{
+  "scenario": "terminal BUY fill while offline",
+  "path_a": "local terminal status and owned quantity already updated by uninterrupted fill callback",
+  "path_b": "local submitted status recovered by targeted broker lookup before drift",
+  "broker_events_identical": true,
+  "comparison_test": "tests/execution/test_reconciliation_repair.py::test_restart_equivalence_for_filled_buy",
+  "compared_directly": ["reconciliation categories", "local status", "owned quantity", "repeat recovery count"],
+  "other_dimensions_covered_by_existing_tests": ["durable order reservations", "slot usage", "account cash snapshot", "risk incident restore", "next decision", "duplicate economic intent"],
+  "scope_limit": "The direct A/B test is a synthetic reconciliation slice; the other dimensions are established by separate offline restart and slot suites rather than one end-to-end A/B assertion. No live broker equivalence claim."
+}

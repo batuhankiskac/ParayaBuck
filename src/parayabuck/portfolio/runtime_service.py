@@ -1629,7 +1629,20 @@ class PortfolioRuntime:
             already = next((o for o in existing if str(o.get("client_order_id")) == order.client_order_id), None)
             if already is not None:
                 status = str(already.get("status", ""))
-                if status in {"submitted", "filled", "partial_fill", "canceled", "rejected", "expired"}:
+                if status in {
+                    "submitted",
+                    "new",
+                    "accepted",
+                    "pending_new",
+                    "pending_cancel",
+                    "pending_replace",
+                    "accepted_for_bidding",
+                    "partial_fill",
+                    "filled",
+                    "canceled",
+                    "rejected",
+                    "expired",
+                }:
                     continue
                 if is_terminal_order_status(status) or status in _AMBIGUOUS_ORDER_STATUSES:
                     continue

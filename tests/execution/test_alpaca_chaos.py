@@ -17,7 +17,17 @@ def test_chaos_no_duplicate_fills_or_stops(tmp_path: Path):
     # Initial reconcile bootstraps
     broker.reconcile()
     # Simulate a fill activity
-    fake.activities = [{"id": "act-1", "symbol": "IWM", "qty": "10", "price": "100", "side": "buy"}]
+    fake.activities = [
+        {
+            "id": "act-1",
+            "order_id": "broker-entry",
+            "symbol": "IWM",
+            "qty": "10",
+            "price": "100",
+            "side": "buy",
+            "transaction_time": "2026-01-01T00:00:00+00:00",
+        }
+    ]
     # Reconcile twice should not duplicate ledger entries or stops
     r2 = broker.reconcile()
     r3 = broker.reconcile()

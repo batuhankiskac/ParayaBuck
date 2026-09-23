@@ -1,0 +1,27 @@
+{
+  "archived_annotated_tag": "archive/research/shared-account-replay-v1-blocked-2026-09",
+  "corrected_difference": "V2 invokes current reserve_opening_order_slots after decision planning and at deferred opening activation; typed pending keys avoid symbol-only cross-market collision.",
+  "frozen_controls": {
+    "CURRENT_HOURLY_REPLAY.json.gz": "251798653eb28bcfb3e5d5080ebc1c347b979d802d340d1875e46c693bea2b01",
+    "EQUITY_CANONICAL_CONTROL.json": "b8b9ed1c29d2e895850e7acc23c349e170864a74baf933a23dab8a168c589129",
+    "EQUITY_CANONICAL_CONTROL_COMPARISON.json": "97ccb7af60dfddbc4bf8cedae1a816848950417c4f33a2dd5485d53058b4203e"
+  },
+  "frozen_controls_origin": {
+    "crypto": "archive/maintenance/crypto-replay-parity-v1-2026-09",
+    "equity": "archive/research/shared-account-replay-v1-blocked-2026-09 (control generated from canonical V3 replay)"
+  },
+  "peeled_commit": "1c1c21ef1631fd426b4e90188ac446db4eaa0fd2",
+  "reused_components": [
+    "research/shared_account_replay_v1/replay.py: asset-aware shared account, engine adapter, event coordinator, accounting checks",
+    "research/shared_account_replay_v1/run_historical.py: canonical data loaders and isolated parity harness"
+  ],
+  "schema": "replay-v1-provenance-v2",
+  "status": "archived failure evidence, not an authoritative current implementation",
+  "v1_outcomes_not_reused": true,
+  "v2_review_basis": [
+    "current src/parayabuck/backtest/portfolio_engine.py",
+    "current src/parayabuck/execution/portfolio.py",
+    "current src/parayabuck/portfolio/runtime_service.py",
+    "research/global_slot_accounting_fix_v1/ARCHIVED_REPLAY_VALIDATION.patch"
+  ]
+}

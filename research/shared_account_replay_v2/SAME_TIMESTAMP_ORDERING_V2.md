@@ -1,0 +1,3 @@
+# Same timestamp ordering V2
+
+The coordinator uses a fixed phase sequence: (1) ingest available execution/signal bars and equity corporate actions, (2) fill all prior SELL orders, (3) if no SELL remains, activate deferred buys and fill prior BUY orders, (4) release completed reservations, (5) update close marks and shared risk state, (6) decide crypto then equity, (7) filter new openings through the production slot helper, (8) defer new buys while SELLs work, (9) record account mark and invariants. Within a market, symbols are sorted. `ORDER_MARKETS=(CRYPTO,EQUITY)` makes a genuine equal-timestamp tie deterministic. New decisions cannot fill against the same source bar; their fills use a later bar. Ties and phase order are fixed before observing replay results.

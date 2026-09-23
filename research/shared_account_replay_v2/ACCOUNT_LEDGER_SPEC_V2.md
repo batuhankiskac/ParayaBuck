@@ -1,0 +1,3 @@
+# Shared account ledger V2
+
+`cash` is a single spendable ledger. Canonical `_fill_side` debits purchases, credits sales, and subtracts asset-specific fees. Equity dividends credit the same cash. Position identity includes market and canonical symbol. NAV is cash plus marked inventory; gross divides absolute marked inventory by NAV. The coordinator records a cash/NAV path and reconciles fill notional, fees, dividends, splits, terminal events and quantities. Sleeve exposure and per-name targets are constrained by the existing risk overlay, not separate cash subaccounts. Synthetic buying power is bounded by available shared cash in the offline fill engine; live broker non-marginable buying power cannot be reconstructed from historical bars.

@@ -1,0 +1,35 @@
+{
+  "branch_base_sha": "3f97c02826bc42eda8197dbb7b605d299915155a",
+  "branch_created_from_main": "research/shared-account-replay-v2",
+  "current_configuration": {
+    "crypto_exposure": 0.1,
+    "crypto_maximum_allocation": 0.05,
+    "crypto_per_name": 0.05,
+    "crypto_strategy": "crypto_low_variance_hysteresis_v1",
+    "equity_maximum_allocation": 0.55,
+    "equity_per_name": 0.1,
+    "equity_strategy": "equity_residual_momentum_v3",
+    "initial_cash": 100000,
+    "maximum_crypto_positions": 2,
+    "maximum_gross": 0.6,
+    "maximum_positions": 6,
+    "minimum_cash": 0.4,
+    "rebalance_band_pct": 0.005
+  },
+  "evidence": [
+    "research/global_slot_accounting_fix_v1/CORRECTNESS_DECISION.json",
+    "research/global_slot_accounting_fix_v1/CAP6_SHARED_REPLAY_REVALIDATION.json"
+  ],
+  "local_main_sha": "3f97c02826bc42eda8197dbb7b605d299915155a",
+  "origin_main_sha_verified_by_git_ls_remote": "3f97c02826bc42eda8197dbb7b605d299915155a",
+  "schema": "corrected-main-receipt-v2",
+  "slot_repair": {
+    "nonzero_positions_consume_slots": true,
+    "open_order_and_reserved_keys_consume_slots": true,
+    "production_helper": "src/parayabuck/execution/portfolio.py:reserve_opening_order_slots",
+    "regression_tests": "tests/test_global_slot_accounting.py",
+    "sell_does_not_free_slot": true,
+    "sequential_opening_admission": true
+  },
+  "worktree_clean_before_branch": true
+}

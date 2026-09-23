@@ -1,0 +1,47 @@
+{
+  "current_git": {
+    "branch": "research/shared-account-replay-v1",
+    "head": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+    "main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+    "origin_main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a"
+  },
+  "exact_checks": {
+    "1.0.chronology_checks": true,
+    "1.0.chronology_sha256": true,
+    "1.0.counts": true,
+    "1.0.fills_sha256": true,
+    "1.0.reserved_roles": true,
+    "1.0.targets_sha256": true,
+    "1.0.terminal_events_sha256": true,
+    "2.0.chronology_checks": true,
+    "2.0.chronology_sha256": true,
+    "2.0.counts": true,
+    "2.0.fills_sha256": true,
+    "2.0.reserved_roles": true,
+    "2.0.targets_sha256": true,
+    "2.0.terminal_events_sha256": true,
+    "3.0.chronology_checks": true,
+    "3.0.chronology_sha256": true,
+    "3.0.counts": true,
+    "3.0.fills_sha256": true,
+    "3.0.reserved_roles": true,
+    "3.0.targets_sha256": true,
+    "3.0.terminal_events_sha256": true,
+    "input_identity": true,
+    "production_identity": true,
+    "window": true
+  },
+  "failed_exact_checks": [],
+  "metric_differences": [],
+  "metric_tolerance": {
+    "absolute": 1e-12,
+    "relative": 1e-12
+  },
+  "reference_git": {
+    "branch": "maintenance/month-end-first-open-correctness-v1",
+    "head": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+    "main": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+    "origin_main": "86123374e41735d8d163c7fbed5bf5edfc43468d"
+  },
+  "verdict": "V3_PARITY_PASS"
+}

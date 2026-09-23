@@ -164,12 +164,12 @@ def _summarize(
                 approved += 1
                 continue
             reasons = set(row["reasons"])
-            if "position_count_limit" in reasons:
+            if "daily_loss_limit" in reasons:
+                reason = "DAILY_LOSS_LIMIT"
+            elif "position_count_limit" in reasons:
                 reason = (
                     "GLOBAL_POSITION_COUNT" if market == "equity" or total_claims >= cap else "CRYPTO_POSITION_COUNT"
                 )
-            elif "daily_loss_limit" in reasons:
-                reason = "DAILY_LOSS_LIMIT"
             elif "exposure_scaled_to_limit" in reasons:
                 reason = "GROSS_OR_SLEEVE_OR_CASH_LIMIT"
             else:

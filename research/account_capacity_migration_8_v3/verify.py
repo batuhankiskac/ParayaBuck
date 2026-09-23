@@ -109,10 +109,12 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
     require([event["timestamp"] for event in marks] == trace["timestamps"], f"arm {cap} mark times")
     cash = 100_000.0
     qty: dict[tuple[str, str], float] = defaultdict(float)
+    prices: dict[tuple[str, str], float] = {}
     live_orders: set[tuple[str, str]] = set()
     counts: Counter[str] = Counter()
     costs = notional = 0.0
     max_claims = max_positions = 0
+    concentration_by_day: dict[str, dict[str, float]] = {}
     for event in events:
         kind = event["event"]
         counts[kind] += 1
@@ -124,6 +126,7 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
             if abs(qty[key]) <= 1e-9:
                 qty.pop(key, None)
             cash -= side * quantity * float(event["fill_price"]) + float(event["fee"])
+            prices[key] = float(event["reference_price"])
             costs += sum(float(event[field]) for field in ("fee", "slippage_cost", "spread_cost"))
             notional += quantity * float(event["reference_price"])
             require(event["timestamp"] > event["order_created_at"], f"arm {cap} fill causality")
@@ -131,6 +134,8 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
             cash += float(event["cash_delta"])
             if event["split_ratio"] is not None and key in qty:
                 qty[key] *= float(event["split_ratio"])
+        elif kind == "mark":
+            prices[key] = float(event["price"])
         elif kind == "terminal_liquidation":
             cash += float(event["proceeds"])
             qty.pop(key, None)
@@ -150,6 +155,21 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
             require(float(event["target_gross"]) <= 0.6 + 1e-7, f"arm {cap} target gross limit")
             max_claims = max(max_claims, int(event["slot_claim_count"]))
             max_positions = max(max_positions, len(qty))
+            values = {key: amount * prices.get(key, 0.0) for key, amount in qty.items()}
+            equity_value = sum(value for key, value in values.items() if key[0] == "equity")
+            crypto_value = sum(value for key, value in values.items() if key[0] == "crypto")
+            nav = float(event["nav"])
+            concentration_by_day[event["timestamp"][:10]] = {
+                "total_hhi": sum((value / nav) ** 2 for value in values.values()) if nav > 0 else 0.0,
+                "equity_hhi": sum((value / equity_value) ** 2 for key, value in values.items() if key[0] == "equity")
+                if equity_value > 0
+                else 0.0,
+                "crypto_hhi": sum((value / crypto_value) ** 2 for key, value in values.items() if key[0] == "crypto")
+                if crypto_value > 0
+                else 0.0,
+                "equity_active": float(equity_value > 0),
+                "crypto_active": float(crypto_value > 0),
+            }
         elif kind == "final_state":
             close(cash, float(event["cash"]), f"arm {cap} final cash")
             require(not qty and not event["positions"] and not event["pending"], f"arm {cap} final flat")
@@ -176,7 +196,11 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
             raw_new += 1
             if approved.get(symbol, 0.0) > 0:
                 approved_new += 1
-            elif "position_count_limit" in row["reasons"] and (row["market"] == "equity" or len(claims) >= cap):
+            elif (
+                "daily_loss_limit" not in row["reasons"]
+                and "position_count_limit" in row["reasons"]
+                and (row["market"] == "equity" or len(claims) >= cap)
+            ):
                 count_denied += 1
                 count_weight += weight
                 count_notional += weight * float(row["equity_at_decision"])
@@ -193,6 +217,26 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
     require(len(daily) == len({mark["timestamp"][:10] for mark in marks}), "daily mark count")
     for field, source in (("average_cash_daily", "cash"), ("average_realized_gross_daily", "gross")):
         close(statistics.mean(row[source] for row in daily), float(structural[field]), field)
+    close(
+        statistics.mean(row["total_hhi"] for row in concentration_by_day.values()),
+        float(structural["average_hhi_daily"]),
+        "daily HHI",
+    )
+    write_json(
+        f"CONCENTRATION_CAP{cap}_V3.json",
+        {
+            "total_hhi_daily_average": statistics.mean(row["total_hhi"] for row in concentration_by_day.values()),
+            "equity_hhi_active_day_average": statistics.mean(
+                row["equity_hhi"] for row in concentration_by_day.values() if row["equity_active"]
+            ),
+            "crypto_hhi_active_day_average": statistics.mean(
+                row["crypto_hhi"] for row in concentration_by_day.values() if row["crypto_active"]
+            ),
+            "equity_active_days": sum(row["equity_active"] for row in concentration_by_day.values()),
+            "crypto_active_days": sum(row["crypto_active"] for row in concentration_by_day.values()),
+            "measurement_note": "At fill-time account marks the trace does not expose prior non-held source marks; daily final marks are used for sleeve HHI.",
+        },
+    )
     econ = economics(marks, structural)
     require(all(outcome["hard_gates"].values()), f"arm {cap} hard gates")
     require(json.loads((OUT / f"DETERMINISM_RECEIPT_CAP{cap}_V3.json").read_text())["status"] == "PASS", "repeat")
@@ -307,6 +351,17 @@ def main() -> None:
                 for key in fields
             ],
         )
+    concentration = {cap: json.loads((OUT / f"CONCENTRATION_CAP{cap}_V3.json").read_text()) for cap in (6, 8)}
+    with (OUT / "CONCENTRATION_COMPARISON_V3.csv").open("a", newline="") as handle:
+        writer = csv.writer(handle)
+        for key in (
+            "equity_hhi_active_day_average",
+            "crypto_hhi_active_day_average",
+            "equity_active_days",
+            "crypto_active_days",
+        ):
+            left, right = concentration[6][key], concentration[8][key]
+            writer.writerow((key, left, right, right - left))
     write_csv("SLOT_DENIAL_ATTRIBUTION_V3.csv", [{"cap": cap, **row} for cap in (6, 8) for row in results[cap][1]])
     write_json("ECONOMIC_METRICS_V3.json", {"cap6": results[6][2], "cap8": results[8][2]})
     print(decision, "count_denials", count_a, count_b)

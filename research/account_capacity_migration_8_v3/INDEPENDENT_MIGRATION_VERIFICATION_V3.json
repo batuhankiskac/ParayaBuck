@@ -1,0 +1,24 @@
+{
+  "cap6_event_sha256": "841091dd6ebedbc03e3dde27eaf7bee09e54474e660554c3c4b28423d3eb186d",
+  "cap8_event_sha256": "16e3d85643bbf05160c84059b5862d9c033f2f5c4d9448cf7b3c2c4b0a145ea3",
+  "count_denials": {
+    "6": 1112,
+    "8": 438
+  },
+  "freeze_commit_sha": "51b8fa16c77df60729414da17d20d329480e380c",
+  "limitation": "Event trace omits non-held source marks; independent NAV valuation and per-name HHI at fill-time marks cannot be reconstructed from trace alone. Replay internal NAV reconciliation and daily source mark trace remain separate gates.",
+  "schema": "independent-migration-verification-v3",
+  "status": "PASS",
+  "structural_gate_pass": true,
+  "trace_based_checks": [
+    "event/component hashes",
+    "ledger cash",
+    "inventory counts",
+    "slot/gross",
+    "marked gross cash/NAV arithmetic",
+    "orders/fills/reservations",
+    "direct target denials",
+    "costs/turnover",
+    "daily NAV economics"
+  ]
+}

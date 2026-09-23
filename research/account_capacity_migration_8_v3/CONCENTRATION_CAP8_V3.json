@@ -1,0 +1,8 @@
+{
+  "crypto_active_days": 1770.0,
+  "crypto_hhi_active_day_average": 0.6642085154379762,
+  "equity_active_days": 2990.0,
+  "equity_hhi_active_day_average": 0.17984853725912964,
+  "measurement_note": "At fill-time account marks the trace does not expose prior non-held source marks; daily final marks are used for sleeve HHI.",
+  "total_hhi_daily_average": 0.03985975197293803
+}

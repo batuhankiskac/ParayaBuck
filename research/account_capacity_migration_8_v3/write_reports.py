@@ -45,6 +45,7 @@ def main() -> None:
     treatment = load("TREATMENT_CAP8_RESULTS_V3.json")
     a, b = control["structural"], treatment["structural"]
     econ = load("ECONOMIC_METRICS_V3.json")
+    regime = load("RISK_REGIME_REVIEW_V3.json")["arms"]
     denial = {
         cap: load(f"{prefix}_SLOT_DENIALS_V3.json") for cap, prefix in ((6, "CONTROL_CAP6"), (8, "TREATMENT_CAP8"))
     }
@@ -178,6 +179,8 @@ Cap 6 observed {a["global_count_denied_target_openings"]} count-denied target op
 
 Both arms pass cash, inventory, slot, gross target, sleeve, per-name, reservation, corporate-action, causality, and deterministic replay gates. Realized gross can drift between decisions; the unchanged 0.60 target limit remains enforced.
 
+Cap 6 had {regime["6"]["realized_gross_over_nominal_mark_count"]} of {regime["6"]["account_mark_count"]} account marks above 0.60 realized gross; cap 8 had {regime["8"]["realized_gross_over_nominal_mark_count"]} of {regime["8"]["account_mark_count"]}. Treatment peaked at {regime["8"]["maximum_realized_gross"]:.6f} on `{regime["8"]["maximum_realized_gross_timestamp"]}`, when the recorded target gross was {regime["8"]["target_gross_at_realized_peak"]:.6f}. Cash/NAV/gross arithmetic reconciles. This is fuller target use followed by mark-to-market drift, not a change to the nominal target constraint. The production parity review must examine this excursion before deployment.
+
 ## Concentration comparison
 
 {concentration_lines}
@@ -203,6 +206,8 @@ Both arms were run twice. Decision, order, fill, reservation, position, cash, NA
 ## Decision rationale and governance
 
 The result follows the predeclared structural count gate, not historical performance chasing. Previously `ALPHA_VALID_PORTFOLIO_REJECTED` families may receive a separate rerun-eligibility review if migration is accepted; none were rerun here. The old crypto giveback audit was not used and needs a separate causal-baseline refresh.
+
+Marginal Crypto→Equity and Equity→Crypto crowd-out events did not disappear under cap 8; both directions increased slightly as the larger account held more incumbent positions. Aggregate count-specific denials still fell from {verify["count_denials"]["6"]} to {verify["count_denials"]["8"]}. Cap 8 does not reserve two slots for crypto, and no separate sleeve slot policy was introduced.
 
 ## Production state and publication
 

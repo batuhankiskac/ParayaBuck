@@ -1,0 +1,22 @@
+{
+  "cap": 6,
+  "checks": {
+    "causality": true,
+    "components": true,
+    "event_order": true,
+    "final_state": true,
+    "input_identity": true
+  },
+  "component_hashes": {
+    "cash_path": "64ccd68e77eb75044458f0b4307f8066270c1b2f07044f68ad8c668f9c41a5f3",
+    "decisions": "fc737b0ee7e4cc513f7cb2e6d1716c48916f095ce06a16b768390575903a19c4",
+    "fills": "b7c71e20aa956eb856f4846d15725f1ba993f10e19ec6c2394e3ff318e0ba4bd",
+    "nav_path": "1915fd916e089cb9dfad3491b45538fba770b7b8bd88d95b1c8880352f9f9a86",
+    "orders": "7662ef931fa22b05847043f414de2f004e32ae3d0fe5e370b20ce8762e6837b4",
+    "positions": "96e92cfbb2e9e19df3ef91426dad581fe62b45b9ef86f1d7ed7314a6136e96bb",
+    "reservations": "601454d8642d3d01f62c58e8fd9cefc123b11de14c475e2b67ad44df65e77497"
+  },
+  "event_sha256": "841091dd6ebedbc03e3dde27eaf7bee09e54474e660554c3c4b28423d3eb186d",
+  "final_state_sha256": "fc4690187e9b771b7ac6c0886a82e82663786f1655235d9b693268f4a9a7f656",
+  "status": "PASS"
+}

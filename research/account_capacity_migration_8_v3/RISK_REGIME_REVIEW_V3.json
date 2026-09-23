@@ -1,0 +1,22 @@
+{
+  "arms": {
+    "6": {
+      "account_mark_count": 50194,
+      "maximum_realized_gross": 0.5897671669613848,
+      "maximum_realized_gross_timestamp": "2020-03-30T20:00:00+00:00",
+      "maximum_target_gross": 0.5500000000000002,
+      "realized_gross_over_nominal_mark_count": 0,
+      "target_gross_at_realized_peak": 0.55
+    },
+    "8": {
+      "account_mark_count": 50194,
+      "maximum_realized_gross": 0.6155074541750836,
+      "maximum_realized_gross_timestamp": "2024-01-11T00:00:00+00:00",
+      "maximum_target_gross": 0.6000000000000002,
+      "realized_gross_over_nominal_mark_count": 9152,
+      "target_gross_at_realized_peak": 0.5894985672604114
+    }
+  },
+  "interpretation": "The unchanged 0.60 gross control applies to target weights at decisions. Marked holdings can drift above 0.60 between decisions. Independent cash/NAV/gross arithmetic reconciles; production parity review must assess the realized excursion before any deployment.",
+  "schema": "migration-risk-regime-review-v3"
+}

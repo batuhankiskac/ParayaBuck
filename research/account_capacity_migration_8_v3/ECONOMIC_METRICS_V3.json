@@ -1,0 +1,30 @@
+{
+  "cap6": {
+    "annualized_volatility": 0.11056328544961898,
+    "average_cash": 75799.86644746645,
+    "average_realized_gross": 0.4364818340570192,
+    "cagr": 0.04746217211969728,
+    "calmar": 0.21674849960938133,
+    "ending_nav": 158651.99162660827,
+    "max_drawdown": -0.2189734748117399,
+    "sharpe": 0.5604684163569952,
+    "sortino": 0.7649785329937203,
+    "total_modeled_costs": 8543.516067016033,
+    "total_return": 0.5865199162660828,
+    "turnover": 145.07716594103732
+  },
+  "cap8": {
+    "annualized_volatility": 0.11186226619947968,
+    "average_cash": 69292.08039916476,
+    "average_realized_gross": 0.5067521439006678,
+    "cagr": 0.06422084756714486,
+    "calmar": 0.32207711235463093,
+    "ending_nav": 185805.51881278775,
+    "max_drawdown": -0.1993958747880008,
+    "sharpe": 0.7261183723095583,
+    "sortino": 1.0031434741751317,
+    "total_modeled_costs": 9434.70761944628,
+    "total_return": 0.8580551881278775,
+    "turnover": 148.88334614755195
+  }
+}

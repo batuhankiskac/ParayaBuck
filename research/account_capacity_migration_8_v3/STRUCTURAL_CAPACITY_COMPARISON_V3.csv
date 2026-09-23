@@ -1,0 +1,14 @@
+metric,cap6,cap8,difference_cap8_minus_cap6
+decisions,949,949,0
+equity_decisions,495,495,0
+crypto_decisions,454,454,0
+raw_new_symbol_target_openings,2367,1815,-552
+risk_approved_new_symbol_target_openings,895,1096,201
+global_count_denied_target_openings,1107,433,-674
+global_count_denied_order_admissions,5,5,0
+count_target_notional_shortfall_sum,20740097.76423648,12866679.67603448,-7873418.088202
+timestamps_at_global_cap,38883,37105,-1778
+average_positions_daily,5.31245858184228,7.088137839628893,1.7756792577866136
+average_equity_positions_daily,4.27998674618953,6.055003313452618,1.775016567263088
+average_crypto_positions_daily,1.0324718356527502,1.0331345261762757,0.000662690523525411
+maximum_effective_slot_claims,6,8,2

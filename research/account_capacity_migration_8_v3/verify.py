@@ -149,7 +149,7 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
                 qty[key] *= float(event["split_ratio"])
         elif kind == "mark":
             prices[key] = float(event["price"])
-        elif kind == "terminal_liquidation":
+        elif kind in {"terminal_liquidation", "final_liquidation"}:
             cash += float(event["proceeds"])
             qty.pop(key, None)
             costs += sum(float(event[field]) for field in ("fee", "slippage_cost", "spread_cost"))
@@ -166,6 +166,12 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
             require(len(qty) == event["position_count"], f"arm {cap} inventory count")
             require(event["slot_claim_count"] <= cap, f"arm {cap} slot limit")
             require(float(event["target_gross"]) <= 0.6 + 1e-7, f"arm {cap} target gross limit")
+            close(
+                float(event["gross"]),
+                1 - float(event["cash"]) / float(event["nav"]),
+                f"arm {cap} marked gross",
+                tolerance=1e-7,
+            )
             max_claims = max(max_claims, int(event["slot_claim_count"]))
             max_positions = max(max_positions, len(qty))
             values = {key: amount * prices.get(key, 0.0) for key, amount in qty.items()}
@@ -296,10 +302,51 @@ def main() -> None:
         json.loads((OUT / "CRYPTO_CANONICAL_AUTHORITY_RECEIPT.json").read_text())["status"] == "PASS",
         "crypto authority",
     )
+    replay_path = "research/physical_availability_clock_v2/shared_replay.py"
+    tagged_replay = subprocess.check_output(
+        ["git", "show", f"{freeze['validated_infrastructure']['tag']}:{replay_path}"], cwd=ROOT, text=True
+    )
+    expected_replay = tagged_replay.replace(
+        'if maximum_positions != 6:\n            raise ValueError("Shared-account replay V2 validates the current cap of six only")',
+        'if maximum_positions not in (6, 8):\n            raise ValueError("Migration replay permits only the frozen six/eight arms")',
+    )
+    require(expected_replay != tagged_replay, "tag constructor guard")
+    require((ROOT / replay_path).read_text() == expected_replay, "tagged replay differs beyond frozen cap guard")
+    for source_path in (
+        "research/physical_availability_clock_v2/run_historical.py",
+        "research/physical_availability_clock_v2/timing.py",
+    ):
+        require(
+            file_hash(ROOT / source_path) == freeze["validated_infrastructure"]["source_sha256"][source_path],
+            f"tagged source {source_path}",
+        )
     for path, expected in freeze["direct_source_sha256"].items():
         require(file_hash(ROOT / path) == expected, f"source {path}")
     require(file_hash(ROOT / "config/settings.yaml") == freeze["config_sha256"], "configuration")
     results = {cap: audit_arm(cap, freeze) for cap in (6, 8)}
+    risk_regime: dict[str, Any] = {}
+    for cap, prefix in ((6, "CONTROL_CAP6"), (8, "TREATMENT_CAP8")):
+        with gzip.open(OUT / f"{prefix}_TRACE_V3.json.gz", "rt") as handle:
+            events = json.load(handle)["events"]
+        marks = [event for event in events if event["event"] == "account_mark"]
+        over = [event for event in marks if float(event["gross"]) > 0.6 + 1e-9]
+        peak = max(marks, key=lambda event: float(event["gross"]))
+        risk_regime[str(cap)] = {
+            "account_mark_count": len(marks),
+            "realized_gross_over_nominal_mark_count": len(over),
+            "maximum_realized_gross": peak["gross"],
+            "maximum_realized_gross_timestamp": peak["timestamp"],
+            "target_gross_at_realized_peak": peak["target_gross"],
+            "maximum_target_gross": max(float(event["target_gross"]) for event in marks),
+        }
+    write_json(
+        "RISK_REGIME_REVIEW_V3.json",
+        {
+            "schema": "migration-risk-regime-review-v3",
+            "arms": risk_regime,
+            "interpretation": "The unchanged 0.60 gross control applies to target weights at decisions. Marked holdings can drift above 0.60 between decisions. Independent cash/NAV/gross arithmetic reconciles; production parity review must assess the realized excursion before any deployment.",
+        },
+    )
     a, b = results[6][0]["structural"], results[8][0]["structural"]
     count_a = a["global_count_denied_target_openings"] + a["global_count_denied_order_admissions"]
     count_b = b["global_count_denied_target_openings"] + b["global_count_denied_order_admissions"]
@@ -315,6 +362,7 @@ def main() -> None:
                 "ledger cash",
                 "inventory counts",
                 "slot/gross",
+                "marked gross cash/NAV arithmetic",
                 "orders/fills/reservations",
                 "direct target denials",
                 "costs/turnover",
@@ -338,6 +386,8 @@ def main() -> None:
             "structural_gate": "PASS" if structural_pass else "FAIL",
             "count_denials_cap6": count_a,
             "count_denials_cap8": count_b,
+            "risk_regime_review": risk_regime,
+            "realized_gross_excursion_interpretation": "Expected mark-to-market drift under unchanged target gross control; deployment requires production parity review.",
             "next_action": "PROCEED_TO_PRODUCTION_PARITY_CHANGE_REVIEW" if structural_pass else "RETAIN_GLOBAL_CAP_6",
             "production_maximum_positions_changed": False,
         },

@@ -16,7 +16,7 @@
   "liquidity_lookback": "20 positive completed daily bars known at order creation",
   "max_participation_pct_per_daily_attempt": 0.1,
   "costs": {"slippage_bps": 2, "full_spread_bps": 2, "crypto_taker_fee_bps": 25, "fixed_commission": 0},
-  "terminal": "precommitted final-date liquidation at last eligible same-symbol pinned source-hour open after UTC midnight, with canonical sell costs; fail closed if missing",
+  "terminal": "precommitted liquidation at latest hourly opening timestamp common to final frozen scanner observation set; instruction exists one UTC day earlier; exact source open required for each held symbol; terminal precedes same-boundary signal and evaluation stops",
   "canonical_input_modified": false,
   "selection_used_outcomes": false
 }

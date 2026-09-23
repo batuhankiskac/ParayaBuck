@@ -93,6 +93,12 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
     require(outcome["trace_gzip_sha256"] == file_hash(trace_path), f"arm {cap} trace bytes")
     require(trace["input_identity"] == freeze["input_identity"], f"arm {cap} inputs")
     require(digest(events) == outcome["event_sha256"], f"arm {cap} event hash")
+    final_event = events[-1]
+    require(final_event["event"] == "final_state", f"arm {cap} final event")
+    require(
+        digest({field: final_event[field] for field in ("cash", "nav", "positions")}) == outcome["final_state_sha256"],
+        f"arm {cap} final-state hash",
+    )
     types = {
         "decisions": {"decision"},
         "orders": {"reservation_created"},

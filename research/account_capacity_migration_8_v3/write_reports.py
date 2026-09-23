@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 OUT = Path(__file__).resolve().parent
+ROOT = OUT.parents[1]
 
 
 def load(name: str) -> Any:
@@ -38,6 +40,7 @@ def main() -> None:
         raise RuntimeError("Independent verification must pass before writing reports")
     freeze = load("FROZEN_MIGRATION_SPEC_V3.json")
     decision = load("MIGRATION_DECISION_V3.json")
+    current_main = subprocess.check_output(["git", "rev-parse", "refs/heads/main"], cwd=ROOT, text=True).strip()
     control = load("CONTROL_CAP6_RESULTS_V3.json")
     treatment = load("TREATMENT_CAP8_RESULTS_V3.json")
     a, b = control["structural"], treatment["structural"]
@@ -203,7 +206,7 @@ The result follows the predeclared structural count gate, not historical perform
 
 ## Production state and publication
 
-Production `maximum_positions` remains 6. Equity V3, crypto strategy and rebalance band, PAPER/LIVE modes, and production code/config remain unchanged. A production parity review is the next action if accepted. Local `refs/heads/main` at `{freeze["starting_main_sha"]}` and local `refs/heads/research/account-capacity-migration-8-v3` require exact publication approval before push; no new migration tag was created. The final branch SHA is supplied with the completed local commit in the delivery message.
+Production `maximum_positions` remains 6. Equity V3, crypto strategy and rebalance band, PAPER/LIVE modes, and production code/config remain unchanged. A production parity review is the next action if accepted. The clock-closure commit is `{freeze["starting_main_sha"]}`; local `refs/heads/main` is currently `{current_main}` and also contains an independently created later commit. No main push is part of this study. Local `refs/heads/research/account-capacity-migration-8-v3` requires exact publication approval before push; no new migration tag was created. The final branch SHA is supplied with the completed local commit in the delivery message.
 """
     write("FINAL_MIGRATION_REPORT_V3.md", report)
 

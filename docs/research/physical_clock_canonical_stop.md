@@ -21,3 +21,8 @@ maintenance campaign. Until that repair passes, existing baseline economics
 remain historical provenance rather than a physically validated execution
 control. Production strategy, configuration, PAPER, and LIVE behavior were
 not changed by the clock audit.
+
+Later resolution: the corrected causal crypto control and physical-clock V2
+research infrastructure are recorded in
+`docs/research/physical_availability_clock_v2_closure.md`. The V1 stop above
+remains historical provenance, not the current migration-readiness decision.

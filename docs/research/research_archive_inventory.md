@@ -430,3 +430,15 @@ These two pushed tags bring the local count to 36. After documentation is
 merged and pushed, delete only the two completed research branches locally and
 remotely, then the process-only maintenance branch locally. No unrelated
 branch is in scope.
+
+## Shared-account replay V1 — 2026-09-23
+
+`research/shared-account-replay-v1` ended at
+`1c1c21ef1631fd426b4e90188ac446db4eaa0fd2` and was never pushed. Its
+annotated evidence tag `archive/research/shared-account-replay-v1-blocked-2026-09`
+was pushed; the remote peeled target is the exact branch tip. The replay branch
+is closed without merging its implementation. The archived decision is
+`SHARED_ACCOUNT_REPLAY_BLOCKED_BY_GENERIC_CORRECTNESS` because a deterministic
+combined cap-six run recorded 21 timestamps with seven slot claims. Both
+isolated parity checks passed. No cap-eight comparison or migration economics
+was performed, and production root cause was not proven by this replay.

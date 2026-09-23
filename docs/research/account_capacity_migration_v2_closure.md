@@ -27,3 +27,18 @@ being removed after this closure. No remote V2 study branch existed.
 Future work must build and validate the shared-account replay from a new clean
 main branch. Do not resume the V2 migration or infer cap-eight benefits from
 isolated-market results.
+
+## Shared-account replay V1 follow-up — 2026-09-23
+
+The research-only replay V1 evidence is preserved at annotated tag
+`archive/research/shared-account-replay-v1-blocked-2026-09`, pointing to
+`1c1c21ef1631fd426b4e90188ac446db4eaa0fd2`. The tag was pushed and its
+remote peeled target verified; the replay implementation was not merged.
+Equity and crypto isolated parity passed, and the combined cap-six replay was
+deterministic, but it recorded 21 timestamps with seven occupied/reserved
+position slots under `maximum_positions = 6`. Its decision is
+`SHARED_ACCOUNT_REPLAY_BLOCKED_BY_GENERIC_CORRECTNESS`; migration readiness is
+`MIGRATION_REPLAY_NOT_READY`. No cap-eight arm or migration economics ran.
+The replay observation did **not** establish the production root cause; a
+separate production-correctness campaign must establish and repair it before
+shared replay can be rebuilt and validated from corrected main.

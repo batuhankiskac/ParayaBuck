@@ -1,0 +1,261 @@
+{
+  "canonical_control_comparison": {
+    "current_git": {
+      "branch": "research/shared-account-replay-v1",
+      "head": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+      "main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+      "origin_main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a"
+    },
+    "exact_checks": {
+      "1.0.chronology_checks": true,
+      "1.0.chronology_sha256": true,
+      "1.0.counts": true,
+      "1.0.fills_sha256": true,
+      "1.0.reserved_roles": true,
+      "1.0.targets_sha256": true,
+      "1.0.terminal_events_sha256": true,
+      "2.0.chronology_checks": true,
+      "2.0.chronology_sha256": true,
+      "2.0.counts": true,
+      "2.0.fills_sha256": true,
+      "2.0.reserved_roles": true,
+      "2.0.targets_sha256": true,
+      "2.0.terminal_events_sha256": true,
+      "3.0.chronology_checks": true,
+      "3.0.chronology_sha256": true,
+      "3.0.counts": true,
+      "3.0.fills_sha256": true,
+      "3.0.reserved_roles": true,
+      "3.0.targets_sha256": true,
+      "3.0.terminal_events_sha256": true,
+      "input_identity": true,
+      "production_identity": true,
+      "window": true
+    },
+    "failed_exact_checks": [],
+    "metric_differences": [],
+    "metric_tolerance": {
+      "absolute": 1e-12,
+      "relative": 1e-12
+    },
+    "reference_git": {
+      "branch": "maintenance/month-end-first-open-correctness-v1",
+      "head": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+      "main": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+      "origin_main": "86123374e41735d8d163c7fbed5bf5edfc43468d"
+    },
+    "verdict": "V3_PARITY_PASS"
+  },
+  "canonical_control_source_git": null,
+  "canonical_control_verdict": null,
+  "checks": {
+    "chronology_checks_match": true,
+    "counts_match": true,
+    "development_validation_full_economic_metrics_within_1e_12": true,
+    "fresh_canonical_control_pass": true,
+    "input_identity_match": true,
+    "reserved_role_observability_match": true,
+    "session_normalized_target_fill_terminal_chronology_hashes_match": true
+  },
+  "combined_economics_run": false,
+  "frozen_reference_source_git": {
+    "branch": "maintenance/month-end-first-open-correctness-v1",
+    "head": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+    "main": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+    "origin_main": "86123374e41735d8d163c7fbed5bf5edfc43468d"
+  },
+  "input_identity": {
+    "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "evaluation_bar_count": 10834588,
+    "lifetimes_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "universe_sha256": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520",
+    "warmup_bar_count": 846642
+  },
+  "matched_counts": {
+    "curve_point_count": 2406,
+    "fill_count": 2054,
+    "target_decision_count": 495,
+    "target_entry_count": 2807,
+    "terminal_event_count": 5,
+    "universe_history_count": 495
+  },
+  "matched_hashes": {
+    "chronology_sha256": "f668e40e2c853be27f8cee8d2da09adb83263f2516b5a1f5746ac9cc315c828d",
+    "fills_sha256": "cb46efe20372da28f40626b7a86f2421cebb8761ee5d7b4350861eae6d142160",
+    "targets_sha256": "6773406fd5bdd37d64e20de1c6a252bb19987300fbc21591d92ca9de9370450e",
+    "terminal_events_sha256": "85cef16704d7bf8e208eaa879cca10289986951f1854c3188826f3810797fbe7"
+  },
+  "metric_difference_count": 0,
+  "metric_difference_paths": [],
+  "metric_tolerance": {
+    "absolute": 1e-12,
+    "relative": 1e-12
+  },
+  "physical_event_hashes": {
+    "chronology_sha256": "068eabcad43f8d15457576752b501718c0d7b1b220a6e1732f5f1d9351770ada",
+    "fills_sha256": "62732d7f0597f044f0e266056197a3f2f5c64f4edf9ef7b232a4f372f394a8fe",
+    "targets_sha256": "6773406fd5bdd37d64e20de1c6a252bb19987300fbc21591d92ca9de9370450e",
+    "terminal_events_sha256": "9102decd6505d7f3e1d1662a2bf8d68826a940f91055aa382520ad1601fc41a6"
+  },
+  "reference_source_git": {
+    "branch": "research/shared-account-replay-v1",
+    "head": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+    "main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+    "origin_main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a"
+  },
+  "schema": "shared-account-equity-isolated-parity-v2",
+  "session_normalized_hashes": {
+    "chronology_sha256": "f668e40e2c853be27f8cee8d2da09adb83263f2516b5a1f5746ac9cc315c828d",
+    "fills_sha256": "cb46efe20372da28f40626b7a86f2421cebb8761ee5d7b4350861eae6d142160",
+    "targets_sha256": "6773406fd5bdd37d64e20de1c6a252bb19987300fbc21591d92ca9de9370450e",
+    "terminal_events_sha256": "85cef16704d7bf8e208eaa879cca10289986951f1854c3188826f3810797fbe7"
+  },
+  "session_normalized_samples": {
+    "chronology_checks": {
+      "curve_strictly_ordered": true,
+      "decisions_strictly_ordered": true,
+      "fills_after_decisions": true,
+      "first_curve_timestamp": "2017-01-03T05:00:00+00:00",
+      "first_decision_timestamp": "2017-02-06T05:00:00+00:00",
+      "last_curve_timestamp": "2026-07-30T04:00:00+00:00",
+      "last_decision_timestamp": "2026-07-27T04:00:00+00:00"
+    },
+    "first_chronology_fill": [
+      "2017-02-06T05:00:00+00:00",
+      "2017-02-07T05:00:00+00:00",
+      "FFIV",
+      "buy"
+    ],
+    "first_fill": {
+      "decision_timestamp": "2017-02-06T05:00:00+00:00",
+      "fee": 0.0,
+      "fill_price": 137.0411,
+      "qty": 67.06662764608332,
+      "reference_price": 137.0,
+      "side": "buy",
+      "slippage_cost": 1.837625597502683,
+      "spread_cost": 0.9188127987513415,
+      "symbol": "FFIV",
+      "timestamp": "2017-02-07T05:00:00+00:00"
+    },
+    "last_fill": {
+      "decision_timestamp": "2026-07-27T04:00:00+00:00",
+      "fee": 0.433699244092777,
+      "fill_price": 74.237722,
+      "qty": 251.0854970009898,
+      "reference_price": 74.26,
+      "side": "sell",
+      "slippage_cost": 3.729121801458701,
+      "spread_cost": 1.8645609007293504,
+      "symbol": "FTI",
+      "timestamp": "2026-07-28T04:00:00+00:00"
+    },
+    "reference_chronology_checks": {
+      "curve_strictly_ordered": true,
+      "decisions_strictly_ordered": true,
+      "fills_after_decisions": true,
+      "first_curve_timestamp": "2017-01-03T05:00:00+00:00",
+      "first_decision_timestamp": "2017-02-06T05:00:00+00:00",
+      "last_curve_timestamp": "2026-07-30T04:00:00+00:00",
+      "last_decision_timestamp": "2026-07-27T04:00:00+00:00"
+    },
+    "terminal_events": [
+      {
+        "cash_after": 72972.80872502727,
+        "cash_before": 62713.96321710826,
+        "effective_policy": "TERMINAL_BAR",
+        "fee": 0.22558919670003366,
+        "fill_price": 92.302301,
+        "last_close": 92.33,
+        "policy": "TERMINAL_BAR",
+        "position_removed": true,
+        "proceeds": 10258.845507919006,
+        "quantity": 111.14642848519784,
+        "slippage_cost": 2.052429948407663,
+        "spread_cost": 1.0262149742038316,
+        "symbol": "ESRX",
+        "terminal_event_class": "POSSIBLE_DELISTING",
+        "timestamp": "2018-12-20T05:00:00+00:00"
+      },
+      {
+        "cash_after": 77637.44936960387,
+        "cash_before": 66400.0096211908,
+        "effective_policy": "TERMINAL_BAR",
+        "fee": 0.2426574349100013,
+        "fill_price": 133.23001900000003,
+        "last_close": 133.27,
+        "policy": "TERMINAL_BAR",
+        "position_removed": true,
+        "proceeds": 11237.439748413079,
+        "quantity": 84.34797570544508,
+        "slippage_cost": 2.2482109444529335,
+        "spread_cost": 1.1241054722264667,
+        "symbol": "TSS",
+        "terminal_event_class": "POSSIBLE_DELISTING",
+        "timestamp": "2019-09-17T04:00:00+00:00"
+      },
+      {
+        "cash_after": 161935.9832519209,
+        "cash_before": 143924.00916882954,
+        "effective_policy": "FINAL_BAR",
+        "fee": 0.38241316850874013,
+        "fill_price": 313.985776,
+        "last_close": 314.08,
+        "policy": "FINAL_BAR",
+        "position_removed": true,
+        "proceeds": 18011.974083091372,
+        "quantity": 57.366791342356485,
+        "slippage_cost": 3.6035523649614647,
+        "spread_cost": 1.8017761824807323,
+        "symbol": "MPC",
+        "timestamp": "2026-07-30T04:00:00+00:00"
+      },
+      {
+        "cash_after": 179836.10123718868,
+        "cash_before": 161935.9832519209,
+        "effective_policy": "FINAL_BAR",
+        "fee": 0.3743512054997797,
+        "fill_price": 632.790106,
+        "last_close": 632.98,
+        "policy": "FINAL_BAR",
+        "position_removed": true,
+        "proceeds": 17900.117985267774,
+        "quantity": 28.28819883045591,
+        "slippage_cost": 3.581172819140397,
+        "spread_cost": 1.7905864095701984,
+        "symbol": "CMI",
+        "timestamp": "2026-07-30T04:00:00+00:00"
+      },
+      {
+        "cash_after": 197552.94167944646,
+        "cash_before": 179836.10123718868,
+        "effective_policy": "FINAL_BAR",
+        "fee": 0.40230569831141194,
+        "fill_price": 93.9718,
+        "last_close": 94.0,
+        "policy": "FINAL_BAR",
+        "position_removed": true,
+        "proceeds": 17716.840442257784,
+        "quantity": 188.537867189477,
+        "slippage_cost": 3.5445119031621672,
+        "spread_cost": 1.7722559515810836,
+        "symbol": "EWT",
+        "timestamp": "2026-07-30T04:00:00+00:00"
+      }
+    ]
+  },
+  "shared_replay_source_git": {
+    "branch": "research/shared-account-replay-v2"
+  },
+  "source_identity": {
+    "config/settings.yaml": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+    "maintenance/crypto_canonical_causal_execution_v1/CORRECTED_REPLAY_A.json.gz": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+    "research/physical_availability_clock_v2/EQUITY_CANONICAL_CONTROL.json": "b8b9ed1c29d2e895850e7acc23c349e170864a74baf933a23dab8a168c589129",
+    "research/physical_availability_clock_v2/EQUITY_CANONICAL_CONTROL_COMPARISON.json": "97ccb7af60dfddbc4bf8cedae1a816848950417c4f33a2dd5485d53058b4203e",
+    "research/physical_availability_clock_v2/run_historical.py": "9b62235d416cb10e392d6307261729a7bec2e1e1b49d6e1a73b2b085fcc9d902",
+    "research/physical_availability_clock_v2/shared_replay.py": "88cc6922e39957e67c6cee9dee423c9809ba3775cf731110d2deebcb307e3759",
+    "research/physical_availability_clock_v2/timing.py": "19613df9a2aff330a55d49d14a9bb8906d00833c3ce24405a987e7e8ff533d4a"
+  },
+  "status": "PASS"
+}

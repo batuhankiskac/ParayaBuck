@@ -1,0 +1,19 @@
+{
+  "schema": "physical-availability-clock-v2-decision",
+  "decision": "PHYSICAL_AVAILABILITY_CLOCK_V2_VALIDATED_WITH_LIMITATIONS",
+  "migration_readiness": "MIGRATION_REPLAY_READY",
+  "equity_isolated_physical_parity": "PASS",
+  "corrected_crypto_isolated_physical_parity": "PASS",
+  "combined_cap6_invariants": "PASS",
+  "causality": "PASS",
+  "determinism": "PASS",
+  "generic_production_correctness_finding": null,
+  "maximum_positions_tested": 6,
+  "cap8_arm_created": false,
+  "performance_interpretation": false,
+  "old_label_clock_comparison_limit": "Archived V2 has aggregate receipts but no full event trace; exact scarce-slot claimant flips and fill-time shifts attributable solely to the clock are unavailable. The future migration arms must both use this validated physical scheduler, so those old-clock counterfactual counts are not inputs to their slot ordering.",
+  "source_commit": "b135d73743ec2652f79b8c840df50bd3f67166e8",
+  "infrastructure_ref": "infrastructure/physical-availability-clock-v2-cap6-2026-09",
+  "next_action": "FREEZE_ACCOUNT_CAPACITY_MIGRATION_8_V3_USING_VALIDATED_PHYSICAL_REPLAY",
+  "remote_publication": "PENDING_EXPLICIT_APPROVAL"
+}

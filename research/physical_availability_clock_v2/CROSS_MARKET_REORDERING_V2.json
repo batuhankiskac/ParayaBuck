@@ -1,0 +1,16 @@
+{
+  "basis": "Same physical-run completed-bar marks and decisions ordered once by archived label-clock keys and once by physical UTC keys; no P&L attribution.",
+  "changed_cross_market_event_pairs": 9030,
+  "changed_decision_order_pairs": 56,
+  "counterfactual_returns_computed": false,
+  "events_with_changed_relative_order": 7087,
+  "fill_shift_status": "UNMEASURABLE_FROM_ARCHIVED_V2_AGGREGATES_AND_SUPERSEDED_CRYPTO_CONTROL",
+  "fill_time_shifts_due_solely_to_clock": null,
+  "scarce_slot_first_claimant_changes": null,
+  "scarce_slot_first_claimant_status": "UNMEASURABLE_FROM_ARCHIVED_V2_AGGREGATES",
+  "schema": "physical-clock-v2-cross-market-reordering",
+  "source_events": {
+    "crypto": 3558,
+    "equity": 10979
+  }
+}

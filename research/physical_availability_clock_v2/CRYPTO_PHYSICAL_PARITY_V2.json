@@ -1,0 +1,141 @@
+{
+  "accounting_invariants": {
+    "active_reservation_count": 0,
+    "all_reservations_released": true,
+    "cash_conserved": true,
+    "cash_reconciliation_error": 0.0,
+    "corporate_action_dividend_cash": 0,
+    "deferred_buy_intent_count": 0,
+    "dividend_cash_event_count": 0,
+    "duplicate_fill_count": 0,
+    "duplicate_fill_keys": [],
+    "duplicate_position_keys": false,
+    "ending_cash": 105423.13343607534,
+    "ending_cash_nonnegative": true,
+    "fee_counted_once_in_cash_reconciliation": true,
+    "fill_count": 406,
+    "final_position_count": 0,
+    "final_position_count_within_limit": true,
+    "future_data_access_checks": 1945,
+    "gross_at_final_mark": 0.0,
+    "max_observed_position_count": 4,
+    "max_observed_slot_claim_count": 4,
+    "maximum_positions": 6,
+    "maximum_realized_gross_observed": 0.09366197932943063,
+    "maximum_target_gross_observed": 0.05,
+    "maximum_target_name_weight": 0.05,
+    "nav_from_cash_and_marks": 105423.13343607534,
+    "nav_matches_ledger": true,
+    "no_deferred_buy_intents_at_end": true,
+    "no_future_data_access": true,
+    "position_quantities_reconciled": true,
+    "position_quantity_reconciliation_error": 0.0,
+    "realized_gross_drift_is_recorded_not_corrected": true,
+    "reservation_create_count": 206,
+    "reservation_release_count": 206,
+    "sleeve_targets_within_limits": true,
+    "slot_claim_violation_count": 0,
+    "slot_claim_violation_samples": [],
+    "slot_claims_within_limit": true,
+    "starting_cash": 100000,
+    "target_gross_within_limit": true,
+    "target_name_weights_within_limits": true,
+    "unowned_fill_count": 0,
+    "unowned_fills": []
+  },
+  "actual_hashes": {
+    "curve": "5b0a1e95b28b91cdd6e266b2099d94c4f48c0630ee64492cfbfc4b2427b9d7ac",
+    "decisions": "2586494f6234780d918ee85cf65cb53a690f2f8d8f9f463b1216672a8bd3d8ea",
+    "fills": "645d444ff3c95ba2f5eab1f0162acc903275e4642c70c79eb03b8248829e1fba",
+    "final_state": "c6211f8780af3ed09aa2d4667d6d9239c64c883e120b9cedd91fa928515cee7a",
+    "orders": "e8fbc8eabed019357dc356534964023e70902c719437b0e1f7c2b3913074a5c3",
+    "snapshots": "99d66d42ccb4bba10dfd776b0bdac895fae6e531bed6f2ab18948cc0f4a4828f",
+    "terminal": "7ad9de1ae9bc69eca5794436e0e45868066a49960de3de8d9d86183192d51fba"
+  },
+  "checks": {
+    "cash_and_position_accounting": true,
+    "curve_timestamps_match": true,
+    "daily_input_hash_match": true,
+    "decision_fill_nav_counts_match": true,
+    "decision_sequence_match": true,
+    "equity_curve_match": true,
+    "fill_sequence_match": true,
+    "final_economic_state_match": true,
+    "flat_final_state": true,
+    "order_creation_match": true,
+    "snapshot_account_match": true,
+    "terminal_events_match": true,
+    "universe_hash_match": true
+  },
+  "fill_count": 406,
+  "final_economic_state_differences": {},
+  "final_state_metadata_differences": {
+    "risk_session_date": {
+      "actual": "2026-07-31",
+      "reference": "2026-07-30"
+    }
+  },
+  "first_trace_differences": {
+    "decision": null,
+    "equity_curve": null,
+    "fill": null,
+    "order": {
+      "actual": {
+        "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2021-09-30T00:00:00+00:00|ETH/USD|sell|46",
+        "created_at": "2021-10-01T00:00:00+00:00",
+        "qty": 0.8236495859742291,
+        "side": "sell",
+        "symbol": "ETH/USD"
+      },
+      "expected": {
+        "client_order_id": "crypto_low_variance_hysteresis_v1|1.0.0|2021-09-30T00:00:00+00:00|LTC/USD|buy|46",
+        "created_at": "2021-10-01T00:00:00+00:00",
+        "qty": 16.490178318691974,
+        "side": "buy",
+        "symbol": "LTC/USD"
+      },
+      "index": 17
+    },
+    "snapshot": null,
+    "terminal_event": null
+  },
+  "input_identity": {
+    "daily_bar_count": 28890,
+    "daily_bars_sha256": "92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9",
+    "evaluation_bar_count": 28100,
+    "hourly_bar_count": 705541,
+    "hourly_bars_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+    "universe_sha256": "e3692166c51a1e84aba7662e3c6156cdc1961989df8f46564caff70d898529c6",
+    "warmup_bar_count": 790
+  },
+  "nav_observation_count": 1945,
+  "order_event_sequence_differs": true,
+  "performance_interpretation": false,
+  "reference_commit": "b135d73743ec2652f79b8c840df50bd3f67166e8",
+  "reference_gzip_sha256": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+  "reference_hashes": {
+    "curve_timestamps": "80ee49be42c294a2c6a6836a27416b2b285341ec0f87364f389596e85d6567e1",
+    "daily_bars": "92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9",
+    "decisions": "e2919b031944c1a08a8fbecc4019007c21c34218840d3c1ffa10feb420f7f58a",
+    "equity_curve": "e2a89843121f43fe3fe642dc1c3140761efccca246e0bef6e900322908a069c3",
+    "fills": "645d444ff3c95ba2f5eab1f0162acc903275e4642c70c79eb03b8248829e1fba",
+    "final_state": "7689e62a2e80a0452e42f7359c9722d49e25b21cfe38632901bb29bd953ad5ef",
+    "orders": "6d90738ef71a49b02e71532f732763ed837f9686cf595779416ca049b23012ab",
+    "price_events": "ff858d0fe3019731daa7436b406f99fa63a0c60a8f15c877263acb8f1fdb6242",
+    "snapshots": "6a71d86a6f6ac35d18ebf5a47de615cffe4eb45e43c03b8b69d3a389e3087c13",
+    "terminal_events": "7ad9de1ae9bc69eca5794436e0e45868066a49960de3de8d9d86183192d51fba"
+  },
+  "reference_schema": "crypto-canonical-causal-execution-v1",
+  "schema": "physical-clock-v2-corrected-crypto-isolated-parity",
+  "source_identity": {
+    "config/settings.yaml": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+    "maintenance/crypto_canonical_causal_execution_v1/CORRECTED_REPLAY_A.json.gz": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+    "research/physical_availability_clock_v2/EQUITY_CANONICAL_CONTROL.json": "b8b9ed1c29d2e895850e7acc23c349e170864a74baf933a23dab8a168c589129",
+    "research/physical_availability_clock_v2/EQUITY_CANONICAL_CONTROL_COMPARISON.json": "97ccb7af60dfddbc4bf8cedae1a816848950417c4f33a2dd5485d53058b4203e",
+    "research/physical_availability_clock_v2/run_historical.py": "9b62235d416cb10e392d6307261729a7bec2e1e1b49d6e1a73b2b085fcc9d902",
+    "research/physical_availability_clock_v2/shared_replay.py": "88cc6922e39957e67c6cee9dee423c9809ba3775cf731110d2deebcb307e3759",
+    "research/physical_availability_clock_v2/timing.py": "19613df9a2aff330a55d49d14a9bb8906d00833c3ce24405a987e7e8ff533d4a"
+  },
+  "status": "PASS",
+  "target_count": 454
+}

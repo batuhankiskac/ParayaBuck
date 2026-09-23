@@ -1,0 +1,15 @@
+{
+  "accepted_decision": "CRYPTO_CANONICAL_BASELINE_CAUSAL_REPAIR_ACCEPTED",
+  "accepted_maintenance_sha": "b135d73743ec2652f79b8c840df50bd3f67166e8",
+  "authoritative_control": "maintenance/crypto_canonical_causal_execution_v1/CORRECTED_REPLAY_A.json.gz",
+  "daily_input_sha256": "92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9",
+  "decisions": 454,
+  "fills": 406,
+  "full_payload_sha256": "cdc3004dbbfe1e13e8f9f9deb5ec80ecbe628236210649a68a8f47aa55f33697",
+  "gzip_sha256": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+  "fill_sha256": "645d444ff3c95ba2f5eab1f0162acc903275e4642c70c79eb03b8248829e1fba",
+  "final_state_sha256": "7689e62a2e80a0452e42f7359c9722d49e25b21cfe38632901bb29bd953ad5ef",
+  "source_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+  "strict_price_event_after_order_creation": true,
+  "verifier_status": "PASS"
+}

@@ -59,7 +59,36 @@ def _observe_run(
                 self._account.positions.items(), key=lambda item: (item[0][0].value, item[0][1])
             )
         ]
-        reserved = [[key_market.value, symbol] for key_market, symbol in kwargs.get("reserved_position_keys", ())]
+        shared_coordination = len(self._account.engines) > 1
+        pending = (
+            {
+                (key_market, order.symbol)
+                for key_market in shared.ORDER_MARKETS
+                for order in self._account.pending[key_market]
+            }
+            if shared_coordination
+            else set()
+        )
+        deferred = (
+            {
+                (key_market, order.symbol)
+                for key_market in shared.ORDER_MARKETS
+                if key_market != market
+                for order in self._account.deferred_buys[key_market]
+            }
+            if shared_coordination
+            else set()
+        )
+        reserved = [
+            [key_market.value, symbol]
+            for key_market, symbol in sorted(
+                self._account.same_cycle_buy_reservations
+                | set(kwargs.get("reserved_position_keys", ()))
+                | pending
+                | deferred,
+                key=lambda item: (item[0].value, item[1]),
+            )
+        ]
         decided = original_overlay(self, target, account, **kwargs)
         risk_rows.append(
             {

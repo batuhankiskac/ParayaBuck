@@ -1,0 +1,25 @@
+# Production semantics mapping
+
+| Production behavior | Shared historical replay behavior | Match | Evidence and boundary |
+| --- | --- | --- | --- |
+| Account position identity uses market plus canonical instrument | Ledger keys are `(Market, canonical symbol)`; overlay receives market-tagged snapshots | Exact | `src/parayabuck/execution/portfolio.py:265-303`; research `replay.py` market-scoped views |
+| Global position cap counts cross-market positions | Canonical risk overlay receives the combined position snapshot and cap 6 | Exact for target decisions | `src/parayabuck/execution/portfolio.py:265-337`; no cap 8 is constructed |
+| Same-batch strategy order | For genuinely equal event timestamps crypto is processed before equity; otherwise merged source timestamps determine order | Exact tie-break; approximate daily cross-market availability | `src/parayabuck/runtime.py:3073-3113`; equity daily labels are New York midnight and crypto labels UTC midnight, not actual close/decision availability |
+| Earlier-market planned BUY claims a slot for later decision | Actual planned BUY keys are passed into the next market's overlay decision | Exact at shared timestamps | `src/parayabuck/runtime.py:3083,3517`; historical coordinator carries the same-cycle key set |
+| Working order symbol claims a slot | Active order symbols and deferred BUY-intent symbols are supplied to the shared overlay; active position/order claims deduplicate, while deferred intents reserve future capacity until activation | Exact within the deterministic replay | `src/parayabuck/execution/portfolio.py:287-307`; research `replay.py:175-209`; external broker-only orders are absent by design |
+| Partial positive position occupies a slot | Filled quantity is in the shared ledger; residual order remains active and deduplicates to the same slot | Exact in bar-fill model | `src/parayabuck/backtest/portfolio_engine.py:855-961`; broker update timing is approximate |
+| Exit-pending position remains occupied until fill | Position stays in the ledger while a SELL remains open; any account BUY fill waits while sells remain working | Exact within deterministic fill model | `src/parayabuck/portfolio/runtime_service.py:1095,1210`; live terminal order status is not replayed |
+| Replacement BUY reservation during an active sell phase | New BUY intents are held unsubmitted until all sells are terminal, reserve capacity against later market decisions, then activate for a later bar | Exact slot treatment in bar model; approximate order resizing | `src/parayabuck/portfolio/runtime_rebalance.py:42`; research `replay.py:175-209,695-738`; decision-time quantities remain and production refreshes account state before BUY submission |
+| Gross, sleeves, cash buffer and per-name limits | Existing `PortfolioRiskOverlay` runs on account-wide marks/positions with current configured values | Exact at target decision; realized gross may drift between decisions | `src/parayabuck/execution/portfolio.py:339-365`; mark drift is measured, not forcibly traded |
+| One cash balance and buying-power use | One shared cash ledger; fills debit cash and cannot produce negative cash | Cash exact; broker buying power approximate | `src/parayabuck/backtest/portfolio_engine.py:855-961`; Alpaca buying-power snapshots do not exist in historical inputs |
+| Sell-before-buy rebalance | All market sells fill first; if a sell remains open, BUY fills defer | Approximate | `src/parayabuck/portfolio/runtime_rebalance.py:42`; production waits for asynchronous terminal status and obtains a fresh account snapshot |
+| Daily loss and drawdown lifecycle | One update per merged bar timestamp; single-market session rules are canonical; combined risk date is New York | Approximate in combined mode | `src/parayabuck/backtest/portfolio_engine.py:207-218,1111-1144`; runtime latches and operator epoch resets are not modeled |
+| Next-open execution and market costs | Reuses canonical offline engine fill, fee, and liquidation methods separately per market | Exact to offline engine | `src/parayabuck/backtest/portfolio_engine.py:806-961,1483-1547`; not a model of broker queue/acknowledgement behavior |
+| Equity dividends, splits and terminal bars | Market-scoped corporate actions and terminal lifecycle use canonical methods; cash is shared | Exact to supplied data | `src/parayabuck/backtest/portfolio_engine.py:706-724,1454-1481`; equity bars are already split adjusted |
+| Async account refresh, broker rejects and ambiguous submissions | Not synthesized; deterministic bars only | Not modeled | `src/parayabuck/runtime.py:2510`; paper/live broker updates and reconciliation do not enter this package |
+| External/manual positions or working broker orders | Replay starts empty and never reads broker state | Deliberately excluded | `MIGRATION_V2_CLOSURE_RECEIPT.json`; V2 FILL-pagination audit required a flat all-cash start |
+
+The exact-match claims are bounded to the supplied offline data and current
+canonical risk/fill methods. Asynchronous order transitions, live account
+buying-power, production risk epochs, and unobserved historical asset
+tradability are not inferred from bars.

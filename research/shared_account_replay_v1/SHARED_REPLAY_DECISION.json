@@ -1,0 +1,46 @@
+{
+  "schema": "shared-account-replay-decision-v1",
+  "decision": "SHARED_ACCOUNT_REPLAY_BLOCKED_BY_GENERIC_CORRECTNESS",
+  "migration_readiness": "MIGRATION_REPLAY_NOT_READY",
+  "starting_main_sha": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+  "branch": "research/shared-account-replay-v1",
+  "replay_scope": {
+    "strategies": [
+      "equity_residual_momentum_v3",
+      "crypto_low_variance_hysteresis_v1"
+    ],
+    "maximum_positions": 6,
+    "cap_8_arm_created": false,
+    "combined_performance_interpreted": false
+  },
+  "isolated_parity": {
+    "equity": "PASS",
+    "crypto": "PASS"
+  },
+  "combined_smoke": {
+    "status": "FAIL",
+    "deterministic_event_logs": true,
+    "event_sha256": "adcf6a164719e4c9ad22df959d4724e9413427ab6ad6b17d1b87baea5786b989",
+    "maximum_observed_positions": 7,
+    "maximum_observed_slot_claims": 7,
+    "position_limit": 6,
+    "slot_claim_violation_count": 21
+  },
+  "generic_correctness_finding": {
+    "observed_at": "2024-06-14T00:00:00+00:00",
+    "description": "Six positions were live before a crypto rebalance. The shared overlay retained BCH/USD and targeted BTC/USD, but the existing LTC/USD position remained with no SELL order while BUY orders for BCH/USD and BTC/USD were created, producing seven distinct position/order slot claims.",
+    "production_relevance": "The canonical overlay and rebalance-band order-existence policy are also used by the production portfolio path. This may allow a managed current-market position omitted from a target to remain live while its slot is reused.",
+    "cause_status": "Requires a separate production-correctness campaign; the observed behavior is consistent with the configured 0.005 rebalance band suppressing a small residual exit.",
+    "production_fix_included": false
+  },
+  "validation_scope": {
+    "focused_replay_tests": "PASS: 12 passed",
+    "full_pytest": "NOT_RUN: stopped under the explicit generic-correctness stop rule",
+    "full_repository_ruff": "NOT_RUN",
+    "strict_mypy_replay_modules": "PASS",
+    "open_order_pagination_suite": "PASS: 18 passed in the preceding validation run",
+    "no_broker_api_or_orders": true,
+    "production_source_or_config_changed": false
+  },
+  "next_action": "Isolate and resolve the production slot-accounting versus rebalance-band behavior in a separate production-correctness campaign; then rerun the current-cap shared replay before any cap-migration work."
+}

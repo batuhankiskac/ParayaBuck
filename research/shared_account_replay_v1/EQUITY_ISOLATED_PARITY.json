@@ -1,0 +1,106 @@
+{
+  "canonical_control_comparison": {
+    "current_git": {
+      "branch": "research/shared-account-replay-v1",
+      "head": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+      "main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+      "origin_main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a"
+    },
+    "exact_checks": {
+      "1.0.chronology_checks": true,
+      "1.0.chronology_sha256": true,
+      "1.0.counts": true,
+      "1.0.fills_sha256": true,
+      "1.0.reserved_roles": true,
+      "1.0.targets_sha256": true,
+      "1.0.terminal_events_sha256": true,
+      "2.0.chronology_checks": true,
+      "2.0.chronology_sha256": true,
+      "2.0.counts": true,
+      "2.0.fills_sha256": true,
+      "2.0.reserved_roles": true,
+      "2.0.targets_sha256": true,
+      "2.0.terminal_events_sha256": true,
+      "3.0.chronology_checks": true,
+      "3.0.chronology_sha256": true,
+      "3.0.counts": true,
+      "3.0.fills_sha256": true,
+      "3.0.reserved_roles": true,
+      "3.0.targets_sha256": true,
+      "3.0.terminal_events_sha256": true,
+      "input_identity": true,
+      "production_identity": true,
+      "window": true
+    },
+    "failed_exact_checks": [],
+    "metric_differences": [],
+    "metric_tolerance": {
+      "absolute": 1e-12,
+      "relative": 1e-12
+    },
+    "reference_git": {
+      "branch": "maintenance/month-end-first-open-correctness-v1",
+      "head": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+      "main": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+      "origin_main": "86123374e41735d8d163c7fbed5bf5edfc43468d"
+    },
+    "verdict": "V3_PARITY_PASS"
+  },
+  "canonical_control_source_git": null,
+  "canonical_control_verdict": null,
+  "checks": {
+    "chronology_checks_match": true,
+    "counts_match": true,
+    "development_validation_full_metrics_within_1e_12": true,
+    "fresh_canonical_control_pass": true,
+    "input_identity_match": true,
+    "reserved_role_observability_match": true,
+    "target_fill_terminal_chronology_hashes_match": true
+  },
+  "combined_economics_run": false,
+  "frozen_reference_source_git": {
+    "branch": "maintenance/month-end-first-open-correctness-v1",
+    "head": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+    "main": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+    "origin_main": "86123374e41735d8d163c7fbed5bf5edfc43468d"
+  },
+  "input_identity": {
+    "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "evaluation_bar_count": 10834588,
+    "lifetimes_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "universe_sha256": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520",
+    "warmup_bar_count": 846642
+  },
+  "matched_counts": {
+    "curve_point_count": 2406,
+    "fill_count": 2054,
+    "target_decision_count": 495,
+    "target_entry_count": 2807,
+    "terminal_event_count": 5,
+    "universe_history_count": 495
+  },
+  "matched_hashes": {
+    "chronology_sha256": "f668e40e2c853be27f8cee8d2da09adb83263f2516b5a1f5746ac9cc315c828d",
+    "fills_sha256": "cb46efe20372da28f40626b7a86f2421cebb8761ee5d7b4350861eae6d142160",
+    "targets_sha256": "6773406fd5bdd37d64e20de1c6a252bb19987300fbc21591d92ca9de9370450e",
+    "terminal_events_sha256": "85cef16704d7bf8e208eaa879cca10289986951f1854c3188826f3810797fbe7"
+  },
+  "metric_difference_count": 0,
+  "metric_difference_paths": [],
+  "metric_tolerance": {
+    "absolute": 1e-12,
+    "relative": 1e-12
+  },
+  "reference_source_git": {
+    "branch": "research/shared-account-replay-v1",
+    "head": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+    "main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a",
+    "origin_main": "7b0a1063ba5a8ca8ed6bf93cf06a0b684da94b3a"
+  },
+  "schema": "shared-account-equity-isolated-parity-v1",
+  "shared_replay_source_git": {
+    "branch": "research/shared-account-replay-v1"
+  },
+  "status": "PASS"
+}

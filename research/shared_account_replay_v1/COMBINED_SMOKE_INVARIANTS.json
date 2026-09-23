@@ -1,0 +1,735 @@
+{
+  "cash_reconciliation_error": -8.731149137020111e-11,
+  "checks": {
+    "all_reservations_released": true,
+    "cash_conserved": true,
+    "cash_path_identical_on_repeat": true,
+    "ending_cash_nonnegative": true,
+    "event_log_identical_on_repeat": true,
+    "final_cash_identical_on_repeat": true,
+    "final_nav_identical_on_repeat": true,
+    "final_position_count_within_limit": true,
+    "final_positions_identical_on_repeat": true,
+    "input_identity_same_on_repeat": true,
+    "maximum_observed_position_count_within_limit": false,
+    "nav_matches_ledger": true,
+    "nav_path_identical_on_repeat": true,
+    "no_deferred_buy_intents_at_end": true,
+    "no_duplicate_fill_application": true,
+    "no_future_data_access": true,
+    "no_unowned_fills": true,
+    "position_quantities_reconciled": true,
+    "sleeve_targets_within_limits": true,
+    "slot_claims_within_limit": false,
+    "target_gross_within_limit": true,
+    "target_name_weights_within_limits": true
+  },
+  "deferred_buy_intent_count_at_end": 0,
+  "dividend_cash_events": 83,
+  "duplicate_fill_count": 0,
+  "ending_cash": 166164.9103959537,
+  "event_order_sha256": "adcf6a164719e4c9ad22df959d4724e9413427ab6ad6b17d1b87baea5786b989",
+  "fill_count": 2379,
+  "future_data_access_checks": 4352,
+  "generic_correctness_stop": {
+    "diagnostic_source": "targeted single-pass replay trace at the first reproduced remaining breach",
+    "hypothesis": "The omitted LTC position was not exited, consistently with the configured 0.005 rebalance band suppressing a small residual sale; the overlay treated that managed current-market holding as replaceable.",
+    "ltc_last_observed_hourly_close_near_timestamp": 79.2117,
+    "ltc_qty": 1.1548489283700016,
+    "pending_orders_after_decision": [
+      [
+        "crypto",
+        "BCH/USD",
+        "buy"
+      ],
+      [
+        "crypto",
+        "BTC/USD",
+        "buy"
+      ]
+    ],
+    "positions_before_decision": [
+      [
+        "equity",
+        "ALL"
+      ],
+      [
+        "equity",
+        "CMG"
+      ],
+      [
+        "equity",
+        "EME"
+      ],
+      [
+        "equity",
+        "ETN"
+      ],
+      [
+        "crypto",
+        "BCH/USD"
+      ],
+      [
+        "crypto",
+        "LTC/USD"
+      ]
+    ],
+    "production_fix_included": false,
+    "risk_target_after_overlay": [
+      [
+        "BCH/USD",
+        0.025
+      ],
+      [
+        "BTC/USD",
+        0.025
+      ]
+    ],
+    "slot_claim_count_after_decision": 7,
+    "timestamp": "2024-06-14T00:00:00+00:00"
+  },
+  "initial_pending_order_count": 0,
+  "initial_position_count": 0,
+  "initial_sleeve_state": {
+    "crypto": "flat",
+    "equity": "flat"
+  },
+  "input_identity": {
+    "crypto": {
+      "daily_bar_count": 28890,
+      "daily_bars_sha256": "92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9",
+      "evaluation_bar_count": 28100,
+      "hourly_bar_count": 705541,
+      "hourly_bars_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+      "universe_sha256": "e3692166c51a1e84aba7662e3c6156cdc1961989df8f46564caff70d898529c6",
+      "warmup_bar_count": 790
+    },
+    "equity": {
+      "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+      "evaluation_bar_count": 10834588,
+      "lifetimes_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+      "universe_sha256": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520",
+      "warmup_bar_count": 846642
+    }
+  },
+  "maximum_name_target_weight": 0.1,
+  "maximum_observed_position_count": 7,
+  "maximum_observed_slot_claim_count": 7,
+  "maximum_realized_gross_observed": 0.5897671669613848,
+  "maximum_target_gross": 0.5500000000000002,
+  "nav_cash_mark_reconciliation": true,
+  "performance_interpretation": false,
+  "performance_metrics_published": false,
+  "position_count_maximum": 6,
+  "position_quantity_reconciliation_error": 0.0,
+  "reservation_created": 2115,
+  "reservation_released": 2115,
+  "schema": "shared-account-combined-smoke-invariants-v1",
+  "slot_claim_violation_count": 21,
+  "slot_claim_violation_samples": [
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "BCH/USD",
+          "buy",
+          6.284545058182841,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-06-14T00:00:00+00:00|BCH/USD|buy|262"
+        ],
+        [
+          "crypto",
+          "BTC/USD",
+          "buy",
+          0.053964523440847297,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-06-14T00:00:00+00:00|BTC/USD|buy|262"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          2.147499419805
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          1.1548489283700016
+        ],
+        [
+          "equity",
+          "ALL",
+          86.42442609620335
+        ],
+        [
+          "equity",
+          "CMG",
+          221.69189475520966
+        ],
+        [
+          "equity",
+          "EME",
+          37.336983358250706
+        ],
+        [
+          "equity",
+          "ETN",
+          43.81644932279944
+        ]
+      ],
+      "same_cycle_buy_reservations": [
+        [
+          "crypto",
+          "BCH/USD"
+        ],
+        [
+          "crypto",
+          "BTC/USD"
+        ]
+      ],
+      "slot_claim_count": 7,
+      "timestamp": "2024-06-14T00:00:00+00:00"
+    },
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "BCH/USD",
+          "buy",
+          6.284545058182841,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-06-14T00:00:00+00:00|BCH/USD|buy|262"
+        ],
+        [
+          "crypto",
+          "BTC/USD",
+          "buy",
+          0.053964523440847297,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-06-14T00:00:00+00:00|BTC/USD|buy|262"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          2.147499419805
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          1.1548489283700016
+        ],
+        [
+          "equity",
+          "ALL",
+          86.42442609620335
+        ],
+        [
+          "equity",
+          "CMG",
+          221.69189475520966
+        ],
+        [
+          "equity",
+          "EME",
+          37.336983358250706
+        ],
+        [
+          "equity",
+          "ETN",
+          43.81644932279944
+        ]
+      ],
+      "same_cycle_buy_reservations": [],
+      "slot_claim_count": 7,
+      "timestamp": "2024-06-14T04:00:00+00:00"
+    },
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "BCH/USD",
+          "buy",
+          5.556854453852841,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-06-14T00:00:00+00:00|BCH/USD|buy|262"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          2.8751900241349997
+        ],
+        [
+          "crypto",
+          "BTC/USD",
+          0.053964523440847297
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          1.1548489283700016
+        ],
+        [
+          "equity",
+          "ALL",
+          86.42442609620335
+        ],
+        [
+          "equity",
+          "CMG",
+          221.69189475520966
+        ],
+        [
+          "equity",
+          "EME",
+          37.336983358250706
+        ],
+        [
+          "equity",
+          "ETN",
+          43.81644932279944
+        ]
+      ],
+      "same_cycle_buy_reservations": [],
+      "slot_claim_count": 7,
+      "timestamp": "2024-06-15T00:00:00+00:00"
+    },
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "BCH/USD",
+          "buy",
+          4.829274360312841,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-06-14T00:00:00+00:00|BCH/USD|buy|262"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          3.6027701176749996
+        ],
+        [
+          "crypto",
+          "BTC/USD",
+          0.053964523440847297
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          1.1548489283700016
+        ],
+        [
+          "equity",
+          "ALL",
+          86.42442609620335
+        ],
+        [
+          "equity",
+          "CMG",
+          221.69189475520966
+        ],
+        [
+          "equity",
+          "EME",
+          37.336983358250706
+        ],
+        [
+          "equity",
+          "ETN",
+          43.81644932279944
+        ]
+      ],
+      "same_cycle_buy_reservations": [],
+      "slot_claim_count": 7,
+      "timestamp": "2024-06-16T00:00:00+00:00"
+    },
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "BCH/USD",
+          "buy",
+          4.096230695337841,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-06-14T00:00:00+00:00|BCH/USD|buy|262"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          4.33581378265
+        ],
+        [
+          "crypto",
+          "BTC/USD",
+          0.053964523440847297
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          1.1548489283700016
+        ],
+        [
+          "equity",
+          "ALL",
+          86.42442609620335
+        ],
+        [
+          "equity",
+          "CMG",
+          221.69189475520966
+        ],
+        [
+          "equity",
+          "EME",
+          37.336983358250706
+        ],
+        [
+          "equity",
+          "ETN",
+          43.81644932279944
+        ]
+      ],
+      "same_cycle_buy_reservations": [],
+      "slot_claim_count": 7,
+      "timestamp": "2024-06-17T00:00:00+00:00"
+    },
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "BCH/USD",
+          "buy",
+          4.096230695337841,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-06-14T00:00:00+00:00|BCH/USD|buy|262"
+        ],
+        [
+          "equity",
+          "CMG",
+          "sell",
+          221.69189475520966,
+          "equity_residual_momentum_v3|3.0.0|2024-06-17T04:00:00+00:00|CMG|sell|385"
+        ],
+        [
+          "equity",
+          "EME",
+          "sell",
+          37.336983358250706,
+          "equity_residual_momentum_v3|3.0.0|2024-06-17T04:00:00+00:00|EME|sell|385"
+        ],
+        [
+          "equity",
+          "ETN",
+          "sell",
+          43.81644932279944,
+          "equity_residual_momentum_v3|3.0.0|2024-06-17T04:00:00+00:00|ETN|sell|385"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          4.33581378265
+        ],
+        [
+          "crypto",
+          "BTC/USD",
+          0.053964523440847297
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          1.1548489283700016
+        ],
+        [
+          "equity",
+          "ALL",
+          86.42442609620335
+        ],
+        [
+          "equity",
+          "CMG",
+          221.69189475520966
+        ],
+        [
+          "equity",
+          "EME",
+          37.336983358250706
+        ],
+        [
+          "equity",
+          "ETN",
+          43.81644932279944
+        ]
+      ],
+      "same_cycle_buy_reservations": [],
+      "slot_claim_count": 7,
+      "timestamp": "2024-06-17T04:00:00+00:00"
+    },
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "BTC/USD",
+          "sell",
+          0.053964523440847297,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-06-18T00:00:00+00:00|BTC/USD|sell|263"
+        ],
+        [
+          "equity",
+          "CMG",
+          "sell",
+          221.69189475520966,
+          "equity_residual_momentum_v3|3.0.0|2024-06-17T04:00:00+00:00|CMG|sell|385"
+        ],
+        [
+          "equity",
+          "EME",
+          "sell",
+          37.336983358250706,
+          "equity_residual_momentum_v3|3.0.0|2024-06-17T04:00:00+00:00|EME|sell|385"
+        ],
+        [
+          "equity",
+          "ETN",
+          "sell",
+          43.81644932279944,
+          "equity_residual_momentum_v3|3.0.0|2024-06-17T04:00:00+00:00|ETN|sell|385"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          4.33581378265
+        ],
+        [
+          "crypto",
+          "BTC/USD",
+          0.053964523440847297
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          1.1548489283700016
+        ],
+        [
+          "equity",
+          "ALL",
+          86.42442609620335
+        ],
+        [
+          "equity",
+          "CMG",
+          221.69189475520966
+        ],
+        [
+          "equity",
+          "EME",
+          37.336983358250706
+        ],
+        [
+          "equity",
+          "ETN",
+          43.81644932279944
+        ]
+      ],
+      "same_cycle_buy_reservations": [],
+      "slot_claim_count": 7,
+      "timestamp": "2024-06-18T00:00:00+00:00"
+    },
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "BTC/USD",
+          "buy",
+          0.06151895859872677,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-07-12T00:00:00+00:00|BTC/USD|buy|269"
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          "buy",
+          50.26067309893082,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-07-12T00:00:00+00:00|LTC/USD|buy|269"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          0.033669555809999974
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          1.1548489283700016
+        ],
+        [
+          "equity",
+          "ALL",
+          88.49490774019988
+        ],
+        [
+          "equity",
+          "APH",
+          205.90015582697274
+        ],
+        [
+          "equity",
+          "GDDY",
+          103.15890160093767
+        ],
+        [
+          "equity",
+          "TDG",
+          11.18032108416583
+        ]
+      ],
+      "same_cycle_buy_reservations": [
+        [
+          "crypto",
+          "BTC/USD"
+        ],
+        [
+          "crypto",
+          "LTC/USD"
+        ]
+      ],
+      "slot_claim_count": 7,
+      "timestamp": "2024-07-12T00:00:00+00:00"
+    },
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "BTC/USD",
+          "buy",
+          0.06151895859872677,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-07-12T00:00:00+00:00|BTC/USD|buy|269"
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          "buy",
+          50.26067309893082,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-07-12T00:00:00+00:00|LTC/USD|buy|269"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          0.033669555809999974
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          1.1548489283700016
+        ],
+        [
+          "equity",
+          "ALL",
+          88.49490774019988
+        ],
+        [
+          "equity",
+          "APH",
+          205.90015582697274
+        ],
+        [
+          "equity",
+          "GDDY",
+          103.15890160093767
+        ],
+        [
+          "equity",
+          "TDG",
+          11.18032108416583
+        ]
+      ],
+      "same_cycle_buy_reservations": [],
+      "slot_claim_count": 7,
+      "timestamp": "2024-07-12T04:00:00+00:00"
+    },
+    {
+      "event": "slot_claim_violation",
+      "maximum_positions": 6,
+      "pending_orders": [
+        [
+          "crypto",
+          "LTC/USD",
+          "buy",
+          42.77182586999082,
+          "crypto_low_variance_hysteresis_v1|1.0.0|2024-07-12T00:00:00+00:00|LTC/USD|buy|269"
+        ]
+      ],
+      "positions": [
+        [
+          "crypto",
+          "BCH/USD",
+          0.033669555809999974
+        ],
+        [
+          "crypto",
+          "BTC/USD",
+          0.06151895859872677
+        ],
+        [
+          "crypto",
+          "LTC/USD",
+          8.643696157310002
+        ],
+        [
+          "equity",
+          "ALL",
+          88.49490774019988
+        ],
+        [
+          "equity",
+          "APH",
+          205.90015582697274
+        ],
+        [
+          "equity",
+          "GDDY",
+          103.15890160093767
+        ],
+        [
+          "equity",
+          "TDG",
+          11.18032108416583
+        ]
+      ],
+      "same_cycle_buy_reservations": [],
+      "slot_claim_count": 7,
+      "timestamp": "2024-07-13T00:00:00+00:00"
+    }
+  ],
+  "start_timestamp_utc": "2017-01-03T05:00:00+00:00",
+  "starting_cash": 100000,
+  "starting_nav": 100000,
+  "status": "FAIL",
+  "unowned_fill_count": 0
+}

@@ -1,0 +1,12 @@
+{
+  "canonical_control_sha256": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+  "corrected_decisions": 454,
+  "corrected_fills": 406,
+  "daily_input_sha256": "92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9",
+  "decision": "CRYPTO_CANONICAL_BASELINE_CAUSAL_REPAIR_ACCEPTED",
+  "expected_control_sha256": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+  "schema": "crypto-canonical-authority-receipt-v3",
+  "source_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+  "status": "PASS",
+  "strict_post_decision_price_event": true
+}

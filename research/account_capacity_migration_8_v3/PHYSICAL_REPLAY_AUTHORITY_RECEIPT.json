@@ -1,0 +1,38 @@
+{
+  "combined_cap6_event_sha256": "841091dd6ebedbc03e3dde27eaf7bee09e54474e660554c3c4b28423d3eb186d",
+  "current_migration_source_sha256": {
+    "research/physical_availability_clock_v2/run_historical.py": "9b62235d416cb10e392d6307261729a7bec2e1e1b49d6e1a73b2b085fcc9d902",
+    "research/physical_availability_clock_v2/shared_replay.py": "d881f2608bb5a79103b54c08f8b8b6a42678da249defcc0eb32a74f10e86e43b",
+    "research/physical_availability_clock_v2/timing.py": "19613df9a2aff330a55d49d14a9bb8906d00833c3ce24405a987e7e8ff533d4a"
+  },
+  "decision": {
+    "cap8_arm_created": false,
+    "causality": "PASS",
+    "combined_cap6_invariants": "PASS",
+    "corrected_crypto_isolated_physical_parity": "PASS",
+    "decision": "PHYSICAL_AVAILABILITY_CLOCK_V2_VALIDATED_WITH_LIMITATIONS",
+    "determinism": "PASS",
+    "equity_isolated_physical_parity": "PASS",
+    "generic_production_correctness_finding": null,
+    "infrastructure_ref": "infrastructure/physical-availability-clock-v2-cap6-2026-09",
+    "maximum_positions_tested": 6,
+    "migration_readiness": "MIGRATION_REPLAY_READY",
+    "next_action": "FREEZE_ACCOUNT_CAPACITY_MIGRATION_8_V3_USING_VALIDATED_PHYSICAL_REPLAY",
+    "old_label_clock_comparison_limit": "Archived V2 has aggregate receipts but no full event trace; exact scarce-slot claimant flips and fill-time shifts attributable solely to the clock are unavailable. The future migration arms must both use this validated physical scheduler, so those old-clock counterfactual counts are not inputs to their slot ordering.",
+    "performance_interpretation": false,
+    "remote_publication": "PENDING_EXPLICIT_APPROVAL",
+    "schema": "physical-availability-clock-v2-decision",
+    "source_commit": "b135d73743ec2652f79b8c840df50bd3f67166e8"
+  },
+  "expected_peeled_commit": "11890e93ad1a5223cb11483488deb4d5a6aec3d3",
+  "original_tag_source_sha256": {
+    "research/physical_availability_clock_v2/run_historical.py": "9b62235d416cb10e392d6307261729a7bec2e1e1b49d6e1a73b2b085fcc9d902",
+    "research/physical_availability_clock_v2/shared_replay.py": "d881f2608bb5a79103b54c08f8b8b6a42678da249defcc0eb32a74f10e86e43b",
+    "research/physical_availability_clock_v2/timing.py": "19613df9a2aff330a55d49d14a9bb8906d00833c3ce24405a987e7e8ff533d4a"
+  },
+  "peeled_commit": "11890e93ad1a5223cb11483488deb4d5a6aec3d3",
+  "schema": "physical-replay-authority-receipt-v3",
+  "status": "PASS",
+  "tag": "refs/tags/infrastructure/physical-availability-clock-v2-cap6-2026-09",
+  "tag_type": "tag"
+}

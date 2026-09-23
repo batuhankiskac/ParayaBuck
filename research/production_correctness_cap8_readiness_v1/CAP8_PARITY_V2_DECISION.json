@@ -1,0 +1,17 @@
+{
+  "decision": "CAP8_PRODUCTION_PARITY_READY_FOR_PAPER_CHANGE",
+  "corrected_production_main_sha": "d0c68057234a240a778e5adb06e42c6a3c136c34",
+  "source_branch": "audit/cap8-production-parity-v2",
+  "migration_authority_sha": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+  "gross_policy": "MAXIMUM_GROSS_IS_TARGET_LIMIT",
+  "gross_subdecision": "REALIZED_GROSS_DRIFT_CONSISTENT_WITH_EXISTING_POLICY",
+  "safety_evidence": "Fresh BUY admission blocks over-gross and cash-buffer violations, includes committed broker/local BUYs, allows SELL, and uses global slot reservation separately. Synthetic cap-8 config and eight-slot tests pass. Reconciliation, pagination, restart, external ownership, dashboard and same-class suites pass.",
+  "focused_parity_result": "108 passed, 1 skipped",
+  "full_parity_result": "1218 passed, 4 skipped, 2 deprecation warnings",
+  "production_maximum_positions": 6,
+  "crypto_maximum_positions": 2,
+  "paper_config_changed": false,
+  "live_enabled": false,
+  "broker_mutations": "NONE",
+  "next_action": "REQUEST_EXPLICIT_APPROVAL_FOR_CONTROLLED_CAP8_PAPER_CONFIG_CHANGE"
+}

@@ -1,0 +1,10 @@
+{
+  "decision": "MIGRATION_V3_STILL_VALID",
+  "frozen_migration_authority_sha": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+  "corrected_production_main_sha": "d0c68057234a240a778e5adb06e42c6a3c136c34",
+  "reason": "Migration V3 is a frozen physical-clock offline replay with the same risk/account input and only maximum_positions 6 versus 8. The production repair changes Alpaca reconciliation, PortfolioRuntime BUY submission admission, and dashboard monitoring. The only change in execution/portfolio.py since the starting main is an additive broker working BUY DTO; backtest engine, risk overlay, target/order planner, and migration replay inputs are unchanged. The repaired submission bug was not exercised in the frozen historical replay.",
+  "structural_denials": {"cap_6": 1112, "cap_8": 438},
+  "replay_rerun_required": false,
+  "new_alpha_research": false,
+  "production_promotion_automatic": false
+}

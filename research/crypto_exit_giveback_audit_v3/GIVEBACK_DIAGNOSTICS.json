@@ -1,0 +1,1367 @@
+{
+  "account_reconciliation": {
+    "account_profit": 5423.133436075339,
+    "episode_pnl": 5423.133436075336,
+    "final_residual": -2.7284841053187847e-12,
+    "maximum_daily_nav_residual": 4.9112713895738125e-11
+  },
+  "all": {
+    "count": 56,
+    "days_below_peak_after_mfe": {
+      "mean": 37.680059523809526,
+      "median": 8.541666666666666,
+      "p10": 0.041666666666666664,
+      "p25": 2.0416666666666665,
+      "p75": 42.291666666666664,
+      "p90": 110.04166666666667
+    },
+    "days_positive_after_mfe": {
+      "mean": 13.558035714285714,
+      "median": 3.0416666666666665,
+      "p10": 0.041666666666666664,
+      "p25": 1.03125,
+      "p75": 12.291666666666666,
+      "p90": 38.52083333333333
+    },
+    "final_pnl": {
+      "mean": 96.8416685013453,
+      "median": 32.07939215442866,
+      "p10": -952.6433865775132,
+      "p25": -306.57094096422423,
+      "p75": 533.1600668668341,
+      "p90": 979.0414573261255
+    },
+    "final_return": {
+      "mean": 0.06435098927319734,
+      "median": 0.012148242865400727,
+      "p10": -0.18287085538708248,
+      "p25": -0.10221442983566471,
+      "p75": 0.20663323544684248,
+      "p90": 0.36962295028495823
+    },
+    "giveback": {
+      "mean": 461.77644588375136,
+      "median": 242.06581905592373,
+      "p10": 17.511266185603798,
+      "p25": 74.5588159494215,
+      "p75": 631.7854934341574,
+      "p90": 1336.8962747699093
+    },
+    "holding_days": {
+      "mean": 73.10565476190476,
+      "median": 39.97916666666667,
+      "p10": 8.0,
+      "p25": 12.75,
+      "p75": 83.0,
+      "p90": 204.5
+    },
+    "mae": {
+      "mean": -383.404303741693,
+      "median": -194.8878591876953,
+      "p10": -1118.5585393313697,
+      "p25": -430.8206003521253,
+      "p75": -83.05966335033816,
+      "p90": -32.89623749671841
+    },
+    "mae_return": {
+      "mean": -0.10597997291773407,
+      "median": -0.07170739292332087,
+      "p10": -0.2749248763148443,
+      "p25": -0.14189329344136137,
+      "p75": -0.02919554037667656,
+      "p90": -0.01246059158853317
+    },
+    "mfe": {
+      "mean": 548.9477308423817,
+      "median": 340.79486929494396,
+      "p10": 14.86941904513219,
+      "p25": 91.52245940263572,
+      "p75": 854.7230905280908,
+      "p90": 1215.4254579237092
+    },
+    "mfe_return": {
+      "mean": 0.19490471087483113,
+      "median": 0.10893135450657149,
+      "p10": 0.003430058009792429,
+      "p25": 0.030612726276333182,
+      "p75": 0.3309204733205528,
+      "p90": 0.4511395311399849
+    },
+    "mfe_to_exit_days": {
+      "mean": 38.611607142857146,
+      "median": 9.541666666666666,
+      "p10": 1.0416666666666667,
+      "p25": 3.0416666666666665,
+      "p75": 43.291666666666664,
+      "p90": 111.04166666666667
+    },
+    "near_flat_definition": "abs(final_return)<=0.01 descriptive, not an exit rule",
+    "net_pnl": 5423.133436075336,
+    "positive_mfe_count": 52,
+    "positive_mfe_near_flat_count": 3,
+    "profit_erosion_times": {
+      "0.25": {
+        "mean": 2.775,
+        "median": 1.0,
+        "p10": 1.0,
+        "p25": 1.0,
+        "p75": 3.25,
+        "p90": 6.0
+      },
+      "0.5": {
+        "mean": 6.151515151515151,
+        "median": 2.0,
+        "p10": 1.0,
+        "p25": 1.0,
+        "p75": 5.0,
+        "p90": 8.0
+      },
+      "0.75": {
+        "mean": 7.379310344827586,
+        "median": 2.0,
+        "p10": 1.0,
+        "p25": 1.0,
+        "p75": 5.0,
+        "p90": 17.199999999999996
+      },
+      "1.0": {
+        "mean": 7.777777777777778,
+        "median": 3.0,
+        "p10": 1.0,
+        "p25": 1.5,
+        "p75": 7.0,
+        "p90": 14.400000000000002
+      }
+    },
+    "profit_levels": {
+      "0.05": {
+        "count": 37,
+        "crossing_to_mfe_days": 7.0,
+        "mean_final_return": 0.14655102485486776,
+        "median_final_return": 0.13163463160014596,
+        "mfe_to_exit_days": 8.041666666666666,
+        "nonpositive_fraction": 0.2702702702702703,
+        "profitable_fraction": 0.7297297297297297,
+        "retention": {
+          "mean": -0.06788327610016714,
+          "median": 0.5162851336476023,
+          "p10": -1.1267528714782764,
+          "p25": -0.08932829356461257,
+          "p75": 0.9235687294817239,
+          "p90": 0.9696737362820127
+        }
+      },
+      "0.1": {
+        "count": 28,
+        "crossing_to_mfe_days": 16.5,
+        "mean_final_return": 0.23868722735658204,
+        "median_final_return": 0.20803030086122695,
+        "mfe_to_exit_days": 5.041666666666667,
+        "nonpositive_fraction": 0.10714285714285714,
+        "profitable_fraction": 0.8928571428571429,
+        "retention": {
+          "mean": 0.5924511769257109,
+          "median": 0.7585557120137505,
+          "p10": 0.042527542571797125,
+          "p25": 0.43605804581194607,
+          "p75": 0.9389986959246326,
+          "p90": 0.98197234551718
+        }
+      },
+      "0.2": {
+        "count": 19,
+        "crossing_to_mfe_days": 12.0,
+        "mean_final_return": 0.3268076101217177,
+        "median_final_return": 0.29564615229187124,
+        "mfe_to_exit_days": 4.041666666666667,
+        "nonpositive_fraction": 0.05263157894736842,
+        "profitable_fraction": 0.9473684210526315,
+        "retention": {
+          "mean": 0.6960608082341574,
+          "median": 0.8091843328946591,
+          "p10": 0.382416436920202,
+          "p25": 0.6041000022684102,
+          "p75": 0.9492189875221595,
+          "p90": 0.9810103291641347
+        }
+      },
+      "0.3": {
+        "count": 15,
+        "crossing_to_mfe_days": 9.0,
+        "mean_final_return": 0.38420945591854955,
+        "median_final_return": 0.3223739647872441,
+        "mfe_to_exit_days": 6.041666666666667,
+        "nonpositive_fraction": 0.0,
+        "profitable_fraction": 1.0,
+        "retention": {
+          "mean": 0.767086548519223,
+          "median": 0.874143415252469,
+          "p10": 0.4599788531735641,
+          "p25": 0.6041000022684102,
+          "p75": 0.9492189875221595,
+          "p90": 0.9785833544589622
+        }
+      },
+      "0.4": {
+        "count": 9,
+        "crossing_to_mfe_days": 10.0,
+        "mean_final_return": 0.4509714098927551,
+        "median_final_return": 0.40688839389309067,
+        "mfe_to_exit_days": 12.041666666666666,
+        "nonpositive_fraction": 0.0,
+        "profitable_fraction": 1.0,
+        "retention": {
+          "mean": 0.7431698360123079,
+          "median": 0.874143415252469,
+          "p10": 0.4363930709965185,
+          "p25": 0.5010609550978389,
+          "p75": 0.9467527325701312,
+          "p90": 0.9590894859770498
+        }
+      },
+      "0.5": {
+        "count": 5,
+        "crossing_to_mfe_days": 24.0,
+        "mean_final_return": 0.5316047231158431,
+        "median_final_return": 0.5439584617800408,
+        "mfe_to_exit_days": 43.041666666666664,
+        "nonpositive_fraction": 0.0,
+        "profitable_fraction": 1.0,
+        "retention": {
+          "mean": 0.699143222574476,
+          "median": 0.874143415252469,
+          "p10": 0.30849640607476747,
+          "p25": 0.5010609550978389,
+          "p75": 0.9516852424741878,
+          "p90": 0.9738979729827738
+        }
+      }
+    },
+    "retention": {
+      "mean": -2.4863905983655914,
+      "median": 0.2402174127051827,
+      "p10": -6.11023590408886,
+      "p25": -1.6067472050277418,
+      "p75": 0.8008426652386538,
+      "p90": 0.9511919914837822
+    },
+    "retention_bins": {
+      "25_to_50pct": {
+        "count": 4,
+        "fraction": 0.07692307692307693
+      },
+      "50_to_75pct": {
+        "count": 6,
+        "fraction": 0.11538461538461539
+      },
+      "at_least_75pct": {
+        "count": 16,
+        "fraction": 0.3076923076923077
+      },
+      "nonpositive": {
+        "count": 22,
+        "fraction": 0.4230769230769231
+      },
+      "positive_below_25pct": {
+        "count": 4,
+        "fraction": 0.07692307692307693
+      }
+    },
+    "right_tail": {
+      "top1": {
+        "count": 1,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4"
+        ],
+        "pnl": 2606.124555140639,
+        "share_net_strategy_pnl": 0.48055696690116156,
+        "share_positive_pnl": 0.13968389032690157
+      },
+      "top10": {
+        "count": 10,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:6",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:7",
+          "crypto_low_variance_hysteresis_v1:XRP/USD:3",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:2",
+          "crypto_low_variance_hysteresis_v1:LTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:LTC/USD:1",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:5",
+          "crypto_low_variance_hysteresis_v1:LTC/USD:9",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:6"
+        ],
+        "pnl": 12341.679516946188,
+        "share_net_strategy_pnl": 2.2757469758807414,
+        "share_positive_pnl": 0.6614932523828841
+      },
+      "top10pct": {
+        "count": 6,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:6",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:7",
+          "crypto_low_variance_hysteresis_v1:XRP/USD:3",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:2",
+          "crypto_low_variance_hysteresis_v1:LTC/USD:4"
+        ],
+        "pnl": 8860.130322658708,
+        "share_net_strategy_pnl": 1.6337658711696177,
+        "share_positive_pnl": 0.4748880746436641
+      },
+      "top3": {
+        "count": 3,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:6",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:7"
+        ],
+        "pnl": 5719.267688846683,
+        "share_net_strategy_pnl": 1.054605747076298,
+        "share_positive_pnl": 0.3065431232069182
+      },
+      "top5": {
+        "count": 5,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:6",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:7",
+          "crypto_low_variance_hysteresis_v1:XRP/USD:3",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:2"
+        ],
+        "pnl": 7859.703456917974,
+        "share_net_strategy_pnl": 1.4492919175903505,
+        "share_positive_pnl": 0.4212668782512786
+      }
+    },
+    "time_to_mfe_days": {
+      "mean": 34.49404761904762,
+      "median": 10.958333333333334,
+      "p10": 1.9583333333333333,
+      "p25": 3.7083333333333335,
+      "p75": 38.208333333333336,
+      "p90": 68.95833333333333
+    },
+    "winner_to_loser_count": 22,
+    "winner_to_nonpositive_count": 22
+  },
+  "all_final_positive_count": 30,
+  "by_symbol": {
+    "AAVE/USD": {
+      "cohort_30pct": 0,
+      "episodes": 2,
+      "positive_mfe_to_negative_final": 1
+    },
+    "AVAX/USD": {
+      "cohort_30pct": 0,
+      "episodes": 1,
+      "positive_mfe_to_negative_final": 1
+    },
+    "BCH/USD": {
+      "cohort_30pct": 0,
+      "episodes": 5,
+      "positive_mfe_to_negative_final": 2
+    },
+    "BTC/USD": {
+      "cohort_30pct": 3,
+      "episodes": 7,
+      "positive_mfe_to_negative_final": 3
+    },
+    "DOGE/USD": {
+      "cohort_30pct": 0,
+      "episodes": 4,
+      "positive_mfe_to_negative_final": 2
+    },
+    "DOT/USD": {
+      "cohort_30pct": 0,
+      "episodes": 1,
+      "positive_mfe_to_negative_final": 1
+    },
+    "ETH/USD": {
+      "cohort_30pct": 4,
+      "episodes": 13,
+      "positive_mfe_to_negative_final": 6
+    },
+    "GRT/USD": {
+      "cohort_30pct": 0,
+      "episodes": 1,
+      "positive_mfe_to_negative_final": 1
+    },
+    "LINK/USD": {
+      "cohort_30pct": 1,
+      "episodes": 1,
+      "positive_mfe_to_negative_final": 0
+    },
+    "LTC/USD": {
+      "cohort_30pct": 6,
+      "episodes": 12,
+      "positive_mfe_to_negative_final": 2
+    },
+    "SOL/USD": {
+      "cohort_30pct": 0,
+      "episodes": 1,
+      "positive_mfe_to_negative_final": 0
+    },
+    "UNI/USD": {
+      "cohort_30pct": 0,
+      "episodes": 1,
+      "positive_mfe_to_negative_final": 0
+    },
+    "XRP/USD": {
+      "cohort_30pct": 1,
+      "episodes": 5,
+      "positive_mfe_to_negative_final": 2
+    }
+  },
+  "cohort_30pct": [
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:1",
+      "final_return": 0.12044689463959518,
+      "holding_days": 83.0,
+      "mfe_return": 0.6687034635340031,
+      "retention": 0.1801200400593866,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:LTC/USD:1",
+      "final_return": 0.37850522727836977,
+      "holding_days": 44.0,
+      "mfe_return": 0.46776143814396387,
+      "retention": 0.8091843328946591,
+      "symbol": "LTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:LTC/USD:2",
+      "final_return": 0.27843616757655043,
+      "holding_days": 24.0,
+      "mfe_return": 0.34818702332667284,
+      "retention": 0.7996741662463354,
+      "symbol": "LTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:BTC/USD:2",
+      "final_return": 0.29564615229187124,
+      "holding_days": 236.0,
+      "mfe_return": 0.5900402920721339,
+      "retention": 0.5010609550978389,
+      "symbol": "BTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:LINK/USD:1",
+      "final_return": 0.1617808073589533,
+      "holding_days": 52.0,
+      "mfe_return": 0.3736358969942032,
+      "retention": 0.43299053613540583,
+      "symbol": "LINK/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:LTC/USD:4",
+      "final_return": 0.40688839389309067,
+      "holding_days": 48.0,
+      "mfe_return": 0.4345176241360059,
+      "retention": 0.9364140170427997,
+      "symbol": "LTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:5",
+      "final_return": 0.3607406732915467,
+      "holding_days": 76.0,
+      "mfe_return": 0.37444588074249474,
+      "retention": 0.9633986961646586,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:6",
+      "final_return": 0.3223739647872441,
+      "holding_days": 40.0,
+      "mfe_return": 0.3490524900817611,
+      "retention": 0.9235687294817239,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:7",
+      "final_return": 0.5439584617800408,
+      "holding_days": 284.0,
+      "mfe_return": 0.5501718495764345,
+      "retention": 0.9887064599884978,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:LTC/USD:5",
+      "final_return": 0.205236170032458,
+      "holding_days": 33.0,
+      "mfe_return": 0.4100939638092491,
+      "retention": 0.5004613287308014,
+      "symbol": "LTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:BTC/USD:4",
+      "final_return": 1.0358507217361819,
+      "holding_days": 372.0,
+      "mfe_return": 1.184989446425114,
+      "retention": 0.874143415252469,
+      "symbol": "BTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:LTC/USD:8",
+      "final_return": 0.2588295439118835,
+      "holding_days": 43.0,
+      "mfe_return": 0.3660235481511443,
+      "retention": 0.7071390494389816,
+      "symbol": "LTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:BTC/USD:6",
+      "final_return": 0.662121385131526,
+      "holding_days": 288.0,
+      "mfe_return": 0.6957356861078828,
+      "retention": 0.9516852424741878,
+      "symbol": "BTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:XRP/USD:3",
+      "final_return": 0.41008928225166213,
+      "holding_days": 60.0,
+      "mfe_return": 0.43315352377003524,
+      "retention": 0.9467527325701312,
+      "symbol": "XRP/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:LTC/USD:9",
+      "final_return": 0.3222379928172697,
+      "holding_days": 22.0,
+      "mfe_return": 0.32516495665184614,
+      "retention": 0.9909985262104665,
+      "symbol": "LTC/USD"
+    }
+  ],
+  "endpoint_open": {
+    "count": 2,
+    "days_below_peak_after_mfe": {
+      "mean": 59.0,
+      "median": 59.0,
+      "p10": 42.2,
+      "p25": 48.5,
+      "p75": 69.5,
+      "p90": 75.80000000000001
+    },
+    "days_positive_after_mfe": {
+      "mean": 11.5,
+      "median": 11.5,
+      "p10": 2.3000000000000003,
+      "p25": 5.75,
+      "p75": 17.25,
+      "p90": 20.7
+    },
+    "final_pnl": {
+      "mean": -267.1093631533188,
+      "median": -267.1093631533188,
+      "p10": -334.678604596531,
+      "p25": -309.3401390553264,
+      "p75": -224.87858725131116,
+      "p90": -199.54012171010658
+    },
+    "final_return": {
+      "mean": -0.09704400825958824,
+      "median": -0.09704400825958824,
+      "p10": -0.12014637560788632,
+      "p25": -0.11148298785227453,
+      "p75": -0.08260502866690195,
+      "p90": -0.07394164091129016
+    },
+    "giveback": {
+      "mean": 683.0816218424825,
+      "median": 683.0816218424825,
+      "p10": 683.0816218424825,
+      "p25": 683.0816218424825,
+      "p75": 683.0816218424825,
+      "p90": 683.0816218424825
+    },
+    "holding_days": {
+      "mean": 77.95833333333333,
+      "median": 77.95833333333334,
+      "p10": 47.55833333333334,
+      "p25": 58.958333333333336,
+      "p75": 96.95833333333334,
+      "p90": 108.35833333333335
+    },
+    "mae": {
+      "mean": -404.57303594527,
+      "median": -404.57303594527,
+      "p10": -413.0242470130928,
+      "p25": -409.8550428626593,
+      "p75": -399.29102902788077,
+      "p90": -396.12182487744724
+    },
+    "mae_return": {
+      "mean": -0.1480277175250843,
+      "median": -0.1480277175250843,
+      "p10": -0.15355229019211772,
+      "p25": -0.1514805754419802,
+      "p75": -0.14457485960818844,
+      "p90": -0.14250314485805093
+    },
+    "mfe": {
+      "mean": 245.00032585533762,
+      "median": 245.00032585533762,
+      "p10": 40.65353814506456,
+      "p25": 117.28358353641696,
+      "p75": 372.7170681742583,
+      "p90": 449.3471135656107
+    },
+    "mfe_return": {
+      "mean": 0.09151511311895444,
+      "median": 0.09151511311895442,
+      "p10": 0.015313551482316116,
+      "p25": 0.04388913709605548,
+      "p75": 0.13914108914185339,
+      "p90": 0.16771667475559277
+    },
+    "mfe_to_exit_days": {
+      "mean": 60.0,
+      "median": 60.0,
+      "p10": 43.2,
+      "p25": 49.5,
+      "p75": 70.5,
+      "p90": 76.80000000000001
+    },
+    "near_flat_definition": "abs(final_return)<=0.01 descriptive, not an exit rule",
+    "net_pnl": -534.2187263066376,
+    "positive_mfe_count": 1,
+    "positive_mfe_near_flat_count": 0,
+    "profit_erosion_times": {
+      "0.25": {
+        "mean": 6.0,
+        "median": 6.0,
+        "p10": 6.0,
+        "p25": 6.0,
+        "p75": 6.0,
+        "p90": 6.0
+      },
+      "0.5": {
+        "mean": 12.0,
+        "median": 12.0,
+        "p10": 12.0,
+        "p25": 12.0,
+        "p75": 12.0,
+        "p90": 12.0
+      },
+      "0.75": {
+        "mean": 22.0,
+        "median": 22.0,
+        "p10": 22.0,
+        "p25": 22.0,
+        "p75": 22.0,
+        "p90": 22.0
+      },
+      "1.0": {
+        "mean": 23.0,
+        "median": 23.0,
+        "p10": 23.0,
+        "p25": 23.0,
+        "p75": 23.0,
+        "p90": 23.0
+      }
+    },
+    "profit_levels": {
+      "0.05": {
+        "count": 1,
+        "crossing_to_mfe_days": 30.0,
+        "mean_final_return": -0.06816604907421564,
+        "median_final_return": -0.06816604907421564,
+        "mfe_to_exit_days": 81.0,
+        "nonpositive_fraction": 1.0,
+        "profitable_fraction": 0.0,
+        "retention": {
+          "mean": -0.3649789592939446,
+          "median": -0.3649789592939446,
+          "p10": -0.3649789592939446,
+          "p25": -0.3649789592939446,
+          "p75": -0.3649789592939446,
+          "p90": -0.3649789592939446
+        }
+      },
+      "0.1": {
+        "count": 1,
+        "crossing_to_mfe_days": 23.0,
+        "mean_final_return": -0.06816604907421564,
+        "median_final_return": -0.06816604907421564,
+        "mfe_to_exit_days": 81.0,
+        "nonpositive_fraction": 1.0,
+        "profitable_fraction": 0.0,
+        "retention": {
+          "mean": -0.3649789592939446,
+          "median": -0.3649789592939446,
+          "p10": -0.3649789592939446,
+          "p25": -0.3649789592939446,
+          "p75": -0.3649789592939446,
+          "p90": -0.3649789592939446
+        }
+      },
+      "0.2": {
+        "count": 0,
+        "crossing_to_mfe_days": null,
+        "mean_final_return": null,
+        "median_final_return": null,
+        "mfe_to_exit_days": null,
+        "nonpositive_fraction": null,
+        "profitable_fraction": null,
+        "retention": {
+          "mean": null,
+          "median": null,
+          "p10": null,
+          "p25": null,
+          "p75": null,
+          "p90": null
+        }
+      },
+      "0.3": {
+        "count": 0,
+        "crossing_to_mfe_days": null,
+        "mean_final_return": null,
+        "median_final_return": null,
+        "mfe_to_exit_days": null,
+        "nonpositive_fraction": null,
+        "profitable_fraction": null,
+        "retention": {
+          "mean": null,
+          "median": null,
+          "p10": null,
+          "p25": null,
+          "p75": null,
+          "p90": null
+        }
+      },
+      "0.4": {
+        "count": 0,
+        "crossing_to_mfe_days": null,
+        "mean_final_return": null,
+        "median_final_return": null,
+        "mfe_to_exit_days": null,
+        "nonpositive_fraction": null,
+        "profitable_fraction": null,
+        "retention": {
+          "mean": null,
+          "median": null,
+          "p10": null,
+          "p25": null,
+          "p75": null,
+          "p90": null
+        }
+      },
+      "0.5": {
+        "count": 0,
+        "crossing_to_mfe_days": null,
+        "mean_final_return": null,
+        "median_final_return": null,
+        "mfe_to_exit_days": null,
+        "nonpositive_fraction": null,
+        "profitable_fraction": null,
+        "retention": {
+          "mean": null,
+          "median": null,
+          "p10": null,
+          "p25": null,
+          "p75": null,
+          "p90": null
+        }
+      }
+    },
+    "retention": {
+      "mean": -0.3649789592939446,
+      "median": -0.3649789592939446,
+      "p10": -0.3649789592939446,
+      "p25": -0.3649789592939446,
+      "p75": -0.3649789592939446,
+      "p90": -0.3649789592939446
+    },
+    "retention_bins": {
+      "25_to_50pct": {
+        "count": 0,
+        "fraction": 0.0
+      },
+      "50_to_75pct": {
+        "count": 0,
+        "fraction": 0.0
+      },
+      "at_least_75pct": {
+        "count": 0,
+        "fraction": 0.0
+      },
+      "nonpositive": {
+        "count": 1,
+        "fraction": 1.0
+      },
+      "positive_below_25pct": {
+        "count": 0,
+        "fraction": 0.0
+      }
+    },
+    "right_tail": {
+      "top1": {
+        "count": 0,
+        "episode_ids": [],
+        "pnl": 0,
+        "share_net_strategy_pnl": 0.0,
+        "share_positive_pnl": null
+      },
+      "top10": {
+        "count": 0,
+        "episode_ids": [],
+        "pnl": 0,
+        "share_net_strategy_pnl": 0.0,
+        "share_positive_pnl": null
+      },
+      "top10pct": {
+        "count": 0,
+        "episode_ids": [],
+        "pnl": 0,
+        "share_net_strategy_pnl": 0.0,
+        "share_positive_pnl": null
+      },
+      "top3": {
+        "count": 0,
+        "episode_ids": [],
+        "pnl": 0,
+        "share_net_strategy_pnl": 0.0,
+        "share_positive_pnl": null
+      },
+      "top5": {
+        "count": 0,
+        "episode_ids": [],
+        "pnl": 0,
+        "share_net_strategy_pnl": 0.0,
+        "share_positive_pnl": null
+      }
+    },
+    "time_to_mfe_days": {
+      "mean": 17.958333333333336,
+      "median": 17.958333333333332,
+      "p10": 4.358333333333333,
+      "p25": 9.458333333333334,
+      "p75": 26.458333333333332,
+      "p90": 31.558333333333334
+    },
+    "winner_to_loser_count": 1,
+    "winner_to_nonpositive_count": 1
+  },
+  "endpoint_open_count": 2,
+  "natural": {
+    "count": 54,
+    "days_below_peak_after_mfe": {
+      "mean": 36.89043209876543,
+      "median": 7.541666666666666,
+      "p10": 0.041666666666666664,
+      "p25": 2.0416666666666665,
+      "p75": 40.791666666666664,
+      "p90": 114.04166666666673
+    },
+    "days_positive_after_mfe": {
+      "mean": 13.63425925925926,
+      "median": 3.0416666666666665,
+      "p10": 0.041666666666666664,
+      "p25": 1.0416666666666667,
+      "p75": 11.28125,
+      "p90": 38.7125
+    },
+    "final_pnl": {
+      "mean": 110.32133634040693,
+      "median": 58.82496534444226,
+      "p10": -977.9468996422897,
+      "p25": -302.60225821436114,
+      "p75": 547.2665707742544,
+      "p90": 987.5956206919691
+    },
+    "final_return": {
+      "mean": 0.0703285817744116,
+      "median": 0.019942887607403776,
+      "p10": -0.196567893863856,
+      "p25": -0.09956413246266939,
+      "p75": 0.20942736627561143,
+      "p90": 0.3731758610823229
+    },
+    "giveback": {
+      "mean": 457.43712870809,
+      "median": 235.7537861452288,
+      "p10": 15.734117610715202,
+      "p25": 72.35010819077729,
+      "p75": 607.5955719084241,
+      "p90": 1368.4867638317442
+    },
+    "holding_days": {
+      "mean": 72.92592592592592,
+      "median": 39.5,
+      "p10": 8.0,
+      "p25": 12.25,
+      "p75": 82.0,
+      "p90": 215.90000000000015
+    },
+    "mae": {
+      "mean": -382.620276623042,
+      "median": -187.18970220619326,
+      "p10": -1136.6125234008996,
+      "p25": -454.25314440029933,
+      "p75": -81.89826528086962,
+      "p90": -31.444893702492916
+    },
+    "mae_return": {
+      "mean": -0.10442264904338777,
+      "median": -0.07051887450045351,
+      "p10": -0.29377430732336907,
+      "p25": -0.1271627036780027,
+      "p75": -0.026847539897872252,
+      "p90": -0.01180165555566427
+    },
+    "mfe": {
+      "mean": 560.2050421381981,
+      "median": 340.79486929494396,
+      "p10": 22.258332883436793,
+      "p25": 97.52870819329326,
+      "p75": 867.9523366135002,
+      "p90": 1228.2023683956181
+    },
+    "mfe_return": {
+      "mean": 0.1987339552361599,
+      "median": 0.10893135450657149,
+      "p10": 0.003448643867536297,
+      "p25": 0.03088224339136157,
+      "p75": 0.3424315066579662,
+      "p90": 0.4577882939415766
+    },
+    "mfe_to_exit_days": {
+      "mean": 37.81944444444444,
+      "median": 8.541666666666666,
+      "p10": 1.0416666666666667,
+      "p25": 3.0416666666666665,
+      "p75": 41.791666666666664,
+      "p90": 115.04166666666673
+    },
+    "near_flat_definition": "abs(final_return)<=0.01 descriptive, not an exit rule",
+    "net_pnl": 5957.352162381974,
+    "positive_mfe_count": 51,
+    "positive_mfe_near_flat_count": 3,
+    "profit_erosion_times": {
+      "0.25": {
+        "mean": 2.6923076923076925,
+        "median": 1.0,
+        "p10": 1.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "p90": 5.200000000000003
+      },
+      "0.5": {
+        "mean": 5.96875,
+        "median": 2.0,
+        "p10": 1.0,
+        "p25": 1.0,
+        "p75": 5.0,
+        "p90": 7.900000000000002
+      },
+      "0.75": {
+        "mean": 6.857142857142857,
+        "median": 2.0,
+        "p10": 1.0,
+        "p25": 1.0,
+        "p75": 5.0,
+        "p90": 9.700000000000006
+      },
+      "1.0": {
+        "mean": 7.1923076923076925,
+        "median": 2.5,
+        "p10": 1.0,
+        "p25": 1.25,
+        "p75": 6.75,
+        "p90": 11.0
+      }
+    },
+    "profit_levels": {
+      "0.05": {
+        "count": 36,
+        "crossing_to_mfe_days": 7.0,
+        "mean_final_return": 0.15251538801956455,
+        "median_final_return": 0.14088120726305883,
+        "mfe_to_exit_days": 7.541666666666666,
+        "nonpositive_fraction": 0.25,
+        "profitable_fraction": 0.75,
+        "retention": {
+          "mean": -0.05963061823367333,
+          "median": 0.6060793617841914,
+          "p10": -1.1531661627158394,
+          "p25": 0.05194581658154064,
+          "p75": 0.9253814302854956,
+          "p90": 0.9712424963113513
+        }
+      },
+      "0.1": {
+        "count": 27,
+        "crossing_to_mfe_days": 15.0,
+        "mean_final_return": 0.25005216352068566,
+        "median_final_return": 0.2108244316899959,
+        "mfe_to_exit_days": 4.041666666666667,
+        "nonpositive_fraction": 0.07407407407407407,
+        "profitable_fraction": 0.9259259259259259,
+        "retention": {
+          "mean": 0.6279115523412537,
+          "median": 0.7615125576406826,
+          "p10": 0.1476868986877353,
+          "p25": 0.46877093888413046,
+          "p75": 0.9415833748064655,
+          "p90": 0.9829343618702255
+        }
+      },
+      "0.2": {
+        "count": 19,
+        "crossing_to_mfe_days": 12.0,
+        "mean_final_return": 0.3268076101217177,
+        "median_final_return": 0.29564615229187124,
+        "mfe_to_exit_days": 4.041666666666667,
+        "nonpositive_fraction": 0.05263157894736842,
+        "profitable_fraction": 0.9473684210526315,
+        "retention": {
+          "mean": 0.6960608082341574,
+          "median": 0.8091843328946591,
+          "p10": 0.382416436920202,
+          "p25": 0.6041000022684102,
+          "p75": 0.9492189875221595,
+          "p90": 0.9810103291641347
+        }
+      },
+      "0.3": {
+        "count": 15,
+        "crossing_to_mfe_days": 9.0,
+        "mean_final_return": 0.38420945591854955,
+        "median_final_return": 0.3223739647872441,
+        "mfe_to_exit_days": 6.041666666666667,
+        "nonpositive_fraction": 0.0,
+        "profitable_fraction": 1.0,
+        "retention": {
+          "mean": 0.767086548519223,
+          "median": 0.874143415252469,
+          "p10": 0.4599788531735641,
+          "p25": 0.6041000022684102,
+          "p75": 0.9492189875221595,
+          "p90": 0.9785833544589622
+        }
+      },
+      "0.4": {
+        "count": 9,
+        "crossing_to_mfe_days": 10.0,
+        "mean_final_return": 0.4509714098927551,
+        "median_final_return": 0.40688839389309067,
+        "mfe_to_exit_days": 12.041666666666666,
+        "nonpositive_fraction": 0.0,
+        "profitable_fraction": 1.0,
+        "retention": {
+          "mean": 0.7431698360123079,
+          "median": 0.874143415252469,
+          "p10": 0.4363930709965185,
+          "p25": 0.5010609550978389,
+          "p75": 0.9467527325701312,
+          "p90": 0.9590894859770498
+        }
+      },
+      "0.5": {
+        "count": 5,
+        "crossing_to_mfe_days": 24.0,
+        "mean_final_return": 0.5316047231158431,
+        "median_final_return": 0.5439584617800408,
+        "mfe_to_exit_days": 43.041666666666664,
+        "nonpositive_fraction": 0.0,
+        "profitable_fraction": 1.0,
+        "retention": {
+          "mean": 0.699143222574476,
+          "median": 0.874143415252469,
+          "p10": 0.30849640607476747,
+          "p25": 0.5010609550978389,
+          "p75": 0.9516852424741878,
+          "p90": 0.9738979729827738
+        }
+      }
+    },
+    "retention": {
+      "mean": -2.527986905014055,
+      "median": 0.28859888067315326,
+      "p10": -6.208978553684826,
+      "p25": -1.9282617911518287,
+      "p75": 0.8020111642309722,
+      "p90": 0.9516852424741878
+    },
+    "retention_bins": {
+      "25_to_50pct": {
+        "count": 4,
+        "fraction": 0.0784313725490196
+      },
+      "50_to_75pct": {
+        "count": 6,
+        "fraction": 0.11764705882352941
+      },
+      "at_least_75pct": {
+        "count": 16,
+        "fraction": 0.3137254901960784
+      },
+      "nonpositive": {
+        "count": 21,
+        "fraction": 0.4117647058823529
+      },
+      "positive_below_25pct": {
+        "count": 4,
+        "fraction": 0.0784313725490196
+      }
+    },
+    "right_tail": {
+      "top1": {
+        "count": 1,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4"
+        ],
+        "pnl": 2606.124555140639,
+        "share_net_strategy_pnl": 0.48055696690116156,
+        "share_positive_pnl": 0.13968389032690157
+      },
+      "top10": {
+        "count": 10,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:6",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:7",
+          "crypto_low_variance_hysteresis_v1:XRP/USD:3",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:2",
+          "crypto_low_variance_hysteresis_v1:LTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:LTC/USD:1",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:5",
+          "crypto_low_variance_hysteresis_v1:LTC/USD:9",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:6"
+        ],
+        "pnl": 12341.679516946188,
+        "share_net_strategy_pnl": 2.2757469758807414,
+        "share_positive_pnl": 0.6614932523828841
+      },
+      "top10pct": {
+        "count": 6,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:6",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:7",
+          "crypto_low_variance_hysteresis_v1:XRP/USD:3",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:2",
+          "crypto_low_variance_hysteresis_v1:LTC/USD:4"
+        ],
+        "pnl": 8860.130322658708,
+        "share_net_strategy_pnl": 1.6337658711696177,
+        "share_positive_pnl": 0.4748880746436641
+      },
+      "top3": {
+        "count": 3,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:6",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:7"
+        ],
+        "pnl": 5719.267688846683,
+        "share_net_strategy_pnl": 1.054605747076298,
+        "share_positive_pnl": 0.3065431232069182
+      },
+      "top5": {
+        "count": 5,
+        "episode_ids": [
+          "crypto_low_variance_hysteresis_v1:BTC/USD:4",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:6",
+          "crypto_low_variance_hysteresis_v1:ETH/USD:7",
+          "crypto_low_variance_hysteresis_v1:XRP/USD:3",
+          "crypto_low_variance_hysteresis_v1:BTC/USD:2"
+        ],
+        "pnl": 7859.703456917974,
+        "share_net_strategy_pnl": 1.4492919175903505,
+        "share_positive_pnl": 0.4212668782512786
+      }
+    },
+    "time_to_mfe_days": {
+      "mean": 35.10648148148148,
+      "median": 10.958333333333334,
+      "p10": 1.9583333333333333,
+      "p25": 3.9583333333333335,
+      "p75": 38.708333333333336,
+      "p90": 71.35833333333336
+    },
+    "winner_to_loser_count": 21,
+    "winner_to_nonpositive_count": 21
+  },
+  "natural_exit_reasons": {
+    "QUALIFIED_HISTORY_LOSS": 8,
+    "RANK_ABOVE_RETENTION": 37,
+    "RETENTION_CAPACITY_DISPLACEMENT": 5,
+    "SCANNER_INELIGIBLE": 4
+  },
+  "natural_final_positive_count": 30,
+  "natural_positive_mfe_to_negative_final": [
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:BTC/USD:1",
+      "final_return": -0.39836908358188494,
+      "holding_days": 83.0,
+      "mfe_return": 0.06416016421017687,
+      "retention": -6.208978553684826,
+      "symbol": "BTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:2",
+      "final_return": -0.01721439967132537,
+      "holding_days": 32.0,
+      "mfe_return": 0.19270937554487058,
+      "retention": -0.08932829356461257,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:AAVE/USD:1",
+      "final_return": -0.3209055924775896,
+      "holding_days": 48.0,
+      "mfe_return": 0.0614578939230946,
+      "retention": -5.221552057725167,
+      "symbol": "AAVE/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:3",
+      "final_return": -0.2811476759056206,
+      "holding_days": 44.0,
+      "mfe_return": 0.010150990752289594,
+      "retention": -27.696574922226848,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:4",
+      "final_return": -0.3830095079968482,
+      "holding_days": 104.0,
+      "mfe_return": 0.07588283603484022,
+      "retention": -5.047379987498046,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:GRT/USD:1",
+      "final_return": -0.09792989805795561,
+      "holding_days": 4.0,
+      "mfe_return": 0.03327419025397258,
+      "retention": -2.943118895170224,
+      "symbol": "GRT/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:DOGE/USD:3",
+      "final_return": -0.0243174642904602,
+      "holding_days": 28.0,
+      "mfe_return": 0.031647504930315,
+      "retention": -0.7683848803880465,
+      "symbol": "DOGE/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:BCH/USD:2",
+      "final_return": -0.1343970636841227,
+      "holding_days": 24.0,
+      "mfe_return": 0.010250611911792103,
+      "retention": -13.111125934785896,
+      "symbol": "BCH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:BTC/USD:3",
+      "final_return": -0.12924401717706413,
+      "holding_days": 428.0,
+      "mfe_return": 0.0029960964977785148,
+      "retention": -43.13746812657516,
+      "symbol": "BTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:XRP/USD:1",
+      "final_return": -0.1486282591951485,
+      "holding_days": 36.0,
+      "mfe_return": 0.04019013575315153,
+      "retention": -3.698127821911966,
+      "symbol": "XRP/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:10",
+      "final_return": -0.001852597809088068,
+      "holding_days": 4.0,
+      "mfe_return": 0.0034555955475687036,
+      "retention": -0.536115347871519,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:DOGE/USD:4",
+      "final_return": -0.057171957686149896,
+      "holding_days": 10.0,
+      "mfe_return": 0.05641500411671435,
+      "retention": -1.013417593090475,
+      "symbol": "DOGE/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:XRP/USD:2",
+      "final_return": -0.014785715631373493,
+      "holding_days": 12.0,
+      "mfe_return": 0.003414451443491021,
+      "retention": -4.33033413304487,
+      "symbol": "XRP/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:DOT/USD:1",
+      "final_return": -0.04469295576006991,
+      "holding_days": 135.0,
+      "mfe_return": 0.0034456645760938373,
+      "retention": -12.970779590721476,
+      "symbol": "DOT/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:11",
+      "final_return": -0.21711345157901643,
+      "holding_days": 176.0,
+      "mfe_return": 0.2647156215116208,
+      "retention": -0.8201761963998233,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:ETH/USD:12",
+      "final_return": -0.06876218416812238,
+      "holding_days": 8.0,
+      "mfe_return": 0.02674228049135231,
+      "retention": -2.5712909634000027,
+      "symbol": "ETH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:LTC/USD:10",
+      "final_return": -0.10853108754993694,
+      "holding_days": 39.0,
+      "mfe_return": 0.08444470359188168,
+      "retention": -1.2852326189036547,
+      "symbol": "LTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:BCH/USD:5",
+      "final_return": -0.02813131461454846,
+      "holding_days": 172.0,
+      "mfe_return": 0.05388396826797778,
+      "retention": -0.5220720655658607,
+      "symbol": "BCH/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:BTC/USD:7",
+      "final_return": -0.3322584298940148,
+      "holding_days": 233.0,
+      "mfe_return": 0.030627156211710426,
+      "retention": -10.848491044917004,
+      "symbol": "BTC/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:AVAX/USD:1",
+      "final_return": -0.10912678198392588,
+      "holding_days": 106.0,
+      "mfe_return": 0.02101916373166619,
+      "retention": -5.191775628043762,
+      "symbol": "AVAX/USD"
+    },
+    {
+      "episode_id": "crypto_low_variance_hysteresis_v1:LTC/USD:12",
+      "final_return": -0.06075369637932251,
+      "holding_days": 79.0,
+      "mfe_return": 0.05949829971639025,
+      "retention": -1.021099706528024,
+      "symbol": "LTC/USD"
+    }
+  ],
+  "naturally_closed_count": 54
+}

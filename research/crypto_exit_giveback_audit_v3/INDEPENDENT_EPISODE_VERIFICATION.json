@@ -1,0 +1,13 @@
+{
+  "episodes_checked": 56,
+  "failures": [],
+  "fills_checked": 406,
+  "marks_checked": 4087,
+  "method": "independent event ledger with separate grouping, mark and return calculations",
+  "natural_30pct_checked": 15,
+  "primary_module_imports": false,
+  "production_imports": false,
+  "snapshots_checked": 1945,
+  "status": "PASS",
+  "terminal_events_checked": 2
+}

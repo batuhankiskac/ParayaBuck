@@ -1,0 +1,7 @@
+{
+  "alternative_exits_tested": "NONE",
+  "behavior_class": "MIXED_PROFIT_RETENTION_BEHAVIOR",
+  "exact_next_action": "CLOSE_AND_ARCHIVE_CORRECTED_CRYPTO_GIVEBACK_AUDIT",
+  "rationale": "The corrected natural >=30% MFE cohort remains 15/15 profitable with median retention above 87%; mixed small-peak round trips persist without a systematic large-winner collapse. Hindsight MFE does not establish executable peak capture.",
+  "research_decision": "CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED"
+}

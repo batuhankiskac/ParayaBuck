@@ -130,6 +130,13 @@ def audit_arm(cap: int, freeze: dict[str, Any]) -> tuple[dict[str, Any], list[di
             costs += sum(float(event[field]) for field in ("fee", "slippage_cost", "spread_cost"))
             notional += quantity * float(event["reference_price"])
             require(event["timestamp"] > event["order_created_at"], f"arm {cap} fill causality")
+        elif kind == "decision":
+            market = event["market"]
+            limit = 0.55 if market == "equity" else 0.05
+            name_limit = 0.10 if market == "equity" else 0.05
+            weights = [float(weight) for _symbol, weight in event["target_weights"]]
+            require(sum(weights) <= limit + 1e-8, f"arm {cap} {market} sleeve")
+            require(all(0 <= weight <= name_limit + 1e-8 for weight in weights), f"arm {cap} name limit")
         elif kind == "corporate_action":
             cash += float(event["cash_delta"])
             if event["split_ratio"] is not None and key in qty:

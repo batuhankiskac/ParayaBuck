@@ -19,6 +19,8 @@ OUT = Path(__file__).resolve().parent
 def main() -> None:
     for cap, prefix in ((6, "CONTROL_CAP6"), (8, "TREATMENT_CAP8")):
         result_path = OUT / f"{prefix}_RESULTS_V3.json"
+        if not result_path.exists():
+            continue
         outcome = json.loads(result_path.read_text())
         with gzip.open(OUT / f"{prefix}_TRACE_V3.json.gz", "rt") as handle:
             trace = json.load(handle)

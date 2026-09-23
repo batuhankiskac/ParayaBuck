@@ -1,0 +1,10 @@
+{
+  "affected_baseline": "crypto_low_variance_hysteresis_v1 repaired canonical hourly control",
+  "cap8_run": false,
+  "decision": "PHYSICAL_CLOCK_REPAIR_EXPOSED_CANONICAL_BASELINE_CORRECTNESS_ISSUE",
+  "exact_next_action": "ISOLATE_AND_REPAIR_AFFECTED_CANONICAL_BASELINE",
+  "first_material_case": "2021-04-01 complete daily signal -> 2021-04-02 00:00 opening fills",
+  "migration_economics_run": false,
+  "production_strategy_or_config_changed": false,
+  "replay_readiness": "SHARED_ACCOUNT_REPLAY_CLOCK_NOT_READY"
+}

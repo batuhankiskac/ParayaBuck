@@ -1,0 +1,6 @@
+{
+  "calendar_unit_checks": "PASS",
+  "isolated_equity_economic_parity": "NOT_RUN",
+  "reason": "Stop before isolated/combined reruns after actual noncausal crypto canonical fills were established. Equity session mapping is tested but no fresh full replay parity is claimed.",
+  "status": "NOT_RUN_CANONICAL_CRYPTO_STOP"
+}

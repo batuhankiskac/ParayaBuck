@@ -1,0 +1,23 @@
+{
+  "actual_fills": [
+    {
+      "next_daily_open_price": 58714.99,
+      "symbol": "BTC/USD",
+      "timestamp": "2021-04-02T00:00:00+00:00"
+    },
+    {
+      "next_daily_open_price": 1968.4,
+      "symbol": "ETH/USD",
+      "timestamp": "2021-04-02T00:00:00+00:00"
+    }
+  ],
+  "baseline_redefined": false,
+  "consumed_complete_daily_bar_label": "2021-04-01T00:00:00+00:00",
+  "control_sha256": "251798653eb28bcfb3e5d5080ebc1c347b979d802d340d1875e46c693bea2b01",
+  "decision_label": "2021-04-01T00:00:00+00:00",
+  "earliest_complete_daily_availability": "2021-04-02T00:00:00+00:00",
+  "economic_fill_timing_issue": "The completed signal becomes available at the exact opening print used for two nonzero canonical fills; no order based on that signal exists before the opening print.",
+  "final_source_hour_label": "2021-04-01T23:00:00+00:00",
+  "fresh_full_isolated_replay": "NOT_RUN_STOP_RULE",
+  "status": "FAIL_CANONICAL_BASELINE_TIMING"
+}

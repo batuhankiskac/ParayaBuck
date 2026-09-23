@@ -1,0 +1,5 @@
+# Crypto source clock
+
+The hourly source is `data/historical/crypto_expanded_1h.csv`, SHA-256 `73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e`. Alpaca's [Bar model](https://alpaca.markets/sdks/python/api_reference/data/models.html) defines the bar timestamp as its opening timestamp. The repository's [canonical crypto baseline](../../docs/research/canonical_crypto_baseline.md) notes that the original provider-download receipt is unavailable; that limits independent provider-provenance proof. The source rows and UTC aggregation follow the opening-label convention. Its 23:00 row contains observations from 23:00 up to the 00:00 boundary; the complete row cannot be known at 23:00.
+
+The 2021-04-01 23:00 BTC/USD row closes at 58713.5 and ETH/USD at 1968.16. These values become part of the 2021-04-01 complete daily bars; neither daily bar can be fully known before 2021-04-02 00:00 UTC. The canonical control fills at the 2021-04-02 daily opening prices 58714.99 and 1968.4, respectively. Component completeness and continuity are required by the existing aggregator and by the isolated research clock helper.

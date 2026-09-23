@@ -1,0 +1,22 @@
+{
+  "archive_tag": "archive/research/shared-account-replay-v2-clock-blocked-2026-09",
+  "archive_tag_object": "a62b5e47797a15ffb2a62c6dfe8656d3e18bed50",
+  "cap8_run": false,
+  "combined_cap6_accounting": "PASS",
+  "combined_determinism": "PASS",
+  "crypto_isolated_parity": "PASS",
+  "equity_isolated_parity": "PASS",
+  "main_closure_sha": "d87adda9ddd35efbceda04af1162a579f0e6e9b6",
+  "maximum_actual_positions": 6,
+  "maximum_effective_slot_claims": 6,
+  "migration_economics_run": false,
+  "over_cap_timestamp_count": 0,
+  "remote_peeled_target": "fb66be75aa77d48e78d586808c05ac40d617ca0d",
+  "schema": "replay-v2-closure-receipt",
+  "starting_main_sha": "3f97c02826bc42eda8197dbb7b605d299915155a",
+  "v2_branch": "research/shared-account-replay-v2",
+  "v2_decision": "SHARED_ACCOUNT_REPLAY_V2_BLOCKED",
+  "v2_implementation_merged_to_main": false,
+  "v2_migration_readiness": "MIGRATION_REPLAY_NOT_READY",
+  "v2_sha": "fb66be75aa77d48e78d586808c05ac40d617ca0d"
+}

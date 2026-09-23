@@ -1,0 +1,8 @@
+{
+  "cap8_run": false,
+  "maximum_actual_positions": null,
+  "maximum_effective_slot_claims": null,
+  "over_cap_timestamp_count": null,
+  "reason": "Combined replay forbidden until isolated physical-clock controls are acceptable.",
+  "status": "NOT_RUN_CANONICAL_BASELINE_STOP"
+}

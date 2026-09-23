@@ -6,7 +6,7 @@
 
 ## Starting main SHA and physical-clock V2 closure
 
-Starting production main was `b135d73743ec2652f79b8c840df50bd3f67166e8`. The documentation-only closure was committed on main as `d1c8847aebd3776730ef9ad93967908c44a8aed9` locally and remains unpublished. V2 was classified `PHYSICAL_AVAILABILITY_CLOCK_V2_VALIDATED_WITH_LIMITATIONS` and `MIGRATION_REPLAY_READY`. Its completed branch was removed after preservation by the immutable tag. The obsolete label-clock replay lacks its full event trace, so exact old-clock cross-market claimant flips cannot be recovered.
+Starting production main was `b135d73743ec2652f79b8c840df50bd3f67166e8`. The documentation-only closure was committed on main as `d1c8847aebd3776730ef9ad93967908c44a8aed9`. At the remote observation recorded below, remote main already included that commit. V2 was classified `PHYSICAL_AVAILABILITY_CLOCK_V2_VALIDATED_WITH_LIMITATIONS` and `MIGRATION_REPLAY_READY`. Its completed branch was removed after preservation by the immutable tag. The obsolete label-clock replay lacks its full event trace, so exact old-clock cross-market claimant flips cannot be recovered.
 
 ## Authorities and freeze
 
@@ -125,4 +125,4 @@ Marginal Crypto→Equity and Equity→Crypto crowd-out events did not disappear 
 
 ## Production state and publication
 
-Production `maximum_positions` remains 6. Equity V3, crypto strategy and rebalance band, PAPER/LIVE modes, and production code/config remain unchanged. A production parity review is the next action if accepted. The clock-closure commit is `d1c8847aebd3776730ef9ad93967908c44a8aed9`; local `refs/heads/main` is currently `af7225e1952c20a81f7d22d4f8d98126f02e27b3` and also contains an independently created later commit. No main push is part of this study. Local `refs/heads/research/account-capacity-migration-8-v3` requires exact publication approval before push; no new migration tag was created. The final branch SHA is supplied with the completed local commit in the delivery message.
+Production `maximum_positions` remains 6. Equity V3, crypto strategy and rebalance band, PAPER/LIVE modes, and production code/config remain unchanged. A production parity review is the next action if accepted. The clock-closure commit is `d1c8847aebd3776730ef9ad93967908c44a8aed9`; local main is `af7225e1952c20a81f7d22d4f8d98126f02e27b3` and includes an independently created later documentation commit. A read-only `git ls-remote` at `2026-09-23T22:02:48Z` found remote main at `af7225e1952c20a81f7d22d4f8d98126f02e27b3` and remote migration branch at `11b4250cc316793a3043ea5a9bb4f31235189609`. The migration push was not initiated in this task; the local tracking reflog records an external push update. This report correction remains local and must not be pushed without exact approval. No migration tag was created. The final local branch SHA is supplied in the delivery message.

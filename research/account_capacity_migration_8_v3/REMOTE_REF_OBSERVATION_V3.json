@@ -1,0 +1,12 @@
+{
+  "local_tracking_reflog": "update by push at 2026-09-24 01:01:17 +0300",
+  "method": "git ls-remote --heads origin research/account-capacity-migration-8-v3 main",
+  "observed_at_utc": "2026-09-23T22:02:48Z",
+  "publication_policy": "No new migration ref push initiated here without exact operator approval; no rollback or further push performed.",
+  "push_initiated_in_this_task": false,
+  "refs": {
+    "refs/heads/main": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+    "refs/heads/research/account-capacity-migration-8-v3": "11b4250cc316793a3043ea5a9bb4f31235189609"
+  },
+  "schema": "migration-remote-ref-observation-v3"
+}

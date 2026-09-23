@@ -41,6 +41,7 @@ def main() -> None:
     freeze = load("FROZEN_MIGRATION_SPEC_V3.json")
     decision = load("MIGRATION_DECISION_V3.json")
     current_main = subprocess.check_output(["git", "rev-parse", "refs/heads/main"], cwd=ROOT, text=True).strip()
+    remote_observation = load("REMOTE_REF_OBSERVATION_V3.json")
     control = load("CONTROL_CAP6_RESULTS_V3.json")
     treatment = load("TREATMENT_CAP8_RESULTS_V3.json")
     a, b = control["structural"], treatment["structural"]
@@ -143,7 +144,7 @@ def main() -> None:
 
 ## Starting main SHA and physical-clock V2 closure
 
-Starting production main was `{freeze["production_main_before_closure_sha"]}`. The documentation-only closure was committed on main as `{freeze["starting_main_sha"]}` locally and remains unpublished. V2 was classified `PHYSICAL_AVAILABILITY_CLOCK_V2_VALIDATED_WITH_LIMITATIONS` and `MIGRATION_REPLAY_READY`. Its completed branch was removed after preservation by the immutable tag. The obsolete label-clock replay lacks its full event trace, so exact old-clock cross-market claimant flips cannot be recovered.
+Starting production main was `{freeze["production_main_before_closure_sha"]}`. The documentation-only closure was committed on main as `{freeze["starting_main_sha"]}`. At the remote observation recorded below, remote main already included that commit. V2 was classified `PHYSICAL_AVAILABILITY_CLOCK_V2_VALIDATED_WITH_LIMITATIONS` and `MIGRATION_REPLAY_READY`. Its completed branch was removed after preservation by the immutable tag. The obsolete label-clock replay lacks its full event trace, so exact old-clock cross-market claimant flips cannot be recovered.
 
 ## Authorities and freeze
 
@@ -211,7 +212,7 @@ Marginal Crypto→Equity and Equity→Crypto crowd-out events did not disappear 
 
 ## Production state and publication
 
-Production `maximum_positions` remains 6. Equity V3, crypto strategy and rebalance band, PAPER/LIVE modes, and production code/config remain unchanged. A production parity review is the next action if accepted. The clock-closure commit is `{freeze["starting_main_sha"]}`; local `refs/heads/main` is currently `{current_main}` and also contains an independently created later commit. No main push is part of this study. Local `refs/heads/research/account-capacity-migration-8-v3` requires exact publication approval before push; no new migration tag was created. The final branch SHA is supplied with the completed local commit in the delivery message.
+Production `maximum_positions` remains 6. Equity V3, crypto strategy and rebalance band, PAPER/LIVE modes, and production code/config remain unchanged. A production parity review is the next action if accepted. The clock-closure commit is `{freeze["starting_main_sha"]}`; local main is `{current_main}` and includes an independently created later documentation commit. A read-only `git ls-remote` at `{remote_observation["observed_at_utc"]}` found remote main at `{remote_observation["refs"]["refs/heads/main"]}` and remote migration branch at `{remote_observation["refs"]["refs/heads/research/account-capacity-migration-8-v3"]}`. The migration push was not initiated in this task; the local tracking reflog records an external push update. This report correction remains local and must not be pushed without exact approval. No migration tag was created. The final local branch SHA is supplied in the delivery message.
 """
     write("FINAL_MIGRATION_REPORT_V3.md", report)
 

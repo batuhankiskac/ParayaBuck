@@ -3,7 +3,8 @@
     6,
     8
   ],
-  "freeze_commit_sha": "TO_BE_PINNED_AFTER_FREEZE_COMMIT",
+  "freeze_commit_is_ancestor_required": true,
+  "freeze_commit_sha": "51b8fa16c77df60729414da17d20d329480e380c",
   "freeze_spec_sha256": "800f7278624d65124476b3cba18a36bca39dbd63c9c7616a63f8cd3998a72467",
   "main_parent_sha": "d1c8847aebd3776730ef9ad93967908c44a8aed9",
   "outcome_files_present": false,

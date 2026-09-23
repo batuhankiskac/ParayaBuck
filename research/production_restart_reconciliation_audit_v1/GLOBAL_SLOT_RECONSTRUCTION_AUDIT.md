@@ -1,0 +1,5 @@
+# Global slot reconstruction
+
+\`reserve_opening_order_slots\` (\`src/parayabuck/execution/portfolio.py:556-590\`) starts from every nonzero broker position, adds passed reservations and broker OPEN order symbols, then admits opening BUYs sequentially only while under \`maximum_positions\`. SELLs do not free slots. \`PortfolioRuntime._effective_reserved_position_keys\` (\`portfolio/runtime_service.py:1490-1508\`) adds all nonterminal local portfolio orders; \`_effective_open_order_constraints\` (:1515-1532) adds broker-wide symbols. Engine startup resumes markets crypto first and shares same-cycle reservations (\`runtime.py:2481-2507,3520-3567\`).
+
+Thus unmanaged positions and partial fills consume slots, pending exits retain slots, and a broker-only opening order is counted even if ownership is unknown. Startup reconciliation itself halts on unknown orders/positions before new decisions, so externally caused over-cap state fails closed. The repaired global slot tests cover band-suppressed replacement BUYs; audit validation reruns them. This conclusion is independent of whether the configured cap is 6 or 8.

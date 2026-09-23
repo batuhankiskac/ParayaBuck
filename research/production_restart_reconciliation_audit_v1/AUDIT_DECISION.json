@@ -1,0 +1,23 @@
+{
+  "decision": "PRODUCTION_RECONCILIATION_FIX_REQUIRED",
+  "open_order_classification": "OPEN_ORDER_RECONCILIATION_COMPLETE",
+  "fill_activity_classification": "FILL_ACTIVITY_PAGINATION_INCOMPLETE_CONFIRMED",
+  "production_main_sha": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+  "issues": [
+    {
+      "id": "RR-01",
+      "severity": "MEDIUM",
+      "title": "Terminal broker order can remain locally nonterminal and halt normal startup before order-status recovery",
+      "proof": "Offline test test_filled_buy_without_trade_update_halts_before_phase_recovery plus startup drift gate",
+      "production_files_changed": false
+    },
+    {
+      "id": "RR-02",
+      "severity": "MEDIUM",
+      "title": "FILL pagination reports success on a malformed or nonadvancing page",
+      "proof": "Offline tests test_nonadvancing_full_fill_page_reports_success_and_advances_watermark and test_malformed_fill_response_reports_success",
+      "production_files_changed": false
+    }
+  ],
+  "next_action": "ISOLATE_PRODUCTION_RECONCILIATION_CORRECTNESS_REPAIR"
+}

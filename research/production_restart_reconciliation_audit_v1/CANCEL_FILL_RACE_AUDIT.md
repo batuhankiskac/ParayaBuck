@@ -1,0 +1,5 @@
+# Cancel versus fill
+
+Cancellation is a request, not a terminal fact. Alpaca documents \`pending_cancel\`, \`partially_filled\`, \`filled\`, and \`canceled\` separately: [Alpaca order statuses](https://docs.alpaca.markets/us/docs/orders-at-alpaca). The broker OPEN list keeps a pending cancel visible; local nonterminal rows remain slot reservations. Startup compares IDs and positions, so a late fill during cancellation can create drift and halt instead of silently freeing exposure.
+
+Crypto managed exits use \`_reconcile_crypto_exit\` (\`alpaca_reconciliation.py:288-344\`) to query the exit order by client ID and distinguish filled/partially filled/terminal outcomes. Portfolio phase recovery resolves only rows left at \`submitting\` (\`runtime_service.py:1311-1348\`); a previously \`submitted\` row whose order filled or canceled during downtime can remain nonterminal and trigger the startup missing-broker-order bucket. This is the same recovery gap as C5, including late fills. The audit did not simulate Alpaca's real asynchronous cancellation timing.

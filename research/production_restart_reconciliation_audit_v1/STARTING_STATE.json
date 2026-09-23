@@ -1,0 +1,27 @@
+{
+  "audit_started_utc_date": "2026-09-24",
+  "local_main_sha": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+  "origin_main_tracking_sha": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+  "origin_main_live_verified": false,
+  "origin_main_live_verification_error": "git ls-remote failed: github.com DNS unavailable in sandbox",
+  "original_current_branch": "research/account-capacity-migration-8-v3",
+  "original_worktree_state": [
+    "?? research/account_capacity_migration_8_v3/CONTROL_CAP6_TRACE_V3.json.gz",
+    "?? research/account_capacity_migration_8_v3/CRYPTO_CANONICAL_AUTHORITY_RECEIPT.json",
+    "?? research/account_capacity_migration_8_v3/PHYSICAL_REPLAY_AUTHORITY_RECEIPT.json"
+  ],
+  "local_branches_at_start": [
+    "main",
+    "maintenance/crypto-canonical-causal-execution-v1",
+    "research/account-capacity-migration-8-v3",
+    "research/shared-account-replay-v2"
+  ],
+  "remote_tracking_branches_at_start": [
+    "origin/main",
+    "origin/research/physical-availability-clock-v1",
+    "origin/research/shared-account-replay-v2"
+  ],
+  "audit_branch": "audit/production-restart-reconciliation-v1",
+  "audit_base": "main",
+  "original_worktree_touched": false
+}

@@ -1,0 +1,5 @@
+# Startup order and first decision
+
+Sequence: mode/live proof → broker account/positions/FILL/OPEN reconciliation → halt on any drift → create portfolio runtimes and load prior decision time → restore incidents/watermarks → start workers with warmup gate → seed history → fresh broker account and risk persistence → resume prior rebalances → startup catch-up → running state. See \`runtime.py:861-1145\` and \`PRODUCTION_RESTART_CALL_GRAPH.md\`.
+
+The account snapshot used for startup decisions is fetched **after** reconciliation and warmup. Reservations are recomputed from local and broker order state per decision. The \`pb-decisions\` thread begins before warmup ends, but \`_warming_up\`, freshness, and readiness gates prevent ordinary portfolio decisions; startup catch-up runs after the second account fetch. A persistence failure in the second account/risk pass propagates and stops startup. The primary concern is that reconciliation can halt before terminal order recovery, not that it submits a portfolio BUY before loading broker truth.

@@ -7,11 +7,16 @@ import gc
 import gzip
 import hashlib
 import json
+import sys
 from collections import Counter, defaultdict
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 from parayabuck.config import load_config
 from parayabuck.core.models import Market
@@ -24,7 +29,6 @@ from research.physical_availability_clock_v2.run_historical import (
     _new_replay,
 )
 
-ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "research/account_capacity_migration_8_v3"
 FREEZE = json.loads((OUT / "FROZEN_MIGRATION_SPEC_V3.json").read_text())
 TAGGED_CAP6_EVENT_SHA256 = "841091dd6ebedbc03e3dde27eaf7bee09e54474e660554c3c4b28423d3eb186d"

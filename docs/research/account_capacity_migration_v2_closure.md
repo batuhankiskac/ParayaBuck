@@ -42,3 +42,19 @@ position slots under `maximum_positions = 6`. Its decision is
 The replay observation did **not** establish the production root cause; a
 separate production-correctness campaign must establish and repair it before
 shared replay can be rebuilt and validated from corrected main.
+
+## Shared-account replay V2 follow-up — 2026-09-23
+
+The research-only V2 replay at `fb66be75aa77d48e78d586808c05ac40d617ca0d`
+is preserved by the pushed annotated tag
+`archive/research/shared-account-replay-v2-clock-blocked-2026-09`. Equity and
+crypto isolated parity passed. Combined cap-six accounting passed with zero
+over-cap timestamps, at most six actual positions and six occupied/reserved
+claims; two runs produced the same event hash. No cap-eight arm or migration
+economics ran. Its decision remains `SHARED_ACCOUNT_REPLAY_V2_BLOCKED` and
+`MIGRATION_REPLAY_NOT_READY`: completed equity and crypto bars are labeled
+before their full contents are physically available, so combined slot priority
+under that label-time clock is unproven. The V2 implementation remains archived
+research provenance, not validated replay infrastructure. A separate physical
+availability clock study must repair and revalidate isolated semantics and the
+combined cap-six replay before any capacity comparison.

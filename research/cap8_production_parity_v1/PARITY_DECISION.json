@@ -1,0 +1,9 @@
+{
+  "decision": "CAP8_PRODUCTION_PARITY_BLOCKED",
+  "gross_policy": "MAXIMUM_GROSS_IS_TARGET_LIMIT",
+  "gross_subdecision": "REALIZED_GROSS_DRIFT_CONSISTENT_WITH_EXISTING_POLICY",
+  "production_maximum_positions": 6,
+  "production_files_changed": "NONE",
+  "blocker": "Current pure-BUY PAPER/LIVE path submits risk-increasing BUY orders with observed gross already above 0.60; it omits the fresh-headroom sizing used by deferred BUYs.",
+  "required_next_action": "Repair and verify pure-BUY gross/cash admission on production main, complete separate reconciliation repair, then re-audit before any PAPER cap-8 config change."
+}

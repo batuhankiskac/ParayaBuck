@@ -729,3 +729,15 @@ economic findings. Commercial security-master procurement stays
 `DEFERRED_EXTERNAL_DATA_NOT_WORTH_PROCUREMENT_BURDEN`.
 
 `NO_UNTESTED_SHORTLIST_CANDIDATE_REMAINS_FROM_PUBLIC_DATA_DISCOVERY_V3`.
+
+## Account capacity migration V3
+
+The frozen cap 6 versus cap 8 account architecture study at
+`9c5e61382e8cdb71fdd3442d945719024accedd9` is
+`ACCOUNT_ARCHITECTURE_MIGRATION_8_ACCEPTED` as research: global count denials
+fell from 1,112 to 438. The local annotated archive tag is
+`archive/research/account-capacity-migration-8-v3-accepted-2026-09`.
+See `docs/research/account_capacity_migration_v3_closure.md` and
+`research/cap8_production_parity_v1/`. Realized gross at cap 8 exceeded 0.60
+at 9,152 of 50,194 marks; the production parity audit blocks rollout because
+the pure-BUY path lacks fresh gross-headroom sizing. Production is still cap 6.

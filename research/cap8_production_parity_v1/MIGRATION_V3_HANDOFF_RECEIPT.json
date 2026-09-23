@@ -1,0 +1,26 @@
+{
+  "starting_main_sha": "af7225e1952c20a81f7d22d4f8d98126f02e27b3",
+  "migration_branch": "research/account-capacity-migration-8-v3",
+  "migration_final_sha": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+  "archive_tag": "archive/research/account-capacity-migration-8-v3-accepted-2026-09",
+  "archive_tag_peeled_sha": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+  "archive_pushed": false,
+  "decision": "ACCOUNT_ARCHITECTURE_MIGRATION_8_ACCEPTED",
+  "independent_verifier": "PASS",
+  "frozen_cap6": 6,
+  "frozen_cap8": 8,
+  "count_denials_cap6": 1112,
+  "count_denials_cap8": 438,
+  "migration_production_src_config_diff": false,
+  "production_maximum_positions": 6,
+  "authority_files": [
+    "FINAL_MIGRATION_REPORT_V3.md",
+    "MIGRATION_DECISION_V3.json",
+    "FROZEN_MIGRATION_SPEC_V3.json",
+    "INDEPENDENT_MIGRATION_VERIFICATION_V3.json",
+    "CONTROL_CAP6_RESULTS_V3.json",
+    "TREATMENT_CAP8_RESULTS_V3.json",
+    "EXPOSURE_COMPARISON_V3.csv",
+    "SLOT_DENIAL_ATTRIBUTION_V3.csv"
+  ]
+}

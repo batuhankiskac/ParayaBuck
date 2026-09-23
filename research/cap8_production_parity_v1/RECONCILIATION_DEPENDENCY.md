@@ -1,0 +1,3 @@
+# Restart and reconciliation prerequisite
+
+Audit base is production `main` at `af7225e1952c20a81f7d22d4f8d98126f02e27b3`. A separate restart/reconciliation repair concerning sequencing, authoritative order recovery and FILL pagination is outstanding relative to this base. This audit did not inspect or edit its worktree files. Increasing the global cap does not introduce a six-element array in the inspected production paths, but more simultaneous orders increase reliance on complete open-order/FILL recovery and correct slot reconstruction. The separate repair must be accepted, merged and validated on main before an actual cap-8 PAPER rollout. Its eventual SHA must be pinned in the rollout preflight; this audit cannot assert it is complete.

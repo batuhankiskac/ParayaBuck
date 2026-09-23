@@ -16,6 +16,7 @@ from typing import Protocol
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
+    BrokerWorkingBuyOrder,
     PortfolioExecutionPolicy,
     PortfolioOrderRequest,
     PortfolioRiskLimits,
@@ -97,6 +98,7 @@ class OpenPortfolioOrder:
     quantity: float
     cumulative_filled_quantity: float
     broker_order_id: str = ""
+    reference_price: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -132,12 +134,25 @@ class PortfolioRuntimeResult:
     status: str
 
 
+@dataclass(frozen=True)
+class BuyAdmission:
+    account: AccountSnapshot
+    orders: tuple[PortfolioOrderRequest, ...]
+    realized_gross: float
+    committed_buy_notional: float | None
+    gross_headroom: float
+    cash_headroom: float
+    reason: str | None
+
+
 class PortfolioRuntimeBroker(Protocol):
     def account(self) -> AccountSnapshot: ...
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules: ...
 
     def all_open_order_symbols(self) -> set[str]: ...
+
+    def working_buy_orders(self) -> tuple[BrokerWorkingBuyOrder, ...]: ...
 
     def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str: ...
 

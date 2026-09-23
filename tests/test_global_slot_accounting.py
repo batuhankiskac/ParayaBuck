@@ -102,6 +102,21 @@ def test_sell_and_partial_exit_do_not_release_slot_until_broker_is_flat() -> Non
     assert reserve_opening_order_slots((buy,), flat, maximum_positions=6) == (buy,)
 
 
+def test_synthetic_eight_slots_and_six_slot_rollback_preserve_exits() -> None:
+    held = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES)
+    seventh = _order("NEW1")
+    eighth = _order("BTC/USD", Market.CRYPTO)
+    ninth = _order("ETH/USD", Market.CRYPTO)
+    assert reserve_opening_order_slots((seventh, eighth, ninth), _account(held), maximum_positions=8) == (
+        seventh,
+        eighth,
+    )
+    eight_held = (*held, _position("NEW1", Market.EQUITY), _position("BTC/USD", Market.CRYPTO))
+    exit_order = _order("ALL", side=PortfolioOrderSide.SELL)
+    assert reserve_opening_order_slots((exit_order, ninth), _account(eight_held), maximum_positions=6) == (exit_order,)
+    assert reserve_opening_order_slots((ninth,), _account(eight_held[3:]), maximum_positions=6) == (ninth,)
+
+
 def test_opening_reservation_transitions_to_position_or_releases_once() -> None:
     held = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES[:5])
     pending = ((Market.CRYPTO, "BTC/USD"),)

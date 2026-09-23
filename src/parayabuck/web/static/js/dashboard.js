@@ -221,6 +221,14 @@
       setText("riskDailyLoss", formatPnl(risk.daily_pnl)+" / "+fmtPct(risk.daily_loss_limit_pct));
       const latch=risk.entry_risk_latch||{}; const reasons=Object.entries(latch).filter(function(e){return e[1];}).map(function(e){return e[0]+": "+e[1];}).join(", "); setText("riskEntryLatch", reasons||"a\u00e7\u0131k");
       const epoch=risk.risk_epoch; setText("riskEpoch", epoch ? fmtDate(epoch.session_date)+" \u00b7 taban $"+fmtNum(epoch.day_start_equity) : "—");
+      const cap=risk.buy_capacity||{}; const capReady=!cap.unavailable;
+      setText("riskSlots",capReady ? cap.positions_count+" / "+cap.effective_slots+" / "+cap.maximum_positions : "—");
+      setText("riskWorking",capReady ? String(cap.broker_working_order_count) : "—");
+      setText("riskGrossHeadroom",capReady ? formatCurrency(cap.available_gross_buy_headroom) : "—");
+      setText("riskCommittedBuy",capReady&&cap.committed_buy_notional!==null ? formatCurrency(cap.committed_buy_notional) : "bilinmiyor");
+      setText("riskCashHeadroom",capReady ? formatCurrency(cap.available_cash_buy_headroom) : "—");
+      const capReasons=Object.entries(cap.suppression_reasons||{}).concat(Object.entries(cap.halt_reasons||{})).map(function(e){return e[0]+": "+e[1];}).join(", ");
+      setText("riskAdmission",capReady ? (cap.reconciliation_status||"—")+(capReasons ? " \u00b7 "+capReasons : "") : "—");
       const badge=document.getElementById("riskCircuitBadge"); if(badge){ badge.textContent=risk.circuit_breaker ? ("KES\u0130C\u0130: "+risk.circuit_breaker) : "risk haz\u0131r"; badge.className="count-badge"+(risk.circuit_breaker?" risk-critical":""); }
       const box=document.getElementById("riskIncidents"); if(!box) return; box.replaceChildren(); const incidents=risk.safety_incidents||[]; if(!incidents.length){ const ok=document.createElement("div"); ok.className="risk-incident ok"; ok.textContent="Aktif g\u00fcvenlik olay\u0131 yok"; box.appendChild(ok); return; } incidents.forEach(function(i){ const d=document.createElement("div"); d.className="risk-incident"; d.textContent=i.reason+" ("+fmtDateTime(i.activated_at)+")"; box.appendChild(d); });
     }

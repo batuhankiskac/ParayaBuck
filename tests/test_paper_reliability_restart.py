@@ -573,6 +573,9 @@ def test_order_idempotency_same_decision_twice_one_order(tmp_path: Path) -> None
     assert len(rows) == 2
     # Broker timeout -> reconcile before retry (order left at reconciliation_required)
     broker_fail = _SimBroker()
+    # This is an independent timeout scenario: the prior two working BUYs
+    # legitimately consume the new account-wide admission headroom.
+    failure_repo = PortfolioStateRepository(tmp_path / "timeout_runtime.sqlite3")
 
     # Make submit raise
     def failing_submit(order: PortfolioOrderRequest) -> str:  # type: ignore[no-untyped-def]
@@ -589,7 +592,7 @@ def test_order_idempotency_same_decision_twice_one_order(tmp_path: Path) -> None
             submit_portfolio_order=failing_submit,
             resolve_portfolio_submission=lambda *a, **k: None,
         ),
-        repository=repo,
+        repository=failure_repo,
         mode="paper",
         maximum_allocation=1.0,
         account_id="acct",
@@ -601,7 +604,7 @@ def test_order_idempotency_same_decision_twice_one_order(tmp_path: Path) -> None
     with pytest.raises(TimeoutError):
         rt_fail.process_closed_bars(_bars(("TSLA",), day=datetime(2025, 1, 5, tzinfo=UTC)))
     # Order left at reconciliation_required
-    tsla_decision = repo.latest_decision_timestamp("acct", rt_fail.configuration_digest, Market.EQUITY)
+    tsla_decision = failure_repo.latest_decision_timestamp("acct", rt_fail.configuration_digest, Market.EQUITY)
     assert tsla_decision is not None
     # Find the TSLA order
 

@@ -252,6 +252,35 @@ def test_dashboard_risk_panel_exposes_policies_and_state(tmp_path: Path, monkeyp
     assert risk["circuit_breaker"] is None
     assert isinstance(risk["safety_incidents"], list)
     assert "risk_epoch" in risk
+    assert risk["buy_capacity"]["unavailable"] is True
+
+
+def test_dashboard_risk_exposes_sampled_buy_capacity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from parayabuck.web import server_legacy
+
+    config_path = _repo_config(tmp_path)
+    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    monkeypatch.setattr(
+        server_legacy,
+        "_dashboard_buy_capacity",
+        lambda: {
+            "positions_count": 5,
+            "effective_slots": 6,
+            "maximum_positions": 6,
+            "broker_working_order_count": 1,
+            "available_gross_buy_headroom": 1200.0,
+            "committed_buy_notional": 500.0,
+            "available_cash_buy_headroom": 1500.0,
+            "suppression_reasons": {"equity": "gross_headroom_exhausted"},
+            "reconciliation_status": "complete",
+        },
+    )
+    server_legacy._dashboard_snapshot_reset()
+    capacity = asyncio.run(server.dashboard_overview())["risk"]["buy_capacity"]
+    assert capacity["effective_slots"] == capacity["maximum_positions"] == 6
+    assert capacity["broker_working_order_count"] == 1
+    assert capacity["committed_buy_notional"] == 500.0
+    assert capacity["suppression_reasons"]["equity"] == "gross_headroom_exhausted"
 
 
 def test_dashboard_universe_and_health_panels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

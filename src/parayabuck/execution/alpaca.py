@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import threading
 import time
@@ -33,6 +34,7 @@ from parayabuck.execution.alpaca_client import AlpacaClient
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
+    BrokerWorkingBuyOrder,
     PortfolioOrderRequest,
     floor_increment_decimal,
 )
@@ -564,6 +566,60 @@ class AlpacaBroker:
         if getter is None:
             raise RuntimeError("Alpaca adapter does not support exhaustive open-order retrieval")
         return getter(request)
+
+    def working_buy_orders(self) -> tuple[BrokerWorkingBuyOrder, ...]:
+        """Exhaustive broker BUY commitments; an unpriced order stays unknown."""
+        result: list[BrokerWorkingBuyOrder] = []
+        seen: set[str] = set()
+        for order in self.working_orders():
+            if self._normalized_field(order, "side") != "buy":
+                continue
+            client_id = str(self._field(order, "client_order_id", "") or "").strip()
+            symbol = str(self._field(order, "symbol", "") or "").strip()
+            if not client_id or client_id in seen or not symbol:
+                raise ValueError("Invalid broker working BUY identity")
+            seen.add(client_id)
+            market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+            filled = float(self._field(order, "filled_qty", 0) or 0)
+            raw_qty = self._field(order, "qty", None)
+            quantity = float(raw_qty) if raw_qty is not None else None
+            raw_notional = self._field(order, "notional", None)
+            notional = float(raw_notional) if raw_notional is not None else None
+            prices = [
+                float(value)
+                for field in ("limit_price", "stop_price", "filled_avg_price")
+                if (value := self._field(order, field, None)) is not None
+            ]
+            if (
+                not math.isfinite(filled)
+                or filled < 0
+                or (quantity is not None and (not math.isfinite(quantity) or quantity < filled))
+                or (notional is not None and (not math.isfinite(notional) or notional < 0))
+                or any(not math.isfinite(price) or price <= 0 for price in prices)
+                or (quantity is None and notional is None)
+            ):
+                raise ValueError(f"Invalid broker working BUY quantity or price for {client_id}")
+            average = self._field(order, "filled_avg_price", None)
+            remaining_notional = (
+                max(0.0, notional - filled * float(average))
+                if notional is not None and (filled == 0 or average is not None)
+                else None
+            )
+            result.append(
+                BrokerWorkingBuyOrder(
+                    client_order_id=client_id,
+                    symbol=canonical_symbol(symbol, market),
+                    market=market,
+                    remaining_quantity=max(0.0, quantity - filled) if quantity is not None else None,
+                    reference_price=max(prices) if prices else None,
+                    remaining_notional=remaining_notional,
+                )
+            )
+        return tuple(result)
+
+    def working_orders(self) -> tuple[Any, ...]:
+        """Complete OPEN order collection for operator slot/order counts."""
+        return tuple(self._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True)))
 
     def _reconcile_stale_portfolio_ownership(self, symbol: str, market: Market) -> bool:
         """Resolve one stale portfolio symbol against real broker state.

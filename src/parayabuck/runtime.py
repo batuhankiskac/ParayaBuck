@@ -652,6 +652,69 @@ class EngineRuntime:
             scanner_status=scanner_status,
         )
 
+    def capacity_health(self) -> dict[str, object]:
+        """Fresh read-only account capacity for the operator dashboard."""
+        with self._portfolio_lock:
+            runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
+            if not runtimes:
+                return {"unavailable": True, "reason": "portfolio runtime not started"}
+            admission = runtimes[0].current_buy_capacity()
+            account = admission.account
+            broker_orders = self.broker.working_orders()
+            slots = {
+                (position.market, canonical_symbol(position.symbol, position.market))
+                for position in account.positions
+                if not position.is_flat
+            }
+            for order in self._portfolio_repository.open_orders(self.broker.account_id or "unknown"):
+                slots.add((order.market, canonical_symbol(order.symbol, order.market)))
+            for order in broker_orders:
+                symbol = str(self.broker._field(order, "symbol", "") or "")
+                if not symbol:
+                    raise ValueError("Broker OPEN order missing symbol")
+                market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+                slots.add((market, canonical_symbol(symbol, market)))
+            return {
+                "sampled_at": datetime.now(UTC).isoformat(),
+                "maximum_positions": runtimes[0].risk_overlay.limits.maximum_positions,
+                "positions_count": sum(not position.is_flat for position in account.positions),
+                "effective_slots": len(slots),
+                "broker_working_order_count": len(broker_orders),
+                "target_gross_pct": runtimes[0].risk_overlay.limits.maximum_gross * 100,
+                "realized_gross_pct": admission.realized_gross / account.equity * 100,
+                "available_gross_buy_headroom": admission.gross_headroom,
+                "committed_buy_notional": admission.committed_buy_notional,
+                "cash_ratio_pct": account.cash / account.equity * 100,
+                "available_cash_buy_headroom": admission.cash_headroom,
+                "equity_sleeve_pct": sum(
+                    position.market_value for position in account.positions if position.market == Market.EQUITY
+                )
+                / account.equity
+                * 100,
+                "crypto_sleeve_pct": sum(
+                    position.market_value for position in account.positions if position.market == Market.CRYPTO
+                )
+                / account.equity
+                * 100,
+                "suppression_reasons": {
+                    runtime.market.value: runtime.last_buy_admission.reason
+                    for runtime in runtimes
+                    if runtime.last_buy_admission is not None and runtime.last_buy_admission.reason
+                },
+                "halt_reasons": {
+                    market.value: reason
+                    for market, reason in getattr(self, "_market_entry_halts", {}).items()
+                    if reason
+                },
+                "reconciliation_status": (
+                    "failed"
+                    if getattr(self, "_reconcile_failed", False)
+                    else "complete"
+                    if getattr(self, "_last_reconciliation_at", None) is not None
+                    else "pending"
+                ),
+            }
+
     def _snapshot_health_state(
         self,
     ) -> tuple[dict[str, WorkerHealth], dict[Market, bool], dict[Market, set[str]]]:

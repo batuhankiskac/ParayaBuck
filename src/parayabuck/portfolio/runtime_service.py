@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -38,6 +39,7 @@ from parayabuck.portfolio.runtime_models import (
     REBALANCE_PHASE_COMPLETE,
     REBALANCE_PHASE_SELL_PENDING,
     TERMINAL_ORDER_STATUSES_SQL,
+    BuyAdmission,
     PortfolioDecisionService,
     PortfolioRuntimeBroker,
     PortfolioRuntimeResult,
@@ -344,6 +346,7 @@ class PortfolioRuntime:
         # blocked/early returns; used by the engine health surface.
         self.startup_catch_up_status: str | None = None
         self.startup_catch_up_at: datetime | None = None
+        self.last_buy_admission: BuyAdmission | None = None
 
     def _with_paper_observability(
         self,
@@ -1184,6 +1187,18 @@ class PortfolioRuntime:
                 submitted,
                 "sell_phase_submitted",
             )
+        # Pure BUY decisions still require current account-wide gross/cash
+        # headroom. Size BEFORE persisting candidate rows: a suppressed BUY
+        # must not become a phantom committed order.
+        admission = self._size_buys_to_safe_capacity(buys)
+        buys = reserve_opening_order_slots(
+            admission.orders,
+            admission.account,
+            maximum_positions=self.risk_overlay.limits.maximum_positions,
+            reserved_position_keys=self._effective_reserved_position_keys(reserved_position_keys),
+            open_order_symbols=tuple(sorted(self.broker.all_open_order_symbols())),
+        )
+        orders = buys
         # Pure BUY decision with no SELL leg: there is nothing to wait for,
         # so the BUY phase begins immediately. Atomic decision+orders.
         decision_id = self.repository.record_decision_with_orders(
@@ -1445,7 +1460,11 @@ class PortfolioRuntime:
                 session_id=self.session_id,
             )
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
-        buy_orders = self._size_buys_to_safe_capacity(buy_orders, account)
+        admission = self._size_buys_to_safe_capacity(buy_orders)
+        buy_orders = admission.orders
+        account = admission.account
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys)
+        open_order_symbols, _open_order_sides = self._effective_open_order_constraints()
         buy_orders = reserve_opening_order_slots(
             buy_orders,
             account,
@@ -1540,73 +1559,178 @@ class PortfolioRuntime:
             local_sides.setdefault(symbol, set()).add(side)
         return broker_symbols, {symbol: frozenset(sides) for symbol, sides in local_sides.items()}
 
-    def _size_buys_to_safe_capacity(
+    def _committed_buy_notional(
         self,
-        buy_orders: tuple[PortfolioOrderRequest, ...],
         account: AccountSnapshot,
-    ) -> tuple[PortfolioOrderRequest, ...]:
-        """Cap the re-planned BUY side by what the fresh account can absorb.
-
-        A rejected/canceled/expired/partial SELL leaves the account with more
-        exposure and less cash than the original decision assumed. The BUY
-        phase must therefore be re-sized against three hard constraints, all
-        evaluated on the FRESH broker snapshot:
-
-        * cash: buy notional must not exceed available cash;
-        * maximum gross: current broker gross + buy notional must stay within
-          the configured maximum gross exposure;
-        * live hard dollar cap: managed exposure after the buys must stay
-          within the authorized cap.
-
-        Orders that fall below the broker minimum after scaling are dropped;
-        if nothing remains, the BUY phase submits nothing. Margin is never
-        used as a risk control.
-        """
-        prices: dict[str, float] = {order.symbol: order.reference_price for order in buy_orders}
-        for position in account.positions:
-            prices.setdefault(canonical_symbol(position.symbol, position.market), position.current_price)
-        equity = max(1e-9, account.equity)
-        current_gross = sum(position.market_value for position in account.positions if not position.is_flat)
-        managed_value = sum(
-            abs(position.managed_qty) * position.current_price
+        broker_buys: tuple[Any, ...] | None,
+        unknown_broker_symbols: set[str],
+    ) -> float | None:
+        """Count each open BUY once; None means its risk cannot be priced."""
+        marks = {
+            (position.market, canonical_symbol(position.symbol, position.market)): position.current_price
             for position in account.positions
-            if not position.is_flat and position.managed_qty > 1e-12
-        )
+            if not position.is_flat
+        }
+        by_client: dict[str, float] = {}
+        local_prices: dict[str, float] = {}
+        local_buy_symbols: set[str] = set()
+        for order in self.repository.open_orders(self.account_id):
+            if str(order.side).lower() != "buy":
+                continue
+            remaining = order.quantity - order.cumulative_filled_quantity
+            if not math.isfinite(remaining) or remaining < -1e-8:
+                raise ValueError(f"Invalid durable BUY remainder: {order.client_order_id}")
+            if remaining <= 1e-12:
+                continue
+            symbol = canonical_symbol(order.symbol, order.market)
+            price = max(order.reference_price, marks.get((order.market, symbol), 0.0))
+            if not math.isfinite(price) or price <= 0:
+                return None
+            by_client[order.client_order_id] = remaining * price
+            local_prices[order.client_order_id] = price
+            local_buy_symbols.add(symbol)
+        if broker_buys is None:
+            # A test/alternate broker without detailed OPEN orders cannot
+            # prove that an unmatched working symbol is not a BUY.
+            if unknown_broker_symbols - local_buy_symbols:
+                return None
+        else:
+            seen: set[str] = set()
+            for order in broker_buys:
+                client_id = str(order.client_order_id).strip()
+                if not client_id or client_id in seen:
+                    raise ValueError("Invalid broker working BUY client ID")
+                seen.add(client_id)
+                symbol = canonical_symbol(order.symbol, order.market)
+                price = max(
+                    float(order.reference_price or 0),
+                    local_prices.get(client_id, 0.0),
+                    marks.get((order.market, symbol), 0.0),
+                )
+                if not math.isfinite(price):
+                    raise ValueError(f"Invalid broker BUY reference price: {client_id}")
+                remaining_qty = order.remaining_quantity
+                direct_notional = order.remaining_notional
+                if remaining_qty is not None and (not math.isfinite(remaining_qty) or remaining_qty < 0):
+                    raise ValueError(f"Invalid broker BUY remainder: {client_id}")
+                if direct_notional is not None and (not math.isfinite(direct_notional) or direct_notional < 0):
+                    raise ValueError(f"Invalid broker BUY notional: {client_id}")
+                if remaining_qty is None and direct_notional is None:
+                    return None
+                if remaining_qty and (not math.isfinite(price) or price <= 0) and direct_notional is None:
+                    return None
+                amount = max((remaining_qty or 0.0) * price, direct_notional or 0.0)
+                by_client[client_id] = max(by_client.get(client_id, 0.0), amount)
+        return sum(by_client.values())
+
+    def _size_buys_to_safe_capacity(self, buy_orders: tuple[PortfolioOrderRequest, ...]) -> BuyAdmission:
+        """One fresh account-wide gate for immediate and deferred BUYs."""
+        getter = getattr(self.broker, "working_buy_orders", None)
+        broker_buys = tuple(getter()) if getter is not None else None
+        unknown_symbols = set(self.broker.all_open_order_symbols()) if getter is None else set()
+        # Fetch positions/cash AFTER OPEN orders. An intervening fill can
+        # overcount temporarily, never free headroom twice.
+        account = self.broker.account()
+        if not math.isfinite(account.equity) or account.equity <= 0 or not math.isfinite(account.cash):
+            raise ValueError("Invalid broker account values for BUY admission")
+        if any(not math.isfinite(position.market_value) or position.market_value < 0 for position in account.positions):
+            raise ValueError("Invalid broker position mark for BUY admission")
+        realized_gross = sum(position.market_value for position in account.positions if not position.is_flat)
+        committed = self._committed_buy_notional(account, broker_buys, unknown_symbols)
         limits = self.risk_overlay.limits
-        gross_capacity = max(0.0, limits.maximum_gross * equity - current_gross)
-        cash_capacity = max(0.0, account.cash)
+        gross_headroom = max(0.0, limits.maximum_gross * account.equity - realized_gross - (committed or 0.0))
+        cash_headroom = max(0.0, account.cash - limits.minimum_cash * account.equity - (committed or 0.0))
+        if committed is None:
+            gross_headroom = cash_headroom = 0.0
+        capacity = min(gross_headroom, cash_headroom)
         if self.mode == "live":
-            cash_capacity = min(cash_capacity, max(0.0, self.live_dollar_cap - managed_value))
-        capacity = min(gross_capacity, cash_capacity)
-        notional = sum(order.quantity * prices.get(order.symbol, order.reference_price) for order in buy_orders)
-        if notional <= 0:
-            return ()
-        if notional > capacity:
-            scale = capacity / notional
-            if scale <= 0:
-                return ()
-            buy_orders = tuple(
+            managed = sum(
+                abs(position.managed_qty) * position.current_price
+                for position in account.positions
+                if not position.is_flat and position.managed_qty > 1e-12
+            )
+            capacity = min(capacity, max(0.0, self.live_dollar_cap - managed - (committed or 0.0)))
+        marks = {
+            (position.market, canonical_symbol(position.symbol, position.market)): position.current_price
+            for position in account.positions
+            if not position.is_flat
+        }
+        prices = {
+            order.client_order_id: max(order.reference_price, marks.get((order.market, order.symbol), 0.0))
+            for order in buy_orders
+        }
+        if any(not math.isfinite(price) or price <= 0 for price in prices.values()):
+            raise ValueError("Invalid BUY reference price")
+        notional = sum(order.quantity * prices[order.client_order_id] for order in buy_orders)
+        if not math.isfinite(notional) or notional < 0:
+            raise ValueError("Invalid BUY batch notional")
+        reason: str | None = None
+        if committed is None:
+            reason = "committed_buy_unpriced"
+        elif gross_headroom <= 1e-9:
+            reason = "gross_headroom_exhausted"
+        elif cash_headroom <= 1e-9:
+            reason = "cash_headroom_exhausted"
+        elif self.mode == "live" and capacity <= 1e-9:
+            reason = "live_dollar_cap_exhausted"
+        if notional <= 0 or capacity <= 0:
+            sized: tuple[PortfolioOrderRequest, ...] = ()
+        else:
+            scale = min(1.0, capacity / notional)
+            sized = tuple(
                 PortfolioOrderRequest(
                     **{
                         **asdict(order),
                         "quantity": floor_increment(
                             order.quantity * scale,
-                            self.broker.asset_trading_rules(order.symbol, self.market).quantity_increment,
+                            self.broker.asset_trading_rules(order.symbol, order.market).quantity_increment,
                         ),
                     }
                 )
                 for order in buy_orders
             )
-        sized: list[PortfolioOrderRequest] = []
-        for order in buy_orders:
-            rule = self.broker.asset_trading_rules(order.symbol, self.market)
-            price = prices.get(order.symbol, order.reference_price)
-            if order.quantity < rule.minimum_order_size:
-                continue
-            if order.quantity * price < rule.minimum_order_notional:
-                continue
-            sized.append(order)
-        return tuple(sized)
+            sized = tuple(
+                order
+                for order in sized
+                if order.quantity >= self.broker.asset_trading_rules(order.symbol, order.market).minimum_order_size
+                and order.quantity * prices[order.client_order_id]
+                >= self.broker.asset_trading_rules(order.symbol, order.market).minimum_order_notional
+            )
+            if not sized and reason is None:
+                reason = "below_broker_minimum_after_sizing"
+            elif scale < 1 and reason is None:
+                reason = "buy_scaled_to_headroom"
+        admission = BuyAdmission(account, sized, realized_gross, committed, gross_headroom, cash_headroom, reason)
+        if buy_orders:
+            self.last_buy_admission = admission
+        if reason is not None and buy_orders:
+            log.warning(
+                "BUY admission adjusted: reason=%s market=%s gross_headroom=%s cash_headroom=%s committed=%s",
+                reason,
+                self.market.value,
+                gross_headroom,
+                cash_headroom,
+                committed,
+            )
+            if not sized:
+                _emit_no_trade_safe(
+                    market=self.market.value,
+                    strategy=self.strategy.name,
+                    reason=reason,
+                    decision_timestamp=buy_orders[0].decision_timestamp if buy_orders else None,
+                    available_capacity={
+                        "gross_headroom": gross_headroom,
+                        "cash_headroom": cash_headroom,
+                        "committed_buy_notional": committed or 0.0,
+                    },
+                    session_id=self.session_id,
+                    account_id=self.account_id,
+                )
+        return admission
+
+    def current_buy_capacity(self) -> BuyAdmission:
+        """Read-only fresh account capacity for operator monitoring."""
+        return self._size_buys_to_safe_capacity(())
 
     def _submit_orders(self, orders: tuple[PortfolioOrderRequest, ...]) -> tuple[str, ...]:
         """Persist and submit one order batch with broker idempotency keys.

@@ -816,7 +816,7 @@ class PortfolioStateRepository:
         """
         query = f"""
             SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
-                   o.cumulative_filled_quantity, o.broker_order_id
+                   o.cumulative_filled_quantity, o.broker_order_id, o.reference_price
             FROM portfolio_orders o
             JOIN portfolio_decisions d ON d.decision_id = o.decision_id
             JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -838,6 +838,7 @@ class PortfolioStateRepository:
                 quantity=float(row[4] or 0.0),
                 cumulative_filled_quantity=float(row[5] or 0.0),
                 broker_order_id=str(row[6] or ""),
+                reference_price=float(row[7] or 0.0),
             )
             for row in rows
         )

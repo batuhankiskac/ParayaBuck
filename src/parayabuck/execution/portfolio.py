@@ -60,6 +60,18 @@ class PortfolioOrderRequest:
 
 
 @dataclass(frozen=True)
+class BrokerWorkingBuyOrder:
+    """Remaining broker BUY risk, before deduplication with durable orders."""
+
+    client_order_id: str
+    symbol: str
+    market: Market
+    remaining_quantity: float | None
+    reference_price: float | None
+    remaining_notional: float | None
+
+
+@dataclass(frozen=True)
 class PortfolioExecutionPolicy:
     """Shared order-existence policy consumed by backtest, paper and live.
 

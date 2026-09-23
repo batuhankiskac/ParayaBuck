@@ -909,6 +909,16 @@ document.addEventListener('DOMContentLoaded', () => {
         setText('riskEntryLatch', latchReasons || 'açık');
         const epoch = risk.risk_epoch;
         setText('riskEpoch', epoch ? fmtDate(epoch.session_date) + ' · taban $' + fmtNum(epoch.day_start_equity) : '—');
+        const cap = risk.buy_capacity || {};
+        const capReady = !cap.unavailable;
+        setText('riskSlots', capReady ? `${cap.positions_count} / ${cap.effective_slots} / ${cap.maximum_positions}` : '—');
+        setText('riskWorking', capReady ? String(cap.broker_working_order_count) : '—');
+        setText('riskGrossHeadroom', capReady ? formatCurrency(cap.available_gross_buy_headroom) : '—');
+        setText('riskCommittedBuy', capReady && cap.committed_buy_notional !== null ? formatCurrency(cap.committed_buy_notional) : 'bilinmiyor');
+        setText('riskCashHeadroom', capReady ? formatCurrency(cap.available_cash_buy_headroom) : '—');
+        const capReasons = Object.entries(cap.suppression_reasons || {}).concat(Object.entries(cap.halt_reasons || {}))
+            .map(([market, reason]) => `${market}: ${reason}`).join(', ');
+        setText('riskAdmission', capReady ? `${cap.reconciliation_status || '—'}${capReasons ? ' · ' + capReasons : ''}` : '—');
         const circuitBadge = document.getElementById('riskCircuitBadge');
         if (circuitBadge) {
             circuitBadge.textContent = risk.circuit_breaker ? ('KESİCİ: ' + risk.circuit_breaker) : 'risk hazır';

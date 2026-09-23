@@ -3057,6 +3057,31 @@ def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]], dict[str, Any] | Non
     return incidents, risk_state
 
 
+_dashboard_capacity_cache_lock = threading.Lock()
+_dashboard_capacity_cache: tuple[float, int, dict[str, Any]] | None = None
+
+
+def _dashboard_buy_capacity() -> dict[str, Any]:
+    """Sample read-only broker capacity at most once per ten seconds."""
+    global _dashboard_capacity_cache
+    runtime = _dashboard_runtime()
+    if runtime is None or not hasattr(runtime, "capacity_health"):
+        return {"unavailable": True, "reason": "runtime not started"}
+    now = time.monotonic()
+    with _dashboard_capacity_cache_lock:
+        cached = _dashboard_capacity_cache
+        if cached is not None and cached[0] > now and cached[1] == id(runtime):
+            return cached[2]
+    try:
+        capacity = dict(runtime.capacity_health())
+    except Exception as exc:
+        log.warning("Dashboard capacity probe failed: %s", exc)
+        capacity = {"unavailable": True, "reason": str(exc)}
+    with _dashboard_capacity_cache_lock:
+        _dashboard_capacity_cache = (time.monotonic() + 10.0, id(runtime), capacity)
+    return capacity
+
+
 def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, Any]) -> dict[str, Any]:
     """Risk panel: exposure, buffers, policies, latch, incidents, epoch."""
     equity = max(float(account.get("equity") or 0.0), 1e-9)
@@ -3069,6 +3094,7 @@ def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, 
     drawdown = float(account.get("drawdown") or 0.0)
     limits = getattr(cfg, "risk", None) if cfg is not None else None
     incidents, risk_state = _dashboard_ledger_risk()
+    capacity = _dashboard_buy_capacity()
     return {
         "gross_exposure_pct": (gross / equity) * 100,
         "gross_exposure_limit_pct": (float(getattr(limits, "max_gross_exposure_pct", 0.60) or 0.0) * 100),
@@ -3089,6 +3115,7 @@ def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, 
         "circuit_breaker": (health or {}).get("circuit_breaker_reason"),
         "safety_incidents": incidents,
         "risk_epoch": risk_state,
+        "buy_capacity": capacity,
     }
 
 
@@ -3525,9 +3552,11 @@ _dashboard_snapshot: tuple[float, str, tuple[str, int] | None, int, int, dict[st
 
 def _dashboard_snapshot_reset() -> None:
     """Clear the display-only payload cache (benchmarks/tests)."""
-    global _dashboard_snapshot
+    global _dashboard_snapshot, _dashboard_capacity_cache
     with _dashboard_snapshot_lock:
         _dashboard_snapshot = None
+    with _dashboard_capacity_cache_lock:
+        _dashboard_capacity_cache = None
 
 
 def _dashboard_payload(context: DashboardContext | None = None) -> dict[str, Any]:

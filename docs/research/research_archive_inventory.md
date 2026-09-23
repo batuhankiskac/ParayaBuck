@@ -442,3 +442,14 @@ is closed without merging its implementation. The archived decision is
 combined cap-six run recorded 21 timestamps with seven slot claims. Both
 isolated parity checks passed. No cap-eight comparison or migration economics
 was performed, and production root cause was not proven by this replay.
+
+## Corrected crypto giveback audit V3 closure — 2026-09-24
+
+| Campaign branch | Final evidence SHA | Annotated archive tag | Causal baseline | Durable decision |
+|---|---|---|---|---|
+| `research/crypto-exit-giveback-audit-v3` | `d46338454cb7f8d59525d88fd775f98e2b927d45` | `archive/research/crypto-exit-giveback-audit-v3-2026-09` | `b135d73743ec2652f79b8c840df50bd3f67166e8` | `CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED`; `MIXED_PROFIT_RETENTION_BEHAVIOR` |
+
+V3 supersedes V2 as diagnostic input authority and reconfirms its broad
+conclusion. The branch-only diff contains research evidence and one focused
+test; no production path was changed. The annotated tag preserves the full
+evidence commit. Publication of local refs is separate from this local closure.

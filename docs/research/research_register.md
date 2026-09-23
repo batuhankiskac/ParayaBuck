@@ -35,6 +35,7 @@ are listed explicitly and are separate from research conclusions.
 | `public-data-alpha-discovery-v3` | `research/public-data-alpha-discovery-v3` | `f37820f11e35da1d360600d7adbf10f501e88f09` / 2026-09-22 | Public/free-data, pre-outcome screen; no candidate economics | `PUBLIC_DATA_DISCOVERY_V3_EXHAUSTED_AFTER_SINGLE_DESIGN_CANDIDATE` | Discovery campaign, not an alpha result | No | Closed; sole shortlist candidate received the design decision below; no untested shortlist candidate remains | `archive/research/public-data-alpha-discovery-v3-2026-09` |
 | `equity_spinoff_child_drift_v1` | `research/spinoff-child-drift-design-v1` | `4b38d4db4a62459b4b60f271ce98beaf1e98f7f9` / 2026-09-22 | Primary-source, pre-outcome child-security design audit; no economic test | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection, not `ALPHA_REJECTED` | No | Closed; reopen only with materially new external evidence | `archive/research/spinoff-child-drift-design-v1-2026-09` |
 | `account_capacity_migration_8_v1` | `research/account-capacity-migration-8-v1` | `ede3b3dfadfd5f3f0bdef040a14d20365c8df469` / 2026-09-22 | Stopped before either arm; no migration outcomes | `ACCOUNT_ARCHITECTURE_MIGRATION_8_INCONCLUSIVE` | Inconclusive migration attempt; not an economic result | No | Closed; frozen specification is provenance only; re-freeze from corrected main | `archive/research/account-capacity-migration-8-v1-inconclusive-2026-09` |
+| `crypto_exit_giveback_audit_v3` | `research/crypto-exit-giveback-audit-v3` | `d46338454cb7f8d59525d88fd775f98e2b927d45` / 2026-09-24 | Causal canonical replay; independent episode verification PASS | `CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED` | `MIXED_PROFIT_RETENTION_BEHAVIOR` | No | Closed; V2 input authority superseded, conclusion reconfirmed | `archive/research/crypto-exit-giveback-audit-v3-2026-09` |
 
 The branch `maintenance/reserved-equity-role-isolation-v1` was an exact alias
 of current `main` (`bdfa55ea...`) with no unique commit or evidence. It is not
@@ -521,21 +522,22 @@ annotated archive tag `archive/maintenance/crypto-replay-parity-v1-2026-09`.
 Only durable documentation was consolidated; no runtime, strategy, allocation,
 risk, PAPER or LIVE configuration changed.
 
-The old historical control is `SUPERSEDED_HISTORICAL_CONTROL`: it predates the
-correction restricting strategy history to the effective observation set.
-Source data and scanner eligibility were unchanged. The current isolated
-hourly-scanner/daily-strategy contract is `CRYPTO_CANONICAL_REPLAY_VALID`, with
-455 decisions and 388 fills, two byte-identical replays and independent
-verification. See [canonical crypto baseline](canonical_crypto_baseline.md)
-for source/data/config identity, hashes, limitations and archived evidence.
-
-This is baseline maintenance, not an alpha or exit-research verdict. It enables
-`CRYPTO_GIVEBACK_AUDIT_READY_FOR_RERUN`; it does not itself interpret profit
-retention or authorize a strategy change.
+The 455-decision / 388-fill control was a valid historical V2 replay but is
+superseded as the current diagnostic input. The accepted causal execution
+repair at `b135d73743ec2652f79b8c840df50bd3f67166e8` is now authoritative:
+454 decisions, 406 fills, the same pinned source and universe, and independent
+causal verification. Its physical order timing uses the first observed hourly
+open strictly after order creation. See [canonical crypto baseline](canonical_crypto_baseline.md)
+for source/data/config identity, hashes, costs, execution contract, limitations
+and archived evidence. The repair did not change strategy parameters or
+production PAPER/LIVE behavior. Its giveback interpretation is recorded below
+under the corrected V3 audit; neither baseline maintenance nor this register
+authorizes an exit change.
 
 ## Exit-audit closure — 2026-09-22
 
-Both valid audits concluded `MIXED_PROFIT_RETENTION_BEHAVIOR`.
+The equity audit and both canonical crypto audits concluded
+`MIXED_PROFIT_RETENTION_BEHAVIOR`.
 
 ### Equity
 
@@ -566,10 +568,40 @@ MFE ended profitable; their median retention was approximately 87.15%.
 Of 50 naturally closed positive-MFE episodes, 20 eventually closed negative. Higher giveback
 was associated with hysteresis behavior; causality was not established.
 No alternative exit was tested.
-Durable decision: `CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED`.
+Its historical decision was `CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED`.
 Evidence: `research/crypto_exit_giveback_audit_v2/` at that tag, especially
 `AUDIT_DECISION.json`, `SUMMARY.json`, `INDEPENDENT_VERIFICATION.json`, and
-`HYSTERESIS_GIVEBACK_AUDIT.md`.
+`HYSTERESIS_GIVEBACK_AUDIT.md`. **V2 is superseded as input authority because
+its canonical replay used the older non-causal execution path; V3 below
+independently reconfirms the research conclusion.** V2 history remains archived.
+
+### Crypto corrected causal V3 — 2026-09-24
+
+Branch `research/crypto-exit-giveback-audit-v3`, final SHA
+`d46338454cb7f8d59525d88fd775f98e2b927d45`, is preserved by annotated
+`archive/research/crypto-exit-giveback-audit-v3-2026-09`. It uses only the
+accepted causal canonical baseline at
+`b135d73743ec2652f79b8c840df50bd3f67166e8` (454 decisions, 406 fills).
+Independent verification passed for 56 position episodes: 54 natural closures
+and two endpoint-open positions settled by precommitted liquidation.
+
+Of 51 naturally closed episodes with positive MFE, 21 ultimately closed
+negative. This remains a real descriptive concern. Fifteen naturally closed
+episodes reached >=30% MFE; all 15/15 closed profitable, with median profit
+retention **87.4143415252469%**. The corrected audit therefore did not find a
+systematic collapse of larger marked winners. Behavior is
+`MIXED_PROFIT_RETENTION_BEHAVIOR`; durable decision:
+`CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED`.
+
+MFE is hindsight diagnostic information, **not an executable exit signal**;
+no peak was treated as capturable. Alternative exits tested: `NONE`—no
+take-profit, trailing-stop, stop-loss or time-stop treatment was run. Keep exit
+research closed unless future live/PAPER behavior or materially new evidence
+justifies a separately frozen investigation. Evidence remains in
+`research/crypto_exit_giveback_audit_v3/` behind the tag, especially
+`FINAL_GIVEBACK_REPORT.md`, `AUDIT_DECISION.json`,
+`GIVEBACK_DIAGNOSTICS.json`, `INDEPENDENT_EPISODE_VERIFICATION.json`, and
+`OLD_VS_NEW_COMPARISON.md`. No production code or configuration changed.
 
 ### Governance
 

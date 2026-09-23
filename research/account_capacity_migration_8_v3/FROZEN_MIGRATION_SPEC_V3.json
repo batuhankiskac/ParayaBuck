@@ -1,0 +1,224 @@
+{
+  "arms": {
+    "A": {
+      "maximum_positions": 6
+    },
+    "B": {
+      "maximum_positions": 8
+    }
+  },
+  "backtest_settings": {
+    "commission": 0,
+    "crypto_taker_fee_bps": 25,
+    "equity_cat_per_share": 3e-06,
+    "equity_sec_fee_rate": 2.06e-05,
+    "equity_taf_cap": 9.79,
+    "equity_taf_per_share": 0.000195,
+    "equity_use_effective_dated_fees": true,
+    "initial_cash": 100000,
+    "output_dir": "reports",
+    "ranking_metric": "risk_adjusted",
+    "scanner_rebalance": "daily",
+    "slippage_bps": 2,
+    "spread_bps": 2
+  },
+  "clock": "Equity completed daily bar at official XNYS close; next valid XNYS open execution. Crypto completed 24-hour daily aggregate at max component availability; actual source-hour OPEN strictly after order creation; at most one attempt per UTC day. Source label remains strategy/PIT key.",
+  "config_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+  "corporate_actions": "Tagged V2 effective ex-date/open, split-adjusted source, terminal and dividend semantics unchanged",
+  "crypto_authority": {
+    "accepted_decision": "CRYPTO_CANONICAL_BASELINE_CAUSAL_REPAIR_ACCEPTED",
+    "accepted_maintenance_sha": "b135d73743ec2652f79b8c840df50bd3f67166e8",
+    "authoritative_control": "maintenance/crypto_canonical_causal_execution_v1/CORRECTED_REPLAY_A.json.gz",
+    "daily_input_sha256": "92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9",
+    "decisions": 454,
+    "fill_sha256": "645d444ff3c95ba2f5eab1f0162acc903275e4642c70c79eb03b8248829e1fba",
+    "fills": 406,
+    "final_state_sha256": "7689e62a2e80a0452e42f7359c9722d49e25b21cfe38632901bb29bd953ad5ef",
+    "full_payload_sha256": "cdc3004dbbfe1e13e8f9f9deb5ec80ecbe628236210649a68a8f47aa55f33697",
+    "gzip_sha256": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+    "source_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+    "strict_price_event_after_order_creation": true,
+    "verifier_status": "PASS"
+  },
+  "direct_source_sha256": {
+    "data/historical/crypto_expanded_1h.csv": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+    "data/historical/equity_entity_lifetimes_full_v5.csv": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "data/historical/equity_pit_symmetric_2016_2026_v5.csv": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "data/historical/equity_survivorship_full_corporate_actions_v5.csv": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+  },
+  "economic_metrics": [
+    "total_return",
+    "cagr",
+    "annualized_volatility",
+    "sharpe",
+    "sortino",
+    "max_drawdown",
+    "calmar",
+    "ending_nav",
+    "turnover",
+    "total_modeled_costs",
+    "average_cash",
+    "average_realized_gross"
+  ],
+  "economics_rule": "Report one frozen look after integrity gates; no return/Sharpe outperformance requirement or post-outcome tuning. Investigate unexplained costs/risk regime without inventing thresholds.",
+  "equal_timestamp_order": [
+    "effective corporate actions",
+    "old executable sells",
+    "old executable buys after required sells",
+    "precommitted terminal exits",
+    "completed source bars and account mark/risk",
+    "crypto then equity strategy decisions",
+    "sequential global slot admission and new order creation"
+  ],
+  "execution_settings": {
+    "minimum_order_notional": 10,
+    "rebalance_band_pct": 0.005
+  },
+  "final_liquidation": "Tagged V2 equity final completed-session close and crypto precommitted common source-hour open",
+  "forbidden": [
+    "another cap",
+    "strategy or universe change",
+    "data/sample change",
+    "clock or event priority change",
+    "execution/cost/risk control change",
+    "PAPER/LIVE action",
+    "production max_positions change",
+    "old crypto exit audit use"
+  ],
+  "hard_gates": {
+    "decision": "ACCEPTED only if all integrity/risk/structural gates pass and no unexplained operational/risk regime; REJECTED if structural or hard risk gate fails; INCONCLUSIVE for generic correctness, fidelity, attribution or independent verification failure",
+    "risk": [
+      "arm slot claims <= its frozen cap",
+      "same gross/sleeve/per-name limits",
+      "cash and quantity accounting reconciled",
+      "zero physical causality violations",
+      "same corporate action semantics",
+      "repeat event/decision/order/fill/reservation/position/cash/NAV/final hashes",
+      "only cap differs"
+    ],
+    "structural": "A has directly observed global count denial or count-specific target shortfall; B reduces that count-specific blocking; no other risk gate violated"
+  },
+  "incumbents": {
+    "crypto": {
+      "enabled": true,
+      "maximum_allocation": 0.05,
+      "name": "crypto_low_variance_hysteresis_v1",
+      "parameters": {
+        "rebalance_hours": 96,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      }
+    },
+    "equity": {
+      "enabled": true,
+      "maximum_allocation": 0.55,
+      "name": "equity_residual_momentum_v3",
+      "parameters": {
+        "beta_window_bars": 273,
+        "exclude_symbols": [
+          "SPY"
+        ],
+        "formation_bars": 252,
+        "ivol_reject_quantile": 0.7,
+        "max_single_weight": 0.1,
+        "rebalance_frequency": "weekly",
+        "residual_vol_window": 63,
+        "skip_bars": 21,
+        "top_n": 8
+      }
+    }
+  },
+  "input_identity": {
+    "crypto": {
+      "daily_bar_count": 28890,
+      "daily_bars_sha256": "92f9b745eb925e9994c184b712ac500e82be973be38839b8bd93aab7a60d54f9",
+      "evaluation_bar_count": 28100,
+      "hourly_bar_count": 705541,
+      "hourly_bars_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+      "universe_sha256": "e3692166c51a1e84aba7662e3c6156cdc1961989df8f46564caff70d898529c6",
+      "warmup_bar_count": 790
+    },
+    "equity": {
+      "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+      "evaluation_bar_count": 10834588,
+      "lifetimes_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+      "universe_sha256": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520",
+      "warmup_bar_count": 846642
+    }
+  },
+  "metric_definitions": {
+    "averages": "arithmetic average of last UTC-day account marks, not event-frequency-weighted",
+    "cagr": "ending/starting NAV over elapsed UTC seconds divided by 365 days",
+    "concentration": "sum squared actual market-value/NAV weights for total account; within-sleeve HHI uses sleeve-normalized weights",
+    "daily_nav": "last physical account mark in each UTC date",
+    "max_drawdown": "peak-to-trough across all physical account marks",
+    "return_series": "consecutive daily NAV simple returns; risk-free zero; sample standard deviation; annualizer 365",
+    "turnover": "sum regular fill quantity times source reference price divided by arithmetic average marked account NAV, matching canonical numerator/denominator method"
+  },
+  "outcome_artifacts_present_at_freeze": false,
+  "partition": "full common historical account only; no new development/validation partition invented",
+  "period": {
+    "account_first_price_event_utc": "2017-01-03T14:30:00+00:00",
+    "crypto_precommitted_terminal_utc": "2026-07-31T00:00:00+00:00",
+    "crypto_start_label_utc": "2021-04-01T00:00:00+00:00",
+    "equity_last_label_utc": "2026-07-30T04:00:00+00:00",
+    "equity_last_session": "2026-07-30",
+    "equity_start_label_utc": "2017-01-03T05:00:00+00:00",
+    "warmup": "exact validated V2 _prepared_window; no exclusions or truncation"
+  },
+  "production_main_before_closure_sha": "b135d73743ec2652f79b8c840df50bd3f67166e8",
+  "risk_settings_except_cap": {
+    "cash_buffer_pct": 0.4,
+    "daily_loss_limit_pct": 0.005,
+    "max_crypto_exposure_pct": 0.1,
+    "max_crypto_position_pct": 0.05,
+    "max_crypto_positions": 2,
+    "max_drawdown_pct": 0.05,
+    "max_gross_exposure_pct": 0.6,
+    "max_position_pct": 0.1
+  },
+  "schema": "frozen-account-capacity-migration-8-v3",
+  "single_variable": "Config.risk.max_positions only; the same imported source, data, universe, strategy, execution, fees and timestamps are used for both arms",
+  "starting_account": {
+    "broker_state_imported": false,
+    "cash": 100000,
+    "nav": 100000,
+    "pending_orders": 0,
+    "positions": 0
+  },
+  "starting_main_sha": "d1c8847aebd3776730ef9ad93967908c44a8aed9",
+  "structural_metrics": [
+    "decisions by market",
+    "raw new-symbol target openings",
+    "risk-approved new-symbol openings",
+    "direct global-count denials",
+    "other explicit risk denials",
+    "slot-admission denials",
+    "pending conflicts",
+    "timestamps at cap",
+    "actual/equity/crypto position distributions",
+    "occupied plus reserved distribution",
+    "target/realized gross and cash",
+    "count-specific target shortfall",
+    "cross-market crowd-out both directions",
+    "orders",
+    "fills",
+    "costs",
+    "turnover",
+    "HHI",
+    "operational load"
+  ],
+  "validated_infrastructure": {
+    "imported_tag_tree_file_count": 20,
+    "initial_blob_mismatches": 0,
+    "migration_change": "shared_replay.py constructor permits only (6,8) instead of only 6; no scheduler, execution, accounting, strategy or policy change",
+    "peeled_commit": "11890e93ad1a5223cb11483488deb4d5a6aec3d3",
+    "source_sha256": {
+      "research/physical_availability_clock_v2/run_historical.py": "9b62235d416cb10e392d6307261729a7bec2e1e1b49d6e1a73b2b085fcc9d902",
+      "research/physical_availability_clock_v2/shared_replay.py": "d881f2608bb5a79103b54c08f8b8b6a42678da249defcc0eb32a74f10e86e43b",
+      "research/physical_availability_clock_v2/timing.py": "19613df9a2aff330a55d49d14a9bb8906d00833c3ce24405a987e7e8ff533d4a"
+    },
+    "tag": "infrastructure/physical-availability-clock-v2-cap6-2026-09"
+  }
+}

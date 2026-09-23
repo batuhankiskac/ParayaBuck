@@ -1,0 +1,7 @@
+{
+  "archive_tag": "archive/research/physical-availability-clock-v1-canonical-stop-2026-09",
+  "peeled_commit": "377d260835c5a5f8ea23b61e16bf8103a842b0e0",
+  "decision": "PHYSICAL_CLOCK_REPAIR_EXPOSED_CANONICAL_BASELINE_CORRECTNESS_ISSUE",
+  "validated_combined_infrastructure": false,
+  "use": "calendar and timing provenance only; V2 starts from local main after accepted crypto repair"
+}

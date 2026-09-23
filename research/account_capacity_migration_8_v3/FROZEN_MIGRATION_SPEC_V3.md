@@ -1,0 +1,13 @@
+# Frozen migration V3 specification — before outcomes
+
+This is the one-look research comparison of global `maximum_positions=6` (A) and `8` (B). Eight was chosen before outcomes as six equity plus two crypto slots. The count cap is the sole variable. Production stays at six. No cap search, alpha research, broker state, or PAPER/LIVE action is allowed.
+
+Authority: local main `d1c8847aebd3776730ef9ad93967908c44a8aed9`; immutable physical replay tag `infrastructure/physical-availability-clock-v2-cap6-2026-09` at `11890e93ad1a5223cb11483488deb4d5a6aec3d3`; corrected causal crypto 454-decision/406-fill control. The 20 imported tag files matched byte-for-byte before the only permitted research-engine edit: constructor admission for cap 8. Tagged timing, event scheduler, fill, cash and accounting logic stay identical. Control must reproduce the tagged cap-6 event hash before treatment is interpreted.
+
+Historical inputs, exact hashes, strategy/risk/execution settings, clock, period, cost rules and starting state are frozen in the companion JSON. Both arms begin flat with 100,000 cash and zero pending orders. Equity uses XNYS close availability and next valid open; crypto uses completed hourly components and a strictly later actual source-hour open. The same equal-time priority and corporate-action rules apply to both.
+
+**Predeclared hard structural gate:** A must exhibit a directly observed global count denial or count-specific target shortfall; B must reduce that same kind of blocking; no other risk gate may fail. A shortfall inferred merely from idle cash is not evidence. Observe raw strategy targets, risk-overlay decisions, deterministic slot admission and account state. Attribute global count, gross, sleeve, per-name, liquidity, pending conflict, insufficient cash, signal/eligibility or explicit other policy where deterministically knowable. Record both crowd-out directions without denied-symbol hypothetical P&L.
+
+**Predeclared risk gates:** each arm obeys its cap, unchanged gross/sleeve/name controls, cash and position reconciliation, physical causality, corporate actions, repeat determinism and exact single-variable input identity. Only after integrity is established may the full-sample economic metrics be calculated once. No return or Sharpe superiority is required; unexplained risk/cost changes cause review or inconclusive, never retuning. No new partition or post-hoc threshold is permitted.
+
+Metric definitions and the exact acceptance/rejection/inconclusive decision rules are in `FROZEN_MIGRATION_SPEC_V3.json`. This specification is committed before any A/B outcome artifact. Its commit SHA will be pinned in the post-freeze receipt and independently checked as an ancestor of every outcome commit.

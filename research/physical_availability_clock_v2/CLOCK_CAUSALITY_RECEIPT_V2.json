@@ -1,0 +1,14 @@
+{
+  "all_consumed_history_available": true,
+  "checked": {
+    "corporate_actions": 131488,
+    "decisions": 949,
+    "fills": 2297,
+    "orders": 2063
+  },
+  "failure_count": 0,
+  "failures": [],
+  "history_checks": 4351,
+  "schema": "physical-clock-v2-causality",
+  "status": "PASS"
+}

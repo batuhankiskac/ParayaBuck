@@ -1,0 +1,13 @@
+{
+  "all_excluded_inventory_and_claim_counts_zero": true,
+  "cap8_materiality_interpreted": false,
+  "excluded_event_count": 5,
+  "excluded_event_kinds": {
+    "account_mark": 2,
+    "corporate_action": 3
+  },
+  "first_excluded_timestamp_utc": "2026-08-03T13:30:00+00:00",
+  "frozen_cutoff_utc": "2026-07-31T00:00:00+00:00",
+  "last_excluded_timestamp_utc": "2026-12-15T14:30:00+00:00",
+  "status": "INERT_POST_TERMINAL_TAIL_CONFIRMED_ON_CAP6"
+}

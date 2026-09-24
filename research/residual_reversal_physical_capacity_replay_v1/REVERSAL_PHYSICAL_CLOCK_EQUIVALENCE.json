@@ -1,0 +1,36 @@
+{
+  "archived_buy_target_symbol_mismatches": 0,
+  "archived_candidate_commit": "a3a54cff64a9312300ef700f2fe9409435a064d3",
+  "archived_dividend_entitled_symbol_events": 154,
+  "archived_fill_groups_checked": 3348,
+  "archived_reversal_terminal_bar_events": 0,
+  "archived_risk_overlay_reduced_decisions": 80,
+  "classification": "REVERSAL_PHYSICAL_CLOCK_EQUIVALENT",
+  "corporate_action_source_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+  "decision_sessions_checked": 495,
+  "fill_session_mismatches": 0,
+  "first_decision_session": "2017-02-06T05:00:00+00:00",
+  "internal_event_sha256": "c273939fbb96fa882a3bdac87fbb0c3fe17cd014a0b8b3eedee86309bea4b7a0",
+  "last_decision_session": "2026-07-27T04:00:00+00:00",
+  "lifetime_source_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+  "mismatch_counts": {},
+  "mismatch_examples": {},
+  "non_xnys_decisions": 0,
+  "physical_clock_commit": "11890e93ad1a5223cb11483488deb4d5a6aec3d3",
+  "physical_decision_count": 495,
+  "physical_dividend_entitled_symbol_events": 154,
+  "physical_fill_group_count": 3348,
+  "physical_input_identity": {
+    "equity": {
+      "first_label": "2017-01-03T05:00:00+00:00",
+      "last_label": "2026-07-30T04:00:00+00:00",
+      "source_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "universe_sha256": "ef828159a2a215e813204123d7f454f949ad4498dd912a6398615610b3cdc9cc"
+    }
+  },
+  "physical_terminal_events": 0,
+  "physical_timing_sha256": "19613df9a2aff330a55d49d14a9bb8906d00833c3ce24405a987e7e8ff533d4a",
+  "raw_symbol_comparison_decisions": 415,
+  "remaining_gate": "Candidate physical chronology verified; incumbent physical parity and capacity arms remain.",
+  "structural_event_sha256": "0056260e0f18706eccdc046a9cf11c4cf961dd50de41ba4450fedae24017f766"
+}

@@ -1,0 +1,74 @@
+{
+  "combined": {
+    "event_order_sha256": "841091dd6ebedbc03e3dde27eaf7bee09e54474e660554c3c4b28423d3eb186d",
+    "fill_count": 2297,
+    "future_data_access_checks": 4351,
+    "maximum_observed_position_count": 6,
+    "maximum_observed_slot_claim_count": 6,
+    "over_cap_timestamp_count": 0,
+    "reservation_created": 2063,
+    "reservation_released": 2063
+  },
+  "combined_input_identity": {
+    "crypto": {
+      "first_label": "2021-04-01T00:00:00+00:00",
+      "last_label": "2026-07-30T00:00:00+00:00",
+      "source_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+      "universe_sha256": "e3692166c51a1e84aba7662e3c6156cdc1961989df8f46564caff70d898529c6"
+    },
+    "equity": {
+      "first_label": "2017-01-03T05:00:00+00:00",
+      "last_label": "2026-07-30T04:00:00+00:00",
+      "source_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "universe_sha256": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520"
+    }
+  },
+  "corrected_crypto_commit": "b135d73743ec2652f79b8c840df50bd3f67166e8",
+  "correction_note": "Original receipt counted only inactive-entity terminal_liquidation events (2); tagged V2 terminal_event_count also includes final_liquidation events. Only isolated V3 was rerun; the prior exact combined hash and crypto checks were reused.",
+  "differences": [],
+  "isolated": {
+    "crypto": {
+      "checks": {
+        "decision_count": true,
+        "fill_count": true,
+        "source_identity": true,
+        "universe_identity": true
+      },
+      "decision_count": 454,
+      "fill_count": 406,
+      "source_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+      "terminal_event_count": 2,
+      "universe_sha256": "e3692166c51a1e84aba7662e3c6156cdc1961989df8f46564caff70d898529c6"
+    },
+    "equity": {
+      "checks": {
+        "decision_count": true,
+        "fill_count": true,
+        "source_identity": true,
+        "terminal_event_count": true,
+        "universe_identity": true
+      },
+      "decision_count": 495,
+      "fill_count": 2054,
+      "source_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "terminal_event_count": 5,
+      "universe_sha256": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520"
+    }
+  },
+  "physical_v2_commit": "11890e93ad1a5223cb11483488deb4d5a6aec3d3",
+  "schema": "residual-reversal-incumbent-physical-parity-v1",
+  "static_identity": {
+    "config_sections_differing_after_cap6_normalization": [],
+    "equity_exclusions": [
+      "SPY",
+      "SH",
+      "PSQ",
+      "DOG"
+    ],
+    "timing_byte_identical": true
+  },
+  "status": "PASS",
+  "tagged_crypto_causal_status": "PASS",
+  "tagged_crypto_reference_commit_match": true,
+  "tagged_equity_physical_status": "PASS"
+}

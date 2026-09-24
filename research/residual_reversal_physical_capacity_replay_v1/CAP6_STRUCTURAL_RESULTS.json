@@ -1,0 +1,10 @@
+{
+  "arm_cap": 6,
+  "candidate_capacity_interpreted": false,
+  "decision": "RESIDUAL_REVERSAL_PHYSICAL_CAPACITY_REPLAY_BLOCKED",
+  "independent_execution_count": 2,
+  "independent_verifier_each_execution": "PASS",
+  "metrics_suppressed_due_to_cap8_integrity_failure": true,
+  "reason": "Deferred DOGE/USD BUY activated after BTC/USD SELL order completed while BTC/USD and LTC/USD inventory still occupied both crypto slots; DOGE/USD fill created three crypto positions at 2026-06-29T02:00:00+00:00.",
+  "status": "BLOCKED"
+}

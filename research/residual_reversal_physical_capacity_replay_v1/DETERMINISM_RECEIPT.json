@@ -1,0 +1,8 @@
+{
+  "candidate_capacity_interpreted": false,
+  "cap6_executions": 2,
+  "cap8_executions": 1,
+  "decision": "RESIDUAL_REVERSAL_PHYSICAL_CAPACITY_REPLAY_BLOCKED",
+  "reason": "Cap8 first execution failed slot integrity before the required second execution.",
+  "status": "NOT_ESTABLISHED"
+}

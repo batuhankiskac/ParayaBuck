@@ -1,0 +1,28 @@
+{
+  "audited_compressed_traces": [
+    "CAP8_BLOCKED_STRUCTURAL_TRACE.json.gz"
+  ],
+  "audited_json_artifacts": [
+    "AUTHORITY_RECEIPT.json",
+    "CAP6_DENIAL_LEDGER.json",
+    "CAP6_STRUCTURAL_RESULTS.json",
+    "CAP8_DENIAL_LEDGER.json",
+    "CAP8_INTEGRITY_FAILURE_RECEIPT.json",
+    "CAP8_STRUCTURAL_RESULTS.json",
+    "CAPACITY_COMPARISON.json",
+    "CAPACITY_REPLAY_DECISION.json",
+    "CAUSALITY_RECEIPT.json",
+    "DETERMINISM_RECEIPT.json",
+    "FROZEN_CAPACITY_MATERIALITY_SPEC.json",
+    "INCUMBENT_PHYSICAL_PARITY_RECEIPT.json",
+    "INDEPENDENT_CAPACITY_VERIFICATION.json",
+    "OVERLAP_CAPACITY_SUMMARY.json",
+    "PHYSICAL_INFRASTRUCTURE_PROVENANCE.json",
+    "REVERSAL_PHYSICAL_CLOCK_EQUIVALENCE.json",
+    "SOURCE_ATTRIBUTION_SUMMARY.json",
+    "TERMINAL_TAIL_RECEIPT.json"
+  ],
+  "economic_outcome_fields_found": 0,
+  "new_economics_calculated": "NONE",
+  "status": "PASS"
+}

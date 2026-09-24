@@ -1,0 +1,13 @@
+{
+  "schema": "residual-reversal-physical-capacity-authorities-v1",
+  "production_main_commit": "be440821e34d859f2e693c45532566eb0dafb1f8",
+  "parent_review_commit": "690ce42e1852ead0ccaaddbf3822b10a65a6a77c",
+  "original_candidate_tag_commit": "a3a54cff64a9312300ef700f2fe9409435a064d3",
+  "physical_clock_tag_commit": "11890e93ad1a5223cb11483488deb4d5a6aec3d3",
+  "account_capacity_migration_tag_commit": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+  "corrected_causal_crypto_commit": "b135d73743ec2652f79b8c840df50bd3f67166e8",
+  "pre_outcome_freeze_commit": "1d46b4b26abd5c3c8a02f8c49d0b6e9c76bca64e",
+  "branch": "research/residual-reversal-physical-capacity-replay-v1",
+  "production_files_changed": false,
+  "production_config_changed": false
+}

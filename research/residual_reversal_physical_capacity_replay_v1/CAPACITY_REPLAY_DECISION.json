@@ -1,0 +1,10 @@
+{
+  "candidate_capacity_interpreted": false,
+  "decision": "RESIDUAL_REVERSAL_PHYSICAL_CAPACITY_REPLAY_BLOCKED",
+  "future_economic_experiment_authorized": false,
+  "new_economics_calculated": "NONE",
+  "next_action": "REPAIR_DEFERRED_CRYPTO_CAP_ADMISSION_AND_RERUN_FROZEN_STRUCTURAL_ARMS",
+  "production_changes": "NONE",
+  "reason": "Deferred DOGE/USD BUY activated after BTC/USD SELL order completed while BTC/USD and LTC/USD inventory still occupied both crypto slots; DOGE/USD fill created three crypto positions at 2026-06-29T02:00:00+00:00.",
+  "status": "BLOCKED"
+}

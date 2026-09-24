@@ -1,0 +1,45 @@
+{
+  "authority_peeled_commit": "11890e93ad1a5223cb11483488deb4d5a6aec3d3",
+  "authority_tag": "infrastructure/physical-availability-clock-v2-cap6-2026-09",
+  "files": {
+    "scheduler": {
+      "authority_path": "research/physical_availability_clock_v2/shared_replay.py",
+      "authority_sha256": "88cc6922e39957e67c6cee9dee423c9809ba3775cf731110d2deebcb307e3759",
+      "corporate_action_timing_changed": false,
+      "fill_order_lifecycle_changed": false,
+      "intentional_changes": [
+        "Use the byte-identical local timing.py import.",
+        "Permit only frozen global caps 6 and 8.",
+        "Remove benchmark-return and market performance result construction.",
+        "Remove stored NAV, cash, and market equity curves; retain mechanical state internally.",
+        "Return only whitelisted structural event fields, structural invariants, and position quantities.",
+        "Expose only an internal normalized V2 event hash for incumbent parity; raw account events remain private.",
+        "Annotate each existing decision event with pre/post position and pending-order keys, slot claims, and crypto counts without changing decisions or phase order.",
+        "Emit structural source_admission records from the raw source targets and post-overlay orders; exclude them from the normalized V2 parity hash.",
+        "Maintain research-only source quantity lineage through orders, fills, splits and exits; emit structural source_order_claim, source_order_adjustment and source_inventory records, all excluded from the normalized V2 parity hash.",
+        "Label the isolated frozen reversal source correctly in research-only source attribution events.",
+        "Distinguish carried working BUY reservations from new openings and classify crypto-count and exposure-limit reductions only when the canonical overlay record supports them.",
+        "Finalize structural decision and source admission snapshots after the unchanged V2 pending-SELL BUY deferral, including below-cap deferrals because the SELL gate is independent of slot count, without changing physical events.",
+        "Preserve pre-deferral source contribution in deferred_target_contribution for frozen order-claim verification.",
+        "Expose deferred_target_contribution in the structural event whitelist for later frozen source-claim verification.",
+        "Classify replaced working BUY reservations deferred by the SELL gate as OTHER_EXPLICIT rather than denied new openings.",
+        "Classify a removed target for an existing position as OTHER_EXPLICIT rather than a denied new opening.",
+        "Require observed slot pressure and absence of daily-loss or drawdown halts before attributing an opening denial to position count.",
+        "Narrow typing annotations on inherited shared-account view overrides; no runtime change."
+      ],
+      "local_path": "research/residual_reversal_physical_capacity_replay_v1/physical_scheduler.py",
+      "local_sha256": "e9550129c7b88e35d0a96bbd4dca6e37bc4cfeb365e3438a000307968d2e2585",
+      "physical_event_phase_order_changed": false,
+      "slot_reservation_algorithm_changed": false
+    },
+    "timing": {
+      "authority_path": "research/physical_availability_clock_v2/timing.py",
+      "authority_sha256": "19613df9a2aff330a55d49d14a9bb8906d00833c3ce24405a987e7e8ff533d4a",
+      "intentional_changes": [],
+      "local_path": "research/residual_reversal_physical_capacity_replay_v1/timing.py",
+      "local_sha256": "19613df9a2aff330a55d49d14a9bb8906d00833c3ce24405a987e7e8ff533d4a"
+    }
+  },
+  "schema": "residual-reversal-physical-scheduler-provenance-v1",
+  "status": "LOCAL_COPY_PROVENANCE_RECORDED"
+}

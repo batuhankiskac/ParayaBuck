@@ -1,0 +1,6 @@
+{
+  "candidate_capacity_interpreted": false,
+  "decision": "RESIDUAL_REVERSAL_PHYSICAL_CAPACITY_REPLAY_BLOCKED",
+  "reason": "Cap8 slot integrity failed; chronology alone cannot validate the arm.",
+  "status": "NOT_CERTIFIED_FOR_VALID_COMPARISON"
+}

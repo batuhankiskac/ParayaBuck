@@ -1,0 +1,7 @@
+{
+  "candidate_capacity_interpreted": false,
+  "cross_arm_overlap_not_interpreted": true,
+  "decision": "RESIDUAL_REVERSAL_PHYSICAL_CAPACITY_REPLAY_BLOCKED",
+  "reason": "Deferred DOGE/USD BUY activated after BTC/USD SELL order completed while BTC/USD and LTC/USD inventory still occupied both crypto slots; DOGE/USD fill created three crypto positions at 2026-06-29T02:00:00+00:00.",
+  "status": "BLOCKED"
+}

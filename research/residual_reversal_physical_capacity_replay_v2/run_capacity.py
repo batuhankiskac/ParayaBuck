@@ -220,6 +220,40 @@ def run() -> dict[str, Any]:
         raise RuntimeError("Post-terminal event tail differs between cap arms")
     comparison = compare_arms(six, eight, repeat6=repeat[6], repeat8=repeat[8])
     if comparison["status"] == "BLOCKED":
+        diagnostic = {
+            "status": "BLOCKED",
+            "reason": "Independent cross-arm comparison rejected the four individually verified runs",
+            "per_arm": {
+                "cap6": {
+                    "status": six["status"],
+                    "event_sha256": six["event_sha256"],
+                    "repeat_event_sha256": repeat[6]["event_sha256"],
+                    "equity_source_demand_sha256": six["equity_source_demand_sha256"],
+                    "price_event_clock_sha256": six["price_event_clock_sha256"],
+                    "maximum_claims": six["maximum_claims"],
+                    "maximum_crypto_positions": six["maximum_crypto_positions"],
+                },
+                "cap8": {
+                    "status": eight["status"],
+                    "event_sha256": eight["event_sha256"],
+                    "repeat_event_sha256": repeat[8]["event_sha256"],
+                    "equity_source_demand_sha256": eight["equity_source_demand_sha256"],
+                    "price_event_clock_sha256": eight["price_event_clock_sha256"],
+                    "maximum_claims": eight["maximum_claims"],
+                    "maximum_crypto_positions": eight["maximum_crypto_positions"],
+                },
+            },
+            "comparison_integrity": {
+                "same_price_event_clock": comparison["same_price_event_clock"],
+                "M6_determinism": comparison["gates"]["M6"],
+                "M7_causality": comparison["gates"]["M7"],
+                "M8_slot_correctness": comparison["gates"]["M8"],
+            },
+            "candidate_materiality_interpreted": False,
+        }
+        if (HERE / "CROSS_ARM_BLOCKED_DIAGNOSTIC.json").exists():
+            raise RuntimeError("Cross-arm blocked diagnostic already exists")
+        _write_json("CROSS_ARM_BLOCKED_DIAGNOSTIC.json", diagnostic)
         raise RuntimeError("Independent comparison blocked; no capacity interpretation")
     _write_trace("CAP6_STRUCTURAL_TRACE.json.gz", six_events)
     _write_trace("CAP8_STRUCTURAL_TRACE.json.gz", eight_events)

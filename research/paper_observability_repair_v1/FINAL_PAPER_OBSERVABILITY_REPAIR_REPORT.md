@@ -10,7 +10,10 @@ PAPER_FORWARD_OBSERVATION_READY for an operator-controlled, frozen PAPER observa
 `7724a2bc9e61ba325a6a252c8f518cabd99d6c69`, fetched before work. The prior audit branch was evidence only. This repair branch was created directly from origin/main in an isolated worktree.
 
 ## Final commit and main publication
-The commit cannot embed its own SHA. Verify the final commit and remote `refs/heads/main` in the publication readback; the delivery response records both. Publication is conditional on a final fetch, safe fast-forward and unchanged config.
+Main published **YES** by non-force fast-forward after a fresh fetch confirmed the starting parent was unchanged. Initial remote readback was `e1e2663f42dea5aba9809aa0066f881435fbf273`. This documentation update will be the final commit; a file cannot embed its own final SHA. The delivery response records the final remote `refs/heads/main` readback.
+
+## Remote main after publication
+Verified against `refs/heads/main` after each push; the final SHA is reported in the delivery response because this tracked report cannot contain its own commit ID.
 
 ## Gap 1: unified receipts
 Previously only scheduled equity V3 emitted a runtime receipt; catch-up and crypto did not. V1 `positions_after` and gross were projections. Ongoing PAPER decisions now emit immutable V2 receipts for equity and crypto, scheduled and startup catch-up, with deterministic timestamp/market/origin/decision ID filenames. The old V1 class remains for historical files, but runtime no longer emits misleading V1 files.

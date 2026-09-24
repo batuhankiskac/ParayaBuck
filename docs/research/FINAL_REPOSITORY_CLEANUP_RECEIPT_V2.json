@@ -16,6 +16,7 @@
     "fix/paper-observability-readiness-v1": "exact current main alias; accepted repair represented",
     "integration/cap8-main-v1": "ancestor of main; integration represented",
     "maintenance/crypto-canonical-causal-execution-v1": "ancestor of main; maintenance represented; pre-existing archive tag",
+    "maintenance/post-readiness-research-cleanup-2026-09": "process-only documentation branch; integrated into main; deleted without archive tag",
     "research/customer-momentum-design-v1": "research-only unique evidence; archived",
     "research/earnings-acceleration-design-v1": "research-only unique evidence; archived",
     "research/government-contract-award-design-v1": "research-only unique evidence; archived",
@@ -24,18 +25,38 @@
     "research/residual-reversal-physical-capacity-replay-v1": "research-only evidence parent archived; benchmark child excluded",
     "research/residual-reversal-physical-capacity-replay-v2": "research-only unique evidence; archived"
   },
-  "branches_deleted_locally": [],
-  "branches_deleted_remotely": [],
+  "branches_deleted_locally": [
+    "audit/paper-forward-readiness-v1",
+    "audit/production-restart-reconciliation-v1",
+    "codex/crypto-position-cap-correctness-v1",
+    "fix/paper-observability-readiness-v1",
+    "integration/cap8-main-v1",
+    "maintenance/crypto-canonical-causal-execution-v1",
+    "research/customer-momentum-design-v1",
+    "research/earnings-acceleration-design-v1",
+    "research/government-contract-award-design-v1",
+    "research/public-data-alpha-discovery-v4",
+    "research/residual-reversal-cap8-reentry-review-v1",
+    "research/residual-reversal-physical-capacity-replay-v1",
+    "research/residual-reversal-physical-capacity-replay-v2",
+    "maintenance/post-readiness-research-cleanup-2026-09"
+  ],
+  "branches_deleted_remotely": [
+    "research/earnings-acceleration-design-v1",
+    "research/government-contract-award-design-v1",
+    "research/residual-reversal-cap8-reentry-review-v1",
+    "research/residual-reversal-physical-capacity-replay-v1"
+  ],
   "branches_intentionally_retained": [
     "main"
   ],
   "cleanup_date": "2026-09-24",
   "config_diff": "NONE",
   "contaminated_replay_tip": "54cf5923b508de40af35e409fd746d671a592d3a",
-  "decision": "PENDING_VALIDATION_AND_DELETION",
+  "decision": "POST_READINESS_REPOSITORY_CLEANUP_COMPLETE_MAIN_ONLY",
   "final_main_ref": "refs/heads/main",
   "final_main_sha": null,
-  "final_main_sha_note": "A commit cannot contain its own SHA. Resolve refs/heads/main after final receipt publication; the verified exact SHA is reported in the task closeout.",
+  "final_main_sha_note": "Self-reference prevents embedding this receipt commit SHA in its own JSON. The final main SHA is the peeled commit at final_main_ref, independently verified after publication and stated in the final task report.",
   "final_tag_peeled_targets": {
     "archive/audit/paper-forward-readiness-v1-blocked-2026-09": "2920adfd6e01bebf13cbb477a1bf09c262034deb",
     "archive/research/customer-momentum-design-v1-2026-09": "dfa967d8501831287048838d3238be7b389b1aa7",
@@ -46,6 +67,15 @@
     "archive/research/residual-reversal-physical-capacity-replay-v1-blocked-2026-09": "4812b94b051354e4893e21d5332adf74ca2a65dc",
     "archive/research/residual-reversal-physical-capacity-replay-v2-blocked-2026-09": "ad2eaf4e0676f35a3002fc67dcb9ad7778332e6f"
   },
+  "full_validation": {
+    "git_diff_check": "PASS",
+    "json_yaml": "PASS; 42 files",
+    "mypy_src": "PASS; 133 source files",
+    "privacy_scan": "PASS; no secret patterns in local-only branch evidence or new main documentation",
+    "pytest": "1266 passed, 4 skipped, 2 warnings",
+    "ruff_check": "PASS",
+    "ruff_format_check": "PASS"
+  },
   "live_state": "DISABLED",
   "paper_state": {
     "broker_calls_during_cleanup": "NONE",
@@ -55,6 +85,16 @@
     "repair_decision": "PAPER_OBSERVABILITY_REPAIR_ACCEPTED",
     "started": false
   },
+  "post_cleanup_local_branches": [
+    "main"
+  ],
+  "post_cleanup_remote_branches": [
+    "main"
+  ],
+  "post_cleanup_worktrees": [
+    "/Users/batuhankiskac/Desktop/ParayaBuck"
+  ],
+  "pre_final_receipt_main_sha": "92513f760802e1650c7a5c26d8e8ecb4741bfd30",
   "production_code_diff_caused_by_cleanup": "NONE",
   "replay_v1_archived_authority": "4812b94b051354e4893e21d5332adf74ca2a65dc",
   "schema_version": 2,

@@ -1,6 +1,6 @@
 {
   "campaign": "final-repository-cleanup-2026-09-24",
-  "status": "PREFLIGHT_VERIFIED_DELETIONS_PENDING",
+  "status": "REPOSITORY_CLEANUP_COMPLETE_MAIN_ONLY",
   "starting_main_sha": "be9dd048b362e71fa1076ef1919c4f2d4ff77545",
   "origin_main_sha_at_preflight": "be9dd048b362e71fa1076ef1919c4f2d4ff77545",
   "remote_branches_at_preflight": {
@@ -56,5 +56,46 @@
   "production_config_changed": false,
   "runtime_started": false,
   "broker_calls": 0,
-  "post_cleanup": null
+  "post_cleanup": {
+    "verified_documentation_main_sha": "5fd7afdd648da4ded61e8372061b7131cda7730d",
+    "remote_branches": ["main"],
+    "deleted_remote_branches": [
+      "audit/cap8-production-parity-v1",
+      "audit/cap8-production-parity-v2",
+      "fix/production-correctness-cap8-readiness-v1",
+      "fix/production-restart-reconciliation-v1",
+      "research/account-capacity-migration-8-v3",
+      "research/physical-availability-clock-v1",
+      "research/shared-account-replay-v2"
+    ],
+    "deleted_local_branches": [
+      "audit/cap8-production-parity-v1",
+      "audit/cap8-production-parity-v2",
+      "fix/production-correctness-cap8-readiness-v1",
+      "fix/production-restart-reconciliation-v1",
+      "research/account-capacity-migration-8-v3",
+      "research/shared-account-replay-v2",
+      "maintenance/final-repository-cleanup-2026-09"
+    ],
+    "removed_clean_worktrees": [
+      "cap8-correctness-temporary",
+      "cap8-integration-temporary",
+      "cap8-parity-v2-temporary",
+      "production-main-temporary",
+      "reconciliation-fix",
+      "nested-detached-reconciliation"
+    ],
+    "retained_worktrees": ["primary-main", "reconciliation-audit"],
+    "dirty_worktrees_preserved": [],
+    "remote_tracking_refs": ["origin/main"],
+    "worktree_pruned": true,
+    "all_six_protected_tags_verified_after_deletion": true,
+    "evidence_spot_check": [
+      "archive/audit/cap8-production-parity-v2-ready-2026-09:research/production_correctness_cap8_readiness_v1/CAP8_PARITY_V2_DECISION.json",
+      "archive/research/account-capacity-migration-8-v3-accepted-2026-09:research/account_capacity_migration_8_v3/MIGRATION_DECISION_V3.json"
+    ],
+    "main_only_remote": true,
+    "current_risk_max_positions": 8,
+    "live_enabled": false
+  }
 }

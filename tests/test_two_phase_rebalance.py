@@ -9,13 +9,18 @@ is persisted so a process restart between phases resumes exactly once.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+import pytest
+
+from parayabuck import load_config
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderRequest,
     PortfolioOrderSide,
     PortfolioRiskLimits,
+    portfolio_risk_limits_from_config,
 )
 from parayabuck.portfolio.base import PortfolioContext
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
@@ -177,6 +182,86 @@ def _position(symbol: str, qty: float) -> PositionSnapshot:
         ownership="managed",
         managed_qty=qty,
     )
+
+
+class _CryptoTargetStrategy(_FixedTargetStrategy):
+    market = Market.CRYPTO
+
+
+def _crypto_position(symbol: str, qty: float) -> PositionSnapshot:
+    return PositionSnapshot(
+        symbol,
+        qty,
+        100.0,
+        100.0,
+        Market.CRYPTO,
+        qty_available=qty,
+        ownership="managed",
+        managed_qty=qty,
+    )
+
+
+def _crypto_runtime(tmp_path, broker: _SimBroker) -> tuple[PortfolioRuntime, PortfolioStateRepository]:
+    repository = PortfolioStateRepository(tmp_path / "crypto.sqlite3")
+    config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
+    limits = portfolio_risk_limits_from_config(config.risk)
+    assert (limits.maximum_positions, limits.maximum_crypto_positions) == (8, 2)
+    runtime = PortfolioRuntime(
+        _CryptoTargetStrategy({"LTC/USD": 0.01, "DOGE/USD": 0.02}),
+        ("BTC/USD", "LTC/USD", "DOGE/USD"),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.05,
+        risk_limits=limits,
+        account_id="crypto-acct",
+    )
+    return runtime, repository
+
+
+def _crypto_bars() -> list[Bar]:
+    return [
+        Bar(datetime(2025, 1, 1, tzinfo=UTC), symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.CRYPTO)
+        for symbol in ("BTC/USD", "LTC/USD", "DOGE/USD")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("sell_status", "remaining_btc"),
+    [("rejected", 10.0), ("canceled", 10.0), ("canceled", 5.0), ("filled", 0.0)],
+)
+def test_crypto_deferred_replacement_requires_fresh_free_slot(tmp_path, sell_status: str, remaining_btc: float) -> None:
+    broker = _SimBroker((_crypto_position("BTC/USD", 10), _crypto_position("LTC/USD", 10)))
+    runtime, repository = _crypto_runtime(tmp_path, broker)
+    result = runtime.process_closed_bars(_crypto_bars())
+    assert result.status == "sell_phase_submitted"
+    assert [(order.side, order.symbol) for order in broker.submitted] == [(PortfolioOrderSide.SELL, "BTC/USD")]
+    assert (PortfolioOrderSide.BUY, "DOGE/USD") in [(order.side, order.symbol) for order in result.orders]
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(
+        repository,
+        sell,
+        status=sell_status,
+        cumulative=sell.quantity - remaining_btc,
+    )
+    broker.positions = [
+        *([_crypto_position("BTC/USD", remaining_btc)] if remaining_btc else []),
+        _crypto_position("LTC/USD", 10),
+    ]
+    broker.open_symbols.discard("BTC/USD")
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None
+    if remaining_btc:
+        assert resumed.status == "rebalance_waiting_for_slot"
+        assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+        assert runtime.advance_rebalance().status == "rebalance_waiting_for_slot"
+        runtime.close()
+        restarted, _ = _crypto_runtime(tmp_path, broker)
+        assert restarted.advance_rebalance().status == "rebalance_waiting_for_slot"
+        assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+    else:
+        assert resumed.status == "buy_phase_submitted"
+        assert [(order.side, order.symbol) for order in broker.submitted][-1] == (PortfolioOrderSide.BUY, "DOGE/USD")
 
 
 def test_sell_exists_buy_exists_no_buy_submission_before_sell_terminal(tmp_path) -> None:

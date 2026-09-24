@@ -1092,6 +1092,7 @@ class PortfolioRuntime:
                 planned,
                 account,
                 maximum_positions=self.risk_overlay.limits.maximum_positions,
+                market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
                 reserved_position_keys=reserved_slots,
                 open_order_symbols=tuple(sorted(open_order_symbols)),
             )
@@ -1195,6 +1196,7 @@ class PortfolioRuntime:
             admission.orders,
             admission.account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
+            market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
             reserved_position_keys=self._effective_reserved_position_keys(reserved_position_keys),
             open_order_symbols=tuple(sorted(self.broker.all_open_order_symbols())),
         )
@@ -1449,6 +1451,7 @@ class PortfolioRuntime:
             for order in planned
             if order.side == PortfolioOrderSide.BUY
         )
+        replan_needs_sell = any(order.side == PortfolioOrderSide.SELL for order in planned)
         if not buy_orders:
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
             _emit_rebalance_phase_safe(
@@ -1469,6 +1472,7 @@ class PortfolioRuntime:
             buy_orders,
             account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
+            market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
             reserved_position_keys=reserved_slots,
             open_order_symbols=tuple(sorted(open_order_symbols)),
         )
@@ -1477,6 +1481,11 @@ class PortfolioRuntime:
                 "Deferred BUY phase has no safe capacity; decision=%s submits nothing",
                 decision_id,
             )
+            if replan_needs_sell and admission.orders:
+                # A terminal SELL update did not prove that its position slot
+                # disappeared. Keep the deferred phase retryable until a fresh
+                # account snapshot permits the replacement opening.
+                return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_waiting_for_slot")
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
             _emit_rebalance_phase_safe(
                 decision_id,

@@ -1,0 +1,10 @@
+candidate_id,family,natural_rank,few_name_evidence,disposition
+V4-007,dividend initiation,initiation event,none established,REJECT_CONCENTRATION
+V4-008,large recurring dividend increase,dividend change magnitude,none established,REJECT_CONCENTRATION
+V4-010,forward stock split announcement,split factor,none established,REJECT_EVENT_TIMING
+V4-021,abnormal institutional ownership,ownership residual,none established,REJECT_CONCENTRATION
+V4-022,institutional breadth change,holder-count change,none established,REJECT_CONCENTRATION
+V4-031,Phase III failed-trial rebound,event outcome and firm size,none established,REJECT_CONCENTRATION
+V4-032,positive Phase III outcome continuation,not established,none established,REJECT_LONG_HIGH
+V4-033,FDA fast-track designation,designation event; no validated strength variable,none established,REJECT_CONCENTRATION
+V4-044,order-backlog growth,backlog change,none established,REJECT_CONCENTRATION

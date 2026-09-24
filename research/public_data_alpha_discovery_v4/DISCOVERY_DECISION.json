@@ -1,0 +1,9 @@
+{
+  "decision": "PUBLIC_DATA_ALPHA_DISCOVERY_V4_EXHAUSTED_NO_CANDIDATE",
+  "next_action": "PAUSE_NEW_ALPHA_DISCOVERY_AND_PRIORITIZE_FORWARD_PAPER_EVIDENCE",
+  "shortlist_count": 0,
+  "local_future_economics": "NONE",
+  "production_files_changed": "NONE",
+  "paper_live_changes": "NONE",
+  "candidate_backtests": "NONE"
+}

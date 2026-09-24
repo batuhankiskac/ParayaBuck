@@ -1,0 +1,10 @@
+candidate_id,family,classification,sample_end,limitation
+V4-007,dividend initiation,MODERN_SUPPORT_NONE,not recovered,No independently established modern liquid concentrated long result
+V4-008,large recurring dividend increase,MODERN_SUPPORT_NONE,1989,No independently established modern liquid concentrated long result
+V4-010,forward stock split announcement,MODERN_SUPPORT_NONE,2000,No independently established modern liquid concentrated long result
+V4-021,abnormal institutional ownership,MODERN_SUPPORT_LIMITED,2022,No independently established modern liquid concentrated long result
+V4-022,institutional breadth change,MODERN_SUPPORT_NONE,1998,No independently established modern liquid concentrated long result
+V4-031,Phase III failed-trial rebound,MODERN_SUPPORT_LIMITED,not recovered,No independently established modern liquid concentrated long result
+V4-032,positive Phase III outcome continuation,MODERN_SUPPORT_NONE,not recovered,No independently established modern liquid concentrated long result
+V4-033,FDA fast-track designation,MODERN_SUPPORT_LIMITED,2020,No independently established modern liquid concentrated long result
+V4-044,order-backlog growth,MODERN_SUPPORT_NONE,not recovered,No independently established modern liquid concentrated long result

@@ -1,0 +1,10 @@
+candidate_id,family,literature_horizon,supply,slot_case
+V4-007,dividend initiation,LONG,not quantified causally,unsupported for six shared equity slots
+V4-008,large recurring dividend increase,MEDIUM,not quantified causally,unsupported for six shared equity slots
+V4-010,forward stock split announcement,MEDIUM,not quantified causally,unsupported for six shared equity slots
+V4-021,abnormal institutional ownership,SHORT,not quantified causally,unsupported for six shared equity slots
+V4-022,institutional breadth change,LONG,not quantified causally,unsupported for six shared equity slots
+V4-031,Phase III failed-trial rebound,MEDIUM,not quantified causally,unsupported for six shared equity slots
+V4-032,positive Phase III outcome continuation,MEDIUM,not quantified causally,unsupported for six shared equity slots
+V4-033,FDA fast-track designation,LONG,not quantified causally,unsupported for six shared equity slots
+V4-044,order-backlog growth,MEDIUM,not quantified causally,unsupported for six shared equity slots

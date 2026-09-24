@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "long_list_total": 66,
+  "unique_family_ids": 66,
+  "unique_family_names": 66,
+  "stage_a_count": 9,
+  "stage_b_count": 6,
+  "stage_c_count": 3,
+  "final_shortlist_count": 0,
+  "disposition_counts": {
+    "REJECT_V3_REDUNDANCY": 3,
+    "REJECT_METHOD_UNAVAILABLE": 43,
+    "REJECT_CONCENTRATION": 7,
+    "EXCLUDE_PRIOR_CLOSED": 2,
+    "REJECT_EVENT_TIMING": 1,
+    "REJECT_LONG_HIGH": 5,
+    "DEFER_EXTERNAL_DATA_BURDEN": 3,
+    "BLOCK_PUBLIC_PIT": 2
+  },
+  "sum_final_dispositions": 66,
+  "bucket_counts": {
+    "A": 6,
+    "B": 8,
+    "C": 6,
+    "D": 6,
+    "E": 4,
+    "F": 6,
+    "G": 7,
+    "H": 8,
+    "I": 4,
+    "J": 4,
+    "K": 3,
+    "L": 4
+  }
+}

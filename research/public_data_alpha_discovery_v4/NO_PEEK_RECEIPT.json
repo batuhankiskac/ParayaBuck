@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "scope": "V4 research artifacts only",
+  "local_candidate_outcome_vectors": "NONE",
+  "local_future_economics": "NONE",
+  "candidate_backtests": "NONE",
+  "external_published_evidence": "Paper-reported statistics only; no local recomputation",
+  "method": "CSV/JSON key scan plus research-only git diff and manual artifact review"
+}

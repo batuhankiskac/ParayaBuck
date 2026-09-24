@@ -1,0 +1,21 @@
+{
+  "decision": "CAP8_CODE_INTEGRATION_ACCEPTED",
+  "remote": "git@github.com:batuhankiskac/ParayaBuck.git",
+  "verified_ref": "refs/heads/main",
+  "verified_integration_main_sha": "49ba2ceedde26d796bbe3709dd5a5f11cce5fede",
+  "verification_date": "2026-09-24",
+  "verification_method": "git ls-remote origin refs/heads/main; git fetch origin main; inspect FETCH_HEAD tree",
+  "checks": {
+    "risk_max_positions": 8,
+    "live_enabled": false,
+    "reconciliation_source_present": true,
+    "buy_admission_source_present": true,
+    "cap8_regression_tests_present": true,
+    "fix_worktrees_gitlink_present": false
+  },
+  "config_change_commit_sha": "d3458dc552b21dd6a12799916e3bdcac5a769561",
+  "config_semantic_diff_receipt": "docs/research/CAP8_CONFIG_INTEGRATION_RECEIPT.json",
+  "runtime_started_in_campaign": false,
+  "broker_network_calls_in_campaign": 0,
+  "broker_mutations_in_campaign": 0
+}

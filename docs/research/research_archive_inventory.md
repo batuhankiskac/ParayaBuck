@@ -453,3 +453,34 @@ V3 supersedes V2 as diagnostic input authority and reconfirms its broad
 conclusion. The branch-only diff contains research evidence and one focused
 test; no production path was changed. The annotated tag preserves the full
 evidence commit. Publication of local refs is separate from this local closure.
+
+## Final architecture/correctness cleanup — 2026-09-24
+
+Preflight began at clean, synchronized `main` and `origin/main`:
+`be9dd048b362e71fa1076ef1919c4f2d4ff77545`. The remote had only
+`main` and the seven completed branches below. Remote annotated tags were
+checked by their peeled targets before any branch deletion.
+
+| Branch | Tip | Durable authority | Cleanup action |
+|---|---|---|---|
+| `audit/cap8-production-parity-v1` | `8d7f0989b3c830a67cf66d8d8dc7dec1d1642b6d` | `archive/audit/cap8-production-parity-v1-blocked-2026-09` at `e99d4226c2b74e23ee7dd6e6b01f1b4ddaadff57` | Delete branch; the later `.fix-worktrees` gitlink commit is accidental and intentionally not archived. |
+| `audit/cap8-production-parity-v2` | `d20b70c0333b888b6d0e5438091ede540f3a27ee` | `archive/audit/cap8-production-parity-v2-ready-2026-09` at same commit | Delete branch after tag verification. |
+| `fix/production-correctness-cap8-readiness-v1` | `f107009c1308c152d326a8647a1df6c8bc55b225` | Main-history `d0c68057234a240a778e5adb06e42c6a3c136c34`; both trees `7e751ed9fdc8fd460962e7b710b3db8919279b92` | Delete branch after tree comparison. |
+| `fix/production-restart-reconciliation-v1` | `5229a061b1d5921fc4dffef8c9bb54393b3dd833` | Main-history `96254b7de6e045212002cfa807abd448bc6e5d0d`; both trees `9e35fa26741c2a2713ad706df892c50bd88f1a26` | Delete branch after tree comparison. |
+| `research/account-capacity-migration-8-v3` | `9c5e61382e8cdb71fdd3442d945719024accedd9` | `archive/research/account-capacity-migration-8-v3-accepted-2026-09` at same commit | Delete branch after tag verification. |
+| `research/physical-availability-clock-v1` | `377d260835c5a5f8ea23b61e16bf8103a842b0e0` | `archive/research/physical-availability-clock-v1-canonical-stop-2026-09` at same commit | Delete branch after tag verification. |
+| `research/shared-account-replay-v2` | `fb66be75aa77d48e78d586808c05ac40d617ca0d` | `archive/research/shared-account-replay-v2-clock-blocked-2026-09` at same commit | Delete branch after tag verification. |
+
+The validated infrastructure tag
+`infrastructure/physical-availability-clock-v2-cap6-2026-09` remains at
+`11890e93ad1a5223cb11483488deb4d5a6aec3d3`. The two fix trees are
+identical to their main-history authorities, so no unique production code is
+stranded. Research and audit evidence remains available through its tags.
+Main is authoritative; cap 8 is integrated in code/config, with crypto cap 2
+and LIVE disabled. No runtime or broker call was made in this cleanup.
+
+Local-only `audit/production-restart-reconciliation-v1`,
+`maintenance/crypto-canonical-causal-execution-v1`, and the merged
+`integration/cap8-main-v1` are outside the seven-branch deletion list and are
+retained for separate review. See `FINAL_REPOSITORY_CLEANUP_RECEIPT.json` for
+the frozen ref and worktree inventory and post-cleanup verification.

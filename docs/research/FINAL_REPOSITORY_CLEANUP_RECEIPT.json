@@ -1,0 +1,60 @@
+{
+  "campaign": "final-repository-cleanup-2026-09-24",
+  "status": "PREFLIGHT_VERIFIED_DELETIONS_PENDING",
+  "starting_main_sha": "be9dd048b362e71fa1076ef1919c4f2d4ff77545",
+  "origin_main_sha_at_preflight": "be9dd048b362e71fa1076ef1919c4f2d4ff77545",
+  "remote_branches_at_preflight": {
+    "audit/cap8-production-parity-v1": "8d7f0989b3c830a67cf66d8d8dc7dec1d1642b6d",
+    "audit/cap8-production-parity-v2": "d20b70c0333b888b6d0e5438091ede540f3a27ee",
+    "fix/production-correctness-cap8-readiness-v1": "f107009c1308c152d326a8647a1df6c8bc55b225",
+    "fix/production-restart-reconciliation-v1": "5229a061b1d5921fc4dffef8c9bb54393b3dd833",
+    "main": "be9dd048b362e71fa1076ef1919c4f2d4ff77545",
+    "research/account-capacity-migration-8-v3": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+    "research/physical-availability-clock-v1": "377d260835c5a5f8ea23b61e16bf8103a842b0e0",
+    "research/shared-account-replay-v2": "fb66be75aa77d48e78d586808c05ac40d617ca0d"
+  },
+  "local_branches_at_preflight": {
+    "audit/cap8-production-parity-v1": "8d7f0989b3c830a67cf66d8d8dc7dec1d1642b6d",
+    "audit/cap8-production-parity-v2": "d20b70c0333b888b6d0e5438091ede540f3a27ee",
+    "audit/production-restart-reconciliation-v1": "3551322b9ac609ed2ee52c0343a14f2dcd408f37",
+    "fix/production-correctness-cap8-readiness-v1": "f107009c1308c152d326a8647a1df6c8bc55b225",
+    "fix/production-restart-reconciliation-v1": "5229a061b1d5921fc4dffef8c9bb54393b3dd833",
+    "integration/cap8-main-v1": "3ed51b33d6be46a4857bb9aa7e1aefb6c54b0853",
+    "main": "be9dd048b362e71fa1076ef1919c4f2d4ff77545",
+    "maintenance/crypto-canonical-causal-execution-v1": "b135d73743ec2652f79b8c840df50bd3f67166e8",
+    "research/account-capacity-migration-8-v3": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+    "research/shared-account-replay-v2": "fb66be75aa77d48e78d586808c05ac40d617ca0d"
+  },
+  "worktrees_at_preflight": [
+    {"label": "primary-parity-v1", "branch": "audit/cap8-production-parity-v1", "clean": true},
+    {"label": "cap8-correctness-temporary", "branch": "fix/production-correctness-cap8-readiness-v1", "clean": true},
+    {"label": "cap8-integration-temporary", "branch": "integration/cap8-main-v1", "clean": true},
+    {"label": "cap8-parity-v2-temporary", "branch": "audit/cap8-production-parity-v2", "clean": true},
+    {"label": "production-main-temporary", "branch": "main", "clean": true},
+    {"label": "reconciliation-audit", "branch": "audit/production-restart-reconciliation-v1", "clean": true},
+    {"label": "reconciliation-fix", "branch": "fix/production-restart-reconciliation-v1", "clean": true},
+    {"label": "nested-detached-reconciliation", "commit": "af7225e1952c20a81f7d22d4f8d98126f02e27b3", "clean": true}
+  ],
+  "verified_annotated_remote_tag_targets": {
+    "archive/audit/cap8-production-parity-v1-blocked-2026-09": "e99d4226c2b74e23ee7dd6e6b01f1b4ddaadff57",
+    "archive/audit/cap8-production-parity-v2-ready-2026-09": "d20b70c0333b888b6d0e5438091ede540f3a27ee",
+    "archive/research/account-capacity-migration-8-v3-accepted-2026-09": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+    "archive/research/physical-availability-clock-v1-canonical-stop-2026-09": "377d260835c5a5f8ea23b61e16bf8103a842b0e0",
+    "archive/research/shared-account-replay-v2-clock-blocked-2026-09": "fb66be75aa77d48e78d586808c05ac40d617ca0d",
+    "infrastructure/physical-availability-clock-v2-cap6-2026-09": "11890e93ad1a5223cb11483488deb4d5a6aec3d3"
+  },
+  "fix_tree_equivalence": {
+    "restart_reconciliation": "9e35fa26741c2a2713ad706df892c50bd88f1a26",
+    "buy_headroom_correctness": "7e751ed9fdc8fd460962e7b710b3db8919279b92"
+  },
+  "retained_local_only_branches": [
+    "audit/production-restart-reconciliation-v1",
+    "maintenance/crypto-canonical-causal-execution-v1",
+    "integration/cap8-main-v1"
+  ],
+  "production_files_changed": false,
+  "production_config_changed": false,
+  "runtime_started": false,
+  "broker_calls": 0,
+  "post_cleanup": null
+}

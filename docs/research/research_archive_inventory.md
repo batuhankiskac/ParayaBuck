@@ -484,3 +484,22 @@ Local-only `audit/production-restart-reconciliation-v1`,
 `integration/cap8-main-v1` are outside the seven-branch deletion list and are
 retained for separate review. See `FINAL_REPOSITORY_CLEANUP_RECEIPT.json` for
 the frozen ref and worktree inventory and post-cleanup verification.
+
+## Post-readiness research and audit archive — 2026-09-24
+
+The following annotated tags preserve full evidence; only compact conclusions are on main.
+
+| Archive tag | Peeled evidence commit | Decision |
+|---|---|---|
+| `archive/research/earnings-acceleration-design-v1-2026-09` | `88c461819cc5684766af6f42e4313de925c37bcf` | Design rejected; no defensible concentrated expression |
+| `archive/research/government-contract-award-design-v1-2026-09` | `959085355442fea1ffa59236bfd03d6dfa31f289` | Design blocked by data or execution |
+| `archive/research/customer-momentum-design-v1-2026-09` | `dfa967d8501831287048838d3238be7b389b1aa7` | PIT public customer graph unvalidated |
+| `archive/research/public-data-alpha-discovery-v4-exhausted-2026-09` | `9294bd05664e4ffc0c3397a9e6abc954fe1053a7` | 66 screened; zero shortlisted; no candidate economics |
+| `archive/research/residual-reversal-cap8-reentry-review-v1-2026-09` | `690ce42e1852ead0ccaaddbf3822b10a65a6a77c` | Re-entry blocked; old standalone result unchanged |
+| `archive/research/residual-reversal-physical-capacity-replay-v1-blocked-2026-09` | `4812b94b051354e4893e21d5332adf74ca2a65dc` | Physical replay V1 blocked |
+| `archive/research/residual-reversal-physical-capacity-replay-v2-blocked-2026-09` | `ad2eaf4e0676f35a3002fc67dcb9ad7778332e6f` | Physical replay V2 blocked; keep reversal closed |
+| `archive/audit/paper-forward-readiness-v1-blocked-2026-09` | `2920adfd6e01bebf13cbb477a1bf09c262034deb` | Superseded pre-repair audit: `PAPER_FORWARD_OBSERVATION_BLOCKED` |
+
+The remote replay V1 branch tip `54cf5923b508de40af35e409fd746d671a592d3a` adds unrelated `agent_benchmark.sh` and `agent_benchmark.txt`; it is **not** an archive authority. The archive points to its parent campaign commit `4812b94b051354e4893e21d5332adf74ca2a65dc`.
+
+Current operational authority is main commit `7f007c8f9e5edc33a5065fc86c1c6fb61e55f3f3`: `PAPER_OBSERVABILITY_REPAIR_ACCEPTED` and `PAPER_FORWARD_OBSERVATION_READY`. The frozen observation period is 14 calendar days. Before PAPER, refresh both active universes and pass provider-backed readiness and reconciliation checks. PAPER has not started; no broker call was made by this cleanup; LIVE remains disabled. The blocked audit is historical, not current readiness.

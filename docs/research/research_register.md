@@ -740,3 +740,16 @@ economic findings. Commercial security-master procurement stays
 `DEFERRED_EXTERNAL_DATA_NOT_WORTH_PROCUREMENT_BURDEN`.
 
 `NO_UNTESTED_SHORTLIST_CANDIDATE_REMAINS_FROM_PUBLIC_DATA_DISCOVERY_V3`.
+
+## Post-readiness research closure — 2026-09-24
+
+| Campaign | Evidence authority | Durable classification | Economics / production | Archive tag |
+|---|---|---|---|---|
+| Earnings acceleration | `88c461819cc5684766af6f42e4313de925c37bcf` | `DESIGN_REJECT_NO_DEFENSIBLE_CONCENTRATED_EXPRESSION`; diversified evidence does not establish a few-name expression | None / none | `archive/research/earnings-acceleration-design-v1-2026-09` |
+| Federal government contract awards | `959085355442fea1ffa59236bfd03d6dfa31f289` | `DESIGN_BLOCKED_DATA_OR_EXECUTION` | None / none | `archive/research/government-contract-award-design-v1-2026-09` |
+| Customer momentum | `dfa967d8501831287048838d3238be7b389b1aa7` | `DESIGN_BLOCKED_DATA_OR_EXECUTION`; no validated PIT public customer graph | None / none | `archive/research/customer-momentum-design-v1-2026-09` |
+| Public Data Alpha Discovery V4 | `9294bd05664e4ffc0c3397a9e6abc954fe1053a7` | `PUBLIC_DATA_ALPHA_DISCOVERY_V4_EXHAUSTED_NO_CANDIDATE`; 66 mechanisms, Stage A 9, Stage B 6, Stage C 3, shortlist 0 | No local candidate economics / none | `archive/research/public-data-alpha-discovery-v4-exhausted-2026-09` |
+| Residual reversal cap-8 re-entry | `690ce42e1852ead0ccaaddbf3822b10a65a6a77c` | `RESIDUAL_REVERSAL_CAP8_REENTRY_BLOCKED`; historical standalone classification remains `ALPHA_VALID_PORTFOLIO_REJECTED` | No new economics / none | `archive/research/residual-reversal-cap8-reentry-review-v1-2026-09` |
+| Residual reversal physical capacity replay V1/V2 | `4812b94b051354e4893e21d5332adf74ca2a65dc`; `ad2eaf4e0676f35a3002fc67dcb9ad7778332e6f` | `RESIDUAL_REVERSAL_PHYSICAL_CAPACITY_REPLAY_BLOCKED`; `KEEP_RESIDUAL_REVERSAL_CLOSED` | No economics / none | `archive/research/residual-reversal-physical-capacity-replay-v1-blocked-2026-09`; `archive/research/residual-reversal-physical-capacity-replay-v2-blocked-2026-09` |
+
+Research workflow decision: `PAUSE_NEW_ALPHA_DISCOVERY_AND_PRIORITIZE_FORWARD_PAPER_EVIDENCE`. This is not an alpha claim or PAPER start authorization. The original residual-reversal result above remains intact.

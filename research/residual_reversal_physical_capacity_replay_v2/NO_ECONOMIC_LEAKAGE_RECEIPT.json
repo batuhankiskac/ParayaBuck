@@ -1,0 +1,25 @@
+{
+  "independent_reverification": "PASS_PER_ARM_CROSS_ARM_BLOCKED",
+  "json_artifacts_audited": [
+    "CAP6_STRUCTURAL_RESULTS.json",
+    "CAP6_TERMINAL_TAIL_RECEIPT.json",
+    "CAP8_STRUCTURAL_RESULTS.json",
+    "CAP8_TERMINAL_TAIL_RECEIPT.json",
+    "CAPACITY_REPLAY_DECISION.json",
+    "CROSS_ARM_BLOCKED_DIAGNOSTIC.json",
+    "DETERMINISM_RECEIPT.json",
+    "INDEPENDENT_CAPACITY_VERIFICATION.json",
+    "SOURCE_DEMAND_DIAGNOSTIC.json",
+    "TAIL_INTEGRITY_FAILURE_RECEIPT.json"
+  ],
+  "new_economics_calculated": "NONE",
+  "original_invalid_evidence_sha256": {
+    "CAP8_BLOCKED_STRUCTURAL_TRACE.json.gz": "4d449448ec4fff28569f717e0dc5c4b93d51f2eecdd0c1c5769a3f3b9f4f114c",
+    "CAP8_INTEGRITY_FAILURE_RECEIPT.json": "91adcb25c13bbc54c34623d3ba81ce8654b8a9fe7c4f6010c12593c1b63c58e9"
+  },
+  "raw_trace_sha256": {
+    "cap6": "9d8430c463230d65d72056ccda47a7d4386b3742d224be9ef1b31010170a48f8",
+    "cap8": "eb5ff86a80026d1fa62063a262d15fa056b88682b409599b338ac83f133d649b"
+  },
+  "status": "PASS"
+}

@@ -1,0 +1,21 @@
+{
+  "blocker": "Frozen cross-arm source-demand identity fails at 2017-02-21T21:00:00+00:00.",
+  "candidate_materiality_interpreted": false,
+  "equity_source_demand_identity": false,
+  "per_arm": {
+    "cap6": {
+      "event_sha256": "bd2104a8fca36694a66f29b0f3b23f15c0d5c7c04ea392187112bdd27bf61098",
+      "maximum_claims": 6,
+      "maximum_crypto_positions": 2,
+      "status": "PASS"
+    },
+    "cap8": {
+      "event_sha256": "b9425634ed88cab366a3b0758091092666e9e154c31425416055d9e62014f255",
+      "maximum_claims": 8,
+      "maximum_crypto_positions": 2,
+      "status": "PASS"
+    }
+  },
+  "same_price_event_clock": true,
+  "status": "CROSS_ARM_BLOCKED"
+}

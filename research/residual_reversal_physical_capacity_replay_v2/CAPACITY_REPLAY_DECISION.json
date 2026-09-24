@@ -1,0 +1,12 @@
+{
+  "blocker": "Cap6 and cap8 equity source demand differs under the physical bounded observation stream; frozen cross-arm identity gate fails.",
+  "candidate_materiality_interpreted": false,
+  "decision": "RESIDUAL_REVERSAL_PHYSICAL_CAPACITY_REPLAY_BLOCKED",
+  "live": "DISABLED",
+  "new_economics_calculated": "NONE",
+  "next_action": "KEEP_RESIDUAL_REVERSAL_CLOSED",
+  "paper_runtime_started": "NO",
+  "production_authority_main_sha": "7724a2bc9e61ba325a6a252c8f518cabd99d6c69",
+  "production_strategy_changes": "NONE",
+  "replay_execution_sha": "fcf52fb72692f188896134b666eb79576e9c4386"
+}

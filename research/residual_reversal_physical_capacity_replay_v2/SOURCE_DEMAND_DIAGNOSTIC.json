@@ -1,0 +1,216 @@
+{
+  "first_differing_row_index": 28,
+  "first_differing_timestamp": "2017-02-21T21:00:00+00:00",
+  "interpretation": "Equity source requests diverge before any crypto trading; the frozen cross-arm source-demand identity gate fails. Cause in dynamic observation or strategy state requires a separate protocol review. Candidate materiality is withheld.",
+  "per_arm": {
+    "cap6": {
+      "equity_source_demand_sha256": "88f205d9ddcffb1a105a11e2ddc207f804259a918871dec1a804788fc6a15d68",
+      "first_timestamp_source_requests": [
+        {
+          "requested_target_contribution": 0.049933652268128396,
+          "source": "v3",
+          "source_rank": 1,
+          "symbol": "AMAT",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.05179519253312452,
+          "source": "v3",
+          "source_rank": 2,
+          "symbol": "BAC",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.05179519253312452,
+          "source": "v3",
+          "source_rank": 3,
+          "symbol": "GEN",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.05179519253312452,
+          "source": "v3",
+          "source_rank": 4,
+          "symbol": "LNC",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.05179519253312452,
+          "source": "v3",
+          "source_rank": 5,
+          "symbol": "FITB",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.05179519253312452,
+          "source": "v3",
+          "source_rank": 6,
+          "symbol": "FFIV",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.05179519253312452,
+          "source": "v3",
+          "source_rank": 7,
+          "symbol": "GD",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.05179519253312452,
+          "source": "v3",
+          "source_rank": 8,
+          "symbol": "CVX",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 1,
+          "symbol": "BP",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 2,
+          "symbol": "AAP",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 3,
+          "symbol": "KMI",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 4,
+          "symbol": "RDS.A",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 5,
+          "symbol": "RDS.B",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 6,
+          "symbol": "XLE",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        }
+      ],
+      "row_count": 6930
+    },
+    "cap8": {
+      "equity_source_demand_sha256": "3c0245a476aefbc07fcd580860c8ceb64b199d9ce35a87878efd688a3bacaec7",
+      "first_timestamp_source_requests": [
+        {
+          "requested_target_contribution": 0.051562500000000004,
+          "source": "v3",
+          "source_rank": 1,
+          "symbol": "BAC",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.051562500000000004,
+          "source": "v3",
+          "source_rank": 2,
+          "symbol": "GEN",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.051562500000000004,
+          "source": "v3",
+          "source_rank": 3,
+          "symbol": "LNC",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.051562500000000004,
+          "source": "v3",
+          "source_rank": 4,
+          "symbol": "FITB",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.051562500000000004,
+          "source": "v3",
+          "source_rank": 5,
+          "symbol": "FFIV",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.051562500000000004,
+          "source": "v3",
+          "source_rank": 6,
+          "symbol": "DPZ",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.051562500000000004,
+          "source": "v3",
+          "source_rank": 7,
+          "symbol": "GD",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.051562500000000004,
+          "source": "v3",
+          "source_rank": 8,
+          "symbol": "CVX",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 1,
+          "symbol": "BP",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 2,
+          "symbol": "AAP",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 3,
+          "symbol": "RDS.A",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 4,
+          "symbol": "RDS.B",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 5,
+          "symbol": "XLE",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        },
+        {
+          "requested_target_contribution": 0.02291666666666667,
+          "source": "reversal",
+          "source_rank": 6,
+          "symbol": "CPB",
+          "timestamp": "2017-02-21T21:00:00+00:00"
+        }
+      ],
+      "row_count": 6930
+    }
+  },
+  "status": "CROSS_ARM_SOURCE_DEMAND_MISMATCH"
+}

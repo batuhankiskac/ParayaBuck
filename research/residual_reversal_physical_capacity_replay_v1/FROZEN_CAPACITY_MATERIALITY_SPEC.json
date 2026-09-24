@@ -1,0 +1,33 @@
+{
+  "schema": "residual-reversal-physical-capacity-materiality-v1",
+  "parent_review_commit": "690ce42e1852ead0ccaaddbf3822b10a65a6a77c",
+  "candidate": "equity_short_term_residual_reversal_v1",
+  "purpose": "No-return structural test of candidate slot admission under identical physical shared accounts; global count cap is the sole arm difference.",
+  "arms": {
+    "A": {"global_cap": 6, "crypto_cap": 2, "v3_budget": 0.4125, "reversal_budget": 0.1375, "crypto_budget": 0.05},
+    "B": {"global_cap": 8, "crypto_cap": 2, "v3_budget": 0.4125, "reversal_budget": 0.1375, "crypto_budget": 0.05}
+  },
+  "period": {
+    "first_price_event_utc": "2017-01-03T14:30:00+00:00",
+    "equity_first_source_label_utc": "2017-01-03T05:00:00+00:00",
+    "crypto_first_source_label_utc": "2021-04-01T00:00:00+00:00",
+    "equity_last_source_label_utc": "2026-07-30T04:00:00+00:00",
+    "last_precommitted_terminal_event_utc": "2026-07-31T00:00:00+00:00",
+    "warmup": "validated physical V2 prepared window"
+  },
+  "starting_account": {"positions": 0, "pending_orders": 0, "reservations": 0, "reference_cash_for_mechanics": 100000},
+  "prerequisites": ["REVERSAL_PHYSICAL_CLOCK_EQUIVALENT", "incumbent physical-capacity parity", "source attribution invariant", "independent verifier PASS"],
+  "gates": {
+    "M1": "Cap6 has directly observed reversal GLOBAL_POSITION_COUNT denials or count-induced unused reversal exposure.",
+    "M2": "If cap6 candidate global-count denials >=20, cap8 reduces them >=25% relative; otherwise require >=10 fewer events, plus all other gates.",
+    "M3": "Cap8 reduces reversal count-induced unused target exposure >=25% relative to cap6.",
+    "M4": ">=10% of eligible reversal equity decision timestamps have a candidate admission state difference attributable specifically to global cap.",
+    "M5": "Cap8 does not increase V3 or crypto global-count denials; any apparent increase fails pending bookkeeping proof.",
+    "M6": "Two independent executions per arm produce identical canonical capacity event hashes.",
+    "M7": "Zero order-created-at >= source-price-event-time violations.",
+    "M8": "Claims never exceed arm cap; crypto positions <=2; pending SELL never frees a slot early."
+  },
+  "denial_reasons": ["GLOBAL_POSITION_COUNT", "CRYPTO_POSITION_COUNT", "PENDING_OPENING_RESERVATION", "PENDING_SELL_SLOT_NOT_RELEASED", "PER_NAME_CAP", "SLEEVE_LIMIT", "GROSS_TARGET_LIMIT", "CASH_TARGET_LIMIT", "MISSING_DATA", "INELIGIBLE", "MIN_ORDER", "OTHER_EXPLICIT"],
+  "materiality_rule": "PROVEN only if all prerequisites and M1-M8 pass; NOT_PROVEN only for a valid replay failing M1-M5; BLOCKED for chronology, attribution, parity, causality, determinism, slot or verifier failure.",
+  "forbidden": ["economic outcomes", "cap other than 6 or 8", "allocation change", "strategy retuning", "PAPER/LIVE change"]
+}

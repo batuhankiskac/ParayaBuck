@@ -1,0 +1,7 @@
+# Contract value semantics
+
+Store separately: action face value, base value, maximum potential/ceiling, current transaction obligation, cumulative obligation, amount newly obligated, unexercised options, not-to-exceed value, and winner-specific allocation. Preserve currency and whether the amount describes one action or the whole vehicle.
+
+The official [2016 Boeing record](https://www.defense.gov/News/Contracts/Contract/Article/793556/) has $667,522,500 headline and $136,132,068 obligated. The [2020 Lockheed modification](https://www.defense.gov/News/Contracts/Contract/Article/2218996/) has $375,488,269 not-to-exceed and $117,700,000 obligated. The [2023 Lockheed base action](https://www.defense.gov/News/Contracts/Contract/Article/3526503/) has $151,360,000 not-to-exceed and $68,072,000 obligated. The [2026 Lockheed IDIQ](https://www.war.gov/News/Contracts/Contract/Article/4575681/contracts-for-aug-17-2026/) has $31,291,904 headline and $297,008 obligated. The [2026 Boeing modification](https://www.war.gov/News/Contracts/Contract/Article/4599224/contracts-for-sept-11-2026/) adds a $13.4bn ceiling with zero obligated.
+
+The ranking amount used by Pyun is UNKNOWN. Quiver's [dashboard description](https://www.quiverquant.com/datasources/) mentions total obligated dollars for new contracts, but does not prove that the paper used this view or version. No ranking may choose headline, obligation or normalized intensity by convenience.

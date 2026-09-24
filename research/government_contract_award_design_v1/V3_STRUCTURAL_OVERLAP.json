@@ -1,0 +1,10 @@
+{
+  "award_candidates_also_selected_by_v3": null,
+  "candidate_corpus_frozen": false,
+  "causal_timestamps_complete": false,
+  "historical_issuer_mapping_complete": false,
+  "new_slot_demand": null,
+  "reason": "No candidate events satisfy the mapping and clock prerequisites; V3 history was not recomputed.",
+  "status": "NOT_ESTIMABLE",
+  "unique_award_candidates": null
+}

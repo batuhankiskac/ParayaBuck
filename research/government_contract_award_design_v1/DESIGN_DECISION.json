@@ -1,0 +1,18 @@
+{
+  "candidate_frozen": false,
+  "decision": "GOVERNMENT_CONTRACT_AWARD_DESIGN_BLOCKED_DATA_OR_EXECUTION",
+  "external_support": "LIMITED_EXTERNAL_SUPPORT",
+  "long_high_evidence": "LONG_HIGH_EVIDENCE_LIMITED",
+  "new_local_economics_calculated": "NONE",
+  "next_action": "Acquire legitimate full Pyun manuscript/method tables and archival source/mapping vintages; repeat design gates without return calculations.",
+  "paper_live_changes": "NONE",
+  "primary_blockers": [
+    "Primary paper full methodology and high-leg tables unavailable; event, amount, rank, lag and holding semantics cannot be frozen.",
+    "No verified historical first-public timestamps and vintages for a broad official federal award corpus.",
+    "No sufficient historical recipient-to-listed-security map or winner-specific economic attribution.",
+    "Concentrated event supply and holding-slot demand unmeasured."
+  ],
+  "production_files_changed": "NONE",
+  "public_data_policy": "Official/free sources exist but causal and fidelity gates not passed; no commercial data procured.",
+  "starting_origin_main_sha": "be440821e34d859f2e693c45532566eb0dafb1f8"
+}

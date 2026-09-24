@@ -1,0 +1,18 @@
+{
+  "empirical_business_day_distribution": null,
+  "empirical_calendar_day_distribution": null,
+  "policy_windows_only": {
+    "dod_fpds_public_release": "90 days after Date Signed",
+    "ordinary_car_due": "within 3 business days",
+    "specified_emergency_car_due": "within 30 days",
+    "usaspending_pipeline": "FPDS next morning; site publication following day"
+  },
+  "sample_pairs_with_verified_same_piid_mod_and_both_public_timestamps": 0,
+  "sources": [
+    "https://www.acquisition.gov/far/4.604",
+    "https://www.acquisition.gov/dfarspgi/pgi-204.6-contract-reporting",
+    "https://www.usaspending.gov/data/about-the-data-download.pdf"
+  ],
+  "status": "NOT_ESTIMABLE",
+  "warning": "Policy windows and Quiver receipt delays are not an empirical first-public delay distribution."
+}

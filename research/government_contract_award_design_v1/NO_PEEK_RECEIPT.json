@@ -1,0 +1,11 @@
+{
+  "candidate_event_rows_downloaded": 0,
+  "candidate_frozen": false,
+  "economic_test_authorized": false,
+  "external_published_return_results_discussed": true,
+  "external_results_are_not_local_economic_outputs": true,
+  "local_car_pnl_cagr_sharpe_sortino_calmar_drawdown_hit_rate_ic_calculations": 0,
+  "local_forward_return_calculations": 0,
+  "policy": "No local forward stock returns or economic outcomes until final design gate authorizes one frozen test.",
+  "quarantine_required": false
+}

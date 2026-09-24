@@ -1,0 +1,7 @@
+# First-public availability contract
+
+For each potential event retain event_date, award_date/date_signed, source_submission_at, source_publication_at and first_proved_public_at as separate nullable fields. Only the last may drive an entry clock. Required evidence: official or issuer URL, archived/versioned capture, publication date, time if published, timezone, PIID/agency/modification, retrieval date, record hash and rule for ambiguous time. Never manufacture midnight/noon or equate action date with public availability.
+
+Candidate source ordering is conditional, not automatic: check issuer/agency release and official notice for an earlier same-award disclosure; next check FPDS/USAspending actual public vintage. A dated [DoD archive](https://www.defense.gov/News/Contracts/) with no article-level posting time can support a conservative next-trading-session-after-page-date rule, provided no earlier source changes the event identity or decision-time fields. The official [5 p.m. schedule](https://www.defense.gov/Today-in-DoD/Date/2014-4-16) is a schedule, not an exact row timestamp. [FAR 5.303](https://www.acquisition.gov/far/5.303) does not prove a page was posted on time.
+
+Dedup key: agency/subtier + PIID + modification/order number; verify recipient and action amount. A later source can add metadata for audit but cannot rewrite the original decision-time signal. Unknown vintage for a ranking field fails closed. No sample event currently has a complete cross-source earliest-public audit.

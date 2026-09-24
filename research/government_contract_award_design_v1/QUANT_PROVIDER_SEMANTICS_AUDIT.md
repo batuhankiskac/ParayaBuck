@@ -1,0 +1,5 @@
+# Quiver provider semantics audit
+
+Quiver is literature provenance, not an approved ParayaBuck source. [Its data-source description](https://www.quiverquant.com/datasources/) says it obtains transaction-level records from USAspending, maps recipients to tickers, and that the public dashboard displays new contracts rather than payments or modifications, using total dollars obligated for each contract. [Its API page](https://api.quiverquant.com/datasets/government-contracts) presents historical government-contract endpoints and an example with separate Date and action_date values. The page does not define Date as the first public release time. Its [automated news](https://www.quiverquant.com/news/category/contracts_automated) can describe a payment received months after its action date, and warns that ticker mappings may be inaccurate.
+
+The paper's exact Quiver snapshot, API endpoint, event filter, amount field, and mapping version are UNKNOWN. Dashboard behavior today cannot be retroactively projected onto the 2020–2023 paper sample. Quiver historical access is paid; no purchase or credential use was made. No Quiver date is authorized as first_proved_public_at.

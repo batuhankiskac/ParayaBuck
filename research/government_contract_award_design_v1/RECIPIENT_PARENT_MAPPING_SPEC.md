@@ -1,0 +1,7 @@
+# Recipient to parent to security mapping specification
+
+Required chain at event time: award recipient legal name and UEI/CAGE -> dated legal ownership -> economic ultimate parent -> listed issuer CIK -> share class and historical security -> ParayaBuck entity_id. Each edge needs an archived source, effective interval, confidence and reviewer decision. Name resemblance or today's ticker is insufficient. [SAM Contract Awards API](https://open.gsa.gov/api/contract-awards/) exposes recipient and ultimate-parent identifiers in current records but does not by itself prove historical ownership vintage. Dated SEC Exhibit 21, acquisition filings and issuer releases can support edges; [this March 2020 SEC filing](https://www.sec.gov/Archives/edgar/data/101829/000010182920000034/utx-20200331.htm) documents why pre- and post-merger Raytheon ownership must differ.
+
+The canonical ParayaBuck entity-lifetime file identifies provider asset, symbol intervals and entity_id, but contains no UEI, CAGE or issuer-CIK columns. See docs/research/canonical_v3_baseline.md and data/historical/equity_entity_lifetimes_full_v5.csv in the starting snapshot. It is a terminal security-resolution layer, not a federal-recipient parent map.
+
+Fail closed for private recipients, unresolved subsidiaries, acquisitions effective after an event, renamed tickers, delisted firms, ADR/foreign-parent ambiguity, multiple classes and spinoffs. A wholly owned subsidiary can map to its listed parent only with dated ownership proof; the economic award amount remains separately governed.

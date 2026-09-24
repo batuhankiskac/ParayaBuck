@@ -1,0 +1,5 @@
+# Vintage and correction specification
+
+Persist immutable first-observed record bytes, URL, retrieval timestamp, publication fields, normalized decision-time fields and hash. Link every later revision by source ID/PIID/modification to its own observed_at, change type and field diffs. Distinguish correction to an existing announcement from a contractual modification. A current USAspending or SAM value may corroborate an old event but may not replace the first public amount, recipient or event type in a simulated historical decision.
+
+The [September 11, 2026 department contract page](https://www.war.gov/News/Contracts/Contract/Article/4599224/contracts-for-sept-11-2026/) corrects an earlier Kelvin Hughes award date and amount. [SAM Opportunities API documentation](https://open.gsa.gov/api/get-opportunities-public-api/) says its public API returns the latest version, so a current query alone cannot recover that historical notice vintage. No first-observed historical snapshots were collected here; vintage integrity is not proved.

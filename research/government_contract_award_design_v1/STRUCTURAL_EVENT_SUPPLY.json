@@ -1,0 +1,10 @@
+{
+  "holding_slot_demand": null,
+  "monthly_qualifying_listed_issuer_counts": null,
+  "observed_sample_rows_not_population": 5,
+  "reason": "No literature-faithful event type, amount/rank, holding horizon or complete historically mapped event corpus.",
+  "repeated_award_aggregation": null,
+  "simultaneous_active_signals": null,
+  "status": "NOT_ESTIMABLE",
+  "top_tail_candidate_counts": null
+}

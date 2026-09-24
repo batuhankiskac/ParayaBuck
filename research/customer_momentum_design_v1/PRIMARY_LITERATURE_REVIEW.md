@@ -1,0 +1,11 @@
+# Cohen–Frazzini base design (pre-outcome review)
+
+Primary source: [Cohen and Frazzini (2008), author-hosted full PDF](https://pages.stern.nyu.edu/~afrazzin/pdf/Economic%20Links%20and%20Predictable%20Returns%20-%20Cohen%20and%20Frazzini.pdf), especially pp. 1983–1989, Tables I, III, V, and VI.
+
+The study uses Compustat Segment principal-customer records for 1980–2004, matches a customer to a CRSP/Compustat public common stock (CRSP share codes 10/11 and PERMNO), drops ambiguous matches, and imposes a **six-month lag after supplier fiscal year-end** before the relationship can be used. Its final sample has 30,622 firm-year and 11,484 unique supplier-customer relationships. The paper's description of SFAS 131 as requiring customer *identity* is inaccurate: see `CUSTOMER_DISCLOSURE_RULE_HISTORY.md` and SFAS 131 paragraph 39.
+
+For suppliers with multiple principal customers, the base signal is the **equal-weighted monthly return** of the customer portfolio using the last available supplier-customer link. The paper reports sales-share weighting as a robustness check, not the base. At the beginning of calendar month t it ranks suppliers on customer return in t-1, forms five quintiles, holds during t, and rebalances monthly. The supplier must have a known customer return and prior-month-end price > $5. Table III reports both value- and equal-weighted supplier portfolios. Its central test is Q5 long / Q1 short; ParayaBuck cannot implement the short side.
+
+The paper does **not** state a precise stale-edge expiration clock in its description of the “last available” link. A six-month disclosure lag is specified; an indefinite carry-forward or one-year expiration must not be attributed to it. It uses annual Compustat customer records; quarterly updating of links would be a different graph. It does not explicitly specify how delisting returns enter customer RET, beyond using CRSP stock returns. A proposed public graph must freeze the exact return series and corporate-action treatment before economics.
+
+Table I reports mean 918 supplier firms and 433 customer firms per year, mean link duration 2.7 years, median 2.0, and 23% of linked pairs in the same industry. These are published historical sample characteristics, not local measurements.

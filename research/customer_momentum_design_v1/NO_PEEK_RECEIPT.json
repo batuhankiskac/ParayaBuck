@@ -1,0 +1,12 @@
+{
+  "candidate_frozen": false,
+  "economic_result_files": [],
+  "leakage_audit": "audit_no_peek.py",
+  "local_future_supplier_economics": "NONE",
+  "permitted_external_published_results": [
+    "Cohen-Frazzini 2008 Tables III/V",
+    "Pinchuk 2023 Tables 8-10"
+  ],
+  "source_corpus_rows": 0,
+  "supplier_forward_returns_generated": false
+}

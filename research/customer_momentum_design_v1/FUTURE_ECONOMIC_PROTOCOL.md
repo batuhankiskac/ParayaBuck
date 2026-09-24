@@ -1,0 +1,3 @@
+# Future test authorization
+
+`NOT_AUTHORIZED`. A future campaign requires a separately committed, complete candidate freeze before any supplier return after formation is read. The first authorized experiment, if every design gate later passes, must be standalone long-only; no V3 blend or PAPER/LIVE change. It would predeclare source-regime handling around 2020-11-09, universe/security mapping, graph vintages, exact customer total-return construction, physical fill timing, position/cash/gross semantics, windows, costs and numeric acceptance thresholds without inspecting future outcomes. This document does not authorize that test.

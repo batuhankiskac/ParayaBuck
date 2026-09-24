@@ -1,0 +1,7 @@
+# Validation receipt
+
+Source and design validation performed: author-hosted full-paper tables/methods read; FASB SFAS 131 paragraph 39 and SEC 2016/2020 rules checked; SEC API capability checked; repository register/policy/V3/universe docs read; current worktree isolated at fetched origin/main.
+
+Automated checks: `UV_CACHE_DIR=/private/tmp/parayabuck-uv-cache uv run --extra dev pytest -q` completed with **1220 passed, 4 skipped, 2 existing deprecation warnings** in 104.63 seconds. `ruff check` and `ruff format --check` passed for the one research Python file. `.venv/bin/mypy --strict` passed for that file. `audit_no_peek.py` passed after pinning the originally fetched base SHA rather than mutable `origin/main`. Eight JSON files parsed; the deterministic sample has 330 rows, 30 in each year 2016–2026. The initial direct `python3 -m pytest` attempt lacked pytest; the first sandboxed `uv` attempt could not fetch packages; the escalated `uv` run above completed.
+
+Not performed: SEC bulk corpus acquisition, filing acceptance-time replay, parser accuracy, entity mapping, XBRL coverage, public graph, structural monthly signal, V3 overlap, local future supplier economics. These missing checks remain failed-closed rather than recorded as passing. `origin/main` advanced during execution; the branch was not updated to it. `git diff --check` and the final repository status are recorded in the handoff after staging/commit.

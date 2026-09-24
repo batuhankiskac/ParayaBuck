@@ -1,0 +1,13 @@
+{
+  "accepted_edges": 0,
+  "accepted_edges_are_empty_due_to_missing_audit": true,
+  "canonical_endpoint": "2026-07-30",
+  "future_supplier_outcomes_calculated": false,
+  "graph_fidelity": null,
+  "link_duration": null,
+  "median_links": null,
+  "reason": "No deterministic SEC filing corpus with accepted-at vintages was acquired; selected search examples are not a sample.",
+  "status": "NOT_MEASURED",
+  "unique_customers": null,
+  "unique_suppliers": null
+}

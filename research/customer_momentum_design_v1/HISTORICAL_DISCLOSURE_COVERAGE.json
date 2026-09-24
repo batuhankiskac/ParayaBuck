@@ -1,0 +1,13 @@
+{
+  "anonymous_customer_rate": null,
+  "canonical_endpoint": "2026-07-30",
+  "future_supplier_outcomes_calculated": false,
+  "issuer_years_audited": 0,
+  "mapped_public_customer_rate": null,
+  "named_customer_rate": null,
+  "period": "2016-01-01 through 2026-07-30",
+  "reason": "No deterministic SEC filing corpus with accepted-at vintages was acquired; selected search examples are not a sample.",
+  "source_regime_comparison": null,
+  "status": "NOT_MEASURED",
+  "yearly_counts": []
+}

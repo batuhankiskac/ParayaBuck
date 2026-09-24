@@ -1,0 +1,13 @@
+{
+  "basis": "The SEC corpus and accepted-time historical graph could not be audited with the configured environment; public graph sufficiency is unknown. This is an acquisition/execution block, not a measured finding that free identities are too incomplete, and not an alpha rejection.",
+  "candidate_frozen": false,
+  "decision": "CUSTOMER_MOMENTUM_DESIGN_BLOCKED_DATA_OR_EXECUTION",
+  "first_material_blocker": "G4",
+  "future_protocol_authorized": false,
+  "local_future_supplier_economics": "NONE",
+  "long_high_classification": "CUSTOMER_MOMENTUM_LONG_HIGH_LIMITED",
+  "modern_classification": "LIMITED_MODERN_SUPPORT",
+  "next_action": "KEEP_CUSTOMER_MOMENTUM_CLOSED_UNDER_PUBLIC_DATA_POLICY",
+  "paper_live_changes": "NONE",
+  "production_changes": "NONE"
+}

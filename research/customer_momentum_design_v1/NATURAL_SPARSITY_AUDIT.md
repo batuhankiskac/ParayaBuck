@@ -1,0 +1,5 @@
+# Natural sparsity / concentration
+
+No accepted monthly public graph exists, so eligible suppliers, positive customer-return names, high-quintile names, simultaneous positions and repeated suppliers are `NOT_MEASURED`. The paper's broad annual average of 918 supplier firms is not evidence that a public subset would fit ParayaBuck's finite slots. [Cohen–Frazzini Table III](https://pages.stern.nyu.edu/~afrazzin/pdf/Economic%20Links%20and%20Predictable%20Returns%20-%20Cohen%20and%20Frazzini.pdf) supports broad quintiles, not a six- or eight-name extreme. [Pinchuk's](https://arxiv.org/html/2301.11394) decile high leg is narrower but still diversified, with no top-six attribution.
+
+Concentration gate G10: `UNPROVEN`. No `top_n` is defined and no candidate is frozen. Fetched remote-main `config/settings.yaml` has `risk.max_positions: 8` and V3 `top_n: 8`; the older baseline document still lists six. Eight account positions do not imply eight freely available customer-momentum slots. A future protocol must pin available equity capacity and shared-account pressure before specifying portfolio breadth.

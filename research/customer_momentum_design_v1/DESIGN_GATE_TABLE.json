@@ -1,0 +1,71 @@
+{
+  "first_material_blocker": "G4",
+  "gates": [
+    {
+      "basis": "Base historical signal recovered; precise stale-edge expiry remains unspecified",
+      "id": "G1",
+      "status": "PASS"
+    },
+    {
+      "basis": "High leg positive in published samples; liquid/few-name evidence missing",
+      "id": "G2",
+      "status": "LIMITED"
+    },
+    {
+      "basis": "Later work supports mechanism but post-discovery spread weakens",
+      "id": "G3",
+      "status": "LIMITED"
+    },
+    {
+      "basis": "No audited public historical relationship graph",
+      "id": "G4",
+      "status": "BLOCKED"
+    },
+    {
+      "basis": "No accepted_at edge vintages",
+      "id": "G5",
+      "status": "UNTESTED"
+    },
+    {
+      "basis": "No edge vintage replay",
+      "id": "G6",
+      "status": "UNTESTED"
+    },
+    {
+      "basis": "No historical customer security map",
+      "id": "G7",
+      "status": "UNTESTED"
+    },
+    {
+      "basis": "No historical supplier security map",
+      "id": "G8",
+      "status": "UNTESTED"
+    },
+    {
+      "basis": "No public/Compustat graph comparison",
+      "id": "G9",
+      "status": "UNTESTED"
+    },
+    {
+      "basis": "No natural monthly sparsity or extreme-tail proof",
+      "id": "G10",
+      "status": "UNTESTED"
+    },
+    {
+      "basis": "Only long-short liquid robustness published",
+      "id": "G11",
+      "status": "UNTESTED"
+    },
+    {
+      "basis": "No physical monthly replay",
+      "id": "G12",
+      "status": "UNTESTED"
+    },
+    {
+      "basis": "Free-source sufficiency unproved",
+      "id": "G13",
+      "status": "BLOCKED"
+    }
+  ],
+  "ready": false
+}

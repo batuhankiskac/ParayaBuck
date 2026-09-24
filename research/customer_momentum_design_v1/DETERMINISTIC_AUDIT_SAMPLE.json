@@ -1,0 +1,19 @@
+{
+  "status": "FROZEN_FRAME_NOT_AUDITED",
+  "sample_rows": 330,
+  "rows_per_sampling_year": 30,
+  "years": [
+    2016,
+    2026
+  ],
+  "frame": "data/historical/equity_entity_lifetimes_full_v5.csv",
+  "frame_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+  "selection": "active interval intersects calendar year; SHA256(customer-momentum-v1|year|entity_id) ascending, first 30",
+  "limitations": [
+    "Historical CIK mapping missing",
+    "Filing year may differ from activity year",
+    "No PIT size/sector labels for stratification",
+    "No SEC filings fetched",
+    "No outcome or relationship coverage observed"
+  ]
+}

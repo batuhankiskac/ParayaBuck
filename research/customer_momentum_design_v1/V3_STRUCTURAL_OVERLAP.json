@@ -1,0 +1,11 @@
+{
+  "canonical_endpoint": "2026-07-30",
+  "future_supplier_outcomes_calculated": false,
+  "months": [],
+  "overlap_count": null,
+  "rank_correlation": null,
+  "reason": "No deterministic SEC filing corpus with accepted-at vintages was acquired; selected search examples are not a sample.",
+  "slot_pressure": null,
+  "status": "NOT_MEASURED",
+  "unique_customer_momentum_count": null
+}

@@ -1,0 +1,5 @@
+# SEC source capability
+
+[SEC EDGAR API documentation](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) provides issuer submissions and entity-wide standard-taxonomy XBRL facts; bulk submissions/companyfacts are available. Submissions can identify form, accession, filing and acceptance metadata. Raw filing documents are necessary for actual customer names, note text, custom dimensions and source hashes. Companyfacts excludes custom taxonomy and dimensional facts, so it cannot stand alone as a customer-identity service. Filings may identify direct buyers, end customers, distributors or common-control groups differently; the exact economic edge must be reviewed, not inferred from a generic mention.
+
+An SEC-compliant bulk corpus was not acquired in this run because no `SEC_USER_AGENT` contact was configured. The official source capability is documented; historical coverage, extraction recall and acceptance-time validation remain unmeasured. The raw SEC URLs in the construction spec are illustrative only.

@@ -1,0 +1,13 @@
+{
+  "version": "V4",
+  "frozen_date": "2026-09-24",
+  "starting_origin_main": "7724a2bc9e61ba325a6a252c8f518cabd99d6c69",
+  "scale": {"0": "contradicted, unavailable, or unknown", "1": "weak, indirect, or materially unresolved", "2": "credible but qualified", "3": "direct, independently verifiable, and strong for this account"},
+  "dimensions": {
+    "R1": "external hypothesis strength", "R2": "positive long-high evidence", "R3": "modern evidence", "R4": "public/free data", "R5": "PIT causality", "R6": "historical identity", "R7": "natural rank", "R8": "concentrated expression", "R9": "liquidity", "R10": "holding/slot efficiency", "R11": "mechanism distinction", "R12": "source burden", "R13": "replication risk", "R14": "implementation ambiguity"
+  },
+  "hard_dispositions": ["REJECT_LONG_HIGH", "REJECT_CONCENTRATION", "REJECT_EVENT_TIMING", "REJECT_EXECUTION", "BLOCK_PUBLIC_PIT", "DEFER_EXTERNAL_DATA_BURDEN", "REJECT_MAPPING", "REJECT_PARAMETER_SEARCH", "REJECT_SLOT_STRUCTURE", "EXCLUDE_PRIOR_CLOSED", "REJECT_METHOD_UNAVAILABLE"],
+  "stage_limits": {"broad_min": 50, "stage_a_max": 15, "stage_b_max": 8, "stage_c_max": 5, "shortlist_max": 3},
+  "tie_breakers": ["long_high", "public_PIT", "concentration", "modern_replication", "source_mapping_burden", "V3_distinction"],
+  "local_forward_economics_allowed": false
+}

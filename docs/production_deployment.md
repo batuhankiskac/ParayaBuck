@@ -187,10 +187,12 @@ config resolution and the SQLite store.
 
 `ExecStartPre=... doctor --strict --paper --offline` is the deployment gate:
 the service refuses to start if PAPER invariants, filesystem writability, SQLite
-`integrity_check`, universe freshness, or config parsing fail. `--offline`
-skips Alpaca reachability so the first boot does not flap while the network
-is still coming up. Online checks are re-evaluated after the engine starts
-and surface via `/readyz` and `ops doctor` (see §6, §8).
+integrity_check, or config parsing fail. With --offline, missing or stale
+active universes are reported as REFRESH_NEEDED and do not fail the doctor,
+even with --strict. The engine refreshes them after launch; require both
+active universes and /readyz to be healthy before treating PAPER as ready.
+--offline skips Alpaca reachability so first boot does not flap while the
+network is still coming up (see §6, §8).
 
 ### 2.3 Service operation
 

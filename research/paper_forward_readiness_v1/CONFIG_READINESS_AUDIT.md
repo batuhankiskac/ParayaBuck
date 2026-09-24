@@ -1,0 +1,3 @@
+# Config readiness
+The frozen origin/main configuration parses and constructs equity V3 (3.0.0, 1d, allocation 0.55) and crypto hysteresis (1.0.0, 1d, allocation 0.05). Runtime is paper; LIVE is disabled with hard cap zero. Global positions 8, crypto positions 2, gross target 0.60, cash buffer 0.40, band 0.005, minimum notional 10. No parameters were changed.
+Source: config/settings.yaml; src/parayabuck/cli.py:359-535. The offline doctor returned exit 0 with both universes REFRESH_NEEDED. Its final READY count is a preflight result, not trading readiness. Check /readyz and universe status after launch. Historical docs/research/canonical_v3_baseline.md retains its cap-6 research contract.

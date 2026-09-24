@@ -1,0 +1,29 @@
+{
+  "blockers": [
+    {
+      "evidence": "src/parayabuck/runtime.py:3399-3565 equity-name guard; startup catch-up at 3587-3645 separate path",
+      "id": "RECEIPT_PATH",
+      "required_repair": "decision-unique actual lifecycle receipts for crypto and startup/scheduled decisions, regression tests"
+    },
+    {
+      "evidence": "scripts/audit_v3_paper_soak.py EXPECTED_MARKET=equity",
+      "id": "SOAK_AUDITOR_SCOPE",
+      "required_repair": "read-only two-market cap/risk/lifecycle/identity audit with no-data semantics"
+    },
+    {
+      "evidence": "src/parayabuck/runtime.py:655-713 reports only global effective_slots; web/server_legacy.py:3108-3109 reports crypto held positions/cap, not working crypto claims",
+      "id": "CRYPTO_EFFECTIVE_SLOTS_VISIBILITY",
+      "required_repair": "Expose crypto occupied/effective claims and cap2 in operator capacity snapshot/dashboard with synthetic tests"
+    }
+  ],
+  "broker_calls": "NONE",
+  "crypto_cap": 2,
+  "decision": "PAPER_FORWARD_OBSERVATION_BLOCKED",
+  "final_audited_production_sha": "7724a2bc9e61ba325a6a252c8f518cabd99d6c69",
+  "global_cap": 8,
+  "live": "DISABLED",
+  "next_action": "Repair both observability blockers offline, rerun all gates, then ask operator to review a new readiness decision before PAPER.",
+  "paper_started": "NO",
+  "production_code_changes": "NONE",
+  "starting_origin_main_sha": "7724a2bc9e61ba325a6a252c8f518cabd99d6c69"
+}

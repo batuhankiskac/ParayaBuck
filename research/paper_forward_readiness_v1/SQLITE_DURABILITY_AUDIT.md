@@ -1,0 +1,3 @@
+# SQLite durability
+SQLiteStore opens the decision database with WAL, migrations and transaction boundaries; the same store is shared by execution ledger and portfolio repository. Persistent tables include runtime sessions, decisions, orders, fills, rebalance executions, ownership, risk epochs and execution events. The offline doctor proved WAL capability using a temporary probe, not the real runtime DB (none exists in the worktree).
+Synthetic crash/reopen/reconcile cases in tests/test_restart_chaos.py, tests/test_paper_reliability_restart.py and tests/test_restart_recovery.py cover pending submission, offline fill, SELL/BUY phase continuation and repeated restart without manual DB surgery. No production DB was opened or changed.

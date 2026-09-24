@@ -1,0 +1,3 @@
+# LIVE boundary
+Shipped runtime.mode=paper, live.enabled=false and live.hard_dollar_cap=0. EngineManager auto-start is paper-only. LIVE requires mode=live, live.enabled=true, positive cap, PARAYABUCK_ENABLE_LIVE=YES, and a fresh account/config/credential-bound operator approval proof. EngineRuntime verifies these before reconciliation. Merely adding LIVE credentials or approval key does not change the mode or arm LIVE. PARAYABUCK_OPERATOR_APPROVAL_KEY is irrelevant to PAPER execution.
+Sources: config/settings.yaml:204-211; web/managers/engine.py:173-190,455-485; runtime.py:947-968; live_safety.py. Synthetic tests: test_live_safety.py, test_runtime_start_guard.py, test_safety_reliability_fixes.py.

@@ -1,0 +1,20 @@
+{
+  "checks": {
+    "config": "PASS",
+    "crypto_strategy": "PASS",
+    "crypto_universe": "REFRESH_NEEDED missing",
+    "directories": "PASS",
+    "equity_strategy": "PASS",
+    "equity_universe": "REFRESH_NEEDED missing",
+    "live_disabled": "PASS",
+    "offline_network": "PASS",
+    "paper_mode": "PASS",
+    "sqlite_wal_capability": "PASS",
+    "tracked_env": "PASS"
+  },
+  "command": "env -u PARAYABUCK_ENABLE_LIVE ALPACA_API_KEY=OFFLINE_PLACEHOLDER ALPACA_SECRET_KEY=OFFLINE_PLACEHOLDER PYTHONPATH=src /Users/batuhankiskac/Desktop/ParayaBuck/.venv/bin/parayabuck doctor --strict --paper --offline",
+  "credentials": "synthetic placeholders only",
+  "exit_code": 0,
+  "interpretation": "Doctor exits 0 because REFRESH_NEEDED is explicitly nonblocking offline; runtime readiness still requires scanner refresh and /readyz.",
+  "network_calls": "NONE"
+}

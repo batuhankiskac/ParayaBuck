@@ -1,0 +1,19 @@
+{
+  "cases": {
+    "broker_filled_before_stream": "tests/test_restart_chaos.py:552",
+    "crash_during_sell": "tests/test_restart_chaos.py:388",
+    "duplicate_trade_update": "tests/test_restart_chaos.py:482",
+    "filled_sell_before_buy": "tests/test_restart_chaos.py:422",
+    "flat_restart": "tests/test_restart_chaos.py:252",
+    "managed_position": "tests/test_restart_chaos.py:276",
+    "open_managed_sell": "tests/test_restart_chaos.py:332",
+    "open_order": "tests/test_restart_chaos.py:305",
+    "partial_fill": "tests/test_restart_chaos.py:451",
+    "persisted_before_broker_ack": "tests/test_restart_chaos.py:516",
+    "repeated_restart": "tests/test_restart_chaos.py and tests/test_paper_reliability_restart.py"
+  },
+  "environment": "synthetic fake broker and tmp_path only",
+  "full_suite": "running at artifact creation; see VALIDATION_RECEIPT.json",
+  "limitation": "Graceful SIGTERM of a real process and target-host systemd behavior require an operator PAPER drill after stable launch; none was performed offline.",
+  "physical_SIGTERM_drill": "NOT_RUN"
+}

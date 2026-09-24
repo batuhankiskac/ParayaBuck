@@ -1,5 +1,10 @@
 # LIVE Readiness Gap Analysis — ParayaBuck 2026-08-29
 
+> Historical 2026-08-29 snapshot. For the current two-market cap-8/cap-2
+> production audit and its blocked PAPER decision, see
+> research/paper_forward_readiness_v1/FINAL_PAPER_FORWARD_READINESS_REPORT.md.
+> The V3-only soak auditor referenced below does not certify the crypto sleeve.
+
 **Repository:** `batuhankiskac/ParayaBuck`  
 **Branch audited:** local working tree (post-Mission 7/8)  
 **Audit date (UTC):** 2026-08-29  

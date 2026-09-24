@@ -1,0 +1,71 @@
+{
+  "authority_sha": "7724a2bc9e61ba325a6a252c8f518cabd99d6c69",
+  "broker_calls": "NONE",
+  "environment": "macOS arm64, shared Python 3.13.12 virtualenv; isolated audit source worktree via PYTHONPATH=src",
+  "focused_pytest": {
+    "duration_seconds": 11.42,
+    "files": [
+      "tests/test_startup_regressions.py",
+      "tests/test_dual_market_startup.py",
+      "tests/test_restart_chaos.py",
+      "tests/test_paper_reliability_restart.py",
+      "tests/execution/test_reconciliation_repair.py",
+      "tests/test_global_slot_accounting.py",
+      "tests/test_buy_admission_correctness.py",
+      "tests/test_health_readiness.py",
+      "tests/test_backup.py",
+      "tests/test_paper_chaos_incident.py",
+      "tests/test_t1_promotion_transition.py",
+      "tests/test_live_safety.py",
+      "tests/test_runtime_start_guard.py",
+      "tests/test_v3_paper_audit.py"
+    ],
+    "passed": 155,
+    "result": "PASS"
+  },
+  "full_pytest": {
+    "command": "env -u ALPACA_API_KEY -u ALPACA_SECRET_KEY -u PARAYABUCK_ENABLE_LIVE PYTHONPATH=src /Users/batuhankiskac/Desktop/ParayaBuck/.venv/bin/python -m pytest -q",
+    "duration_seconds": 105.67,
+    "passed": 1232,
+    "permission": "local loopback socket fixture allowed; no external broker request",
+    "result": "PASS",
+    "skipped": 4,
+    "warnings": 2
+  },
+  "git_diff_check": "PASS staged and unstaged",
+  "json_yaml_validation": {
+    "files": 8,
+    "result": "PASS",
+    "scope": "seven audit JSON files and shipped config/settings.yaml"
+  },
+  "mypy_src": {
+    "output": "Success: no issues found in 133 source files",
+    "result": "PASS"
+  },
+  "paper_started": "NO",
+  "privacy_scan": {
+    "interpretation": "placeholder/test matches; no production credential value inspected",
+    "literal_pattern_files": [
+      ".env.example",
+      "docs/production_deployment.md",
+      "tests/test_hardening.py"
+    ],
+    "tracked_env_files": 0
+  },
+  "production_code_changes": "NONE",
+  "ruff_check": {
+    "output": "All checks passed!",
+    "result": "PASS"
+  },
+  "ruff_format": {
+    "output": "259 files already formatted",
+    "result": "PASS"
+  },
+  "sandbox_attempt": {
+    "cause": "six synthetic loopback bind tests denied by sandbox PermissionError; full suite rerun above passed",
+    "failed": 6,
+    "passed": 1226,
+    "result": "ENVIRONMENT_ONLY_FAILURE",
+    "skipped": 4
+  }
+}

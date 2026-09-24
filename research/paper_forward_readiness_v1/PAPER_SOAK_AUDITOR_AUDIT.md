@@ -1,0 +1,3 @@
+# Soak auditor
+scripts/audit_v3_paper_soak.py opens the runtime DB read-only and audits equity_residual_momentum_v3 only (EXPECTED_MARKET=equity). It cannot certify crypto hysteresis, crypto cap 2, both-market effective slots, gross/cash extrema, or complete receipt coverage. Its V3 findings remain useful but are insufficient for the current two-market production contract.
+Classification: BLOCKER for automated current-production soak acceptance. Add a read-only current-production supplement with explicit no-data state and both-market lifecycle/cap/risk/identity checks before beginning the frozen observation. It must not import a broker client, place/cancel orders, modify config, or restart runtime. tests/test_v3_paper_audit.py only proves the older V3 scope.

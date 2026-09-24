@@ -1,0 +1,42 @@
+{
+  "authority": "origin/main fetched 2026-09-24",
+  "auto_start_engine": true,
+  "broker_calls": "NONE",
+  "config_sha256": "9282b0d380402c3890dbdb866f5e8e9d0e69cab03c3683d6edfa1c43683d7a4f",
+  "crypto_strategy": {
+    "allocation": 0.05,
+    "name": "crypto_low_variance_hysteresis_v1",
+    "version": "1.0.0"
+  },
+  "equity_strategy": {
+    "allocation": 0.55,
+    "name": "equity_residual_momentum_v3",
+    "version": "3.0.0"
+  },
+  "execution": {
+    "minimum_order_notional": 10,
+    "rebalance_band": 0.005
+  },
+  "live_enabled": false,
+  "live_hard_dollar_cap": 0,
+  "origin_main_sha": "7724a2bc9e61ba325a6a252c8f518cabd99d6c69",
+  "repair_evidence": [
+    "tests/execution/test_reconciliation_repair.py",
+    "tests/test_buy_admission_correctness.py",
+    "tests/test_global_slot_accounting.py",
+    "tests/test_restart_chaos.py"
+  ],
+  "requirements_dev_lock_sha256": "370e8752050ceab1363b5bf026c0127ffa2ba91c44a7d2d4147b79b114ebc179",
+  "requirements_lock_sha256": "f33d2ba645350a8d8daa8df317025744c83a3cb9499f27e335aa6fdbcf842f2b",
+  "risk": {
+    "cash_buffer": 0.4,
+    "daily_loss_limit_pct": 0.005,
+    "max_crypto_positions": 2,
+    "max_drawdown_pct": 0.05,
+    "max_positions": 8,
+    "maximum_gross": 0.6
+  },
+  "runtime_mode": "paper",
+  "source_tree_sha": "41a94eeb32cba807348cb6a4d5d75578bd637225",
+  "uv_lock_sha256": "61ca56bb0ebb35d1b3acaee118c50cf4584026668903afbe0f7efcd5bb9c5032"
+}

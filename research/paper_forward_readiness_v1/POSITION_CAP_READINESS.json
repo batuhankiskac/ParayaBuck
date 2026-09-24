@@ -1,0 +1,24 @@
+{
+  "broker_calls": "NONE",
+  "covered_cases": [
+    "6 equity + 2 crypto",
+    "5 equity + 2 crypto",
+    "6 equity + 1 crypto",
+    "working crypto BUY",
+    "partial crypto opening",
+    "cancel in flight",
+    "partial/rejected SELL",
+    "deferred and restart-resumed BUY",
+    "same-symbol add",
+    "risk-reducing SELL"
+  ],
+  "crypto_cap": 2,
+  "evidence": [
+    "tests/test_global_slot_accounting.py:82-390",
+    "tests/test_dual_market_startup.py",
+    "tests/test_restart_chaos.py",
+    "src/parayabuck/execution/portfolio.py:577-610"
+  ],
+  "global_cap": 8,
+  "status": "PASS_OFFLINE_SYNTHETIC"
+}

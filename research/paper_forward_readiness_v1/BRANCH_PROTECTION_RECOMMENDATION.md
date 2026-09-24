@@ -1,0 +1,2 @@
+# GitHub main governance
+No GitHub settings were changed and remote protection was not queried live in this offline audit. Recommend disallow force pushes and branch deletion on main. Optional required offline CI checks: full pytest, Ruff check/format, strict mypy and config validation. For a single operator, PR review can be optional if the operator consistently uses isolated branches, SHA checks and a non-force fast-forward merge; required PRs offer an extra review gate. This is non-blocking for PAPER.

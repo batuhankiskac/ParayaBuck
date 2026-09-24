@@ -1,0 +1,20 @@
+{
+  "cases": [
+    "pure BUY",
+    "deferred BUY",
+    "cross-market working BUY",
+    "partial fill",
+    "cancel in flight",
+    "manual unpriceable BUY",
+    "stale broker OPEN failure",
+    "SELL after actual broker flat"
+  ],
+  "cash_buffer": 0.4,
+  "evidence": [
+    "tests/test_buy_admission_correctness.py:63-322",
+    "src/parayabuck/portfolio/runtime_service.py:1635-1755"
+  ],
+  "gross_target": 0.6,
+  "note": "Fresh account and working commitments are re-read for final BUY admission; this is not a physical broker observation.",
+  "status": "PASS_OFFLINE_SYNTHETIC"
+}

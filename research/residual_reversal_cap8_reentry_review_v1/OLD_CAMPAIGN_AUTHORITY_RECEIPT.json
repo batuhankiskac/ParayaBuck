@@ -1,0 +1,17 @@
+{
+  "annotated_tag": "archive/research/residual-reversal-local-v1-2026-09",
+  "peeled_commit": "a3a54cff64a9312300ef700f2fe9409435a064d3",
+  "binding_files": [
+    "research/residual_reversal_local_v1/FROZEN_PROTOCOL.md",
+    "research/residual_reversal_local_v1/corrected_replay_v1/CORRECTED_REPLAY_SPEC.md",
+    "research/residual_reversal_local_v1/corrected_replay_v1/FINAL_CORRECTED_REPLAY_REPORT.md",
+    "research/residual_reversal_local_v1/corrected_replay_v1/decision.json",
+    "research/residual_reversal_local_v1/corrected_replay_v1/gate_table.json",
+    "research/residual_reversal_local_v1/corrected_replay_v1/sleeve_attribution.json"
+  ],
+  "candidate": "equity_short_term_residual_reversal_v1",
+  "historical_decision": "ALPHA_VALID_PORTFOLIO_REJECTED",
+  "corrected_replay_validity": "CORRECTED_REPLAY_VALID",
+  "old_six_slot_shortfall_decisions": 495,
+  "old_six_slot_treatment_decisions": 495
+}

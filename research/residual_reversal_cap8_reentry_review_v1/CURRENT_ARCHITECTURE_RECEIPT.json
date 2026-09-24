@@ -1,0 +1,22 @@
+{
+  "verified_main": "be440821e34d859f2e693c45532566eb0dafb1f8",
+  "migration_tag": "archive/research/account-capacity-migration-8-v3-accepted-2026-09",
+  "migration_peeled_commit": "9c5e61382e8cdb71fdd3442d945719024accedd9",
+  "migration_decision": "ACCOUNT_ARCHITECTURE_MIGRATION_8_ACCEPTED",
+  "migration_incumbent_only_global_count_denials": {"cap6": 1112, "cap8": 438},
+  "physical_clock_tag": "infrastructure/physical-availability-clock-v2-cap6-2026-09",
+  "physical_clock_peeled_commit": "11890e93ad1a5223cb11483488deb4d5a6aec3d3",
+  "corrected_causal_crypto_tag": "archive/maintenance/crypto-canonical-causal-execution-v1-2026-09",
+  "corrected_causal_crypto_peeled_commit": "b135d73743ec2652f79b8c840df50bd3f67166e8",
+  "corrected_causal_crypto_replay_a_sha256": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+  "source": "config/settings.yaml",
+  "incumbents": ["equity_residual_momentum_v3", "crypto_low_variance_hysteresis_v1"],
+  "global_cap": 8,
+  "crypto_cap": 2,
+  "equity_max_allocation": 0.55,
+  "crypto_max_allocation": 0.05,
+  "maximum_gross": 0.60,
+  "cash_buffer": 0.40,
+  "live_enabled": false,
+  "production_changes": "NONE"
+}

@@ -1,0 +1,8 @@
+{
+  "decision_count": 495,
+  "overlap_decisions": 251,
+  "mean_overlapping_names": 0.694949494949495,
+  "slot_savings_from_equity_overlap": 344,
+  "cross_market_symbol_overlap": 0,
+  "mean_candidate_unique_slot_demand": 5.305050505050505
+}

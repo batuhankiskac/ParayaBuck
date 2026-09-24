@@ -1,0 +1,11 @@
+{
+  "decision": "RESIDUAL_REVERSAL_CAP8_REENTRY_BLOCKED",
+  "historical_candidate_status": "ALPHA_VALID_PORTFOLIO_REJECTED",
+  "old_standalone_evidence": "OLD_STANDALONE_EVIDENCE_REUSABLE",
+  "material_architecture_change_relative_to_old_test": "UNDETERMINED_FOR_CANDIDATE",
+  "blocker": "A physically timed, no-return, multi-source shared-account replay is absent. Existing physical replay permits one equity engine; archived reversal labels and isolated crypto hysteresis cannot represent current pending orders, shared holdings, SELL completion, and source-specific admission faithfully.",
+  "candidate_economics_calculated": "NONE",
+  "production_changes": "NONE",
+  "future_experiment": "NOT AUTHORIZED",
+  "next_action": "BUILD_AND_VERIFY_NO_RETURN_PHYSICAL_SHARED_ACCOUNT_CAPACITY_REPLAY"
+}

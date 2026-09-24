@@ -1,0 +1,3 @@
+# Historical equity universe limitation
+
+The historical broad `US_EQUITY` scanner family is not proven point-in-time common-stock-only; see `docs/research/equity_universe_limitations.md`. Reversal and incumbent V3 share the scanner/data family. The old reversal target set includes exchange-traded products such as XLE, XOP, AMLP, QLD, and TNA, so neither taxonomy purity nor common-stock-only alpha is claimed. Negative-first reversal ranking may be more sensitive to such products, but available evidence does not establish a unique reversal invalidation. This is a shared incumbent limitation and must be explicit in any future result. No security-master procurement is opened here.

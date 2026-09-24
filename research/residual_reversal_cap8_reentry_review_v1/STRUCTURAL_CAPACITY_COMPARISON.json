@@ -1,0 +1,47 @@
+{
+  "scope": "TARGET_DEMAND_ONLY_NOT_PHYSICAL_REPLAY",
+  "decision_count": 495,
+  "crypto_reference": "isolated corrected causal crypto; target holdings are not shared-account endogenous",
+  "cap8_extra_equity_selection_events": 990,
+  "cap6": {
+    "v3": {
+      "accepted": 0.14010466133638866,
+      "denials": 5.278787878787878
+    },
+    "reversal": {
+      "accepted": 0.05875036674771512,
+      "denials": 3.4363636363636365
+    },
+    "crypto": {
+      "accepted": 0.027171717171717173,
+      "denials": 0.0
+    }
+  },
+  "cap8": {
+    "v3": {
+      "accepted": 0.21161581725743392,
+      "denials": 3.890909090909091
+    },
+    "reversal": {
+      "accepted": 0.07555592230327068,
+      "denials": 2.703030303030303
+    },
+    "crypto": {
+      "accepted": 0.027171717171717173,
+      "denials": 0.0
+    }
+  },
+  "mean_crypto_requested_slots": 1.0787878787878789,
+  "mean_count_unadmitted_target_exposure_diagnostic": {
+    "6": {
+      "v3": 0.2723953386636113,
+      "reversal": 0.0787496332522849,
+      "crypto": 0.0
+    },
+    "8": {
+      "v3": 0.20088418274256606,
+      "reversal": 0.06194407769672933,
+      "crypto": 0.0
+    }
+  }
+}

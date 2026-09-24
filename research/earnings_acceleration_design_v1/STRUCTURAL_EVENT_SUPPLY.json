@@ -1,0 +1,384 @@
+{
+  "as_of_utc": "2026-09-24T12:43:55.291207+00:00",
+  "canonical_endpoint_cutoff": "2026-07-30",
+  "coverage_limit": "All years: only cached recent submissions arrays. 2026 capped at canonical lifetime endpoint 2026-07-30. Issuers with omitted older submission segments are not assumed to lack earlier events.",
+  "earnings_event_proxy": "8-K or 8-K/A recent row with items containing 2.02; not a verified first-public earnings announcement",
+  "exact_paper_IBQ_per_CSHOQ_coverage": "NOT_MEASURED: exact earnings and period-specific shares require raw filing reconstruction; EPS tag is a diagnostic, not a substitute",
+  "historical_event_timestamp_proven": "NO: acceptanceDateTime is not proved first public dissemination time; issuer releases not audited",
+  "issuers": [
+    {
+      "cik": "0000012927",
+      "entity_name": "BOEING CO",
+      "older_submission_segments_not_loaded": 2,
+      "recent_max_filed": "2026-09-01",
+      "recent_min_filed": "2019-03-05",
+      "recent_rows": 1006,
+      "source_sha256": {
+        "companyfacts": "0c63f1ae7cc10b3c27e0c94f2add0c461e6293036dd4e52e52ae6dbb6f206e15",
+        "submissions": "8892f8403c90c4a081a4e6a7f6e4420933d37ad951cce6e1fcf9def6d0a3ffb8"
+      }
+    },
+    {
+      "cik": "0000019617",
+      "entity_name": "JPMORGAN CHASE & CO",
+      "older_submission_segments_not_loaded": 70,
+      "recent_max_filed": "2026-09-21",
+      "recent_min_filed": "2025-09-19",
+      "recent_rows": 26219,
+      "source_sha256": {
+        "companyfacts": "306858a6ee264e2b560f556459979faee015b66a392507693247122104fb8678",
+        "submissions": "acc32e1ce3c94a45de2bb4080ce2adf4207a6d637218b3e5d4d4494b20b01f65"
+      }
+    },
+    {
+      "cik": "0000040545",
+      "entity_name": "GENERAL ELECTRIC CO",
+      "older_submission_segments_not_loaded": 2,
+      "recent_max_filed": "2026-09-08",
+      "recent_min_filed": "2019-01-04",
+      "recent_rows": 1004,
+      "source_sha256": {
+        "companyfacts": "8c18acb17bbe0760fae6205c5df75b805480c58d4d1dbbabeba206d9ca36e1e3",
+        "submissions": "12179127823d7f5dc9696e09b73f4f31b5ddefc772782a1c8c10b767dc79cdcf"
+      }
+    },
+    {
+      "cik": "0000050863",
+      "entity_name": "INTEL CORP",
+      "older_submission_segments_not_loaded": 2,
+      "recent_max_filed": "2026-08-28",
+      "recent_min_filed": "2019-03-01",
+      "recent_rows": 1001,
+      "source_sha256": {
+        "companyfacts": "70056711b8b04d3a27e4a42b6d86e26f85ddaa3d59e480039d66ccfb353eb0b8",
+        "submissions": "2571798058d2159930fc29f2071045d6f5f03251ba604d4fefda4dc7d8dfc5e9"
+      }
+    },
+    {
+      "cik": "0000104169",
+      "entity_name": "Walmart Inc.",
+      "older_submission_segments_not_loaded": 2,
+      "recent_max_filed": "2026-09-18",
+      "recent_min_filed": "2023-05-15",
+      "recent_rows": 1000,
+      "source_sha256": {
+        "companyfacts": "54ec3fbf36dc203dd00a0333396b3df2b6695ecdf6cbb19b6ec41b053d86b517",
+        "submissions": "3655f0ee3b85ad68016b49c0de49f5b13987a23ac9f3cd2d9f984111dbabf0a6"
+      }
+    },
+    {
+      "cik": "0000320193",
+      "entity_name": "Apple Inc.",
+      "older_submission_segments_not_loaded": 1,
+      "recent_max_filed": "2026-09-17",
+      "recent_min_filed": "2015-07-24",
+      "recent_rows": 1001,
+      "source_sha256": {
+        "companyfacts": "73a86c6aedc31f77cac2ea4df5f80f0b3bd7e6eb58bb4e01444fbedf3afb9c43",
+        "submissions": "21995788784b0bc55218499c45c6fc1878378176024c615170f97e1b65044fd4"
+      }
+    },
+    {
+      "cik": "0000789019",
+      "entity_name": "MICROSOFT CORP",
+      "older_submission_segments_not_loaded": 2,
+      "recent_max_filed": "2026-09-17",
+      "recent_min_filed": "2020-08-07",
+      "recent_rows": 1002,
+      "source_sha256": {
+        "companyfacts": "f8aae2965b20ad0df44bdf7ccbedf797d275b6b8dc030154a7a311361bb7246f",
+        "submissions": "551ff75d16e89942b05b48835f3548be1276d59159bf86f009468b99542a94b9"
+      }
+    },
+    {
+      "cik": "0000796343",
+      "entity_name": "ADOBE INC.",
+      "older_submission_segments_not_loaded": 1,
+      "recent_max_filed": "2026-09-18",
+      "recent_min_filed": "2018-04-13",
+      "recent_rows": 1006,
+      "source_sha256": {
+        "companyfacts": "75f3829c00b3e8c669b84dcefefe66bc6e0cefd25379b0f0528abd08064df62b",
+        "submissions": "e37b6865981e03d9058fd8e9d460e70f0c2d5f4594ebbae3b1d86ba25f95daaf"
+      }
+    },
+    {
+      "cik": "0000831001",
+      "entity_name": "CITIGROUP INC",
+      "older_submission_segments_not_loaded": 40,
+      "recent_max_filed": "2026-09-21",
+      "recent_min_filed": "2025-09-19",
+      "recent_rows": 13430,
+      "source_sha256": {
+        "companyfacts": "86b71675c379db2be9146edbb4b6ce527cc14c6bab0bebc4c9deabf0065edb54",
+        "submissions": "66c06d29f3fdabb02381a8c05530c7569256426a668674e6c82fac92c164f64d"
+      }
+    },
+    {
+      "cik": "0000909832",
+      "entity_name": "COSTCO WHOLESALE CORP /NEW",
+      "older_submission_segments_not_loaded": 1,
+      "recent_max_filed": "2026-09-14",
+      "recent_min_filed": "2016-10-07",
+      "recent_rows": 1003,
+      "source_sha256": {
+        "companyfacts": "71a4fd99c86f27c3aa27b8f05b3a9705c16f0060b425395bb1a367ce239b7d1f",
+        "submissions": "59f1d5d4686014b15554083b0618a2f1fb41a69828766bd9c8cec62e25929c6a"
+      }
+    },
+    {
+      "cik": "0001018724",
+      "entity_name": "AMAZON COM INC",
+      "older_submission_segments_not_loaded": 2,
+      "recent_max_filed": "2026-09-14",
+      "recent_min_filed": "2020-09-30",
+      "recent_rows": 1001,
+      "source_sha256": {
+        "companyfacts": "7549fb68446eee40e1f50a166fa06b2d2ee6349e07c8553a4828757e032d3cd4",
+        "submissions": "e12c1f29dc9deb9202456c28d81f77602a41e190c105d6364619fc35a9ec063d"
+      }
+    },
+    {
+      "cik": "0001045810",
+      "entity_name": "NVIDIA CORP",
+      "older_submission_segments_not_loaded": 1,
+      "recent_max_filed": "2026-09-18",
+      "recent_min_filed": "2020-08-19",
+      "recent_rows": 1000,
+      "source_sha256": {
+        "companyfacts": "19ef503a5770f5660964b3c3aea6937579d9b359da344afe6a9adf59c63d26ff",
+        "submissions": "7f9d5135fdb5e9f14e68cb109632c54ceafedef50e8e4946b13ec4b2c397801f"
+      }
+    },
+    {
+      "cik": "0001326801",
+      "entity_name": "Meta Platforms, Inc.",
+      "older_submission_segments_not_loaded": 2,
+      "recent_max_filed": "2026-09-17",
+      "recent_min_filed": "2024-06-12",
+      "recent_rows": 1002,
+      "source_sha256": {
+        "companyfacts": "7518e76d6dac2d016e1a3d1dec1cc55ff9ea3bdd58a151b16fcaa067a6c9d94e",
+        "submissions": "46487956bb62eb3628ab1ccd4cf5b02ad31543e2fd2a6ad74e6a1483f0844c65"
+      }
+    },
+    {
+      "cik": "0001652044",
+      "entity_name": "Alphabet Inc.",
+      "older_submission_segments_not_loaded": 1,
+      "recent_max_filed": "2026-09-16",
+      "recent_min_filed": "2023-06-29",
+      "recent_rows": 1013,
+      "source_sha256": {
+        "companyfacts": "a017f26ee88cb4a639d1c1ddb06d53b4afe22f0ac89cabec7cd67c88919fe1c5",
+        "submissions": "9624fe558574d3c33ca6a6a0f9451a2fdba6e11e465de1d5a822d2e3d70042bc"
+      }
+    }
+  ],
+  "local_forward_economics": "NONE",
+  "price_liquidity_and_security_mapping": "NOT_MEASURED",
+  "sample_design": "14 pre-existing large issuer CIKs; convenience sample, not representative; recent submissions only; no archived submissions segments or 8-K exhibits loaded",
+  "schema": "offline_sec_cached_14_issuer_source_capability_v1",
+  "source": "data/research/external/cbop_design_v1/sample",
+  "standard_fact_coverage_definition": "any standard us-gaap Company Facts value whose accn equals the event filing accession; API omits custom tags and dimensional facts",
+  "years": {
+    "2016": {
+      "amendments": 1,
+      "custom_tag_only_events": null,
+      "events": 5,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 2,
+      "item_202": 5,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 2,
+      "matched_eps_basic_10q": 4,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 2,
+      "ten_q": 4,
+      "unproved_first_public": 5
+    },
+    "2017": {
+      "amendments": 1,
+      "custom_tag_only_events": null,
+      "events": 8,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 2,
+      "item_202": 8,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 2,
+      "matched_eps_basic_10q": 6,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 2,
+      "ten_q": 6,
+      "unproved_first_public": 8
+    },
+    "2018": {
+      "amendments": 1,
+      "custom_tag_only_events": null,
+      "events": 11,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 3,
+      "item_202": 11,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 2,
+      "matched_eps_basic_10q": 8,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 2,
+      "ten_q": 8,
+      "unproved_first_public": 11
+    },
+    "2019": {
+      "amendments": 1,
+      "custom_tag_only_events": null,
+      "events": 25,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 6,
+      "item_202": 25,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 4,
+      "matched_eps_basic_10q": 18,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 4,
+      "ten_q": 18,
+      "unproved_first_public": 25
+    },
+    "2020": {
+      "amendments": 2,
+      "custom_tag_only_events": null,
+      "events": 29,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 9,
+      "item_202": 29,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 6,
+      "matched_eps_basic_10q": 22,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 6,
+      "ten_q": 22,
+      "unproved_first_public": 29
+    },
+    "2021": {
+      "amendments": 1,
+      "custom_tag_only_events": null,
+      "events": 37,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 9,
+      "item_202": 37,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 9,
+      "matched_eps_basic_10q": 27,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 9,
+      "ten_q": 27,
+      "unproved_first_public": 37
+    },
+    "2022": {
+      "amendments": 1,
+      "custom_tag_only_events": null,
+      "events": 37,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 9,
+      "item_202": 37,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 9,
+      "matched_eps_basic_10q": 27,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 9,
+      "ten_q": 27,
+      "unproved_first_public": 37
+    },
+    "2023": {
+      "amendments": 3,
+      "custom_tag_only_events": null,
+      "events": 42,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 11,
+      "item_202": 42,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 9,
+      "matched_eps_basic_10q": 32,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 9,
+      "ten_q": 32,
+      "unproved_first_public": 42
+    },
+    "2024": {
+      "amendments": 5,
+      "custom_tag_only_events": null,
+      "events": 47,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 12,
+      "item_202": 47,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 11,
+      "matched_eps_basic_10q": 35,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 11,
+      "ten_q": 35,
+      "unproved_first_public": 47
+    },
+    "2025": {
+      "amendments": 1,
+      "custom_tag_only_events": null,
+      "events": 50,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 14,
+      "item_202": 50,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 12,
+      "matched_eps_basic_10q": 38,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 12,
+      "ten_q": 38,
+      "unproved_first_public": 50
+    },
+    "2026": {
+      "amendments": 2,
+      "custom_tag_only_events": null,
+      "events": 38,
+      "exact_paper_earnings_available_at_event": null,
+      "first_public_timestamp_proved": 0,
+      "historically_mapped_candidates": null,
+      "issuers": 14,
+      "item_202": 38,
+      "matched_any_standard_fact_8k": 0,
+      "matched_eps_basic_10k": 12,
+      "matched_eps_basic_10q": 22,
+      "matched_eps_basic_8k": 0,
+      "missing_or_ambiguous_exact_measure": null,
+      "ten_k": 12,
+      "ten_q": 23,
+      "unproved_first_public": 38
+    }
+  }
+}

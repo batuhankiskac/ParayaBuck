@@ -1,0 +1,15 @@
+{
+  "schema": "earnings_acceleration_no_local_outcome_peek_v1",
+  "starting_main_sha": "7724a2bc9e61ba325a6a252c8f518cabd99d6c69",
+  "expected_main_sha_in_request": "be440821e34d859f2e693c45532566eb0dafb1f8",
+  "branch": "research/earnings-acceleration-design-v1",
+  "local_future_returns_calculated": "NONE",
+  "local_backtest_run": false,
+  "local_forward_outcome_files_read": false,
+  "literature_published_outcomes_reviewed": true,
+  "cached_sec_inputs": "data/research/external/cbop_design_v1/sample/companyfacts_*.json and submissions_*.json",
+  "sec_network_requests": 0,
+  "production_source_or_config_changed": "NONE",
+  "paper_live_changes": "NONE",
+  "note": "The offline source audit reads filings and facts only. Published paper outcome tables are external prior evidence required by the user."
+}

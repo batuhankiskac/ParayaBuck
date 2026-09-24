@@ -1,0 +1,9 @@
+{
+  "schema": "earnings_acceleration_v3_structural_overlap_v1",
+  "status": "NOT_MEASURABLE_WITH_CAUSAL_INPUTS",
+  "candidate_event_count": null,
+  "contemporaneous_v3_selection_count": null,
+  "collisions": null,
+  "reason": "The cached SEC source audit has no verified first-public EAP values or dated CIK-to-canonical-security bridge. Joining current tickers or scanning V3 forward outcomes is prohibited.",
+  "future_returns_used": false
+}

@@ -1,0 +1,5 @@
+# Restatement and vintage specification
+
+Future immutable tables, if authorization is reopened: `event(cik,security_id,accession,form,item,accepted_at_utc,observed_public_at_utc,source_url,sha256,fiscal_quarter,classification)`; `fact(cik,accession,form,filed_date,accepted_at_utc,concept,unit,value,period_start,period_end,fy,fp,frame,context_id,first_observed_filing,amendment_of)`; `candidate(event_id,input_fact_ids,input_price_ids,split_basis,eap,rank,eligibility,exclusion_reason)`. Raw filing and exhibit bytes/hashes are authoritative; Company Facts is a discovery index.
+
+At decision time select only filings with proven `available_at <= decision_time`. Preserve all later revisions as distinct vintages. Do not silently replace a prior input with later 10-Q/A, 10-K/A, or repeated comparative fact. Validate duplicate facts by accession, context, unit and period; unresolved conflicts fail closed. [SEC FAQ](https://www.sec.gov/about/webmaster-frequently-asked-questions) distinguishes accepted timestamp from filed date and says first public document timestamp is unavailable. The cached source audit counts amendment form rows but does not trace restatement chains.

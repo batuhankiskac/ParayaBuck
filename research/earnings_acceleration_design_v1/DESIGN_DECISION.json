@@ -1,0 +1,15 @@
+{
+  "schema": "earnings_acceleration_design_decision_v1",
+  "decision": "EARNINGS_ACCELERATION_DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "specific_reason": "DESIGN_REJECT_NO_DEFENSIBLE_CONCENTRATED_EXPRESSION",
+  "interpretation": "The diversified high-decile historical U.S. hypothesis is credible; a few-name long-only implementation has no primary within-decile evidence. This is a ParayaBuck fit rejection, not a finding that diversified EAP alpha is false.",
+  "additional_data_blockers": [
+    "Exact IBQ divided by split-adjusted CSHOQ is not proven obtainable from first-public 8-K or issuer releases across the historical sample.",
+    "Only a 14-issuer biased cached source diagnostic was possible; archived submissions and raw earnings exhibits were not audited.",
+    "EDGAR acceptance does not prove public dissemination time and the paper day-2 fill convention is unresolved.",
+    "Dated CIK-to-canonical-security identity and Q4 vintage-aware derivation remain unverified."
+  ],
+  "local_forward_economics": "NONE",
+  "frozen_candidate": null,
+  "next_action": "KEEP_EARNINGS_ACCELERATION_CLOSED"
+}

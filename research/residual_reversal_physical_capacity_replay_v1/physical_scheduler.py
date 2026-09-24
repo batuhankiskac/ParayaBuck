@@ -483,6 +483,7 @@ def _admit_synthetic_orders(
     orders: tuple[PortfolioOrder, ...],
     account: AccountSnapshot,
     maximum_positions: int,
+    maximum_crypto_positions: int,
     reserved_position_keys: tuple[InstrumentKey, ...],
 ) -> tuple[PortfolioOrder, ...]:
     """Apply the current production slot policy to historical order records."""
@@ -506,6 +507,7 @@ def _admit_synthetic_orders(
         requests,
         account,
         maximum_positions=maximum_positions,
+        market_position_limits={Market.CRYPTO: maximum_crypto_positions},
         reserved_position_keys=reserved_position_keys,
     )
     admitted_ids = {order.client_order_id for order in admitted}
@@ -1260,6 +1262,7 @@ class SharedAccountReplay:
                                 tuple(engine._pending),
                                 engine._account_snapshot(),
                                 self.maximum_positions,
+                                engine._shared_overlay.limits.maximum_crypto_positions,
                                 prior_keys,
                             )
                         )
@@ -1502,10 +1505,16 @@ class SharedAccountReplay:
                 tuple(deferred),
                 engine._account_snapshot(),
                 self.maximum_positions,
+                engine._shared_overlay.limits.maximum_crypto_positions,
                 prior_keys,
             )
             for order in deferred:
                 if order not in admitted:
+                    crypto_slots_full = (
+                        market == Market.CRYPTO
+                        and self._claim_snapshot()["crypto_claim_count"]
+                        >= engine._shared_overlay.limits.maximum_crypto_positions
+                    )
                     self._events.append(
                         {
                             "event": "buy_intent_cancelled",
@@ -1514,7 +1523,9 @@ class SharedAccountReplay:
                             "client_order_id": order.client_order_id,
                             "symbol": order.symbol,
                             "qty": order.qty,
-                            "reason": "account_position_count_limit",
+                            "reason": "crypto_position_count_limit"
+                            if crypto_slots_full
+                            else "account_position_count_limit",
                         }
                     )
                     continue

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from parayabuck.backtest.portfolio_engine import OrderSide, PortfolioFill, PortfolioOrder, _Position
-from parayabuck.core.models import Market
+from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.portfolio import PortfolioRiskLimits
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from research.residual_reversal_physical_capacity_replay_v1.physical_scheduler import (
@@ -398,3 +398,49 @@ def test_split_preserves_source_lineage_and_adjusts_pending_claim() -> None:
     assert replay._order_desired[(Market.EQUITY, "buy-abc")] == {"v3": 12.0, "reversal": 8.0}
     assert [event["event"] for event in replay._events] == ["source_inventory", "source_order_adjustment"]
     assert replay._events[-1]["split_ratio"] == 2.0
+
+
+@pytest.mark.parametrize("btc_residual,expect_doge", ((0.0582293832077028, False), (0.0, True)))
+def test_deferred_crypto_buy_rechecks_crypto_slots_after_btc_sell(btc_residual: float, expect_doge: bool) -> None:
+    """A terminal SELL order releases its reservation, not its residual inventory."""
+    replay = SharedAccountReplay(maximum_positions=8)
+    at = datetime(2026, 6, 29, 1, tzinfo=UTC)
+
+    class EngineView:
+        def _account_snapshot(self) -> AccountSnapshot:
+            return AccountSnapshot(100_000.0, 100_000.0, 100_000.0, 0.0, replay.account.snapshots())
+
+        _shared_overlay = SimpleNamespace(limits=PortfolioRiskLimits(maximum_positions=8, maximum_crypto_positions=2))
+
+        @property
+        def _pending(self) -> list[PortfolioOrder]:
+            return replay.account.pending[Market.CRYPTO]
+
+        @_pending.setter
+        def _pending(self, orders: list[PortfolioOrder]) -> None:
+            replay.account.pending[Market.CRYPTO][:] = orders
+
+    replay.inputs = {Market.CRYPTO: SimpleNamespace(engine=EngineView())}
+    for index in range(5):
+        symbol = f"EQ{index}"
+        replay.account.positions[(Market.EQUITY, symbol)] = _Position(symbol, Market.EQUITY, "1d", 1.0, 100.0, at)
+    replay.account.positions[(Market.CRYPTO, "LTC/USD")] = _Position("LTC/USD", Market.CRYPTO, "1d", 1.0, 100.0, at)
+    if btc_residual:
+        replay.account.positions[(Market.CRYPTO, "BTC/USD")] = _Position(
+            "BTC/USD", Market.CRYPTO, "1d", btc_residual, 100.0, at
+        )
+    doge = PortfolioOrder("buy-doge", "DOGE/USD", Market.CRYPTO, OrderSide.BUY, 100.0, at, at)
+    replay.account.deferred_buys[Market.CRYPTO].append(doge)
+
+    # BTC's SELL is terminal. A partial fill still leaves its physical position.
+    assert not replay.account.pending[Market.CRYPTO]
+    replay._activate_deferred_buys(at, [Market.CRYPTO])
+
+    assert (doge in replay.account.pending[Market.CRYPTO]) is expect_doge
+    assert replay.account.deferred_buys[Market.CRYPTO] == []
+    assert [event["event"] for event in replay._events] == [
+        "buy_intent_activated" if expect_doge else "buy_intent_cancelled"
+    ]
+    if not expect_doge:
+        assert replay._events[0]["reason"] == "crypto_position_count_limit"
+    assert replay._claim_snapshot()["crypto_claim_count"] <= 2

@@ -1,0 +1,60 @@
+{
+  "B1_receipt_paths": {
+    "scheduled_crypto": "equity-name guard excludes crypto",
+    "scheduled_equity": "writer reachable in runtime.py equity-name guard",
+    "startup_crypto": "catch-up path bypasses writer and equity-name guard",
+    "startup_equity": "writer bypassed by _run_startup_catch_up"
+  },
+  "B1_same_day_filename_collision": true,
+  "B2_current_fields": {
+    "actual_gross_exposure": "PROJECTED using quantity times fixed 100",
+    "fills": "empty at initial write, not eventual execution",
+    "intended_orders": "INTENDED",
+    "positions_after": "PROJECTED from intended quantities",
+    "submitted_order_ids": "broker ID returned but no linked order status",
+    "target_weights": "INTENDED"
+  },
+  "B3_crypto_only_synthetic_db": {
+    "ignored_invariants": [
+      "crypto strategy",
+      "crypto cap2",
+      "effective global slots",
+      "gross and cash admission"
+    ],
+    "inserted_crypto_decisions": 1,
+    "legacy_auditor_scope": "equity V3 only",
+    "legacy_auditor_status": "no_data"
+  },
+  "B4_operator_capacity": {
+    "two_held": {
+      "crypto_effective_field_present": false,
+      "effective_slots": 2,
+      "keys": [
+        "available_cash_buy_headroom",
+        "available_gross_buy_headroom",
+        "broker_working_order_count",
+        "cash_ratio_pct",
+        "committed_buy_notional",
+        "crypto_sleeve_pct",
+        "effective_slots",
+        "equity_sleeve_pct",
+        "halt_reasons",
+        "maximum_positions",
+        "positions_count",
+        "realized_gross_pct",
+        "reconciliation_status",
+        "sampled_at",
+        "suppression_reasons",
+        "target_gross_pct"
+      ],
+      "positions_count": 2
+    },
+    "two_held_plus_working_DOGE": {
+      "broker_working_order_count": 1,
+      "crypto_effective_field_present": false,
+      "effective_slots": 3,
+      "positions_count": 2
+    }
+  },
+  "authority_sha": "7724a2bc9e61ba325a6a252c8f518cabd99d6c69"
+}

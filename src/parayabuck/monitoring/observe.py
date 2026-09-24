@@ -78,6 +78,15 @@ def on_runtime_health_recovered(*, session_id: str | None = None) -> None:
 
 
 # ------------------------------------------------------------------ reconciliation
+def on_reconciliation_complete(*, phase: str, session_id: str | None = None) -> None:
+    _emit_safely(
+        kind="reconciliation_succeeded",
+        message=f"{phase} reconciliation completed without drift",
+        session_id=session_id,
+        fields={"phase": phase},
+    )
+
+
 def on_reconciliation_failure(*, error: str, session_id: str | None = None, market: str | None = None) -> None:
     _emit_safely(
         kind="reconciliation_failure",
@@ -95,6 +104,15 @@ def on_reconciliation_recovered(*, session_id: str | None = None, market: str | 
 
 
 # ------------------------------------------------------------------ universe
+def on_universe_refresh_complete(*, market: str, session_id: str | None = None) -> None:
+    _emit_safely(
+        kind="scanner_refresh_complete",
+        message=f"universe refresh completed for {market}",
+        market=market,
+        session_id=session_id,
+    )
+
+
 def on_universe_refresh_failure(*, market: str, error: str, session_id: str | None = None) -> None:
     key = f"universe_{market}"
     if not _dedup(key, "failed"):

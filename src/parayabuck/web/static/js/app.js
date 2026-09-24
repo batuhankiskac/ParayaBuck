@@ -912,6 +912,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cap = risk.buy_capacity || {};
         const capReady = !cap.unavailable;
         setText('riskSlots', capReady ? `${cap.positions_count} / ${cap.effective_slots} / ${cap.maximum_positions}` : '—');
+        setText('riskCryptoSlots', capReady && cap.effective_crypto_slot_claims !== undefined ? `${cap.crypto_position_count} / ${cap.effective_crypto_slot_claims} / ${cap.crypto_slot_cap}` : '—');
         setText('riskWorking', capReady ? String(cap.broker_working_order_count) : '—');
         setText('riskGrossHeadroom', capReady ? formatCurrency(cap.available_gross_buy_headroom) : '—');
         setText('riskCommittedBuy', capReady && cap.committed_buy_notional !== null ? formatCurrency(cap.committed_buy_notional) : 'bilinmiyor');

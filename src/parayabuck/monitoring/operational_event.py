@@ -94,6 +94,7 @@ LIFECYCLE_KINDS: tuple[str, ...] = (
     # universe transitions
     "universe_became_stale",
     "universe_recovered",
+    "scanner_refresh_complete",
     # health
     "runtime_health_degraded",
     "runtime_health_recovered",

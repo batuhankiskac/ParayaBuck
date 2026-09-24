@@ -1,0 +1,116 @@
+{
+  "fixture": "temporary synthetic SQLite and V2 receipts; no production paths",
+  "clean_status": "PASS",
+  "clean_counts": {
+    "sessions": 2,
+    "decisions": 6,
+    "orders": 5,
+    "fills": 2,
+    "execution_events": 1,
+    "rebalance_executions": 1,
+    "buy_admissions": 5,
+    "receipts_v2": 6,
+    "decision_classes": {
+      "equity_scheduled": 2,
+      "equity_startup_catch_up": 1,
+      "crypto_scheduled": 2,
+      "crypto_startup_catch_up": 1
+    },
+    "order_statuses": {
+      "filled": 1,
+      "rejected": 1,
+      "partially_filled": 1,
+      "canceled": 1,
+      "submitted": 1
+    },
+    "operational_events": {
+      "reconciliation_recovered": 1,
+      "reconciliation_succeeded": 1,
+      "scanner_recovered": 2,
+      "scanner_refresh_complete": 2,
+      "scanner_refresh_failure": 1,
+      "decision_summary": 6
+    },
+    "restarts_observed": 1,
+    "reconciliation_runs_observed": 1,
+    "reconciliation_failures": 0,
+    "reconciliation_recoveries": 1,
+    "ambiguous_submissions": 0,
+    "drift_incidents": 0,
+    "scanner_refresh_failures": {
+      "equity": 0,
+      "crypto": 1
+    },
+    "scanner_recoveries": {
+      "equity": 1,
+      "crypto": 1
+    },
+    "scanner_refresh_completions": {
+      "equity": 1,
+      "crypto": 1
+    },
+    "no_order_decisions": 1
+  },
+  "negative_mutations": {
+    "global_nine": {
+      "status": "FAIL",
+      "expected_gate": "S5",
+      "detected": true
+    },
+    "crypto_three": {
+      "status": "FAIL",
+      "expected_gate": "S6",
+      "detected": true
+    },
+    "duplicate_order": {
+      "status": "FAIL",
+      "expected_gate": "S4",
+      "detected": true
+    },
+    "orphan_fill": {
+      "status": "FAIL",
+      "expected_gate": "S3",
+      "detected": true
+    },
+    "wrong_strategy": {
+      "status": "FAIL",
+      "expected_gate": "S1",
+      "detected": true
+    },
+    "live": {
+      "status": "FAIL",
+      "expected_gate": "S12",
+      "detected": true
+    },
+    "ambiguous": {
+      "status": "FAIL",
+      "expected_gate": "S3",
+      "detected": true
+    },
+    "buy_headroom": {
+      "status": "FAIL",
+      "expected_gate": "S7",
+      "detected": true
+    },
+    "missing_receipt": {
+      "status": "FAIL",
+      "expected_gate": "S10",
+      "detected": true
+    },
+    "forged_cash_headroom": {
+      "status": "FAIL",
+      "expected_gate": "S7",
+      "detected": true
+    },
+    "stale_universe": {
+      "status": "FAIL",
+      "expected_gate": "S11",
+      "detected": true
+    },
+    "missing_reconciliation": {
+      "status": "FAIL",
+      "expected_gate": "S8",
+      "detected": true
+    }
+  }
+}

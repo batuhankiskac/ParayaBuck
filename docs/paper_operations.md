@@ -49,6 +49,32 @@ Offline verification of this contract lives in
 (real membership adapters, fake broker, no network), and in the paper-chaos
 gate (`scripts/run_paper_chaos.py`).
 
+## Two-market forward observation (V2)
+
+After deploying the V2 PAPER decision writer, record its exact deployment
+timestamp. Keep both active universes fresh with provider-backed validation
+before any operator PAPER start; `doctor --offline` can report
+`REFRESH_NEEDED` without refreshing them. Freeze a 14-calendar-day window with
+the equity V3 and crypto hysteresis identities, cap 8, crypto cap 2, receipt
+schema V2, and S1-S12 gates in
+`research/paper_observability_repair_v1/FORWARD_OBSERVATION_PROTOCOL_V2.md`.
+
+```sh
+PYTHONPATH=src python scripts/audit_paper_soak.py \
+  --db data/runtime/parayabuck.sqlite3 \
+  --receipts data/runtime/paper_receipts \
+  --journal data/runtime/observability.sqlite3 \
+  --config config/settings.yaml \
+  --start DEPLOYMENT_TIMESTAMP_WITH_UTC_OFFSET \
+  --end OBSERVATION_END_WITH_UTC_OFFSET \
+  --output report.json
+```
+
+The auditor only reads the configured databases, receipt files and config.
+V1 equity receipts remain historical; V2 intent and SQLite lifecycle are the
+new observation authority. A missing V2 receipt or final BUY admission
+observation invalidates the window. P&L is not a gate.
+
 ## PAPER smoke policy
 
 Real PAPER orders require an EXPLICIT operator opt-in: the environment

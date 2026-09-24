@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "gates": {
+    "S1": "Frozen PAPER strategy, allocation, risk, config and session identities",
+    "S2": "Scheduled cadence and decision-summary evidence have no unexplained gap",
+    "S3": "All decision/order/fill/event links and lifecycle statuses resolvable",
+    "S4": "No duplicate decision receipt or logical order submission",
+    "S5": "Effective global slot claims at most 8",
+    "S6": "Effective crypto slot claims at most 2",
+    "S7": "Every BUY has a final admission observation with batch notional within gross and cash headroom",
+    "S8": "No unrecovered reconciliation or broker/local drift incident",
+    "S9": "Startup catch-up is explicitly labeled for both markets",
+    "S10": "Every persisted decision has complete V2 receipt with intent labels",
+    "S11": "Scanner failures are recovered and both markets have freshness evidence",
+    "S12": "No LIVE configuration, session, receipt or journal activity"
+  },
+  "pnl_is_gate": false
+}

@@ -1,20 +1,15 @@
-"""Machine-readable PAPER cycle receipt per weekly equity decision.
+"""Historical V1 equity receipt reader and immutable two-market V2 writer.
 
-17 canonical fields (plus warnings/incidents/created_at extras) form the
-reconstructable PAPER cycle record: decision_timestamp, config_digest,
-strategy_version, strategy_name, universe_hash, universe_size,
-observation_set_symbols, selected_symbols, target_weights,
-risk_adjusted_weights, broker_positions_before, intended_orders,
-submitted_order_ids, fills, positions_after, actual_gross_exposure,
-cash_ratio. Each scheduled weekly equity decision writes one JSON to
-data/runtime/paper_receipts/YYYY-MM-DD_equity_v3.json (not committed to Git)
-via build_receipt()/write(). Every cycle is reconstructable via IDs/hashes
-+ structured summaries, not enormous raw histories.
+V1 has projected post-order fields and remains available for historical files.
+Ongoing PAPER decisions emit immutable V2 snapshots with explicit intent labels;
+the portfolio SQLite ledger owns later execution truth.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -172,4 +167,38 @@ def default_receipt_dir() -> Path:
     return Path("data/runtime/paper_receipts")
 
 
-__all__ = ["PaperReceipt", "build_receipt", "default_receipt_dir"]
+def write_decision_receipt_v2(payload: dict[str, Any], directory: str | Path) -> Path:
+    """Publish an immutable decision snapshot; SQLite owns later order/fill truth."""
+    if payload.get("schema_version") != 2 or not payload.get("decision_id"):
+        raise ValueError("Decision receipt v2 requires schema_version=2 and decision_id")
+    market = str(payload["market"])
+    origin = str(payload["origin"])
+    if market not in {"equity", "crypto"} or origin not in {"scheduled", "startup_catch_up"}:
+        raise ValueError("Invalid decision receipt market/origin")
+    stamp = str(payload["decision_timestamp"]).replace(":", "").replace("-", "")
+    decision_id = str(payload["decision_id"])
+    if not decision_id.isalnum():
+        raise ValueError("Invalid decision receipt ID")
+    root = Path(directory)
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / f"{stamp}_{market}_{origin}_{decision_id}.v2.json"
+    content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    descriptor, temp_name = tempfile.mkstemp(prefix=".receipt-v2-", suffix=".tmp", dir=root)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temp_name, path)
+        except FileExistsError:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            identity = ("schema_version", "receipt_id", "decision_id", "market", "origin", "configuration_digest")
+            if any(existing.get(key) != payload.get(key) for key in identity):
+                raise ValueError(f"Decision receipt conflict for {decision_id}") from None
+    finally:
+        Path(temp_name).unlink(missing_ok=True)
+    return path
+
+
+__all__ = ["PaperReceipt", "build_receipt", "default_receipt_dir", "write_decision_receipt_v2"]

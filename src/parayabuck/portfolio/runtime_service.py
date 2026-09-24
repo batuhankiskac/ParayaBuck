@@ -1213,6 +1213,7 @@ class PortfolioRuntime:
             buys,
             initial_status="submitting",
         )
+        self._record_buy_admission_observation(decision_id, admission, buys)
         submitted = self._submit_orders(buys)
         _emit_decision_summary_safe(
             decision_id=decision_id,
@@ -1496,6 +1497,7 @@ class PortfolioRuntime:
                 session_id=self.session_id,
             )
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
+        self._record_buy_admission_observation(decision_id, admission, buy_orders)
         submitted = self._submit_orders(buy_orders)
         self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BUY_PENDING)
         _emit_rebalance_phase_safe(
@@ -1740,6 +1742,47 @@ class PortfolioRuntime:
     def current_buy_capacity(self) -> BuyAdmission:
         """Read-only fresh account capacity for operator monitoring."""
         return self._size_buys_to_safe_capacity(())
+
+    def _record_buy_admission_observation(
+        self, decision_id: str, admission: BuyAdmission, orders: tuple[PortfolioOrderRequest, ...]
+    ) -> None:
+        """Best-effort PAPER telemetry for the final direct or deferred BUY gate."""
+        if self.mode != "paper" or not orders:
+            return
+        writer = getattr(self.repository, "record_buy_admission_observation", None)
+        if writer is None:
+            return
+        marks = {
+            (position.market, canonical_symbol(position.symbol, position.market)): position.current_price
+            for position in admission.account.positions
+            if not position.is_flat
+        }
+        notional = sum(
+            order.quantity * max(order.reference_price, marks.get((order.market, order.symbol), 0.0))
+            for order in orders
+        )
+        try:
+            writer(
+                decision_id,
+                tuple(order.client_order_id for order in orders),
+                account_equity=admission.account.equity,
+                account_cash=admission.account.cash,
+                realized_gross=admission.realized_gross,
+                committed_buy_notional=admission.committed_buy_notional or 0.0,
+                gross_headroom=admission.gross_headroom,
+                cash_headroom=admission.cash_headroom,
+                admitted_batch_notional=notional,
+            )
+        except Exception:
+            log.warning("PAPER final BUY admission observation failed for %s", decision_id, exc_info=True)
+            try:
+                from parayabuck.monitoring import alerts
+
+                alerts.emit(
+                    "paper_incident", message="Final BUY admission evidence unavailable", decision_id=decision_id
+                )
+            except Exception:
+                pass
 
     def _submit_orders(self, orders: tuple[PortfolioOrderRequest, ...]) -> tuple[str, ...]:
         """Persist and submit one order batch with broker idempotency keys.

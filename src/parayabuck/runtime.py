@@ -48,6 +48,7 @@ from parayabuck.markets.timeframes import (
 )
 from parayabuck.monitoring import alerts
 from parayabuck.monitoring import metrics as runtime_metrics_store
+from parayabuck.monitoring import receipt as paper_receipt
 
 try:
     from parayabuck.monitoring import observe as _observe
@@ -59,7 +60,6 @@ except Exception:  # pragma: no cover
     SnapshotWriter = None  # type: ignore
 from parayabuck.monitoring.incident import IncidentCategory
 from parayabuck.monitoring.paper_incident import automate_incident_recovery
-from parayabuck.monitoring.receipt import build_receipt, default_receipt_dir
 from parayabuck.portfolio import product_strategy_from, validate_strategy_timeframe
 from parayabuck.portfolio.runtime_service import (
     REBALANCE_PHASE_BLOCKED,
@@ -661,25 +661,64 @@ class EngineRuntime:
             admission = runtimes[0].current_buy_capacity()
             account = admission.account
             broker_orders = self.broker.working_orders()
-            slots = {
-                (position.market, canonical_symbol(position.symbol, position.market))
-                for position in account.positions
-                if not position.is_flat
-            }
-            for order in self._portfolio_repository.open_orders(self.broker.account_id or "unknown"):
-                slots.add((order.market, canonical_symbol(order.symbol, order.market)))
+            claims: dict[tuple[Market, str], set[str]] = {}
+            for position in account.positions:
+                if not position.is_flat:
+                    claims.setdefault((position.market, canonical_symbol(position.symbol, position.market)), set()).add(
+                        "POSITION"
+                    )
+            local_orders = self._portfolio_repository.open_orders(self.broker.account_id or "unknown")
+            for order in local_orders:
+                key = (order.market, canonical_symbol(order.symbol, order.market))
+                claims.setdefault(key, set()).add("RESERVED")
+                if str(getattr(order.side, "value", order.side)).lower() == "buy":
+                    claims[key].add("WORKING_OPENING")
             for order in broker_orders:
                 symbol = str(self.broker._field(order, "symbol", "") or "")
                 if not symbol:
                     raise ValueError("Broker OPEN order missing symbol")
                 market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
-                slots.add((market, canonical_symbol(symbol, market)))
+                key = (market, canonical_symbol(symbol, market))
+                raw_side = self.broker._field(order, "side", "")
+                side = str(getattr(raw_side, "value", raw_side)).lower()
+                if side == "buy":
+                    claims.setdefault(key, set()).add("WORKING_OPENING")
+                elif side == "sell":
+                    claims.setdefault(key, set()).add("WORKING_ORDER")
+                else:
+                    # Unknown OPEN side retains conservative capacity behavior.
+                    claims.setdefault(key, set()).add("WORKING_UNKNOWN")
+            global_cap = runtimes[0].risk_overlay.limits.maximum_positions
+            crypto_cap = runtimes[0].risk_overlay.limits.maximum_crypto_positions
+            effective_global = len(claims)
+            effective_crypto = sum(market == Market.CRYPTO for market, _ in claims)
+            crypto_positions = sum(
+                position.market == Market.CRYPTO and not position.is_flat for position in account.positions
+            )
+            opening_keys = {
+                key for key, sources in claims.items() if "WORKING_OPENING" in sources and "POSITION" not in sources
+            }
             return {
                 "sampled_at": datetime.now(UTC).isoformat(),
-                "maximum_positions": runtimes[0].risk_overlay.limits.maximum_positions,
+                "maximum_positions": global_cap,
                 "positions_count": sum(not position.is_flat for position in account.positions),
-                "effective_slots": len(slots),
+                "effective_slots": effective_global,
                 "broker_working_order_count": len(broker_orders),
+                "position_count": sum(not position.is_flat for position in account.positions),
+                "effective_global_slot_claims": effective_global,
+                "global_slot_cap": global_cap,
+                "global_slots_available": max(0, global_cap - effective_global),
+                "crypto_position_count": crypto_positions,
+                "effective_crypto_slot_claims": effective_crypto,
+                "crypto_slot_cap": crypto_cap,
+                "crypto_slots_available": max(0, crypto_cap - effective_crypto),
+                "working_opening_order_count": len(opening_keys),
+                "slot_claims": [
+                    {"market": market.value, "symbol": symbol, "sources": sorted(sources)}
+                    for (market, symbol), sources in sorted(
+                        claims.items(), key=lambda item: (item[0][0].value, item[0][1])
+                    )
+                ],
                 "target_gross_pct": runtimes[0].risk_overlay.limits.maximum_gross * 100,
                 "realized_gross_pct": admission.realized_gross / account.equity * 100,
                 "available_gross_buy_headroom": admission.gross_headroom,
@@ -976,6 +1015,11 @@ class EngineRuntime:
                 )
             self._last_reconciliation_at = datetime.now(UTC)
             self._clear_reconciliation_incidents()
+            try:
+                if _observe is not None:
+                    _observe.on_reconciliation_complete(phase="startup")
+            except Exception:
+                log.warning("Startup reconciliation observation failed", exc_info=True)
         except Exception as exc:
             if _is_transient_network_error(exc):
                 # G2/G3 boundary: a transient broker API failure is NOT a
@@ -1323,6 +1367,13 @@ class EngineRuntime:
         if ok:
             self._universe_retry_at.pop(market, None)
             self._universe_retry_attempt.pop(market, None)
+            try:
+                if _observe is not None:
+                    _observe.on_universe_refresh_complete(
+                        market=market.value, session_id=getattr(self, "_runtime_session_id", None)
+                    )
+            except Exception:
+                log.warning("Scanner refresh observation failed for %s", market.value, exc_info=True)
             # "Recovered" is a TRANSITION event: a refresh succeeding after a
             # prior failure. A healthy first success must not count as a
             # recovery (that would inflate scanner-recovery metrics).
@@ -3427,162 +3478,173 @@ class EngineRuntime:
                     observability.get("symbols"),
                     observability.get("blocked_or_skipped_reason"),
                 )
-                # PAPER cycle observability + receipt (reconstructable via IDs/hashes + summaries)
-                try:
-                    # Only write receipt for scheduled weekly equity decisions (successful rebalance)
-                    should_receipt = (
-                        portfolio_result.status
-                        in {
-                            "rebalance_complete",
-                            "rebalance_in_progress",
-                            "rebalance_blocked",
-                            "submitted",
-                            "risk_reduced",
-                            "no_orders",
-                        }
-                        or portfolio_result.target is not None
-                    )
-                    if should_receipt and portfolio_result.target is not None:
-                        ts = portfolio_result.target.decision_timestamp
-                        # Structured summaries for observability (hashes/IDs, not raw histories)
-                        universe_hash = portfolio_runtime.universe_version or "unknown"
-                        target_w = {w.symbol: float(w.weight) for w in portfolio_result.target.weights}
-                        risk_w = target_w  # risk_adjusted_weights: after overlay, available via risk object if present
-                        if portfolio_result.risk is not None:
-                            try:
-                                risk_w = (
-                                    {w.symbol: float(w.weight) for w in portfolio_result.risk.adjusted_target.weights}
-                                    if hasattr(portfolio_result.risk, "adjusted_target")
-                                    else target_w
-                                )
-                            except Exception:
-                                risk_w = target_w
-                        broker_positions_before: dict[str, float] = {}
-                        fills_list: list[dict[str, object]] = []
-                        positions_after: dict[str, float] = {}
-                        gross = 0.0
-                        cash_ratio = (
-                            float(portfolio_result.target.cash_weight)
-                            if portfolio_result.target.cash_weight is not None
-                            else 0.0
-                        )
-                        if account is not None:
-                            broker_positions_before = {
-                                p.symbol: float(p.qty)
-                                for p in account.positions
-                                if p.market == portfolio_runtime.market
-                            }
-                            positions_after = dict(broker_positions_before)
-                            # Apply intended deltas as estimate (actual fills arrive via trade updates)
-                            for order in portfolio_result.orders:
-                                delta = order.quantity if order.side.value == "buy" else -order.quantity
-                                positions_after[order.symbol] = positions_after.get(order.symbol, 0.0) + delta
-                            try:
-                                gross = sum(abs(qty * 100.0) for qty in positions_after.values()) / max(
-                                    1.0, float(account.equity)
-                                )
-                            except Exception:
-                                gross = 0.0
-                        intended = [
-                            {
-                                "symbol": o.symbol,
-                                "side": o.side.value if hasattr(o.side, "value") else str(o.side),
-                                "quantity": float(o.quantity),
-                                "client_order_id": o.client_order_id,
-                            }
-                            for o in portfolio_result.orders
-                        ]
-                        # T1 hysteresis provenance: rank/retained per selected symbol
-                        ranks: dict[str, int] = {}
-                        retained_map: dict[str, bool] = {}
-                        try:
-                            meta = portfolio_result.target.metadata if portfolio_result.target.metadata else {}
-                            expl = meta.get("explanations", {}) if isinstance(meta.get("explanations"), dict) else {}
-                            for sym in target_w.keys():
-                                info = expl.get(sym, {}) if isinstance(expl.get(sym), dict) else {}
-                                rank = info.get("alpha_rank")
-                                if isinstance(rank, int) and rank > 0:
-                                    ranks[sym] = rank
-                                retained_map[sym] = bool(info.get("retained", sym in meta.get("retained", ())))
-                            # fallback for hysteresis: retained tuple directly
-                            if not retained_map and "retained" in meta:
-                                retained_set = set(meta.get("retained", ()))
-                                for sym in target_w.keys():
-                                    retained_map[sym] = sym in retained_set
-                        except Exception:
-                            ranks = {}
-                            retained_map = {}
-                        # observation strategy digest: per-market provenance
-                        obs_digest = ""
-                        try:
-                            if (
-                                portfolio_runtime.market
-                                == portfolio_runtime.strategy.market
-                                == __import__("parayabuck.core.models", fromlist=["Market"]).Market.CRYPTO
-                            ):
-                                obs_digest = (
-                                    getattr(
-                                        self.app_config.universe.crypto, "observation_strategy_parameters_digest", ""
-                                    )
-                                    or ""
-                                )
-                            else:
-                                obs_digest = (
-                                    getattr(
-                                        self.app_config.universe.equity, "observation_strategy_parameters_digest", ""
-                                    )
-                                    or ""
-                                )
-                                # equity currently stores observation_strategy_name/version but not digest separately; keep empty if absent
-                        except Exception:
-                            obs_digest = ""
-                        receipt = build_receipt(
-                            decision_timestamp=ts,
-                            config_digest=portfolio_runtime.configuration_digest,
-                            strategy_name=portfolio_runtime.strategy.name,
-                            strategy_version=portfolio_runtime.strategy.version,
-                            universe_hash=universe_hash,
-                            universe_size=len(portfolio_runtime.symbols),
-                            observation_set_symbols=tuple(sorted(portfolio_runtime.symbols)),
-                            selected_symbols=tuple(sorted(target_w.keys())),
-                            target_weights=target_w,
-                            risk_adjusted_weights=risk_w,
-                            broker_positions_before=broker_positions_before,
-                            intended_orders=intended,
-                            submitted_order_ids=list(portfolio_result.submitted_order_ids),
-                            fills=fills_list,
-                            positions_after=positions_after,
-                            actual_gross_exposure=float(gross),
-                            cash_ratio=float(cash_ratio),
-                            ranks=ranks,
-                            retained=retained_map,
-                            previous_holdings=dict(broker_positions_before),
-                            universe_version=portfolio_result.target.universe_version or universe_hash,
-                            observation_strategy_digest=obs_digest,
-                            warnings=[],
-                            incidents=[],
-                        )
-                        receipt.write(default_receipt_dir())
-                        runtime_metrics_store.record_paper_cycle(
-                            {
-                                "decision_id": portfolio_result.decision_id,
-                                "decision_timestamp": ts.isoformat(),
-                                "universe_hash": universe_hash,
-                                "universe_size": len(portfolio_runtime.symbols),
-                                "ranked_count": observability.get("ranked_symbol_count"),
-                                "selected_symbols": sorted(target_w.keys()),
-                                "target_gross": sum(target_w.values()),
-                                "risk_gross": sum(risk_w.values()),
-                                "intended_order_ids": [o["client_order_id"] for o in intended],
-                                "submitted_order_ids": list(portfolio_result.submitted_order_ids),
-                                "positions_after": positions_after,
-                                "cash_ratio": cash_ratio,
-                            }
-                        )
-                except Exception as exc:
-                    log.warning("PAPER receipt/observability failed: %s", exc, exc_info=True)
+            self._record_paper_decision_receipt(portfolio_runtime, portfolio_result, account)
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
             reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, portfolio_result))
+
+    def _record_paper_decision_receipt(
+        self, portfolio_runtime: Any, result: Any, account: AccountSnapshot | None
+    ) -> None:
+        """Mirror one persisted PAPER decision; the repository owns later fills."""
+        if (
+            getattr(self, "mode", None) != RuntimeMode.PAPER
+            or result is None
+            or result.decision_id is None
+            or result.target is None
+        ):
+            return
+        try:
+            target = result.target
+            origin = str(target.metadata.get("decision_origin", "scheduled"))
+            if origin not in {"scheduled", "startup_catch_up"}:
+                raise ValueError(f"Unsupported decision origin: {origin}")
+            orders = tuple(portfolio_runtime.repository.orders_for_decision(result.decision_id))
+            positions = (
+                {
+                    f"{position.market.value}:{canonical_symbol(position.symbol, position.market)}": float(position.qty)
+                    for position in account.positions
+                    if not position.is_flat
+                }
+                if account is not None
+                else {}
+            )
+            realized_gross = (
+                sum(position.market_value for position in account.positions if not position.is_flat) / account.equity
+                if account is not None and account.equity > 0
+                else None
+            )
+            admission = getattr(portfolio_runtime, "last_buy_admission", None)
+            has_submitted_buy = result.status == "submitted" and any(
+                str(getattr(order.side, "value", order.side)).lower() == "buy" for order in result.orders
+            )
+            try:
+                capacity = self.capacity_health()
+            except Exception:
+                capacity = {"unavailable": True, "reason": "capacity_sample_failed"}
+            metadata = target.metadata or {}
+            explanations = metadata.get("explanations", {})
+            explanations = explanations if isinstance(explanations, dict) else {}
+            target_symbols = [weight.symbol for weight in target.weights]
+            retained = set(metadata.get("retained", ()))
+            receipt = {
+                "schema_version": 2,
+                "receipt_id": result.decision_id,
+                "decision_id": result.decision_id,
+                "decision_timestamp": target.decision_timestamp.isoformat(),
+                "origin": origin,
+                "market": portfolio_runtime.market.value,
+                "mode": self.mode.value,
+                "strategy": {
+                    "name": target.strategy_name,
+                    "version": target.strategy_version,
+                    "maximum_allocation": portfolio_runtime.maximum_allocation,
+                },
+                "source_code_sha": os.getenv("PARAYABUCK_SOURCE_SHA") or None,
+                "configuration_digest": portfolio_runtime.configuration_digest,
+                "universe": {
+                    "version": target.universe_version or portfolio_runtime.universe_version,
+                    "snapshot_id": target.universe_snapshot_id,
+                    "data_timestamp": target.data_timestamp.isoformat() if target.data_timestamp else None,
+                    "active_universe_version": portfolio_runtime.universe_version,
+                    "observation_symbols": sorted(portfolio_runtime.symbols),
+                    "observation_strategy_digest": getattr(
+                        self.app_config.universe.crypto
+                        if portfolio_runtime.market == Market.CRYPTO
+                        else self.app_config.universe.equity,
+                        "observation_strategy_parameters_digest",
+                        "",
+                    ),
+                },
+                "account_before": {
+                    "equity": float(account.equity) if account is not None else None,
+                    "cash": float(account.cash) if account is not None else None,
+                    "cash_ratio": float(account.cash / account.equity)
+                    if account is not None and account.equity > 0
+                    else None,
+                    "realized_gross_ratio": realized_gross,
+                    "positions": positions,
+                },
+                "capacity_snapshot": {**capacity, "phase": "post_decision_observation"},
+                "final_buy_admission": (
+                    {
+                        "gross_headroom": admission.gross_headroom,
+                        "cash_headroom": admission.cash_headroom,
+                        "committed_buy_notional": admission.committed_buy_notional,
+                        "realized_gross": admission.realized_gross,
+                        "account_equity": admission.account.equity,
+                        "account_cash": admission.account.cash,
+                        "admitted_client_order_ids": [order.client_order_id for order in admission.orders],
+                    }
+                    if has_submitted_buy and admission is not None
+                    else None
+                ),
+                "target_state": {
+                    "kind": "INTENDED_POST_RISK",
+                    "rebalance_reason": target.rebalance_reason.value,
+                    "weights": {weight.symbol: float(weight.weight) for weight in target.weights},
+                    "selected_symbols": sorted(target_symbols),
+                    "cash_weight": float(target.cash_weight),
+                },
+                "planned_orders": [
+                    {
+                        "kind": "INTENDED",
+                        "client_order_id": order.client_order_id,
+                        "symbol": order.symbol,
+                        "market": order.market.value,
+                        "side": order.side.value,
+                        "quantity": float(order.quantity),
+                        "reference_price": float(order.reference_price),
+                    }
+                    for order in result.orders
+                ],
+                "submission_snapshot": [{**order, "kind": "SUBMISSION_STATUS_AT_DECISION_WRITE"} for order in orders],
+                "execution_confirmation": {
+                    "source": "portfolio_orders + portfolio_fills + portfolio_execution_events",
+                    "state": "QUERY_AUTHORITATIVE_DB_AT_AUDIT_TIME",
+                    "confirmed_positions_after": None,
+                },
+                "crypto_provenance": {
+                    "ranks": {
+                        symbol: detail.get("alpha_rank")
+                        for symbol, detail in explanations.items()
+                        if symbol in target_symbols
+                        and isinstance(detail, dict)
+                        and isinstance(detail.get("alpha_rank"), int)
+                    },
+                    "retained": {
+                        symbol: symbol in retained
+                        or bool(
+                            explanations.get(symbol, {}).get("retained", False)
+                            if isinstance(explanations.get(symbol), dict)
+                            else False
+                        )
+                        for symbol in target_symbols
+                    },
+                    "previous_holdings": {key: qty for key, qty in positions.items() if key.startswith("crypto:")},
+                }
+                if portfolio_runtime.market == Market.CRYPTO
+                else None,
+                "database_link": {
+                    "decision_table": "portfolio_decisions",
+                    "order_table": "portfolio_orders",
+                    "fill_table": "portfolio_fills",
+                    "execution_event_table": "portfolio_execution_events",
+                },
+            }
+            path = paper_receipt.write_decision_receipt_v2(receipt, paper_receipt.default_receipt_dir())
+            runtime_metrics_store.record_event("paper_receipt_written")
+            log.info("PAPER decision receipt v2 written: %s", path)
+        except Exception:
+            log.warning("PAPER decision receipt v2 failed for %s", result.decision_id, exc_info=True)
+            try:
+                alerts.emit(
+                    "paper_incident",
+                    message="PAPER decision receipt unavailable; forward observation invalid until repaired",
+                    decision_id=result.decision_id,
+                    reason="receipt_write_failed",
+                )
+            except Exception:
+                log.warning("Could not emit PAPER receipt incident for %s", result.decision_id, exc_info=True)
 
     def _run_startup_catch_up(self, *, account: AccountSnapshot | None = None) -> None:
         """Force an immediate full-target decision on the latest warmup bars.
@@ -3631,6 +3693,7 @@ class EngineRuntime:
                         )
                     )
                 result = portfolio_runtime.startup_catch_up(**catch_up_kwargs)
+            self._record_paper_decision_receipt(portfolio_runtime, result, account)
             reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, result))
             log.info(
                 "Startup catch-up: market=%s status=%s decision_id=%s",
@@ -4255,6 +4318,13 @@ class EngineRuntime:
                 self._last_reconciliation_at = datetime.now(UTC)
                 self._last_account_at = datetime.now(UTC)
                 self._generic_reconcile_failures = 0
+                try:
+                    if _observe is not None:
+                        _observe.on_reconciliation_complete(
+                            phase="periodic", session_id=getattr(self, "_runtime_session_id", None)
+                        )
+                except Exception:
+                    log.warning("Periodic reconciliation observation failed", exc_info=True)
                 account_id = self.broker.account_id or "unknown"
                 if getattr(self, "_reconcile_failed", False):
                     self._reconcile_failed = False

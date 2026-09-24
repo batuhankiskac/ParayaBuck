@@ -116,6 +116,20 @@ class PortfolioStateRepository:
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY(decision_id) REFERENCES portfolio_decisions(decision_id)
                 );
+                CREATE TABLE IF NOT EXISTS portfolio_buy_admission_observations (
+                    observation_id TEXT PRIMARY KEY,
+                    client_order_id TEXT NOT NULL,
+                    decision_id TEXT NOT NULL,
+                    observed_at TEXT NOT NULL,
+                    account_equity REAL NOT NULL,
+                    account_cash REAL NOT NULL,
+                    realized_gross REAL NOT NULL,
+                    committed_buy_notional REAL NOT NULL,
+                    gross_headroom REAL NOT NULL,
+                    cash_headroom REAL NOT NULL,
+                    admitted_batch_notional REAL NOT NULL,
+                    FOREIGN KEY(client_order_id) REFERENCES portfolio_orders(client_order_id)
+                );
                 """
             )
             session_columns = {
@@ -611,7 +625,8 @@ class PortfolioStateRepository:
     def orders_for_decision(self, decision_id: str, side: str | None = None) -> tuple[dict[str, object], ...]:
         """Order rows attributed to one decision (used by rebalance recovery)."""
         query = """SELECT client_order_id, symbol, market, side, quantity,
-                          status, cumulative_filled_quantity
+                          status, cumulative_filled_quantity, broker_order_id,
+                          reference_price, average_fill_price
                    FROM portfolio_orders WHERE decision_id = ?"""
         params: tuple[object, ...] = (decision_id,)
         if side is not None:
@@ -629,9 +644,52 @@ class PortfolioStateRepository:
                 "quantity": float(row[4] or 0.0),
                 "status": str(row[5]),
                 "cumulative_filled_quantity": float(row[6] or 0.0),
+                "broker_order_id": str(row[7] or ""),
+                "reference_price": float(row[8] or 0.0),
+                "average_fill_price": float(row[9]) if row[9] is not None else None,
             }
             for row in rows
         )
+
+    def record_buy_admission_observation(
+        self,
+        decision_id: str,
+        client_order_ids: tuple[str, ...],
+        *,
+        account_equity: float,
+        account_cash: float,
+        realized_gross: float,
+        committed_buy_notional: float,
+        gross_headroom: float,
+        cash_headroom: float,
+        admitted_batch_notional: float,
+    ) -> None:
+        """Mirror final BUY headroom without affecting the order authority."""
+        observed_at = datetime.now(UTC).isoformat()
+        with self.store.lock, self.store.connection:
+            self.store.connection.executemany(
+                """INSERT INTO portfolio_buy_admission_observations
+                   (observation_id, client_order_id, decision_id, observed_at, account_equity,
+                    account_cash, realized_gross, committed_buy_notional,
+                    gross_headroom, cash_headroom, admitted_batch_notional)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    (
+                        uuid4().hex,
+                        client_order_id,
+                        decision_id,
+                        observed_at,
+                        account_equity,
+                        account_cash,
+                        realized_gross,
+                        committed_buy_notional,
+                        gross_headroom,
+                        cash_headroom,
+                        admitted_batch_notional,
+                    )
+                    for client_order_id in client_order_ids
+                ),
+            )
 
     def update_order(self, client_order_id: str, status: str, broker_order_id: str = "") -> None:
         with self.store.lock, self.store.connection:

@@ -1,0 +1,3 @@
+# Startup catch-up receipt audit
+
+`EngineRuntime._run_startup_catch_up` calls the same V2 writer used by scheduled batches after each persisted `PortfolioRuntimeResult`. The target metadata carries `decision_origin=startup_catch_up`; this is not inferred from the clock. No-order, SELL-only and BUY results with a persisted decision ID write a receipt. A resumed duplicate decision ID uses immutable receipt identity and does not create another file. If readiness prevents a strategy decision before persistence, there is no fabricated decision receipt; the operational event stream must explain the gate. Deferred BUY execution is audited later through order/fill rows and the final admission observation.

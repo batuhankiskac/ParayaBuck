@@ -8,6 +8,17 @@ remain outside production `main` behind the archive tags listed here.
 No entry below authorizes automatic PAPER/LIVE promotion. Production changes
 are listed explicitly and are separate from research conclusions.
 
+## Account-capacity integration
+
+Migration V3 (`9c5e61382e8cdb71fdd3442d945719024accedd9`) concluded
+`ACCOUNT_ARCHITECTURE_MIGRATION_8_ACCEPTED`. Production parity V2
+(`d20b70c0333b888b6d0e5438091ede540f3a27ee`) concluded
+`CAP8_PRODUCTION_PARITY_READY_FOR_PAPER_CHANGE`; the subsequent correctness
+campaign concluded `PRODUCTION_CORRECTNESS_FIXED_CAP8_READY_FOR_PAPER_CHANGE`.
+The repository integration changes only `risk.max_positions` from 6 to 8.
+Status: `CODE/CONFIG INTEGRATED; RUNTIME NOT STARTED IN THIS CAMPAIGN`.
+LIVE: `DISABLED`. See [the integration record](cap8_main_integration_v1.md).
+
 ## Decision index
 
 | Research ID | Original branch | Final recorded SHA / date | Validity | Verdict | Durable classification | Production changed? | Closed / superseded-by | Archive tag |

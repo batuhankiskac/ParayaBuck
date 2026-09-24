@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from itertools import product
+from pathlib import Path
 
 import pytest
 
+from parayabuck import load_config
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -15,6 +17,7 @@ from parayabuck.execution.portfolio import (
     PortfolioRiskLimits,
     PortfolioRiskOverlay,
     TargetToOrderPlanner,
+    portfolio_risk_limits_from_config,
     reserve_opening_order_slots,
 )
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
@@ -115,6 +118,52 @@ def test_synthetic_eight_slots_and_six_slot_rollback_preserve_exits() -> None:
     exit_order = _order("ALL", side=PortfolioOrderSide.SELL)
     assert reserve_opening_order_slots((exit_order, ninth), _account(eight_held), maximum_positions=6) == (exit_order,)
     assert reserve_opening_order_slots((ninth,), _account(eight_held[3:]), maximum_positions=6) == (ninth,)
+
+
+def test_shipped_cap8_counts_restored_working_slot_and_keeps_crypto_cap_two() -> None:
+    config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
+    limits = portfolio_risk_limits_from_config(config.risk)
+    held = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES)
+    account = _account(held)
+    restored_working = ((Market.EQUITY, "PENDING"),)
+    eighth = _order("BTC/USD", Market.CRYPTO)
+    ninth = _order("ETH/USD", Market.CRYPTO)
+    assert reserve_opening_order_slots(
+        (eighth, ninth),
+        account,
+        maximum_positions=limits.maximum_positions,
+        reserved_position_keys=restored_working,
+    ) == (eighth,)
+    assert (
+        reserve_opening_order_slots(
+            (ninth,),
+            account,
+            maximum_positions=limits.maximum_positions,
+            reserved_position_keys=(*restored_working, (Market.CRYPTO, "BTC/USD")),
+        )
+        == ()
+    )
+
+    target = TargetPortfolio(
+        strategy_name="synthetic_crypto",
+        strategy_version="1",
+        decision_timestamp=NOW,
+        weights=(
+            TargetWeight("BCH/USD", 0.03),
+            TargetWeight("BTC/USD", 0.02),
+            TargetWeight("LTC/USD", 0.01),
+        ),
+        cash_weight=0.94,
+    )
+    decision = PortfolioRiskOverlay(limits).apply(
+        target,
+        account,
+        market=Market.CRYPTO,
+        approved_symbols=CRYPTOS,
+        maximum_allocation=0.05,
+        mode="paper",
+    )
+    assert len(decision.target.weights) == limits.maximum_crypto_positions == 2
 
 
 def test_opening_reservation_transitions_to_position_or_releases_once() -> None:

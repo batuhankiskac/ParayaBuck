@@ -132,6 +132,27 @@ def test_shipped_container_config_stays_paper_even_when_credentials_exist(
     assert not config.live.enabled
 
 
+def test_shipped_paper_config_has_integrated_cap8_with_other_limits_unchanged() -> None:
+    config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
+
+    assert config.runtime.mode == RuntimeMode.PAPER
+    assert config.live.enabled is False
+    assert config.risk.max_positions == 8
+    assert config.risk.max_crypto_positions == 2
+    assert config.risk.max_gross_exposure_pct == 0.60
+    assert config.risk.cash_buffer_pct == 0.40
+    assert config.risk.max_position_pct == 0.10
+    assert config.risk.max_crypto_position_pct == 0.05
+    assert config.risk.max_crypto_exposure_pct == 0.10
+    assert config.risk.daily_loss_limit_pct == 0.005
+    assert config.risk.max_drawdown_pct == 0.05
+    assert config.strategy.equity.name == "equity_residual_momentum_v3"
+    assert config.strategy.equity.maximum_allocation == 0.55
+    assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
+    assert config.strategy.crypto.maximum_allocation == 0.05
+    assert config.execution.rebalance_band_pct == 0.005
+
+
 def test_deprecated_risk_monitor_timeframe_still_loads_and_maps(tmp_path) -> None:
     """A pre-v1 settings.yaml with runtime.risk_monitor_timeframe must keep
     loading after the market_state_timeframe rename instead of crashing."""

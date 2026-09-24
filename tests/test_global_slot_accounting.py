@@ -105,6 +105,84 @@ def test_sell_and_partial_exit_do_not_release_slot_until_broker_is_flat() -> Non
     assert reserve_opening_order_slots((buy,), flat, maximum_positions=6) == (buy,)
 
 
+@pytest.mark.parametrize(
+    ("positions", "reserved", "open_symbols", "candidates", "expected"),
+    [
+        # C5: a working crypto opening occupies the second market slot.
+        ((_position("BTC/USD", Market.CRYPTO),), ((Market.CRYPTO, "LTC/USD"),), (), ("DOGE/USD",), ()),
+        # C6: adding to an already held crypto symbol costs no new slot.
+        (
+            (_position("BTC/USD", Market.CRYPTO), _position("LTC/USD", Market.CRYPTO)),
+            (),
+            (),
+            ("BTC/USD",),
+            ("BTC/USD",),
+        ),
+        # C8: global room never overrides the crypto market cap.
+        ((_position("BTC/USD", Market.CRYPTO), _position("LTC/USD", Market.CRYPTO)), (), (), ("DOGE/USD",), ()),
+        # C9: crypto room never overrides the global cap.
+        (
+            (
+                *(_position(symbol, Market.EQUITY) for symbol in EQUITIES),
+                _position("BTC/USD", Market.CRYPTO),
+                _position("PENDING", Market.EQUITY),
+            ),
+            (),
+            (),
+            ("DOGE/USD",),
+            (),
+        ),
+        # C10: both gates open, then the next same-cycle crypto opening is denied.
+        ((_position("BTC/USD", Market.CRYPTO),), (), (), ("DOGE/USD", "ETH/USD"), ("DOGE/USD",)),
+        # Broker alias and durable local representation of one order count once.
+        ((_position("BTC/USD", Market.CRYPTO),), ((Market.CRYPTO, "LTC/USD"),), ("LTCUSD",), ("DOGE/USD",), ()),
+    ],
+)
+def test_market_and_global_final_slot_gates(
+    positions: tuple[PositionSnapshot, ...],
+    reserved: tuple[tuple[Market, str], ...],
+    open_symbols: tuple[str, ...],
+    candidates: tuple[str, ...],
+    expected: tuple[str, ...],
+) -> None:
+    admitted = reserve_opening_order_slots(
+        tuple(_order(symbol, Market.CRYPTO) for symbol in candidates),
+        _account(positions),
+        maximum_positions=8,
+        market_position_limits={Market.CRYPTO: 2},
+        reserved_position_keys=reserved,
+        open_order_symbols=open_symbols,
+    )
+    assert tuple(order.symbol for order in admitted) == expected
+
+
+def test_market_gate_preserves_sell_and_cross_market_global_capacity() -> None:
+    six_equities = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES)
+    two_crypto = (_position("BTC/USD", Market.CRYPTO), _position("LTC/USD", Market.CRYPTO))
+    sell = _order("BTC/USD", Market.CRYPTO, PortfolioOrderSide.SELL)
+    equity_buy = _order("NEW", Market.EQUITY)
+    crypto_buy = _order("DOGE/USD", Market.CRYPTO)
+    limits = {Market.CRYPTO: 2}
+    assert reserve_opening_order_slots(
+        (sell, equity_buy, crypto_buy),
+        _account((*six_equities, *two_crypto)),
+        maximum_positions=8,
+        market_position_limits=limits,
+    ) == (sell,)
+    assert reserve_opening_order_slots(
+        (equity_buy, crypto_buy),
+        _account((*six_equities[:5], *two_crypto)),
+        maximum_positions=8,
+        market_position_limits=limits,
+    ) == (equity_buy,)
+    assert reserve_opening_order_slots(
+        (crypto_buy, equity_buy),
+        _account((*six_equities, two_crypto[0])),
+        maximum_positions=8,
+        market_position_limits=limits,
+    ) == (crypto_buy,)
+
+
 def test_synthetic_eight_slots_and_six_slot_rollback_preserve_exits() -> None:
     held = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES)
     seventh = _order("NEW1")

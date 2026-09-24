@@ -570,10 +570,11 @@ def reserve_opening_order_slots(
     account: AccountSnapshot,
     *,
     maximum_positions: int,
+    market_position_limits: Mapping[Market, int] | None = None,
     reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     open_order_symbols: tuple[str, ...] = (),
 ) -> tuple[PortfolioOrderRequest, ...]:
-    """Admit opening BUYs against occupied and working account-wide slots.
+    """Admit opening BUYs against occupied and working account/market slots.
 
     Caller order is the existing deterministic planner priority. A requested
     exit never releases a slot; only a fresh zero-position snapshot does.
@@ -592,7 +593,11 @@ def reserve_opening_order_slots(
         key = (order.market, canonical_symbol(order.symbol, order.market))
         if order.side == PortfolioOrderSide.SELL or key in slots:
             admitted.append(order)
-        elif len(slots) < maximum_positions:
+        elif len(slots) < maximum_positions and (
+            market_position_limits is None
+            or order.market not in market_position_limits
+            or sum(slot_market == order.market for slot_market, _ in slots) < market_position_limits[order.market]
+        ):
             slots.add(key)
             admitted.append(order)
     return tuple(admitted)

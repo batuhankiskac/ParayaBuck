@@ -1,0 +1,10 @@
+{
+  "decision": "PRODUCTION_CRYPTO_POSITION_CAP_REPAIR_ACCEPTED",
+  "production_bug_reproduced": true,
+  "research_replay_same_bug_class": true,
+  "maximum_positions": 8,
+  "maximum_crypto_positions": 2,
+  "live_enabled": false,
+  "scope": "generic final submission-time market slot admission and retryable deferred state",
+  "economic_analysis_performed": false
+}

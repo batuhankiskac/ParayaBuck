@@ -60,7 +60,7 @@ Strategy contract (display name, signal timeframe `1d`, rebalance cadence
 `universe.equity.candidate_universe_path`; `observation set` — active-universe
 `selected_symbols` size; `positions` / `current allocation %` — account
 positions weighted by market value over equity; `maximum allocation %` —
-`strategy.equity.maximum_allocation` (0.60). Status derivation:
+`strategy.equity.maximum_allocation` (0.55). Status derivation:
 active / warming / halted (entry halt or circuit breaker) / scanner_issue /
 disabled / engine states. `Next expected decision` — the last persisted
 `portfolio_decisions` timestamp advanced by the strategy's rebalance policy

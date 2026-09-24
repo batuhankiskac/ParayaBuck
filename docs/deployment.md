@@ -131,7 +131,7 @@ sudo journalctl -u parayabuck -f
    ```
 
    Dashboard (`http://127.0.0.1:8000/` via SSH tunnel) must show: PAPER
-   badge, `equity_residual_momentum_v3` (weekly, allocation 0.60) and `crypto_low_variance_hysteresis_v1`
+   badge, `equity_residual_momentum_v3` (weekly, allocation 0.55) and `crypto_low_variance_hysteresis_v1`
    (96h, lookback 22, top2, retention rank 4, allocation 0.05) cards, engine running, catch-up status per card.
 9. **Verify the persisted catch-up decision** (fresh account only):
 

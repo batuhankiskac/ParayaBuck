@@ -15,7 +15,7 @@ Documentation only. Nothing at runtime reads this file.
 > Same strategy name + different economic parameters ≠ validated strategy.
 > Any change to the parameters below — however small, however well it
 > backtests — is a new, unvalidated strategy and requires a separate
-> separate validation and approval before it may run on the PAPER product.
+> validation and approval before it may run on the PAPER product.
 
 ## Equity — `equity_residual_momentum_v1`
 

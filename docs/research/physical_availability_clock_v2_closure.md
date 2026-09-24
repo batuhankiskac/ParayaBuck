@@ -26,6 +26,7 @@ same tagged physical replay and input identities, with only the global
 position-count cap varied. It does not validate any old label-clock economics.
 
 The next research step is a pre-outcome frozen cap-six versus cap-eight study
-on a new branch. No cap-eight arm was run in this clock campaign. Production
-`maximum_positions` remains six; strategy parameters, rebalance band,
+on a new branch. No cap-eight arm was run in this clock campaign. At the time
+of this closure production `maximum_positions` was six (the later 2026-09-24
+CAP8 integration changed only this value to eight); strategy parameters, rebalance band,
 PAPER/LIVE modes and broker behavior remain unchanged.

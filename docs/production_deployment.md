@@ -816,7 +816,7 @@ curl -s http://127.0.0.1:8000/readyz  | python3 -m json.tool   # eventually read
 parayabuck ops status
 parayabuck ops doctor
 # Dashboard via SSH tunnel must show: PAPER badge, equity_residual_momentum_v3
-# (weekly, alloc 0.60) and crypto_low_variance_hysteresis_v1 (96h, lookback 22, top2, ret rank 4, alloc 0.05), engine running
+# (weekly, alloc 0.55) and crypto_low_variance_hysteresis_v1 (96h, lookback 22, top2, ret rank 4, alloc 0.05), engine running
 ```
 
 Docker upgrade:

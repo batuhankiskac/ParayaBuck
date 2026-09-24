@@ -696,7 +696,7 @@ class Config:
         # 2026-08-29 fix: capital invariant — sum of enabled sleeve caps must
         # stay inside gross limit and cash buffer. This guarantees order
         # existence is deterministic regardless of market processing order and
-        # that a stale account snapshot cannot temporarily plan 65% gross.
+        # that a stale account snapshot cannot temporarily plan above the gross cap.
         # invariant: sum(effective allocations) <= max_gross <= 1 - cash_buffer
         effective_alloc = 0.0
         if self.strategy.equity.enabled:

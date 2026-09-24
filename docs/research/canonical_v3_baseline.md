@@ -27,8 +27,11 @@ Frozen strategy parameters are `formation_bars=252`, `skip_bars=21`,
 `max_single_weight=0.10`, `ivol_reject_quantile=0.70`,
 `exclude_symbols=[SPY]`, and weekly rebalance.
 
-The shared account contract is maximum gross exposure `0.60`, cash buffer
-`0.40`, maximum positions `6`, and maximum per-position weight `0.10`.
+The frozen V3 research control used maximum gross exposure `0.60`, cash buffer
+`0.40`, maximum positions `6`, and maximum per-position weight `0.10`. The
+current shipped PAPER configuration uses `risk.max_positions: 8` after the
+2026-09-24 CAP8 integration (`docs/research/cap8_main_integration_v1.md`); the
+metrics below remain the six-position control.
 Crypto remains a separate current PAPER sleeve at allocation `0.05`; it is
 outside this equity baseline's alpha comparison.
 

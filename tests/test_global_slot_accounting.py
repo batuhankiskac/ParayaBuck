@@ -183,6 +183,44 @@ def test_market_gate_preserves_sell_and_cross_market_global_capacity() -> None:
     ) == (crypto_buy,)
 
 
+def test_partial_crypto_opening_and_cancel_in_flight_keep_one_market_claim() -> None:
+    doge = _order("DOGE/USD", Market.CRYPTO)
+    ltc_sell = _order("LTC/USD", Market.CRYPTO, PortfolioOrderSide.SELL)
+    limits = {Market.CRYPTO: 2}
+    # BTC is partially filled and still working. Its broker position, durable
+    # reservation and broker alias are one canonical slot; LTC is the second.
+    account = _account((_position("BTC/USD", Market.CRYPTO, 0.1), _position("LTC/USD", Market.CRYPTO)))
+    assert reserve_opening_order_slots(
+        (ltc_sell, doge),
+        account,
+        maximum_positions=8,
+        market_position_limits=limits,
+        reserved_position_keys=((Market.CRYPTO, "BTCUSD"),),
+        open_order_symbols=("BTC/USD",),
+    ) == (ltc_sell,)
+    # Cancel requested but not yet terminal: the working opening still claims
+    # BTC even if the account snapshot has not shown its first fill.
+    unfilled = _account((_position("LTC/USD", Market.CRYPTO),))
+    assert (
+        reserve_opening_order_slots(
+            (doge,),
+            unfilled,
+            maximum_positions=8,
+            market_position_limits=limits,
+            open_order_symbols=("BTCUSD",),
+        )
+        == ()
+    )
+    # After terminal cancellation and a fresh account without BTC, exactly
+    # one new opening remains available; an existing partial position does not vanish.
+    assert reserve_opening_order_slots(
+        (doge, _order("ETH/USD", Market.CRYPTO)),
+        unfilled,
+        maximum_positions=8,
+        market_position_limits=limits,
+    ) == (doge,)
+
+
 def test_synthetic_eight_slots_and_six_slot_rollback_preserve_exits() -> None:
     held = tuple(_position(symbol, Market.EQUITY) for symbol in EQUITIES)
     seventh = _order("NEW1")

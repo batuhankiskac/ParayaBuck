@@ -1166,9 +1166,7 @@ class SharedAccountReplay:
                 if replay_input.terminal_at != timestamp:
                     continue
                 engine = replay_input.engine
-                pending_before_terminal = self._pending_keys()
-                engine._pending = []
-                self._sync_reservations(timestamp, pending_before_terminal, "precommitted_terminal", [])
+                self._close_market_intents(timestamp, market, "precommitted_terminal")
                 terminal_bars = {bar.symbol: bar for bar in cycles_at_time[market]}
                 for position in list(engine._positions.values()):
                     source_terminal = terminal_bars.get(position.symbol)
@@ -1355,9 +1353,7 @@ class SharedAccountReplay:
                             {"event": "final_liquidation", "market": market.value, **engine._liquidation_events[-1]}
                         )
                         self._clear_source_inventory(timestamp, market, position.symbol, "final_liquidation")
-                    pending_before_close = self._pending_keys()
-                    engine._pending = []
-                    self._sync_reservations(timestamp, pending_before_close, "final_liquidation", [])
+                    self._close_market_intents(timestamp, market, "final_liquidation")
 
             if shared_coordination:
                 self._defer_decision_buys_while_sells_work(timestamp, market_orders)
@@ -1570,6 +1566,13 @@ class SharedAccountReplay:
                 }
             )
         deferred.clear()
+
+    def _close_market_intents(self, timestamp: datetime, market: Market, reason: str) -> None:
+        """Close both working and deferred orders when a market reaches its frozen end."""
+        before = self._pending_keys()
+        self.inputs[market].engine._pending = []
+        self._sync_reservations(timestamp, before, reason, [])
+        self._cancel_deferred_buys(timestamp, market, reason)
 
     def _sync_reservations(
         self,

@@ -1,0 +1,26 @@
+{
+  "attempt_code_commit": "9f04e279320f153e6439332341234cdb756728e0",
+  "arm_cap": 8,
+  "decision": "RESIDUAL_REVERSAL_PHYSICAL_CAPACITY_REPLAY_BLOCKED",
+  "full_raw_independent_verifier": "PASS",
+  "window_check": "FAIL",
+  "frozen_cutoff_utc": "2026-07-31T00:00:00+00:00",
+  "first_noninert_event_utc": "2026-08-03T13:30:00+00:00",
+  "first_noninert_event": "buy_intent_activated",
+  "postcutoff_event_count": 20,
+  "postcutoff_event_kinds": {
+    "corporate_action": 3,
+    "buy_intent_activated": 5,
+    "reservation_created": 5,
+    "source_order_claim": 5,
+    "account_mark": 2
+  },
+  "postcutoff_claim_count": 5,
+  "postcutoff_position_count": 0,
+  "deferred_intents_activated": {
+    "crypto": ["BTC/USD"],
+    "equity": ["ADI", "DHI", "EME", "JBHT"]
+  },
+  "candidate_materiality_interpreted": false,
+  "required_repair": "Cancel deferred intents at each market's precommitted terminal or final close before any later action-only timestamp; retain the frozen cutoff and verifier."
+}

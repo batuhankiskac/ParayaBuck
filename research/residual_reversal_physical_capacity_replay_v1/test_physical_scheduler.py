@@ -444,3 +444,43 @@ def test_deferred_crypto_buy_rechecks_crypto_slots_after_btc_sell(btc_residual: 
     if not expect_doge:
         assert replay._events[0]["reason"] == "crypto_position_count_limit"
     assert replay._claim_snapshot()["crypto_claim_count"] <= 2
+
+
+@pytest.mark.parametrize(
+    "market,close_reason", ((Market.CRYPTO, "precommitted_terminal"), (Market.EQUITY, "final_liquidation"))
+)
+def test_market_close_cancels_deferred_buy_before_later_action_only_timestamp(
+    market: Market, close_reason: str
+) -> None:
+    replay = SharedAccountReplay(maximum_positions=8)
+    terminal_at = datetime(2026, 7, 31, tzinfo=UTC)
+    later_action_at = datetime(2026, 8, 3, 13, 30, tzinfo=UTC)
+    symbol = "DOGE/USD" if market == Market.CRYPTO else "ABC"
+
+    class EngineView:
+        def _account_snapshot(self) -> AccountSnapshot:
+            return AccountSnapshot(100_000.0, 100_000.0, 100_000.0, 0.0)
+
+        _shared_overlay = SimpleNamespace(limits=PortfolioRiskLimits(maximum_positions=8, maximum_crypto_positions=2))
+
+        @property
+        def _pending(self) -> list[PortfolioOrder]:
+            return replay.account.pending[market]
+
+        @_pending.setter
+        def _pending(self, orders: list[PortfolioOrder]) -> None:
+            replay.account.pending[market][:] = orders
+
+    replay.inputs = {market: SimpleNamespace(engine=EngineView())}
+    replay.account.deferred_buys[market].append(
+        PortfolioOrder("deferred-buy", symbol, market, OrderSide.BUY, 1.0, terminal_at, terminal_at)
+    )
+
+    replay._close_market_intents(terminal_at, market, close_reason)
+    replay._activate_deferred_buys(later_action_at, [market])
+
+    assert replay.account.deferred_buys[market] == replay.account.pending[market] == []
+    assert replay._claim_snapshot()["slot_claims"] == 0
+    assert [(event["event"], event["timestamp"], event["reason"]) for event in replay._events] == [
+        ("buy_intent_cancelled", terminal_at.isoformat(), close_reason)
+    ]

@@ -179,7 +179,7 @@ risk:
   max_crypto_positions: 2
   cash_buffer_pct: 0.40
   max_gross_exposure_pct: 0.6
-  max_positions: 6
+  max_positions: 8
   daily_loss_limit_pct: 0.005
   max_drawdown_pct: 0.05
 backtest:

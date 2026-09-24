@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from parayabuck import load_config
 from parayabuck.core.models import Bar, Market, PositionSnapshot
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.portfolio import (
@@ -15,6 +17,7 @@ from parayabuck.execution.portfolio import (
     PortfolioOrderRequest,
     PortfolioOrderSide,
     PortfolioRiskLimits,
+    portfolio_risk_limits_from_config,
 )
 from parayabuck.portfolio.runtime_models import OpenPortfolioOrder
 from parayabuck.portfolio.runtime_service import PortfolioRuntime, PortfolioStateRepository
@@ -72,6 +75,38 @@ def test_over_gross_add_to_held_buy_is_suppressed(tmp_path) -> None:  # type: ig
 def test_over_gross_sell_remains_available(tmp_path) -> None:  # type: ignore[no-untyped-def]
     broker, _result = _decide(tmp_path, {**{name: 0.071 for name in _NAMES[1:]}, "AAPL": 0.04})
     assert [(order.side, order.symbol) for order in broker.submitted] == [(PortfolioOrderSide.SELL, "AAPL")]
+
+
+def test_shipped_cap8_config_still_blocks_over_gross_buy(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
+    broker = _over_gross_broker()
+    targets = {**{name: 0.071 for name in _NAMES}, "TSLA": 0.019}
+    runtime, _repository = _runtime(
+        tmp_path,
+        broker,
+        targets,
+        limits=portfolio_risk_limits_from_config(config.risk),
+    )
+    runtime.maximum_allocation = config.strategy.equity.maximum_allocation
+    result = runtime.process_closed_bars(_bars(tuple(targets)))
+    assert result.risk is not None and result.risk.gross_before == 0.605
+    assert broker.submitted == []
+
+
+def test_shipped_cap8_config_counts_working_buy_before_next_admission(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
+    broker = _SimBroker((_position("AAPL", 500),))
+    broker.working_buy_orders = lambda: (_working("existing", "MSFT", 50, Market.EQUITY),)  # type: ignore[attr-defined]
+    runtime, _repository = _runtime(
+        tmp_path,
+        broker,
+        {"TSLA": 0.10},
+        limits=portfolio_risk_limits_from_config(config.risk),
+    )
+    admission = runtime._size_buys_to_safe_capacity((_buy(),))
+    assert admission.committed_buy_notional == 5000
+    assert admission.orders[0].quantity == 50
+    assert admission.gross_headroom == admission.cash_headroom == 5000
 
 
 def _admission_runtime(tmp_path, current_qty: int = 500):  # type: ignore[no-untyped-def]
@@ -240,13 +275,8 @@ def test_sequential_equity_crypto_decisions_share_committed_headroom(tmp_path) -
             if order.side == PortfolioOrderSide.BUY
         )
         repository = PortfolioStateRepository(tmp_path / f"shared-{first_market.value}.sqlite3")
-        limits = PortfolioRiskLimits(
-            maximum_gross=0.60,
-            maximum_equity=0.60,
-            minimum_cash=0.40,
-            maximum_positions=8,
-            maximum_crypto_positions=2,
-        )
+        config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
+        limits = portfolio_risk_limits_from_config(config.risk)
         runtimes = {
             Market.EQUITY: PortfolioRuntime(
                 _FixedTargetStrategy({"AAPL": 0.08}),

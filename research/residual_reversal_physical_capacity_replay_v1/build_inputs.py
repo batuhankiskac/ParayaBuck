@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from collections import defaultdict
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -33,10 +34,11 @@ from .recording_candidate import RecordingReversal
 from .timing import equity_action_effective_open, equity_daily_available_at, equity_session_open
 
 ROOT = Path(__file__).resolve().parents[2]
-EQUITY_BARS = ROOT / "data/historical/equity_pit_symmetric_2016_2026_v5.csv"
-EQUITY_LIFETIMES = ROOT / "data/historical/equity_entity_lifetimes_full_v5.csv"
-EQUITY_ACTIONS = ROOT / "data/historical/equity_survivorship_full_corporate_actions_v5.csv"
-CRYPTO_HOURLY = ROOT / "data/historical/crypto_expanded_1h.csv"
+DATA_ROOT = Path(os.environ.get("PARAYABUCK_CAPACITY_DATA_ROOT", ROOT / "data/historical"))
+EQUITY_BARS = DATA_ROOT / "equity_pit_symmetric_2016_2026_v5.csv"
+EQUITY_LIFETIMES = DATA_ROOT / "equity_entity_lifetimes_full_v5.csv"
+EQUITY_ACTIONS = DATA_ROOT / "equity_survivorship_full_corporate_actions_v5.csv"
+CRYPTO_HOURLY = DATA_ROOT / "crypto_expanded_1h.csv"
 EQUITY_START = datetime(2017, 1, 3, tzinfo=UTC)
 EQUITY_END = datetime(2026, 7, 30, 23, 59, 59, 999999, tzinfo=UTC)
 CRYPTO_START = datetime(2021, 4, 1, tzinfo=UTC)

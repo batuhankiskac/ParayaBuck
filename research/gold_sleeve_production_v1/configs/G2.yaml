@@ -1,0 +1,273 @@
+app:
+  host: 127.0.0.1
+  port: 8000
+  open_browser: true
+  auto_start_engine: true
+  log_level: INFO
+runtime:
+  mode: paper
+  execution_timeframe: 5m
+  market_state_timeframe: 5m
+  decision_db_path: data/runtime/parayabuck.sqlite3
+  scanner_refresh_hours: 24
+alpaca:
+  data_delayed: false
+  # Live Basic streaming: IEX exchange prints only (NOT the consolidated
+  # SIP/NBBO tape). SIP real-time streaming requires a paid entitlement.
+  stock_stream_feed: iex
+  # Historical bars/quotes: SIP for consolidated coverage where the account
+  # entitlement allows; falls back to IEX gracefully otherwise.
+  stock_historical_feed: sip
+data:
+  equity_session: regular
+  include_extended_hours: false
+universe:
+  equity:
+    enabled: true
+    dynamic_selection_enabled: true
+    allow_static_fallback_trading: false
+    maximum_stream_symbols: 30
+    target_shortlist: 300
+    reference_symbols:
+    - SPY
+    trade_reference_symbols: false
+    fallback_trade_symbols:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - TSLA
+    - NVDA
+    - AMZN
+    - QQQ
+    - KO
+    - PEP
+    - JNJ
+    - JPM
+    - XOM
+    - XLK
+    - XLF
+    - XLE
+    - XLV
+    - XLY
+    - XLP
+    - XLI
+    - XLB
+    - XLU
+    - SH
+    - PSQ
+    - DOG
+    - SCHD
+    - VIG
+    - DGRO
+    - GLD
+    - OUNZ
+    allowlist_symbols: []
+    denylist_symbols: []
+    supported_exchanges: [NASDAQ, NYSE, ARCA, AMEX, BATS]
+    inverse_trade_symbols:
+    - SH
+    - PSQ
+    - DOG
+    # Dividend-growth sleeve ETFs of the equity strategy: pinned into the
+    # 30-symbol IEX stream (V3 keeps 23 ranked slots) and hidden from V3.
+    sleeve_trade_symbols:
+    - SCHD
+    - VIG
+    - DGRO
+    - GLD
+    - OUNZ
+    candidate_universe_path: data/universe/equity_candidates.json
+    active_universe_path: data/runtime/active_equity_universe.json
+    active_universe_max_age_hours: 36
+    require_scanner_config_digest_match: true
+    scanner:
+      minimum_price: 5
+      minimum_median_dollar_volume: 20000000
+      minimum_data_completeness: 0.95
+      minimum_atr_pct: 0.005
+      maximum_atr_pct: 0.12
+      maximum_per_sector: 5
+      volatility_optimum_pct: 0.03
+      spread_quality_ceiling_bps: 50
+      unknown_sector_penalty: 2
+  crypto:
+    enabled: true
+    dynamic_selection_enabled: true
+    allow_static_fallback_trading: false
+    maximum_stream_symbols: 12
+    pinned_symbols:
+    - BTC/USD
+    - ETH/USD
+    trade_symbols:
+    - BTC/USD
+    - ETH/USD
+    - SOL/USD
+    - XRP/USD
+    - ADA/USD
+    - DOGE/USD
+    - AVAX/USD
+    - LINK/USD
+    - LTC/USD
+    - BCH/USD
+    - DOT/USD
+    - UNI/USD
+    - AAVE/USD
+    - ARB/USD
+    - FIL/USD
+    - RENDER/USD
+    - ONDO/USD
+    - HYPE/USD
+    # 2026-08-21 historical experiment widened the alpha-search pool
+    # 18 -> 22 pairs (the original optimization note is no longer in the
+    # repository). Scanner eligibility gates still apply per pair.
+    - SHIB/USD
+    - GRT/USD
+    - CRV/USD
+    - PEPE/USD
+    allowlist_symbols: []
+    denylist_symbols: []
+    active_universe_path: data/runtime/active_crypto_universe.json
+    active_universe_max_age_hours: 12
+    require_scanner_config_digest_match: true
+    scanner:
+      historical_timeframe: 1h
+      lookback_days: 14
+      minimum_data_completeness: 0.9
+      minimum_median_dollar_volume: 1000
+      minimum_atr_pct: 0.004
+      maximum_atr_pct: 0.2
+      maximum_spread_bps: 200
+      maximum_btc_correlation: 0.97
+      maximum_per_category: 3
+      maximum_meme_symbols: 1
+      maximum_high_beta_symbols: 2
+strategy:
+  # The strategy owns its signal timeframe; strategy.*.timeframe is a
+  # deprecated compatibility key and intentionally omitted here.
+  # equity_residual_momentum_v3 — MH_RAW (2026-08) frozen PAPER identity:
+  # positive 12-1 residual gate, raw 6/9/12 rank consensus, existing ivol
+  # filter, top_n and inverse-vol sizing. v1/v2 stay frozen historical
+  # identities. LIVE remains disabled.
+  equity:
+    enabled: true
+    # 2026-09-25: V3 core 0.40 + dividend-growth sleeve 0.15 (SCHD/VIG/DGRO,
+    # 1/3 each, decided on the first weekly decision of each month, held
+    # otherwise). Validated by docs/research/sleeve_candidates_v2_v3_closure.md
+    # and docs/research/dividend_sleeve_production_v1.md. Rollback: name
+    # equity_residual_momentum_v3 without the sleeve keys below.
+    name: equity_residual_momentum_v3_dividend_sleeve_v1
+    # 2026-08-29 fix (kripto alım arızası): equity 0.60→0.55 so that
+    # equity 0.55 + crypto 0.05 never exceeds max_gross 0.60 and cash stays >=0.40.
+    maximum_allocation: 0.55
+    parameters:
+      core_allocation: 0.35
+      sleeve_allocation: 0.20
+      sleeve_symbols: [SCHD, VIG, DGRO, GLD, OUNZ]
+      formation_bars: 252
+      skip_bars: 21
+      beta_window_bars: 273
+      residual_vol_window: 63
+      top_n: 8
+      max_single_weight: 0.10
+      ivol_reject_quantile: 0.70
+      exclude_symbols: [SPY]
+      rebalance_frequency: weekly
+  crypto:
+    # crypto_low_variance_hysteresis_v1 — current PAPER identity (2026-08-26):
+    # same validated alpha as v2 (22d top2), hysteresis retention rank<=4 at 96h.
+    # The 2026-08-26 tournament figures (turnover 8.72->4.00, return
+    # 5.25%->10.54%) are historical; the current causal canonical replay is
+    # docs/research/canonical_crypto_baseline.md (total return 5.42%, turnover 3.52).
+    # v2 and v1 stay frozen historical baselines for rollback.
+    enabled: true
+    name: crypto_low_variance_hysteresis_v1
+    # 2026-08-21 operator decision: sleeve halved 0.10 -> 0.05 to reduce the
+    # crypto drawdown contribution (historical rationale; the original
+    # optimization note is no longer in the repository).
+    maximum_allocation: 0.05
+    parameters:
+      variance_lookback_days: 22
+      top_n: 2
+      rebalance_hours: 96
+risk:
+  max_position_pct: 0.1
+  max_crypto_exposure_pct: 0.1
+  max_crypto_position_pct: 0.05
+  max_crypto_positions: 2
+  cash_buffer_pct: 0.40
+  max_gross_exposure_pct: 0.6
+  max_positions: 8
+  daily_loss_limit_pct: 0.005
+  max_drawdown_pct: 0.05
+  # Additive dividend-growth sleeve ETFs never consume the 8 position slots.
+  slot_exempt_equity_symbols: [SCHD, VIG, DGRO, GLD, OUNZ]
+backtest:
+  initial_cash: 100000
+  slippage_bps: 2
+  spread_bps: 2
+  commission: 0
+  # Crypto market orders pay Alpaca's tier-1 taker fee (0.25% = 25 bps) for a
+  # low-volume account; the tier helper in backtest/regulatory_fees.py models
+  # higher volume tiers.
+  crypto_taker_fee_bps: 25
+  # Equity regulatory fees use the effective-dated schedule by trade date
+  # (SEC Section 31, FINRA TAF, CAT NMS Plan). The fixed values below are the
+  # 2026 rates and only apply when effective-dated fees are disabled.
+  equity_use_effective_dated_fees: true
+  equity_taf_per_share: 0.000195
+  equity_taf_cap: 9.79
+  equity_cat_per_share: 0.000003
+  equity_sec_fee_rate: 0.0000206
+  scanner_rebalance: daily
+  output_dir: reports
+  ranking_metric: risk_adjusted
+live:
+  enabled: false
+  hard_dollar_cap: 0
+  operator_approval_path: ""
+  operator_approval_key_env: PARAYABUCK_OPERATOR_APPROVAL_KEY
+engine:
+  manage_external_positions: false
+  event_grace_seconds: 5
+  data_finalization_grace_seconds: 2
+  maximum_queue_age_seconds: 30
+  account_poll_interval_seconds: 15
+  maximum_account_age_for_entry_seconds: 30
+  event_queue_capacity: 1024
+  crypto_stop_limit_offset_bps: 25
+  crypto_emergency_exit_bps: 75
+  crypto_stop_cancel_timeout_seconds: 5
+  crypto_stop_cancel_poll_interval_seconds: 0.25
+execution:
+  # Shared order-existence policy for backtest, paper and live: a rebalance
+  # band below which drift produces no order, and the minimum order notional.
+  # These values change order behavior and are part of the configuration and
+  # live-authorization digests.
+  rebalance_band_pct: 0.005
+  minimum_order_notional: 10
+backup:
+  # Consistent SQLite snapshots of the runtime decision database
+  # (runtime.decision_db_path), taken with the sqlite3 online backup API so
+  # the copy stays safe while the WAL-mode runtime database is open.
+  path: data/backups
+  retention_days: 7
+alerting:
+  # Event-notification sink for runtime operators. The console/log sink is
+  # always attached; webhook_url enables an additional generic POST sink
+  # (also overridable via PARAYABUCK_ALERT_WEBHOOK_URL). Failure events are
+  # throttled per kind so a broken scanner/broker cannot spam the webhook.
+  enabled: true
+  webhook_url: ""
+  events:
+  - runtime_started
+  - runtime_stopped_unexpected
+  - scanner_refresh_failure
+  - scanner_recovered
+  - order_rejected
+  - ambiguous_order
+  - reconciliation_failure
+  - reconciliation_recovered
+  - risk_incident
+  - drawdown_halt
+  - risk_epoch_reset
+  - circuit_breaker

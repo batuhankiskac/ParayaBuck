@@ -765,3 +765,15 @@ against the shipped control (full 1x Sharpe 0.657 -> 0.757 / 0.749). A post-hoc
 matched cash control shows the Sharpe/CAGR gain is real diversification, but the
 drawdown and 2022 improvements come from holding less V3. Full record:
 `research/etf_diversifier_v1/RESULTS.md`.
+
+## ETF diversifier v1 — Stage B (2026-09-25)
+
+Shared-ledger confirmation of Stage A on the accepted physical-clock harness
+(one cash balance, account-wide daily-loss latch, cap 8). Structural gates all
+hold (invariance arm reproduces the shipped run exactly). Verdict:
+**STAGE_B_FAIL** — C2 (trend) passes every gate except the CAGR guard (−0.69
+pp/year vs shipped; Sharpe 0.742 vs 0.675, max DD 17.3% vs 19.4%); C1 (static)
+also fails the Sharpe, validation and cash-control gates. The ETF sleeve is a
+real but lower-returning diversifier; the shipped configuration stays. Re-tuning
+on the same window is excluded. Full record:
+`research/etf_diversifier_v1/stage_b/RESULTS_STAGE_B.md`.

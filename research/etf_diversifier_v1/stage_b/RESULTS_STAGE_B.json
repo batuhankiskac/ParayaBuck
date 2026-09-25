@@ -1,0 +1,814 @@
+{
+  "arms": {
+    "A|1.0": {
+      "costs": {
+        "fees": 2605.6042548005303,
+        "slippage": 4526.972320948358,
+        "spread": 2263.486160474179
+      },
+      "days_in_drawdown_over_5pct": 725,
+      "development": {
+        "cagr": 0.08767861603155258,
+        "calmar": 0.6596280618298384,
+        "days": 1258,
+        "max_drawdown": 0.13292129474954129,
+        "sharpe": 0.8560856580708048,
+        "sortino": 1.1708566372588438,
+        "total_return": 0.5211714602633355,
+        "volatility": 0.10457209648522972
+      },
+      "ending_nav": 185805.51881278775,
+      "etf_decision_count": 0,
+      "fills": 2835,
+      "full": {
+        "cagr": 0.06685911184218885,
+        "calmar": 0.3444569771720601,
+        "days": 2405,
+        "max_drawdown": 0.194100036501197,
+        "sharpe": 0.6750572635354092,
+        "sortino": 0.9313532584257533,
+        "total_return": 0.8575932137191316,
+        "volatility": 0.10418960944868381
+      },
+      "halt_counts": {},
+      "max_observed_slot_claim_count": 8,
+      "maximum_realized_gross_observed": 0.6155074541750836,
+      "slot_claim_violation_events": 0,
+      "validation": {
+        "cagr": 0.04469519292982094,
+        "calmar": 0.23752287669801497,
+        "days": 1147,
+        "max_drawdown": 0.18817216072473775,
+        "sharpe": 0.47484839648733057,
+        "sortino": 0.6618346604509168,
+        "total_return": 0.22115965375629432,
+        "volatility": 0.10379788743377359
+      },
+      "year_2022": {
+        "cagr": -0.15317640011041278,
+        "calmar": -0.8293961096171187,
+        "days": 251,
+        "max_drawdown": 0.18468425199284444,
+        "sharpe": -1.3968328351078991,
+        "sortino": -1.7760597258757629,
+        "total_return": -0.1526944172673378,
+        "volatility": 0.11437628543236159
+      }
+    },
+    "A|2.0": {
+      "costs": {
+        "fees": 5040.387886904631,
+        "slippage": 8756.915237806763,
+        "spread": 4378.457618903381
+      },
+      "days_in_drawdown_over_5pct": 761,
+      "development": {
+        "cagr": 0.08231362929278796,
+        "calmar": 0.6174532753382396,
+        "days": 1258,
+        "max_drawdown": 0.13331151130050567,
+        "sharpe": 0.8086700210726672,
+        "sortino": 1.1039638887283778,
+        "total_return": 0.48408905611476727,
+        "volatility": 0.10459072392754373
+      },
+      "ending_nav": 175325.47110400896,
+      "etf_decision_count": 0,
+      "fills": 2789,
+      "full": {
+        "cagr": 0.06041826858120958,
+        "calmar": 0.295779323981003,
+        "days": 2405,
+        "max_drawdown": 0.2042680596061206,
+        "sharpe": 0.6159638656165938,
+        "sortino": 0.8489419634681694,
+        "total_return": 0.7530162754625911,
+        "volatility": 0.1043531302472163
+      },
+      "halt_counts": {},
+      "max_observed_slot_claim_count": 8,
+      "maximum_realized_gross_observed": 0.6159850426444313,
+      "slot_claim_violation_events": 0,
+      "validation": {
+        "cagr": 0.03711778172404534,
+        "calmar": 0.1888371532793018,
+        "days": 1147,
+        "max_drawdown": 0.19655973985768493,
+        "sharpe": 0.4034928704047142,
+        "sortino": 0.5622777688923443,
+        "total_return": 0.1812069284115998,
+        "volatility": 0.10411945717791551
+      },
+      "year_2022": {
+        "cagr": -0.16079479722954038,
+        "calmar": -0.8463783408191742,
+        "days": 251,
+        "max_drawdown": 0.18997981100734906,
+        "sharpe": -1.4764797670907583,
+        "sortino": -1.871256733345247,
+        "total_return": -0.1602911804317505,
+        "volatility": 0.11432980135399046
+      }
+    },
+    "A|3.0": {
+      "costs": {
+        "fees": 7267.741021461049,
+        "slippage": 12704.234365705846,
+        "spread": 6352.117182852923
+      },
+      "days_in_drawdown_over_5pct": 782,
+      "development": {
+        "cagr": 0.07683010025923087,
+        "calmar": 0.5746379672615469,
+        "days": 1258,
+        "max_drawdown": 0.13370174725030237,
+        "sharpe": 0.7599174729955629,
+        "sortino": 1.0354750041678003,
+        "total_return": 0.44693788380992183,
+        "volatility": 0.10462011105863361
+      },
+      "ending_nav": 164587.79148295725,
+      "etf_decision_count": 0,
+      "fills": 2783,
+      "full": {
+        "cagr": 0.05344881215382835,
+        "calmar": 0.24894837746606466,
+        "days": 2405,
+        "max_drawdown": 0.21469837521280577,
+        "sharpe": 0.5523230117007881,
+        "sortino": 0.7593413689599273,
+        "total_return": 0.6458232884551494,
+        "volatility": 0.10441649065196505
+      },
+      "halt_counts": {},
+      "max_observed_slot_claim_count": 8,
+      "maximum_realized_gross_observed": 0.6159247329564553,
+      "slot_claim_violation_events": 0,
+      "validation": {
+        "cagr": 0.028586095612674223,
+        "calmar": 0.1395843797071274,
+        "days": 1147,
+        "max_drawdown": 0.2047943736444786,
+        "sharpe": 0.3236303572876311,
+        "sortino": 0.4495297357916962,
+        "total_return": 0.13745262106314016,
+        "volatility": 0.10421745259047292
+      },
+      "year_2022": {
+        "cagr": -0.1683448535070483,
+        "calmar": -0.8622441835563777,
+        "days": 251,
+        "max_drawdown": 0.1952403468965136,
+        "sharpe": -1.556095863323558,
+        "sortino": -1.965793769695444,
+        "total_return": -0.1678200296734068,
+        "volatility": 0.11428980788419449
+      }
+    },
+    "B|1.0": {
+      "costs": {
+        "fees": 2532.825301656647,
+        "slippage": 3229.187843983495,
+        "spread": 1614.5939219917475
+      },
+      "days_in_drawdown_over_5pct": 590,
+      "development": {
+        "cagr": 0.06927156465850803,
+        "calmar": 0.7044926345105067,
+        "days": 1258,
+        "max_drawdown": 0.09832830219245525,
+        "sharpe": 0.889211571814542,
+        "sortino": 1.2383649605933111,
+        "total_return": 0.3969512894627183,
+        "volatility": 0.07881264145664181
+      },
+      "ending_nav": 161799.86595919667,
+      "etf_decision_count": 0,
+      "fills": 2734,
+      "full": {
+        "cagr": 0.05154489184603728,
+        "calmar": 0.2982538987813614,
+        "days": 2405,
+        "max_drawdown": 0.1728221896063893,
+        "sharpe": 0.6773604000611118,
+        "sortino": 0.9416050513888626,
+        "total_return": 0.6175800205847424,
+        "volatility": 0.07901505541698334
+      },
+      "halt_counts": {
+        "daily_loss_limit_decisions": 63,
+        "etf_increase_blocked": 0
+      },
+      "max_observed_slot_claim_count": 8,
+      "maximum_realized_gross_observed": 0.47130081220355036,
+      "slot_claim_violation_events": 0,
+      "validation": {
+        "cagr": 0.03261147982537471,
+        "calmar": 0.21384785921336488,
+        "days": 1147,
+        "max_drawdown": 0.1524985096663366,
+        "sharpe": 0.44615073600695926,
+        "sortino": 0.6191181941350726,
+        "total_return": 0.15793587993099,
+        "volatility": 0.07925505146298321
+      },
+      "year_2022": {
+        "cagr": -0.13088588553794867,
+        "calmar": -0.8582764895494659,
+        "days": 251,
+        "max_drawdown": 0.1524985096663366,
+        "sharpe": -1.5674299209289793,
+        "sortino": -1.9799095252249428,
+        "total_return": -0.13046853669001823,
+        "volatility": 0.08710538937307916
+      }
+    },
+    "B|2.0": {
+      "costs": {
+        "fees": 4938.5659136711065,
+        "slippage": 6299.973848578245,
+        "spread": 3149.9869242891227
+      },
+      "days_in_drawdown_over_5pct": 622,
+      "development": {
+        "cagr": 0.06507181448975219,
+        "calmar": 0.6598474481331696,
+        "days": 1258,
+        "max_drawdown": 0.09861645244495887,
+        "sharpe": 0.8391633464846213,
+        "sortino": 1.1662745005265132,
+        "total_return": 0.36978006570612343,
+        "volatility": 0.07882425290979239
+      },
+      "ending_nav": 152691.52713171692,
+      "etf_decision_count": 0,
+      "fills": 2730,
+      "full": {
+        "cagr": 0.04520228691571493,
+        "calmar": 0.25294376710035565,
+        "days": 2405,
+        "max_drawdown": 0.17870488541344798,
+        "sharpe": 0.6007735495688745,
+        "sortino": 0.8322057927307446,
+        "total_return": 0.5265959318490028,
+        "volatility": 0.07898551201422364
+      },
+      "halt_counts": {
+        "daily_loss_limit_decisions": 63,
+        "etf_increase_blocked": 0
+      },
+      "max_observed_slot_claim_count": 8,
+      "maximum_realized_gross_observed": 0.4715085419821842,
+      "slot_claim_violation_events": 0,
+      "validation": {
+        "cagr": 0.024004069004455397,
+        "calmar": 0.15267661451057024,
+        "days": 1147,
+        "max_drawdown": 0.15722164839326802,
+        "sharpe": 0.3403709512641919,
+        "sortino": 0.46989566337297173,
+        "total_return": 0.1144825144334698,
+        "volatility": 0.079176235271464
+      },
+      "year_2022": {
+        "cagr": -0.1377058971913363,
+        "calmar": -0.8758710940804043,
+        "days": 251,
+        "max_drawdown": 0.15722164839326802,
+        "sharpe": -1.6588391402719156,
+        "sortino": -2.0873117545742494,
+        "total_return": -0.1372685634364872,
+        "volatility": 0.08705698629282849
+      }
+    },
+    "B|3.0": {
+      "costs": {
+        "fees": 7233.948418369994,
+        "slippage": 9207.992169926925,
+        "spread": 4603.996084963463
+      },
+      "days_in_drawdown_over_5pct": 660,
+      "development": {
+        "cagr": 0.060864536574047445,
+        "calmar": 0.6153862615247127,
+        "days": 1258,
+        "max_drawdown": 0.09890460736521212,
+        "sharpe": 0.7888292066736112,
+        "sortino": 1.0940678791551508,
+        "total_return": 0.3429855383714342,
+        "volatility": 0.0788374397519709
+      },
+      "ending_nav": 144251.06049689936,
+      "etf_decision_count": 0,
+      "fills": 2739,
+      "full": {
+        "cagr": 0.03902660208748299,
+        "calmar": 0.21147090361765422,
+        "days": 2405,
+        "max_drawdown": 0.18454832991135395,
+        "sharpe": 0.5257477734560214,
+        "sortino": 0.7265603282233303,
+        "total_return": 0.44243768098925296,
+        "volatility": 0.0789479797101177
+      },
+      "halt_counts": {
+        "daily_loss_limit_decisions": 63,
+        "etf_increase_blocked": 0
+      },
+      "max_observed_slot_claim_count": 8,
+      "maximum_realized_gross_observed": 0.471716489477319,
+      "slot_claim_violation_events": 0,
+      "validation": {
+        "cagr": 0.015756900758346903,
+        "calmar": 0.0973125211564775,
+        "days": 1147,
+        "max_drawdown": 0.16192058916046348,
+        "sharpe": 0.23802400568753931,
+        "sortino": 0.3276969409916713,
+        "total_return": 0.07405302572239347,
+        "volatility": 0.07907873345472025
+      },
+      "year_2022": {
+        "cagr": -0.1444755210545261,
+        "calmar": -0.8922615820731155,
+        "days": 251,
+        "max_drawdown": 0.16192058916046348,
+        "sharpe": -1.7502287049327854,
+        "sortino": -2.1938621729306105,
+        "total_return": -0.14401853207206639,
+        "volatility": 0.08701618698870661
+      }
+    },
+    "C1|1.0": {
+      "costs": {
+        "fees": 2543.364758682743,
+        "slippage": 3367.2752493260955,
+        "spread": 1683.6376246630477
+      },
+      "days_in_drawdown_over_5pct": 614,
+      "development": {
+        "cagr": 0.08209779643967785,
+        "calmar": 0.7709490536129777,
+        "days": 1258,
+        "max_drawdown": 0.10648926288311078,
+        "sharpe": 0.9838059826178241,
+        "sortino": 1.3718413171217652,
+        "total_return": 0.48261250663855626,
+        "volatility": 0.08376585648929638
+      },
+      "ending_nav": 173312.21554832062,
+      "etf_decision_count": 114,
+      "fills": 2780,
+      "full": {
+        "cagr": 0.05912556939635771,
+        "calmar": 0.30884596566990297,
+        "days": 2405,
+        "max_drawdown": 0.1914403164312387,
+        "sharpe": 0.723605540272148,
+        "sortino": 1.0048859453950598,
+        "total_return": 0.7326741669780679,
+        "volatility": 0.08454664111066362
+      },
+      "halt_counts": {
+        "daily_loss_limit_decisions": 64,
+        "etf_increase_blocked": 15
+      },
+      "max_observed_slot_claim_count": 12,
+      "maximum_realized_gross_observed": 0.6202470266487493,
+      "slot_claim_violation_events": 48866,
+      "validation": {
+        "cagr": 0.03469740165624757,
+        "calmar": 0.19880597264428773,
+        "days": 1147,
+        "max_drawdown": 0.17452897010458368,
+        "sharpe": 0.44367282250946566,
+        "sortino": 0.6135908387449504,
+        "total_return": 0.16866285642392942,
+        "volatility": 0.08540725678720248
+      },
+      "year_2022": {
+        "cagr": -0.14969996393995355,
+        "calmar": -0.8577370499020779,
+        "days": 251,
+        "max_drawdown": 0.17452897010458368,
+        "sharpe": -1.663996871528362,
+        "sortino": -2.0817189269227767,
+        "total_return": -0.14922793097309717,
+        "volatility": 0.094781842064903
+      }
+    },
+    "C1|2.0": {
+      "costs": {
+        "fees": 5070.990535249921,
+        "slippage": 6537.342302566883,
+        "spread": 3268.6711512834413
+      },
+      "days_in_drawdown_over_5pct": 594,
+      "development": {
+        "cagr": 0.07797125200387134,
+        "calmar": 0.7300511437517225,
+        "days": 1258,
+        "max_drawdown": 0.10680245167917712,
+        "sharpe": 0.9384901194734762,
+        "sortino": 1.3061723828719662,
+        "total_return": 0.454607276351344,
+        "volatility": 0.08373638345920373
+      },
+      "ending_nav": 168070.58492659678,
+      "etf_decision_count": 114,
+      "fills": 2776,
+      "full": {
+        "cagr": 0.05573635210911054,
+        "calmar": 0.28193004442079705,
+        "days": 2405,
+        "max_drawdown": 0.1976956809396333,
+        "sharpe": 0.6841680269207133,
+        "sortino": 0.9526155525812017,
+        "total_return": 0.6803407764502716,
+        "volatility": 0.08474601830701176
+      },
+      "halt_counts": {
+        "daily_loss_limit_decisions": 65,
+        "etf_increase_blocked": 16
+      },
+      "max_observed_slot_claim_count": 12,
+      "maximum_realized_gross_observed": 0.6213504069760187,
+      "slot_claim_violation_events": 48940,
+      "validation": {
+        "cagr": 0.03207416107616923,
+        "calmar": 0.17839389713941436,
+        "days": 1147,
+        "max_drawdown": 0.17979404895843132,
+        "sharpe": 0.41211043230675204,
+        "sortino": 0.574158270971572,
+        "total_return": 0.15518518556097383,
+        "volatility": 0.08585370399839902
+      },
+      "year_2022": {
+        "cagr": -0.15680312424902443,
+        "calmar": -0.8721263309737107,
+        "days": 251,
+        "max_drawdown": 0.17979404895843132,
+        "sharpe": -1.7531862980913493,
+        "sortino": -2.186167326546417,
+        "total_return": -0.15631081330158514,
+        "volatility": 0.09474624445073515
+      }
+    },
+    "C1|3.0": {
+      "costs": {
+        "fees": 7157.315495870758,
+        "slippage": 9556.085819673921,
+        "spread": 4778.0429098369605
+      },
+      "days_in_drawdown_over_5pct": 632,
+      "development": {
+        "cagr": 0.07376940793307485,
+        "calmar": 0.6875247025776963,
+        "days": 1258,
+        "max_drawdown": 0.10729710169903062,
+        "sharpe": 0.892834096870701,
+        "sortino": 1.2404204896350726,
+        "total_return": 0.4265272963678113,
+        "volatility": 0.08363404394042823
+      },
+      "ending_nav": 158298.1364181454,
+      "etf_decision_count": 114,
+      "fills": 2746,
+      "full": {
+        "cagr": 0.04916294359012752,
+        "calmar": 0.24469896513229505,
+        "days": 2405,
+        "max_drawdown": 0.20091193913937422,
+        "sharpe": 0.6095300286742203,
+        "sortino": 0.8444963425446607,
+        "total_return": 0.5828571142415144,
+        "volatility": 0.08486430503773176
+      },
+      "halt_counts": {
+        "daily_loss_limit_decisions": 65,
+        "etf_increase_blocked": 14
+      },
+      "max_observed_slot_claim_count": 12,
+      "maximum_realized_gross_observed": 0.628321607727164,
+      "slot_claim_violation_events": 48989,
+      "validation": {
+        "cagr": 0.023018137910904013,
+        "calmar": 0.1261081467125218,
+        "days": 1147,
+        "max_drawdown": 0.18252696999327522,
+        "sharpe": 0.3081476338106058,
+        "sortino": 0.42577244190434704,
+        "total_return": 0.10958768070666802,
+        "volatility": 0.08620209936006434
+      },
+      "year_2022": {
+        "cagr": -0.16081017912943651,
+        "calmar": -0.8810214684183997,
+        "days": 251,
+        "max_drawdown": 0.18252696999327522,
+        "sharpe": -1.8060907739450818,
+        "sortino": -2.245389922871276,
+        "total_return": -0.16030651888971037,
+        "volatility": 0.09461481857363765
+      }
+    },
+    "C2|1.0": {
+      "costs": {
+        "fees": 2496.1300545533772,
+        "slippage": 3373.246553667882,
+        "spread": 1686.623276833941
+      },
+      "days_in_drawdown_over_5pct": 627,
+      "development": {
+        "cagr": 0.0751049738370313,
+        "calmar": 0.7230890976885354,
+        "days": 1258,
+        "max_drawdown": 0.10386683200882962,
+        "sharpe": 0.9110272365486031,
+        "sortino": 1.2664933510842553,
+        "total_return": 0.4354051663965415,
+        "volatility": 0.08329752705687003
+      },
+      "ending_nav": 174658.26568127234,
+      "etf_decision_count": 114,
+      "fills": 2870,
+      "full": {
+        "cagr": 0.05998301036375042,
+        "calmar": 0.3463455047223286,
+        "days": 2405,
+        "max_drawdown": 0.17318836117662295,
+        "sharpe": 0.7418478431637985,
+        "sortino": 1.032864826893502,
+        "total_return": 0.7461432324029891,
+        "volatility": 0.08343554453386728
+      },
+      "halt_counts": {
+        "daily_loss_limit_decisions": 65,
+        "etf_increase_blocked": 18
+      },
+      "max_observed_slot_claim_count": 13,
+      "maximum_realized_gross_observed": 0.6225691973064176,
+      "slot_claim_violation_events": 47839,
+      "validation": {
+        "cagr": 0.04381795975810254,
+        "calmar": 0.2778343286286661,
+        "days": 1147,
+        "max_drawdown": 0.15771254752563912,
+        "sharpe": 0.5567695407088169,
+        "sortino": 0.7767036684379691,
+        "total_return": 0.21648108372532282,
+        "volatility": 0.08361230817317289
+      },
+      "year_2022": {
+        "cagr": -0.13346783472502788,
+        "calmar": -0.8660017993962524,
+        "days": 251,
+        "max_drawdown": 0.15411958129657144,
+        "sharpe": -1.5306494485544024,
+        "sortino": -1.9352796805504802,
+        "total_return": -0.13304289834681693,
+        "volatility": 0.09092039664046535
+      }
+    },
+    "C2|2.0": {
+      "costs": {
+        "fees": 4870.088179118602,
+        "slippage": 6576.8833938675025,
+        "spread": 3288.4416969337512
+      },
+      "days_in_drawdown_over_5pct": 661,
+      "development": {
+        "cagr": 0.07095087704179215,
+        "calmar": 0.6810328045667375,
+        "days": 1258,
+        "max_drawdown": 0.10418129136514942,
+        "sharpe": 0.8643587070031018,
+        "sortino": 1.1992218557331467,
+        "total_return": 0.40793583969951897,
+        "volatility": 0.08331767097213107
+      },
+      "ending_nav": 165791.9446586142,
+      "etf_decision_count": 114,
+      "fills": 2838,
+      "full": {
+        "cagr": 0.054231906825366716,
+        "calmar": 0.2989670454417105,
+        "days": 2405,
+        "max_drawdown": 0.18139760770369018,
+        "sharpe": 0.676281544878394,
+        "sortino": 0.9389061886014922,
+        "total_return": 0.6575675184517786,
+        "volatility": 0.08346035137784535
+      },
+      "halt_counts": {
+        "daily_loss_limit_decisions": 65,
+        "etf_increase_blocked": 18
+      },
+      "max_observed_slot_claim_count": 13,
+      "maximum_realized_gross_observed": 0.6229219345533934,
+      "slot_claim_violation_events": 47923,
+      "validation": {
+        "cagr": 0.036366738173172486,
+        "calmar": 0.21982323334093237,
+        "days": 1147,
+        "max_drawdown": 0.16543628087195816,
+        "sharpe": 0.47061291913820197,
+        "sortino": 0.6540241914444458,
+        "total_return": 0.17730330581366127,
+        "volatility": 0.0836396675274657
+      },
+      "year_2022": {
+        "cagr": -0.1405036849772644,
+        "calmar": -0.8837209374266028,
+        "days": 251,
+        "max_drawdown": 0.15899101065367016,
+        "sharpe": -1.6208602838639947,
+        "sortino": -2.0416855420780906,
+        "total_return": -0.1400582059314205,
+        "volatility": 0.090891344810113
+      }
+    },
+    "C2|3.0": {
+      "costs": {
+        "fees": 6976.953882956264,
+        "slippage": 9704.20054046956,
+        "spread": 4852.10027023478
+      },
+      "days_in_drawdown_over_5pct": 680,
+      "development": {
+        "cagr": 0.06688135984501686,
+        "calmar": 0.6400523743259985,
+        "days": 1258,
+        "max_drawdown": 0.10449357353833066,
+        "sharpe": 0.8187420067093469,
+        "sortino": 1.1338249225607633,
+        "total_return": 0.3814350127504451,
+        "volatility": 0.08330859390561678
+      },
+      "ending_nav": 151935.7442642012,
+      "etf_decision_count": 114,
+      "fills": 2854,
+      "full": {
+        "cagr": 0.04467405039935479,
+        "calmar": 0.23571704672672295,
+        "days": 2405,
+        "max_drawdown": 0.18952405445308063,
+        "sharpe": 0.5688414964541333,
+        "sortino": 0.7834839889311866,
+        "total_return": 0.5192293006236619,
+        "volatility": 0.08311901541919635
+      },
+      "halt_counts": {
+        "daily_loss_limit_decisions": 64,
+        "etf_increase_blocked": 17
+      },
+      "max_observed_slot_claim_count": 13,
+      "maximum_realized_gross_observed": 0.6257253304979458,
+      "slot_claim_violation_events": 47848,
+      "validation": {
+        "cagr": 0.02102571664920405,
+        "calmar": 0.12147362679034678,
+        "days": 1147,
+        "max_drawdown": 0.17308873707617756,
+        "sharpe": 0.2934015440295534,
+        "sortino": 0.4017736493245259,
+        "total_return": 0.09974720967790685,
+        "volatility": 0.08292280949245526
+      },
+      "year_2022": {
+        "cagr": -0.14748113948724728,
+        "calmar": -0.9001957298359033,
+        "days": 251,
+        "max_drawdown": 0.16383230290831485,
+        "sharpe": -1.710937659877313,
+        "sortino": -2.147128739661316,
+        "total_return": -0.14701548236768847,
+        "volatility": 0.0908709609806824
+      }
+    }
+  },
+  "gates": {
+    "C1": {
+      "etf_pnl": {
+        "BIL": 1124.3386903638211,
+        "DBC": 0.0,
+        "GLD": 7085.278301050729,
+        "IEF": 0.0,
+        "SPY": 7368.218784523351,
+        "TLT": -556.0654395625552
+      },
+      "gates": {
+        "G2_full_sharpe_and_drawdown": false,
+        "G3_cagr_guard": false,
+        "G4_validation": false,
+        "G5_development": true,
+        "G6_2022": true,
+        "G7_costs_3x": true,
+        "G8_concentration": true,
+        "G9a_sharpe_vs_cash": false,
+        "G9b_calmar_vs_cash": true,
+        "G9c_validation_sharpe_vs_cash": false,
+        "S1_to_S4_structural": true
+      },
+      "largest_etf_pnl_share": 0.45669170066842985,
+      "passed": false
+    },
+    "C2": {
+      "etf_pnl": {
+        "BIL": 1897.9463200265636,
+        "DBC": 3117.0576319970887,
+        "GLD": 4037.406367723556,
+        "IEF": 290.0524431768781,
+        "SPY": 4391.568542241389,
+        "TLT": -230.371579571829
+      },
+      "gates": {
+        "G2_full_sharpe_and_drawdown": true,
+        "G3_cagr_guard": false,
+        "G4_validation": true,
+        "G5_development": true,
+        "G6_2022": true,
+        "G7_costs_3x": true,
+        "G8_concentration": true,
+        "G9a_sharpe_vs_cash": true,
+        "G9b_calmar_vs_cash": true,
+        "G9c_validation_sharpe_vs_cash": true,
+        "S1_to_S4_structural": true
+      },
+      "largest_etf_pnl_share": 0.31448308806968384,
+      "passed": false
+    }
+  },
+  "structural": {
+    "A|1.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "A|2.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "A|3.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "B|1.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "B|2.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "B|3.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "C1|1.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "C1|2.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "C1|3.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "C2|1.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "C2|2.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    },
+    "C2|3.0": {
+      "S2_accounting": true,
+      "S3_non_etf_slots": true,
+      "S4_fills_after_creation": true
+    }
+  },
+  "structural_summary": {
+    "S1_invariance": true,
+    "all_structural_gates": true
+  },
+  "verdict": {
+    "inconclusive": false,
+    "preferred": null,
+    "stage_b_pass": []
+  }
+}

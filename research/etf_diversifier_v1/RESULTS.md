@@ -4,6 +4,7 @@ Verdict: **STAGE_A_PASS — both frozen candidates pass all eight pre-registered
 gates; preferred by the frozen tie-break: `etf_static_defensive_v1` (C1).**
 A post-hoc matched cash control (below) narrows what the result means.
 Stage A authorizes a shared-ledger Stage B only; no production change.
+Stage B outcome: **STAGE_B_FAIL** (`stage_b/RESULTS_STAGE_B.md`).
 
 Pre-registration: `PREREGISTRATION.md` (commit `3d33501`, before any outcome).
 Machine-readable results: `RESULTS.json`. Inputs: `DATA_MANIFEST.json`,

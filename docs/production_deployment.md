@@ -472,8 +472,9 @@ parayabuck doctor --strict --paper --offline
 What it checks (from `src/parayabuck/cli.py: _run_doctor`):
 
 * **Config parses** — `config/settings.yaml` loads, strategy constructors
-  (`equity_residual_momentum_v3`, `crypto_low_variance_hysteresis_v1`)
-  validate name/version/timeframe/params digest.
+  (`equity_residual_momentum_v3_dividend_sleeve_v1`,
+  `crypto_low_variance_hysteresis_v1`) validate name/version/timeframe/params
+  digest. See the [dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md).
 * **PAPER invariants (with `--paper`):** `runtime.mode == paper`,
   `live.enabled == false`, `live.hard_dollar_cap == 0`,
   `PARAYABUCK_ENABLE_LIVE` not in `{1,true,yes}`.
@@ -815,8 +816,10 @@ curl -s http://127.0.0.1:8000/healthz | python3 -m json.tool   # must be 200
 curl -s http://127.0.0.1:8000/readyz  | python3 -m json.tool   # eventually ready=true
 parayabuck ops status
 parayabuck ops doctor
-# Dashboard via SSH tunnel must show: PAPER badge, equity_residual_momentum_v3
-# (weekly, alloc 0.55) and crypto_low_variance_hysteresis_v1 (96h, lookback 22, top2, ret rank 4, alloc 0.05), engine running
+# Dashboard via SSH tunnel must show: PAPER badge, Residual Momentum v3 + dividend-growth sleeve
+# (equity_residual_momentum_v3_dividend_sleeve_v1; unchanged V3 3.0.0 weekly core capped at 0.40,
+# static SCHD/VIG/DGRO sleeve 0.15 = 0.05 each, inside the 0.55 equity maximum)
+# and unchanged crypto_low_variance_hysteresis_v1 (96h, lookback 22, top2, ret rank 4, alloc 0.05), engine running
 ```
 
 Docker upgrade:
@@ -842,7 +845,12 @@ parayabuck ops status   # or curl /readyz
    reversible: `parayabuck backup` + config tarball.
 3. `sudo -u parayabuck git checkout <PREVIOUS_RELEASE_TAG>` — re-apply the
    pre-upgrade `.env` / `config/settings.yaml` snapshot if they were updated
-   (config is operator state — `git checkout` must not clobber it).
+   (config is operator state — `git checkout` must not clobber it). Set
+   `strategy.equity.name` back to the still-registered
+   `equity_residual_momentum_v3` and remove `core_allocation`,
+   `sleeve_allocation`, `sleeve_symbols`,
+   `universe.equity.sleeve_trade_symbols`, and
+   `risk.slot_exempt_equity_symbols`.
    `sudo -u parayabuck .venv/bin/pip install -r requirements.lock && sudo -u parayabuck .venv/bin/pip install . --no-deps`.
 4. Restore the runtime DB **only when** the new release corrupted or
    partially migrated it (visible as loud schema errors on startup:

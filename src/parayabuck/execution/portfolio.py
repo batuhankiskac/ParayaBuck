@@ -106,6 +106,14 @@ class PortfolioRiskLimits:
     minimum_cash: float = 0.40
     maximum_positions: int = 6
     maximum_crypto_positions: int = 3
+    # Equity sleeve ETFs held by a composed strategy's static sleeve (see
+    # ``parayabuck.portfolio.dividend_sleeve``). They are additive: their
+    # holdings, reservations and orders never consume account or market
+    # position slots.
+    slot_exempt_equity_symbols: tuple[str, ...] = ()
+
+    def is_slot_exempt(self, key: tuple[Market, str]) -> bool:
+        return key[0] == Market.EQUITY and key[1] in self.slot_exempt_equity_symbols
 
 
 def _validate_unique_account_positions(account: AccountSnapshot) -> None:
@@ -134,6 +142,7 @@ def portfolio_risk_limits_from_config(risk: RiskLimits) -> PortfolioRiskLimits:
         minimum_cash=risk.cash_buffer_pct,
         maximum_positions=risk.max_positions,
         maximum_crypto_positions=risk.max_crypto_positions,
+        slot_exempt_equity_symbols=risk.slot_exempt_equity_symbols,
     )
 
 
@@ -151,6 +160,153 @@ class PortfolioRiskOverlay:
         self.limits = limits or PortfolioRiskLimits()
 
     def apply(
+        self,
+        target: TargetPortfolio,
+        account: AccountSnapshot,
+        *,
+        market: Market,
+        approved_symbols: tuple[str, ...],
+        maximum_allocation: float,
+        mode: str,
+        enforce_drawdown_halt: bool = True,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+        open_order_symbols: tuple[str, ...] = (),
+    ) -> RiskOverlayDecision:
+        """Apply the risk overlay; compose a static sleeve when one is declared.
+
+        A target carrying ``metadata["sleeve"]`` (see
+        ``parayabuck.portfolio.dividend_sleeve``) is split: the core weights go
+        through the canonical overlay capped at the sleeve's
+        ``core_allocation``, then the sleeve weights are appended inside the
+        remaining gross, cash-buffer and market-allocation room.
+        """
+        sleeve = target.metadata.get("sleeve")
+        if not isinstance(sleeve, dict):
+            return self._apply_managed(
+                target,
+                account,
+                market=market,
+                approved_symbols=approved_symbols,
+                maximum_allocation=maximum_allocation,
+                mode=mode,
+                enforce_drawdown_halt=enforce_drawdown_halt,
+                reserved_position_keys=reserved_position_keys,
+                open_order_symbols=open_order_symbols,
+            )
+        if market != Market.EQUITY:
+            raise ValueError("Static sleeves are supported only for the equity market")
+        sleeve_symbols = tuple(canonical_symbol(str(symbol), market) for symbol in sleeve["symbols"])
+        if any(canonical_symbol(weight.symbol, market) in sleeve_symbols for weight in target.weights):
+            raise ValueError("Core target weights must not include sleeve symbols")
+        core_allocation = min(maximum_allocation, float(sleeve["core_allocation"]))
+        decision = self._apply_managed(
+            target,
+            account,
+            market=market,
+            approved_symbols=approved_symbols,
+            maximum_allocation=core_allocation,
+            mode=mode,
+            enforce_drawdown_halt=enforce_drawdown_halt,
+            reserved_position_keys=reserved_position_keys,
+            open_order_symbols=open_order_symbols,
+        )
+        equity = account.equity
+        approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
+        current: dict[str, float] = {}
+        external: dict[str, float] = {}
+        for position in account.positions:
+            symbol = canonical_symbol(position.symbol, position.market)
+            if position.market != market or position.is_flat or symbol not in sleeve_symbols:
+                continue
+            current[symbol] = current.get(symbol, 0.0) + position.market_value / equity
+            if position.external_qty > 1e-12:
+                external_weight = abs(position.external_qty) * position.current_price / equity
+                external[symbol] = external.get(symbol, 0.0) + external_weight
+        if sleeve["mode"] == "decide":
+            desired = {
+                canonical_symbol(str(symbol), market): float(weight) for symbol, weight in sleeve["weights"].items()
+            }
+        elif sleeve["mode"] == "hold":
+            desired = dict(current)
+        else:
+            raise ValueError(f"Unsupported sleeve mode: {sleeve['mode']}")
+        # Unapproved symbols are not tradable by this runtime and purely
+        # external inventory is never the bot's to size; a mixed position
+        # keeps its external floor, as in the core overlay.
+        desired = {
+            symbol: max(min(weight, self.limits.maximum_equity_asset), external.get(symbol, 0.0))
+            for symbol, weight in desired.items()
+            if symbol in approved
+            and symbol in sleeve_symbols
+            and not (symbol in external and current.get(symbol, 0.0) - external[symbol] <= 1e-12)
+        }
+        reduce_only = (
+            decision.halted
+            or "entry_risk_latch" in target.metadata
+            or bool(target.metadata.get("intermediate_risk_reduction"))
+        )
+        if reduce_only:
+            # Risk latches may only reduce exposure: never grow the sleeve.
+            desired = {symbol: min(weight, current.get(symbol, 0.0)) for symbol, weight in desired.items()}
+        core_managed = float(decision.target.metadata.get("risk_overlay_managed_exposure", 0.0))
+        immutable_sleeve = sum(
+            (
+                position.market_value
+                if canonical_symbol(position.symbol, position.market) not in approved
+                else abs(position.external_qty) * position.current_price
+            )
+            / equity
+            for position in account.positions
+            if not position.is_flat
+            and position.market == market
+            and (canonical_symbol(position.symbol, position.market) not in approved or position.external_qty > 1e-12)
+        )
+        room = max(
+            0.0,
+            min(
+                self.limits.maximum_gross - decision.gross_after,
+                1.0 - self.limits.minimum_cash - decision.gross_after,
+                self.limits.maximum_equity - immutable_sleeve - core_managed,
+                maximum_allocation - core_managed,
+            ),
+        )
+        managed_total = sum(max(0.0, weight - external.get(symbol, 0.0)) for symbol, weight in desired.items())
+        scaled = False
+        if managed_total > room + 1e-12:
+            scale = room / managed_total if managed_total > 0 else 0.0
+            desired = {
+                symbol: external.get(symbol, 0.0) + max(0.0, weight - external.get(symbol, 0.0)) * scale
+                for symbol, weight in desired.items()
+            }
+            scaled = True
+        sleeve_weights = tuple(
+            TargetWeight(symbol, weight, "static_sleeve")
+            for symbol, weight in sorted(desired.items())
+            if weight > 1e-12
+        )
+        sleeve_managed = sum(max(0.0, weight.weight - external.get(weight.symbol, 0.0)) for weight in sleeve_weights)
+        merged = tuple(sorted((*decision.target.weights, *sleeve_weights), key=lambda weight: weight.symbol))
+        adjusted = replace(
+            decision.target,
+            weights=merged,
+            cash_weight=max(0.0, 1.0 - sum(weight.weight for weight in merged)),
+            metadata={
+                **decision.target.metadata,
+                "risk_overlay_managed_exposure": core_managed + sleeve_managed,
+                "sleeve_weights": {weight.symbol: weight.weight for weight in sleeve_weights},
+                "sleeve_scaled_to_room": scaled,
+                "sleeve_reduce_only": reduce_only,
+            },
+        )
+        return RiskOverlayDecision(
+            adjusted,
+            decision.halted,
+            decision.reasons,
+            decision.gross_before,
+            decision.gross_after + sleeve_managed,
+        )
+
+    def _apply_managed(
         self,
         target: TargetPortfolio,
         account: AccountSnapshot,
@@ -313,6 +469,8 @@ class PortfolioRiskOverlay:
             and position.market == market
             and (canonical_symbol(position.symbol, position.market) not in approved or position.external_qty > 1e-12)
         )
+        # Sleeve ETFs are additive and never consume position slots.
+        fixed_slots = {slot for slot in fixed_slots if not self.limits.is_slot_exempt(slot)}
         fixed_current_symbols = {symbol for fixed_market, symbol in fixed_slots if fixed_market == market}
         mandatory_symbols = set(desired) & fixed_current_symbols
         available_global_slots = max(0, self.limits.maximum_positions - len(fixed_slots))
@@ -573,12 +731,19 @@ def reserve_opening_order_slots(
     market_position_limits: Mapping[Market, int] | None = None,
     reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     open_order_symbols: tuple[str, ...] = (),
+    slot_exempt_equity_symbols: tuple[str, ...] = (),
 ) -> tuple[PortfolioOrderRequest, ...]:
     """Admit opening BUYs against occupied and working account/market slots.
 
     Caller order is the existing deterministic planner priority. A requested
     exit never releases a slot; only a fresh zero-position snapshot does.
+    Slot-exempt sleeve ETFs are always admitted and never occupy a slot.
     """
+    exempt = frozenset(slot_exempt_equity_symbols)
+
+    def is_exempt(key: tuple[Market, str]) -> bool:
+        return key[0] == Market.EQUITY and key[1] in exempt
+
     slots = {
         (position.market, canonical_symbol(position.symbol, position.market))
         for position in account.positions
@@ -588,10 +753,11 @@ def reserve_opening_order_slots(
     for symbol in open_order_symbols:
         market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
         slots.add((market, canonical_symbol(symbol, market)))
+    slots = {slot for slot in slots if not is_exempt(slot)}
     admitted: list[PortfolioOrderRequest] = []
     for order in orders:
         key = (order.market, canonical_symbol(order.symbol, order.market))
-        if order.side == PortfolioOrderSide.SELL or key in slots:
+        if order.side == PortfolioOrderSide.SELL or key in slots or is_exempt(key):
             admitted.append(order)
         elif len(slots) < maximum_positions and (
             market_position_limits is None

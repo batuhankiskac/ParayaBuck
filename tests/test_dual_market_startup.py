@@ -139,7 +139,7 @@ def _assert_frozen_config():
     assert config.universe.equity.enabled and config.universe.crypto.enabled
     assert config.strategy.equity.enabled and config.strategy.crypto.enabled
     assert config.live.enabled is False
-    assert config.strategy.equity.name == "equity_residual_momentum_v3"
+    assert config.strategy.equity.name == "equity_residual_momentum_v3_dividend_sleeve_v1"
     assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
     # 2026-08-29 fix: equity 0.55 so 0.55+0.05==0.60 gross invariant
     assert config.strategy.equity.maximum_allocation == 0.55

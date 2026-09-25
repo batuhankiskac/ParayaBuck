@@ -1,10 +1,17 @@
 # Paper Operations
 
 Operational contract for the ParayaBuck PAPER runtime (dual-market:
-`equity_residual_momentum_v3` on 1d weekly cadence, `crypto_low_variance_hysteresis_v1`
-on 1d 96h cadence, retention rank 4, lookback 22, top2, max allocation 0.05). v1 identities remain frozen historical baselines
-This document is a companion to
-`docs/operations.md` and `docs/validated_strategies.md`.
+`equity_residual_momentum_v3_dividend_sleeve_v1` / **Residual Momentum v3 +
+dividend-growth sleeve**, implemented by
+`src/parayabuck/portfolio/dividend_sleeve.py`, with unchanged V3 3.0.0 weekly
+core at `core_allocation: 0.40` and static SCHD/VIG/DGRO
+`sleeve_allocation: 0.15` at 0.05 each inside the 0.55 equity maximum;
+`crypto_low_variance_hysteresis_v1` remains unchanged on 1d 96h cadence,
+retention rank 4, lookback 22, top2, allocation 0.05). v1 identities remain
+frozen historical baselines. See the
+[dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md).
+This document is a companion to `docs/operations.md` and
+`docs/validated_strategies.md`.
 
 ## Startup contract (Phase 4)
 
@@ -16,16 +23,19 @@ before the next begins:
    any other combination (`EngineRuntime._validate_execution_mode`).
 2. **Universe preflight** — active equity/crypto universes are validated
    (freshness, scanner digest, candidate-pool membership) with a
-   deterministic configured fallback when no scanner output exists yet.
+   deterministic configured fallback when no scanner output exists yet. The
+   equity stream pins `universe.equity.sleeve_trade_symbols`; those symbols are
+   hidden from V3 scoring, which ranks 23 core slots instead of 26.
 3. **Startup reconciliation** — the broker is reconciled before any
    decision; a verified reconcile clears persisted safety incidents so a
    restart never resurrects them.
 4. **Strategy runtimes** — one `PortfolioRuntime` per market on a SINGLE
-   shared repository/account: equity weekly (1d), crypto 96h
-   (`rebalance_hours: 96`, 1d). Each receives an immutable active product
-   universe snapshot: `selected_symbols` owns PIT eligibility and
-   `observation_set` owns bounded stream completeness. Missing/invalid
-   universe dependencies fail before a portfolio session row is opened.
+   shared repository/account: equity core weekly (1d), with the static sleeve
+   selected on the first weekly decision of each calendar month or while empty
+   and otherwise held; crypto 96h (`rebalance_hours: 96`, 1d). Each receives
+   an immutable active product universe snapshot: `selected_symbols` owns PIT
+   eligibility and `observation_set` owns bounded stream completeness. Missing
+   or invalid universe dependencies fail before a portfolio session row is opened.
 5. **Warmup** — each runtime seeds completed bars until every decision-required
    symbol meets the strategy's minimum history and the latest timestamps are
    aligned (equity: beta window + 1; crypto: variance lookback + 1). One ready
@@ -35,14 +45,20 @@ before the next begins:
    parity) unless the account already holds managed positions in that market
    (`already_invested`) or a decision already exists (restart:
    `catch_up_superseded`/`duplicate_decision`). Tagged
-   `decision_origin: startup_catch_up`. Expected no-trade gates are explicit
-   result statuses; unexpected invariant/persistence/provider exceptions fail
-   startup instead of being converted to a blocked informational status.
+   `decision_origin: startup_catch_up`; it applies the normal sleeve rule:
+   select on the first weekly decision of the calendar month or while empty,
+   otherwise hold. Expected no-trade gates are explicit result statuses;
+   unexpected invariant/persistence/provider exceptions fail startup instead of
+   being converted to a blocked informational status.
 7. **Account reconciliation** — a fresh broker snapshot is taken between
    phases and before any order sizing (stale account data pauses decisions
    for that market).
 8. **Ready** — the runtime enters `running` when both markets have ready
    symbol history and the decision loop is live.
+
+The sleeve symbols in `risk.slot_exempt_equity_symbols` never count toward the
+8-position cap. Daily-loss, drawdown, entry-latch, and intermediate-reduction
+latches never grow the sleeve.
 
 Offline verification of this contract lives in
 `tests/test_runtime_product_universe.py`, `tests/test_dual_market_startup.py`

@@ -105,13 +105,16 @@ def _target(
 
 
 def test_frozen_strategy_parameters_and_paper_mode() -> None:
-    """The config selects the validated V3 equity and T1 hysteresis crypto PAPER specs;
+    """The config selects the V3 + dividend-sleeve equity and T1 hysteresis crypto PAPER specs;
     runtime mode
     stays paper (no live enablement)."""
     config = load_config()
     assert config.runtime.mode == RuntimeMode.PAPER
-    assert config.strategy.equity.name == "equity_residual_momentum_v3"
-    assert dict(config.strategy.equity.parameters) == _PRODUCTION_EQUITY_PARAMETERS
+    assert config.strategy.equity.name == "equity_residual_momentum_v3_dividend_sleeve_v1"
+    parameters = dict(config.strategy.equity.parameters)
+    sleeve = {key: parameters.pop(key) for key in ("core_allocation", "sleeve_allocation", "sleeve_symbols")}
+    assert parameters == _PRODUCTION_EQUITY_PARAMETERS
+    assert sleeve == {"core_allocation": 0.40, "sleeve_allocation": 0.15, "sleeve_symbols": ["SCHD", "VIG", "DGRO"]}
     assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
     assert dict(config.strategy.crypto.parameters) == _PRODUCTION_CRYPTO_PARAMETERS
 

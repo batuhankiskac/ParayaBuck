@@ -146,8 +146,11 @@ def test_shipped_paper_config_has_integrated_cap8_with_other_limits_unchanged() 
     assert config.risk.max_crypto_exposure_pct == 0.10
     assert config.risk.daily_loss_limit_pct == 0.005
     assert config.risk.max_drawdown_pct == 0.05
-    assert config.strategy.equity.name == "equity_residual_momentum_v3"
+    assert config.strategy.equity.name == "equity_residual_momentum_v3_dividend_sleeve_v1"
     assert config.strategy.equity.maximum_allocation == 0.55
+    assert config.strategy.equity.parameters["core_allocation"] == 0.40
+    assert config.strategy.equity.parameters["sleeve_allocation"] == 0.15
+    assert config.risk.slot_exempt_equity_symbols == ("SCHD", "VIG", "DGRO")
     assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
     assert config.strategy.crypto.maximum_allocation == 0.05
     assert config.execution.rebalance_band_pct == 0.005

@@ -18,7 +18,10 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED = {"equity": ("equity_residual_momentum_v3", 0.55), "crypto": ("crypto_low_variance_hysteresis_v1", 0.05)}
+EXPECTED = {
+    "equity": ("equity_residual_momentum_v3_dividend_sleeve_v1", 0.55),
+    "crypto": ("crypto_low_variance_hysteresis_v1", 0.05),
+}
 TERMINAL = {"filled", "fill", "rejected", "canceled", "cancelled", "expired", "done_for_day"}
 AMBIGUOUS = {"reconciliation_required", "manual_intervention_required"}
 KNOWN = (

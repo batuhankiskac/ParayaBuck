@@ -58,6 +58,9 @@ universe:
     - SH
     - PSQ
     - DOG
+    - SCHD
+    - VIG
+    - DGRO
     allowlist_symbols: []
     denylist_symbols: []
     supported_exchanges: [NASDAQ, NYSE, ARCA, AMEX, BATS]
@@ -65,6 +68,12 @@ universe:
     - SH
     - PSQ
     - DOG
+    # Dividend-growth sleeve ETFs of the equity strategy: pinned into the
+    # 30-symbol IEX stream (V3 keeps 23 ranked slots) and hidden from V3.
+    sleeve_trade_symbols:
+    - SCHD
+    - VIG
+    - DGRO
     candidate_universe_path: data/universe/equity_candidates.json
     active_universe_path: data/runtime/active_equity_universe.json
     active_universe_max_age_hours: 36
@@ -139,13 +148,19 @@ strategy:
   # identities. LIVE remains disabled.
   equity:
     enabled: true
-    name: equity_residual_momentum_v3
-    # Existing PAPER equity sleeve; promotion changes only the strategy
-    # identity, not the allocation or risk policy.
+    # 2026-09-25: V3 core 0.40 + dividend-growth sleeve 0.15 (SCHD/VIG/DGRO,
+    # 1/3 each, decided on the first weekly decision of each month, held
+    # otherwise). Validated by docs/research/sleeve_candidates_v2_v3_closure.md
+    # and docs/research/dividend_sleeve_production_v1.md. Rollback: name
+    # equity_residual_momentum_v3 without the sleeve keys below.
+    name: equity_residual_momentum_v3_dividend_sleeve_v1
     # 2026-08-29 fix (kripto alım arızası): equity 0.60→0.55 so that
     # equity 0.55 + crypto 0.05 never exceeds max_gross 0.60 and cash stays >=0.40.
     maximum_allocation: 0.55
     parameters:
+      core_allocation: 0.40
+      sleeve_allocation: 0.15
+      sleeve_symbols: [SCHD, VIG, DGRO]
       formation_bars: 252
       skip_bars: 21
       beta_window_bars: 273
@@ -182,6 +197,8 @@ risk:
   max_positions: 8
   daily_loss_limit_pct: 0.005
   max_drawdown_pct: 0.05
+  # Additive dividend-growth sleeve ETFs never consume the 8 position slots.
+  slot_exempt_equity_symbols: [SCHD, VIG, DGRO]
 backtest:
   initial_cash: 100000
   slippage_bps: 2

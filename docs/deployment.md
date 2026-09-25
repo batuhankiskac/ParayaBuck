@@ -69,7 +69,7 @@ sudo systemctl status parayabuck
 sudo journalctl -u parayabuck -f
 ```
 
-## Google Cloud update procedure (PAPER v3 release)
+## Google Cloud update procedure (current PAPER dividend-sleeve release)
 
 1. **Stop safely**
 
@@ -131,8 +131,13 @@ sudo journalctl -u parayabuck -f
    ```
 
    Dashboard (`http://127.0.0.1:8000/` via SSH tunnel) must show: PAPER
-   badge, `equity_residual_momentum_v3` (weekly, allocation 0.55) and `crypto_low_variance_hysteresis_v1`
-   (96h, lookback 22, top2, retention rank 4, allocation 0.05) cards, engine running, catch-up status per card.
+   badge, **Residual Momentum v3 + dividend-growth sleeve**
+   (`equity_residual_momentum_v3_dividend_sleeve_v1`; unchanged V3 3.0.0 weekly
+   core capped at 0.40 plus static SCHD/VIG/DGRO sleeve at 0.15, 0.05 each,
+   inside the 0.55 equity maximum), and unchanged
+   `crypto_low_variance_hysteresis_v1` (96h, lookback 22, top2, retention rank
+   4, allocation 0.05) cards, engine running, catch-up status per card. See the
+   [dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md).
 9. **Verify the persisted catch-up decision** (fresh account only):
 
    ```bash
@@ -142,11 +147,14 @@ sudo journalctl -u parayabuck -f
       FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 8;"
    ```
 
-   Expect `origin='startup_catch_up'` for the newest rows; later scheduled
-   decisions carry `'scheduled'`. An account that already holds managed
-   positions shows catch-up status `already_invested` (positions stay
-   managed; the first v3 boundary rebalances them normally) — never a
-   duplicate order set.
+   Expect `origin='startup_catch_up'` for the newest rows; current equity rows
+   use `strategy_name='equity_residual_momentum_v3_dividend_sleeve_v1'`, and
+   later scheduled decisions carry `'scheduled'`. An account that already holds
+   managed positions shows catch-up status `already_invested` (positions stay
+   managed; the first scheduled equity boundary rebalances them normally) —
+   never a duplicate order set. The static sleeve follows the normal rule:
+   select on the first weekly decision of the calendar month or while empty,
+   otherwise hold.
 
 ## Rollback
 
@@ -154,7 +162,12 @@ sudo journalctl -u parayabuck -f
 2. Snapshot the CURRENT state (backup CLI + config tarball) in case the
    rollback itself must be reverted.
 3. `git checkout <PREVIOUS_RELEASE_TAG>`; re-apply the pre-deploy config/env
-   snapshot (config is operator state — `git checkout` must NOT clobber it);
+   snapshot (config is operator state — `git checkout` must NOT clobber it).
+   Set `strategy.equity.name` back to the still-registered
+   `equity_residual_momentum_v3` and remove `core_allocation`,
+   `sleeve_allocation`, `sleeve_symbols`,
+   `universe.equity.sleeve_trade_symbols`, and
+   `risk.slot_exempt_equity_symbols`; then run
    `pip install -r requirements.lock && pip install -e . --no-deps`.
 4. Restore the runtime DB only when the new release corrupted/partially
    migrated it (loud schema errors on startup). A healthy new ledger is kept:

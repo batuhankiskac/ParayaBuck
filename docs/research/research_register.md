@@ -792,3 +792,15 @@ max DD 18.2% / 18.1% vs 19.4%). Not statistically established (Holm p ≈
 production-integration design only; the shipped configuration is unchanged.
 Full record: `docs/research/sleeve_candidates_v2_v3_closure.md` (evidence:
 tag `archive/research/sleeve-candidates-v2-v3-2026-09`).
+
+## Dividend-growth sleeve — production integration (2026-09-25)
+
+`dividend_growth_v1` shipped as the PAPER equity identity
+`equity_residual_momentum_v3_dividend_sleeve_v1` (V3 core 0.40 + SCHD/VIG/DGRO
+0.15, monthly, slot-exempt, pinned into the 30-symbol stream). Shared-ledger
+validation of the production code path: CAGR 7.22% vs 6.69%, Sharpe 0.780 vs
+0.675, max DD 17.2% vs 19.4%, ahead of shipped A at 1x/2x/3x costs; arm A is
+reproduced exactly under the new code. Caveat: validation-window CAGR 4.23% vs
+4.47%. `gold_v1b` is deferred to the operator. Full record:
+`docs/research/dividend_sleeve_production_v1.md` (evidence: tag
+`archive/research/dividend-sleeve-production-v1-2026-09`).

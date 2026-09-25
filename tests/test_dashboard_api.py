@@ -222,9 +222,9 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkey
     equity = overview["equity"]
     crypto = overview["crypto"]
 
-    assert equity["name"] == "equity_residual_momentum_v3"
+    assert equity["name"] == "equity_residual_momentum_v3_dividend_sleeve_v1"
     assert equity["status"] == "stopped"
-    assert equity["strategy"]["display_name"] == "Residual Momentum v3 (MH-RAW consensus)"
+    assert equity["strategy"]["display_name"] == "Residual Momentum v3 + dividend-growth sleeve"
     assert equity["strategy"]["signal_timeframe"] == "1d"
     assert equity["maximum_allocation_pct"] == pytest.approx(55.0)
     assert equity["observation_set_size"] is not None

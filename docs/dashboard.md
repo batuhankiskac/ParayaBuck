@@ -53,21 +53,29 @@ shows **LIVE (devre dışı)** — visually dimmed and struck through. The same
 state is exposed as `mode.badge` / `mode.live_active` / `mode.live_disabled`
 in the overview payload.
 
-### Equity card — "Residual Momentum v3 (weekly)"
-Strategy contract (display name, signal timeframe `1d`, rebalance cadence
-`weekly`, minimum history) from `StrategySpec` via `_strategy_metadata`.
+### Equity card — "Residual Momentum v3 + dividend-growth sleeve"
+The active identity is `equity_residual_momentum_v3_dividend_sleeve_v1`,
+implemented by `src/parayabuck/portfolio/dividend_sleeve.py`. Its unchanged V3
+3.0.0 core keeps the `1d` signal and `weekly` rebalance contract from
+`StrategySpec` via `_strategy_metadata`; the static SCHD/VIG/DGRO sleeve is
+selected on the first weekly decision of each calendar month or while empty and
+is otherwise held. See the
+[production evidence](research/dividend_sleeve_production_v1.md).
+
 `Eligible pool` — shortlist count from
 `universe.equity.candidate_universe_path`; `observation set` — active-universe
-`selected_symbols` size; `positions` / `current allocation %` — account
-positions weighted by market value over equity; `maximum allocation %` —
-`strategy.equity.maximum_allocation` (0.55). Status derivation:
-active / warming / halted (entry halt or circuit breaker) / scanner_issue /
-disabled / engine states. `Next expected decision` — the last persisted
-`portfolio_decisions` timestamp advanced by the strategy's rebalance policy
-(`weekly` → next ISO-week start, `hours:N` → +N hours); it is an expected
-boundary, not a guarantee. Holdings carry target weight (from the decision's
-`target_json`), current weight (account), rank among the decision's
-`selected_symbols`, and the per-weight `reason` + strategy `hypothesis`.
+size; `positions` / `current allocation %` — account positions weighted by
+market value over equity; `maximum allocation %` —
+`strategy.equity.maximum_allocation` (0.55), split internally into 0.40 core
+and 0.15 sleeve (0.05 per ETF). Status derivation: active / warming / halted
+(entry halt or circuit breaker) / scanner_issue / disabled / engine states.
+`Next expected decision` — the last persisted `portfolio_decisions`
+timestamp advanced by the strategy's rebalance policy (`weekly` → next ISO-week
+start); it is an expected boundary, not a guarantee. Sleeve ETFs are pinned in the 30-symbol IEX stream
+through `universe.equity.sleeve_trade_symbols`, hidden from V3 scoring, leaving
+23 V3-ranked slots instead of 26. `risk.slot_exempt_equity_symbols` excludes
+them from the 8-position cap. Holdings show target/current weight and the
+persisted reason; only V3 holdings have a V3 rank.
 
 ### Crypto card — "Low Realized Variance Hysteresis v1 (96h, retention 4)"
 Same shape plus: `lookback 22g` (the frozen `variance_lookback_days`),
@@ -85,13 +93,14 @@ with the strategy's own `realized_volatility` over cached 1d bars
 `Gross exposure` vs `max_gross_exposure_pct`, `cash` vs
 `cash_buffer_pct`, `equity exposure`, `crypto exposure` vs
 `max_crypto_exposure_pct`, `max drawdown` vs `max_drawdown_pct`, `daily PnL`
-vs `daily_loss_limit_pct` — all from the account snapshot and
-`config.risk`. `Entry risk latch` — `RuntimeHealth.entry_risk_latch`.
-`Circuit breaker` — `RuntimeHealth.circuit_breaker_reason`. `Safety
-incidents` — `safety_incidents` rows in the ledger. `Risk epoch` — latest
-`risk_state` row (session date, day-start equity, peak equity, consecutive
-losses). Nothing critical is hidden: the panel always renders the latch,
-breaker and incidents explicitly.
+vs `daily_loss_limit_pct` — all from the account snapshot and `config.risk`.
+`Entry risk latch` — `RuntimeHealth.entry_risk_latch`. Daily-loss, drawdown,
+entry-latch, and intermediate-reduction latches never grow the dividend sleeve.
+`Circuit breaker` — `RuntimeHealth.circuit_breaker_reason`. `Safety incidents`
+— `safety_incidents` rows in the ledger. `Risk epoch` — latest `risk_state` row
+(session date, day-start equity, peak equity, consecutive losses). Nothing
+critical is hidden: the panel always renders the latch, breaker and incidents
+explicitly.
 
 ### Execution panel
 Open orders and recent fills (25 each) queried read-only from
@@ -108,9 +117,12 @@ telemetry module is available. Reconciliation anomalies come from
 `Broad discovered` — candidate payload size
 (`candidate_universe_path` for equity, `candidate_symbols` for crypto);
 `eligible pool` — equity shortlist / crypto candidates; `observation set` —
-active-universe `selected_symbols`; `last refresh` /
-`data_timestamp` / `scanner status` / `scanner version` from the active
-universe JSON; `next refresh` / `refresh errors` from
+active-universe selection. The 30-symbol equity IEX stream pins SCHD/VIG/DGRO
+through `universe.equity.sleeve_trade_symbols`; they are hidden from V3 scoring,
+leaving 23 ranked core slots instead of 26, and
+`risk.slot_exempt_equity_symbols` keeps them outside the 8-position cap. `Last
+refresh` / `data_timestamp` / `scanner status` / `scanner version` come from the
+active universe JSON; `next refresh` / `refresh errors` from
 `RuntimeHealth.universe_refresh`; `pinned symbols` — runtime managed pins
 (equity) or `universe.crypto.pinned_symbols`. Symbol lists are rendered in a
 collapsible `<details>` and capped client-side (120 chips) so hundreds of
@@ -129,11 +141,14 @@ heartbeat. `Restart count` — Worker D's `runtime_metrics().restart_count`
 has not landed.
 
 ### Explanations
-Per-holding structured reasons derived from the persisted decision
+Per-holding structured reasons derive from the persisted decision
 (`target_json.metadata`: `selected_symbols`, `qualified_symbols`,
-`hypothesis`, `risk_off_detail`) matched against current account positions —
-rank, reason, hypothesis, universe version, rebalance reason, risk
-multiplier. Deliberately concise; no debug dumps.
+`hypothesis`, `risk_off_detail`) matched against current account positions.
+Core holdings keep their rank among the decision's `selected_symbols`;
+SCHD/VIG/DGRO sleeve holdings are static, have no V3 rank, and carry the
+`static_sleeve` reason. The
+panel also shows universe version, rebalance reason, and risk multiplier where
+available. Deliberately concise; no debug dumps.
 
 ## Frontend
 `templates/index.html` (Jinja2) + `static/js/app.js` + `static/css/style.css`.

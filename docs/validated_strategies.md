@@ -78,11 +78,28 @@ authoritative source for the currently selected product values.
 
 ## Current PAPER equity identity
 
-`equity_residual_momentum_v3` is the current PAPER equity identity. It keeps
-the production eligibility, positive 12-1 gate, risk overlay, inverse-vol
-sizing, and weekly cadence while replacing only the cross-sectional score with
-the frozen raw 6-1/9-1/12-1 percentile-rank consensus. This does not imply LIVE
-readiness.
+`equity_residual_momentum_v3_dividend_sleeve_v1` (**Residual Momentum v3 +
+dividend-growth sleeve**), implemented by
+`src/parayabuck/portfolio/dividend_sleeve.py`, is the current PAPER equity
+identity. It retains `equity_residual_momentum_v3` 3.0.0 unchanged: production
+eligibility, the positive 12-1 gate, risk overlay, inverse-vol sizing, weekly
+cadence, and the frozen raw 6-1/9-1/12-1 percentile-rank consensus. The market
+`maximum_allocation` remains 0.55, split internally into
+`core_allocation: 0.40` and `sleeve_allocation: 0.15`; the static sleeve holds
+SCHD, VIG, and DGRO at 0.05 each. It is selected on the first weekly decision
+of each calendar month or while empty and is otherwise held. See the
+[production evidence](research/dividend_sleeve_production_v1.md).
+
+`universe.equity.sleeve_trade_symbols` pins the sleeve ETFs into the
+30-symbol IEX equity stream and hides them from V3 scoring, reducing V3-ranked
+slots from 26 to 23. `risk.slot_exempt_equity_symbols` excludes them from the
+8-position cap. Daily-loss, drawdown, entry-latch, and
+intermediate-reduction latches never grow the sleeve.
+
+For rollback, select the still-registered `equity_residual_momentum_v3` and
+remove `core_allocation`, `sleeve_allocation`, `sleeve_symbols`,
+`universe.equity.sleeve_trade_symbols`, and
+`risk.slot_exempt_equity_symbols`. This does not imply LIVE readiness.
 
 ## Current PAPER crypto identity
 

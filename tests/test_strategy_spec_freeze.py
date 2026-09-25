@@ -86,10 +86,10 @@ def _params_dict(raw: dict[str, object]) -> dict[str, object]:
 # ---------------------------------------------------------------------------
 
 
-def test_production_equity_selection_is_v3(config: Config) -> None:
+def test_production_equity_selection_is_v3_dividend_sleeve(config: Config) -> None:
     equity = config.strategy.equity
     assert equity.enabled is True
-    assert equity.name == "equity_residual_momentum_v3"
+    assert equity.name == "equity_residual_momentum_v3_dividend_sleeve_v1"
     # 2026-08-29 fix: equity 0.60→0.55 for capital invariant (0.55+0.05==0.60)
     # see kripto alım arızası report. Alpha params remain frozen.
     assert equity.maximum_allocation == 0.55
@@ -117,6 +117,7 @@ def test_production_selections_are_the_only_product_strategies(config: Config) -
         "equity_residual_momentum_v1",
         "equity_residual_momentum_v2",
         "equity_residual_momentum_v3",
+        "equity_residual_momentum_v3_dividend_sleeve_v1",
         "crypto_low_variance_v1",
         "crypto_low_variance_v2",
         "crypto_low_variance_hysteresis_v1",

@@ -301,7 +301,7 @@ def _refresh_equity_universe_with_clients(
     history = history_factory()
     reserved = {
         *universe.reference_symbols,
-        *universe.inverse_trade_symbols,
+        *universe.pinned_trade_symbols,
         *universe.allowlist_symbols,
     }
     cached_history: dict[str, list[tuple[str, float, float, float, float, float]]] = {}
@@ -491,7 +491,7 @@ def _equity_observation_set(
         timeframe=strategy.timeframe,
         decision_timestamp=data_timestamp,
         maximum_stream_symbols=universe.maximum_stream_symbols,
-        pinned_symbols=(*universe.reference_symbols, *universe.inverse_trade_symbols),
+        pinned_symbols=(*universe.reference_symbols, *universe.pinned_trade_symbols),
         ordinary_alpha_excluded_symbols=universe.ordinary_alpha_excluded_symbols,
         scanner_fallback=result.observation_set,
     )

@@ -16,8 +16,9 @@ tradeable universe on a pre-session cadence from the broad eligible market.
 
 - Equity: every active/tradable US equity on the supported exchanges
   (~13,000+) → Stage-A shortlist (trailing median dollar volume,
-  `universe.equity.target_shortlist`, default 300) → scanner → streamed
-  observation set (`maximum_stream_symbols`, default 30).
+  `universe.equity.target_shortlist`, default 300) → scanner → 30-symbol IEX
+  observation set. `universe.equity.sleeve_trade_symbols` pins SCHD/VIG/DGRO;
+  they are hidden from V3 scoring, leaving 23 ranked core slots instead of 26.
 - Crypto: all Alpaca tradable USD pairs → scanner (liquidity, spread, ATR,
   BTC-correlation, category limits) → streamed observation set
   (`maximum_stream_symbols`, default 12).
@@ -47,9 +48,8 @@ only documented:
 13,000+ equity / all crypto
         ↓ eligibility scanner (tradability-first)
 broad candidate pool (equity ~300 shortlist)
-        ↓ STRATEGY ALPHA RANKING on batch historical data
-top observation candidates (<= maximum_stream_symbols)
-        ↓ streamed (~30 equity / ~12 crypto)
+        ↓ configured equity sleeve pins + V3 alpha ranking (23 ranked slots)
+streamed (30 equity / ~12 crypto)
 positions
 ```
 
@@ -60,9 +60,11 @@ Mechanics:
   deliberately larger than the stream capacity. `observation_set` on the
   scanner result is the fail-safe quality-ranked stream set (with
   issuer/sector/category diversity), used when no strategy ranker exists.
-- The strategy alpha ranks the pool: `PortfolioStrategy.rank_candidates`
+- The V3 core alpha ranks the pool: `PortfolioStrategy.rank_candidates`
   reuses the EXACT scoring code of `decide` (BACKTEST/PAPER/LIVE parity), so
-  the live observation set is selected by the same alpha the strategy trades.
+  its live observation set is selected by the same alpha it trades. The
+  current equity wrapper streams its configured sleeve pins separately; they
+  are not V3 score candidates.
 - `build_observation_set` (universe/observation_set.py) produces the streamed
   set: pinned symbols (references, inverse hedges, configured pins, managed
   positions) first, then the alpha-top candidates up to
@@ -161,6 +163,10 @@ one market's target can never push the combined account outside its limits,
 and one surviving crypto asset cannot absorb the sleeve (per-asset cap binds
 before renormalization).
 
+For the current PAPER equity wrapper, `maximum_allocation=0.55` is split
+internally into the unchanged V3 `core_allocation=0.40` and static
+`sleeve_allocation=0.15`; crypto remains `maximum_allocation=0.05`.
+
 Scanner isolation: equity and crypto universes refresh independently; a
 failed equity scan does not block crypto decisions and vice versa.
 
@@ -172,10 +178,12 @@ portfolio/risk layer is the ONLY authority that:
 - enforces account-level gross exposure and the cash buffer;
 - enforces per-market sleeve and per-asset caps;
 - enforces the account-wide `max_positions` count across equity and crypto,
-  plus the crypto-specific `max_crypto_positions` count;
+  plus the crypto-specific `max_crypto_positions` count; sleeve symbols in
+  `risk.slot_exempt_equity_symbols` do not count toward the 8-position cap;
 - orders SELL before BUY and sizes against the fresh account;
 - halts entries on daily-loss / drawdown breaches (production; backtest
-  records shadow events and keeps trading);
+  records shadow events and keeps trading); daily-loss, drawdown, entry-latch,
+  and intermediate-reduction latches never grow the dividend sleeve;
 - persists decisions, orders and rebalance phases so restart recovery
   resumes exactly (idempotency, two-phase rebalance, no duplicate orders).
 
@@ -190,7 +198,7 @@ runtime state or authorize PAPER/LIVE. The runtime does not read generated
 reports or benchmark output; `config/settings.yaml` and the product factory
 are the strategy-selection authorities.
 
-## 8. Strategy registry (as of the PAPER v3 release)
+## 8. Strategy registry (current PAPER dividend-sleeve release)
 
 **The complete registry** — `_PORTFOLIO_STRATEGY_FACTORIES` and
 `supported_portfolio_strategies()` (config-selectable):
@@ -199,12 +207,20 @@ are the strategy-selection authorities.
 |---|---|---|---|---|---|
 | `equity_residual_momentum_v1` | equity | 1d | 1d | monthly | frozen historical baseline |
 | `equity_residual_momentum_v2` | equity | 1d | 1d | weekly | frozen prior PAPER identity (superseded 2026-08-24) |
-| `equity_residual_momentum_v3` | equity | 1d | 1d | weekly | PAPER production selection (2026-08-24) |
+| `equity_residual_momentum_v3` | equity | 1d | 1d | weekly | registered rollback identity |
+| `equity_residual_momentum_v3_dividend_sleeve_v1` | equity | 1d | 1d | weekly core; sleeve on first weekly decision of calendar month or while empty | PAPER production selection |
 | `crypto_low_variance_v1` | crypto | 1d | 1d | hours:168 | frozen historical baseline |
 | `crypto_low_variance_v2` | crypto | 1d | 1d | hours:96 | frozen prior PAPER selection (superseded 2026-08-26) |
 | `crypto_low_variance_hysteresis_v1` | crypto | 1d | 1d | hours:96 (retention rank 4, lookback 22, top2, alloc 0.05) | PAPER production selection (2026-08-26) |
 Unknown strategy names are rejected with
-`Unsupported portfolio strategy: <name>`.
+`Unsupported portfolio strategy: <name>`. The current wrapper's display name
+is **Residual Momentum v3 + dividend-growth sleeve** and its module is
+`src/parayabuck/portfolio/dividend_sleeve.py`; see the
+[production evidence](research/dividend_sleeve_production_v1.md). Rollback
+selects `equity_residual_momentum_v3` and removes `core_allocation`,
+`sleeve_allocation`, `sleeve_symbols`,
+`universe.equity.sleeve_trade_symbols`, and
+`risk.slot_exempt_equity_symbols`.
 
 Versioning: strategies are immutable once validated; a change to the signal
 specification is a NEW named strategy, never a silent parameter mutation.

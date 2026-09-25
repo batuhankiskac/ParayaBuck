@@ -363,7 +363,7 @@ class PortfolioRuntime:
         snapshot, risk result, or planned orders. It is persisted for
         operations and deliberately cannot participate in strategy math.
         """
-        if self.strategy.name != "equity_residual_momentum_v3":
+        if not self.strategy.name.startswith("equity_residual_momentum_v3"):
             return target
         verified = {
             symbol: timestamp.isoformat()
@@ -1093,6 +1093,7 @@ class PortfolioRuntime:
                 account,
                 maximum_positions=self.risk_overlay.limits.maximum_positions,
                 market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
+                slot_exempt_equity_symbols=self.risk_overlay.limits.slot_exempt_equity_symbols,
                 reserved_position_keys=reserved_slots,
                 open_order_symbols=tuple(sorted(open_order_symbols)),
             )
@@ -1197,6 +1198,7 @@ class PortfolioRuntime:
             admission.account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
             market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
+            slot_exempt_equity_symbols=self.risk_overlay.limits.slot_exempt_equity_symbols,
             reserved_position_keys=self._effective_reserved_position_keys(reserved_position_keys),
             open_order_symbols=tuple(sorted(self.broker.all_open_order_symbols())),
         )
@@ -1474,6 +1476,7 @@ class PortfolioRuntime:
             account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
             market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
+            slot_exempt_equity_symbols=self.risk_overlay.limits.slot_exempt_equity_symbols,
             reserved_position_keys=reserved_slots,
             open_order_symbols=tuple(sorted(open_order_symbols)),
         )

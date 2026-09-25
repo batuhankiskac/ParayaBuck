@@ -35,9 +35,9 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             INSERT INTO portfolio_runtime_sessions VALUES ('session-2','config-1','paper');
         """)
         decisions = [
-            ("eq-scheduled-1", "equity", "scheduled", "equity_residual_momentum_v3"),
-            ("eq-catchup-1", "equity", "startup_catch_up", "equity_residual_momentum_v3"),
-            ("eq-scheduled-2", "equity", "scheduled", "equity_residual_momentum_v3"),
+            ("eq-scheduled-1", "equity", "scheduled", "equity_residual_momentum_v3_dividend_sleeve_v1"),
+            ("eq-catchup-1", "equity", "startup_catch_up", "equity_residual_momentum_v3_dividend_sleeve_v1"),
+            ("eq-scheduled-2", "equity", "scheduled", "equity_residual_momentum_v3_dividend_sleeve_v1"),
             ("cr-scheduled-1", "crypto", "scheduled", "crypto_low_variance_hysteresis_v1"),
             ("cr-catchup-1", "crypto", "startup_catch_up", "crypto_low_variance_hysteresis_v1"),
             ("cr-scheduled-2", "crypto", "scheduled", "crypto_low_variance_hysteresis_v1"),

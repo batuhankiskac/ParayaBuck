@@ -2,7 +2,7 @@
 
 > **Project status — production-only surface**
 >
-> - **Equity:** `equity_residual_momentum_v3` — 1d signal, weekly rebalance, 0.55 allocation; positive 12-1 gate, multi-horizon consensus, inverse-vol sizing, **LIVE disabled**
+> - **Equity:** `equity_residual_momentum_v3_dividend_sleeve_v1` (Residual Momentum v3 + dividend-growth sleeve) — 0.55 maximum allocation split internally into the unchanged weekly V3 3.0.0 core (`core_allocation: 0.40`) and a static SCHD/VIG/DGRO sleeve (`sleeve_allocation: 0.15`, 0.05 each), selected on the first weekly decision of each calendar month or while empty and otherwise held; **LIVE disabled**
 > - **Crypto:** `crypto_low_variance_hysteresis_v1` — 1d signal, 96h rebalance, 0.05 allocation; validated low-variance hysteresis product identity
 > - **Dataset:** point-in-time historical manifests and corporate-action data remain under `data/historical/`; large provider datasets are local/ignored
 
@@ -13,13 +13,15 @@ execution through the same pipeline in backtest, paper, and live modes.
 Live trading is disabled by default. Supplying Alpaca credentials alone cannot
 enable it (see [Enabling live safely](#enabling-live-safely)).
 
-## Current PAPER strategies (2026-08-26)
+## Current PAPER strategies
 
-The PAPER product runs two validated identities (see `docs/validated_strategies.md`):
+The PAPER product runs the current validated equity and crypto identities
+(see `docs/validated_strategies.md` and the
+[dividend-sleeve production evidence](docs/research/dividend_sleeve_production_v1.md)):
 
 | Market | Strategy | Signal | Rebalance | Allocation |
 |---|---|---|---|---|
-| Equity | Residual Momentum v3 (`equity_residual_momentum_v3`) | 1d | weekly | 0.55 |
+| Equity | Residual Momentum v3 + dividend-growth sleeve (`equity_residual_momentum_v3_dividend_sleeve_v1`) | 1d | weekly core; sleeve selected on the first weekly decision of each calendar month or while empty | 0.55 total = 0.40 core + 0.15 sleeve |
 | Crypto | Low Realized Variance Hysteresis v1 (`crypto_low_variance_hysteresis_v1`) — retention rank 4, lookback 22, top2, 96h | 1d | 96h | 0.05 |
 
 Historical baselines `equity_residual_momentum_v1` (monthly),
@@ -39,10 +41,19 @@ Alpaca assets/data -> eligibility filters -> dynamic scanner -> active universe
 
 - One `PortfolioStrategy` interface and one target/risk meaning across
   backtest, paper, and live.
-- Dynamic universes (equity ~300-candidate shortlist → ~30 streamed; crypto
-  from supported USD pairs) rebuilt point-in-time by the production scanner;
-  static symbols are fallback/allowlist/denylist inputs only.
-- Strict risk overlay: allocation sleeves (0.55 equity / 0.05 crypto), risk caps 0.10 crypto exposure / 0.05 crypto position / max 2 crypto positions, gross cap 0.60, cash buffer 0.40, per-position and count caps, daily-loss 0.5% and drawdown 5% latches, stale-account pauses, ownership-drift halts, duplicate order/decision protection.
+- Dynamic universes (equity ~300-candidate shortlist → 30-symbol IEX stream;
+  crypto from supported USD pairs) are rebuilt point-in-time by the production
+  scanner. `universe.equity.sleeve_trade_symbols` pins SCHD/VIG/DGRO in the
+  equity stream; they are hidden from V3 scoring, leaving 23 ranked core slots
+  instead of 26. Other static symbols remain fallback/allowlist/denylist inputs.
+- Strict risk overlay: market allocations remain 0.55 equity / 0.05 crypto.
+  Equity is split internally into the 0.40 V3 core and 0.15 dividend sleeve;
+  `risk.slot_exempt_equity_symbols` keeps the sleeve outside the 8-position cap.
+  Daily-loss, drawdown, entry-latch, and intermediate-reduction latches never
+  grow the sleeve. Crypto limits remain
+  0.10 exposure / 0.05 per position / 2 positions; gross cap 0.60, cash buffer
+  0.40, stale-account pauses, ownership-drift halts, and duplicate
+  order/decision protection remain unchanged.
 - Startup catch-up: a fresh mid-period deployment decides immediately on the
   latest closed warmup bars (`decision_origin: startup_catch_up`) instead of
   sitting in cash until the next cadence boundary. Restart-safe — never
@@ -79,8 +90,13 @@ procedures).
 
 Configuration lives in `config/settings.yaml` (`runtime.mode`, universe,
 `strategy.equity` / `strategy.crypto`, `risk`, `backtest`, `live`, engine,
-execution, backup, alerting). The strategy block selects the current PAPER
-identity and cadence — see the file header comments.
+execution, backup, alerting). The current equity selection is
+`equity_residual_momentum_v3_dividend_sleeve_v1`; its sleeve uses
+`core_allocation`, `sleeve_allocation`, `sleeve_symbols`,
+`universe.equity.sleeve_trade_symbols`, and
+`risk.slot_exempt_equity_symbols`. Rollback selects the still-registered
+`equity_residual_momentum_v3` and removes the three sleeve parameters and both
+sleeve symbol lists.
 
 ## Backtesting
 
@@ -142,7 +158,8 @@ live.
 ## Documentation
 
 - `docs/product_foundation.md` — frozen product principles
-- `docs/validated_strategies.md` — validated specs: v1 baselines + v2/v3 identities
+- `docs/validated_strategies.md` — frozen baselines and current validated identities
+- `docs/research/dividend_sleeve_production_v1.md` — current dividend-growth sleeve evidence
 - `docs/strategy_architecture.md` — universe/scanner/strategy/risk contract
 - `docs/paper_operations.md` — PAPER runtime contract and forward rules
 - `docs/operations.md` — state, backup/restore, Docker, incident reconciliation

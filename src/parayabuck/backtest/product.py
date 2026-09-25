@@ -242,7 +242,7 @@ def build_product_universe(
     ]
     if market == Market.EQUITY:
         equity_universe = config.universe.equity
-        pinned = (*equity_universe.reference_symbols, *equity_universe.inverse_trade_symbols)
+        pinned = (*equity_universe.reference_symbols, *equity_universe.pinned_trade_symbols)
         maximum_symbols = equity_universe.maximum_stream_symbols
         lookback_days = 60
         minimum_price = equity_universe.scanner.minimum_price

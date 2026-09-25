@@ -509,3 +509,9 @@ Current operational authority is main commit `7f007c8f9e5edc33a5065fc86c1c6fb61e
 | Archive tag | Peeled evidence commit | Decision |
 |---|---|---|
 | `archive/research/etf-diversifier-v1-stage-b-fail-2026-09` | `36b99e53bd1e6ccb989a401e7668fd4796fba74e` | Stage A pass; Stage B shared-ledger FAIL (C2 misses only the CAGR guard); shipped config stays. Summary: `docs/research/etf_diversifier_v1_closure.md` |
+
+## Sleeve candidates v2 and v3 — 2026-09-25
+
+| Archive tag | Peeled evidence commit | Decision |
+|---|---|---|
+| `archive/research/sleeve-candidates-v2-v3-2026-09` | `094c7fb7b1a7723c2c116bfb7fc5e1f85ff71c15` | v2: no pass. v3: `dividend_growth_v1` and `gold_v1b` pass Stage B; design-only authorization, shipped config unchanged. Summary: `docs/research/sleeve_candidates_v2_v3_closure.md` |

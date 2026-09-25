@@ -777,3 +777,18 @@ also fails the Sharpe, validation and cash-control gates. The ETF sleeve is a
 real but lower-returning diversifier; the shipped configuration stays. Re-tuning
 on the same window is excluded. Full record:
 `docs/research/etf_diversifier_v1_closure.md` (evidence: tag `archive/research/etf-diversifier-v1-stage-b-fail-2026-09`).
+
+## Sleeve candidates v2 and v3 (2026-09-25)
+
+Successor sleeve screens after ETF diversifier v1, each pre-registered with
+fixed literature-standard rules and the v1 gates plus a matched cash control.
+v2 (seven sleeves including risk parity, global equity and a hypothetical
+T-bill cash-equivalent sweep): **no candidate passes** Stage B. v3 (twelve
+further sleeves): **`dividend_growth_v1` (SCHD/VIG/DGRO) and `gold_v1b`
+(GLD/OUNZ, declared post-hoc swap of IAU, which V3 itself observes) pass
+every Stage A and Stage B gate** (shared-ledger Sharpe 0.767 / 0.858 vs 0.675,
+max DD 18.2% / 18.1% vs 19.4%). Not statistically established (Holm p ≈
+0.15); gold's return edge is concentrated in 2025. A pass authorizes a
+production-integration design only; the shipped configuration is unchanged.
+Full record: `docs/research/sleeve_candidates_v2_v3_closure.md` (evidence:
+tag `archive/research/sleeve-candidates-v2-v3-2026-09`).

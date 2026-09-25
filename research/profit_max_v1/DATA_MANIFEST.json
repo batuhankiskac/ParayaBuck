@@ -1,0 +1,113 @@
+{
+  "adjustment": "split",
+  "bars": {
+    "path": "data/historical/profit_max_v1_daily_split_sip.csv",
+    "rows": 36589,
+    "sha256": "87e20c9e32f0e42f67f6e9bd4c4e51b5e06003277bd9b3a875e25df3cbf24b0e"
+  },
+  "campaign": "profit_max_v1",
+  "corporate_actions": {
+    "path": "data/historical/profit_max_v1_corporate_actions.csv",
+    "rows": 432,
+    "sha256": "c0efd11fa4492d89a1ff997b8cc86ba600f98204197e177b63b82a9cc485fdcd"
+  },
+  "dividend_rates": "restated to post-split shares",
+  "downloaded_at": "2026-09-25T14:02:35.984160+00:00",
+  "end": "2026-07-31T23:59:59+00:00",
+  "feed": "sip",
+  "provider": "alpaca",
+  "splits_applied": [
+    [
+      "QLD",
+      "2017-07-17",
+      2.0
+    ],
+    [
+      "QLD",
+      "2020-08-18",
+      2.0
+    ],
+    [
+      "QLD",
+      "2021-05-25",
+      2.0
+    ],
+    [
+      "QLD",
+      "2025-11-20",
+      2.0
+    ],
+    [
+      "SCHD",
+      "2024-10-11",
+      3.0
+    ],
+    [
+      "SSO",
+      "2020-08-18",
+      2.0
+    ],
+    [
+      "SSO",
+      "2022-01-13",
+      2.0
+    ],
+    [
+      "SSO",
+      "2025-11-20",
+      2.0
+    ],
+    [
+      "TQQQ",
+      "2017-01-12",
+      2.0
+    ],
+    [
+      "TQQQ",
+      "2018-05-24",
+      3.0
+    ],
+    [
+      "TQQQ",
+      "2021-01-21",
+      2.0
+    ],
+    [
+      "TQQQ",
+      "2022-01-13",
+      2.0
+    ],
+    [
+      "TQQQ",
+      "2025-11-20",
+      2.0
+    ],
+    [
+      "UPRO",
+      "2018-05-24",
+      3.0
+    ],
+    [
+      "UPRO",
+      "2022-01-13",
+      2.0
+    ]
+  ],
+  "start": "2015-01-01T00:00:00+00:00",
+  "symbols": [
+    "SPY",
+    "QQQ",
+    "VOO",
+    "IVV",
+    "SPLG",
+    "SSO",
+    "UPRO",
+    "QLD",
+    "TQQQ",
+    "SCHD",
+    "VIG",
+    "DGRO",
+    "GLD",
+    "OUNZ"
+  ]
+}

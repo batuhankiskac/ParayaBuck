@@ -503,3 +503,9 @@ The following annotated tags preserve full evidence; only compact conclusions ar
 The remote replay V1 branch tip `54cf5923b508de40af35e409fd746d671a592d3a` adds unrelated `agent_benchmark.sh` and `agent_benchmark.txt`; it is **not** an archive authority. The archive points to its parent campaign commit `4812b94b051354e4893e21d5332adf74ca2a65dc`.
 
 Current operational authority is main commit `7f007c8f9e5edc33a5065fc86c1c6fb61e55f3f3`: `PAPER_OBSERVABILITY_REPAIR_ACCEPTED` and `PAPER_FORWARD_OBSERVATION_READY`. The frozen observation period is 14 calendar days. Before PAPER, refresh both active universes and pass provider-backed readiness and reconciliation checks. PAPER has not started; no broker call was made by this cleanup; LIVE remains disabled. The blocked audit is historical, not current readiness.
+
+## ETF diversifier v1 — 2026-09-25
+
+| Archive tag | Peeled evidence commit | Decision |
+|---|---|---|
+| `archive/research/etf-diversifier-v1-stage-b-fail-2026-09` | `36b99e53bd1e6ccb989a401e7668fd4796fba74e` | Stage A pass; Stage B shared-ledger FAIL (C2 misses only the CAGR guard); shipped config stays. Summary: `docs/research/etf_diversifier_v1_closure.md` |

@@ -47,6 +47,7 @@ LIVE: `DISABLED`. See [the integration record](cap8_main_integration_v1.md).
 | `equity_spinoff_child_drift_v1` | `research/spinoff-child-drift-design-v1` | `4b38d4db4a62459b4b60f271ce98beaf1e98f7f9` / 2026-09-22 | Primary-source, pre-outcome child-security design audit; no economic test | `DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS` | Design-stage rejection, not `ALPHA_REJECTED` | No | Closed; reopen only with materially new external evidence | `archive/research/spinoff-child-drift-design-v1-2026-09` |
 | `account_capacity_migration_8_v1` | `research/account-capacity-migration-8-v1` | `ede3b3dfadfd5f3f0bdef040a14d20365c8df469` / 2026-09-22 | Stopped before either arm; no migration outcomes | `ACCOUNT_ARCHITECTURE_MIGRATION_8_INCONCLUSIVE` | Inconclusive migration attempt; not an economic result | No | Closed; frozen specification is provenance only; re-freeze from corrected main | `archive/research/account-capacity-migration-8-v1-inconclusive-2026-09` |
 | `crypto_exit_giveback_audit_v3` | `research/crypto-exit-giveback-audit-v3` | `d46338454cb7f8d59525d88fd775f98e2b927d45` / 2026-09-24 | Causal canonical replay; independent episode verification PASS | `CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED` | `MIXED_PROFIT_RETENTION_BEHAVIOR` | No | Closed; V2 input authority superseded, conclusion reconfirmed | `archive/research/crypto-exit-giveback-audit-v3-2026-09` |
+| `etf_diversifier_v1` | `research/etf-diversifier-v1` | Stage A / 2026-09-25 | Pre-registered (`3d33501`) Stage A sleeve-sum screen; not a shared-ledger replay | `STAGE_A_PASS` (C1 preferred, C2 also passes) | Diversification benefit vs A; post-hoc matched cash control shows no drawdown/2022 hedge beyond de-risking | No | Open; Stage B shared-ledger replay with mandatory cash control B next | — (branch active) |
 
 The branch `maintenance/reserved-equity-role-isolation-v1` was an exact alias
 of current `main` (`bdfa55ea...`) with no unique commit or evidence. It is not
@@ -753,3 +754,14 @@ economic findings. Commercial security-master procurement stays
 | Residual reversal physical capacity replay V1/V2 | `4812b94b051354e4893e21d5332adf74ca2a65dc`; `ad2eaf4e0676f35a3002fc67dcb9ad7778332e6f` | `RESIDUAL_REVERSAL_PHYSICAL_CAPACITY_REPLAY_BLOCKED`; `KEEP_RESIDUAL_REVERSAL_CLOSED` | No economics / none | `archive/research/residual-reversal-physical-capacity-replay-v1-blocked-2026-09`; `archive/research/residual-reversal-physical-capacity-replay-v2-blocked-2026-09` |
 
 Research workflow decision: `PAUSE_NEW_ALPHA_DISCOVERY_AND_PRIORITIZE_FORWARD_PAPER_EVIDENCE`. This is not an alpha claim or PAPER start authorization. The original residual-reversal result above remains intact.
+
+## ETF diversifier v1 — Stage A (2026-09-25)
+
+First test of a cross-asset ETF sleeve as a *complement* to V3 (earlier ETF
+trend work was standalone versus SPY only). Two frozen candidates (static
+SPY/TLT/GLD/BIL quarters; 12-month trend over SPY/TLT/IEF/GLD/DBC versus BIL)
+at V3 0.40 + ETF 0.15 + crypto 0.05 both passed all eight pre-registered gates
+against the shipped control (full 1x Sharpe 0.657 -> 0.757 / 0.749). A post-hoc
+matched cash control shows the Sharpe/CAGR gain is real diversification, but the
+drawdown and 2022 improvements come from holding less V3. Full record:
+`research/etf_diversifier_v1/RESULTS.md`.

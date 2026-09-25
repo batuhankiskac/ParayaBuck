@@ -76,16 +76,14 @@ from parayabuck.runtime_universe import ActiveProductUniverse, load_active_produ
 from parayabuck.storage import SQLiteStore
 from parayabuck.universe import (
     ensure_active_universes,
+    equity_universe_digest,
     load_active_crypto_symbols,
-    load_active_symbols,
     refresh_crypto_universe,
-    refresh_equity_universe,
 )
 from parayabuck.universe.crypto_scanner import (
     crypto_scanner_config_digest,
     validate_active_crypto_universe,
 )
-from parayabuck.universe.scanner import scanner_config_digest, validate_active_universe
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
@@ -216,9 +214,7 @@ class EngineRuntime:
         self.config = config.engine
         self.mode = config.runtime.mode
         self.universe_preflight = ensure_active_universes(config, api_key, secret_key)
-        active_equities = (
-            load_active_symbols(config.universe.equity, log_rejection=False) if config.universe.equity.enabled else ()
-        )
+        active_equities = config.universe.equity.symbols if config.universe.equity.enabled else ()
         active_crypto = (
             load_active_crypto_symbols(config.universe.crypto, log_rejection=False)
             if config.universe.crypto.enabled
@@ -238,9 +234,9 @@ class EngineRuntime:
         self._active_crypto_symbols = active_crypto if config.strategy.crypto.enabled else ()
         # Live observation membership is driven by the enabled strategies'
         # universe symbols plus managed-position/open-order pins. A market
-        # whose strategy is disabled streams nothing from scanner discovery
-        # (which stays enabled independently); pins are added later by
-        # _pin_managed_symbols when managed inventory exists.
+        # whose strategy is disabled streams nothing from its universe; pins
+        # are added later by _pin_managed_symbols when managed inventory
+        # exists.
         self._strategy_enabled: dict[Market, bool] = {
             Market.EQUITY: bool(config.strategy.equity.enabled and active_equities),
             Market.CRYPTO: bool(config.strategy.crypto.enabled and active_crypto),
@@ -338,15 +334,7 @@ class EngineRuntime:
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
         self.market_state = RuntimeMarketState(
             self.config,
-            allowed_trade_symbols={
-                *(
-                    symbol
-                    for symbol in active_equities
-                    if config.universe.equity.trade_reference_symbols
-                    or symbol not in config.universe.equity.reference_symbols
-                ),
-                *active_crypto,
-            },
+            allowed_trade_symbols={*active_equities, *active_crypto},
         )
         self._consecutive_losses = 0
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_stream_feed)
@@ -473,18 +461,16 @@ class EngineRuntime:
 
     def _initial_universe_halt(self, market: Market) -> str | None:
         if market == Market.EQUITY:
-            equity_config = self.app_config.universe.equity
-            status = self.universe_preflight.equity_status
-            enabled = equity_config.enabled
-            dynamic = equity_config.dynamic_selection_enabled
-            fallback_allowed = equity_config.allow_static_fallback_trading
-        else:
-            crypto_config = self.app_config.universe.crypto
-            status = self.universe_preflight.crypto_status
-            enabled = crypto_config.enabled
-            dynamic = crypto_config.dynamic_selection_enabled
-            fallback_allowed = crypto_config.allow_static_fallback_trading
-        if enabled and dynamic and status != "success" and not fallback_allowed:
+            # The static equity universe cannot be invalid.
+            return None
+        crypto_config = self.app_config.universe.crypto
+        status = self.universe_preflight.crypto_status
+        if (
+            crypto_config.enabled
+            and crypto_config.dynamic_selection_enabled
+            and status != "success"
+            and not crypto_config.allow_static_fallback_trading
+        ):
             return "invalid_dynamic_universe"
         return None
 
@@ -496,28 +482,21 @@ class EngineRuntime:
         """Bind runtime observation membership to a concrete product snapshot."""
 
         if market == Market.EQUITY:
-            equity_config = self.app_config.universe.equity
-            status = self.universe_preflight.equity_status
-            policy_digest = scanner_config_digest(equity_config)
-            dynamic = equity_config.dynamic_selection_enabled
-            active_path = equity_config.active_universe_path
+            policy_digest = equity_universe_digest(self.app_config.universe.equity)
         else:
             crypto_config = self.app_config.universe.crypto
-            status = self.universe_preflight.crypto_status
             policy_digest = crypto_scanner_config_digest(crypto_config)
-            dynamic = crypto_config.dynamic_selection_enabled
-            active_path = crypto_config.active_universe_path
-        if dynamic and status == "success":
-            return load_active_product_universe(
-                active_path,
-                market=market,
-                expected_observation_symbols=observation_symbols,
-                expected_config_digest=policy_digest,
-            )
-        # A disabled/failed dynamic scanner may still keep explicit fallback
-        # symbols observable for managed exits. Entry-halt policy remains in
-        # _initial_universe_halt; this adapter only removes the permissive
-        # universe=None behavior.
+            if crypto_config.dynamic_selection_enabled and self.universe_preflight.crypto_status == "success":
+                return load_active_product_universe(
+                    crypto_config.active_universe_path,
+                    market=market,
+                    expected_observation_symbols=observation_symbols,
+                    expected_config_digest=policy_digest,
+                )
+        # The static equity universe, and a disabled/failed crypto scanner that
+        # keeps explicit fallback symbols observable for managed exits, bind a
+        # configured snapshot. Entry-halt policy remains in
+        # _initial_universe_halt.
         return ActiveProductUniverse.configured(
             market,
             observation_symbols,
@@ -534,7 +513,7 @@ class EngineRuntime:
         digests: list[str] = []
         for strategy, _symbols, maximum_allocation in self._strategy_specs:
             universe_version = (
-                scanner_config_digest(self.app_config.universe.equity)
+                equity_universe_digest(self.app_config.universe.equity)
                 if strategy.market == Market.EQUITY
                 else crypto_scanner_config_digest(self.app_config.universe.crypto)
             )
@@ -1068,7 +1047,7 @@ class EngineRuntime:
             product_universe = product_universe.with_observation_symbols(symbols)
             self._product_universes_by_market[strategy.market] = product_universe
             universe_version = (
-                scanner_config_digest(self.app_config.universe.equity)
+                equity_universe_digest(self.app_config.universe.equity)
                 if strategy.market == Market.EQUITY
                 else crypto_scanner_config_digest(self.app_config.universe.crypto)
             )
@@ -1085,11 +1064,6 @@ class EngineRuntime:
                     universe_version=universe_version,
                     account_id=self.broker.account_id or "unknown",
                     live_dollar_cap=configured_live_cap,
-                    ordinary_alpha_excluded_symbols=(
-                        self.app_config.universe.equity.ordinary_alpha_excluded_symbols
-                        if strategy.market == Market.EQUITY
-                        else ()
-                    ),
                     execution_policy=PortfolioExecutionPolicy(
                         rebalance_band_pct=self.app_config.execution.rebalance_band_pct,
                         minimum_order_notional=self.app_config.execution.minimum_order_notional,
@@ -1141,13 +1115,8 @@ class EngineRuntime:
                 daemon=True,
             ),
         ]
-        if any(
-            config.enabled and config.dynamic_selection_enabled
-            for config in (
-                self.app_config.universe.equity,
-                self.app_config.universe.crypto,
-            )
-        ):
+        crypto_universe = self.app_config.universe.crypto
+        if crypto_universe.enabled and crypto_universe.dynamic_selection_enabled:
             self._threads.append(
                 threading.Thread(
                     target=self._universe_refresh_loop,
@@ -1293,30 +1262,19 @@ class EngineRuntime:
         self._universe_retry_attempt = {}
         interval = self.app_config.runtime.scanner_refresh_hours * 3600
         next_interval = time.monotonic() + interval
-        next_equity = self._next_equity_refresh_at(datetime.now(UTC))
-        self._next_universe_refresh_at = self._next_universe_deadline(next_interval, next_equity)
+        self._next_universe_refresh_at = self._next_universe_deadline(next_interval)
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
                 now_mono = time.monotonic()
-                now = datetime.now(UTC)
                 interval_due = now_mono >= next_interval
-                equity_due = next_equity is not None and now >= next_equity
                 retry_due = [market for market, deadline in self._universe_retry_at.items() if now_mono >= deadline]
-                if interval_due or equity_due or retry_due:
-                    markets_to_refresh: set[Market] = set()
+                if interval_due or retry_due:
+                    # Only crypto has a dynamic universe; it trades 24/7 on a
+                    # fixed cadence.
+                    markets_to_refresh: set[Market] = set(retry_due)
                     if interval_due:
-                        # Crypto trades 24/7: keep a fixed cadence.
                         markets_to_refresh.add(Market.CRYPTO)
-                    if equity_due:
-                        # Equity refreshes pre-market only, after the
-                        # previous session's data is final, so a mid-session
-                        # partial daily bar can never change the universe.
-                        markets_to_refresh.add(Market.EQUITY)
-                    markets_to_refresh.update(retry_due)
-                    # Markets refresh independently: a failing market (or an
-                    # apply failure that re-raises) must not skip the other
-                    # market's slot, and its retry state stays per-market.
                     for market in sorted(markets_to_refresh, key=lambda m: m.value):
                         try:
                             self._refresh_runtime_universes(market)
@@ -1337,12 +1295,8 @@ class EngineRuntime:
                     # loop and hammer Alpaca during an outage.
                     if interval_due:
                         next_interval = now_mono + interval
-                    if equity_due:
-                        next_equity = self._next_equity_refresh_at(now)
-                    self._next_universe_refresh_at = self._next_universe_deadline(next_interval, next_equity)
+                    self._next_universe_refresh_at = self._next_universe_deadline(next_interval)
                 remaining = next_interval - now_mono
-                if next_equity is not None:
-                    remaining = min(remaining, (next_equity - now).total_seconds())
                 # Wake for a pending per-market retry before the next slot.
                 for retry_at in self._universe_retry_at.values():
                     remaining = min(remaining, retry_at - now_mono)
@@ -1357,12 +1311,6 @@ class EngineRuntime:
         then ~15, ~30, capped at ~60 min per consecutive failure) instead of
         waiting for the next full schedule slot; a success clears the market's
         retry state so a later failure restarts from the first rung.
-
-        Equity retries are capped at the next pre-market slot when the backoff
-        deadline would land inside a regular session: a mid-session refresh
-        would read a partial daily bar into the scanner metrics and could
-        change the universe, which the pre-market-only cadence exists to
-        prevent. Crypto trades 24/7 and retries on the plain backoff.
         """
         if ok:
             self._universe_retry_at.pop(market, None)
@@ -1397,49 +1345,17 @@ class EngineRuntime:
             error=getattr(self, "_last_universe_refresh_error", {}).get(market.value),
         )
         delay = _UNIVERSE_RETRY_BACKOFF_SECONDS[min(attempt, len(_UNIVERSE_RETRY_BACKOFF_SECONDS) - 1)]
-        deadline = time.monotonic() + delay
-        if market == Market.EQUITY:
-            candidate = datetime.now(UTC) + timedelta(seconds=delay)
-            if is_regular_equity_time(candidate):
-                next_premarket = self._next_equity_refresh_at(candidate)
-                if next_premarket is not None:
-                    deadline = time.monotonic() + max(0.0, (next_premarket - datetime.now(UTC)).total_seconds())
-                    log.warning(
-                        "Equity scanner retry deferred to next pre-market slot %s (backoff %ds would land mid-session)",
-                        next_premarket.isoformat(),
-                        delay,
-                    )
-        self._universe_retry_at[market] = deadline
+        self._universe_retry_at[market] = time.monotonic() + delay
         self._universe_retry_attempt[market] = attempt + 1
 
-    def _next_universe_deadline(self, next_interval: float, next_equity: datetime | None) -> datetime:
+    def _next_universe_deadline(self, next_interval: float) -> datetime:
         now_mono = time.monotonic()
         interval_remaining = max(0.0, next_interval - now_mono)
         deadline = datetime.now(UTC) + timedelta(seconds=interval_remaining)
-        if next_equity is not None:
-            deadline = min(deadline, next_equity)
         for retry_at in getattr(self, "_universe_retry_at", {}).values():
             retry_remaining = max(0.0, retry_at - now_mono)
             deadline = min(deadline, datetime.now(UTC) + timedelta(seconds=retry_remaining))
         return deadline
-
-    def _next_equity_refresh_at(self, now: datetime) -> datetime | None:
-        """Next pre-market slot (06:00 ET) with the prior session finalized.
-
-        ``None`` when the equity universe is not dynamically refreshed, so the
-        loop never waits on a market that is not running.
-        """
-        equity_config = self.app_config.universe.equity
-        if not (equity_config.enabled and equity_config.dynamic_selection_enabled):
-            return None
-        local = now.astimezone(NEW_YORK)
-        premarket = local.replace(hour=6, minute=0, second=0, microsecond=0)
-        if local.weekday() < 5 and local < premarket:
-            return premarket.astimezone(UTC)
-        days_ahead = 1
-        while (local + timedelta(days=days_ahead)).weekday() >= 5:
-            days_ahead += 1
-        return (premarket + timedelta(days=days_ahead)).astimezone(UTC)
 
     def _resync_stream_if_needed(self) -> None:
         """Re-converge the live stream from the authoritative membership.
@@ -1465,11 +1381,11 @@ class EngineRuntime:
         log.warning("Stream membership reconnected from the authoritative desired set")
 
     def _refresh_runtime_universes(self, target: Market | None = None) -> None:
-        """Refresh the scanner universes, optionally for one market only.
+        """Refresh the dynamic (crypto) scanner universe.
 
         ``target=None`` refreshes every enabled dynamic universe (startup and
-        backfill paths); the scheduled loop passes a single market so equity
-        can run on a pre-market cadence while crypto keeps its own interval.
+        backfill paths); the scheduled loop passes a single market. The equity
+        universe is static and never refreshed.
         """
         if getattr(self, "_resync_pending", False):
             try:
@@ -1498,29 +1414,11 @@ class EngineRuntime:
                 self._universe_refresh_status[market.value] = "refresh_failed"
                 self._last_universe_refresh_error[market.value] = str(exc)
                 log.error("%s universe refresh failed; active membership unchanged: %s", market, exc)
-                if market == Market.EQUITY:
-                    _symbols, snapshot_status = validate_active_universe(self.app_config.universe.equity)
-                    fallback_allowed = self.app_config.universe.equity.allow_static_fallback_trading
-                else:
-                    _symbols, snapshot_status = validate_active_crypto_universe(self.app_config.universe.crypto)
-                    fallback_allowed = self.app_config.universe.crypto.allow_static_fallback_trading
+                _symbols, snapshot_status = validate_active_crypto_universe(self.app_config.universe.crypto)
+                fallback_allowed = self.app_config.universe.crypto.allow_static_fallback_trading
                 if snapshot_status != "success" and not fallback_allowed:
                     self._market_entry_halts[market] = "invalid_dynamic_universe"
 
-        equity_config = self.app_config.universe.equity
-        if target in {None, Market.EQUITY} and equity_config.enabled and equity_config.dynamic_selection_enabled:
-
-            def refresh_equity() -> tuple[tuple[str, ...], ActiveProductUniverse]:
-                refresh_equity_universe(self.app_config, self.api_key, self.secret_key)
-                selected = load_active_symbols(equity_config, log_rejection=False)
-                return selected, load_active_product_universe(
-                    equity_config.active_universe_path,
-                    market=Market.EQUITY,
-                    expected_observation_symbols=selected,
-                    expected_config_digest=scanner_config_digest(equity_config),
-                )
-
-            refresh_one(Market.EQUITY, refresh_equity)
         crypto_config = self.app_config.universe.crypto
         if target in {None, Market.CRYPTO} and crypto_config.enabled and crypto_config.dynamic_selection_enabled:
 
@@ -1582,10 +1480,9 @@ class EngineRuntime:
             )
             if market == Market.EQUITY:
                 equity_config = self.app_config.universe.equity
-                # Reference symbols are strategy inputs; with the strategy
-                # disabled, scanner discovery stays enabled but observation
-                # keeps only the managed/protection pins.
-                configured_pins = equity_config.reference_symbols if strategy_enabled.get(market, True) else ()
+                # Universe symbols are strategy inputs; with the strategy
+                # disabled observation keeps only the managed/protection pins.
+                configured_pins = equity_config.symbols if strategy_enabled.get(market, True) else ()
                 maximum_symbols = equity_config.maximum_stream_symbols
             else:
                 crypto_config = self.app_config.universe.crypto
@@ -1719,14 +1616,9 @@ class EngineRuntime:
                 self._expected_all_symbols = set(self.symbols)
                 self._not_ready_symbols.difference_update(removed_all)
                 if self.market_state.allowed_trade_symbols is not None:
-                    references = set(self.app_config.universe.equity.reference_symbols)
                     self.market_state.allowed_trade_symbols = {
                         *self._symbols_by_market[Market.CRYPTO],
-                        *(
-                            symbol
-                            for symbol in self._symbols_by_market[Market.EQUITY]
-                            if self.app_config.universe.equity.trade_reference_symbols or symbol not in references
-                        ),
+                        *self._symbols_by_market[Market.EQUITY],
                     }
         except Exception:
             # Commit failed after the stream converged: restore both the
@@ -1851,11 +1743,9 @@ class EngineRuntime:
         strategy_enabled = getattr(self, "_strategy_enabled", {})
         if equity_pins:
             maximum = self.app_config.universe.equity.maximum_stream_symbols
-            # Reference symbols are strategy inputs; a disabled equity
+            # Universe symbols are strategy inputs; a disabled equity
             # strategy only needs the managed pins themselves.
-            references = (
-                self.app_config.universe.equity.reference_symbols if strategy_enabled.get(Market.EQUITY, True) else ()
-            )
+            references = self.app_config.universe.equity.symbols if strategy_enabled.get(Market.EQUITY, True) else ()
             ordered = tuple(dict.fromkeys((*references, *equity_pins, *sorted(self._symbols_by_market[Market.EQUITY]))))
             if len({*references, *equity_pins}) > maximum:
                 raise RuntimeError("Managed equity pins and references exceed the configured IEX stream limit")
@@ -3545,12 +3435,10 @@ class EngineRuntime:
                     "data_timestamp": target.data_timestamp.isoformat() if target.data_timestamp else None,
                     "active_universe_version": portfolio_runtime.universe_version,
                     "observation_symbols": sorted(portfolio_runtime.symbols),
-                    "observation_strategy_digest": getattr(
-                        self.app_config.universe.crypto
+                    "observation_strategy_digest": (
+                        self.app_config.universe.crypto.observation_strategy_parameters_digest
                         if portfolio_runtime.market == Market.CRYPTO
-                        else self.app_config.universe.equity,
-                        "observation_strategy_parameters_digest",
-                        "",
+                        else ""
                     ),
                 },
                 "account_before": {

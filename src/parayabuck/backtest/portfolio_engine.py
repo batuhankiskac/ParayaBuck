@@ -310,7 +310,6 @@ class PortfolioBacktestEngine:
         maximum_allocation: float = 1.0,
         enforce_drawdown_halt: bool = False,
         allow_static_universe: bool = False,
-        ordinary_alpha_excluded_symbols: tuple[str, ...] = (),
         terminal_lifecycles: Mapping[str, TerminalLifecycle] | None = None,
     ) -> None:
         if not isinstance(strategy, PortfolioStrategy):
@@ -370,9 +369,6 @@ class PortfolioBacktestEngine:
             EQUITY_UNIVERSE_VERSION if strategy.market == Market.EQUITY else CRYPTO_UNIVERSE_VERSION
         )
         self.allow_static_universe = bool(allow_static_universe)
-        self.ordinary_alpha_excluded_symbols = tuple(
-            dict.fromkeys(canonical_symbol(symbol, strategy.market) for symbol in ordinary_alpha_excluded_symbols)
-        )
         self.terminal_lifecycles = self._validated_terminal_lifecycles(terminal_lifecycles)
         self.state_path = Path(state_path) if state_path else None
         self.cash_rate_annualized = float(cash_rate_annualized)
@@ -1213,7 +1209,6 @@ class PortfolioBacktestEngine:
             holdings=holdings,
             prices=prices,
             benchmark_symbol=benchmark,
-            ordinary_alpha_excluded_symbols=self.ordinary_alpha_excluded_symbols,
         )
 
     def _apply_target(self, target: TargetPortfolio) -> None:

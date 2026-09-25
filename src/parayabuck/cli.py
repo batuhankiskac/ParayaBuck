@@ -33,13 +33,11 @@ from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
 from parayabuck.universe import (
     ensure_active_universes,
+    equity_universe_digest,
     load_active_crypto_symbols,
-    load_active_symbols,
     validate_active_crypto_universe,
-    validate_active_universe,
 )
 from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
-from parayabuck.universe.scanner import scanner_config_digest
 from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.cli")
@@ -253,11 +251,6 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         # LiveOperatorApproval.calculated_signature would only raise a raw
         # ValueError at signing time.
         raise SystemExit(f"{config.live.operator_approval_key_env} must be set to a key of at least 32 characters")
-    equity_universe = config.universe.equity
-    if config.strategy.equity.enabled and equity_universe.enabled and equity_universe.dynamic_selection_enabled:
-        _symbols, status = validate_active_universe(equity_universe)
-        if status != "success" and not equity_universe.allow_static_fallback_trading:
-            raise SystemExit(f"Live authorization requires a valid dynamic equity universe; status={status}")
     crypto_universe = config.universe.crypto
     if config.strategy.crypto.enabled and crypto_universe.enabled and crypto_universe.dynamic_selection_enabled:
         _symbols, status = validate_active_crypto_universe(crypto_universe)
@@ -276,8 +269,8 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         (
             Market.EQUITY,
             config.strategy.equity,
-            load_active_symbols(config.universe.equity, log_rejection=False),
-            scanner_config_digest(config.universe.equity),
+            config.universe.equity.symbols if config.universe.equity.enabled else (),
+            equity_universe_digest(config.universe.equity),
         ),
         (
             Market.CRYPTO,
@@ -475,35 +468,31 @@ def _run_doctor(args: argparse.Namespace) -> int:
                     store.connection.close()
             except Exception as exc:
                 add("sqlite WAL capability", False, str(exc))
-        for market in (Market.EQUITY, Market.CRYPTO):
-            uni_cfg = config.universe.equity if market == Market.EQUITY else config.universe.crypto
-            strat_sel = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
-            if not uni_cfg.enabled:
-                add(f"universe {market.value} disabled", True, "skipped")
-                continue
-            if not uni_cfg.dynamic_selection_enabled:
-                # Static universe - no snapshot validation required.
-                add(f"universe {market.value} static", True, "dynamic_selection disabled")
-                continue
-            # Enabled dynamic universe: use canonical validators.
-            # Validators evaluate: snapshot exists, JSON parses, freshness vs
+        if config.universe.equity.enabled:
+            add("universe equity static", True, ",".join(config.universe.equity.symbols))
+        else:
+            add("universe equity disabled", True, "skipped")
+        uni_cfg = config.universe.crypto
+        strat_sel = config.strategy.crypto
+        if not uni_cfg.enabled:
+            add("universe crypto disabled", True, "skipped")
+        elif not uni_cfg.dynamic_selection_enabled:
+            # Static universe - no snapshot validation required.
+            add("universe crypto static", True, "dynamic_selection disabled")
+        else:
+            # Enabled dynamic universe: the canonical validator evaluates
+            # snapshot existence, JSON parse, freshness vs
             # active_universe_max_age_hours, scanner config digest match,
-            # observation strategy identity (name/version/timeframe/params digest),
-            # and scanner version.
-            if market == Market.EQUITY:
-                eq_cfg = config.universe.equity
-                symbols, status = validate_active_universe(eq_cfg)
-                cfg_digest = scanner_config_digest(eq_cfg)[:12]
-            else:
-                cr_cfg = config.universe.crypto
-                symbols, status = validate_active_crypto_universe(cr_cfg)
-                cfg_digest = crypto_scanner_config_digest(cr_cfg)[:12]
+            # observation strategy identity (name/version/timeframe/params
+            # digest), and scanner version.
+            symbols, status = validate_active_crypto_universe(uni_cfg)
+            cfg_digest = crypto_scanner_config_digest(uni_cfg)[:12]
             obs = f"{uni_cfg.observation_strategy_name}/{uni_cfg.observation_strategy_version}/{uni_cfg.observation_strategy_timeframe}"
             detail = (
                 f"status={status} symbols={len(symbols)} cfg={cfg_digest} obs={obs} path={uni_cfg.active_universe_path}"
             )
             if status == "success":
-                add(f"universe {market.value} active", True, detail)
+                add("universe crypto active", True, detail)
             else:
                 requires = (
                     config.runtime.mode == RuntimeMode.PAPER
@@ -518,15 +507,15 @@ def _run_doctor(args: argparse.Namespace) -> int:
                         # can refresh after network startup. Classify as REFRESH_NEEDED
                         # explicitly, not PASS. Non-blocking even with --strict so first
                         # boot / ExecStartPre does not fail when network is still down.
-                        checks.append((f"universe {market.value} active", "REFRESH_NEEDED", detail))
+                        checks.append(("universe crypto active", "REFRESH_NEEDED", detail))
                     else:
                         # Strict paper online (no --offline): fail-closed, runtime would halt.
-                        add(f"universe {market.value} active", False, detail)
+                        add("universe crypto active", False, detail)
                 else:
                     # Degraded: fallback allowed or non-PAPER runtime; emit WARN, not FAIL.
                     # WARN means strict failure (warning=True) except for transient network
                     # below which is explicitly non-blocking.
-                    checks.append((f"universe {market.value} active", "WARN", detail))
+                    checks.append(("universe crypto active", "WARN", detail))
                     warning = True
         try:
             result = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True, timeout=5)
@@ -1267,7 +1256,8 @@ def _warmup_window_days(config: Config, market: Market, end_date: datetime | Non
     """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
-    lookback_days = 60 if market == Market.EQUITY else config.universe.crypto.scanner.lookback_days
+    # The static equity universe has no scanner lookback.
+    lookback_days = 0 if market == Market.EQUITY else config.universe.crypto.scanner.lookback_days
     from parayabuck.markets.timeframes import bars_to_calendar_days
 
     # Strategy warmup is expressed in bars of the strategy timeframe (e.g. 150
@@ -1292,43 +1282,7 @@ def _candidate_symbols(
     if explicit:
         return list(dict.fromkeys(item.strip().upper() for item in explicit.split(",") if item.strip()))
     if market == Market.EQUITY:
-        # Always download the broad eligible universe. The historical Stage-A
-        # shortlist is applied per date inside the backtest universe builder,
-        # so 2022 liquidity cannot be hidden behind today's shortlist.
-        from alpaca.trading.client import TradingClient
-
-        from parayabuck.universe.preflight import eligible_equity_symbols
-
-        load_dotenv()
-        trading = TradingClient(
-            os.getenv("ALPACA_API_KEY", ""),
-            os.getenv("ALPACA_SECRET_KEY", ""),
-            paper=config.runtime.mode.value != "live",
-        )
-        if (session := getattr(trading, "_session", None)) is not None:
-            from parayabuck.utils.http import patch_session_timeout
-
-            patch_session_timeout(session, timeout=15.0)
-        eligible = eligible_equity_symbols(config, trading, limit=limit)
-        # The scanner reserves references, approved inverse ETFs and pinned
-        # symbols in every snapshot: those must be present even when an
-        # explicit --candidate-limit excludes them alphabetically, otherwise
-        # the backtest gate cannot evaluate a period at all.
-        equity_config = config.universe.equity
-        required_order = list(
-            dict.fromkeys(
-                (
-                    *equity_config.reference_symbols,
-                    *equity_config.inverse_trade_symbols,
-                    *equity_config.fallback_trade_symbols,
-                )
-            )
-        )
-        required_set = set(required_order)
-        candidates = [symbol for symbol in dict.fromkeys(eligible) if symbol not in required_set]
-        if limit is not None:
-            candidates = candidates[: max(0, limit - len(required_order))]
-        return [*required_order, *candidates]
+        return list(config.universe.equity.symbols)
     source = Path(config.universe.crypto.active_universe_path)
     payload = json.loads(source.read_text(encoding="utf-8")) if source.exists() else {}
     candidates = [str(symbol) for symbol in payload.get("candidate_symbols", ())]

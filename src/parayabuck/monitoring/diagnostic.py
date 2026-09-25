@@ -228,7 +228,7 @@ def collect_bundle_data(
 
     # universe status
     try:
-        from parayabuck.universe import validate_active_crypto_universe, validate_active_universe
+        from parayabuck.universe import validate_active_crypto_universe
 
         # Use config if available
         data["universe_status"] = {"checked": True}
@@ -237,7 +237,7 @@ def collect_bundle_data(
 
             cfg2 = _lc(str(config_path)) if Path(str(config_path)).exists() else None
             if cfg2 is not None:
-                data["universe_status"]["equity"] = str(validate_active_universe(cfg2.universe.equity))
+                data["universe_status"]["equity"] = "static" if cfg2.universe.equity.enabled else "disabled"
                 if cfg2.universe.crypto.enabled:
                     data["universe_status"]["crypto"] = str(validate_active_crypto_universe(cfg2.universe.crypto))
         except Exception:
@@ -376,20 +376,20 @@ def _run_doctor_checks(
 
         if Path(str(config_path)).exists():
             cfg = _lc(str(config_path))
-            for market, path in [
-                ("equity", cfg.universe.equity.active_universe_path),
-                ("crypto", cfg.universe.crypto.active_universe_path),
-            ]:
-                p = Path(path)
-                if not p.exists():
-                    _add(f"universe_{market}", "UNKNOWN", f"no artifact at {path}")
-                else:
-                    try:
-                        data = json.loads(p.read_text(encoding="utf-8"))
-                        # check age if possible
-                        _add(f"universe_{market}", "OK", f"exists {p}")
-                    except Exception as exc:
-                        _add(f"universe_{market}", "CRITICAL", f"corrupt: {exc}")
+            _add(
+                "universe_equity",
+                "OK",
+                f"static {','.join(cfg.universe.equity.symbols)}" if cfg.universe.equity.enabled else "disabled",
+            )
+            p = Path(cfg.universe.crypto.active_universe_path)
+            if not p.exists():
+                _add("universe_crypto", "UNKNOWN", f"no artifact at {p}")
+            else:
+                try:
+                    json.loads(p.read_text(encoding="utf-8"))
+                    _add("universe_crypto", "OK", f"exists {p}")
+                except Exception as exc:
+                    _add("universe_crypto", "CRITICAL", f"corrupt: {exc}")
     except Exception:
         pass
 

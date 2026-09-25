@@ -214,7 +214,7 @@ lowered — `SIGTERM` triggers a graceful ledger close and broker socket release
 
 | Path | Purpose | Mount |
 |------|---------|-------|
-| `/opt/parayabuck/config` | `config/settings.yaml` + active universe snapshots (`data/runtime/active_*_universe.json` is under `data/`, but operator UI persists mutated settings to `config/settings.yaml`) | `ReadWritePaths` |
+| `/opt/parayabuck/config` | `config/settings.yaml` (which also defines the static equity universe) — the active crypto universe snapshot lives under `data/runtime/active_crypto_universe.json`, and operator UI persists mutated settings to `config/settings.yaml` | `ReadWritePaths` |
 | `/opt/parayabuck/data` | SQLite runtime DB `data/runtime/parayabuck.sqlite3`, WAL/SHM, observability `data/runtime/observability.sqlite3`, health snapshot, `data/backups/` | `ReadWritePaths` |
 | `/opt/parayabuck/reports` | Backtest reports (optional persistence) | `ReadWritePaths` |
 | `/opt/parayabuck/.env` | Secrets (0600, `UMask=0077`) | `EnvironmentFile` |
@@ -487,9 +487,11 @@ What it checks (from `src/parayabuck/cli.py: _run_doctor`):
 * **SQLite** — `PRAGMA integrity_check == ok`, warns on `journal_mode != WAL`,
   `foreign_keys != ON`, `busy_timeout < 5000` (non-blocking warnings under
   `--strict` unless `--offline` flow promotes them).
-* **Universe snapshots** — `validate_active_universe` / `validate_active_crypto_universe`
-  check JSON parses, freshness vs `active_universe_max_age_hours`, scanner
-  config digest, observation strategy identity. With `--offline` a stale/missing
+* **Universe** — equity is static configuration, reported as
+  `universe equity static` (never a check that can fail). Crypto runs
+  `validate_active_crypto_universe`: JSON parses, freshness vs
+  `universe.crypto.active_universe_max_age_hours`, scanner config digest,
+  observation strategy identity. With `--offline` a stale/missing crypto
   snapshot is `REFRESH_NEEDED` (non-blocking) so first boot does not flap while
   the network is still down.
 * **No tracked .env** — `git ls-files` must not list `.env`.
@@ -763,7 +765,7 @@ sudo -u parayabuck .venv/bin/parayabuck backup
 # second artifact: config + universe
 sudo -u parayabuck tar czf ~/backups/parayabuck-config-$(date +%Y%m%dT%H%M%SZ).tgz \
   config/.env 2>/dev/null; sudo tar czf ~/backups/parayabuck-config-$(date +%Y%m%dT%H%M%SZ).tgz \
-  config/settings.yaml .env data/runtime/active_equity_universe.json data/runtime/active_crypto_universe.json 2>/dev/null || true
+  config/settings.yaml .env data/runtime/active_crypto_universe.json 2>/dev/null || true
 ls -lh data/backups/ ~/backups/
 
 # 2. Stop the service cleanly
@@ -888,8 +890,9 @@ parayabuck ops status   # or curl /readyz
   if the previous behavior depends on a prior setting.
 
 If you restore a backup, also restore `config/settings.yaml` and
-`active_*_universe.json` from the same point in time so the configuration
-digest matches the decision digests in the ledger.
+`active_crypto_universe.json` from the same point in time so the configuration
+digest matches the decision digests in the ledger. The equity universe is
+configuration, so the restored `config/settings.yaml` fully determines it.
 
 ---
 

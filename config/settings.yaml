@@ -24,63 +24,14 @@ data:
 universe:
   equity:
     enabled: true
-    dynamic_selection_enabled: true
-    allow_static_fallback_trading: false
     maximum_stream_symbols: 30
-    target_shortlist: 300
-    # QQQ is the equity strategy's trend signal and QLD (2x Nasdaq-100) its
-    # only holding; both are pinned references, tradable through
-    # trade_reference_symbols.
-    reference_symbols:
+    # Static universe: QQQ is the equity strategy's trend signal, QLD
+    # (2x Nasdaq-100) its only holding, SPY the benchmark. Leftover managed
+    # positions are pinned by the runtime until sold.
+    symbols:
     - SPY
     - QQQ
     - QLD
-    trade_reference_symbols: true
-    fallback_trade_symbols:
-    - AAPL
-    - MSFT
-    - GOOGL
-    - TSLA
-    - NVDA
-    - AMZN
-    - KO
-    - PEP
-    - JNJ
-    - JPM
-    - XOM
-    - XLK
-    - XLF
-    - XLE
-    - XLV
-    - XLY
-    - XLP
-    - XLI
-    - XLB
-    - XLU
-    - SH
-    - PSQ
-    - DOG
-    allowlist_symbols: []
-    denylist_symbols: []
-    supported_exchanges: [NASDAQ, NYSE, ARCA, AMEX, BATS]
-    inverse_trade_symbols:
-    - SH
-    - PSQ
-    - DOG
-    candidate_universe_path: data/universe/equity_candidates.json
-    active_universe_path: data/runtime/active_equity_universe.json
-    active_universe_max_age_hours: 36
-    require_scanner_config_digest_match: true
-    scanner:
-      minimum_price: 5
-      minimum_median_dollar_volume: 20000000
-      minimum_data_completeness: 0.95
-      minimum_atr_pct: 0.005
-      maximum_atr_pct: 0.12
-      maximum_per_sector: 5
-      volatility_optimum_pct: 0.03
-      spread_quality_ceiling_bps: 50
-      unknown_sector_penalty: 2
   crypto:
     enabled: true
     dynamic_selection_enabled: true

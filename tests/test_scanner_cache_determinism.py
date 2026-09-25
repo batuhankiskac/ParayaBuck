@@ -2,10 +2,11 @@
 
 Tier-1 guard for the WorkerD optimization candidates: the WarmupCache
 incremental path changes only I/O (what is downloaded), never the math.
-These tests prove the scanner results and warmup seeding computed from a
+These tests prove the crypto scanner result and observation set computed from a
 cache-backed (incremental) fetch are byte-identical to a full-window fetch,
 and that the fail-closed rules (digest mismatch, missing window head) force
-a full refetch instead of silently serving a shorter history.
+a full refetch instead of silently serving a shorter history. The equity
+universe is static and has no refresh path to cache.
 """
 
 from __future__ import annotations
@@ -88,20 +89,6 @@ class FakeCryptoClient:
         return {symbol: SimpleNamespace(bid_price=100.0, ask_price=100.05) for symbol in request.symbol_or_symbols}
 
 
-class FakeStockClient:
-    def __init__(self) -> None:
-        self.bar_rows: list[int] = []
-
-    def get_stock_bars(self, request: Any) -> Any:
-        minutes = _timeframe_minutes(request.timeframe)
-        rows = _rows(list(request.symbol_or_symbols), request.start, request.end, minutes, Market.EQUITY)
-        self.bar_rows.append(len(rows))
-        return SimpleNamespace(df=_to_df(rows))
-
-    def get_stock_latest_quote(self, request: Any) -> dict[str, Any]:
-        return {symbol: SimpleNamespace(bid_price=100.0, ask_price=100.05) for symbol in request.symbol_or_symbols}
-
-
 def _timeframe_minutes(timeframe: Any) -> int:
     unit_minutes = {"Minute": 1, "Hour": 60, "Day": 1440}
     return getattr(timeframe, "amount", 1) * unit_minutes.get(str(getattr(timeframe, "unit")).split(".")[-1], 1)
@@ -118,37 +105,14 @@ class FakeTrading:
 
 
 _CRYPTO = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "ADA/USD", "LINK/USD", "DOGE/USD"]
-_EQUITY = ["AAA", "BBB", "CCC", "SPY"]
 
 
 def _config(tmp_path: Path) -> Config:
     from dataclasses import replace as _replace
 
-    from parayabuck.config import (
-        CryptoScannerConfig,
-        CryptoUniverseConfig,
-        EquityScannerConfig,
-        EquityUniverseConfig,
-    )
+    from parayabuck.config import CryptoScannerConfig, CryptoUniverseConfig
 
     base = Config()
-    equity = _replace(
-        EquityUniverseConfig(
-            maximum_stream_symbols=4,
-            target_shortlist=4,
-            reference_symbols=("SPY",),
-            allowlist_symbols=tuple(_EQUITY),
-            scanner=EquityScannerConfig(
-                minimum_price=1,
-                minimum_median_dollar_volume=1,
-                minimum_data_completeness=0.9,
-                minimum_atr_pct=0.001,
-                maximum_per_sector=5,
-            ),
-        ),
-        candidate_universe_path=str(tmp_path / "equity_candidates.json"),
-        active_universe_path=str(tmp_path / "active_equity_universe.json"),
-    )
     crypto = _replace(
         CryptoUniverseConfig(
             enabled=True,
@@ -167,7 +131,7 @@ def _config(tmp_path: Path) -> Config:
     strategy = _replace(base.strategy, crypto=_replace(base.strategy.crypto, enabled=True))
     return _replace(
         base,
-        universe=_replace(base.universe, equity=equity, crypto=crypto),
+        universe=_replace(base.universe, crypto=crypto),
         strategy=strategy,
     )
 
@@ -176,26 +140,16 @@ def _install_fakes(monkeypatch: Any, trading: FakeTrading) -> None:
     monkeypatch.setattr(preflight_module, "TradingClient", lambda *a, **k: trading)
 
 
-def _history(config: Config, crypto: FakeCryptoClient, stock: FakeStockClient) -> Any:
+def _history(config: Config, crypto: FakeCryptoClient) -> Any:
     from parayabuck.data.alpaca import AlpacaHistoricalData
     from parayabuck.data.cache import WarmupCache
 
-    # Use a temporary cache under tmp_path when available; fall back to
-    # an in-memory temp path derived from config's universe paths so tests
-    # NEVER write to data/cache/warmup.sqlite3.
-    tmp_cache_path: str | None = None
-    # _config stores universe paths under tmp_path; derive cache path from same parent.
-    try:
-        candidate = config.universe.equity.candidate_universe_path
-        if candidate:
-            tmp_cache_path = str(Path(candidate).parent / "warmup_test.sqlite3")
-    except Exception:
-        tmp_cache_path = None
-    if tmp_cache_path is None:
-        tmp_cache_path = ":memory:"
-    history = AlpacaHistoricalData("k", "s", stock_feed="sip", cache=WarmupCache(tmp_cache_path))
+    # _config stores the crypto active-universe path under tmp_path, so the
+    # cache lands in the same temporary directory and NEVER touches
+    # data/cache/warmup.sqlite3.
+    cache_path = str(Path(config.universe.crypto.active_universe_path).parent / "warmup_test.sqlite3")
+    history = AlpacaHistoricalData("k", "s", stock_feed="sip", cache=WarmupCache(cache_path))
     history._crypto_client = crypto
-    history._stock_client = stock
     return history
 
 
@@ -212,9 +166,8 @@ def test_crypto_refresh_cold_and_warm_cache_results_are_identical(tmp_path: Path
     config = _config(tmp_path)
     trading = FakeTrading(_CRYPTO)
     crypto = FakeCryptoClient()
-    stock = FakeStockClient()
     _install_fakes(monkeypatch, trading)
-    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock))
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto))
 
     cold = preflight_module.refresh_crypto_universe(config, "k", "s")
     cold_rows = sum(crypto.bar_rows)
@@ -232,9 +185,8 @@ def test_crypto_refresh_config_digest_change_fails_closed_to_full_refetch(tmp_pa
     config = _config(tmp_path)
     trading = FakeTrading(_CRYPTO)
     crypto = FakeCryptoClient()
-    stock = FakeStockClient()
     _install_fakes(monkeypatch, trading)
-    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock))
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto))
     preflight_module.refresh_crypto_universe(config, "k", "s")
 
     from dataclasses import replace
@@ -251,63 +203,3 @@ def test_crypto_refresh_config_digest_change_fails_closed_to_full_refetch(tmp_pa
     # Full lookback re-downloaded (336 hourly bars x 7 symbols) because the
     # scope digest no longer matches the cached rows.
     assert crypto.bar_rows and crypto.bar_rows[0] >= len(_CRYPTO) * 336
-
-
-def test_equity_refresh_observation_cache_keeps_scanner_result_identical(tmp_path: Path, monkeypatch: Any) -> None:
-    config = _config(tmp_path)
-    trading = FakeTrading(_EQUITY)
-    crypto = FakeCryptoClient()
-    stock = FakeStockClient()
-    _install_fakes(monkeypatch, trading)
-    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock))
-
-    cold = preflight_module.refresh_equity_universe(config, "k", "s")
-    cold_bars = sum(stock.bar_rows)
-    stock.bar_rows.clear()
-    warm = preflight_module.refresh_equity_universe(config, "k", "s")
-    warm_bars = sum(stock.bar_rows)
-
-    assert warm_bars < cold_bars
-    assert _crypto_result_snapshot(cold) == _crypto_result_snapshot(warm)
-
-
-class _FrozenDatetime(datetime):
-    frozen: datetime | None = None
-
-    @classmethod
-    def now(cls, tz=None):  # noqa: D102
-        assert cls.frozen is not None
-        return cls.frozen.astimezone(tz or UTC)
-
-
-def test_equity_same_slot_skip_after_close_produces_identical_output(tmp_path: Path, monkeypatch: Any) -> None:
-    """After the session close the cached final daily bar needs no refetch;
-    a same-slot re-run must skip the whole daily delta pass and produce the
-    identical scanner result."""
-    from datetime import time as dtime
-
-    from parayabuck.markets.timeframes import NEW_YORK
-
-    frozen = datetime(2026, 8, 18, 17, 30, tzinfo=NEW_YORK).astimezone(UTC)  # Tue 17:30 ET
-    _FrozenDatetime.frozen = frozen
-    monkeypatch.setattr(preflight_module, "datetime", _FrozenDatetime)
-
-    config = _config(tmp_path)
-    trading = FakeTrading(_EQUITY)
-    crypto = FakeCryptoClient()
-    stock = FakeStockClient()
-    _install_fakes(monkeypatch, trading)
-    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock))
-
-    first = preflight_module.refresh_equity_universe(config, "k", "s")
-    first_calls = len(stock.bar_rows)
-    stock.bar_rows.clear()
-    second = preflight_module.refresh_equity_universe(config, "k", "s")
-    second_calls = len(stock.bar_rows)
-
-    # The second refresh must not re-download the daily delta pass (only the
-    # observation tail fetch + quotes remain).
-    assert second_calls < first_calls
-    assert _crypto_result_snapshot(first) == _crypto_result_snapshot(second)
-    # Sanity: the frozen clock really is after the regular session close.
-    assert frozen.astimezone(NEW_YORK).time() >= dtime(16, 0)

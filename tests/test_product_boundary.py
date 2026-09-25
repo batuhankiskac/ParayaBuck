@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from parayabuck import load_config
+from parayabuck.config import EquityUniverseConfig
 from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES, portfolio_strategy_from, product_strategy_from
 
 
@@ -69,7 +70,7 @@ def test_config_loader_rejects_unsupported_equity_identity(tmp_path: Path) -> No
         "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
         "engine": {},
         "universe": {
-            "equity": {"enabled": True, "fallback_trade_symbols": ["AAPL"]},
+            "equity": {"enabled": True, "symbols": ["AAPL"]},
             "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"]},
         },
         "strategy": {
@@ -92,7 +93,7 @@ def test_missing_strategy_block_raises(tmp_path: Path) -> None:
         "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
         "engine": {},
         "universe": {
-            "equity": {"enabled": True, "fallback_trade_symbols": ["AAPL"]},
+            "equity": {"enabled": True, "symbols": ["AAPL"]},
             "crypto": {"enabled": False},
         },
         # strategy block intentionally missing equity
@@ -132,7 +133,7 @@ def test_missing_strategy_block_raises(tmp_path: Path) -> None:
         "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
         "engine": {},
         "universe": {
-            "equity": {"enabled": True, "fallback_trade_symbols": ["AAPL"]},
+            "equity": {"enabled": True, "symbols": ["AAPL"]},
             "crypto": {"enabled": False},
         },
         "strategy": {
@@ -152,7 +153,7 @@ def test_missing_both_blocks_when_both_universes_enabled(tmp_path: Path) -> None
         "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
         "engine": {},
         "universe": {
-            "equity": {"enabled": True, "fallback_trade_symbols": ["AAPL"]},
+            "equity": {"enabled": True, "symbols": ["AAPL"]},
             "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"]},
         },
         "strategy": {},
@@ -161,6 +162,40 @@ def test_missing_both_blocks_when_both_universes_enabled(tmp_path: Path) -> None
     path.write_text(yaml.safe_dump(raw))
     with pytest.raises(ValueError, match="strategy.equity block with name is required"):
         load_config(str(path))
+
+
+def test_removed_dynamic_equity_universe_keys_fail_to_load(tmp_path: Path) -> None:
+    # The equity universe is static: a YAML still carrying the deleted dynamic
+    # scanner keys must be rejected outright, never silently reinterpreted.
+    for removed in ("dynamic_selection_enabled", "reference_symbols", "fallback_trade_symbols", "scanner"):
+        raw: dict[str, object] = {
+            "app": {"host": "127.0.0.1", "port": 8000, "log_level": "INFO"},
+            "runtime": {"mode": "paper"},
+            "alpaca": {"stock_stream_feed": "iex", "stock_historical_feed": "sip"},
+            "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
+            "engine": {},
+            "universe": {
+                "equity": {"enabled": True, "symbols": ["AAPL"], removed: True},
+                "crypto": {"enabled": False},
+            },
+            "strategy": {
+                "equity": {"enabled": True, "name": "equity_leveraged_trend_v1", "maximum_allocation": 0.5},
+                "crypto": {"enabled": False, "name": "crypto_low_variance_v1", "maximum_allocation": 0.05},
+            },
+        }
+        path = tmp_path / f"settings-{removed}.yaml"
+        path.write_text(yaml.safe_dump(raw))
+        with pytest.raises(TypeError, match=removed):
+            load_config(str(path))
+
+
+def test_static_equity_universe_rejects_more_symbols_than_stream_capacity() -> None:
+    # Every configured equity symbol is streamed, so the configured set can
+    # never exceed maximum_stream_symbols.
+    with pytest.raises(ValueError, match="exceed maximum_stream_symbols"):
+        EquityUniverseConfig(symbols=("SPY", "QQQ", "QLD", "TQQQ"), maximum_stream_symbols=3)
+    with pytest.raises(ValueError, match="must be unique"):
+        EquityUniverseConfig(symbols=("SPY", "SPY"))
 
 
 def test_dataclass_defaults_still_usable_without_yaml() -> None:

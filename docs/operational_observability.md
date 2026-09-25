@@ -95,7 +95,8 @@ Schema version 1, idempotent migration, WAL.
   - workers: `account_poll_interval * 3` (30s ×3 = 90s)
   - queue age: `engine.maximum_queue_age_seconds` (30s)
   - account/reconciliation: `maximum_account_age_for_entry_seconds *2` etc.
-  - universe: `active_universe_max_age_hours *3600`
+  - universe: `universe.crypto.active_universe_max_age_hours *3600` (the
+    equity universe is static and has no age)
   - rebalance stuck: 3600s
 - **Overall derivation** precedence: `CRITICAL` > `BLOCKED` > `DEGRADED` > `UNKNOWN` > `OK`.
 - `trading_state` separate concept: `ACTIVE / ENTRY_BLOCKED / REBALANCE_BLOCKED / MARKET_HALTED / CIRCUIT_BREAKER / STOPPED / UNKNOWN`, derived from `RuntimeHealth` + risk latch/market halts. A runtime can be `healthy infrastructure` but `ENTRY_BLOCKED` by risk — distinction visible.

@@ -76,10 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 equity: universe.equity?.symbols || [],
                 crypto: universe.crypto?.symbols || []
             },
-            universe_scores: {
-                equity: universe.equity?.scores || {},
-                crypto: universe.crypto?.scores || {}
-            },
+            crypto_universe_scores: universe.crypto?.scores || {},
             pending_orders: operations.pending_orders || [],
             recent_fills: operations.recent_fills || [],
             last_decision: operations.last_decision || null,

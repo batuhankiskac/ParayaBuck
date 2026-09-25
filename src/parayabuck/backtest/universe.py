@@ -1,33 +1,22 @@
 from __future__ import annotations
 
 import hashlib
-import statistics
 from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from itertools import pairwise
 
-from parayabuck.config import (
-    CryptoScannerConfig,
-    CryptoUniverseConfig,
-    EquityScannerConfig,
-    EquityUniverseConfig,
-)
+from parayabuck.config import CryptoScannerConfig, CryptoUniverseConfig, EquityUniverseConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import timeframe_duration
 from parayabuck.portfolio.base import PortfolioStrategy
 from parayabuck.universe.crypto_scanner import (
-    CryptoScannerResult,
     CryptoUniverseScanner,
     crypto_candidate_from_bars,
 )
-from parayabuck.universe.scanner import (
-    EquityUniverseScanner,
-    ScannerResult,
-    equity_candidate_from_bars,
-)
+from parayabuck.universe.equity import STATIC_EQUITY_UNIVERSE_VERSION, equity_universe_digest
 
 
 @dataclass(frozen=True)
@@ -39,7 +28,6 @@ class UniverseSnapshot:
     candidate_count: int = 0
     score_breakdown: dict[str, dict[str, float | str]] = field(default_factory=dict)
     eliminated: dict[str, str] = field(default_factory=dict)
-    sector_metadata_coverage: float = 1.0
     # The STREAMED observation set at the snapshot (live parity): the
     # completeness gate requires these symbols to have a closed bar at the
     # decision timestamp, exactly like the live runtime requires its stream.
@@ -80,15 +68,9 @@ class PointInTimeUniverse:
         return canonical_symbol(symbol, market) in self.snapshots[index - 1].symbols
 
     def to_dict(self) -> dict[str, object]:
-        coverage = (
-            sum(snapshot.sector_metadata_coverage for snapshot in self.snapshots) / len(self.snapshots)
-            if self.snapshots
-            else 1.0
-        )
         return {
             "market": self.market.value,
             "methodology": self.methodology,
-            "sector_metadata_coverage": round(coverage, 6),
             "snapshots": [
                 {
                     "effective_at": snapshot.effective_at.isoformat(),
@@ -103,11 +85,54 @@ class PointInTimeUniverse:
                     "candidate_count": snapshot.candidate_count,
                     "score_breakdown": snapshot.score_breakdown,
                     "eliminated": snapshot.eliminated,
-                    "sector_metadata_coverage": snapshot.sector_metadata_coverage,
                 }
                 for snapshot in self.snapshots
             ],
         }
+
+
+def build_static_equity_point_in_time_universe(
+    bars: list[Bar],
+    config: EquityUniverseConfig,
+) -> PointInTimeUniverse:
+    """Point-in-time view of the static equity universe.
+
+    Each configured symbol joins at its first bar, so a symbol listed later
+    in the bar set is never a member before it has data. A new snapshot is
+    emitted only when the membership changes.
+    """
+    configured = set(config.symbols)
+    digest = equity_universe_digest(config)
+    snapshots: list[UniverseSnapshot] = []
+    members: list[str] = []
+    for bar in sorted(
+        (bar for bar in bars if bar.market == Market.EQUITY),
+        key=lambda item: (item.timestamp, item.symbol),
+    ):
+        symbol = canonical_symbol(bar.symbol, Market.EQUITY)
+        if symbol not in configured or symbol in members:
+            continue
+        members.append(symbol)
+        observation = tuple(item for item in config.symbols if item in members)
+        snapshot = UniverseSnapshot(
+            effective_at=bar.timestamp,
+            symbols=frozenset(observation),
+            scanner_version=STATIC_EQUITY_UNIVERSE_VERSION,
+            config_digest=digest,
+            candidate_count=len(observation),
+            observation_set=observation,
+            maximum_stream_symbols=config.maximum_stream_symbols,
+            pinned_symbols=observation,
+        )
+        if snapshots and snapshots[-1].effective_at == bar.timestamp:
+            snapshots[-1] = snapshot
+        else:
+            snapshots.append(snapshot)
+    return PointInTimeUniverse(
+        Market.EQUITY,
+        tuple(snapshots),
+        "static configured equity universe; each symbol joins at its first bar",
+    )
 
 
 def build_crypto_point_in_time_universe(
@@ -132,7 +157,6 @@ def build_crypto_point_in_time_universe(
     )
     return build_trailing_point_in_time_universe(
         bars,
-        market=Market.CRYPTO,
         maximum_symbols=maximum_symbols,
         rebalance_frequency="monthly",
         lookback_days=lookback_days,
@@ -144,36 +168,28 @@ def build_crypto_point_in_time_universe(
 def build_trailing_point_in_time_universe(
     bars: list[Bar],
     *,
-    market: Market,
     maximum_symbols: int,
     rebalance_frequency: str = "daily",
     lookback_days: int = 60,
     minimum_history_ratio: float = 0.80,
-    minimum_price: float = 0.0,
     minimum_dollar_volume: float = 0.0,
     pinned_symbols: tuple[str, ...] = (),
-    target_shortlist: int | None = None,
-    equity_config: EquityUniverseConfig | None = None,
     crypto_config: CryptoUniverseConfig | None = None,
     observation_strategy: PortfolioStrategy | None = None,
 ) -> PointInTimeUniverse:
-    """Run the production scanner policy on strictly trailing historical metrics.
+    """Run the production crypto scanner policy on strictly trailing metrics.
 
-    ``target_shortlist`` mirrors the live equity pipeline's Stage-A gate: the
-    trailing median-dollar-volume leaders (up to the target) are the only
-    symbols that reach the scanner, so a broad downloaded universe is
-    evaluated exactly like the live market is. When ``observation_strategy``
-    is supplied, the scanner's broad eligible pool is then ranked through the
-    shared PAPER observation builder using strictly prior bars.
+    When ``observation_strategy`` is supplied, the scanner's eligible pool is
+    ranked through the shared PAPER observation builder using strictly prior
+    bars.
     """
+    market = Market.CRYPTO
     if maximum_symbols <= 0:
         raise ValueError("maximum_symbols must be positive")
     if rebalance_frequency not in {"daily", "weekly", "monthly"}:
         raise ValueError("rebalance_frequency must be daily, weekly, or monthly")
     if not 0 < minimum_history_ratio <= 1:
         raise ValueError("minimum_history_ratio must be in (0, 1]")
-    if target_shortlist is not None and target_shortlist < maximum_symbols:
-        raise ValueError("target_shortlist must cover the active universe")
     selected_bars = sorted(
         (bar for bar in bars if bar.market == market),
         key=lambda item: (item.timestamp, item.symbol),
@@ -234,108 +250,64 @@ def build_trailing_point_in_time_universe(
             (series[-1].timestamp for series in by_symbol.values()),
             default=timestamp - duration,
         )
-        result: ScannerResult | CryptoScannerResult
-        ordinary_alpha_excluded_symbols: tuple[str, ...] = ()
-        if market == Market.EQUITY:
-            configured = equity_config or EquityUniverseConfig(
-                maximum_stream_symbols=maximum_symbols,
-                reference_symbols=(),
-                scanner=EquityScannerConfig(
-                    minimum_price=max(minimum_price, 0.01),
-                    minimum_median_dollar_volume=max(minimum_dollar_volume, 1.0),
-                    minimum_data_completeness=minimum_history_ratio,
-                ),
+        configured_crypto = crypto_config or CryptoUniverseConfig(
+            enabled=True,
+            dynamic_selection_enabled=True,
+            maximum_stream_symbols=maximum_symbols,
+            pinned_symbols=pinned,
+            trade_symbols=pinned,
+            scanner=replace(
+                CryptoScannerConfig(),
+                lookback_days=lookback_days,
+                minimum_data_completeness=minimum_history_ratio,
+                minimum_median_dollar_volume=max(minimum_dollar_volume, 1.0),
+            ),
+        )
+        # Backtest ↔ PAPER parity: the configured trade_symbols are the
+        # authoritative candidate pool for crypto. Only symbols that are
+        # both configured and have bars at this PIT window enter the
+        # scanner. This mirrors PAPER's configured ∩ broker_active
+        # intersection, with broker availability inferred from bar
+        # availability (listing support) at time t. Dataset-only extras
+        # (e.g. MKR/USD, NEAR/USD, TRX/USD) must not enter the alpha pool.
+        allowed_crypto_pool: set[str] | None = None
+        if crypto_config is not None and configured_crypto.trade_symbols:
+            allowed_crypto_pool = {canonical_symbol(s, Market.CRYPTO) for s in configured_crypto.trade_symbols}
+            if configured_crypto.allowlist_symbols:
+                allowed_crypto_pool &= {canonical_symbol(s, Market.CRYPTO) for s in configured_crypto.allowlist_symbols}
+            if configured_crypto.denylist_symbols:
+                allowed_crypto_pool -= {canonical_symbol(s, Market.CRYPTO) for s in configured_crypto.denylist_symbols}
+        btc_history = by_symbol.get("BTC/USD", [])
+        crypto_items = sorted(by_symbol.items())
+        if allowed_crypto_pool is not None:
+            crypto_items = [(s, h) for s, h in crypto_items if s in allowed_crypto_pool]
+        crypto_candidates = [
+            crypto_candidate_from_bars(
+                symbol,
+                history,
+                expected_bar_count=expected,
+                tradable=True,
+                status="active",
+                btc_bars=btc_history,
+                spread_bps=None,
             )
-            ordinary_alpha_excluded_symbols = configured.ordinary_alpha_excluded_symbols
-            if target_shortlist is not None:
-                # Stage-A parity with the live pipeline: rank the trailing
-                # window by median dollar volume and admit only the top target
-                # before the production scanner runs. The sort key is a total
-                # order (median-dollars, symbol), so the result is independent
-                # of the input order and one sort suffices.
-                shortlisted = sorted(
-                    by_symbol.items(),
-                    key=lambda item: (-_median_dollar_volume(item[1]), item[0]),
-                )[:target_shortlist]
-            else:
-                shortlisted = sorted(by_symbol.items())
-            equity_candidates = [
-                equity_candidate_from_bars(
-                    symbol,
-                    history,
-                    expected_bar_count=min(20, expected),
-                )
-                for symbol, history in shortlisted
-            ]
-            result = EquityUniverseScanner(configured).scan(
-                equity_candidates,
-                data_timestamp=data_timestamp,
-                selection_timestamp=timestamp,
-                pinned_symbols=pinned,
-            )
-        else:
-            configured_crypto = crypto_config or CryptoUniverseConfig(
-                enabled=True,
-                dynamic_selection_enabled=True,
-                maximum_stream_symbols=maximum_symbols,
-                pinned_symbols=pinned,
-                trade_symbols=pinned,
-                scanner=replace(
-                    CryptoScannerConfig(),
-                    lookback_days=lookback_days,
-                    minimum_data_completeness=minimum_history_ratio,
-                    minimum_median_dollar_volume=max(minimum_dollar_volume, 1.0),
-                ),
-            )
-            # Backtest ↔ PAPER parity: the configured trade_symbols are the
-            # authoritative candidate pool for crypto. Only symbols that are
-            # both configured and have bars at this PIT window enter the
-            # scanner. This mirrors PAPER's configured ∩ broker_active
-            # intersection, with broker availability inferred from bar
-            # availability (listing support) at time t. Dataset-only extras
-            # (e.g. MKR/USD, NEAR/USD, TRX/USD) must not enter the alpha pool.
-            allowed_crypto_pool: set[str] | None = None
-            if crypto_config is not None and configured_crypto.trade_symbols:
-                allowed_crypto_pool = {canonical_symbol(s, Market.CRYPTO) for s in configured_crypto.trade_symbols}
-                if configured_crypto.allowlist_symbols:
-                    allowed_crypto_pool &= {
-                        canonical_symbol(s, Market.CRYPTO) for s in configured_crypto.allowlist_symbols
-                    }
-                if configured_crypto.denylist_symbols:
-                    allowed_crypto_pool -= {
-                        canonical_symbol(s, Market.CRYPTO) for s in configured_crypto.denylist_symbols
-                    }
-            btc_history = by_symbol.get("BTC/USD", [])
-            crypto_items = sorted(by_symbol.items())
-            if allowed_crypto_pool is not None:
-                crypto_items = [(s, h) for s, h in crypto_items if s in allowed_crypto_pool]
-            crypto_candidates = [
-                crypto_candidate_from_bars(
-                    symbol,
-                    history,
-                    expected_bar_count=expected,
-                    tradable=True,
-                    status="active",
-                    btc_bars=btc_history,
-                    spread_bps=None,
-                )
-                for symbol, history in crypto_items
-            ]
-            result = CryptoUniverseScanner(configured_crypto).scan(
-                crypto_candidates,
-                data_timestamp=data_timestamp,
-                selection_timestamp=timestamp,
-            )
+            for symbol, history in crypto_items
+        ]
+        result = CryptoUniverseScanner(configured_crypto).scan(
+            crypto_candidates,
+            data_timestamp=data_timestamp,
+            selection_timestamp=timestamp,
+        )
         if not result.selected_symbols and not result.candidate_symbols:
             continue
-        # The scanner reserves references/inverse ETFs unconditionally (matching
-        # the live pipeline), but a reserved symbol without bars in this
-        # window cannot be evaluated or traded: drop it so the decision gate
-        # never blocks on data the run does not have.
+        # The scanner reserves pinned symbols unconditionally (matching the
+        # live pipeline), but a reserved symbol without bars in this window
+        # cannot be evaluated or traded: drop it so the decision gate never
+        # blocks on data the run does not have.
         selected = tuple(symbol for symbol in result.selected_symbols if symbol in by_symbol)
         if not selected and not result.candidate_symbols:
             continue
-        raw_observation = tuple(symbol for symbol in getattr(result, "observation_set", ()) if symbol in by_symbol)
+        raw_observation = tuple(symbol for symbol in result.observation_set if symbol in by_symbol)
         observation = raw_observation
         observation_strategy_name = ""
         observation_strategy_version = ""
@@ -352,7 +324,6 @@ def build_trailing_point_in_time_universe(
                 decision_timestamp=data_timestamp,
                 maximum_stream_symbols=maximum_symbols,
                 pinned_symbols=tuple(symbol for symbol in pinned if symbol in by_symbol),
-                ordinary_alpha_excluded_symbols=ordinary_alpha_excluded_symbols,
                 scanner_fallback=raw_observation,
             )
             observation = ranked_observation.observation_set
@@ -367,7 +338,6 @@ def build_trailing_point_in_time_universe(
                 candidate_count=len(result.candidate_symbols),
                 score_breakdown=result.score_breakdown,
                 eliminated=result.eliminated,
-                sector_metadata_coverage=getattr(result, "sector_metadata_coverage", 1.0),
                 observation_set=observation,
                 maximum_stream_symbols=maximum_symbols,
                 pinned_symbols=tuple(symbol for symbol in pinned if symbol in by_symbol),
@@ -381,23 +351,10 @@ def build_trailing_point_in_time_universe(
         (
             f"{rebalance_frequency} production scanner policy on trailing {lookback_days}d "
             "metrics; inputs strictly precede snapshot; "
-            + (
-                f"Stage-A shortlist capped at {target_shortlist} symbols by trailing median dollar volume; "
-                if target_shortlist is not None
-                else ""
-            )
-            + "historical spread and broad sector/tradability metadata unavailable "
+            "historical spread and broad sector/tradability metadata unavailable "
             "and explicitly degraded"
         ),
     )
-
-
-def _median_dollar_volume(bars: list[Bar]) -> float:
-    # ``bars`` is the trailing-window series, already timestamp-ascending
-    # (see the builder's forward-pass invariant), so the last 20 are the
-    # trailing 20 without a redundant sort.
-    values = [float(bar.close) * float(bar.volume) for bar in bars[-20:]]
-    return statistics.median(values) if values else 0.0
 
 
 def _period_key(timestamp: datetime, frequency: str) -> tuple[int, ...]:
@@ -457,6 +414,7 @@ __all__ = [
     "PointInTimeUniverse",
     "UniverseSnapshot",
     "build_crypto_point_in_time_universe",
+    "build_static_equity_point_in_time_universe",
     "build_trailing_point_in_time_universe",
     "hash_point_in_time_universe",
     "verify_persisted_universe",

@@ -246,62 +246,9 @@ class _HistorySpy(_CloseSpy):
         self.instances.append(self)
 
 
-def test_equity_refresh_closes_owned_clients_on_success_and_failure(monkeypatch, tmp_path: Path) -> None:
-    _TradingSpy.instances = []
-    _HistorySpy.instances = []
-    monkeypatch.setattr(preflight, "TradingClient", _TradingSpy)
-    monkeypatch.setattr(preflight, "AlpacaHistoricalData", _HistorySpy)
-    monkeypatch.setattr(preflight, "patch_session_timeout", lambda *_args, **_kwargs: None)
-
-    def fake_refresh(_config, *, now=None, trading, history_factory):
-        history_factory()
-        return SimpleNamespace(status="success")
-
-    monkeypatch.setattr(preflight, "_refresh_equity_universe_with_clients", fake_refresh)
-    preflight.refresh_equity_universe(Config(), "test-api", "test-secret", now=datetime.now(UTC))
-    assert _TradingSpy.instances[0]._session.calls == 1
-    assert _HistorySpy.instances[0].calls == 1
-
-    def failing_refresh(_config, *, now=None, trading, history_factory):
-        history_factory()
-        raise RuntimeError("primary refresh failure")
-
-    monkeypatch.setattr(preflight, "_refresh_equity_universe_with_clients", failing_refresh)
-    with pytest.raises(RuntimeError, match="primary refresh failure"):
-        preflight.refresh_equity_universe(Config(), "test-api", "test-secret")
-    assert _TradingSpy.instances[1]._session.calls == 1
-    assert _HistorySpy.instances[1].calls == 1
-
-
-def test_refresh_cleanup_failure_does_not_mask_primary_exception(monkeypatch) -> None:
-    class BadHistory(_CloseSpy):
-        def close(self) -> None:
-            self.calls += 1
-            raise RuntimeError("cleanup failure")
-
-    trading = _TradingSpy()
-    history = BadHistory()
-    monkeypatch.setattr(preflight, "TradingClient", lambda *_args, **_kwargs: trading)
-    monkeypatch.setattr(preflight, "patch_session_timeout", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        preflight,
-        "_refresh_equity_universe_with_clients",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("primary")),
-    )
-    monkeypatch.setattr(preflight, "AlpacaHistoricalData", lambda *_args, **_kwargs: history)
-
-    def refresh_with_history(_config, *, now=None, trading, history_factory):
-        history_factory()
-        raise RuntimeError("primary")
-
-    monkeypatch.setattr(preflight, "_refresh_equity_universe_with_clients", refresh_with_history)
-    with pytest.raises(RuntimeError, match="^primary$"):
-        preflight.refresh_equity_universe(Config(), "test-api", "test-secret")
-    assert history.calls == 1
-    assert trading._session.calls == 1
-
-
-def test_crypto_refresh_closes_owned_clients(monkeypatch) -> None:
+def test_crypto_refresh_closes_owned_clients_on_success_and_failure(monkeypatch) -> None:
+    """Only the crypto universe refresh owns clients; both the success and
+    the failure leg must close them exactly once."""
     _TradingSpy.instances = []
     _HistorySpy.instances = []
 
@@ -321,6 +268,46 @@ def test_crypto_refresh_closes_owned_clients(monkeypatch) -> None:
     preflight.refresh_crypto_universe(Config(), "test-api", "test-secret")
     assert _TradingSpy.instances[0]._session.calls == 1
     assert _HistorySpy.instances[0].calls == 1
+
+    def failing_refresh(_config, _assets, *, history_factory):
+        history_factory()
+        raise RuntimeError("primary refresh failure")
+
+    monkeypatch.setattr(preflight, "_refresh_crypto_universe_with_clients", failing_refresh)
+    with pytest.raises(RuntimeError, match="primary refresh failure"):
+        preflight.refresh_crypto_universe(Config(), "test-api", "test-secret")
+    assert _TradingSpy.instances[1]._session.calls == 1
+    assert _HistorySpy.instances[1].calls == 1
+
+
+def test_refresh_cleanup_failure_does_not_mask_primary_exception(monkeypatch) -> None:
+    """A client whose close() fails must not replace the primary refresh
+    failure the caller needs to see."""
+
+    class BadHistory(_CloseSpy):
+        def close(self) -> None:
+            self.calls += 1
+            raise RuntimeError("cleanup failure")
+
+    class CryptoTrading(_TradingSpy):
+        def get_all_assets(self, _request):
+            return []
+
+    trading = CryptoTrading()
+    history = BadHistory()
+    monkeypatch.setattr(preflight, "TradingClient", lambda *_args, **_kwargs: trading)
+    monkeypatch.setattr(preflight, "patch_session_timeout", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(preflight, "AlpacaHistoricalData", lambda *_args, **_kwargs: history)
+
+    def refresh_with_history(_config, _assets, *, history_factory):
+        history_factory()
+        raise RuntimeError("primary")
+
+    monkeypatch.setattr(preflight, "_refresh_crypto_universe_with_clients", refresh_with_history)
+    with pytest.raises(RuntimeError, match="^primary$"):
+        preflight.refresh_crypto_universe(Config(), "test-api", "test-secret")
+    assert history.calls == 1
+    assert trading._session.calls == 1
 
 
 def _stopped_backtest() -> BacktestManager:

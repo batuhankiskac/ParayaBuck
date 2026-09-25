@@ -6,9 +6,10 @@
 > - **Crypto:** `crypto_low_variance_hysteresis_v1` — 1d signal, 96h rebalance, 0.05 allocation; validated low-variance hysteresis product identity
 > - **Dataset:** point-in-time historical manifests and corporate-action data remain under `data/historical/`; large provider datasets are local/ignored
 
-Automated multi-market Alpaca trading bot: dynamic universe discovery,
-validated portfolio strategies, strict risk overlay, and deterministic
-execution through the same pipeline in backtest, paper, and live modes.
+Automated multi-market Alpaca trading bot: a static equity universe and a
+scanner-selected crypto universe, validated portfolio strategies, strict risk
+overlay, and deterministic execution through the same pipeline in backtest,
+paper, and live modes.
 
 Live trading is disabled by default. Supplying Alpaca credentials alone cannot
 enable it (see [Enabling live safely](#enabling-live-safely)).
@@ -38,20 +39,27 @@ operation remains the gate before any live consideration.
 ## Architecture
 
 ```text
-Alpaca assets/data -> eligibility filters -> dynamic scanner -> active universe
+Alpaca assets/data -> static equity symbols / crypto scanner -> active universe
   -> production strategy -> target portfolio -> risk overlay -> order planner
   -> historical broker / Alpaca paper / explicitly authorized Alpaca live
 ```
 
 - One `PortfolioStrategy` interface and one target/risk meaning across
   backtest, paper, and live.
-- Dynamic universes (equity ~300-candidate shortlist → 30-symbol IEX stream;
-  crypto from supported USD pairs) are rebuilt point-in-time by the production
-  scanner. `universe.equity.reference_symbols` pins SPY, QQQ and QLD; QQQ is
-  the trend signal and QLD the only holding, both tradable through
-  `universe.equity.trade_reference_symbols`. The unused static fallback list
-  omits XLRE/XLC; other static symbols remain fallback/allowlist/denylist
-  inputs.
+- The equity universe is static: `universe.equity.symbols` is `[SPY, QQQ,
+  QLD]` streamed and tradable within `maximum_stream_symbols` (30, the Alpaca
+  IEX limit). QQQ is the `equity_leveraged_trend_v1` trend signal, QLD its only
+  holding, SPY the benchmark. There is no equity scanner and no equity universe
+  artifact; managed positions outside those symbols (e.g. leftovers of the
+  removed V3/sleeve identities) are pinned into the stream by the runtime
+  (`_pin_managed_symbols`) at startup until sold. Backtests use
+  `build_static_equity_point_in_time_universe` — each configured symbol joins
+  at its first bar.
+- The crypto universe stays dynamic: all supported USD pairs are scanned
+  (liquidity, spread, ATR, BTC-correlation, category limits) into a
+  point-in-time observation set bounded by
+  `universe.crypto.maximum_stream_symbols` (12). The crypto scanner, active
+  universe, refresh loop and preflight are unchanged.
 - Strict risk overlay: market allocations remain 0.93 equity / 0.05 crypto.
   Equity limits are 0.93 per asset, 0.98 gross and a 0.02 cash buffer; the
   0.20 daily-loss and 0.75 drawdown latches are catastrophe brakes for a 2x
@@ -98,7 +106,8 @@ Configuration lives in `config/settings.yaml` (`runtime.mode`, universe,
 execution, backup, alerting). The current equity selection is
 `equity_leveraged_trend_v1`; its parameters are `signal_symbol`, `hold_symbol`,
 `sma_bars`, `vol_target`, `vol_window` and `rebalance_frequency`, with QQQ/QLD
-as tradable reference symbols. The V3 and sleeve identities, the
+as ordinary tradable members of `universe.equity.symbols`. The V3 and sleeve
+identities, the
 static-sleeve risk-overlay composition and `risk.slot_exempt_equity_symbols`
 are gone. Rollback restores `config/settings.yaml` and the removed modules
 from commit `ec4e2df` (main before the switch), e.g.
@@ -113,8 +122,8 @@ from commit `ec4e2df` (main before the switch), e.g.
 
 CSV columns are `timestamp,symbol,open,high,low,close,volume` plus optional
 `market,timeframe`. Downloads (`--start/--end`) use the configured Alpaca
-credentials; equity history defaults to the broad eligible universe so
-delisted names are still evaluated point-in-time. `--cost-stress` repeats at
+credentials; equity history downloads the configured `universe.equity.symbols`
+only (no Alpaca asset listing). `--cost-stress` repeats at
 1x/2x/3x costs. Equity regulatory fees follow an effective-dated schedule;
 crypto backtests use Alpaca's tier-1 taker rate (25 bps). Reports include
 return, CAGR, Sharpe, Sortino, max drawdown, Calmar, profit factor, costs,
@@ -130,7 +139,7 @@ Live requires ALL of the following at the same time:
 4. live Alpaca credentials
 5. `PARAYABUCK_ENABLE_LIVE=YES`
 6. a short-lived HMAC approval bound to the live account, exact strategy,
-   scanner-policy, risk-policy and allocation digests, and dollar cap
+   universe-policy, risk-policy and allocation digests, and dollar cap
 7. a fresh Web UI account-suffix confirmation before start
 
 Create the signed file with a 32+ character secret in
@@ -141,7 +150,7 @@ Create the signed file with a 32+ character secret in
 ```
 
 This performs read-only live account verification; it does not place an order.
-Changing the account, strategy/scanner/risk policy, allocation, or mode
+Changing the account, strategy/universe/risk policy, allocation, or mode
 invalidates the approval. Live activation is never performed automatically.
 
 ## Verification and quality gates
@@ -167,7 +176,7 @@ live.
 - `docs/validated_strategies.md` — frozen baselines and current validated identities
 - `docs/research/profit_max_v1.md` — current equity identity evidence
 - `docs/research/dividend_sleeve_production_v1.md` / `docs/research/gold_sleeve_production_v1.md` — removed sleeve evidence (historical)
-- `docs/strategy_architecture.md` — universe/scanner/strategy/risk contract
+- `docs/strategy_architecture.md` — universe/strategy/risk contract
 - `docs/paper_operations.md` — PAPER runtime contract and forward rules
 - `docs/operations.md` — state, backup/restore, Docker, incident reconciliation
 - `docs/deployment.md` — systemd on Google Cloud, update + rollback

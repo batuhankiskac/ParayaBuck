@@ -15,9 +15,10 @@ from parayabuck.backtest.universe import PointInTimeUniverse, UniverseSnapshot
 from parayabuck.config import Config, StrategyConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
+from parayabuck.markets.timeframes import bars_to_calendar_days
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
 from parayabuck.portfolio.models import PortfolioState
-from parayabuck.universe.observation_set import build_observation_set
+from parayabuck.universe import STATIC_EQUITY_UNIVERSE_VERSION
 
 
 def _bars(days: int = 420) -> list[Bar]:
@@ -84,42 +85,32 @@ def test_product_backtest_uses_production_strategy_risk_and_next_open_fills(tmp_
     report = json.loads((tmp_path / "reports" / run.run_id / "report.json").read_text())
     assert "survivorship_bias_limitation" in report["summary"]
     universe = json.loads((tmp_path / "reports" / run.run_id / "universe.json").read_text())
-    assert 0.0 <= universe["sector_metadata_coverage"] <= 1.0
-    assert universe["sector_metadata_coverage"] == report["summary"]["sector_metadata_coverage"]
+    assert universe["market"] == "equity"
+    assert {symbol for snapshot in universe["snapshots"] for symbol in snapshot["symbols"]} <= set(
+        config.universe.equity.symbols
+    )
+    assert {snapshot["scanner_version"] for snapshot in universe["snapshots"]} == {STATIC_EQUITY_UNIVERSE_VERSION}
 
 
-def test_product_universe_observation_uses_configured_strategy_alpha(tmp_path) -> None:
+def test_product_equity_universe_streams_the_configured_symbols(tmp_path) -> None:
+    """Equity has no ranker: the streamed observation set is exactly the
+    configured static universe, in configuration order."""
     config = _config(tmp_path)
     bars = _bars()
     universe = build_product_universe(config, bars, market=Market.EQUITY)
     snapshot = universe.snapshots[-1]
-    strategy = portfolio_strategy_from(
-        config.strategy.equity.name,
-        config.strategy.equity.parameters,
-        timeframe=config.strategy.equity.timeframe,
-    )
-    history = {
-        symbol: tuple(bar for bar in bars if bar.symbol == symbol and bar.timestamp < snapshot.effective_at)
-        for symbol in snapshot.symbols
-    }
-    data_timestamp = max(bar.timestamp for series in history.values() for bar in series)
-    direct = build_observation_set(
-        strategy,
-        history,
-        tuple(sorted(snapshot.symbols)),
-        market=Market.EQUITY,
-        timeframe=strategy.timeframe,
-        decision_timestamp=data_timestamp,
-        maximum_stream_symbols=snapshot.maximum_stream_symbols,
-        pinned_symbols=snapshot.pinned_symbols,
-    )
-    assert direct.strategy_name == strategy.name
-    assert snapshot.observation_strategy_name == strategy.name
-    assert snapshot.observation_strategy_version == strategy.version
-    assert snapshot.observation_set[: len(direct.observation_set)] == direct.observation_set
+    assert snapshot.observation_set == tuple(config.universe.equity.symbols)
+    assert snapshot.pinned_symbols == tuple(config.universe.equity.symbols)
+    assert snapshot.symbols == frozenset(config.universe.equity.symbols)
+    assert snapshot.maximum_stream_symbols == config.universe.equity.maximum_stream_symbols
+    # A symbol downloaded into the run but never configured is not a member.
+    assert not universe.contains("AAA", Market.EQUITY, bars[-1].timestamp)
+    # Every configured symbol joined at its first bar, so one snapshot covers
+    # the whole set: the static universe never re-snapshots an unchanged set.
+    assert len(universe.snapshots) == 1
 
 
-def test_requested_strategy_identity_owns_direct_backtest_observation_set(tmp_path) -> None:
+def test_requested_strategy_identity_owns_report_but_not_the_static_universe(tmp_path) -> None:
     config = _config(tmp_path)
 
     run = run_product_backtest(
@@ -130,8 +121,9 @@ def test_requested_strategy_identity_owns_direct_backtest_observation_set(tmp_pa
     )
 
     assert run.report.summary["strategy_name"] == "equity_leveraged_trend_v1"
-    assert {snapshot.observation_strategy_name for snapshot in run.universe.snapshots} == {"equity_leveraged_trend_v1"}
-    assert {snapshot.observation_strategy_version for snapshot in run.universe.snapshots} == {"1.0.0"}
+    # The static equity universe is owned by configuration, so the requested
+    # strategy arm cannot redefine its streamed membership.
+    assert {snapshot.observation_set for snapshot in run.universe.snapshots} == {tuple(config.universe.equity.symbols)}
 
 
 def test_product_runner_applies_typed_terminal_lifecycle(tmp_path) -> None:
@@ -226,17 +218,12 @@ def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) 
     bars = _bars()
     real_build = product_module.build_product_universe
     builds: list[str] = []
-    identities: list[set[tuple[str, str]]] = []
+    memberships: list[tuple[tuple[str, ...], ...]] = []
 
     def counting_build(*args, **kwargs):
         builds.append(kwargs.get("end").isoformat())
         universe = real_build(*args, **kwargs)
-        identities.append(
-            {
-                (snapshot.observation_strategy_name, snapshot.observation_strategy_version)
-                for snapshot in universe.snapshots
-            }
-        )
+        memberships.append(tuple(snapshot.observation_set for snapshot in universe.snapshots))
         return universe
 
     monkeypatch.setattr(product_module, "build_product_universe", counting_build)
@@ -258,10 +245,10 @@ def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) 
         (start + timedelta(days=299)).isoformat(),
         (start + timedelta(days=419)).isoformat(),
     ]
-    assert identities == [
-        {("equity_leveraged_trend_v1", "1.0.0")},
-        {("equity_leveraged_trend_v1", "1.0.0")},
-    ]
+    # The static equity universe has a single membership, identical in both
+    # windows: no parameter arm can redefine the streamed symbols.
+    assert memberships[0] == (tuple(config.universe.equity.symbols),)
+    assert memberships == [memberships[0], memberships[0]]
 
 
 @pytest.mark.parametrize(
@@ -457,50 +444,13 @@ def test_equity_csv_rejects_weekend_execution_bars(tmp_path) -> None:
         cli_module.load_csv_bars(csv_path, default_market=Market.EQUITY)
 
 
-def test_download_candidates_use_broad_eligible_universe_not_todays_shortlist(tmp_path, monkeypatch) -> None:
-    # Keep this unit test independent of a developer's private .env file.
-    # _candidate_symbols constructs an Alpaca TradingClient before the
-    # eligibility function is replaced with the deterministic fake below.
-    monkeypatch.setenv("ALPACA_API_KEY", "unit-test-api-key")
-    monkeypatch.setenv("ALPACA_SECRET_KEY", "unit-test-secret-key")
+def test_equity_candidate_symbols_are_the_configured_static_universe(tmp_path) -> None:
+    # Equity downloads are configuration, not discovery: no eligibility probe,
+    # no shortlist file and no candidate cap narrow the configured symbols.
     config = _config(tmp_path)
-    candidate_path = tmp_path / "equity-candidates.json"
-    candidate_path.write_text(
-        json.dumps({"symbols": ["AAA", "BBB", "ZZZ"], "shortlist_symbols": ["ZZZ"]}),
-        encoding="utf-8",
-    )
-    config = replace(
-        config,
-        universe=replace(
-            config.universe,
-            equity=replace(
-                config.universe.equity,
-                candidate_universe_path=str(candidate_path),
-            ),
-        ),
-    )
-
-    broad = ["AAA", "BBB", "ZZZ", "HISTORICAL_LIQUID", "SPY"]
-    monkeypatch.setattr(
-        "parayabuck.universe.preflight.eligible_equity_symbols",
-        lambda _config, trading, limit=None: broad if limit is None else broad[:limit],
-    )
-
-    # The historical candidate set is the broad eligible universe, never the
-    # current shortlist file: a symbol liquid in 2022 but absent today can
-    # still enter the historical Stage-A selection. Scanner-reserved symbols
-    # (references, approved inverse ETFs, fallback symbols) are always
-    # retained even under an explicit cap, because the point-in-time scanner
-    # reserves them in every snapshot and the backtest gate needs their bars.
-    # The default _config universe only reserves its reference symbol.
-    assert cli_module._candidate_symbols(config, Market.EQUITY, None, None) == [
-        "SPY",
-        "AAA",
-        "BBB",
-        "ZZZ",
-        "HISTORICAL_LIQUID",
-    ]
-    assert cli_module._candidate_symbols(config, Market.EQUITY, None, 2) == ["SPY", "AAA"]
+    assert cli_module._candidate_symbols(config, Market.EQUITY, None, None) == list(config.universe.equity.symbols)
+    assert cli_module._candidate_symbols(config, Market.EQUITY, None, 1) == list(config.universe.equity.symbols)
+    # An explicit --symbols override still wins over configuration.
     assert cli_module._candidate_symbols(config, Market.EQUITY, "AAPL,MSFT", None) == [
         "AAPL",
         "MSFT",
@@ -515,10 +465,6 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
     monkeypatch.setenv("ALPACA_SECRET_KEY", "unit-test-secret-key")
     config = _config(tmp_path)
     monkeypatch.setattr(cli_module, "ensure_active_universes", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        "parayabuck.universe.preflight.eligible_equity_symbols",
-        lambda _config, _trading, limit=None: ["SPY", "AAA"],
-    )
     captured_requests: list[dict[str, object]] = []
 
     class FakeProvider:
@@ -561,14 +507,14 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
     assert first["end"] == end
     assert first["adjustment"] == "splits"
     assert first["timeframe"] == "1d"
-    assert first["symbols"] == ("SPY", "AAA")
+    assert first["symbols"] == config.universe.equity.symbols
     # Empty downloads (no pre-start history) trigger the bounded warmup
     # extension: at most three fetch attempts.
     assert len(captured_requests) == 3
     assert captured_requests[-1]["start"] <= first["start"]
 
 
-def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(
+def test_warmup_window_covers_strategy_minimum_history_for_equity(
     tmp_path,
 ) -> None:
     # The SHIPPED DEFAULT strategy (equity_leveraged_trend_v1) declares
@@ -582,9 +528,10 @@ def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(
     # The warmup window counts REAL NYSE sessions (holiday-aware), so it
     # spans more calendar days than bars: at least the no-holiday Mon-Fri
     # minimum (ceil(200*7/5)=280) and bounded by a plausible holiday count.
-    days = cli_module._warmup_window_days(config, Market.EQUITY)
-    assert 280 <= days <= 340
-    assert days >= config.universe.equity.scanner.minimum_data_completeness  # sanity
+    # The static equity universe adds no scanner lookback on top of it.
+    assert cli_module._warmup_window_days(config, Market.EQUITY) == bars_to_calendar_days(
+        "SPY", "1d", 200, end_date=None
+    )
 
 
 def test_warmup_window_never_shrinks_below_scanner_lookback_for_intraday(
@@ -631,43 +578,26 @@ def test_bars_to_calendar_days_scales_by_session_density() -> None:
     assert bars_to_calendar_days("BTC/USD", "1d", 61) == 65
 
 
-def test_reserved_symbols_without_bars_do_not_block_periods(tmp_path) -> None:
-    """A scanner-reserved symbol (reference/inverse/fallback) that has no bars
-    in a period must be dropped from that snapshot instead of making the
-    decision gate fail-closed for the whole run."""
-    from parayabuck.backtest.universe import build_trailing_point_in_time_universe
-
+def test_configured_symbol_without_bars_never_blocks_periods(tmp_path) -> None:
+    """A configured symbol with no bars in the run is never a member, so the
+    decision gate is not made fail-closed for the whole window."""
     config = _config(tmp_path)
     bars = _bars(days=40)
-    # Configure an inverse symbol that the scanner reserves but that has no
-    # bars in the supplied set.
     config = replace(
         config,
         universe=replace(
             config.universe,
             equity=replace(
                 config.universe.equity,
-                inverse_trade_symbols=("SH",),
-                fallback_trade_symbols=("AAPL", "SH"),
+                symbols=(*config.universe.equity.symbols, "TQQQ"),
             ),
         ),
     )
-    assert "SH" not in {bar.symbol for bar in bars}
-    universe = build_trailing_point_in_time_universe(
-        bars,
-        market=Market.EQUITY,
-        maximum_symbols=config.universe.equity.maximum_stream_symbols,
-        rebalance_frequency=config.backtest.scanner_rebalance,
-        lookback_days=20,
-        minimum_history_ratio=config.universe.equity.scanner.minimum_data_completeness,
-        minimum_price=config.universe.equity.scanner.minimum_price,
-        minimum_dollar_volume=config.universe.equity.scanner.minimum_median_dollar_volume,
-        pinned_symbols=config.universe.equity.reference_symbols,
-        target_shortlist=config.universe.equity.target_shortlist,
-        equity_config=config.universe.equity,
-    )
+    assert "TQQQ" not in {bar.symbol for bar in bars}
+    universe = build_product_universe(config, bars, market=Market.EQUITY)
     assert universe.snapshots
+    available = {bar.symbol for bar in bars}
     for snapshot in universe.snapshots:
-        # The bar-less reserved symbol never appears in a snapshot.
-        assert "SH" not in snapshot.symbols
-        assert all(symbol in {bar.symbol for bar in bars} for symbol in snapshot.symbols)
+        assert "TQQQ" not in snapshot.symbols
+        assert all(symbol in available for symbol in snapshot.symbols)
+        assert all(symbol in available for symbol in snapshot.observation_set)

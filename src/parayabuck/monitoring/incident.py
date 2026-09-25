@@ -116,8 +116,8 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=True,
         retry_interval_seconds=(300, 900, 1800, 3600),
         bounded_attempts=None,
-        recovery_condition="validate_active_universe success + status==success",
-        operator_action="Check scanner_config_digest, asset API, fallback",
+        recovery_condition="validate_active_crypto_universe success + status==success",
+        operator_action="Check crypto_scanner_config_digest, asset API, fallback",
     ),
     IncidentCategory.DATABASE_ERROR: IncidentSpec(
         category=IncidentCategory.DATABASE_ERROR,

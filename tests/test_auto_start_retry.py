@@ -227,9 +227,8 @@ def _full_paper_runtime(**overrides: Any) -> EngineRuntime:
         universe=SimpleNamespace(
             equity=SimpleNamespace(
                 enabled=False,
-                dynamic_selection_enabled=False,
                 maximum_stream_symbols=100,
-                reference_symbols=(),
+                symbols=(),
             ),
             crypto=SimpleNamespace(
                 enabled=False,
@@ -668,15 +667,11 @@ def test_status_exposes_retry_info_only_while_retrying(monkeypatch: Any) -> None
                 crypto=SimpleNamespace(enabled=False),
             ),
             universe=SimpleNamespace(
-                equity=SimpleNamespace(
-                    candidate_universe_path="no/such/candidates.json",
-                    active_universe_path="no/such/active.json",
-                ),
+                equity=SimpleNamespace(enabled=False, symbols=()),
                 crypto=SimpleNamespace(active_universe_path="no/such/crypto.json"),
             ),
         ),
     )
-    monkeypatch.setattr(server, "validate_active_universe", lambda equity: ([], "ok"))
     monkeypatch.setattr(server, "validate_active_crypto_universe", lambda crypto: ([], "ok"))
 
     async def scenario() -> None:

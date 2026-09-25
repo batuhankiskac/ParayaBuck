@@ -18,9 +18,8 @@ from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_r
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.portfolio import product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
-from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
+from parayabuck.universe import equity_universe_digest, load_active_crypto_symbols
 from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
-from parayabuck.universe.scanner import scanner_config_digest
 from parayabuck.utils.io import atomic_write
 from parayabuck.web import app as web_app
 from parayabuck.web import server
@@ -47,8 +46,8 @@ def _expected_digests(config_path: Path) -> tuple[str, ...]:
         (
             Market.EQUITY,
             cfg.strategy.equity,
-            load_active_symbols(cfg.universe.equity, log_rejection=False),
-            scanner_config_digest(cfg.universe.equity),
+            cfg.universe.equity.symbols if cfg.universe.equity.enabled else (),
+            equity_universe_digest(cfg.universe.equity),
         ),
         (
             Market.CRYPTO,

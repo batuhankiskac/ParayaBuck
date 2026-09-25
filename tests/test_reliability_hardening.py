@@ -18,14 +18,21 @@ import sqlite3
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from parayabuck.backup import backup_database, verify_backup
+from parayabuck.config import CryptoScannerConfig, CryptoUniverseConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.portfolio.runtime_service import PortfolioRuntime, PortfolioStateRepository
 from parayabuck.storage import SQLiteStore
-from parayabuck.universe.scanner import scanner_config_digest
+from parayabuck.universe import validate_active_crypto_universe
+from parayabuck.universe.crypto_scanner import (
+    CryptoCandidate,
+    CryptoUniverseScanner,
+    crypto_candidate_from_bars,
+)
 
 # ---------------------------------------------------------------------------
 # SQLite durability
@@ -601,117 +608,93 @@ def test_universe_pagination_150(tmp_path: Path) -> None:
     assert len(chunks[2]) == 10
 
 
-def test_universe_stale_snapshot_explicit_age(tmp_path: Path) -> None:
-    from parayabuck.universe.scanner import (
-        EquityUniverseConfig,
-        EquityUniverseScanner,
-        scanner_config_digest,
-        validate_active_universe,
-    )
+def _crypto_candidates(history_bars: int = 30) -> list[CryptoCandidate]:
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    series = [
+        SimpleNamespace(
+            timestamp=start + timedelta(hours=index),
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=100.0 + index,
+            volume=1_000_000.0,
+        )
+        for index in range(history_bars)
+    ]
+    return [
+        crypto_candidate_from_bars(symbol, series, expected_bar_count=history_bars, tradable=True, status="active")
+        for symbol in ("BTC/USD", "ETH/USD")
+    ]
 
-    # Create a stale scanner payload
-    config = EquityUniverseConfig(
+
+def test_universe_stale_snapshot_explicit_age(tmp_path: Path) -> None:
+    config = CryptoUniverseConfig(
+        enabled=True,
+        dynamic_selection_enabled=True,
         active_universe_path=str(tmp_path / "active.json"),
-        candidate_universe_path=str(tmp_path / "candidate.json"),
         active_universe_max_age_hours=24,
-        require_scanner_config_digest_match=False,
-        reference_symbols=(),
-        inverse_trade_symbols=(),
-        maximum_stream_symbols=100,
+        maximum_stream_symbols=2,
+        scanner=CryptoScannerConfig(lookback_days=2, minimum_data_completeness=0.5, minimum_atr_pct=0.0001),
     )
-    # Build a minimal valid payload but stale
-    scanner = EquityUniverseScanner(config)
-    now = datetime.now(UTC) - timedelta(hours=30)  # stale
-    payload = {
-        "status": "success",
-        "scanner_version": scanner.version,
-        "config_digest": scanner_config_digest(config),
-        "selection_timestamp": now.isoformat(),
-        "data_timestamp": now.isoformat(),
-        "selected_symbols": ["AAPL", "MSFT"],
-        "candidate_symbols": ["AAPL", "MSFT"],
-        "score_breakdown": {"AAPL": {"selection_role": "test"}, "MSFT": {"selection_role": "test"}},
-        "observation_set": ["AAPL", "MSFT"],
-        "observation_strategy_name": "",
-        "observation_strategy_version": "",
-        "observation_strategy_timeframe": "",
-    }
-    Path(config.active_universe_path).write_text(json.dumps(payload))
-    symbols, status = validate_active_universe(config)
+    # A valid but stale snapshot: 30 hours old against a 24 hour budget.
+    scanner = CryptoUniverseScanner(config)
+    stale_at = datetime.now(UTC) - timedelta(hours=30)
+    scanner.persist(
+        scanner.scan(
+            _crypto_candidates(),
+            data_timestamp=stale_at,
+            selection_timestamp=stale_at,
+        )
+    )
+    # Age is the only thing wrong with the snapshot: it stays digest-valid
+    # and is rejected as stale rather than silently accepted.
+    symbols, status = validate_active_crypto_universe(config)
     assert status == "stale"
     assert symbols == ()
 
 
 def test_universe_no_partial_on_refresh_failure(tmp_path: Path) -> None:
     import parayabuck.universe.preflight as preflight
-    from parayabuck.config import Config
 
-    # Create a valid stale snapshot that would trigger refresh
-    Config.load(Path("config/paper.toml")) if Path("config/paper.toml").exists() else None
-    # Instead of full Config, test the atomic write behavior directly:
-    # Simulate refresh_equity_universe failure leaves file unchanged
-    candidate_path = tmp_path / "candidate.json"
-    original = {"generated_at": datetime.now(UTC).isoformat(), "history": {}, "symbols": ["AAPL"]}
-    candidate_path.write_text(json.dumps(original))
-    # Mock refresh to raise, and ensure file not truncated
+    # An existing verified snapshot must survive a failed refresh: the
+    # refresh path never truncates the persisted universe.
+    active_path = tmp_path / "active_crypto.json"
+    original = {"status": "success", "selected_symbols": ["BTC/USD"]}
+    active_path.write_text(json.dumps(original))
+
+    class DummyConfig:
+        universe = SimpleNamespace(
+            equity=SimpleNamespace(enabled=False, symbols=()),
+            crypto=SimpleNamespace(
+                enabled=True,
+                dynamic_selection_enabled=True,
+                active_universe_path=str(active_path),
+            ),
+        )
+
     with (
-        patch("parayabuck.universe.preflight.refresh_equity_universe", side_effect=RuntimeError("fail")),
         patch("parayabuck.universe.preflight.refresh_crypto_universe", side_effect=RuntimeError("fail")),
-        patch("parayabuck.universe.preflight.validate_active_universe", return_value=((), "missing")),
         patch("parayabuck.universe.preflight.validate_active_crypto_universe", return_value=((), "missing")),
     ):
-        # Use minimal config mock
-        class DummyUniverse:
-            enabled = True
-            dynamic_selection_enabled = True
-            allow_static_fallback_trading = True
-            active_universe_path = str(tmp_path / "active.json")
-            candidate_universe_path = str(candidate_path)
-
-        class DummyConfig:
-            universe = type(
-                "U",
-                (),
-                {
-                    "equity": DummyUniverse(),
-                    "crypto": type("C", (), {"enabled": False, "dynamic_selection_enabled": False}),
-                },
-            )()
-
         result = preflight.ensure_active_universes(DummyConfig(), "key", "secret")  # type: ignore[arg-type]
-        assert result.equity_status == "refresh_failed"
-        # File should still be original, not partial/empty
-        assert json.loads(candidate_path.read_text()) == original
+    assert result.equity_status == "disabled"
+    assert result.crypto_status == "refresh_failed"
+    # The file is still the previous snapshot, not partial/empty.
+    assert json.loads(active_path.read_text()) == original
 
 
 def test_universe_refresh_atomic_write(tmp_path: Path) -> None:
-
-    from parayabuck.universe.scanner import EquityUniverseConfig, EquityUniverseScanner
-
-    config = EquityUniverseConfig(
+    config = CryptoUniverseConfig(
+        enabled=True,
+        dynamic_selection_enabled=True,
         active_universe_path=str(tmp_path / "active.json"),
-        candidate_universe_path=str(tmp_path / "candidate.json"),
-        active_universe_max_age_hours=24,
-        maximum_stream_symbols=100,
+        maximum_stream_symbols=2,
+        scanner=CryptoScannerConfig(lookback_days=2, minimum_data_completeness=0.5, minimum_atr_pct=0.0001),
     )
-    scanner = EquityUniverseScanner(config)
-    # Create a result and persist; ensure .tmp not left
-    from parayabuck.universe.scanner import ScannerResult
-
-    result = ScannerResult(
-        selection_timestamp=datetime.now(UTC).isoformat(),
-        data_timestamp=datetime.now(UTC).isoformat(),
-        selected_symbols=("AAPL", "MSFT"),
-        candidate_symbols=("AAPL", "MSFT"),
-        score_breakdown={"AAPL": {"score": 1}, "MSFT": {"score": 2}},
-        eliminated={},
-        scanner_version=scanner.version,
-        config_digest=scanner_config_digest(config),
-        sector_distribution={"Technology": 2},
-        observation_set=("AAPL",),
-        observation_eliminated={},
-        status="success",
-    )
-    scanner.persist(result)
-    assert not Path(str(tmp_path / "active.json.tmp")).exists()
-    assert Path(config.active_universe_path).exists()
+    scanner = CryptoUniverseScanner(config)
+    now = datetime.now(UTC)
+    scanner.persist(scanner.scan(_crypto_candidates(), data_timestamp=now, selection_timestamp=now))
+    # The replace is atomic: the target holds the whole snapshot and the
+    # write left no temporary sibling behind.
+    assert json.loads((tmp_path / "active.json").read_text())["selected_symbols"]
+    assert [item.name for item in tmp_path.iterdir() if item.name.startswith(".active.json")] == []

@@ -14,7 +14,7 @@ Levels used:
   the exact restart hook (``_restore_persistent_state``, ``_pin_managed_symbols``)
   like the existing hardening tests.
 - ``AlpacaBroker`` unit: the ownership-drift exemption predicate.
-- universe module: scanner persist -> validate/load round trip.
+- universe module: crypto scanner persist -> validate/load round trip.
 """
 
 import threading
@@ -28,7 +28,7 @@ from typing import Any
 import pytest
 
 from parayabuck import runtime as runtime_module
-from parayabuck.config import Config, EquityUniverseConfig
+from parayabuck.config import Config, CryptoScannerConfig, CryptoUniverseConfig
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -52,12 +52,8 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioStateRepository,
 )
 from parayabuck.runtime import EngineRuntime, WorkerHealth
-from parayabuck.universe.scanner import (
-    EquityCandidate,
-    EquityUniverseScanner,
-    load_active_symbols,
-    validate_active_universe,
-)
+from parayabuck.universe import load_active_crypto_symbols, validate_active_crypto_universe
+from parayabuck.universe.crypto_scanner import CryptoUniverseScanner, crypto_candidate_from_bars
 from tests.helpers import apply_entry_fill
 
 pytestmark = pytest.mark.paper_chaos
@@ -723,38 +719,55 @@ def test_restart_after_universe_persisted_loads_validates_and_keeps_pins(
 ) -> None:
     """Level: universe module. A persisted scanner snapshot survives a
     restart: the load path validates it (fresh, digest-matched, canonical)
-    and the reference + managed pins are preserved."""
-    config = EquityUniverseConfig(
+    and the configured + managed pins are preserved."""
+    config = CryptoUniverseConfig(
+        enabled=True,
+        dynamic_selection_enabled=True,
         maximum_stream_symbols=6,
-        active_universe_path=str(tmp_path / "active_equity.json"),
+        trade_symbols=("BTC/USD", "ETH/USD", "SOL/USD"),
+        pinned_symbols=("BTC/USD",),
+        active_universe_path=str(tmp_path / "active_crypto.json"),
         active_universe_max_age_hours=48,
         require_scanner_config_digest_match=True,
+        scanner=CryptoScannerConfig(lookback_days=2, minimum_data_completeness=0.5, minimum_atr_pct=0.0001),
     )
-    scanner = EquityUniverseScanner(config)
-    result = scanner.scan(
-        [
-            EquityCandidate("AAPL", 200, 600_000_000, 0.03, 1.0),
-            EquityCandidate("MSFT", 300, 800_000_000, 0.02, 1.0),
-            EquityCandidate("NVDA", 100, 900_000_000, 0.04, 1.0),
-        ],
-        data_timestamp=datetime.now(UTC),
-        # Managed position pin: force-kept even before scoring.
-        pinned_symbols=("AAPL",),
-    )
+    scanner = CryptoUniverseScanner(config)
+    now = datetime.now(UTC)
+    start = now - timedelta(hours=30)
+    series = [
+        SimpleNamespace(
+            timestamp=start + timedelta(hours=index),
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=100.0 + index,
+            volume=1_000_000.0,
+        )
+        for index in range(30)
+    ]
+    candidates = [
+        crypto_candidate_from_bars(
+            symbol,
+            series,
+            expected_bar_count=len(series),
+            tradable=True,
+            status="active",
+        )
+        for symbol in ("BTC/USD", "ETH/USD", "SOL/USD")
+    ]
+    result = scanner.scan(candidates, data_timestamp=now, selection_timestamp=now)
     scanner.persist(result)
     # ---- restart: load the persisted snapshot through the validated path ----
-    selected, status = validate_active_universe(config)
+    selected, status = validate_active_crypto_universe(config)
     assert status == "success"
-    assert "SPY" in selected  # configured reference pin preserved
-    assert "AAPL" in selected  # managed pin preserved
-    assert "MSFT" in selected
-    assert "NVDA" in selected
-    loaded = load_active_symbols(config)
-    assert loaded[0] == "SPY"
+    assert "BTC/USD" in selected  # configured pin preserved
+    assert set(selected) == {"BTC/USD", "ETH/USD", "SOL/USD"}
+    loaded = load_active_crypto_symbols(config)
+    assert "BTC/USD" in loaded
     assert set(selected).issubset(loaded)
     # A managed symbol absent from the last scan is re-pinned at load time.
-    loaded_with_pin = load_active_symbols(config, pinned_symbols=("TSLA",))
-    assert "TSLA" in loaded_with_pin
+    loaded_with_pin = load_active_crypto_symbols(config, pinned_symbols=("XRP/USD",))
+    assert "XRP/USD" in loaded_with_pin
 
 
 # ---------------------------------------------------------------------------

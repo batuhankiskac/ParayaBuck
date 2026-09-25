@@ -371,7 +371,6 @@ def test_same_config_data_gives_same_hash(tmp_path: Path) -> None:
             bars.append(_bar(sym, base + timedelta(days=i), 100 + i))
     u1 = build_trailing_point_in_time_universe(
         bars,
-        market=Market.CRYPTO,
         maximum_symbols=2,
         rebalance_frequency="daily",
         lookback_days=2,
@@ -379,7 +378,6 @@ def test_same_config_data_gives_same_hash(tmp_path: Path) -> None:
     )
     u2 = build_trailing_point_in_time_universe(
         bars,
-        market=Market.CRYPTO,
         maximum_symbols=2,
         rebalance_frequency="daily",
         lookback_days=2,

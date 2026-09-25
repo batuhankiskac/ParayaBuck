@@ -3,88 +3,103 @@
 The product foundation (broker, execution, ownership, reconciliation,
 persistence, safety, Web app, PAPER/LIVE separation, offline/runtime
 separation) is FROZEN. This document defines the STABLE contract of the
-trading/strategy layer that may evolve: dynamic universe discovery,
-eligibility vs alpha, candidate pool vs observation stream, timeframe
+trading/strategy layer that may evolve: universe selection, eligibility vs
+alpha, observation stream vs positions, timeframe
 ownership, multi-market strategy independence, and the portfolio/risk
 boundary.
 
-## 1. Dynamic universe
+## 1. Universe
 
-Both markets are first-class product capabilities (`EQUITY + CRYPTO`). A
-strategy never receives a hand-maintained universe: the scanner selects the
-tradeable universe on a pre-session cadence from the broad eligible market.
+Both markets are first-class product capabilities (`EQUITY + CRYPTO`), but
+they build their universe differently.
 
-- Equity: every active/tradable US equity on the supported exchanges
-  (~13,000+) → Stage-A shortlist (trailing median dollar volume,
-  `universe.equity.target_shortlist`, default 300) → scanner → 30-symbol IEX
-  observation set. `universe.equity.reference_symbols` pins SPY, QQQ and QLD,
-  and `trade_reference_symbols: true` makes them tradable: QQQ is the equity
-  strategy's trend signal, QLD its only holding.
+- Equity: STATIC. `universe.equity.symbols` is `[SPY, QQQ, QLD]`, streamed and
+  tradable within `maximum_stream_symbols` (30, the Alpaca IEX limit). QQQ is
+  the `equity_leveraged_trend_v1` trend signal, QLD its only holding, SPY the
+  benchmark. There is no equity scanner, no shortlist, no candidate scoring and
+  no persisted equity universe artifact.
 - Crypto: all Alpaca tradable USD pairs → scanner (liquidity, spread, ATR,
   BTC-correlation, category limits) → streamed observation set
-  (`maximum_stream_symbols`, default 12).
+  (`universe.crypto.maximum_stream_symbols`, default 12), refreshed on the
+  `runtime.scanner_refresh_hours` cadence.
+
+The equity policy identity is `parayabuck.universe.equity.equity_universe_digest`
+(version `equity-static-v1`), derived from the configured symbols and the
+stream limit; `ensure_active_universes` reports `equity_status="static"` and
+`parayabuck doctor` prints `universe equity static`. Backtests build the equity
+point-in-time universe with
+`build_static_equity_point_in_time_universe` — each configured symbol joins at
+its first bar. `build_trailing_point_in_time_universe` is crypto-only.
 
 Managed positions and open managed orders are pinned into the universe
-regardless of ranking: the bot must always be able to observe, rebalance and
-exit what it owns.
+regardless of configuration: the bot must always be able to observe, rebalance
+and exit what it owns. `_pin_managed_symbols` does this at startup, which is how
+leftovers of the removed V3/sleeve identities stay observable until sold.
 
 ## 2. Eligibility vs alpha (scanner ≠ strategy)
 
-The scanner answers ONE question: **"which assets are sufficiently tradeable
-and observable?"** It scores tradability, liquidity, spread quality, data
-completeness, reasonable volatility and market eligibility. It does NOT
-answer "which asset will make money" — that is the strategy's job.
+The crypto scanner answers ONE question: **"which assets are sufficiently
+tradeable and observable?"** It scores tradability, liquidity, spread quality,
+data completeness, reasonable volatility and market eligibility. It does NOT
+answer "which asset will make money" — that is the strategy's job. For equity
+there is no eligibility stage: membership is configuration, reviewed in git.
 
 - Eligibility filtering happens entirely before alpha scoring.
-- Scanner failure is fail-closed: no scanner result → no new trades (and no
-  live authorization).
+- Crypto scanner failure is fail-closed: no scanner result → no new trades
+  (and no live authorization) unless `universe.crypto.allow_static_fallback_trading`
+  is set.
 - Scanner metrics are NEVER an alpha input (volume is not a momentum signal).
 
-## 3. Candidate pool vs observation stream
+## 3. Observation stream vs positions
 
 The stream limit is NOT the opportunity universe — this is implemented, not
 only documented:
 
 ```
-13,000+ equity / all crypto
+crypto: all supported USD pairs
         ↓ eligibility scanner (tradability-first)
-broad candidate pool (equity ~300 shortlist)
-        ↓ reserved reference pins + the strategy's own alpha ranking
-streamed (30 equity / ~12 crypto)
+crypto candidate pool
+        ↓ pinned symbols + the strategy's own alpha ranking
+streamed (~12 crypto)
+
+equity: configured universe.equity.symbols
+        ↓ runtime managed-position pins
+streamed (≤30 equity)
 positions
 ```
 
 Mechanics:
 
-- The scanner is eligibility-first: `selected_symbols` is the eligible POOL
-  (every candidate that passes tradability filters, plus reserved symbols) —
+- The crypto scanner is eligibility-first: `selected_symbols` is the eligible
+  POOL (every candidate that passes tradability filters, plus pinned symbols) —
   deliberately larger than the stream capacity. `observation_set` on the
-  scanner result is the fail-safe quality-ranked stream set (with
-  issuer/sector/category diversity), used when no strategy ranker exists.
+  scanner result is the quality-ranked stream set (with
+  category/diversity limits), used when no strategy ranker exists.
 - A strategy that ranks the pool ranks it through
   `PortfolioStrategy.rank_candidates`, which reuses the EXACT scoring code of
   `decide` (BACKTEST/PAPER/LIVE parity), so its live observation set is
   selected by the same alpha it trades. The current equity identity trades a
-  single reserved holding (QLD) and does not rank the pool.
+  single holding (QLD) and does not rank anything.
 - `build_observation_set` (universe/observation_set.py) produces the streamed
-  set: pinned symbols (references, inverse hedges, configured pins, managed
+  set: pinned symbols (configured equity symbols, crypto pins, managed
   positions) first, then the alpha-top candidates up to
-  `maximum_stream_symbols`. Scanner-quality fallback names fill a shortfall
-  only when they meet the strategy minimum-history window and align with the
-  benchmark's latest closed timestamp; young or stale names leave stream
-  capacity empty so one fallback cannot wedge the whole decision batch.
-- The universe refresh fetches strategy-warmup batch history for the pool
-  (`bars_to_calendar_days`), ranks it, and persists `observation_set` in the
-  active universe file. `load_active_symbols` / `load_active_crypto_symbols`
-  stream the OBSERVATION SET; validation enforces it ⊆ pool and ≤ capacity.
-- In backtests the point-in-time universe snapshots carry the eligible POOL
-  (so the strategy alpha-scores the broad pool) plus the snapshot's
-  OBSERVATION SET. The engine's completeness gate follows the observation
-  set (live parity): decisions require a closed bar for every STREAMED
-  symbol, never for every pool member — a halted/absent pool member must
-  not block the whole market.
-- `maximum_stream_symbols` is a streaming-load limit, not a universe size.
-  Do not raise it to widen the alpha universe; widen the candidate pool.
+  `maximum_stream_symbols`. For crypto, scanner-quality fallback names fill a
+  shortfall only when they meet the strategy minimum-history window and align
+  with the benchmark's latest closed timestamp; young or stale names leave
+  stream capacity empty so one fallback cannot wedge the whole decision batch.
+- The crypto universe refresh fetches strategy-warmup batch history for the
+  pool (`bars_to_calendar_days`), ranks it, and persists `observation_set` in
+  `data/runtime/active_crypto_universe.json`. `load_active_crypto_symbols`
+  streams the OBSERVATION SET; `validate_active_crypto_universe` enforces it ⊆
+  pool, ≤ capacity, freshness and `scanner_config_digest` match.
+- In backtests the crypto point-in-time universe snapshots carry the eligible
+  POOL plus the snapshot's OBSERVATION SET. The engine's completeness gate
+  follows the observation set (live parity): decisions require a closed bar for
+  every STREAMED symbol, never for every pool member — a halted/absent pool
+  member must not block the whole market.
+- `maximum_stream_symbols` is a streaming-load limit, not a universe size. For
+  equity the only way to widen the universe is to add to
+  `universe.equity.symbols`.
 
 ## 4. Timeframe ownership
 
@@ -93,7 +108,7 @@ every resolution. The independent cadences are:
 
 | Cadence | Owner | Example |
 |---|---|---|
-| scanner timeframe | scanner config | equity 1d / crypto 1h |
+| scanner timeframe | crypto scanner config | crypto 1h |
 | strategy signal timeframe | the strategy (`StrategySpec.primary_timeframe`) | equity 1d / crypto 1d |
 | rebalance / decision cadence | the strategy (`StrategySpec.rebalance_policy`) | monthly / weekly |
 | execution timeframe | `runtime.execution_timeframe` | 5m |
@@ -168,8 +183,9 @@ For the current PAPER equity identity, `maximum_allocation=0.93` is a single
 market allocation with no internal composition; crypto remains
 `maximum_allocation=0.05`.
 
-Scanner isolation: equity and crypto universes refresh independently; a
-failed equity scan does not block crypto decisions and vice versa.
+Universe isolation: the equity universe is static and never fails a refresh;
+only the crypto scanner can fail, and a failed crypto scan does not block
+equity decisions.
 
 ## 6. Portfolio / risk boundary
 

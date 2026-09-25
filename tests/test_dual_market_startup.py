@@ -37,7 +37,6 @@ from parayabuck.portfolio.runtime_service import (
 )
 from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.universe.crypto_scanner import load_active_crypto_symbols
-from parayabuck.universe.scanner import load_active_symbols
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -211,7 +210,7 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
     transitions: list[str] = []
 
     # Stage 1: universe preflight (offline fallback loaders; no network).
-    equity_universe = load_active_symbols(config.universe.equity)
+    equity_universe = config.universe.equity.symbols if config.universe.equity.enabled else ()
     crypto_universe = load_active_crypto_symbols(config.universe.crypto)
     assert equity_universe, "equity universe preflight must yield symbols"
     assert crypto_universe, "crypto universe preflight must yield symbols"

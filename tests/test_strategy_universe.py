@@ -1,10 +1,10 @@
-"""Universe / scanner contract tests.
+"""Universe contract tests.
 
-The scanner answers "which assets are tradeable and observable?" and the
-eligibility pool is deliberately larger than the streamed observation set;
-alpha scoring happens on that broader pool. Managed positions and open
-managed orders are pinned regardless of ranking, scanner failure is
-fail-closed, and the two markets' universes are isolated.
+Equity is a static universe: the configured symbols are the only members and
+each one joins the point-in-time universe at its first bar. Crypto keeps the
+scanner policy, whose eligible pool is deliberately larger than the streamed
+observation set. A missing crypto snapshot is fail-closed, and the two
+markets' universes stay isolated.
 """
 
 from __future__ import annotations
@@ -15,8 +15,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
-from parayabuck.backtest.universe import build_trailing_point_in_time_universe
-from parayabuck.config import EquityScannerConfig, EquityUniverseConfig
+from parayabuck.backtest.universe import (
+    build_static_equity_point_in_time_universe,
+    build_trailing_point_in_time_universe,
+)
+from parayabuck.config import CryptoUniverseConfig, EquityUniverseConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
 from parayabuck.portfolio.models import PortfolioState
@@ -37,8 +40,9 @@ def _bar(symbol: str, timestamp: datetime, close: float) -> Bar:
 
 
 def _panel(symbols: list[str], days: int = 320) -> list[Bar]:
-    """Synthetic panel with a trend AND oscillation so the scanner's ATR range
-    and liquidity filters are satisfied on every day."""
+    """Synthetic daily panel with a trend AND an oscillation, so every symbol
+    has usable history from its first bar."""
+
     import math
 
     start = datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
@@ -51,66 +55,26 @@ def _panel(symbols: list[str], days: int = 320) -> list[Bar]:
     return bars
 
 
-def _equity_config(maximum_stream_symbols: int = 10) -> EquityUniverseConfig:
+def _static_equity_config(symbols: tuple[str, ...], maximum_stream_symbols: int = 10) -> EquityUniverseConfig:
     return EquityUniverseConfig(
         enabled=True,
-        dynamic_selection_enabled=True,
         maximum_stream_symbols=maximum_stream_symbols,
-        target_shortlist=30,
-        reference_symbols=(),
-        scanner=EquityScannerConfig(
-            minimum_price=1.0,
-            minimum_median_dollar_volume=1_000.0,
-            minimum_data_completeness=0.9,
-        ),
+        symbols=symbols,
     )
 
 
-def test_scanner_eligibility_pool_exceeds_stream_symbol_count() -> None:
-    symbols = [f"S{i:02d}" for i in range(40)]
-    universe = build_trailing_point_in_time_universe(
-        _panel(symbols),
-        market=Market.EQUITY,
-        maximum_symbols=10,
-        rebalance_frequency="monthly",
-        lookback_days=60,
-        minimum_history_ratio=0.8,
-        target_shortlist=30,
-        equity_config=_equity_config(maximum_stream_symbols=10),
-    )
-    assert universe.snapshots
-    for snapshot in universe.snapshots:
-        # The snapshot symbols are the ELIGIBLE POOL (alpha-search universe),
-        # which deliberately exceeds the streamed observation-set capacity.
-        assert snapshot.candidate_count >= len(snapshot.symbols)
-    assert len(universe.snapshots[0].symbols) <= 30  # Stage-A shortlist bound
-    # The pool is larger than the stream capacity (10): stream limit !=
-    # opportunity universe.
-    assert max(len(snapshot.symbols) for snapshot in universe.snapshots) > 10
-    # The very first snapshot already has a large candidate pool.
-    assert universe.snapshots[0].candidate_count >= 20
-
-
-def test_backtest_context_covers_pool_beyond_stream_capacity() -> None:
-    """The backtest engine ingests the full downloaded pool; the point-in-time
-    universe gates eligibility, so the streamed observation set (capacity 10)
-    stays a strict subset of the eligible pool and only pool members are ever
-    targeted."""
-    # QQQ/QLD are the shipped signal/hold pair, reserved in every snapshot
-    # exactly like the product's reference symbols.
+def test_static_equity_universe_only_trades_configured_symbols() -> None:
+    """The equity universe is configuration, not discovery: a symbol that is
+    not configured is never a member and is never a backtest target."""
     symbols = ["SPY", "QQQ", "QLD"] + [f"S{i:02d}" for i in range(38)]
     bars = _panel(symbols)
-    universe = build_trailing_point_in_time_universe(
-        bars,
-        market=Market.EQUITY,
-        maximum_symbols=10,
-        rebalance_frequency="monthly",
-        lookback_days=60,
-        minimum_history_ratio=0.8,
-        target_shortlist=28,
-        pinned_symbols=("QQQ", "QLD"),
-        equity_config=_equity_config(maximum_stream_symbols=10),
-    )
+    config = _static_equity_config(("SPY", "QQQ", "QLD"), maximum_stream_symbols=10)
+    universe = build_static_equity_point_in_time_universe(bars, config)
+    assert universe.snapshots
+    for snapshot in universe.snapshots:
+        assert snapshot.symbols <= {"SPY", "QQQ", "QLD"}
+    assert not universe.contains("S00", Market.EQUITY, bars[-1].timestamp)
+
     strategy = portfolio_strategy_from("equity_leveraged_trend_v1", {"sma_bars": 5})
     engine = PortfolioBacktestEngine(
         strategy,
@@ -120,62 +84,18 @@ def test_backtest_context_covers_pool_beyond_stream_capacity() -> None:
     )
     result = engine.run(bars, liquidate_at_end=False)
     assert result.rebalances
-    last_decision = result.rebalances[-1].decision_timestamp
-    context_history = {symbol for symbol in engine._history}
-    # Every pool symbol was ingested; only universe members may be targeted.
-    assert len(context_history) == len(symbols)
-    snapshot_symbols = next(
-        snapshot.symbols for snapshot in reversed(universe.snapshots) if snapshot.effective_at <= last_decision
-    )
-    assert snapshot_symbols
-    # The eligible pool is BIGGER than the streamed observation capacity:
-    # 28 shortlisted + 2 reserved symbols, truncated to a 10-symbol stream.
-    assert 10 < len(snapshot_symbols) <= 30 < len(context_history)
-    first_snapshot = universe.snapshots[0].effective_at
-    gated = [rebalance for rebalance in result.rebalances if rebalance.decision_timestamp >= first_snapshot]
-    assert any(rebalance.target_weights for rebalance in gated)
-    for rebalance in gated:
+    for rebalance in result.rebalances:
         for symbol, _weight in rebalance.target_weights:
             assert universe.contains(symbol, Market.EQUITY, rebalance.decision_timestamp)
 
 
-def test_managed_positions_stay_pinned_outside_universe() -> None:
-    """A managed position is pinned into the scanner universe regardless of
-    ranking: the pinned symbol stays selected even when it fails the scanner's
-    liquidity filters, so the strategy can always observe and target it."""
-    symbols = [f"S{i:02d}" for i in range(20)]
-    bars = _panel(symbols)
-    universe = build_trailing_point_in_time_universe(
-        bars,
-        market=Market.EQUITY,
-        maximum_symbols=5,
-        rebalance_frequency="monthly",
-        lookback_days=60,
-        minimum_history_ratio=0.8,
-        target_shortlist=30,
-        pinned_symbols=("S19",),
-        equity_config=_equity_config(maximum_stream_symbols=5),
-    )
-    assert universe.snapshots
-    for snapshot in universe.snapshots:
-        assert "S19" in snapshot.symbols
-    # The pinned symbol is investable even though the strategy ranks by alpha.
-    assert universe.contains("S19", Market.EQUITY, bars[-1].timestamp)
-
-
 def test_open_managed_orders_stay_pinned_across_restart() -> None:
     """Pending managed orders decided before a restart are re-armed and fill."""
-    symbols = ["SPY"] + [f"S{i:02d}" for i in range(20)]
-    bars = _panel(symbols)
-    universe = build_trailing_point_in_time_universe(
+    symbols = ("SPY", "QQQ", "QLD", "S00")
+    bars = _panel(list(symbols))
+    universe = build_static_equity_point_in_time_universe(
         bars,
-        market=Market.EQUITY,
-        maximum_symbols=5,
-        rebalance_frequency="monthly",
-        lookback_days=60,
-        minimum_history_ratio=0.8,
-        target_shortlist=30,
-        equity_config=_equity_config(maximum_stream_symbols=5),
+        _static_equity_config(symbols, maximum_stream_symbols=len(symbols)),
     )
     decision_timestamp = bars[10].timestamp
     state = PortfolioState(
@@ -211,19 +131,19 @@ def test_open_managed_orders_stay_pinned_across_restart() -> None:
     assert restored_fills[0].timestamp > restored_fills[0].decision_timestamp
 
 
-def test_market_scanner_failure_is_fail_closed() -> None:
-    from parayabuck.universe import validate_active_universe
+def test_missing_crypto_snapshot_is_fail_closed() -> None:
+    from parayabuck.universe import validate_active_crypto_universe
 
-    config = _equity_config()
-    config = EquityUniverseConfig(
-        **{
-            **config.__dict__,
-            "active_universe_path": "/nonexistent/active_equity_universe.json",
-        }
+    config = CryptoUniverseConfig(
+        enabled=True,
+        dynamic_selection_enabled=True,
+        maximum_stream_symbols=2,
+        trade_symbols=("BTC/USD", "ETH/USD"),
+        active_universe_path="/nonexistent/active_crypto_universe.json",
     )
-    _symbols, status = validate_active_universe(config)
+    symbols, status = validate_active_crypto_universe(config)
     assert status != "success"
-    assert _symbols == ()
+    assert symbols == ()
 
 
 def test_disabled_strategy_creates_no_orders(tmp_path) -> None:
@@ -288,7 +208,7 @@ def test_disabled_strategy_creates_no_orders(tmp_path) -> None:
     runtime.close()
 
 
-def test_crypto_and_equity_universe_states_are_isolated() -> None:
+def test_static_equity_and_crypto_universes_are_isolated() -> None:
     equity_bars = _panel([f"S{i:02d}" for i in range(6)])
     start = datetime(2024, 1, 1, tzinfo=UTC)
     import math
@@ -308,18 +228,12 @@ def test_crypto_and_equity_universe_states_are_isolated() -> None:
         for offset, symbol in enumerate(("BTC/USD", "ETH/USD"))
         for index in range(2400)
     ]
-    equity_universe = build_trailing_point_in_time_universe(
+    equity_universe = build_static_equity_point_in_time_universe(
         equity_bars,
-        market=Market.EQUITY,
-        maximum_symbols=3,
-        rebalance_frequency="daily",
-        lookback_days=30,
-        minimum_history_ratio=0.8,
-        equity_config=_equity_config(maximum_stream_symbols=3),
+        _static_equity_config(tuple(f"S{i:02d}" for i in range(6)), maximum_stream_symbols=6),
     )
     crypto_universe = build_trailing_point_in_time_universe(
         crypto_bars,
-        market=Market.CRYPTO,
         maximum_symbols=2,
         rebalance_frequency="daily",
         lookback_days=7,
@@ -341,54 +255,11 @@ def test_crypto_and_equity_universe_states_are_isolated() -> None:
     assert not crypto_universe.contains("DOGE/USD", Market.CRYPTO, start + timedelta(days=100))
 
 
-def test_scanners_do_not_block_each_other() -> None:
-    """A missing/invalid equity universe does not fail the crypto scanner and
-    vice versa: each market's selection is independent and fail-closed per
-    market."""
-    from parayabuck.universe import (
-        validate_active_crypto_universe,
-        validate_active_universe,
-    )
-
-    equity_config = _equity_config()
-    equity_config = EquityUniverseConfig(
-        **{
-            **equity_config.__dict__,
-            "active_universe_path": "/nonexistent/equity_active.json",
-        }
-    )
-    equity_symbols, equity_status = validate_active_universe(equity_config)
-    assert equity_status != "success" and equity_symbols == ()
-
-    crypto_config = _equity_config()
-    from parayabuck.config import CryptoUniverseConfig
-
-    crypto_config = CryptoUniverseConfig(
-        enabled=True,
-        dynamic_selection_enabled=True,
-        maximum_stream_symbols=2,
-        trade_symbols=("BTC/USD", "ETH/USD"),
-        pinned_symbols=("BTC/USD",),
-        active_universe_path="/nonexistent/crypto_active.json",
-    )
-    crypto_symbols, crypto_status = validate_active_crypto_universe(crypto_config)
-    assert crypto_status != "success" and crypto_symbols == ()
-    # Both fail closed on their own missing state; neither "blocks" the
-    # other's validation path (they are independent checks).
-    assert equity_status != crypto_status or equity_status != "success"
-
-
 def test_point_in_time_universe_round_trip() -> None:
-    symbols = [f"S{i:02d}" for i in range(10)]
-    universe = build_trailing_point_in_time_universe(
-        _panel(symbols),
-        market=Market.EQUITY,
-        maximum_symbols=4,
-        rebalance_frequency="monthly",
-        lookback_days=60,
-        minimum_history_ratio=0.8,
-        target_shortlist=10,
-        equity_config=_equity_config(maximum_stream_symbols=4),
+    symbols = tuple(f"S{i:02d}" for i in range(10))
+    universe = build_static_equity_point_in_time_universe(
+        _panel(list(symbols)),
+        _static_equity_config(symbols, maximum_stream_symbols=len(symbols)),
     )
     payload = universe.to_dict()
     assert payload["market"] == "equity"

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from parayabuck.config import Config, EquityUniverseConfig
+from parayabuck.config import Config
 from parayabuck.core.models import (
     AccountSnapshot,
     Direction,
@@ -22,7 +22,6 @@ from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.runtime import EngineRuntime
-from parayabuck.universe import EquityCandidate, EquityUniverseScanner
 from tests.helpers import apply_entry_fill
 
 pytestmark = pytest.mark.paper_chaos
@@ -275,33 +274,3 @@ def test_fill_activity_recovers_entry_fill_idempotently(tmp_path: Path) -> None:
     assert position.owned_qty == 0.1
     assert position.filled_avg_price == 100_000
     ledger.close()
-
-
-def test_scanner_keeps_only_one_alphabet_share_class(tmp_path: Path) -> None:
-    scanner = EquityUniverseScanner(
-        EquityUniverseConfig(
-            maximum_stream_symbols=3,
-            reference_symbols=("SPY",),
-            active_universe_path=str(tmp_path / "active.json"),
-        )
-    )
-    candidates = [
-        EquityCandidate("GOOG", 200, 500_000_000, 0.03, 1.0, 2, "communications"),
-        EquityCandidate("GOOGL", 200, 400_000_000, 0.03, 1.0, 2, "communications"),
-    ]
-    timestamp = datetime.now(UTC)
-
-    result = scanner.scan(
-        candidates,
-        data_timestamp=timestamp,
-        selection_timestamp=timestamp,
-    )
-
-    # The eligible POOL keeps both share classes; the streamed OBSERVATION
-    # SET deduplicates economically identical issuers.
-    alphabet = set(result.selected_symbols) & {"GOOG", "GOOGL"}
-    assert len(alphabet) == 2
-    observation_alphabet = set(result.observation_set) & {"GOOG", "GOOGL"}
-    assert len(observation_alphabet) == 1
-    rejected = ({"GOOG", "GOOGL"} - observation_alphabet).pop()
-    assert result.observation_eliminated[rejected] == "duplicate_issuer"

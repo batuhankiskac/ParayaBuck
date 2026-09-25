@@ -16,8 +16,9 @@ snapshot mechanism guarantees consistency.
 On restart the runtime reconciles Alpaca before enabling decisions, pins open
 positions with portfolio-order lineage into the active universe, restores the
 high-water/risk state, warms every configured strategy timeframe, and then
-resumes. A stale universe can be refreshed from Alpaca; an API failure preserves
-the previous successful snapshot or uses the configured fallback.
+resumes. The equity universe is static configuration, so nothing to refresh;
+a stale crypto universe can be refreshed from Alpaca, and an API failure
+preserves the previous successful snapshot or uses the configured fallback.
 
 If the safety lock opens, inspect `/api/status`, broker positions/orders, and
 SQLite state. The Web UI reset action succeeds only after the event queue drains,

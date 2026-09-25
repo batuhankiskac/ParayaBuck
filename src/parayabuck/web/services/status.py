@@ -25,16 +25,21 @@ def _load_config(path: str) -> Any:
     return _cfg.load_config(path)
 
 
-def _validate_active_universe(cfg: Any) -> Any:
-    import parayabuck.universe as _u
-
-    return _u.validate_active_universe(cfg)
-
-
 def _validate_active_crypto_universe(cfg: Any) -> Any:
     import parayabuck.universe as _u
 
     return _u.validate_active_crypto_universe(cfg)
+
+
+def _equity_symbols(cfg: Any) -> tuple[str, ...]:
+    """Static equity universe: configured symbols, empty while disabled."""
+    universe = cfg.universe.equity
+    return tuple(universe.symbols) if universe.enabled else ()
+
+
+def _equity_status(cfg: Any) -> str:
+    """Equity universe status — the static set has no scanner snapshot."""
+    return "static" if cfg.universe.equity.enabled else "disabled"
 
 
 def _dashboard_load_json(path: str | Path) -> dict[str, Any]:
@@ -58,23 +63,12 @@ def strategy_metadata(cfg: Any) -> dict[str, Any]:
     from parayabuck.portfolio import portfolio_strategy_from
 
     result: dict[str, Any] = {"equity": None, "crypto": None}
-    candidate_payload: dict[str, Any] = {}
-    active_payload: dict[str, Any] = {}
+    equity_symbols = _equity_symbols(cfg)
     active_crypto_payload: dict[str, Any] = {}
-    for path, store in (
-        (cfg.universe.equity.candidate_universe_path, candidate_payload),
-        (cfg.universe.equity.active_universe_path, active_payload),
-        (cfg.universe.crypto.active_universe_path, active_crypto_payload),
-    ):
-        store.update(_dashboard_load_json(path))
-    shortlist = candidate_payload.get("shortlist_symbols")
+    active_crypto_payload.update(_dashboard_load_json(cfg.universe.crypto.active_universe_path))
     crypto_candidates = active_crypto_payload.get("candidate_symbols")
     for market_key, selection, pool_size in (
-        (
-            "equity",
-            cfg.strategy.equity,
-            len(shortlist) if isinstance(shortlist, list) else None,
-        ),
+        ("equity", cfg.strategy.equity, len(equity_symbols)),
         (
             "crypto",
             cfg.strategy.crypto,
@@ -87,7 +81,7 @@ def strategy_metadata(cfg: Any) -> dict[str, Any]:
             strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
             spec = strategy.spec()
             observation_size = (
-                len(active_payload.get("observation_set", active_payload.get("selected_symbols", ())))
+                len(equity_symbols)
                 if market_key == "equity"
                 else len(
                     active_crypto_payload.get("observation_set", active_crypto_payload.get("selected_symbols", ()))
@@ -102,9 +96,7 @@ def strategy_metadata(cfg: Any) -> dict[str, Any]:
                 "rebalance_cadence": spec.rebalance_policy,
                 "minimum_history_bars": spec.minimum_history_bars,
                 "dynamic_universe_enabled": (
-                    cfg.universe.equity.dynamic_selection_enabled
-                    if market_key == "equity"
-                    else cfg.universe.crypto.dynamic_selection_enabled
+                    False if market_key == "equity" else cfg.universe.crypto.dynamic_selection_enabled
                 ),
                 "candidate_pool_size": pool_size,
                 "observation_set_size": observation_size,
@@ -138,7 +130,7 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
         result["strategy_metadata"] = strategy_metadata(cfg)
     except Exception:
         result["strategy_status"] = "configuration_error"
-        result["scanner"] = {"last_run_at": None, "status": "error"}
+        result["scanner"] = {"equity_status": "error", "crypto_status": "error"}
     retry_attempt = getattr(manager, "_retry_attempt", 0)
     retry_next_at = getattr(manager, "_retry_next_at", None)
     if retry_attempt > 0 and retry_next_at is not None:
@@ -184,55 +176,29 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
 
     if cfg is not None:
         try:
-            candidate_path = Path(cfg.universe.equity.candidate_universe_path)
-            active_path = Path(cfg.universe.equity.active_universe_path)
+            equity_symbols = _equity_symbols(cfg)
             active_crypto_path = Path(cfg.universe.crypto.active_universe_path)
-            candidate_payload = (
-                json.loads(candidate_path.read_text(encoding="utf-8")) if candidate_path.exists() else []
-            )
-            active_payload = json.loads(active_path.read_text(encoding="utf-8")) if active_path.exists() else {}
             active_crypto_payload = (
                 json.loads(active_crypto_path.read_text(encoding="utf-8")) if active_crypto_path.exists() else {}
             )
-            candidate_items = (
-                candidate_payload.get(
-                    "candidates",
-                    candidate_payload.get("symbols", candidate_payload),
-                )
-                if isinstance(candidate_payload, dict)
-                else candidate_payload
-            )
-            result["candidate_universe_size"] = len(candidate_items) if isinstance(candidate_items, (list, dict)) else 0
-            equity_symbols, validated_scanner_status = _validate_active_universe(cfg.universe.equity)
             crypto_symbols, validated_crypto_scanner_status = _validate_active_crypto_universe(cfg.universe.crypto)
             if runtime is None:
                 result["active_equity_symbol_count"] = len(equity_symbols)
                 result["active_crypto_symbol_count"] = len(crypto_symbols)
             result["scanner"] = {
-                "last_run_at": active_payload.get("selection_timestamp"),
-                "status": runtime_refresh.get("status", {}).get("equity", validated_scanner_status),
-                "equity_status": runtime_refresh.get("status", {}).get("equity", validated_scanner_status),
+                "equity_status": runtime_refresh.get("status", {}).get("equity") or _equity_status(cfg),
                 "crypto_status": runtime_refresh.get("status", {}).get("crypto", validated_crypto_scanner_status),
-                "equity_snapshot_status": validated_scanner_status,
                 "crypto_snapshot_status": validated_crypto_scanner_status,
-                "scanner_version": active_payload.get("scanner_version"),
                 "crypto_last_run_at": active_crypto_payload.get("selection_timestamp"),
                 "crypto_scanner_version": active_crypto_payload.get("scanner_version"),
                 "next_refresh_at": runtime_refresh.get("next_refresh_at"),
                 "refresh_errors": runtime_refresh.get("errors", {}),
-                "equity_candidate_count": len(active_payload.get("candidate_symbols", ())),
-                "equity_shortlist_count": len(
-                    candidate_payload.get("shortlist_symbols", ()) if isinstance(candidate_payload, dict) else ()
-                ),
-                "equity_sector_metadata_coverage": active_payload.get("sector_metadata_coverage"),
                 "crypto_candidate_count": len(active_crypto_payload.get("candidate_symbols", ())),
             }
             result["universe"] = {
                 "equity": {
-                    "symbols": list(active_payload.get("observation_set", active_payload.get("selected_symbols", ()))),
-                    "pool_size": len(active_payload.get("selected_symbols", ())),
-                    "scores": active_payload.get("score_breakdown", {}),
-                    "eliminated": active_payload.get("eliminated", {}),
+                    "symbols": list(equity_symbols),
+                    "pool_size": len(equity_symbols),
                 },
                 "crypto": {
                     "symbols": list(
@@ -244,5 +210,5 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
                 },
             }
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            result["scanner"] = {"last_run_at": None, "status": "error"}
+            result["scanner"] = {"equity_status": "error", "crypto_status": "error"}
     return result

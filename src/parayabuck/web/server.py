@@ -32,7 +32,7 @@ class _ServerModule(sys.modules[__name__].__class__):  # type: ignore[misc]
                 _cfg.load_config = value
             except Exception:
                 pass
-        if name in ("validate_active_universe", "validate_active_crypto_universe"):
+        if name == "validate_active_crypto_universe":
             try:
                 import parayabuck.universe as _u
 
@@ -411,17 +411,14 @@ async def dashboard_metrics() -> dict[str, Any]:
     return await _dashboard_panel("metrics")
 
 
-# --- Universe validation shims (for tests that patch server.validate_active_universe) ---
+# --- Universe validation shim (for tests that patch server.validate_active_crypto_universe) ---
 try:
     from parayabuck.universe import (
         validate_active_crypto_universe as _orig_validate_active_crypto_universe,  # noqa: F401
     )
-    from parayabuck.universe import validate_active_universe as _orig_validate_active_universe  # noqa: F401
 
-    validate_active_universe = _orig_validate_active_universe
     validate_active_crypto_universe = _orig_validate_active_crypto_universe
 except Exception:
-    validate_active_universe = None  # type: ignore[assignment]
     validate_active_crypto_universe = None  # type: ignore[assignment]
 
 # Re-export _atomic_update_credentials for hardening tests
@@ -556,7 +553,6 @@ __all__ = [
     "dashboard_metrics",
     "_dashboard_payload",
     "_dashboard_market_decisions",
-    "validate_active_universe",
     "validate_active_crypto_universe",
     "websocket_stream",
     "websocket_logs",

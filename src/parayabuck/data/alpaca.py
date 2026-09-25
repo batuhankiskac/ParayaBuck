@@ -99,9 +99,8 @@ class AlpacaHistoricalData:
     provider calls (same sorted symbols, timeframe, start, end, adjustment)
     within a short TTL (60 s) so repeated signal-verification latches that
     happen on the same decision timestamp do not re-hit Alpaca. The cache
-    is measurement-aware: ``historical_requests``-style counters in
-    ``universe.preflight.refresh_equity_universe`` remain accurate because a
-    dedup hit returns the cached bars without counting as a new provider call.
+    is measurement-aware: a dedup hit returns the cached bars without counting
+    as a new provider call.
     The dedup is bounded (single-entry, TTL) and never weakens fail-closed
     semantics — a new timestamp, new symbol set, or expired TTL triggers a
     fresh provider fetch and fresh adequacy checks.

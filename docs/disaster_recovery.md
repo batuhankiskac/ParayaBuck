@@ -18,9 +18,9 @@ All paths are relative to `WorkingDirectory` (repo root / `/opt/parayabuck`). `c
 | **Execution ledger (inside decision DB)** | Tables: `portfolio_decisions`, `portfolio_orders`, `portfolio_rebalance_executions`, `risk_state`, `safety_incidents`, `reconcile_watermarks`, etc. | **CRITICAL** (subset of decision DB) | YES (same file) | same | `foreign_key_check` violations → `doctor` CRITICAL; orders fail-closed | No — ledger is source of `managed_for_account` ownership; broker cannot tell bot-owned vs external |
 | **Observability DB** | `data/runtime/observability.sqlite3` | **RECONSTRUCTIBLE** | NO | NO (regenerated) | Journal writer fails → `event_journal_failed` counter increments, trading continues; stale snapshot → `heartbeat_stale` UNKNOWN, never halts trading | N/A — emits derived from runtime; history lost, trading unaffected |
 | **Peak sidecar** | `data/runtime/paper_equity_peak.json` (or `live_equity_peak.json`; `resolve_peak_state_path()`; overridden by `peak_state_path`/`runtime_state_dir`) `{"account_id","peak_equity","epoch"}` | **CRITICAL** (drawdown latch) | **YES** if `data/runtime/` or `data/backups` captured; explicitly included in `deployment.md` tarball (`data/runtime/paper_equity_peak.json`) | YES — restore sidecar + DB together; `RiskPeakService.ensure_reconciled()` reconciles sidecar vs `portfolio_high_water`/`risk_state` max-wins | Missing → bootstrap `0.0` (new account). Malformed/truncated/non-finite/negative → `RiskStatePersistenceError` — **fail-closed, never falls back to 0.0** (would erase watermark) | No — peak is max historical equity; broker only gives current equity |
-| **Universe artifact** | `data/runtime/active_equity_universe.json`, `data/runtime/active_crypto_universe.json` + `.history.jsonl` | **RECONSTRUCTIBLE** | NO (but bundle includes snapshot hash) | No restore needed — rescanned from provider; stale check `active_universe_max_age_hours` (equity 36h, crypto 12h) → degraded, entries blocked unless `allow_static_fallback_trading` | Missing/corrupt → `universe stale` → entry gate blocked, sells still allowed; `doctor` shows `universe_* active` REFRESH_NEEDED/WARN | No — point-in-time universe is derived from scanner + corporate actions |
+| **Universe artifact** | `data/runtime/active_crypto_universe.json` + `.history.jsonl` (equity has none — `universe.equity.symbols` is static config) | **RECONSTRUCTIBLE** | NO (but bundle includes snapshot hash) | No restore needed — rescanned from provider; stale check `universe.crypto.active_universe_max_age_hours` (12h) → degraded, entries blocked unless `allow_static_fallback_trading` | Missing/corrupt → `universe stale` → crypto entry gate blocked, sells still allowed; `doctor` shows `universe crypto active` REFRESH_NEEDED/WARN and `universe equity static` | No — the point-in-time crypto universe is derived from scanner + corporate actions |
 | **Warmup cache** | `data/cache/` (historical bars, `scope_meta` with `config_digest`), `data/historical/` CSVs | **RECONSTRUCTIBLE** | NO | NO — refetched via `AlpacaHistoricalData` with `config_digest` validation; digest mismatch → full refetch (fail-closed) | Missing → bounded single retry, then fail-closed; never serves wrong-config bars | No — cache is provider-derived |
-| **Config** | `config/settings.yaml` | **CRITICAL** | **YES** — deployment tarball (`tar czf ... config/ .env data/runtime/active_*_universe.json`) | YES — versioned in git; restore tarball, `diff` vs HEAD, `parayabuck doctor --strict` | Invalid/missing → `StorageInitializationError` at startup; `doctor` CRITICAL; `backup.retention_days` validated `>0 finite` | No — config defines universe, strategy, allocation, retention |
+| **Config** | `config/settings.yaml` | **CRITICAL** | **YES** — deployment tarball (`tar czf ... config/ .env data/runtime/active_crypto_universe.json`) | YES — versioned in git; restore tarball, `diff` vs HEAD, `parayabuck doctor --strict` | Invalid/missing → `StorageInitializationError` at startup; `doctor` CRITICAL; `backup.retention_days` validated `>0 finite` | No — config defines the static equity universe, strategy, allocation, retention |
 | **.env (secrets)** | `.env` (mode 600, `EnvironmentFile` in systemd) `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `PARAYABUCK_OPERATOR_APPROVAL_KEY`, `PARAYABUCK_ALERT_WEBHOOK_URL` | **CRITICAL** | **YES** (operator tarball, minus git) | YES — restore from vault/tarball; never commit | Missing → startup fails (paper needs keys); wrong keys → `auth_invalid` / `401` non-retryable | No — secrets are operator-supplied |
 | **Receipts** | `data/runtime/paper_receipts/`, `data/runtime/ai_decisions/paper/` | **EPHEMERAL** (audit trail) | NO (but durable on disk; include in host backup if required) | Optional — not needed for trading; forensic only | Missing → no impact on runtime | No |
 | **Backups** | `data/backups/parayabuck-*.sqlite3` (rollback-journal, no sidecars) | **CRITICAL** | SELF (are the backups) | Source for DB restore; `latest_verified_backup()` scans `mtime` + `verify_backup()` | Partial file from crash → `verify_backup() == False` → deleted, previous backups preserved, `BackupVerificationError` | No |
@@ -35,7 +35,7 @@ All paths are relative to `WorkingDirectory` (repo root / `/opt/parayabuck`). `c
   - Config + secrets (`config/`, `.env`) — via same tarball (operator-managed, host backup recommended).
 - **NOT included** (reconstructed or ephemeral):
   - `observability.sqlite3`, `health_snapshot.json`, `data/cache/`, `data/historical/` cache, and `reports/` — all regenerable.
-  - `active_*_universe.json` — rescanned; history `.jsonl` is append-only log for forensics, not required for restart.
+  - `active_crypto_universe.json` — rescanned; history `.jsonl` is append-only log for forensics, not required for restart. The equity universe is configuration, not an artifact.
 
 ---
 
@@ -386,7 +386,7 @@ parayabuck ops doctor
 
 ### 3.9 Network / broker outage
 
-**Prevent**: Bounded retry with backoff, no unbounded hammering. Startup `TransientStartupError` for network-class failures (connection/timeout, HTTP 5xx/429, DNS, `ConnectionError`/`TimeoutError`) up to 5 attempts; daily provider fetch single bounded retry; universe scanner bounded `historical_requests` budget. Web `auto_start` retry `[5,15,30,60]s` capped at 60s.
+**Prevent**: Bounded retry with backoff, no unbounded hammering. Startup `TransientStartupError` for network-class failures (connection/timeout, HTTP 5xx/429, DNS, `ConnectionError`/`TimeoutError`) up to 5 attempts; daily provider fetch single bounded retry; crypto universe scanner bounded `historical_requests` budget. Web `auto_start` retry `[5,15,30,60]s` capped at 60s.
 
 **Detect**:
 ```bash
@@ -400,7 +400,7 @@ journalctl -u parayabuck | grep -E "timeout|timed out|connection|unreachable|dns
 Permanent 4xx (auth/config/entitlement) are **not** retried; 5xx/429 are bounded retry.
 
 **Recover**:
-- Transient → runtime stays alive, entries blocked (`ENTRY_LATCH`, `ACCOUNT_STALE`), sells still allowed; auto-recovers when `account_recovered` / `scanner_recovered` events appear.
+- Transient → runtime stays alive, entries blocked (`ENTRY_LATCH`, `ACCOUNT_STALE`), sells still allowed; auto-recovers when `account_recovered` / `scanner_recovered` events appear. Equity entries are unaffected by a universe refresh — there is none.
 - `TransientStartupError` → caller discards runtime and may retry startup; nothing persisted as permanent.
 - Offline preflight (`--offline`) classifies stale universe as `REFRESH_NEEDED` (non-blocking) so first boot without network does not fail `ExecStartPre`.
 
@@ -448,7 +448,7 @@ python3 -c "from parayabuck.backup import verify_backup; from pathlib import Pat
 1. `sudo systemctl stop parayabuck; curl -m 3 http://127.0.0.1:8000/healthz || echo closed`
 2. Record Alpaca paper positions/orders dashboard
 3. `parayabuck backup` (verify `Backup OK`)
-4. `tar czf ~/backups/parayabuck-config-$(date +%Y%m%dT%H%M%SZ).tgz config/ .env data/runtime/active_*_universe.json data/runtime/paper_equity_peak.json`
+4. `tar czf ~/backups/parayabuck-config-$(date +%Y%m%dT%H%M%SZ).tgz config/ .env data/runtime/active_crypto_universe.json data/runtime/paper_equity_peak.json`
 5. `git fetch --tags && git checkout <RELEASE_TAG>`
 6. `pip install -r requirements.lock && pip install -e . --no-deps`
 7. Offline tests (`pytest` identity/startup/integration) → `parayabuck doctor --strict --paper --offline`

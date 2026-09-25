@@ -13,26 +13,56 @@ from parayabuck.config import Config
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.runtime import EngineRuntime, WorkerHealth
 from parayabuck.runtime_universe import ActiveProductUniverse
+from parayabuck.universe import equity_universe_digest
 
 
-def test_invalid_dynamic_snapshot_blocks_entries_unless_fallback_is_explicit() -> None:
+def test_crypto_preflight_failure_halts_entries_unless_fallback_is_explicit() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime.app_config = Config()
-    runtime.universe_preflight = SimpleNamespace(equity_status="refresh_failed", crypto_status="disabled")
+    runtime.universe_preflight = SimpleNamespace(equity_status="static", crypto_status="refresh_failed")
+    crypto = replace(
+        runtime.app_config.universe.crypto,
+        enabled=True,
+        dynamic_selection_enabled=True,
+    )
+    runtime.app_config = replace(
+        runtime.app_config,
+        universe=replace(runtime.app_config.universe, crypto=crypto),
+    )
 
-    assert runtime._initial_universe_halt(Market.EQUITY) == "invalid_dynamic_universe"
+    # The static equity universe is never refreshed, so it can never halt.
+    assert runtime._initial_universe_halt(Market.EQUITY) is None
+    assert runtime._initial_universe_halt(Market.CRYPTO) == "invalid_dynamic_universe"
 
     runtime.app_config = replace(
         runtime.app_config,
         universe=replace(
             runtime.app_config.universe,
-            equity=replace(
-                runtime.app_config.universe.equity,
-                allow_static_fallback_trading=True,
-            ),
+            crypto=replace(crypto, allow_static_fallback_trading=True),
         ),
     )
-    assert runtime._initial_universe_halt(Market.EQUITY) is None
+    assert runtime._initial_universe_halt(Market.CRYPTO) is None
+
+
+def test_static_equity_product_universe_identity_follows_the_configured_symbols() -> None:
+    """The equity market binds a CONFIGURED snapshot whose identity is the
+    static equity policy digest: no scanner snapshot is read, and editing the
+    configured symbols produces a different snapshot identity."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    base = Config()
+    runtime.app_config = base
+
+    bound = runtime._load_product_universe(Market.EQUITY, base.universe.equity.symbols)
+    digest = equity_universe_digest(base.universe.equity)
+    assert bound.observation_symbols == ("SPY", "QQQ", "QLD")
+    assert bound.snapshot_id == f"equity:configured:{digest}"
+    assert bound.config_digest == digest
+
+    narrowed = replace(base.universe.equity, symbols=("SPY", "QQQ"))
+    runtime.app_config = replace(base, universe=replace(base.universe, equity=narrowed))
+    rebound = runtime._load_product_universe(Market.EQUITY, narrowed.symbols)
+    assert rebound.config_digest != digest
+    assert rebound.observation_symbols == ("SPY", "QQQ")
 
 
 def test_engine_readiness_requires_every_portfolio_symbol() -> None:
@@ -121,7 +151,7 @@ def test_hot_swap_pins_positions_and_open_orders_within_stream_capacity() -> Non
         base,
         universe=replace(
             base.universe,
-            equity=replace(base.universe.equity, maximum_stream_symbols=4),
+            equity=replace(base.universe.equity, symbols=("SPY",), maximum_stream_symbols=4),
         ),
     )
     runtime._symbols_by_market = {
@@ -189,7 +219,7 @@ def test_hot_swap_does_not_pin_external_positions_by_default() -> None:
         base,
         universe=replace(
             base.universe,
-            equity=replace(base.universe.equity, maximum_stream_symbols=4),
+            equity=replace(base.universe.equity, symbols=("SPY",), maximum_stream_symbols=4),
         ),
     )
     runtime.config = base.engine
@@ -251,9 +281,6 @@ def test_scheduled_refresh_worker_invokes_refresh() -> None:
         runtime._running = False
 
     runtime._refresh_runtime_universes = refresh
-    # Only the crypto interval cadence may fire in this test; the equity
-    # pre-market schedule would otherwise trigger a second refresh.
-    runtime._next_equity_refresh_at = lambda _now: None
     runtime._universe_refresh_loop()
 
     assert calls == [Market.CRYPTO]
@@ -280,7 +307,6 @@ def test_scheduled_refresh_failure_does_not_busy_spin(monkeypatch) -> None:
         raise RuntimeError("scanner unavailable")
 
     runtime._refresh_runtime_universes = refresh
-    runtime._next_equity_refresh_at = lambda _now: None
 
     # Deterministic clock schedule: m0 seeds next_interval=60; m2 makes the
     # first iteration due (62>=60); m4 (64) comes after the failure-advanced
@@ -306,78 +332,34 @@ def test_scheduled_refresh_failure_does_not_busy_spin(monkeypatch) -> None:
     assert calls == [Market.CRYPTO], "a failed refresh must not re-fire immediately"
 
 
-def test_next_equity_refresh_at_lands_pre_market_on_a_trading_day() -> None:
+def test_crypto_refresh_failure_with_no_valid_snapshot_halts_entries(monkeypatch) -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     base = Config()
-    runtime.app_config = replace(
-        base,
-        universe=replace(
-            base.universe,
-            equity=replace(base.universe.equity, enabled=True, dynamic_selection_enabled=True),
-        ),
+    crypto = replace(
+        base.universe.crypto,
+        enabled=True,
+        dynamic_selection_enabled=True,
+        allow_static_fallback_trading=False,
     )
-    from zoneinfo import ZoneInfo
-
-    new_york = ZoneInfo("America/New_York")
-
-    # Monday noon: the next refresh must be Tuesday 06:00 ET, never mid-session.
-    monday_noon = datetime(2026, 8, 3, 12, 0, tzinfo=new_york)
-    assert runtime._next_equity_refresh_at(monday_noon).astimezone(new_york) == datetime(
-        2026, 8, 4, 6, 0, tzinfo=new_york
-    )
-
-    # Friday after the close: the next refresh skips the weekend.
-    friday_evening = datetime(2026, 8, 7, 20, 0, tzinfo=new_york)
-    assert runtime._next_equity_refresh_at(friday_evening).astimezone(new_york) == datetime(
-        2026, 8, 10, 6, 0, tzinfo=new_york
-    )
-
-    # Early Monday morning (before the pre-market slot): today 06:00 ET.
-    monday_early = datetime(2026, 8, 3, 5, 30, tzinfo=new_york)
-    assert runtime._next_equity_refresh_at(monday_early).astimezone(new_york) == datetime(
-        2026, 8, 3, 6, 0, tzinfo=new_york
-    )
-
-
-def test_next_equity_refresh_at_none_when_equity_universe_is_static() -> None:
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    base = Config()
-    runtime.app_config = replace(
-        base,
-        universe=replace(
-            base.universe,
-            equity=replace(base.universe.equity, dynamic_selection_enabled=False),
-        ),
-    )
-    assert runtime._next_equity_refresh_at(datetime.now(UTC)) is None
-
-
-def test_refresh_failure_with_no_valid_snapshot_halts_entries(monkeypatch) -> None:
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    base = Config()
-    runtime.app_config = replace(
-        base,
-        universe=replace(
-            base.universe,
-            crypto=replace(base.universe.crypto, enabled=False),
-        ),
-    )
+    runtime.app_config = replace(base, universe=replace(base.universe, crypto=crypto))
     runtime.api_key = "key"
     runtime.secret_key = "secret"
-    runtime._universe_refresh_status = {"equity": "success", "crypto": "disabled"}
+    runtime._universe_refresh_status = {"equity": "static", "crypto": "stale"}
     runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
     runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
     monkeypatch.setattr(
         runtime_module,
-        "refresh_equity_universe",
+        "refresh_crypto_universe",
         lambda *_args: (_ for _ in ()).throw(RuntimeError("scanner unavailable")),
     )
-    monkeypatch.setattr(runtime_module, "validate_active_universe", lambda _config: ((), "stale"))
+    monkeypatch.setattr(runtime_module, "validate_active_crypto_universe", lambda _config: ((), "stale"))
 
     runtime._refresh_runtime_universes()
 
-    assert runtime._universe_refresh_status["equity"] == "refresh_failed"
-    assert runtime._market_entry_halts[Market.EQUITY] == "invalid_dynamic_universe"
+    assert runtime._universe_refresh_status["crypto"] == "refresh_failed"
+    assert runtime._market_entry_halts[Market.CRYPTO] == "invalid_dynamic_universe"
+    # The static equity universe never halts.
+    assert runtime._market_entry_halts[Market.EQUITY] is None
 
 
 def _hot_swap_runtime(equity_symbols: set[str]) -> EngineRuntime:
@@ -387,7 +369,7 @@ def _hot_swap_runtime(equity_symbols: set[str]) -> EngineRuntime:
         base,
         universe=replace(
             base.universe,
-            equity=replace(base.universe.equity, maximum_stream_symbols=4),
+            equity=replace(base.universe.equity, symbols=("SPY",), maximum_stream_symbols=4),
         ),
     )
     runtime.config = base.engine
@@ -590,12 +572,7 @@ def test_disabled_crypto_strategy_without_positions_streams_nothing(tmp_path, mo
     monkeypatch.setattr(
         runtime_module,
         "ensure_active_universes",
-        lambda config, api_key, secret_key: SimpleNamespace(equity_status="success", crypto_status="success"),
-    )
-    monkeypatch.setattr(
-        runtime_module,
-        "load_active_symbols",
-        lambda config, log_rejection=True: ("SPY", "AAPL"),
+        lambda config, api_key, secret_key: SimpleNamespace(equity_status="static", crypto_status="success"),
     )
     monkeypatch.setattr(
         runtime_module,
@@ -636,12 +613,7 @@ def test_disabled_crypto_strategy_with_managed_position_stays_protected(tmp_path
     monkeypatch.setattr(
         runtime_module,
         "ensure_active_universes",
-        lambda config, api_key, secret_key: SimpleNamespace(equity_status="success", crypto_status="success"),
-    )
-    monkeypatch.setattr(
-        runtime_module,
-        "load_active_symbols",
-        lambda config, log_rejection=True: ("SPY", "AAPL"),
+        lambda config, api_key, secret_key: SimpleNamespace(equity_status="static", crypto_status="success"),
     )
     monkeypatch.setattr(
         runtime_module,
@@ -860,40 +832,6 @@ def test_retry_backoff_escalates_and_caps_at_sixty_minutes(monkeypatch) -> None:
     assert runtime._universe_retry_attempt == {}
 
 
-def test_equity_retry_deferred_to_premarket_when_backoff_lands_mid_session(
-    monkeypatch,
-) -> None:
-    """An equity scanner retry whose backoff deadline would land inside a
-    regular session must be deferred to the next pre-market slot: a
-    mid-session refresh reads a partial daily bar into the scanner metrics
-    and could change the universe (the pre-market-only invariant). Crypto
-    keeps the plain bounded backoff."""
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime._universe_retry_at = {}
-    runtime._universe_retry_attempt = {}
-    clock = {"t": 1000.0}
-    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: clock["t"])
-    premarket = datetime.now(UTC) + timedelta(hours=20)
-    runtime._next_equity_refresh_at = lambda when: premarket  # type: ignore[attr-defined]
-
-    # Mid-session failure: the 300s backoff would land inside the session.
-    monkeypatch.setattr(runtime_module, "is_regular_equity_time", lambda when: True)
-    runtime._mark_universe_refresh_outcome(Market.EQUITY, False)
-    deadline = runtime._universe_retry_at[Market.EQUITY]
-    assert deadline > clock["t"] + 3600  # deferred ~20h, not +300s
-    assert runtime._universe_retry_attempt[Market.EQUITY] == 1
-
-    # Pre-market failure: plain backoff applies.
-    monkeypatch.setattr(runtime_module, "is_regular_equity_time", lambda when: False)
-    runtime._mark_universe_refresh_outcome(Market.EQUITY, False)
-    assert runtime._universe_retry_at[Market.EQUITY] == clock["t"] + 900  # +900 (attempt 2)
-    assert runtime._universe_retry_attempt[Market.EQUITY] == 2
-
-    # Crypto never defers to the equity pre-market slot.
-    runtime._mark_universe_refresh_outcome(Market.CRYPTO, False)
-    assert runtime._universe_retry_at[Market.CRYPTO] == clock["t"] + 300  # +300 (attempt 1)
-
-
 def test_scheduled_refresh_failure_retries_bounded_and_restores_health(monkeypatch) -> None:
     """A failed scheduled refresh must self-heal with a bounded retry (~5
     min) instead of waiting for the next full interval; a successful retry
@@ -905,7 +843,7 @@ def test_scheduled_refresh_failure_retries_bounded_and_restores_health(monkeypat
     runtime._stop_event = threading.Event()
     now = runtime_module.datetime.now(runtime_module.UTC)
     runtime._workers = {"pb-universe-refresh": WorkerHealth(now, now)}
-    runtime._universe_refresh_status = {"equity": "success", "crypto": "success"}
+    runtime._universe_refresh_status = {"equity": "static", "crypto": "success"}
     runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
     calls: list[Market] = []
     call_times: list[float] = []
@@ -927,7 +865,6 @@ def test_scheduled_refresh_failure_retries_bounded_and_restores_health(monkeypat
             runtime._running = False
 
     runtime._refresh_runtime_universes = refresh
-    runtime._next_equity_refresh_at = lambda _now: None
     captured_deadline = {}
 
     def advance_wait(timeout: float) -> None:
@@ -963,7 +900,7 @@ def test_shutdown_cancels_pending_retry(monkeypatch) -> None:
     runtime._stop_event = threading.Event()
     now = runtime_module.datetime.now(runtime_module.UTC)
     runtime._workers = {"pb-universe-refresh": WorkerHealth(now, now)}
-    runtime._universe_refresh_status = {"equity": "success", "crypto": "success"}
+    runtime._universe_refresh_status = {"equity": "static", "crypto": "success"}
     runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
     calls: list[Market] = []
     clock = {"t": 0.0}
@@ -975,7 +912,6 @@ def test_shutdown_cancels_pending_retry(monkeypatch) -> None:
         runtime._last_universe_refresh_error["crypto"] = "scanner unavailable"
 
     runtime._refresh_runtime_universes = refresh
-    runtime._next_equity_refresh_at = lambda _now: None
 
     def shutdown_wait(timeout: float) -> None:
         clock["t"] += timeout
@@ -992,10 +928,10 @@ def test_shutdown_cancels_pending_retry(monkeypatch) -> None:
     assert runtime._universe_retry_attempt[Market.CRYPTO] == 1
 
 
-def test_disabled_market_failure_does_not_degrade_active_market(monkeypatch) -> None:
+def test_crypto_refresh_failure_does_not_degrade_static_equity_market(monkeypatch) -> None:
     """A crypto scanner failure (no crypto exposure) must not degrade the
-    active equity market: both markets refresh independently in the same due
-    iteration, and the crypto retry stays isolated per market."""
+    active static equity market: only crypto is refreshed, its retry stays
+    isolated, and equity keeps its membership and entry state."""
     runtime = EngineRuntime.__new__(EngineRuntime)
     base = Config()
     runtime.app_config = replace(base, runtime=replace(base.runtime, scanner_refresh_hours=1))
@@ -1003,131 +939,87 @@ def test_disabled_market_failure_does_not_degrade_active_market(monkeypatch) -> 
     runtime._stop_event = threading.Event()
     now = datetime.now(UTC)
     runtime._workers = {"pb-universe-refresh": WorkerHealth(now, now)}
-    runtime._universe_refresh_status = {"equity": "success", "crypto": "success"}
+    runtime._universe_refresh_status = {"equity": "static", "crypto": "success"}
     runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
     runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._symbols_by_market = {Market.EQUITY: {"SPY", "QQQ", "QLD"}, Market.CRYPTO: set()}
     calls: list[Market] = []
     call_times: list[float] = []
+    pending: list[tuple[dict[Market, float], dict[Market, int]]] = []
     clock = {"t": 0.0}
     monkeypatch.setattr(runtime_module.time, "monotonic", lambda: clock["t"])
 
-    class _FakeDatetime:
-        @classmethod
-        def now(cls, tz=None):
-            return datetime(2026, 8, 3, tzinfo=tz or UTC) + timedelta(seconds=clock["t"])
-
-    monkeypatch.setattr(runtime_module, "datetime", _FakeDatetime)
-
     def refresh(target: Market | None = None) -> None:
-        assert target is not None
+        assert target is Market.CRYPTO
         calls.append(target)
         call_times.append(clock["t"])
-        if target is Market.CRYPTO:
+        if len(calls) == 1:
             runtime._universe_refresh_status["crypto"] = "apply_failed"
             runtime._last_universe_refresh_error["crypto"] = "universe rejected"
             runtime._market_entry_halts[Market.CRYPTO] = "invalid_dynamic_universe"
             raise RuntimeError("universe rejected")
-        runtime._universe_refresh_status["equity"] = "success"
-        runtime._last_universe_refresh_error["equity"] = None
-        runtime._market_entry_halts[Market.EQUITY] = None
+        runtime._universe_refresh_status["crypto"] = "success"
+        runtime._last_universe_refresh_error["crypto"] = None
+        runtime._market_entry_halts[Market.CRYPTO] = None
+        pending.append((dict(runtime._universe_retry_at), dict(runtime._universe_retry_attempt)))
         runtime._running = False
 
     runtime._refresh_runtime_universes = refresh
-    # Equity shares the first due iteration with the crypto interval.
-    runtime._next_equity_refresh_at = lambda _now: _FakeDatetime.now(UTC) + timedelta(seconds=3600)
-
-    def advance_wait(timeout: float) -> None:
-        clock["t"] += timeout
-        if len(calls) >= 2:
-            runtime._running = False
-
-    runtime._stop_event.wait = advance_wait
+    runtime._stop_event.wait = lambda timeout: clock.__setitem__("t", clock["t"] + timeout)
     runtime._universe_refresh_loop()
 
-    # Both markets refreshed in the same due iteration. The crypto refresh
-    # raises (apply failure) yet the equity refresh still runs: the failing
-    # market must not block or degrade the active market.
-    assert calls == [Market.CRYPTO, Market.EQUITY]
-    assert call_times == [3600.0, 3600.0]
-    assert runtime._universe_refresh_status["equity"] == "success"
+    # Only the dynamic crypto universe is refreshed: the interval slot and the
+    # bounded retry both target crypto alone.
+    assert calls == [Market.CRYPTO, Market.CRYPTO]
+    assert call_times == [3600.0, 3900.0]
+    # The failing market kept a bounded, crypto-only retry.
+    assert pending == [({Market.CRYPTO: 3900.0}, {Market.CRYPTO: 1})]
+    # The successful retry cleared the retry state.
+    assert runtime._universe_retry_at == {}
+    assert runtime._universe_retry_attempt == {}
+    # The static equity market is untouched by the crypto failure.
+    assert runtime._universe_refresh_status["equity"] == "static"
+    assert runtime._last_universe_refresh_error["equity"] is None
     assert runtime._market_entry_halts[Market.EQUITY] is None
+    assert runtime._symbols_by_market[Market.EQUITY] == {"SPY", "QQQ", "QLD"}
     assert Market.EQUITY not in runtime._universe_retry_at
-    # The failing market keeps its bounded retry, isolated from equity.
-    assert runtime._universe_refresh_status["crypto"] == "apply_failed"
-    assert runtime._market_entry_halts[Market.CRYPTO] == "invalid_dynamic_universe"
-    assert runtime._universe_retry_at[Market.CRYPTO] == 3900.0
-    assert runtime._universe_retry_attempt[Market.CRYPTO] == 1
 
 
-def test_refresh_failure_keeps_pinned_membership_fail_closed(monkeypatch) -> None:
+def test_crypto_refresh_failure_keeps_pinned_membership_fail_closed(monkeypatch) -> None:
     """A scanner failure must keep the previous membership — including
     managed pins — fully protected: entries stay blocked and the active
-    universe is unchanged."""
+    universe is unchanged. An old snapshot whose config digest no longer
+    matches is not accepted as a fallback."""
     runtime = EngineRuntime.__new__(EngineRuntime)
     base = Config()
-    runtime.app_config = replace(
-        base,
-        universe=replace(
-            base.universe,
-            equity=replace(
-                base.universe.equity,
-                enabled=True,
-                dynamic_selection_enabled=True,
-            ),
-        ),
+    crypto = replace(
+        base.universe.crypto,
+        enabled=True,
+        dynamic_selection_enabled=True,
+        allow_static_fallback_trading=False,
     )
+    runtime.app_config = replace(base, universe=replace(base.universe, crypto=crypto))
     runtime.api_key = "key"
     runtime.secret_key = "secret"
-    runtime._universe_refresh_status = {"equity": "success", "crypto": "disabled"}
+    runtime._universe_refresh_status = {"equity": "static", "crypto": "success"}
     runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
     runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
-    runtime._symbols_by_market = {Market.EQUITY: {"AAPL", "SPY"}, Market.CRYPTO: set()}
-    runtime._managed_pin_symbols = {"AAPL"}
+    runtime._symbols_by_market = {Market.EQUITY: {"SPY"}, Market.CRYPTO: {"BTC/USD", "ETH/USD"}}
+    runtime._managed_pin_symbols = {"SOL/USD"}
     monkeypatch.setattr(
         runtime_module,
-        "refresh_equity_universe",
+        "refresh_crypto_universe",
         lambda *_args: (_ for _ in ()).throw(RuntimeError("scanner unavailable")),
     )
-    monkeypatch.setattr(runtime_module, "validate_active_universe", lambda _config: ((), "stale"))
+    monkeypatch.setattr(runtime_module, "validate_active_crypto_universe", lambda _config: ((), "digest_mismatch"))
 
-    runtime._refresh_runtime_universes(Market.EQUITY)
+    runtime._refresh_runtime_universes(Market.CRYPTO)
 
-    assert runtime._universe_refresh_status["equity"] == "refresh_failed"
-    assert runtime._market_entry_halts[Market.EQUITY] == "invalid_dynamic_universe"
+    assert runtime._universe_refresh_status["crypto"] == "refresh_failed"
+    assert runtime._market_entry_halts[Market.CRYPTO] == "invalid_dynamic_universe"
     # Previous membership — including the managed pin — is untouched.
-    assert runtime._symbols_by_market[Market.EQUITY] == {"AAPL", "SPY"}
-    assert runtime._managed_pin_symbols == {"AAPL"}
-
-
-def test_old_scanner_result_with_mismatched_digest_cannot_become_valid(monkeypatch) -> None:
-    """An old scanner result whose config digest no longer matches stays
-    fail-closed: the refresh failure halts entries instead of accepting the
-    stale universe."""
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    base = Config()
-    runtime.app_config = replace(
-        base,
-        universe=replace(
-            base.universe,
-            crypto=replace(base.universe.crypto, enabled=False),
-        ),
-    )
-    runtime.api_key = "key"
-    runtime.secret_key = "secret"
-    runtime._universe_refresh_status = {"equity": "success", "crypto": "disabled"}
-    runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
-    monkeypatch.setattr(
-        runtime_module,
-        "refresh_equity_universe",
-        lambda *_args: (_ for _ in ()).throw(RuntimeError("scanner unavailable")),
-    )
-    monkeypatch.setattr(runtime_module, "validate_active_universe", lambda _config: ((), "digest_mismatch"))
-
-    runtime._refresh_runtime_universes()
-
-    assert runtime._universe_refresh_status["equity"] == "refresh_failed"
-    assert runtime._market_entry_halts[Market.EQUITY] == "invalid_dynamic_universe"
+    assert runtime._symbols_by_market[Market.CRYPTO] == {"BTC/USD", "ETH/USD"}
+    assert runtime._managed_pin_symbols == {"SOL/USD"}
 
 
 def _health_payload_runtime() -> EngineRuntime:

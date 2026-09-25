@@ -70,7 +70,7 @@
       const strategyStatus = statusData.strategy_status || "";
       const strategyLabel = strategyStatus.indexOf("configured:")===0 ? "STRATEJ\u0130 "+strategyStatus.slice("configured:".length) : strategyStatus==="configuration_error" ? "STRATEJ\u0130 AYAR HATASI" : strategyStatus || "STRATEJ\u0130 DEVRE DI\u015eI";
       const scanner = statusData.scanner || {};
-      const equityScanner = scanner.equity_status || scanner.status || "not_run";
+      const equityUniverse = scanner.equity_status || "static";
       const cryptoScanner = scanner.crypto_status || "not_run";
       const strategyMeta = statusData.strategy_metadata || {};
       const fmtStrategy = function(meta){
@@ -80,7 +80,7 @@
         return (meta.display_name||meta.name)+" \u00b7 "+extra.join(" \u00b7 ");
       };
       const strategyMetaText=[ strategyMeta.equity ? "E: "+fmtStrategy(strategyMeta.equity) : null, strategyMeta.crypto ? "C: "+fmtStrategy(strategyMeta.crypto) : null ].filter(Boolean).join("  |  ");
-      if (marketStatusText) marketStatusText.textContent = "Global "+globalHealth+" | "+strategyLabel+" | Equity "+(statusData.active_equity_symbol_count||0)+" \u00b7 "+marketLabel(equity)+" | Crypto "+(statusData.active_crypto_symbol_count||0)+" \u00b7 "+marketLabel(crypto)+" | Aday "+(statusData.candidate_universe_size||0)+" \u00b7 Scanner E "+equityScanner+" \u00b7 C "+cryptoScanner+(strategyMetaText ? "\n"+strategyMetaText : "")+(statusData.engine_error ? " | Hata: "+statusData.engine_error : "");
+      if (marketStatusText) marketStatusText.textContent = "Global "+globalHealth+" | "+strategyLabel+" | Equity "+(statusData.active_equity_symbol_count||0)+" \u00b7 "+marketLabel(equity)+" | Crypto "+(statusData.active_crypto_symbol_count||0)+" \u00b7 "+marketLabel(crypto)+" | Evren E "+equityUniverse+" \u00b7 C "+cryptoScanner+(strategyMetaText ? "\n"+strategyMetaText : "")+(statusData.engine_error ? " | Hata: "+statusData.engine_error : "");
     }
     let statusInFlight=false;
     async function refreshSystemStatus(){
@@ -257,19 +257,17 @@
     }
     function renderUniverse(universe){
       if(!universe||universe.unavailable) return;
-      function renderMarket(market, ids){
-        if(!market) return;
-        setText(ids.broad, fmtNum(market.broad_discovered_count,0));
-        setText(ids.eligible, fmtNum(market.eligible_pool_size,0));
-        setText(ids.observed, fmtNum(market.observation_set_size,0));
-        setText(ids.lastScan, fmtDateTime(market.last_refresh_at));
-        setText(ids.scanner, market.scanner_status||"—");
-        setText(ids.nextScan, fmtDateTime(market.next_refresh_at));
-        const box=document.getElementById(ids.symbols);
-        if(box){ box.replaceChildren(); const syms=market.observation_set||[]; syms.slice(0,120).forEach(function(s){ const ch=document.createElement("span"); ch.textContent=s; box.appendChild(ch); }); if(syms.length>120){ const more=document.createElement("span"); more.textContent="+"+(syms.length-120)+" daha…"; box.appendChild(more); }}
+      function renderSymbols(boxId, syms){
+        const box=document.getElementById(boxId);
+        if(!box) return;
+        box.replaceChildren();
+        syms.slice(0,120).forEach(function(s){ const ch=document.createElement("span"); ch.textContent=s; box.appendChild(ch); });
+        if(syms.length>120){ const more=document.createElement("span"); more.textContent="+"+(syms.length-120)+" daha…"; box.appendChild(more); }
       }
-      renderMarket(universe.equity, {broad:"eqBroad", eligible:"eqEligible", observed:"eqObserved", lastScan:"eqLastScan", scanner:"eqScanner", nextScan:"eqNextScan", symbols:"eqSymbols"});
-      renderMarket(universe.crypto, {broad:"crBroad", eligible:"crEligible", observed:"crObserved", lastScan:"crLastScan", scanner:"crScanner", nextScan:"crNextScan", symbols:"crSymbols"});
+      // Equity: static configured symbols, nothing is discovered or refreshed.
+      if(universe.equity){ setText("eqCount", fmtNum(universe.equity.observation_set_size,0)); setText("eqStatus", universe.equity.scanner_status||"—"); renderSymbols("eqSymbols", universe.equity.observation_set||[]); }
+      const crypto=universe.crypto;
+      if(crypto){ setText("crEligible", fmtNum(crypto.eligible_pool_size,0)); setText("crObserved", fmtNum(crypto.observation_set_size,0)); setText("crLastScan", fmtDateTime(crypto.last_refresh_at)); setText("crScanner", crypto.scanner_status||"—"); setText("crNextScan", fmtDateTime(crypto.next_refresh_at)); renderSymbols("crSymbols", crypto.observation_set||[]); }
     }
     function renderDashboard(data){
       if(!data) return;

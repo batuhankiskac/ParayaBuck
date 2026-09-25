@@ -32,7 +32,6 @@ from parayabuck.data.aggregator import TimeframeAggregator
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
-from parayabuck.markets.sectors import classify_instrument, is_inverse_equity, sector_of
 from parayabuck.markets.symbols import (
     canonical_symbol,
     normalize_symbol,
@@ -169,14 +168,6 @@ def test_legacy_crypto_symbols_outside_the_allowlist_canonicalize() -> None:
         canonical_symbol("USD", Market.CRYPTO)
     with pytest.raises(ValueError):
         canonical_symbol("PAXG", Market.CRYPTO)
-
-
-def test_legacy_crypto_symbols_have_crypto_sector_classification() -> None:
-    assert sector_of("BTCUSD") == "crypto"
-    assert sector_of("AAPL") == "technology"
-    assert sector_of("SH") == "inverse_market"
-    assert classify_instrument("PSQ").instrument_category == "inverse_equity_etf"
-    assert is_inverse_equity("DOG")
 
 
 def test_crypto_asset_lookup_uses_legacy_adapter() -> None:
@@ -1123,7 +1114,8 @@ def test_safety_lock_reset_subscription_halt_needs_resync() -> None:
 
 def test_safety_lock_reset_universe_halt_needs_valid_refresh() -> None:
     """invalid_dynamic_universe clears only when a scanner refresh produces a
-    valid snapshot; a failing refresh keeps the halt active."""
+    valid snapshot; a failing refresh keeps the halt active. Only the dynamic
+    crypto universe can halt this way; equity is static."""
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime._circuit_breaker_reason = "ownership_drift"
     runtime._events = SimpleNamespace(empty=lambda: True)
@@ -1132,8 +1124,8 @@ def test_safety_lock_reset_universe_halt_needs_valid_refresh() -> None:
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {
-        Market.EQUITY: "invalid_dynamic_universe",
-        Market.CRYPTO: None,
+        Market.EQUITY: None,
+        Market.CRYPTO: "invalid_dynamic_universe",
     }
     runtime.market_state = SimpleNamespace(has_data_gaps=False)
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
@@ -1157,13 +1149,13 @@ def test_safety_lock_reset_universe_halt_needs_valid_refresh() -> None:
 
     runtime._refresh_runtime_universes = successful_refresh
     runtime.reset_safety_lock()
-    assert cleared == [Market.EQUITY]
-    assert runtime._market_entry_halts[Market.EQUITY] is None
+    assert cleared == [Market.CRYPTO]
+    assert runtime._market_entry_halts[Market.CRYPTO] is None
 
     # A failing refresh leaves the halt in place.
     runtime._market_entry_halts = {
-        Market.EQUITY: "invalid_dynamic_universe",
-        Market.CRYPTO: None,
+        Market.EQUITY: None,
+        Market.CRYPTO: "invalid_dynamic_universe",
     }
 
     def failing_refresh(market: Market) -> None:
@@ -1172,7 +1164,7 @@ def test_safety_lock_reset_universe_halt_needs_valid_refresh() -> None:
     runtime._refresh_runtime_universes = failing_refresh
     runtime._circuit_breaker_reason = "reconciliation_failed"
     runtime.reset_safety_lock()
-    assert runtime._market_entry_halts[Market.EQUITY] == "invalid_dynamic_universe"
+    assert runtime._market_entry_halts[Market.CRYPTO] == "invalid_dynamic_universe"
 
 
 def test_safety_lock_reset_refuses_manual_intervention() -> None:

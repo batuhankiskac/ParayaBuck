@@ -35,7 +35,11 @@ def test_excluded_symbol_not_ranked() -> None:
     end = base + timedelta(days=59)
     universe = build_product_universe(config, bars, market=Market.EQUITY, end=end, timeframe=strat.timeframe)
     assert universe is not None
+    configured = set(config.universe.equity.symbols)
     for snap in universe.snapshots:
+        # The static universe admits only the configured symbols; a symbol that
+        # merely appears in the bar set never leaks into membership.
+        assert snap.symbols <= configured, "Unconfigured symbol leaked into universe"
         assert "ZZZ_EXCLUDED" not in snap.symbols, "Excluded symbol leaked into universe"
         if snap.observation_set:
             assert "ZZZ_EXCLUDED" not in snap.observation_set
@@ -60,7 +64,8 @@ def test_excluded_symbol_not_ranked() -> None:
         benchmark_symbol="SPY",
     )
     assert not ctx.in_universe("ZZZ_EXCLUDED"), "Excluded symbol should be out of universe"
-    assert ctx.in_universe("AAA"), "Eligible symbol should be in universe"
+    assert not ctx.in_universe("AAA"), "Unconfigured symbol should be out of universe"
+    assert ctx.in_universe("SPY"), "Configured symbol should be in universe"
     ranked = strat.rank_candidates(ctx)
     assert "ZZZ_EXCLUDED" not in ranked, "Strategy ranked excluded symbol"
 

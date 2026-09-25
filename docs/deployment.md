@@ -88,7 +88,7 @@ sudo journalctl -u parayabuck -f
    cd /opt/parayabuck
    sudo -u parayabuck .venv/bin/parayabuck backup
    sudo -u parayabuck tar czf ~/backups/parayabuck-config-$(date +%Y%m%dT%H%M%SZ).tgz \
-     config/ .env data/runtime/active_equity_universe.json data/runtime/active_crypto_universe.json
+     config/ .env data/runtime/active_crypto_universe.json
    ```
 
 4. **Pull the release**

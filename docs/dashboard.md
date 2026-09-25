@@ -7,8 +7,8 @@ are there open orders/fills, and is risk blocking anything.
 
 All dashboard data comes from the **same read-only state** the existing
 `/api/status` and `/api/account` endpoints expose: the runtime SQLite ledger
-(`runtime.decision_db_path`, read via `mode=ro` connections), the universe
-snapshot JSON files, `EngineRuntime.health()`, the broker account snapshot,
+(`runtime.decision_db_path`, read via `mode=ro` connections), the crypto
+universe snapshot JSON file, `EngineRuntime.health()`, the broker account snapshot,
 and the batch observability modules. No new ledgers, no secrets, no
 mutations.
 
@@ -63,19 +63,20 @@ target is cash when QQQ is in a downtrend, when history is insufficient, or
 when QLD is unavailable. See the
 [profit maximization v1 evidence](research/profit_max_v1.md).
 
-`Eligible pool` — shortlist count from
-`universe.equity.candidate_universe_path`; `observation set` — active-universe
-size; `positions` / `current allocation %` — account positions weighted by
+`Eligible pool` — size of the static `universe.equity.symbols` list;
+`observation set` — the same configured symbols plus runtime managed pins;
+`positions` / `current allocation %` — account positions weighted by
 market value over equity; `maximum allocation %` —
 `strategy.equity.maximum_allocation` (0.93). Status derivation: active /
-warming / halted (entry halt or circuit breaker) / scanner_issue / disabled /
-engine states.
+warming / halted (entry halt or circuit breaker) / disabled / engine states.
+`scanner.equity_status` is `static` when equity is enabled and `disabled`
+otherwise — there is no equity scan to fail.
 `Next expected decision` — the last persisted `portfolio_decisions`
 timestamp advanced by the strategy's rebalance policy (`hours:24` → the next
 session boundary); it is an expected boundary, not a guarantee. QQQ and QLD are
-pinned in the 30-symbol IEX equity stream through
-`universe.equity.reference_symbols` and tradable through
-`universe.equity.trade_reference_symbols`. Holdings show target/current weight
+members of the 30-symbol IEX equity stream because they are configured in
+`universe.equity.symbols` (SPY, QQQ, QLD), and all three are tradable. Holdings
+show target/current weight
 and the persisted reason (`trend_up` when QLD is targeted).
 
 ### Crypto card — "Low Realized Variance Hysteresis v1 (96h, retention 4)"
@@ -115,16 +116,15 @@ telemetry module is available. Reconciliation anomalies come from
 `portfolio_ownership_adjustments`.
 
 ### Universe panel (both markets)
-`Broad discovered` — candidate payload size
-(`candidate_universe_path` for equity, `candidate_symbols` for crypto);
-`eligible pool` — equity shortlist / crypto candidates; `observation set` —
-active-universe selection. The 30-symbol equity IEX stream pins SPY, QQQ and
-QLD through `universe.equity.reference_symbols`, with QQQ and QLD tradable
-through `universe.equity.trade_reference_symbols`. `Last
-refresh` / `data_timestamp` / `scanner status` / `scanner version` come from the
-active universe JSON; `next refresh` / `refresh errors` from
+`Broad discovered` / `eligible pool` — crypto `candidate_symbols` size;
+`observation set` — the crypto `observation_set` (and, for equity, exactly
+`universe.equity.symbols`, since there is no equity candidate pool or artifact).
+`Last refresh` / `data_timestamp` / `scanner status` / `scanner version` come from
+the active crypto universe JSON (equity `scanner_status` is `static`);
+`next refresh` / `refresh errors` from
 `RuntimeHealth.universe_refresh`; `pinned symbols` — runtime managed pins
-(equity) or `universe.crypto.pinned_symbols`. Symbol lists are rendered in a
+(equity and crypto) falling back to `universe.crypto.pinned_symbols`. Symbol
+lists are rendered in a
 collapsible `<details>` and capped client-side (120 chips) so hundreds of
 symbols are never dumped by default.
 
@@ -134,7 +134,8 @@ symbols are never dumped by default.
 per-market `stream_healthy` / `data_gap`. `Account freshness` — snapshot
 age/staleness vs `engine.maximum_account_age_for_entry_seconds`.
 `Reconciliation` — last reconciliation time + breaker state.
-`Scanner` — universe-refresh status/errors/next refresh. `Database` — ledger
+`Scanner` — crypto universe-refresh status/errors/next refresh (equity reports
+`static`). `Database` — ledger
 path, existence, size, WAL file presence. `Last heartbeat` — newest worker
 heartbeat. `Restart count` — Worker D's `runtime_metrics().restart_count`
 (runtime_sessions-derived), with a same-formula fallback while that module

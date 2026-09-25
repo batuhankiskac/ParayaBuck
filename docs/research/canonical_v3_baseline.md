@@ -95,9 +95,11 @@ split/stock-dividend rows are not reapplied.
   excluded from ordinary V3 alpha targeting.
 - Ordinary V3 target eligibility for `SPY`, `SH`, `PSQ`, and `DOG` is zero in
   the corrected baseline evidence.
-- The broad historical Alpaca `US_EQUITY` universe remains in force. This is
-  not a complete common-stock/product taxonomy; see
-  [`equity_universe_limitations.md`](equity_universe_limitations.md).
+- This baseline ran on the broad historical Alpaca `US_EQUITY` universe. That
+  was not a complete common-stock/product taxonomy; see
+  [`equity_universe_limitations.md`](equity_universe_limitations.md). It is no
+  longer the production universe: as of 2026-09-25 equity is static
+  (`universe.equity.symbols: [SPY, QQQ, QLD]`) and the V3 identity is removed.
 
 Role isolation is a role boundary, not a claim that the historical dataset has
 been converted to common-stock-only. A future authorized security-master

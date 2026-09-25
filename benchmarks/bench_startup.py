@@ -43,20 +43,9 @@ def _monkeypatched_constructor(tmp_path: Path):
         real_init(self, api_key, secret_key, config)
 
     orig_ensure = runtime_module.ensure_active_universes
-    orig_equities = runtime_module.load_active_symbols
     orig_crypto = runtime_module.load_active_crypto_symbols
     runtime_module.ensure_active_universes = lambda config, api_key, secret_key: SimpleNamespace(
-        equity_status="success", crypto_status="success"
-    )
-    runtime_module.load_active_symbols = lambda config, log_rejection=True: (
-        "SPY",
-        "AAPL",
-        "MSFT",
-        "NVDA",
-        "TSLA",
-        "AMZN",
-        "META",
-        "GOOGL",
+        equity_status="static", crypto_status="success"
     )
     runtime_module.load_active_crypto_symbols = lambda config, log_rejection=True: (
         "BTC/USD",
@@ -67,7 +56,6 @@ def _monkeypatched_constructor(tmp_path: Path):
         return EngineRuntime("key", "secret", load_config(str(CONFIG)))
     finally:
         runtime_module.ensure_active_universes = orig_ensure
-        runtime_module.load_active_symbols = orig_equities
         runtime_module.load_active_crypto_symbols = orig_crypto
 
 

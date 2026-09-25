@@ -36,7 +36,7 @@ from parayabuck.config import DEFAULT_DECISION_DB_PATH, load_config
 from parayabuck.core.models import Market
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
-from parayabuck.universe import validate_active_crypto_universe, validate_active_universe
+from parayabuck.universe import validate_active_crypto_universe
 from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.web.server")
@@ -1153,19 +1153,20 @@ class EngineManager:
     ) -> tuple[tuple[str, ...] | None, str | None]:
         try:
             cfg = load_config(str(self.config_path))
+
             from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
             from parayabuck.portfolio import product_strategy_from
             from parayabuck.portfolio.runtime_service import configuration_digest
-            from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
+            from parayabuck.universe import equity_universe_digest, load_active_crypto_symbols
             from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
-            from parayabuck.universe.scanner import scanner_config_digest
 
+            equity_universe = cfg.universe.equity
             digests: list[str] = []
             for selection, symbols, universe_version in (
                 (
                     cfg.strategy.equity,
-                    load_active_symbols(cfg.universe.equity, log_rejection=False),
-                    scanner_config_digest(cfg.universe.equity),
+                    equity_universe.symbols if equity_universe.enabled else (),
+                    equity_universe_digest(equity_universe),
                 ),
                 (
                     cfg.strategy.crypto,
@@ -1688,23 +1689,13 @@ def _strategy_metadata(cfg: Any) -> dict[str, Any]:
     from parayabuck.portfolio import portfolio_strategy_from
 
     result: dict[str, Any] = {"equity": None, "crypto": None}
-    candidate_payload: dict[str, Any] = {}
-    active_payload: dict[str, Any] = {}
+    equity_universe = cfg.universe.equity
+    equity_symbols = tuple(equity_universe.symbols) if equity_universe.enabled else ()
     active_crypto_payload: dict[str, Any] = {}
-    for path, store in (
-        (cfg.universe.equity.candidate_universe_path, candidate_payload),
-        (cfg.universe.equity.active_universe_path, active_payload),
-        (cfg.universe.crypto.active_universe_path, active_crypto_payload),
-    ):
-        store.update(_dashboard_load_json(path))
-    shortlist = candidate_payload.get("shortlist_symbols")
+    active_crypto_payload.update(_dashboard_load_json(cfg.universe.crypto.active_universe_path))
     crypto_candidates = active_crypto_payload.get("candidate_symbols")
     for market_key, selection, pool_size in (
-        (
-            "equity",
-            cfg.strategy.equity,
-            len(shortlist) if isinstance(shortlist, list) else None,
-        ),
+        ("equity", cfg.strategy.equity, len(equity_symbols)),
         (
             "crypto",
             cfg.strategy.crypto,
@@ -1717,7 +1708,7 @@ def _strategy_metadata(cfg: Any) -> dict[str, Any]:
             strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
             spec = strategy.spec()
             observation_size = (
-                len(active_payload.get("observation_set", active_payload.get("selected_symbols", ())))
+                len(equity_symbols)
                 if market_key == "equity"
                 else len(
                     active_crypto_payload.get("observation_set", active_crypto_payload.get("selected_symbols", ()))
@@ -1732,9 +1723,7 @@ def _strategy_metadata(cfg: Any) -> dict[str, Any]:
                 "rebalance_cadence": spec.rebalance_policy,
                 "minimum_history_bars": spec.minimum_history_bars,
                 "dynamic_universe_enabled": (
-                    cfg.universe.equity.dynamic_selection_enabled
-                    if market_key == "equity"
-                    else cfg.universe.crypto.dynamic_selection_enabled
+                    False if market_key == "equity" else cfg.universe.crypto.dynamic_selection_enabled
                 ),
                 "candidate_pool_size": pool_size,
                 "observation_set_size": observation_size,
@@ -1773,7 +1762,7 @@ async def get_status() -> dict[str, Any]:
         result["strategy_status"] = "configuration_error"
         # Mirror the universe-section failure state so consumers never see a
         # missing scanner key when the config cannot be loaded.
-        result["scanner"] = {"last_run_at": None, "status": "error"}
+        result["scanner"] = {"equity_status": "error", "crypto_status": "error"}
     # Bounded auto-start retry state (cheap reads; present only while a retry
     # cycle is active, so a settled engine exposes no retry noise).
     retry_attempt = getattr(manager, "_retry_attempt", 0)
@@ -1815,55 +1804,31 @@ async def get_status() -> dict[str, Any]:
             )
     if cfg is not None:
         try:
-            candidate_path = Path(cfg.universe.equity.candidate_universe_path)
-            active_path = Path(cfg.universe.equity.active_universe_path)
+            equity_universe = cfg.universe.equity
+            equity_symbols = tuple(equity_universe.symbols) if equity_universe.enabled else ()
             active_crypto_path = Path(cfg.universe.crypto.active_universe_path)
-            candidate_payload = (
-                json.loads(candidate_path.read_text(encoding="utf-8")) if candidate_path.exists() else []
-            )
-            active_payload = json.loads(active_path.read_text(encoding="utf-8")) if active_path.exists() else {}
             active_crypto_payload = (
                 json.loads(active_crypto_path.read_text(encoding="utf-8")) if active_crypto_path.exists() else {}
             )
-            candidate_items = (
-                candidate_payload.get(
-                    "candidates",
-                    candidate_payload.get("symbols", candidate_payload),
-                )
-                if isinstance(candidate_payload, dict)
-                else candidate_payload
-            )
-            result["candidate_universe_size"] = len(candidate_items) if isinstance(candidate_items, (list, dict)) else 0
-            equity_symbols, validated_scanner_status = validate_active_universe(cfg.universe.equity)
             crypto_symbols, validated_crypto_scanner_status = validate_active_crypto_universe(cfg.universe.crypto)
             if runtime is None:
                 result["active_equity_symbol_count"] = len(equity_symbols)
                 result["active_crypto_symbol_count"] = len(crypto_symbols)
             result["scanner"] = {
-                "last_run_at": active_payload.get("selection_timestamp"),
-                "status": runtime_refresh.get("status", {}).get("equity", validated_scanner_status),
-                "equity_status": runtime_refresh.get("status", {}).get("equity", validated_scanner_status),
+                "equity_status": runtime_refresh.get("status", {}).get("equity")
+                or ("static" if equity_universe.enabled else "disabled"),
                 "crypto_status": runtime_refresh.get("status", {}).get("crypto", validated_crypto_scanner_status),
-                "equity_snapshot_status": validated_scanner_status,
                 "crypto_snapshot_status": validated_crypto_scanner_status,
-                "scanner_version": active_payload.get("scanner_version"),
                 "crypto_last_run_at": active_crypto_payload.get("selection_timestamp"),
                 "crypto_scanner_version": active_crypto_payload.get("scanner_version"),
                 "next_refresh_at": runtime_refresh.get("next_refresh_at"),
                 "refresh_errors": runtime_refresh.get("errors", {}),
-                "equity_candidate_count": len(active_payload.get("candidate_symbols", ())),
-                "equity_shortlist_count": len(
-                    candidate_payload.get("shortlist_symbols", ()) if isinstance(candidate_payload, dict) else ()
-                ),
-                "equity_sector_metadata_coverage": active_payload.get("sector_metadata_coverage"),
                 "crypto_candidate_count": len(active_crypto_payload.get("candidate_symbols", ())),
             }
             result["universe"] = {
                 "equity": {
-                    "symbols": list(active_payload.get("observation_set", active_payload.get("selected_symbols", ()))),
-                    "pool_size": len(active_payload.get("selected_symbols", ())),
-                    "scores": active_payload.get("score_breakdown", {}),
-                    "eliminated": active_payload.get("eliminated", {}),
+                    "symbols": list(equity_symbols),
+                    "pool_size": len(equity_symbols),
                 },
                 "crypto": {
                     "symbols": list(
@@ -1875,7 +1840,7 @@ async def get_status() -> dict[str, Any]:
                 },
             }
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            result["scanner"] = {"last_run_at": None, "status": "error"}
+            result["scanner"] = {"equity_status": "error", "crypto_status": "error"}
     return result
 
 
@@ -3280,62 +3245,43 @@ def _dashboard_execution() -> dict[str, Any]:
 
 
 def _dashboard_universe(cfg: Any, health: dict[str, Any] | None) -> dict[str, Any]:
-    """Universe panel: discovered assets, pools, scanner freshness, pins."""
+    """Universe panel: static equity symbols, crypto scan freshness, pins."""
     if cfg is None:
         return {"unavailable": True, "reason": "config unavailable"}
     refresh = dict((health or {}).get("universe_refresh") or {})
     status_map = dict(refresh.get("status") or {})
     errors = dict(refresh.get("errors") or {})
     market_health = dict((health or {}).get("markets") or {})
-    result: dict[str, Any] = {}
-    for market_key, active_path, candidate_path in (
-        (
-            "equity",
-            cfg.universe.equity.active_universe_path,
-            cfg.universe.equity.candidate_universe_path,
-        ),
-        ("crypto", cfg.universe.crypto.active_universe_path, None),
-    ):
-        active: dict[str, Any] = {}
-        candidates: dict[str, Any] = {}
-        active.update(_dashboard_load_json(active_path))
-        if candidate_path is not None:
-            candidates.update(_dashboard_load_json(candidate_path))
-        shortlist = candidates.get("shortlist_symbols")
-        candidate_symbols = active.get("candidate_symbols", ())
-        candidate_items = (
-            candidates.get("candidates", candidates.get("symbols", candidates))
-            if isinstance(candidates, dict)
-            else candidates
-        )
-        broad_discovered = len(candidate_items) if isinstance(candidate_items, (list, dict)) else 0
-        eligible_pool = (
-            len(shortlist)
-            if market_key == "equity" and isinstance(shortlist, list)
-            else len(candidate_symbols)
-            if isinstance(candidate_symbols, (list, tuple))
-            else 0
-        )
-        selected = active.get("observation_set", active.get("selected_symbols", ()))
-        market = dict(market_health.get(market_key) or {})
-        pinned = list(market.get("managed_pins") or ())
-        if market_key == "crypto" and not pinned:
-            pinned = list(getattr(cfg.universe.crypto, "pinned_symbols", ()) or ())
-        result[market_key] = {
-            "broad_discovered_count": broad_discovered,
-            "eligible_pool_size": eligible_pool,
+    equity_universe = cfg.universe.equity
+    equity_symbols = tuple(equity_universe.symbols) if equity_universe.enabled else ()
+    active: dict[str, Any] = {}
+    active.update(_dashboard_load_json(cfg.universe.crypto.active_universe_path))
+    candidate_symbols = active.get("candidate_symbols", ())
+    selected = active.get("observation_set", active.get("selected_symbols", ()))
+    crypto_pinned = list(dict(market_health.get("crypto") or {}).get("managed_pins") or ()) or list(
+        getattr(cfg.universe.crypto, "pinned_symbols", ()) or ()
+    )
+    return {
+        "equity": {
+            "observation_set": list(equity_symbols),
+            "observation_set_size": len(equity_symbols),
+            "pinned_symbols": list(dict(market_health.get("equity") or {}).get("managed_pins") or ()),
+            "scanner_status": status_map.get("equity") or ("static" if equity_universe.enabled else "disabled"),
+        },
+        "crypto": {
+            "eligible_pool_size": len(candidate_symbols) if isinstance(candidate_symbols, (list, tuple)) else 0,
             "observation_set_size": len(selected),
             "observation_set": list(selected),
-            "pinned_symbols": pinned,
+            "pinned_symbols": crypto_pinned,
             "last_refresh_at": active.get("selection_timestamp"),
             "data_timestamp": active.get("data_timestamp"),
-            "scanner_status": status_map.get(market_key) or active.get("status"),
+            "scanner_status": status_map.get("crypto") or active.get("status"),
             "scanner_version": active.get("scanner_version"),
-            "refresh_errors": dict(errors.get(market_key) or {}),
+            "refresh_errors": dict(errors.get("crypto") or {}),
             "next_refresh_at": refresh.get("next_refresh_at"),
             "eliminated_count": len(active.get("eliminated", {})),
-        }
-    return result
+        },
+    }
 
 
 def _dashboard_database_state() -> dict[str, Any]:

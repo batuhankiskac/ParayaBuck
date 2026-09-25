@@ -334,142 +334,29 @@ class DataConfig:
 
 
 @dataclass(frozen=True)
-class EquityScannerConfig:
-    minimum_price: float = 5.0
-    minimum_median_dollar_volume: float = 20_000_000.0
-    minimum_data_completeness: float = 0.95
-    minimum_atr_pct: float = 0.005
-    maximum_atr_pct: float = 0.12
-    maximum_per_sector: int = 5
-    volatility_optimum_pct: float = 0.03
-    spread_quality_ceiling_bps: float = 50.0
-    unknown_sector_penalty: float = 2.0
-
-    def __post_init__(self) -> None:
-        if not math.isfinite(self.minimum_price) or self.minimum_price <= 0:
-            raise ValueError("Equity scanner price and liquidity thresholds must be positive")
-        if not math.isfinite(self.minimum_median_dollar_volume) or self.minimum_median_dollar_volume <= 0:
-            raise ValueError("Equity scanner price and liquidity thresholds must be positive")
-        if not math.isfinite(self.minimum_data_completeness) or not 0 < self.minimum_data_completeness <= 1:
-            raise ValueError("Equity scanner completeness must be in (0, 1]")
-        if (
-            not math.isfinite(self.minimum_atr_pct)
-            or not math.isfinite(self.maximum_atr_pct)
-            or not 0 < self.minimum_atr_pct < self.maximum_atr_pct <= 1
-        ):
-            raise ValueError("Equity scanner ATR range is invalid")
-        if (
-            not math.isfinite(self.volatility_optimum_pct)
-            or not self.minimum_atr_pct <= self.volatility_optimum_pct <= self.maximum_atr_pct
-        ):
-            raise ValueError("Equity scanner volatility optimum must be inside the ATR range")
-        if (
-            self.maximum_per_sector <= 0
-            or not math.isfinite(self.spread_quality_ceiling_bps)
-            or self.spread_quality_ceiling_bps <= 0
-        ):
-            raise ValueError("Equity scanner sector and spread limits must be positive")
-        if not math.isfinite(self.unknown_sector_penalty) or self.unknown_sector_penalty < 0:
-            raise ValueError("Equity scanner unknown-sector penalty must not be negative")
-
-
-@dataclass(frozen=True)
 class EquityUniverseConfig:
+    """Static equity universe: the configured symbols are streamed and tradable.
+
+    The equity strategy reads a fixed signal/hold pair, so there is no dynamic
+    equity scanner. Managed positions outside ``symbols`` are pinned by the
+    runtime until they are sold.
+    """
+
     enabled: bool = True
-    dynamic_selection_enabled: bool = True
-    allow_static_fallback_trading: bool = False
     maximum_stream_symbols: int = 30
-    target_shortlist: int = 300
-    reference_symbols: tuple[str, ...] = ("SPY",)
-    fallback_trade_symbols: tuple[str, ...] = ()
-    allowlist_symbols: tuple[str, ...] = ()
-    denylist_symbols: tuple[str, ...] = ()
-    supported_exchanges: tuple[str, ...] = ("NASDAQ", "NYSE", "ARCA", "AMEX", "BATS")
-    inverse_trade_symbols: tuple[str, ...] = ()
-    candidate_universe_path: str = "data/universe/equity_candidates.json"
-    active_universe_path: str = "data/runtime/active_equity_universe.json"
-    trade_reference_symbols: bool = False
-    active_universe_max_age_hours: float = 36.0
-    require_scanner_config_digest_match: bool = True
-    # Runtime-only identity of the strategy that produced the persisted
-    # strategy-alpha observation set.  These fields are deliberately excluded
-    # from the scanner digest: changing alpha must invalidate the observation
-    # snapshot without pretending that scanner economics changed.
-    observation_strategy_name: str = ""
-    observation_strategy_version: str = ""
-    observation_strategy_timeframe: str | None = None
-    scanner: EquityScannerConfig = field(default_factory=EquityScannerConfig)
+    symbols: tuple[str, ...] = ("SPY", "QQQ", "QLD")
 
     def __post_init__(self) -> None:
         from parayabuck.markets.symbols import canonical_symbol
 
-        references = tuple(canonical_symbol(item, Market.EQUITY) for item in self.reference_symbols)
-        fallback = tuple(canonical_symbol(item, Market.EQUITY) for item in self.fallback_trade_symbols)
-        inverse = tuple(canonical_symbol(item, Market.EQUITY) for item in self.inverse_trade_symbols)
-        allowlist = tuple(canonical_symbol(item, Market.EQUITY) for item in self.allowlist_symbols)
-        denylist = tuple(canonical_symbol(item, Market.EQUITY) for item in self.denylist_symbols)
-        if len(set(references)) != len(references):
-            raise ValueError("universe.equity.reference_symbols must be unique")
-        if len(set(fallback)) != len(fallback):
-            raise ValueError("universe.equity.fallback_trade_symbols must be unique")
-        if len(set(inverse)) != len(inverse):
-            raise ValueError("universe.equity.inverse_trade_symbols must be unique")
-        if len(set(allowlist)) != len(allowlist) or len(set(denylist)) != len(denylist):
-            raise ValueError("Equity allowlist and denylist symbols must be unique")
-        if set(allowlist) & set(denylist):
-            raise ValueError("Equity allowlist and denylist must not overlap")
-        if not set(inverse).issubset(fallback):
-            raise ValueError("universe.equity.inverse_trade_symbols must be included in fallback_trade_symbols")
-        from parayabuck.markets.sectors import is_inverse_equity
-
-        if any(not is_inverse_equity(symbol) for symbol in inverse):
-            raise ValueError("Only approved -1x inverse equity ETFs may be configured")
-        if set(references) & set(fallback):
-            raise ValueError(
-                "Reference and fallback trade symbols must be unique; use "
-                "trade_reference_symbols to make references tradeable"
-            )
+        symbols = tuple(canonical_symbol(item, Market.EQUITY) for item in self.symbols)
+        if len(set(symbols)) != len(symbols):
+            raise ValueError("universe.equity.symbols must be unique")
         if self.maximum_stream_symbols <= 0:
             raise ValueError("universe.equity.maximum_stream_symbols must be positive")
-        if self.target_shortlist < self.maximum_stream_symbols:
-            raise ValueError("universe.equity.target_shortlist must cover the active universe")
-        if not self.supported_exchanges:
-            raise ValueError("universe.equity.supported_exchanges must not be empty")
-        if not math.isfinite(self.active_universe_max_age_hours) or self.active_universe_max_age_hours <= 0:
-            raise ValueError("universe.equity.active_universe_max_age_hours must be positive")
-        if len(references) > self.maximum_stream_symbols:
-            raise ValueError("Equity reference symbols exceed maximum_stream_symbols")
-        object.__setattr__(self, "reference_symbols", references)
-        object.__setattr__(self, "fallback_trade_symbols", fallback)
-        object.__setattr__(self, "inverse_trade_symbols", inverse)
-        object.__setattr__(self, "allowlist_symbols", allowlist)
-        object.__setattr__(self, "denylist_symbols", denylist)
-        object.__setattr__(
-            self,
-            "supported_exchanges",
-            tuple(dict.fromkeys(exchange.upper() for exchange in self.supported_exchanges)),
-        )
-
-    @property
-    def configured_stream_symbols(self) -> tuple[str, ...]:
-        return tuple(dict.fromkeys((*self.reference_symbols, *self.fallback_trade_symbols)))
-
-    @property
-    def trade_symbols(self) -> tuple[str, ...]:
-        if self.trade_reference_symbols:
-            return self.configured_stream_symbols
-        references = set(self.reference_symbols)
-        return tuple(item for item in self.fallback_trade_symbols if item not in references)
-
-    @property
-    def ordinary_alpha_excluded_symbols(self) -> tuple[str, ...]:
-        """Symbols reserved for reference/hedge roles, not ordinary alpha.
-
-        This is a role boundary, not a product-taxonomy blacklist. The
-        symbols remain in configured observation/history paths. An explicitly
-        authorized strategy can pass an empty boundary when it is composed.
-        """
-        return tuple(dict.fromkeys((*self.reference_symbols, *self.inverse_trade_symbols)))
+        if len(symbols) > self.maximum_stream_symbols:
+            raise ValueError("universe.equity.symbols exceed maximum_stream_symbols")
+        object.__setattr__(self, "symbols", symbols)
 
 
 @dataclass(frozen=True)
@@ -675,13 +562,9 @@ class Config:
         if not self.symbols:
             raise ValueError("At least one enabled market symbol must be configured")
         if self.alpaca.stock_stream_feed == "iex" and (
-            self.universe.equity.maximum_stream_symbols > 30 or len(self.universe.equity.configured_stream_symbols) > 30
+            self.universe.equity.maximum_stream_symbols > 30 or len(self.universe.equity.symbols) > 30
         ):
-            raise ValueError("Alpaca Basic IEX equity stream symbols, including references, must not exceed 30")
-        if len(self.universe.equity.configured_stream_symbols) > self.universe.equity.maximum_stream_symbols:
-            raise ValueError(
-                "Configured equity reference and fallback symbols exceed universe.equity.maximum_stream_symbols"
-            )
+            raise ValueError("Alpaca Basic IEX equity stream symbols must not exceed 30")
         if self.strategy.equity.enabled and not self.universe.equity.enabled:
             raise ValueError("Enabled equity strategy requires universe.equity.enabled")
         if self.strategy.crypto.enabled and not self.universe.crypto.enabled:
@@ -715,7 +598,7 @@ class Config:
 
     @property
     def symbols(self) -> tuple[str, ...]:
-        equity = self.universe.equity.configured_stream_symbols if self.universe.equity.enabled else ()
+        equity = self.universe.equity.symbols if self.universe.equity.enabled else ()
         crypto = self.universe.crypto.trade_symbols if self.universe.crypto.enabled else ()
         return (*equity, *crypto)
 
@@ -817,13 +700,7 @@ def load_config(config_path: str | None = None) -> Config:
         for symbol in legacy:
             identity = normalize_symbol(str(symbol))
             (crypto if identity.market == Market.CRYPTO else equities).append(identity.canonical)
-        # Legacy symbols were all tradeable. Avoid silently changing SPY ownership semantics.
-        equity = EquityUniverseConfig(
-            enabled=bool(equities),
-            dynamic_selection_enabled=False,
-            reference_symbols=(),
-            fallback_trade_symbols=tuple(equities),
-        )
+        equity = EquityUniverseConfig(enabled=bool(equities), symbols=tuple(equities))
         crypto_universe = CryptoUniverseConfig(
             enabled=bool(crypto),
             trade_symbols=tuple(crypto),
@@ -831,8 +708,7 @@ def load_config(config_path: str | None = None) -> Config:
     else:
         universe_dict = dict(universe_raw)
         equity_raw = dict(universe_dict.get("equity", {}))
-        equity_scanner = EquityScannerConfig(**dict(equity_raw.pop("scanner", {})))
-        equity = EquityUniverseConfig(scanner=equity_scanner, **equity_raw)
+        equity = EquityUniverseConfig(**equity_raw)
         crypto_raw = dict(universe_dict.get("crypto", {}))
         scanner = CryptoScannerConfig(**dict(crypto_raw.pop("scanner", {})))
         crypto_universe = CryptoUniverseConfig(scanner=scanner, **crypto_raw)
@@ -879,20 +755,6 @@ def load_config(config_path: str | None = None) -> Config:
     )
     equity_strategy = _resolved_timeframe(equity_strategy)
     crypto_strategy = _resolved_timeframe(crypto_strategy)
-    if equity_strategy.enabled and equity.dynamic_selection_enabled:
-        from parayabuck.portfolio import product_strategy_from
-
-        resolved_equity = product_strategy_from(
-            equity_strategy.name,
-            equity_strategy.parameters,
-            timeframe=equity_strategy.timeframe,
-        )
-        equity = replace(
-            equity,
-            observation_strategy_name=resolved_equity.name,
-            observation_strategy_version=resolved_equity.version,
-            observation_strategy_timeframe=resolved_equity.timeframe,
-        )
     if crypto_strategy.enabled and crypto_universe.dynamic_selection_enabled:
         from parayabuck.portfolio import product_strategy_from
 

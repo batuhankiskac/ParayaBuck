@@ -309,28 +309,7 @@ def test_dynamic_loader_reserves_managed_position_and_static_mode_is_unchanged(
     assert load_active_crypto_symbols(static) == static.trade_symbols
 
 
-def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(tmp_path: Path, monkeypatch: Any) -> None:
-    crypto = _config(tmp_path, maximum_stream_symbols=3)
-    scanner = CryptoUniverseScanner(crypto)
-    now = datetime.now(UTC)
-    scanner.persist(scanner.scan(_candidates(), data_timestamp=now, selection_timestamp=now))
-    config = Config(
-        universe=UniverseConfig(
-            equity=EquityUniverseConfig(
-                enabled=False,
-                dynamic_selection_enabled=False,
-                reference_symbols=(),
-            ),
-            crypto=crypto,
-        ),
-        engine=EngineConfig(),
-        runtime=RuntimeConfig(decision_db_path=str(tmp_path / "runtime.sqlite3")),
-        strategy=StrategyConfig(
-            equity=replace(StrategyConfig().equity, enabled=False),
-            crypto=replace(StrategyConfig().crypto, enabled=True),
-        ),
-    )
-
+def _install_runtime_fakes(monkeypatch: Any) -> None:
     class FakeEngine:
         def __init__(self, *_args: object, allowed_trade_symbols: set[str], **_kwargs: object):
             self.allowed_trade_symbols = allowed_trade_symbols
@@ -360,6 +339,49 @@ def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(tmp_pat
     monkeypatch.setattr(runtime_module, "AlpacaBarStream", Sink)
     monkeypatch.setattr(runtime_module, "AlpacaTradingUpdateStream", Sink)
     monkeypatch.setattr(runtime_module, "TimeframeAggregator", Sink)
+
+
+def test_runtime_streams_and_trades_only_configured_static_equity_symbols(tmp_path: Path, monkeypatch: Any) -> None:
+    config = Config(
+        universe=UniverseConfig(
+            equity=EquityUniverseConfig(symbols=("SPY", "QQQ", "QLD")),
+            crypto=CryptoUniverseConfig(enabled=False),
+        ),
+        engine=EngineConfig(),
+        runtime=RuntimeConfig(decision_db_path=str(tmp_path / "runtime.sqlite3")),
+        strategy=StrategyConfig(
+            crypto=replace(StrategyConfig().crypto, enabled=False),
+        ),
+    )
+    _install_runtime_fakes(monkeypatch)
+
+    runtime = EngineRuntime("key", "secret", config)
+
+    assert runtime._symbols_by_market[Market.EQUITY] == {"SPY", "QQQ", "QLD"}
+    assert runtime._symbols_by_market[Market.CRYPTO] == set()
+    assert runtime.market_state.allowed_trade_symbols == {"SPY", "QQQ", "QLD"}
+    # The static equity universe is never refreshed, so it can never halt.
+    assert runtime._initial_universe_halt(Market.EQUITY) is None
+
+
+def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(tmp_path: Path, monkeypatch: Any) -> None:
+    crypto = _config(tmp_path, maximum_stream_symbols=3)
+    scanner = CryptoUniverseScanner(crypto)
+    now = datetime.now(UTC)
+    scanner.persist(scanner.scan(_candidates(), data_timestamp=now, selection_timestamp=now))
+    config = Config(
+        universe=UniverseConfig(
+            equity=EquityUniverseConfig(enabled=False),
+            crypto=crypto,
+        ),
+        engine=EngineConfig(),
+        runtime=RuntimeConfig(decision_db_path=str(tmp_path / "runtime.sqlite3")),
+        strategy=StrategyConfig(
+            equity=replace(StrategyConfig().equity, enabled=False),
+            crypto=replace(StrategyConfig().crypto, enabled=True),
+        ),
+    )
+    _install_runtime_fakes(monkeypatch)
 
     runtime = EngineRuntime("key", "secret", config)
     active = set(load_active_crypto_symbols(crypto))
@@ -405,11 +427,7 @@ def test_asset_api_failure_preserves_previous_success(tmp_path: Path, monkeypatc
     active.write_text('{"old":"success"}')
     config = Config(
         universe=UniverseConfig(
-            equity=EquityUniverseConfig(
-                enabled=False,
-                dynamic_selection_enabled=False,
-                reference_symbols=(),
-            ),
+            equity=EquityUniverseConfig(enabled=False),
             crypto=crypto,
         ),
         engine=EngineConfig(),
@@ -443,11 +461,7 @@ def test_historical_api_failure_preserves_previous_success(tmp_path: Path, monke
     active.write_text('{"old":"success"}')
     config = Config(
         universe=UniverseConfig(
-            equity=EquityUniverseConfig(
-                enabled=False,
-                dynamic_selection_enabled=False,
-                reference_symbols=(),
-            ),
+            equity=EquityUniverseConfig(enabled=False),
             crypto=crypto,
         ),
         engine=EngineConfig(),
@@ -479,21 +493,15 @@ def test_historical_api_failure_preserves_previous_success(tmp_path: Path, monke
     assert active.read_text() == '{"old":"success"}'
 
 
-def test_startup_preflight_refreshes_both_missing_dynamic_universes(tmp_path: Path, monkeypatch: Any) -> None:
+def test_startup_preflight_reports_static_equity_and_refreshes_crypto(tmp_path: Path, monkeypatch: Any) -> None:
     crypto = _config(tmp_path, maximum_stream_symbols=3)
-    equity = EquityUniverseConfig(
-        dynamic_selection_enabled=True,
-        reference_symbols=("SPY",),
-        fallback_trade_symbols=("AAPL",),
-        active_universe_path=str(tmp_path / "active-equity.json"),
-        candidate_universe_path=str(tmp_path / "candidates.json"),
+    config = Config(
+        universe=UniverseConfig(
+            equity=EquityUniverseConfig(symbols=("SPY", "QQQ", "QLD")),
+            crypto=crypto,
+        )
     )
-    config = Config(universe=UniverseConfig(equity=equity, crypto=crypto))
     calls: list[str] = []
-
-    def refresh_equity(*_args: object) -> SimpleNamespace:
-        calls.append("equity")
-        return SimpleNamespace(selected_symbols=("SPY", "AAPL"))
 
     def refresh_crypto(*_args: object) -> SimpleNamespace:
         calls.append("crypto")
@@ -502,15 +510,17 @@ def test_startup_preflight_refreshes_both_missing_dynamic_universes(tmp_path: Pa
             eliminated={},
         )
 
-    monkeypatch.setattr(preflight_module, "refresh_equity_universe", refresh_equity)
+    def forbidden_client(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("the static equity universe must never reach the network")
+
+    monkeypatch.setattr(preflight_module, "TradingClient", forbidden_client)
     monkeypatch.setattr(preflight_module, "refresh_crypto_universe", refresh_crypto)
 
     result = preflight_module.ensure_active_universes(config, "key", "secret")
 
-    assert calls == ["equity", "crypto"]
-    assert result.equity_status == "success"
+    assert calls == ["crypto"]
+    assert result.equity_status == "static"
     assert result.crypto_status == "success"
-    assert result.equity_refreshed
     assert result.crypto_refreshed
 
 
@@ -518,11 +528,7 @@ def test_startup_preflight_failure_is_nonfatal_and_keeps_fallback(tmp_path: Path
     crypto = _config(tmp_path, maximum_stream_symbols=3)
     config = Config(
         universe=UniverseConfig(
-            equity=EquityUniverseConfig(
-                enabled=False,
-                dynamic_selection_enabled=False,
-                reference_symbols=(),
-            ),
+            equity=EquityUniverseConfig(enabled=False),
             crypto=crypto,
         ),
         engine=EngineConfig(),
@@ -558,11 +564,7 @@ def test_startup_preflight_skips_api_when_active_file_is_valid(tmp_path: Path, m
     scanner.persist(scanner.scan(_candidates(), data_timestamp=now, selection_timestamp=now))
     config = Config(
         universe=UniverseConfig(
-            equity=EquityUniverseConfig(
-                enabled=False,
-                dynamic_selection_enabled=False,
-                reference_symbols=(),
-            ),
+            equity=EquityUniverseConfig(enabled=False),
             crypto=crypto,
         ),
         engine=EngineConfig(),

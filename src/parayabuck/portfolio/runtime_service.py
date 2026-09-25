@@ -283,7 +283,6 @@ class PortfolioRuntime:
         universe_version: str = "runtime",
         account_id: str = "unknown",
         live_dollar_cap: float = 0.0,
-        ordinary_alpha_excluded_symbols: tuple[str, ...] = (),
         execution_policy: PortfolioExecutionPolicy | None = None,
         allow_static_universe: bool = False,
     ) -> None:
@@ -311,9 +310,6 @@ class PortfolioRuntime:
         self.universe = universe
         self.universe_version = universe_version
         self.account_id = account_id
-        self.ordinary_alpha_excluded_symbols = tuple(
-            dict.fromkeys(canonical_symbol(symbol, strategy.market) for symbol in ordinary_alpha_excluded_symbols)
-        )
         self.allow_static_universe = bool(allow_static_universe)
         self.policy = rebalance_policy_for(self.strategy)
         self.execution_policy = execution_policy or PortfolioExecutionPolicy()
@@ -919,7 +915,6 @@ class PortfolioRuntime:
             timestamp,
             universe=self.universe,
             universe_version=self.universe_version,
-            ordinary_alpha_excluded_symbols=self.ordinary_alpha_excluded_symbols,
         )
         # Fail-closed PAPER product universe guard: dynamic product
         # strategies must execute against a PIT universe that exposes

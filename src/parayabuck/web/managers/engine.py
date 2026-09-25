@@ -1044,16 +1044,16 @@ class EngineManager:
             from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
             from parayabuck.portfolio import product_strategy_from
             from parayabuck.portfolio.runtime_service import configuration_digest
-            from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
+            from parayabuck.universe import equity_universe_digest, load_active_crypto_symbols
             from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
-            from parayabuck.universe.scanner import scanner_config_digest
 
+            equity_universe = cfg.universe.equity
             digests: list[str] = []
             for selection, symbols, universe_version in (
                 (
                     cfg.strategy.equity,
-                    load_active_symbols(cfg.universe.equity, log_rejection=False),
-                    scanner_config_digest(cfg.universe.equity),
+                    equity_universe.symbols if equity_universe.enabled else (),
+                    equity_universe_digest(equity_universe),
                 ),
                 (
                     cfg.strategy.crypto,

@@ -23,21 +23,25 @@ before the next begins:
 1. **Config validation** — `runtime.mode` must be `paper`; both markets
    enabled; `live.enabled` must be `false`. The engine refuses to start in
    any other combination (`EngineRuntime._validate_execution_mode`).
-2. **Universe preflight** — active equity/crypto universes are validated
-   (freshness, scanner digest, candidate-pool membership) with a
-   deterministic configured fallback when no scanner output exists yet. The
-   equity stream pins `universe.equity.reference_symbols` (SPY, QQQ, QLD);
-   QQQ and QLD are tradable through
-   `universe.equity.trade_reference_symbols`.
+2. **Universe preflight** — the equity universe is static
+   (`universe.equity.symbols`: SPY, QQQ, QLD — all streamed and tradable;
+   preflight reports `equity_status="static"`, no artifact, nothing to
+   refresh). The active crypto universe is validated (freshness, scanner
+   digest, candidate-pool membership) with a deterministic configured
+   fallback when no scanner output exists yet. Managed equity positions
+   outside the configured symbols are pinned into the stream at startup until
+   sold.
 3. **Startup reconciliation** — the broker is reconciled before any
    decision; a verified reconcile clears persisted safety incidents so a
    restart never resurrects them.
 4. **Strategy runtimes** — one `PortfolioRuntime` per market on a SINGLE
    shared repository/account: equity daily (`rebalance_frequency: hours:24`,
    1d), crypto 96h (`rebalance_hours: 96`, 1d). Each receives
-   an immutable active product universe snapshot: `selected_symbols` owns PIT
-   eligibility and `observation_set` owns bounded stream completeness. Missing
-   or invalid universe dependencies fail before a portfolio session row is opened.
+   an immutable active product universe snapshot: for crypto
+   `selected_symbols` owns PIT eligibility and `observation_set` owns bounded
+   stream completeness; for equity the configured symbols are the stream.
+   Missing or invalid universe dependencies fail before a portfolio session row
+   is opened.
 5. **Warmup** — each runtime seeds completed bars until every decision-required
    symbol meets the strategy's minimum history and the latest timestamps are
    aligned (equity: beta window + 1; crypto: variance lookback + 1). One ready

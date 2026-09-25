@@ -24,7 +24,7 @@ This document is the single source for the actual PAPER startup/runtime lifecycl
 
 ## 2. Config Load — `config.py:648`
 
-Inputs: YAML `runtime, engine, alpaca, data, universe, strategy, risk, execution, backup, alerting, live` + env. Current equity config is `name: equity_leveraged_trend_v1` with `maximum_allocation: 0.93` and parameters `signal_symbol: QQQ`, `hold_symbol: QLD`, `sma_bars: 200`, `vol_target: 0.35`, `vol_window: 20`, `rebalance_frequency: hours:24`; QQQ and QLD are tradable `universe.equity.reference_symbols`. Persisted: `Config` in-memory, digests later in `portfolio_runtime_sessions`. Failure: `FileNotFoundError`, `ValueError` on ratios, unknown alert events — fail-fast. Telemetry: `warnings.warn` deprecated keys.
+Inputs: YAML `runtime, engine, alpaca, data, universe, strategy, risk, execution, backup, alerting, live` + env. Current equity config is `name: equity_leveraged_trend_v1` with `maximum_allocation: 0.93` and parameters `signal_symbol: QQQ`, `hold_symbol: QLD`, `sma_bars: 200`, `vol_target: 0.35`, `vol_window: 20`, `rebalance_frequency: hours:24`; the static equity universe is `universe.equity.symbols: [SPY, QQQ, QLD]` and QQQ/QLD are ordinary tradable members. Persisted: `Config` in-memory, digests later in `portfolio_runtime_sessions`. Failure: `FileNotFoundError`, `ValueError` on ratios, unknown alert events — fail-fast. Telemetry: `warnings.warn` deprecated keys.
 
 ## 3. DB / Storage Startup — `storage.py:17`, `execution/ledger.py:59`, `portfolio/runtime_service.py:174`
 
@@ -46,9 +46,9 @@ Single `broker.account()` returns both account + positions. Cached `_last_accoun
 
 `symbols` + `required_timeframes` + `minimum_history_bars` 200 (equity 200-session SMA) / 23 (crypto `variance_lookback_days` + 1) + `stock_feed` sip/iex. Cache digest `SHA256(timeframes+strategies)` gates reuse. Failure: coverage <60% → refetch; SIP 403 → degrade to iex; timeout → `TransientStartupError`. Retry: `_WARMUP_RETRY_SECONDS=600` singleton `pb-warmup-retry`. Fail-closed via `not_ready_symbols`. Telemetry: `Warmup starting/complete`, `Historical gap remains`.
 
-## 8. Universe Refresh — `universe/preflight.py:81`, `runtime.py:1077`
+## 8. Universe Refresh — `universe/preflight.py:89`, `runtime.py:1077`
 
-`ensure_active_universes()` pre-subscription, `refresh_equity/crypto_universe` bars+quotes, `active_*_universe.json` + digest. The 30-symbol equity IEX stream pins `universe.equity.reference_symbols` (SPY, QQQ, QLD); QQQ and QLD are tradable through `universe.equity.trade_reference_symbols`. Failure: `invalid_dynamic_universe` → entry halt unless `allow_static_fallback_trading`; hot-swap protects managed pins, rollback on `rollback_failed` → `subscription_state_unknown` halt. Retry: startup one-retry 1s; loop backoff `(300,900,1800,3600)` capped 60min, equity defers to next premarket 06:00 ET. Telemetry: `scanner_refresh_failure/recovered`, `health.universe_refresh`.
+`ensure_active_universes()` pre-subscription returns `equity_status="static"` (no equity refresh, no `active_equity_universe.json`); only `refresh_crypto_universe` fetches bars+quotes and writes `active_crypto_universe.json` + `scanner_config_digest`. The 30-symbol equity IEX stream is exactly `universe.equity.symbols` (SPY, QQQ, QLD) plus `_pin_managed_symbols` pins for managed positions outside it; managed pins plus configured symbols above `maximum_stream_symbols` raise at startup. Failure: crypto `invalid_dynamic_universe` → entry halt unless `allow_static_fallback_trading`; hot-swap protects managed pins, rollback on `rollback_failed` → `subscription_state_unknown` halt. Retry: startup one-retry 1s; loop backoff `(300,900,1800,3600)` capped 60min (crypto only). Telemetry: `scanner_refresh_failure/recovered`, `health.universe_refresh`.
 
 ## 9. Signal-Basis Verification — `runtime.py:2909`, `data/adjustment.py:55`
 

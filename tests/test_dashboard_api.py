@@ -213,8 +213,6 @@ def test_dashboard_live_active_badge(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    if not Path("data/universe/equity_candidates.json").exists():
-        pytest.skip("equity candidates data not present in CI (gitignored 36M) — skip")
     config_path = _repo_config(tmp_path)
     monkeypatch.setattr(server, "manager", _stub_manager(config_path))
 
@@ -289,16 +287,21 @@ def test_dashboard_universe_and_health_panels(tmp_path: Path, monkeypatch: pytes
     monkeypatch.setattr(server, "manager", _stub_manager(config_path))
 
     overview = asyncio.run(server.dashboard_overview())
-    for market in ("equity", "crypto"):
-        panel = overview["universe"][market]
-        assert "broad_discovered_count" in panel
-        assert "eligible_pool_size" in panel
-        assert "observation_set_size" in panel
-        assert "observation_set" in panel
-        assert "pinned_symbols" in panel
-        assert "last_refresh_at" in panel
-        assert "scanner_status" in panel
-        assert "next_refresh_at" in panel
+    # Equity is the configured static set: no discovery, no refresh cycle.
+    equity = overview["universe"]["equity"]
+    assert equity["observation_set"]
+    assert equity["observation_set_size"] == len(equity["observation_set"])
+    assert equity["scanner_status"] == "static"
+    assert "pinned_symbols" in equity
+
+    crypto = overview["universe"]["crypto"]
+    assert "eligible_pool_size" in crypto
+    assert "observation_set_size" in crypto
+    assert "observation_set" in crypto
+    assert "pinned_symbols" in crypto
+    assert "last_refresh_at" in crypto
+    assert "scanner_status" in crypto
+    assert "next_refresh_at" in crypto
 
     health = overview["health"]
     assert "workers" in health

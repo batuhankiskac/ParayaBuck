@@ -65,7 +65,7 @@
     "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0"
   },
   "paper_parity": {
-    "combined_hash": "0dd8f1972b58e8a52a8683a9e083a2703ce04829ea78512108cd9f9e4acab46b",
+    "combined_hash": "98a1d86c17b70dad805e1d375a4a152eea397533f14932e5ff0bf2a05b4b6c20",
     "crypto": {
       "curve_points": 2038,
       "economics": {
@@ -97,10 +97,10 @@
       "fill_count": 45,
       "fills_hash": "9d7fa13e2210ab3fcc7663269e3818df129e0567b7d8f7992450ef6b16c9ab69",
       "strategy": "equity_leveraged_trend_v1",
-      "universe_history_hash": "26c7a8f46979e60e3e41ccff6508cd4471bc725b6e1f7cd23014eddde8bd24d2",
+      "universe_history_hash": "5bccf8b2a413d9e0b9f6f6123818a7c546f0e4fb4856b68057e9e99944ce3e11",
       "weight_history_hash": "013f35655e62f937b26d840feed6861b4739facc7b7dd32f16625a4ebad31a42"
     },
-    "head": "5d61c8cf292bd6a8e3fc3f1601ffb715ffcf8b76"
+    "head": "da6190b3d63b99bed9e51684324a8c759847b273"
   },
   "paper_strategy": "equity_leveraged_trend_v1",
   "parity_canary_hash": "3e1ea843a3ec1736",

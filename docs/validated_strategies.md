@@ -96,8 +96,8 @@ insufficient or QLD is unavailable.
 | `rebalance_frequency` | `hours:24` (cadence `daily`) |
 | `maximum_allocation` | 0.93 |
 
-QQQ and QLD are `universe.equity.reference_symbols` with
-`universe.equity.trade_reference_symbols: true`; `risk.max_position_pct` is
+QQQ and QLD are ordinary tradable members of the static
+`universe.equity.symbols` list (`[SPY, QQQ, QLD]`); `risk.max_position_pct` is
 0.93 so the per-asset cap admits the whole equity allocation in QLD. The
 0.20 daily-loss and 0.75 drawdown latches are catastrophe brakes, not routine
 entry gates — a daily-reset 2x index ETF moves more than any tighter latch

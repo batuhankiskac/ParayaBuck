@@ -21,6 +21,7 @@ from parayabuck.backtest.portfolio_engine import (
 from parayabuck.backtest.portfolio_report import PortfolioReport, build_portfolio_report
 from parayabuck.backtest.universe import (
     PointInTimeUniverse,
+    build_static_equity_point_in_time_universe,
     build_trailing_point_in_time_universe,
     hash_point_in_time_universe,
 )
@@ -194,11 +195,12 @@ def build_product_universe(
     timeframe: str | None = None,
     observation_strategy: PortfolioStrategy | None = None,
 ) -> PointInTimeUniverse:
-    """Build the point-in-time scanner universe for a product backtest.
+    """Build the point-in-time universe for a product backtest.
 
-    Eligible-pool membership depends on the bar set and scanner policy. Its
-    streamed observation membership is ranked by the configured product
-    strategy, matching the product runtime. Optimizer trials deliberately
+    Equity uses the static configured universe. Crypto eligible-pool
+    membership depends on the bar set and scanner policy; its streamed
+    observation membership is ranked by the configured product strategy,
+    matching the product runtime. Optimizer trials deliberately
     reuse that configured observation basis rather than letting each parameter
     arm redefine the streamed universe.
 
@@ -235,34 +237,17 @@ def build_product_universe(
         if bar.market == market and bar.timeframe == selected_timeframe and (end is None or bar.timestamp <= end)
     ]
     if market == Market.EQUITY:
-        equity_universe = config.universe.equity
-        pinned = (*equity_universe.reference_symbols, *equity_universe.inverse_trade_symbols)
-        maximum_symbols = equity_universe.maximum_stream_symbols
-        lookback_days = 60
-        minimum_price = equity_universe.scanner.minimum_price
-        minimum_history_ratio = equity_universe.scanner.minimum_data_completeness
-        minimum_dollar_volume = equity_universe.scanner.minimum_median_dollar_volume
-    else:
-        crypto_universe = config.universe.crypto
-        pinned = crypto_universe.pinned_symbols
-        maximum_symbols = crypto_universe.maximum_stream_symbols
-        lookback_days = crypto_universe.scanner.lookback_days
-        minimum_price = 0.0
-        minimum_history_ratio = crypto_universe.scanner.minimum_data_completeness
-        minimum_dollar_volume = crypto_universe.scanner.minimum_median_dollar_volume
+        return build_static_equity_point_in_time_universe(available, config.universe.equity)
+    crypto_universe = config.universe.crypto
     return build_trailing_point_in_time_universe(
         available,
-        market=market,
-        maximum_symbols=maximum_symbols,
+        maximum_symbols=crypto_universe.maximum_stream_symbols,
         rebalance_frequency=config.backtest.scanner_rebalance,
-        lookback_days=lookback_days,
-        minimum_history_ratio=minimum_history_ratio,
-        minimum_price=minimum_price,
-        minimum_dollar_volume=minimum_dollar_volume,
-        pinned_symbols=pinned,
-        target_shortlist=(equity_universe.target_shortlist if market == Market.EQUITY else None),
-        equity_config=(config.universe.equity if market == Market.EQUITY else None),
-        crypto_config=(config.universe.crypto if market == Market.CRYPTO else None),
+        lookback_days=crypto_universe.scanner.lookback_days,
+        minimum_history_ratio=crypto_universe.scanner.minimum_data_completeness,
+        minimum_dollar_volume=crypto_universe.scanner.minimum_median_dollar_volume,
+        pinned_symbols=crypto_universe.pinned_symbols,
+        crypto_config=crypto_universe,
         observation_strategy=observation_strategy,
     )
 
@@ -347,9 +332,6 @@ def run_product_backtest(
         universe_version=hash_point_in_time_universe(universe),
         risk_limits=risk,
         maximum_allocation=selection.maximum_allocation,
-        ordinary_alpha_excluded_symbols=(
-            config.universe.equity.ordinary_alpha_excluded_symbols if market == Market.EQUITY else ()
-        ),
         execution_policy=PortfolioExecutionPolicy(
             rebalance_band_pct=config.execution.rebalance_band_pct,
             minimum_order_notional=config.execution.minimum_order_notional,
@@ -381,7 +363,6 @@ def run_product_backtest(
             "cost_multiplier": cost_multiplier,
             "universe_hash": hash_point_in_time_universe(universe),
             "universe_methodology": universe.methodology,
-            "sector_metadata_coverage": universe.to_dict()["sector_metadata_coverage"],
             "scanner_versions": sorted({snapshot.scanner_version for snapshot in universe.snapshots}),
             "data_feed": (data_feed or "offline csv (feed unknown; downloader used the configured historical feed)"),
             "data_feed_note": (

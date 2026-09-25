@@ -562,12 +562,8 @@ def test_websocket_logs_detects_dead_browser_and_cleans_queue(monkeypatch: Any) 
     assert manager.log_queues == set()
 
 
-def test_status_reports_validated_universe_counts_while_runtime_is_starting(tmp_path: Path, monkeypatch: Any) -> None:
-    candidate_path = tmp_path / "candidates.json"
-    equity_path = tmp_path / "active-equity.json"
+def test_status_reports_universe_counts_while_runtime_is_starting(tmp_path: Path, monkeypatch: Any) -> None:
     crypto_path = tmp_path / "active-crypto.json"
-    candidate_path.write_text(json.dumps(["AAPL", "MSFT", "NVDA"]))
-    equity_path.write_text(json.dumps({"selection_timestamp": "equity-time"}))
     crypto_path.write_text(json.dumps({"selection_timestamp": "crypto-time"}))
 
     class StartingManager:
@@ -588,10 +584,7 @@ def test_status_reports_validated_universe_counts_while_runtime_is_starting(tmp_
     equity_config = type(
         "EquityConfig",
         (),
-        {
-            "candidate_universe_path": str(candidate_path),
-            "active_universe_path": str(equity_path),
-        },
+        {"enabled": True, "symbols": ("AAPL", "MSFT")},
     )()
     crypto_config = type("CryptoConfig", (), {"active_universe_path": str(crypto_path)})()
     config = type(
@@ -608,7 +601,6 @@ def test_status_reports_validated_universe_counts_while_runtime_is_starting(tmp_
 
     monkeypatch.setattr(server, "manager", StartingManager())
     monkeypatch.setattr(server, "load_config", lambda _path: config)
-    monkeypatch.setattr(server, "validate_active_universe", lambda _config: (("AAPL", "MSFT"), "success"))
     monkeypatch.setattr(
         server,
         "validate_active_crypto_universe",
@@ -620,8 +612,8 @@ def test_status_reports_validated_universe_counts_while_runtime_is_starting(tmp_
     assert status["state"] == "starting"
     assert status["active_equity_symbol_count"] == 2
     assert status["active_crypto_symbol_count"] == 2
-    assert status["candidate_universe_size"] == 3
-    assert status["scanner"]["equity_status"] == "success"
+    assert status["universe"]["equity"]["symbols"] == ["AAPL", "MSFT"]
+    assert status["scanner"]["equity_status"] == "static"
     assert status["scanner"]["crypto_status"] == "success"
 
 
@@ -651,11 +643,7 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
             "Universe",
             (),
             {
-                "equity": type(
-                    "Equity",
-                    (),
-                    {"candidate_universe_path": "c.json", "active_universe_path": "a.json"},
-                )(),
+                "equity": type("Equity", (), {"enabled": True, "symbols": ("SPY", "QQQ")})(),
                 "crypto": type("Crypto", (), {"active_universe_path": "crypto.json"})(),
             },
         )()
@@ -710,15 +698,7 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
         "Universe",
         (),
         {
-            "equity": type(
-                "Equity",
-                (),
-                {
-                    "candidate_universe_path": str(tmp_path / "c.json"),
-                    "active_universe_path": str(tmp_path / "a.json"),
-                    "dynamic_selection_enabled": True,
-                },
-            )(),
+            "equity": type("Equity", (), {"enabled": True, "symbols": ("A", "B", "C")})(),
             "crypto": type(
                 "Crypto",
                 (),
@@ -730,10 +710,6 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
         },
     )()
     config = type("Config", (), {"strategy": strategy, "universe": universe})()
-    (tmp_path / "c.json").write_text(json.dumps({"shortlist_symbols": ["A", "B", "C"]}))
-    # The streamed observation set is the alpha-ranked subset of the pool;
-    # selected_symbols holds the broader pool.
-    (tmp_path / "a.json").write_text(json.dumps({"selected_symbols": ["A", "B", "C"], "observation_set": ["A", "B"]}))
     (tmp_path / "crypto.json").write_text(json.dumps({"selected_symbols": []}))
 
     monkeypatch.setattr(server, "manager", StaticManager())
@@ -744,8 +720,10 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
     assert meta["equity"]["signal_timeframe"] == "1d"
     assert meta["equity"]["supported_timeframes"] == ["1d"]
     assert meta["equity"]["rebalance_cadence"] == "hours:24"
+    # The static equity universe is its own pool and observation set.
+    assert meta["equity"]["dynamic_universe_enabled"] is False
     assert meta["equity"]["candidate_pool_size"] == 3
-    assert meta["equity"]["observation_set_size"] == 2
+    assert meta["equity"]["observation_set_size"] == 3
     assert meta["crypto"] is None  # disabled strategy exposes no metadata
 
 
@@ -775,7 +753,7 @@ def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
     monkeypatch.setattr(server, "load_config", _raise)
     status = asyncio.run(server.get_status())
     assert status["strategy_status"] == "configuration_error"
-    assert status["scanner"] == {"last_run_at": None, "status": "error"}
+    assert status["scanner"] == {"equity_status": "error", "crypto_status": "error"}
 
 
 def test_readyz_rejects_degraded_or_halted_runtime(monkeypatch: Any) -> None:

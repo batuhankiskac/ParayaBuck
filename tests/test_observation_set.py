@@ -1,42 +1,30 @@
 """Broad-pool alpha-before-stream contract tests.
 
-The stream limit is NOT the opportunity universe: the scanner emits the
-eligible POOL (tradability-first), the strategy alpha ranks the pool on batch
-history, and the top ``maximum_stream_symbols`` plus pins become the streamed
-OBSERVATION SET. Also covers the required-timeframes aggregation contract.
+The stream limit is NOT the opportunity universe: the crypto scanner emits
+the eligible POOL (tradability-first), the strategy alpha ranks the pool on
+batch history, and the top ``maximum_stream_symbols`` plus pins become the
+streamed OBSERVATION SET. The equity universe is static and needs no ranker.
+Also covers the required-timeframes aggregation contract.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
-from parayabuck.config import (
-    CryptoUniverseConfig,
-    EquityScannerConfig,
-    EquityUniverseConfig,
-)
+from parayabuck.config import CryptoUniverseConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import portfolio_strategy_from
 from parayabuck.portfolio.base import PortfolioContext
-from parayabuck.universe import (
-    load_active_crypto_symbols,
-    load_active_symbols,
-    validate_active_crypto_universe,
-    validate_active_universe,
-)
+from parayabuck.universe import load_active_crypto_symbols, validate_active_crypto_universe
 from parayabuck.universe.crypto_scanner import (
     CryptoCandidate,
     CryptoUniverseScanner,
 )
 from parayabuck.universe.observation_set import build_observation_set
-from parayabuck.universe.scanner import (
-    EquityCandidate,
-    EquityUniverseScanner,
-)
 
 
 def _bar(symbol: str, timestamp: datetime, close: float, market: Market) -> Bar:
@@ -51,33 +39,6 @@ def _bar(symbol: str, timestamp: datetime, close: float, market: Market) -> Bar:
         volume=1_000_000.0,
         market=market,
     )
-
-
-def _equity_scanner_result() -> EquityUniverseScanner:
-    config = EquityUniverseConfig(
-        maximum_stream_symbols=3,
-        reference_symbols=("SPY",),
-        fallback_trade_symbols=("AAPL",),
-        scanner=EquityScannerConfig(maximum_per_sector=1),
-    )
-    return EquityUniverseScanner(config)
-
-
-def test_scanner_pool_exceeds_streamed_observation_set() -> None:
-    scanner = _equity_scanner_result()
-    candidates = [
-        EquityCandidate("MSFT", 400, 500_000_000, 0.03, 1.0, 2, "technology"),
-        EquityCandidate("AAPL", 200, 600_000_000, 0.03, 1.0, 2, "technology"),
-        EquityCandidate("JPM", 220, 300_000_000, 0.025, 0.99, 3, "financial"),
-    ]
-    timestamp = datetime.now(UTC)
-    result = scanner.scan(candidates, data_timestamp=timestamp, selection_timestamp=timestamp)
-    # The POOL is every eligible candidate plus reserved symbols...
-    assert result.selected_symbols == ("SPY", "AAPL", "MSFT", "JPM")
-    # ...while the OBSERVATION SET is the streamed subset at the capacity.
-    assert len(result.observation_set) == 3
-    assert set(result.observation_set) <= set(result.selected_symbols)
-    assert result.observation_eliminated["MSFT"] == "sector_concentration"
 
 
 def test_observation_set_falls_back_when_no_ranker() -> None:
@@ -181,67 +142,6 @@ def test_observation_set_respects_capacity_and_rejects_overflow_pins() -> None:
         )
 
 
-def test_validate_and_load_return_the_observation_set(tmp_path) -> None:
-    config = EquityUniverseConfig(
-        maximum_stream_symbols=3,
-        reference_symbols=("SPY",),
-        active_universe_path=str(tmp_path / "active.json"),
-    )
-    result = EquityUniverseScanner(config).scan(
-        [
-            EquityCandidate("AAPL", 200, 600_000_000, 0.03, 1.0, 2, "technology"),
-            EquityCandidate("MSFT", 400, 500_000_000, 0.03, 1.0, 2, "technology"),
-            EquityCandidate("JPM", 220, 300_000_000, 0.025, 0.99, 3, "financial"),
-        ],
-        data_timestamp=datetime.now(UTC),
-    )
-    EquityUniverseScanner(config).persist(result)
-    assert validate_active_universe(config) == (result.observation_set, "success")
-    assert load_active_symbols(config) == result.observation_set
-
-
-def test_observation_set_outside_pool_is_rejected(tmp_path) -> None:
-    config = EquityUniverseConfig(
-        maximum_stream_symbols=3,
-        reference_symbols=("SPY",),
-        active_universe_path=str(tmp_path / "active.json"),
-    )
-    result = EquityUniverseScanner(config).scan(
-        [EquityCandidate("AAPL", 200, 600_000_000, 0.03, 1.0, 2, "technology")],
-        data_timestamp=datetime.now(UTC),
-    )
-    EquityUniverseScanner(config).persist(result)
-    raw = json.loads((tmp_path / "active.json").read_text(encoding="utf-8"))
-    raw["observation_set"] = ["AAPL", "ZZZ"]  # ZZZ not in the pool
-    (tmp_path / "active.json").write_text(json.dumps(raw), encoding="utf-8")
-    symbols, status = validate_active_universe(config)
-    assert symbols == () and status == "observation_outside_pool"
-
-
-def test_active_universe_rejects_observation_set_from_old_strategy(tmp_path) -> None:
-    config = EquityUniverseConfig(
-        maximum_stream_symbols=3,
-        reference_symbols=("SPY",),
-        active_universe_path=str(tmp_path / "active.json"),
-        observation_strategy_name="equity_leveraged_trend_v1",
-        observation_strategy_version="1.0.0",
-        observation_strategy_timeframe="1d",
-    )
-    result = EquityUniverseScanner(config).scan(
-        [EquityCandidate("AAPL", 200, 600_000_000, 0.03, 1.0, 2, "technology")],
-        data_timestamp=datetime.now(UTC),
-    )
-    stale = replace(
-        result,
-        observation_strategy_name="equity_leveraged_trend_v0",
-        observation_strategy_version="0.9.0",
-        observation_strategy_timeframe="1d",
-    )
-    EquityUniverseScanner(config).persist(stale)
-    symbols, status = validate_active_universe(config)
-    assert symbols == () and status == "observation_strategy_mismatch"
-
-
 def test_crypto_pool_and_observation_set_contract(tmp_path) -> None:
     config = CryptoUniverseConfig(
         enabled=True,
@@ -265,6 +165,31 @@ def test_crypto_pool_and_observation_set_contract(tmp_path) -> None:
     CryptoUniverseScanner(config).persist(result)
     assert validate_active_crypto_universe(config) == (result.observation_set, "success")
     assert load_active_crypto_symbols(config) == result.observation_set
+
+
+def test_observation_set_outside_pool_is_rejected(tmp_path) -> None:
+    """A persisted observation set that names a symbol outside the selected
+    pool must fail closed instead of being streamed."""
+    config = CryptoUniverseConfig(
+        enabled=True,
+        dynamic_selection_enabled=True,
+        maximum_stream_symbols=2,
+        pinned_symbols=("BTC/USD",),
+        trade_symbols=("BTC/USD", "ETH/USD"),
+        active_universe_path=str(tmp_path / "active_crypto.json"),
+    )
+    result = CryptoUniverseScanner(config).scan(
+        [
+            CryptoCandidate("BTC/USD", 1_000_000, 0.045, 1.0, None, "core"),
+            CryptoCandidate("ETH/USD", 900_000, 0.05, 1.0, 0.9, "core"),
+        ],
+        data_timestamp=datetime.now(UTC),
+    )
+    CryptoUniverseScanner(config).persist(result)
+    raw = json.loads(Path(config.active_universe_path).read_text(encoding="utf-8"))
+    raw["observation_set"] = [*result.observation_set, "ZZZ/USD"]  # ZZZ not in the pool
+    Path(config.active_universe_path).write_text(json.dumps(raw), encoding="utf-8")
+    assert validate_active_crypto_universe(config) == ((), "observation_outside_pool")
 
 
 def test_required_timeframes_join_the_aggregation_union() -> None:

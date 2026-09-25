@@ -49,7 +49,6 @@ def build_observation_set(
     decision_timestamp: datetime,
     maximum_stream_symbols: int,
     pinned_symbols: tuple[str, ...] = (),
-    ordinary_alpha_excluded_symbols: tuple[str, ...] = (),
     scanner_fallback: tuple[str, ...] = (),
 ) -> ObservationSetResult:
     """Rank the eligible pool with the strategy's alpha and truncate to the
@@ -87,7 +86,6 @@ def build_observation_set(
             holdings={},
             prices={},
             benchmark_symbol="BTC/USD" if market == Market.CRYPTO else "SPY",
-            ordinary_alpha_excluded_symbols=ordinary_alpha_excluded_symbols,
         )
         # Static pool-ranking context: pool membership is caller-supplied, so
         # the permissive None universe is intentional. Explicit opt-in keeps

@@ -258,7 +258,8 @@ document.addEventListener('DOMContentLoaded', () => {
               ? 'STRATEJİ AYAR HATASI'
               : strategyStatus || 'STRATEJİ DEVRE DIŞI';
         const scanner = statusData.scanner || {};
-        const equityScanner = scanner.equity_status || scanner.status || 'not_run';
+        // Equity has no scanner: the universe is the configured static set.
+        const equityUniverse = scanner.equity_status || 'static';
         const cryptoScanner = scanner.crypto_status || 'not_run';
         // Strategy metadata replaces any notion of a global strategy
         // timeframe: each market shows its own strategy, signal timeframe,
@@ -287,8 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
             `${marketLabel(equity)} | ` +
             `Crypto ${statusData.active_crypto_symbol_count ?? 0} · ` +
             `${marketLabel(crypto)} | ` +
-            `Aday ${statusData.candidate_universe_size ?? 0} · ` +
-            `Scanner E ${equityScanner} · C ${cryptoScanner}` +
+            `Evren E ${equityUniverse} · C ${cryptoScanner}` +
             (strategyMetaText ? `\n${strategyMetaText}` : '') +
             (statusData.engine_error ? ` | Hata: ${statusData.engine_error}` : '');
     };
@@ -1096,38 +1096,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderUniversePanel = (universe) => {
         if (!universe || universe.unavailable) return;
-        const renderMarket = (market, ids) => {
-            if (!market) return;
-            setText(ids.broad, fmtNum(market.broad_discovered_count, 0));
-            setText(ids.eligible, fmtNum(market.eligible_pool_size, 0));
-            setText(ids.observed, fmtNum(market.observation_set_size, 0));
-            setText(ids.lastScan, fmtDateTime(market.last_refresh_at));
-            setText(ids.scanner, market.scanner_status || '—');
-            setText(ids.nextScan, fmtDateTime(market.next_refresh_at));
-            const box = document.getElementById(ids.symbols);
-            if (box) {
-                box.replaceChildren();
-                const symbols = market.observation_set || [];
-                symbols.slice(0, 120).forEach((symbol) => {
-                    const chip = document.createElement('span');
-                    chip.textContent = symbol;
-                    box.appendChild(chip);
-                });
-                if (symbols.length > 120) {
-                    const more = document.createElement('span');
-                    more.textContent = `+${symbols.length - 120} daha…`;
-                    box.appendChild(more);
-                }
+        const renderSymbols = (boxId, symbols) => {
+            const box = document.getElementById(boxId);
+            if (!box) return;
+            box.replaceChildren();
+            symbols.slice(0, 120).forEach((symbol) => {
+                const chip = document.createElement('span');
+                chip.textContent = symbol;
+                box.appendChild(chip);
+            });
+            if (symbols.length > 120) {
+                const more = document.createElement('span');
+                more.textContent = `+${symbols.length - 120} daha…`;
+                box.appendChild(more);
             }
         };
-        renderMarket(universe.equity, {
-            broad: 'eqBroad', eligible: 'eqEligible', observed: 'eqObserved',
-            lastScan: 'eqLastScan', scanner: 'eqScanner', nextScan: 'eqNextScan', symbols: 'eqSymbols'
-        });
-        renderMarket(universe.crypto, {
-            broad: 'crBroad', eligible: 'crEligible', observed: 'crObserved',
-            lastScan: 'crLastScan', scanner: 'crScanner', nextScan: 'crNextScan', symbols: 'crSymbols'
-        });
+        // Equity: static configured symbols, nothing is discovered or refreshed.
+        if (universe.equity) {
+            setText('eqCount', fmtNum(universe.equity.observation_set_size, 0));
+            setText('eqStatus', universe.equity.scanner_status || '—');
+            renderSymbols('eqSymbols', universe.equity.observation_set || []);
+        }
+        const crypto = universe.crypto;
+        if (crypto) {
+            setText('crEligible', fmtNum(crypto.eligible_pool_size, 0));
+            setText('crObserved', fmtNum(crypto.observation_set_size, 0));
+            setText('crLastScan', fmtDateTime(crypto.last_refresh_at));
+            setText('crScanner', crypto.scanner_status || '—');
+            setText('crNextScan', fmtDateTime(crypto.next_refresh_at));
+            renderSymbols('crSymbols', crypto.observation_set || []);
+        }
     };
 
     const renderDashboard = (data) => {

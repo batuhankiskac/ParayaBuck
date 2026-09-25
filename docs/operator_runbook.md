@@ -85,20 +85,25 @@ Events show `account_became_stale` → `account_recovered` transitions (deduplic
 
 ## Universe stale
 
-**What it means**: active universe file older than `active_universe_max_age_hours` (equity 36h, crypto 12h) or refresh failed.
+**What it means**: the active crypto universe file is older than
+`universe.crypto.active_universe_max_age_hours` (12h) or its refresh failed.
+Equity has no universe artifact: `universe.equity.symbols` is static, so
+`doctor` reports `universe equity static` and only `universe_crypto` checks can
+fail.
 
 **Check**:
 
 ```bash
 parayabuck ops status  # Universe line
-parayabuck ops doctor  # universe_equity/crypto checks
+parayabuck ops doctor  # universe equity static / universe crypto checks
 parayabuck ops events --since 24h --kind scanner_refresh_failure
-cat data/runtime/active_equity_universe.json | jq .generated_at
+cat data/runtime/active_crypto_universe.json | jq .generated_at
 ```
 
 **When human intervention**: if `refresh_failed` but `recovered` never appears and age > max, check network, then `parayabuck` will retry bounded (retry_at in snapshot). Do not manually edit universe file.
 
-**What NOT to do**: do not set `allow_static_fallback_trading=true` to hide failure unless intended.
+**What NOT to do**: do not set `universe.crypto.allow_static_fallback_trading=true`
+to hide failure unless intended.
 
 ---
 
@@ -237,7 +242,7 @@ Bundle is sanitized (no `api_key`, `webhook_url`, `approval_key`). Share `status
 `ops doctor`:
 
 - `0` healthy
-- `1` degraded/warnings (e.g. `UNKNOWN` snapshot, stale universe with fallback)
+- `1` degraded/warnings (e.g. `UNKNOWN` snapshot, stale crypto universe with fallback)
 - `2` critical (integrity_fail, ambiguous orders, heartbeat stale)
 
 Use in scripts: `parayabuck ops doctor || echo "needs attention"`.

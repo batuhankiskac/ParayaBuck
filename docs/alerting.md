@@ -3,7 +3,7 @@
 The engine ships a minimal event-notification layer
 (`parayabuck.monitoring.alerts`) and a runtime/risk metric aggregator
 (`parayabuck.monitoring.metrics`). Alerts are **never per-bar noise**: they
-fire on state transitions (scanner/reconciliation failure ↔ recovery, risk
+fire on state transitions (crypto scanner/reconciliation failure ↔ recovery, risk
 breaches, circuit-breaker engagements, runtime lifecycle).
 
 ## Event kinds
@@ -15,8 +15,8 @@ exactly these 12 kinds:
 | --- | --- |
 | `runtime_started` | Engine start completed (mode, symbol count). |
 | `runtime_stopped_unexpected` | Stop from a halted/error state or with a circuit breaker active. |
-| `scanner_refresh_failure` | A scheduled scanner refresh failed (per market, with retry attempt). |
-| `scanner_recovered` | A scanner refresh succeeded. |
+| `scanner_refresh_failure` | A scheduled crypto scanner refresh failed (per market, with retry attempt). |
+| `scanner_recovered` | A crypto scanner refresh succeeded. |
 | `order_rejected` | A portfolio order was rejected by the broker. |
 | `ambiguous_order` | Two-phase rebalance outcome ambiguous / crypto exit state ambiguous; entries halted. |
 | `reconciliation_failure` | Periodic or startup reconciliation failed (incl. protection failures). |
@@ -78,7 +78,7 @@ account_id=None) -> dict` aggregates, JSON-serializable and empty-state safe:
   `safety_incidents` (current active incidents), `risk_state` (latest
   per-account session row), `runtime_sessions` (session counts and derived
   `restart_count` = starts − 1).
-* **Process-local counters** (`record_event`, zero-filled): scanner
+* **Process-local counters** (`record_event`, zero-filled): crypto scanner
   refresh failures/recoveries, reconciliation failures/recoveries, data-gap
   episodes, daily-loss/drawdown incidents, circuit-breaker engagements,
   order rejections, ambiguity events, runtime starts/unexpected stops.

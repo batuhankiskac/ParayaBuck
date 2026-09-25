@@ -169,7 +169,6 @@ class PortfolioDecisionService:
         *,
         universe: object | None,
         universe_version: str,
-        ordinary_alpha_excluded_symbols: tuple[str, ...] = (),
     ) -> PortfolioContext:
         if any(not series or series[-1].timestamp != decision_timestamp for series in history.values()):
             raise ValueError("Portfolio context requires a complete closed-bar batch")
@@ -188,7 +187,6 @@ class PortfolioDecisionService:
             },
             prices={symbol: series[-1].close for symbol, series in history.items()},
             benchmark_symbol="BTC/USD" if strategy.market == Market.CRYPTO else "SPY",
-            ordinary_alpha_excluded_symbols=ordinary_alpha_excluded_symbols,
         )
 
 

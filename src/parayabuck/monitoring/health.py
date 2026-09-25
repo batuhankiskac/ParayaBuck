@@ -300,10 +300,7 @@ def _check_universe(health_snapshot: dict[str, Any] | None, now: datetime, confi
         )
     if isinstance(last_refresh, str) and last_refresh:
         age = _age_seconds(last_refresh, now)
-        max_age_h = max(
-            config.universe.equity.active_universe_max_age_hours,
-            config.universe.crypto.active_universe_max_age_hours,
-        )
+        max_age_h = config.universe.crypto.active_universe_max_age_hours
         max_age_s = max_age_h * 3600
         if age is not None and age > max_age_s:
             return HealthCheck(

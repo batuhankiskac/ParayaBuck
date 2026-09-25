@@ -85,21 +85,23 @@ identity. It retains `equity_residual_momentum_v3` 3.0.0 unchanged: production
 eligibility, the positive 12-1 gate, risk overlay, inverse-vol sizing, weekly
 cadence, and the frozen raw 6-1/9-1/12-1 percentile-rank consensus. The market
 `maximum_allocation` remains 0.55, split internally into
-`core_allocation: 0.40` and `sleeve_allocation: 0.15`; the static sleeve holds
-SCHD, VIG, and DGRO at 0.05 each. It is selected on the first weekly decision
-of each calendar month or while empty and is otherwise held. See the
-[production evidence](research/dividend_sleeve_production_v1.md).
+`core_allocation: 0.30` and `sleeve_allocation: 0.25`; the static sleeve holds
+SCHD, VIG, DGRO, GLD, and OUNZ at 0.05 each (dividend 0.15, gold 0.10). It is
+selected on the first weekly decision of each calendar month or while empty and
+is otherwise held. See the [dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
+and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
 
 `universe.equity.sleeve_trade_symbols` pins the sleeve ETFs into the
 30-symbol IEX equity stream and hides them from V3 scoring, reducing V3-ranked
-slots from 26 to 23. `risk.slot_exempt_equity_symbols` excludes them from the
+slots from 26 to 21. `risk.slot_exempt_equity_symbols` excludes them from the
 8-position cap. Daily-loss, drawdown, entry-latch, and
 intermediate-reduction latches never grow the sleeve.
 
 For rollback, select the still-registered `equity_residual_momentum_v3` and
 remove `core_allocation`, `sleeve_allocation`, `sleeve_symbols`,
 `universe.equity.sleeve_trade_symbols`, and
-`risk.slot_exempt_equity_symbols`. This does not imply LIVE readiness.
+`risk.slot_exempt_equity_symbols`; remove GLD/OUNZ from
+`fallback_trade_symbols` and restore XLRE/XLC. This does not imply LIVE readiness.
 
 ## Current PAPER crypto identity
 

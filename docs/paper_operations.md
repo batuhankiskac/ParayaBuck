@@ -4,12 +4,13 @@ Operational contract for the ParayaBuck PAPER runtime (dual-market:
 `equity_residual_momentum_v3_dividend_sleeve_v1` / **Residual Momentum v3 +
 dividend-growth sleeve**, implemented by
 `src/parayabuck/portfolio/dividend_sleeve.py`, with unchanged V3 3.0.0 weekly
-core at `core_allocation: 0.40` and static SCHD/VIG/DGRO
-`sleeve_allocation: 0.15` at 0.05 each inside the 0.55 equity maximum;
-`crypto_low_variance_hysteresis_v1` remains unchanged on 1d 96h cadence,
-retention rank 4, lookback 22, top2, allocation 0.05). v1 identities remain
-frozen historical baselines. See the
-[dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md).
+core at `core_allocation: 0.30` and static SCHD/VIG/DGRO/GLD/OUNZ
+`sleeve_allocation: 0.25` at 0.05 each (dividend 0.15 + gold 0.10) inside the
+0.55 equity maximum; `crypto_low_variance_hysteresis_v1` remains unchanged on
+1d 96h cadence, retention rank 4, lookback 22, top2, allocation 0.05). v1
+identities remain frozen historical baselines. See the
+[dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
+and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
 This document is a companion to `docs/operations.md` and
 `docs/validated_strategies.md`.
 
@@ -25,7 +26,7 @@ before the next begins:
    (freshness, scanner digest, candidate-pool membership) with a
    deterministic configured fallback when no scanner output exists yet. The
    equity stream pins `universe.equity.sleeve_trade_symbols`; those symbols are
-   hidden from V3 scoring, which ranks 23 core slots instead of 26.
+   hidden from V3 scoring, which ranks 21 core slots instead of 26.
 3. **Startup reconciliation** — the broker is reconciled before any
    decision; a verified reconcile clears persisted safety incidents so a
    restart never resurrects them.

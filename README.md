@@ -2,7 +2,7 @@
 
 > **Project status — production-only surface**
 >
-> - **Equity:** `equity_residual_momentum_v3_dividend_sleeve_v1` (Residual Momentum v3 + dividend-growth sleeve) — 0.55 maximum allocation split internally into the unchanged weekly V3 3.0.0 core (`core_allocation: 0.40`) and a static SCHD/VIG/DGRO sleeve (`sleeve_allocation: 0.15`, 0.05 each), selected on the first weekly decision of each calendar month or while empty and otherwise held; **LIVE disabled**
+> - **Equity:** `equity_residual_momentum_v3_dividend_sleeve_v1` (Residual Momentum v3 + dividend-growth sleeve) — 0.55 maximum allocation split internally into the unchanged weekly V3 3.0.0 core (`core_allocation: 0.30`) and a static SCHD/VIG/DGRO/GLD/OUNZ sleeve (`sleeve_allocation: 0.25`, 0.05 each: dividend 0.15 + gold 0.10), selected on the first weekly decision of each calendar month or while empty and otherwise held; **LIVE disabled**
 > - **Crypto:** `crypto_low_variance_hysteresis_v1` — 1d signal, 96h rebalance, 0.05 allocation; validated low-variance hysteresis product identity
 > - **Dataset:** point-in-time historical manifests and corporate-action data remain under `data/historical/`; large provider datasets are local/ignored
 
@@ -17,11 +17,12 @@ enable it (see [Enabling live safely](#enabling-live-safely)).
 
 The PAPER product runs the current validated equity and crypto identities
 (see `docs/validated_strategies.md` and the
-[dividend-sleeve production evidence](docs/research/dividend_sleeve_production_v1.md)):
+[dividend-sleeve production evidence](docs/research/dividend_sleeve_production_v1.md) and
+[gold sleeve production evidence](docs/research/gold_sleeve_production_v1.md)):
 
 | Market | Strategy | Signal | Rebalance | Allocation |
 |---|---|---|---|---|
-| Equity | Residual Momentum v3 + dividend-growth sleeve (`equity_residual_momentum_v3_dividend_sleeve_v1`) | 1d | weekly core; sleeve selected on the first weekly decision of each calendar month or while empty | 0.55 total = 0.40 core + 0.15 sleeve |
+| Equity | Residual Momentum v3 + dividend-growth sleeve (`equity_residual_momentum_v3_dividend_sleeve_v1`) | 1d | weekly core; sleeve selected on the first weekly decision of each calendar month or while empty | 0.55 total = 0.30 core + 0.25 sleeve (0.05 each: SCHD/VIG/DGRO/GLD/OUNZ) |
 | Crypto | Low Realized Variance Hysteresis v1 (`crypto_low_variance_hysteresis_v1`) — retention rank 4, lookback 22, top2, 96h | 1d | 96h | 0.05 |
 
 Historical baselines `equity_residual_momentum_v1` (monthly),
@@ -43,14 +44,15 @@ Alpaca assets/data -> eligibility filters -> dynamic scanner -> active universe
   backtest, paper, and live.
 - Dynamic universes (equity ~300-candidate shortlist → 30-symbol IEX stream;
   crypto from supported USD pairs) are rebuilt point-in-time by the production
-  scanner. `universe.equity.sleeve_trade_symbols` pins SCHD/VIG/DGRO in the
-  equity stream; they are hidden from V3 scoring, leaving 23 ranked core slots
-  instead of 26. Other static symbols remain fallback/allowlist/denylist inputs.
+  scanner. `universe.equity.sleeve_trade_symbols` pins SCHD/VIG/DGRO/GLD/OUNZ in the
+  equity stream; they are hidden from V3 scoring, leaving 21 ranked core slots
+  instead of 26. The unused static fallback list omits XLRE/XLC; other static
+  symbols remain fallback/allowlist/denylist inputs.
 - Strict risk overlay: market allocations remain 0.55 equity / 0.05 crypto.
-  Equity is split internally into the 0.40 V3 core and 0.15 dividend sleeve;
-  `risk.slot_exempt_equity_symbols` keeps the sleeve outside the 8-position cap.
-  Daily-loss, drawdown, entry-latch, and intermediate-reduction latches never
-  grow the sleeve. Crypto limits remain
+  Equity is split internally into the 0.30 V3 core and 0.25 sleeve (0.05 each:
+  SCHD/VIG/DGRO/GLD/OUNZ); `risk.slot_exempt_equity_symbols` keeps the sleeve
+  outside the 8-position cap. Daily-loss, drawdown, entry-latch, and
+  intermediate-reduction latches never grow the sleeve. Crypto limits remain
   0.10 exposure / 0.05 per position / 2 positions; gross cap 0.60, cash buffer
   0.40, stale-account pauses, ownership-drift halts, and duplicate
   order/decision protection remain unchanged.
@@ -95,8 +97,9 @@ execution, backup, alerting). The current equity selection is
 `core_allocation`, `sleeve_allocation`, `sleeve_symbols`,
 `universe.equity.sleeve_trade_symbols`, and
 `risk.slot_exempt_equity_symbols`. Rollback selects the still-registered
-`equity_residual_momentum_v3` and removes the three sleeve parameters and both
-sleeve symbol lists.
+`equity_residual_momentum_v3` and removes the three sleeve parameters, both
+sleeve symbol lists, GLD/OUNZ from `fallback_trade_symbols`, and restores
+XLRE/XLC there.
 
 ## Backtesting
 
@@ -160,6 +163,7 @@ live.
 - `docs/product_foundation.md` — frozen product principles
 - `docs/validated_strategies.md` — frozen baselines and current validated identities
 - `docs/research/dividend_sleeve_production_v1.md` — current dividend-growth sleeve evidence
+- `docs/research/gold_sleeve_production_v1.md` — current gold sleeve evidence
 - `docs/strategy_architecture.md` — universe/scanner/strategy/risk contract
 - `docs/paper_operations.md` — PAPER runtime contract and forward rules
 - `docs/operations.md` — state, backup/restore, Docker, incident reconciliation

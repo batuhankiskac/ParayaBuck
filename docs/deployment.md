@@ -133,11 +133,12 @@ sudo journalctl -u parayabuck -f
    Dashboard (`http://127.0.0.1:8000/` via SSH tunnel) must show: PAPER
    badge, **Residual Momentum v3 + dividend-growth sleeve**
    (`equity_residual_momentum_v3_dividend_sleeve_v1`; unchanged V3 3.0.0 weekly
-   core capped at 0.40 plus static SCHD/VIG/DGRO sleeve at 0.15, 0.05 each,
-   inside the 0.55 equity maximum), and unchanged
-   `crypto_low_variance_hysteresis_v1` (96h, lookback 22, top2, retention rank
+   core capped at 0.30 plus static SCHD/VIG/DGRO/GLD/OUNZ sleeve at 0.25,
+   0.05 each: dividend 0.15 + gold 0.10, inside the 0.55 equity maximum), and
+   unchanged `crypto_low_variance_hysteresis_v1` (96h, lookback 22, top2, retention rank
    4, allocation 0.05) cards, engine running, catch-up status per card. See the
-   [dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md).
+   [dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
+   and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
 9. **Verify the persisted catch-up decision** (fresh account only):
 
    ```bash
@@ -167,7 +168,8 @@ sudo journalctl -u parayabuck -f
    `equity_residual_momentum_v3` and remove `core_allocation`,
    `sleeve_allocation`, `sleeve_symbols`,
    `universe.equity.sleeve_trade_symbols`, and
-   `risk.slot_exempt_equity_symbols`; then run
+   `risk.slot_exempt_equity_symbols`; remove GLD/OUNZ from
+   `fallback_trade_symbols` and restore XLRE/XLC; then run
    `pip install -r requirements.lock && pip install -e . --no-deps`.
 4. Restore the runtime DB only when the new release corrupted/partially
    migrated it (loud schema errors on startup). A healthy new ledger is kept:

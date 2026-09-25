@@ -17,8 +17,8 @@ tradeable universe on a pre-session cadence from the broad eligible market.
 - Equity: every active/tradable US equity on the supported exchanges
   (~13,000+) → Stage-A shortlist (trailing median dollar volume,
   `universe.equity.target_shortlist`, default 300) → scanner → 30-symbol IEX
-  observation set. `universe.equity.sleeve_trade_symbols` pins SCHD/VIG/DGRO;
-  they are hidden from V3 scoring, leaving 23 ranked core slots instead of 26.
+  observation set. `universe.equity.sleeve_trade_symbols` pins SCHD/VIG/DGRO/GLD/OUNZ;
+  they are hidden from V3 scoring, leaving 21 ranked core slots instead of 26.
 - Crypto: all Alpaca tradable USD pairs → scanner (liquidity, spread, ATR,
   BTC-correlation, category limits) → streamed observation set
   (`maximum_stream_symbols`, default 12).
@@ -48,7 +48,7 @@ only documented:
 13,000+ equity / all crypto
         ↓ eligibility scanner (tradability-first)
 broad candidate pool (equity ~300 shortlist)
-        ↓ configured equity sleeve pins + V3 alpha ranking (23 ranked slots)
+        ↓ configured equity sleeve pins + V3 alpha ranking (21 ranked slots)
 streamed (30 equity / ~12 crypto)
 positions
 ```
@@ -164,8 +164,8 @@ and one surviving crypto asset cannot absorb the sleeve (per-asset cap binds
 before renormalization).
 
 For the current PAPER equity wrapper, `maximum_allocation=0.55` is split
-internally into the unchanged V3 `core_allocation=0.40` and static
-`sleeve_allocation=0.15`; crypto remains `maximum_allocation=0.05`.
+internally into the unchanged V3 `core_allocation=0.30` and static
+`sleeve_allocation=0.25`; crypto remains `maximum_allocation=0.05`.
 
 Scanner isolation: equity and crypto universes refresh independently; a
 failed equity scan does not block crypto decisions and vice versa.
@@ -198,7 +198,7 @@ runtime state or authorize PAPER/LIVE. The runtime does not read generated
 reports or benchmark output; `config/settings.yaml` and the product factory
 are the strategy-selection authorities.
 
-## 8. Strategy registry (current PAPER dividend-sleeve release)
+## 8. Strategy registry (current PAPER dividend-and-gold-sleeve release)
 
 **The complete registry** — `_PORTFOLIO_STRATEGY_FACTORIES` and
 `supported_portfolio_strategies()` (config-selectable):
@@ -214,13 +214,16 @@ are the strategy-selection authorities.
 | `crypto_low_variance_hysteresis_v1` | crypto | 1d | 1d | hours:96 (retention rank 4, lookback 22, top2, alloc 0.05) | PAPER production selection (2026-08-26) |
 Unknown strategy names are rejected with
 `Unsupported portfolio strategy: <name>`. The current wrapper's display name
-is **Residual Momentum v3 + dividend-growth sleeve** and its module is
+is **Residual Momentum v3 + dividend-growth sleeve**; the configured sleeve
+also includes GLD/OUNZ. Its module is
 `src/parayabuck/portfolio/dividend_sleeve.py`; see the
-[production evidence](research/dividend_sleeve_production_v1.md). Rollback
-selects `equity_residual_momentum_v3` and removes `core_allocation`,
+[dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
+and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
+Rollback selects `equity_residual_momentum_v3` and removes `core_allocation`,
 `sleeve_allocation`, `sleeve_symbols`,
 `universe.equity.sleeve_trade_symbols`, and
-`risk.slot_exempt_equity_symbols`.
+`risk.slot_exempt_equity_symbols`; remove GLD/OUNZ from
+`fallback_trade_symbols` and restore XLRE/XLC.
 
 Versioning: strategies are immutable once validated; a change to the signal
 specification is a NEW named strategy, never a silent parameter mutation.

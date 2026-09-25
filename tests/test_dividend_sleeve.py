@@ -35,6 +35,7 @@ from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 
 ROOT = Path(__file__).resolve().parents[1]
 SLEEVE = ("SCHD", "VIG", "DGRO")
+SHIPPED_SLEEVE = ("SCHD", "VIG", "DGRO", "GLD", "OUNZ")
 V3_PARAMS = {
     "formation_bars": 252,
     "skip_bars": 21,
@@ -371,16 +372,18 @@ def test_sleeve_buys_are_admitted_without_slots() -> None:
 
 def test_shipped_config_declares_one_sleeve_symbol_set() -> None:
     config = load_config(str(ROOT / "config" / "settings.yaml"))
-    assert config.strategy.equity.parameters["sleeve_symbols"] == list(SLEEVE)
-    assert config.universe.equity.sleeve_trade_symbols == SLEEVE
-    assert config.risk.slot_exempt_equity_symbols == SLEEVE
-    assert set(SLEEVE) <= set(config.universe.equity.ordinary_alpha_excluded_symbols)
+    assert config.strategy.equity.parameters["sleeve_symbols"] == list(SHIPPED_SLEEVE)
+    assert config.universe.equity.sleeve_trade_symbols == SHIPPED_SLEEVE
+    assert config.risk.slot_exempt_equity_symbols == SHIPPED_SLEEVE
+    assert set(SHIPPED_SLEEVE) <= set(config.universe.equity.ordinary_alpha_excluded_symbols)
     assert len(config.universe.equity.configured_stream_symbols) <= 30
 
 
 def test_mismatched_sleeve_declarations_fail_closed(tmp_path: Path) -> None:
     text = (ROOT / "config" / "settings.yaml").read_text(encoding="utf-8")
-    broken = text.replace("  slot_exempt_equity_symbols: [SCHD, VIG, DGRO]\n", "  slot_exempt_equity_symbols: [SCHD]\n")
+    broken = text.replace(
+        "  slot_exempt_equity_symbols: [SCHD, VIG, DGRO, GLD, OUNZ]\n", "  slot_exempt_equity_symbols: [SCHD]\n"
+    )
     assert broken != text
     path = tmp_path / "settings.yaml"
     path.write_text(broken, encoding="utf-8")

@@ -11,7 +11,10 @@ sleeve (see ``execution.portfolio``).
 Validated by ``docs/research/sleeve_candidates_v2_v3_closure.md``
 (``dividend_growth_v1``): SCHD/VIG/DGRO at 1/3 each of a 0.15 sleeve, decided on
 the first weekly decision of each calendar month and held otherwise; V3 core
-at 0.40.
+at 0.40. The shipped configuration adds gold (GLD/OUNZ) as an equal-weight
+five-ETF 0.25 sleeve with a 0.30 core
+(``docs/research/gold_sleeve_production_v1.md``); the class defaults stay the
+original dividend-only parameters.
 """
 
 from __future__ import annotations

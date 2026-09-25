@@ -114,7 +114,11 @@ def test_frozen_strategy_parameters_and_paper_mode() -> None:
     parameters = dict(config.strategy.equity.parameters)
     sleeve = {key: parameters.pop(key) for key in ("core_allocation", "sleeve_allocation", "sleeve_symbols")}
     assert parameters == _PRODUCTION_EQUITY_PARAMETERS
-    assert sleeve == {"core_allocation": 0.40, "sleeve_allocation": 0.15, "sleeve_symbols": ["SCHD", "VIG", "DGRO"]}
+    assert sleeve == {
+        "core_allocation": 0.30,
+        "sleeve_allocation": 0.25,
+        "sleeve_symbols": ["SCHD", "VIG", "DGRO", "GLD", "OUNZ"],
+    }
     assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
     assert dict(config.strategy.crypto.parameters) == _PRODUCTION_CRYPTO_PARAMETERS
 

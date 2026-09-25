@@ -804,3 +804,12 @@ reproduced exactly under the new code. Caveat: validation-window CAGR 4.23% vs
 4.47%. `gold_v1b` is deferred to the operator. Full record:
 `docs/research/dividend_sleeve_production_v1.md` (evidence: tag
 `archive/research/dividend-sleeve-production-v1-2026-09`).
+
+## Gold + dividend sleeve — production validation (2026-09-25)
+
+Gold (`gold_v1b`, GLD/OUNZ) added to the shipped sleeve: V3 core 0.30 +
+SCHD/VIG/DGRO/GLD/OUNZ at 0.05 each (arm G3 of three pre-registered arms).
+G3 improves Sharpe (0.869 vs 0.780), max drawdown, 2022 and the 2022–2026
+window but misses the CAGR gates by 0.03–0.06 pp (within path noise); shipped
+by operator decision. Summary: `docs/research/gold_sleeve_production_v1.md`
+(evidence: tag `archive/research/gold-sleeve-production-v1-2026-09`).

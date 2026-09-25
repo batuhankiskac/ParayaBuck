@@ -521,3 +521,9 @@ Current operational authority is main commit `7f007c8f9e5edc33a5065fc86c1c6fb61e
 | Archive tag | Peeled evidence commit | Decision |
 |---|---|---|
 | `archive/research/dividend-sleeve-production-v1-2026-09` | `e4e1f11ac698719279253aaed78ecdc061abc64c` | Shipped: `equity_residual_momentum_v3_dividend_sleeve_v1` passes every production-path validation gate. Summary: `docs/research/dividend_sleeve_production_v1.md` |
+
+## Gold + dividend sleeve production validation — 2026-09-25
+
+| Archive tag | Peeled evidence commit | Decision |
+|---|---|---|
+| `archive/research/gold-sleeve-production-v1-2026-09` | `6cf5c3d77dc989f67cdda907f2795f59e5bead2b` | G3 (V3 0.30 + five-ETF sleeve 0.25) shipped by operator decision; misses the pre-registered CAGR gates within path noise. Summary: `docs/research/gold_sleeve_production_v1.md` |

@@ -377,11 +377,14 @@ class ReconciliationService:
             quantity = float(self._field(order, "filled_qty", 0) or 0)
             average_raw = self._field(order, "filled_avg_price", None)
             average = float(average_raw) if average_raw is not None else None
+            local_quantity = float(local.quantity)
+            if isfinite(quantity) and quantity > local_quantity + max(1e-9, local_quantity * 1e-8):
+                local_quantity = self._adopt_broker_order_quantity(broker, order, client_id, quantity, local_quantity)
             if (
                 not isfinite(quantity)
                 or (average is not None and not isfinite(average))
                 or quantity < 0
-                or quantity > float(local.quantity) + max(1e-9, float(local.quantity) * 1e-8)
+                or quantity > local_quantity + max(1e-9, local_quantity * 1e-8)
             ):
                 raise ReconciliationResultError(f"Invalid broker cumulative fill for {client_id}")
             if (quantity > 0 and (average is None or average <= 0)) or (status == "filled" and quantity <= 0):
@@ -408,6 +411,35 @@ class ReconciliationService:
                 None,
                 status=local_status,
             )
+
+    def _adopt_broker_order_quantity(
+        self, broker: Any, order: Any, client_id: str, filled: float, local_quantity: float
+    ) -> float:
+        """Adopt the broker's ordered quantity for one of our own orders.
+
+        A deterministic client ID can be recovered (Alpaca rejects the reused
+        ID and the existing order is returned) after the plan was re-sized, so
+        the local row may record less than the broker actually ordered. Identity,
+        symbol and side were already verified; the broker is authoritative, so
+        the local row takes the broker's ordered quantity when it covers the
+        cumulative fill. Anything else stays fail-closed.
+        """
+        adopt = getattr(broker, "portfolio_order_quantity_adopted", None)
+        ordered_raw = self._field(order, "qty", None)
+        try:
+            ordered = float(ordered_raw) if ordered_raw is not None else float("nan")
+        except (TypeError, ValueError):
+            ordered = float("nan")
+        if adopt is None or not isfinite(ordered) or ordered <= 0 or filled > ordered + max(1e-9, ordered * 1e-8):
+            return local_quantity
+        adopt(client_id, ordered)
+        log.warning(
+            "Adopted broker ordered quantity for %s: local %.9g -> broker %.9g",
+            client_id,
+            local_quantity,
+            ordered,
+        )
+        return ordered
 
     def _reconcile_crypto_exit(self, position: Any) -> None:
         broker = self._broker

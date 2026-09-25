@@ -691,6 +691,25 @@ class PortfolioStateRepository:
                 ),
             )
 
+    def adopt_order_quantity(self, client_order_id: str, quantity: float) -> None:
+        """Raise a local order's quantity to the broker's ordered quantity.
+
+        Only reconciliation calls this, after verifying the broker order's
+        identity, symbol and side; the quantity never shrinks.
+        """
+        with self.store.lock, self.store.connection:
+            cursor = self.store.connection.execute(
+                """UPDATE portfolio_orders SET quantity = ?
+                   WHERE client_order_id = ? AND quantity < ?""",
+                (float(quantity), client_order_id, float(quantity)),
+            )
+            if cursor.rowcount == 0:
+                row = self.store.connection.execute(
+                    "SELECT quantity FROM portfolio_orders WHERE client_order_id = ?", (client_order_id,)
+                ).fetchone()
+                if row is None:
+                    raise RuntimeError(f"Cannot adopt quantity for unknown portfolio order: {client_order_id}")
+
     def update_order(self, client_order_id: str, status: str, broker_order_id: str = "") -> None:
         with self.store.lock, self.store.connection:
             self.store.connection.execute(

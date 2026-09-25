@@ -313,6 +313,7 @@ class EngineRuntime:
             ),
             portfolio_open_orders=lambda: self._portfolio_repository.open_orders(self.broker.account_id or "unknown"),
             portfolio_fill_recovered=self._recover_portfolio_fill,
+            portfolio_order_quantity_adopted=self._portfolio_repository.adopt_order_quantity,
             portfolio_stop_recorded=lambda symbol, market, qty, client_order_id, reference_price: (
                 self._portfolio_repository.record_protective_order(
                     self.broker.account_id or "unknown",

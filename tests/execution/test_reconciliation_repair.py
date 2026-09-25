@@ -466,3 +466,45 @@ def test_overlap_activity_id_across_pages_is_applied_once() -> None:
     assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
     assert len(applied) == 101
     assert len(set(applied)) == 101
+
+
+def _oversized_fill_broker(
+    *, ordered_qty: float | None, filled_qty: float = 1.5
+) -> tuple[Any, list[tuple[str, float]]]:
+    """A recovered deterministic order whose broker quantity exceeds the local row."""
+    state = _State(broker_qty=filled_qty)
+    broker = state.broker()
+    order = broker._fetch_broker_order("intent-1", "broker-1")
+    order.filled_qty = filled_qty
+    if ordered_qty is not None:
+        order.qty = ordered_qty
+    adopted: list[tuple[str, float]] = []
+    broker.portfolio_order_quantity_adopted = lambda client_id, qty: adopted.append((client_id, qty))
+    return broker, adopted
+
+
+def test_recovered_order_adopts_broker_ordered_quantity() -> None:
+    broker, adopted = _oversized_fill_broker(ordered_qty=1.5)
+    ReconciliationService(broker).reconcile()
+    assert adopted == [("intent-1", 1.5)]
+
+
+def test_fill_beyond_broker_ordered_quantity_stays_fail_closed() -> None:
+    broker, adopted = _oversized_fill_broker(ordered_qty=1.2)
+    with pytest.raises(ReconciliationResultError, match="Invalid broker cumulative fill"):
+        ReconciliationService(broker).reconcile()
+    assert adopted == []
+
+
+def test_missing_broker_ordered_quantity_stays_fail_closed() -> None:
+    broker, adopted = _oversized_fill_broker(ordered_qty=None)
+    with pytest.raises(ReconciliationResultError, match="Invalid broker cumulative fill"):
+        ReconciliationService(broker).reconcile()
+    assert adopted == []
+
+
+def test_oversized_fill_without_adoption_hook_stays_fail_closed() -> None:
+    broker, _adopted = _oversized_fill_broker(ordered_qty=1.5)
+    del broker.portfolio_order_quantity_adopted
+    with pytest.raises(ReconciliationResultError, match="Invalid broker cumulative fill"):
+        ReconciliationService(broker).reconcile()

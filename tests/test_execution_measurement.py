@@ -172,3 +172,25 @@ def test_raw_event_source_identity_is_idempotent_and_invalid_sequence_is_retaine
     assert measurement["comparison_exclusion_reasons"] == [
         "raw_execution_quality_excluded:out_of_order_or_decreasing_cumulative_quantity"
     ]
+
+
+def test_adopt_order_quantity_only_raises_the_local_row(tmp_path) -> None:
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _order(repo)
+
+    def quantity() -> float:
+        row = repo.store.connection.execute(
+            "SELECT quantity FROM portfolio_orders WHERE client_order_id = 'measurement-buy'"
+        ).fetchone()
+        return float(row[0])
+
+    repo.adopt_order_quantity("measurement-buy", 0.75)
+    assert quantity() == 0.75
+    repo.adopt_order_quantity("measurement-buy", 0.25)
+    assert quantity() == 0.75
+    try:
+        repo.adopt_order_quantity("unknown-order", 1.0)
+    except RuntimeError as exc:
+        assert "unknown portfolio order" in str(exc)
+    else:  # pragma: no cover - the assertion above must run
+        raise AssertionError("unknown order must be rejected")

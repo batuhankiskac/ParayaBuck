@@ -118,6 +118,7 @@ def test_production_selections_are_the_only_product_strategies(config: Config) -
         "equity_residual_momentum_v2",
         "equity_residual_momentum_v3",
         "equity_residual_momentum_v3_dividend_sleeve_v1",
+        "equity_leveraged_trend_v1",
         "crypto_low_variance_v1",
         "crypto_low_variance_v2",
         "crypto_low_variance_hysteresis_v1",

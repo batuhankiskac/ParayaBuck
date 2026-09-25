@@ -694,7 +694,7 @@ class EngineManager:
             now = time.monotonic()
             if self.last_account is not None and now - self._last_account_monotonic < self._account_cache_ttl_seconds:
                 return {
-                    "account": self.last_account,
+                    **self.last_account,
                     "age_seconds": max(0.0, now - self._last_account_monotonic),
                     "stale": False,
                     "source": "cache",

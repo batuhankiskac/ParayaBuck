@@ -40,7 +40,7 @@ def fetch_account_snapshot(manager: Any) -> dict[str, Any]:
         monotonic = getattr(manager, "_last_account_monotonic", 0.0)
         if last is not None and now - monotonic < ttl:
             return {
-                "account": last,
+                **last,
                 "age_seconds": max(0.0, now - monotonic),
                 "stale": False,
                 "source": "cache",

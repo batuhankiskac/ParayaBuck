@@ -82,3 +82,18 @@ async def dashboard_metrics(request: Request) -> dict[str, Any]:
     if state is None:
         raise HTTPException(status_code=503, detail="Web state unavailable")
     return await asyncio.to_thread(svc.get_panel, "metrics", state)
+
+
+@router.get("/api/performance")
+async def dashboard_performance(request: Request, period: str = "1M") -> dict[str, Any]:
+    """Broker equity history plus a VOO benchmark for the performance chart."""
+    from parayabuck.web.deps import get_engine_manager
+    from parayabuck.web.services import performance
+
+    manager = get_engine_manager(request)
+    if manager is None:
+        raise HTTPException(status_code=503, detail="Engine manager unavailable")
+    try:
+        return await asyncio.to_thread(performance.portfolio_performance, manager, period)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

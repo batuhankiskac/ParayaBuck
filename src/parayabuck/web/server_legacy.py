@@ -806,7 +806,7 @@ class EngineManager:
             now = time.monotonic()
             if self.last_account is not None and now - self._last_account_monotonic < self._account_cache_ttl_seconds:
                 return {
-                    "account": self.last_account,
+                    **self.last_account,
                     "age_seconds": max(0.0, now - self._last_account_monotonic),
                     "stale": False,
                     "source": "cache",
@@ -1570,6 +1570,12 @@ class BacktestPayload(BaseModel):
     max_symbols: int = Field(0, ge=0, le=2000)
 
 
+def _asset_version() -> str:
+    from parayabuck.web.routers.pages import ASSET_VERSION
+
+    return ASSET_VERSION
+
+
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def serve_index(request: Request) -> HTMLResponse:
@@ -1579,6 +1585,7 @@ async def serve_index(request: Request) -> HTMLResponse:
         context={
             "is_paper": manager.is_paper_mode(),
             "control_token": manager.control_token,
+            "asset_version": _asset_version(),
         },
     )
     response.headers["Cache-Control"] = "no-store"
@@ -1590,7 +1597,7 @@ async def serve_tools(request: Request) -> HTMLResponse:
     response = templates.TemplateResponse(
         request=request,
         name="tools.html",
-        context={"control_token": manager.control_token},
+        context={"control_token": manager.control_token, "asset_version": _asset_version()},
     )
     response.headers["Cache-Control"] = "no-store"
     return response

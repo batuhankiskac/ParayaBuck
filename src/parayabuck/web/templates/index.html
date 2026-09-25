@@ -1,612 +1,301 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="parayabuck-control-token" content="{{ control_token }}">
-    <meta name="theme-color" content="#080b0f">
-    <title>ParayaBuck — Trading Control Center</title>
-    <script src="/static/js/chart-lite.js?v=20260812-1"></script>
-    <link rel="stylesheet" href="/static/css/style.css?v=20260813-3">
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260829-1">
-</head>
-<body>
-    <div class="ambient ambient-one"></div>
-    <div class="ambient ambient-two"></div>
+{% extends "base.html" %}
+{% block title %}ParayaBuck — Genel bakış{% endblock %}
+{% block page_id %}dashboard{% endblock %}
+{% block page_title %}Genel bakış{% endblock %}
 
-    <div class="app-shell">
-        <header class="topbar">
-            <a class="brand" href="/" aria-label="ParayaBuck ana sayfa">
-                <span class="brand-mark" aria-hidden="true">PB</span>
-                <span class="brand-copy">
-                    <strong>ParayaBuck</strong>
-                    <small>Trading Control Center</small>
-                </span>
-            </a>
-
-            <div class="topbar-context" aria-label="Sistem durumu">
-                <div id="modeChip" class="mode-chip paper" role="button" tabindex="0" aria-label="İşlem modunu değiştir">
-                    <span class="chip-signal" aria-hidden="true"></span>
-                    <span>
-                        <small>İşlem modu</small>
-                        <strong id="modeText">Paper demo</strong>
-                    </span>
-                    <span id="modeIcon" class="chip-chevron" aria-hidden="true">⌄</span>
-                </div>
-                <div class="engine-state">
-                    <span id="statusDot" class="status-dot stopped" aria-hidden="true"></span>
-                    <span>
-                        <small>Motor durumu</small>
-                        <strong id="statusText">Durdu</strong>
-                    </span>
-                </div>
-                <span id="modeBadge" class="mode-badge paper" aria-label="İşlem modu rozeti">PAPER</span>
+{% block content %}
+<section id="overview" class="hero-grid" data-section="overview" aria-label="Portföy özeti">
+    <article class="card hero-card">
+        <div class="hero-top">
+            <div>
+                <span class="eyebrow">Net portföy değeri</span>
+                <div id="equityValue" class="hero-value">—</div>
             </div>
+            <span id="accountFreshness" class="freshness"><span class="dot"></span><span>bekleniyor</span></span>
+        </div>
+        <div class="hero-deltas">
+            <span id="dailyPnlValue" class="delta">—</span><span>bugün</span>
+            <span aria-hidden="true">·</span>
+            <span id="periodReturn" class="delta">—</span><span id="periodLabel">son 1 ay</span>
+        </div>
 
-            <div class="nav-actions">
-                <button id="startBtn" class="btn btn-primary">
-                    <span class="button-icon" aria-hidden="true">▶</span>
-                    <span>Motoru başlat</span>
-                </button>
-                <button id="stopBtn" class="btn btn-danger" disabled>
-                    <span class="stop-icon" aria-hidden="true"></span>
-                    <span>Durdur</span>
-                </button>
-                <button id="resetSafetyBtn" class="btn btn-quiet" hidden>
-                    <span class="button-icon" aria-hidden="true">↻</span>
-                    <span>Güvenlik kilidini doğrula</span>
-                </button>
-                <button id="riskEpochBtn" class="btn btn-quiet" hidden title="Drawdown >%5 kalıcı kilitlenmesin: doğrulama sonrası risk dönemi başlatır, drawdown tabanını mevcut özkaynağa çeker">
-                    <span class="button-icon" aria-hidden="true">⟲</span>
-                    <span>Yeni risk dönemi</span>
-                </button>
-                <button id="settingsBtn" class="btn btn-quiet" aria-haspopup="dialog">
-                    <span class="button-icon" aria-hidden="true">⚙</span>
-                    <span>Ayarlar</span>
-                </button>
+        <div class="chart-toolbar">
+            <div id="periodSwitch" class="segmented" role="tablist" aria-label="Grafik dönemi">
+                <button type="button" data-period="1D">1G</button>
+                <button type="button" data-period="1W">1H</button>
+                <button type="button" data-period="1M" class="active">1A</button>
+                <button type="button" data-period="3M">3A</button>
+                <button type="button" data-period="1A">1Y</button>
+                <button type="button" data-period="ALL">Tümü</button>
             </div>
-        </header>
-
-        <section class="system-strip" aria-label="Piyasa ve tarayıcı durumu">
-            <div class="system-strip-label">
-                <span class="live-pulse" aria-hidden="true"></span>
-                <span>Canlı sistem özeti</span>
+            <div class="legend">
+                <span><i></i>Portföy <b id="legendPortfolio">—</b></span>
+                <span><i class="bench"></i>VOO <b id="legendBench">—</b></span>
             </div>
-            <p id="marketStatusText">Equity ve kripto durumu yükleniyor…</p>
-            <span class="system-time">bağımsız strateji zaman dilimleri</span>
-        </section>
-        <nav class="page-nav" aria-label="Ana bölümler">
-            <a class="page-nav-link active" href="/" aria-current="page">Dashboard</a>
-            <a class="page-nav-link" href="/tools">Araçlar</a>
-        </nav>
+        </div>
+        <div id="perfChart" class="perf-chart" aria-label="Portföy ve VOO getiri grafiği"></div>
+        <p id="perfNote" class="chart-note"></p>
+    </article>
 
-        <main class="dashboard-content">
-            <section class="metric-grid metric-grid-primary" aria-label="Öncelikli portföy özeti">
-                <article class="metric-card metric-primary">
-                    <div class="metric-head">
-                        <span class="metric-icon">EQ</span>
-                        <span class="metric-label">Net portföy</span>
-                    </div>
-                    <div id="equityValue" class="metric-value">$0.00</div>
-                    <div id="equitySub" class="metric-meta">Canlı bakiye özeti</div>
-                </article>
-
-                <article class="metric-card">
-                    <div class="metric-head">
-                        <span class="metric-icon">CA</span>
-                        <span class="metric-label">Kullanılabilir nakit</span>
-                    </div>
-                    <div id="cashValue" class="metric-value">$0.00</div>
-                    <div id="cashSub" class="metric-meta">Serbest bakiye</div>
-                </article>
-
-                <article class="metric-card">
-                    <div class="metric-head">
-                        <span class="metric-icon metric-icon-green">24</span>
-                        <span class="metric-label">Günlük kâr / zarar</span>
-                    </div>
-                    <div id="dailyPnlValue" class="metric-value">$0.00</div>
-                    <div id="dailyPnlSub" class="metric-meta">Bugünkü toplam değişim</div>
-                </article>
-
-                <article class="metric-card">
-                    <div class="metric-head">
-                        <span class="metric-icon">TP</span>
-                        <span class="metric-label">Toplam PnL</span>
-                    </div>
-                    <div id="totalPnlValue" class="metric-value">$0.00</div>
-                    <div id="totalPnlSub" class="metric-meta">Gerçekleşen + gerçekleşmemiş</div>
-                </article>
-            </section>
-
-            <section class="metric-grid metric-grid-secondary" aria-label="Tamamlayıcı portföy özeti">
-                <article class="metric-card metric-compact">
-                    <div class="metric-head">
-                        <span class="metric-icon">RP</span>
-                        <span class="metric-label">Gerçekleşen PnL</span>
-                    </div>
-                    <div id="realizedPnlValue" class="metric-value">$0.00</div>
-                    <div id="realizedPnlSub" class="metric-meta">Kapatılan işlemler net</div>
-                </article>
-
-                <article class="metric-card metric-compact">
-                    <div class="metric-head">
-                        <span class="metric-icon">UP</span>
-                        <span class="metric-label">Açık pozisyon PnL</span>
-                    </div>
-                    <div id="unrealizedPnlValue" class="metric-value">$0.00</div>
-                    <div id="unrealizedPnlSub" class="metric-meta">Anlık işlem farkı</div>
-                </article>
-
-                <article class="metric-card metric-compact">
-                    <div class="metric-head">
-                        <span class="metric-icon">DD</span>
-                        <span class="metric-label">Maksimum düşüş</span>
-                    </div>
-                    <div id="drawdownValue" class="metric-value">$0.00</div>
-                    <div id="drawdownSub" class="metric-meta">Zirve bakiye düşüşü</div>
-                </article>
-
-                <article class="metric-card metric-compact">
-                    <div class="metric-head">
-                        <span class="metric-icon">FE</span>
-                        <span class="metric-label">Toplam ücretler</span>
-                    </div>
-                    <div id="feesValue" class="metric-value">$0.00</div>
-                    <div class="metric-meta">Broker fill aktiviteleri</div>
-                </article>
-
-                <article class="metric-card metric-compact">
-                    <div class="metric-head">
-                        <span class="metric-icon">GE</span>
-                        <span class="metric-label">Brüt maruziyet</span>
-                    </div>
-                    <div id="grossExposureValue" class="metric-value">$0.00</div>
-                    <div id="grossExposureSub" class="metric-meta">Toplam pozisyon büyüklüğü</div>
-                </article>
-
-            </section>
-
-            <section class="panel chart-panel" aria-label="Portföy performansı">
-                <div class="panel-header">
-                    <div>
-                        <span class="eyebrow">PORTFÖY ANALİTİĞİ</span>
-                        <h2>Performans eğrisi</h2>
-                    </div>
-                    <span class="live-pill"><span></span> Canlı</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="equityChart"></canvas>
-                </div>
-            </section>
-
-            <section class="panel positions-panel" aria-label="Açık pozisyonlar">
-                <div class="panel-header">
-                    <div>
-                        <span class="eyebrow">PİYASA MARUZİYETİ</span>
-                        <h2>Açık pozisyonlar</h2>
-                    </div>
-                    <span id="activePositionsBadge" class="count-badge">0 açık</span>
-                </div>
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Sembol</th><th>Piyasa</th><th>Yön</th><th>Miktar</th><th>Giriş</th>
-                                <th>Açık PnL</th><th>Koruma</th><th>Stop / Hedef</th><th>Çıkış</th>
-                            </tr>
-                        </thead>
-                        <tbody id="positionsTableBody">
-                            <tr><td colspan="9" class="empty-state"><span class="empty-icon">—</span>Henüz açık pozisyon bulunmuyor</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <div class="strategy-grid" aria-label="Strateji kartları">
-                <section class="panel strategy-card" aria-label="Borsa stratejisi">
-                    <div class="panel-header">
-                        <div>
-                            <span class="eyebrow">EQUITY STRATEJİ</span>
-                            <h2 id="equityStrategyName">Leveraged index trend v1 (daily)</h2>
-                        </div>
-                        <span id="equityStatusBadge" class="count-badge">—</span>
-                    </div>
-                    <div class="kpi-row">
-                        <span><small>Sinyal</small><strong id="equitySignal">—</strong></span>
-                        <span><small>Rebalance</small><strong id="equityRebalance">—</strong></span>
-                        <span><small>Aday havuz</small><strong id="equityPool">—</strong></span>
-                        <span><small>İzlenen</small><strong id="equityObs">—</strong></span>
-                        <span><small>Pozisyon</small><strong id="equityPositions">—</strong></span>
-                        <span><small>Ayrım</small><strong id="equityAllocation">—</strong></span>
-                        <span><small>Sıradaki karar</small><strong id="equityNextRebalance">—</strong></span>
-                        <span><small>Başlangıç yakalama</small><strong id="equityStartupCatchUp">—</strong></span>
-                    </div>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Sembol</th>
-                                    <th>Miktar</th>
-                                    <th>Hedef ağ.</th>
-                                    <th>Anlık ağ.</th>
-                                    <th>Neden</th>
-                                </tr>
-                            </thead>
-                            <tbody id="equityHoldingsBody">
-                                <tr><td colspan="5" class="empty-state"><span class="empty-icon">—</span>Pozisyon yok</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-
-                <section class="panel strategy-card" aria-label="Kripto stratejisi">
-                    <div class="panel-header">
-                        <div>
-                            <span class="eyebrow">CRYPTO STRATEJİ</span>
-                            <h2 id="cryptoStrategyName">Low Realized Variance v2 (96h)</h2>
-                        </div>
-                        <span id="cryptoStatusBadge" class="count-badge">—</span>
-                    </div>
-                    <div class="kpi-row">
-                        <span><small>Sinyal</small><strong id="cryptoSignal">—</strong></span>
-                        <span><small>Rebalance</small><strong id="cryptoRebalance">—</strong></span>
-                        <span><small>Bakış 22g</small><strong id="cryptoLookback">—</strong></span>
-                        <span><small>Aday havuz</small><strong id="cryptoPool">—</strong></span>
-                        <span><small>İzlenen</small><strong id="cryptoObs">—</strong></span>
-                        <span><small>Pozisyon</small><strong id="cryptoPositions">—</strong></span>
-                        <span><small>Ayrım</small><strong id="cryptoAllocation">—</strong></span>
-                        <span><small>Sıradaki karar</small><strong id="cryptoNextRebalance">—</strong></span>
-                        <span><small>Başlangıç yakalama</small><strong id="cryptoStartupCatchUp">—</strong></span>
-                    </div>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Sembol</th>
-                                    <th>Miktar</th>
-                                    <th>22g vol</th>
-                                    <th>Sıra</th>
-                                    <th>Hedef ağ.</th>
-                                    <th>Anlık ağ.</th>
-                                    <th>Neden</th>
-                                </tr>
-                            </thead>
-                            <tbody id="cryptoHoldingsBody">
-                                <tr><td colspan="7" class="empty-state"><span class="empty-icon">—</span>Pozisyon yok</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
+    <aside class="card story-card" aria-label="Botun durumu">
+        <h2>Bot şu an ne yapıyor?</h2>
+        <ul id="storyList" class="story">
+            <li><span class="story-icon"><svg class="icon"><use href="#i-clock"/></svg></span><span>Durum yükleniyor…</span></li>
+        </ul>
+        <div class="alloc">
+            <div class="donut" id="allocDonut">
+                <svg viewBox="0 0 120 120" aria-hidden="true">
+                    <circle class="track" cx="60" cy="60" r="50"/>
+                    <circle id="donutEquity" class="c-equity" cx="60" cy="60" r="50"/>
+                    <circle id="donutCrypto" class="c-crypto" cx="60" cy="60" r="50"/>
+                    <circle id="donutCash" class="c-cash" cx="60" cy="60" r="50"/>
+                </svg>
+                <div class="donut-center"><strong id="donutInvested">—</strong><small>yatırımda</small></div>
             </div>
+            <ul class="alloc-legend">
+                <li><span class="swatch c-equity"></span><span>Hisse / ETF</span><b id="allocEquity">—</b></li>
+                <li><span class="swatch c-crypto"></span><span>Kripto</span><b id="allocCrypto">—</b></li>
+                <li><span class="swatch c-cash"></span><span>Nakit</span><b id="allocCash">—</b></li>
+            </ul>
+        </div>
+    </aside>
+</section>
 
-            <div class="dashboard-grid-row">
-                <section class="panel" aria-label="Risk durumu">
-                    <div class="panel-header">
-                        <div>
-                            <span class="eyebrow">RİSK</span>
-                            <h2>Risk ve güvenlik durumu</h2>
-                        </div>
-                        <span id="riskCircuitBadge" class="count-badge">—</span>
-                    </div>
-                    <div class="risk-grid">
-                        <div class="risk-item"><small>Brüt maruziyet</small><strong id="riskGross">—</strong></div>
-                        <div class="risk-item"><small>Nakit tampon</small><strong id="riskCash">—</strong></div>
-                        <div class="risk-item"><small>Hisse maruziyeti</small><strong id="riskEquity">—</strong></div>
-                        <div class="risk-item"><small>Kripto maruziyeti</small><strong id="riskCrypto">—</strong></div>
-                        <div class="risk-item"><small>Max drawdown</small><strong id="riskDrawdown">—</strong></div>
-                        <div class="risk-item"><small>Günlük kayıp</small><strong id="riskDailyLoss">—</strong></div>
-                        <div class="risk-item"><small>Giriş kilidi</small><strong id="riskEntryLatch">—</strong></div>
-                        <div class="risk-item"><small>Risk dönemi</small><strong id="riskEpoch">—</strong></div>
-                        <div class="risk-item"><small>Pozisyon / dolu slot / limit</small><strong id="riskSlots">—</strong></div>
-                        <div class="risk-item"><small>Kripto pozisyon / dolu slot / limit</small><strong id="riskCryptoSlots">—</strong></div>
-                        <div class="risk-item"><small>Broker açık emir</small><strong id="riskWorking">—</strong></div>
-                        <div class="risk-item"><small>Brüt ALIŞ alanı</small><strong id="riskGrossHeadroom">—</strong></div>
-                        <div class="risk-item"><small>Taahhütlü ALIŞ</small><strong id="riskCommittedBuy">—</strong></div>
-                        <div class="risk-item"><small>Nakit ALIŞ alanı</small><strong id="riskCashHeadroom">—</strong></div>
-                        <div class="risk-item"><small>Mutabakat / engel</small><strong id="riskAdmission">—</strong></div>
-                    </div>
-                    <div id="riskIncidents" class="risk-incidents"></div>
-                </section>
+<section class="kpi-grid" aria-label="Hesap göstergeleri">
+    <article class="card kpi">
+        <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-cash"/></svg>Kullanılabilir nakit</span>
+        <span id="cashValue" class="kpi-value">—</span>
+        <span id="cashSub" class="kpi-sub">serbest bakiye</span>
+    </article>
+    <article class="card kpi">
+        <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-trend"/></svg>Toplam kâr / zarar</span>
+        <span id="totalPnlValue" class="kpi-value">—</span>
+        <span class="kpi-sub">gerçekleşen + açık</span>
+    </article>
+    <article class="card kpi">
+        <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-check"/></svg>Gerçekleşen</span>
+        <span id="realizedPnlValue" class="kpi-value">—</span>
+        <span class="kpi-sub">kapanan işlemler</span>
+    </article>
+    <article class="card kpi">
+        <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-activity"/></svg>Açık pozisyon K/Z</span>
+        <span id="unrealizedPnlValue" class="kpi-value">—</span>
+        <span class="kpi-sub">henüz satılmadı</span>
+    </article>
+    <article class="card kpi">
+        <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-shield"/></svg>Zirveden düşüş</span>
+        <span id="drawdownValue" class="kpi-value">—</span>
+        <span id="drawdownSub" class="kpi-sub">en yüksek bakiyeye göre</span>
+    </article>
+    <article class="card kpi">
+        <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-layers"/></svg>Yatırımdaki tutar</span>
+        <span id="grossExposureValue" class="kpi-value">—</span>
+        <span id="grossExposureSub" class="kpi-sub">brüt maruziyet</span>
+    </article>
+    <article class="card kpi">
+        <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-coins"/></svg>Ödenen ücretler</span>
+        <span id="feesValue" class="kpi-value">—</span>
+        <span class="kpi-sub">broker komisyonları</span>
+    </article>
+</section>
 
-                <section class="panel" aria-label="Sistem sağlığı">
-                    <div class="panel-header">
-                        <div>
-                            <span class="eyebrow">SİSTEM</span>
-                            <h2>Motor ve altyapı sağlığı</h2>
-                        </div>
-                        <span id="healthBadge" class="count-badge">—</span>
-                    </div>
-                    <div class="risk-grid">
-                        <div class="risk-item"><small>Kuyruk</small><strong id="healthQueue">—</strong></div>
-                        <div class="risk-item"><small>Veri tazeliği</small><strong id="healthData">—</strong></div>
-                        <div class="risk-item"><small>Hesap tazeliği</small><strong id="healthAccount">—</strong></div>
-                        <div class="risk-item"><small>Son kalp atışı</small><strong id="healthHeartbeat">—</strong></div>
-                        <div class="risk-item"><small>Yeniden başlatma</small><strong id="healthRestarts">—</strong></div>
-                        <div class="risk-item"><small>Veritabanı</small><strong id="healthDatabase">—</strong></div>
-                        <div class="risk-item"><small>Tarayıcı</small><strong id="healthScanner">—</strong></div>
-                        <div class="risk-item"><small>Mutabakat</small><strong id="healthReconciliation">—</strong></div>
-                    </div>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr><th>Çalışan</th><th>Durum</th><th>Kalp atışı</th><th>Yeniden başlatma</th><th>Son hata</th></tr>
-                            </thead>
-                            <tbody id="workersBody">
-                                <tr><td colspan="5" class="empty-state"><span class="empty-icon">—</span>Çalışan bilgisi yok</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            </div>
-
-            <section class="panel" aria-label="Emir ve dolumlar">
-                <div class="panel-header">
-                    <div>
-                        <span class="eyebrow">YÜRÜTME</span>
-                        <h2>Açık emirler ve son dolumlar</h2>
-                    </div>
-                    <span id="executionBadge" class="count-badge">—</span>
-                </div>
-                <div class="execution-grid">
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr><th>Sembol</th><th>Yön</th><th>Miktar</th><th>Referans</th><th>Durum</th><th>Karar</th></tr>
-                            </thead>
-                            <tbody id="openOrdersBody">
-                                <tr><td colspan="6" class="empty-state"><span class="empty-icon">—</span>Açık emir yok</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr><th>Sembol</th><th>Yön</th><th>Miktar</th><th>Dolum</th><th>Kayma (bps)</th><th>Ücret</th><th>Zaman</th></tr>
-                            </thead>
-                            <tbody id="recentFillsBody">
-                                <tr><td colspan="7" class="empty-state"><span class="empty-icon">—</span>Dolum yok</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <section class="panel" aria-label="Piyasa evreni">
-                <div class="panel-header">
-                    <div>
-                        <span class="eyebrow">EVREN</span>
-                        <h2>Piyasa evreni ve tarayıcı</h2>
-                    </div>
-                </div>
-                <div class="execution-grid">
-                    <div class="universe-market">
-                        <div class="kpi-row">
-                            <span><small>Sembol</small><strong id="eqCount">—</strong></span>
-                            <span><small>Evren</small><strong id="eqStatus">—</strong></span>
-                        </div>
-                        <details class="universe-details">
-                            <summary>Yapılandırılmış semboller (tıkla aç)</summary>
-                            <div id="eqSymbols" class="universe-symbols"></div>
-                        </details>
-                    </div>
-                    <div class="universe-market">
-                        <div class="kpi-row">
-                            <span><small>Uygun havuz</small><strong id="crEligible">—</strong></span>
-                            <span><small>İzlenen</small><strong id="crObserved">—</strong></span>
-                            <span><small>Son tarama</small><strong id="crLastScan">—</strong></span>
-                            <span><small>Tarayıcı</small><strong id="crScanner">—</strong></span>
-                            <span><small>Sıradaki</small><strong id="crNextScan">—</strong></span>
-                        </div>
-                        <details class="universe-details">
-                            <summary>İzlenen semboller (tıkla aç)</summary>
-                            <div id="crSymbols" class="universe-symbols"></div>
-                        </details>
-                    </div>
-                </div>
-            </section>
-
-            <section id="opsSummaryPanel" class="panel ops-panel" aria-label="Operasyon durumu">
-                <div class="panel-header">
-                    <div>
-                        <span class="eyebrow">OPS</span>
-                        <h2>Operasyon özeti</h2>
-                    </div>
-                    <span id="opsHeartbeatBadge" class="count-badge">—</span>
-                </div>
-                <div class="ops-summary">
-                    <div class="ops-summary-item"><small>Overall health</small><strong><span id="opsOverall" class="ops-badge unknown">—</span></strong></div>
-                    <div class="ops-summary-item"><small>Trading state</small><strong><span id="opsTradingState" class="ops-badge unknown">—</span></strong></div>
-                    <div class="ops-summary-item"><small>Heartbeat</small><strong id="opsHeartbeat">—</strong></div>
-                    <div class="ops-summary-item"><small>Snapshot age</small><strong id="opsSnapshotAge">—</strong></div>
-                </div>
-                <div class="table-wrapper" style="padding: 0 16px;">
-                    <h3 style="font-size:12px; color:var(--text-muted); margin:12px 0 6px;">Health checks</h3>
-                    <div id="opsChecks"></div>
-                    <h3 style="font-size:12px; color:var(--text-muted); margin:16px 0 6px;">Recent events</h3>
-                    <div id="opsRecentEvents" class="empty-state">Yükleniyor…</div>
-                    <h3 style="font-size:12px; color:var(--text-muted); margin:16px 0 6px;">Decision explanation</h3>
-                    <pre id="opsDecisionExplanation" class="ops-check-observed" style="white-space:pre-wrap;">Yükleniyor…</pre>
-                </div>
-            </section>
-
-        </main>
+<section id="positions" class="card" aria-label="Açık pozisyonlar">
+    <div class="card-head">
+        <div><h2>Açık pozisyonlar</h2><p>Botun şu anda elinde tuttuğu varlıklar.</p></div>
+        <span id="activePositionsBadge" class="badge">0 pozisyon</span>
     </div>
-
-    <div id="settingsModal" class="modal-backdrop" aria-hidden="true">
-        <aside class="settings-drawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-            <div class="modal-header">
-                <div>
-                    <span class="eyebrow">KONTROL MERKEZİ</span>
-                    <h2 id="settingsTitle">Ayarlar</h2>
-                    <p>Bağlantı, işlem kapsamı ve güvenlik sınırlarını yönetin.</p>
-                </div>
-                <button id="closeSettingsBtn" class="modal-close" type="button" aria-label="Ayarları kapat">×</button>
-            </div>
-
-            <form id="settingsForm" class="modal-body">
-                <section class="settings-section">
-                    <div class="settings-section-heading">
-                        <span class="section-number">01</span>
-                        <div>
-                            <h3>Broker bağlantısı</h3>
-                            <p>Alpaca hesabınızla güvenli bağlantı kurun.</p>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="apiKey">API anahtarı</label>
-                            <input type="text" id="apiKey" placeholder="PK..." autocomplete="off">
-                        </div>
-                        <div class="form-group">
-                            <label for="secretKey">Secret anahtarı</label>
-                            <input type="password" id="secretKey" placeholder="Secret key" autocomplete="new-password">
-                        </div>
-                    </div>
-                    <label class="switch-row">
-                        <span>
-                            <strong>Paper trading</strong>
-                            <small>Gerçek para kullanmadan demo hesapta çalışır.</small>
-                        </span>
-                        <input type="checkbox" id="paperModeCheck">
-                        <span class="switch-control" aria-hidden="true"></span>
-                    </label>
-                </section>
-
-                <section class="settings-section">
-                    <div class="settings-section-heading">
-                        <span class="section-number">02</span>
-                        <div>
-                            <h3>İşlem kapsamı</h3>
-                            <p>Motorun hangi piyasalarda işlem yapabileceğini belirleyin.</p>
-                        </div>
-                    </div>
-                    <div class="switch-stack">
-                        <label class="switch-row">
-                            <span>
-                                <strong>Hisse işlemleri</strong>
-                                <small>ABD hisse senedi evrenini tarar ve işler.</small>
-                            </span>
-                            <input type="checkbox" id="equityTradingCheck">
-                            <span class="switch-control" aria-hidden="true"></span>
-                        </label>
-                        <label class="switch-row">
-                            <span>
-                                <strong>Kripto işlemleri</strong>
-                                <small>7/24 kripto piyasası stratejilerini etkinleştirir.</small>
-                            </span>
-                            <input type="checkbox" id="cryptoTradingCheck">
-                            <span class="switch-control" aria-hidden="true"></span>
-                        </label>
-                        <label class="switch-row switch-danger">
-                            <span>
-                                <strong>Gerçek işlem izni</strong>
-                                <small>Canlı hesapta gerçek emir gönderilmesine izin verir.</small>
-                            </span>
-                            <input type="checkbox" id="liveTradingCheck">
-                            <span class="switch-control" aria-hidden="true"></span>
-                        </label>
-                    </div>
-                    <div class="warning-note">
-                        <strong>Canlı işlem uyarısı</strong>
-                        Stop-limit tetiklenmesi gerçekleşmeyi garanti etmez. Paper testleri tamamlanmadan gerçek işlem iznini açmayın.
-                    </div>
-                    <div id="livePrerequisites" class="warning-note" hidden>
-                        <strong>Canlı arma ön koşulları</strong>
-                        <ul id="livePrerequisitesList" class="prereq-list" style="margin:6px 0 0;padding-left:18px;list-style:none;line-height:1.7;"></ul>
-                        <small id="livePrerequisitesSummary" class="settings-note"></small>
-                    </div>
-                </section>
-
-                <section class="settings-section">
-                    <div class="settings-section-heading">
-                        <span class="section-number">03</span>
-                        <div>
-                            <h3>Risk sınırları</h3>
-                            <p>Hesabı koruyan günlük ve toplam kayıp eşiklerini ayarlayın.</p>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group input-with-suffix">
-                            <label for="maxDailyLoss">Maksimum günlük zarar</label>
-                            <input type="number" id="maxDailyLoss" step="0.1" min="0.01" max="100" value="1.5">
-                            <span>%</span>
-                        </div>
-                        <div class="form-group input-with-suffix">
-                            <label for="maxDrawdown">Maksimum drawdown</label>
-                            <input type="number" id="maxDrawdown" step="0.1" min="0.01" max="100" value="10">
-                            <span>%</span>
-                        </div>
-                    </div>
-                </section>
-
-                <details class="advanced-settings settings-section">
-                    <summary>
-                        <span class="summary-copy">
-                            <span class="section-number">04</span>
-                            <span>
-                                <strong>Program ve sunucu ayarları</strong>
-                                <small>Gelişmiş çalışma seçenekleri</small>
-                            </span>
-                        </span>
-                        <span class="summary-chevron">⌄</span>
-                    </summary>
-                    <div class="advanced-body">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="timeframe">İşlem periyodu</label>
-                                <select id="timeframe">
-                                    <option value="5m">5 dakika</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="logLevel">Log seviyesi</label>
-                                <select id="logLevel">
-                                    <option value="DEBUG">Debug</option>
-                                    <option value="INFO">Info</option>
-                                    <option value="WARNING">Warning</option>
-                                    <option value="ERROR">Error</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="host">Web arayüzü adresi</label>
-                                <input type="text" id="host" placeholder="127.0.0.1">
-                            </div>
-                            <div class="form-group">
-                                <label for="port">Port</label>
-                                <input type="number" id="port" min="1" max="65535" step="1" value="8000">
-                            </div>
-                        </div>
-                        <label class="switch-row">
-                            <span>
-                                <strong>Başlangıçta tarayıcıyı aç</strong>
-                                <small>Uygulama başladığında kontrol merkezini otomatik gösterir.</small>
-                            </span>
-                            <input type="checkbox" id="openBrowser">
-                            <span class="switch-control" aria-hidden="true"></span>
-                        </label>
-                        <p class="settings-note">Adres, port, tarayıcı ve log seviyesi değişiklikleri bir sonraki uygulama açılışında etkinleşir.</p>
-                    </div>
-                </details>
-
-                <div class="modal-footer">
-                    <span class="save-hint">Değişiklikler güvenli biçimde yerel olarak saklanır.</span>
-                    <div>
-                        <button type="button" id="cancelSettingsBtn" class="btn btn-quiet">Vazgeç</button>
-                        <button type="submit" class="btn btn-primary">Kaydet ve uygula</button>
-                    </div>
-                </div>
-            </form>
-        </aside>
+    <div class="card-body flush table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Varlık</th><th class="r">Miktar</th><th class="r">Ort. maliyet</th><th class="r">Güncel fiyat</th>
+                    <th class="r">Değer</th><th class="r">Kâr / zarar</th><th class="r">Portföy payı</th><th>Koruma</th>
+                </tr>
+            </thead>
+            <tbody id="positionsTableBody">
+                <tr class="empty"><td colspan="8">Henüz açık pozisyon yok</td></tr>
+            </tbody>
+        </table>
     </div>
+</section>
 
-    <div id="statusToast" class="status-toast" role="status" aria-live="polite" hidden></div>
-    <script src="/static/js/api.js?v=20260829-1"></script>
-    <script src="/static/js/websocket.js?v=20260829-1"></script>
-    <script src="/static/js/controls.js?v=20260829-1"></script>
-    <script src="/static/js/dashboard.js?v=20260829-1"></script>
-    <script src="/static/js/ops.js?v=20260829-1"></script>
-</body>
-</html>
+<div class="section-title" id="strategies" data-section="strategies">
+    <h2>Stratejiler</h2><p>Her piyasada botun uyguladığı kurallar.</p>
+</div>
+<section class="two-col strategy-grid" aria-label="Strateji kartları">
+    <article class="card" aria-label="Hisse stratejisi">
+        <div class="strategy-head">
+            <span class="strategy-icon"><svg class="icon"><use href="#i-trend"/></svg></span>
+            <div>
+                <h3 id="equityStrategyName">Hisse stratejisi</h3>
+                <p id="equityStrategyDesc">—</p>
+            </div>
+            <span id="equityStatusBadge" class="badge">—</span>
+        </div>
+        <div class="alloc-row">
+            <div class="alloc-row-top"><span>Portföydeki payı</span><b id="equityAllocation">—</b></div>
+            <div class="bar lg"><span id="equityAllocBar"></span></div>
+        </div>
+        <div class="stat-grid">
+            <div class="stat"><small>Sinyal periyodu</small><strong id="equitySignal">—</strong></div>
+            <div class="stat"><small>Yeniden dengeleme</small><strong id="equityRebalance">—</strong></div>
+            <div class="stat"><small>İzlenen sembol</small><strong id="equityObs">—</strong></div>
+            <div class="stat"><small>Pozisyon</small><strong id="equityPositions">—</strong></div>
+            <div class="stat"><small>Sıradaki karar</small><strong id="equityNextRebalance">—</strong></div>
+            <div class="stat"><small>Başlangıç yakalama</small><strong id="equityStartupCatchUp">—</strong></div>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Sembol</th><th class="r">Miktar</th><th class="r">Hedef</th><th class="r">Şu an</th><th>Neden</th></tr></thead>
+                <tbody id="equityHoldingsBody"><tr class="empty"><td colspan="5">Pozisyon yok</td></tr></tbody>
+            </table>
+        </div>
+    </article>
+
+    <article class="card" aria-label="Kripto stratejisi">
+        <div class="strategy-head">
+            <span class="strategy-icon crypto"><svg class="icon"><use href="#i-coins"/></svg></span>
+            <div>
+                <h3 id="cryptoStrategyName">Kripto stratejisi</h3>
+                <p id="cryptoStrategyDesc">—</p>
+            </div>
+            <span id="cryptoStatusBadge" class="badge">—</span>
+        </div>
+        <div class="alloc-row">
+            <div class="alloc-row-top"><span>Portföydeki payı</span><b id="cryptoAllocation">—</b></div>
+            <div class="bar lg crypto"><span id="cryptoAllocBar"></span></div>
+        </div>
+        <div class="stat-grid">
+            <div class="stat"><small>Sinyal periyodu</small><strong id="cryptoSignal">—</strong></div>
+            <div class="stat"><small>Yeniden dengeleme</small><strong id="cryptoRebalance">—</strong></div>
+            <div class="stat"><small>Aday / izlenen</small><strong id="cryptoObs">—</strong></div>
+            <div class="stat"><small>Pozisyon</small><strong id="cryptoPositions">—</strong></div>
+            <div class="stat"><small>Sıradaki karar</small><strong id="cryptoNextRebalance">—</strong></div>
+            <div class="stat"><small>Başlangıç yakalama</small><strong id="cryptoStartupCatchUp">—</strong></div>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Sembol</th><th class="r">Miktar</th><th class="r">22g oynaklık</th><th class="r">Sıra</th><th class="r">Hedef</th><th class="r">Şu an</th></tr></thead>
+                <tbody id="cryptoHoldingsBody"><tr class="empty"><td colspan="6">Pozisyon yok</td></tr></tbody>
+            </table>
+        </div>
+    </article>
+</section>
+
+<div class="section-title" id="risk" data-section="risk">
+    <h2>Risk ve güvenlik</h2><p>Hesabı koruyan sınırlar ve ne kadarının kullanıldığı.</p>
+</div>
+<section class="risk-layout" aria-label="Risk durumu">
+    <article class="card">
+        <div class="card-head">
+            <div><h2>Limit kullanımı</h2><p>Çubuk limite yaklaştıkça sarı, aşınca kırmızı olur.</p></div>
+            <span id="riskCircuitBadge" class="badge">—</span>
+        </div>
+        <div class="card-body meters" id="riskMeters"></div>
+    </article>
+    <article class="card">
+        <div class="card-head"><div><h2>Güvenlik durumu</h2><p>Kilitler, risk dönemi ve aktif olaylar.</p></div></div>
+        <div class="card-body status-list">
+            <div class="status-row"><span>Yeni alım kilidi</span><b id="riskEntryLatch">—</b></div>
+            <div class="status-row"><span>Risk dönemi</span><b id="riskEpoch">—</b></div>
+            <div class="status-row"><span>Mutabakat</span><b id="riskAdmission">—</b></div>
+            <div id="riskIncidents" class="status-list"></div>
+        </div>
+    </article>
+</section>
+<section class="card" aria-label="Alım kapasitesi">
+    <details class="more">
+        <summary><svg class="icon icon-sm"><use href="#i-chevron"/></svg>Alım kapasitesi ayrıntıları</summary>
+        <div class="kv-grid">
+            <div class="kv"><small>Pozisyon / dolu slot / limit</small><strong id="riskSlots">—</strong></div>
+            <div class="kv"><small>Kripto pozisyon / slot / limit</small><strong id="riskCryptoSlots">—</strong></div>
+            <div class="kv"><small>Broker'da bekleyen emir</small><strong id="riskWorking">—</strong></div>
+            <div class="kv"><small>Brüt alım alanı</small><strong id="riskGrossHeadroom">—</strong></div>
+            <div class="kv"><small>Taahhüt edilmiş alım</small><strong id="riskCommittedBuy">—</strong></div>
+            <div class="kv"><small>Nakit alım alanı</small><strong id="riskCashHeadroom">—</strong></div>
+        </div>
+    </details>
+</section>
+
+<div class="section-title" id="trades" data-section="trades">
+    <h2>İşlemler</h2><p>Bekleyen emirler ve son gerçekleşen alım-satımlar.</p>
+</div>
+<section class="card" aria-label="Emirler ve dolumlar">
+    <div class="tabs" role="tablist">
+        <button class="tab active" type="button" data-tab="fills">Son işlemler <span id="fillsCount" class="count">0</span></button>
+        <button class="tab" type="button" data-tab="orders">Bekleyen emirler <span id="ordersCount" class="count">0</span></button>
+    </div>
+    <div class="table-wrap" data-panel="fills">
+        <table class="table">
+            <thead><tr><th>Zaman</th><th>Sembol</th><th>Yön</th><th class="r">Miktar</th><th class="r">Fiyat</th><th class="r">Kayma</th><th class="r">Ücret</th></tr></thead>
+            <tbody id="recentFillsBody"><tr class="empty"><td colspan="7">Henüz işlem yok</td></tr></tbody>
+        </table>
+    </div>
+    <div class="table-wrap" data-panel="orders" hidden>
+        <table class="table">
+            <thead><tr><th>Sembol</th><th>Yön</th><th class="r">Miktar</th><th class="r">Referans fiyat</th><th>Durum</th><th>Karar</th></tr></thead>
+            <tbody id="openOrdersBody"><tr class="empty"><td colspan="6">Bekleyen emir yok</td></tr></tbody>
+        </table>
+    </div>
+</section>
+
+<div class="section-title" id="system" data-section="system">
+    <h2>Sistem sağlığı</h2><p>Motorun ve veri akışının teknik durumu.</p>
+</div>
+<section class="tile-grid" aria-label="Sağlık göstergeleri">
+    <article class="card tile"><small><svg class="icon icon-sm"><use href="#i-activity"/></svg>Genel sağlık</small><strong><span id="opsOverall" class="badge">—</span></strong></article>
+    <article class="card tile"><small><svg class="icon icon-sm"><use href="#i-swap"/></svg>İşlem durumu</small><strong><span id="opsTradingState" class="badge">—</span></strong></article>
+    <article class="card tile"><small><svg class="icon icon-sm"><use href="#i-clock"/></svg>Son kalp atışı</small><strong id="healthHeartbeat">—</strong></article>
+    <article class="card tile"><small><svg class="icon icon-sm"><use href="#i-trend"/></svg>Piyasa verisi</small><strong id="healthData">—</strong></article>
+    <article class="card tile"><small><svg class="icon icon-sm"><use href="#i-wallet"/></svg>Hesap verisi</small><strong id="healthAccount">—</strong></article>
+    <article class="card tile"><small><svg class="icon icon-sm"><use href="#i-db"/></svg>Veritabanı</small><strong id="healthDatabase">—</strong></article>
+    <article class="card tile"><small><svg class="icon icon-sm"><use href="#i-rotate"/></svg>Yeniden başlatma</small><strong id="healthRestarts">—</strong></article>
+    <article class="card tile"><small><svg class="icon icon-sm"><use href="#i-check"/></svg>Mutabakat</small><strong id="healthReconciliation">—</strong></article>
+</section>
+
+<section class="two-col" aria-label="Sistem ayrıntıları">
+    <article id="opsSummaryPanel" class="card">
+        <div class="card-head">
+            <div><h2>Sağlık kontrolleri</h2><p id="opsSnapshotAge">—</p></div>
+            <span id="healthBadge" class="badge">—</span>
+        </div>
+        <div class="card-body flush"><div id="opsChecks" class="checks"><p class="empty-note">Yükleniyor…</p></div></div>
+    </article>
+    <div class="meters">
+        <article class="card">
+            <div class="card-head"><div><h2>Piyasa evreni</h2><p>Botun izlediği semboller.</p></div></div>
+            <div class="card-body status-list">
+                <div class="status-row"><span>Hisse / ETF</span><b id="eqStatus">—</b></div>
+                <div id="eqSymbols" class="chips"></div>
+                <div class="status-row"><span>Kripto tarayıcı</span><b id="crScanner">—</b></div>
+                <div class="status-row"><span>Uygun havuz / izlenen</span><b id="crObserved">—</b></div>
+                <div class="status-row"><span>Son / sıradaki tarama</span><b id="crScanTimes">—</b></div>
+                <div id="crSymbols" class="chips"></div>
+            </div>
+        </article>
+        <article class="card">
+            <div class="card-head"><div><h2>Arka plan işçileri</h2></div></div>
+            <div class="card-body flush table-wrap">
+                <table class="table">
+                    <thead><tr><th>İşçi</th><th>Durum</th><th>Kalp atışı</th><th class="r">Yeniden b.</th><th>Son hata</th></tr></thead>
+                    <tbody id="workersBody"><tr class="empty"><td colspan="5">Çalışan bilgisi yok</td></tr></tbody>
+                </table>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="card" aria-label="Olaylar ve karar açıklaması">
+    <div class="card-head"><div><h2>Son olaylar</h2></div></div>
+    <div class="card-body flush"><ul id="opsRecentEvents" class="events"><li class="empty-note">Yükleniyor…</li></ul></div>
+    <details class="more">
+        <summary><svg class="icon icon-sm"><use href="#i-chevron"/></svg>Son kararın teknik açıklaması</summary>
+        <div class="card-body"><pre id="opsDecisionExplanation" class="code">Yükleniyor…</pre></div>
+    </details>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/chart.js?v={{ asset_version }}"></script>
+<script src="/static/js/dashboard.js?v={{ asset_version }}"></script>
+{% endblock %}

@@ -22,6 +22,9 @@ from fastapi.templating import Jinja2Templates
 
 router = APIRouter(tags=["pages"])
 
+# Cache-busting query for /static assets; bump when the UI bundle changes.
+ASSET_VERSION = "20260925-1"
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
@@ -85,7 +88,11 @@ async def serve_index(request: Request) -> HTMLResponse:
     response = templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"is_paper": _is_paper(), "control_token": _control_token()},
+        context={
+            "is_paper": _is_paper(),
+            "control_token": _control_token(),
+            "asset_version": ASSET_VERSION,
+        },
     )
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -94,7 +101,9 @@ async def serve_index(request: Request) -> HTMLResponse:
 @router.get("/tools", response_class=HTMLResponse)
 async def serve_tools(request: Request) -> HTMLResponse:
     response = templates.TemplateResponse(
-        request=request, name="tools.html", context={"control_token": _control_token()}
+        request=request,
+        name="tools.html",
+        context={"control_token": _control_token(), "asset_version": ASSET_VERSION},
     )
     response.headers["Cache-Control"] = "no-store"
     return response

@@ -381,6 +381,27 @@ class AlpacaBroker:
     def account_id(self) -> str:
         return self._account_id
 
+    def portfolio_history(self, period: str, timeframe: str) -> list[tuple[datetime, float]]:
+        """Broker equity history for display only; never feeds trading state.
+
+        Points before the account was funded (zero equity) and non-finite
+        values are dropped so the series starts at the first real balance.
+        """
+        from alpaca.trading.requests import GetPortfolioHistoryRequest
+
+        raw: Any = self._client.get_portfolio_history(GetPortfolioHistoryRequest(period=period, timeframe=timeframe))
+        stamps = list(getattr(raw, "timestamp", None) or [])
+        values = list(getattr(raw, "equity", None) or [])
+        points: list[tuple[datetime, float]] = []
+        for stamp, value in zip(stamps, values, strict=False):
+            if value is None:
+                continue
+            equity = float(value)
+            if not math.isfinite(equity) or equity <= 0:
+                continue
+            points.append((datetime.fromtimestamp(int(stamp), UTC), equity))
+        return points
+
     def snapshot_if_fresh(self, max_age_seconds: float) -> AccountSnapshot | None:
         """Return the last fetched account snapshot if it is at most
         ``max_age_seconds`` old, else ``None``.

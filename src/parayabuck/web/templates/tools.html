@@ -1,137 +1,88 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="parayabuck-control-token" content="{{ control_token }}">
-    <meta name="theme-color" content="#080b0f">
-    <title>ParayaBuck — Araçlar</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=20260813-3">
-</head>
-<body>
-    <div class="ambient ambient-one"></div>
-    <div class="ambient ambient-two"></div>
+{% extends "base.html" %}
+{% block title %}ParayaBuck — Araçlar{% endblock %}
+{% block page_id %}tools{% endblock %}
+{% block page_title %}Araçlar{% endblock %}
 
-    <div class="app-shell">
-        <header class="topbar">
-            <a class="brand" href="/" aria-label="ParayaBuck ana sayfa">
-                <span class="brand-mark" aria-hidden="true">PB</span>
-                <span class="brand-copy">
-                    <strong>ParayaBuck</strong>
-                    <small>Trading Control Center</small>
-                </span>
-            </a>
-
-            <div class="topbar-context" aria-label="Sistem durumu">
-                <div class="mode-chip paper">
-                    <span class="chip-signal" aria-hidden="true"></span>
-                    <span><small>İşlem modu</small><strong id="modeText">Paper demo</strong></span>
-                </div>
-                <div class="engine-state">
-                    <span id="statusDot" class="status-dot stopped" aria-hidden="true"></span>
-                    <span><small>Motor durumu</small><strong id="statusText">Durdu</strong></span>
-                </div>
-                <span id="modeBadge" class="mode-badge paper">PAPER</span>
-            </div>
-
-            <div class="nav-actions">
-                <button id="startBtn" class="btn btn-primary">
-                    <span class="button-icon" aria-hidden="true">▶</span><span>Motoru başlat</span>
-                </button>
-                <button id="stopBtn" class="btn btn-danger" disabled>
-                    <span class="stop-icon" aria-hidden="true"></span><span>Durdur</span>
-                </button>
-                <a class="btn btn-quiet" href="/#settings">
-                    <span class="button-icon" aria-hidden="true">⚙</span><span>Ayarlar</span>
-                </a>
-            </div>
-        </header>
-
-        <section class="system-strip" aria-label="Piyasa ve tarayıcı durumu">
-            <div class="system-strip-label">
-                <span class="live-pulse" aria-hidden="true"></span><span>Canlı sistem özeti</span>
-            </div>
-            <p id="marketStatusText">Equity ve kripto durumu yükleniyor…</p>
-            <span class="system-time">teknik araçlar</span>
-        </section>
-
-        <nav class="page-nav" aria-label="Ana bölümler">
-            <a class="page-nav-link" href="/">Dashboard</a>
-            <a class="page-nav-link active" href="/tools" aria-current="page">Araçlar</a>
-        </nav>
-
-        <main class="dashboard-content tools-content">
-            <section class="panel backtest-panel" aria-label="Backtest çalıştırıcı">
-                <div class="panel-header">
-                    <div>
-                        <span class="eyebrow">DOĞRULAMA</span>
-                        <h2>Backtest çalıştır</h2>
-                        <p>Üretim stratejisini, risk katmanını ve maliyet modelini geçmiş veride çalıştırır.</p>
-                    </div>
-                    <span id="backtestStateBadge" class="count-badge">beklemede</span>
-                </div>
-                <div class="backtest-body">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="btStrategy">Strateji (boş = ayar)</label>
-                            <input type="text" id="btStrategy" placeholder="equity_leveraged_trend_v1">
-                        </div>
-                        <div class="form-group">
-                            <label for="btMarket">Piyasa</label>
-                            <select id="btMarket"><option value="equity" selected>Borsa</option><option value="crypto">Kripto</option></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="btYears">Yıl</label>
-                            <input type="number" id="btYears" min="1" max="30" value="3">
-                        </div>
-                        <div class="form-group">
-                            <label for="btDays">Gün (0 = yıllar)</label>
-                            <input type="number" id="btDays" min="0" max="3650" value="90">
-                        </div>
-                        <div class="form-group">
-                            <label for="btMaxSymbols">Max sembol (0 = tümü)</label>
-                            <input type="number" id="btMaxSymbols" min="0" max="2000" value="0">
-                        </div>
-                        <div class="form-group form-wide">
-                            <label for="btSymbols">Semboller (boş = universe)</label>
-                            <input type="text" id="btSymbols" placeholder="AAPL,MSFT,BTC/USD">
-                        </div>
-                        <div class="form-group form-wide">
-                            <label for="btParameters">Parametreler (JSON, boş = ayar)</label>
-                            <input type="text" id="btParameters" placeholder='{"sma_bars": 200, "vol_target": 0.35}'>
-                        </div>
-                    </div>
-                    <div class="backtest-options">
-                        <button id="backtestRunBtn" class="btn btn-primary">
-                            <span class="button-icon" aria-hidden="true">▶</span><span>Backtest'i çalıştır</span>
-                        </button>
-                    </div>
-                    <div id="backtestSummary" class="backtest-summary" hidden></div>
-                    <div id="backtestProgress" class="terminal-view backtest-progress" aria-live="polite"></div>
-                </div>
-            </section>
-
-            <section class="panel" aria-label="Operasyon durumu">
-                <div class="panel-header">
-                    <div><span class="eyebrow">OPERASYON</span><h2>Strateji, evren ve emir durumu</h2></div>
-                    <span class="count-badge">HAM DURUM</span>
-                </div>
-                <pre id="operationsDetail" class="terminal-view">Operasyon durumu yükleniyor…</pre>
-            </section>
-
-            <section class="panel terminal-panel" aria-label="Motor konsolu">
-                <div class="panel-header">
-                    <div><span class="eyebrow">SİSTEM AKIŞI</span><h2>Motor konsolu</h2></div>
-                    <button id="clearLogsBtn" class="btn btn-small btn-quiet">Kayıtları temizle</button>
-                </div>
-                <div id="terminalLogView" class="terminal-view" aria-live="polite">
-                    <div class="log-line info"><span class="log-time">[SYSTEM]</span><span class="log-msg"> Araçlar ekranı bağlantısı kuruldu.</span></div>
-                </div>
-            </section>
-        </main>
+{% block content %}
+<section id="backtest" class="card" data-section="backtest" aria-label="Backtest çalıştırıcı">
+    <div class="card-head">
+        <div>
+            <h2>Backtest</h2>
+            <p>Üretim stratejisini, risk katmanını ve maliyet modelini geçmiş veride çalıştırır.</p>
+        </div>
+        <span id="backtestStateBadge" class="badge">beklemede</span>
     </div>
+    <div class="card-body">
+        <div class="form-grid cols-4">
+            <div class="field span-2">
+                <label for="btStrategy">Strateji</label>
+                <input type="text" id="btStrategy" placeholder="equity_leveraged_trend_v1" spellcheck="false">
+                <span class="hint">Boş bırakılırsa ayarlardaki strateji kullanılır.</span>
+            </div>
+            <div class="field">
+                <label for="btMarket">Piyasa</label>
+                <select id="btMarket"><option value="equity" selected>Hisse / ETF</option><option value="crypto">Kripto</option></select>
+            </div>
+            <div class="field">
+                <label for="btYears">Yıl</label>
+                <input type="number" id="btYears" min="1" max="30" value="3">
+            </div>
+            <div class="field">
+                <label for="btDays">Gün</label>
+                <input type="number" id="btDays" min="0" max="3650" value="90">
+                <span class="hint">0 = yıl alanı kullanılır.</span>
+            </div>
+            <div class="field">
+                <label for="btMaxSymbols">Maks. sembol</label>
+                <input type="number" id="btMaxSymbols" min="0" max="2000" value="0">
+                <span class="hint">0 = tümü.</span>
+            </div>
+            <div class="field span-2">
+                <label for="btSymbols">Semboller</label>
+                <input type="text" id="btSymbols" placeholder="SPY,QQQ,QLD" spellcheck="false">
+                <span class="hint">Boş = yapılandırılmış evren.</span>
+            </div>
+            <div class="field span-2">
+                <label for="btParameters">Parametreler (JSON)</label>
+                <input type="text" id="btParameters" placeholder='{"sma_bars": 200, "vol_target": 0.35}' spellcheck="false">
+                <span class="hint">Boş = ayarlardaki parametreler.</span>
+            </div>
+            <div class="field span-2">
+                <label>&nbsp;</label>
+                <button id="backtestRunBtn" class="btn primary" type="button"><svg class="icon icon-sm"><use href="#i-play"/></svg>Backtest'i çalıştır</button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body" id="backtestSummary" hidden></div>
+    <div class="card-body">
+        <div id="backtestProgress" class="terminal short" aria-live="polite"><div class="log-line plain"><span class="m">Henüz çalıştırılmadı.</span></div></div>
+    </div>
+</section>
 
-    <div id="statusToast" class="status-toast" role="status" aria-live="polite" hidden></div>
-    <script src="/static/js/tools.js?v=20260813-1"></script>
-</body>
-</html>
+<section id="operations" class="card" data-section="operations" aria-label="Ham operasyon durumu">
+    <div class="card-head">
+        <div><h2>Ham durum</h2><p>Strateji, evren ve emir durumunun işlenmemiş hali (hata ayıklama için).</p></div>
+        <button id="copyOpsBtn" class="btn sm" type="button">Kopyala</button>
+    </div>
+    <div class="card-body"><pre id="operationsDetail" class="code">Operasyon durumu yükleniyor…</pre></div>
+</section>
+
+<section id="console" class="card" data-section="console" aria-label="Motor konsolu">
+    <div class="card-head">
+        <div><h2>Motor konsolu</h2><p>Motorun canlı log akışı.</p></div>
+        <div class="console-toolbar">
+            <button class="filter-chip active" type="button" data-level="all">Tümü</button>
+            <button class="filter-chip" type="button" data-level="warning">Uyarı+</button>
+            <button class="filter-chip" type="button" data-level="error">Hata</button>
+            <button id="clearLogsBtn" class="btn sm ghost" type="button">Temizle</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="terminalLogView" class="terminal" aria-live="polite"></div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/tools.js?v={{ asset_version }}"></script>
+{% endblock %}

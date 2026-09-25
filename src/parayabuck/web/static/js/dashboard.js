@@ -1,296 +1,567 @@
-// ParayaBuck dashboard.js — polls /api/dashboard/overview + status/account + chart.
-// Depends on PBApi, PBWebSocket, PBControls. Token never stored in localStorage/sessionStorage.
+// ParayaBuck dashboard.js — overview page: account, performance chart, plain-language
+// bot summary, positions, strategies, risk, trades and system health.
+// Read-only: every value comes from the backend; nothing is recalculated for trading.
 (function (global) {
   "use strict";
-  document.addEventListener("DOMContentLoaded", function(){
+
+  document.addEventListener("DOMContentLoaded", function () {
     if (!document.getElementById("equityValue")) return;
+    const PB = global.PB;
     const api = global.PBApi;
-    // formatting
-    const fmtPct = function(v){ return (v===undefined||v===null||!Number.isFinite(Number(v))) ? "—" : Number(v).toFixed(1)+"%"; };
-    const fmtNum = function(v, d){ d=d===undefined?2:d; return (v===undefined||v===null||!Number.isFinite(Number(v))) ? "—" : Number(v).toLocaleString("en-US",{maximumFractionDigits:d}); };
-    const fmtVol = function(v){ return (v===undefined||v===null||!Number.isFinite(Number(v))) ? "—" : (Number(v)*100).toFixed(2)+"%"; };
-    const fmtDateTime = function(iso){ if(!iso) return "—"; const d=new Date(iso); return Number.isNaN(d.getTime())? iso : d.toLocaleString("tr-TR",{hour12:false}); };
-    const fmtDate = function(iso){ if(!iso) return "—"; const d=new Date(iso); return Number.isNaN(d.getTime())? iso : d.toLocaleDateString("tr-TR"); };
-    const formatCurrency = function(v){ if(v===undefined||v===null) return "$0.00"; return (v>=0?"$":"-$")+Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); };
-    const formatPnl = function(v){ if(v===undefined||v===null) return "$0.00"; const s=v>0?"+$":(v<0?"-$":"$"); return s+Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); };
-    const setText = function(id, val){ const el=document.getElementById(id); if(el) el.textContent=val; };
-    const STRATEGY_STATUS_LABELS = { active:"Aktif", warming:"Is\u0131n\u0131yor", halted:"Durdu (g\u00fcvenlik)", scanner_issue:"Taray\u0131c\u0131 sorunu", disabled:"Devre d\u0131\u015f\u0131", stopped:"Motor durdu", starting:"Ba\u015flat\u0131l\u0131yor", stopping:"Durduruluyor", error:"Hata", stop_failed:"Durdurma hatas\u0131", unknown:"Bilinmiyor", unavailable:"Yok" };
-    const CATCH_UP_LABELS = { submitted:"Uyguland\u0131", sell_phase_submitted:"Uyguland\u0131 (SELL faz\u0131)", catch_up_superseded:"Gerek yok: karar mevcut", duplicate_decision:"Gerek yok: kopya \u00f6nlendi", already_invested:"Gerek yok: pozisyon var", warming_up:"Bekliyor: \u0131s\u0131nma", incomplete_strategy_batch:"Bekliyor: eksik parti", rebalance_in_progress:"Bekliyor: rebalance s\u00fcr\u00fcyor", rebalance_blocked:"Bekliyor: rebalance kilitli", no_eligible_bars:"Bekliyor: bar yok", not_scheduled:"Bekliyor: s\u0131radaki periyot", not_attempted:"Haz\u0131r de\u011fil" };
-    function formatCatchUp(catchUp){
-      const status=(catchUp && catchUp.status) || "not_attempted";
-      if (status.indexOf("blocked:")===0) return {label:"Engelli: "+status.slice("blocked:".length), tooltip: status};
-      const label=CATCH_UP_LABELS[status]||status||"—";
-      const tooltip=catchUp && catchUp.at ? "Son deneme: "+fmtDateTime(catchUp.at) : (catchUp && catchUp.next_boundary_after ? "S\u0131radaki s\u0131n\u0131r: "+fmtDateTime(catchUp.next_boundary_after) : status||"");
-      return {label:label, tooltip:tooltip};
-    }
-    // Engine state UI (topbar)
-    const modeChip = document.getElementById("modeChip");
-    const modeText = document.getElementById("modeText");
-    const statusDot = document.getElementById("statusDot");
-    const statusText = document.getElementById("statusText");
-    const marketStatusText = document.getElementById("marketStatusText");
-    const resetSafetyBtn = document.getElementById("resetSafetyBtn");
-    const riskEpochBtn = document.getElementById("riskEpochBtn");
-    const startBtn = document.getElementById("startBtn");
-    const stopBtn = document.getElementById("stopBtn");
-    let isPaperMode = true;
-    let accountSuffix = "";
-    function updateEngineStateUI(state, paper){
-      isPaperMode = paper;
-      if (global.PBControls && global.PBControls.setPaper) global.PBControls.setPaper(paper);
-      if (modeChip){
-        modeChip.className = "mode-chip " + (paper ? "paper" : "real");
-        if (modeText) modeText.textContent = (paper ? "Paper demo" : "Ger\u00e7ek para") + (accountSuffix ? " \u00b7 \u2026"+accountSuffix : "");
-      }
-      if (statusDot) statusDot.className = "status-dot " + state;
-      const labels = { running:"\u00c7al\u0131\u015f\u0131yor (Canl\u0131)", stopped:"Durdu", starting:"Ba\u015flat\u0131l\u0131yor...", warming_up:"Veriler haz\u0131rlan\u0131yor...", degraded:"K\u0131s\u0131tl\u0131 \u00e7al\u0131\u015f\u0131yor", halted:"G\u00fcvenlik nedeniyle durdu", stopping:"Durduruluyor...", stop_failed:"Durdurma hatas\u0131", error:"Hata" };
-      if (statusText) statusText.textContent = labels[state] || state;
-      if (resetSafetyBtn) resetSafetyBtn.hidden = state !== "halted" && state !== "degraded";
-      if (riskEpochBtn) riskEpochBtn.hidden = ["running","warming_up","degraded","halted"].indexOf(state)===-1;
-      if (["running","warming_up","degraded","halted"].indexOf(state)!==-1){ if(startBtn) startBtn.disabled=true; if(stopBtn) stopBtn.disabled=false; }
-      else if (state==="stopped"||state==="error"){ if(startBtn) startBtn.disabled=false; if(stopBtn) stopBtn.disabled=true; }
-      else if (state==="starting"||state==="stopping"){ if(startBtn) startBtn.disabled=true; if(stopBtn) stopBtn.disabled = state==="stopping"; }
-      else if (state==="stop_failed"){ if(startBtn) startBtn.disabled=true; if(stopBtn) stopBtn.disabled=true; }
-    }
-    function renderSystemStatus(statusData){
-      updateEngineStateUI(statusData.state, statusData.paper);
-      const hasRuntime = !!statusData.runtime;
-      const markets = (statusData.runtime && statusData.runtime.markets) || {};
-      const equity = markets.equity || {};
-      const crypto = markets.crypto || {};
-      const marketLabel = function(market){
-        if (!hasRuntime){ if(statusData.state==="starting") return "ba\u015flat\u0131l\u0131yor"; if(statusData.state==="error") return "hata"; if(statusData.state==="stopped") return "kapal\u0131"; return "durum bekleniyor"; }
-        if (market.entry_halt_reason) return "halt: "+market.entry_halt_reason;
-        if (market.stream_healthy===false) return "stream hatas\u0131";
-        if (market.ready===false) return "haz\u0131r de\u011fil";
-        if (Number.isFinite(market.ready_symbol_count) && Number.isFinite(market.symbol_count) && market.ready_symbol_count < market.symbol_count) return market.ready_symbol_count+"/"+market.symbol_count+" haz\u0131r";
-        return "haz\u0131r";
-      };
-      const globalHealth = hasRuntime ? statusData.runtime.state + (statusData.runtime.healthy ? "" : " (degraded)") : statusData.state;
-      const strategyStatus = statusData.strategy_status || "";
-      const strategyLabel = strategyStatus.indexOf("configured:")===0 ? "STRATEJ\u0130 "+strategyStatus.slice("configured:".length) : strategyStatus==="configuration_error" ? "STRATEJ\u0130 AYAR HATASI" : strategyStatus || "STRATEJ\u0130 DEVRE DI\u015eI";
-      const scanner = statusData.scanner || {};
-      const equityUniverse = scanner.equity_status || "static";
-      const cryptoScanner = scanner.crypto_status || "not_run";
-      const strategyMeta = statusData.strategy_metadata || {};
-      const fmtStrategy = function(meta){
-        if(!meta) return null;
-        if(meta.configuration_error) return meta.name+" (ayar hatas\u0131)";
-        const extra=[ "Sinyal "+meta.signal_timeframe, "Rebalance "+meta.rebalance_cadence, meta.dynamic_universe_enabled?"Dinamik evren":"Statik evren", "Aday "+(meta.candidate_pool_size||0), "\u0130zlenen "+(meta.observation_set_size||0)];
-        return (meta.display_name||meta.name)+" \u00b7 "+extra.join(" \u00b7 ");
-      };
-      const strategyMetaText=[ strategyMeta.equity ? "E: "+fmtStrategy(strategyMeta.equity) : null, strategyMeta.crypto ? "C: "+fmtStrategy(strategyMeta.crypto) : null ].filter(Boolean).join("  |  ");
-      if (marketStatusText) marketStatusText.textContent = "Global "+globalHealth+" | "+strategyLabel+" | Equity "+(statusData.active_equity_symbol_count||0)+" \u00b7 "+marketLabel(equity)+" | Crypto "+(statusData.active_crypto_symbol_count||0)+" \u00b7 "+marketLabel(crypto)+" | Evren E "+equityUniverse+" \u00b7 C "+cryptoScanner+(strategyMetaText ? "\n"+strategyMetaText : "")+(statusData.engine_error ? " | Hata: "+statusData.engine_error : "");
-    }
-    let statusInFlight=false;
-    async function refreshSystemStatus(){
-      if(statusInFlight) return; statusInFlight=true;
-      try { const r=await fetch("/api/status",{cache:"no-store"}); if(!r.ok) throw new Error("Durum al\u0131namad\u0131 ("+r.status+")"); renderSystemStatus(await r.json()); } catch(e){ console.error("Status refresh error:",e); } finally { statusInFlight=false; }
-    }
-    global.PBStatus = { refresh: refreshSystemStatus, render: renderSystemStatus };
+    const fmt = PB.fmt;
+    const el = PB.el;
+    const setText = PB.setText;
+    const byId = function (id) { return document.getElementById(id); };
+    const isNum = PB.isNum;
 
-    // Account + chart
-    const equityValue = document.getElementById("equityValue");
-    const cashValue = document.getElementById("cashValue");
-    const dailyPnlValue = document.getElementById("dailyPnlValue");
-    const realizedPnlValue = document.getElementById("realizedPnlValue");
-    const feesValue = document.getElementById("feesValue");
-    const unrealizedPnlValue = document.getElementById("unrealizedPnlValue");
-    const drawdownValue = document.getElementById("drawdownValue");
-    const activePositionsBadge = document.getElementById("activePositionsBadge");
-    const positionsTableBody = document.getElementById("positionsTableBody");
-    let equityHistoryScope = "paper:unknown";
-    const equityHistoryKey = function(scope){ return "parayabuck-equity-history-v2:"+scope; };
-    const loadEquityHistory = function(scope){
-      try {
-        const stored = JSON.parse(sessionStorage.getItem(equityHistoryKey(scope)) || "{}");
-        const values = Array.isArray(stored.values) ? stored.values.map(Number) : [];
-        const times = Array.isArray(stored.times) ? stored.times.map(String) : [];
-        const snaps = Array.isArray(stored.snapshots) ? stored.snapshots.map(String) : [];
-        if (values.length===times.length && values.length===snaps.length && values.every(Number.isFinite)) return {values: values.slice(-30), times: times.slice(-30), snapshots: snaps.slice(-30)};
-      } catch(_){}
-      return {values:[], times:[], snapshots:[]};
+    const view = { account: null, overview: null, status: null, period: "1M", perf: null };
+
+    // ---------- labels ----------
+    const STRATEGY_STATUS = {
+      active: "Aktif", warming: "Isınıyor", halted: "Güvenlik durdurdu", scanner_issue: "Tarayıcı sorunu",
+      disabled: "Kapalı", stopped: "Motor kapalı", starting: "Başlatılıyor", stopping: "Durduruluyor",
+      error: "Hata", stop_failed: "Durdurma hatası", unknown: "Bilinmiyor", unavailable: "Yok"
     };
-    const storedHist = loadEquityHistory(equityHistoryScope);
-    let equityHistory = storedHist.values;
-    let timeHistory = storedHist.times;
-    let snapshotHistory = storedHist.snapshots;
-    let equityChart = null;
-    try {
-      const ctx = document.getElementById("equityChart");
-      if (ctx && window.Chart) {
-        equityChart = new Chart(ctx.getContext("2d"), {
-          type:"line",
-          data:{labels: timeHistory, datasets:[{label:"Net Portf\u00f6y (Equity)", data: equityHistory, borderColor:"#6366F1", backgroundColor:"rgba(99,102,241,0.1)", borderWidth:2, fill:true, tension:0.4, pointRadius:3, pointBackgroundColor:"#38BDF8"}]},
-          options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{color:"rgba(255,255,255,0.04)"}, ticks:{color:"#94A3B8", font:{size:10}}}, y:{grid:{color:"rgba(255,255,255,0.04)"}, ticks:{color:"#94A3B8", font:{size:10}, callback:function(v){return "$"+v.toLocaleString();}}}}}
-        });
-      }
-    } catch(_){}
-    function updateAccountUI(data){
-      if(!data) return;
-      accountSuffix = data.account_suffix || accountSuffix;
-      const nextScope = (isPaperMode ? "paper" : "live") + ":" + (accountSuffix || "unknown");
-      if (nextScope !== equityHistoryScope){
-        equityHistoryScope = nextScope;
-        const stored = loadEquityHistory(equityHistoryScope);
-        equityHistory = stored.values; timeHistory = stored.times; snapshotHistory = stored.snapshots;
-        if (equityChart){ equityChart.data.labels=timeHistory; equityChart.data.datasets[0].data=equityHistory; equityChart.update(); }
-      }
-      if(equityValue) equityValue.textContent=formatCurrency(data.equity);
-      if(cashValue) cashValue.textContent=formatCurrency(data.cash);
-      if(dailyPnlValue){ dailyPnlValue.textContent=formatPnl(data.daily_pnl); dailyPnlValue.className="metric-value "+(data.daily_pnl>0?"positive":(data.daily_pnl<0?"negative":"")); }
-      if(realizedPnlValue){ realizedPnlValue.textContent=formatPnl(data.realized_pnl); realizedPnlValue.className="metric-value "+(data.realized_pnl>0?"positive":(data.realized_pnl<0?"negative":"")); }
-      if(unrealizedPnlValue){ unrealizedPnlValue.textContent=formatPnl(data.unrealized_pnl); if(feesValue) feesValue.textContent=formatPnl(-(data.fees||0)); unrealizedPnlValue.className="metric-value "+(data.unrealized_pnl>0?"positive":(data.unrealized_pnl<0?"negative":"")); }
-      if(drawdownValue) drawdownValue.textContent=formatCurrency(data.drawdown);
-      const positions=data.positions||[];
-      if(activePositionsBadge) activePositionsBadge.textContent=positions.length+" a\u00e7\u0131k";
-      if(positionsTableBody){
-        if(!positions.length){ positionsTableBody.innerHTML='<tr><td colspan="9" class="empty-state"><span class="empty-icon">—</span>Hen\u00fcz a\u00e7\u0131k pozisyon bulunmuyor</td></tr>'; }
-        else {
-          const rows=positions.map(function(p){
-            const row=document.createElement("tr");
-            const ownershipTag=p.ownership_state==="managed" ? " (M)" : p.ownership_state==="mixed" ? " (M+E)" : " (external)";
-            const qtyLabel= p.managed_qty!=null && p.external_qty!=null ? p.total_qty+" = "+p.managed_qty+"M + "+p.external_qty+"E" : String(p.qty);
-            const vals=[ p.symbol+ownershipTag, p.market||"-", p.direction||"-", qtyLabel, "$"+Number(p.avg_price).toFixed(2), formatPnl(p.unrealized_pnl), p.manual_intervention_required ? "MANUAL" : (p.protection_state||"-"), (p.stop_price ? "$"+Number(p.stop_price).toFixed(4) : "-")+" / "+(p.target_price ? "$"+Number(p.target_price).toFixed(4):"-"), (p.stop_order_state||"-")+" / "+(p.target_exit_state||"-") ];
-            vals.forEach(function(v, idx){
-              const c=document.createElement("td"); c.textContent=String(v);
-              if(idx===0) c.className="position-symbol";
-              if(idx===2) c.className= p.direction==="LONG" ? "badge-long" : "badge-short";
-              if(idx===5) c.className= p.unrealized_pnl>0 ? "positive" : (p.unrealized_pnl<0 ? "negative" : "");
-              if(idx===6 && p.manual_intervention_required) c.className="negative";
-              row.appendChild(c);
-            });
-            return row;
-          });
-          positionsTableBody.replaceChildren(...rows);
-        }
-      }
-      if(data.equity>0 && equityChart){
-        const snapId=data.snapshot_at || new Date().toISOString();
-        if (snapshotHistory[snapshotHistory.length-1]===snapId) return;
-        const snapDate=new Date(snapId);
-        const nowTime=Number.isNaN(snapDate.getTime()) ? new Date().toLocaleTimeString() : snapDate.toLocaleTimeString();
-        timeHistory.push(nowTime); equityHistory.push(data.equity); snapshotHistory.push(snapId);
-        if(timeHistory.length>30){ timeHistory.shift(); equityHistory.shift(); snapshotHistory.shift(); }
-        try { sessionStorage.setItem(equityHistoryKey(equityHistoryScope), JSON.stringify({times:timeHistory, values:equityHistory, snapshots:snapshotHistory})); } catch(_){}
-        equityChart.update();
-      }
-    }
-    global.PBAccount = { update: updateAccountUI };
+    const CATCH_UP = {
+      submitted: "Uygulandı", sell_phase_submitted: "Uygulandı (satış)", catch_up_superseded: "Gerek yok",
+      duplicate_decision: "Gerek yok", already_invested: "Zaten yatırımda", warming_up: "Isınma bekleniyor",
+      incomplete_strategy_batch: "Veri bekleniyor", rebalance_in_progress: "Dengeleme sürüyor",
+      rebalance_blocked: "Dengeleme kilitli", no_eligible_bars: "Veri yok", not_scheduled: "Sıradaki periyot",
+      not_attempted: "Henüz denenmedi"
+    };
+    const STRATEGY_DESC = {
+      equity_leveraged_trend_v1: "QQQ 200 günlük ortalamasının üzerindeyken QLD (2x Nasdaq-100) tutar; piyasa dalgalandıkça payı küçültür, trend bozulunca nakde geçer. Her işlem günü kontrol eder.",
+      crypto_low_variance_hysteresis_v1: "En sakin seyreden (oynaklığı en düşük) 2 kripto parayı seçer; sıralamada ilk 4'ten düşmedikçe tutmaya devam eder. 96 saatte bir gözden geçirir.",
+      crypto_low_variance_v2: "En düşük oynaklıklı 2 kripto parayı seçer ve 96 saatte bir yeniden dengeler.",
+      crypto_low_variance_v1: "En düşük oynaklıklı kripto paraları seçer."
+    };
+    const PERIOD_LABEL = { "1D": "son 1 gün", "1W": "son 1 hafta", "1M": "son 1 ay", "3M": "son 3 ay", "1A": "son 1 yıl", "ALL": "tüm zamanlar" };
 
-    // Dashboard overview panels
-    function renderModeBadge(mode){
-      if(!mode) return; const b=document.getElementById("modeBadge"); if(!b) return;
-      b.className="mode-badge "+(mode.badge||"paper");
-      if(mode.badge==="paper") b.textContent="PAPER"; else if(mode.badge==="live") b.textContent="LIVE"; else b.textContent="LIVE (devre d\u0131\u015f\u0131)";
-      b.title="runtime.mode="+(mode.runtime_mode||"paper")+" \u00b7 live.enabled="+(mode.live_enabled===true);
+    function cadence(value) {
+      if (!value) return "—";
+      const s = String(value);
+      let m = s.match(/^hours:(\d+)$/);
+      if (m) return Number(m[1]) === 24 ? "Günde bir" : m[1] + " saatte bir";
+      m = s.match(/^(\d+)\s*(h|hour|hours|Hour)$/);
+      if (m) return m[1] === "1" ? "Saatlik" : m[1] + " saatlik";
+      m = s.match(/^(\d+)\s*(d|day|days|Day)$/);
+      if (m) return m[1] === "1" ? "Günlük" : m[1] + " günlük";
+      m = s.match(/^(\d+)\s*(m|min|Min)$/);
+      if (m) return m[1] + " dakikalık";
+      if (/daily|session/i.test(s)) return "Her işlem günü";
+      return s;
     }
-    function renderHoldings(holdings, bodyId, isCrypto){
-      const tbody=document.getElementById(bodyId); if(!tbody) return; tbody.replaceChildren();
-      if(!holdings.length){ const r=document.createElement("tr"); const c=document.createElement("td"); c.colSpan=isCrypto?7:5; c.className="empty-state"; const ic=document.createElement("span"); ic.className="empty-icon"; ic.textContent="—"; c.append(ic, document.createTextNode("Pozisyon yok")); r.appendChild(c); tbody.appendChild(r); return; }
-      holdings.forEach(function(h){
-        const row=document.createElement("tr");
-        const reason=h.reason||h.hypothesis||"—";
-        const vals=isCrypto ? [h.symbol, fmtNum(h.qty,4), fmtVol(h.realized_vol_22d), h.rank ? "#"+h.rank+"/"+(h.of_qualified||"?") : "—", fmtPct(h.target_weight_pct), fmtPct(h.current_weight_pct), reason] : [h.symbol, fmtNum(h.qty,4), fmtPct(h.target_weight_pct), fmtPct(h.current_weight_pct), reason];
-        vals.forEach(function(v){ const td=document.createElement("td"); td.textContent=String(v); row.appendChild(td); }); tbody.appendChild(row);
-      });
+    function symbolBase(symbol) { return String(symbol || "").split("/")[0].slice(0, 4); }
+    function sideBadge(side) {
+      const s = String(side || "").toLowerCase();
+      if (s === "buy") return el("span", { className: "badge ok", text: "Alış" });
+      if (s === "sell") return el("span", { className: "badge bad", text: "Satış" });
+      return el("span", { className: "badge", text: side || "—" });
     }
-    function renderStrategyCard(card, ids, isCrypto){
-      if(!card||card.unavailable){ setText(ids.name,"Panel yok"); return; }
-      setText(ids.name, (card.strategy && card.strategy.display_name) || card.name || "—");
-      const badge=document.getElementById(ids.badge);
-      if(badge){ badge.className="strategy-chip "+(card.status||"unknown"); badge.textContent=STRATEGY_STATUS_LABELS[card.status]||card.status||"—"; }
-      setText(ids.signal, (card.strategy && card.strategy.signal_timeframe)||"—");
-      setText(ids.rebalance, (card.strategy && card.strategy.rebalance_cadence)||"—");
-      if(ids.lookback) setText(ids.lookback,"22 g\u00fcn");
-      setText(ids.pool, card.eligible_pool===undefined||card.eligible_pool===null?"—":String(card.eligible_pool));
-      setText(ids.obs, card.observation_set_size===undefined||card.observation_set_size===null?"—":String(card.observation_set_size));
-      setText(ids.positions, String(card.positions_count||0));
-      setText(ids.allocation, fmtPct(card.current_allocation_pct)+" / "+fmtPct(card.maximum_allocation_pct));
-      setText(ids.nextRebalance, fmtDateTime(card.next_rebalance_at));
-      const cu=formatCatchUp(card.startup_catch_up); setText(ids.catchUp, cu.label); const el=document.getElementById(ids.catchUp); if(el) el.title=cu.tooltip;
-      renderHoldings(card.holdings||[], ids.body, isCrypto);
+    function cell(content, className) {
+      const td = el("td", className ? { className: className } : null);
+      if (content instanceof Node) td.appendChild(content); else td.textContent = content === undefined || content === null ? "—" : String(content);
+      return td;
     }
-    function renderRisk(risk){
-      if(!risk||risk.unavailable) return;
-      setText("riskGross", fmtPct(risk.gross_exposure_pct)+" / "+fmtPct(risk.gross_exposure_limit_pct));
-      setText("riskCash", fmtPct(risk.cash_pct)+" / "+fmtPct(risk.cash_buffer_limit_pct));
-      setText("riskEquity", fmtPct(risk.equity_exposure_pct));
-      setText("riskCrypto", fmtPct(risk.crypto_exposure_pct)+" / "+fmtPct(risk.crypto_exposure_limit_pct));
-      setText("riskDrawdown", formatCurrency(risk.drawdown)+" / "+fmtPct(risk.max_drawdown_pct));
-      setText("riskDailyLoss", formatPnl(risk.daily_pnl)+" / "+fmtPct(risk.daily_loss_limit_pct));
-      const latch=risk.entry_risk_latch||{}; const reasons=Object.entries(latch).filter(function(e){return e[1];}).map(function(e){return e[0]+": "+e[1];}).join(", "); setText("riskEntryLatch", reasons||"a\u00e7\u0131k");
-      const epoch=risk.risk_epoch; setText("riskEpoch", epoch ? fmtDate(epoch.session_date)+" \u00b7 taban $"+fmtNum(epoch.day_start_equity) : "—");
-      const cap=risk.buy_capacity||{}; const capReady=!cap.unavailable;
-      setText("riskSlots",capReady ? cap.positions_count+" / "+cap.effective_slots+" / "+cap.maximum_positions : "—");
-      setText("riskCryptoSlots",capReady&&cap.effective_crypto_slot_claims!==undefined ? cap.crypto_position_count+" / "+cap.effective_crypto_slot_claims+" / "+cap.crypto_slot_cap : "—");
-      setText("riskWorking",capReady ? String(cap.broker_working_order_count) : "—");
-      setText("riskGrossHeadroom",capReady ? formatCurrency(cap.available_gross_buy_headroom) : "—");
-      setText("riskCommittedBuy",capReady&&cap.committed_buy_notional!==null ? formatCurrency(cap.committed_buy_notional) : "bilinmiyor");
-      setText("riskCashHeadroom",capReady ? formatCurrency(cap.available_cash_buy_headroom) : "—");
-      const capReasons=Object.entries(cap.suppression_reasons||{}).concat(Object.entries(cap.halt_reasons||{})).map(function(e){return e[0]+": "+e[1];}).join(", ");
-      setText("riskAdmission",capReady ? (cap.reconciliation_status||"—")+(capReasons ? " \u00b7 "+capReasons : "") : "—");
-      const badge=document.getElementById("riskCircuitBadge"); if(badge){ badge.textContent=risk.circuit_breaker ? ("KES\u0130C\u0130: "+risk.circuit_breaker) : "risk haz\u0131r"; badge.className="count-badge"+(risk.circuit_breaker?" risk-critical":""); }
-      const box=document.getElementById("riskIncidents"); if(!box) return; box.replaceChildren(); const incidents=risk.safety_incidents||[]; if(!incidents.length){ const ok=document.createElement("div"); ok.className="risk-incident ok"; ok.textContent="Aktif g\u00fcvenlik olay\u0131 yok"; box.appendChild(ok); return; } incidents.forEach(function(i){ const d=document.createElement("div"); d.className="risk-incident"; d.textContent=i.reason+" ("+fmtDateTime(i.activated_at)+")"; box.appendChild(d); });
-    }
-    function renderHealth(health){
-      if(!health||health.unavailable) return;
-      const badge=document.getElementById("healthBadge");
-      if(badge){ badge.textContent=health.healthy===true ? "sa\u011fl\u0131kl\u0131" : (health.healthy===false ? "degrade" : (health.engine_state||"—")); badge.className="count-badge"+(health.healthy===false?" risk-critical":""); }
-      const queue=health.queue||{}; setText("healthQueue", "boyut "+(queue.size||0)+" \u00b7 ya\u015f "+(queue.age_seconds===undefined||queue.age_seconds===null?"—":Math.round(queue.age_seconds)+"s"));
-      const markets=health.markets||{}; const eq=markets.equity||{}; const cr=markets.crypto||{}; const dataOk=(eq.stream_healthy!==false && cr.stream_healthy!==false); setText("healthData", dataOk ? "g\u00fcncel" : "gecikme/gap var");
-      const fresh=health.account_freshness||{}; setText("healthAccount", (fresh.source||"—")+(fresh.age_seconds===undefined||fresh.age_seconds===null?"":" \u00b7 "+Math.round(fresh.age_seconds)+"s")+(fresh.maximum_age_for_entry_seconds?" (limit "+fresh.maximum_age_for_entry_seconds+"s)":""));
-      setText("healthHeartbeat", fmtDateTime(health.last_heartbeat));
-      setText("healthRestarts", String(health.restart_count||0));
-      const db=health.database||{}; setText("healthDatabase", (db.exists?"a\u00e7\u0131k":"yok")+(db.size_bytes?" \u00b7 "+fmtNum(db.size_bytes/1024,0)+" KB":""));
-      const scanner=health.scanner||{}; const scStatus=Object.entries(scanner.status||{}).map(function(e){return e[0]+": "+e[1];}).join(", "); setText("healthScanner", scStatus||"—");
-      const rec=health.reconciliation||{}; setText("healthReconciliation", rec.failed?"HATA":(rec.last_at?fmtDateTime(rec.last_at):"—"));
-      const workers=health.workers||{}; const tbody=document.getElementById("workersBody"); if(tbody){ tbody.replaceChildren(); const names=Object.keys(workers); if(!names.length){ const r=document.createElement("tr"); const c=document.createElement("td"); c.colSpan=5; c.className="empty-state"; const ic=document.createElement("span"); ic.className="empty-icon"; ic.textContent="—"; c.append(ic, document.createTextNode("Çal\u0131\u015fan bilgisi yok")); r.appendChild(c); tbody.appendChild(r); } else { names.sort().forEach(function(n){ const w=workers[n]||{}; const r=document.createElement("tr"); [n, w.alive?"canl\u0131":"durdu", fmtDateTime(w.last_heartbeat), String(w.restart_count||0), w.last_error||"—"].forEach(function(v){ const td=document.createElement("td"); td.textContent=String(v); r.appendChild(td); }); tbody.appendChild(r); }); }}
-    }
-    function renderExecution(execution){
-      if(!execution||execution.unavailable) return;
-      const badge=document.getElementById("executionBadge"); if(badge) badge.textContent=(execution.open_orders||[]).length+" a\u00e7\u0131k \u00b7 "+(execution.recent_fills||[]).length+" dolum";
-      const oBody=document.getElementById("openOrdersBody");
-      if(oBody){ oBody.replaceChildren(); const orders=execution.open_orders||[]; if(!orders.length){ const r=document.createElement("tr"); const c=document.createElement("td"); c.colSpan=6; c.className="empty-state"; const ic=document.createElement("span"); ic.className="empty-icon"; ic.textContent="—"; c.append(ic, document.createTextNode("A\u00e7\u0131k emir yok")); r.appendChild(c); oBody.appendChild(r);} else { orders.forEach(function(o){ const r=document.createElement("tr"); const lin=o.lineage||{}; [o.symbol, o.side||"—", fmtNum(o.quantity,4), o.reference_price===undefined||o.reference_price===null?"—":"$"+fmtNum(o.reference_price,4), o.status||"—", lin.strategy ? lin.strategy+" \u00b7 "+fmtDate(lin.decision_timestamp) : "—"].forEach(function(v){ const td=document.createElement("td"); td.textContent=String(v); r.appendChild(td); }); oBody.appendChild(r); }); }}
-      const fBody=document.getElementById("recentFillsBody");
-      if(fBody){ fBody.replaceChildren(); const fills=execution.recent_fills||[]; if(!fills.length){ const r=document.createElement("tr"); const c=document.createElement("td"); c.colSpan=7; c.className="empty-state"; const ic=document.createElement("span"); ic.className="empty-icon"; ic.textContent="—"; c.append(ic, document.createTextNode("Dolum yok")); r.appendChild(c); fBody.appendChild(r);} else { fills.forEach(function(f){ const r=document.createElement("tr"); const slip=f.slippage_bps; [f.symbol, f.side||"—", fmtNum(f.quantity,4), "$"+fmtNum(f.price,4), slip===undefined||slip===null?"—":fmtNum(slip,2)+" bps", "$"+fmtNum(f.fee,4), fmtDateTime(f.occurred_at)].forEach(function(v){ const td=document.createElement("td"); td.textContent=String(v); r.appendChild(td); }); fBody.appendChild(r); }); }}
-    }
-    function renderUniverse(universe){
-      if(!universe||universe.unavailable) return;
-      function renderSymbols(boxId, syms){
-        const box=document.getElementById(boxId);
-        if(!box) return;
-        box.replaceChildren();
-        syms.slice(0,120).forEach(function(s){ const ch=document.createElement("span"); ch.textContent=s; box.appendChild(ch); });
-        if(syms.length>120){ const more=document.createElement("span"); more.textContent="+"+(syms.length-120)+" daha…"; box.appendChild(more); }
+    function toneClass(base, v) { const t = fmt.tone(v); return base + (t ? " " + t : ""); }
+
+    // ---------- account / hero ----------
+    function renderAccount(acct) {
+      if (!acct) return;
+      view.account = Object.assign({}, view.account || {}, acct);
+      const a = view.account;
+      PB.setAccountSuffix(a.account_suffix);
+      setText("equityValue", fmt.money(a.equity));
+      const base = isNum(a.equity) && isNum(a.daily_pnl) ? Number(a.equity) - Number(a.daily_pnl) : null;
+      const dailyPct = base && base > 0 ? (Number(a.daily_pnl) / base) * 100 : null;
+      setText("dailyPnlValue", fmt.signedMoney(a.daily_pnl) + (dailyPct !== null ? " (" + fmt.signedPct(dailyPct, 2) + ")" : ""), toneClass("delta", a.daily_pnl));
+      setText("cashValue", fmt.money(a.cash));
+      if (isNum(a.cash) && isNum(a.equity) && Number(a.equity) > 0) setText("cashSub", "portföyün " + fmt.pct((a.cash / a.equity) * 100));
+      const total = isNum(a.total_pnl) ? a.total_pnl : (isNum(a.realized_pnl) || isNum(a.unrealized_pnl) ? Number(a.realized_pnl || 0) + Number(a.unrealized_pnl || 0) : null);
+      setText("totalPnlValue", fmt.signedMoney(total), toneClass("kpi-value", total));
+      setText("realizedPnlValue", fmt.signedMoney(a.realized_pnl), toneClass("kpi-value", a.realized_pnl));
+      setText("unrealizedPnlValue", fmt.signedMoney(a.unrealized_pnl), toneClass("kpi-value", a.unrealized_pnl));
+      setText("drawdownValue", fmt.money(a.drawdown), "kpi-value" + (Number(a.drawdown) > 0 ? " neg" : ""));
+      if (isNum(a.drawdown) && isNum(a.equity) && Number(a.equity) + Number(a.drawdown) > 0) {
+        setText("drawdownSub", fmt.pct((a.drawdown / (Number(a.equity) + Number(a.drawdown))) * 100) + " — en yüksek bakiyeye göre");
       }
-      // Equity: static configured symbols, nothing is discovered or refreshed.
-      if(universe.equity){ setText("eqCount", fmtNum(universe.equity.observation_set_size,0)); setText("eqStatus", universe.equity.scanner_status||"—"); renderSymbols("eqSymbols", universe.equity.observation_set||[]); }
-      const crypto=universe.crypto;
-      if(crypto){ setText("crEligible", fmtNum(crypto.eligible_pool_size,0)); setText("crObserved", fmtNum(crypto.observation_set_size,0)); setText("crLastScan", fmtDateTime(crypto.last_refresh_at)); setText("crScanner", crypto.scanner_status||"—"); setText("crNextScan", fmtDateTime(crypto.next_refresh_at)); renderSymbols("crSymbols", crypto.observation_set||[]); }
+      setText("grossExposureValue", fmt.money(a.gross_exposure));
+      if (isNum(a.fees)) setText("feesValue", fmt.money(a.fees));
+
+      const fresh = byId("accountFreshness");
+      if (fresh) {
+        const stale = a.stale === true;
+        fresh.className = "freshness" + (stale ? " stale" : "");
+        const label = a.source === "unavailable" ? "hesap verisi yok"
+          : stale ? "eski veri · " + fmt.duration(a.age_seconds) + " önce"
+          : "canlı · " + fmt.time(a.snapshot_at);
+        fresh.replaceChildren(el("span", { className: "dot" + (stale ? "" : " running") }), el("span", { text: label }));
+      }
+      setText("grossExposureSub", a.stale ? "eski veri (" + (a.source || "?") + ")" : "brüt maruziyet");
+      if (Array.isArray(a.positions)) renderPositions(a.positions, a.equity);
     }
-    function renderDashboard(data){
-      if(!data) return;
-      renderModeBadge(data.mode);
-      setText("grossExposureValue", formatCurrency(data.account && data.account.gross_exposure));
-      const stale=data.account && data.account.stale; setText("grossExposureSub", stale ? "eski veri ("+(data.account.source||"")+")" : "Toplam pozisyon b\u00fcy\u00fckl\u00fc\u011f\u00fc");
-      const total=data.account && data.account.total_pnl; setText("totalPnlValue", formatPnl(total)); const el=document.getElementById("totalPnlValue"); if(el) el.className="metric-value "+(total>0?"positive":(total<0?"negative":""));
-      renderStrategyCard(data.equity, {name:"equityStrategyName", badge:"equityStatusBadge", signal:"equitySignal", rebalance:"equityRebalance", pool:"equityPool", obs:"equityObs", positions:"equityPositions", allocation:"equityAllocation", nextRebalance:"equityNextRebalance", catchUp:"equityStartupCatchUp", body:"equityHoldingsBody"}, false);
-      renderStrategyCard(data.crypto, {name:"cryptoStrategyName", badge:"cryptoStatusBadge", signal:"cryptoSignal", rebalance:"cryptoRebalance", lookback:"cryptoLookback", pool:"cryptoPool", obs:"cryptoObs", positions:"cryptoPositions", allocation:"cryptoAllocation", nextRebalance:"cryptoNextRebalance", catchUp:"cryptoStartupCatchUp", body:"cryptoHoldingsBody"}, true);
-      renderRisk(data.risk); renderHealth(data.health); renderExecution(data.execution); renderUniverse(data.universe);
+
+    function renderPositions(positions, equity) {
+      const tbody = byId("positionsTableBody");
+      setText("activePositionsBadge", positions.length + " pozisyon");
+      if (!positions.length) { PB.emptyRow(tbody, 8, "Henüz açık pozisyon yok"); return; }
+      const eq = Number(equity) || 0;
+      const rows = positions.slice().sort(function (a, b) { return Number(b.market_value || 0) - Number(a.market_value || 0); }).map(function (p) {
+        const crypto = p.market === "crypto";
+        const owner = p.ownership_state === "managed" ? "Bot" : p.ownership_state === "mixed" ? "Bot + harici" : "Harici";
+        const sym = el("span", { className: "sym" }, [
+          el("span", { className: "sym-logo" + (crypto ? " crypto" : ""), text: symbolBase(p.symbol) }),
+          el("span", null, [p.symbol, el("small", { text: (crypto ? "Kripto" : "Hisse/ETF") + " · " + owner + (p.direction === "SHORT" ? " · açığa satış" : "") })])
+        ]);
+        const qty = p.managed_qty != null && p.external_qty != null && Number(p.external_qty) > 0
+          ? fmt.num(p.total_qty, 6) + " (" + fmt.num(p.managed_qty, 6) + " bot)"
+          : fmt.num(p.qty, 6);
+        const cost = Number(p.avg_price) * Number(p.qty);
+        const pnlPct = cost > 0 && isNum(p.unrealized_pnl) ? (Number(p.unrealized_pnl) / cost) * 100 : null;
+        const pnl = el("span", { className: fmt.tone(p.unrealized_pnl), text: fmt.signedMoney(p.unrealized_pnl) + (pnlPct !== null ? " · " + fmt.signedPct(pnlPct, 2) : "") });
+        const share = eq > 0 && isNum(p.market_value) ? (Number(p.market_value) / eq) * 100 : null;
+        const bar = el("span", { className: "bar" }, [el("span")]);
+        bar.firstChild.style.width = Math.min(100, Math.max(0, share || 0)) + "%";
+        const shareCell = el("div", { className: "weight-cell" }, [el("span", { text: fmt.pct(share) }), bar]);
+        let protection;
+        if (p.manual_intervention_required) protection = el("span", { className: "badge bad", text: "Elle müdahale gerekli" });
+        else if (p.protection_state) protection = el("span", { className: "badge", text: p.protection_state });
+        else protection = el("span", { className: "muted", text: "—" });
+        if (p.stop_price || p.target_price) protection.title = "Stop " + fmt.price(p.stop_price) + " · Hedef " + fmt.price(p.target_price);
+        return el("tr", null, [
+          cell(sym), cell(qty, "r"), cell(fmt.price(p.avg_price), "r"), cell(fmt.price(p.current_price), "r"),
+          cell(fmt.money(p.market_value), "r"), cell(pnl, "r"), cell(shareCell, "r"), cell(protection)
+        ]);
+      });
+      tbody.replaceChildren.apply(tbody, rows);
     }
-    let dashInFlight=false;
-    async function refreshDashboard(){
-      if(dashInFlight) return; dashInFlight=true;
-      try { const r=await fetch("/api/dashboard/overview",{cache:"no-store"}); if(!r.ok) throw new Error("Panel verisi al\u0131namad\u0131 ("+r.status+")"); renderDashboard(await r.json()); } catch(e){ console.error("Dashboard refresh error:",e);} finally { dashInFlight=false; }
+
+    // ---------- performance chart ----------
+    const chartBox = byId("perfChart");
+    let chart = null;
+    function toReturns(series) {
+      const pts = (series || []).map(function (p) { return { t: new Date(p.t).getTime(), raw: Number(p.v) }; })
+        .filter(function (p) { return Number.isFinite(p.t) && Number.isFinite(p.raw) && p.raw > 0; })
+        .sort(function (a, b) { return a.t - b.t; });
+      if (!pts.length) return [];
+      const base = pts[0].raw;
+      return pts.map(function (p) { return { t: p.t, raw: p.raw, v: (p.raw / base - 1) * 100 }; });
     }
-    // init
-    refreshSystemStatus();
-    window.setInterval(refreshSystemStatus, 2000);
-    if (global.PBWebSocket) global.PBWebSocket.connectStream(function(payload){ if(payload.account) updateAccountUI(payload.account); if(payload.status) updateEngineStateUI(payload.status.state, payload.status.paper); });
-    fetch("/api/account",{cache:"no-store"}).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){ if(d) updateAccountUI(d); }).catch(function(){});
-    refreshDashboard();
-    window.setInterval(refreshDashboard, 5000);
-    global.PBDashboard = { refresh: refreshDashboard, render: renderDashboard };
+    function renderPerformance(data) {
+      view.perf = data;
+      const main = toReturns(data.equity);
+      const bench = toReturns(data.benchmark);
+      const last = main.length ? main[main.length - 1].v : null;
+      const benchLast = bench.length ? bench[bench.length - 1].v : null;
+      setText("periodReturn", fmt.signedPct(last, 2), toneClass("delta", last));
+      setText("periodLabel", PERIOD_LABEL[view.period] || "");
+      setText("legendPortfolio", fmt.signedPct(last, 2));
+      setText("legendBench", fmt.signedPct(benchLast, 2));
+
+      let note = "";
+      if (!data.available) note = "";
+      else if (data.benchmark_error) note = "VOO karşılaştırma verisi alınamadı.";
+      else if (last !== null && benchLast !== null) {
+        const diff = last - benchLast;
+        note = Math.abs(diff) < 0.05 ? "Bu dönemde portföy VOO ile başa baş."
+          : "Bu dönemde portföy VOO'dan " + fmt.pct(Math.abs(diff), 2).replace("%", "") + " puan " + (diff > 0 ? "daha iyi." : "geride.");
+      }
+      setText("perfNote", note);
+
+      const options = {
+        series: [{ cls: "main", area: true, points: main }, { cls: "bench", points: bench }],
+        includeZero: true,
+        areaBase: 0,
+        emptyText: data.available ? "Bu dönem için yeterli hesap geçmişi yok." : (data.reason || "Hesap geçmişi alınamadı."),
+        yFormat: function (v) { return (v > 0 ? "+" : "") + v.toLocaleString("tr-TR", { maximumFractionDigits: Math.abs(v) < 10 ? 1 : 0 }) + "%"; },
+        xFormat: function (t, span) {
+          const d = new Date(t);
+          return span < 2 * 86400000
+            ? d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", hour12: false })
+            : d.toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
+        },
+        tip: function (t, hits) {
+          const span = main.length > 1 ? main[main.length - 1].t - main[0].t : 0;
+          const d = new Date(t);
+          const date = span < 2 * 86400000
+            ? d.toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })
+            : d.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+          const nodes = [el("div", { className: "tip-date", text: date })];
+          hits.forEach(function (h) {
+            const label = h.cls === "main" ? "Portföy" : "VOO";
+            const value = h.cls === "main" ? fmt.money(h.point.raw) + " · " + fmt.signedPct(h.point.v, 2) : fmt.signedPct(h.point.v, 2);
+            nodes.push(el("div", { className: "tip-row" }, [el("span", null, [el("i", { className: h.cls === "main" ? "" : "bench" }), label]), el("b", { text: value })]));
+          });
+          return nodes;
+        }
+      };
+      if (!chart) chart = global.PBChart.line(chartBox, options); else chart.update(options);
+    }
+    let perfSeq = 0;
+    async function loadPerformance() {
+      const seq = ++perfSeq;
+      const period = view.period;
+      try {
+        const data = await api.fetchJson("/api/performance?period=" + encodeURIComponent(period));
+        if (seq === perfSeq) renderPerformance(data);
+      } catch (err) {
+        if (seq === perfSeq) renderPerformance({ available: false, reason: "Grafik verisi alınamadı: " + err.message, equity: [], benchmark: [] });
+      }
+    }
+    document.querySelectorAll("#periodSwitch button").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll("#periodSwitch button").forEach(function (b) { b.classList.toggle("active", b === btn); });
+        view.period = btn.dataset.period;
+        loadPerformance();
+      });
+    });
+
+    // ---------- story + allocation ----------
+    function storyItem(tone, iconName, strong, rest) {
+      return el("li", null, [
+        el("span", { className: "story-icon " + tone }, [PB.icon(iconName)]),
+        el("span", null, [strong ? el("strong", { text: strong }) : null, rest ? " " + rest : null])
+      ]);
+    }
+    function holdingsSentence(card) {
+      const holdings = (card && card.holdings) || [];
+      const names = holdings.map(function (h) { return h.symbol; });
+      if (!names.length) return null;
+      return names.slice(0, 3).join(", ") + (names.length > 3 ? " +" + (names.length - 3) : "");
+    }
+    function renderStory() {
+      const list = byId("storyList");
+      if (!list) return;
+      const items = [];
+      const status = view.status;
+      const ov = view.overview || {};
+      const state = status ? status.state : null;
+      const breaker = status && status.runtime && status.runtime.circuit_breaker_reason;
+      if (!state) items.push(storyItem("", "clock", "Durum yükleniyor…"));
+      else if (breaker || state === "halted") items.push(storyItem("bad", "lock", "Güvenlik kilidi devrede.", "Bot yeni alım yapmıyor" + (breaker ? " (" + breaker + ")" : "") + "."));
+      else if (state === "running") items.push(storyItem("ok", "activity", "Bot çalışıyor", "ve piyasayı izliyor."));
+      else if (state === "warming_up" || state === "starting") items.push(storyItem("warn", "clock", "Bot hazırlanıyor.", "Geçmiş verileri yüklüyor; birazdan karar vermeye başlayacak."));
+      else if (state === "degraded") items.push(storyItem("warn", "alert", "Bot kısıtlı çalışıyor.", "Bazı veriler gecikiyor; yeni alımlar durabilir."));
+      else if (state === "stopped") items.push(storyItem("", "pause", "Bot kapalı.", "İşlem yapmıyor — üstteki “Başlat” ile çalıştırabilirsiniz."));
+      else items.push(storyItem("bad", "alert", "Motor sorunlu:", (status.engine_error || state) + "."));
+
+      [["equity", "trend", "Hisse"], ["crypto", "coins", "Kripto"]].forEach(function (spec) {
+        const card = ov[spec[0]];
+        if (!card || card.unavailable) return;
+        if (card.enabled === false) { items.push(storyItem("", spec[1], spec[2] + " stratejisi kapalı.")); return; }
+        const names = holdingsSentence(card);
+        const next = card.next_rebalance_at ? " Sıradaki kontrol " + fmt.relative(card.next_rebalance_at) + "." : "";
+        if (names) items.push(storyItem("info", spec[1], spec[2] + ": " + names, "tutuluyor — portföyün " + fmt.pct(card.current_allocation_pct) + "'i." + next));
+        else items.push(storyItem("", spec[1], spec[2] + ": pozisyon yok,", "bu kısım nakitte bekliyor." + next));
+      });
+
+      const risk = ov.risk;
+      if (risk && !risk.unavailable && !risk.circuit_breaker && view.account) {
+        const dd = ddPct(view.account);
+        items.push(storyItem("ok", "shield", "Risk limitleri içinde.", "Zirveden düşüş " + fmt.pct(dd) + " (sınır " + fmt.pct(risk.max_drawdown_pct, 0) + ")."));
+      }
+      list.replaceChildren.apply(list, items);
+    }
+    function ddPct(a) {
+      const eq = Number(a && a.equity) || 0;
+      const dd = Number(a && a.drawdown) || 0;
+      return eq + dd > 0 ? (dd / (eq + dd)) * 100 : 0;
+    }
+    function renderAllocation(risk) {
+      if (!risk || risk.unavailable) return;
+      const eq = Math.max(0, Number(risk.equity_exposure_pct) || 0);
+      const cr = Math.max(0, Number(risk.crypto_exposure_pct) || 0);
+      const cash = Math.max(0, 100 - eq - cr);
+      const C = 2 * Math.PI * 50;
+      let offset = 0;
+      [["donutEquity", eq], ["donutCrypto", cr], ["donutCash", cash]].forEach(function (pair) {
+        const circle = byId(pair[0]);
+        if (!circle) return;
+        const len = Math.max(0, Math.min(100, pair[1])) / 100 * C;
+        circle.setAttribute("stroke-dasharray", len.toFixed(2) + " " + C.toFixed(2));
+        circle.setAttribute("stroke-dashoffset", (-offset).toFixed(2));
+        offset += len;
+      });
+      setText("donutInvested", fmt.pct(eq + cr, 0));
+      setText("allocEquity", fmt.pct(eq));
+      setText("allocCrypto", fmt.pct(cr));
+      setText("allocCash", fmt.pct(cash));
+    }
+
+    // ---------- strategies ----------
+    function renderStrategy(prefix, card, isCrypto) {
+      if (!card || card.unavailable) { setText(prefix + "StrategyDesc", "Strateji bilgisi alınamadı."); return; }
+      const strategy = card.strategy || {};
+      setText(prefix + "StrategyName", strategy.display_name || card.name || "—");
+      setText(prefix + "StrategyDesc", STRATEGY_DESC[card.name] || strategy.name || card.name || "—");
+      setText(prefix + "StatusBadge", STRATEGY_STATUS[card.status] || card.status || "—", PB.badgeClass(card.status === "disabled" ? "" : card.status));
+      setText(prefix + "Signal", cadence(strategy.signal_timeframe));
+      setText(prefix + "Rebalance", cadence(strategy.rebalance_cadence));
+      if (isCrypto) setText(prefix + "Obs", (isNum(card.eligible_pool) ? card.eligible_pool : "—") + " / " + (isNum(card.observation_set_size) ? card.observation_set_size : "—"));
+      else setText(prefix + "Obs", isNum(card.observation_set_size) ? String(card.observation_set_size) : "—");
+      setText(prefix + "Positions", String(card.positions_count || 0));
+      setText(prefix + "Allocation", fmt.pct(card.current_allocation_pct) + " / en fazla " + fmt.pct(card.maximum_allocation_pct, 0));
+      const bar = byId(prefix + "AllocBar");
+      if (bar) {
+        const max = Number(card.maximum_allocation_pct) || 0;
+        bar.style.width = (max > 0 ? Math.min(100, (Number(card.current_allocation_pct) || 0) / max * 100) : 0) + "%";
+      }
+      const next = byId(prefix + "NextRebalance");
+      if (next) { next.textContent = card.next_rebalance_at ? fmt.relative(card.next_rebalance_at) : "—"; next.title = fmt.dateTime(card.next_rebalance_at); }
+      const cu = card.startup_catch_up || {};
+      const status = cu.status || "not_attempted";
+      const cuEl = byId(prefix + "StartupCatchUp");
+      if (cuEl) {
+        cuEl.textContent = status.indexOf("blocked:") === 0 ? "Engelli: " + status.slice(8) : (CATCH_UP[status] || status);
+        cuEl.title = cu.at ? "Son deneme: " + fmt.dateTime(cu.at) : cu.next_boundary_after ? "Sıradaki sınır: " + fmt.dateTime(cu.next_boundary_after) : status;
+      }
+      const tbody = byId(prefix + "HoldingsBody");
+      const holdings = card.holdings || [];
+      if (!holdings.length) { PB.emptyRow(tbody, isCrypto ? 6 : 5, "Pozisyon yok"); return; }
+      tbody.replaceChildren.apply(tbody, holdings.map(function (h) {
+        const sym = el("span", { className: "sym" }, [el("span", { className: "sym-logo" + (isCrypto ? " crypto" : ""), text: symbolBase(h.symbol) }), h.symbol]);
+        if (isCrypto) {
+          return el("tr", null, [
+            cell(sym), cell(fmt.num(h.qty, 6), "r"),
+            cell(isNum(h.realized_vol_22d) ? fmt.pct(Number(h.realized_vol_22d) * 100, 2) : "—", "r"),
+            cell(h.rank ? "#" + h.rank + " / " + (h.of_qualified || "?") : "—", "r"),
+            cell(fmt.pct(h.target_weight_pct), "r"), cell(fmt.pct(h.current_weight_pct), "r")
+          ]);
+        }
+        return el("tr", null, [
+          cell(sym), cell(fmt.num(h.qty, 4), "r"), cell(fmt.pct(h.target_weight_pct), "r"),
+          cell(fmt.pct(h.current_weight_pct), "r"), cell(h.reason || h.hypothesis || "—", "wrap")
+        ]);
+      }));
+    }
+
+    // ---------- risk ----------
+    function meter(label, value, limit, opts) {
+      opts = opts || {};
+      const wrap = el("div");
+      const valueText = fmt.pct(value, opts.digits === undefined ? 1 : opts.digits);
+      wrap.appendChild(el("div", { className: "meter-top" }, [
+        el("span", { text: label }),
+        el("b", null, [valueText, el("small", { text: isNum(limit) ? (opts.minimum ? "  · en az " : "  · sınır ") + fmt.pct(limit, 0) : "" })])
+      ]));
+      const bar = el("div", { className: "meter" });
+      const fill = el("span");
+      const scale = opts.minimum ? 100 : Math.max(Number(limit) * 1.25 || 100, Number(value) || 0, 1);
+      fill.style.width = Math.max(0, Math.min(100, (Number(value) || 0) / scale * 100)) + "%";
+      let tone = "";
+      if (isNum(limit) && Number(limit) > 0) {
+        const ratio = (Number(value) || 0) / Number(limit);
+        if (opts.minimum) tone = ratio >= 1 ? "" : ratio >= 0.7 ? "warn" : "bad";
+        else tone = ratio >= 1 ? "bad" : ratio >= 0.7 ? "warn" : "";
+        const mark = el("i");
+        mark.style.left = Math.min(100, Number(limit) / scale * 100) + "%";
+        bar.appendChild(mark);
+      }
+      fill.className = tone;
+      bar.insertBefore(fill, bar.firstChild);
+      wrap.appendChild(bar);
+      if (opts.note) wrap.appendChild(el("div", { className: "meter-note", text: opts.note }));
+      return wrap;
+    }
+    function renderRisk(risk) {
+      if (!risk || risk.unavailable) return;
+      const a = view.account || {};
+      const eq = Number(a.equity) || 0;
+      const daily = Number(a.daily_pnl !== undefined ? a.daily_pnl : risk.daily_pnl) || 0;
+      const lossPct = eq - daily > 0 ? Math.max(0, -daily) / (eq - daily) * 100 : 0;
+      const box = byId("riskMeters");
+      if (box) {
+        box.replaceChildren(
+          meter("Zirveden düşüş", ddPct(a), risk.max_drawdown_pct, { note: "Bu sınır aşılırsa bot tüm yeni alımları durdurur." }),
+          meter("Bugünkü kayıp", lossPct, risk.daily_loss_limit_pct, { digits: 2, note: "Günlük kayıp sınırı aşılırsa o gün yeni alım yapılmaz." }),
+          meter("Yatırımdaki pay (brüt)", risk.gross_exposure_pct, risk.gross_exposure_limit_pct),
+          meter("Kripto payı", risk.crypto_exposure_pct, risk.crypto_exposure_limit_pct, { digits: 2 }),
+          meter("Nakit tamponu", risk.cash_pct, risk.cash_buffer_limit_pct, { minimum: true })
+        );
+      }
+      setText("riskCircuitBadge", risk.circuit_breaker ? "Kesici: " + risk.circuit_breaker : "Limitler içinde", risk.circuit_breaker ? "badge bad" : "badge ok");
+      const latch = Object.entries(risk.entry_risk_latch || {}).filter(function (e) { return e[1]; }).map(function (e) { return e[0] + ": " + e[1]; }).join(", ");
+      setText("riskEntryLatch", latch || "Yok — alım serbest", latch ? "neg" : "pos");
+      const epoch = risk.risk_epoch;
+      setText("riskEpoch", epoch ? fmt.date(epoch.session_date) + " · taban " + fmt.money(epoch.day_start_equity) : "—");
+      const cap = risk.buy_capacity || {};
+      const ready = !cap.unavailable;
+      const reasons = Object.entries(cap.suppression_reasons || {}).concat(Object.entries(cap.halt_reasons || {})).map(function (e) { return e[0] + ": " + e[1]; }).join(", ");
+      setText("riskAdmission", ready ? ({ complete: "Tamam", pending: "Bekleniyor", failed: "Başarısız" }[cap.reconciliation_status] || cap.reconciliation_status || "—") + (reasons ? " · " + reasons : "") : "—");
+      setText("riskSlots", ready ? cap.positions_count + " / " + cap.effective_slots + " / " + cap.maximum_positions : "—");
+      setText("riskCryptoSlots", ready && cap.effective_crypto_slot_claims !== undefined ? cap.crypto_position_count + " / " + cap.effective_crypto_slot_claims + " / " + cap.crypto_slot_cap : "—");
+      setText("riskWorking", ready ? String(cap.broker_working_order_count) : "—");
+      setText("riskGrossHeadroom", ready ? fmt.money(cap.available_gross_buy_headroom) : "—");
+      setText("riskCommittedBuy", ready && cap.committed_buy_notional !== null ? fmt.money(cap.committed_buy_notional) : "bilinmiyor");
+      setText("riskCashHeadroom", ready ? fmt.money(cap.available_cash_buy_headroom) : "—");
+      const incidents = risk.safety_incidents || [];
+      const box2 = byId("riskIncidents");
+      if (box2) {
+        if (!incidents.length) box2.replaceChildren(el("div", { className: "incident ok" }, [PB.icon("check"), el("span", { text: "Aktif güvenlik olayı yok" })]));
+        else box2.replaceChildren.apply(box2, incidents.map(function (i) {
+          return el("div", { className: "incident" }, [PB.icon("alert"), el("span", { text: i.reason + " · " + fmt.dateTime(i.activated_at) })]);
+        }));
+      }
+    }
+
+    // ---------- trades ----------
+    function renderExecution(ex) {
+      if (!ex || ex.unavailable) return;
+      const fills = ex.recent_fills || [];
+      const orders = ex.open_orders || [];
+      setText("fillsCount", String(fills.length));
+      setText("ordersCount", String(orders.length));
+      const fBody = byId("recentFillsBody");
+      if (!fills.length) PB.emptyRow(fBody, 7, "Henüz işlem yok");
+      else fBody.replaceChildren.apply(fBody, fills.map(function (f) {
+        const slip = f.slippage_bps;
+        return el("tr", null, [
+          cell(fmt.dateTime(f.occurred_at)), cell(el("span", { className: "sym", text: f.symbol })), cell(sideBadge(f.side)),
+          cell(fmt.num(f.quantity, 6), "r"), cell(fmt.price(f.price), "r"),
+          cell(isNum(slip) ? fmt.num(slip, 1) + " bps" : "—", "r"), cell(fmt.price(f.fee), "r")
+        ]);
+      }));
+      const oBody = byId("openOrdersBody");
+      if (!orders.length) PB.emptyRow(oBody, 6, "Bekleyen emir yok");
+      else oBody.replaceChildren.apply(oBody, orders.map(function (o) {
+        const lin = o.lineage || {};
+        return el("tr", null, [
+          cell(el("span", { className: "sym", text: o.symbol })), cell(sideBadge(o.side)), cell(fmt.num(o.quantity, 6), "r"),
+          cell(fmt.price(o.reference_price), "r"), cell(el("span", { className: "badge", text: o.status || "—" })),
+          cell(lin.strategy ? lin.strategy + " · " + fmt.date(lin.decision_timestamp) : "—")
+        ]);
+      }));
+    }
+    document.querySelectorAll(".tab[data-tab]").forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        document.querySelectorAll(".tab[data-tab]").forEach(function (t) { t.classList.toggle("active", t === tab); });
+        document.querySelectorAll("[data-panel]").forEach(function (panel) { panel.hidden = panel.dataset.panel !== tab.dataset.tab; });
+      });
+    });
+
+    // ---------- system ----------
+    function renderHealth(h) {
+      if (!h || h.unavailable) return;
+      setText("healthBadge", h.healthy === true ? "Sağlıklı" : h.healthy === false ? "Sorunlu" : (h.engine_state || "—"), h.healthy === true ? "badge ok" : h.healthy === false ? "badge bad" : "badge");
+      const markets = h.markets || {};
+      const dataOk = (markets.equity || {}).stream_healthy !== false && (markets.crypto || {}).stream_healthy !== false;
+      setText("healthData", dataOk ? "Güncel" : "Gecikme var", dataOk ? "pos" : "neg");
+      const fresh = h.account_freshness || {};
+      setText("healthAccount", (fresh.source || "—") + (isNum(fresh.age_seconds) ? " · " + fmt.duration(fresh.age_seconds) : ""));
+      setText("healthHeartbeat", h.last_heartbeat ? fmt.relative(h.last_heartbeat) : "—");
+      setText("healthRestarts", String(h.restart_count || 0));
+      const db = h.database || {};
+      setText("healthDatabase", (db.exists ? "Açık" : "Yok") + (db.size_bytes ? " · " + fmt.num(db.size_bytes / 1048576, 1) + " MB" : ""));
+      const rec = h.reconciliation || {};
+      setText("healthReconciliation", rec.failed ? "Hata" : rec.last_at ? fmt.relative(rec.last_at) : "—", rec.failed ? "neg" : "");
+      const workers = h.workers || {};
+      const names = Object.keys(workers).sort();
+      const tbody = byId("workersBody");
+      if (!names.length) PB.emptyRow(tbody, 5, "Çalışan bilgisi yok");
+      else tbody.replaceChildren.apply(tbody, names.map(function (n) {
+        const w = workers[n] || {};
+        return el("tr", null, [
+          cell(el("span", { className: "mono", text: n })),
+          cell(el("span", { className: w.alive ? "badge ok" : "badge bad", text: w.alive ? "Canlı" : "Durdu" })),
+          cell(w.last_heartbeat ? fmt.relative(w.last_heartbeat) : "—"), cell(String(w.restart_count || 0), "r"),
+          cell(w.last_error || "—", "wrap")
+        ]);
+      }));
+    }
+    function chips(boxId, symbols) {
+      const box = byId(boxId);
+      if (!box) return;
+      const list = (symbols || []).slice(0, 80).map(function (s) { return el("span", { className: "chip", text: s }); });
+      if ((symbols || []).length > 80) list.push(el("span", { className: "chip", text: "+" + (symbols.length - 80) }));
+      box.replaceChildren.apply(box, list);
+    }
+    function renderUniverse(u) {
+      if (!u || u.unavailable) return;
+      if (u.equity) {
+        const status = u.equity.scanner_status === "static" ? "Sabit liste" : (u.equity.scanner_status || "—");
+        setText("eqStatus", status + " · " + fmt.num(u.equity.observation_set_size, 0) + " sembol");
+        chips("eqSymbols", u.equity.observation_set);
+      }
+      if (u.crypto) {
+        setText("crScanner", u.crypto.scanner_status || "—");
+        setText("crObserved", fmt.num(u.crypto.eligible_pool_size, 0) + " / " + fmt.num(u.crypto.observation_set_size, 0));
+        setText("crScanTimes", fmt.dateTime(u.crypto.last_refresh_at) + " · " + fmt.dateTime(u.crypto.next_refresh_at));
+        chips("crSymbols", u.crypto.observation_set);
+      }
+    }
+    function renderOps(data) {
+      setText("opsOverall", data.overall_health || "UNKNOWN", PB.badgeClass(data.overall_health));
+      setText("opsTradingState", data.trading_state || "UNKNOWN", PB.badgeClass(data.trading_state));
+      setText("opsSnapshotAge", "Anlık görüntü yaşı: " + fmt.duration(data.snapshot_age_seconds) + " · " + fmt.dateTime(data.as_of));
+      const box = byId("opsChecks");
+      const checks = data.checks || [];
+      if (!checks.length) box.replaceChildren(el("p", { className: "empty-note", text: "Kontrol yok" }));
+      else box.replaceChildren.apply(box, checks.map(function (c) {
+        const status = String(c.status || "").toLowerCase();
+        const body = el("div", null, [
+          el("div", { className: "check-title", text: c.code }),
+          el("div", { className: "check-summary", text: c.summary || "—" }),
+          c.action ? el("div", { className: "check-action", text: "→ " + c.action }) : null
+        ]);
+        if (c.observed !== undefined && c.observed !== null && status !== "ok") {
+          let text;
+          try { text = typeof c.observed === "string" ? c.observed : JSON.stringify(c.observed, null, 2); } catch (_) { text = String(c.observed); }
+          body.appendChild(el("pre", { text: text }));
+        }
+        return el("div", { className: "check" }, [el("span", { className: "check-dot " + status }), body, el("span", { className: PB.badgeClass(status), text: c.status })]);
+      }));
+      const events = data.recent_events || data.events || [];
+      const evBox = byId("opsRecentEvents");
+      if (!events.length) evBox.replaceChildren(el("li", { className: "empty-note", text: "Son olay yok" }));
+      else evBox.replaceChildren.apply(evBox, events.slice(0, 12).map(function (ev) {
+        return el("li", null, [el("time", { text: fmt.dateTime(ev.at || ev.time || ev.timestamp) }), el("span", { text: (ev.type || ev.code || "olay") + (ev.message ? " — " + ev.message : "") })]);
+      }));
+      const exp = data.decision_explanation || data.explanations;
+      let text = "Karar açıklaması yok";
+      if (typeof exp === "string") text = exp;
+      else if (exp) { try { text = JSON.stringify(exp, null, 2); } catch (_) { text = String(exp); } }
+      setText("opsDecisionExplanation", text);
+    }
+
+    // ---------- data loading ----------
+    function renderOverview(data) {
+      if (!data || data.unavailable) return;
+      view.overview = data;
+      if (data.account) renderAccount(data.account);
+      renderStrategy("equity", data.equity, false);
+      renderStrategy("crypto", data.crypto, true);
+      renderAllocation(data.risk);
+      renderRisk(data.risk);
+      renderExecution(data.execution);
+      renderHealth(data.health);
+      renderUniverse(data.universe);
+      renderStory();
+    }
+    let overviewBusy = false;
+    async function refreshOverview() {
+      if (overviewBusy) return;
+      overviewBusy = true;
+      try { renderOverview(await api.fetchJson("/api/dashboard/overview")); }
+      catch (e) { console.error("overview", e); }
+      finally { overviewBusy = false; }
+    }
+    let opsBusy = false;
+    async function refreshOps() {
+      if (opsBusy) return;
+      opsBusy = true;
+      try { renderOps(await api.fetchJson("/api/ops/status")); }
+      catch (e) { const box = byId("opsChecks"); if (box) box.replaceChildren(el("p", { className: "empty-note", text: "Operasyon durumu alınamadı: " + e.message })); }
+      finally { opsBusy = false; }
+    }
+
+    PB.onStatus(function (status) { view.status = status; renderStory(); });
+    PB.onStream(function (payload) { if (payload.account && payload.account.source !== "unavailable") renderAccount(payload.account); });
+    api.fetchJson("/api/account").then(renderAccount).catch(function () {});
+    refreshOverview();
+    refreshOps();
+    loadPerformance();
+    global.setInterval(refreshOverview, 5000);
+    global.setInterval(refreshOps, 10000);
+    global.setInterval(loadPerformance, 60000);
   });
 })(window);

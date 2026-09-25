@@ -153,14 +153,38 @@ panel also shows universe version, rebalance reason, and risk multiplier where
 available. Deliberately concise; no debug dumps.
 
 ## Frontend
-`templates/index.html` (Jinja2) + `static/js/app.js` + `static/css/style.css`.
-The dashboard polls `/api/dashboard/overview` every 5 s; the existing
-2-second status/account websocket polling is unchanged.
+Templates: `templates/base.html` (shell: sidebar, topbar, settings drawer,
+dialog, toasts), `templates/index.html` and `templates/tools.html`.
+Static assets are dependency-free and same-origin (the CSP forbids inline
+scripts/styles and third-party origins):
 
-The main dashboard is ordered for day-to-day portfolio monitoring: primary
-money metrics, secondary account metrics, the full-width performance chart,
-open positions, strategy cards, risk/health, execution and universe. Diagnostic
-workflows live on `/tools`: the Web backtest runner, raw
-operations snapshot and live motor console. Both pages preserve the existing
-engine controls and no-store control-token behavior; `/tools` links back to the
-dashboard settings drawer for configuration changes.
+- `static/css/app.css` — the only stylesheet; light and dark tokens on
+  `:root` / `:root[data-theme="dark"]`.
+- `static/js/theme.js` — applies the saved or system theme before paint.
+- `static/js/api.js`, `static/js/websocket.js` — control-token fetch and
+  ticketed websockets.
+- `static/js/ui.js` — shared shell (`window.PB`): formatting, status polling
+  (`/api/status` every 2 s), engine controls, PAPER/LIVE arming, settings
+  drawer, navigation and toasts.
+- `static/js/chart.js` — responsive SVG line chart with hover crosshair.
+- `static/js/dashboard.js` — dashboard rendering; polls
+  `/api/dashboard/overview` every 5 s, `/api/ops/status` every 10 s and
+  `/api/performance` every 60 s.
+- `static/js/tools.js` — backtest runner, raw operations state and the live
+  motor console.
+
+The main dashboard is ordered for day-to-day portfolio monitoring: net
+portfolio value with the performance chart (portfolio vs VOO), a
+plain-language "what is the bot doing" summary with allocation, account
+metrics, open positions, strategy cards, risk, trades and system health.
+Diagnostic workflows live on `/tools`. Both pages keep the engine controls
+and the no-store control-token behavior. `ASSET_VERSION` in
+`routers/pages.py` busts browser caches when static files change.
+
+### Performance chart
+`GET /api/performance?period=1D|1W|1M|3M|1A|ALL` returns the broker's own
+equity history (`AlpacaBroker.portfolio_history`) and VOO closes over the
+same window (IEX feed). It is display-only: nothing feeds trading state.
+Results are cached for 60 s per (period, mode); failures degrade to
+`available: false` with a `reason`, or to a `benchmark_error` with the
+portfolio series still shown. Unknown periods return 422.

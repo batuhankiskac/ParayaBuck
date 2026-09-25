@@ -4,83 +4,235 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="parayabuck-control-token" content="{{ control_token }}">
-    <meta name="theme-color" content="#080b0f">
-    <title>{% block title %}ParayaBuck — Trading Control Center{% endblock %}</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=20260813-3">
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260829-1">
-    {% block head_extra %}{% endblock %}
+    <meta name="theme-color" content="#090b0f">
+    <title>{% block title %}ParayaBuck{% endblock %}</title>
+    <script src="/static/js/theme.js?v={{ asset_version }}"></script>
+    <link rel="stylesheet" href="/static/css/app.css?v={{ asset_version }}">
 </head>
-<body>
-    <div class="ambient ambient-one"></div>
-    <div class="ambient ambient-two"></div>
-    <div class="app-shell">
+<body data-page="{% block page_id %}{% endblock %}">
+<svg width="0" height="0" class="sr-only" aria-hidden="true">
+    <defs>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/></symbol>
+        <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4 3 8l4 4"/><path d="M3 8h14"/><path d="m17 20 4-4-4-4"/><path d="M21 16H7"/></symbol>
+        <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+        <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/></symbol>
+        <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="m7 9 3 3-3 3"/><path d="M13 15h4"/></symbol>
+        <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5"/><path d="m16 7 5 5-5 5"/></symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+        <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+        <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+        <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+        <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+        <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+        <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+        <symbol id="i-trend" viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+        <symbol id="i-coins" viewBox="0 0 24 24"><circle cx="9" cy="9" r="6"/><path d="M15.5 9.6a6 6 0 1 1-5.9 5.9"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+        <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><path d="M16 14.5h.01"/></symbol>
+        <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+        <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+        <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v.01M18 14.5v.01"/></symbol>
+    </defs>
+</svg>
+
+<div class="app">
+    <aside id="sidebar" class="sidebar" aria-label="Ana menü">
+        <a class="brand" href="/" aria-label="ParayaBuck ana sayfa">
+            <span class="brand-mark"><svg viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>
+            <span class="brand-name"><strong>ParayaBuck</strong><small>Otomatik yatırım botu</small></span>
+        </a>
+        <nav class="side-nav">
+            <div class="nav-label">Panel</div>
+            <a class="nav-item" href="/#overview" data-nav="overview"><svg class="icon"><use href="#i-home"/></svg>Genel bakış</a>
+            <a class="nav-item" href="/#strategies" data-nav="strategies"><svg class="icon"><use href="#i-layers"/></svg>Stratejiler</a>
+            <a class="nav-item" href="/#risk" data-nav="risk"><svg class="icon"><use href="#i-shield"/></svg>Risk</a>
+            <a class="nav-item" href="/#trades" data-nav="trades"><svg class="icon"><use href="#i-swap"/></svg>İşlemler</a>
+            <a class="nav-item" href="/#system" data-nav="system"><svg class="icon"><use href="#i-activity"/></svg>Sistem</a>
+            <div class="nav-label">Araçlar</div>
+            <a class="nav-item" href="/tools#backtest" data-nav="backtest"><svg class="icon"><use href="#i-flask"/></svg>Backtest</a>
+            <a class="nav-item" href="/tools#operations" data-nav="operations"><svg class="icon"><use href="#i-code"/></svg>Ham durum</a>
+            <a class="nav-item" href="/tools#console" data-nav="console"><svg class="icon"><use href="#i-terminal"/></svg>Motor konsolu</a>
+        </nav>
+        <div class="sidebar-foot">
+            <button id="settingsBtn" class="side-btn" type="button" aria-haspopup="dialog"><svg class="icon"><use href="#i-settings"/></svg>Ayarlar</button>
+            <button id="themeToggle" class="side-btn" type="button"><svg class="icon"><use id="themeIcon" href="#i-moon"/></svg><span id="themeLabel">Koyu tema</span></button>
+        </div>
+    </aside>
+    <div id="sidebarScrim" class="drawer-scrim"></div>
+
+    <div class="main">
         <header class="topbar">
-            <a class="brand" href="/" aria-label="ParayaBuck ana sayfa">
-                <span class="brand-mark" aria-hidden="true">PB</span>
-                <span class="brand-copy">
-                    <strong>ParayaBuck</strong>
-                    <small>Trading Control Center</small>
-                </span>
-            </a>
-            <div class="topbar-context" aria-label="Sistem durumu">
-                <div id="modeChip" class="mode-chip paper" role="button" tabindex="0" aria-label="İşlem modunu değiştir">
-                    <span class="chip-signal" aria-hidden="true"></span>
-                    <span>
-                        <small>İşlem modu</small>
-                        <strong id="modeText">Paper demo</strong>
-                    </span>
-                    <span id="modeIcon" class="chip-chevron" aria-hidden="true">⌄</span>
-                </div>
-                <div class="engine-state">
-                    <span id="statusDot" class="status-dot stopped" aria-hidden="true"></span>
-                    <span>
-                        <small>Motor durumu</small>
-                        <strong id="statusText">Durdu</strong>
-                    </span>
-                </div>
-                <span id="modeBadge" class="mode-badge paper" aria-label="İşlem modu rozeti">PAPER</span>
+            <button id="menuBtn" class="btn ghost icon-only menu-btn" type="button" aria-label="Menüyü aç"><svg class="icon"><use href="#i-menu"/></svg></button>
+            <div class="topbar-title">
+                <h1>{% block page_title %}{% endblock %}</h1>
+                <p id="marketStatusText">Durum yükleniyor…</p>
             </div>
-            <div class="nav-actions">
-                <button id="startBtn" class="btn btn-primary">
-                    <span class="button-icon" aria-hidden="true">▶</span>
-                    <span>Motoru başlat</span>
+            <div class="topbar-status">
+                <button id="modeChip" class="pill mode-paper" type="button" title="İşlem modunu değiştir">
+                    <svg class="icon icon-sm"><use href="#i-shield"/></svg><span id="modeText">Paper</span><small id="modeSuffix" class="mode-suffix"></small>
                 </button>
-                <button id="stopBtn" class="btn btn-danger" disabled>
-                    <span class="stop-icon" aria-hidden="true"></span>
-                    <span>Durdur</span>
-                </button>
-                <button id="resetSafetyBtn" class="btn btn-quiet" hidden>
-                    <span class="button-icon" aria-hidden="true">↻</span>
-                    <span>Güvenlik kilidini doğrula</span>
-                </button>
-                <button id="riskEpochBtn" class="btn btn-quiet" hidden title="Drawdown >%5 kalıcı kilitlenmesin: doğrulama sonrası risk dönemi başlatır, drawdown tabanını mevcut özkaynağa çeker">
-                    <span class="button-icon" aria-hidden="true">⟲</span>
-                    <span>Yeni risk dönemi</span>
-                </button>
-                <button id="settingsBtn" class="btn btn-quiet" aria-haspopup="dialog">
-                    <span class="button-icon" aria-hidden="true">⚙</span>
-                    <span>Ayarlar</span>
-                </button>
+                <span class="pill" id="enginePill"><span id="statusDot" class="dot stopped"></span><span id="statusText">Durdu</span></span>
+            </div>
+            <div class="topbar-actions">
+                <button id="resetSafetyBtn" class="btn warn" type="button" hidden><svg class="icon icon-sm"><use href="#i-unlock"/></svg>Kilidi doğrula</button>
+                <button id="riskEpochBtn" class="btn" type="button" hidden title="Drawdown tabanını doğrulanmış özkaynağa çeker ve yeni risk dönemi başlatır"><svg class="icon icon-sm"><use href="#i-rotate"/></svg>Yeni risk dönemi</button>
+                <button id="startBtn" class="btn primary" type="button"><svg class="icon icon-sm"><use href="#i-play"/></svg>Başlat</button>
+                <button id="stopBtn" class="btn danger" type="button" disabled><svg class="icon icon-sm"><use href="#i-stop"/></svg>Durdur</button>
             </div>
         </header>
+        <div id="alertBar" class="alert-bar" role="status" hidden><svg class="icon"><use href="#i-alert"/></svg><div id="alertText"></div></div>
 
-        <section class="system-strip" aria-label="Piyasa ve tarayıcı durumu">
-            <div class="system-strip-label">
-                <span class="live-pulse" aria-hidden="true"></span><span>Canlı sistem özeti</span>
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</div>
+
+<div id="settingsScrim" class="drawer-scrim"></div>
+<aside id="settingsDrawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" aria-hidden="true">
+    <div class="drawer-head">
+        <div>
+            <h2 id="settingsTitle">Ayarlar</h2>
+            <p>Bağlantı, işlem kapsamı ve güvenlik sınırları.</p>
+        </div>
+        <button id="closeSettingsBtn" class="btn ghost icon-only" type="button" aria-label="Ayarları kapat"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <form id="settingsForm" class="drawer-body">
+        <section class="drawer-section">
+            <h3>Broker bağlantısı</h3>
+            <p>Alpaca API anahtarları yalnızca bu bilgisayarda saklanır.</p>
+            <div class="form-grid">
+                <div class="field">
+                    <label for="apiKey">API anahtarı</label>
+                    <input type="text" id="apiKey" placeholder="PK…" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="field">
+                    <label for="secretKey">Secret anahtarı</label>
+                    <input type="password" id="secretKey" placeholder="Secret key" autocomplete="new-password">
+                </div>
             </div>
-            <p id="marketStatusText">Equity ve kripto durumu yükleniyor…</p>
-            <span class="system-time">{% block system_time %}bağımsız strateji zaman dilimleri{% endblock %}</span>
+            <label class="switch">
+                <span><strong>Paper trading</strong><small>Gerçek para kullanmadan demo hesapta çalışır.</small></span>
+                <input type="checkbox" id="paperModeCheck"><span class="track"></span>
+            </label>
         </section>
 
-        <nav class="page-nav" aria-label="Ana bölümler">
-            <a class="page-nav-link {% if request.url.path == '/' %}active{% endif %}" href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Dashboard</a>
-            <a class="page-nav-link {% if request.url.path == '/tools' %}active{% endif %}" href="/tools" {% if request.url.path == '/tools' %}aria-current="page"{% endif %}>Araçlar</a>
-        </nav>
+        <section class="drawer-section">
+            <h3>İşlem kapsamı</h3>
+            <p>Botun hangi piyasalarda işlem yapabileceği.</p>
+            <label class="switch">
+                <span><strong>Hisse / ETF işlemleri</strong><small>ABD borsası (VT35: QLD).</small></span>
+                <input type="checkbox" id="equityTradingCheck"><span class="track"></span>
+            </label>
+            <label class="switch">
+                <span><strong>Kripto işlemleri</strong><small>7/24 kripto stratejisi.</small></span>
+                <input type="checkbox" id="cryptoTradingCheck"><span class="track"></span>
+            </label>
+            <label class="switch danger">
+                <span><strong>Gerçek işlem izni</strong><small>Canlı hesapta gerçek emir gönderilmesine izin verir.</small></span>
+                <input type="checkbox" id="liveTradingCheck"><span class="track"></span>
+            </label>
+            <div class="note"><strong>Canlı işlem uyarısı</strong>Paper testleri tamamlanmadan gerçek işlem iznini açmayın. Stop-limit tetiklenmesi gerçekleşmeyi garanti etmez.</div>
+            <div id="livePrerequisites" class="note" hidden>
+                <strong>Canlıya geçiş ön koşulları</strong>
+                <ul id="livePrerequisitesList" class="prereq"></ul>
+                <small id="livePrerequisitesSummary"></small>
+            </div>
+        </section>
 
-        {% block content %}{% endblock %}
+        <section class="drawer-section">
+            <h3>Risk sınırları</h3>
+            <p>Hesabı koruyan günlük ve toplam kayıp eşikleri.</p>
+            <div class="form-grid">
+                <div class="field suffix">
+                    <label for="maxDailyLoss">Maksimum günlük zarar</label>
+                    <input type="number" id="maxDailyLoss" step="0.1" min="0.01" max="100" value="1.5">
+                    <span>%</span>
+                </div>
+                <div class="field suffix">
+                    <label for="maxDrawdown">Maksimum drawdown</label>
+                    <input type="number" id="maxDrawdown" step="0.1" min="0.01" max="100" value="10">
+                    <span>%</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="drawer-section">
+            <details>
+                <summary><svg class="icon icon-sm"><use href="#i-chevron"/></svg>Gelişmiş: program ve sunucu</summary>
+                <div class="inner">
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="timeframe">İşlem periyodu</label>
+                            <select id="timeframe"><option value="5m">5 dakika</option></select>
+                        </div>
+                        <div class="field">
+                            <label for="logLevel">Log seviyesi</label>
+                            <select id="logLevel">
+                                <option value="DEBUG">Debug</option>
+                                <option value="INFO">Info</option>
+                                <option value="WARNING">Warning</option>
+                                <option value="ERROR">Error</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="host">Web arayüzü adresi</label>
+                            <input type="text" id="host" placeholder="127.0.0.1">
+                        </div>
+                        <div class="field">
+                            <label for="port">Port</label>
+                            <input type="number" id="port" min="1" max="65535" step="1" value="8000">
+                        </div>
+                    </div>
+                    <label class="switch">
+                        <span><strong>Başlangıçta tarayıcıyı aç</strong><small>Uygulama açılınca kontrol merkezini gösterir.</small></span>
+                        <input type="checkbox" id="openBrowser"><span class="track"></span>
+                    </label>
+                    <small class="muted">Adres, port, tarayıcı ve log seviyesi bir sonraki açılışta etkinleşir.</small>
+                </div>
+            </details>
+        </section>
+    </form>
+    <div class="drawer-foot">
+        <small>Değişiklikler yerel olarak saklanır.</small>
+        <div>
+            <button type="button" id="cancelSettingsBtn" class="btn ghost">Vazgeç</button>
+            <button type="submit" form="settingsForm" id="saveSettingsBtn" class="btn primary">Kaydet ve uygula</button>
+        </div>
     </div>
+</aside>
 
-    <div id="statusToast" class="status-toast" role="status" aria-live="polite" hidden></div>
-    {% block scripts %}{% endblock %}
+<dialog id="pbDialog" class="dialog">
+    <form method="dialog">
+        <div class="dialog-body">
+            <h3 id="pbDialogTitle"></h3>
+            <p id="pbDialogMessage"></p>
+            <div id="pbDialogField" class="field" hidden>
+                <label id="pbDialogLabel" for="pbDialogInput"></label>
+                <input id="pbDialogInput" type="text" autocomplete="off" spellcheck="false">
+            </div>
+        </div>
+        <div class="dialog-foot">
+            <button id="pbDialogCancel" class="btn ghost" value="cancel" type="submit">Vazgeç</button>
+            <button id="pbDialogOk" class="btn primary" value="ok" type="submit">Tamam</button>
+        </div>
+    </form>
+</dialog>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script src="/static/js/api.js?v={{ asset_version }}"></script>
+<script src="/static/js/websocket.js?v={{ asset_version }}"></script>
+<script src="/static/js/ui.js?v={{ asset_version }}"></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

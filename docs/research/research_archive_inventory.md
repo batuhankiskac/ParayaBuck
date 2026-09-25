@@ -515,3 +515,9 @@ Current operational authority is main commit `7f007c8f9e5edc33a5065fc86c1c6fb61e
 | Archive tag | Peeled evidence commit | Decision |
 |---|---|---|
 | `archive/research/sleeve-candidates-v2-v3-2026-09` | `094c7fb7b1a7723c2c116bfb7fc5e1f85ff71c15` | v2: no pass. v3: `dividend_growth_v1` and `gold_v1b` pass Stage B; design-only authorization, shipped config unchanged. Summary: `docs/research/sleeve_candidates_v2_v3_closure.md` |
+
+## Dividend-growth sleeve production integration — 2026-09-25
+
+| Archive tag | Peeled evidence commit | Decision |
+|---|---|---|
+| `archive/research/dividend-sleeve-production-v1-2026-09` | `e4e1f11ac698719279253aaed78ecdc061abc64c` | Shipped: `equity_residual_momentum_v3_dividend_sleeve_v1` passes every production-path validation gate. Summary: `docs/research/dividend_sleeve_production_v1.md` |

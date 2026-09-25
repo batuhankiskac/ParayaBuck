@@ -1,0 +1,38 @@
+{
+  "adjustment": "split",
+  "bars": {
+    "path": "data/historical/sleeve_candidates_v2_daily_split_sip.csv",
+    "rows": 45203,
+    "sha256": "7e7ae8a47ecd8679fd67831842e1f2bbe91354557b9798d95efa5291212a3cde"
+  },
+  "campaign": "sleeve_candidates_v2",
+  "corporate_actions": {
+    "path": "data/historical/sleeve_candidates_v2_corporate_actions.csv",
+    "rows": 964,
+    "sha256": "fffb6b1d02e44e725f99bb03392c6913d9f0f078017cc29e64288710bdbf3cf5"
+  },
+  "downloaded_at": "2026-09-25T07:16:02.214385+00:00",
+  "end": "2026-07-31T23:59:59+00:00",
+  "feed": "sip",
+  "provider": "alpaca",
+  "start": "2015-01-01T00:00:00+00:00",
+  "symbols": [
+    "SPY",
+    "QQQ",
+    "USMV",
+    "QUAL",
+    "SPLV",
+    "TLT",
+    "IEF",
+    "GLD",
+    "DBC",
+    "EFA",
+    "EEM",
+    "VNQ",
+    "BIL",
+    "SHV",
+    "XLP",
+    "XLU",
+    "XLV"
+  ]
+}

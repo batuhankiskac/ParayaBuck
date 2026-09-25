@@ -5,11 +5,12 @@ first with no drawdown limit, then (on request) with the worst loss held at or
 below the index's. The bar is **SPY/VOO buy-and-hold**, not the previous bot.
 
 Decision: **`equity_leveraged_trend_v1` with volatility targeting (arm VT35) is
-the proposed PAPER equity identity.** It holds QLD (2x Nasdaq-100) while QQQ's
+the PAPER equity identity since 2026-09-25 (operator approved).** It holds QLD (2x Nasdaq-100) while QQQ's
 completed close is above its 200-session SMA, sized
 `min(1, 0.35 / 20-session realized QLD volatility)`, and holds cash otherwise.
 Decisions are daily. It runs at equity 0.93 plus the unchanged crypto 0.05.
-Switching `config/settings.yaml` requires explicit operator approval. Evidence
+The residual-momentum V1/V2/V3 identities and the dividend/gold sleeve were
+removed from the code at the switch (recoverable from `ec4e2df`). Evidence
 (pre-registration, data manifest, screens, arm configs, runs, results) is at
 tag `archive/research/profit-max-v1-2026-09`.
 
@@ -75,7 +76,7 @@ tag `archive/research/profit-max-v1-2026-09`.
   index. Daily-reset leverage decays in sideways, volatile markets.
 - **Idle cash.** Cash earns nothing in the model. In downtrends the account
   sits in cash.
-- **Risk limits.** The production switch needs wider risk limits:
+- **Risk limits.** The production switch widened the risk limits:
   - cash buffer 0.40 → 0.02
   - per-asset cap 0.10 → 0.93
   - gross 0.60 → 0.98

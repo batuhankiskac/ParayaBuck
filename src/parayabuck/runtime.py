@@ -690,11 +690,6 @@ class EngineRuntime:
                     claims.setdefault(key, set()).add("WORKING_UNKNOWN")
             global_cap = runtimes[0].risk_overlay.limits.maximum_positions
             crypto_cap = runtimes[0].risk_overlay.limits.maximum_crypto_positions
-            exempt = set(getattr(runtimes[0].risk_overlay.limits, "slot_exempt_equity_symbols", ()))
-            # Sleeve ETFs are additive and never consume position slots.
-            claims = {
-                key: sources for key, sources in claims.items() if not (key[0] == Market.EQUITY and key[1] in exempt)
-            }
             effective_global = len(claims)
             effective_crypto = sum(market == Market.CRYPTO for market, _ in claims)
             crypto_positions = sum(
@@ -3260,9 +3255,9 @@ class EngineRuntime:
             except TypeError:
                 readiness_reasons = gate(portfolio_runtime.market)
             if readiness_reasons:
-                if portfolio_runtime.strategy.name.startswith("equity_residual_momentum_v3"):
+                if portfolio_runtime.market == Market.EQUITY:
                     log.info(
-                        "V3 PAPER decision skipped: strategy=%s reason=%s",
+                        "Equity PAPER decision skipped: strategy=%s reason=%s",
                         portfolio_runtime.strategy.name,
                         ",".join(readiness_reasons),
                     )
@@ -3459,7 +3454,7 @@ class EngineRuntime:
                 len(portfolio_result.orders),
                 len(portfolio_result.submitted_order_ids),
             )
-            if portfolio_runtime.strategy.name.startswith("equity_residual_momentum_v3") and (
+            if portfolio_runtime.market == Market.EQUITY and (
                 portfolio_result.status not in {"not_scheduled", "warming_up", "incomplete_strategy_batch"}
             ):
                 observability = (
@@ -3468,17 +3463,15 @@ class EngineRuntime:
                     else {}
                 )
                 log.info(
-                    "V3 PAPER decision telemetry: strategy=%s version=%s status=%s "
-                    "decision_timestamp=%s signal_verified_through=%s qualified=%s "
-                    "ranked=%s selected=%s gross_after=%s planned_delta=%s blocked=%s",
+                    "Equity PAPER decision telemetry: strategy=%s version=%s status=%s "
+                    "decision_timestamp=%s signal_verified_through=%s trend_state=%s "
+                    "gross_after=%s planned_delta=%s blocked=%s",
                     portfolio_runtime.strategy.name,
                     portfolio_result.target.strategy_version if portfolio_result.target is not None else "",
                     portfolio_result.status,
                     observability.get("decision_timestamp"),
                     observability.get("signal_verified_through"),
-                    observability.get("qualified_symbol_count"),
-                    observability.get("ranked_symbol_count"),
-                    observability.get("selected_symbols"),
+                    observability.get("trend_state"),
                     observability.get("risk_overlay_gross_after"),
                     observability.get("symbols"),
                     observability.get("blocked_or_skipped_reason"),

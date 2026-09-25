@@ -19,7 +19,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = {
-    "equity": ("equity_residual_momentum_v3_dividend_sleeve_v1", 0.55),
+    "equity": ("equity_leveraged_trend_v1", 0.93),
     "crypto": ("crypto_low_variance_hysteresis_v1", 0.05),
 }
 TERMINAL = {"filled", "fill", "rejected", "canceled", "cancelled", "expired", "done_for_day"}
@@ -94,8 +94,8 @@ def audit(
         and settings["live"]["hard_dollar_cap"] == 0
         and settings["risk"]["max_positions"] == 8
         and settings["risk"]["max_crypto_positions"] == 2
-        and settings["risk"]["max_gross_exposure_pct"] == 0.6
-        and settings["risk"]["cash_buffer_pct"] == 0.4
+        and settings["risk"]["max_gross_exposure_pct"] == 0.98
+        and settings["risk"]["cash_buffer_pct"] == 0.02
         and all(
             settings["strategy"][market]["name"] == name
             and settings["strategy"][market]["maximum_allocation"] == allocation

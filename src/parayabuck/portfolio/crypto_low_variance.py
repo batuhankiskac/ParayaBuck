@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import math
+import statistics
 from datetime import timedelta
 
 from parayabuck.core.models import Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import RebalanceReason, TargetPortfolio, TargetWeight
-from parayabuck.portfolio.momentum import realized_volatility
 
 # Low Realized Variance / Defensive (Ang, Hodrick, Xing & Zhang 2006):
 # assets with LOWER recent realized variance earn better subsequent
@@ -20,6 +20,22 @@ from parayabuck.portfolio.momentum import realized_volatility
 _DEFAULT_VARIANCE_LOOKBACK = 22
 _DEFAULT_TOP_N = 2
 _DEFAULT_REBALANCE_HOURS = 168  # weekly decisions: slow turnover for 25 bps taker fees
+
+
+def realized_volatility(closes: list[float], window: int) -> float:
+    """Per-bar sample volatility of the last ``window`` close-to-close returns."""
+    if len(closes) < window + 1:
+        return 0.0
+    returns = [
+        closes[index] / closes[index - 1] - 1
+        for index in range(len(closes) - window, len(closes))
+        if closes[index - 1] > 0
+    ]
+    if len(returns) < 2:
+        return 0.0
+    mean = statistics.fmean(returns)
+    variance = sum((value - mean) ** 2 for value in returns) / (len(returns) - 1)
+    return math.sqrt(variance)
 
 
 class CryptoLowVariance1dV1(PortfolioStrategy):

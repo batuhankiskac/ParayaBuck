@@ -48,6 +48,7 @@ LIVE: `DISABLED`. See [the integration record](cap8_main_integration_v1.md).
 | `account_capacity_migration_8_v1` | `research/account-capacity-migration-8-v1` | `ede3b3dfadfd5f3f0bdef040a14d20365c8df469` / 2026-09-22 | Stopped before either arm; no migration outcomes | `ACCOUNT_ARCHITECTURE_MIGRATION_8_INCONCLUSIVE` | Inconclusive migration attempt; not an economic result | No | Closed; frozen specification is provenance only; re-freeze from corrected main | `archive/research/account-capacity-migration-8-v1-inconclusive-2026-09` |
 | `crypto_exit_giveback_audit_v3` | `research/crypto-exit-giveback-audit-v3` | `d46338454cb7f8d59525d88fd775f98e2b927d45` / 2026-09-24 | Causal canonical replay; independent episode verification PASS | `CRYPTO_EXIT_RESEARCH_NOT_JUSTIFIED` | `MIXED_PROFIT_RETENTION_BEHAVIOR` | No | Closed; V2 input authority superseded, conclusion reconfirmed | `archive/research/crypto-exit-giveback-audit-v3-2026-09` |
 | `etf_diversifier_v1` | `research/etf-diversifier-v1` | Stage A / 2026-09-25 | Pre-registered (`3d33501`) Stage A sleeve-sum screen; not a shared-ledger replay | `STAGE_A_PASS` (C1 preferred, C2 also passes) | Diversification benefit vs A; post-hoc matched cash control shows no drawdown/2022 hedge beyond de-risking | No | Open; Stage B shared-ledger replay with mandatory cash control B next | — (branch active) |
+| `profit_max_v1` | `profit-max-v1` | `5d61c8c` / 2026-09-25 | Pre-registered; Stage A/A2 screens plus a Stage B shared-ledger replay (2017-01-03 → 2026-07-30) through the production engine | `PRODUCTION_EQUITY_IDENTITY_SELECTED` (arm VT35) | Portfolio-level result: the shipped V3 + sleeve did not beat VOO buy-and-hold | Yes — PAPER equity identity switched to `equity_leveraged_trend_v1`; V3 and both sleeve identities removed | Closed; supersedes the dividend-growth and gold sleeve production records | `archive/research/profit-max-v1-2026-09` |
 
 The branch `maintenance/reserved-equity-role-isolation-v1` was an exact alias
 of current `main` (`bdfa55ea...`) with no unique commit or evidence. It is not
@@ -793,7 +794,7 @@ production-integration design only; the shipped configuration is unchanged.
 Full record: `docs/research/sleeve_candidates_v2_v3_closure.md` (evidence:
 tag `archive/research/sleeve-candidates-v2-v3-2026-09`).
 
-## Dividend-growth sleeve — production integration (2026-09-25)
+## Dividend-growth sleeve — production integration (2026-09-25; identity removed 2026-09-25)
 
 `dividend_growth_v1` shipped as the PAPER equity identity
 `equity_residual_momentum_v3_dividend_sleeve_v1` (V3 core 0.40 + SCHD/VIG/DGRO
@@ -805,7 +806,11 @@ reproduced exactly under the new code. Caveat: validation-window CAGR 4.23% vs
 `docs/research/dividend_sleeve_production_v1.md` (evidence: tag
 `archive/research/dividend-sleeve-production-v1-2026-09`).
 
-## Gold + dividend sleeve — production validation (2026-09-25)
+**Status: removed.** `equity_residual_momentum_v3_dividend_sleeve_v1`, the
+static-sleeve risk-overlay composition and `risk.slot_exempt_equity_symbols`
+are no longer in the product; see *Profit maximization v1* below.
+
+## Gold + dividend sleeve — production validation (2026-09-25; identity removed 2026-09-25)
 
 Gold (`gold_v1b`, GLD/OUNZ) added to the shipped sleeve: V3 core 0.30 +
 SCHD/VIG/DGRO/GLD/OUNZ at 0.05 each (arm G3 of three pre-registered arms).
@@ -813,3 +818,34 @@ G3 improves Sharpe (0.869 vs 0.780), max drawdown, 2022 and the 2022–2026
 window but misses the CAGR gates by 0.03–0.06 pp (within path noise); shipped
 by operator decision. Summary: `docs/research/gold_sleeve_production_v1.md`
 (evidence: tag `archive/research/gold-sleeve-production-v1-2026-09`).
+
+**Status: removed, and the G3 ship is superseded by evidence.** Restating
+Alpaca cash dividend rates to post-split shares puts G3 (6.72% CAGR) below
+the dividend sleeve arm P (7.08%); the G3 decision above rested on inflated
+pre-2024 SCHD yields. The whole sleeve composition was removed from the
+product on 2026-09-25; see *Profit maximization v1* below.
+
+## Profit maximization v1 — PAPER equity identity switch (2026-09-25)
+
+Operator goal: maximize long-run ending wealth against index buy-and-hold
+(VOO/SPY), not against the previous bot. `equity_leveraged_trend_v1`
+(`src/parayabuck/portfolio/equity_leveraged_trend.py`, arm VT35) shipped as
+the PAPER equity identity: it holds QLD (2x Nasdaq-100) while QQQ's completed
+close is above its 200-session SMA, sized
+`min(1, 0.35 / 20-session annualized realized QLD volatility)` of a 0.93
+equity allocation and holds cash otherwise, decided every session. Stage B
+(production engine, shared ledger, 2017-01-03 → 2026-07-30, 100k start):
+29.34% CAGR, Sharpe 1.078, max drawdown 29.2%, 2022 −22.0% — against VOO
+buy-and-hold 14.54% / 32.0% and the prior shipped V3 + sleeve at ~6.7–7.1%.
+28.95% / 28.66% CAGR at 2x / 3x costs. Switching `config/settings.yaml`
+required explicit operator approval; the residual-momentum v1/v2/v3 classes
+and the sleeve modules were removed (recoverable from `5d61c8c` on
+`profit-max-v1`, `ec4e2df` on `main`). 3x arms were excluded before the runs.
+
+Caveats recorded with the decision: one strong Nasdaq decade (a 2000–2002
+style decline is untested), concentration in a single daily-reset leveraged
+ETF, idle cash in downtrends, and QLD missing from the local leveraged/inverse
+classification list. Full record: `docs/research/profit_max_v1.md` (evidence:
+tag `archive/research/profit-max-v1-2026-09`, holding `research/profit_max_v1/`
+— pre-registration, data manifest, Stage A/A2/B scripts, arm configs, runs,
+results).

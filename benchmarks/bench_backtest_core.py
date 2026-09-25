@@ -134,20 +134,10 @@ def _run_engine_benchmark(
     config = load_config(str(CONFIG))
     # Universe + prepared for reuse
     universe = build_product_universe(config, bars, market=market, end=end, timeframe="1d")
-    from parayabuck.backtest.numeric_history import build_numeric_history
     from parayabuck.backtest.product import _prepared_window
 
     strat = portfolio_strategy_from(config.strategy.equity.name, parameters=config.strategy.equity.parameters)
     prepared = _prepared_window(bars, market, strat.timeframe, start, end)
-    # Build numeric view once per prepared dataset (reused across trials)
-    filtered_pre, warmup_pre, (ordered_pre, decision_bars_pre) = prepared
-    try:
-        # Use deduped combined for view (already canonicalized/sorted)
-        combined_for_view = (warmup_pre or []) + ordered_pre
-        numeric_view = build_numeric_history(combined_for_view, market=market, timeframe=strat.timeframe)
-        # Make immutable (already in builder) and ensure not writable
-    except Exception:
-        numeric_view = None
 
     def single_engine():
         # Engine-only path: directly time PortfolioBacktestEngine.run
@@ -171,9 +161,7 @@ def _run_engine_benchmark(
             ),
         )
         filtered, warmup, (ordered, decision_bars) = prepared
-        return engine.run(
-            filtered, warmup=warmup, prepared_inputs=(ordered, decision_bars), numeric_history=numeric_view
-        )
+        return engine.run(filtered, warmup=warmup, prepared_inputs=(ordered, decision_bars))
 
     def single_product():
         return run_product_backtest(
@@ -186,7 +174,6 @@ def _run_engine_benchmark(
             persist_artifacts=False,
             universe=universe,
             prepared_inputs=prepared,
-            numeric_history=numeric_view,
         )
 
     # Measure end-to-end (includes cost of run_product_backtest wrapper)

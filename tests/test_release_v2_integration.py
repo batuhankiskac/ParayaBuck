@@ -1,4 +1,4 @@
-"""Release integration: v1 -> v2 strategy-identity migration on one account.
+"""Release integration: strategy-identity migration on one account.
 
 PAPER promotion changes ``configuration_digest`` (strategy name + cadence
 parameters). The migration contract:
@@ -10,7 +10,13 @@ parameters). The migration contract:
   (digest-scoped duplicate/superseded guards);
 - v2's first scheduled boundary decision rebalances the v1 holdings exactly
   once, within the frozen risk caps, without layering (no double buy);
-- the runtime-path rebalance policy for the v2 identities is weekly / 96h.
+- the runtime-path rebalance policy for the v2 identity is 96h.
+
+The equity residual-momentum identities that used to play the v1/v2/v3 equity
+roles were removed from the codebase; the migration and promotion contracts
+are strategy-agnostic, so they are exercised on the crypto identities that
+still exist. The equity market keeps its own generic runtime coverage through
+``equity_leveraged_trend_v1`` (entry latch).
 
 Offline: fake Alpaca client + local SQLite, same seam as the paper-chaos
 gate. No real PAPER orders are ever placed.
@@ -45,23 +51,19 @@ from parayabuck.portfolio.runtime_service import (
 
 pytestmark = pytest.mark.paper_chaos
 
-EQUITY_SYMBOLS = ("SPY", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8")
+EQUITY_SYMBOLS = ("QQQ", "QLD")
 CRYPTO_SYMBOLS = ("BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD")
 
-V1_EQUITY = {
-    "formation_bars": 252,
-    "skip_bars": 21,
-    "beta_window_bars": 273,
-    "residual_vol_window": 63,
-    "top_n": 8,
-    "max_single_weight": 0.10,
-    "ivol_reject_quantile": 0.70,
-    "exclude_symbols": ["SPY"],
-}
 V1_CRYPTO = {"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 168}
-V2_EQUITY = {**V1_EQUITY, "rebalance_frequency": "weekly"}
 V2_CRYPTO = {**V1_CRYPTO, "rebalance_hours": 96}
-V3_EQUITY = {**V1_EQUITY, "rebalance_frequency": "weekly"}
+TREND_EQUITY = {
+    "signal_symbol": "QQQ",
+    "hold_symbol": "QLD",
+    "sma_bars": 200,
+    "vol_target": 0.35,
+    "vol_window": 20,
+    "rebalance_frequency": "hours:24",
+}
 
 
 def _daily_bars(
@@ -71,9 +73,9 @@ def _daily_bars(
     *,
     start: datetime | None = None,
 ) -> list[Bar]:
-    """Deterministic daily bars: higher-index symbols drift faster/noisier
-    (equity momentum ranking) and a separate volatility schedule for crypto
-    (BTC/ETH low-variance, SOL/XRP high-variance)."""
+    """Deterministic daily bars: higher-index symbols drift faster/noisier and
+    a separate volatility schedule for crypto (BTC/ETH low-variance,
+    SOL/XRP high-variance)."""
     start = start or datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
     bars: list[Bar] = []
     for index in range(days):
@@ -276,32 +278,10 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
     broker = _broker(client, repo, tmp_path)
 
     total_days = 360
-    equity_bars = _daily_bars(EQUITY_SYMBOLS, total_days, Market.EQUITY)
     crypto_bars = _daily_bars(CRYPTO_SYMBOLS, total_days, Market.CRYPTO)
-    equity_days = sorted({bar.timestamp for bar in equity_bars})
     crypto_days = sorted({bar.timestamp for bar in crypto_bars})
 
     # --- Phase 1: the account runs v1 and owns managed positions -------------
-    v1_equity = _runtime(
-        "equity_residual_momentum_v1",
-        V1_EQUITY,
-        EQUITY_SYMBOLS,
-        repo,
-        broker,
-        Market.EQUITY,
-        maximum_allocation=0.50,
-    )
-    assert rebalance_policy_for(v1_equity.strategy).frequency == "monthly"
-    v1_equity.seed([bar for bar in equity_bars if bar.timestamp <= equity_days[299]])
-    v1_decided = v1_equity.process_closed_bars(
-        [bar for bar in equity_bars if bar.timestamp == equity_days[299]],
-        force_scheduled=True,
-        decision_origin="v1_monthly",
-    )
-    assert v1_decided.status == "submitted", v1_decided.status
-    v1_equity_orders = list(v1_decided.orders)
-    assert v1_equity_orders and any(o.side == PortfolioOrderSide.BUY for o in v1_equity_orders)
-
     v1_crypto = _runtime(
         "crypto_low_variance_v1",
         V1_CRYPTO,
@@ -322,27 +302,13 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
     v1_crypto_orders = list(v1_crypto_decided.orders)
     assert v1_crypto_orders and any(o.side == PortfolioOrderSide.BUY for o in v1_crypto_orders)
 
-    _fill_orders(v1_decided, repo, client)
     _fill_orders(v1_crypto_decided, repo, client)
-    v1_equity.close()
     v1_crypto.close()
 
-    held_equity = {p.symbol for p in client.positions if p.asset_class == "us_equity"}
     held_crypto = {p.symbol for p in client.positions if p.asset_class == "crypto"}
-    assert held_equity and held_crypto
+    assert held_crypto
 
     # --- Phase 2: promote to v2 on the SAME account/repository --------------
-    v2_equity = _runtime(
-        "equity_residual_momentum_v2",
-        V2_EQUITY,
-        EQUITY_SYMBOLS,
-        repo,
-        broker,
-        Market.EQUITY,
-        maximum_allocation=0.50,
-    )
-    assert rebalance_policy_for(v2_equity.strategy).frequency == "weekly"  # G4 runtime-path
-    v2_equity_digest = v2_equity.configuration_digest
     v2_crypto = _runtime(
         "crypto_low_variance_v2",
         V2_CRYPTO,
@@ -354,43 +320,26 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
     )
     assert rebalance_policy_for(v2_crypto.strategy).hours == 96  # G4 runtime-path
     v2_crypto_digest = v2_crypto.configuration_digest
-    assert v2_equity_digest != v1_equity.configuration_digest
     assert v2_crypto_digest != v1_crypto.configuration_digest
 
-    v2_equity.seed([bar for bar in equity_bars if bar.timestamp <= equity_days[299]])
     v2_crypto.seed([bar for bar in crypto_bars if bar.timestamp <= crypto_days[299]])
 
     # v1 positions stay managed under v2 (ledger ownership, not digest).
     snapshot = broker.account()
-    for symbol in held_equity | held_crypto:
+    for symbol in held_crypto:
         position = next(p for p in snapshot.positions if p.symbol == symbol)
         assert position.managed_qty > 1e-12, f"{symbol} lost managed ownership under v2"
         assert position.ownership in {"managed", "mixed"}
 
     # v2 catch-up must NOT fire over managed positions and must not be
     # confused by the v1 decisions (digest-scoped guards).
-    assert v2_equity.startup_catch_up().status == "already_invested"
     assert v2_crypto.startup_catch_up().status == "already_invested"
-    assert _decision_count(repo, Market.EQUITY, v2_equity_digest) == 0
     assert _decision_count(repo, Market.CRYPTO, v2_crypto_digest) == 0
 
     # --- Phase 3: v2's first boundary rebalances exactly once ---------------
-    # Equity: first ISO-week start after day 300 (bars start on a Monday).
     # Crypto: first 96h block boundary after day 300.
-    first_weekly_start = next(
-        day for day in equity_days[301:] if day.isocalendar()[:2] != (day - timedelta(days=1)).isocalendar()[:2]
-    )
-    equity_decisions: list[datetime] = []
     crypto_decisions: list[datetime] = []
-    for day in equity_days[300:]:
-        equity_result = v2_equity.process_closed_bars([bar for bar in equity_bars if bar.timestamp == day])
-        if equity_result.status in {"submitted", "sell_phase_submitted", "buy_phase_submitted"}:
-            assert equity_result.target is not None
-            assert equity_result.target.metadata.get("decision_origin") is None
-            assert day.isocalendar()[:2] != (day - timedelta(days=1)).isocalendar()[:2], (
-                "equity decision off the weekly cadence"
-            )
-            equity_decisions.append(day)
+    for day in crypto_days[300:]:
         crypto_result = v2_crypto.process_closed_bars([bar for bar in crypto_bars if bar.timestamp == day])
         if crypto_result.status in {"submitted", "sell_phase_submitted", "buy_phase_submitted"}:
             assert crypto_result.target is not None
@@ -398,27 +347,20 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
             crypto_decisions.append(day)
     # The takeover fires at the FIRST v2 boundary, exactly once; the rest of
     # the window then follows the normal cadence (no gap, no duplicate).
-    assert equity_decisions and equity_decisions[0] == first_weekly_start, (
-        "v2 equity takeover must fire at the first weekly boundary"
-    )
-    assert len(equity_decisions) == len(set(equity_decisions)) >= 2
-    for previous, current in zip(equity_decisions, equity_decisions[1:], strict=False):
-        assert current.isocalendar()[:2] != previous.isocalendar()[:2]
     assert crypto_decisions and len(crypto_decisions) == len(set(crypto_decisions)) >= 2
     for previous, current in zip(crypto_decisions, crypto_decisions[1:], strict=False):
         epoch_delta = int(current.timestamp()) // (96 * 3600) - int(previous.timestamp()) // (96 * 3600)
         assert epoch_delta >= 1, "crypto decisions off the 96h cadence"
-    assert _decision_count(repo, Market.EQUITY, v2_equity_digest) == len(equity_decisions)
     assert _decision_count(repo, Market.CRYPTO, v2_crypto_digest) == len(crypto_decisions)
 
     # No double buy: every BUY is a gap-close toward the target, never a layering
     # on top of the full target. Sells never exceed the managed quantity.
     with repo.store.lock:
         rows = repo.store.connection.execute(
-            "SELECT decision_id, market, target_json FROM portfolio_decisions WHERE configuration_digest IN (?, ?)",
-            (v2_equity_digest, v2_crypto_digest),
+            "SELECT decision_id, market, target_json FROM portfolio_decisions WHERE configuration_digest=?",
+            (v2_crypto_digest,),
         ).fetchall()
-    for _decision_id, market_value, target_json in rows:
+    for _decision_id, _market_value, target_json in rows:
         target = TargetPortfolio.from_dict(json.loads(str(target_json)))
         target_by_symbol = {w.symbol: w.weight for w in target.weights}
         order_rows = repo.store.connection.execute(
@@ -434,111 +376,111 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
                 assert float(qty) <= held + 1e-9, f"SELL exceeds managed qty on {symbol}"
 
     # Risk caps still hold on the takeover targets.
-    for market, digest, cap, max_positions in (
-        (Market.EQUITY, v2_equity_digest, 0.50, 6),
-        (Market.CRYPTO, v2_crypto_digest, 0.10, 2),
-    ):
-        row = repo.store.connection.execute(
-            "SELECT target_json FROM portfolio_decisions WHERE market=? AND configuration_digest=? "
-            "ORDER BY decision_timestamp DESC LIMIT 1",
-            (market.value, digest),
-        ).fetchone()
-        target = TargetPortfolio.from_dict(json.loads(str(row[0])))
-        assert target.invested_weight <= cap + 1e-9
-        assert len(target.weights) <= max_positions
+    row = repo.store.connection.execute(
+        "SELECT target_json FROM portfolio_decisions WHERE market=? AND configuration_digest=? "
+        "ORDER BY decision_timestamp DESC LIMIT 1",
+        (Market.CRYPTO.value, v2_crypto_digest),
+    ).fetchone()
+    target = TargetPortfolio.from_dict(json.loads(str(row[0])))
+    assert target.invested_weight <= 0.10 + 1e-9
+    assert len(target.weights) <= 2
 
-    v2_equity.close()
     v2_crypto.close()
 
 
-def test_v2_to_v3_paper_promotion_uses_normal_delta_and_restart_idempotency(
+def test_equity_parameter_promotion_uses_normal_delta_and_restart_idempotency(
     tmp_path: Path,
 ) -> None:
-    """V3 promotion consumes existing V2 holdings through the normal planner.
+    """A promotion to a new parameter spec (new ``configuration_digest``)
+    consumes the existing holdings through the normal planner.
 
-    No strategy-change liquidation path is allowed: the V3 target, current
-    broker positions, ownership ledger, pending orders and restart guards are
-    all exercised on one deterministic fake PAPER account.
+    No strategy-change liquidation path is allowed: the promoted target,
+    current broker positions, ownership ledger, pending orders and restart
+    guards are all exercised on one deterministic fake PAPER account.
     """
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     client = _FakeAlpacaClient()
     broker = _broker(client, repo, tmp_path)
     bars = _daily_bars(EQUITY_SYMBOLS, 360, Market.EQUITY)
     days = sorted({bar.timestamp for bar in bars})
+    promoted = {**TREND_EQUITY, "sma_bars": 50, "vol_target": 0.20}
 
-    v2 = _runtime(
-        "equity_residual_momentum_v2",
-        V2_EQUITY,
+    baseline = _runtime(
+        "equity_leveraged_trend_v1",
+        TREND_EQUITY,
         EQUITY_SYMBOLS,
         repo,
         broker,
         Market.EQUITY,
-        maximum_allocation=0.60,
+        maximum_allocation=0.93,
     )
-    v2.seed([bar for bar in bars if bar.timestamp <= days[299]])
-    v2_result = v2.process_closed_bars(
+    baseline.seed([bar for bar in bars if bar.timestamp <= days[299]])
+    baseline_result = baseline.process_closed_bars(
         [bar for bar in bars if bar.timestamp == days[299]],
         force_scheduled=True,
-        decision_origin="v2_paper_seed",
+        decision_origin="baseline_paper_seed",
     )
-    assert v2_result.status == "submitted"
-    assert v2_result.orders
-    _fill_orders(v2_result, repo, client)
-    v2.close()
-    held_symbols = {position.symbol for position in client.positions if position.asset_class == "us_equity"}
-    assert held_symbols
+    assert baseline_result.status == "submitted"
+    assert baseline_result.orders
+    _fill_orders(baseline_result, repo, client)
+    baseline.close()
+    held = {position.symbol: float(position.qty) for position in client.positions}
+    assert held
 
-    v3 = _runtime(
-        "equity_residual_momentum_v3",
-        V3_EQUITY,
+    runtime = _runtime(
+        "equity_leveraged_trend_v1",
+        promoted,
         EQUITY_SYMBOLS,
         repo,
         broker,
         Market.EQUITY,
-        maximum_allocation=0.60,
+        maximum_allocation=0.93,
     )
-    v3.seed([bar for bar in bars if bar.timestamp <= days[299]])
-    assert v3.startup_catch_up().status == "already_invested"
-    first = v3.process_closed_bars(
+    assert runtime.configuration_digest != baseline.configuration_digest
+    runtime.seed([bar for bar in bars if bar.timestamp <= days[299]])
+    assert runtime.startup_catch_up().status == "already_invested"
+    first = runtime.process_closed_bars(
         [bar for bar in bars if bar.timestamp == days[300]],
         force_scheduled=True,
     )
     assert first.status in {"submitted", "sell_phase_submitted"}
     assert first.target is not None
-    assert first.target.strategy_name == "equity_residual_momentum_v3"
-    assert first.target.strategy_version == "3.0.0"
-    assert len(first.target.weights) <= 6
-    assert all(weight.weight <= 0.10 for weight in first.target.weights)
-    assert first.target.invested_weight <= 0.60
+    assert first.target.strategy_name == "equity_leveraged_trend_v1"
+    assert first.target.strategy_version == "1.0.0"
+    # Shipped equity risk caps: at most 8 positions, 0.93 per asset / total.
+    assert len(first.target.weights) <= 8
+    assert all(weight.weight <= 0.93 for weight in first.target.weights)
+    assert first.target.invested_weight <= 0.93
     paper_observability = first.target.metadata["paper_observability"]
-    assert paper_observability["strategy_name"] == "equity_residual_momentum_v3"
+    assert paper_observability["strategy_name"] == "equity_leveraged_trend_v1"
     assert paper_observability["decision_timestamp"] == days[300].isoformat()
     assert paper_observability["symbols"]
 
     by_symbol = {}
     for order in first.orders:
         by_symbol.setdefault(order.symbol, set()).add(order.side)
-        assert order.strategy_name == "equity_residual_momentum_v3"
-        assert order.strategy_version == "3.0.0"
+        assert order.strategy_name == "equity_leveraged_trend_v1"
+        assert order.strategy_version == "1.0.0"
+        if order.side == PortfolioOrderSide.SELL:
+            assert order.quantity <= held.get(order.symbol, 0.0) + 1e-9
     assert all(len(sides) == 1 for sides in by_symbol.values())
-    assert all(not (order.side == PortfolioOrderSide.SELL and order.quantity > 100.0) for order in first.orders)
 
     with repo.store.lock:
         before_orders = repo.store.connection.execute("SELECT COUNT(*) FROM portfolio_orders").fetchone()[0]
         before_decisions = repo.store.connection.execute(
             "SELECT COUNT(*) FROM portfolio_decisions WHERE strategy_name=?",
-            ("equity_residual_momentum_v3",),
+            ("equity_leveraged_trend_v1",),
         ).fetchone()[0]
-    v3.close()
+    runtime.close()
 
     restarted = _runtime(
-        "equity_residual_momentum_v3",
-        V3_EQUITY,
+        "equity_leveraged_trend_v1",
+        promoted,
         EQUITY_SYMBOLS,
         repo,
         broker,
         Market.EQUITY,
-        maximum_allocation=0.60,
+        maximum_allocation=0.93,
     )
     restarted.seed([bar for bar in bars if bar.timestamp <= days[300]])
     duplicate = restarted.process_closed_bars(
@@ -550,29 +492,30 @@ def test_v2_to_v3_paper_promotion_uses_normal_delta_and_restart_idempotency(
         after_orders = repo.store.connection.execute("SELECT COUNT(*) FROM portfolio_orders").fetchone()[0]
         after_decisions = repo.store.connection.execute(
             "SELECT COUNT(*) FROM portfolio_decisions WHERE strategy_name=?",
-            ("equity_residual_momentum_v3",),
+            ("equity_leveraged_trend_v1",),
         ).fetchone()[0]
     assert (after_orders, after_decisions) == (before_orders, before_decisions)
     restarted.close()
 
 
-def test_v3_runtime_signal_basis_latch_blocks_entries_until_verified(
+def test_equity_runtime_signal_basis_latch_blocks_entries_until_verified(
     tmp_path: Path,
 ) -> None:
-    """The shared production entry latch applies to V3 without new math."""
+    """The shared production entry latch applies to the equity runtime
+    without new math."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     client = _FakeAlpacaClient()
     broker = _broker(client, repo, tmp_path)
     bars = _daily_bars(EQUITY_SYMBOLS, 360, Market.EQUITY)
     days = sorted({bar.timestamp for bar in bars})
     runtime = _runtime(
-        "equity_residual_momentum_v3",
-        V3_EQUITY,
+        "equity_leveraged_trend_v1",
+        TREND_EQUITY,
         EQUITY_SYMBOLS,
         repo,
         broker,
         Market.EQUITY,
-        maximum_allocation=0.60,
+        maximum_allocation=0.93,
     )
     runtime.seed([bar for bar in bars if bar.timestamp <= days[299]])
 

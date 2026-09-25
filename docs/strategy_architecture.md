@@ -17,8 +17,9 @@ tradeable universe on a pre-session cadence from the broad eligible market.
 - Equity: every active/tradable US equity on the supported exchanges
   (~13,000+) → Stage-A shortlist (trailing median dollar volume,
   `universe.equity.target_shortlist`, default 300) → scanner → 30-symbol IEX
-  observation set. `universe.equity.sleeve_trade_symbols` pins SCHD/VIG/DGRO/GLD/OUNZ;
-  they are hidden from V3 scoring, leaving 21 ranked core slots instead of 26.
+  observation set. `universe.equity.reference_symbols` pins SPY, QQQ and QLD,
+  and `trade_reference_symbols: true` makes them tradable: QQQ is the equity
+  strategy's trend signal, QLD its only holding.
 - Crypto: all Alpaca tradable USD pairs → scanner (liquidity, spread, ATR,
   BTC-correlation, category limits) → streamed observation set
   (`maximum_stream_symbols`, default 12).
@@ -48,7 +49,7 @@ only documented:
 13,000+ equity / all crypto
         ↓ eligibility scanner (tradability-first)
 broad candidate pool (equity ~300 shortlist)
-        ↓ configured equity sleeve pins + V3 alpha ranking (21 ranked slots)
+        ↓ reserved reference pins + the strategy's own alpha ranking
 streamed (30 equity / ~12 crypto)
 positions
 ```
@@ -60,11 +61,11 @@ Mechanics:
   deliberately larger than the stream capacity. `observation_set` on the
   scanner result is the fail-safe quality-ranked stream set (with
   issuer/sector/category diversity), used when no strategy ranker exists.
-- The V3 core alpha ranks the pool: `PortfolioStrategy.rank_candidates`
-  reuses the EXACT scoring code of `decide` (BACKTEST/PAPER/LIVE parity), so
-  its live observation set is selected by the same alpha it trades. The
-  current equity wrapper streams its configured sleeve pins separately; they
-  are not V3 score candidates.
+- A strategy that ranks the pool ranks it through
+  `PortfolioStrategy.rank_candidates`, which reuses the EXACT scoring code of
+  `decide` (BACKTEST/PAPER/LIVE parity), so its live observation set is
+  selected by the same alpha it trades. The current equity identity trades a
+  single reserved holding (QLD) and does not rank the pool.
 - `build_observation_set` (universe/observation_set.py) produces the streamed
   set: pinned symbols (references, inverse hedges, configured pins, managed
   positions) first, then the alpha-top candidates up to
@@ -103,14 +104,14 @@ A strategy declares its contract through `StrategySpec`:
 
 ```python
 StrategySpec(
-    name="equity_residual_momentum_v1",
-    display_name="Residual Momentum v1",
+    name="equity_leveraged_trend_v1",
+    display_name="Leveraged index trend v1",
     market=Market.EQUITY,
     primary_timeframe="1d",
     supported_timeframes=("1d",),  # ONLY validated variants
     required_timeframes=(),  # extra series the strategy needs
-    rebalance_policy="monthly",
-    minimum_history_bars=274,
+    rebalance_policy="hours:24",
+    minimum_history_bars=200,
 )
 ```
 
@@ -163,9 +164,9 @@ one market's target can never push the combined account outside its limits,
 and one surviving crypto asset cannot absorb the sleeve (per-asset cap binds
 before renormalization).
 
-For the current PAPER equity wrapper, `maximum_allocation=0.55` is split
-internally into the unchanged V3 `core_allocation=0.30` and static
-`sleeve_allocation=0.25`; crypto remains `maximum_allocation=0.05`.
+For the current PAPER equity identity, `maximum_allocation=0.93` is a single
+market allocation with no internal composition; crypto remains
+`maximum_allocation=0.05`.
 
 Scanner isolation: equity and crypto universes refresh independently; a
 failed equity scan does not block crypto decisions and vice versa.
@@ -178,12 +179,11 @@ portfolio/risk layer is the ONLY authority that:
 - enforces account-level gross exposure and the cash buffer;
 - enforces per-market sleeve and per-asset caps;
 - enforces the account-wide `max_positions` count across equity and crypto,
-  plus the crypto-specific `max_crypto_positions` count; sleeve symbols in
-  `risk.slot_exempt_equity_symbols` do not count toward the 8-position cap;
+  plus the crypto-specific `max_crypto_positions` count;
 - orders SELL before BUY and sizes against the fresh account;
 - halts entries on daily-loss / drawdown breaches (production; backtest
-  records shadow events and keeps trading); daily-loss, drawdown, entry-latch,
-  and intermediate-reduction latches never grow the dividend sleeve;
+  records shadow events and keeps trading); a drawdown halt persists until an
+  operator risk-epoch reset;
 - persists decisions, orders and rebalance phases so restart recovery
   resumes exactly (idempotency, two-phase rebalance, no duplicate orders).
 
@@ -198,32 +198,32 @@ runtime state or authorize PAPER/LIVE. The runtime does not read generated
 reports or benchmark output; `config/settings.yaml` and the product factory
 are the strategy-selection authorities.
 
-## 8. Strategy registry (current PAPER dividend-and-gold-sleeve release)
+## 8. Strategy registry (current PAPER leveraged-trend release)
 
 **The complete registry** — `_PORTFOLIO_STRATEGY_FACTORIES` and
 `supported_portfolio_strategies()` (config-selectable):
 
 | name | market | primary timeframe | supported | rebalance | status |
 |---|---|---|---|---|---|
-| `equity_residual_momentum_v1` | equity | 1d | 1d | monthly | frozen historical baseline |
-| `equity_residual_momentum_v2` | equity | 1d | 1d | weekly | frozen prior PAPER identity (superseded 2026-08-24) |
-| `equity_residual_momentum_v3` | equity | 1d | 1d | weekly | registered rollback identity |
-| `equity_residual_momentum_v3_dividend_sleeve_v1` | equity | 1d | 1d | weekly core; sleeve on first weekly decision of calendar month or while empty | PAPER production selection |
+| `equity_leveraged_trend_v1` | equity | 1d | 1d | hours:24 (daily; QQQ 200-session SMA filter, 35% vol target) | PAPER production selection (2026-09-25) |
 | `crypto_low_variance_v1` | crypto | 1d | 1d | hours:168 | frozen historical baseline |
 | `crypto_low_variance_v2` | crypto | 1d | 1d | hours:96 | frozen prior PAPER selection (superseded 2026-08-26) |
 | `crypto_low_variance_hysteresis_v1` | crypto | 1d | 1d | hours:96 (retention rank 4, lookback 22, top2, alloc 0.05) | PAPER production selection (2026-08-26) |
+
 Unknown strategy names are rejected with
-`Unsupported portfolio strategy: <name>`. The current wrapper's display name
-is **Residual Momentum v3 + dividend-growth sleeve**; the configured sleeve
-also includes GLD/OUNZ. Its module is
-`src/parayabuck/portfolio/dividend_sleeve.py`; see the
-[dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
-and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
-Rollback selects `equity_residual_momentum_v3` and removes `core_allocation`,
-`sleeve_allocation`, `sleeve_symbols`,
-`universe.equity.sleeve_trade_symbols`, and
-`risk.slot_exempt_equity_symbols`; remove GLD/OUNZ from
-`fallback_trade_symbols` and restore XLRE/XLC.
+`Unsupported portfolio strategy: <name>`. The current equity identity's
+display name is **Leveraged index trend v1**: it holds QLD while QQQ's
+completed close is above its 200-session SMA, sized to a 35% volatility
+target, and holds cash otherwise. Its module is
+`src/parayabuck/portfolio/equity_leveraged_trend.py`; see the
+[profit maximization v1 evidence](research/profit_max_v1.md).
+
+Removed 2026-09-25 and recoverable from git history (`5d61c8c` on
+`profit-max-v1`, `ec4e2df` on `main`): `equity_residual_momentum_v1/v2/v3`,
+`equity_residual_momentum_v3_dividend_sleeve_v1`, the static-sleeve
+composition in the risk overlay, `risk.slot_exempt_equity_symbols`, and
+`universe.equity.sleeve_trade_symbols`. Rollback restores
+`config/settings.yaml` and the removed modules from `ec4e2df`.
 
 Versioning: strategies are immutable once validated; a change to the signal
 specification is a NEW named strategy, never a silent parameter mutation.

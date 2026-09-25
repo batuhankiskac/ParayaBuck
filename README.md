@@ -2,7 +2,7 @@
 
 > **Project status — production-only surface**
 >
-> - **Equity:** `equity_residual_momentum_v3_dividend_sleeve_v1` (Residual Momentum v3 + dividend-growth sleeve) — 0.55 maximum allocation split internally into the unchanged weekly V3 3.0.0 core (`core_allocation: 0.30`) and a static SCHD/VIG/DGRO/GLD/OUNZ sleeve (`sleeve_allocation: 0.25`, 0.05 each: dividend 0.15 + gold 0.10), selected on the first weekly decision of each calendar month or while empty and otherwise held; **LIVE disabled**
+> - **Equity:** `equity_leveraged_trend_v1` (Leveraged Index Trend v1 — holds QLD, the 2x Nasdaq-100 ETF, while QQQ's completed close is above its 200-session SMA, sized to a 35% volatility target) — 0.93 maximum allocation, decided every session, cash otherwise; **LIVE disabled**
 > - **Crypto:** `crypto_low_variance_hysteresis_v1` — 1d signal, 96h rebalance, 0.05 allocation; validated low-variance hysteresis product identity
 > - **Dataset:** point-in-time historical manifests and corporate-action data remain under `data/historical/`; large provider datasets are local/ignored
 
@@ -17,17 +17,20 @@ enable it (see [Enabling live safely](#enabling-live-safely)).
 
 The PAPER product runs the current validated equity and crypto identities
 (see `docs/validated_strategies.md` and the
-[dividend-sleeve production evidence](docs/research/dividend_sleeve_production_v1.md) and
-[gold sleeve production evidence](docs/research/gold_sleeve_production_v1.md)):
+[profit maximization v1 evidence](docs/research/profit_max_v1.md)):
 
 | Market | Strategy | Signal | Rebalance | Allocation |
 |---|---|---|---|---|
-| Equity | Residual Momentum v3 + dividend-growth sleeve (`equity_residual_momentum_v3_dividend_sleeve_v1`) | 1d | weekly core; sleeve selected on the first weekly decision of each calendar month or while empty | 0.55 total = 0.30 core + 0.25 sleeve (0.05 each: SCHD/VIG/DGRO/GLD/OUNZ) |
+| Equity | Leveraged Index Trend v1 (`equity_leveraged_trend_v1`) — QQQ 200-session SMA filter, `min(1, 0.35 / 20-session realized QLD volatility)` | 1d | daily (`rebalance_frequency: hours:24`) | 0.93 |
 | Crypto | Low Realized Variance Hysteresis v1 (`crypto_low_variance_hysteresis_v1`) — retention rank 4, lookback 22, top2, 96h | 1d | 96h | 0.05 |
 
-Historical baselines `equity_residual_momentum_v1` (monthly),
-`equity_residual_momentum_v2` (weekly), and `crypto_low_variance_v1` (168h)
-remain constructible for controlled backtests.
+The equity target is cash when QQQ is in a downtrend, when history is
+insufficient, or when QLD is unavailable. The residual-momentum
+v1/v2/v3 identities and the dividend-growth and gold sleeve composition were
+removed on 2026-09-25; they are recoverable from git history (`5d61c8c` on
+`profit-max-v1`, `ec4e2df` on `main`) and are documented as historical, not
+selectable. `crypto_low_variance_v1` (168h) remains a constructible
+historical baseline for controlled backtests.
 
 Backtest economics do not imply forward live returns; controlled PAPER
 operation remains the gate before any live consideration.
@@ -44,17 +47,17 @@ Alpaca assets/data -> eligibility filters -> dynamic scanner -> active universe
   backtest, paper, and live.
 - Dynamic universes (equity ~300-candidate shortlist → 30-symbol IEX stream;
   crypto from supported USD pairs) are rebuilt point-in-time by the production
-  scanner. `universe.equity.sleeve_trade_symbols` pins SCHD/VIG/DGRO/GLD/OUNZ in the
-  equity stream; they are hidden from V3 scoring, leaving 21 ranked core slots
-  instead of 26. The unused static fallback list omits XLRE/XLC; other static
-  symbols remain fallback/allowlist/denylist inputs.
-- Strict risk overlay: market allocations remain 0.55 equity / 0.05 crypto.
-  Equity is split internally into the 0.30 V3 core and 0.25 sleeve (0.05 each:
-  SCHD/VIG/DGRO/GLD/OUNZ); `risk.slot_exempt_equity_symbols` keeps the sleeve
-  outside the 8-position cap. Daily-loss, drawdown, entry-latch, and
-  intermediate-reduction latches never grow the sleeve. Crypto limits remain
-  0.10 exposure / 0.05 per position / 2 positions; gross cap 0.60, cash buffer
-  0.40, stale-account pauses, ownership-drift halts, and duplicate
+  scanner. `universe.equity.reference_symbols` pins SPY, QQQ and QLD; QQQ is
+  the trend signal and QLD the only holding, both tradable through
+  `universe.equity.trade_reference_symbols`. The unused static fallback list
+  omits XLRE/XLC; other static symbols remain fallback/allowlist/denylist
+  inputs.
+- Strict risk overlay: market allocations remain 0.93 equity / 0.05 crypto.
+  Equity limits are 0.93 per asset, 0.98 gross and a 0.02 cash buffer; the
+  0.20 daily-loss and 0.75 drawdown latches are catastrophe brakes for a 2x
+  index ETF, and the drawdown halt persists until an operator risk-epoch reset.
+  Crypto limits remain 0.10 exposure / 0.05 per position / 2 positions;
+  max positions 8, stale-account pauses, ownership-drift halts, and duplicate
   order/decision protection remain unchanged.
 - Startup catch-up: a fresh mid-period deployment decides immediately on the
   latest closed warmup bars (`decision_origin: startup_catch_up`) instead of
@@ -93,13 +96,13 @@ procedures).
 Configuration lives in `config/settings.yaml` (`runtime.mode`, universe,
 `strategy.equity` / `strategy.crypto`, `risk`, `backtest`, `live`, engine,
 execution, backup, alerting). The current equity selection is
-`equity_residual_momentum_v3_dividend_sleeve_v1`; its sleeve uses
-`core_allocation`, `sleeve_allocation`, `sleeve_symbols`,
-`universe.equity.sleeve_trade_symbols`, and
-`risk.slot_exempt_equity_symbols`. Rollback selects the still-registered
-`equity_residual_momentum_v3` and removes the three sleeve parameters, both
-sleeve symbol lists, GLD/OUNZ from `fallback_trade_symbols`, and restores
-XLRE/XLC there.
+`equity_leveraged_trend_v1`; its parameters are `signal_symbol`, `hold_symbol`,
+`sma_bars`, `vol_target`, `vol_window` and `rebalance_frequency`, with QQQ/QLD
+as tradable reference symbols. The V3 and sleeve identities, the
+static-sleeve risk-overlay composition and `risk.slot_exempt_equity_symbols`
+are gone. Rollback restores `config/settings.yaml` and the removed modules
+from commit `ec4e2df` (main before the switch), e.g.
+`git checkout ec4e2df -- <paths>`.
 
 ## Backtesting
 
@@ -162,8 +165,8 @@ live.
 
 - `docs/product_foundation.md` — frozen product principles
 - `docs/validated_strategies.md` — frozen baselines and current validated identities
-- `docs/research/dividend_sleeve_production_v1.md` — current dividend-growth sleeve evidence
-- `docs/research/gold_sleeve_production_v1.md` — current gold sleeve evidence
+- `docs/research/profit_max_v1.md` — current equity identity evidence
+- `docs/research/dividend_sleeve_production_v1.md` / `docs/research/gold_sleeve_production_v1.md` — removed sleeve evidence (historical)
 - `docs/strategy_architecture.md` — universe/scanner/strategy/risk contract
 - `docs/paper_operations.md` — PAPER runtime contract and forward rules
 - `docs/operations.md` — state, backup/restore, Docker, incident reconciliation

@@ -1,4 +1,4 @@
-"""Canonical backtest benchmarks: equity v2 (weekly) and crypto v2 (96h).
+"""Canonical backtest benchmarks: equity leveraged trend v1 (daily) and crypto v2 (96h).
 
 Uses the gitignored local historical CSVs when present; falls back to a
 smaller synthetic window when they are missing (report is labeled synthetic).
@@ -54,14 +54,16 @@ def run(report: Report) -> None:
                 config,
                 bars,
                 market=market,
-                strategy_name="equity_residual_momentum_v2",
+                strategy_name="equity_leveraged_trend_v1",
+                # The dataset has no QLD; hold QQQ so the run trades.
+                parameters={"hold_symbol": "QQQ", "vol_target": 0.35},
                 start=datetime.fromisoformat(EQUITY_START).replace(tzinfo=UTC),
                 end=datetime.fromisoformat(EQUITY_END).replace(tzinfo=UTC),
                 output_dir=str(ROOT / "data" / "smoke" / "bench_equity"),
                 persist_artifacts=False,
             )
 
-        timing, _ = timeit(equity_run, label="equity v2 backtest 2019-2021", warmup=0, runs=3)
+        timing, _ = timeit(equity_run, label="equity trend backtest 2019-2021", warmup=0, runs=3)
         report.add(timing)
 
     if CRYPTO_CSV.exists():

@@ -115,7 +115,7 @@ def test_equity_and_crypto_targets_combine_within_account_limits() -> None:
     approved_crypto = ("BTC/USD", "ETH/USD", "SOL/USD")
 
     equity_target = _target(
-        "equity_residual_momentum_v1",
+        "equity_leveraged_trend_v1",
         timestamp,
         (("AAPL", 0.10), ("MSFT", 0.10), ("NVDA", 0.10)),
     )
@@ -191,7 +191,7 @@ def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
     # 8 symbols would like 8 positions at 10% each: position count and the
     # equity sleeve cap (50%) must both bind.
     weights = tuple((f"S{i:02d}", 0.10) for i in range(8))
-    target = _target("equity_residual_momentum_v1", timestamp, weights)
+    target = _target("equity_leveraged_trend_v1", timestamp, weights)
     decision = overlay.apply(
         target,
         account,
@@ -234,7 +234,7 @@ def test_global_position_limit_counts_existing_cross_market_slots_and_keeps_equi
     )
     symbols = tuple((f"S{index:02d}", 0.10) for index in range(8))
     decision = overlay.apply(
-        _ranked_target("equity_residual_momentum_v3", timestamp, symbols),
+        _ranked_target("equity_leveraged_trend_v1", timestamp, symbols),
         account,
         market=Market.EQUITY,
         approved_symbols=tuple(symbol for symbol, _weight in symbols),
@@ -584,7 +584,7 @@ def test_planner_orders_sells_before_buys_across_markets() -> None:
     timestamp = datetime(2025, 1, 15, 4, 0, tzinfo=UTC)
     account = _account(equity_positions=(("AAPL", 100.0, 100.0),))
     target = _target(
-        "equity_residual_momentum_v1",
+        "equity_leveraged_trend_v1",
         timestamp,
         (("AAPL", 0.05), ("MSFT", 0.05)),  # sell AAPL down, buy MSFT
     )
@@ -647,7 +647,7 @@ def test_planner_ignores_cross_market_open_orders() -> None:
     assert suppressed == ()
 
     equity_target = _target(
-        "equity_residual_momentum_v1",
+        "equity_leveraged_trend_v1",
         timestamp,
         (("IWM", 0.05),),
     )
@@ -713,14 +713,16 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
     each market's decision boundary without duplicate rebalances."""
     repository = PortfolioStateRepository(tmp_path / "shared.sqlite3")
     broker = _SharedBroker()
-    equity = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
+    equity = portfolio_strategy_from(
+        "equity_leveraged_trend_v1", {"signal_symbol": "QQQ", "hold_symbol": "QLD", "sma_bars": 5}
+    )
     crypto = portfolio_strategy_from(
         "crypto_low_variance_v1",
         {"top_n": 2, "rebalance_hours": 168},
     )
     equity_runtime = PortfolioRuntime(
         equity,
-        ("AAPL", "MSFT", "NVDA", "SPY"),
+        ("QQQ", "QLD"),
         broker,
         repository,
         mode="paper",
@@ -739,7 +741,7 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
         account_id="shared-account",
         allow_static_universe=True,
     )
-    equity_result = equity_runtime.process_closed_bars(_daily_bars(("AAPL", "MSFT", "NVDA", "SPY")))
+    equity_result = equity_runtime.process_closed_bars(_daily_bars(("QQQ", "QLD")))
     assert equity_result.status == "submitted"
     crypto_result = crypto_runtime.process_closed_bars(_daily_bars(("BTC/USD", "ETH/USD"), market=Market.CRYPTO))
     assert crypto_result.status == "submitted"
@@ -757,7 +759,7 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
     broker2 = _SharedBroker()
     equity_restart = PortfolioRuntime(
         equity,
-        ("AAPL", "MSFT", "NVDA", "SPY"),
+        ("QQQ", "QLD"),
         broker2,
         repository,
         mode="paper",
@@ -765,6 +767,6 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
         risk_limits=_limits(),
         allow_static_universe=True,
     )
-    result = equity_restart.process_closed_bars(_daily_bars(("AAPL", "MSFT", "NVDA", "SPY")))
+    result = equity_restart.process_closed_bars(_daily_bars(("QQQ", "QLD")))
     assert result.status in {"duplicate_decision", "not_scheduled"}
     equity_restart.close()

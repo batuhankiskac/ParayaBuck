@@ -644,7 +644,7 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
             return True
 
     def make_config(enabled: bool) -> object:
-        selection = type("Selection", (), {"enabled": enabled, "name": "equity_residual_momentum_v1"})()
+        selection = type("Selection", (), {"enabled": enabled, "name": "equity_leveraged_trend_v1"})()
         disabled = type("Selection", (), {"enabled": False, "name": "crypto"})()
         strategy = type("Strategy", (), {"equity": selection, "crypto": disabled})()
         universe = type(
@@ -664,7 +664,7 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
     monkeypatch.setattr(server, "manager", StaticManager())
     monkeypatch.setattr(server, "load_config", lambda _path: make_config(True))
     configured = asyncio.run(server.get_status())
-    assert configured["strategy_status"] == "configured:equity/equity_residual_momentum_v1"
+    assert configured["strategy_status"] == "configured:equity/equity_leveraged_trend_v1"
 
     monkeypatch.setattr(server, "load_config", lambda _path: make_config(False))
     disabled = asyncio.run(server.get_status())
@@ -699,7 +699,7 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
         (),
         {
             "enabled": True,
-            "name": "equity_residual_momentum_v1",
+            "name": "equity_leveraged_trend_v1",
             "timeframe": "1d",
             "parameters": {},
         },
@@ -740,10 +740,10 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
     monkeypatch.setattr(server, "load_config", lambda _path: config)
     status = asyncio.run(server.get_status())
     meta = status["strategy_metadata"]
-    assert meta["equity"]["name"] == "equity_residual_momentum_v1"
+    assert meta["equity"]["name"] == "equity_leveraged_trend_v1"
     assert meta["equity"]["signal_timeframe"] == "1d"
     assert meta["equity"]["supported_timeframes"] == ["1d"]
-    assert meta["equity"]["rebalance_cadence"] == "monthly"
+    assert meta["equity"]["rebalance_cadence"] == "hours:24"
     assert meta["equity"]["candidate_pool_size"] == 3
     assert meta["equity"]["observation_set_size"] == 2
     assert meta["crypto"] is None  # disabled strategy exposes no metadata

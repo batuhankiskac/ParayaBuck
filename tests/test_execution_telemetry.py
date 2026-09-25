@@ -417,7 +417,7 @@ def _intent(symbol: str, *, direction: Direction = Direction.LONG) -> OrderInten
         entry_price=100.0,
         stop_price=95.0,
         target_price=115.0,
-        strategy="equity_residual_momentum_v1",
+        strategy="equity_leveraged_trend_v1",
         client_order_id="pb-" + symbol,
     )
 

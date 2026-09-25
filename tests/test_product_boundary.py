@@ -73,8 +73,8 @@ def test_config_loader_rejects_unsupported_equity_identity(tmp_path: Path) -> No
             "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"]},
         },
         "strategy": {
-            "equity": {"enabled": True, "name": "equity_residual_momentum_v3", "maximum_allocation": 0.55},
-            "crypto": {"enabled": True, "name": "unsupported_strategy_name", "maximum_allocation": 0.05},
+            "equity": {"enabled": True, "name": "unsupported_equity_identity", "maximum_allocation": 0.55},
+            "crypto": {"enabled": True, "name": "crypto_low_variance_v1", "maximum_allocation": 0.05},
         },
     }
     path = tmp_path / "settings.yaml"
@@ -117,7 +117,7 @@ def test_missing_strategy_block_raises(tmp_path: Path) -> None:
             "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"]},
         },
         "strategy": {
-            "equity": {"enabled": False, "name": "equity_residual_momentum_v1", "maximum_allocation": 0.5},
+            "equity": {"enabled": False, "name": "equity_leveraged_trend_v1", "maximum_allocation": 0.5},
         },
     }
     path.write_text(yaml.safe_dump(raw2))
@@ -173,4 +173,4 @@ def test_dataclass_defaults_still_usable_without_yaml() -> None:
     assert cfg.strategy.crypto.name in PRODUCT_STRATEGY_NAMES
     # Direct StrategyConfig defaults also usable
     sc = StrategyConfig()
-    assert sc.equity.name == "equity_residual_momentum_v1"
+    assert sc.equity.name == "equity_leveraged_trend_v1"

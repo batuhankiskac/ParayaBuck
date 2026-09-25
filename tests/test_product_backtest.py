@@ -22,16 +22,22 @@ from parayabuck.universe.observation_set import build_observation_set
 
 def _bars(days: int = 420) -> list[Bar]:
     start = datetime(2023, 1, 1, tzinfo=UTC)
-    symbols = ("SPY", "AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "LOSER")
+    symbols = ("SPY", "AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "LOSER", "QQQ", "QLD")
     bars: list[Bar] = []
     for index in range(days):
         timestamp = start + timedelta(days=index)
         for offset, symbol in enumerate(symbols):
-            drift = -0.0005 if symbol == "LOSER" else 0.0004 + offset * 0.00002
-            # A small deterministic oscillation gives the returns real
-            # variance so the volatility-aware product strategy can rank.
-            wobble = 1 + 0.01 * math.sin(index * 0.9 + offset)
-            close = 100 * (1 + drift) ** index * wobble
+            if symbol in ("QQQ", "QLD"):
+                # The shipped equity identity reads QQQ's SMA and holds QLD;
+                # a clean, wobble-free uptrend keeps it invested on every
+                # session so the product-runner tests see deterministic trades.
+                close = 100 * (1 + (0.0006 if symbol == "QQQ" else 0.0012)) ** index
+            else:
+                drift = -0.0005 if symbol == "LOSER" else 0.0004 + offset * 0.00002
+                # A small deterministic oscillation gives the returns real
+                # variance so the volatility-aware product strategy can rank.
+                wobble = 1 + 0.01 * math.sin(index * 0.9 + offset)
+                close = 100 * (1 + drift) ** index * wobble
             bars.append(
                 Bar(
                     timestamp,
@@ -52,11 +58,8 @@ def _config(tmp_path) -> Config:
     base = Config()
     parameters = {
         **base.strategy.equity.parameters,
-        "formation_bars": 60,
-        "skip_bars": 5,
-        "beta_window_bars": 80,
-        "residual_vol_window": 20,
-        "top_n": 4,
+        "sma_bars": 5,
+        "vol_target": 0.0,
     }
     return replace(
         base,
@@ -110,7 +113,7 @@ def test_product_universe_observation_uses_configured_strategy_alpha(tmp_path) -
         maximum_stream_symbols=snapshot.maximum_stream_symbols,
         pinned_symbols=snapshot.pinned_symbols,
     )
-    assert direct.alpha_scored_count > 0
+    assert direct.strategy_name == strategy.name
     assert snapshot.observation_strategy_name == strategy.name
     assert snapshot.observation_strategy_version == strategy.version
     assert snapshot.observation_set[: len(direct.observation_set)] == direct.observation_set
@@ -123,19 +126,17 @@ def test_requested_strategy_identity_owns_direct_backtest_observation_set(tmp_pa
         config,
         _bars(),
         market=Market.EQUITY,
-        strategy_name="equity_residual_momentum_v1",
+        strategy_name="equity_leveraged_trend_v1",
     )
 
-    assert run.report.summary["strategy_name"] == "equity_residual_momentum_v1"
-    assert {snapshot.observation_strategy_name for snapshot in run.universe.snapshots} == {
-        "equity_residual_momentum_v1"
-    }
+    assert run.report.summary["strategy_name"] == "equity_leveraged_trend_v1"
+    assert {snapshot.observation_strategy_name for snapshot in run.universe.snapshots} == {"equity_leveraged_trend_v1"}
     assert {snapshot.observation_strategy_version for snapshot in run.universe.snapshots} == {"1.0.0"}
 
 
 def test_product_runner_applies_typed_terminal_lifecycle(tmp_path) -> None:
     terminal = datetime(2023, 1, 1, tzinfo=UTC) + timedelta(days=350)
-    terminal_lifecycles = {"FFF": TerminalLifecycle(terminal, "POSSIBLE_DELISTING")}
+    terminal_lifecycles = {"QLD": TerminalLifecycle(terminal, "POSSIBLE_DELISTING")}
 
     run = run_product_backtest(
         _config(tmp_path),
@@ -147,7 +148,7 @@ def test_product_runner_applies_typed_terminal_lifecycle(tmp_path) -> None:
     )
 
     terminal_events = [event for event in run.result.terminal_events if event["policy"] == "TERMINAL_BAR"]
-    assert [(event["symbol"], event["timestamp"]) for event in terminal_events] == [("FFF", terminal.isoformat())]
+    assert [(event["symbol"], event["timestamp"]) for event in terminal_events] == [("QLD", terminal.isoformat())]
     assert terminal_events[0]["terminal_event_class"] == "POSSIBLE_DELISTING"
 
 
@@ -201,7 +202,7 @@ def test_grid_optimizer_ranks_train_and_evaluates_oos_once(tmp_path) -> None:
         config,
         _bars(),
         market=Market.EQUITY,
-        grid={"formation_bars": [60, 66]},
+        grid={"sma_bars": [5, 6]},
         train_start=start + timedelta(days=100),
         train_end=start + timedelta(days=299),
         oos_start=start + timedelta(days=300),
@@ -244,8 +245,8 @@ def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) 
         config,
         bars,
         market=Market.EQUITY,
-        grid={"formation_bars": [60, 66, 72]},
-        strategy_name="equity_residual_momentum_v1",
+        grid={"sma_bars": [5, 6, 7]},
+        strategy_name="equity_leveraged_trend_v1",
         train_start=start + timedelta(days=100),
         train_end=start + timedelta(days=299),
         oos_start=start + timedelta(days=300),
@@ -258,8 +259,8 @@ def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) 
         (start + timedelta(days=419)).isoformat(),
     ]
     assert identities == [
-        {("equity_residual_momentum_v1", "1.0.0")},
-        {("equity_residual_momentum_v1", "1.0.0")},
+        {("equity_leveraged_trend_v1", "1.0.0")},
+        {("equity_leveraged_trend_v1", "1.0.0")},
     ]
 
 
@@ -286,7 +287,7 @@ def test_optimizer_rejects_overlapping_train_and_oos_windows(tmp_path) -> None:
             _config(tmp_path),
             _bars(),
             market=Market.EQUITY,
-            grid={"formation_bars": [60]},
+            grid={"sma_bars": [5]},
             train_start=start,
             train_end=start + timedelta(days=300),
             oos_start=start + timedelta(days=200),
@@ -298,7 +299,7 @@ def test_optimizer_rejects_overlapping_train_and_oos_windows(tmp_path) -> None:
             _config(tmp_path),
             _bars(),
             market=Market.EQUITY,
-            grid={"formation_bars": [60]},
+            grid={"sma_bars": [5]},
             oos_start=start + timedelta(days=300),
             oos_end=start + timedelta(days=400),
         )
@@ -314,7 +315,7 @@ def test_optimizer_uses_configured_metric_for_full_trial_ordering(tmp_path) -> N
         config,
         _bars(280),
         market=Market.EQUITY,
-        grid={"formation_bars": [60, 66]},
+        grid={"sma_bars": [5, 6]},
     )
     training = payload["training_results"]
 
@@ -363,7 +364,7 @@ def test_backtest_cli_runs_offline_csv_end_to_end(tmp_path, monkeypatch, capsys)
             "--market",
             "equity",
             "--strategy",
-            "equity_residual_momentum_v1",
+            "equity_leveraged_trend_v1",
             "--data",
             str(csv_path),
             "--output-dir",
@@ -372,7 +373,7 @@ def test_backtest_cli_runs_offline_csv_end_to_end(tmp_path, monkeypatch, capsys)
     )
 
     assert exit_code == 0
-    assert "equity_residual_momentum_v1" in capsys.readouterr().out
+    assert "equity_leveraged_trend_v1" in capsys.readouterr().out
     assert list((tmp_path / "cli-reports").glob("*/report.json"))
 
 
@@ -400,7 +401,7 @@ def test_product_backtest_credits_explicit_dividend_once(tmp_path) -> None:
     bars = _bars()
     action = CorporateAction(
         datetime(2023, 10, 28, tzinfo=UTC),
-        "FFF",
+        "QLD",
         CorporateActionType.DIVIDEND,
         1.0,
     )
@@ -409,7 +410,7 @@ def test_product_backtest_credits_explicit_dividend_once(tmp_path) -> None:
         config,
         bars,
         market=Market.EQUITY,
-        strategy_name="equity_residual_momentum_v1",
+        strategy_name="equity_leveraged_trend_v1",
         corporate_actions=[action],
     )
 
@@ -570,9 +571,9 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
 def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(
     tmp_path,
 ) -> None:
-    # The SHIPPED DEFAULT strategy (equity_residual_momentum_v2, identical
-    # windows to v1) declares minimum_history_bars=274 daily bars — not the
-    # reduced-window fixture config used by the other backtest tests.
+    # The SHIPPED DEFAULT strategy (equity_leveraged_trend_v1) declares
+    # minimum_history_bars=200 daily bars — not the reduced-window fixture
+    # config used by the other backtest tests.
     base = Config()
     config = replace(
         base,
@@ -580,9 +581,9 @@ def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(
     )
     # The warmup window counts REAL NYSE sessions (holiday-aware), so it
     # spans more calendar days than bars: at least the no-holiday Mon-Fri
-    # minimum (ceil(274*7/5)=384) and bounded by a plausible holiday count.
+    # minimum (ceil(200*7/5)=280) and bounded by a plausible holiday count.
     days = cli_module._warmup_window_days(config, Market.EQUITY)
-    assert 384 <= days <= 460
+    assert 280 <= days <= 340
     assert days >= config.universe.equity.scanner.minimum_data_completeness  # sanity
 
 

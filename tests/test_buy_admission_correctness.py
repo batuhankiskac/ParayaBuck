@@ -79,8 +79,27 @@ def test_over_gross_sell_remains_available(tmp_path) -> None:  # type: ignore[no
 
 def test_shipped_cap8_config_still_blocks_over_gross_buy(tmp_path) -> None:  # type: ignore[no-untyped-def]
     config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
-    broker = _over_gross_broker()
-    targets = {**{name: 0.071 for name in _NAMES}, "TSLA": 0.019}
+    # Account already invested 0.99: past the shipped 0.98 gross cap.
+    broker = _SimBroker(
+        tuple(
+            [_position(symbol, 130) for symbol in _NAMES]
+            + [
+                PositionSnapshot(
+                    "BTC/USD",
+                    210,
+                    100,
+                    100,
+                    Market.CRYPTO,
+                    qty_available=210,
+                    ownership="external",
+                    managed_qty=0,
+                )
+            ]
+        )
+    )
+    # Held names are targeted at their current weight (inside the rebalance
+    # band), so the only planned order is the new TSLA BUY.
+    targets = {**{name: 0.13 for name in _NAMES}, "TSLA": 0.019}
     runtime, _repository = _runtime(
         tmp_path,
         broker,
@@ -89,13 +108,14 @@ def test_shipped_cap8_config_still_blocks_over_gross_buy(tmp_path) -> None:  # t
     )
     runtime.maximum_allocation = config.strategy.equity.maximum_allocation
     result = runtime.process_closed_bars(_bars(tuple(targets)))
-    assert result.risk is not None and result.risk.gross_before == 0.605
+    assert result.risk is not None and result.risk.gross_before == 0.99
     assert broker.submitted == []
 
 
 def test_shipped_cap8_config_counts_working_buy_before_next_admission(tmp_path) -> None:  # type: ignore[no-untyped-def]
     config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
-    broker = _SimBroker((_position("AAPL", 500),))
+    # Account invested 0.90 leaves 0.98 - 0.90 - 0.05 (working buy) == 0.03.
+    broker = _SimBroker((_position("AAPL", 900),))
     broker.working_buy_orders = lambda: (_working("existing", "MSFT", 50, Market.EQUITY),)  # type: ignore[attr-defined]
     runtime, _repository = _runtime(
         tmp_path,
@@ -105,8 +125,8 @@ def test_shipped_cap8_config_counts_working_buy_before_next_admission(tmp_path) 
     )
     admission = runtime._size_buys_to_safe_capacity((_buy(),))
     assert admission.committed_buy_notional == 5000
-    assert admission.orders[0].quantity == 50
-    assert admission.gross_headroom == admission.cash_headroom == 5000
+    assert admission.orders[0].quantity == 30
+    assert admission.gross_headroom == admission.cash_headroom == 3000
 
 
 def _admission_runtime(tmp_path, current_qty: int = 500):  # type: ignore[no-untyped-def]
@@ -268,7 +288,8 @@ def test_sequential_equity_crypto_decisions_share_committed_headroom(tmp_path) -
         market = Market.CRYPTO
 
     for first_market in (Market.EQUITY, Market.CRYPTO):
-        broker = _SimBroker((PositionSnapshot("MANUAL", 500, 100, 100, Market.EQUITY, managed_qty=0),))
+        # Invested 0.88 leaves 0.98 - 0.88 == 0.10 of shared headroom.
+        broker = _SimBroker((PositionSnapshot("MANUAL", 880, 100, 100, Market.EQUITY, managed_qty=0),))
         broker.working_buy_orders = lambda: tuple(  # type: ignore[attr-defined]
             _working(order.client_order_id, order.symbol, order.quantity, order.market)
             for order in broker.submitted
@@ -284,7 +305,7 @@ def test_sequential_equity_crypto_decisions_share_committed_headroom(tmp_path) -
                 broker,
                 repository,
                 mode="paper",
-                maximum_allocation=0.55,
+                maximum_allocation=config.strategy.equity.maximum_allocation,
                 risk_limits=limits,
                 account_id="acct",
             ),
@@ -294,7 +315,7 @@ def test_sequential_equity_crypto_decisions_share_committed_headroom(tmp_path) -
                 broker,
                 repository,
                 mode="paper",
-                maximum_allocation=0.10,
+                maximum_allocation=config.strategy.crypto.maximum_allocation,
                 risk_limits=limits,
                 account_id="acct",
             ),

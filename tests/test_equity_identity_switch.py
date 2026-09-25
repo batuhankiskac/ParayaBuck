@@ -1,4 +1,4 @@
-"""Deterministic PAPER safety contracts for the V2 -> V3 identity switch."""
+"""Deterministic PAPER safety contracts for an equity identity switch (V3 -> VT35)."""
 
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ def _account(*positions: PositionSnapshot) -> AccountSnapshot:
 
 def _target(weights: dict[str, float]) -> TargetPortfolio:
     return TargetPortfolio(
-        strategy_name="equity_residual_momentum_v3",
-        strategy_version="3.0.0",
+        strategy_name="equity_leveraged_trend_v1",
+        strategy_version="1.0.0",
         decision_timestamp=NOW,
         weights=tuple(TargetWeight(symbol, weight) for symbol, weight in weights.items()),
         cash_weight=1.0 - sum(weights.values()),
@@ -72,7 +72,7 @@ def _plan(
     )
 
 
-def test_v3_switch_reuses_current_holdings_as_normal_delta_inventory() -> None:
+def test_identity_switch_reuses_current_holdings_as_normal_delta_inventory() -> None:
     orders = _plan(
         _target({"AAPL": 0.10}),
         _account(_position("AAPL", 80.0)),
@@ -81,7 +81,7 @@ def test_v3_switch_reuses_current_holdings_as_normal_delta_inventory() -> None:
     assert [(order.symbol, order.side, order.quantity) for order in orders] == [("AAPL", PortfolioOrderSide.BUY, 20.0)]
 
 
-def test_v3_switch_exits_unselected_holdings_and_enters_new_names() -> None:
+def test_identity_switch_exits_unselected_holdings_and_enters_new_names() -> None:
     orders = _plan(
         _target({"MSFT": 0.10}),
         _account(_position("AAPL", 100.0)),
@@ -93,7 +93,7 @@ def test_v3_switch_exits_unselected_holdings_and_enters_new_names() -> None:
     ]
 
 
-def test_v3_switch_enters_new_target_and_skips_equal_target() -> None:
+def test_identity_switch_enters_new_target_and_skips_equal_target() -> None:
     assert _plan(_target({"MSFT": 0.10}), _account(), symbols=("MSFT",))
     assert (
         _plan(
@@ -105,7 +105,7 @@ def test_v3_switch_enters_new_target_and_skips_equal_target() -> None:
     )
 
 
-def test_v3_switch_respects_existing_pending_order_ownership() -> None:
+def test_identity_switch_respects_existing_pending_order_ownership() -> None:
     orders = _plan(
         _target({"AAPL": 0.10}),
         _account(),
@@ -115,7 +115,7 @@ def test_v3_switch_respects_existing_pending_order_ownership() -> None:
     assert orders == ()
 
 
-def test_v3_target_keeps_existing_paper_risk_caps() -> None:
+def test_new_identity_target_keeps_existing_paper_risk_caps() -> None:
     target = _target({f"S{index}": 0.10 for index in range(8)})
     decision = PortfolioRiskOverlay().apply(
         target,
@@ -129,5 +129,5 @@ def test_v3_target_keeps_existing_paper_risk_caps() -> None:
     assert all(weight.weight <= 0.10 for weight in decision.target.weights)
     assert decision.gross_after <= 0.60
     assert decision.target.cash_weight >= 0.40
-    assert decision.target.strategy_name == "equity_residual_momentum_v3"
-    assert decision.target.strategy_version == "3.0.0"
+    assert decision.target.strategy_name == "equity_leveraged_trend_v1"
+    assert decision.target.strategy_version == "1.0.0"

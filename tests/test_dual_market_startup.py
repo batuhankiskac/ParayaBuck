@@ -3,15 +3,14 @@
 Verifies the Phase-4 startup contract WITHOUT any network or real broker:
 runtime.mode=paper, equity+crypto enabled, LIVE disabled, universe
 preflight -> warmup -> startup catch-up -> strategy runtimes -> different
-rebalance cadences (equity 1d weekly vs crypto 1d 96h) -> account
+rebalance cadences (equity 1d 24h vs crypto 1d 96h) -> account
 reconciliation -> ready state, with both strategies deciding simultaneously
 against ONE repository and ONE fake broker. Restart must never re-run the
 catch-up. No real PAPER orders are ever placed: the fake broker only records
 submitted orders.
 
-The strategy parameters below are the validated PRODUCTION v2 specs (same
-alpha as the frozen v1 baselines, new cadence); they are asserted, never
-changed.
+The strategy parameters below are the validated PRODUCTION specs (they mirror
+the shipped config block); they are asserted, never changed.
 """
 
 from __future__ import annotations
@@ -45,15 +44,12 @@ pytestmark = pytest.mark.paper_chaos
 ROOT = Path(__file__).resolve().parents[1]
 
 PRODUCTION_EQUITY = {
-    "formation_bars": 252,
-    "skip_bars": 21,
-    "beta_window_bars": 273,
-    "residual_vol_window": 63,
-    "top_n": 8,
-    "max_single_weight": 0.10,
-    "ivol_reject_quantile": 0.70,
-    "exclude_symbols": ["SPY"],
-    "rebalance_frequency": "weekly",
+    "signal_symbol": "QQQ",
+    "hold_symbol": "QLD",
+    "sma_bars": 200,
+    "vol_target": 0.35,
+    "vol_window": 20,
+    "rebalance_frequency": "hours:24",
 }
 PRODUCTION_CRYPTO = {
     "variance_lookback_days": 22,
@@ -61,7 +57,7 @@ PRODUCTION_CRYPTO = {
     "rebalance_hours": 96,
 }
 
-EQUITY_SYMBOLS = ("SPY", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8")
+EQUITY_SYMBOLS = ("QQQ", "QLD")
 CRYPTO_SYMBOLS = ("BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD")
 
 _SUBMITTED_STATUSES = {"submitted", "sell_phase_submitted", "buy_phase_submitted"}
@@ -104,9 +100,9 @@ def _bars(
 ) -> list[Bar]:
     """Deterministic daily bars with distinct per-symbol drift and noise.
 
-    Higher-index symbols grow faster and noisier, so the residual-momentum
-    ranking is deterministic and produces positive scores for the trailing
-    symbols while SPY (low drift) stays a pure benchmark.
+    Every symbol trends up, so the equity trend filter (QQQ close above its
+    200-session SMA) is deterministically in an uptrend and the crypto
+    low-variance ranking is deterministic.
     """
     start = start or datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
     bars: list[Bar] = []
@@ -139,16 +135,17 @@ def _assert_frozen_config():
     assert config.universe.equity.enabled and config.universe.crypto.enabled
     assert config.strategy.equity.enabled and config.strategy.crypto.enabled
     assert config.live.enabled is False
-    assert config.strategy.equity.name == "equity_residual_momentum_v3_dividend_sleeve_v1"
+    assert config.strategy.equity.name == "equity_leveraged_trend_v1"
     assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
-    # 2026-08-29 fix: equity 0.55 so 0.55+0.05==0.60 gross invariant
-    assert config.strategy.equity.maximum_allocation == 0.55
+    # 2026-09-25 (profit_max_v1): equity 0.93 so 0.93+0.05==0.98 gross invariant
+    assert config.strategy.equity.maximum_allocation == 0.93
+    assert config.strategy.equity.parameters == PRODUCTION_EQUITY
     assert config.strategy.crypto.maximum_allocation == 0.05
     risk = config.risk
     assert risk.max_crypto_exposure_pct == 0.10
     assert risk.max_crypto_positions == 2
-    assert risk.max_gross_exposure_pct == 0.60
-    assert risk.cash_buffer_pct == 0.40
+    assert risk.max_gross_exposure_pct == 0.98
+    assert risk.cash_buffer_pct == 0.02
     return config
 
 
@@ -157,9 +154,9 @@ def _equity_runtime(
     broker: _PaperBroker,
     config,
 ) -> PortfolioRuntime:
-    strategy = portfolio_strategy_from("equity_residual_momentum_v2", PRODUCTION_EQUITY)
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1", PRODUCTION_EQUITY)
     assert strategy.timeframe == "1d"
-    assert rebalance_policy_for(strategy).frequency == "weekly"  # 1d weekly cadence
+    assert rebalance_policy_for(strategy).hours == 24  # one decision per session
     return PortfolioRuntime(
         strategy,
         EQUITY_SYMBOLS,
@@ -292,16 +289,20 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
 
     assert equity_decisions, "equity strategy must reach a decision"
     assert crypto_decisions, "crypto strategy must reach a decision"
-    assert len(broker.submitted) >= 4  # catch-up (2 markets) + first cadence rebalances
+    # Orders: one per market at catch-up plus the first cadence rebalance. The
+    # equity single-ETF target cannot drift against the flat fake account, so
+    # the rotating crypto ranking contributes the follow-up order.
+    assert len(broker.submitted) >= 3
 
-    # Cadence contract: equity rebalances only on ISO-week starts (weekly).
-    assert all(
-        decision.isocalendar()[:2] != (decision - timedelta(days=1)).isocalendar()[:2] for decision in equity_decisions
-    )
-    # Cadence contract: crypto rebalances on 96h boundaries.
+    # Cadence contract: equity rebalances on 24h boundaries (every session),
+    # crypto on 96h boundaries — the two markets keep distinct cadences.
+    for previous, current in zip(equity_decisions, equity_decisions[1:], strict=False):
+        epoch_delta = int(current.timestamp()) // (24 * 3600) - int(previous.timestamp()) // (24 * 3600)
+        assert epoch_delta >= 1
     for previous, current in zip(crypto_decisions, crypto_decisions[1:], strict=False):
         epoch_delta = int(current.timestamp()) // (96 * 3600) - int(previous.timestamp()) // (96 * 3600)
         assert epoch_delta >= 1
+    assert len(equity_decisions) > len(crypto_decisions)
 
     # Persisted catch-up decisions carry the startup_catch_up origin.
     connection = repository.store.connection
@@ -354,10 +355,13 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
     crypto_restart = _crypto_runtime(repository, _PaperBroker(), config)
     equity_restart.seed([bar for day in equity_days for bar in equity_by_day[day]])
     crypto_restart.seed([bar for day in crypto_days for bar in crypto_by_day[day]])
-    assert equity_restart.startup_catch_up().status == "catch_up_superseded"
-    assert equity_restart.startup_catch_up_status == "catch_up_superseded"
-    assert crypto_restart.startup_catch_up().status == "catch_up_superseded"
-    assert crypto_restart.startup_catch_up_status == "catch_up_superseded"
+    # Both gates refuse the re-entry: a daily cadence already decided on the
+    # newest bar (duplicate_decision), otherwise any prior decision for the
+    # digest supersedes the catch-up.
+    for restart in (equity_restart, crypto_restart):
+        status = restart.startup_catch_up().status
+        assert status in {"catch_up_superseded", "duplicate_decision"}
+        assert restart.startup_catch_up_status == status
     equity_restart.close()
     crypto_restart.close()
     # No duplicate decision rows after the restart attempt.

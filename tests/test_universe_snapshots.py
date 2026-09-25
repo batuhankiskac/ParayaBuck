@@ -93,7 +93,7 @@ def test_universe_hash_commits_observation_order_and_capacity() -> None:
         observation_set=("SPY", "AAA", "BBB"),
         maximum_stream_symbols=3,
         pinned_symbols=("SPY",),
-        observation_strategy_name="equity_residual_momentum_v3",
+        observation_strategy_name="equity_leveraged_trend_v1",
         observation_strategy_version="3.0.0",
     )
     reordered = UniverseSnapshot(
@@ -102,7 +102,7 @@ def test_universe_hash_commits_observation_order_and_capacity() -> None:
         observation_set=("SPY", "BBB", "AAA"),
         maximum_stream_symbols=3,
         pinned_symbols=("SPY",),
-        observation_strategy_name="equity_residual_momentum_v3",
+        observation_strategy_name="equity_leveraged_trend_v1",
         observation_strategy_version="3.0.0",
     )
     resized = UniverseSnapshot(
@@ -111,7 +111,7 @@ def test_universe_hash_commits_observation_order_and_capacity() -> None:
         observation_set=base.observation_set,
         maximum_stream_symbols=4,
         pinned_symbols=("SPY",),
-        observation_strategy_name="equity_residual_momentum_v3",
+        observation_strategy_name="equity_leveraged_trend_v1",
         observation_strategy_version="3.0.0",
     )
     base_universe = PointInTimeUniverse(Market.EQUITY, (base,), "same")

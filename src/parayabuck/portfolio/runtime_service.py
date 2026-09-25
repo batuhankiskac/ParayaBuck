@@ -357,13 +357,13 @@ class PortfolioRuntime:
         *,
         entry_latch: str | None,
     ) -> TargetPortfolio:
-        """Attach V3 PAPER diagnostics after decisions are complete.
+        """Attach equity PAPER diagnostics after decisions are complete.
 
         Every value here is derived from already-computed targets, the account
         snapshot, risk result, or planned orders. It is persisted for
         operations and deliberately cannot participate in strategy math.
         """
-        if not self.strategy.name.startswith("equity_residual_momentum_v3"):
+        if self.market != Market.EQUITY:
             return target
         verified = {
             symbol: timestamp.isoformat()
@@ -381,12 +381,6 @@ class PortfolioRuntime:
             planned_delta[order.symbol] = planned_delta.get(order.symbol, 0.0) + signed_quantity
         target_weights = {weight.symbol: weight.weight for weight in target.weights}
         symbols = sorted(set(current_positions) | set(target_weights) | set(planned_delta))
-        qualified_raw = target.metadata.get("qualified_symbols", 0)
-        ranked_raw = target.metadata.get("ranked_symbols", 0)
-        selected_raw = target.metadata.get("selected_symbols", ())
-        qualified_count = int(qualified_raw) if isinstance(qualified_raw, (int, float)) else 0
-        ranked_count = int(ranked_raw) if isinstance(ranked_raw, (int, float)) else 0
-        selected_symbols = list(selected_raw) if isinstance(selected_raw, (list, tuple)) else []
         details = {
             symbol: {
                 "target_weight": float(target_weights.get(symbol, 0.0)),
@@ -406,9 +400,7 @@ class PortfolioRuntime:
                     "decision_timestamp": target.decision_timestamp.isoformat(),
                     "signal_verified_through": verified_through,
                     "signal_verified_through_by_symbol": verified,
-                    "qualified_symbol_count": qualified_count,
-                    "ranked_symbol_count": ranked_count,
-                    "selected_symbols": selected_symbols,
+                    "trend_state": target.metadata.get("trend_state"),
                     "risk_overlay_gross_after": float(risk.gross_after),
                     "cash_weight": float(target.cash_weight),
                     "blocked_or_skipped_reason": reason,
@@ -1093,7 +1085,6 @@ class PortfolioRuntime:
                 account,
                 maximum_positions=self.risk_overlay.limits.maximum_positions,
                 market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
-                slot_exempt_equity_symbols=self.risk_overlay.limits.slot_exempt_equity_symbols,
                 reserved_position_keys=reserved_slots,
                 open_order_symbols=tuple(sorted(open_order_symbols)),
             )
@@ -1198,7 +1189,6 @@ class PortfolioRuntime:
             admission.account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
             market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
-            slot_exempt_equity_symbols=self.risk_overlay.limits.slot_exempt_equity_symbols,
             reserved_position_keys=self._effective_reserved_position_keys(reserved_position_keys),
             open_order_symbols=tuple(sorted(self.broker.all_open_order_symbols())),
         )
@@ -1476,7 +1466,6 @@ class PortfolioRuntime:
             account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
             market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
-            slot_exempt_equity_symbols=self.risk_overlay.limits.slot_exempt_equity_symbols,
             reserved_position_keys=reserved_slots,
             open_order_symbols=tuple(sorted(open_order_symbols)),
         )

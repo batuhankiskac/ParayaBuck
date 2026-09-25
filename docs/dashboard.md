@@ -53,29 +53,30 @@ shows **LIVE (devre dışı)** — visually dimmed and struck through. The same
 state is exposed as `mode.badge` / `mode.live_active` / `mode.live_disabled`
 in the overview payload.
 
-### Equity card — "Residual Momentum v3 + dividend-growth sleeve"
-The active identity is `equity_residual_momentum_v3_dividend_sleeve_v1`,
-implemented by `src/parayabuck/portfolio/dividend_sleeve.py`. Its unchanged V3
-3.0.0 core keeps the `1d` signal and `weekly` rebalance contract from
-`StrategySpec` via `_strategy_metadata`; the static SCHD/VIG/DGRO/GLD/OUNZ
-sleeve is selected on the first weekly decision of each calendar month or while
-empty and is otherwise held. See the [dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
-and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
+### Equity card — "Leveraged Index Trend v1"
+The active identity is `equity_leveraged_trend_v1`, implemented by
+`src/parayabuck/portfolio/equity_leveraged_trend.py`. It holds QLD (the 2x
+Nasdaq-100 ETF) while QQQ's completed daily close is above its 200-session
+SMA; in an uptrend the position is `min(1, 0.35 / 20-session annualized
+realized QLD volatility)` of the equity allocation and the rest is cash. The
+target is cash when QQQ is in a downtrend, when history is insufficient, or
+when QLD is unavailable. See the
+[profit maximization v1 evidence](research/profit_max_v1.md).
 
 `Eligible pool` — shortlist count from
 `universe.equity.candidate_universe_path`; `observation set` — active-universe
 size; `positions` / `current allocation %` — account positions weighted by
 market value over equity; `maximum allocation %` —
-`strategy.equity.maximum_allocation` (0.55), split internally into 0.30 core
-and 0.25 sleeve (0.05 per ETF: SCHD/VIG/DGRO/GLD/OUNZ). Status derivation: active / warming / halted
-(entry halt or circuit breaker) / scanner_issue / disabled / engine states.
+`strategy.equity.maximum_allocation` (0.93). Status derivation: active /
+warming / halted (entry halt or circuit breaker) / scanner_issue / disabled /
+engine states.
 `Next expected decision` — the last persisted `portfolio_decisions`
-timestamp advanced by the strategy's rebalance policy (`weekly` → next ISO-week
-start); it is an expected boundary, not a guarantee. Sleeve ETFs are pinned in the 30-symbol IEX stream
-through `universe.equity.sleeve_trade_symbols`, hidden from V3 scoring, leaving
-21 V3-ranked slots instead of 26. `risk.slot_exempt_equity_symbols` excludes
-them from the 8-position cap. Holdings show target/current weight and the
-persisted reason; only V3 holdings have a V3 rank.
+timestamp advanced by the strategy's rebalance policy (`hours:24` → the next
+session boundary); it is an expected boundary, not a guarantee. QQQ and QLD are
+pinned in the 30-symbol IEX equity stream through
+`universe.equity.reference_symbols` and tradable through
+`universe.equity.trade_reference_symbols`. Holdings show target/current weight
+and the persisted reason (`trend_up` when QLD is targeted).
 
 ### Crypto card — "Low Realized Variance Hysteresis v1 (96h, retention 4)"
 Same shape plus: `lookback 22g` (the frozen `variance_lookback_days`),
@@ -94,8 +95,8 @@ with the strategy's own `realized_volatility` over cached 1d bars
 `cash_buffer_pct`, `equity exposure`, `crypto exposure` vs
 `max_crypto_exposure_pct`, `max drawdown` vs `max_drawdown_pct`, `daily PnL`
 vs `daily_loss_limit_pct` — all from the account snapshot and `config.risk`.
-`Entry risk latch` — `RuntimeHealth.entry_risk_latch`. Daily-loss, drawdown,
-intermediate-reduction latches never grow the sleeve.
+`Entry risk latch` — `RuntimeHealth.entry_risk_latch`. A drawdown halt persists
+until an operator risk-epoch reset.
 `Circuit breaker` — `RuntimeHealth.circuit_breaker_reason`. `Safety incidents`
 — `safety_incidents` rows in the ledger. `Risk epoch` — latest `risk_state` row
 (session date, day-start equity, peak equity, consecutive losses). Nothing
@@ -117,10 +118,9 @@ telemetry module is available. Reconciliation anomalies come from
 `Broad discovered` — candidate payload size
 (`candidate_universe_path` for equity, `candidate_symbols` for crypto);
 `eligible pool` — equity shortlist / crypto candidates; `observation set` —
-active-universe selection. The 30-symbol equity IEX stream pins SCHD/VIG/DGRO/GLD/OUNZ
-through `universe.equity.sleeve_trade_symbols`; they are hidden from V3 scoring,
-leaving 21 ranked core slots instead of 26, and
-`risk.slot_exempt_equity_symbols` keeps them outside the 8-position cap. `Last
+active-universe selection. The 30-symbol equity IEX stream pins SPY, QQQ and
+QLD through `universe.equity.reference_symbols`, with QQQ and QLD tradable
+through `universe.equity.trade_reference_symbols`. `Last
 refresh` / `data_timestamp` / `scanner status` / `scanner version` come from the
 active universe JSON; `next refresh` / `refresh errors` from
 `RuntimeHealth.universe_refresh`; `pinned symbols` — runtime managed pins
@@ -144,9 +144,10 @@ has not landed.
 Per-holding structured reasons derive from the persisted decision
 (`target_json.metadata`: `selected_symbols`, `qualified_symbols`,
 `hypothesis`, `risk_off_detail`) matched against current account positions.
-Core holdings keep their rank among the decision's `selected_symbols`;
-SCHD/VIG/DGRO/GLD/OUNZ sleeve holdings are static, have no V3 rank, and carry
-the `static_sleeve` reason. The
+Crypto holdings keep their rank among the decision's `selected_symbols`; the
+current equity identity emits no `selected_symbols`, so an equity holding is
+reported by its target-weight reason (`trend_up`) or as held outside the
+latest decision. The
 panel also shows universe version, rebalance reason, and risk multiplier where
 available. Deliberately concise; no debug dumps.
 

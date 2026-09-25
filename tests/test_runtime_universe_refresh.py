@@ -417,7 +417,7 @@ def test_hot_swap_stages_warmup_bars_and_seeds_after_membership_commit() -> None
     runtime universe includes them; otherwise the strategy history of a new
     symbol is silently dropped and the member stays warming for the retry."""
     from parayabuck.core.models import Bar
-    from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV1
+    from parayabuck.portfolio import EquityLeveragedTrendV1
 
     runtime = _hot_swap_runtime({"SPY", "OLD"})
     runtime.aggregators = {"1d": object()}
@@ -426,7 +426,7 @@ def test_hot_swap_stages_warmup_bars_and_seeds_after_membership_commit() -> None
         SimpleNamespace(
             market=Market.EQUITY,
             symbols=("SPY", "OLD"),
-            strategy=EquityResidualMomentum1dV1({"top_n": 2}),
+            strategy=EquityLeveragedTrendV1({"signal_symbol": "QQQ", "hold_symbol": "QLD", "sma_bars": 5}),
             update_symbols=lambda symbols: None,
             seed=lambda bars: runtime_seeds.append(bars),
         ),

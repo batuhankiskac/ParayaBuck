@@ -142,9 +142,9 @@ class EquityUniverseScanner:
         pinned = tuple(
             symbol
             for symbol in dict.fromkeys(canonical_symbol(item, Market.EQUITY) for item in pinned_symbols)
-            if symbol not in references and symbol not in self.config.pinned_trade_symbols
+            if symbol not in references and symbol not in self.config.inverse_trade_symbols
         )
-        reserved = tuple(dict.fromkeys((*references, *self.config.pinned_trade_symbols, *pinned)))
+        reserved = tuple(dict.fromkeys((*references, *self.config.inverse_trade_symbols, *pinned)))
         if len(reserved) > self.config.maximum_stream_symbols:
             raise ValueError("Reference and pinned symbols exceed the equity stream limit")
         eliminated: dict[str, str] = {}
@@ -217,13 +217,7 @@ class EquityUniverseScanner:
                 "selection_role": (
                     "reference"
                     if symbol in references
-                    else (
-                        "inverse_hedge"
-                        if symbol in self.config.inverse_trade_symbols
-                        else (
-                            "static_sleeve" if symbol in self.config.sleeve_trade_symbols else "pinned_managed_position"
-                        )
-                    )
+                    else ("inverse_hedge" if symbol in self.config.inverse_trade_symbols else "pinned_managed_position")
                 ),
                 "economic_sector": candidate_sector.get(symbol, sector_of(symbol)),
             }
@@ -400,12 +394,12 @@ def validate_active_universe(config: EquityUniverseConfig) -> tuple[tuple[str, .
         allowed = {
             *candidates,
             *config.reference_symbols,
-            *config.pinned_trade_symbols,
+            *config.inverse_trade_symbols,
             *managed_pins,
         }
         if not set(selected).issubset(allowed):
             return (), "outside_candidate_pool"
-        required = {*config.reference_symbols, *config.pinned_trade_symbols}
+        required = {*config.reference_symbols, *config.inverse_trade_symbols}
         if not required.issubset(selected):
             return (), "invalid"
         # The eligible pool may exceed the stream capacity; the OBSERVATION

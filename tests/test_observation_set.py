@@ -3,14 +3,12 @@
 The stream limit is NOT the opportunity universe: the scanner emits the
 eligible POOL (tradability-first), the strategy alpha ranks the pool on batch
 history, and the top ``maximum_stream_symbols`` plus pins become the streamed
-OBSERVATION SET. Also covers the residual-momentum timestamp alignment
-regression and the required-timeframes aggregation contract.
+OBSERVATION SET. Also covers the required-timeframes aggregation contract.
 """
 
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
@@ -24,10 +22,6 @@ from parayabuck.config import (
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import portfolio_strategy_from
 from parayabuck.portfolio.base import PortfolioContext
-from parayabuck.portfolio.equity_residual_momentum import (
-    _aligned_returns,
-    _ols_beta,
-)
 from parayabuck.universe import (
     load_active_crypto_symbols,
     load_active_symbols,
@@ -59,13 +53,6 @@ def _bar(symbol: str, timestamp: datetime, close: float, market: Market) -> Bar:
     )
 
 
-def _series(symbol: str, slope: float, days: int = 300, market: Market = Market.EQUITY) -> tuple[Bar, ...]:
-    start = datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
-    return tuple(
-        _bar(symbol, start + timedelta(days=index), 100 * (1 + slope) ** index, market) for index in range(days)
-    )
-
-
 def _equity_scanner_result() -> EquityUniverseScanner:
     config = EquityUniverseConfig(
         maximum_stream_symbols=3,
@@ -91,102 +78,6 @@ def test_scanner_pool_exceeds_streamed_observation_set() -> None:
     assert len(result.observation_set) == 3
     assert set(result.observation_set) <= set(result.selected_symbols)
     assert result.observation_eliminated["MSFT"] == "sector_concentration"
-
-
-def test_observation_set_uses_strategy_alpha_and_pins() -> None:
-    strategy = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
-    pool = ("SPY", "AAPL", "MSFT", "JPM")
-    history = {
-        symbol: _series(symbol, slope)
-        for symbol, slope in (("AAPL", 0.004), ("MSFT", 0.0035), ("JPM", 0.001), ("SPY", 0.002))
-    }
-    observation = build_observation_set(
-        strategy,
-        history,
-        pool,
-        market=Market.EQUITY,
-        timeframe="1d",
-        decision_timestamp=datetime.now(UTC),
-        maximum_stream_symbols=3,
-        pinned_symbols=("SPY",),
-    )
-    assert observation.source == "strategy_alpha"
-    assert observation.observation_set[0] == "SPY"  # pinned first
-    # Top residual-momentum names fill the stream slots; the corrected
-    # nearest-rank ivol quantile (3 qualified at q=0.70 -> keep 2) rejects
-    # JPM outright, so only two names are ranked for the two free slots.
-    assert observation.observation_set == ("SPY", "AAPL", "MSFT")
-    assert observation.alpha_scored_count == 2
-
-
-def test_v3_observation_set_uses_v3_rank_candidates_not_v2() -> None:
-    params = {
-        "formation_bars": 252,
-        "skip_bars": 21,
-        "beta_window_bars": 273,
-        "residual_vol_window": 63,
-        "top_n": 8,
-        "max_single_weight": 0.10,
-        "ivol_reject_quantile": 0.70,
-        "exclude_symbols": ["SPY"],
-        "rebalance_frequency": "weekly",
-    }
-    v2 = portfolio_strategy_from("equity_residual_momentum_v2", params)
-    v3 = portfolio_strategy_from("equity_residual_momentum_v3", params)
-    specs = (
-        (0.003, 0.0001),
-        (0.0005, 0.004),
-        (0.002, 0.002),
-        (0.0015, 0.0025),
-        (0.0025, 0.0005),
-        (0.001, 0.003),
-    )
-    history = {"SPY": _series("SPY", 0.0)}
-    for index, (older, recent) in enumerate(specs):
-        closes: list[float] = []
-        current = 100.0
-        for day in range(300):
-            current *= 1.0 + (older if day < 180 else recent)
-            closes.append(current * (1.0 + 0.0001 * math.sin(day * 1.7 + index)))
-        history[f"S{index}"] = tuple(
-            _bar(
-                f"S{index}",
-                datetime(2024, 1, 1, 4, 0, tzinfo=UTC) + timedelta(days=day),
-                close,
-                Market.EQUITY,
-            )
-            for day, close in enumerate(closes)
-        )
-    pool = tuple(history)
-    decision_timestamp = datetime(2024, 10, 26, 4, 0, tzinfo=UTC)
-    context = PortfolioContext(
-        decision_timestamp=decision_timestamp,
-        market=Market.EQUITY,
-        timeframe="1d",
-        history=history,
-        universe=None,
-        universe_version="test",
-        equity=100_000.0,
-        holdings={},
-        prices={},
-        benchmark_symbol="SPY",
-    )
-    v2_ranked = v2.rank_candidates(context)
-    v3_ranked = v3.rank_candidates(context)
-    assert v2_ranked != v3_ranked
-    observation = build_observation_set(
-        v3,
-        history,
-        pool,
-        market=Market.EQUITY,
-        timeframe="1d",
-        decision_timestamp=decision_timestamp,
-        maximum_stream_symbols=3,
-        pinned_symbols=("SPY",),
-    )
-    assert observation.source == "strategy_alpha"
-    assert observation.observation_set == ("SPY", "S3", "S2")
-    assert observation.observation_set == ("SPY", *v3_ranked[:2])
 
 
 def test_observation_set_falls_back_when_no_ranker() -> None:
@@ -332,8 +223,8 @@ def test_active_universe_rejects_observation_set_from_old_strategy(tmp_path) -> 
         maximum_stream_symbols=3,
         reference_symbols=("SPY",),
         active_universe_path=str(tmp_path / "active.json"),
-        observation_strategy_name="equity_residual_momentum_v3",
-        observation_strategy_version="3.0.0",
+        observation_strategy_name="equity_leveraged_trend_v1",
+        observation_strategy_version="1.0.0",
         observation_strategy_timeframe="1d",
     )
     result = EquityUniverseScanner(config).scan(
@@ -342,8 +233,8 @@ def test_active_universe_rejects_observation_set_from_old_strategy(tmp_path) -> 
     )
     stale = replace(
         result,
-        observation_strategy_name="equity_residual_momentum_v2",
-        observation_strategy_version="2.0.0",
+        observation_strategy_name="equity_leveraged_trend_v0",
+        observation_strategy_version="0.9.0",
         observation_strategy_timeframe="1d",
     )
     EquityUniverseScanner(config).persist(stale)
@@ -376,44 +267,6 @@ def test_crypto_pool_and_observation_set_contract(tmp_path) -> None:
     assert load_active_crypto_symbols(config) == result.observation_set
 
 
-def test_residual_momentum_aligns_returns_on_timestamps() -> None:
-    """A missing trading day must not shift the beta/residual pairing.
-
-    The stock below moves IDENTICALLY to the market on the days both trade;
-    only the market trades on the missing day. Timestamp alignment therefore
-    produces beta == 1 and zero residuals, while positional pairing would
-    produce spurious residuals.
-    """
-    start = datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
-    # The market jumps +9% on day 2 (the day the stock does not trade).
-    spy_closes = [100.0, 101.0, 110.0, 111.0, 112.0, 113.0]
-    spy_bars = tuple(
-        _bar("SPY", start + timedelta(days=index), close, Market.EQUITY) for index, close in enumerate(spy_closes)
-    )
-    # The stock trades at the market's exact price on every day BOTH trade
-    # (days 0,1,3,4,5 — day 2 is the stock's missing session): its return
-    # over [d1,d3] therefore equals the market's over [d1,d3], never [d1,d2].
-    stock_bars = tuple(
-        _bar("STOCK", start + timedelta(days=day), close, Market.EQUITY)
-        for day, close in ((0, 100.0), (1, 101.0), (3, 111.0), (4, 112.0), (5, 113.0))
-    )
-    # The strategy hoists the market close-by-timestamp lookup once per
-    # decision; the contract test builds the same lookup explicitly.
-    market_close_by_timestamp = {bar.timestamp: bar.close for bar in spy_bars}
-    aligned = _aligned_returns(stock_bars, market_close_by_timestamp, window=len(spy_closes) - 1)
-    assert aligned is not None
-    stock_returns, market_returns = aligned
-    # Every aligned pair is the SAME calendar interval: the stock's return
-    # over [d1,d3] (101 -> 111 = +9.9%) pairs with the market's [d1,d3]
-    # return, not the market's [d1,d2] jump (+8.9%).
-    assert len(stock_returns) == 4
-    assert all(abs(s - m) < 1e-9 for s, m in zip(stock_returns, market_returns))
-    beta = _ols_beta(stock_returns, market_returns)
-    assert beta == pytest.approx(1.0, abs=1e-9)
-    residuals = [s - beta * m for s, m in zip(stock_returns, market_returns)]
-    assert all(abs(residual) < 1e-9 for residual in residuals)
-
-
 def test_required_timeframes_join_the_aggregation_union() -> None:
     from parayabuck.runtime import required_aggregation_timeframes
 
@@ -432,5 +285,5 @@ def test_required_timeframes_join_the_aggregation_union() -> None:
     timeframes = required_aggregation_timeframes("5m", "5m", strategy_specs)
     assert timeframes == frozenset({"5m", "1d", "1h", "4h"})
     # A strategy that declares required timeframes exposes them in its spec.
-    strategy = portfolio_strategy_from("equity_residual_momentum_v1")
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1")
     assert strategy.spec().required_timeframes == ()

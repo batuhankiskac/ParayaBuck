@@ -2,9 +2,9 @@
 
 Worker D acceptance suite:
 
-* both validated strategies carry concise per-holding decision reasons in
-  ``TargetPortfolio.metadata["explanations"]``, derived EXACTLY from the
-  production ``_score_candidates`` output (no second scoring path);
+* the crypto low-variance identity carries concise per-holding decision
+  reasons in ``TargetPortfolio.metadata["explanations"]``, derived EXACTLY
+  from the production ``_score_candidates`` output (no second scoring path);
 * ``ObservationSetResult`` carries ``strategy_name`` / ``ranked_pool`` /
   ``alpha_scored_count`` for strategy-alpha observation-set selection;
 * ``parayabuck.monitoring.alerts.emit`` never raises, delivers to the log
@@ -17,7 +17,6 @@ Worker D acceptance suite:
 from __future__ import annotations
 
 import json
-import math
 import queue
 import threading
 from datetime import UTC, date, datetime, timedelta
@@ -30,7 +29,6 @@ from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.monitoring import alerts, metrics
 from parayabuck.portfolio.base import PortfolioContext
 from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV1
-from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV1
 from parayabuck.risk.state import RiskState
 from parayabuck.universe.observation_set import build_observation_set
 
@@ -42,16 +40,6 @@ from parayabuck.universe.observation_set import build_observation_set
 VARIANCE_LOOKBACK = 22
 MIN_HISTORY_BARS = VARIANCE_LOOKBACK + 1
 CRYPTO_SYMBOLS = ("LOVOL/USD", "MIDVOL/USD", "HIVOL/USD")
-
-_EQUITY_BARS = 300
-_EQUITY_SPECS = (
-    ("AAA", 0.0022, 0.0005),
-    ("BBB", 0.0018, 0.0008),
-    ("CCC", 0.0014, 0.0011),
-    ("DDD", 0.0010, 0.0014),
-    ("EEE", 0.0006, 0.0017),
-    ("FFF", 0.0002, 0.0040),  # highest residual vol -> rejected by ivol filter
-)
 
 
 def _bar(symbol: str, timestamp: datetime, close: float, market: Market) -> Bar:
@@ -65,55 +53,6 @@ def _bar(symbol: str, timestamp: datetime, close: float, market: Market) -> Bar:
         close=close,
         volume=1_000_000.0,
         market=market,
-    )
-
-
-def _spy_bars() -> tuple[Bar, ...]:
-    start = datetime(2023, 1, 1, tzinfo=UTC)
-    return tuple(
-        _bar(
-            "SPY",
-            start + timedelta(days=index),
-            100.0 + 2.0 * math.sin(index * 0.5) + (index % 4),
-            Market.EQUITY,
-        )
-        for index in range(_EQUITY_BARS)
-    )
-
-
-def _equity_stock(symbol: str, drift: float, jitter: float, spy: tuple[Bar, ...]) -> tuple[Bar, ...]:
-    return tuple(
-        _bar(
-            symbol,
-            spy_bar.timestamp,
-            spy_bar.close * (1.0 + drift) ** index * (1.0 + (jitter if index % 2 else 0.0)),
-            Market.EQUITY,
-        )
-        for index, spy_bar in enumerate(spy)
-    )
-
-
-def _equity_history() -> dict[str, tuple[Bar, ...]]:
-    spy = _spy_bars()
-    return {
-        "SPY": spy,
-        **{symbol: _equity_stock(symbol, drift, jitter, spy) for symbol, drift, jitter in _EQUITY_SPECS},
-    }
-
-
-def _equity_context(holdings: dict[str, float] | None = None) -> PortfolioContext:
-    history = _equity_history()
-    return PortfolioContext(
-        decision_timestamp=history["SPY"][-1].timestamp,
-        market=Market.EQUITY,
-        timeframe="1d",
-        history=history,
-        universe=None,
-        universe_version="test",
-        equity=100_000.0,
-        holdings=holdings or {},
-        prices={},
-        benchmark_symbol="SPY",
     )
 
 
@@ -153,85 +92,6 @@ def _crypto_context(holdings: dict[str, float] | None = None) -> PortfolioContex
         prices={},
         benchmark_symbol="BTC/USD",
     )
-
-
-# ---------------------------------------------------------------------------
-# Equity explanation metadata
-# ---------------------------------------------------------------------------
-
-
-def test_equity_explanations_cover_selected_holdings_with_required_keys() -> None:
-    strategy = EquityResidualMomentum1dV1()
-    target = strategy.decide(_equity_context(holdings={"AAA": 30.0, "BBB": 7.5}))
-    explanations = target.metadata["explanations"]
-    assert isinstance(explanations, dict)
-    # The ivol filter rejects the two highest-vol names under the corrected
-    # nearest-rank quantile (6 qualified, q=0.70 -> keep 4), and all kept
-    # names are selected (top_n=8): explanations must cover exactly the
-    # targets.
-    assert set(explanations) == {weight.symbol for weight in target.weights}
-    for symbol, explanation in explanations.items():
-        assert set(explanation) == {
-            "alpha_rank",
-            "residual_momentum_score",
-            "idio_vol_percentile",
-            "target_weight",
-            "current_weight",
-        }
-        assert explanation["alpha_rank"] >= 1
-        assert explanation["residual_momentum_score"] > 0.0
-        assert 0.0 <= explanation["idio_vol_percentile"] <= 1.0
-        assert explanation["target_weight"] == pytest.approx(target.weight_for(symbol, Market.EQUITY))
-    assert explanations["AAA"]["current_weight"] == 30.0
-    assert explanations["BBB"]["current_weight"] == 7.5
-    assert explanations["CCC"]["current_weight"] == 0.0
-
-
-def test_equity_explanations_match_production_scoring_exactly() -> None:
-    """alpha_rank and scores are read from _score_candidates output, never
-    recomputed: no second scoring path may exist."""
-    strategy = EquityResidualMomentum1dV1()
-    context = _equity_context()
-    ranked, _vols = strategy._score_candidates(context)
-    target = strategy.decide(context)
-    explanations = target.metadata["explanations"]
-    for rank, (score, symbol) in enumerate(ranked, start=1):
-        if symbol not in explanations:
-            continue
-        assert explanations[symbol]["alpha_rank"] == rank
-        assert explanations[symbol]["residual_momentum_score"] == pytest.approx(score)
-    # Ranking parity with rank_candidates (observation-set selection path).
-    assert [symbol for symbol in strategy.rank_candidates(context) if symbol in explanations] == [
-        symbol
-        for symbol, _ in sorted(
-            ((symbol, exp["alpha_rank"]) for symbol, exp in explanations.items()),
-            key=lambda item: item[1],
-        )
-    ]
-    # Scores strictly descend along alpha_rank (production sort order).
-    by_rank = sorted(explanations.items(), key=lambda item: item[1]["alpha_rank"])
-    scores = [explanation["residual_momentum_score"] for _symbol, explanation in by_rank]
-    assert all(a > b for a, b in zip(scores, scores[1:]))
-
-
-def test_equity_high_idio_vol_name_is_filtered_out_of_explanations() -> None:
-    strategy = EquityResidualMomentum1dV1()
-    target = strategy.decide(_equity_context())
-    assert "FFF" not in target.metadata["selected_symbols"]
-    assert "FFF" not in target.metadata["explanations"]
-
-
-def test_equity_target_weights_carry_alpha_rank_for_risk_overlay() -> None:
-    """decide() must stamp each selected weight with its 1-based alpha rank
-    so the risk overlay's position-count enforcement retains the strategy's
-    best-ranked names instead of re-ranking by target weight."""
-    strategy = EquityResidualMomentum1dV1()
-    context = _equity_context()
-    ranked, _vols = strategy._score_candidates(context)
-    target = strategy.decide(context)
-    expected = {symbol: index for index, (score, symbol) in enumerate(ranked, start=1)}
-    for weight in target.weights:
-        assert weight.rank == expected[weight.symbol] > 0
 
 
 # ---------------------------------------------------------------------------
@@ -304,32 +164,6 @@ def test_crypto_observation_set_metadata() -> None:
     assert result.alpha_scored_count == 3
     assert result.observation_set == result.ranked_pool
     assert result.source == "strategy_alpha"
-
-
-def test_equity_observation_set_metadata() -> None:
-    strategy = EquityResidualMomentum1dV1()
-    history = _equity_history()
-    # The benchmark (SPY) must be present in the context history for the
-    # residual-momentum ranker; it is never itself ranked (excluded by
-    # benchmark_symbol).
-    pool = ("SPY", *(symbol for symbol, _drift, _jitter in _EQUITY_SPECS))
-    result = build_observation_set(
-        strategy,
-        history,
-        pool_symbols=pool,
-        market=Market.EQUITY,
-        timeframe="1d",
-        decision_timestamp=history["SPY"][-1].timestamp,
-        maximum_stream_symbols=3,
-    )
-    assert result.strategy_name == "equity_residual_momentum_v1"
-    assert result.source == "strategy_alpha"
-    # ivol filter under the corrected nearest-rank quantile: 6 qualified
-    # names at q=0.70 keep floor(0.70 * (6-1)) + 1 = 4 (rejects the two
-    # highest-idio-vol names; the pre-fix int(q*n) index kept 5 of 6).
-    assert result.alpha_scored_count == len(result.ranked_pool) == 4
-    assert "SPY" not in result.ranked_pool
-    assert result.observation_set == result.ranked_pool[:3]
 
 
 def test_observation_set_without_ranker_is_empty_state_safe() -> None:

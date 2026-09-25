@@ -1,7 +1,7 @@
 """Deterministic parity reference for canonical backtest outputs.
 
-Runs equity v2 (2019-2021 window) and crypto v2 (full) backtests on the local
-historical CSVs and hashes the authoritative outputs (equity curve, fills,
+Runs equity leveraged trend v1 (holding QQQ, 2019-2021 window) and crypto v2
+(full) backtests on the local historical CSVs and hashes the authoritative outputs (equity curve, fills,
 targets, universe history, summary economics). The reference hash is expected
 to remain stable when benchmarked code changes.
 
@@ -46,7 +46,9 @@ def _run_equity(config) -> dict[str, object]:
         config,
         bars,
         market=Market.EQUITY,
-        strategy_name="equity_residual_momentum_v2",
+        strategy_name="equity_leveraged_trend_v1",
+        # The dataset has no QLD; hold QQQ so the run trades.
+        parameters={"hold_symbol": "QQQ", "vol_target": 0.35},
         start=datetime.fromisoformat(EQUITY_START).replace(tzinfo=UTC),
         end=datetime.fromisoformat(EQUITY_END).replace(tzinfo=UTC),
         output_dir=str(ROOT / "data" / "smoke" / "parity_equity"),
@@ -55,7 +57,7 @@ def _run_equity(config) -> dict[str, object]:
     result = run.result
     summary = run.report.summary
     return {
-        "strategy": "equity_residual_momentum_v2",
+        "strategy": "equity_leveraged_trend_v1",
         "equity_curve_hash": _sha(list(result.equity_curve)),
         "curve_points": len(result.equity_curve),
         "fills_hash": _sha(

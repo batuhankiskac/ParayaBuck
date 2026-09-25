@@ -69,7 +69,7 @@ sudo systemctl status parayabuck
 sudo journalctl -u parayabuck -f
 ```
 
-## Google Cloud update procedure (current PAPER dividend-sleeve release)
+## Google Cloud update procedure (current PAPER leveraged-trend release)
 
 1. **Stop safely**
 
@@ -131,14 +131,13 @@ sudo journalctl -u parayabuck -f
    ```
 
    Dashboard (`http://127.0.0.1:8000/` via SSH tunnel) must show: PAPER
-   badge, **Residual Momentum v3 + dividend-growth sleeve**
-   (`equity_residual_momentum_v3_dividend_sleeve_v1`; unchanged V3 3.0.0 weekly
-   core capped at 0.30 plus static SCHD/VIG/DGRO/GLD/OUNZ sleeve at 0.25,
-   0.05 each: dividend 0.15 + gold 0.10, inside the 0.55 equity maximum), and
+   badge, **Leveraged Index Trend v1** (`equity_leveraged_trend_v1`: holds QLD,
+   the 2x Nasdaq-100 ETF, while QQQ's completed close is above its 200-session
+   SMA, sized `min(1, 0.35 / 20-session annualized realized QLD volatility)`,
+   inside the 0.93 equity maximum, cash otherwise), and
    unchanged `crypto_low_variance_hysteresis_v1` (96h, lookback 22, top2, retention rank
    4, allocation 0.05) cards, engine running, catch-up status per card. See the
-   [dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
-   and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
+   [profit maximization v1 evidence](research/profit_max_v1.md).
 9. **Verify the persisted catch-up decision** (fresh account only):
 
    ```bash
@@ -149,13 +148,13 @@ sudo journalctl -u parayabuck -f
    ```
 
    Expect `origin='startup_catch_up'` for the newest rows; current equity rows
-   use `strategy_name='equity_residual_momentum_v3_dividend_sleeve_v1'`, and
+   use `strategy_name='equity_leveraged_trend_v1'`, and
    later scheduled decisions carry `'scheduled'`. An account that already holds
    managed positions shows catch-up status `already_invested` (positions stay
    managed; the first scheduled equity boundary rebalances them normally) —
-   never a duplicate order set. The static sleeve follows the normal rule:
-   select on the first weekly decision of the calendar month or while empty,
-   otherwise hold.
+   never a duplicate order set. The equity target is the ordinary daily
+   QQQ-trend decision: QLD at the volatility target while QQQ is above its
+   200-session SMA, cash otherwise.
 
 ## Rollback
 
@@ -164,12 +163,11 @@ sudo journalctl -u parayabuck -f
    rollback itself must be reverted.
 3. `git checkout <PREVIOUS_RELEASE_TAG>`; re-apply the pre-deploy config/env
    snapshot (config is operator state — `git checkout` must NOT clobber it).
-   Set `strategy.equity.name` back to the still-registered
-   `equity_residual_momentum_v3` and remove `core_allocation`,
-   `sleeve_allocation`, `sleeve_symbols`,
-   `universe.equity.sleeve_trade_symbols`, and
-   `risk.slot_exempt_equity_symbols`; remove GLD/OUNZ from
-   `fallback_trade_symbols` and restore XLRE/XLC; then run
+   Reverting the 2026-09-25 equity identity switch additionally restores
+   `config/settings.yaml` and the removed modules from commit `ec4e2df`
+   (main before the switch), e.g.
+   `git checkout ec4e2df -- config/settings.yaml src/parayabuck`;
+   then run
    `pip install -r requirements.lock && pip install -e . --no-deps`.
 4. Restore the runtime DB only when the new release corrupted/partially
    migrated it (loud schema errors on startup). A healthy new ledger is kept:

@@ -39,10 +39,9 @@ from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.backtest.portfolio_engine")
 
-# Largest trailing history window any in-tree strategy reads (the equity
-# residual-momentum beta window of 273 bars + the current bar). Context
-# histories are trimmed to at least this many bars so every strategy's
-# trailing-window reads are preserved exactly.
+# Context histories are trimmed to at least this many bars. It covers every
+# in-tree strategy's trailing window (the equity 200-session SMA is the
+# largest) with headroom; the profit_max_v1 validation ran with this value.
 _MAX_CONTEXT_HISTORY_BARS = 274
 
 
@@ -388,7 +387,6 @@ class PortfolioBacktestEngine:
         self._idempotency = IdempotencyKeyFactory(strategy.name, strategy.version)
         self._history: dict[tuple[str, str], list[Bar]] = {}
         self._execution_history: dict[tuple[str, str], list[Bar]] = {}
-        self._numeric_history: object | None = None
         self._positions: dict[str, _Position] = {}
         self._pending: list[PortfolioOrder] = []
         self._fills: list[PortfolioFill] = []
@@ -477,7 +475,6 @@ class PortfolioBacktestEngine:
         corporate_actions: list[CorporateAction] | None = None,
         cash_rates: list[CashRateObservation] | None = None,
         prepared_inputs: tuple[list[Bar], list[Bar]] | None = None,
-        numeric_history: object | None = None,
     ) -> PortfolioBacktestResult:
         """Run the event loop.
 
@@ -486,13 +483,6 @@ class PortfolioBacktestEngine:
         It is deterministic (dedup/sort are pure functions of the input), so
         reusing one preparation across identical trial runs yields identical
         results while skipping the per-trial sort of the full bar set.
-
-        ``numeric_history`` is an optional derived view (``NumericHistoryView``)
-        built once per prepared dataset from validated Bars. When present it is
-        attached to each ``PortfolioContext`` so strategy hot paths can avoid
-        repeatedly converting ``Bar`` objects to numpy. It must be treated as
-        immutable and PIT-safe (slicing via ``searchsorted`` up to the decision
-        timestamp).
         """
         # a restart resumes fills exactly where the interrupted run left off.
         restored_pending = list(self._pending)
@@ -526,9 +516,6 @@ class PortfolioBacktestEngine:
             cutoff = datetime.fromisoformat(watermark)
             ordered = [bar for bar in ordered if bar.timestamp > cutoff]
             decision_bars = [bar for bar in decision_bars if bar.timestamp > cutoff]
-        # Numeric view is only safe when no watermark (full history visible).
-        # For watermark-resume runs we fall back to Bar path for correctness.
-        self._numeric_history = None if watermark else numeric_history
         # Warmup is already sorted and canonicalized in _prepared_window; avoid per-trial sort.
         for bar in warmup or []:
             self._ingest(bar)
@@ -1227,7 +1214,6 @@ class PortfolioBacktestEngine:
             prices=prices,
             benchmark_symbol=benchmark,
             ordinary_alpha_excluded_symbols=self.ordinary_alpha_excluded_symbols,
-            numeric_history=self._numeric_history,
         )
 
     def _apply_target(self, target: TargetPortfolio) -> None:

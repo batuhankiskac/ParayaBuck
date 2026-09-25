@@ -571,16 +571,16 @@ def test_settings_patch_preserves_omitted(tmp_path, monkeypatch):
         from parayabuck.web.server import get_settings
 
         result = asyncio.run(get_settings())
-        assert result["daily_loss_limit_pct"] == 0.5
-        assert result["max_drawdown_pct"] == 5.0
+        assert result["daily_loss_limit_pct"] == 20.0
+        assert result["max_drawdown_pct"] == 75.0
         assert result["crypto_trading_enabled"] is True
         assert "config_digest" in result
         # PATCH with only log_level should preserve risk
         payload = SettingsPayload(log_level="DEBUG")
         assert "daily_loss_limit_pct" not in payload.model_fields_set
         validated = manager._validated_settings_payload(payload)
-        assert validated.cfg_raw["risk"]["daily_loss_limit_pct"] == 0.005
-        assert validated.cfg_raw["risk"]["max_drawdown_pct"] == 0.05
+        assert validated.cfg_raw["risk"]["daily_loss_limit_pct"] == 0.20
+        assert validated.cfg_raw["risk"]["max_drawdown_pct"] == 0.75
         assert validated.cfg_raw["app"]["log_level"] == "DEBUG"
     finally:
         manager.config_path = orig_path
@@ -630,20 +630,18 @@ def test_product_gate_rejects_non_product():
         product_strategy_from("nonexistent_strategy_xyz", {})
     # Generic construction remains available for known strategy classes.
     strat = portfolio_strategy_from(
-        "equity_residual_momentum_v3",
+        "equity_leveraged_trend_v1",
         {
-            "formation_bars": 252,
-            "skip_bars": 21,
-            "beta_window_bars": 273,
-            "residual_vol_window": 63,
-            "top_n": 8,
-            "max_single_weight": 0.10,
-            "ivol_reject_quantile": 0.70,
-            "exclude_symbols": ["SPY"],
+            "signal_symbol": "QQQ",
+            "hold_symbol": "QLD",
+            "sma_bars": 200,
+            "vol_target": 0.35,
+            "vol_window": 20,
+            "rebalance_frequency": "hours:24",
         },
         timeframe="1d",
     )
-    assert strat.name == "equity_residual_momentum_v3"
+    assert strat.name == "equity_leveraged_trend_v1"
 
 
 # --- Container credential semantics ---

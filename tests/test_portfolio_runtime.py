@@ -25,7 +25,7 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
-from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV1
+from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1
 from parayabuck.portfolio.models import RebalancePolicy, TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_service import (
     REBALANCE_PHASE_BLOCKED,
@@ -54,19 +54,10 @@ class _Broker:
         return "broker-" + order.client_order_id
 
 
-def _fixture_strategy() -> EquityResidualMomentum1dV1:
-    """A real product strategy (frozen v1 baseline) with reduced windows so
-    the 220-bar runtime fixture satisfies warmup and produces targets."""
-    return EquityResidualMomentum1dV1(
-        {
-            "formation_bars": 60,
-            "skip_bars": 5,
-            "beta_window_bars": 66,
-            "residual_vol_window": 20,
-            "top_n": 2,
-            "exclude_symbols": ["SPY"],
-        }
-    )
+def _fixture_strategy() -> EquityLeveragedTrendV1:
+    """A real product strategy with a reduced SMA window so the 220-bar
+    runtime fixture satisfies warmup and produces targets."""
+    return EquityLeveragedTrendV1({"signal_symbol": "SPY", "hold_symbol": "AAPL", "sma_bars": 5})
 
 
 class _TestUniverse:
@@ -79,6 +70,27 @@ class _TestUniverse:
 def _runtime(tmp_path, broker: _Broker, *, mode: str = "paper", cap: float = 0.0):
     return PortfolioRuntime(
         _fixture_strategy(),
+        EQUITY_UNIVERSE,
+        broker,
+        PortfolioStateRepository(tmp_path / "runtime.sqlite3"),
+        mode=mode,
+        maximum_allocation=0.50,
+        live_dollar_cap=cap,
+        universe=_TestUniverse(),
+        universe_version="test-universe-v1",
+    )
+
+
+def _monthly_runtime(tmp_path, broker: _Broker, *, mode: str = "paper", cap: float = 0.0):
+    """Runtime on the calendar-month test strategy.
+
+    ``equity_leveraged_trend_v1`` decides every session (``hours:24``), so a
+    one-day-later batch is always a boundary. The cadence gate is a generic
+    runtime behaviour, so the tests that need a mid-period batch to stay
+    ``not_scheduled`` run the monthly twin instead.
+    """
+    return PortfolioRuntime(
+        _MonthlyCadenceStrategy({"AAPL": 0.10}),
         EQUITY_UNIVERSE,
         broker,
         PortfolioStateRepository(tmp_path / "runtime.sqlite3"),
@@ -138,9 +150,9 @@ def test_live_runtime_scales_allocation_to_hard_cap(tmp_path) -> None:
     assert result.risk.gross_after <= 0.0100001
 
 
-def test_runtime_rejects_partial_strategy_batch_even_when_top_n_is_ready(tmp_path) -> None:
+def test_runtime_rejects_partial_strategy_batch_even_when_a_target_is_ready(tmp_path) -> None:
     broker = _Broker()
-    runtime = _runtime(tmp_path, broker)
+    runtime = _monthly_runtime(tmp_path, broker)
     bars = _bars()
     last_timestamp = max(bar.timestamp for bar in bars)
 
@@ -171,11 +183,11 @@ def test_runtime_rejects_partial_strategy_batch_even_when_top_n_is_ready(tmp_pat
 
 def test_restart_restores_last_decision_boundary_without_extra_rebalance(tmp_path) -> None:
     initial_bars = _bars()
-    first = _runtime(tmp_path, _Broker())
+    first = _monthly_runtime(tmp_path, _Broker())
     assert first.process_closed_bars(initial_bars).status == "submitted"
     first.close()
 
-    restarted = _runtime(tmp_path, _Broker())
+    restarted = _monthly_runtime(tmp_path, _Broker())
     restarted.seed(initial_bars)
     previous = max(bar.timestamp for bar in initial_bars)
     next_timestamp = previous + timedelta(days=1)
@@ -2498,6 +2510,19 @@ class _FixedTargetStrategy(PortfolioStrategy):
         return True
 
 
+class _MonthlyCadenceStrategy(_FixedTargetStrategy):
+    """``fixed_target`` on the calendar month, with a non-trivial warmup.
+
+    The backtest/runtime parity tests need a cadence whose boundaries do not
+    line up with the first usable bar, and they must not decide on
+    non-scheduled bars: hence the base (risk-reducing-only) intermediate
+    rebalance hook instead of ``_FixedTargetStrategy``'s unconditional one.
+    """
+
+    minimum_history_bars = 20
+    requires_intermediate_risk_rebalance = PortfolioStrategy.requires_intermediate_risk_rebalance
+
+
 class _PositionedBroker(_Broker):
     def __init__(self, positions: tuple[PositionSnapshot, ...]) -> None:
         super().__init__()
@@ -2515,7 +2540,7 @@ class _PositionedBroker(_Broker):
         )
 
 
-def test_paper_runtime_blocks_opening_when_all_six_residual_positions_remain(tmp_path) -> None:
+def test_paper_runtime_blocks_opening_when_all_six_positions_remain(tmp_path) -> None:
     """An omitted sub-band position must not be spent as a free slot."""
     held = ("AAPL", "CMG", "EME", "ETN", "GDDY", "SPY")
     broker = _PositionedBroker(
@@ -2868,7 +2893,7 @@ def test_backtest_decides_but_runtime_waits_for_boundary_then_catch_up_fires(
     its first usable bar while a seeded runtime mid-period reports
     ``not_scheduled`` — the startup catch-up closes the gap with an immediate
     full-target decision."""
-    strategy = _fixture_strategy()
+    strategy = _MonthlyCadenceStrategy({"AAPL": 0.10})
     bars = _bars()  # 220 daily bars; the last bar is mid-month
     last_timestamp = max(bar.timestamp for bar in bars)
     assert (
@@ -2897,7 +2922,7 @@ def test_backtest_decides_but_runtime_waits_for_boundary_then_catch_up_fires(
     # Runtime without catch-up: after mid-period warmup the normal cadence
     # waits for the next boundary -> not_scheduled (the mismatch).
     broker = _Broker()
-    runtime = _runtime(tmp_path, broker)
+    runtime = _monthly_runtime(tmp_path, broker)
     runtime.seed(bars)
     last_batch = [bar for bar in bars if bar.timestamp == last_timestamp]
     assert runtime.process_closed_bars(last_batch).status == "not_scheduled"
@@ -2945,8 +2970,8 @@ def test_startup_catch_up_warming_up_with_short_or_empty_history(tmp_path) -> No
     # No history at all.
     assert runtime.startup_catch_up().status == "warming_up"
     assert runtime.startup_catch_up_status == "warming_up"
-    # Too few bars (below minimum_history_bars=151).
-    runtime.seed(_bars()[:40])
+    # Too few bars (below minimum_history_bars=5).
+    runtime.seed(_bars()[:3])
     result = runtime.startup_catch_up()
     assert result.status == "warming_up"
     assert runtime.startup_catch_up_status == "warming_up"
@@ -3123,7 +3148,7 @@ def test_forced_scheduled_applies_full_target_and_leaves_normal_cadence_unchange
     empty account); non-forced calls keep the not_scheduled cadence gate and
     normal scheduled decisions carry no decision_origin label."""
     broker = _Broker()
-    runtime = _runtime(tmp_path, broker)
+    runtime = _monthly_runtime(tmp_path, broker)
     bars = _bars()
     runtime.seed(bars)
     last_timestamp = max(bar.timestamp for bar in bars)

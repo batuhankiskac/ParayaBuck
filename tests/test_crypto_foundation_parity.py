@@ -7,7 +7,7 @@ Proves:
 - category completeness and meme caps
 - observation provenance mismatch fails closed
 - order independence & hash determinism
-- crypto low-variance alpha frozen & equity V3 untouched
+- crypto low-variance alpha frozen
 - paper/live freeze
 """
 
@@ -430,19 +430,6 @@ def test_crypto_low_variance_target_math_unchanged() -> None:
         or abs(weights["ETH/USD"] - 0.5) < 1e-9
         or abs(weights["SOL/USD"] - 0.5) < 1e-9
     )
-
-
-# 10. Equity V3 unchanged
-def test_equity_v3_unchanged() -> None:
-    cfg = load_config()
-    assert cfg.strategy.equity.name == "equity_residual_momentum_v3_dividend_sleeve_v1"
-    strat = portfolio_strategy_from(cfg.strategy.equity.name, cfg.strategy.equity.parameters)
-    # The V3 core inside the dividend-sleeve identity is unchanged.
-    assert strat.core.name == "equity_residual_momentum_v3"
-    assert strat.core.version == "3.0.0"
-    # Ensure crypto changes didn't affect equity config
-    equity_cfg = cfg.universe.equity
-    assert equity_cfg.observation_strategy_name == "equity_residual_momentum_v3_dividend_sleeve_v1"
 
 
 # 11 & 12. Runtime mode paper and live disabled

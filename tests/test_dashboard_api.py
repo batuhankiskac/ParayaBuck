@@ -222,11 +222,12 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkey
     equity = overview["equity"]
     crypto = overview["crypto"]
 
-    assert equity["name"] == "equity_residual_momentum_v3_dividend_sleeve_v1"
+    assert equity["name"] == "equity_leveraged_trend_v1"
     assert equity["status"] == "stopped"
-    assert equity["strategy"]["display_name"] == "Residual Momentum v3 + dividend-growth sleeve"
+    assert equity["strategy"]["display_name"] == "Leveraged index trend v1"
     assert equity["strategy"]["signal_timeframe"] == "1d"
-    assert equity["maximum_allocation_pct"] == pytest.approx(55.0)
+    assert equity["strategy"]["rebalance_cadence"] == "hours:24"
+    assert equity["maximum_allocation_pct"] == pytest.approx(93.0)
     assert equity["observation_set_size"] is not None
     assert isinstance(equity["holdings"], list)
 
@@ -242,12 +243,12 @@ def test_dashboard_risk_panel_exposes_policies_and_state(tmp_path: Path, monkeyp
 
     risk = asyncio.run(server.dashboard_overview())["risk"]
     assert risk["gross_exposure_pct"] == 40.0
-    assert risk["gross_exposure_limit_pct"] == 60.0
+    assert risk["gross_exposure_limit_pct"] == 98.0
     assert risk["cash_pct"] == 60.0
-    assert risk["cash_buffer_limit_pct"] == 40.0
+    assert risk["cash_buffer_limit_pct"] == 2.0
     assert risk["crypto_exposure_limit_pct"] == 10.0
-    assert risk["max_drawdown_pct"] == 5.0
-    assert risk["daily_loss_limit_pct"] == 0.5
+    assert risk["max_drawdown_pct"] == 75.0
+    assert risk["daily_loss_limit_pct"] == 20.0
     assert risk["entry_risk_latch"] == {}
     assert risk["circuit_breaker"] is None
     assert isinstance(risk["safety_incidents"], list)

@@ -79,7 +79,7 @@ def test_active_product_universe_rejects_raced_or_wrong_snapshot(tmp_path) -> No
 def test_start_composition_passes_product_universe_to_runtime(monkeypatch) -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     config = Config()
-    strategy = product_strategy_from("equity_residual_momentum_v3", config.strategy.equity.parameters)
+    strategy = product_strategy_from("equity_leveraged_trend_v1", config.strategy.equity.parameters)
     universe = ActiveProductUniverse.configured(
         Market.EQUITY,
         ("SPY", "AAPL"),

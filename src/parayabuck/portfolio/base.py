@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
@@ -33,12 +33,6 @@ class PortfolioContext:
     holdings: dict[str, float]
     prices: dict[str, float]
     benchmark_symbol: str
-    # Optional derived numerical view (immutable) for computational hot paths.
-    # ``Bar`` remains canonical; this is a validated cache built once per
-    # prepared dataset. Strategies may use it if present, otherwise fall back
-    # to ``history``. PAPER/LIVE contexts without prepared data will have
-    # ``None`` and use the canonical path.
-    numeric_history: Any | None = None
     # Configuration-derived role boundary for ordinary-alpha strategies.
     # Reserved symbols remain visible in ``history`` so benchmark, hedge, and
     # managed-position paths can observe them; ordinary selection applies this

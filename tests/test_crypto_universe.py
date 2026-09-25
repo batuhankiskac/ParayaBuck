@@ -58,7 +58,7 @@ def test_new_universe_is_canonical_and_crypto_does_not_count_toward_iex(
                     "trade_symbols": ["btcusd", "ETH/USD"],
                 },
             },
-            "strategy": {"equity": {"name": "equity_residual_momentum_v3"}, "crypto": {"enabled": False}},
+            "strategy": {"equity": {"name": "equity_leveraged_trend_v1"}, "crypto": {"enabled": False}},
         },
     )
     config = load_config(str(path))
@@ -82,7 +82,7 @@ def test_iex_rejects_reference_plus_trade_symbols_over_limit(tmp_path: Path) -> 
                 "crypto": {"enabled": False},
             },
             "strategy": {
-                "equity": {"name": "equity_residual_momentum_v3"},
+                "equity": {"name": "equity_leveraged_trend_v1"},
                 "crypto": {"enabled": False},
             },
         },

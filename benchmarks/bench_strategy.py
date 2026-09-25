@@ -1,4 +1,4 @@
-"""Strategy computation benchmarks: equity residual momentum v2, crypto low variance v2.
+"""Strategy computation benchmarks: equity leveraged trend v1, crypto low variance v2.
 
 Deterministic synthetic histories; measures candidate scoring, ranking and
 target construction in isolation (the per-decision hot path).
@@ -18,10 +18,9 @@ from benchmarks.harness import Report, timeit
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio.base import PortfolioContext
 from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV2
-from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV2
+from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1
 
-_EQUITY_SYMBOLS = 300
-_EQUITY_BARS = 300  # >= beta_window(273) + 1
+_EQUITY_BARS = 300  # >= sma_bars(200)
 _CRYPTO_SYMBOLS = 18
 _CRYPTO_BARS = 120  # >= lookback(22) + 1
 
@@ -62,12 +61,10 @@ def _synthetic_history(
     return history
 
 
-def _equity_context() -> tuple[PortfolioContext, EquityResidualMomentum1dV2]:
+def _equity_context() -> tuple[PortfolioContext, EquityLeveragedTrendV1]:
     start = datetime(2023, 1, 1, tzinfo=UTC)
-    symbols = [f"SYM{i:04d}" for i in range(_EQUITY_SYMBOLS - 1)] + ["SPY"]
+    symbols = ["SPY", "QQQ", "QLD"]
     history = _synthetic_history(symbols, _EQUITY_BARS, Market.EQUITY, start, seed=7)
-    # One symbol with too-short history exercises the rejection path.
-    history["SHORT"] = history["SYM0000"][:60]
     universe = SimpleNamespace(contains=lambda _s, _m, _t: True)
     context = PortfolioContext(
         decision_timestamp=history["SPY"][-1].timestamp,
@@ -77,11 +74,11 @@ def _equity_context() -> tuple[PortfolioContext, EquityResidualMomentum1dV2]:
         universe=universe,
         universe_version="bench",
         equity=100_000.0,
-        holdings={"SYM0001": 100.0},
+        holdings={"QLD": 100.0},
         prices={symbol: history[symbol][-1].close for symbol in symbols},
         benchmark_symbol="SPY",
     )
-    strategy = EquityResidualMomentum1dV2()
+    strategy = EquityLeveragedTrendV1({"vol_target": 0.35})
     return context, strategy
 
 
@@ -130,30 +127,8 @@ def run(report: Report) -> None:
     crypto_context, crypto_strategy = _crypto_context()
 
     timing, _ = timeit(
-        lambda: equity_strategy.rank_candidates(equity_context),
-        label="equity rank_candidates (300 sym)",
-        warmup=3,
-        runs=10,
-    )
-    report.add(timing)
-
-    timing, _ = timeit(
         lambda: equity_strategy.decide(equity_context),
-        label="equity decide (300 sym)",
-        warmup=3,
-        runs=10,
-    )
-    report.add(timing)
-
-    def equity_rank_and_decide() -> object:
-        return (
-            equity_strategy.rank_candidates(equity_context),
-            equity_strategy.decide(equity_context),
-        )
-
-    timing, _ = timeit(
-        equity_rank_and_decide,
-        label="equity rank+decide combined",
+        label="equity decide (QQQ trend, QLD vol target)",
         warmup=3,
         runs=10,
     )

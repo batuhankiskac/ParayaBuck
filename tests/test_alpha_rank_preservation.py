@@ -53,11 +53,11 @@ def _flat_account(equity: float = 100_000.0) -> AccountSnapshot:
 
 def _ranked_target(weights: dict[str, float], ranks: dict[str, int]) -> TargetPortfolio:
     ordered = tuple(
-        TargetWeight(symbol, weight, reason="residual_momentum", rank=ranks.get(symbol, 0))
+        TargetWeight(symbol, weight, reason="alpha", rank=ranks.get(symbol, 0))
         for symbol, weight in sorted(weights.items())
     )
     return TargetPortfolio(
-        strategy_name="equity_residual_momentum_v2",
+        strategy_name="equity_leveraged_trend_v1",
         strategy_version="2.0.0",
         decision_timestamp=_TS,
         weights=ordered,

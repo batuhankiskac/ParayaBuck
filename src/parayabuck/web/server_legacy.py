@@ -2943,7 +2943,7 @@ def _crypto_realized_vols(symbols: list[str]) -> dict[str, float | None]:
     result: dict[str, float | None] = {}
     try:
         from parayabuck.data.cache import WarmupCache
-        from parayabuck.portfolio.momentum import realized_volatility
+        from parayabuck.portfolio.crypto_low_variance import realized_volatility
     except Exception:
         return dict.fromkeys(symbols)
     try:

@@ -1,11 +1,10 @@
 # PAPER Runtime Lifecycle — ParayaBuck
 
 **Mode:** `paper` (`runtime.mode paper`), **Strategy:**
-`equity_residual_momentum_v3_dividend_sleeve_v1` (**Residual Momentum v3 +
-dividend-growth sleeve**; unchanged V3 3.0.0 weekly core plus a static
-SCHD/VIG/DGRO/GLD/OUNZ sleeve), **Live:** `false`. See the
-[dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
-and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
+`equity_leveraged_trend_v1` (**Leveraged Index Trend v1**; holds QLD while QQQ's
+completed close is above its 200-session SMA, sized to a 35% volatility
+target, cash otherwise), **Live:** `false`. See the
+[profit maximization v1 evidence](research/profit_max_v1.md).
 
 This document is the single source for the actual PAPER startup/runtime lifecycle as implemented in `src/parayabuck/runtime.py` (EngineRuntime). Every stage lists inputs, persisted state, external dependency, failure/retry, fail-open/closed, and telemetry with file:line refs. No alpha/economics change.
 
@@ -25,7 +24,7 @@ This document is the single source for the actual PAPER startup/runtime lifecycl
 
 ## 2. Config Load — `config.py:648`
 
-Inputs: YAML `runtime, engine, alpaca, data, universe, strategy, risk, execution, backup, alerting, live` + env. Current equity config is `maximum_allocation: 0.55`, `core_allocation: 0.30`, and `sleeve_allocation: 0.25` (SCHD/VIG/DGRO/GLD/OUNZ at 0.05 each: dividend 0.15 + gold 0.10), with `universe.equity.sleeve_trade_symbols` and `risk.slot_exempt_equity_symbols`. Persisted: `Config` in-memory, digests later in `portfolio_runtime_sessions`. Failure: `FileNotFoundError`, `ValueError` on ratios, unknown alert events — fail-fast. Telemetry: `warnings.warn` deprecated keys.
+Inputs: YAML `runtime, engine, alpaca, data, universe, strategy, risk, execution, backup, alerting, live` + env. Current equity config is `name: equity_leveraged_trend_v1` with `maximum_allocation: 0.93` and parameters `signal_symbol: QQQ`, `hold_symbol: QLD`, `sma_bars: 200`, `vol_target: 0.35`, `vol_window: 20`, `rebalance_frequency: hours:24`; QQQ and QLD are tradable `universe.equity.reference_symbols`. Persisted: `Config` in-memory, digests later in `portfolio_runtime_sessions`. Failure: `FileNotFoundError`, `ValueError` on ratios, unknown alert events — fail-fast. Telemetry: `warnings.warn` deprecated keys.
 
 ## 3. DB / Storage Startup — `storage.py:17`, `execution/ledger.py:59`, `portfolio/runtime_service.py:174`
 
@@ -45,11 +44,11 @@ Single `broker.account()` returns both account + positions. Cached `_last_accoun
 
 ## 7. Historical Warmup — `runtime.py:3435`, `data/alpaca.py:94`, `data/cache.py:15`
 
-`symbols` + `required_timeframes` + `minimum_history_bars` 252 + `stock_feed` sip/iex. Cache digest `SHA256(timeframes+strategies)` gates reuse. Failure: coverage <60% → refetch; SIP 403 → degrade to iex; timeout → `TransientStartupError`. Retry: `_WARMUP_RETRY_SECONDS=600` singleton `pb-warmup-retry`. Fail-closed via `not_ready_symbols`. Telemetry: `Warmup starting/complete`, `Historical gap remains`.
+`symbols` + `required_timeframes` + `minimum_history_bars` 200 (equity 200-session SMA) / 23 (crypto `variance_lookback_days` + 1) + `stock_feed` sip/iex. Cache digest `SHA256(timeframes+strategies)` gates reuse. Failure: coverage <60% → refetch; SIP 403 → degrade to iex; timeout → `TransientStartupError`. Retry: `_WARMUP_RETRY_SECONDS=600` singleton `pb-warmup-retry`. Fail-closed via `not_ready_symbols`. Telemetry: `Warmup starting/complete`, `Historical gap remains`.
 
 ## 8. Universe Refresh — `universe/preflight.py:81`, `runtime.py:1077`
 
-`ensure_active_universes()` pre-subscription, `refresh_equity/crypto_universe` bars+quotes, `active_*_universe.json` + digest. The 30-symbol equity IEX stream pins `universe.equity.sleeve_trade_symbols`, hides them from V3 scoring, and leaves 21 ranked core slots instead of 26. Failure: `invalid_dynamic_universe` → entry halt unless `allow_static_fallback_trading`; hot-swap protects managed pins, rollback on `rollback_failed` → `subscription_state_unknown` halt. Retry: startup one-retry 1s; loop backoff `(300,900,1800,3600)` capped 60min, equity defers to next premarket 06:00 ET. Telemetry: `scanner_refresh_failure/recovered`, `health.universe_refresh`.
+`ensure_active_universes()` pre-subscription, `refresh_equity/crypto_universe` bars+quotes, `active_*_universe.json` + digest. The 30-symbol equity IEX stream pins `universe.equity.reference_symbols` (SPY, QQQ, QLD); QQQ and QLD are tradable through `universe.equity.trade_reference_symbols`. Failure: `invalid_dynamic_universe` → entry halt unless `allow_static_fallback_trading`; hot-swap protects managed pins, rollback on `rollback_failed` → `subscription_state_unknown` halt. Retry: startup one-retry 1s; loop backoff `(300,900,1800,3600)` capped 60min, equity defers to next premarket 06:00 ET. Telemetry: `scanner_refresh_failure/recovered`, `health.universe_refresh`.
 
 ## 9. Signal-Basis Verification — `runtime.py:2909`, `data/adjustment.py:55`
 
@@ -57,11 +56,11 @@ Equity splits `1d` provider-authoritative. Watermark `verified_through_by_symbol
 
 ## 10. Strategy Decision — `runtime.py:2294`, `portfolio/runtime_service.py:96`
 
-Finalized `Bar` batch after `event_grace_seconds=5.0` coalescing. `portfolio_decisions` row `decision_id=SHA256(account_id+digest+timestamp+market)` dedup `UNIQUE(account_id,configuration_digest,decision_timestamp,market)`. The equity target combines the unchanged V3 core with the static sleeve; the sleeve is selected only on the first weekly decision of each calendar month or while empty and is otherwise held. Failure: missing timeframes → `ValueError`; exception → `portfolio_runtime_failure` halt. No decision retry, startup catch-up once. Fail-closed on exception. Telemetry: `Portfolio decision: ...`, `paper_observability`.
+Finalized `Bar` batch after `event_grace_seconds=5.0` coalescing. `portfolio_decisions` row `decision_id=SHA256(account_id+digest+timestamp+market)` dedup `UNIQUE(account_id,configuration_digest,decision_timestamp,market)`. The equity target is the QQQ trend decision — QLD at the volatility target while QQQ's completed close is above its 200-session SMA, cash otherwise — on a declared `hours:24` (daily) cadence. Failure: missing timeframes → `ValueError`; exception → `portfolio_runtime_failure` halt. No decision retry, startup catch-up once. Fail-closed on exception. Telemetry: `Portfolio decision: ...`, `Equity PAPER decision skipped` / `Equity PAPER decision telemetry` (with `trend_state`), `paper_observability`.
 
 ## 11. Risk Overlay — `portfolio/runtime_service.py:PortfolioRiskOverlay`, `runtime.py:1812`
 
-`risk.*` limits, `live_dollar_cap`, `execution band`, `high_water`. `risk_state` session + `safety_incidents` for drawdown. Failure: `daily_loss`/`drawdown` → latch `entry_risk_latch[market]=reason` (sells only), drawdown persists. Daily-loss, drawdown, entry-latch, and intermediate-reduction latches never grow the static sleeve. Re-evaluated every 15s, `start_new_risk_epoch()` rebases. Fail-closed for entries. Telemetry: `risk_incident/drawdown_halt/risk_epoch_reset`.
+`risk.*` limits, `live_dollar_cap`, `execution band`, `high_water`. `risk_state` session + `safety_incidents` for drawdown. Failure: `daily_loss`/`drawdown` → latch `entry_risk_latch[market]=reason` (sells only), drawdown persists until an operator risk-epoch reset. The 0.20 daily-loss and 0.75 drawdown latches are catastrophe brakes for a daily-reset 2x index ETF. Re-evaluated every 15s, `start_new_risk_epoch()` rebases. Fail-closed for entries. Telemetry: `risk_incident/drawdown_halt/risk_epoch_reset`.
 
 ## 12. Order Submission (Two-Phase) — `portfolio/runtime_service.py:1161`, `execution/alpaca.py:500`, `runtime.py:938`
 

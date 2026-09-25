@@ -76,7 +76,7 @@ def test_engine_emits_shared_receipt_for_both_markets_and_origins(
         "effective_crypto_slot_claims": 1 if market == Market.CRYPTO else 0,
         "crypto_slot_cap": 2,
     }
-    strategy = "equity_residual_momentum_v3" if market == Market.EQUITY else "crypto_low_variance_hysteresis_v1"
+    strategy = "equity_leveraged_trend_v1" if market == Market.EQUITY else "crypto_low_variance_hysteresis_v1"
     symbol = "AAPL" if market == Market.EQUITY else "BTC/USD"
     target = TargetPortfolio(
         strategy,
@@ -124,7 +124,7 @@ def test_receipt_failure_cannot_interrupt_trading_path(tmp_path: Path, monkeypat
             crypto=SimpleNamespace(observation_strategy_parameters_digest=""),
         )
     )
-    target = TargetPortfolio("equity_residual_momentum_v3", "3.0.0", datetime(2026, 9, 24, tzinfo=UTC), (), 1.0)
+    target = TargetPortfolio("equity_leveraged_trend_v1", "1.0.0", datetime(2026, 9, 24, tzinfo=UTC), (), 1.0)
     runtime = SimpleNamespace(
         market=Market.EQUITY,
         maximum_allocation=0.55,

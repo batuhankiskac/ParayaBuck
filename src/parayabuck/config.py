@@ -68,18 +68,15 @@ class MarketStrategyConfig:
 def _default_equity_strategy() -> MarketStrategyConfig:
     return MarketStrategyConfig(
         enabled=True,
-        name="equity_residual_momentum_v1",
+        name="equity_leveraged_trend_v1",
         timeframe="1d",
         maximum_allocation=0.50,
         parameters={
-            "formation_bars": 252,
-            "skip_bars": 21,
-            "beta_window_bars": 273,
-            "residual_vol_window": 63,
-            "top_n": 8,
-            "max_single_weight": 0.10,
-            "ivol_reject_quantile": 0.70,
-            "exclude_symbols": ["SPY"],
+            "signal_symbol": "QQQ",
+            "hold_symbol": "QLD",
+            "sma_bars": 200,
+            "vol_target": 0.35,
+            "vol_window": 20,
         },
     )
 
@@ -217,18 +214,8 @@ class RiskLimits:
     max_positions: int = 5
     daily_loss_limit_pct: float = 0.005
     max_drawdown_pct: float = 0.05
-    # Additive static-sleeve ETFs that never consume position slots. Must
-    # equal universe.equity.sleeve_trade_symbols and the equity strategy's
-    # sleeve_symbols (validated in ``Config``).
-    slot_exempt_equity_symbols: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        from parayabuck.markets.symbols import canonical_symbol
-
-        exempt = tuple(canonical_symbol(str(item), Market.EQUITY) for item in self.slot_exempt_equity_symbols)
-        if len(set(exempt)) != len(exempt):
-            raise ValueError("risk.slot_exempt_equity_symbols must be unique")
-        object.__setattr__(self, "slot_exempt_equity_symbols", exempt)
         ratios = (
             self.max_position_pct,
             self.max_crypto_exposure_pct,
@@ -399,9 +386,6 @@ class EquityUniverseConfig:
     denylist_symbols: tuple[str, ...] = ()
     supported_exchanges: tuple[str, ...] = ("NASDAQ", "NYSE", "ARCA", "AMEX", "BATS")
     inverse_trade_symbols: tuple[str, ...] = ()
-    # Static-sleeve ETFs of a composed equity strategy: pinned into the stream
-    # and tradable, but reserved from ordinary alpha like the inverse hedges.
-    sleeve_trade_symbols: tuple[str, ...] = ()
     candidate_universe_path: str = "data/universe/equity_candidates.json"
     active_universe_path: str = "data/runtime/active_equity_universe.json"
     trade_reference_symbols: bool = False
@@ -422,7 +406,6 @@ class EquityUniverseConfig:
         references = tuple(canonical_symbol(item, Market.EQUITY) for item in self.reference_symbols)
         fallback = tuple(canonical_symbol(item, Market.EQUITY) for item in self.fallback_trade_symbols)
         inverse = tuple(canonical_symbol(item, Market.EQUITY) for item in self.inverse_trade_symbols)
-        sleeve = tuple(canonical_symbol(item, Market.EQUITY) for item in self.sleeve_trade_symbols)
         allowlist = tuple(canonical_symbol(item, Market.EQUITY) for item in self.allowlist_symbols)
         denylist = tuple(canonical_symbol(item, Market.EQUITY) for item in self.denylist_symbols)
         if len(set(references)) != len(references):
@@ -431,12 +414,6 @@ class EquityUniverseConfig:
             raise ValueError("universe.equity.fallback_trade_symbols must be unique")
         if len(set(inverse)) != len(inverse):
             raise ValueError("universe.equity.inverse_trade_symbols must be unique")
-        if len(set(sleeve)) != len(sleeve):
-            raise ValueError("universe.equity.sleeve_trade_symbols must be unique")
-        if not set(sleeve).issubset(fallback):
-            raise ValueError("universe.equity.sleeve_trade_symbols must be included in fallback_trade_symbols")
-        if set(sleeve) & (set(references) | set(inverse)):
-            raise ValueError("universe.equity.sleeve_trade_symbols must not overlap references or inverse hedges")
         if len(set(allowlist)) != len(allowlist) or len(set(denylist)) != len(denylist):
             raise ValueError("Equity allowlist and denylist symbols must be unique")
         if set(allowlist) & set(denylist):
@@ -465,7 +442,6 @@ class EquityUniverseConfig:
         object.__setattr__(self, "reference_symbols", references)
         object.__setattr__(self, "fallback_trade_symbols", fallback)
         object.__setattr__(self, "inverse_trade_symbols", inverse)
-        object.__setattr__(self, "sleeve_trade_symbols", sleeve)
         object.__setattr__(self, "allowlist_symbols", allowlist)
         object.__setattr__(self, "denylist_symbols", denylist)
         object.__setattr__(
@@ -493,12 +469,7 @@ class EquityUniverseConfig:
         symbols remain in configured observation/history paths. An explicitly
         authorized strategy can pass an empty boundary when it is composed.
         """
-        return tuple(dict.fromkeys((*self.reference_symbols, *self.pinned_trade_symbols)))
-
-    @property
-    def pinned_trade_symbols(self) -> tuple[str, ...]:
-        """Tradable symbols force-kept in the stream: inverse hedges and sleeve ETFs."""
-        return tuple(dict.fromkeys((*self.inverse_trade_symbols, *self.sleeve_trade_symbols)))
+        return tuple(dict.fromkeys((*self.reference_symbols, *self.inverse_trade_symbols)))
 
 
 @dataclass(frozen=True)
@@ -711,7 +682,6 @@ class Config:
             raise ValueError(
                 "Configured equity reference and fallback symbols exceed universe.equity.maximum_stream_symbols"
             )
-        self._validate_equity_sleeve()
         if self.strategy.equity.enabled and not self.universe.equity.enabled:
             raise ValueError("Enabled equity strategy requires universe.equity.enabled")
         if self.strategy.crypto.enabled and not self.universe.crypto.enabled:
@@ -741,38 +711,6 @@ class Config:
         if max_gross + cash_buf - 1.0 > eps:
             raise ValueError(
                 f"Capital invariant violated: max_gross {max_gross:.4f} + cash_buffer {cash_buf:.4f} > 1.0"
-            )
-
-    def _validate_equity_sleeve(self) -> None:
-        """The sleeve symbol set is declared once per role and must agree.
-
-        The strategy owns the sleeve targets, the universe pins them into the
-        stream, and the risk limits exempt them from position slots; a
-        mismatch would trade an unpinned ETF or count a sleeve ETF as a slot.
-        """
-        universe_sleeve = set(self.universe.equity.sleeve_trade_symbols)
-        exempt = set(self.risk.slot_exempt_equity_symbols)
-        strategy = self.strategy.equity
-        strategy_sleeve: set[str] = set()
-        if strategy.enabled and "sleeve_symbols" in strategy.parameters:
-            from parayabuck.markets.symbols import canonical_symbol
-
-            raw = strategy.parameters["sleeve_symbols"]
-            if not isinstance(raw, (list, tuple)):
-                raise ValueError("strategy.equity.parameters.sleeve_symbols must be a list")
-            strategy_sleeve = {canonical_symbol(str(item), Market.EQUITY) for item in raw}
-            core = strategy.parameters.get("core_allocation")
-            sleeve = strategy.parameters.get("sleeve_allocation")
-            if not isinstance(core, (int, float)) or not isinstance(sleeve, (int, float)):
-                raise ValueError("A sleeve equity strategy requires explicit core_allocation and sleeve_allocation")
-            if float(core) + float(sleeve) - float(strategy.maximum_allocation) > 1e-9:
-                raise ValueError(
-                    "strategy.equity core_allocation + sleeve_allocation must not exceed its maximum_allocation"
-                )
-        if not strategy_sleeve == universe_sleeve == exempt:
-            raise ValueError(
-                "strategy.equity sleeve_symbols, universe.equity.sleeve_trade_symbols and "
-                "risk.slot_exempt_equity_symbols must list the same symbols"
             )
 
     @property
@@ -868,8 +806,6 @@ def load_config(config_path: str | None = None) -> Config:
         raise ValueError(
             "Obsolete risk settings have no portfolio effect and must be removed: " + ", ".join(sorted(obsolete_risk))
         )
-    if "slot_exempt_equity_symbols" in risk_raw:
-        risk_raw["slot_exempt_equity_symbols"] = tuple(risk_raw["slot_exempt_equity_symbols"] or ())
     risk = RiskLimits(**risk_raw)
     universe_raw = raw.get("universe")
     if universe_raw is None:

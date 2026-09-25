@@ -48,7 +48,7 @@ No file in this audit mutates `config/settings.yaml`, `.env`, `live.*`, or creat
 | **Execution — protection / HELD** | **NEEDS PAPER SOAK** | `execution/alpaca_protection.py` `ProtectionService` 381L; fee-reserve `QuantityResolution` 0.9975 band when `qty_available==0`; HELD detection via nested `get_order_by_id(nested=True)`; `docs/mission7_execution_boundary_report.md §8` fail-closed table | HELD/stop lifecycle exercised in unit tests but no wall-clock PAPER bracket-fill/replace cycle observed | Soak 1–2 weeks PAPER equity; audit `ProtectionService` cancels + replaces via `execution/alpaca_protection.py:200-320` logs |
 | **Execution — crypto locks** | **PASS** | `execution/alpaca_crypto.py` per-symbol `threading.Lock` non-blocking, OCO synthetic; `tests/execution/test_alpaca_concurrency.py:3` `test_same_symbol_exit_serialized`, `test_different_symbols_not_blocked` | Real 24/7 crypto stream concurrency not load-tested on host; only fake concurrency | Retain fake tests; optional `bench_execution_boundary.py: crypto pending exit recovery 0.00003s` baseline — no LIVE block unless PAPER crypto concurrency alert fires |
 | **Execution — reconciliation idempotency** | **PASS** | `execution/alpaca_reconciliation.py` 7-bucket (`MATCH`, `EXTERNAL`, `STALE`, …) idempotent; `ReconciliationService.reconcile()` dedup by `activity.id`, watermark 24h paginated; `portfolio/idempotency.py` `IdempotencyKeyFactory` deterministic `strategy|version|iso|symbol|side|rebalance`; `test_alpaca_concurrency::test_reconcile_idempotent`; `tests/test_restart_chaos.py::test_open_managed_sell_exempts_drift_after_restart` fixed via `risk_peak` `__new__` isolation | Idempotency proven on fake; cold-start reconciliation after kill-9 not yet observed in PAPER wall-clock | PAPER kill/restart drill (see deployment) before LIVE |
-| **PAPER soak** | **NEEDS PAPER SOAK** | Current identities are defined in `docs/validated_strategies.md` and `config/settings.yaml`; `scripts/audit_v3_paper_soak.py` provides the read-only audit | No persisted weekly production decisions with `origin=startup_catch_up/scheduled`, no `portfolio_orders`→`portfolio_fills` lifecycle, no reconciliation-required incidents observed over real calendar weeks | **Block LIVE:** run uninterrupted PAPER 1–2 calendar weeks and re-run `python3 scripts/audit_v3_paper_soak.py --pretty` until the scheduled-rebalance, lifecycle, identity-continuity, and reconciliation checks pass |
+| **PAPER soak** | **NEEDS PAPER SOAK** | Current identities are defined in `docs/validated_strategies.md` and `config/settings.yaml`; `scripts/audit_paper_soak.py` provides the read-only audit | No persisted scheduled/catch-up production decisions, no `portfolio_orders`→`portfolio_fills` lifecycle, no reconciliation-required incidents observed over real calendar weeks | **Block LIVE:** run uninterrupted PAPER 1–2 calendar weeks and re-run `python3 scripts/audit_paper_soak.py --pretty` until the scheduled-decision continuity, lifecycle, identity-continuity, and reconciliation checks pass |
 | **Deployment — systemd** | **NEEDS OPERATOR PROCEDURE** | `deploy/systemd/parayabuck.service` hardened: `User=parayabuck`, `EnvironmentFile`, `ExecStartPre=parayabuck doctor --strict --paper --offline`, `Restart=on-failure`, `RestartSec=10`, `TimeoutStopSec=35`, `UMask=0077`, `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome=true`, `ReadWritePaths=/opt/parayabuck/{config,data,reports}`; `docs/deployment.md:28-175` step-by-step Google Cloud update/rollback verified prescriptively | `systemd` unit never exercised on target VM in this release (audit machine `product_audit.md:128` `Docker build/healthz/SIGTERM NOT RUN`); `ReadWritePaths` vs `read_only:true` deferred per `deferred_refactor_seams.md:49` | Dry-run on staging VM: `daemon-reload → enable --now → status → journalctl -f → systemctl stop → healthz closed → backup → start → readyz 200`; record evidence |
 | **Deployment — Docker** | **NEEDS OPERATOR PROCEDURE** | `Dockerfile:1-40` `python:3.12-slim` non-root `parayabuck`, locked `requirements.lock`, `VOLUME ["/app/config","/app/data","/app/reports"]`, `HEALTHCHECK /healthz` `30s/5s/20s×3`, `STOPSIGNAL SIGTERM`; `docker-compose.yml:22` `127.0.0.1:8000:8000`, `restart:unless-stopped`, `healthcheck` liveness `/healthz` (not `/readyz`), `stop_grace_period:30s`, `json-file` rotation `10m×3`, `env_file:.env` (no secrets on cmdline) | Docker gate `NOT RUN` on this machine (`product_audit.md:128`, `docs/deployment.md:169`); Docker is alternative to systemd, not both | Papertrail: `docker compose up -d --build → logs -f → curl /healthz /readyz → docker compose down` with same bind-mounts; confirm dashboard PAPER badge |
 | **Deployment — secrets** | **PASS** | `.env` mode `600` (`deployment.md:22`), `EnvironmentFile=/opt/parayabuck/.env` (systemd), `env_file:.env` + `VOLUME` (compose); `web/security.py` redacts `api_key/webhook_url/approval_key` in events/bundle (`operational_observability.md:145`), `cli.py:311-318` checks `PARAYABUCK_OPERATOR_APPROVAL_KEY ≥32 chars`; logs never emit credential values (`operations.md:94`) | Secret rotation procedure undocumented; no test for `.env` permission enforcement | Add operator runbook step: `chmod 600 .env`, `umask 0077` already in units, verify `ps aux | grep ALPACA` shows no secrets |
@@ -120,11 +120,11 @@ No file in this audit mutates `config/settings.yaml`, `.env`, `live.*`, or creat
 
 ### 3.6 PAPER soak (standalone)
 
-**Evidence.** The selected identities and their frozen parameters are recorded in `docs/validated_strategies.md`; `scripts/audit_v3_paper_soak.py` is read-only and requires real PAPER state for soak evidence.
+**Evidence.** The selected identities and their frozen parameters are recorded in `docs/validated_strategies.md`; `scripts/audit_paper_soak.py` is read-only and requires real PAPER state for soak evidence.
 
-**Gap.** Zero wall-clock PAPER rebalances have been confirmed in this audit. The required soak is at least four scheduled equity rebalances with stable identity and reconciliation state.
+**Gap.** Zero wall-clock PAPER rebalances have been confirmed in this audit. The required soak is at least two consecutive scheduled equity decisions with stable identity and reconciliation state.
 
-**Next step.** `NEEDS PAPER SOAK` — run PAPER engine uninterrupted 1–2 weeks. Nightly run `python3 scripts/audit_v3_paper_soak.py --pretty` and archive each JSON. Only after checklist passes may LIVE be reconsidered (and then only with fresh approval + arm token).
+**Next step.** `NEEDS PAPER SOAK` — run PAPER engine uninterrupted 1–2 weeks. Nightly run `python3 scripts/audit_paper_soak.py --pretty` and archive each JSON. Only after checklist passes may LIVE be reconsidered (and then only with fresh approval + arm token).
 
 ### 3.7 Deployment — systemd
 
@@ -227,15 +227,15 @@ All `PASS`; gaps are procedural rotation/drill.
 
 - Execution boundary is reviewable and hardened (Mission 7 facade + Mission 8 splits), observability is isolated and bounded, deployment artefacts are hardened (systemd non-root + `ProtectSystem`, Docker non-root + loopback-only + `stop_grace_period 30s`), and security posture (loopback/Host/Origin/control-token/7-gate LIVE arm) is `PASS`.
 
-- **However:** the PAPER soak for the current PAPER identities (`equity_residual_momentum_v3` weekly + `crypto_low_variance_hysteresis_v1` 96h) has **not yet occurred** wall-clock. No scheduled production rebalance, protection replacement, crash-restart recovery, or backup-timer fire has been observed on a durable host.
+- **However:** the PAPER soak for the current PAPER identities (`equity_leveraged_trend_v1` daily + `crypto_low_variance_hysteresis_v1` 96h) has **not yet occurred** wall-clock. No scheduled production rebalance, protection replacement, crash-restart recovery, or backup-timer fire has been observed on a durable host.
 
 - The only path to LIVE is:
 
-  1. Run uninterrupted PAPER on the target host (systemd primary, or Docker alternative) for **1–2 calendar weeks**. This covers ≥2 weekly equity rebalances (formation `252`, skip `21`, beta `273`, top8) and at least one 96h crypto hysteresis retention cycle, plus intervening universe refresh, signal-basis verification, and risk-latch windows.
+  1. Run uninterrupted PAPER on the target host (systemd primary, or Docker alternative) for **1–2 calendar weeks**. This covers ≥2 scheduled equity decisions (QQQ 200-session SMA, `vol_target` 0.35 over 20 sessions, QLD holding) and at least one 96h crypto hysteresis retention cycle, plus intervening universe refresh, signal-basis verification, and risk-latch windows.
 
-  2. During that window, execute the **operator procedures** weekly: `ops status/doctor/events/timeline/bundle`, `audit_v3_paper_soak.py --pretty`, `parayabuck backup` + restore check, graceful `systemctl stop/start` and one unclean `kill -9 → start` reconciliation check, and `bench_execution_boundary.py` p95 gate. Log each as evidence (bundle zip + audit JSON).
+  2. During that window, execute the **operator procedures** weekly: `ops status/doctor/events/timeline/bundle`, `audit_paper_soak.py --pretty`, `parayabuck backup` + restore check, graceful `systemctl stop/start` and one unclean `kill -9 → start` reconciliation check, and `bench_execution_boundary.py` p95 gate. Log each as evidence (bundle zip + audit JSON).
 
-  3. Declare soak success only when `audit_v3_paper_soak.py` reports `≥4 real scheduled weekly V3 PAPER rebalances`, `0 unexplained reconciliation_required`, `0 open ambiguous orders`, scanner/config digests stable per `runtime.py` lineage, and operator sign-off that the five `NEEDS OPERATOR PROCEDURE` drills each succeeded at least once.
+  3. Declare soak success only when `audit_paper_soak.py` reports `≥1 scheduled and ≥1 startup-catch-up decision per market with no unexplained scheduled gap > 8 equity / 5 crypto days`, `0 unexplained reconciliation_required`, `0 open ambiguous orders`, scanner/config digests stable per `runtime.py` lineage, and operator sign-off that the five `NEEDS OPERATOR PROCEDURE` drills each succeeded at least once.
 
 - **Do not enable LIVE** before that. When soak passes, a *separate* LIVE authorization ceremony must still satisfy all 7 gates (`runtime.mode live`, `live.enabled true`, `hard_dollar_cap >0`, live Alpaca creds, `PARAYABUCK_ENABLE_LIVE=YES`, short-lived HMAC `LiveOperatorApproval` bound to `account_id + configuration_digests + cap`, and fresh `LIVE <suffix>` Web confirmation). No gate may be skipped or cached.
 
@@ -256,7 +256,7 @@ cat benchmarks/execution_boundary_mission8.json | python3 -m json.tool | head -6
 cat docs/alpaca_broker_truth_matrix.md | head -80
 
 # 3. PAPER soak status (read-only, never writes DB)
-python3 scripts/audit_v3_paper_soak.py --pretty | head -120
+python3 scripts/audit_paper_soak.py --pretty | head -120
 
 # 4. Deployment artefacts
 cat deploy/systemd/parayabuck.service
@@ -294,7 +294,7 @@ uv run python benchmarks/bench_web_platform.py | tail -20
 - `src/parayabuck/backup.py:51-241` + `deploy/systemd/parayabuck-backup.{service,timer}` + `docs/operations.md:97-119`
 - `src/parayabuck/monitoring/{health,operational_event,observe,journal,alerts,diagnostic}` + `docs/operational_observability.md`
 - `docs/execution_architecture.md`, `docs/alpaca_broker_truth_matrix.md`, `docs/operational_observability.md`
-- `docs/validated_strategies.md` + `scripts/audit_v3_paper_soak.py:1-1250` + `tests/test_v3_paper_audit.py`
+- `docs/validated_strategies.md` + `scripts/audit_paper_soak.py:1-483` + `tests/test_paper_soak_auditor.py`
 - `docs/deployment.md` + `deploy/systemd/*` + `Dockerfile` + `docker-compose.yml` + `docs/operations.md`
 - `docs/paper_operations.md`, `docs/paper_runtime_lifecycle.md`, `docs/deferred_refactor_seams.md`
 - `benchmarks/bench_execution_boundary.py`, `benchmarks/bench_web_platform.py`, `benchmarks/bench_backtest.py`

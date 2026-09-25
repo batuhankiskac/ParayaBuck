@@ -1,6 +1,6 @@
 # PAPER Incident Taxonomy — Strict Classification
 
-**Mode:** `paper`, **V3 frozen**, **Live disabled**. No generic `runtime error` bucket.
+**Mode:** `paper`, **equity identity frozen** (`equity_leveraged_trend_v1`), **Live disabled**. No generic `runtime error` bucket.
 
 Every incident defines severity, halt, retry, recovery, operator action, telemetry payload.
 

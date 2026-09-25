@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
-from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV1
+from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1
 from parayabuck.portfolio.runtime_service import PortfolioRuntime, PortfolioStateRepository
 from parayabuck.runtime import EngineRuntime, WorkerHealth
 
@@ -35,17 +35,10 @@ class _CountingBroker:
         return "broker-" + order.client_order_id
 
 
-def _strategy() -> EquityResidualMomentum1dV1:
-    return EquityResidualMomentum1dV1(
-        {
-            "formation_bars": 60,
-            "skip_bars": 5,
-            "beta_window_bars": 66,
-            "residual_vol_window": 20,
-            "top_n": 2,
-            "exclude_symbols": ["SPY"],
-        }
-    )
+def _strategy() -> EquityLeveragedTrendV1:
+    """A real product strategy with a reduced SMA window so the 220-bar
+    fixture satisfies warmup and produces a target on every daily batch."""
+    return EquityLeveragedTrendV1({"signal_symbol": _UNIVERSE[0], "hold_symbol": _UNIVERSE[1], "sma_bars": 5})
 
 
 def _bars(start: datetime, count: int) -> list[Bar]:

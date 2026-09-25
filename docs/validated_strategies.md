@@ -17,9 +17,12 @@ Documentation only. Nothing at runtime reads this file.
 > backtests — is a new, unvalidated strategy and requires a separate
 > validation and approval before it may run on the PAPER product.
 
-## Equity — `equity_residual_momentum_v1`
+## Equity — `equity_residual_momentum_v1` (REMOVED 2026-09-25)
 
-Market-residual momentum, 1d signal timeframe, monthly decisions.
+Historical record only. Market-residual momentum, 1d signal timeframe,
+monthly decisions. The class is no longer registered or constructible; it is
+recoverable from git history (`5d61c8c` on `profit-max-v1`, `ec4e2df` on
+`main`).
 
 | Parameter | Validated value |
 |---|---|
@@ -46,13 +49,11 @@ Low realized variance (AHXZ monthly construction on 1d bars), weekly decisions.
 
 ## Risk limits (shared, frozen)
 
-| Limit | Value |
-|---|---|
 | `max_crypto_exposure_pct` | 0.10 |
 | `max_crypto_position_pct` | 0.05 |
 | `max_crypto_positions` | 2 |
-| `max_gross_exposure_pct` | 0.60 |
-| `cash_buffer_pct` | 0.40 |
+| `max_gross_exposure_pct` | 0.98 |
+| `cash_buffer_pct` | 0.02 |
 
 ## Runtime posture (frozen)
 
@@ -63,45 +64,53 @@ Low realized variance (AHXZ monthly construction on 1d bars), weekly decisions.
 ## Historical cadence selections (v2, promoted 2026-08-18)
 
 The cadence-validated v2 identities were the prior PAPER selections: same
-alpha as the frozen v1 baselines, new cadence. v1 and v2 remain frozen and
-reproducible; the current equity selection is recorded below.
+alpha as the frozen v1 baselines, new cadence.
 
 | Identity | Alpha (identical to v1) | Cadence | Status |
 |---|---|---|---|
-| `equity_residual_momentum_v2` | same parameters as v1 | weekly (`rebalance_frequency: weekly`) | frozen named baseline |
+| `equity_residual_momentum_v2` | same parameters as v1 | weekly (`rebalance_frequency: weekly`) | removed 2026-09-25; historical record only |
 | `crypto_low_variance_v2` | same parameters as v1 | 96h (`rebalance_hours: 96`) | frozen named baseline |
 
-The v2 classes carry their cadence in the strategy parameters so the
+The crypto v2 classes carry their cadence in the strategy parameters so the
 configuration digest and persisted decision identity are distinct from v1.
 Parameter changes are separate named identities; `config/settings.yaml` is the
 authoritative source for the currently selected product values.
 
 ## Current PAPER equity identity
 
-`equity_residual_momentum_v3_dividend_sleeve_v1` (**Residual Momentum v3 +
-dividend-growth sleeve**), implemented by
-`src/parayabuck/portfolio/dividend_sleeve.py`, is the current PAPER equity
-identity. It retains `equity_residual_momentum_v3` 3.0.0 unchanged: production
-eligibility, the positive 12-1 gate, risk overlay, inverse-vol sizing, weekly
-cadence, and the frozen raw 6-1/9-1/12-1 percentile-rank consensus. The market
-`maximum_allocation` remains 0.55, split internally into
-`core_allocation: 0.30` and `sleeve_allocation: 0.25`; the static sleeve holds
-SCHD, VIG, DGRO, GLD, and OUNZ at 0.05 each (dividend 0.15, gold 0.10). It is
-selected on the first weekly decision of each calendar month or while empty and
-is otherwise held. See the [dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
-and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
+`equity_leveraged_trend_v1` (**Leveraged Index Trend v1**), implemented by
+`src/parayabuck/portfolio/equity_leveraged_trend.py`, is the current PAPER
+equity identity. It holds QLD (the 2x Nasdaq-100 ETF) while QQQ's completed
+daily close is above its 200-session SMA. In an uptrend the position is
+`min(1, 0.35 / 20-session annualized realized QLD volatility)` of the equity
+allocation and the rest is cash; the target is also cash when history is
+insufficient or QLD is unavailable.
 
-`universe.equity.sleeve_trade_symbols` pins the sleeve ETFs into the
-30-symbol IEX equity stream and hides them from V3 scoring, reducing V3-ranked
-slots from 26 to 21. `risk.slot_exempt_equity_symbols` excludes them from the
-8-position cap. Daily-loss, drawdown, entry-latch, and
-intermediate-reduction latches never grow the sleeve.
+| Parameter | Validated value |
+|---|---|
+| `signal_symbol` | `QQQ` |
+| `hold_symbol` | `QLD` |
+| `sma_bars` | 200 |
+| `vol_target` | 0.35 |
+| `vol_window` | 20 |
+| `rebalance_frequency` | `hours:24` (cadence `daily`) |
+| `maximum_allocation` | 0.93 |
 
-For rollback, select the still-registered `equity_residual_momentum_v3` and
-remove `core_allocation`, `sleeve_allocation`, `sleeve_symbols`,
-`universe.equity.sleeve_trade_symbols`, and
-`risk.slot_exempt_equity_symbols`; remove GLD/OUNZ from
-`fallback_trade_symbols` and restore XLRE/XLC. This does not imply LIVE readiness.
+QQQ and QLD are `universe.equity.reference_symbols` with
+`universe.equity.trade_reference_symbols: true`; `risk.max_position_pct` is
+0.93 so the per-asset cap admits the whole equity allocation in QLD. The
+0.20 daily-loss and 0.75 drawdown latches are catastrophe brakes, not routine
+entry gates — a daily-reset 2x index ETF moves more than any tighter latch
+would allow — and a drawdown halt persists until an operator risk-epoch reset.
+Evidence: `docs/research/profit_max_v1.md` (shared-ledger replay
+2017-01-03 → 2026-07-30: 29.34% CAGR, Sharpe 1.078, max drawdown 29.2%, 2022
+−22.0% for this arm, against VOO buy-and-hold at 14.54% and 32.0%).
+
+Removed 2026-09-25: `equity_residual_momentum_v1/v2/v3`,
+`equity_residual_momentum_v3_dividend_sleeve_v1`, the static-sleeve
+composition in the risk overlay, and `risk.slot_exempt_equity_symbols`. They
+are recoverable from git history; rollback restores `config/settings.yaml` and
+the removed modules from `ec4e2df`. This does not imply LIVE readiness.
 
 ## Current PAPER crypto identity
 

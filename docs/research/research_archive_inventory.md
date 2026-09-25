@@ -516,14 +516,29 @@ Current operational authority is main commit `7f007c8f9e5edc33a5065fc86c1c6fb61e
 |---|---|---|
 | `archive/research/sleeve-candidates-v2-v3-2026-09` | `094c7fb7b1a7723c2c116bfb7fc5e1f85ff71c15` | v2: no pass. v3: `dividend_growth_v1` and `gold_v1b` pass Stage B; design-only authorization, shipped config unchanged. Summary: `docs/research/sleeve_candidates_v2_v3_closure.md` |
 
-## Dividend-growth sleeve production integration — 2026-09-25
+## Dividend-growth sleeve production integration — 2026-09-25 (identity removed 2026-09-25)
 
 | Archive tag | Peeled evidence commit | Decision |
 |---|---|---|
 | `archive/research/dividend-sleeve-production-v1-2026-09` | `e4e1f11ac698719279253aaed78ecdc061abc64c` | Shipped: `equity_residual_momentum_v3_dividend_sleeve_v1` passes every production-path validation gate. Summary: `docs/research/dividend_sleeve_production_v1.md` |
 
-## Gold + dividend sleeve production validation — 2026-09-25
+`equity_residual_momentum_v3_dividend_sleeve_v1` was removed from the product
+on 2026-09-25; the evidence below is historical (superseded by profit
+maximization v1).
+
+## Gold + dividend sleeve production validation — 2026-09-25 (identity removed 2026-09-25)
 
 | Archive tag | Peeled evidence commit | Decision |
 |---|---|---|
 | `archive/research/gold-sleeve-production-v1-2026-09` | `6cf5c3d77dc989f67cdda907f2795f59e5bead2b` | G3 (V3 0.30 + five-ETF sleeve 0.25) shipped by operator decision; misses the pre-registered CAGR gates within path noise. Summary: `docs/research/gold_sleeve_production_v1.md` |
+
+G3 (V3 0.30 + five-ETF sleeve 0.25) was removed from the product on
+2026-09-25, and the ship itself is superseded: restating the Alpaca cash
+dividend rates to post-split shares puts G3 (6.72% CAGR) below the dividend
+sleeve arm P (7.08%).
+
+## Profit maximization v1 — 2026-09-25
+
+| Archive tag | Peeled evidence commit | Decision |
+|---|---|---|
+| `archive/research/profit-max-v1-2026-09` | `a5049ebd595e0d8be88a0cc7cf1b16096ba6d7a0` | `equity_leveraged_trend_v1` (arm VT35) shipped as the PAPER equity identity; Stage B shared-ledger 29.34% CAGR / 29.2% max DD against VOO 14.54% / 32.0%. Tag holds `research/profit_max_v1/`. Summary: `docs/research/profit_max_v1.md` |

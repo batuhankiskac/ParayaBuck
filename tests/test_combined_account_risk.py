@@ -1,16 +1,17 @@
 """Combined-account risk invariant tests for the frozen dual-market portfolio.
 
-The ACTUAL current product combination is equity_residual_momentum_v1
-(maximum allocation 0.50) + crypto_low_variance_v1 (maximum allocation 0.10)
-on ONE shared account with the frozen risk limits (gross 0.60, cash buffer
-0.40, crypto exposure 0.10, crypto position 0.05, max 2 crypto positions).
+The ACTUAL current product combination is equity_leveraged_trend_v1
+(maximum allocation 0.93) + crypto_low_variance_hysteresis_v1 (maximum
+allocation 0.05) on ONE shared account with the shipped risk limits (gross
+0.98, cash buffer 0.02, crypto exposure 0.10, crypto position 0.05, max 2
+crypto positions).
 
 These tests assert OBSERVABLE invariants of that contract, loaded at test time
 from config/settings.yaml (via ``parayabuck.config.load_config``), so they fail
 loudly if the frozen allocation/risk contract drifts:
 
-  * equity sleeve + crypto sleeve allocations fit inside the gross cap and
-    leave the cash buffer intact (0.50 + 0.10 == 0.60, cash >= 0.40);
+  * equity and crypto allocations fit inside the gross cap and leave the cash
+    buffer intact (0.93 + 0.05 == 0.98, cash >= 0.02);
   * crypto exposure <= 0.10, per-crypto position <= 0.05, crypto positions
     <= 2 — enforced by the production risk overlay on a shared account;
   * the frozen strategy parameters are exactly the validated spec.
@@ -34,26 +35,20 @@ from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 _EPS = 1e-9
 
 # Frozen validated specs (docs/validated_strategies.md, strategy freeze).
-# v1/v2 = historical baselines; production selection is v3 (same weekly
-# cadence, frozen multi-horizon scoring identity).
-_FROZEN_EQUITY_PARAMETERS = {
-    "formation_bars": 252,
-    "skip_bars": 21,
-    "beta_window_bars": 273,
-    "residual_vol_window": 63,
-    "top_n": 8,
-    "max_single_weight": 0.10,
-    "ivol_reject_quantile": 0.70,
-    "exclude_symbols": ["SPY"],
-}
+# The crypto v1 spec is the historical baseline; both production selections
+# are pinned to their validated parameter sets.
 _FROZEN_CRYPTO_PARAMETERS = {
     "variance_lookback_days": 22,
     "top_n": 2,
     "rebalance_hours": 168,
 }
 _PRODUCTION_EQUITY_PARAMETERS = {
-    **_FROZEN_EQUITY_PARAMETERS,
-    "rebalance_frequency": "weekly",
+    "signal_symbol": "QQQ",
+    "hold_symbol": "QLD",
+    "sma_bars": 200,
+    "vol_target": 0.35,
+    "vol_window": 20,
+    "rebalance_frequency": "hours:24",
 }
 _PRODUCTION_CRYPTO_PARAMETERS = {
     **_FROZEN_CRYPTO_PARAMETERS,
@@ -105,45 +100,37 @@ def _target(
 
 
 def test_frozen_strategy_parameters_and_paper_mode() -> None:
-    """The config selects the V3 + dividend-sleeve equity and T1 hysteresis crypto PAPER specs;
+    """The config selects the leveraged-trend equity and T1 hysteresis crypto PAPER specs;
     runtime mode
     stays paper (no live enablement)."""
     config = load_config()
     assert config.runtime.mode == RuntimeMode.PAPER
-    assert config.strategy.equity.name == "equity_residual_momentum_v3_dividend_sleeve_v1"
-    parameters = dict(config.strategy.equity.parameters)
-    sleeve = {key: parameters.pop(key) for key in ("core_allocation", "sleeve_allocation", "sleeve_symbols")}
-    assert parameters == _PRODUCTION_EQUITY_PARAMETERS
-    assert sleeve == {
-        "core_allocation": 0.30,
-        "sleeve_allocation": 0.25,
-        "sleeve_symbols": ["SCHD", "VIG", "DGRO", "GLD", "OUNZ"],
-    }
+    assert config.strategy.equity.name == "equity_leveraged_trend_v1"
+    assert dict(config.strategy.equity.parameters) == _PRODUCTION_EQUITY_PARAMETERS
     assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
     assert dict(config.strategy.crypto.parameters) == _PRODUCTION_CRYPTO_PARAMETERS
 
 
-def test_combined_sleeve_allocations_fit_gross_cap_and_cash_buffer() -> None:
-    """2026-08-29 fix (kripto alım arızası): equity 0.55 + crypto 0.05 == gross 0.60
+def test_combined_allocations_fit_gross_cap_and_cash_buffer() -> None:
+    """2026-09-25 (profit_max_v1): equity 0.93 + crypto 0.05 == gross 0.98
 
     Invariant: sum(effective allocations) <= max_gross <= 1 - cash_buffer.
     This guarantees deterministic sizing regardless of market processing order
-    and that a stale snapshot cannot temporarily plan 65% gross.
+    and that a stale snapshot cannot temporarily plan more than the gross cap.
     """
     config = load_config()
     equity_allocation = config.strategy.equity.maximum_allocation
     crypto_allocation = config.strategy.crypto.maximum_allocation
     gross_cap = config.risk.max_gross_exposure_pct
     cash_buffer = config.risk.cash_buffer_pct
-    assert equity_allocation == pytest.approx(0.55)
+    assert equity_allocation == pytest.approx(0.93)
     assert crypto_allocation == pytest.approx(0.05)
-    assert gross_cap == pytest.approx(0.60)
-    assert cash_buffer == pytest.approx(0.40)
+    assert gross_cap == pytest.approx(0.98)
+    assert cash_buffer == pytest.approx(0.02)
     # Invariant from config.__post_init__
     assert equity_allocation + crypto_allocation <= gross_cap + _EPS
     assert gross_cap + cash_buffer <= 1.0 + _EPS
     assert equity_allocation <= gross_cap + _EPS
-    assert crypto_allocation <= cash_buffer - _EPS
 
 
 def test_crypto_position_caps_match_config() -> None:
@@ -163,14 +150,15 @@ def test_crypto_position_caps_match_config() -> None:
 
 
 def test_risk_overlay_enforces_combined_limits_on_shared_account() -> None:
-    """With the equity sleeve already at its cap on the shared account,
-    the crypto sleeve is still admitted up to its (halved) allocation and the
-    COMBINED account stays inside gross 0.60 / cash 0.40."""
+    """With the equity sleeve at its cap on the shared account,
+    the crypto sleeve is still admitted up to its allocation and the
+    COMBINED account stays inside gross 0.98 / cash 0.02."""
     config = load_config()
     limits = portfolio_risk_limits_from_config(config.risk)
     overlay = PortfolioRiskOverlay(limits)
 
-    # Equity sleeve at its cap: 5 positions x 10% = 50% of the account.
+    # Account already carries 50% in managed equity positions; the equity
+    # sleeve targets its single-ETF cap (0.93) on the shared account.
     account = _account(
         equity_positions=(
             ("S00", 100.0, 100.0),
@@ -180,19 +168,17 @@ def test_risk_overlay_enforces_combined_limits_on_shared_account() -> None:
             ("S04", 100.0, 100.0),
         )
     )
+    approved_equity = ("S00", "S01", "S02", "S03", "S04", "QLD")
     equity_decision = overlay.apply(
-        _target(
-            "equity_residual_momentum_v1",
-            (("S00", 0.10), ("S01", 0.10), ("S02", 0.10), ("S03", 0.10), ("S04", 0.10)),
-        ),
+        _target("equity_leveraged_trend_v1", (("QLD", 0.93),)),
         account,
         market=Market.EQUITY,
-        approved_symbols=("S00", "S01", "S02", "S03", "S04"),
+        approved_symbols=approved_equity,
         maximum_allocation=config.strategy.equity.maximum_allocation,
         mode="backtest",
     )
     assert not equity_decision.halted
-    assert equity_decision.target.invested_weight <= 0.50 + _EPS
+    assert equity_decision.target.invested_weight == pytest.approx(0.93)
 
     # Crypto decides against the SAME account holding the equity positions.
     crypto_decision = overlay.apply(
@@ -204,34 +190,31 @@ def test_risk_overlay_enforces_combined_limits_on_shared_account() -> None:
         mode="backtest",
     )
     assert not crypto_decision.halted
-    # 2026-08-21: the halved crypto allocation (0.05) binds before the
-    # risk-layer exposure cap.
+    # The crypto allocation (0.05) binds before the risk-layer exposure cap.
     assert crypto_decision.target.invested_weight <= 0.05 + _EPS
     combined_gross = equity_decision.target.invested_weight + crypto_decision.target.invested_weight
     assert combined_gross <= config.risk.max_gross_exposure_pct + _EPS
     assert 1.0 - combined_gross >= config.risk.cash_buffer_pct - _EPS
-    # Equity at its pre-existing 0.50 level + halved crypto 0.05.
-    assert combined_gross == pytest.approx(0.55)
+    # Equity at its 0.93 cap + crypto 0.05 == the gross cap 0.98.
+    assert combined_gross == pytest.approx(0.98)
 
 
-def test_six_equity_positions_blocks_crypto_and_enforces_gross() -> None:
-    """Six 10% equity positions fill gross 60%; crypto must be scaled to 0.
+def test_gross_capped_equity_sleeve_blocks_crypto() -> None:
+    """An equity sleeve filled to the gross cap (0.98) leaves no headroom:
+    crypto must be scaled to 0.
 
-    Reproduces the report's secondary allocation bug: 6×0.10 = 0.60 gross,
-    crypto target 0.05 must be exposure_scaled_to_limit → 0, not 0.05.
+    Reproduces the report's secondary allocation bug: an equity sleeve that
+    already consumes the gross cap must make the crypto target
+    exposure_scaled_to_limit → 0, not 0.05.
     """
     config = load_config()
     limits = portfolio_risk_limits_from_config(config.risk)
     overlay = PortfolioRiskOverlay(limits)
-    # 6×10% = 60% gross
+    # Equity inventory worth 98% of the account: the gross cap is exhausted.
     account = _account(
         equity_positions=(
-            ("S00", 100.0, 100.0),
-            ("S01", 100.0, 100.0),
-            ("S02", 100.0, 100.0),
-            ("S03", 100.0, 100.0),
-            ("S04", 100.0, 100.0),
-            ("S05", 100.0, 100.0),
+            ("QLD", 490.0, 100.0),
+            ("SPY", 490.0, 100.0),
         )
     )
     crypto_decision = overlay.apply(
@@ -252,7 +235,7 @@ def test_capital_allocation_order_invariant() -> None:
     limits = portfolio_risk_limits_from_config(config.risk)
     overlay = PortfolioRiskOverlay(limits)
     account = _account()
-    equity_target = _target("equity_residual_momentum_v1", (("S00", 0.55),))
+    equity_target = _target("equity_leveraged_trend_v1", (("S00", 0.93),))
     crypto_target = _target("crypto_low_variance_v1", (("BTC/USD", 0.05),))
     # Order A: equity then crypto
     eq_a = overlay.apply(
@@ -331,22 +314,23 @@ def test_risk_overlay_caps_single_crypto_asset_and_position_count() -> None:
 
 
 def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
-    """8 proposed positions at 10% each are cut to max_positions and the
-    equity sleeve cap (0.55 after 2026-08-29 fix)."""
+    """9 proposed positions at 10% each are cut to max_positions (8) and stay
+    inside the equity sleeve cap (0.93) and the per-asset cap."""
     config = load_config()
     overlay = PortfolioRiskOverlay(portfolio_risk_limits_from_config(config.risk))
     account = _account()
-    weights = tuple((f"S{i:02d}", 0.10) for i in range(8))
+    weights = tuple((f"S{i:02d}", 0.10) for i in range(9))
     decision = overlay.apply(
-        _target("equity_residual_momentum_v1", weights),
+        _target("equity_leveraged_trend_v1", weights),
         account,
         market=Market.EQUITY,
         approved_symbols=tuple(symbol for symbol, _weight in weights),
         maximum_allocation=config.strategy.equity.maximum_allocation,
         mode="backtest",
     )
+    assert "position_count_limit" in decision.reasons
     assert len(decision.target.weights) <= config.risk.max_positions
-    assert decision.target.invested_weight <= 0.55 + _EPS
+    assert decision.target.invested_weight <= config.strategy.equity.maximum_allocation + _EPS
     assert all(weight.weight <= config.risk.max_position_pct + _EPS for weight in decision.target.weights)
 
 
@@ -355,8 +339,8 @@ def test_risk_limits_dataclass_validates_contract() -> None:
     config = load_config()
     limits = portfolio_risk_limits_from_config(config.risk)
     assert isinstance(limits, PortfolioRiskLimits)
-    assert limits.maximum_gross == pytest.approx(0.60)
-    assert limits.minimum_cash == pytest.approx(0.40)
+    assert limits.maximum_gross == pytest.approx(0.98)
+    assert limits.minimum_cash == pytest.approx(0.02)
     assert limits.maximum_crypto == pytest.approx(0.10)
     assert limits.maximum_crypto_asset == pytest.approx(0.05)
     assert limits.maximum_crypto_positions == 2

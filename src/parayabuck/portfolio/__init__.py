@@ -7,13 +7,7 @@ from parayabuck.portfolio.crypto_low_variance import (
     CryptoLowVariance1dV2,
 )
 from parayabuck.portfolio.crypto_low_variance_hysteresis import CryptoLowVarianceHysteresis1dV1
-from parayabuck.portfolio.dividend_sleeve import EquityResidualMomentumV3DividendSleeveV1
 from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1
-from parayabuck.portfolio.equity_residual_momentum import (
-    EquityResidualMomentum1dV1,
-    EquityResidualMomentum1dV2,
-)
-from parayabuck.portfolio.equity_residual_momentum_v3 import EquityResidualMomentum1dV3
 from parayabuck.portfolio.models import (
     PortfolioState,
     RebalancePolicy,
@@ -23,13 +17,8 @@ from parayabuck.portfolio.models import (
 )
 
 _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
-    EquityResidualMomentum1dV1.name: EquityResidualMomentum1dV1,
-    EquityResidualMomentum1dV2.name: EquityResidualMomentum1dV2,
-    # v3 (multi-horizon consensus) is the frozen PAPER production identity.
-    EquityResidualMomentum1dV3.name: EquityResidualMomentum1dV3,
-    # V3 core 0.40 + monthly SCHD/VIG/DGRO sleeve 0.15 (2026-09 PAPER identity).
-    EquityResidualMomentumV3DividendSleeveV1.name: EquityResidualMomentumV3DividendSleeveV1,
-    # QLD while QQQ is above its 200-session SMA, else cash (profit_max_v1).
+    # PAPER equity identity (2026-09-25): QLD while QQQ is above its
+    # 200-session SMA, sized to a volatility target, else cash (profit_max_v1).
     EquityLeveragedTrendV1.name: EquityLeveragedTrendV1,
     CryptoLowVariance1dV1.name: CryptoLowVariance1dV1,
     CryptoLowVariance1dV2.name: CryptoLowVariance1dV2,
@@ -39,10 +28,6 @@ _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
 # The PRODUCT strategy surface: current selections plus frozen historical
 # baselines. Unknown strategy names are not constructible at runtime.
 PRODUCT_STRATEGY_NAMES: tuple[str, ...] = (
-    "equity_residual_momentum_v1",
-    "equity_residual_momentum_v2",
-    "equity_residual_momentum_v3",
-    "equity_residual_momentum_v3_dividend_sleeve_v1",
     "equity_leveraged_trend_v1",
     "crypto_low_variance_v1",
     "crypto_low_variance_v2",
@@ -146,10 +131,6 @@ __all__ = [
     "CryptoLowVariance1dV2",
     "CryptoLowVarianceHysteresis1dV1",
     "EquityLeveragedTrendV1",
-    "EquityResidualMomentum1dV1",
-    "EquityResidualMomentum1dV2",
-    "EquityResidualMomentum1dV3",
-    "EquityResidualMomentumV3DividendSleeveV1",
     "PortfolioContext",
     "PortfolioState",
     "PortfolioStrategy",

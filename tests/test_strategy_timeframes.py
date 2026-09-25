@@ -33,7 +33,7 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioStateRepository,
 )
 
-EQUITY_SYMBOLS = ("AAPL", "MSFT", "NVDA", "SPY")
+EQUITY_SYMBOLS = ("AAPL", "MSFT", "NVDA", "SPY", "QQQ", "QLD")
 CRYPTO_SYMBOLS = ("BTC/USD", "ETH/USD", "SOL/USD")
 
 
@@ -112,8 +112,8 @@ class _Broker:
 
 def test_strategy_cannot_run_on_unsupported_timeframe() -> None:
     with pytest.raises(ValueError, match="cannot run on timeframe 5m"):
-        portfolio_strategy_from("equity_residual_momentum_v1", timeframe="5m")
-    strategy = portfolio_strategy_from("equity_residual_momentum_v1")
+        portfolio_strategy_from("equity_leveraged_trend_v1", timeframe="5m")
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1")
     with pytest.raises(ValueError, match="not supported"):
         validate_strategy_timeframe(strategy, "1h")
     with pytest.raises(ValueError, match="not supported"):
@@ -133,12 +133,12 @@ def test_crypto_strategy_supports_only_validated_variants() -> None:
 
 
 def test_spec_declares_owned_timeframes_and_cadence() -> None:
-    spec = portfolio_strategy_from("equity_residual_momentum_v1").spec()
+    spec = portfolio_strategy_from("equity_leveraged_trend_v1").spec()
     assert spec.primary_timeframe == "1d"
     assert spec.supported_timeframes == ("1d",)
-    assert spec.rebalance_policy == "monthly"
+    assert spec.rebalance_policy == "hours:24"
     assert spec.market == Market.EQUITY
-    assert spec.minimum_history_bars == 274
+    assert spec.minimum_history_bars == 200
 
 
 def test_required_timeframe_aggregation_is_initialized() -> None:
@@ -165,13 +165,13 @@ def test_required_timeframe_aggregation_is_initialized() -> None:
 
 
 def test_multiple_markets_run_simultaneously_with_distinct_cadences(tmp_path) -> None:
-    """Equity (monthly) and crypto (hours:168) run at the same time, one
+    """Equity (daily) and crypto (hours:168) run at the same time, one
     account, one risk layer, one repository, without interfering."""
     broker = _Broker()
     repository = PortfolioStateRepository(tmp_path / "shared.sqlite3")
     equity = portfolio_strategy_from(
-        "equity_residual_momentum_v1",
-        {"top_n": 2, "exclude_symbols": ["SPY"]},
+        "equity_leveraged_trend_v1",
+        {"sma_bars": 5},
         timeframe="1d",
     )
     crypto = portfolio_strategy_from("crypto_low_variance_v1", {"top_n": 2, "rebalance_hours": 168}, timeframe="1d")
@@ -210,7 +210,7 @@ def test_multiple_markets_run_simultaneously_with_distinct_cadences(tmp_path) ->
     )
     assert equity_runtime.strategy.timeframe == "1d"
     assert crypto_runtime.strategy.timeframe == "1d"
-    assert equity_runtime.policy.frequency == "monthly"
+    assert equity_runtime.policy.frequency == "hours:24"
     assert crypto_runtime.policy.frequency == "hours:168"
 
     # Both markets decide on their own closed-bar batches.
@@ -229,13 +229,13 @@ def test_multiple_markets_run_simultaneously_with_distinct_cadences(tmp_path) ->
 
 
 def test_execution_timeframe_remains_independent() -> None:
-    # A daily signal + weekly decision may still execute on 5m; the runtime
+    # A daily signal may still execute on 5m; the runtime
     # config keeps the execution cadence separate from strategy timeframes.
     config = Config(runtime=RuntimeConfig(execution_timeframe="5m", market_state_timeframe="5m"))
-    strategy = portfolio_strategy_from("equity_residual_momentum_v1")
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1")
     assert config.runtime.execution_timeframe == "5m"
     assert strategy.timeframe == "1d"
-    assert strategy.spec().rebalance_policy == "monthly"
+    assert strategy.spec().rebalance_policy == "hours:24"
     # The runtime aggregates BOTH the strategy timeframe and the execution
     # timeframe (aggregator map is built from the union of required cadences).
     required = {
@@ -269,7 +269,7 @@ def test_backtest_uses_same_strategy_timeframe() -> None:
 
 def test_paper_runtime_uses_same_strategy_timeframe(tmp_path) -> None:
     broker = _Broker()
-    strategy = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1", {"sma_bars": 5})
     runtime = PortfolioRuntime(
         strategy,
         EQUITY_SYMBOLS,
@@ -288,8 +288,8 @@ def test_paper_runtime_uses_same_strategy_timeframe(tmp_path) -> None:
 
 
 def test_strategy_warmup_uses_required_history() -> None:
-    strategy = portfolio_strategy_from("equity_residual_momentum_v1", {"exclude_symbols": ["SPY"]})
-    assert strategy.minimum_history_bars == 274
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1")
+    assert strategy.minimum_history_bars == 200
     start = datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
     short = _daily_series(EQUITY_SYMBOLS, days=100)
     context = PortfolioContext(
@@ -323,7 +323,7 @@ def test_strategy_warmup_uses_required_history() -> None:
 
 def test_decision_fires_only_on_finalized_bars() -> None:
     service = PortfolioDecisionService()
-    strategy = portfolio_strategy_from("equity_residual_momentum_v1")
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1")
     bars = _daily_series(EQUITY_SYMBOLS, days=40)
     decision_timestamp = bars[-1].timestamp
     # One symbol's series ends before the decision timestamp: the batch is
@@ -356,8 +356,23 @@ def test_no_same_bar_execution_lookahead() -> None:
     """A decision on completed bar t may only fill on the NEXT tradable bar."""
     from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 
-    strategy = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
-    engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy), allow_static_universe=True)
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1", {"sma_bars": 5})
+    # The single-symbol target needs the shipped equity risk budget; a 0.93
+    # cap leaves the cash headroom the per-asset limit is meant to reserve.
+    engine = PortfolioBacktestEngine(
+        strategy,
+        rebalance_policy_for(strategy),
+        risk_limits=PortfolioRiskLimits(
+            daily_loss_limit=0.20,
+            drawdown_halt=0.75,
+            maximum_gross=0.98,
+            maximum_equity=0.98,
+            maximum_equity_asset=0.93,
+            minimum_cash=0.02,
+            maximum_positions=8,
+        ),
+        allow_static_universe=True,
+    )
     bars = _daily_series(EQUITY_SYMBOLS, days=320)
     result = engine.run(bars, liquidate_at_end=False)
     assert result.fills

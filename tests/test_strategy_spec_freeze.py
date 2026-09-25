@@ -1,15 +1,17 @@
 """Strategy specification freeze guards — TWO contracts.
 
 A. HISTORICAL SPEC FREEZE (v1)
-   ``equity_residual_momentum_v1`` and ``crypto_low_variance_v1`` are the
-   frozen historical baselines: they must remain constructible, unchanged,
-   reproducible, with exact historical parameter specs. v2 evidence is
-   defined relative to v1, so this freeze is permanent.
+   ``crypto_low_variance_v1`` is the frozen historical crypto baseline: it
+   must remain constructible, unchanged, reproducible, with exact historical
+   parameter specs. v2 evidence is defined relative to v1, so this freeze is
+   permanent. The equity residual-momentum V1/V2/V3 and dividend-sleeve
+   identities were removed from the codebase (2026-09-25) and are recoverable
+   from git history; nothing freezes them here.
 
    B. CURRENT PRODUCTION SELECTION
-   The PAPER config selects the approved v3/v2 identities with their exact
-   cadence parameters. A config change here is a deliberate promotion, not
-   drift: the v1 freeze above still protects the baselines.
+   The PAPER config selects the approved identities with their exact
+   parameters. A config change here is a deliberate promotion, not
+   drift: the v1 freeze above still protects the crypto baseline.
 
 These tests fail loudly on any drift in config, strategy-class defaults, or
 the PAPER/LIVE posture — the "same name, different parameters is a NEW
@@ -35,17 +37,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = REPO_ROOT / "config" / "settings.yaml"
 
 # --- A. HISTORICAL v1 SPECS (frozen baselines) -------------------------------
-EQUITY_FROZEN_PARAMETERS = {
-    "formation_bars": 252,
-    "skip_bars": 21,
-    "beta_window_bars": 273,
-    "residual_vol_window": 63,
-    "top_n": 8,
-    "max_single_weight": 0.10,
-    "ivol_reject_quantile": 0.70,
-    "exclude_symbols": ["SPY"],
-}
-
 CRYPTO_FROZEN_PARAMETERS = {
     "variance_lookback_days": 22,
     "top_n": 2,
@@ -54,8 +45,12 @@ CRYPTO_FROZEN_PARAMETERS = {
 
 # --- B. CURRENT PAPER SELECTIONS ---------------------------------------------
 PRODUCTION_EQUITY_PARAMETERS = {
-    **EQUITY_FROZEN_PARAMETERS,
-    "rebalance_frequency": "weekly",
+    "signal_symbol": "QQQ",
+    "hold_symbol": "QLD",
+    "sma_bars": 200,
+    "vol_target": 0.35,
+    "vol_window": 20,
+    "rebalance_frequency": "hours:24",
 }
 
 PRODUCTION_CRYPTO_PARAMETERS = {
@@ -86,15 +81,16 @@ def _params_dict(raw: dict[str, object]) -> dict[str, object]:
 # ---------------------------------------------------------------------------
 
 
-def test_production_equity_selection_is_v3_dividend_sleeve(config: Config) -> None:
+def test_production_equity_selection_is_leveraged_trend_v1(config: Config) -> None:
     equity = config.strategy.equity
     assert equity.enabled is True
-    assert equity.name == "equity_residual_momentum_v3_dividend_sleeve_v1"
-    # 2026-08-29 fix: equity 0.60→0.55 for capital invariant (0.55+0.05==0.60)
-    # see kripto alım arızası report. Alpha params remain frozen.
-    assert equity.maximum_allocation == 0.55
+    assert equity.name == "equity_leveraged_trend_v1"
+    # 2026-09-25 (profit_max_v1): equity 0.93 + crypto 0.05 == 0.98 == max_gross,
+    # cash buffer 0.02. Alpha params are the frozen VT35 set.
+    assert equity.maximum_allocation == 0.93
+    assert _params_dict(equity.parameters) == PRODUCTION_EQUITY_PARAMETERS
     strategy = portfolio_strategy_from(equity.name, equity.parameters)
-    assert rebalance_policy_for(strategy).frequency == "weekly"
+    assert rebalance_policy_for(strategy).hours == 24
 
 
 def test_production_crypto_selection_is_hysteresis_v1(config: Config) -> None:
@@ -114,10 +110,6 @@ def test_production_selections_are_the_only_product_strategies(config: Config) -
     """The product surface is exactly the current selections plus frozen v1/v2 baselines."""
     registered = set(supported_portfolio_strategies())
     assert registered == {
-        "equity_residual_momentum_v1",
-        "equity_residual_momentum_v2",
-        "equity_residual_momentum_v3",
-        "equity_residual_momentum_v3_dividend_sleeve_v1",
         "equity_leveraged_trend_v1",
         "crypto_low_variance_v1",
         "crypto_low_variance_v2",
@@ -159,27 +151,12 @@ def test_crypto_risk_limits_frozen(config: Config) -> None:
 
 def test_v1_historical_specs_stay_registered_and_constructible() -> None:
     registered = supported_portfolio_strategies()
-    assert "equity_residual_momentum_v1" in registered
     assert "crypto_low_variance_v1" in registered
-
-    equity = portfolio_strategy_from("equity_residual_momentum_v1", EQUITY_FROZEN_PARAMETERS)
-    assert equity.name == "equity_residual_momentum_v1"
-    assert equity.version == "1.0.0"
-    assert rebalance_policy_for(equity).frequency == "monthly"
 
     crypto = portfolio_strategy_from("crypto_low_variance_v1", CRYPTO_FROZEN_PARAMETERS)
     assert crypto.name == "crypto_low_variance_v1"
     assert crypto.version == "1.0.0"
     assert rebalance_policy_for(crypto).hours == 168
-
-
-def test_v1_equity_spec_unchanged_and_exact() -> None:
-    equity = portfolio_strategy_from("equity_residual_momentum_v1", EQUITY_FROZEN_PARAMETERS)
-    assert dict(equity.parameter_tuple()) == {
-        key: (list(value) if isinstance(value, tuple) else value) for key, value in EQUITY_FROZEN_PARAMETERS.items()
-    }
-    assert equity.rebalance_policy_declared == "monthly"
-    assert equity.minimum_history_bars == 273 + 1
 
 
 def test_v1_crypto_spec_unchanged_and_exact() -> None:
@@ -190,21 +167,14 @@ def test_v1_crypto_spec_unchanged_and_exact() -> None:
 
 
 def test_v1_contracts_declared() -> None:
-    equity = portfolio_strategy_from("equity_residual_momentum_v1")
-    assert equity.spec().rebalance_policy == "monthly"
     crypto = portfolio_strategy_from("crypto_low_variance_v1")
     assert crypto.spec().rebalance_policy == "hours:168"
     assert crypto.spec().minimum_history_bars == 23
 
 
-def test_v2_specs_are_the_same_alpha_at_new_cadence() -> None:
+def test_v2_crypto_spec_is_the_same_alpha_at_new_cadence() -> None:
     """v2 must not touch any alpha parameter: every v1 alpha key is present
     with the same value; only the cadence key differs."""
-    equity_v2 = portfolio_strategy_from("equity_residual_momentum_v2", PRODUCTION_EQUITY_PARAMETERS)
-    for key, value in EQUITY_FROZEN_PARAMETERS.items():
-        assert dict(equity_v2.parameter_tuple())[key] == value
-    assert equity_v2.version == "2.0.0"
-    assert rebalance_policy_for(equity_v2).frequency == "weekly"
 
     crypto_v2 = portfolio_strategy_from("crypto_low_variance_v2", PRODUCTION_CRYPTO_PARAMETERS)
     for key, value in CRYPTO_FROZEN_PARAMETERS.items():

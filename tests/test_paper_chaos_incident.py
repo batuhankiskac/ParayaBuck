@@ -8,7 +8,7 @@ no duplicate economic action, no silent drift, safe fail-closed.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -106,7 +106,7 @@ def test_provider_timeout_exponential_retry_recovers() -> None:
         return "ok"
 
     result, record = provider_temporary_retry(
-        IncidentCategory.PROVIDER_UNAVAILABLE, flaky, account_id="acct", strategy="equity_residual_momentum_v3"
+        IncidentCategory.PROVIDER_UNAVAILABLE, flaky, account_id="acct", strategy="equity_leveraged_trend_v1"
     )
     assert result == "ok"
     assert record.recovery_result == "recovered"
@@ -363,16 +363,16 @@ def test_missing_symbol_incomplete_batch_fails_closed(tmp_path: Path) -> None:
     """If a symbol is missing from the closed-bar batch, the decision is incomplete,
     not a silent partial rebalance. No orders are submitted.
     """
-    from parayabuck.portfolio import equity_residual_momentum_v3
+    from parayabuck.portfolio import EquityLeveragedTrendV1
 
     # Minimal strategy and broker for PortfolioRuntime
-    strategy = equity_residual_momentum_v3.EquityResidualMomentum1dV3()
+    strategy = EquityLeveragedTrendV1({"signal_symbol": "QQQ", "hold_symbol": "QLD", "sma_bars": 5})
     account = _account(positions=[])
     broker = _FakeBroker(account)
     repo = PortfolioStateRepository(tmp_path / "missing.sqlite3")
     runtime = PortfolioRuntime(
         strategy=strategy,
-        symbols=("AAPL", "MSFT"),
+        symbols=("QQQ", "QLD"),
         broker=broker,  # type: ignore[arg-type]
         repository=repo,
         mode="paper",
@@ -380,15 +380,18 @@ def test_missing_symbol_incomplete_batch_fails_closed(tmp_path: Path) -> None:
         account_id="acct",
         allow_static_universe=True,
     )
-    # Seed only one symbol's history; second missing -> incomplete_strategy_batch
-    bar = _bar("AAPL", close=100.0)
-    runtime.seed([bar])  # only AAPL, MSFT missing
-    # Need enough history to pass warming_up, so seed multiple days for both? Instead we
-    # test that missing_symbols gate triggers when history exists but batch incomplete
-    # Simpler: directly call with incomplete bars list
-    result = runtime.process_closed_bars([bar])
-    # Expect warming_up or incomplete_strategy_batch, never submitted orders
-    assert result.status in {"warming_up", "incomplete_strategy_batch", "no_eligible_bars"}
+    # Both symbols are warm (sma_bars=5), but the next closed-bar batch carries
+    # only QQQ: the missing QLD bar fails closed instead of trading partially.
+    start = datetime(2024, 6, 1, tzinfo=UTC)
+    runtime.seed(
+        [
+            _bar(symbol, close=100.0 + index, ts=start + timedelta(days=index))
+            for index in range(10)
+            for symbol in ("QQQ", "QLD")
+        ]
+    )
+    result = runtime.process_closed_bars([_bar("QQQ", close=200.0, ts=start + timedelta(days=10))])
+    assert result.status == "incomplete_strategy_batch"
     assert len(result.submitted_order_ids) == 0
     assert len(broker.submitted) == 0
     runtime.close("stopped")
@@ -408,8 +411,8 @@ def test_universe_partial_no_silent_drift(tmp_path: Path) -> None:
     receipt = build_receipt(
         decision_timestamp=ts,
         config_digest="digest123",
-        strategy_name="equity_residual_momentum_v3",
-        strategy_version="3.0",
+        strategy_name="equity_leveraged_trend_v1",
+        strategy_version="1.0",
         universe_hash="partial-hash-abc",
         universe_size=8,  # says 8 but only 6 selected
         observation_set_symbols=tuple(f"SYM{i}" for i in range(8)),
@@ -455,7 +458,7 @@ def test_universe_partial_no_silent_drift(tmp_path: Path) -> None:
     # Write and verify file not committed (gitignore) and receipt readable
     out = receipt.write(tmp_path / "receipts")
     assert out.exists()
-    assert out.name == "2025-01-02_equity_equity_residual_momentum_v3.json"
+    assert out.name == "2025-01-02_equity_equity_leveraged_trend_v1.json"
 
 
 def test_receipt_has_17_fields_and_is_json_serializable(tmp_path: Path) -> None:
@@ -463,8 +466,8 @@ def test_receipt_has_17_fields_and_is_json_serializable(tmp_path: Path) -> None:
     receipt = build_receipt(
         decision_timestamp=ts,
         config_digest="cfg",
-        strategy_name="equity_residual_momentum_v3",
-        strategy_version="v3",
+        strategy_name="equity_leveraged_trend_v1",
+        strategy_version="v1",
         universe_hash="h",
         universe_size=10,
         observation_set_symbols=("AAPL",),
@@ -487,4 +490,4 @@ def test_receipt_has_17_fields_and_is_json_serializable(tmp_path: Path) -> None:
     import json
 
     loaded = json.loads(path.read_text())
-    assert loaded["strategy_name"] == "equity_residual_momentum_v3"
+    assert loaded["strategy_name"] == "equity_leveraged_trend_v1"

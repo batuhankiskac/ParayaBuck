@@ -1,16 +1,17 @@
 # Paper Operations
 
 Operational contract for the ParayaBuck PAPER runtime (dual-market:
-`equity_residual_momentum_v3_dividend_sleeve_v1` / **Residual Momentum v3 +
-dividend-growth sleeve**, implemented by
-`src/parayabuck/portfolio/dividend_sleeve.py`, with unchanged V3 3.0.0 weekly
-core at `core_allocation: 0.30` and static SCHD/VIG/DGRO/GLD/OUNZ
-`sleeve_allocation: 0.25` at 0.05 each (dividend 0.15 + gold 0.10) inside the
-0.55 equity maximum; `crypto_low_variance_hysteresis_v1` remains unchanged on
-1d 96h cadence, retention rank 4, lookback 22, top2, allocation 0.05). v1
-identities remain frozen historical baselines. See the
-[dividend-sleeve production evidence](research/dividend_sleeve_production_v1.md)
-and [gold sleeve production evidence](research/gold_sleeve_production_v1.md).
+`equity_leveraged_trend_v1` / **Leveraged Index Trend v1**, implemented by
+`src/parayabuck/portfolio/equity_leveraged_trend.py`, holding QLD while QQQ's
+completed daily close is above its 200-session SMA at
+`min(1, 0.35 / 20-session annualized realized QLD volatility)` of a 0.93
+equity maximum, decided every session and cash otherwise;
+`crypto_low_variance_hysteresis_v1` remains unchanged on
+1d 96h cadence, retention rank 4, lookback 22, top2, allocation 0.05). The
+residual-momentum v1/v2/v3 and dividend-growth / gold sleeve equity identities
+were removed on 2026-09-25 and are recoverable from git history (`5d61c8c` on
+`profit-max-v1`, `ec4e2df` on `main`). See the
+[profit maximization v1 evidence](research/profit_max_v1.md).
 This document is a companion to `docs/operations.md` and
 `docs/validated_strategies.md`.
 
@@ -25,15 +26,15 @@ before the next begins:
 2. **Universe preflight** — active equity/crypto universes are validated
    (freshness, scanner digest, candidate-pool membership) with a
    deterministic configured fallback when no scanner output exists yet. The
-   equity stream pins `universe.equity.sleeve_trade_symbols`; those symbols are
-   hidden from V3 scoring, which ranks 21 core slots instead of 26.
+   equity stream pins `universe.equity.reference_symbols` (SPY, QQQ, QLD);
+   QQQ and QLD are tradable through
+   `universe.equity.trade_reference_symbols`.
 3. **Startup reconciliation** — the broker is reconciled before any
    decision; a verified reconcile clears persisted safety incidents so a
    restart never resurrects them.
 4. **Strategy runtimes** — one `PortfolioRuntime` per market on a SINGLE
-   shared repository/account: equity core weekly (1d), with the static sleeve
-   selected on the first weekly decision of each calendar month or while empty
-   and otherwise held; crypto 96h (`rebalance_hours: 96`, 1d). Each receives
+   shared repository/account: equity daily (`rebalance_frequency: hours:24`,
+   1d), crypto 96h (`rebalance_hours: 96`, 1d). Each receives
    an immutable active product universe snapshot: `selected_symbols` owns PIT
    eligibility and `observation_set` owns bounded stream completeness. Missing
    or invalid universe dependencies fail before a portfolio session row is opened.
@@ -46,10 +47,10 @@ before the next begins:
    parity) unless the account already holds managed positions in that market
    (`already_invested`) or a decision already exists (restart:
    `catch_up_superseded`/`duplicate_decision`). Tagged
-   `decision_origin: startup_catch_up`; it applies the normal sleeve rule:
-   select on the first weekly decision of the calendar month or while empty,
-   otherwise hold. Expected no-trade gates are explicit result statuses;
-   unexpected invariant/persistence/provider exceptions fail startup instead of
+   `decision_origin: startup_catch_up`; the equity target is the ordinary
+   QQQ-trend decision (QLD at the volatility target, or cash). Expected
+   no-trade gates are explicit result statuses; unexpected
+   invariant/persistence/provider exceptions fail startup instead of
    being converted to a blocked informational status.
 7. **Account reconciliation** — a fresh broker snapshot is taken between
    phases and before any order sizing (stale account data pauses decisions
@@ -57,9 +58,9 @@ before the next begins:
 8. **Ready** — the runtime enters `running` when both markets have ready
    symbol history and the decision loop is live.
 
-The sleeve symbols in `risk.slot_exempt_equity_symbols` never count toward the
-8-position cap. Daily-loss, drawdown, entry-latch, and intermediate-reduction
-latches never grow the sleeve.
+The 0.20 daily-loss and 0.75 drawdown latches are catastrophe brakes for a
+daily-reset 2x index ETF, not routine entry gates; a drawdown halt persists
+until an operator risk-epoch reset.
 
 Offline verification of this contract lives in
 `tests/test_runtime_product_universe.py`, `tests/test_dual_market_startup.py`
@@ -72,8 +73,9 @@ After deploying the V2 PAPER decision writer, record its exact deployment
 timestamp. Keep both active universes fresh with provider-backed validation
 before any operator PAPER start; `doctor --offline` can report
 `REFRESH_NEEDED` without refreshing them. Freeze a 14-calendar-day window with
-the equity V3 and crypto hysteresis identities, cap 8, crypto cap 2, receipt
-schema V2, and S1-S12 gates in
+the current identities (`equity_leveraged_trend_v1` at 0.93 and
+`crypto_low_variance_hysteresis_v1`), cap 8, crypto cap 2, receipt schema V2,
+and S1-S12 gates in
 `research/paper_observability_repair_v1/FORWARD_OBSERVATION_PROTOCOL_V2.md`.
 
 ```sh

@@ -1319,7 +1319,7 @@ def _candidate_symbols(
             dict.fromkeys(
                 (
                     *equity_config.reference_symbols,
-                    *equity_config.pinned_trade_symbols,
+                    *equity_config.inverse_trade_symbols,
                     *equity_config.fallback_trade_symbols,
                 )
             )

@@ -504,7 +504,7 @@ def _process_engine(provider: dict[str, list[Bar]], dates: list[datetime]):
     def fake_process(bars, *, entry_latch=None, **kwargs):  # noqa: ANN001
         captured["entry_latch"] = entry_latch
         captured["bars"] = list(bars)
-        return SimpleNamespace(status="captured", orders=(), submitted_order_ids=())
+        return SimpleNamespace(status="captured", orders=(), submitted_order_ids=(), target=None)
 
     portfolio_runtime = SimpleNamespace(
         market=Market.EQUITY,

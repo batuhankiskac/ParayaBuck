@@ -91,11 +91,14 @@ def test_scanner_eligibility_pool_exceeds_stream_symbol_count() -> None:
     assert universe.snapshots[0].candidate_count >= 20
 
 
-def test_alpha_scores_broader_pool_than_final_stream_set() -> None:
-    """The backtest strategy sees the full downloaded pool; the point-in-time
-    universe gates eligibility, so alpha scoring runs before the streamed
-    observation-set truncation (and only universe members are investable)."""
-    symbols = ["SPY"] + [f"S{i:02d}" for i in range(40)]
+def test_backtest_context_covers_pool_beyond_stream_capacity() -> None:
+    """The backtest engine ingests the full downloaded pool; the point-in-time
+    universe gates eligibility, so the streamed observation set (capacity 10)
+    stays a strict subset of the eligible pool and only pool members are ever
+    targeted."""
+    # QQQ/QLD are the shipped signal/hold pair, reserved in every snapshot
+    # exactly like the product's reference symbols.
+    symbols = ["SPY", "QQQ", "QLD"] + [f"S{i:02d}" for i in range(38)]
     bars = _panel(symbols)
     universe = build_trailing_point_in_time_universe(
         bars,
@@ -104,13 +107,11 @@ def test_alpha_scores_broader_pool_than_final_stream_set() -> None:
         rebalance_frequency="monthly",
         lookback_days=60,
         minimum_history_ratio=0.8,
-        target_shortlist=30,
+        target_shortlist=28,
+        pinned_symbols=("QQQ", "QLD"),
         equity_config=_equity_config(maximum_stream_symbols=10),
     )
-    strategy = portfolio_strategy_from(
-        "equity_residual_momentum_v1",
-        {"top_n": 3, "exclude_symbols": []},
-    )
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1", {"sma_bars": 5})
     engine = PortfolioBacktestEngine(
         strategy,
         rebalance_policy_for(strategy),
@@ -127,11 +128,15 @@ def test_alpha_scores_broader_pool_than_final_stream_set() -> None:
         snapshot.symbols for snapshot in reversed(universe.snapshots) if snapshot.effective_at <= last_decision
     )
     assert snapshot_symbols
-    # The alpha-search pool is BIGGER than the streamed observation capacity:
-    # the strategy ranks the broad pool, then the stream set (10) truncates.
+    # The eligible pool is BIGGER than the streamed observation capacity:
+    # 28 shortlisted + 2 reserved symbols, truncated to a 10-symbol stream.
     assert 10 < len(snapshot_symbols) <= 30 < len(context_history)
-    for symbol, _weight in result.rebalances[-1].target_weights:
-        assert symbol in snapshot_symbols
+    first_snapshot = universe.snapshots[0].effective_at
+    gated = [rebalance for rebalance in result.rebalances if rebalance.decision_timestamp >= first_snapshot]
+    assert any(rebalance.target_weights for rebalance in gated)
+    for rebalance in gated:
+        for symbol, _weight in rebalance.target_weights:
+            assert universe.contains(symbol, Market.EQUITY, rebalance.decision_timestamp)
 
 
 def test_managed_positions_stay_pinned_outside_universe() -> None:
@@ -174,7 +179,7 @@ def test_open_managed_orders_stay_pinned_across_restart() -> None:
     )
     decision_timestamp = bars[10].timestamp
     state = PortfolioState(
-        strategy_name="equity_residual_momentum_v1",
+        strategy_name="equity_leveraged_trend_v1",
         strategy_version="1.0.0",
         holdings={},
         cash=100_000.0,
@@ -190,10 +195,7 @@ def test_open_managed_orders_stay_pinned_across_restart() -> None:
             },
         ),
     )
-    strategy = portfolio_strategy_from(
-        "equity_residual_momentum_v1",
-        {"top_n": 2, "exclude_symbols": []},
-    )
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1", {"sma_bars": 5})
     engine = PortfolioBacktestEngine(
         strategy,
         rebalance_policy_for(strategy),
@@ -255,7 +257,7 @@ def test_disabled_strategy_creates_no_orders(tmp_path) -> None:
     broker = _Broker()
     # Only the equity strategy is enabled: a crypto runtime is never built,
     # so crypto bars can never produce crypto orders.
-    equity = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
+    equity = portfolio_strategy_from("equity_leveraged_trend_v1", {"sma_bars": 5})
     runtime = PortfolioRuntime(
         equity,
         ("AAPL", "MSFT", "NVDA", "SPY"),

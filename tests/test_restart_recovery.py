@@ -220,7 +220,7 @@ def test_restart_preserves_legacy_ledger_capture(tmp_path: Path) -> None:
         entry_price=100.0,
         stop_price=95.0,
         target_price=115.0,
-        strategy="equity_residual_momentum_v1",
+        strategy="equity_leveraged_trend_v1",
         client_order_id="pb-restart-1",
     )
     ledger.register_entry_order(

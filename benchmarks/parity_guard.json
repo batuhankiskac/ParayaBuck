@@ -65,44 +65,44 @@
     "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0"
   },
   "paper_parity": {
-    "combined_hash": "93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c",
+    "combined_hash": "0dd8f1972b58e8a52a8683a9e083a2703ce04829ea78512108cd9f9e4acab46b",
     "crypto": {
-      "curve_points": 2039,
+      "curve_points": 2038,
       "economics": {
-        "average_holdings_count": 2.5863591756624142,
-        "fee_total": 2536.6424704991523,
-        "max_drawdown": 0.06844946938630776,
-        "net_return": 0.14642278702439993,
+        "average_holdings_count": 2.6452404317958784,
+        "fee_total": 2553.1395968341826,
+        "max_drawdown": 0.06690524032896931,
+        "net_return": 0.14530801326691356,
         "rebalance_count": 503,
-        "turnover": 8.773518294406792
+        "turnover": 8.82743378877944
       },
-      "equity_curve_hash": "004735795b1c0148009d7cef4ac5bb7675136819be3b92b4eff4ff862c2721ff",
-      "fill_count": 805,
-      "fills_hash": "781baec460a58b823b2070afc58d4c89af7151330b348f0d1213237d318624a1",
+      "equity_curve_hash": "b6da34ebbaf68927d89801906a9ae430a72b3a82e751330e6106afb57204b036",
+      "fill_count": 812,
+      "fills_hash": "6ca9e344305703eab4b56b0a7955edc8dec9c5162f59cd90edb4fb0f41462732",
       "strategy": "crypto_low_variance_v2",
       "universe_history_hash": "13895176875674242ef0a4defcd1d1a80d40e64ae8ac0bdf591e8974f1a97825",
-      "weight_history_hash": "7c7447d05a5c741e42942f0ea57c54fa9ed2e558fb87cfff0129236710d4a3de"
+      "weight_history_hash": "a8f772078aabdfaa66eaf09573bbcf8b698bb85680fbcf4d072b8b613e18ea96"
     },
     "equity": {
-      "curve_points": 757,
+      "curve_points": 756,
       "economics": {
-        "average_holdings_count": 5.591269841269841,
-        "fee_total": 37.876488071720765,
-        "max_drawdown": 0.19757919665253057,
-        "net_return": 0.4068313311025833,
-        "rebalance_count": 157,
-        "turnover": 35.898877906492245
+        "average_holdings_count": 0.9232804232804233,
+        "fee_total": 11.046428721785981,
+        "max_drawdown": 0.19338894348189598,
+        "net_return": 0.8979768398778714,
+        "rebalance_count": 756,
+        "turnover": 7.63969892563819
       },
-      "equity_curve_hash": "4ff7343f294701fe6439679394d32be96c91df87fbdf4c98967fc66cdaee0f44",
-      "fill_count": 489,
-      "fills_hash": "60111bc0d642619fcb04fd0af3d521365f315a9c5836a72c638cfc4783d5cc80",
-      "strategy": "equity_residual_momentum_v2",
-      "universe_history_hash": "2b581bdedf303e013606736516bf09f3fbacaddec6ff3ee1e4b81e23fc2a77c0",
-      "weight_history_hash": "5e6daf037ecd9eb27a4d915667085c69ea12fae9b87303f6eabf35af0f212a81"
+      "equity_curve_hash": "1bffbdffa62298750394c6b3d0da1ecf2017027fc9a17756ac373c54b7114856",
+      "fill_count": 45,
+      "fills_hash": "9d7fa13e2210ab3fcc7663269e3818df129e0567b7d8f7992450ef6b16c9ab69",
+      "strategy": "equity_leveraged_trend_v1",
+      "universe_history_hash": "26c7a8f46979e60e3e41ccff6508cd4471bc725b6e1f7cd23014eddde8bd24d2",
+      "weight_history_hash": "013f35655e62f937b26d840feed6861b4739facc7b7dd32f16625a4ebad31a42"
     },
-    "head": "a69cbc36984e516da885c0aed3e2edaff0c68f61"
+    "head": "5d61c8cf292bd6a8e3fc3f1601ffb715ffcf8b76"
   },
-  "paper_strategy": "equity_residual_momentum_v3",
+  "paper_strategy": "equity_leveraged_trend_v1",
   "parity_canary_hash": "3e1ea843a3ec1736",
   "ruff": "all checks passed",
   "symmetric_full_T1": {

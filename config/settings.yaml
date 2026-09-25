@@ -28,9 +28,14 @@ universe:
     allow_static_fallback_trading: false
     maximum_stream_symbols: 30
     target_shortlist: 300
+    # QQQ is the equity strategy's trend signal and QLD (2x Nasdaq-100) its
+    # only holding; both are pinned references, tradable through
+    # trade_reference_symbols.
     reference_symbols:
     - SPY
-    trade_reference_symbols: false
+    - QQQ
+    - QLD
+    trade_reference_symbols: true
     fallback_trade_symbols:
     - AAPL
     - MSFT
@@ -38,7 +43,6 @@ universe:
     - TSLA
     - NVDA
     - AMZN
-    - QQQ
     - KO
     - PEP
     - JNJ
@@ -56,11 +60,6 @@ universe:
     - SH
     - PSQ
     - DOG
-    - SCHD
-    - VIG
-    - DGRO
-    - GLD
-    - OUNZ
     allowlist_symbols: []
     denylist_symbols: []
     supported_exchanges: [NASDAQ, NYSE, ARCA, AMEX, BATS]
@@ -68,15 +67,6 @@ universe:
     - SH
     - PSQ
     - DOG
-    # Sleeve ETFs of the equity strategy (dividend growth + gold): pinned into
-    # the 30-symbol IEX stream (V3 keeps 21 ranked slots) and hidden from V3.
-    # XLRE/XLC left the unused static fallback list to stay within 30.
-    sleeve_trade_symbols:
-    - SCHD
-    - VIG
-    - DGRO
-    - GLD
-    - OUNZ
     candidate_universe_path: data/universe/equity_candidates.json
     active_universe_path: data/runtime/active_equity_universe.json
     active_universe_max_age_hours: 36
@@ -145,36 +135,27 @@ universe:
 strategy:
   # The strategy owns its signal timeframe; strategy.*.timeframe is a
   # deprecated compatibility key and intentionally omitted here.
-  # equity_residual_momentum_v3 — MH_RAW (2026-08) frozen PAPER identity:
-  # positive 12-1 residual gate, raw 6/9/12 rank consensus, existing ivol
-  # filter, top_n and inverse-vol sizing. v1/v2 stay frozen historical
-  # identities. LIVE remains disabled.
+  # equity_leveraged_trend_v1 (VT35) — PAPER identity since 2026-09-25:
+  # hold QLD (2x Nasdaq-100) while QQQ's completed close is above its
+  # 200-session SMA, sized min(1, 0.35 / 20-session realized QLD volatility),
+  # cash otherwise; decided every session. Validated by
+  # docs/research/profit_max_v1.md (29.3% CAGR, 29.2% max drawdown vs VOO
+  # 14.5% / 32.0%, 2017-2026 shared-ledger replay). The residual-momentum V3
+  # and dividend/gold sleeve identities were removed; they are recoverable
+  # from git history (tag archive/research/profit-max-v1-2026-09 records the
+  # evidence). LIVE remains disabled.
   equity:
     enabled: true
-    # 2026-09-25: V3 core 0.30 + diversifier sleeve 0.25: dividend growth
-    # (SCHD/VIG/DGRO) and gold (GLD/OUNZ) at 0.05 each, decided on the first
-    # weekly decision of each month, held otherwise. Validated by
-    # docs/research/dividend_sleeve_production_v1.md and
-    # docs/research/gold_sleeve_production_v1.md. Rollback: the previous
-    # 0.40/0.15 SCHD/VIG/DGRO sleeve, or name equity_residual_momentum_v3
-    # without the sleeve keys below.
-    name: equity_residual_momentum_v3_dividend_sleeve_v1
-    # 2026-08-29 fix (kripto alım arızası): equity 0.60→0.55 so that
-    # equity 0.55 + crypto 0.05 never exceeds max_gross 0.60 and cash stays >=0.40.
-    maximum_allocation: 0.55
+    name: equity_leveraged_trend_v1
+    # equity 0.93 + crypto 0.05 = 0.98 = max_gross; cash buffer 0.02.
+    maximum_allocation: 0.93
     parameters:
-      core_allocation: 0.30
-      sleeve_allocation: 0.25
-      sleeve_symbols: [SCHD, VIG, DGRO, GLD, OUNZ]
-      formation_bars: 252
-      skip_bars: 21
-      beta_window_bars: 273
-      residual_vol_window: 63
-      top_n: 8
-      max_single_weight: 0.10
-      ivol_reject_quantile: 0.70
-      exclude_symbols: [SPY]
-      rebalance_frequency: weekly
+      signal_symbol: QQQ
+      hold_symbol: QLD
+      sma_bars: 200
+      vol_target: 0.35
+      vol_window: 20
+      rebalance_frequency: hours:24
   crypto:
     # crypto_low_variance_hysteresis_v1 — current PAPER identity (2026-08-26):
     # same validated alpha as v2 (22d top2), hysteresis retention rank<=4 at 96h.
@@ -193,17 +174,20 @@ strategy:
       top_n: 2
       rebalance_hours: 96
 risk:
-  max_position_pct: 0.1
+  # 2026-09-25 (profit_max_v1): limits widened for the single-ETF equity
+  # identity. The per-asset cap admits the whole equity allocation in QLD,
+  # and the daily-loss (0.20) and drawdown (0.75) latches are catastrophe
+  # brakes only: a 2x index ETF routinely moves more than the former
+  # 0.5% / 5% latches, which would have blocked the strategy.
+  max_position_pct: 0.93
   max_crypto_exposure_pct: 0.1
   max_crypto_position_pct: 0.05
   max_crypto_positions: 2
-  cash_buffer_pct: 0.40
-  max_gross_exposure_pct: 0.6
+  cash_buffer_pct: 0.02
+  max_gross_exposure_pct: 0.98
   max_positions: 8
-  daily_loss_limit_pct: 0.005
-  max_drawdown_pct: 0.05
-  # Additive sleeve ETFs (dividend growth + gold) never consume the 8 position slots.
-  slot_exempt_equity_symbols: [SCHD, VIG, DGRO, GLD, OUNZ]
+  daily_loss_limit_pct: 0.20
+  max_drawdown_pct: 0.75
 backtest:
   initial_cash: 100000
   slippage_bps: 2

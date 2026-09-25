@@ -33,10 +33,10 @@ _SYMBOLS = ("SPY", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "GOOGL")
 
 def _target(timestamp: datetime) -> TargetPortfolio:
     return TargetPortfolio(
-        strategy_name="equity_residual_momentum_v2",
+        strategy_name="equity_leveraged_trend_v1",
         strategy_version="2.0.0",
         decision_timestamp=timestamp,
-        weights=tuple(TargetWeight(symbol, 0.1, reason="residual_momentum") for symbol in _SYMBOLS),
+        weights=tuple(TargetWeight(symbol, 0.1, reason="trend_up") for symbol in _SYMBOLS),
         cash_weight=0.2,
         universe_version="bench",
         universe_snapshot_id="bench",
@@ -54,7 +54,7 @@ def _order(timestamp: datetime, symbol: str, decision_id: str) -> PortfolioOrder
         quantity=10.0,
         reference_price=100.0,
         decision_timestamp=timestamp,
-        strategy_name="equity_residual_momentum_v2",
+        strategy_name="equity_leveraged_trend_v1",
         strategy_version="2.0.0",
         risk_reducing=False,
     )
@@ -163,7 +163,7 @@ def run(report: Report) -> None:
             entry_price=100.0,
             stop_price=95.0,
             target_price=120.0,
-            strategy="equity_residual_momentum_v2",
+            strategy="equity_leveraged_trend_v1",
             client_order_id="pbp-ledger-1",
             strategy_version="2.0.0",
             exit_policy=ExitPolicy(),

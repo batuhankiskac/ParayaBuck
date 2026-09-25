@@ -35,9 +35,9 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             INSERT INTO portfolio_runtime_sessions VALUES ('session-2','config-1','paper');
         """)
         decisions = [
-            ("eq-scheduled-1", "equity", "scheduled", "equity_residual_momentum_v3_dividend_sleeve_v1"),
-            ("eq-catchup-1", "equity", "startup_catch_up", "equity_residual_momentum_v3_dividend_sleeve_v1"),
-            ("eq-scheduled-2", "equity", "scheduled", "equity_residual_momentum_v3_dividend_sleeve_v1"),
+            ("eq-scheduled-1", "equity", "scheduled", "equity_leveraged_trend_v1"),
+            ("eq-catchup-1", "equity", "startup_catch_up", "equity_leveraged_trend_v1"),
+            ("eq-scheduled-2", "equity", "scheduled", "equity_leveraged_trend_v1"),
             ("cr-scheduled-1", "crypto", "scheduled", "crypto_low_variance_hysteresis_v1"),
             ("cr-catchup-1", "crypto", "startup_catch_up", "crypto_low_variance_hysteresis_v1"),
             ("cr-scheduled-2", "crypto", "scheduled", "crypto_low_variance_hysteresis_v1"),
@@ -91,7 +91,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "strategy": {
                     "name": strategy,
                     "version": "1",
-                    "maximum_allocation": 0.55 if market == "equity" else 0.05,
+                    "maximum_allocation": 0.93 if market == "equity" else 0.05,
                 },
                 "configuration_digest": "config-1",
                 "universe": {"version": "universe-1"},
@@ -164,7 +164,7 @@ def test_v2_start_boundary_excludes_historical_v1_decision(tmp_path: Path) -> No
     with sqlite3.connect(db) as con:
         con.execute("INSERT INTO portfolio_runtime_sessions VALUES ('legacy','old-config','paper')")
         con.execute(
-            "INSERT INTO portfolio_decisions VALUES ('legacy-decision','legacy','old-config','2026-08-01T00:00:00+00:00','equity','equity_residual_momentum_v3')"
+            "INSERT INTO portfolio_decisions VALUES ('legacy-decision','legacy','old-config','2026-08-01T00:00:00+00:00','equity','equity_leveraged_trend_v1')"
         )
     (receipts / "2026-08-01_equity_v3.json").write_text('{"legacy": true}', encoding="utf-8")
     report = auditor.audit(

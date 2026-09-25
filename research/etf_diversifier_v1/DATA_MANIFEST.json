@@ -1,0 +1,29 @@
+{
+  "adjustment": "split",
+  "bars": {
+    "path": "data/historical/etf_diversifier_v1_daily_split_sip.csv",
+    "rows": 21272,
+    "sha256": "a3af15fe6cc9ef6cf7abd5312504971274328e674008787b1d38585c2c8f02e8"
+  },
+  "campaign": "etf_diversifier_v1",
+  "corporate_actions": {
+    "path": "data/historical/etf_diversifier_v1_corporate_actions.csv",
+    "rows": 642,
+    "sha256": "2ab0d3554f2c9e0f4100531e8c8ebabc2c6e9ad75f1e9c4c13b0219f436fc137"
+  },
+  "downloaded_at": "2026-09-25T05:28:52.824838+00:00",
+  "end": "2026-07-31T23:59:59+00:00",
+  "feed": "sip",
+  "provider": "alpaca",
+  "start": "2015-01-01T00:00:00+00:00",
+  "symbols": [
+    "SPY",
+    "TLT",
+    "IEF",
+    "GLD",
+    "DBC",
+    "SHY",
+    "BIL",
+    "AGG"
+  ]
+}

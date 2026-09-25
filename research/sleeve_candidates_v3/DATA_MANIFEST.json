@@ -1,0 +1,50 @@
+{
+  "adjustment": "split",
+  "bars": {
+    "path": "data/historical/sleeve_candidates_v3_daily_split_sip.csv",
+    "rows": 77111,
+    "sha256": "03a326b6daa7d28789eebd55a002501691d6124fd37ad1a09e358c1b88940c7b"
+  },
+  "campaign": "sleeve_candidates_v3",
+  "corporate_actions": {
+    "path": "data/historical/sleeve_candidates_v3_corporate_actions.csv",
+    "rows": 1725,
+    "sha256": "e8d2669e4e3951e708922d4494903f4146050a41a751351d11b6e35486282c99"
+  },
+  "downloaded_at": "2026-09-25T10:36:01.556947+00:00",
+  "end": "2026-07-31T23:59:59+00:00",
+  "feed": "sip",
+  "provider": "alpaca",
+  "start": "2015-01-01T00:00:00+00:00",
+  "symbols": [
+    "SPY",
+    "QQQ",
+    "TLT",
+    "IEF",
+    "GLD",
+    "IAU",
+    "OUNZ",
+    "DBC",
+    "AGG",
+    "RSP",
+    "EUSA",
+    "SCHD",
+    "VIG",
+    "DGRO",
+    "BTAL",
+    "XYLD",
+    "QYLD",
+    "USMV",
+    "EFAV",
+    "EEMV",
+    "MTUM",
+    "QUAL",
+    "IJR",
+    "IWM",
+    "BIL",
+    "SHV",
+    "VGLT",
+    "SHY",
+    "VGSH"
+  ]
+}

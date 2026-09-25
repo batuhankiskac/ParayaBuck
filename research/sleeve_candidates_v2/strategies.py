@@ -167,7 +167,9 @@ class Gtaa5SmaV1(_Sleeve):
         signals: dict[str, object] = {}
         for symbol in self.RISK_ASSETS:
             closes = context.closes(symbol)
-            above = len(closes) >= SMA_LOOKBACK_BARS and closes[-1] > sum(closes[-SMA_LOOKBACK_BARS:]) / SMA_LOOKBACK_BARS
+            above = (
+                len(closes) >= SMA_LOOKBACK_BARS and closes[-1] > sum(closes[-SMA_LOOKBACK_BARS:]) / SMA_LOOKBACK_BARS
+            )
             signals[symbol] = above
             destination = symbol if above else CASH_PROXY
             weights[destination] = weights.get(destination, 0.0) + slot

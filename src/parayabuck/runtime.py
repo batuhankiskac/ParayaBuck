@@ -792,6 +792,10 @@ class EngineRuntime:
             return False
         if name == "pb-trade-updates":
             return True
+        if name == "pb-signal-adjustment":
+            # The monitor heartbeats once per check interval, not per poll.
+            ttl = _SIGNAL_ADJUSTMENT_CHECK_SECONDS + max(300.0, heartbeat_ttl)
+            return (now - worker.last_heartbeat).total_seconds() <= ttl
         if name in {"pb-stocks", "pb-crypto"}:
             market = Market.EQUITY if name == "pb-stocks" else Market.CRYPTO
             event_required = market == Market.CRYPTO or is_regular_equity_time(now)

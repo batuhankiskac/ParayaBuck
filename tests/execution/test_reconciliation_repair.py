@@ -508,3 +508,17 @@ def test_oversized_fill_without_adoption_hook_stays_fail_closed() -> None:
     del broker.portfolio_order_quantity_adopted
     with pytest.raises(ReconciliationResultError, match="Invalid broker cumulative fill"):
         ReconciliationService(broker).reconcile()
+
+
+def test_fee_net_crypto_quantity_within_broker_precision_matches() -> None:
+    # Alpaca reports 0.029061298 for a fee-net ledger quantity of 0.0290612996625.
+    state = _State(broker_qty=0.029061298, filled_qty=0.0290612996625)
+    report = ReconciliationService(state.broker()).reconcile()
+    assert report["MATCH"] == ["AAPL"]
+    assert report["QUANTITY_MISMATCH"] == []
+
+
+def test_quantity_gap_beyond_broker_precision_still_mismatches() -> None:
+    state = _State(broker_qty=0.02906, filled_qty=0.0291)
+    report = ReconciliationService(state.broker()).reconcile()
+    assert report["QUANTITY_MISMATCH"] == ["AAPL"]

@@ -41,6 +41,9 @@ from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.execution.alpaca_reconciliation")
 
+# Absolute floor for ledger-vs-broker position quantity agreement.
+QUANTITY_MATCH_FLOOR = 1e-8
+
 RECONCILIATION_CATEGORIES: tuple[str, ...] = (
     "MATCH",
     "LOCAL_STALE",
@@ -616,7 +619,10 @@ class ReconciliationService:
                 _local_qty = 0.0
             _broker_qty = float(_broker_quantities.get(_sym, 0.0))
             if _local_qty > 1e-12 and _broker_qty > 1e-12:
-                _tol = max(1e-9, _local_qty * 1e-8)
+                # Alpaca reports quantities at 9 decimals and nets crypto fees
+                # out of the coin, so fee-net ledger quantities can differ from
+                # the broker by a few units of the 9th decimal.
+                _tol = max(QUANTITY_MATCH_FLOOR, _local_qty * 1e-8)
                 if abs(_local_qty - _broker_qty) <= _tol:
                     categories["MATCH"].append(_sym)
                 else:

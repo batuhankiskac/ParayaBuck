@@ -40,15 +40,6 @@ _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
 )
 _START_ENGINE_BLOCKING_STATES: frozenset[str] = _ACTIVE_ENGINE_STATES - {"starting"}
 
-_PLACEHOLDERS = {
-    "",
-    "your_secret_key_here",
-    "your-secret-key",
-    "replace_me",
-    "changeme",
-    "<secret>",
-}
-
 
 @dataclass(frozen=True)
 class LiveArmToken:
@@ -148,8 +139,9 @@ class EngineManager:
                     return cached[1]
                 with open(self.config_path, encoding="utf-8") as f:
                     cfg = yaml.safe_load(f) or {}
-                runtime_mode = cfg.get("runtime", {}).get("mode")
-                if runtime_mode is None and cfg.get("alpaca", {}).get("paper") is False:
+                runtime = cfg.get("runtime") or {}
+                runtime_mode = runtime.get("mode")
+                if runtime_mode is None and (cfg.get("alpaca") or {}).get("paper") is False:
                     # A legacy live configuration must never be silently shown
                     # as paper while the operator migrates to runtime.mode.
                     paper = False
@@ -450,7 +442,9 @@ class EngineManager:
             self.invalidate_live_arming()
             raise
         try:
-            warning = _tracked_secret_warning(Path.cwd())
+            # Never memoized: a secret committed after import must still block
+            # this start, so the gate rescans on every attempt.
+            warning = _scan_tracked_secrets(Path.cwd())
             if warning:
                 raise ValueError(warning)
             cfg = load_config(str(self.config_path))
@@ -1229,7 +1223,22 @@ _PLACEHOLDERS = {
 }
 
 
+_SECRET_WARNING_CACHE: dict[Path, str | None] = {}
+
+
 def _tracked_secret_warning(root: Path) -> str | None:
+    """Constructor-time warning, scanned once per resolved root.
+
+    Four EngineManagers are built at import; the engine-start gate calls
+    _scan_tracked_secrets directly so it never sees this memo.
+    """
+    resolved = root.resolve()
+    if resolved not in _SECRET_WARNING_CACHE:
+        _SECRET_WARNING_CACHE[resolved] = _scan_tracked_secrets(resolved)
+    return _SECRET_WARNING_CACHE[resolved]
+
+
+def _scan_tracked_secrets(root: Path) -> str | None:
     try:
         result = subprocess.run(
             ["git", "ls-files", "-z"],
@@ -1293,10 +1302,6 @@ def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> Non
         if name not in seen:
             lines.append(f"{name}={_quote_dotenv_value(value)}")
     atomic_write(path, "\n".join(lines).rstrip() + "\n", 0o600)
-
-
-def _engine_singleton() -> EngineManager:  # kept for type checkers, not instantiated at import
-    return EngineManager()
 
 
 # Singleton for legacy import path `from parayabuck.web.managers.engine import manager`

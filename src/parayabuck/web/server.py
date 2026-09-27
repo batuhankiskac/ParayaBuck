@@ -6,6 +6,7 @@ import asyncio
 import sys
 from typing import Any  # noqa: F401  # used in payload: Any annotations
 
+from parayabuck.logger import get_logger
 from parayabuck.web.application import create_app
 from parayabuck.web.managers.backtest import BacktestManager
 from parayabuck.web.managers.engine import _PLACEHOLDERS, EngineManager, LiveArmToken  # noqa: F401
@@ -19,6 +20,8 @@ from parayabuck.web.schemas.settings import (
     WebSocketTicketPayload,
 )
 from parayabuck.web.state import WebState, set_web_state
+
+log = get_logger("parayabuck.web.server")
 
 
 # Keep config.load_config and universe validators in sync when tests patch server.*
@@ -463,15 +466,9 @@ def _dashboard_market_decisions(*args: Any, **kwargs: Any) -> Any:
         import parayabuck.web.server_legacy as leg
 
         return leg._dashboard_market_decisions(*args, **kwargs)
-    except Exception:
-        try:
-            from parayabuck.web.services.status import (  # type: ignore[attr-defined]
-                _dashboard_market_decisions as _orig,
-            )
-
-            return _orig(*args, **kwargs)
-        except Exception:
-            return {}
+    except Exception as exc:
+        log.warning("Market decisions unavailable: %s", exc)
+        return {}
 
 
 # --- WebSocket wrappers ---

@@ -429,6 +429,29 @@ def test_cli_ops_events_filters(tmp_path: Path) -> None:
     assert code == 0
 
 
+def test_web_ops_severity_filter_never_widens_the_result() -> None:
+    """The stored severity vocabulary narrows to it; any other value narrows to nothing."""
+    from parayabuck.monitoring.journal import get_journal
+    from parayabuck.web.services import ops
+
+    now = datetime.now(UTC)
+    journal = get_journal()
+    journal.emit_sync(
+        create_event(
+            kind="reconciliation_failure",
+            message="drift",
+            occurred_at=now - timedelta(minutes=5),
+        )
+    )
+    journal.emit_sync(create_event(kind="runtime_started", message="started", occurred_at=now))
+
+    assert len(ops.query_events(10)) >= 2
+    assert {e["kind"] for e in ops.query_events(10, severity="WARNING")} == {"reconciliation_failure"}
+    assert ops.query_events(10, severity="warning") == []
+    assert ops.query_events(10, severity="error") == []
+    assert ops.query_events(10, severity="typo") == []
+
+
 def test_cli_ops_timeline(tmp_path: Path) -> None:
     jp = tmp_path / "timeline.sqlite3"
     j = EventJournal(str(jp))

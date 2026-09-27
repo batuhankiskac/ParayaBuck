@@ -54,7 +54,13 @@ def _dashboard_load_json(path: str | Path) -> dict[str, Any]:
         return {}
 
 
-def strategy_metadata(cfg: Any) -> dict[str, Any]:
+def _read_active_crypto_universe(cfg: Any) -> Any:
+    """Strict read + parse of the active crypto universe snapshot."""
+    path = Path(cfg.universe.crypto.active_universe_path)
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def strategy_metadata(cfg: Any, active_crypto_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     """Declared strategy contracts plus live universe sizes for the Web UI.
 
     Mirrors server.py:_strategy_metadata verbatim — no global timeframe,
@@ -64,8 +70,8 @@ def strategy_metadata(cfg: Any) -> dict[str, Any]:
 
     result: dict[str, Any] = {"equity": None, "crypto": None}
     equity_symbols = _equity_symbols(cfg)
-    active_crypto_payload: dict[str, Any] = {}
-    active_crypto_payload.update(_dashboard_load_json(cfg.universe.crypto.active_universe_path))
+    if active_crypto_payload is None:
+        active_crypto_payload = _dashboard_load_json(cfg.universe.crypto.active_universe_path)
     crypto_candidates = active_crypto_payload.get("candidate_symbols")
     for market_key, selection, pool_size in (
         ("equity", cfg.strategy.equity, len(equity_symbols)),
@@ -119,15 +125,27 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
         "active_crypto_symbol_count": 0,
     }
     cfg: Any = None
+    # The active crypto universe is read once here and shared by the strategy
+    # metadata and the scanner/universe blocks below.  A failed read is
+    # remembered so its strict parse error still surfaces there, and any
+    # non-object JSON is normalized once to an empty payload.
+    active_crypto: dict[str, Any] = {}
+    active_crypto_error: Exception | None = None
     try:
         cfg = _load_config(str(manager.config_path))
+        try:
+            payload = _read_active_crypto_universe(cfg)
+            if isinstance(payload, dict):
+                active_crypto = payload
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            active_crypto_error = exc
         configured: list[str] = []
         if cfg.strategy.equity.enabled:
             configured.append(f"equity/{cfg.strategy.equity.name}")
         if cfg.strategy.crypto.enabled:
             configured.append(f"crypto/{cfg.strategy.crypto.name}")
         result["strategy_status"] = "configured:" + ",".join(configured)
-        result["strategy_metadata"] = strategy_metadata(cfg)
+        result["strategy_metadata"] = strategy_metadata(cfg, active_crypto_payload=active_crypto)
     except Exception:
         result["strategy_status"] = "configuration_error"
         result["scanner"] = {"equity_status": "error", "crypto_status": "error"}
@@ -177,10 +195,8 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
     if cfg is not None:
         try:
             equity_symbols = _equity_symbols(cfg)
-            active_crypto_path = Path(cfg.universe.crypto.active_universe_path)
-            active_crypto_payload = (
-                json.loads(active_crypto_path.read_text(encoding="utf-8")) if active_crypto_path.exists() else {}
-            )
+            if active_crypto_error is not None:
+                raise active_crypto_error
             crypto_symbols, validated_crypto_scanner_status = _validate_active_crypto_universe(cfg.universe.crypto)
             if runtime is None:
                 result["active_equity_symbol_count"] = len(equity_symbols)
@@ -189,11 +205,11 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
                 "equity_status": runtime_refresh.get("status", {}).get("equity") or _equity_status(cfg),
                 "crypto_status": runtime_refresh.get("status", {}).get("crypto", validated_crypto_scanner_status),
                 "crypto_snapshot_status": validated_crypto_scanner_status,
-                "crypto_last_run_at": active_crypto_payload.get("selection_timestamp"),
-                "crypto_scanner_version": active_crypto_payload.get("scanner_version"),
+                "crypto_last_run_at": active_crypto.get("selection_timestamp"),
+                "crypto_scanner_version": active_crypto.get("scanner_version"),
                 "next_refresh_at": runtime_refresh.get("next_refresh_at"),
                 "refresh_errors": runtime_refresh.get("errors", {}),
-                "crypto_candidate_count": len(active_crypto_payload.get("candidate_symbols", ())),
+                "crypto_candidate_count": len(active_crypto.get("candidate_symbols", ())),
             }
             result["universe"] = {
                 "equity": {
@@ -202,11 +218,11 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
                 },
                 "crypto": {
                     "symbols": list(
-                        active_crypto_payload.get("observation_set", active_crypto_payload.get("selected_symbols", ()))
+                        active_crypto.get("observation_set", active_crypto.get("selected_symbols", ()))
                     ),
-                    "pool_size": len(active_crypto_payload.get("selected_symbols", ())),
-                    "scores": active_crypto_payload.get("score_breakdown", {}),
-                    "eliminated": active_crypto_payload.get("eliminated", {}),
+                    "pool_size": len(active_crypto.get("selected_symbols", ())),
+                    "scores": active_crypto.get("score_breakdown", {}),
+                    "eliminated": active_crypto.get("eliminated", {}),
                 },
             }
         except (OSError, ValueError, TypeError, json.JSONDecodeError):

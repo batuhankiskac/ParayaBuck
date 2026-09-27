@@ -26,11 +26,6 @@ _log_queues_lock = threading.Lock()
 _LOG_QUEUE_MAXSIZE = 500
 
 
-def issue_ws_ticket(kind: str) -> str:
-    """Issue a single-use ticket for ``kind`` (stream|logs). Thread-safe."""
-    return _ticket_store.issue(kind)
-
-
 def consume_ws_ticket(ticket: str, kind: str) -> bool:
     """Consume ticket — single-use, TTL 30s, scope-bound. Returns True if valid."""
     return _ticket_store.consume(ticket, kind)

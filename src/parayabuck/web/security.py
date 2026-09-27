@@ -55,20 +55,12 @@ def is_trusted_host(host_header: str) -> bool:
     return host in allowed
 
 
-def is_mutating_method(method: str) -> bool:
-    return method not in {"GET", "HEAD", "OPTIONS"}
-
-
 def validate_control_token(provided: str | None, expected: str | None) -> bool:
     if not isinstance(provided, str) or not provided:
         return False
     if not isinstance(expected, str) or not expected:
         return False
     return secrets.compare_digest(provided, expected)
-
-
-def validate_host_header(host_header: str) -> bool:
-    return is_trusted_host(host_header)
 
 
 def build_protect_middleware(
@@ -88,12 +80,7 @@ def build_protect_middleware(
     """
 
     async def protect_local_control_api(request: Request, call_next: Any) -> Any:
-        host_header = request.headers.get("host") or ""
-        host = urlparse(f"//{host_header}").hostname or ""
-        allowed = {"127.0.0.1", "localhost", "::1"}
-        if os.getenv("PYTEST_CURRENT_TEST"):
-            allowed = allowed | {"testserver"}
-        if host not in allowed:
+        if not is_trusted_host(request.headers.get("host") or ""):
             return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
         if request.method not in {"GET", "HEAD", "OPTIONS"} and not _trusted_browser_origin_for_middleware(
             request.headers.get("origin")

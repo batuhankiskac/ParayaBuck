@@ -42,7 +42,6 @@
       };
     }
     connect();
-    return { close: function(){ try{ ws && ws.close(); }catch(_){}} };
   }
   function connectLogs(onLog) {
     let ws = null;

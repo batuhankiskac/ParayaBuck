@@ -61,6 +61,9 @@ from .alpaca_models import (  # noqa: E402
     RiskStatePersistenceError,
 )
 
+# Broker order states that can never fill again (``rejected`` never filled).
+_DEAD_ORDER_STATUSES = frozenset({"canceled", "cancelled", "expired", "rejected", "done_for_day"})
+
 
 def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
     """Emit one execution alert without ever affecting order flow.
@@ -684,18 +687,31 @@ class AlpacaBroker:
                         fill_recovered(*recovered)
                     return True
                 continue
-            if status not in {
-                "canceled",
-                "cancelled",
-                "rejected",
-                "expired",
-                "done_for_day",
-            }:
+            if status not in _DEAD_ORDER_STATUSES:
                 # The exit is genuinely still working at the broker; keep
                 # ownership until it completes.
                 return True
-            # The order died without filling: fall through to the adjustment.
+            # The order died: book any partial fill it made before dying,
+            # then fall through to the adjustment for the remainder.
+            self._recover_terminal_partial_fill(broker_order, client_order_id, broker_order_id, status)
         return False
+
+    def _recover_terminal_partial_fill(
+        self, broker_order: Any, client_order_id: str, broker_order_id: str, status: str
+    ) -> None:
+        """Book the real fill of an order that ended terminal after filling.
+
+        A canceled/expired/done_for_day order can still have filled part of
+        its quantity; dropping that fill orphans bought units as external
+        inventory or leaves sold units owned (ownership drift). The booking
+        is cumulative and keyed by the recovered activity id, so a later
+        stream or reconcile delivery of the same fill books nothing twice.
+        """
+        recovered = self._fill_from_broker_order(broker_order, client_order_id, broker_order_id)
+        if recovered is None:
+            return
+        if fill_recovered := getattr(self, "portfolio_fill_recovered", None):
+            fill_recovered(*recovered, status=status)
 
     def _fetch_broker_order(self, client_order_id: str, broker_order_id: str) -> Any | None:
         """Resolve one repo order at Alpaca. A 404/unknown order is ``None``;
@@ -756,7 +772,8 @@ class AlpacaBroker:
             # The order filled but its fill could not be extracted; keep the
             # row non-terminal so ownership is not silently released.
             return "submitted"
-        if status in {"canceled", "cancelled", "expired", "rejected", "done_for_day"}:
+        if status in _DEAD_ORDER_STATUSES:
+            self._recover_terminal_partial_fill(broker_order, client_order_id, broker_order_id, status)
             return status
         return "submitted"
 
@@ -768,10 +785,17 @@ class AlpacaBroker:
         avg_price = float(self._field(order, "filled_avg_price", 0) or 0)
         if filled_qty <= 0 or avg_price <= 0:
             return None
-        filled_at_raw = self._field(
-            order, "filled_at", self._field(order, "submitted_at", datetime.now(UTC).isoformat())
+        # A partially filled order that then died has no ``filled_at``; fall
+        # back to its last update rather than parsing ``None``.
+        filled_at_raw = (
+            self._field(order, "filled_at", None)
+            or self._field(order, "updated_at", None)
+            or self._field(order, "submitted_at", None)
+            or datetime.now(UTC)
         )
-        occurred_at = datetime.fromisoformat(str(filled_at_raw))
+        occurred_at = (
+            filled_at_raw if isinstance(filled_at_raw, datetime) else datetime.fromisoformat(str(filled_at_raw))
+        )
         if occurred_at.tzinfo is None:
             occurred_at = occurred_at.replace(tzinfo=UTC)
         return (
@@ -898,7 +922,19 @@ class AlpacaBroker:
             status = self._normalized_field(order, "status")
             if (
                 side == closing_side
-                and status not in {"canceled", "expired", "filled", "rejected"}
+                # Same dead-leg vocabulary as _open_protective_orders: a
+                # done_for_day/replaced/stopped leg no longer protects.
+                and status
+                not in {
+                    "canceled",
+                    "cancelled",
+                    "done_for_day",
+                    "expired",
+                    "filled",
+                    "rejected",
+                    "replaced",
+                    "stopped",
+                }
                 and (stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"})
             ):
                 # Only the still-working remainder protects the position; an

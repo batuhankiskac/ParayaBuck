@@ -101,6 +101,35 @@ def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
     return {str(row[1]) for row in connection.execute(f"PRAGMA table_info({quoted})")}
 
 
+def _unduplicated_activity_fees(connection: sqlite3.Connection) -> list[float]:
+    """Positive ``fee_activities`` fees not already counted from ``portfolio_fills``.
+
+    The FILL-activity backfill records a portfolio SELL's commission under
+    its ledger recovery row, while the stream records the same fill's fee in
+    ``portfolio_fills``. When the portfolio journal already observed a fee for
+    that broker order, the activity copy is the same money and is skipped;
+    otherwise it is the only evidence and is kept.
+    """
+    if not all(_table_exists(connection, table) for table in ("orders", "portfolio_orders", "portfolio_fills")):
+        return [float(row[0]) for row in _query(connection, "SELECT fee FROM fee_activities WHERE fee > 0")]
+    rows = _query(
+        connection,
+        """
+        SELECT fa.fee FROM fee_activities fa
+        WHERE fa.fee > 0
+          AND NOT EXISTS (
+              SELECT 1
+              FROM orders lo
+              JOIN portfolio_orders po
+                ON po.broker_order_id = lo.broker_order_id AND po.broker_order_id <> ''
+              JOIN portfolio_fills pf ON pf.client_order_id = po.client_order_id
+              WHERE lo.client_order_id = fa.client_order_id AND pf.fee > 0
+          )
+        """,
+    )
+    return [float(row[0]) for row in rows]
+
+
 def _percentile(sorted_values: list[float], percentile: float) -> float | None:
     """Linear-interpolation percentile (numpy-default-like) of sorted values."""
     if not 0 <= percentile <= 100:
@@ -316,9 +345,9 @@ def execution_metrics(
 
         # Fees from the legacy fee activities ledger.
         if _table_exists(connection, "fee_activities"):
-            for fee in _query(connection, "SELECT fee FROM fee_activities WHERE fee > 0"):
-                fee_values.append(float(fee[0]))
-                fees_by_market["unknown"] = fees_by_market.get("unknown", 0.0) + float(fee[0])
+            for fee in _unduplicated_activity_fees(connection):
+                fee_values.append(fee)
+                fees_by_market["unknown"] = fees_by_market.get("unknown", 0.0) + fee
 
         rejected = int(by_terminal.get("rejected", 0))
         cancelled = int(by_terminal.get("cancelled", 0) + by_terminal.get("canceled", 0))
@@ -480,6 +509,7 @@ def forward_metrics(
             + execution.get("canceled", 0)
             + execution.get("expired", 0)
         )
+        finished = sum(count for status, count in execution.items() if is_terminal_order_status(status))
         # Working orders carry the raw stream/broker status the repository
         # stored ("new", "partial_fill", "pending_new", ...), so count every
         # status that is neither terminal nor an unresolved outcome (those
@@ -610,7 +640,10 @@ def forward_metrics(
                 "rejected": rejected,
                 "open": open_count,
                 "reconciliation_required": int(execution.get("reconciliation_required", 0)),
-                "fill_rate": (filled / submitted) if submitted > 0 else None,
+                # Share of finished orders that filled. ``submitted`` counts
+                # only rows still AT submitted/submitting (a filled order has
+                # left that status), so it is not a denominator for fills.
+                "fill_rate": (filled / finished) if finished > 0 else None,
             },
             "portfolio": {
                 "pnl": {
@@ -749,8 +782,7 @@ def cost_calibration(
             ):
                 spread_values.append(float(stored_spread))
         if _table_exists(connection, "fee_activities"):
-            for (fee,) in _query(connection, "SELECT fee FROM fee_activities WHERE fee > 0"):
-                fee_values.append(float(fee))
+            fee_values.extend(_unduplicated_activity_fees(connection))
 
         observed_slippage = _stat_summary(slippage_values)
         observed_spread = _stat_summary(spread_values)

@@ -545,3 +545,25 @@ def test_open_order_counts_follow_the_repository_terminal_vocabulary(tmp_path: P
     execution = telemetry.forward_metrics(db)["execution"]
     assert execution["open"] == 2  # new, partial_fill
     assert execution["reconciliation_required"] == 1
+
+
+def test_fill_rate_is_the_share_of_finished_orders_that_filled(tmp_path: Path) -> None:
+    """A filled order has left the ``submitted`` status, so dividing fills by
+    the orders still at ``submitted`` could exceed 1; the rate is over
+    finished (terminal) orders."""
+    db = tmp_path / "runtime.sqlite3"
+    _seed_portfolio_database(db)  # three filled orders
+    connection = sqlite3.connect(db)
+    try:
+        for client_order_id, status in (("o-working", "submitted"), ("o-dead", "canceled")):
+            connection.execute(
+                "INSERT INTO portfolio_orders VALUES "
+                "(?, 'd-eq-2', 'AAPL', 'equity', 'buy', 1.0, 100.0, ?, '', 0.0, NULL, "
+                "'2026-02-05T15:00:00+00:00')",
+                (client_order_id, status),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+    assert telemetry.forward_metrics(db)["execution"]["fill_rate"] == pytest.approx(0.75)

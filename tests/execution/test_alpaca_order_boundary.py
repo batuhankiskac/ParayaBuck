@@ -235,3 +235,21 @@ def test_recovered_submission_fill_reports_the_fee_as_unobserved() -> None:
     assert len(recovered) == 1
     assert recovered[0][2:4] == (2.0, 101.5)
     assert recovered[0][6] is None
+
+
+@pytest.mark.parametrize("dead_status", ["done_for_day", "replaced", "stopped", "cancelled"])
+@pytest.mark.parametrize("via_service", [True, False])
+def test_nested_bracket_dead_stop_leg_is_not_protection(dead_status: str, via_service: bool) -> None:
+    """A bracket stop leg that can no longer execute must not count as live
+    protection, in the service and in the facade fallback alike."""
+    from parayabuck.execution.alpaca_protection import ProtectionService
+
+    leg = SimpleNamespace(side="sell", type="stop", stop_price=95.0, status=dead_status, qty="2", filled_qty="0")
+    parent = SimpleNamespace(symbol="AAPL", side="buy", type="market", stop_price=None, status="filled", legs=[leg])
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = SimpleNamespace(get_order_by_id=lambda _order_id, _request=None: parent)  # type: ignore[attr-defined]
+    if via_service:
+        broker.__dict__["_protection_service"] = ProtectionService(broker)
+
+    assert broker._has_nested_bracket_protection("parent-1", "AAPL", True, 2.0) is False
+    assert broker._last_protection_mismatch == "missing"

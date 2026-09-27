@@ -140,9 +140,11 @@ def test_fill_activity_fee_is_booked_exactly_once_on_replay(tmp_path: Path) -> N
 
 
 def _unlinked_exit_event(cumulative: float) -> ExecutionEvent:
+    # A real execution event; FILL-activity backfill rows (``alpaca-fill-
+    # activity-*``) record completed broker fills and are stamped terminal.
     return ExecutionEvent(
         account_id="acct",
-        client_order_id="alpaca-fill-activity-broker-exit",
+        client_order_id="manual-exit-broker-exit",
         broker_order_id="broker-exit",
         parent_order_id=None,
         role=OrderRole.MANUAL_EXIT,
@@ -168,7 +170,7 @@ def test_unlinked_exit_fill_stays_non_terminal_and_warns(tmp_path: Path, caplog:
 
     row = ledger.connection.execute(
         "SELECT terminal_state, cumulative_filled_qty FROM orders WHERE client_order_id=?",
-        ("alpaca-fill-activity-broker-exit",),
+        ("manual-exit-broker-exit",),
     ).fetchone()
     assert row == (None, 5.0)
     assert "recovery_action=await_managed_entry_link" in caplog.text
@@ -189,13 +191,13 @@ def test_redelivered_unlinked_exit_fill_stays_non_terminal(tmp_path: Path, caplo
 
     row = ledger.connection.execute(
         "SELECT terminal_state, cumulative_filled_qty FROM orders WHERE client_order_id=?",
-        ("alpaca-fill-activity-broker-exit",),
+        ("manual-exit-broker-exit",),
     ).fetchone()
     assert row == (None, 5.0)
     assert ledger.connection.execute(
         "SELECT client_order_id, fee FROM fee_activities WHERE client_order_id=?",
-        ("alpaca-fill-activity-broker-exit",),
-    ).fetchall() == [("alpaca-fill-activity-broker-exit", 0.5)]
+        ("manual-exit-broker-exit",),
+    ).fetchall() == [("manual-exit-broker-exit", 0.5)]
     assert caplog.text.count("Unlinked execution fill") == 1
     ledger.close()
 
@@ -211,7 +213,7 @@ def test_unlinked_exit_fill_stays_non_terminal_across_partial_then_full(tmp_path
 
     row = ledger.connection.execute(
         "SELECT terminal_state, cumulative_filled_qty FROM orders WHERE client_order_id=?",
-        ("alpaca-fill-activity-broker-exit",),
+        ("manual-exit-broker-exit",),
     ).fetchone()
     assert row == (None, 5.0)
     ledger.close()

@@ -35,6 +35,7 @@ from parayabuck.core.models import (
     ProtectionState,
 )
 from parayabuck.execution.alpaca_models import ProtectionReconciliationError
+from parayabuck.execution.ledger import FILL_ACTIVITY_RECOVERY_PREFIX
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.utils import is_crypto
@@ -209,6 +210,10 @@ class ReconciliationService:
             return False
         activities.sort(key=lambda item: str(item.get("transaction_time") or item.get("date") or ""))
         recovered_buy_fills: dict[str, list[tuple[float, float, datetime, str, str]]] = {}
+        # Running (quantity, notional) of the SELL fills seen per broker order
+        # in time order: one order can fill in several activities, and the
+        # ledger event is cumulative, so each activity must carry the sum.
+        recovered_sell_totals: dict[str, tuple[float, float]] = {}
         applied_watermark: datetime | None = None
         for activity in activities:
             fee_raw = activity.get("commission", activity.get("fee", 0))
@@ -239,20 +244,25 @@ class ReconciliationService:
                 existing_client = (
                     order_lookup(broker._account_id or "unknown", broker_order_id) if order_lookup is not None else None
                 )
-                if existing_client is None:
+                recovery_client_id = f"{FILL_ACTIVITY_RECOVERY_PREFIX}{broker_order_id}"
+                previous_qty, previous_notional = recovered_sell_totals.get(broker_order_id, (0.0, 0.0))
+                cumulative_qty = previous_qty + qty
+                cumulative_notional = previous_notional + qty * price
+                recovered_sell_totals[broker_order_id] = (cumulative_qty, cumulative_notional)
+                if existing_client is None or existing_client == recovery_client_id:
                     ledger.apply_execution_event(
                         ExecutionEvent(
                             account_id=broker._account_id or "unknown",
-                            client_order_id=f"alpaca-fill-activity-{broker_order_id}",
+                            client_order_id=recovery_client_id,
                             broker_order_id=broker_order_id,
                             parent_order_id=None,
                             role=OrderRole.MANUAL_EXIT,
                             symbol=canonical_symbol(symbol, market),
                             market=market,
                             state=OrderState.FILLED,
-                            requested_qty=qty,
-                            cumulative_filled_qty=qty,
-                            average_fill_price=price,
+                            requested_qty=cumulative_qty,
+                            cumulative_filled_qty=cumulative_qty,
+                            average_fill_price=cumulative_notional / cumulative_qty,
                             occurred_at=occurred_at,
                             fee=fee,
                             activity_id=activity_id,

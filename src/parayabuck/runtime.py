@@ -2209,7 +2209,15 @@ class EngineRuntime:
                     # managed. Halt the runtime, persist the safety state and
                     # keep entries blocked instead of logging and continuing
                     # until the next strategy decision.
-                    self._halt_for_ownership_drift()
+                    try:
+                        self._halt_for_ownership_drift()
+                    except Exception as exc:
+                        # The halt is already asserted in memory before the
+                        # persist; a failed ledger write must not kill the
+                        # only drift detector. The next poll re-enters and
+                        # retries the persist.
+                        worker.last_error = str(exc)
+                        log.exception("Ownership drift halt could not be persisted; retrying next poll")
                 except Exception as exc:
                     # Temporary broker/API errors are retried on the next
                     # poll; only drift escalates to a runtime halt here.
@@ -2295,16 +2303,20 @@ class EngineRuntime:
         # read-copy-rebuild-assign would otherwise drop this halt.
         with getattr(self, "_risk_state_lock", threading.Lock()):
             self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}), "ownership_drift")
-        self._persist_safety_state("ownership_drift")
-        if not first:
-            return
-        log.critical("Ownership drift detected; runtime halted and safety state persisted")
-        runtime_metrics_store.record_event("circuit_breaker")
-        alerts.emit(
-            "circuit_breaker",
-            message="Ownership drift detected; runtime halted and safety state persisted",
-            reason="ownership_drift",
-        )
+        try:
+            self._persist_safety_state("ownership_drift")
+        finally:
+            # The transition alert fires even when the persist raises: later
+            # polls see the reason already set and never alert, so skipping
+            # it here would leave the halt unannounced for good.
+            if first:
+                log.critical("Ownership drift detected; runtime halted and safety state persisted")
+                runtime_metrics_store.record_event("circuit_breaker")
+                alerts.emit(
+                    "circuit_breaker",
+                    message="Ownership drift detected; runtime halted and safety state persisted",
+                    reason="ownership_drift",
+                )
 
     def _persist_safety_state(self, reason: str) -> None:
         """Persist the halted circuit-breaker reason with the last known
@@ -4499,6 +4511,19 @@ class EngineRuntime:
         reason = self._circuit_breaker_reason
         if reason not in recoverable:
             raise ValueError(f"Safety lock is not operator-resettable: {reason or 'none'}")
+        # A reset cannot revive a shared worker that exited (e.g. the decision
+        # loop after decision_worker_crashed): clearing the breaker would
+        # report "running" while no decision/account/fill processing runs.
+        dead_shared = sorted(
+            name
+            for name, worker in dict(getattr(self, "_workers", {})).items()
+            if name in {"pb-decisions", "pb-account", "pb-trade-updates"} and not worker.alive
+        )
+        if getattr(self, "_running", False) and dead_shared:
+            raise ValueError(
+                "Safety lock cannot be reset while shared workers are stopped "
+                f"({','.join(dead_shared)}); restart the process to recover"
+            )
         if not self._events.empty():
             raise ValueError("Market event queue must drain before resetting the safety lock")
         if self.market_state.has_data_gaps or self._not_ready_symbols:

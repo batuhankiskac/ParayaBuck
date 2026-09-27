@@ -96,6 +96,105 @@ def test_persistent_ownership_drift_alerts_only_on_transition(tmp_path: Path, mo
     ledger.close()
 
 
+class _FailingIncidentLedger:
+    """A ledger whose incident write fails like a locked SQLite database."""
+
+    def save_safety_incident(self, *_args: object, **_kwargs: object) -> None:
+        raise sqlite3.OperationalError("database is locked")
+
+
+def test_ownership_drift_alert_fires_even_when_persist_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Later polls see the reason already set and never alert, so a failed
+    persist on the transition poll must not swallow the only alert."""
+    import parayabuck.runtime as runtime_module
+
+    emitted: list[str] = []
+    monkeypatch.setattr(runtime_module.alerts, "emit", lambda kind, **_: emitted.append(kind))
+    monkeypatch.setattr(runtime_module.runtime_metrics_store, "record_event", lambda _kind: None)
+    runtime = _runtime_with_ledger(_FailingIncidentLedger())  # type: ignore[arg-type]
+
+    with pytest.raises(sqlite3.OperationalError):
+        runtime._halt_for_ownership_drift()
+
+    assert emitted == ["circuit_breaker"]
+    assert runtime._state == "halted"
+    assert runtime._circuit_breaker_reason == "ownership_drift"
+
+
+def test_account_loop_survives_a_failed_drift_persist() -> None:
+    """The account poller is the only drift detector: a failed halt persist
+    must be retried on the next poll, not kill the pb-account thread."""
+    from parayabuck.execution.alpaca import OwnershipDriftError
+    from parayabuck.runtime_health import WorkerHealth
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    now = datetime.now(UTC)
+    runtime._workers = {"pb-account": WorkerHealth(now, now)}
+    runtime._running = True
+    runtime.config = SimpleNamespace(account_poll_interval_seconds=0.0)
+    runtime._account_snapshot_cache_state = lambda: (None, None, 0)  # type: ignore[method-assign]
+
+    def drifted_account() -> AccountSnapshot:
+        raise OwnershipDriftError("broker holds fewer shares than managed")
+
+    runtime.broker = SimpleNamespace(account_id="acct", account=drifted_account)
+    halts: list[int] = []
+
+    def failing_halt() -> None:
+        halts.append(1)
+        raise sqlite3.OperationalError("database is locked")
+
+    runtime._halt_for_ownership_drift = failing_halt  # type: ignore[method-assign]
+    polls: list[float] = []
+
+    def wait(timeout: float) -> bool:
+        polls.append(timeout)
+        if len(polls) >= 2:
+            runtime._running = False
+        return False
+
+    runtime._stop_event = SimpleNamespace(wait=wait)  # type: ignore[assignment]
+
+    runtime._account_loop()
+
+    assert len(halts) == 2
+    assert runtime._workers["pb-account"].last_error == "database is locked"
+
+
+def test_operator_reset_refuses_while_a_shared_worker_is_stopped(tmp_path: Path) -> None:
+    """decision_worker_crashed is resettable (for the restored incident after
+    a restart), but in the crashing process the decision loop has exited: a
+    reset would report "running" with nothing processing decisions."""
+    from parayabuck.runtime_health import WorkerHealth
+
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "decision_worker_crashed")
+    now = datetime.now(UTC)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "decision_worker_crashed"
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._workers = {
+        "pb-decisions": WorkerHealth(now, now, alive=False),
+        "pb-account": WorkerHealth(now, now, alive=True),
+        "pb-stocks": WorkerHealth(now, now, alive=False),
+    }
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
+    runtime.ledger = ledger
+
+    with pytest.raises(ValueError, match="pb-decisions"):
+        runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason == "decision_worker_crashed"
+    assert runtime._state == "halted"
+    assert [i.reason for i in ledger.load_safety_incidents("acct")] == ["decision_worker_crashed"]
+    ledger.close()
+
+
 def test_persistent_incident_restores_after_midnight_restart(tmp_path: Path) -> None:
     """A halt persisted at 23:59 (ambiguous_order_state) is restored on a
     00:01 restart; restore reads incidents, not the today session row."""

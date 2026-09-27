@@ -1122,6 +1122,32 @@ def test_aggregator_late_minute_after_a_grace_flush_does_not_emit_a_stub_candle(
     assert (closed.open, closed.close, closed.volume) == (105, 109, 5)
 
 
+def test_aggregator_logs_a_dropped_late_minute(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A dropped late minute is permanent data loss for the closed candle and
+    must not be silent, or a too-short finalization grace goes unnoticed."""
+    import parayabuck.data.aggregator as aggregator_module
+
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        aggregator_module,
+        "log",
+        SimpleNamespace(warning=lambda message, *args: warnings.append(message % args)),
+    )
+    aggregator = TimeframeAggregator("5m", finalization_grace_seconds=2.0)
+    start = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+
+    def minute(offset: int) -> Bar:
+        return Bar(start + timedelta(minutes=offset), "BTC/USD", "1m", 100, 100, 100, 100, 1, Market.CRYPTO)
+
+    for offset in range(4):
+        aggregator.update(minute(offset))
+    aggregator.flush_until(start + timedelta(minutes=5, seconds=3))
+    assert warnings == []
+    assert aggregator.update(minute(4)) is None
+    assert len(warnings) == 1
+    assert "symbol=BTC/USD timeframe=5m" in warnings[0]
+
+
 def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime._circuit_breaker_reason = "ambiguous_order_state"

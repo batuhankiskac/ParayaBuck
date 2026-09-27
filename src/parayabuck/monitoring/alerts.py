@@ -171,9 +171,7 @@ def _throttle_key(kind: str, fields: dict[str, object]) -> str:
             # limit to first 2 dimensions to avoid key explosion but preserve distinction
             if len(parts) >= 3:
                 break
-    if len(parts) > 1:
-        return ":".join(parts)
-    return kind
+    return ":".join(parts)
 
 
 def _severity(kind: str) -> int:
@@ -305,13 +303,15 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
         with _lock:
             _delivered_counts[kind] = _delivered_counts.get(kind, 0) + 1
         log.log(_severity(kind), "ALERT %s: %s fields=%s", kind, message, dict(fields))
+        # Reuse event_id if supplied, else generate; include correlation from fields
+        eid = str(fields.get("event_id") or "") or None
         # Durable operational journal — best effort, never raises, isolated from trading
         try:
             from parayabuck.monitoring.journal import emit_journal
             from parayabuck.monitoring.operational_event import create_event
 
-            # Reuse event_id if supplied, else generate; include correlation from fields
             ev = create_event(
+                event_id=eid,
                 kind=kind,
                 message=message,
                 fields=dict(fields),
@@ -332,7 +332,7 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
             _webhook_count += 1
             _webhook_attempted += 1
         # Build webhook payload with correlation fields and stable event_id
-        event_id = str(fields.get("event_id") or uuid.uuid4().hex)
+        event_id = eid or uuid.uuid4().hex
         payload: dict[str, object] = {
             "event_id": event_id,
             "kind": kind,
@@ -363,36 +363,6 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
-
-
-def emit_incident(
-    category: str,
-    severity: str,
-    *,
-    message: str,
-    incident_id: str | None = None,
-    account_id: str | None = None,
-    **fields: object,
-) -> None:
-    """Emit a canonical incident record via the alert sink (never raises).
-
-    Thin wrapper over emit() that guarantees incident_id/timestamp/category/
-    severity are present as structured fields. Bounded throttling still applies
-    per kind (paper_incident). Integrates with metrics via caller; this helper
-    only drives the alert sink.
-    """
-    try:
-        emit(
-            "paper_incident",
-            message=message,
-            incident_id=incident_id or "",
-            category=category,
-            severity=severity,
-            account_id=account_id or "unknown",
-            **fields,
-        )
-    except Exception:
-        log.warning("emit_incident failed for category=%s", category, exc_info=True)
 
 
 def alert_stats() -> dict[str, object]:
@@ -463,28 +433,10 @@ def reset_for_tests() -> None:
             pass
 
 
-def shutdown_webhook_worker(timeout: float = 1.0) -> None:
-    """Stop webhook worker cleanly (best effort)."""
-    global _webhook_worker_running
-    with _lock:
-        _webhook_worker_running = False
-    try:
-        _webhook_queue.put_nowait(None)
-    except queue.Full:
-        pass
-    if _webhook_worker is not None:
-        try:
-            _webhook_worker.join(timeout=timeout)
-        except Exception:
-            pass
-
-
 __all__ = [
     "ALERT_KINDS",
     "alert_stats",
     "configure_alerting",
     "emit",
-    "emit_incident",
     "reset_for_tests",
-    "shutdown_webhook_worker",
 ]

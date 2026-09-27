@@ -14,17 +14,12 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 from parayabuck.monitoring.events import ALERT_KINDS_ORDERED, WARNING_KINDS
-
-
-def _alert_ordered() -> tuple[str, ...]:
-    return ALERT_KINDS_ORDERED
-
 
 # ---------------------------------------------------------------------------
 # Severity — small stable vocabulary
@@ -38,9 +33,6 @@ class Severity(StrEnum):
     CRITICAL = "CRITICAL"
 
 
-# Map legacy alert severity (warning/info) to Severity
-_WARNING_SEVERITIES: frozenset[str] = frozenset({Severity.WARNING, Severity.CRITICAL})
-
 
 def severity_for_kind(kind: str) -> Severity:
     """Centralized severity classification.
@@ -51,9 +43,7 @@ def severity_for_kind(kind: str) -> Severity:
     """
     if kind in _CRITICAL_KINDS:
         return Severity.CRITICAL
-    if kind in WARNING_KINDS:
-        return Severity.WARNING
-    if kind in _WARNING_KINDS:
+    if kind in WARNING_KINDS or kind in _WARNING_KINDS:
         return Severity.WARNING
     return Severity.INFO
 
@@ -110,9 +100,7 @@ LIFECYCLE_KINDS: tuple[str, ...] = (
 )
 
 # Full operational vocabulary = alert kinds + lifecycle kinds (deduplicated, ordered)
-OPERATIONAL_KINDS_ORDERED: tuple[str, ...] = tuple(dict.fromkeys((*_alert_ordered(), *LIFECYCLE_KINDS)))
-
-OPERATIONAL_KINDS: frozenset[str] = frozenset(OPERATIONAL_KINDS_ORDERED)
+OPERATIONAL_KINDS_ORDERED: tuple[str, ...] = tuple(dict.fromkeys((*ALERT_KINDS_ORDERED, *LIFECYCLE_KINDS)))
 
 
 # ---------------------------------------------------------------------------
@@ -135,14 +123,29 @@ _REDACTED_KEYS: frozenset[str] = frozenset(
 )
 
 
+_SENSITIVE_SUBSTRINGS: tuple[str, ...] = ("secret", "webhook", "password", "approval_key", "api_key")
+
+
+def _is_sensitive(key: str) -> bool:
+    """True for redaction keys and for any key naming a secret or a webhook."""
+    low = key.lower()
+    return low in _REDACTED_KEYS or any(fragment in low for fragment in _SENSITIVE_SUBSTRINGS)
+
+
+def _redact_value(value: object) -> object:
+    """Recursively redact sensitive keys inside nested mappings and lists."""
+    if isinstance(value, Mapping):
+        return {key: ("***REDACTED***" if _is_sensitive(str(key)) else _redact_value(item)) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_redact_value(item) for item in value]
+    return value
+
+
 def _redact_fields(fields: Mapping[str, object]) -> dict[str, object]:
-    """Return copy with secret keys redacted."""
+    """Return copy with secret keys redacted, nested values included."""
     redacted: dict[str, object] = {}
     for key, value in fields.items():
-        if key.lower() in _REDACTED_KEYS or "secret" in key.lower() or "webhook" in key.lower():
-            redacted[key] = "***REDACTED***"
-        else:
-            redacted[key] = value
+        redacted[key] = "***REDACTED***" if _is_sensitive(str(key)) else _redact_value(value)
     return redacted
 
 
@@ -223,7 +226,7 @@ class OperationalEvent:
         if self.occurred_at.tzinfo is None:
             raise ValueError("occurred_at must be timezone-aware (UTC)")
         for key, value in self.fields.items():
-            if key.lower() in _REDACTED_KEYS and value != "***REDACTED***":
+            if _is_sensitive(str(key)) and value != "***REDACTED***":
                 raise ValueError(f"fields must not contain secret key: {key}")
 
     def to_dict(self) -> dict[str, Any]:
@@ -271,12 +274,9 @@ class OperationalEvent:
             broker_order_id=data.get("broker_order_id"),
             incident_id=data.get("incident_id"),
             correlation_id=data.get("correlation_id"),
-            fields=dict(data.get("fields") or {}),
+            fields=_redact_fields(dict(data.get("fields") or {})),
         )
 
-    def with_fields(self, **extra: object) -> OperationalEvent:
-        merged = {**dict(self.fields), **extra}
-        return replace(self, fields=_redact_fields(merged))
 
 
 def create_event(
@@ -341,7 +341,6 @@ def create_event(
 
 __all__ = [
     "LIFECYCLE_KINDS",
-    "OPERATIONAL_KINDS",
     "OPERATIONAL_KINDS_ORDERED",
     "OperationalEvent",
     "Severity",

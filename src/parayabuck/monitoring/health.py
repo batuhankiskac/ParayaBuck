@@ -356,9 +356,13 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
             observed=latch,
             action="risk latch blocks new entries; check drawdown/daily loss",
         )
+    # One ledger read feeds both persisted checks; the snapshot carries both keys
+    try:
+        snapshot: dict[str, Any] = metrics.runtime_metrics(database_path=db_path)
+    except Exception:
+        snapshot = {}
     # Check persisted incidents
     try:
-        snapshot = metrics.runtime_metrics(database_path=db_path)
         incidents = snapshot.get("incidents") or {}
         active = incidents.get("active") if isinstance(incidents, dict) else None
         if isinstance(active, list) and active:
@@ -374,7 +378,6 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
         pass
     # Check drawdown halt via metrics entry_block
     try:
-        snapshot = metrics.runtime_metrics(database_path=db_path)
         duration = snapshot.get("entry_block_duration_seconds")
         if isinstance(duration, (int, float)) and duration is not None:
             return HealthCheck(
@@ -390,41 +393,12 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
 
 def _check_execution(db_path: str | Path | None) -> HealthCheck:
     try:
-        # Use portfolio repository to find orders
-        from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
-
         if db_path is None or not Path(str(db_path)).exists():
             return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="no decision DB")
-        repo = PortfolioStateRepository(str(db_path))
-        ambiguous: list[Any] = []
-        stuck: list[Any] = []
-        try:
-            # ambiguous: orders with status ambiguous? Check open orders
-            for account in repo.list_accounts():  # type: ignore[attr-defined]
-                orders = repo.open_orders(account, None)
-                for o in orders:
-                    status = getattr(o, "status", "")
-                    if status == "ambiguous" or status == "manual_intervention_required":
-                        ambiguous.append(o)
-                    if status == "submitting":
-                        # check age
-                        created = getattr(o, "created_at", None)
-                        if created:
-                            try:
-                                dt = datetime.fromisoformat(str(created))
-                                if dt.tzinfo is None:
-                                    dt = dt.replace(tzinfo=UTC)
-                                if (datetime.now(UTC) - dt).total_seconds() > 600:
-                                    stuck.append(o)
-                            except Exception:
-                                stuck.append(o)
-        except Exception:
-            pass
-        finally:
-            try:
-                repo.store.release()
-            except Exception:
-                pass
+        from parayabuck.monitoring import forensics
+
+        # ambiguous: orders the ledger could not resolve — operator action required
+        ambiguous = forensics.ambiguous_orders(db_path)
         if ambiguous:
             return HealthCheck(
                 code="execution",
@@ -433,6 +407,16 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
                 observed=len(ambiguous),
                 action="resolve ambiguous orders before trading resumes",
             )
+        # submitting: an order that never got an ack and is older than 10 minutes
+        now = datetime.now(UTC)
+        stuck: list[Any] = []
+        for order in forensics.submitting_orders(db_path):
+            created = str(order.get("created_at") or "")
+            if not created:
+                continue
+            age = _age_seconds(created, now)
+            if age is None or age > 600:
+                stuck.append(order)
         if stuck:
             return HealthCheck(
                 code="execution",
@@ -440,10 +424,7 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
                 summary=f"{len(stuck)} stuck submitting orders >10m",
                 observed=len(stuck),
             )
-        # check rebalance stuck via forensics helper
-        from parayabuck.monitoring.forensics import find_stuck_rebalances
-
-        stuck_rb = find_stuck_rebalances(db_path, threshold_seconds=3600)
+        stuck_rb = forensics.find_stuck_rebalances(db_path, threshold_seconds=3600)
         if stuck_rb:
             return HealthCheck(
                 code="execution",
@@ -461,8 +442,7 @@ def _check_alerts() -> HealthCheck:
         stats = alerts.alert_stats()
         failed = int(stats.get("webhook_failed", 0) or 0)  # type: ignore[call-overload]
         attempted = int(stats.get("webhook_attempted", 0) or 0)  # type: ignore[call-overload]
-        dropped = int(stats.get("dropped_alert_delivery", 0) or stats.get("suppressed", 0) or 0)  # type: ignore[call-overload]
-        # also journal stats for delivery queue
+        dropped = int(stats.get("webhook_dropped", 0) or 0)  # type: ignore[call-overload]
         jstats = journal_stats()
         j_dropped = int(jstats.get("event_journal_dropped", 0) or 0)  # type: ignore[call-overload]
         total_dropped = dropped + j_dropped
@@ -530,9 +510,7 @@ def evaluate_health(
         try:
             config = load_config()
         except Exception:
-            from parayabuck.config import Config as _Config
-
-            config = _Config()
+            config = Config()
 
     health_snapshot: dict[str, Any] | None = None
     if snapshot_path.exists():

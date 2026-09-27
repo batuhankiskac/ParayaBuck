@@ -90,12 +90,6 @@ def record_paper_cycle(summary: dict[str, Any]) -> None:
         log.warning("record_paper_cycle failed", exc_info=True)
 
 
-def paper_cycles() -> list[dict[str, Any]]:
-    """Snapshot of PAPER cycle reconstructable summaries (newest last, bounded)."""
-    with _paper_cycle_lock:
-        return [dict(entry) for entry in _paper_cycles]
-
-
 def _paper_cycle_metrics() -> dict[str, Any]:
     with _paper_cycle_lock:
         cycles = [dict(entry) for entry in _paper_cycles]
@@ -207,9 +201,19 @@ def _sessions_metrics(connection: sqlite3.Connection) -> dict[str, object]:
         "total": total,
         "completed": total - unended,
         "unended": unended,
-        "restart_count": max(0, total - 1),
+        "restart_count": _restart_count(total),
         "latest_started_at": latest,
     }
+
+
+def _restart_count(total_starts: int) -> int:
+    """Each runtime_sessions row is one engine start; the first is not a restart.
+
+    Crashed sessions never get an end marker and are still counted as starts, so
+    a crash-and-restart cycle increments the count correctly. Single source of
+    truth for both the aggregate metrics and the public restart-count reader.
+    """
+    return max(0, total_starts - 1)
 
 
 def runtime_session_restart_count(connection: sqlite3.Connection) -> int:
@@ -225,7 +229,7 @@ def runtime_session_restart_count(connection: sqlite3.Connection) -> int:
         return 0
     rows = _query_rows(connection, "SELECT COUNT(*) FROM runtime_sessions")
     total = int(rows[0][0]) if rows else 0
-    return max(0, total - 1)
+    return _restart_count(total)
 
 
 def _incidents_metrics(connection: sqlite3.Connection, account_id: str | None) -> dict[str, object]:
@@ -377,7 +381,6 @@ __all__ = [
     "RUNTIME_COUNTER_KEYS",
     "record_event",
     "record_paper_cycle",
-    "paper_cycles",
     "reset_for_tests",
     "runtime_counters",
     "runtime_metrics",

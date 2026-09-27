@@ -160,3 +160,34 @@ def test_incident_download_paginates_relevant_cash_activities(monkeypatch) -> No
     assert calls[0]["activity_types"] == "CSD,CSW,ACATC,JNLC"
     assert calls[0]["after"] == "2026-01-01T00:00:00Z"
     assert "page_token" in calls[1]
+
+
+def test_reconcile_reports_broker_order_with_empty_client_id(tmp_path) -> None:
+    database = tmp_path / "ledger.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE orders (
+                client_order_id TEXT, broker_order_id TEXT, entry_price REAL
+            );
+            CREATE TABLE managed_positions (
+                canonical_symbol TEXT, status TEXT, realized_pnl REAL,
+                entry_fees REAL, exit_fees REAL
+            );
+            INSERT INTO orders VALUES (NULL, 'broker-local', 10);
+            INSERT INTO orders VALUES ('c9', 'broker-9', 20);
+            """
+        )
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    snapshot = PaperIncidentSnapshot(
+        orders=(BrokerOrderRecord("broker-sell", "", "AAPL", "sell", 1, 1, "filled", now),),
+        fills=(),
+        positions=(BrokerPositionRecord("AAPL", 0.0, 0.0, 0.0),),
+    )
+
+    report = PaperIncidentReconciler().reconcile(snapshot, database)
+
+    # An empty client_order_id must not match the local row that has no id
+    assert report.broker_orders_missing_locally == ("broker-sell",)
+    assert report.manual_exit_order_ids == ("broker-sell",)
+    assert report.duplicate_client_order_ids == ()

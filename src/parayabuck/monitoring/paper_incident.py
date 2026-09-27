@@ -14,6 +14,7 @@ import json
 import logging
 import sqlite3
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -113,14 +114,16 @@ class PaperIncidentReconciler:
         by_broker_id = {
             str(item.get("broker_order_id") or ""): item for item in local_orders if item.get("broker_order_id")
         }
-        by_client_id = {str(item.get("client_order_id") or ""): item for item in local_orders}
+        by_client_id = {str(item["client_order_id"]): item for item in local_orders if item.get("client_order_id")}
         broker_order_ids = {order.order_id for order in snapshot.orders}
         broker_client_ids = [order.client_order_id for order in snapshot.orders]
+        broker_client_id_set = frozenset(broker_client_ids)
         missing_local = tuple(
             sorted(
                 order.order_id
                 for order in snapshot.orders
-                if order.order_id not in by_broker_id and order.client_order_id not in by_client_id
+                if order.order_id not in by_broker_id
+                and not (order.client_order_id and order.client_order_id in by_client_id)
             )
         )
         missing_broker = tuple(
@@ -128,11 +131,11 @@ class PaperIncidentReconciler:
                 str(order.get("broker_order_id") or order.get("client_order_id") or "")
                 for order in local_orders
                 if order.get("broker_order_id") not in broker_order_ids
-                and order.get("client_order_id") not in broker_client_ids
+                and order.get("client_order_id") not in broker_client_id_set
             )
         )
         duplicates = tuple(
-            sorted(value for value in set(broker_client_ids) if value and broker_client_ids.count(value) > 1)
+            sorted(value for value, count in Counter(broker_client_ids).items() if value and count > 1)
         )
         realized, slippage = _fill_accounting(snapshot.fills, by_broker_id, by_client_id, snapshot.orders)
         unrealized = sum(
@@ -150,7 +153,7 @@ class PaperIncidentReconciler:
                 for order in snapshot.orders
                 if order.side.lower() == "sell"
                 and order.order_id not in by_broker_id
-                and order.client_order_id not in by_client_id
+                and not (order.client_order_id and order.client_order_id in by_client_id)
             )
         )
         closed = [position for position in local_positions if str(position.get("status") or "") == "closed"]
@@ -661,7 +664,7 @@ def automate_incident_recovery(
     except Exception as exc:
         # Ultimate fail-closed: never raise from automation
         log.warning("automate_incident_recovery failed for %s: %s", category, exc, exc_info=True)
-        return create_incident(
+        record = create_incident(
             category,
             account_id=account_id,
             strategy=strategy,
@@ -670,3 +673,5 @@ def automate_incident_recovery(
             attempted_recovery="automation_error_fail_closed",
             recovery_result="halted",
         )
+        emit_incident_record(record)
+        return record

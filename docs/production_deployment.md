@@ -578,7 +578,9 @@ parayabuck ops bundle [--output PATH]
   `runtime_metrics.json`, `active_incidents.json`, `unresolved_orders.json`,
   `stuck_rebalance.json`, `sessions.json`, `database_checks.json`,
   `environment.json`, `sanitized_config.json`, `universe_status.json`,
-  `alert_stats.json`, `journal_stats.json`. Each JSON truncated 500KB, zip
+  `alert_stats.json`, `journal_stats.json`. Every section stays valid JSON:
+  list rows are capped at 2000 and a section that still exceeds 500KB is
+  written as `{"truncated": true, "size_chars": …, "preview": …}`. Zip
   <5MB, secrets redacted (`api_key`, `api_secret`, `webhook_url`,
   `approval_key`, `password` → `***REDACTED***`).
 

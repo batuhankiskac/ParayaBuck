@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -343,6 +344,20 @@ def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCh
     return HealthCheck(code="signal_adjustment", status=HealthStatus.OK, summary="verified")
 
 
+def _ledger_readable(db_path: str | Path) -> bool:
+    """True when the ledger opens read-only and its schema can be read."""
+    try:
+        conn = sqlite3.connect(f"file:{Path(str(db_path)).resolve()}?mode=ro", uri=True, timeout=2.0)
+        try:
+            conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchall()
+        finally:
+            conn.close()
+        return True
+    except sqlite3.Error:
+        log.warning("decision DB unreadable at %s", db_path, exc_info=True)
+        return False
+
+
 def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | None) -> HealthCheck:
     # Check entry latch and active incidents
     latch = {}
@@ -356,11 +371,19 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
             observed=latch,
             action="risk latch blocks new entries; check drawdown/daily loss",
         )
+    # Fail closed: with no explicitly configured, readable ledger the persisted
+    # incidents are unknown — never "no risk block". runtime_metrics(None) would
+    # otherwise fall back to a cwd-relative ledger, and it answers an unreadable
+    # one with the empty shape.
+    if db_path is None or not Path(str(db_path)).exists():
+        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="no decision DB")
+    if not _ledger_readable(db_path):
+        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="decision DB unreadable")
     # One ledger read feeds both persisted checks; the snapshot carries both keys
     try:
         snapshot: dict[str, Any] = metrics.runtime_metrics(database_path=db_path)
-    except Exception:
-        snapshot = {}
+    except Exception as exc:
+        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary=f"risk check failed: {exc}")
     # Check persisted incidents
     try:
         incidents = snapshot.get("incidents") or {}
@@ -397,8 +420,10 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
             return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="no decision DB")
         from parayabuck.monitoring import forensics
 
+        # strict reads: an unreadable ledger must surface as UNKNOWN below, not as
+        # an empty result that reads as "no stuck/ambiguous orders"
         # ambiguous: orders the ledger could not resolve — operator action required
-        ambiguous = forensics.ambiguous_orders(db_path)
+        ambiguous = forensics.ambiguous_orders(db_path, strict=True)
         if ambiguous:
             return HealthCheck(
                 code="execution",
@@ -410,7 +435,7 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
         # submitting: an order that never got an ack and is older than 10 minutes
         now = datetime.now(UTC)
         stuck: list[Any] = []
-        for order in forensics.submitting_orders(db_path):
+        for order in forensics.submitting_orders(db_path, strict=True):
             created = str(order.get("created_at") or "")
             if not created:
                 continue
@@ -424,7 +449,7 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
                 summary=f"{len(stuck)} stuck submitting orders >10m",
                 observed=len(stuck),
             )
-        stuck_rb = forensics.find_stuck_rebalances(db_path, threshold_seconds=3600)
+        stuck_rb = forensics.find_stuck_rebalances(db_path, threshold_seconds=3600, strict=True)
         if stuck_rb:
             return HealthCheck(
                 code="execution",

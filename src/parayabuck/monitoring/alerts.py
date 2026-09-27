@@ -31,11 +31,13 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import requests
 
 from parayabuck.monitoring.events import ALERT_KINDS
 from parayabuck.monitoring.events import WARNING_KINDS as _WARNING_KINDS
+from parayabuck.monitoring.operational_event import redact_fields
 
 log = logging.getLogger("parayabuck.monitoring.alerts")
 
@@ -44,6 +46,7 @@ _WEBHOOK_TIMEOUT = (3.0, 8.0)  # (connect, read) — never block the caller
 _WEBHOOK_QUEUE_SIZE = 256
 _WEBHOOK_MAX_RETRIES = 3
 _WEBHOOK_RETRY_BACKOFF = (0.5, 1.0, 2.0)
+_THROTTLE_KEYS_MAX = 4096
 
 _lock = threading.Lock()
 _settings: dict[str, object] = {
@@ -182,6 +185,20 @@ def _severity_str(kind: str) -> str:
     return "warning" if kind in _WARNING_KINDS else "info"
 
 
+def _scrub_webhook_url(text: str, url: str) -> str:
+    """Remove the webhook URL (and its secret-bearing path) from an error text.
+
+    ``requests`` puts the URL into its exception messages — the full URL for
+    HTTP errors, the path alone for connection errors — and a chat webhook's
+    path *is* its credential, so it must never reach the log.
+    """
+    path = urlsplit(url).path
+    scrubbed = text.replace(url, "<webhook>") if url else text
+    if path and path != "/":
+        scrubbed = scrubbed.replace(path, "<webhook-path>")
+    return scrubbed
+
+
 def _ensure_webhook_worker() -> None:
     global _webhook_worker, _webhook_worker_running
     with _lock:
@@ -225,7 +242,7 @@ def _webhook_worker_loop() -> None:
                         "Alert webhook delivery failed for kind=%s after %d attempts: %s",
                         payload.get("kind"),
                         _WEBHOOK_MAX_RETRIES,
-                        exc,
+                        _scrub_webhook_url(str(exc), url),
                     )
                 else:
                     backoff = _WEBHOOK_RETRY_BACKOFF[min(attempt, len(_WEBHOOK_RETRY_BACKOFF) - 1)]
@@ -252,7 +269,9 @@ def _post_webhook(url: str, payload: dict[str, object]) -> None:
             global _webhook_failed, _webhook_last_failure_at
             _webhook_failed += 1
             _webhook_last_failure_at = datetime.now(UTC).isoformat()
-        log.warning("Alert webhook delivery failed for kind=%s: %s", payload.get("kind"), exc)
+        log.warning(
+            "Alert webhook delivery failed for kind=%s: %s", payload.get("kind"), _scrub_webhook_url(str(exc), url)
+        )
 
 
 def _enqueue_webhook(url: str, payload: dict[str, object]) -> None:
@@ -300,9 +319,17 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
                 log.debug("Alert %s suppressed (throttle window %.0fs)", kind, throttle)
                 return
             _last_emitted_at[throttle_key] = now
+            if len(_last_emitted_at) > _THROTTLE_KEYS_MAX:
+                # Keys carry per-incident/order ids, so the map grows for the life
+                # of the process; an entry past its window can never suppress again
+                for key in [k for k, t in _last_emitted_at.items() if now - t >= throttle]:
+                    del _last_emitted_at[key]
         with _lock:
             _delivered_counts[kind] = _delivered_counts.get(kind, 0) + 1
-        log.log(_severity(kind), "ALERT %s: %s fields=%s", kind, message, dict(fields))
+        # The journal redacts its copy; the log line and the external webhook
+        # must never carry a secret-named field in the clear either
+        safe_fields = redact_fields(fields)
+        log.log(_severity(kind), "ALERT %s: %s fields=%s", kind, message, safe_fields)
         # Reuse event_id if supplied, else generate; include correlation from fields
         eid = str(fields.get("event_id") or "") or None
         # Durable operational journal — best effort, never raises, isolated from trading
@@ -339,7 +366,7 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
             "severity": _severity_str(kind),
             "message": message,
             "occurred_at": _now_iso(),
-            "fields": dict(fields),
+            "fields": safe_fields,
         }
         # Promote correlation fields to top-level for operator convenience
         for corr_key in (

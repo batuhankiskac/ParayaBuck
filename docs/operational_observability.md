@@ -70,7 +70,7 @@ class OperationalEvent:
 - **Severity**: `DEBUG/INFO/WARNING/CRITICAL`, centralized `severity_for_kind` (maps `WARNING_KINDS` + lifecycle).
 - **Vocabulary**: `monitoring/events.py` is authoritative for alert kinds (16 kinds). Lifecycle extensions (`LIFECYCLE_KINDS`) add `reconciliation_started/succeeded`, `account_became_stale/recovered`, `universe_became_stale/recovered`, `runtime_health_degraded/recovered`, `rebalance_phase_changed`, `decision_summary`, `observability_degraded/recovered`. Each answers an operator question (e.g. “when did account become stale?”).
 - **Correlation**: reuse domain IDs (`session_id`→`decision_id`→`client_order_id`→`incident_id`). No fake IDs.
-- **Secrets**: `_REDACTED_KEYS` — `api_key`, `webhook_url`, `approval_key` etc. — redacted to `***REDACTED***` at `create_event` time; `OperationalEvent.__post_init__` rejects plain secrets.
+- **Secrets**: `_REDACTED_KEYS` — `api_key`, `webhook_url`, `approval_key` etc. — redacted to `***REDACTED***` at `create_event` time; `OperationalEvent.__post_init__` rejects plain secrets. `alerts.emit` applies the same redaction to its log line and webhook payload, and webhook delivery failures are logged with the webhook URL/path scrubbed.
 
 ## Retention
 
@@ -88,7 +88,7 @@ Schema version 1, idempotent migration, WAL.
 
 - `HealthStatus`: `OK / DEGRADED / BLOCKED / CRITICAL / UNKNOWN`
 - `HealthCheck(code, status, summary, observed, threshold, since, action)`
-- `UNKNOWN` means “no evidence” — not `OK`.
+- `UNKNOWN` means “no evidence” — not `OK`. `risk` and `execution` read only the explicitly supplied ledger; an absent, unreadable or failing ledger read is `UNKNOWN`, never “no risk block” / “no stuck orders”.
 - **Areas** (11 checks): `runtime_heartbeat`, `workers`, `queue`, `account`, `reconciliation`, `universe`, `signal_adjustment`, `risk`, `execution`, `alerts`, `observability`.
 - **Thresholds** derived from config/runtime cadence:
   - heartbeat: 90s (snapshot interval 30s × 3)

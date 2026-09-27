@@ -31,6 +31,7 @@ import logging
 import queue
 import sqlite3
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -77,6 +78,15 @@ CREATE INDEX IF NOT EXISTS idx_op_events_decision ON operational_events(decision
 CREATE INDEX IF NOT EXISTS idx_op_events_order ON operational_events(client_order_id);
 CREATE INDEX IF NOT EXISTS idx_op_events_incident ON operational_events(incident_id);
 """
+
+
+def _fields_json(fields: Mapping[str, object]) -> str:
+    """Serialise event fields; a non-JSON value (datetime, Decimal) is stringified.
+
+    ``default=str`` keeps one odd field from failing the whole batch insert and
+    losing every other event flushed alongside it.
+    """
+    return json.dumps(dict(fields), separators=(",", ":"), ensure_ascii=False, default=str)
 
 
 @dataclass
@@ -245,7 +255,7 @@ class EventJournal:
                         e.broker_order_id,
                         e.incident_id,
                         e.correlation_id,
-                        json.dumps(dict(e.fields), separators=(",", ":"), ensure_ascii=False),
+                        _fields_json(e.fields),
                         now_iso,
                     )
                     for e in batch
@@ -344,7 +354,7 @@ class EventJournal:
                         event.broker_order_id,
                         event.incident_id,
                         event.correlation_id,
-                        json.dumps(dict(event.fields), separators=(",", ":"), ensure_ascii=False),
+                        _fields_json(event.fields),
                         datetime.now(UTC).isoformat(),
                     ),
                 )

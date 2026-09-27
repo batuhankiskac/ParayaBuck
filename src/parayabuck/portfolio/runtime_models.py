@@ -76,6 +76,10 @@ class OpenPortfolioOrder:
     cumulative_filled_quantity: float
     broker_order_id: str = ""
     reference_price: float = 0.0
+    # Row status and its latest write time (creation or broker-call start or
+    # return); reconciliation uses them to close a never-accepted order.
+    status: str = ""
+    last_updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)

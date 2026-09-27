@@ -41,7 +41,7 @@ Derived from `ledger + portfolio` vs `broker` quantities with tolerance `max(1e-
 |`BROKER_STALE`|Local 0, broker >0|Append to `MISSING_LOCAL_ORDER`; warn; protect if `manage_external` or crypto portfolio-owned|Auto-adopt as managed|
 |`QUANTITY_MISMATCH`|Both >0 but `abs(local-broker)>tol`|Append `QUANTITY_MISMATCH`|Overwrite local with broker|
 |`UNKNOWN_ORDER`|`broker_open_ids - local_open_ids` (broker has order local doesn't)|Append `UNKNOWN_ORDER` per client_order_id|Assume it's managed|
-|`MISSING_BROKER_ORDER`|`local_open_ids - broker_open_ids` (local expects order missing at broker)|Append `MISSING_BROKER_ORDER` + `MISSING_LOCAL_ORDER` (alias for stale)|Ignore|
+|`MISSING_BROKER_ORDER`|`local_open_ids - broker_open_ids` (local expects order missing at broker)|Append `MISSING_BROKER_ORDER` + `MISSING_LOCAL_ORDER` (alias for stale); a `submitting`/`reconciliation_required` row whose client-id lookup is a 404 and whose last write is ≥ `UNKNOWN_ORDER_CANCEL_AGE_SECONDS` (600 s) old is first booked `canceled` with zero fill (warning + one `paper_incident` `unknown_order_canceled`)|Ignore; cancel a younger row or one whose lookup failed|
 |`MISSING_LOCAL_ORDER`|Broker has open order not in local (same as UNKNOWN but per-symbol bucket)|Listed above|—|
 
 Empty mismatch buckets (`QUANTITY_MISMATCH`, `LOCAL_STALE`, `BROKER_STALE`, `UNKNOWN_ORDER` non-empty) must be treated fail-closed by caller (`runtime.py` halts).

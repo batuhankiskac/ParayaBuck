@@ -245,8 +245,12 @@ def decision_reconstruction(
         result["error"] = str(exc)
 
     # Try to find paper receipt — match the identity fields, never the blob text
+    # The runtime writes receipts via receipt.default_receipt_dir(); read that
+    # same directory instead of a cwd-relative guess.
+    from parayabuck.monitoring import receipt as receipt_module
+
     try:
-        receipt_dir = Path("data/runtime/paper_receipts")
+        receipt_dir = receipt_module.default_receipt_dir()
         if receipt_dir.exists():
             for p in receipt_dir.glob("*.json"):
                 try:

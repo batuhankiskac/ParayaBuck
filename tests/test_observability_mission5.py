@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sqlite3
 import time
@@ -914,3 +915,41 @@ def test_missing_db_produces_unknown(tmp_path: Path) -> None:
     data = json.loads(out)
     assert data["overall_health"] == "UNKNOWN"
     assert data["trading_state"] == "UNKNOWN"
+
+
+def test_ops_status_ignores_relative_defaults_when_paths_are_given(tmp_path: Path) -> None:
+    """`--snapshot`/`--db` must win: a repo-shaped decoy under the cwd never answers."""
+
+    decoy_root = tmp_path / "decoy_repo"
+    runtime = decoy_root / "data" / "runtime"
+    runtime.mkdir(parents=True)
+    decoy_db = runtime / "parayabuck.sqlite3"
+    conn = sqlite3.connect(str(decoy_db))
+    try:
+        conn.execute("CREATE TABLE portfolio_orders (client_order_id TEXT PRIMARY KEY, status TEXT NOT NULL)")
+        conn.execute("INSERT INTO portfolio_orders VALUES ('decoy-1', 'ambiguous')")
+        conn.commit()
+    finally:
+        conn.close()
+    # A stale snapshot at the relative default would read CRITICAL if it were used.
+    (runtime / "health_snapshot.json").write_text(
+        json.dumps({"written_at": (datetime.now(UTC) - timedelta(hours=1)).isoformat()}), encoding="utf-8"
+    )
+
+    with contextlib.chdir(decoy_root):
+        code, out, _ = _run_cli(
+            "ops",
+            "status",
+            "--snapshot",
+            str(tmp_path / "absent.json"),
+            "--db",
+            str(tmp_path / "absent.sqlite3"),
+            "--json",
+        )
+
+    assert code == 0
+    data = json.loads(out)
+    assert data["overall_health"] == "UNKNOWN"
+    assert data["trading_state"] == "UNKNOWN"
+    execution = next(c for c in data["checks"] if c["code"] == "execution")
+    assert execution["status"] == "UNKNOWN"

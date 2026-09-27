@@ -644,14 +644,11 @@ def _ops_status(args: argparse.Namespace) -> int:
         from parayabuck.config import Config as _Cfg
 
         config = _Cfg()
-    snapshot_path = "data/runtime/health_snapshot.json"
-    db_path = "data/runtime/parayabuck.sqlite3"
-    # allow explicit snapshot path via config.observability
-    if config is not None and hasattr(config, "observability"):
-        if not getattr(args, "snapshot", None):
-            snapshot_path = config.observability.snapshot_path
-        if not getattr(args, "db", None):
-            db_path = config.runtime.decision_db_path
+    # Explicit flags win; only an absent flag falls back to the configured paths.
+    # Dropping them here made the relative data/runtime defaults answer for a
+    # database and snapshot the operator never asked about.
+    snapshot_path = getattr(args, "snapshot", None) or config.observability.snapshot_path
+    db_path = getattr(args, "db", None) or config.runtime.decision_db_path
     from parayabuck.monitoring.health import evaluate_health
 
     health = evaluate_health(snapshot_path=snapshot_path, database_path=db_path, config=config)

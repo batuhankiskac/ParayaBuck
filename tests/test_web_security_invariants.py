@@ -8,6 +8,7 @@ against the factory app, not per-router.
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import time
 from pathlib import Path
@@ -88,18 +89,19 @@ def test_engine_start_rescans_tracked_secrets(tmp_path: Path, monkeypatch: pytes
     _git(repo, "init", "-q")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "clean")
-    monkeypatch.chdir(repo)
+    # EngineManager scans Path.cwd(); the context manager restores the cwd before
+    # the conftest production-path guard stats its relative paths.
+    with contextlib.chdir(repo):
+        manager = EngineManager()
+        assert manager.security_warning is None
 
-    manager = EngineManager()
-    assert manager.security_warning is None
+        tracked.write_text("ALPACA_SECRET_KEY=realsecret123\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "leaked")
+        monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
 
-    tracked.write_text("ALPACA_SECRET_KEY=realsecret123\n", encoding="utf-8")
-    _git(repo, "add", "-A")
-    _git(repo, "commit", "-qm", "leaked")
-    monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
-
-    with pytest.raises(ValueError, match="SECURITY BLOCK"):
-        manager.start_engine()
+        with pytest.raises(ValueError, match="SECURITY BLOCK"):
+            manager.start_engine()
 
 
 def test_trusted_host_allows_loopback_and_testserver():

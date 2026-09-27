@@ -197,20 +197,25 @@ def test_journal_writes_again_after_stop(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _write_receipt(root: Path, name: str, payload: dict[str, object]) -> None:
-    directory = root / "data" / "runtime" / "paper_receipts"
-    directory.mkdir(parents=True)
+def _write_receipt(directory: Path, name: str, payload: dict[str, object]) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
     (directory / name).write_text(json.dumps(payload), encoding="utf-8")
 
 
-def test_decision_reconstruction_ignores_receipt_that_only_mentions_the_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
+def _receipt_dir() -> Path:
+    """The directory the runtime writes receipts to (redirected to tmp by conftest)."""
+    from parayabuck.monitoring import receipt as receipt_module
+
+    directory = receipt_module.default_receipt_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def test_decision_reconstruction_ignores_receipt_that_only_mentions_the_id(tmp_path: Path) -> None:
     db = tmp_path / "empty.sqlite3"
     db.touch()
     _write_receipt(
-        tmp_path,
+        _receipt_dir(),
         "2025-01-03_equity.v2.json",
         {"schema_version": 2, "decision_id": "dec-2", "note": "cross reference dec-1"},
     )
@@ -220,26 +225,20 @@ def test_decision_reconstruction_ignores_receipt_that_only_mentions_the_id(
     assert "receipt_path" not in recon
 
 
-def test_decision_reconstruction_finds_receipt_by_identity_field(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_decision_reconstruction_finds_receipt_by_identity_field(tmp_path: Path) -> None:
     db = tmp_path / "empty.sqlite3"
     db.touch()
-    root = tmp_path / "identity"
-    root.mkdir()
-    monkeypatch.chdir(root)
-    _write_receipt(root, "v2.json", {"schema_version": 2, "decision_id": "dec-1"})
+    _write_receipt(_receipt_dir(), "v2.json", {"schema_version": 2, "decision_id": "dec-1"})
 
     recon = decision_reconstruction(str(db), "dec-1")
 
     assert recon["receipt"]["decision_id"] == "dec-1"
 
 
-def test_decision_reconstruction_falls_back_for_legacy_receipt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_decision_reconstruction_falls_back_for_legacy_receipt(tmp_path: Path) -> None:
     db = tmp_path / "empty.sqlite3"
     db.touch()
-    root = tmp_path / "legacy"
-    root.mkdir()
-    monkeypatch.chdir(root)
-    _write_receipt(root, "v1.json", {"strategy_name": "dec-1 equity"})
+    _write_receipt(_receipt_dir(), "v1.json", {"strategy_name": "dec-1 equity"})
 
     recon = decision_reconstruction(str(db), "dec-1")
 
@@ -387,8 +386,7 @@ def _read_bundle_section(tmp_path: Path, snapshot: dict[str, object], section: s
     return parsed
 
 
-def test_bundle_caps_rows_and_keeps_section_parseable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
+def test_bundle_caps_rows_and_keeps_section_parseable(tmp_path: Path) -> None:
     snapshot = {
         "written_at": datetime.now(UTC).isoformat(),
         "rows": [{"index": index, "pad": "x" * 120} for index in range(5000)],
@@ -399,8 +397,7 @@ def test_bundle_caps_rows_and_keeps_section_parseable(tmp_path: Path, monkeypatc
     assert len(section["rows"]) == 2000
 
 
-def test_bundle_marks_oversized_section_instead_of_corrupting_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
+def test_bundle_marks_oversized_section_instead_of_corrupting_it(tmp_path: Path) -> None:
     snapshot = {"written_at": datetime.now(UTC).isoformat(), "blob": "x" * 1_200_000}
 
     section = _read_bundle_section(tmp_path, snapshot, "runtime_snapshot")
@@ -409,8 +406,7 @@ def test_bundle_marks_oversized_section_instead_of_corrupting_it(tmp_path: Path,
     assert section["size_chars"] > 500_000
 
 
-def test_bundle_bounds_section_measured_after_escaping(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
+def test_bundle_bounds_section_measured_after_escaping(tmp_path: Path) -> None:
     # Quotes and newlines triple in size once the preview is re-escaped by json.dumps.
     snapshot = {"written_at": datetime.now(UTC).isoformat(), "blob": 'a"\n' * 400_000}
 

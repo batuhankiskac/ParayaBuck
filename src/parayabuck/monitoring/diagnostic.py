@@ -438,7 +438,9 @@ def _run_doctor_checks(
 
     # receipt writable
     try:
-        rp = Path("data/runtime/paper_receipts")
+        from parayabuck.monitoring import receipt as receipt_module
+
+        rp = receipt_module.default_receipt_dir()
         rp.mkdir(parents=True, exist_ok=True)
         test = rp / ".write_test"
         test.write_text("ok", encoding="utf-8")

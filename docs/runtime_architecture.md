@@ -6,9 +6,8 @@
 EngineRuntime
   ├─ event / stream layer          runtime_events.py      (RuntimeEvent, EventQueue)
   ├─ health / snapshot assembly    runtime_health.py      (WorkerHealth, RuntimeHealth, _portfolio_catch_up_health)
-  ├─ universe lifecycle            runtime_universe.py    (RuntimeUniverseManager, UniverseRefreshState)
+  ├─ product universe              runtime_universe.py    (ActiveProductUniverse, load_active_product_universe)
   │     ├─ active symbol sets (static equity config / crypto observation set)
-  │     ├─ crypto scanner refresh scheduling + backoff (300/900/1800/3600s)
   │     └─ validation (ensure_active_universes, validate_active_crypto_universe)
   ├─ portfolio runtimes (per-market)
   │     ├─ decision                portfolio/runtime_models.py       (PortfolioDecisionService, PortfolioContext)
@@ -16,7 +15,6 @@ EngineRuntime
   │     ├─ rebalance execution     portfolio/runtime_rebalance.py    (sell_pending → buy_ready → buy_pending → complete/blocked)
   │     ├─ ownership               portfolio/runtime_ownership.py    (net_owned_quantities pure helper)
   │     └─ repository              portfolio/runtime_repository.py   (PortfolioStateRepository, SQLite, WAL)
-  ├─ reconciliation & recovery     portfolio/runtime_recovery.py     (restart helpers, stuck-submission resolution)
   ├─ warmup / cache                data/cache.py                     (WarmupCache, crash-safe migration)
   └─ health + dashboard            web/server.py reads RuntimeHealth snapshots
 ```
@@ -27,13 +25,12 @@ EngineRuntime
 |--------|------|--------------|
 | `portfolio/runtime_models.py` | Immutable models, terminal order vocabulary (`_TERMINAL_ORDER_STATUSES`, `TERMINAL_ORDER_STATUSES_SQL`), rebalance phases, `PortfolioDecisionService`, `configuration_digest`, `_decision_id` | DB, broker, risk |
 | `portfolio/runtime_repository.py` | Persistence: migrations, sessions, decisions, orders, fills, ownership adjustments, rebalance execution, high-water, query helpers | Strategy, risk, broker |
-| `portfolio/runtime_rebalance.py` | Two-phase state machine: allowed transitions, `is_sell_phase_complete`, `requires_ambiguous_block` | DB SQL, broker |
+| `portfolio/runtime_rebalance.py` | Two-phase phase constants and predicates: `is_sell_phase_complete`, `requires_ambiguous_block` | DB SQL, broker |
 | `portfolio/runtime_ownership.py` | Pure net-ownership math (`net_owned_quantities`) | DB |
-| `portfolio/runtime_recovery.py` | Restart idempotency helpers | Strategy |
 | `portfolio/runtime_service.py` | Orchestration facade: `PortfolioRuntime` — builds context, applies risk, plans orders, drives two-phase submit, advances rebalance. Thin, delegates to models/repository/rebalance/ownership | Direct SQL, migration SQL |
 | `runtime_events.py` | `RuntimeEvent` / `EventQueue` with coalescing, replacement, overflow, ordering, thread Condition | Business logic |
 | `runtime_health.py` | `WorkerHealth`, `RuntimeHealth`, `_portfolio_catch_up_health` assembly | Threading, queue mechanics |
-| `runtime_universe.py` | `RuntimeUniverseManager`, `UniverseRefreshState`, backoff constants | Strategy, broker |
+| `runtime_universe.py` | Immutable `ActiveProductUniverse` membership snapshot and its fail-closed loader | Strategy, broker, refresh scheduling |
 | `runtime.py` | `EngineRuntime` facade: startup, strategy init, worker lifecycle, account polling, reconciliation scheduling, warmup retry, universe refresh scheduling, signal-adjustment verification, entry-risk latch, circuit breaking, shutdown | Direct queue/health/universe internals (delegates) |
 
 ## Dependency Direction

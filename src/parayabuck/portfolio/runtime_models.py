@@ -71,22 +71,6 @@ def is_terminal_order_status(status: str) -> bool:
 TERMINAL_ORDER_STATUSES_SQL = ", ".join(f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES))
 
 
-# Allowed rebalance transitions (fail-closed state machine).
-# Documented for review; enforcement is via repository + runtime.
-REBALANCE_TRANSITIONS: dict[str, frozenset[str]] = {
-    REBALANCE_PHASE_SELL_PENDING: frozenset({REBALANCE_PHASE_BUY_READY, REBALANCE_PHASE_BLOCKED}),
-    REBALANCE_PHASE_BUY_READY: frozenset({REBALANCE_PHASE_BUY_PENDING, REBALANCE_PHASE_BLOCKED}),
-    REBALANCE_PHASE_BUY_PENDING: frozenset({REBALANCE_PHASE_COMPLETE, REBALANCE_PHASE_BLOCKED}),
-    REBALANCE_PHASE_BLOCKED: frozenset({REBALANCE_PHASE_SELL_PENDING}),  # new rebalance after block
-    REBALANCE_PHASE_COMPLETE: frozenset({REBALANCE_PHASE_SELL_PENDING}),  # next decision starts new cycle
-}
-
-
-def is_allowed_rebalance_transition(frm: str, to: str) -> bool:
-    """Whether a persisted rebalance phase transition is allowed."""
-    return to in REBALANCE_TRANSITIONS.get(frm, frozenset())
-
-
 @dataclass(frozen=True)
 class OpenPortfolioOrder:
     """One non-terminal portfolio order attributed to an account."""
@@ -225,7 +209,6 @@ __all__ = [
     "REBALANCE_PHASE_BUY_READY",
     "REBALANCE_PHASE_COMPLETE",
     "REBALANCE_PHASE_SELL_PENDING",
-    "REBALANCE_TRANSITIONS",
     "TERMINAL_ORDER_STATUSES_SQL",
     "OpenPortfolioOrder",
     "PortfolioDecisionService",
@@ -236,6 +219,5 @@ __all__ = [
     "_NON_TERMINAL_REBALANCE_PHASES",
     "_TERMINAL_ORDER_STATUSES",
     "configuration_digest",
-    "is_allowed_rebalance_transition",
     "is_terminal_order_status",
 ]

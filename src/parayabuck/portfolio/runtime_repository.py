@@ -26,6 +26,7 @@ from parayabuck.portfolio.runtime_models import (
     RebalanceExecutionState,
     _decision_id,
 )
+from parayabuck.portfolio.runtime_ownership import net_owned_quantities
 from parayabuck.storage import SQLiteStore
 
 log = get_logger("parayabuck.portfolio.runtime_repository")
@@ -1116,22 +1117,16 @@ class PortfolioStateRepository:
                 existing_equity = float(row[0])
                 existing_epoch = int(row[1] or 0)
                 high_water = max(existing_equity, equity)
-                self.store.connection.execute(
-                    """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
-                   VALUES (?, ?, ?, ?)
-                   ON CONFLICT(account_id) DO UPDATE SET
-                     equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
-                    (account_id, high_water, datetime.now(UTC).isoformat(), existing_epoch),
-                )
             else:
+                existing_epoch = 0
                 high_water = equity
-                self.store.connection.execute(
-                    """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
+            self.store.connection.execute(
+                """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
                    VALUES (?, ?, ?, ?)
                    ON CONFLICT(account_id) DO UPDATE SET
                      equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
-                    (account_id, high_water, datetime.now(UTC).isoformat(), 0),
-                )
+                (account_id, high_water, datetime.now(UTC).isoformat(), existing_epoch),
+            )
         return high_water
 
     def high_water(self, account_id: str) -> float:
@@ -1141,25 +1136,6 @@ class PortfolioStateRepository:
                 (account_id,),
             ).fetchone()
         return float(row[0]) if row is not None else 0.0
-
-    def high_water_with_epoch(self, account_id: str) -> tuple[float, int]:
-        """Return (equity, epoch) for ``account_id``; epoch defaults to 0."""
-        with self.store.lock:
-            row = self.store.connection.execute(
-                "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
-                (account_id,),
-            ).fetchone()
-        if row is None:
-            return 0.0, 0
-        return float(row[0]), int(row[1] or 0)
-
-    def high_water_epoch(self, account_id: str) -> int:
-        with self.store.lock:
-            row = self.store.connection.execute(
-                "SELECT epoch FROM portfolio_high_water WHERE account_id = ?",
-                (account_id,),
-            ).fetchone()
-        return int(row[0] or 0) if row is not None else 0
 
     def reset_high_water(self, account_id: str, equity: float) -> None:
         """Rebase the persisted portfolio high-water to ``equity`` (a new
@@ -1202,16 +1178,22 @@ class PortfolioStateRepository:
             params = (account_id, market.value)
         with self.store.lock:
             rows = self.store.connection.execute(query, params).fetchall()
-            adjustments = self.store.connection.execute(
-                """SELECT symbol, SUM(quantity - consumed_quantity)
+            # A stale-clear adjustment belongs to the market it was raised
+            # for; without the same market filter it is subtracted from the
+            # other market's net and the ownership invariant trips.
+            adjustments_query = """SELECT symbol, SUM(quantity - consumed_quantity)
                    FROM portfolio_ownership_adjustments
-                   WHERE account_id = ? AND consumed_quantity < quantity
-                   GROUP BY symbol""",
-                (account_id,),
+                   WHERE account_id = ? AND consumed_quantity < quantity"""
+            adjustments_params: tuple[object, ...] = (account_id,)
+            if market is not None:
+                adjustments_query += " AND market = ?"
+                adjustments_params = (account_id, market.value)
+            adjustments_query += " GROUP BY symbol"
+            adjustments = self.store.connection.execute(
+                adjustments_query,
+                adjustments_params,
             ).fetchall()
         # Pure computation delegated
-        from parayabuck.portfolio.runtime_ownership import net_owned_quantities
-
         order_tuples = [(str(r[0]), str(r[2]), float(r[3] or 0.0)) for r in rows]
         adj_tuples = [(str(r[0]), float(r[1] or 0.0)) for r in adjustments]
         return net_owned_quantities(order_tuples, adj_tuples)

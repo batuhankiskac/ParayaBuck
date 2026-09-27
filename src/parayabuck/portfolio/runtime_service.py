@@ -40,6 +40,7 @@ from parayabuck.portfolio.runtime_models import (
     REBALANCE_PHASE_SELL_PENDING,
     TERMINAL_ORDER_STATUSES_SQL,
     BuyAdmission,
+    OpenPortfolioOrder,
     PortfolioDecisionService,
     PortfolioRuntimeBroker,
     PortfolioRuntimeResult,
@@ -171,6 +172,7 @@ def _emit_rebalance_phase_safe(
         pass
 
 
+# market/strategy/reason -> decision day it was last journalled
 _no_trade_last: dict[str, str] = {}
 
 
@@ -197,20 +199,21 @@ def _emit_no_trade_safe(
     Fields cover report's acceptance list: market, strategy, karar/veri zamanı,
     eksik/ısınan semboller, her sembolün son zaman damgası, bir sonraki 96h sınırı,
     hedef ve risk sonrası ağırlık, kapasite, engelleyen latch.
-    Repeated identical reason for same market/strategy is suppressed (dedup).
+    Repeat of the same reason for the same market/strategy is suppressed for
+    that day only; a new day (or a new reason) re-emits.
     """
     try:
         key = f"{market}:{strategy}:{reason}"
-        # Suppress exact duplicate consecutive emits (same market/strategy/reason)
-        if _no_trade_last.get(key) == reason:
-            # Still emit if more than an hour has passed? For now suppress.
+        # The journal id is deterministic per market/strategy/reason/DAY, so
+        # dedup is day-scoped: suppressing forever would leave the dashboard
+        # banner showing the first day's reason indefinitely.
+        day = (decision_timestamp or datetime.now(UTC)).date().isoformat()
+        if _no_trade_last.get(key) == day:
             return
-        _no_trade_last[key] = reason
+        _no_trade_last[key] = day
         from parayabuck.monitoring.journal import emit_journal
         from parayabuck.monitoring.operational_event import create_event
 
-        # Use deterministic id per market/strategy/reason/day so journal dedups
-        day = (decision_timestamp or datetime.now(UTC)).date().isoformat()
         det_extra = f"{market}:{strategy}:{reason}:{day}"
         fields: dict[str, Any] = {
             "reason": reason,
@@ -1008,8 +1011,9 @@ class PortfolioRuntime:
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys)
-        open_order_symbols, open_order_sides = self._effective_open_order_constraints()
+        open_orders = self.repository.open_orders(self.account_id)
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders)
+        open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
         risk = self.risk_overlay.apply(
             raw_target,
             account,
@@ -1399,8 +1403,9 @@ class PortfolioRuntime:
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
-        open_order_symbols, open_order_sides = self._effective_open_order_constraints()
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys)
+        open_orders = self.repository.open_orders(self.account_id)
+        open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders)
         risk = self.risk_overlay.apply(
             adjusted_target,
             account,
@@ -1454,8 +1459,9 @@ class PortfolioRuntime:
         admission = self._size_buys_to_safe_capacity(buy_orders)
         buy_orders = admission.orders
         account = admission.account
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys)
-        open_order_symbols, _open_order_sides = self._effective_open_order_constraints()
+        open_orders = self.repository.open_orders(self.account_id)
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders)
+        open_order_symbols, _open_order_sides = self._effective_open_order_constraints(open_orders)
         buy_orders = reserve_opening_order_slots(
             buy_orders,
             account,
@@ -1507,6 +1513,7 @@ class PortfolioRuntime:
     def _effective_reserved_position_keys(
         self,
         same_cycle_keys: tuple[tuple[Market, str], ...] = (),
+        open_orders: tuple[OpenPortfolioOrder, ...] | None = None,
     ) -> tuple[tuple[Market, str], ...]:
         """Return same-cycle plus persisted working order position slots.
 
@@ -1520,25 +1527,16 @@ class PortfolioRuntime:
         place; this separate set reserves the account-level slot even when the
         next decision selects a different symbol.
         """
+        if open_orders is None:
+            open_orders = self.repository.open_orders(self.account_id)
         slots = {(market, canonical_symbol(symbol, market)) for market, symbol in same_cycle_keys}
-        slots.update(
-            (order.market, canonical_symbol(order.symbol, order.market))
-            for order in self.repository.open_orders(self.account_id)
-        )
+        slots.update((order.market, canonical_symbol(order.symbol, order.market)) for order in open_orders)
         return tuple(sorted(slots, key=lambda item: (item[0].value, item[1])))
 
-    def _effective_open_order_symbols(self) -> set[str]:
-        """Union broker-visible and account-local nonterminal order symbols.
-
-        The broker open-order endpoint may omit a submission during a crash
-        window or transiently lag the local ledger. Local rows are account and
-        market scoped through their persisted session lineage, so they suppress
-        duplicate planner output without importing manual/external orders.
-        """
-        broker_symbols, local_sides = self._effective_open_order_constraints()
-        return broker_symbols | set(local_sides)
-
-    def _effective_open_order_constraints(self) -> tuple[set[str], dict[str, frozenset[str]]]:
+    def _effective_open_order_constraints(
+        self,
+        open_orders: tuple[OpenPortfolioOrder, ...] | None = None,
+    ) -> tuple[set[str], dict[str, frozenset[str]]]:
         """Return broker-wide symbols plus side-aware local ledger rows.
 
         ``all_open_order_symbols`` intentionally remains conservative because
@@ -1549,7 +1547,9 @@ class PortfolioRuntime:
         """
         broker_symbols = set(self.broker.all_open_order_symbols())
         local_sides: dict[str, set[str]] = {}
-        for order in self.repository.open_orders(self.account_id):
+        if open_orders is None:
+            open_orders = self.repository.open_orders(self.account_id)
+        for order in open_orders:
             if order.market != self.market:
                 continue
             symbol = canonical_symbol(order.symbol, order.market)
@@ -1785,13 +1785,19 @@ class PortfolioRuntime:
         requires ``reconcile()`` before retry.
         """
         submitted: list[str] = []
+        # Every order in a batch shares one decision id, so the ledger is read
+        # once. The map is keyed by client order id, which is stable per
+        # decision, so a row recorded in an earlier batch is still found.
+        existing_by_client = {}
+        if orders:
+            rows = self.repository.orders_for_decision(orders[0].decision_id)
+            existing_by_client = {str(row.get("client_order_id")): str(row.get("status", "")) for row in rows}
         for order in orders:
             # Idempotency: if the logical order already exists with a terminal
             # or submitted status, do not submit a duplicate broker order.
-            existing = self.repository.orders_for_decision(order.decision_id)
-            already = next((o for o in existing if str(o.get("client_order_id")) == order.client_order_id), None)
+            already = existing_by_client.get(order.client_order_id)
             if already is not None:
-                status = str(already.get("status", ""))
+                status = already
                 if status in {
                     "submitted",
                     "new",
@@ -1801,10 +1807,6 @@ class PortfolioRuntime:
                     "pending_replace",
                     "accepted_for_bidding",
                     "partial_fill",
-                    "filled",
-                    "canceled",
-                    "rejected",
-                    "expired",
                 }:
                     continue
                 if is_terminal_order_status(status) or status in _AMBIGUOUS_ORDER_STATUSES:

@@ -556,6 +556,36 @@ def test_drawdown_breach_persists_incident_and_epoch_reset_recovers(
     ledger.close()
 
 
+def test_risk_epoch_reset_evaluates_the_latch_once(tmp_path: Path) -> None:
+    """``_persist_risk_state`` already re-evaluates the entry-risk latch
+    against the rebased snapshot. A second pass over the SAME snapshot can
+    not transition anything and only repeats two incident writes against
+    SQLite on an operator action."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    broker = _EpochBroker(equity=94_000, peak=100_000)  # 6% drawdown
+    runtime = _epoch_runtime(ledger, broker)
+    runtime._evaluate_entry_risk_latch(broker.account())
+    assert runtime._entry_risk_latch[Market.EQUITY] == "portfolio_drawdown_halt"
+
+    writes: list[str] = []
+    real_clear = ledger.clear_safety_incident
+
+    def counting_clear(account_id: str, reason: str | None = None) -> None:
+        if reason == "portfolio_drawdown_halt":
+            writes.append(reason)
+        real_clear(account_id, reason)
+
+    ledger.clear_safety_incident = counting_clear  # type: ignore[method-assign]
+
+    runtime.start_new_risk_epoch()
+
+    # One deliberate clear of the drawdown incident plus the single latch
+    # evaluation inside _persist_risk_state — never three.
+    assert writes == ["portfolio_drawdown_halt", "portfolio_drawdown_halt"]
+    assert runtime._entry_risk_latch[Market.EQUITY] is None
+    ledger.close()
+
+
 def test_risk_epoch_reset_clears_only_drawdown_incident(tmp_path: Path) -> None:
     """The epoch reset never touches unrelated incidents (ownership drift
     keeps its own recovery flow)."""

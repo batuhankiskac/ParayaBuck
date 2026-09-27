@@ -107,3 +107,41 @@ def test_local_nonterminal_sell_reservation_matches_admission_conservatism() -> 
     assert result["effective_crypto_slot_claims"] == 1
     assert result["working_opening_order_count"] == 0
     assert result["slot_claims"][0]["sources"] == ["RESERVED"]
+
+
+def test_liquidated_account_keeps_the_capacity_sample() -> None:
+    """A fully liquidated account reports equity 0.0, so the sleeve
+    percentages are undefined. Both callers swallow the resulting error and
+    publish ``{"unavailable": True}`` — losing the slot claims, the broker
+    order count and the halt reasons, not just the four percentages."""
+    account = AccountSnapshot(cash=0, equity=0, peak_equity=10_000, daily_pnl=-10_000)
+    admission = BuyAdmission(account, (), 0, 0, 0, 0, None)
+    limits = SimpleNamespace(maximum_positions=8, maximum_crypto_positions=2, maximum_gross=0.6)
+    runtime = SimpleNamespace(
+        current_buy_capacity=lambda: admission,
+        risk_overlay=SimpleNamespace(limits=limits),
+        last_buy_admission=None,
+        market=Market.CRYPTO,
+    )
+    engine = EngineRuntime.__new__(EngineRuntime)
+    engine._portfolio_lock = threading.RLock()
+    engine._portfolio_runtimes = (runtime,)
+    engine._portfolio_repository = SimpleNamespace(open_orders=lambda _: ())
+    engine.broker = SimpleNamespace(
+        account_id="synthetic",
+        working_orders=lambda: (),
+        _field=lambda order, name, default=None: getattr(order, name, default),
+    )
+    engine._market_entry_halts = {Market.CRYPTO: "crypto_protection_failure"}
+    engine._last_reconciliation_at = datetime(2026, 1, 1, tzinfo=UTC)
+    engine._reconcile_failed = False
+
+    sample = engine.capacity_health()
+
+    assert "unavailable" not in sample
+    # The rest of the sample survives; only the undefined ratios are absent.
+    assert sample["halt_reasons"] == {"crypto": "crypto_protection_failure"}
+    assert sample["global_slot_cap"] == 8
+    assert sample["positions_count"] == 0
+    for key in ("realized_gross_pct", "cash_ratio_pct", "equity_sleeve_pct", "crypto_sleeve_pct"):
+        assert sample[key] is None

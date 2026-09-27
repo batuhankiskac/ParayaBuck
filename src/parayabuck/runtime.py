@@ -4684,7 +4684,10 @@ class EngineRuntime:
 
         The broker reconciliation above resolves working orders into terminal
         states; once every order of the blocked decision is terminal the halt
-        can clear and the runtime completes the deferred BUY phase normally.
+        can clear. The next gated decision then closes the blocked rebalance
+        WITHOUT submitting its stale deferred BUYs and plans from a fresh
+        target (``PortfolioRuntime._close_settled_blocked_rebalance``); a
+        block whose decision cannot be restored stays blocked.
         """
         repository = getattr(self, "_portfolio_repository", None)
         if repository is None:

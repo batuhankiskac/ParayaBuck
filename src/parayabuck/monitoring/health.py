@@ -351,7 +351,16 @@ def _check_universe(health_snapshot: dict[str, Any] | None, now: datetime, confi
     errors = refresh.get("errors") if isinstance(refresh, dict) else {}
     last_refresh = refresh.get("last_refresh_at") if isinstance(refresh, dict) else None
     # Check for any refresh_failed
-    failed = [k for k, v in (status_map or {}).items() if v in ("refresh_failed", "apply_failed")]
+    # Like the runtime's scanner_degraded: a failure only matters for a market
+    # that is operationally relevant (the snapshot's scanner_critical).
+    markets = health_snapshot.get("markets")
+    markets = markets if isinstance(markets, dict) else {}
+    failed = [
+        k
+        for k, v in (status_map or {}).items()
+        if v in ("refresh_failed", "apply_failed")
+        and not (isinstance(markets.get(k), dict) and markets[k].get("scanner_critical") is False)
+    ]
     if failed:
         return HealthCheck(
             code="universe",
@@ -362,8 +371,14 @@ def _check_universe(health_snapshot: dict[str, Any] | None, now: datetime, confi
         )
     if isinstance(last_refresh, str) and last_refresh:
         age = _age_seconds(last_refresh, now)
-        max_age_h = config.universe.crypto.active_universe_max_age_hours
-        max_age_s = max_age_h * 3600
+        # The runtime stamps last_refresh_at once per scheduled refresh (even a
+        # failed one, which the status branch above reports), so it is stale
+        # only past the refresh cadence plus an hour of slack; never tighter
+        # than the artifact's own max age.
+        max_age_s = max(
+            config.universe.crypto.active_universe_max_age_hours * 3600,
+            config.runtime.scanner_refresh_hours * 3600 + 3600,
+        )
         if age is not None and age > max_age_s:
             return HealthCheck(
                 code="universe",
@@ -405,6 +420,32 @@ def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCh
     return HealthCheck(code="signal_adjustment", status=HealthStatus.OK, summary="verified")
 
 
+def _check_market_halts(health_snapshot: dict[str, Any] | None) -> HealthCheck:
+    # A market entry halt (protection failure, ambiguous exit, unreconciled
+    # rebalance, invalid universe, ...) stops that market's entries: never OK.
+    if health_snapshot is None:
+        return HealthCheck(code="market_halts", status=HealthStatus.UNKNOWN, summary="no market data")
+    markets = health_snapshot.get("markets")
+    halts = (
+        {
+            m: info["entry_halt_reason"]
+            for m, info in markets.items()
+            if isinstance(info, dict) and info.get("entry_halt_reason")
+        }
+        if isinstance(markets, dict)
+        else {}
+    )
+    if halts:
+        return HealthCheck(
+            code="market_halts",
+            status=HealthStatus.DEGRADED,
+            summary="entries halted: " + ", ".join(f"{m}={reason}" for m, reason in sorted(halts.items())),
+            observed=halts,
+            action="resolve the halt reason; reset_safety_lock verifies and clears it",
+        )
+    return HealthCheck(code="market_halts", status=HealthStatus.OK, summary="no market entry halts")
+
+
 def _ledger_tables(db_path: str | Path) -> frozenset[str] | None:
     """Tables of the ledger opened read-only; None when its schema is unreadable.
 
@@ -421,6 +462,18 @@ def _ledger_tables(db_path: str | Path) -> frozenset[str] | None:
     except sqlite3.Error:
         log.warning("decision DB unreadable at %s", db_path, exc_info=True)
         return None
+
+
+# The runtime persists every breaker reason in effect, but never restores or
+# clears the shared-worker f"{name}_restart_limit" halts (runtime.py
+# _restore_persistent_state): the row stays as an audit trail after a restart
+# re-arms the worker. A live one shows through the snapshot (dead worker,
+# circuit_breaker_reason), so the row itself is not an active block.
+_UNRESTORED_INCIDENT_SUFFIX = "_restart_limit"
+
+
+def _unrestored_incident(incident: object) -> bool:
+    return isinstance(incident, dict) and str(incident.get("reason") or "").endswith(_UNRESTORED_INCIDENT_SUFFIX)
 
 
 def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | None) -> HealthCheck:
@@ -460,6 +513,8 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
     try:
         incidents = snapshot.get("incidents") or {}
         active = incidents.get("active") if isinstance(incidents, dict) else None
+        if isinstance(active, list):
+            active = [item for item in active if not _unrestored_incident(item)]
         if isinstance(active, list) and active:
             # If any incident is BLOCKED-like, treat as BLOCKED else CRITICAL
             return HealthCheck(
@@ -643,6 +698,7 @@ def evaluate_health(
     checks.append(_check_reconciliation(health_snapshot, now, config))
     checks.append(_check_universe(health_snapshot, now, config))
     checks.append(_check_signal_adjustment(health_snapshot))
+    checks.append(_check_market_halts(health_snapshot))
     checks.append(_check_risk(database_path, health_snapshot))
     checks.append(_check_execution(database_path))
     checks.append(_check_alerts())

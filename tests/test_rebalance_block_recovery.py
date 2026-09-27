@@ -232,3 +232,40 @@ def test_stuck_deferred_buy_alerts_once_after_threshold_without_phase_change(tmp
     _settle(repository, buy, "buy-recovered")
     assert runtime.advance_rebalance().status == "rebalance_complete"
     assert len(raised) == 1
+
+
+def test_deferred_buy_phase_records_admission_evidence(tmp_path, monkeypatch) -> None:
+    """The deferred BUY rows exist before the admission observation that
+    references them, so the evidence is kept and no false incident fires."""
+    incidents: list[str] = []
+    monkeypatch.setattr(alerts, "emit", lambda kind, *, message, **fields: incidents.append(message))
+    broker = _Broker()
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime = PortfolioRuntime(
+        _Strategy(),
+        tuple(sorted(_TARGETS)),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    first = runtime.process_closed_bars(_bars(_DAY))
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _settle(repository, sell, "sell-fill")
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+
+    resumed = runtime.advance_rebalance()
+
+    assert resumed.status == "buy_phase_submitted"
+    buy_ids = sorted(order.client_order_id for order in resumed.orders)
+    observed = repository.store.connection.execute(
+        "SELECT client_order_id FROM portfolio_buy_admission_observations WHERE decision_id = ?",
+        (first.decision_id,),
+    ).fetchall()
+    assert sorted(str(row[0]) for row in observed) == buy_ids
+    assert "Final BUY admission evidence unavailable" not in incidents
+    assert [order.client_order_id for order in broker.submitted[1:]] == [
+        order.client_order_id for order in resumed.orders
+    ]

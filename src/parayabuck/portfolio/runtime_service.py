@@ -1618,6 +1618,12 @@ class PortfolioRuntime:
                 session_id=self.session_id,
             )
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
+        # The admission evidence references its order rows, which the direct
+        # BUY path writes with the decision; the re-planned BUYs exist only
+        # now. ``_submit_orders`` records the same ``submitting`` row
+        # (INSERT OR IGNORE) and submits it as before.
+        for order in buy_orders:
+            self.repository.record_order(order, "submitting")
         self._record_buy_admission_observation(decision_id, admission, buy_orders)
         submitted = self._submit_orders(buy_orders)
         self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BUY_PENDING)

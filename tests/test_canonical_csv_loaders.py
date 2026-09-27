@@ -118,7 +118,7 @@ def test_canonical_actions_skip_splits_and_deduplicate_economic_dividends(tmp_pa
             raw_id="raw-2",
         ),
         _canonical_action_row("cash_dividends", rate="0.12", raw_id="raw-3"),
-        _canonical_action_row("stock_dividends", raw_id="raw-4"),
+        _canonical_action_row("stock_dividends", rate="1.05", raw_id="raw-4"),
         # Same-ex-date splits are already reflected in that day's bars, so
         # they do not rescale the dividend.
         _canonical_action_row("forward_splits", rate="", old_rate="1", new_rate="2", raw_id="raw-5"),
@@ -165,6 +165,44 @@ def test_canonical_dividends_are_rescaled_by_later_splits_to_adjusted_shares(tmp
     actions = load_csv_corporate_actions(path)
 
     assert [action.value for action in actions] == pytest.approx([0.50 * 5, 0.30 * 10, 0.40])
+
+
+def test_canonical_cash_echo_of_a_stock_dividend_is_not_credited(tmp_path: Path) -> None:
+    # v5 repeats each stock dividend as a cash_dividends row whose rate is the
+    # share ratio (CBSH 2020-12-01: real 0.27 cash plus a 1.05 echo of the 5%
+    # stock dividend), sometimes re-rounded (CRESY 1.0098549 vs 1.00985).
+    path = tmp_path / "stock_dividend_echo.csv"
+    rows = [
+        _canonical_action_row("cash_dividends", ex_date="2020-12-01", rate="0.27", raw_id="c1"),
+        _canonical_action_row("cash_dividends", ex_date="2020-12-01", rate="1.05", raw_id="c2"),
+        _canonical_action_row("stock_dividends", ex_date="2020-12-01", rate="1.05", raw_id="s1"),
+        _canonical_action_row("cash_dividends", ex_date="2023-12-06", rate="1.0098549", raw_id="c3"),
+        _canonical_action_row("stock_dividends", ex_date="2023-12-06", rate="1.00985", raw_id="s2"),
+        # Same ratio-like amount without a stock dividend that day is real cash.
+        _canonical_action_row("cash_dividends", ex_date="2021-03-01", rate="1.05", raw_id="c4"),
+    ]
+    _write_csv(path, _CANONICAL_ACTION_HEADER, rows)
+
+    actions = load_csv_corporate_actions(path)
+
+    assert [(action.timestamp.date().isoformat(), action.value) for action in actions] == [
+        ("2020-12-01", pytest.approx(0.27)),
+        ("2021-03-01", pytest.approx(1.05)),
+    ]
+
+
+def test_repeated_canonical_split_row_rescales_dividends_once(tmp_path: Path) -> None:
+    path = tmp_path / "repeated_split.csv"
+    rows = [
+        _canonical_action_row("cash_dividends", ex_date="2020-01-10", rate="0.50", raw_id="d1"),
+        _canonical_action_row("forward_splits", ex_date="2021-01-11", rate="", old_rate="1", new_rate="2", raw_id="s1"),
+        _canonical_action_row("forward_splits", ex_date="2021-01-11", rate="", old_rate="1", new_rate="2", raw_id="s2"),
+    ]
+    _write_csv(path, _CANONICAL_ACTION_HEADER, rows)
+
+    actions = load_csv_corporate_actions(path)
+
+    assert [action.value for action in actions] == pytest.approx([0.25])
 
 
 def test_canonical_split_rows_with_invalid_ratio_fail_closed(tmp_path: Path) -> None:
@@ -214,5 +252,5 @@ def test_canonical_v5_action_receipt_has_expected_apply_once_count() -> None:
 
     actions = load_csv_corporate_actions(path)
 
-    assert len(actions) == 141_751
+    assert len(actions) == 141_699
     assert all(action.action_type == CorporateActionType.DIVIDEND for action in actions)

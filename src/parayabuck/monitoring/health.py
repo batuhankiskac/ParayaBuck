@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from parayabuck.config import Config, load_config
+from parayabuck.markets.timeframes import is_regular_equity_time
 from parayabuck.monitoring import alerts, metrics
 from parayabuck.monitoring.journal import journal_stats
 
@@ -146,6 +147,31 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
     )
 
 
+# Per-worker liveness mirrors the runtime's own rules (_is_worker_healthy /
+# _stream_worker_delivering in runtime.py): the trade-update stream heartbeats
+# only at (re)start, the signal-adjustment monitor once per hourly pass, and a
+# market stream proves liveness by delivered bars, only while it must deliver.
+_EVENT_DRIVEN_WORKERS = frozenset({"pb-trade-updates"})
+_SIGNAL_ADJUSTMENT_WORKER = "pb-signal-adjustment"
+_SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
+_STREAM_WORKER_MARKETS = {"pb-stocks": "equity", "pb-crypto": "crypto"}
+
+
+def _worker_stale(name: str, info: dict[str, Any], now: datetime, ttl: float) -> bool:
+    if name in _EVENT_DRIVEN_WORKERS:
+        return False
+    market = _STREAM_WORKER_MARKETS.get(name)
+    if market is not None:
+        if market == "equity" and not is_regular_equity_time(now):
+            return False
+        last_event = _parse_iso(info.get("last_event_at"))
+        return last_event is None or (now - last_event).total_seconds() > max(180.0, ttl)
+    if name == _SIGNAL_ADJUSTMENT_WORKER:
+        ttl = _SIGNAL_ADJUSTMENT_CHECK_SECONDS + max(300.0, ttl)
+    last_hb = _parse_iso(info.get("last_heartbeat"))
+    return last_hb is not None and (now - last_hb).total_seconds() > ttl
+
+
 def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config: Config) -> HealthCheck:
     if health_snapshot is None:
         return HealthCheck(code="workers", status=HealthStatus.UNKNOWN, summary="no runtime health available")
@@ -158,11 +184,9 @@ def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config
     for name, info in workers.items():
         if not isinstance(info, dict):
             continue
-        alive = bool(info.get("alive"))
-        last_hb = _parse_iso(info.get("last_heartbeat"))
-        if not alive:
+        if not bool(info.get("alive")):
             dead.append(name)
-        elif last_hb is not None and (now - last_hb).total_seconds() > ttl:
+        elif _worker_stale(str(name), info, now, ttl):
             stale.append(name)
     if dead:
         return HealthCheck(
@@ -224,6 +248,27 @@ def _check_queue(health_snapshot: dict[str, Any] | None, config: Config) -> Heal
     )
 
 
+# The runtime's decisions loop schedules a reconciliation every 60 s
+# (runtime.py, ``next_reconcile``); it is a runtime constant, not a config field.
+_RECONCILE_INTERVAL_SECONDS = 60.0
+
+
+def _account_stale_seconds(config: Config) -> float:
+    """Age of ``last_reconciliation_at`` past which the account is stale.
+
+    A healthy runtime's stamp can be one reconciliation interval old when the
+    snapshot is written, and the snapshot itself up to one snapshot interval
+    old when read; one account poll interval is the margin. Never tighter than
+    the previous ``maximum_account_age_for_entry_seconds * 2``.
+    """
+    derived = (
+        _RECONCILE_INTERVAL_SECONDS
+        + float(config.observability.snapshot_interval_seconds)
+        + float(config.engine.account_poll_interval_seconds)
+    )
+    return max(derived, float(config.engine.maximum_account_age_for_entry_seconds) * 2)
+
+
 def _check_account(health_snapshot: dict[str, Any] | None, now: datetime, config: Config) -> HealthCheck:
     # account freshness is not persisted directly; infer from reconciliation / health
     # Use last_reconciliation as proxy if no direct account timestamp.
@@ -235,7 +280,7 @@ def _check_account(health_snapshot: dict[str, Any] | None, now: datetime, config
     # Try to find stale indicator in runtime_state? Offline we fallback to UNKNOWN if no signal.
     # Use last_reconciliation age as account proxy
     last_rec = health_snapshot.get("last_reconciliation_at")
-    max_age = float(config.engine.maximum_account_age_for_entry_seconds) * 2  # conservative
+    max_age = _account_stale_seconds(config)
     age = _age_seconds(last_rec, now) if isinstance(last_rec, str) else None
     if age is None:
         return HealthCheck(code="account", status=HealthStatus.UNKNOWN, summary="no reconciliation timestamp")
@@ -344,25 +389,30 @@ def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCh
     return HealthCheck(code="signal_adjustment", status=HealthStatus.OK, summary="verified")
 
 
-def _ledger_readable(db_path: str | Path) -> bool:
-    """True when the ledger opens read-only and its schema can be read."""
+def _ledger_tables(db_path: str | Path) -> frozenset[str] | None:
+    """Tables of the ledger opened read-only; None when its schema is unreadable.
+
+    A zero-byte or foreign SQLite file reads fine but lacks the ledger tables,
+    so callers check for the table they need instead of trusting "readable".
+    """
     try:
         conn = sqlite3.connect(f"file:{Path(str(db_path)).resolve()}?mode=ro", uri=True, timeout=2.0)
         try:
-            conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchall()
+            rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         finally:
             conn.close()
-        return True
+        return frozenset(str(row[0]) for row in rows)
     except sqlite3.Error:
         log.warning("decision DB unreadable at %s", db_path, exc_info=True)
-        return False
+        return None
 
 
 def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | None) -> HealthCheck:
-    # Check entry latch and active incidents
+    # Check entry latch and active incidents. The runtime always reports every
+    # market ({"equity": None, ...}); only a market with a reason is latched.
     latch = {}
     if health_snapshot and isinstance(health_snapshot.get("entry_risk_latch"), dict):
-        latch = health_snapshot["entry_risk_latch"]
+        latch = {market: reason for market, reason in health_snapshot["entry_risk_latch"].items() if reason}
     if latch:
         return HealthCheck(
             code="risk",
@@ -377,11 +427,17 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
     # one with the empty shape.
     if db_path is None or not Path(str(db_path)).exists():
         return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="no decision DB")
-    if not _ledger_readable(db_path):
+    tables = _ledger_tables(db_path)
+    if tables is None:
         return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="decision DB unreadable")
-    # One ledger read feeds both persisted checks; the snapshot carries both keys
+    if "safety_incidents" not in tables:
+        return HealthCheck(
+            code="risk", status=HealthStatus.UNKNOWN, summary="decision DB has no safety_incidents table"
+        )
+    # One ledger read feeds both persisted checks; the snapshot carries both keys.
+    # strict: a failed incidents read is UNKNOWN, never an empty "no incidents"
     try:
-        snapshot: dict[str, Any] = metrics.runtime_metrics(database_path=db_path)
+        snapshot: dict[str, Any] = metrics.runtime_metrics(database_path=db_path, strict=True)
     except Exception as exc:
         return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary=f"risk check failed: {exc}")
     # Check persisted incidents
@@ -418,6 +474,13 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
     try:
         if db_path is None or not Path(str(db_path)).exists():
             return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="no decision DB")
+        tables = _ledger_tables(db_path)
+        if tables is None:
+            return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="decision DB unreadable")
+        if "portfolio_orders" not in tables:
+            return HealthCheck(
+                code="execution", status=HealthStatus.UNKNOWN, summary="decision DB has no portfolio_orders table"
+            )
         from parayabuck.monitoring import forensics
 
         # strict reads: an unreadable ledger must surface as UNKNOWN below, not as

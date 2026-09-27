@@ -211,6 +211,10 @@ def test_health_ledger_checks_close_their_connections(tmp_path: Path, monkeypatc
             ((datetime.now(UTC) - timedelta(hours=1)).isoformat(),),
         )
         connection.execute("CREATE TABLE portfolio_rebalance_executions (phase TEXT, updated_at TEXT)")
+        connection.execute(
+            "CREATE TABLE safety_incidents (id INTEGER PRIMARY KEY, account_id TEXT, reason TEXT, "
+            "scope TEXT, activated_at TEXT, updated_at TEXT)"
+        )
     connection.close()
 
     opened: list[sqlite3.Connection] = []

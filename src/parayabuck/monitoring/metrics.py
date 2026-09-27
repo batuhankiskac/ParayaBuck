@@ -146,8 +146,11 @@ def _default_database_path() -> str:
     return DEFAULT_DATABASE_PATH
 
 
-def _connect_readonly(path: str | Path) -> sqlite3.Connection | None:
-    """Open the ledger read-only; None when the database is missing."""
+def _connect_readonly(path: str | Path, *, strict: bool = False) -> sqlite3.Connection | None:
+    """Open the ledger read-only; None when the database is missing.
+
+    ``strict=True`` re-raises an open failure instead of answering None.
+    """
     resolved = Path(path).expanduser().resolve()
     if not resolved.exists():
         return None
@@ -156,23 +159,30 @@ def _connect_readonly(path: str | Path) -> sqlite3.Connection | None:
         connection.execute("PRAGMA busy_timeout=5000")
         return connection
     except sqlite3.Error as exc:
+        if strict:
+            raise
         log.warning("Runtime metrics could not open ledger read-only: %s", exc)
         return None
 
 
-def _query_rows(connection: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()) -> list[tuple[Any, ...]]:
+def _query_rows(
+    connection: sqlite3.Connection, sql: str, params: tuple[object, ...] = (), *, strict: bool = False
+) -> list[tuple[Any, ...]]:
     try:
         return list(connection.execute(sql, params).fetchall())
     except sqlite3.Error as exc:
+        if strict:
+            raise
         log.warning("Runtime metrics query failed (%s): %s", sql.splitlines()[0].strip(), exc)
         return []
 
 
-def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
+def _table_exists(connection: sqlite3.Connection, table: str, *, strict: bool = False) -> bool:
     row = _query_rows(
         connection,
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
         (table,),
+        strict=strict,
     )
     return bool(row)
 
@@ -232,8 +242,10 @@ def runtime_session_restart_count(connection: sqlite3.Connection) -> int:
     return _restart_count(total)
 
 
-def _incidents_metrics(connection: sqlite3.Connection, account_id: str | None) -> dict[str, object]:
-    if not _table_exists(connection, "safety_incidents"):
+def _incidents_metrics(
+    connection: sqlite3.Connection, account_id: str | None, *, strict: bool = False
+) -> dict[str, object]:
+    if not _table_exists(connection, "safety_incidents", strict=strict):
         return {"count": 0, "active": []}
     if account_id:
         rows = _query_rows(
@@ -241,11 +253,13 @@ def _incidents_metrics(connection: sqlite3.Connection, account_id: str | None) -
             "SELECT reason, scope, activated_at, updated_at FROM safety_incidents "
             "WHERE account_id=? ORDER BY activated_at DESC, id DESC",
             (account_id,),
+            strict=strict,
         )
     else:
         rows = _query_rows(
             connection,
             "SELECT reason, scope, activated_at, updated_at FROM safety_incidents ORDER BY activated_at DESC, id DESC",
+            strict=strict,
         )
     incidents = [
         {
@@ -325,17 +339,22 @@ def _entry_block_duration_seconds(incidents: dict[str, object]) -> float | None:
     return None
 
 
-def runtime_metrics(database_path: str | Path | None = None, *, account_id: str | None = None) -> dict[str, object]:
+def runtime_metrics(
+    database_path: str | Path | None = None, *, account_id: str | None = None, strict: bool = False
+) -> dict[str, object]:
     """Aggregate runtime and risk metrics from persisted state plus counters.
 
     ``database_path`` defaults to the configured ``runtime.decision_db_path``
     (``data/runtime/parayabuck.sqlite3``). ``account_id`` narrows persisted
     incident/risk-state queries; counters are process-local regardless.
     Never raises: a missing/unreadable ledger returns the empty-state shape.
+    ``strict=True`` (the risk health verdict) instead re-raises a failure to
+    open the ledger or read ``safety_incidents``, so "no incidents" is never
+    answered for a read that did not happen.
     """
     path = Path(database_path) if database_path is not None else Path(_default_database_path())
     counters = runtime_counters()
-    connection = _connect_readonly(path)
+    connection = _connect_readonly(path, strict=strict)
     if connection is None:
         sessions: dict[str, Any] = {
             "total": 0,
@@ -349,7 +368,7 @@ def runtime_metrics(database_path: str | Path | None = None, *, account_id: str 
     else:
         try:
             sessions = _sessions_metrics(connection)
-            incidents = _incidents_metrics(connection, account_id)
+            incidents = _incidents_metrics(connection, account_id, strict=strict)
             risk_state = _risk_state_metrics(connection, account_id)
         finally:
             connection.close()

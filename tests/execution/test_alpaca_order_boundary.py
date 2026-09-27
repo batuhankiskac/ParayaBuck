@@ -212,3 +212,44 @@ def test_portfolio_submit_ambiguous_lookup_raises_ambiguous_state() -> None:
 
     with pytest.raises(AmbiguousOrderState):
         service._submit_with_recovery(SimpleNamespace(), "cid-1")
+
+
+def test_recovered_submission_fill_reports_the_fee_as_unobserved() -> None:
+    """An order lookup carries no fee: the recovered fill must hand ``None``
+    (unobserved) to the booking callback, never an observed ``0.0`` fee."""
+    recovered: list[tuple[Any, ...]] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = SimpleNamespace(  # type: ignore[attr-defined]
+        get_order_by_client_id=lambda _cid: SimpleNamespace(
+            id="b-1",
+            status="filled",
+            filled_qty="2",
+            filled_avg_price="101.5",
+            filled_at="2026-01-02T14:30:00+00:00",
+        ),
+    )
+    broker.portfolio_fill_recovered = lambda *args, **_kwargs: recovered.append(args)
+
+    assert broker.resolve_portfolio_submission("cid-1", "b-1") == "filled"
+
+    assert len(recovered) == 1
+    assert recovered[0][2:4] == (2.0, 101.5)
+    assert recovered[0][6] is None
+
+
+@pytest.mark.parametrize("dead_status", ["done_for_day", "replaced", "stopped", "cancelled"])
+@pytest.mark.parametrize("via_service", [True, False])
+def test_nested_bracket_dead_stop_leg_is_not_protection(dead_status: str, via_service: bool) -> None:
+    """A bracket stop leg that can no longer execute must not count as live
+    protection, in the service and in the facade fallback alike."""
+    from parayabuck.execution.alpaca_protection import ProtectionService
+
+    leg = SimpleNamespace(side="sell", type="stop", stop_price=95.0, status=dead_status, qty="2", filled_qty="0")
+    parent = SimpleNamespace(symbol="AAPL", side="buy", type="market", stop_price=None, status="filled", legs=[leg])
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = SimpleNamespace(get_order_by_id=lambda _order_id, _request=None: parent)  # type: ignore[attr-defined]
+    if via_service:
+        broker.__dict__["_protection_service"] = ProtectionService(broker)
+
+    assert broker._has_nested_bracket_protection("parent-1", "AAPL", True, 2.0) is False
+    assert broker._last_protection_mismatch == "missing"

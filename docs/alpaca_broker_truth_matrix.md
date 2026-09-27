@@ -71,7 +71,7 @@ Empty mismatch buckets (`QUANTITY_MISMATCH`, `LOCAL_STALE`, `BROKER_STALE`, `UNK
 |R1|404 / `None`|Order never reached Alpaca, can never fill|Return `"canceled"` (safe to mark canceled)|Mark filled or leave submitting forever|
 |R2|Status `filled` and `filled_qty>0 && avg_price>0`|Order filled at broker at real price|Invoke `portfolio_fill_recovered` (recovery path), return `"filled"`|Invent synthetic fill at reference price|
 |R3|Same but filled but `filled_qty/avg_price` unextractable|Fill not provable|Return `"submitted"` (keep non-terminal, don't release ownership)|Guess fill qty/price|
-|R4|Status `canceled|cancelled|expired|rejected|done_for_day`|Terminal without fill|Return that status (maps to canceled in repo)|Mark filled|
+|R4|Status `canceled|cancelled|expired|rejected|done_for_day`|Terminal; any `filled_qty>0 && avg_price>0` is a real partial fill|Invoke `portfolio_fill_recovered(..., status=<status>)` for a real partial fill (cumulative, so a later delivery never double-books), then return that status|Mark filled; drop a real partial fill|
 |R5|Status `accepted|pending|working|partially_filled` etc.|Still working|Return `"submitted"`|Mark completed|
 |R6|`get_order_by_client_id` missing / `None` capability, or network error|Broker unreachable|Return `None` (caller retries later, no state change)|Guess|
 |R7|Exception with `status_code != 404` during fetch|Lookup itself failed|Propagate (do not guess) → caller treats as `None` retry|Swallow as 404|

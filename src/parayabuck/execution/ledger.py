@@ -27,6 +27,12 @@ log = get_logger("parayabuck.execution.ledger")
 # stream: an exit/stop closes a lot, so it always trades against the entry.
 _OPPOSITE_SIDES = {"long": "sell", "buy": "sell", "sell": "buy", "short": "buy"}
 
+# Client-id prefix of the manual-exit rows the FILL-activity backfill records
+# for broker fills that are already complete (see
+# ``ReconciliationService._reconcile_fill_activity_fees``).  Such a row is a
+# settled historical fact, not a working execution awaiting a lot link.
+FILL_ACTIVITY_RECOVERY_PREFIX = "alpaca-fill-activity-"
+
 
 @dataclass(frozen=True)
 class ManagedPosition:
@@ -1029,7 +1035,15 @@ class ExecutionLedger:
                 # the missing link, not the fill delta — reconciliation
                 # re-emits the same event on every pass, and a delta-gated
                 # guard would let the replay re-stamp the row terminal.
-                if role != OrderRole.ENTRY and entry_client_order_id is None and effective_cumulative > 0:
+                # Backfilled rows for already-completed broker fills (every
+                # portfolio SELL, which lives outside this ledger) are stamped
+                # terminal as reported; only real execution events stay open.
+                if (
+                    role != OrderRole.ENTRY
+                    and entry_client_order_id is None
+                    and effective_cumulative > 0
+                    and not event.client_order_id.startswith(FILL_ACTIVITY_RECOVERY_PREFIX)
+                ):
                     terminal_state = None
                     if fill_delta > 0 or fee_delta > 0:
                         log.warning(

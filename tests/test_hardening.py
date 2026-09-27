@@ -1393,8 +1393,8 @@ def test_fill_activity_recovery_merges_activities_of_one_order(tmp_path: Path) -
            FROM orders WHERE broker_order_id = 'broker-exit'"""
     ).fetchall()
     # One merged row per broker order; the second activity updated it instead
-    # of colliding on the unique index.
-    assert rows == [("alpaca-fill-activity-broker-exit", "broker-exit", 5.0)]
+    # of colliding on the unique index, and its quantity is added (5 + 5).
+    assert rows == [("alpaca-fill-activity-broker-exit", "broker-exit", 10.0)]
     fee_rows = ledger.connection.execute("SELECT COUNT(*) FROM fee_activities").fetchone()[0]
     assert fee_rows == 2
     ledger.close()

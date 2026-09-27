@@ -570,3 +570,79 @@ def test_incremental_merge_dedups_the_overlap_and_keeps_every_cached_bar(warmup_
     btc = result["BTC/USD"]
     assert [bar.timestamp for bar in btc] == sorted({bar.timestamp for bar in btc})
     assert next(bar.close for bar in btc if bar.timestamp == correction) == 100.5
+
+
+class _FailingCryptoBars:
+    """Provider outage: every request raises."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def get_crypto_bars(self, request: Any) -> Any:
+        self.calls += 1
+        raise RuntimeError("provider down")
+
+
+class _EmptyCryptoBars:
+    """Provider answers with no rows at all."""
+
+    def get_crypto_bars(self, request: Any) -> Any:
+        import pandas as pd
+
+        return SimpleNamespace(df=pd.DataFrame())
+
+
+def _seed_old_scope_cache(cache: Any, start: datetime, end: datetime) -> None:
+    """Fresh, window-covering rows recorded under a PREVIOUS config digest."""
+    _seed_crypto_cache(cache, _hour_grid(start, end))
+    cache.scope_set(_INCREMENTAL_SCOPE, "digest-old", "unit-test")
+
+
+def test_normal_incremental_fetch_stamps_the_scope(warmup_cache: Any) -> None:
+    history = _incremental_history(warmup_cache, _FakeCryptoBars())
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+
+    _fetch_incremental(history, end - timedelta(hours=6), end)
+
+    assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+
+
+def test_outage_served_cache_rows_are_not_stamped_into_the_new_scope(warmup_cache: Any) -> None:
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=6)
+    _seed_old_scope_cache(warmup_cache, start, end)
+    provider = _FailingCryptoBars()
+    history = _incremental_history(warmup_cache, provider)
+
+    result = _fetch_incremental(history, start, end)
+
+    assert provider.calls == 1
+    assert _window_pairs(result) == _expected_window(start, end)
+    assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+
+
+def test_empty_provider_response_does_not_stamp_the_scope(warmup_cache: Any) -> None:
+    history = _incremental_history(warmup_cache, _EmptyCryptoBars())
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+
+    result = _fetch_incremental(history, end - timedelta(hours=6), end)
+
+    assert result == {symbol: [] for symbol in _INCREMENTAL_SYMBOLS}
+    assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+
+
+def test_dedup_replay_of_an_outage_served_batch_does_not_stamp_the_scope(warmup_cache: Any) -> None:
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=6)
+    _seed_old_scope_cache(warmup_cache, start, end)
+    history = _incremental_history(warmup_cache, _FailingCryptoBars())
+    history.get_bars_batch(list(_INCREMENTAL_SYMBOLS), "1h", start, end)
+    # The provider recovers, but the identical request inside the dedup TTL
+    # replays the outage-served result instead of calling it.
+    healthy = _FakeCryptoBars()
+    history._crypto_client = healthy
+
+    _fetch_incremental(history, start, end)
+
+    assert healthy.requests == []
+    assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)

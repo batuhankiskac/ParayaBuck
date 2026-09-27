@@ -141,6 +141,12 @@ class AlpacaHistoricalData:
         self._last_batch_result: dict[str, list[Bar]] | None = None
         self._last_batch_at: datetime | None = None
         self._dedup_ttl_seconds: float = 60.0
+        # Bumped whenever a window is answered without real provider rows (the
+        # outage cache fallback or an empty response). The incremental path
+        # compares it across its fetches so such rows are never stamped as
+        # written under the current scope digest.
+        self._provider_fallbacks: int = 0
+        self._last_batch_degraded: bool = False
         # Observability counters (measured provider calls).
         self.provider_calls: int = 0
         self.provider_symbols_requested: int = 0
@@ -218,8 +224,12 @@ class AlpacaHistoricalData:
             and (now - last_at).total_seconds() < getattr(self, "_dedup_ttl_seconds", 60.0)
             and getattr(self, "_last_batch_result", None) is not None
         ):
+            if getattr(self, "_last_batch_degraded", False):
+                # The replayed result carries the original call's degradation.
+                self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
             # Return a shallow copy so callers cannot mutate the cached dict.
             return {symbol: list(bars) for symbol, bars in self._last_batch_result.items()}  # type: ignore[union-attr]
+        fallbacks_before = getattr(self, "_provider_fallbacks", 0)
         minutes = TIMEFRAME_MINUTES.get(timeframe)
         if minutes is not None:
             # Alpaca caps a single bars response at 10,000 ROWS total, across
@@ -245,6 +255,7 @@ class AlpacaHistoricalData:
                 self._last_batch_key = dedup_key
                 self._last_batch_result = {s: list(b) for s, b in result.items()}
                 self._last_batch_at = now
+                self._last_batch_degraded = getattr(self, "_provider_fallbacks", 0) != fallbacks_before
                 return result
         result = self._fetch_window(
             symbols,
@@ -257,6 +268,7 @@ class AlpacaHistoricalData:
         self._last_batch_key = dedup_key
         self._last_batch_result = {s: list(b) for s, b in result.items()}
         self._last_batch_at = now
+        self._last_batch_degraded = getattr(self, "_provider_fallbacks", 0) != fallbacks_before
         return result
 
     def _resolve_batch_request(
@@ -335,6 +347,7 @@ class AlpacaHistoricalData:
         feed_name = "crypto" if market == Market.CRYPTO else self._effective_stock_feed_name
         minutes = TIMEFRAME_MINUTES[timeframe]
         step = timedelta(minutes=minutes)
+        fallbacks_before = getattr(self, "_provider_fallbacks", 0)
         # Bars are aligned to the timeframe grid, while request boundaries
         # carry sub-bucket seconds. Cache reads must use the floored start or
         # the first (grid-aligned) bar is excluded by ``timestamp >= start``
@@ -398,7 +411,10 @@ class AlpacaHistoricalData:
             merged = {bar.timestamp: bar for bar in window}
             merged.update({bar.timestamp: bar for bar in fetched.get(symbol, [])})
             result[symbol] = [merged[key] for key in sorted(merged)]
-        cache.scope_set(scope, config_digest, identity)
+        # Only a refresh the provider actually answered may (re)stamp the
+        # scope: outage-served cache rows can predate this config digest.
+        if getattr(self, "_provider_fallbacks", 0) == fallbacks_before:
+            cache.scope_set(scope, config_digest, identity)
         return result
 
     @staticmethod
@@ -564,6 +580,7 @@ class AlpacaHistoricalData:
                 self._cache_covers_window(bars, market, timeframe, start_at, end_at) for bars in fresh_cached.values()
             ):
                 log.warning(message)
+                self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
                 return fresh_cached
             return None
 
@@ -627,6 +644,7 @@ class AlpacaHistoricalData:
             served = _fallback("Historical API returned no rows; using feed-matched local cache")
             if served is not None:
                 return served
+            self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
             return {symbol: [] for symbol in symbols}
         bars: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
         off_grid_dropped = 0

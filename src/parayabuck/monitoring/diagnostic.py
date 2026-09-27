@@ -199,11 +199,15 @@ def collect_bundle_data(
     except Exception as exc:
         data["runtime_snapshot"] = {"error": str(exc), "corrupt": True}
 
-    # runtime metrics
+    # runtime metrics — runtime_metrics(None) would resolve a cwd-relative
+    # config/ledger, so with no supplied path the section is no_db instead
     try:
         from parayabuck.monitoring import metrics
 
-        data["runtime_metrics"] = metrics.runtime_metrics(database_path=decision_db_path)
+        if dbp is None:
+            data["runtime_metrics"] = {"status": "no_db"}
+        else:
+            data["runtime_metrics"] = metrics.runtime_metrics(database_path=decision_db_path)
     except Exception as exc:
         data["runtime_metrics"] = {"error": str(exc)}
 
@@ -269,11 +273,11 @@ def collect_bundle_data(
     # environment
     data["environment"] = {**_safe_git_info(), **_environment_info()}
 
-    # database checks (integrity)
+    # database checks (integrity) — only the explicitly supplied ledger, never a
+    # cwd-relative guess the rest of the bundle did not read
     try:
-        dbp = Path(str(decision_db_path)) if decision_db_path else Path("data/runtime/parayabuck.sqlite3")
         checks: dict[str, Any] = {}
-        if dbp.exists():
+        if dbp is not None and dbp.exists():
             conn = sqlite3.connect(str(dbp), timeout=2.0)
             try:
                 cur = conn.execute("PRAGMA integrity_check")
@@ -319,9 +323,11 @@ def _run_doctor_checks(
     except Exception as exc:
         _add("config", "CRITICAL", f"config invalid: {exc}")
 
-    # decision DB exists
-    dbp = Path(str(decision_db_path)) if decision_db_path else Path("data/runtime/parayabuck.sqlite3")
-    if not dbp.exists():
+    # decision DB exists — only the explicitly supplied path; none means UNKNOWN
+    dbp = Path(str(decision_db_path)) if decision_db_path else None
+    if dbp is None:
+        _add("decision_db", "UNKNOWN", "no decision DB path configured")
+    elif not dbp.exists():
         _add("decision_db", "UNKNOWN", "no decision DB — fresh install")
     else:
         try:
@@ -373,7 +379,7 @@ def _run_doctor_checks(
         from parayabuck.monitoring.forensics import ambiguous_orders, find_stuck_rebalances, runtime_session_forensics
 
         if forensics is None:
-            forensics_db = str(dbp) if dbp.exists() else None
+            forensics_db = str(dbp) if dbp is not None and dbp.exists() else None
             forensics = {
                 "ambiguous": ambiguous_orders(forensics_db),
                 "stuck_rebalance": find_stuck_rebalances(forensics_db),

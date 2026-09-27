@@ -44,7 +44,9 @@ def _status_variants(statuses: frozenset[str]) -> tuple[str, ...]:
     return tuple(sorted({value for status in statuses for value in (status, status.capitalize(), status.upper())}))
 
 
-def _orders_with_status(db_path: str | Path | None, wanted: frozenset[str]) -> list[dict[str, Any]]:
+def _orders_with_status(
+    db_path: str | Path | None, wanted: frozenset[str], *, strict: bool = False
+) -> list[dict[str, Any]]:
     """Orders whose status is one of ``wanted`` (read-only).
 
     The SQL comparison normalises the column with ``lower()`` so a row written
@@ -53,6 +55,9 @@ def _orders_with_status(db_path: str | Path | None, wanted: frozenset[str]) -> l
 
     Terminal statuses are excluded defensively so callers asking for a
     non-terminal status never see a settled order.
+
+    ``strict=True`` re-raises a read failure instead of answering ``[]``, so a
+    health verdict can tell "no such orders" from "ledger unreadable".
     """
     if db_path is None or not Path(str(db_path)).exists():
         return []
@@ -65,7 +70,7 @@ def _orders_with_status(db_path: str | Path | None, wanted: frozenset[str]) -> l
         conn = sqlite3.connect(str(db_path), timeout=2.0)
         conn.row_factory = sqlite3.Row
         try:
-            if not _table_exists(conn, "portfolio_orders"):
+            if not _table_exists(conn, "portfolio_orders", strict=strict):
                 return []
             rows = conn.execute(
                 f"SELECT * FROM portfolio_orders WHERE lower(status) IN ({placeholders})",
@@ -75,6 +80,8 @@ def _orders_with_status(db_path: str | Path | None, wanted: frozenset[str]) -> l
         finally:
             conn.close()
     except Exception:
+        if strict:
+            raise
         log.warning("forensics status query failed for %s", sorted(wanted), exc_info=True)
         return []
 
@@ -113,16 +120,21 @@ def unresolved_orders(db_path: str | Path | None, *, include_terminal: bool = Fa
         return []
 
 
-def ambiguous_orders(db_path: str | Path | None) -> list[dict[str, Any]]:
-    return _orders_with_status(db_path, _AMBIGUOUS_STATUSES)
+def ambiguous_orders(db_path: str | Path | None, *, strict: bool = False) -> list[dict[str, Any]]:
+    return _orders_with_status(db_path, _AMBIGUOUS_STATUSES, strict=strict)
 
 
-def submitting_orders(db_path: str | Path | None) -> list[dict[str, Any]]:
-    return _orders_with_status(db_path, frozenset({"submitting"}))
+def submitting_orders(db_path: str | Path | None, *, strict: bool = False) -> list[dict[str, Any]]:
+    return _orders_with_status(db_path, frozenset({"submitting"}), strict=strict)
 
 
-def find_stuck_rebalances(db_path: str | Path | None, *, threshold_seconds: float = 3600) -> list[dict[str, Any]]:
-    """Rebalances remaining in non-terminal phase longer than threshold."""
+def find_stuck_rebalances(
+    db_path: str | Path | None, *, threshold_seconds: float = 3600, strict: bool = False
+) -> list[dict[str, Any]]:
+    """Rebalances remaining in non-terminal phase longer than threshold.
+
+    ``strict=True`` re-raises a read failure instead of answering ``[]``.
+    """
     if db_path is None or not Path(str(db_path)).exists():
         return []
     terminal_phases = {"COMPLETE", "BLOCKED", "complete", "blocked"}
@@ -131,7 +143,7 @@ def find_stuck_rebalances(db_path: str | Path | None, *, threshold_seconds: floa
         conn = sqlite3.connect(str(db_path), timeout=2.0)
         conn.row_factory = sqlite3.Row
         try:
-            if not _table_exists(conn, "portfolio_rebalance_executions"):
+            if not _table_exists(conn, "portfolio_rebalance_executions", strict=strict):
                 return []
             rows = conn.execute("SELECT * FROM portfolio_rebalance_executions").fetchall()
             now = datetime.now(UTC)
@@ -154,6 +166,8 @@ def find_stuck_rebalances(db_path: str | Path | None, *, threshold_seconds: floa
         finally:
             conn.close()
     except Exception:
+        if strict:
+            raise
         log.warning("stuck rebalance query failed", exc_info=True)
         return []
 
@@ -296,11 +310,14 @@ def decision_reconstruction(
     return result
 
 
-def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+def _table_exists(conn: sqlite3.Connection, table: str, *, strict: bool = False) -> bool:
     try:
         cur = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,))
         return cur.fetchone() is not None
     except Exception:
+        # An unreadable file is not "table absent"; strict callers must see it
+        if strict:
+            raise
         return False
 
 

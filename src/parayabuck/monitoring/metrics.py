@@ -317,6 +317,10 @@ def _entry_block_duration_seconds(incidents: dict[str, object]) -> float | None:
             activated = datetime.fromisoformat(raw)
         except ValueError:
             return None
+        # A naive stamp is UTC; subtracting it from an aware now() would raise
+        # out of runtime_metrics and hide the active halt from every reader.
+        if activated.tzinfo is None:
+            activated = activated.replace(tzinfo=UTC)
         return max(0.0, (datetime.now(UTC) - activated).total_seconds())
     return None
 

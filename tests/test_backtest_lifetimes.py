@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -103,8 +104,8 @@ def test_loader_validates_and_types_rename_chain(tmp_path: Path) -> None:
 
     intervals = result.records[0].rename_chain
     assert [interval.symbol for interval in intervals] == ["FB", "META"]
-    assert intervals[0].to_dict() == {"symbol": "FB", "valid_from": None, "valid_to": "2022-06-08"}
-    assert intervals[1].to_dict() == {"symbol": "META", "valid_from": "2022-06-09", "valid_to": None}
+    assert (intervals[0].valid_from, intervals[0].valid_to) == (None, date(2022, 6, 8))
+    assert (intervals[1].valid_from, intervals[1].valid_to) == (date(2022, 6, 9), None)
     assert result.receipt.rename_chain_count == 1
 
 

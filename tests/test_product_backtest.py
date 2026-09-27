@@ -601,3 +601,54 @@ def test_configured_symbol_without_bars_never_blocks_periods(tmp_path) -> None:
         assert "TQQQ" not in snapshot.symbols
         assert all(symbol in available for symbol in snapshot.symbols)
         assert all(symbol in available for symbol in snapshot.observation_set)
+
+
+def test_explicit_zero_starting_equity_is_rejected_not_replaced_by_config(tmp_path) -> None:
+    """``initial_cash=0.0`` is an explicit request, not "unset": it must reach
+    the engine's own positivity guard instead of silently falling back to
+    ``config.backtest.initial_cash``."""
+    with pytest.raises(ValueError, match="Starting equity must be positive"):
+        run_product_backtest(
+            _config(tmp_path),
+            _bars(120),
+            market=Market.EQUITY,
+            initial_cash=0.0,
+            persist=False,
+            persist_artifacts=False,
+        )
+
+
+def test_persisted_data_feed_note_never_claims_a_feed_the_run_did_not_get(tmp_path) -> None:
+    config = _config(tmp_path)
+    bars = _bars(120)
+    unknown = run_product_backtest(
+        config,
+        bars,
+        market=Market.EQUITY,
+        persist=False,
+        persist_artifacts=False,
+    )
+    assert unknown.report.summary["data_feed"] == (
+        "offline csv (feed unknown; downloader used the configured historical feed)"
+    )
+    assert unknown.report.summary["data_feed_note"] == "Feed unknown; provenance not verified for this offline run."
+
+    sip = run_product_backtest(
+        config,
+        bars,
+        market=Market.EQUITY,
+        persist=False,
+        persist_artifacts=False,
+        data_feed="sip",
+    )
+    assert sip.report.summary["data_feed_note"] == "SIP consolidates the national market system tape."
+
+    iex = run_product_backtest(
+        config,
+        bars,
+        market=Market.EQUITY,
+        persist=False,
+        persist_artifacts=False,
+        data_feed="iex",
+    )
+    assert iex.report.summary["data_feed_note"].startswith("IEX historical data reflects one exchange's prints")

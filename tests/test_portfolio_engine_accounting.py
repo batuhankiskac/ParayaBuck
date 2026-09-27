@@ -14,6 +14,7 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.execution.portfolio import PortfolioRiskLimits
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import (
+    PortfolioState,
     RebalancePolicy,
     TargetPortfolio,
     TargetWeight,
@@ -792,3 +793,60 @@ def test_crypto_daily_reset_uses_utc_boundary() -> None:
     decision_at_25 = next(record for record in result.rebalances if record.decision_timestamp == bars[25].timestamp)
     assert decision_at_25.risk_overlay_halted
     assert "daily_loss_limit" in decision_at_25.risk_overlay_reasons
+
+
+def test_worst_year_is_the_weakest_year_not_a_floor_at_zero() -> None:
+    """The weakest year is reported, not a floor at zero and not a fixed year."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    engine = _engine(_ScheduleStrategy({}, epoch))
+    timestamps = [
+        datetime(2024, 12, 31, tzinfo=UTC),
+        datetime(2025, 12, 31, tzinfo=UTC),
+        datetime(2026, 12, 31, tzinfo=UTC),
+    ]
+    # +10%, then -5%, then +20%: the minimum is 2025, which is neither the
+    # first nor the last year, and is below the 0.0 the old clamp returned.
+    curve = [110_000.0, 104_500.0, 125_400.0]
+    assert engine._worst_year(curve, timestamps) == pytest.approx(104_500.0 / 110_000.0 - 1)
+    # An all-profitable curve still reports a positive worst year.
+    assert engine._worst_year([110_000.0, 121_000.0, 133_100.0], timestamps) == pytest.approx(0.10)
+
+
+def test_on_target_symbol_never_produces_a_zero_quantity_order() -> None:
+    """A zero turnover_band cannot filter an on-target symbol out (``x < 0.0``
+    is false), so the delta guard must keep the zero-size order out of the
+    pending book: no fill, no commission and no realized-PnL event for a
+    decision that trades nothing."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    # Weight 0.1 of a 100_000 book at a 100.0 price is exactly the 100
+    # shares already held, so the target delta is exactly 0.0.
+    strategy = _ScheduleStrategy({0: {"SPY": 0.1}}, epoch)
+    state = PortfolioState(
+        strategy.name,
+        strategy.version,
+        holdings={"SPY": 100.0},
+        avg_prices={"SPY": 100.0},
+        cash=90_000.0,
+        last_prices={"SPY": 100.0},
+    )
+    engine = PortfolioBacktestEngine(
+        strategy,
+        RebalancePolicy(strategy.market, "monthly"),
+        starting_equity=100_000.0,
+        commission=1.0,
+        benchmark_symbol="SPY",
+        turnover_band=0.0,
+        minimum_order_notional=0.0,
+        state=state,
+    )
+    # Two liquid bars: the decision lands on the first, and the second bar's
+    # fill cycle is where a leaked zero-quantity order would be booked.
+    bars = [
+        _bar(epoch + timedelta(days=offset), "SPY", 100.0, Market.EQUITY, 1_000_000) for offset in (1, 2)
+    ]
+    result = engine.run(bars, liquidate_at_end=False)
+    assert engine._pending == []
+    assert result.fills == ()
+    assert result.fee_total == 0.0
+    assert result.realized_pnl_events == ()
+

@@ -313,10 +313,12 @@ def run_product_backtest(
         prepared = (ordered, decision_bars)
     risk = portfolio_risk_limits_from_config(config.risk)
     benchmark = "SPY" if market == Market.EQUITY else "BTC/USD"
+
+    universe_hash = hash_point_in_time_universe(universe)
     engine = PortfolioBacktestEngine(
         strategy,
         rebalance_policy_for(strategy),
-        starting_equity=initial_cash or config.backtest.initial_cash,
+        starting_equity=initial_cash if initial_cash is not None else config.backtest.initial_cash,
         slippage_bps=config.backtest.slippage_bps * cost_multiplier,
         spread_bps=config.backtest.spread_bps * cost_multiplier,
         commission=config.backtest.commission,
@@ -329,7 +331,7 @@ def run_product_backtest(
         equity_regulatory_fee_multiplier=cost_multiplier,
         benchmark_symbol=benchmark,
         universe=universe,
-        universe_version=hash_point_in_time_universe(universe),
+        universe_version=universe_hash,
         risk_limits=risk,
         maximum_allocation=selection.maximum_allocation,
         execution_policy=PortfolioExecutionPolicy(
@@ -361,17 +363,11 @@ def run_product_backtest(
                 else "raw crypto prices; no corporate actions"
             ),
             "cost_multiplier": cost_multiplier,
-            "universe_hash": hash_point_in_time_universe(universe),
+            "universe_hash": universe_hash,
             "universe_methodology": universe.methodology,
             "scanner_versions": sorted({snapshot.scanner_version for snapshot in universe.snapshots}),
             "data_feed": (data_feed or "offline csv (feed unknown; downloader used the configured historical feed)"),
-            "data_feed_note": (
-                "IEX historical data reflects one exchange's prints, not the "
-                "consolidated SIP/NBBO tape; liquidity, spread and volume "
-                "proxies derived from IEX understate full-market conditions."
-                if (data_feed or "").lower() == "iex"
-                else "SIP consolidates the national market system tape."
-            ),
+            "data_feed_note": _data_feed_note(data_feed),
             "survivorship_bias_limitation": (
                 "Candidate metadata may reflect currently supported Alpaca assets; historical "
                 "scanner membership is point-in-time within the supplied bar set, but delisted "
@@ -561,6 +557,24 @@ def optimize_grid(
     return payload
 
 
+def _data_feed_note(data_feed: str | None) -> str:
+    """Provenance caveat matching the feed the run actually received.
+
+    Claiming the consolidated SIP tape for an unverified offline download
+    would put a false provenance claim in a persisted research artifact.
+    """
+    normalized = (data_feed or "").lower()
+    if normalized == "iex":
+        return (
+            "IEX historical data reflects one exchange's prints, not the "
+            "consolidated SIP/NBBO tape; liquidity, spread and volume "
+            "proxies derived from IEX understate full-market conditions."
+        )
+    if normalized == "sip":
+        return "SIP consolidates the national market system tape."
+    return "Feed unknown; provenance not verified for this offline run."
+
+
 def _prepared_window(
     bars: list[Bar],
     market: Market,
@@ -583,8 +597,6 @@ def _prepared_window(
     filtered = [bar for bar in available if start is None or bar.timestamp >= start]
     warmup = [bar for bar in available if start is not None and bar.timestamp < start]
     if warmup:
-        from parayabuck.markets.symbols import canonical_symbol
-
         canon_warmup: list[Bar] = []
         for bar in warmup:
             can = canonical_symbol(bar.symbol, bar.market)

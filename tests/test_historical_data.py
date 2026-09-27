@@ -646,3 +646,78 @@ def test_dedup_replay_of_an_outage_served_batch_does_not_stamp_the_scope(warmup_
 
     assert healthy.requests == []
     assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+
+
+def test_empty_equity_tail_keeps_a_valid_scope_and_the_next_refresh_stays_incremental(
+    warmup_cache: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Routine live case (weekend/holiday/no new closed bar): a scope-valid
+    equity 1d cache whose tail request returns no rows must stay scope-valid,
+    serve the cached window, and keep the next refresh a tail-only download."""
+    import pandas as pd
+
+    import parayabuck.data.alpaca as alpaca_module
+
+    monkeypatch.setattr(alpaca_module, "StockBarsRequest", lambda **kwargs: SimpleNamespace(**kwargs))
+    requests: list[Any] = []
+
+    def empty_stock_bars(request: Any) -> Any:
+        requests.append(request)
+        return SimpleNamespace(df=pd.DataFrame())
+
+    history = _incremental_history(warmup_cache, None)
+    history._stock_client = SimpleNamespace(get_stock_bars=empty_stock_bars)
+    symbols = ["SPY", "QQQ", "QLD"]
+    end = datetime.now(UTC)
+    start = end - timedelta(days=30)
+    day = start.replace(hour=4, minute=0, second=0, microsecond=0)
+    stamps: list[datetime] = []
+    while day < end - timedelta(hours=1):
+        if day.weekday() < 5:
+            stamps.append(day)
+        day += timedelta(days=1)
+    for symbol in symbols:
+        warmup_cache.upsert(
+            [
+                Bar(
+                    timestamp=stamp,
+                    symbol=symbol,
+                    timeframe="1d",
+                    open=100.0,
+                    high=101.0,
+                    low=99.0,
+                    close=100.0,
+                    volume=1000.0,
+                    market=Market.EQUITY,
+                )
+                for stamp in stamps
+            ],
+            feed="iex",
+            adjustment="splits",
+        )
+    warmup_cache.scope_set(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST, "unit-test")
+
+    def refresh() -> dict[str, list[Bar]]:
+        return history.get_bars_batch_incremental(
+            symbols,
+            "1d",
+            start=start,
+            end=end,
+            adjustment="splits",
+            scope=_INCREMENTAL_SCOPE,
+            config_digest=_INCREMENTAL_DIGEST,
+        )
+
+    first = refresh()
+    assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+    assert {symbol: [bar.timestamp for bar in bars] for symbol, bars in first.items()} == {
+        symbol: stamps for symbol in symbols
+    }
+    second = refresh()
+
+    assert second == first
+    assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+    assert len(requests) == 2
+    # Both refreshes asked only for the overlap tail, never the full window.
+    for request in requests:
+        assert request.start >= stamps[-1] - timedelta(days=2)

@@ -971,6 +971,37 @@ def test_trade_update_blip_never_clears_a_circuit_breaker_halt() -> None:
     assert states == ["running", "degraded"]
 
 
+def test_clean_reconcile_restores_a_blip_degraded_runtime() -> None:
+    """A blip while a reconciliation reason is set stays degraded (the blip
+    restore never passes a breaker); the clean reconcile that clears the
+    reason must un-pin it while the trade-update worker is alive."""
+    runtime, worker = _trade_update_worker_runtime()
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime.broker = SimpleNamespace(account_id="acct")
+    runtime.ledger = SimpleNamespace(clear_safety_incident=lambda *_a: None)
+    calls: list[int] = []
+
+    def flaky() -> None:
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("simulated trade-update disconnect")
+        runtime._running = False
+
+    runtime._run_stream_worker("pb-trade-updates", flaky)
+    assert runtime._state == "degraded"
+
+    worker.alive = False  # a dead trade-update worker is never "restored"
+    runtime._clear_reconciliation_incidents()
+    assert runtime._state == "degraded"
+
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    worker.alive = True
+    runtime._running = True
+    runtime._clear_reconciliation_incidents()
+    assert runtime._circuit_breaker_reason is None
+    assert runtime._state == "running"
+
+
 @pytest.mark.parametrize("blocking_state", ["halted", "error", "stop_failed", "stopping", "stopped"])
 def test_trade_update_blip_never_overwrites_a_blocking_state(blocking_state: str) -> None:
     """A pb-trade-updates failure must not downgrade a halted (or stopping)

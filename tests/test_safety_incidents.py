@@ -888,6 +888,42 @@ def test_reconcile_failures_still_raise_and_escalate_reconciliation_reasons(tmp_
     ledger.close()
 
 
+def test_reconcile_drift_alerts_only_on_the_transition(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Persistent drift re-asserts the halt and persist on every reconcile
+    pass but alerts once, even when the first pass's persist raises."""
+    import parayabuck.runtime as runtime_module
+    from parayabuck.execution.alpaca import OwnershipDriftError
+
+    emitted: list[str] = []
+    events: list[str] = []
+    monkeypatch.setattr(runtime_module.alerts, "emit", lambda kind, **_k: emitted.append(kind))
+    monkeypatch.setattr(runtime_module.runtime_metrics_store, "record_event", events.append)
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    runtime = _reconcile_runtime(ledger, _raise(OwnershipDriftError("broker holds fewer shares")), None)
+    runtime._state = "running"
+    persists: list[str] = []
+
+    def persist(reason: str) -> None:
+        persists.append(reason)
+        if len(persists) == 1:
+            raise sqlite3.OperationalError("database is locked")
+
+    runtime._persist_safety_state = persist  # type: ignore[method-assign]
+
+    with pytest.raises(sqlite3.OperationalError):
+        runtime._reconcile_safely()
+    runtime._state = "running"  # re-assertion is observable on every pass
+    runtime._reconcile_safely()
+    runtime._reconcile_safely()
+
+    assert persists == ["ownership_drift"] * 3
+    assert runtime._state == "halted"
+    assert runtime._circuit_breaker_reason == "ownership_drift"
+    assert emitted == ["circuit_breaker"]
+    assert events == ["circuit_breaker"]
+    ledger.close()
+
+
 def test_restore_prefers_a_non_reconciliation_incident(tmp_path: Path) -> None:
     """A newer reconciliation incident must not mask an older stronger one at
     restore: a clean reconcile would clear it and resume trading."""
@@ -1008,6 +1044,44 @@ def test_operator_reset_keeps_a_halt_raised_during_verification(tmp_path: Path) 
         runtime._state = "halted"
 
     runtime._verify_market_halts = concurrent_halt  # type: ignore[method-assign]
+
+    runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason == "portfolio_runtime_failure"
+    assert runtime._state == "halted"
+    ledger.close()
+
+
+def test_operator_reset_keeps_a_halt_raised_during_broker_reconcile(tmp_path: Path) -> None:
+    """The broker reconcile inside the reset is a slow network call; a halt
+    another thread raises meanwhile must survive the breaker clear, which
+    may only clear the reason being reset."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "ownership_drift")
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime = _runtime_with_ledger(ledger)
+
+    def reconcile_while_another_thread_halts() -> dict[str, list[str]]:
+        with runtime._state_lock:
+            runtime._circuit_breaker_reason = "portfolio_runtime_failure"
+            runtime._state = "halted"
+        return dict(_CLEAN_RECONCILIATION)
+
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        reconcile=reconcile_while_another_thread_halts,
+        account=lambda: account,
+    )
+    runtime._circuit_breaker_reason = "ownership_drift"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._state_lock = threading.RLock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._persist_risk_state = lambda _account: None  # type: ignore[method-assign]
 
     runtime.reset_safety_lock()
 

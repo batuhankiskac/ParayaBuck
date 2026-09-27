@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from parayabuck import Config, EngineConfig, RiskLimits, load_config
-from parayabuck.config import RuntimeMode
+from parayabuck.config import AppConfig, DataConfig, RuntimeMode
 
 
 def _settings() -> dict[str, object]:
@@ -210,3 +210,18 @@ def test_unsupported_strategy_timeframe_is_rejected_at_load(tmp_path: Path) -> N
     path.write_text(yaml.safe_dump(raw))
     with pytest.raises(ValueError, match="cannot run on timeframe 4h"):
         load_config(str(path))
+
+
+def test_present_but_empty_app_and_data_blocks_load_with_defaults(tmp_path: Path) -> None:
+    """``app:`` / ``data:`` with no value parse to None; loading must fall back
+    to the defaults instead of raising a bare TypeError."""
+    raw = _settings()
+    raw["app"] = None
+    raw["data"] = None
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    config = load_config(str(path))
+
+    assert config.app == AppConfig()
+    assert config.data == DataConfig()

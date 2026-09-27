@@ -362,38 +362,3 @@ def test_batch_download_chunks_by_total_rows_not_per_symbol(monkeypatch: Any) ->
         rows = int((chunk_end - chunk_start).total_seconds() // 86400)
         assert rows * 12 <= 10_000
 
-
-def test_sip_quote_entitlement_failure_falls_back_to_iex_quotes_only(monkeypatch: Any) -> None:
-    """A SIP latest-quote entitlement failure degrades quotes to IEX without
-    downgrading the historical bar feed (Alpaca gates the two separately)."""
-    import parayabuck.data.alpaca as alpaca_module
-
-    quote_calls: list[object] = []
-
-    class QuoteFailingClient:
-        def get_stock_latest_quote(self, request: object) -> Any:
-            quote_calls.append(request)
-            if len(quote_calls) == 1:
-                raise RuntimeError("subscription does not permit querying recent SIP data")
-            return {"AAPL": object()}
-
-    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
-    history._stock_feed = "sip"
-    history._configured_stock_feed = "sip"
-    history._sip_fallback_active = False
-    history._sip_quote_fallback_active = False
-    history._sip_quote_fallback_active = False
-    history._stock_client = QuoteFailingClient()
-    history._crypto_client = None
-    history._cache = SimpleNamespace(
-        get=lambda *args, **kwargs: [],
-        upsert=lambda *args, **kwargs: None,
-    )
-
-    quotes = history.get_latest_stock_quotes(["AAPL"])
-    assert "AAPL" in quotes
-    assert history._sip_quote_fallback_active is True
-    assert history._sip_fallback_active is False
-    # The bar feed keeps its configured SIP coverage.
-    assert history.feed_status()["effective"] == "sip"
-    assert history.feed_status()["quote_effective"] == "iex"

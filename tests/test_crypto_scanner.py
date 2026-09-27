@@ -161,6 +161,43 @@ def test_malformed_bar_is_skipped_not_crash_the_refresh() -> None:
     assert candidate.median_dollar_volume == pytest.approx(400.0)
 
 
+def test_bar_with_non_numeric_high_is_skipped_from_the_atr_window() -> None:
+    """A bar with a missing high/low passes the close/volume filter but cannot
+    contribute a true range: skip that pair, never abort the whole refresh."""
+    start = datetime(2026, 7, 27, tzinfo=UTC)
+
+    def bar(hour: int, close: float) -> SimpleNamespace:
+        return SimpleNamespace(
+            timestamp=start + timedelta(hours=hour),
+            open=close,
+            high=close,
+            low=close,
+            close=close,
+            volume=4.0,
+        )
+
+    malformed = SimpleNamespace(
+        timestamp=start + timedelta(hours=2),
+        open=104.0,
+        high=None,
+        low=104.0,
+        close=104.0,
+        volume=4.0,
+    )
+    candidate = crypto_candidate_from_bars(
+        "SOL/USD",
+        [bar(0, 100.0), bar(1, 102.0), malformed, bar(3, 106.0)],
+        expected_bar_count=4,
+        tradable=True,
+        status="active",
+    )
+
+    # The bar itself is still counted as history; only the pair whose current
+    # bar is malformed is dropped, leaving two 2.0 true ranges over a 106 close.
+    assert candidate.data_completeness == pytest.approx(1.0)
+    assert candidate.atr_pct == pytest.approx(2.0 / 106.0)
+
+
 def test_config_canonicalizes_and_validates_crypto_symbols(tmp_path: Path) -> None:
     config = _config(
         tmp_path,

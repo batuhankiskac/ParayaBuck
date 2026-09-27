@@ -213,8 +213,6 @@ def _refresh_crypto_universe_with_clients(
         asset = broker_active.get(symbol)
         if asset is None:
             continue
-        if symbol in denylist or (allowlist and symbol not in allowlist):
-            continue
         if not bool(getattr(asset, "tradable", False)):
             continue
         if str(getattr(asset, "status", "")).lower().split(".")[-1] != "active":
@@ -334,10 +332,6 @@ def _crypto_observation_set(
             "observation_source": observation.source,
         },
     )
-
-
-def _chunks(values: list[str], size: int = 8) -> list[list[str]]:
-    return [values[offset : offset + size] for offset in range(0, len(values), size)]
 
 
 def _incremental_history(

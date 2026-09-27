@@ -123,14 +123,11 @@ def merge_provider_authority(
     oldest_provider = min(provider_by_ts)
 
     merged: dict[datetime, Bar] = {}
-    retained_out_of_scope = 0
     for bar in stored:
         if bar.timestamp in provider_by_ts:
             continue  # provider wins
         if bar.timestamp > newest_provider or bar.timestamp < oldest_provider:
             merged[bar.timestamp] = bar
-            if bar.timestamp < oldest_provider:
-                retained_out_of_scope += 1
     merged.update(provider_by_ts)
     ordered = tuple(merged[key] for key in sorted(merged))
 
@@ -145,7 +142,6 @@ def merge_provider_authority(
             if fresh is not old and not close_matches(fresh.close, old.close):
                 changed = True
                 break
-    del retained_out_of_scope
     return ordered, changed
 
 

@@ -98,16 +98,19 @@ def build_observation_set(
         benchmark_history = history.get(benchmark, ())
         expected_latest = benchmark_history[-1].timestamp if benchmark_history else None
         minimum_history = strategy.minimum_history_bars
+
+        def _ready(symbol: str) -> bool:
+            series = history.get(symbol, ())
+            if len(series) < minimum_history:
+                return False
+            if expected_latest is None:
+                return True
+            return bool(series) and series[-1].timestamp == expected_latest
+
         # Rankers must only ever return ready pool members. A stale name may
         # still have enough history to receive an alpha rank, but streaming it
         # would wedge every runtime decision at the complete-batch gate.
-        ranked = tuple(
-            symbol
-            for symbol in ranked
-            if symbol in available
-            and len(history.get(symbol, ())) >= minimum_history
-            and (expected_latest is None or history[symbol][-1].timestamp == expected_latest)
-        )
+        ranked = tuple(symbol for symbol in ranked if symbol in available and _ready(symbol))
         source = "strategy_alpha" if ranked else "no_ranker"
     if len(ranked) < maximum_stream_symbols - len(reserved) and scanner_fallback:
         fallback_candidates = tuple(
@@ -116,12 +119,7 @@ def build_observation_set(
             if canonical_symbol(symbol, market) not in reserved and canonical_symbol(symbol, market) not in ranked
         )
         if strategy is not None:
-            fallback_candidates = tuple(
-                symbol
-                for symbol in fallback_candidates
-                if len(history.get(symbol, ())) >= minimum_history
-                and (expected_latest is None or history[symbol][-1].timestamp == expected_latest)
-            )
+            fallback_candidates = tuple(symbol for symbol in fallback_candidates if _ready(symbol))
         fill = fallback_candidates
         ranked = (*ranked, *fill)
         if source == "no_ranker" and fill:

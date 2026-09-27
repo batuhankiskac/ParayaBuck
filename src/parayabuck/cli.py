@@ -418,8 +418,6 @@ def _run_doctor(args: argparse.Namespace) -> int:
             except Exception as exc:
                 add(label, False, f"{p}: {exc}")
         cfg_p = Path(config_path) if config_path and Path(config_path).exists() else Path("config/settings.yaml")
-        if not cfg_p.exists():
-            cfg_p = Path("config/settings.yaml")
         try:
             cfg_p.parent.mkdir(parents=True, exist_ok=True)
             add("config state writable", os.access(cfg_p.parent, os.W_OK), str(cfg_p.parent))
@@ -464,8 +462,11 @@ def _run_doctor(args: argparse.Namespace) -> int:
 
                     probe = Path(td) / "probe.sqlite3"
                     store = SQLiteStore(probe)
-                    add("sqlite WAL capability", True, "probe WAL ok")
-                    store.connection.close()
+                    store.acquire()
+                    try:
+                        add("sqlite WAL capability", True, "probe WAL ok")
+                    finally:
+                        store.release()
             except Exception as exc:
                 add("sqlite WAL capability", False, str(exc))
         if config.universe.equity.enabled:
@@ -643,18 +644,8 @@ def _ops_status(args: argparse.Namespace) -> int:
         from parayabuck.config import Config as _Cfg
 
         config = _Cfg()
-    snapshot_path = (
-        getattr(args, "snapshot", None)
-        or getattr(config, "observability", None)
-        and getattr(config.observability, "snapshot_path", None)
-        or "data/runtime/health_snapshot.json"
-    )
-    db_path = (
-        getattr(args, "db", None)
-        or getattr(config, "runtime", None)
-        and getattr(config.runtime, "decision_db_path", None)
-        or "data/runtime/parayabuck.sqlite3"
-    )
+    snapshot_path = "data/runtime/health_snapshot.json"
+    db_path = "data/runtime/parayabuck.sqlite3"
     # allow explicit snapshot path via config.observability
     if config is not None and hasattr(config, "observability"):
         if not getattr(args, "snapshot", None):
@@ -709,9 +700,6 @@ def _ops_status(args: argparse.Namespace) -> int:
     print(f"Session       {session}")
     print("")
     # Markets
-    for market_label in ("equity", "crypto"):
-        # health markets are per market? We have workers check etc. For now show from checks
-        pass
     print(_check_line("workers", "Workers"))
     print(_check_line("reconciliation", "Reconcile"))
     print(_check_line("account", "Account"))
@@ -759,22 +747,23 @@ def _ops_doctor(args: argparse.Namespace) -> int:
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
     db_path = getattr(args, "db", None)
     # Try to get db from config if not provided
-    if not db_path:
-        try:
-            cfg = load_config(config_path if Path(config_path).exists() else None)
+    try:
+        cfg = load_config(config_path if Path(config_path).exists() else None)
+        if not db_path:
             db_path = cfg.runtime.decision_db_path
-            if not snapshot_path or snapshot_path == "data/runtime/health_snapshot.json":
-                # allow observability snapshot path
-                try:
-                    snapshot_path = cfg.observability.snapshot_path
-                except Exception:
-                    pass
-            if not journal_path or journal_path == "data/runtime/observability.sqlite3":
-                try:
-                    journal_path = cfg.observability.journal_path
-                except Exception:
-                    pass
-        except Exception:
+        if not snapshot_path or snapshot_path == "data/runtime/health_snapshot.json":
+            # allow observability snapshot path
+            try:
+                snapshot_path = cfg.observability.snapshot_path
+            except Exception:
+                pass
+        if not journal_path or journal_path == "data/runtime/observability.sqlite3":
+            try:
+                journal_path = cfg.observability.journal_path
+            except Exception:
+                pass
+    except Exception:
+        if not db_path:
             db_path = "data/runtime/parayabuck.sqlite3"
     try:
         from parayabuck.monitoring.diagnostic import _run_doctor_checks
@@ -860,16 +849,18 @@ def _ops_timeline(args: argparse.Namespace) -> int:
     incident_id = getattr(args, "incident", None)
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
     db_path = getattr(args, "db", None)
-    if not db_path:
-        try:
-            cfg = load_config(getattr(args, "config", None))
+    # allow config override
+    try:
+        cfg = load_config(getattr(args, "config", None))
+        if not getattr(args, "journal", None):
+            try:
+                journal_path = cfg.observability.journal_path
+            except Exception:
+                pass
+        if not db_path:
             db_path = cfg.runtime.decision_db_path
-            if not getattr(args, "journal", None):
-                try:
-                    journal_path = cfg.observability.journal_path
-                except Exception:
-                    pass
-        except Exception:
+    except Exception:
+        if not db_path:
             db_path = "data/runtime/parayabuck.sqlite3"
     limit = int(getattr(args, "limit", 100) or 100)
     events: list[Any] = []
@@ -1226,9 +1217,9 @@ def _load_bars(
                     ", ".join(sorted(deficient)[:20]),
                 )
                 continue
-            # Extend the window backward for the deficient symbols only. The
-            # shortfall is converted to calendar days anchored at the evaluation
-            # start, plus a growth buffer so the next attempt makes real progress.
+            # Extend the window backward for every symbol. The shortfall is
+            # converted to calendar days anchored at the evaluation start, plus
+            # a growth buffer so the next attempt makes real progress.
             from parayabuck.markets.timeframes import bars_to_calendar_days
 
             extra_days = bars_to_calendar_days(
@@ -1237,8 +1228,6 @@ def _load_bars(
                 minimum_bars,
                 end_date=start,
             )
-            symbols_to_retry = sorted(set(deficient))
-            symbols = [s for s in symbols if s not in symbols_to_retry] + symbols_to_retry
             start_at = min(
                 start_at,
                 start - timedelta(days=extra_days) if start is not None else start_at,

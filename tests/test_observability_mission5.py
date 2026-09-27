@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sqlite3
 import time
@@ -439,6 +440,84 @@ def test_cli_ops_timeline(tmp_path: Path) -> None:
     assert code == 0
     data = json.loads(out)
     assert "events" in data
+
+
+def test_ops_timeline_uses_configured_journal_path_with_explicit_db(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``--db`` overrides the decision DB only; the journal path still comes
+    from the config unless ``--journal`` is given."""
+    from parayabuck.cli import _ops_timeline
+
+    journal = tmp_path / "observability.sqlite3"
+    decision = "dec-configured-journal"
+    EventJournal(str(journal)).emit_sync(create_event(kind="decision_summary", message="summary", decision_id=decision))
+    config = tmp_path / "settings.yaml"
+    config.write_text(
+        "symbols: [AAPL]\n"
+        "strategy:\n"
+        "  equity:\n"
+        "    name: equity_leveraged_trend_v1\n"
+        "observability:\n"
+        f'  journal_path: "{journal}"\n'
+    )
+
+    code = _ops_timeline(
+        argparse.Namespace(
+            decision=decision,
+            order=None,
+            incident=None,
+            journal=None,
+            db=str(tmp_path / "decisions.sqlite3"),
+            config=str(config),
+            limit=100,
+            json=True,
+        )
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert [event["kind"] for event in payload["events"]] == ["decision_summary"]
+
+
+def test_doctor_wal_probe_closes_the_store_through_the_ownership_api(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fresh-install WAL probe owns a store, so it must hand the connection
+    back through ``release`` rather than closing it behind the store's back."""
+    import parayabuck.cli as cli_module
+    import parayabuck.storage as storage_module
+
+    probe_stores: list[storage_module.SQLiteStore] = []
+
+    class _RecordingStore(storage_module.SQLiteStore):
+        def __init__(self, path: str | Path) -> None:
+            super().__init__(path)
+            probe_stores.append(self)
+
+    monkeypatch.setattr(storage_module, "SQLiteStore", _RecordingStore)
+    config = tmp_path / "settings.yaml"
+    config.write_text(
+        "symbols: [AAPL]\n"
+        "strategy:\n"
+        "  equity:\n"
+        "    name: equity_leveraged_trend_v1\n"
+        "runtime:\n"
+        f"  decision_db_path: {tmp_path / 'parayabuck.sqlite3'}\n"
+        "backtest:\n"
+        f"  output_dir: {tmp_path / 'reports'}\n"
+        "backup:\n"
+        f"  path: {tmp_path / 'backups'}\n"
+    )
+
+    cli_module._run_doctor(
+        argparse.Namespace(config=str(config), paper=False, offline=True, strict=False, json=False)
+    )
+
+    assert len(probe_stores) == 1
+    assert probe_stores[0]._closed is True
 
 
 def test_cli_ops_bundle(tmp_path: Path) -> None:

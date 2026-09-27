@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from datetime import UTC, date, datetime, timedelta
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from parayabuck.logger import get_logger
@@ -81,6 +82,7 @@ def weekday_count(start: datetime, end: datetime) -> int:
     return total_days - weekend_days
 
 
+@lru_cache(maxsize=2048)
 def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: datetime | date | None = None) -> int:
     """Calendar span needed to collect ``bars`` of ``timeframe`` history.
 
@@ -94,6 +96,12 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
     backtests must size their warmup around the requested evaluation start
     (e.g. 2020), whose holiday calendar differs from today's, never around
     the current date.
+
+    Results are memoised per (symbol, timeframe, bars, end_date): the NYSE
+    calendar lookup is expensive and the arguments are immutable. With
+    ``end_date=None`` the anchor is the current date, so a long-lived process
+    may reuse a value anchored up to a day earlier — the same session-density
+    approximation the function already makes.
     """
     minutes = TIMEFRAME_MINUTES[timeframe]
     if "/" in symbol:

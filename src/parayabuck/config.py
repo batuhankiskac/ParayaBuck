@@ -462,7 +462,9 @@ class CryptoUniverseConfig:
             raise ValueError("universe.crypto.maximum_stream_symbols must be positive")
         if len(pinned) > self.maximum_stream_symbols:
             raise ValueError("Pinned crypto symbols exceed maximum_stream_symbols")
-        if self.active_universe_max_age_hours <= 0:
+        # NaN compares False against every age, so a non-finite limit would
+        # never report the persisted universe as stale.
+        if not math.isfinite(self.active_universe_max_age_hours) or self.active_universe_max_age_hours <= 0:
             raise ValueError("universe.crypto.active_universe_max_age_hours must be positive")
         object.__setattr__(self, "trade_symbols", symbols)
         object.__setattr__(self, "pinned_symbols", pinned)

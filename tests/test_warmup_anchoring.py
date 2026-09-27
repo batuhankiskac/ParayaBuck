@@ -100,3 +100,25 @@ def test_intraday_equity_span_scales_by_sessions() -> None:
     # 390 minutes per session: 780 minutes of bars need 2 sessions.
     days2 = bars_to_calendar_days("SPY", "30m", 40, end_date=end)
     assert _sessions_between(calendar, end - timedelta(days=days2), end) >= 2
+
+
+def test_default_anchor_follows_the_current_date_in_a_long_lived_process(monkeypatch) -> None:
+    """``end_date=None`` anchors on TODAY at every call: a process that has
+    been up since Wednesday must not keep Wednesday's span on Monday."""
+    from datetime import UTC, datetime
+
+    import parayabuck.markets.timeframes as timeframes
+
+    current = {"now": datetime(2026, 9, 30, 15, 0, tzinfo=UTC)}  # Wednesday
+
+    class _Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return current["now"]
+
+    monkeypatch.setattr(timeframes, "datetime", _Clock)
+    # Wed, Tue, Mon: three sessions fit in two calendar days back.
+    assert timeframes.bars_to_calendar_days("SPY", "1d", 3) == 2
+    current["now"] = datetime(2026, 10, 5, 15, 0, tzinfo=UTC)  # Monday
+    # Mon, Fri, Thu: the weekend stretches the same request to four days.
+    assert timeframes.bars_to_calendar_days("SPY", "1d", 3) == 4

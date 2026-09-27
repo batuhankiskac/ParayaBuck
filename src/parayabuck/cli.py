@@ -744,13 +744,14 @@ def _ops_doctor(args: argparse.Namespace) -> int:
         cfg = load_config(config_path if Path(config_path).exists() else None)
         if not db_path:
             db_path = cfg.runtime.decision_db_path
-        if not snapshot_path or snapshot_path == "data/runtime/health_snapshot.json":
-            # allow observability snapshot path
+        # Only an absent flag falls back to the configured path: an explicit
+        # flag that happens to equal the relative default must still win.
+        if not getattr(args, "snapshot", None):
             try:
                 snapshot_path = cfg.observability.snapshot_path
             except Exception:
                 pass
-        if not journal_path or journal_path == "data/runtime/observability.sqlite3":
+        if not getattr(args, "journal", None):
             try:
                 journal_path = cfg.observability.journal_path
             except Exception:

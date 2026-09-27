@@ -3147,12 +3147,15 @@ class EngineRuntime:
 
     def _flush_aggregators(self) -> None:
         now = datetime.now(UTC)
-        local = now.astimezone(NEW_YORK)
+        # Same finalization grace as flush_until: the 15:59 minute can arrive
+        # just after 16:00:00 and must still land in the session-close candles.
+        closing = now - timedelta(seconds=self.config.data_finalization_grace_seconds)
+        local = closing.astimezone(NEW_YORK)
         with self._ingestion_lock:
             finalized = {timeframe: aggregator.flush_until(now) for timeframe, aggregator in self.aggregators.items()}
             if local.weekday() < 5 and (local.hour, local.minute) >= (16, 0):
                 for timeframe, aggregator in self.aggregators.items():
-                    finalized[timeframe].extend(aggregator.flush_session_close(now))
+                    finalized[timeframe].extend(aggregator.flush_session_close(closing))
         for timeframe, bars in finalized.items():
             for bar in bars:
                 self._emit_finalized_bar(timeframe, bar)

@@ -314,3 +314,191 @@ def test_rebalance_completing_over_an_ambiguous_buy_alerts_once(tmp_path, raised
     assert [(item["kind"], item["category"], item["client_order_ids"]) for item in raised] == [
         ("paper_incident", "rebalance_completed_with_ambiguous_buy", buy_rows[0]["client_order_id"])
     ]
+
+
+def test_failed_deferred_buy_does_not_strand_its_unsubmitted_sibling(tmp_path) -> None:
+    """A failed BUY submit leaves no ``submitting`` row for a later BUY of the
+    batch that never reached the broker; the next advance submits it."""
+    targets = {"AAPL": 0.15, "MSFT": 0.20, "NVDA": 0.10}
+
+    class _ThreeSymbolStrategy(_Strategy):
+        parameters = {"targets": dict(targets)}
+
+        def decide(self, context: PortfolioContext) -> TargetPortfolio:
+            return TargetPortfolio(
+                strategy_name=self.name,
+                strategy_version=self.version,
+                decision_timestamp=context.decision_timestamp,
+                weights=tuple(TargetWeight(symbol, weight) for symbol, weight in targets.items()),
+                cash_weight=1.0 - sum(targets.values()),
+                universe_version="test",
+            )
+
+    broker = _Broker()
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime = PortfolioRuntime(
+        _ThreeSymbolStrategy(),
+        tuple(sorted(targets)),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    bars = [Bar(_DAY, symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY) for symbol in targets]
+    first = runtime.process_closed_bars(bars)
+    assert first.status == "sell_phase_submitted"
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _settle(repository, sell, "sell-fill")
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+    submit = broker.submit_portfolio_order
+
+    def timeout(order: PortfolioOrderRequest) -> str:
+        raise TimeoutError("broker timeout")
+
+    broker.submit_portfolio_order = timeout  # type: ignore[method-assign]
+    with pytest.raises(TimeoutError):
+        runtime.advance_rebalance()
+    rows = repository.orders_for_decision(first.decision_id, side="buy")
+    assert [row["status"] for row in rows] == ["reconciliation_required"]
+    failed = str(rows[0]["client_order_id"])
+
+    broker.submit_portfolio_order = submit  # type: ignore[method-assign]
+    resumed = runtime.advance_rebalance()
+
+    assert resumed.status == "buy_phase_submitted"
+    sibling = [order for order in broker.submitted if order.decision_id == first.decision_id][1:]
+    assert len(sibling) == 1 and sibling[0].client_order_id != failed
+    statuses = {
+        str(row["client_order_id"]): str(row["status"])
+        for row in repository.orders_for_decision(first.decision_id, side="buy")
+    }
+    assert statuses == {failed: "reconciliation_required", sibling[0].client_order_id: "submitted"}
+
+
+def test_buy_ready_resolves_a_crashed_submitting_buy_before_replanning(tmp_path) -> None:
+    """A BUY row left at ``submitting`` by a crash in the deferred phase is
+    resolved against the broker instead of being suppressed and stranded."""
+    broker = _Broker()
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime = PortfolioRuntime(
+        _Strategy(),
+        tuple(sorted(_TARGETS)),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    first = runtime.process_closed_bars(_bars(_DAY))
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _settle(repository, sell, "sell-fill")
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+    submit = broker.submit_portfolio_order
+
+    def crash(order: PortfolioOrderRequest) -> str:
+        raise SystemExit("process crashed before the broker call")
+
+    # The process dies after persisting the BUY row, before the broker call.
+    broker.submit_portfolio_order = crash  # type: ignore[method-assign]
+    with pytest.raises(SystemExit):
+        runtime.advance_rebalance()
+    broker.submit_portfolio_order = submit  # type: ignore[method-assign]
+    [row] = repository.orders_for_decision(first.decision_id, side="buy")
+    assert row["status"] == "submitting"
+    lookups: list[str] = []
+
+    def unreachable(client_order_id: str, broker_order_id: str = "") -> str:
+        lookups.append(client_order_id)
+        raise ConnectionError("broker unreachable")
+
+    # An unreachable broker leaves the phase waiting, never completing over the row.
+    broker.resolve_portfolio_submission = unreachable  # type: ignore[attr-defined]
+    assert runtime.advance_rebalance() is None
+    assert _phase(repository, first.decision_id)[0] == "buy_ready"
+
+    # The broker proves the order never arrived: the row becomes terminal.
+    broker.resolve_portfolio_submission = lambda client_order_id, broker_order_id="": "canceled"  # type: ignore[attr-defined]
+    runtime.advance_rebalance()
+    runtime.advance_rebalance()
+
+    assert lookups == [row["client_order_id"]]
+    assert [item["status"] for item in repository.orders_for_decision(first.decision_id, side="buy")] == ["canceled"]
+    assert _phase(repository, first.decision_id)[0] == REBALANCE_PHASE_COMPLETE
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+
+
+def _stranded_direct_buy(tmp_path):
+    """A pure-BUY decision whose first submit times out leaves its untried
+    sibling at ``submitting``."""
+    broker = _Broker()
+    broker.positions = []
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime = PortfolioRuntime(
+        _Strategy(),
+        tuple(sorted(_TARGETS)),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    submit = broker.submit_portfolio_order
+
+    def timeout(order: PortfolioOrderRequest) -> str:
+        raise TimeoutError("broker timeout")
+
+    broker.submit_portfolio_order = timeout  # type: ignore[method-assign]
+    with pytest.raises(TimeoutError):
+        runtime.process_closed_bars(_bars(_DAY))
+    broker.submit_portfolio_order = submit  # type: ignore[method-assign]
+    statuses = {str(row["symbol"]): str(row["status"]) for row in _all_orders(repository)}
+    assert statuses == {"AAPL": "reconciliation_required", "MSFT": "submitting"}
+    return runtime, repository, broker
+
+
+def _all_orders(repository: PortfolioStateRepository) -> list[dict[str, object]]:
+    rows = repository.store.connection.execute(
+        "SELECT client_order_id, symbol, status, decision_id FROM portfolio_orders ORDER BY created_at"
+    ).fetchall()
+    return [{"client_order_id": r[0], "symbol": r[1], "status": r[2], "decision_id": r[3]} for r in rows]
+
+
+def test_next_decision_cancels_an_untried_direct_order_unknown_to_the_broker(tmp_path) -> None:
+    runtime, repository, broker = _stranded_direct_buy(tmp_path)
+    [stranded] = [row for row in _all_orders(repository) if row["status"] == "submitting"]
+    lookups: list[str] = []
+
+    def unknown(client_order_id: str, broker_order_id: str = "") -> str:
+        lookups.append(client_order_id)
+        return "canceled"
+
+    broker.resolve_portfolio_submission = unknown  # type: ignore[attr-defined]
+    result = runtime.process_closed_bars(_bars(_DAY + timedelta(days=1)), force_scheduled=True)
+
+    assert lookups == [stranded["client_order_id"]]
+    rows = {row["client_order_id"]: row for row in _all_orders(repository)}
+    assert rows[stranded["client_order_id"]]["status"] == "canceled"
+    # The freed MSFT slot is planned again by the new decision; the ambiguous
+    # AAPL row is not a submitting row and keeps suppressing its symbol.
+    assert [(order.symbol, order.decision_id) for order in broker.submitted] == [("MSFT", result.decision_id)]
+    assert stranded["decision_id"] != result.decision_id
+    open_ids = {order.client_order_id for order in repository.open_orders("acct")}
+    assert stranded["client_order_id"] not in open_ids
+
+
+def test_unreachable_broker_keeps_an_untried_direct_order_open(tmp_path) -> None:
+    runtime, repository, broker = _stranded_direct_buy(tmp_path)
+
+    def unreachable(client_order_id: str, broker_order_id: str = "") -> str:
+        raise ConnectionError("broker unreachable")
+
+    broker.resolve_portfolio_submission = unreachable  # type: ignore[attr-defined]
+    runtime.process_closed_bars(_bars(_DAY + timedelta(days=1)), force_scheduled=True)
+
+    assert [row["status"] for row in _all_orders(repository) if row["symbol"] == "MSFT"] == ["submitting"]
+    # Still an open order: the new decision submits nothing for either symbol.
+    assert {order.symbol for order in repository.open_orders("acct")} == {"AAPL", "MSFT"}
+    assert broker.submitted == []

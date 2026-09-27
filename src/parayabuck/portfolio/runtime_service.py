@@ -1034,6 +1034,7 @@ class PortfolioRuntime:
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
+        self._resolve_stale_submitting_rows()
         open_orders = self.repository.open_orders(self.account_id)
         reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
         open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
@@ -1483,6 +1484,19 @@ class PortfolioRuntime:
         unreachable or lacks the lookup — the caller retries without
         guessing.
         """
+        changed = self._resolve_submitting_rows(orders)
+        if changed is None:
+            return None
+        if not changed:
+            return orders
+        return self.repository.orders_for_decision(decision_id, side=side)
+
+    def _resolve_submitting_rows(self, orders: tuple[dict[str, object], ...]) -> bool | None:
+        """Resolve each ``submitting`` row against the broker.
+
+        Returns whether any row changed, or ``None`` when the broker lacks the
+        lookup. A row whose lookup fails stays ``submitting``.
+        """
         resolver = getattr(self.broker, "resolve_portfolio_submission", None)
         if resolver is None:
             return None
@@ -1504,9 +1518,22 @@ class PortfolioRuntime:
                 status, broker_order_id = outcome, str(item.get("broker_order_id") or "")
             self.repository.update_order(client_order_id, status, broker_order_id)
             changed = True
-        if not changed:
-            return orders
-        return self.repository.orders_for_decision(decision_id, side=side)
+        return changed
+
+    def _resolve_stale_submitting_rows(self) -> None:
+        """Resolve rows of earlier decisions still at ``submitting``.
+
+        A submit that raised mid-batch leaves the batch's untried rows at
+        ``submitting`` with no rebalance phase to resolve them. Each is
+        looked up by its deterministic client order id: a found order takes
+        its real status, an unknown one is canceled, and a failed lookup
+        leaves the row ``submitting`` so it still counts as open (fail
+        closed). Runs before a new decision exists, so its rows are never
+        touched.
+        """
+        rows = self.repository.submitting_orders(self.account_id, self.market)
+        if rows:
+            self._resolve_submitting_rows(rows)
 
     def _submit_deferred_buys(
         self,
@@ -1551,6 +1578,16 @@ class PortfolioRuntime:
                 session_id=self.session_id,
             )
             return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_blocked")
+        # A crash between persisting a BUY row and its broker acknowledgement
+        # leaves it at ``submitting`` in this phase. Resolve it against the
+        # broker first, as the pending phases do: left as is, the re-plan would
+        # suppress its symbol and could complete the rebalance with the row
+        # never resolved. An unresolved row waits for a later advance.
+        buys = self.repository.orders_for_decision(decision_id, side="buy")
+        if any(str(item["status"]) == "submitting" for item in buys):
+            resolved = self._resolve_stuck_submission_rows(decision_id, buys, "buy")
+            if resolved is None or any(str(item["status"]) == "submitting" for item in resolved):
+                return None
         account = account or self.broker.account()
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
@@ -1646,12 +1683,16 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
         # The admission evidence references its order rows, which the direct
         # BUY path writes with the decision; the re-planned BUYs exist only
-        # now. ``_submit_orders`` records the same ``submitting`` row
-        # (INSERT OR IGNORE) and submits it as before.
+        # now. Each row is written just before its own submit (the
+        # observation keeps the whole batch's notional): a failed submit then
+        # leaves no ``submitting`` row for a later BUY that never reached the
+        # broker, so the next re-plan submits it instead of suppressing it.
+        # ``_submit_orders`` records the same row (INSERT OR IGNORE).
+        submitted: tuple[str, ...] = ()
         for order in buy_orders:
             self.repository.record_order(order, "submitting")
-        self._record_buy_admission_observation(decision_id, admission, buy_orders)
-        submitted = self._submit_orders(buy_orders)
+            self._record_buy_admission_observation(decision_id, admission, buy_orders, linked=(order,))
+            submitted += self._submit_orders((order,))
         self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BUY_PENDING)
         _emit_rebalance_phase_safe(
             decision_id,
@@ -1895,9 +1936,18 @@ class PortfolioRuntime:
         return self._size_buys_to_safe_capacity(())
 
     def _record_buy_admission_observation(
-        self, decision_id: str, admission: BuyAdmission, orders: tuple[PortfolioOrderRequest, ...]
+        self,
+        decision_id: str,
+        admission: BuyAdmission,
+        orders: tuple[PortfolioOrderRequest, ...],
+        *,
+        linked: tuple[PortfolioOrderRequest, ...] | None = None,
     ) -> None:
-        """Best-effort PAPER telemetry for the final direct or deferred BUY gate."""
+        """Best-effort PAPER telemetry for the final direct or deferred BUY gate.
+
+        ``orders`` is the admitted batch (its notional is recorded); ``linked``
+        narrows which of its order rows the observation is written for.
+        """
         if self.mode != "paper" or not orders:
             return
         writer = getattr(self.repository, "record_buy_admission_observation", None)
@@ -1915,7 +1965,7 @@ class PortfolioRuntime:
         try:
             writer(
                 decision_id,
-                tuple(order.client_order_id for order in orders),
+                tuple(order.client_order_id for order in (orders if linked is None else linked)),
                 account_equity=admission.account.equity,
                 account_cash=admission.account.cash,
                 realized_gross=admission.realized_gross,

@@ -112,7 +112,7 @@ No file in this audit mutates `config/settings.yaml`, `.env`, `live.*`, or creat
 
 **Code path.** `ReconciliationService.reconcile()` orchestrates `account()` → fee/fill backfill (watermarked 24h paginated dedup by `activity.id`) → `ledger.managed_for_account` 7-bucket → `_reconcile_stale_portfolio_ownership` → `_reconcile_crypto_exit_state` → `_reconcile_stale_ledger_entries` → protective (re)submission. `portfolio/idempotency.py:15-37` `IdempotencyKeyFactory` freezes determinism.
 
-**Evidence.** `test_alpaca_concurrency::test_reconcile_idempotent` (same buckets on second call). `test_restart_chaos.py::test_open_managed_sell_exempts_drift_after_restart` now passes after `RiskPeakService` `__new__` isolation fix (report §7). `portfolio/runtime_models.py` `is_terminal_order_status` + `REBALANCE_TRANSITIONS` state machine.
+**Evidence.** `test_alpaca_concurrency::test_reconcile_idempotent` (same buckets on second call). `test_restart_chaos.py::test_open_managed_sell_exempts_drift_after_restart` now passes after `RiskPeakService` `__new__` isolation fix (report §7). `portfolio/runtime_models.py` `is_terminal_order_status` plus `portfolio/runtime_rebalance.py` phase predicates.
 
 **Gap.** Cold-restart recovery of a half-submitted `submitting` order (`resolve_portfolio_submission` at restart) proven only via fake + transient integration; not wall-clock observed.
 
@@ -290,7 +290,7 @@ uv run python benchmarks/bench_web_platform.py | tail -20
 - `src/parayabuck/web/managers/engine.py:254-441,762-934` — 7-gate live-arm checklist
 - `src/parayabuck/execution/{alpaca,alpaca_models,alpaca_client,risk_peak,alpaca_protection,alpaca_crypto,alpaca_reconciliation,alpaca_account,alpaca_orders}` — execution boundary split
 - `src/parayabuck/execution/fake_client.py:363` — `FakeTradingClient`
-- `src/parayabuck/portfolio/{idempotency,runtime_models,runtime_service,runtime_recovery}` + lifecycle `docs/paper_runtime_lifecycle.md:1-77`
+- `src/parayabuck/portfolio/{idempotency,runtime_models,runtime_rebalance,runtime_service}` + lifecycle `docs/paper_runtime_lifecycle.md:1-77`
 - `src/parayabuck/backup.py:51-241` + `deploy/systemd/parayabuck-backup.{service,timer}` + `docs/operations.md:97-119`
 - `src/parayabuck/monitoring/{health,operational_event,observe,journal,alerts,diagnostic}` + `docs/operational_observability.md`
 - `docs/execution_architecture.md`, `docs/alpaca_broker_truth_matrix.md`, `docs/operational_observability.md`

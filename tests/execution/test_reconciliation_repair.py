@@ -139,20 +139,6 @@ def test_partial_buy_fill_while_offline_retains_order() -> None:
     assert len(broker.portfolio_open_orders()) == 1
 
 
-def test_local_order_missing_at_broker_is_reported_only_as_missing_broker_order() -> None:
-    """``MISSING_LOCAL_ORDER`` is the opposite condition — the broker holds
-    quantity the ledger does not track. A tracked id that vanished from the
-    broker must not be reported as both."""
-    broker = _State().broker()
-    broker._fetch_broker_order = lambda *_args: None
-    broker._get_open_orders = lambda _request: ()
-
-    report = ReconciliationService(broker).reconcile()
-
-    assert report["MISSING_BROKER_ORDER"] == ["intent-1"]
-    assert "intent-1" not in report["MISSING_LOCAL_ORDER"]
-
-
 def test_sell_partial_and_full_fill_while_offline() -> None:
     partial = _State(side="sell", broker_status="partially_filled", broker_qty=0.6, filled_qty=0.4)
     report = ReconciliationService(partial.broker()).reconcile()

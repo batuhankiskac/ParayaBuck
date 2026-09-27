@@ -784,4 +784,8 @@ class ReconciliationService:
             categories["UNKNOWN_ORDER"].append(_cid)
         for _cid in sorted(_local_open_ids - _broker_open_ids):
             categories["MISSING_BROKER_ORDER"].append(_cid)
+            # Documented compatibility contract: a local open id the broker no
+            # longer lists is reported under both keys (see
+            # docs/disaster_recovery.md and docs/alpaca_broker_truth_matrix.md).
+            categories["MISSING_LOCAL_ORDER"].append(_cid)
         return categories

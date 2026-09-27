@@ -60,17 +60,22 @@ class AccountService:
 
     @staticmethod
     def classify_market(asset: Any, is_crypto_fn: Any = is_crypto) -> Market:
+        """CRYPTO when the asset class says so *or* the symbol says so.
+
+        Alpaca populates ``asset_class`` inconsistently, so a crypto pair
+        arriving as ``''`` or ``'us_equity'`` must still be recognized; a
+        misread market makes ``canonical_symbol`` either raise or return the
+        wrong ownership key.
+        """
         raw_class = getattr(asset, "asset_class", None)
         if raw_class is not None:
             try:
-                v = str(raw_class).lower()
-                if "crypto" in v:
+                if "crypto" in str(raw_class).lower():
                     return Market.CRYPTO
-                return Market.EQUITY
             except Exception:
                 pass
         try:
-            return Market.CRYPTO if is_crypto_fn(getattr(asset, "symbol", "")) else Market.EQUITY
+            return Market.CRYPTO if is_crypto_fn(str(getattr(asset, "symbol", ""))) else Market.EQUITY
         except Exception:
             return Market.EQUITY
 

@@ -367,15 +367,6 @@ class RiskPeakService:
             except Exception:
                 log.warning("Failed to reconcile peak sidecar to account %s", account_id, exc_info=True)
 
-    def load_peak_equity(self, account_id: str | None = None) -> float:
-        acct = account_id or getattr(self, "_peak_account_id", None) or getattr(self, "_broker_account_id", None)
-        if acct:
-            self.ensure_reconciled(str(acct), float(getattr(self, "_peak_equity", 0.0) or 0.0))
-            return float(self._peak_equity)
-        if self.ledger is None:
-            return float(self._peak_equity)
-        return float(self._peak_equity)
-
     def save_peak_equity(self, account_id: str | None = None) -> None:
         if not math.isfinite(self._peak_equity) or self._peak_equity < 0:
             raise ValueError(f"Cannot persist non-finite or negative peak: {self._peak_equity!r}")

@@ -139,6 +139,24 @@ def test_fill_activity_fee_is_booked_exactly_once_on_replay(tmp_path: Path) -> N
     ledger.close()
 
 
+def _unlinked_exit_event(cumulative: float) -> ExecutionEvent:
+    return ExecutionEvent(
+        account_id="acct",
+        client_order_id="alpaca-fill-activity-broker-exit",
+        broker_order_id="broker-exit",
+        parent_order_id=None,
+        role=OrderRole.MANUAL_EXIT,
+        symbol="AAPL",
+        market=Market.EQUITY,
+        state=OrderState.FILLED,
+        requested_qty=5.0,
+        cumulative_filled_qty=cumulative,
+        average_fill_price=105.0,
+        occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+        fee=0.5,
+    )
+
+
 def test_unlinked_exit_fill_stays_non_terminal_and_warns(tmp_path: Path, caplog: Any) -> None:
     """A MANUAL_EXIT fill that predates its managed lot has no owner: the order
     row must not be stamped terminal and the loss must be logged."""
@@ -146,23 +164,7 @@ def test_unlinked_exit_fill_stays_non_terminal_and_warns(tmp_path: Path, caplog:
     _entry(ledger)
 
     with caplog.at_level(logging.WARNING, logger="parayabuck.execution.ledger"):
-        ledger.apply_execution_event(
-            ExecutionEvent(
-                account_id="acct",
-                client_order_id="alpaca-fill-activity-broker-exit",
-                broker_order_id="broker-exit",
-                parent_order_id=None,
-                role=OrderRole.MANUAL_EXIT,
-                symbol="AAPL",
-                market=Market.EQUITY,
-                state=OrderState.FILLED,
-                requested_qty=5.0,
-                cumulative_filled_qty=5.0,
-                average_fill_price=105.0,
-                occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
-                fee=0.5,
-            )
-        )
+        ledger.apply_execution_event(_unlinked_exit_event(5.0))
 
     row = ledger.connection.execute(
         "SELECT terminal_state, cumulative_filled_qty FROM orders WHERE client_order_id=?",
@@ -170,6 +172,48 @@ def test_unlinked_exit_fill_stays_non_terminal_and_warns(tmp_path: Path, caplog:
     ).fetchone()
     assert row == (None, 5.0)
     assert "recovery_action=await_managed_entry_link" in caplog.text
+    ledger.close()
+
+
+def test_redelivered_unlinked_exit_fill_stays_non_terminal(tmp_path: Path, caplog: Any) -> None:
+    """Reconciliation re-emits the same exit event on every pass, so a second
+    delivery carrying no new fill delta must not re-stamp the row terminal —
+    that is the ``filled`` order with no ownership movement the guard exists
+    to prevent. The fee is booked once and the warning is not repeated."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    _entry(ledger)
+
+    with caplog.at_level(logging.WARNING, logger="parayabuck.execution.ledger"):
+        ledger.apply_execution_event(_unlinked_exit_event(5.0))
+        ledger.apply_execution_event(_unlinked_exit_event(5.0))
+
+    row = ledger.connection.execute(
+        "SELECT terminal_state, cumulative_filled_qty FROM orders WHERE client_order_id=?",
+        ("alpaca-fill-activity-broker-exit",),
+    ).fetchone()
+    assert row == (None, 5.0)
+    assert ledger.connection.execute(
+        "SELECT client_order_id, fee FROM fee_activities WHERE client_order_id=?",
+        ("alpaca-fill-activity-broker-exit",),
+    ).fetchall() == [("alpaca-fill-activity-broker-exit", 0.5)]
+    assert caplog.text.count("Unlinked execution fill") == 1
+    ledger.close()
+
+
+def test_unlinked_exit_fill_stays_non_terminal_across_partial_then_full(tmp_path: Path) -> None:
+    """A partial fill and the completing fill are separate deliveries; neither
+    may terminalize a row whose lot was never linked."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    _entry(ledger)
+
+    ledger.apply_execution_event(_unlinked_exit_event(2.0))
+    ledger.apply_execution_event(_unlinked_exit_event(5.0))
+
+    row = ledger.connection.execute(
+        "SELECT terminal_state, cumulative_filled_qty FROM orders WHERE client_order_id=?",
+        ("alpaca-fill-activity-broker-exit",),
+    ).fetchone()
+    assert row == (None, 5.0)
     ledger.close()
 
 
@@ -187,8 +231,9 @@ def test_linked_exit_fill_is_still_marked_terminal(tmp_path: Path) -> None:
 
 
 def test_execution_event_rows_record_their_side(tmp_path: Path) -> None:
-    """The adverse-slippage sign is derived from ``orders.side``; an empty
-    value silently reads as "short"."""
+    """The adverse-slippage sign is derived from ``orders.side``. A linked exit
+    takes the opposite of its entry; an exit with no link has no proven side
+    and must stay empty rather than be guessed."""
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     _entry(ledger)
     _booked_exit(ledger, "broker-entry")
@@ -214,7 +259,66 @@ def test_execution_event_rows_record_their_side(tmp_path: Path) -> None:
     )
     assert rows["entry-1"] == "long"
     assert rows["exit-client-1"] == "sell"
-    assert rows["alpaca-fill-activity-broker-unknown"] == "sell"
+    # No managed lot links this fill, so the role proves nothing about its side.
+    assert rows["alpaca-fill-activity-broker-unknown"] == ""
+    ledger.close()
+
+
+def test_short_entry_exit_rows_record_the_opposite_side(tmp_path: Path) -> None:
+    """A short position is closed with a buy. Deriving the side from the order
+    role stamps "sell" and inverts the slippage sign of the closing fill."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    short = OrderIntent(
+        signal_id="signal-2",
+        symbol="AAPL",
+        market=Market.EQUITY,
+        direction=Direction.SHORT,
+        qty=5.0,
+        entry_price=100.0,
+        stop_price=105.0,
+        target_price=90.0,
+        strategy="test",
+        client_order_id="entry-short",
+    )
+    ledger.register_entry_order("acct", short, "broker-short-entry")
+    ledger.apply_execution_event(
+        ExecutionEvent(
+            account_id="acct",
+            client_order_id="entry-short",
+            broker_order_id="broker-short-entry",
+            parent_order_id=None,
+            role=OrderRole.ENTRY,
+            symbol="AAPL",
+            market=Market.EQUITY,
+            state=OrderState.FILLED,
+            requested_qty=5.0,
+            cumulative_filled_qty=5.0,
+            average_fill_price=100.0,
+            occurred_at=datetime(2026, 1, 2, 14, 0, tzinfo=UTC),
+        )
+    )
+    ledger.apply_execution_event(
+        ExecutionEvent(
+            account_id="acct",
+            client_order_id="short-exit-1",
+            broker_order_id="broker-short-exit",
+            parent_order_id="broker-short-entry",
+            role=OrderRole.PROTECTIVE_STOP,
+            symbol="AAPL",
+            market=Market.EQUITY,
+            state=OrderState.FILLED,
+            requested_qty=5.0,
+            cumulative_filled_qty=5.0,
+            average_fill_price=105.0,
+            occurred_at=datetime(2026, 1, 2, 15, 0, tzinfo=UTC),
+        )
+    )
+
+    rows = dict(
+        ledger.connection.execute("SELECT client_order_id, side FROM orders").fetchall()  # type: ignore[arg-type]
+    )
+    assert rows["entry-short"] == "short"
+    assert rows["short-exit-1"] == "buy"
     ledger.close()
 
 

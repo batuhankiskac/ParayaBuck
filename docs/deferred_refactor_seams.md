@@ -27,7 +27,7 @@ Seam: `EngineRuntime` keeps public API, delegates to helpers; helpers receive `C
 Seam: `server.py` becomes thin FastAPI assembly; `manager` stays singleton.
 
 ### execution/alpaca.py
-- `_load_peak_equity` / `_save_peak_equity` + `RiskStatePersistenceError` → `execution/peak_state.py` (now uses `atomic_write`, configurable `runtime_state_dir`)
+- `_save_peak_equity` + `RiskStatePersistenceError` → `execution/peak_state.py` (now uses `atomic_write`, configurable `runtime_state_dir`)
 - Order building (`_build_order_request`) → `execution/orders.py`
 - Polling / fill recovery → `execution/polling.py`
 Seam: `AlpacaBroker` composes `PeakState` and `OrderBuilder`; peak path derived from `runtime.decision_db_path` parent (already implemented).

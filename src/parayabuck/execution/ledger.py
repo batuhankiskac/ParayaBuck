@@ -23,6 +23,10 @@ from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
 
 log = get_logger("parayabuck.execution.ledger")
 
+# The side of an order row is the side of the position, not of the order
+# stream: an exit/stop closes a lot, so it always trades against the entry.
+_OPPOSITE_SIDES = {"long": "sell", "buy": "sell", "sell": "buy", "short": "buy"}
+
 
 @dataclass(frozen=True)
 class ManagedPosition:
@@ -863,10 +867,11 @@ class ExecutionLedger:
                 if entry_client_order_id is None:
                     # The fee is real and must be recorded, but this order is
                     # not linked to a managed lot, so there is no
-                    # managed_positions row to book it against.
-                    log.warning(
-                        "Fee recorded without a managed lot: activity_id=%s client_order_id=%s fee=%s "
-                        "recovery_action=await_managed_entry_link",
+                    # managed_positions row to book it against.  Every
+                    # reconcile pass can rediscover the same order, so this
+                    # routine path must not warn.
+                    log.debug(
+                        "Fee recorded without a managed lot: activity_id=%s client_order_id=%s fee=%s",
                         activity_id,
                         order[0],
                         fee,
@@ -970,7 +975,7 @@ class ExecutionLedger:
                 existing = self.connection.execute(
                     """
                     SELECT cumulative_filled_qty, average_fill_price, terminal_state,
-                           entry_client_order_id, order_role
+                           entry_client_order_id, order_role, side
                     FROM orders WHERE client_order_id=?
                     """,
                     (event.client_order_id,),
@@ -978,6 +983,7 @@ class ExecutionLedger:
                 previous_filled = float(existing[0]) if existing else 0.0
                 previous_average = float(existing[1]) if existing and existing[1] is not None else None
                 previous_state = OrderState(existing[2]) if existing and existing[2] is not None else None
+                existing_side = str(existing[5] or "").strip().lower() if existing else ""
                 role = OrderRole(existing[4]) if existing else event.role
                 if role == OrderRole.MANUAL_EXIT and event.role != OrderRole.MANUAL_EXIT:
                     role = event.role
@@ -1019,26 +1025,30 @@ class ExecutionLedger:
                         fee_delta = event.fee
                 # A non-entry fill that cannot be linked to a managed lot is a
                 # real fill with no owner: never drop it silently, never stamp
-                # the row terminal, and log the recovery action.
-                if (
-                    role != OrderRole.ENTRY
-                    and entry_client_order_id is None
-                    and (fill_delta > 0 or fee_delta > 0)
-                ):
+                # the row terminal, and log the recovery action.  The gate is
+                # the missing link, not the fill delta — reconciliation
+                # re-emits the same event on every pass, and a delta-gated
+                # guard would let the replay re-stamp the row terminal.
+                if role != OrderRole.ENTRY and entry_client_order_id is None and effective_cumulative > 0:
                     terminal_state = None
-                    log.warning(
-                        "Unlinked execution fill: client_order_id=%s broker_order_id=%s "
-                        "role=%s fill_delta=%s fee=%s "
-                        "recovery_action=await_managed_entry_link",
-                        event.client_order_id,
-                        event.broker_order_id,
-                        role.value,
-                        fill_delta,
-                        fee_delta,
-                    )
-                # The event role is the only side information this boundary has.
-                # Never store the empty string the slippage sign read as "short".
-                order_side = Direction.LONG.value if role == OrderRole.ENTRY else "sell"
+                    if fill_delta > 0 or fee_delta > 0:
+                        log.warning(
+                            "Unlinked execution fill: client_order_id=%s broker_order_id=%s "
+                            "role=%s fill_delta=%s fee=%s "
+                            "recovery_action=await_managed_entry_link",
+                            event.client_order_id,
+                            event.broker_order_id,
+                            role.value,
+                            fill_delta,
+                            fee_delta,
+                        )
+                # Never guess the side: the event carries no direction, so the
+                # only real evidence is the linked lot's recorded side.  With
+                # no link the row keeps the previous empty value, which the
+                # conflict clause backfills once the link appears.
+                order_side = self._resolved_order_side(
+                    event.client_order_id, role, entry_client_order_id, existing_side
+                )
                 self.connection.execute(
                     """
                     INSERT INTO orders(
@@ -1193,6 +1203,25 @@ class ExecutionLedger:
             except Exception:
                 self.connection.rollback()
                 raise
+
+    def _resolved_order_side(
+        self, client_order_id: str, role: OrderRole, entry_client_order_id: str | None, existing_side: str
+    ) -> str:
+        """The side a fill order row really traded, or ``""`` when unknown.
+
+        ``ExecutionEvent`` has no direction field, so the role says nothing
+        about the side: a short entry still exits with a buy, and a buy-side
+        protective stop on a short closes with a buy.  Guessing from the role
+        would stamp the wrong sign on the slippage read of every such row.
+        """
+        if role == OrderRole.ENTRY or not entry_client_order_id or entry_client_order_id == client_order_id:
+            return existing_side
+        row = self.connection.execute(
+            "SELECT side FROM orders WHERE client_order_id=?",
+            (entry_client_order_id,),
+        ).fetchone()
+        entry_side = str(row[0] or "").strip().lower() if row else ""
+        return _OPPOSITE_SIDES.get(entry_side, existing_side)
 
     def _resolve_entry_client_order_id(self, event: ExecutionEvent, existing: tuple[object, ...] | None) -> str | None:
         """Link a child event to its managed entry lot.

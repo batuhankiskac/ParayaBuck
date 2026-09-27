@@ -6,6 +6,7 @@ network, no credentials, no production paths.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -15,6 +16,7 @@ from parayabuck.core.models import Direction, Market, OrderIntent, OrderState
 from parayabuck.execution import alpaca as alpaca_module
 from parayabuck.execution.alpaca import AlpacaBroker, AmbiguousOrderState
 from parayabuck.execution.alpaca_orders import OrderService
+from parayabuck.execution.portfolio import AssetTradingRules, PortfolioOrderRequest, PortfolioOrderSide
 
 
 class _NotFound(Exception):
@@ -38,18 +40,32 @@ def _intent() -> OrderIntent:
     )
 
 
-def _poll_broker(responses: list[Any], monkeypatch: pytest.MonkeyPatch) -> AlpacaBroker:
-    """Broker whose order lookup walks ``responses`` then always fails.
+class _FakeClock:
+    """Broker-local clock yielding exactly ``polls`` loop iterations.
 
-    ``time.monotonic`` advances only after the scripted polls so the loop runs
-    a fixed number of iterations regardless of machine speed.
+    ``monotonic`` reports "before the deadline" until the scripted polls are
+    consumed, so the loop cannot be prolonged or cut short by any other
+    in-process clock consumer and cannot raise ``StopIteration``.
     """
+
+    def __init__(self, polls: int) -> None:
+        self._remaining = polls
+        self.sleeps = 0
+
+    def monotonic(self) -> float:
+        return 0.0 if self._remaining > 0 else 1.0
+
+    def sleep(self, _seconds: float) -> None:
+        self.sleeps += 1
+        self._remaining -= 1
+
+
+def _poll_broker(responses: list[Any], monkeypatch: pytest.MonkeyPatch) -> tuple[AlpacaBroker, _FakeClock]:
+    """Broker whose order lookup walks ``responses`` then always fails."""
     broker = AlpacaBroker.__new__(AlpacaBroker)
     polls = iter(responses)
-    lookups = {"count": 0}
 
     def get_order_by_id(_order_id: str) -> Any:
-        lookups["count"] += 1
         try:
             response = next(polls)
         except StopIteration:
@@ -59,10 +75,11 @@ def _poll_broker(responses: list[Any], monkeypatch: pytest.MonkeyPatch) -> Alpac
         return response
 
     broker._client = SimpleNamespace(get_order_by_id=get_order_by_id)  # type: ignore[attr-defined]
-    ticks = iter([0.0, 0.1, 0.2, 0.3, 0.4, 99.0, 99.0, 99.0])
-    monkeypatch.setattr(alpaca_module.time, "monotonic", lambda: next(ticks))
-    monkeypatch.setattr(alpaca_module.time, "sleep", lambda _seconds: None)
-    return broker
+    # Patch this module's ``time`` binding only: the stdlib module object stays
+    # intact for every other consumer in the process.
+    clock = _FakeClock(polls=len(responses))
+    monkeypatch.setattr(alpaca_module, "time", clock)
+    return broker, clock
 
 
 def _partial_order() -> SimpleNamespace:
@@ -79,12 +96,13 @@ def test_transient_lookup_failure_keeps_the_observed_partial_state(monkeypatch: 
     """A failed status lookup is not new information. Downgrading a
     ``PARTIALLY_FILLED`` order to ``ACCEPTED`` skips the cancel/re-protect
     branch for a partially-filled market exit that is still working."""
-    broker = _poll_broker([_partial_order(), TimeoutError("boom")], monkeypatch)
+    broker, clock = _poll_broker([_partial_order(), TimeoutError("boom")], monkeypatch)
 
     state, fill = broker._wait_for_fill("broker-1", _intent(), timeout=1.0)
 
     assert state is OrderState.PARTIALLY_FILLED
     assert fill is not None and fill.qty == 1.0
+    assert clock.sleeps == 2
 
 
 def test_wait_for_fill_does_not_claim_a_fee_from_the_order_payload(
@@ -93,7 +111,7 @@ def test_wait_for_fill_does_not_claim_a_fee_from_the_order_payload(
     """``alpaca.trading.models.Order`` has no ``fees`` field; the fill-activity
     reconciler is the authoritative fee source, so the order lookup must not
     assert one."""
-    broker = _poll_broker([_partial_order(), TimeoutError("boom")], monkeypatch)
+    broker, _clock = _poll_broker([_partial_order(), TimeoutError("boom")], monkeypatch)
 
     _state, fill = broker._wait_for_fill("broker-1", _intent(), timeout=1.0)
 
@@ -107,11 +125,12 @@ def test_a_fresh_accepted_status_still_downgrades_the_state(
     """A genuine non-terminal, non-partial observation is new information and
     must still be reported as ``ACCEPTED``."""
     accepted = SimpleNamespace(id="broker-1", status="accepted", filled_qty=0, filled_avg_price=0)
-    broker = _poll_broker([_partial_order(), accepted], monkeypatch)
+    broker, clock = _poll_broker([_partial_order(), accepted], monkeypatch)
 
     state, _fill = broker._wait_for_fill("broker-1", _intent(), timeout=1.0)
 
     assert state is OrderState.ACCEPTED
+    assert clock.sleeps == 2
 
 
 def test_portfolio_submit_404_lookup_reraises_the_submit_failure() -> None:
@@ -137,6 +156,48 @@ def test_portfolio_submit_404_lookup_reraises_the_submit_failure() -> None:
 
     assert excinfo.value is submit_error
 
+
+def _portfolio_request() -> PortfolioOrderRequest:
+    return PortfolioOrderRequest(
+        client_order_id="cid-dfd",
+        decision_id="dec-1",
+        symbol="AAPL",
+        market=Market.EQUITY,
+        side=PortfolioOrderSide.BUY,
+        quantity=1.0,
+        reference_price=100.0,
+        decision_timestamp=datetime(2026, 1, 2, 14, 0, tzinfo=UTC),
+        strategy_name="test",
+        strategy_version="v1",
+        risk_reducing=False,
+    )
+
+
+def test_portfolio_submit_done_for_day_lookup_reraises_the_submit_failure() -> None:
+    """``done_for_day`` is a broker-confirmed terminal response: the order is
+    dead for the session, so a portfolio submit must surface the broker's own
+    rejection instead of returning the dead order as a successful submit."""
+    submit_error = ValueError("422 insufficient buying power")
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = SimpleNamespace(  # type: ignore[attr-defined]
+        submit_order=lambda _request: (_ for _ in ()).throw(submit_error),
+        get_order_by_client_id=lambda _cid: SimpleNamespace(id="b-1", status="done_for_day"),
+    )
+    broker.asset_trading_rules = lambda symbol, market: AssetTradingRules(  # type: ignore[method-assign]
+        symbol=symbol,
+        market=market,
+        minimum_order_size=1.0,
+        quantity_increment=1.0,
+        price_increment=0.01,
+        minimum_order_notional=1.0,
+    )
+    broker._has_open_order = lambda _symbol: False  # type: ignore[method-assign]
+    service = OrderService(broker)
+
+    with pytest.raises(ValueError) as excinfo:
+        service.submit_portfolio_order(_portfolio_request())
+
+    assert excinfo.value is submit_error
 
 
 def test_portfolio_submit_ambiguous_lookup_raises_ambiguous_state() -> None:

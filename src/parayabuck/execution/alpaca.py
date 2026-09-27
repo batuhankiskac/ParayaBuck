@@ -1371,7 +1371,7 @@ class AlpacaBroker:
                     lookup_error = lookup_exc
                 if recovered is not None:
                     status = self._normalized_field(recovered, "status")
-                    if status in {"rejected", "canceled", "cancelled", "expired"}:
+                    if status in {"rejected", "canceled", "cancelled", "expired", "done_for_day"}:
                         # A broker-confirmed terminal response is known, not
                         # ambiguous. Preserve the original submit failure.
                         raise submit_exc

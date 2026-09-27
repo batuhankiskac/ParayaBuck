@@ -32,7 +32,7 @@ Inputs: YAML `runtime, engine, alpaca, data, universe, strategy, risk, execution
 
 ## 4. Broker Account & Position Fetch — `execution/alpaca.py:200`, `runtime.py:1735`
 
-Single `broker.account()` returns both account + positions. Cached `_last_account_snapshot/_last_account_at` (`runtime.py:446`). Failure: 429/5xx transient → `TransientStartupError`; 401/403 → permanent `ValueError`; `OwnershipDriftError` → halted. Retry: start path `_is_transient_network_error` → `TransientStartupError`; steady-state `_account_loop` 15s poll. Fail-closed on drift, defer on transient; persistent drift re-asserts the halt every poll but alerts only on the transition. Telemetry: `circuit_breaker ownership_drift`, `health.account_fresh` gate `maximum_account_age_for_entry_seconds=30`.
+Single `broker.account()` returns both account + positions. Cached `_last_account_snapshot/_last_account_at` (`runtime.py:446`). Failure: 429/5xx transient → `TransientStartupError`; 401/403 → permanent `ValueError`; `OwnershipDriftError` → halted. Retry: start path `_is_transient_network_error` → `TransientStartupError`; steady-state `_account_loop` 15s poll. Fail-closed on drift, defer on transient; persistent drift re-asserts the halt every poll but alerts only on the transition (the alert fires even if the halt persist fails; the poller survives and retries the persist next poll). Telemetry: `circuit_breaker ownership_drift`, `health.account_fresh` gate `maximum_account_age_for_entry_seconds=30`.
 
 ## 5. Persisted State Load & Circuit-Breaker Restore — `runtime.py:1912`
 
@@ -72,7 +72,7 @@ Finalized `Bar` batch after `event_grace_seconds=5.0` coalescing. `portfolio_dec
 
 ## 14. Monitoring, Health & Shutdown/Restart — `runtime.py:583`, `monitoring/alerts.py:1`, `monitoring/metrics.py:1`, `backup.py:1`, `runtime.py:1641`
 
-`WorkerHealth` heartbeats, `EventQueue` 1024 age, `last_account_at`. `runtime_sessions` + `metrics` counters. Health unhealthy when `!running` or worker dead >45s or queue>30s or account stale>30s or breaker. Stream `restart>5` → market halt. Shutdown `stop()` joins 5/30/30/10s, closes sessions, emits `runtime_stopped_unexpected` if halted. Restart requires per-halt `reset_safety_lock` verification. Fail-closed on halt/overflow. Telemetry: 14 `alerts.emit` kinds throttled 60s, 15 `metrics.record_event`, `health` JSON.
+`WorkerHealth` heartbeats, `EventQueue` 1024 age, `last_account_at`. `runtime_sessions` + `metrics` counters. Health unhealthy when `!running` or worker dead >45s or queue>30s or account stale>30s or breaker. Stream `restart>5` → market halt; a shared worker (`pb-trade-updates`) `restart>5` → runtime halt, but a failure after ≥`_SHARED_WORKER_HEALTHY_RESET_SECONDS=600` of continuous running starts a fresh restart budget/backoff (only a crash loop reaches the limit). Breaker precedence: a reconciliation failure never replaces a non-reconciliation breaker reason and a clean reconcile clears only reconciliation reasons; every `halted` write and every check-then-set to `running` runs under `_state_lock`, and nothing promotes to `running` while a breaker reason is set. Shutdown `stop()` joins 5/30/30/10s, closes sessions, emits `runtime_stopped_unexpected` if halted. Restart requires per-halt `reset_safety_lock` verification; the reset is refused while a shared worker (`pb-decisions`/`pb-account`/`pb-trade-updates`) has exited, since only a process restart re-arms it. Fail-closed on halt/overflow. Telemetry: 14 `alerts.emit` kinds throttled 60s, 15 `metrics.record_event`, `health` JSON.
 
 ---
 

@@ -198,6 +198,11 @@ def _reservation_sort_key(key: tuple[Any, str]) -> tuple[str, str]:
 # Runtime states that block entries outright; a transient stream-worker
 # blip must never overwrite one of them with "degraded".
 _ENTRY_BLOCKING_STATES = frozenset({"halted", "error", "stop_failed", "stopping", "stopped"})
+# A shared stream worker (pb-trade-updates) that ran this long before failing
+# was healthy: its failure starts a fresh restart budget and backoff, so
+# sparse blips over weeks cannot add up to the restart-limit halt. A crash
+# loop never runs this long and still hits the limit.
+_SHARED_WORKER_HEALTHY_RESET_SECONDS = 600.0
 _RECONCILIATION_INCIDENT_REASONS = frozenset({"reconciliation_failed", "reconciliation_bug_suspected"})
 
 
@@ -1016,9 +1021,10 @@ class EngineRuntime:
         try:
             reconciliation = ReconciliationReport.from_result(self.broker.reconcile())
             if reconciliation.has_drift:
-                self._circuit_breaker_reason = "reconciliation_failed"
                 self._reconcile_failed = True
-                self._state = "halted"
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._circuit_breaker_reason = "reconciliation_failed"
+                    self._state = "halted"
                 raise ReconciliationResultError(
                     f"Startup reconciliation found drift: {reconciliation.drift_categories}"
                 )
@@ -1047,7 +1053,8 @@ class EngineRuntime:
                 else "reconciliation_failed"
             )
             self._persist_reconciliation_incident(self._circuit_breaker_reason)
-            self._state = "halted"
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._state = "halted"
             alerts.emit(
                 "reconciliation_failure",
                 message="Startup reconciliation failed; runtime not started",
@@ -1239,7 +1246,14 @@ class EngineRuntime:
                 ) from exc
             raise
         self._refresh_readiness()
-        self._state = "running" if self._has_ready_symbols() else "warming_up"
+        with self._state_lock:
+            # Worker threads have been live since before warmup: a halt they
+            # raised (or a restored persistent incident) must not be
+            # overwritten with a trading state here.
+            if self._circuit_breaker_reason is not None:
+                self._state = "halted"
+            elif self._state not in _ENTRY_BLOCKING_STATES:
+                self._state = "running" if self._has_ready_symbols() else "warming_up"
         record_session = getattr(self.ledger, "record_runtime_session", None)
         if record_session is not None:
             # Observability-only; fake ledgers in unit tests may omit it.
@@ -2209,7 +2223,15 @@ class EngineRuntime:
                     # managed. Halt the runtime, persist the safety state and
                     # keep entries blocked instead of logging and continuing
                     # until the next strategy decision.
-                    self._halt_for_ownership_drift()
+                    try:
+                        self._halt_for_ownership_drift()
+                    except Exception as exc:
+                        # The halt is already asserted in memory before the
+                        # persist; a failed ledger write must not kill the
+                        # only drift detector. The next poll re-enters and
+                        # retries the persist.
+                        worker.last_error = str(exc)
+                        log.exception("Ownership drift halt could not be persisted; retrying next poll")
                 except Exception as exc:
                     # Temporary broker/API errors are retried on the next
                     # poll; only drift escalates to a runtime halt here.
@@ -2288,23 +2310,27 @@ class EngineRuntime:
         """
         first = getattr(self, "_circuit_breaker_reason", None) != "ownership_drift"
         with getattr(self, "_state_lock", threading.RLock()):
+            self._circuit_breaker_reason = "ownership_drift"
             self._state = "halted"
-        self._circuit_breaker_reason = "ownership_drift"
         # Serialize against the account loop's _evaluate_entry_risk_latch,
         # which runs under this lock inside _persist_risk_state: its
         # read-copy-rebuild-assign would otherwise drop this halt.
         with getattr(self, "_risk_state_lock", threading.Lock()):
             self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}), "ownership_drift")
-        self._persist_safety_state("ownership_drift")
-        if not first:
-            return
-        log.critical("Ownership drift detected; runtime halted and safety state persisted")
-        runtime_metrics_store.record_event("circuit_breaker")
-        alerts.emit(
-            "circuit_breaker",
-            message="Ownership drift detected; runtime halted and safety state persisted",
-            reason="ownership_drift",
-        )
+        try:
+            self._persist_safety_state("ownership_drift")
+        finally:
+            # The transition alert fires even when the persist raises: later
+            # polls see the reason already set and never alert, so skipping
+            # it here would leave the halt unannounced for good.
+            if first:
+                log.critical("Ownership drift detected; runtime halted and safety state persisted")
+                runtime_metrics_store.record_event("circuit_breaker")
+                alerts.emit(
+                    "circuit_breaker",
+                    message="Ownership drift detected; runtime halted and safety state persisted",
+                    reason="ownership_drift",
+                )
 
     def _persist_safety_state(self, reason: str) -> None:
         """Persist the halted circuit-breaker reason with the last known
@@ -2345,6 +2371,21 @@ class EngineRuntime:
             return
         log.critical("Safety incident could not be persisted; ledger has no incident writer: %s", reason)
 
+    def _raise_reconciliation_breaker(self, reason: str) -> None:
+        """Set a reconciliation-raised breaker without masking a stronger one.
+
+        A reconciliation failure may only replace no reason or another
+        reconciliation-owned reason (e.g. escalate to
+        ``reconciliation_bug_suspected``). Replacing ownership_drift,
+        portfolio_runtime_failure, a worker crash etc. would let the next
+        clean reconcile clear it via ``_clear_reconciliation_incidents`` while
+        its incident row still demands operator-verified recovery.
+        """
+        with getattr(self, "_state_lock", threading.RLock()):
+            current = getattr(self, "_circuit_breaker_reason", None)
+            if current is None or current in _RECONCILIATION_INCIDENT_REASONS:
+                self._circuit_breaker_reason = reason
+
     def _clear_reconciliation_incidents(self) -> None:
         """Clear only incidents whose documented recovery is clean reconcile."""
         account_id = getattr(self.broker, "account_id", None) or "unknown"
@@ -2352,8 +2393,11 @@ class EngineRuntime:
         if callable(clear):
             for reason in sorted(_RECONCILIATION_INCIDENT_REASONS):
                 clear(account_id, reason)
-        if getattr(self, "_circuit_breaker_reason", None) in _RECONCILIATION_INCIDENT_REASONS:
-            self._circuit_breaker_reason = None
+        # Only a reconciliation-owned reason clears here; every other breaker
+        # keeps its own verified recovery (reset_safety_lock).
+        with getattr(self, "_state_lock", threading.RLock()):
+            if getattr(self, "_circuit_breaker_reason", None) in _RECONCILIATION_INCIDENT_REASONS:
+                self._circuit_breaker_reason = None
 
     def _restore_persistent_state(self) -> None:
         """Restore persisted runtime state at startup.
@@ -2407,10 +2451,12 @@ class EngineRuntime:
             "trade_update_callback_failure",
         }
         incidents = self.ledger.load_safety_incidents(account_id)
-        for incident in incidents:
-            if incident.reason in persistent_reasons:
-                self._circuit_breaker_reason = incident.reason
-                break
+        # Newest first, but a reconciliation-owned reason never masks another
+        # persisted halt: a clean reconcile would clear it and resume trading.
+        restorable = [incident.reason for incident in incidents if incident.reason in persistent_reasons]
+        preferred = [reason for reason in restorable if reason not in _RECONCILIATION_INCIDENT_REASONS]
+        if preferred or restorable:
+            self._circuit_breaker_reason = (preferred or restorable)[0]
         if any(incident.reason == "portfolio_drawdown_halt" for incident in incidents):
             # A drawdown breach is an operational incident with an explicit
             # recovery (verified risk-epoch reset). Restore the entry latch
@@ -2466,8 +2512,8 @@ class EngineRuntime:
             # worker (or run unobserved inside the SDK loop), degrading the
             # whole runtime. Escalate to a halt instead of failing silently.
             with getattr(self, "_state_lock", threading.RLock()):
-                self._state = "halted"
                 self._circuit_breaker_reason = "trade_update_callback_failure"
+                self._state = "halted"
             log.exception(
                 "Trade update handling failed for order %s: %s",
                 update.client_order_id,
@@ -2669,6 +2715,7 @@ class EngineRuntime:
         worker.last_heartbeat = datetime.now(UTC)
         try:
             while self._running:
+                run_started = time.monotonic()
                 try:
                     target()
                     if not self._running:
@@ -2676,16 +2723,21 @@ class EngineRuntime:
                     raise RuntimeError("stream worker returned unexpectedly")
                 except Exception as exc:
                     worker.last_error = str(exc)
-                    worker.restart_count += 1
                     market = _MARKET_BY_STREAM_WORKER.get(name)
+                    # Market workers reset on a verified live event instead
+                    # (_mark_market_stream_recovered).
+                    if market is None and time.monotonic() - run_started >= _SHARED_WORKER_HEALTHY_RESET_SECONDS:
+                        worker.restart_count = 0
+                    worker.restart_count += 1
                     if market is None:
                         with getattr(self, "_state_lock", threading.RLock()):
                             if self._state not in _ENTRY_BLOCKING_STATES:
                                 self._state = "degraded"
                     if worker.restart_count > 5:
                         if market is None:
-                            self._state = "halted"
-                            self._circuit_breaker_reason = f"{name}_restart_limit"
+                            with getattr(self, "_state_lock", threading.RLock()):
+                                self._circuit_breaker_reason = f"{name}_restart_limit"
+                                self._state = "halted"
                             log.exception("%s shared worker restart limit reached", name)
                             runtime_metrics_store.record_event("circuit_breaker")
                             alerts.emit(
@@ -2858,26 +2910,29 @@ class EngineRuntime:
         # _put_event runs from several threads (stock stream, crypto stream,
         # decision loop); the diagnostics counters must not be mutated
         # unsynchronized.
+        overflowed = False
         with getattr(self, "_event_stats_lock", threading.Lock()):
             if result == "coalesced":
                 self._coalesced_events += 1
             elif result == "replaced":
                 self._dropped_events += 1
             elif result == "overflow":
-                # Plain assignment under the stats lock (no nested _state_lock
-                # from the stream threads), matching every other breaker site
-                # that pairs the reason with the halted state.
-                self._state = "halted"
-                self._circuit_breaker_reason = "final_market_event_queue_overflow"
+                overflowed = True
                 self._dropped_events += 1
-                runtime_metrics_store.record_event("circuit_breaker")
-                alerts.emit(
-                    "circuit_breaker",
-                    message="Final market event queue overflow; runtime halted",
-                    reason="final_market_event_queue_overflow",
-                )
             if self._oldest_received_at is None:
                 self._oldest_received_at = event.received_at
+        if overflowed:
+            # The halt takes the state lock only after the stats lock is
+            # released: no stats -> state nesting from the stream threads.
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._circuit_breaker_reason = "final_market_event_queue_overflow"
+                self._state = "halted"
+            runtime_metrics_store.record_event("circuit_breaker")
+            alerts.emit(
+                "circuit_breaker",
+                message="Final market event queue overflow; runtime halted",
+                reason="final_market_event_queue_overflow",
+            )
 
     def _decision_loop(self) -> None:
         worker = self._workers["pb-decisions"]
@@ -3056,11 +3111,12 @@ class EngineRuntime:
                     next_reconcile = time.monotonic() + 60.0
         except Exception as exc:
             worker.last_error = str(exc)
-            self._state = "halted"
-            if isinstance(exc, OwnershipDriftError):
-                self._circuit_breaker_reason = "ownership_drift"
-            else:
-                self._circuit_breaker_reason = "decision_worker_crashed"
+            # Every with-block of the loop body has exited here: no lock held.
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._circuit_breaker_reason = (
+                    "ownership_drift" if isinstance(exc, OwnershipDriftError) else "decision_worker_crashed"
+                )
+                self._state = "halted"
             log.exception("Decision worker failed")
             runtime_metrics_store.record_event("circuit_breaker")
             alerts.emit(
@@ -3314,8 +3370,11 @@ class EngineRuntime:
                         if account_lease is not None:
                             self._release_account_snapshot_lease(account_lease)
             except OwnershipDriftError as exc:
-                self._circuit_breaker_reason = "ownership_drift"
-                self._state = "halted"
+                # The portfolio lock was released when the exception left its
+                # with-block, and this path never holds the ingestion lock.
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._circuit_breaker_reason = "ownership_drift"
+                    self._state = "halted"
                 _broker = getattr(self, "broker", None)
                 automate_incident_recovery(
                     IncidentCategory.POSITION_DRIFT,
@@ -3339,8 +3398,9 @@ class EngineRuntime:
                 )
                 return
             except Exception as exc:
-                self._circuit_breaker_reason = "portfolio_runtime_failure"
-                self._state = "halted"
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._circuit_breaker_reason = "portfolio_runtime_failure"
+                    self._state = "halted"
                 # DB integrity: fail closed immediately, never retry
                 err_lower = str(exc).lower()
                 if _is_database_error(exc):
@@ -4164,8 +4224,15 @@ class EngineRuntime:
             and time.monotonic() - getattr(self, "_last_warmup_retry_at", time.monotonic()) >= retry_delay
         ):
             self._schedule_warmup_retry()
-        if self._running and self._has_ready_symbols() and self._state == "warming_up":
-            self._state = "running"
+        with state_lock:
+            # Atomic with every halt writer, and never promotes past a breaker.
+            if (
+                self._running
+                and self._state == "warming_up"
+                and getattr(self, "_circuit_breaker_reason", None) is None
+                and self._has_ready_symbols()
+            ):
+                self._state = "running"
 
     def _schedule_warmup_retry(self) -> None:
         # Reached from the decision loop, the universe-refresh thread and the
@@ -4263,7 +4330,7 @@ class EngineRuntime:
                         "Reconciliation categories show drift (fail-closed, new orders blocked): %s",
                         "; ".join(f"{key}={values}" for key, values in report.drift_categories.items()),
                     )
-                    self._circuit_breaker_reason = "reconciliation_failed"
+                    self._raise_reconciliation_breaker("reconciliation_failed")
                     self._reconcile_failed = True
                     self._persist_reconciliation_incident("reconciliation_failed")
                     runtime_metrics_store.record_event("reconciliation_failure")
@@ -4300,7 +4367,7 @@ class EngineRuntime:
                     )
                 self._clear_reconciliation_incidents()
             except ReconciliationResultError as exc:
-                self._circuit_breaker_reason = "reconciliation_failed"
+                self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("reconciliation_failed")
                 runtime_metrics_store.record_event("reconciliation_failure")
@@ -4315,7 +4382,7 @@ class EngineRuntime:
                 # scheduled reconciliation retries it; a full traceback every
                 # minute obscures actionable protection failures.
                 log.warning("Position protection check deferred after Alpaca API error: %s", exc)
-                self._circuit_breaker_reason = "reconciliation_failed"
+                self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("reconciliation_failed")
                 runtime_metrics_store.record_event("reconciliation_failure")
@@ -4327,9 +4394,11 @@ class EngineRuntime:
                 )
             except OwnershipDriftError:
                 log.exception("Portfolio ownership drift detected; entries halted")
+                # reconcile -> state is the established order: no thread
+                # holding the state lock ever takes the reconcile lock.
                 with getattr(self, "_state_lock", threading.RLock()):
+                    self._circuit_breaker_reason = "ownership_drift"
                     self._state = "halted"
-                self._circuit_breaker_reason = "ownership_drift"
                 self._reconcile_failed = True
                 self._persist_safety_state("ownership_drift")
                 runtime_metrics_store.record_event("circuit_breaker")
@@ -4340,7 +4409,7 @@ class EngineRuntime:
                 )
             except ProtectionReconciliationError:
                 log.exception("Managed position protection reconciliation failed")
-                self._circuit_breaker_reason = "protection_failure"
+                self._raise_reconciliation_breaker("protection_failure")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("protection_failure")
                 runtime_metrics_store.record_event("reconciliation_failure")
@@ -4357,16 +4426,16 @@ class EngineRuntime:
                 self._generic_reconcile_failures = getattr(self, "_generic_reconcile_failures", 0) + 1
                 log.exception("Periodic position protection check failed")
                 self._reconcile_failed = True
-                if self._generic_reconcile_failures >= 3:
-                    self._circuit_breaker_reason = "reconciliation_bug_suspected"
-                else:
-                    self._circuit_breaker_reason = "reconciliation_failed"
-                self._persist_reconciliation_incident(self._circuit_breaker_reason)
+                failure_reason = (
+                    "reconciliation_bug_suspected" if self._generic_reconcile_failures >= 3 else "reconciliation_failed"
+                )
+                self._raise_reconciliation_breaker(failure_reason)
+                self._persist_reconciliation_incident(failure_reason)
                 runtime_metrics_store.record_event("reconciliation_failure")
                 alerts.emit(
                     "reconciliation_failure",
                     message="Periodic position protection check failed",
-                    reason=self._circuit_breaker_reason,
+                    reason=failure_reason,
                     consecutive_failures=self._generic_reconcile_failures,
                 )
 
@@ -4417,12 +4486,12 @@ class EngineRuntime:
             try:
                 report = ReconciliationReport.from_result(self.broker.reconcile())
             except Exception as exc:
-                self._circuit_breaker_reason = "reconciliation_failed"
+                self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("reconciliation_failed")
                 raise RuntimeError(f"Cannot reset the risk epoch before reconciliation succeeds: {exc}") from exc
             if report.has_drift:
-                self._circuit_breaker_reason = "reconciliation_failed"
+                self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("reconciliation_failed")
                 raise RuntimeError(
@@ -4499,6 +4568,19 @@ class EngineRuntime:
         reason = self._circuit_breaker_reason
         if reason not in recoverable:
             raise ValueError(f"Safety lock is not operator-resettable: {reason or 'none'}")
+        # A reset cannot revive a shared worker that exited (e.g. the decision
+        # loop after decision_worker_crashed): clearing the breaker would
+        # report "running" while no decision/account/fill processing runs.
+        dead_shared = sorted(
+            name
+            for name, worker in dict(getattr(self, "_workers", {})).items()
+            if name in {"pb-decisions", "pb-account", "pb-trade-updates"} and not worker.alive
+        )
+        if getattr(self, "_running", False) and dead_shared:
+            raise ValueError(
+                "Safety lock cannot be reset while shared workers are stopped "
+                f"({','.join(dead_shared)}); restart the process to recover"
+            )
         if not self._events.empty():
             raise ValueError("Market event queue must drain before resetting the safety lock")
         if self.market_state.has_data_gaps or self._not_ready_symbols:
@@ -4540,8 +4622,11 @@ class EngineRuntime:
             with getattr(self, "_risk_state_lock", threading.Lock()):
                 self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}))
             self._persist_risk_state(account)
-        if self._running and self._state == "halted":
-            self._state = "running"
+        with getattr(self, "_state_lock", threading.RLock()):
+            # A halt raised by another thread since the breaker was cleared
+            # above set a new reason: keep that halt.
+            if self._running and self._state == "halted" and self._circuit_breaker_reason is None:
+                self._state = "running"
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
 
     def _verify_market_halts(self, market_halts: dict[Market, str | None]) -> None:

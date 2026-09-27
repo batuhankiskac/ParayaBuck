@@ -96,6 +96,105 @@ def test_persistent_ownership_drift_alerts_only_on_transition(tmp_path: Path, mo
     ledger.close()
 
 
+class _FailingIncidentLedger:
+    """A ledger whose incident write fails like a locked SQLite database."""
+
+    def save_safety_incident(self, *_args: object, **_kwargs: object) -> None:
+        raise sqlite3.OperationalError("database is locked")
+
+
+def test_ownership_drift_alert_fires_even_when_persist_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Later polls see the reason already set and never alert, so a failed
+    persist on the transition poll must not swallow the only alert."""
+    import parayabuck.runtime as runtime_module
+
+    emitted: list[str] = []
+    monkeypatch.setattr(runtime_module.alerts, "emit", lambda kind, **_: emitted.append(kind))
+    monkeypatch.setattr(runtime_module.runtime_metrics_store, "record_event", lambda _kind: None)
+    runtime = _runtime_with_ledger(_FailingIncidentLedger())  # type: ignore[arg-type]
+
+    with pytest.raises(sqlite3.OperationalError):
+        runtime._halt_for_ownership_drift()
+
+    assert emitted == ["circuit_breaker"]
+    assert runtime._state == "halted"
+    assert runtime._circuit_breaker_reason == "ownership_drift"
+
+
+def test_account_loop_survives_a_failed_drift_persist() -> None:
+    """The account poller is the only drift detector: a failed halt persist
+    must be retried on the next poll, not kill the pb-account thread."""
+    from parayabuck.execution.alpaca import OwnershipDriftError
+    from parayabuck.runtime_health import WorkerHealth
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    now = datetime.now(UTC)
+    runtime._workers = {"pb-account": WorkerHealth(now, now)}
+    runtime._running = True
+    runtime.config = SimpleNamespace(account_poll_interval_seconds=0.0)
+    runtime._account_snapshot_cache_state = lambda: (None, None, 0)  # type: ignore[method-assign]
+
+    def drifted_account() -> AccountSnapshot:
+        raise OwnershipDriftError("broker holds fewer shares than managed")
+
+    runtime.broker = SimpleNamespace(account_id="acct", account=drifted_account)
+    halts: list[int] = []
+
+    def failing_halt() -> None:
+        halts.append(1)
+        raise sqlite3.OperationalError("database is locked")
+
+    runtime._halt_for_ownership_drift = failing_halt  # type: ignore[method-assign]
+    polls: list[float] = []
+
+    def wait(timeout: float) -> bool:
+        polls.append(timeout)
+        if len(polls) >= 2:
+            runtime._running = False
+        return False
+
+    runtime._stop_event = SimpleNamespace(wait=wait)  # type: ignore[assignment]
+
+    runtime._account_loop()
+
+    assert len(halts) == 2
+    assert runtime._workers["pb-account"].last_error == "database is locked"
+
+
+def test_operator_reset_refuses_while_a_shared_worker_is_stopped(tmp_path: Path) -> None:
+    """decision_worker_crashed is resettable (for the restored incident after
+    a restart), but in the crashing process the decision loop has exited: a
+    reset would report "running" with nothing processing decisions."""
+    from parayabuck.runtime_health import WorkerHealth
+
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "decision_worker_crashed")
+    now = datetime.now(UTC)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "decision_worker_crashed"
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._workers = {
+        "pb-decisions": WorkerHealth(now, now, alive=False),
+        "pb-account": WorkerHealth(now, now, alive=True),
+        "pb-stocks": WorkerHealth(now, now, alive=False),
+    }
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
+    runtime.ledger = ledger
+
+    with pytest.raises(ValueError, match="pb-decisions"):
+        runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason == "decision_worker_crashed"
+    assert runtime._state == "halted"
+    assert [i.reason for i in ledger.load_safety_incidents("acct")] == ["decision_worker_crashed"]
+    ledger.close()
+
+
 def test_persistent_incident_restores_after_midnight_restart(tmp_path: Path) -> None:
     """A halt persisted at 23:59 (ambiguous_order_state) is restored on a
     00:01 restart; restore reads incidents, not the today session row."""
@@ -696,3 +795,270 @@ def test_restart_restores_drawdown_latch_from_incident(tmp_path: Path) -> None:
     assert restarted._entry_risk_latch[Market.CRYPTO] == "portfolio_drawdown_halt"
     assert restarted._circuit_breaker_reason is None
     ledger.close()
+
+
+# --- breaker precedence: reconciliation never masks a stronger halt ---
+
+_STRONGER_REASONS = [
+    "ownership_drift",
+    "portfolio_runtime_failure",
+    "decision_worker_crashed",
+    "trade_update_callback_failure",
+    "final_market_event_queue_overflow",
+    "protection_failure",
+]
+
+
+def _reconcile_runtime(ledger: ExecutionLedger, reconcile: object, reason: str | None) -> EngineRuntime:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=reconcile)
+    runtime.ledger = ledger
+    runtime._reconcile_lock = threading.Lock()
+    runtime._state_lock = threading.RLock()
+    runtime._last_reconciliation_at = None
+    runtime._last_account_at = None
+    runtime._generic_reconcile_failures = 0
+    runtime._circuit_breaker_reason = reason
+    return runtime
+
+
+def _raise(exc: BaseException) -> object:
+    def reconcile() -> dict[str, list[str]]:
+        raise exc
+
+    return reconcile
+
+
+@pytest.mark.parametrize("reason", _STRONGER_REASONS)
+@pytest.mark.parametrize(
+    "failure",
+    ["request", "generic", "drift", "protection"],
+)
+def test_reconcile_failure_never_replaces_a_stronger_breaker(tmp_path: Path, reason: str, failure: str) -> None:
+    """A failed reconcile must not overwrite a non-reconciliation reason: the
+    next clean reconcile would clear the overwritten reason and drop the
+    halt while its incident still demands operator-verified recovery."""
+    from parayabuck.execution.alpaca import ProtectionReconciliationError
+
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", reason)
+    drift = dict(_CLEAN_RECONCILIATION, UNKNOWN_ORDER=["x"])
+    reconcile = {
+        "request": _raise(RequestException("broker timeout")),
+        "generic": _raise(RuntimeError("bug")),
+        "drift": lambda: drift,
+        "protection": _raise(ProtectionReconciliationError("stop missing")),
+    }[failure]
+    runtime = _reconcile_runtime(ledger, reconcile, reason)
+
+    for _ in range(3):  # generic failures escalate on the third
+        runtime._reconcile_safely()
+    assert runtime._circuit_breaker_reason == reason
+
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
+    runtime._reconcile_safely()
+
+    assert runtime._circuit_breaker_reason == reason
+    assert reason in {i.reason for i in ledger.load_safety_incidents("acct")}
+    ledger.close()
+
+
+def test_reconcile_failures_still_raise_and_escalate_reconciliation_reasons(tmp_path: Path) -> None:
+    """Within the reconciliation family the breaker still sets, escalates to
+    bug_suspected, yields to protection_failure and clears on success."""
+    from parayabuck.execution.alpaca import ProtectionReconciliationError
+
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    runtime = _reconcile_runtime(ledger, _raise(RuntimeError("bug")), None)
+
+    runtime._reconcile_safely()
+    assert runtime._circuit_breaker_reason == "reconciliation_failed"
+    runtime._reconcile_safely()
+    runtime._reconcile_safely()
+    assert runtime._circuit_breaker_reason == "reconciliation_bug_suspected"
+
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=_raise(ProtectionReconciliationError("x")))
+    runtime._reconcile_safely()
+    assert runtime._circuit_breaker_reason == "protection_failure"
+
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
+    runtime._reconcile_safely()
+    assert runtime._circuit_breaker_reason is None
+    ledger.close()
+
+
+def test_restore_prefers_a_non_reconciliation_incident(tmp_path: Path) -> None:
+    """A newer reconciliation incident must not mask an older stronger one at
+    restore: a clean reconcile would clear it and resume trading."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    now = datetime.now(UTC)
+    ledger.save_safety_incident("acct", "ownership_drift", activated_at=now - timedelta(hours=1))
+    ledger.save_safety_incident("acct", "reconciliation_failed", activated_at=now)
+
+    runtime = _runtime_with_ledger(ledger)
+    runtime._restore_persistent_state()
+
+    assert runtime._circuit_breaker_reason == "ownership_drift"
+    ledger.close()
+
+
+# --- no check-then-set to "running" can overwrite a concurrent halt ---
+
+
+class _StateProbeRuntime(EngineRuntime):
+    """Runs ``on_read`` the first time ``_state`` is read as ``trigger`` —
+    i.e. between a caller's state check and its write."""
+
+    @property
+    def _state(self) -> str:
+        value = self.__dict__["_probe_state"]
+        hook = self.__dict__.get("_probe_hook")
+        if hook is not None and value == hook[0]:
+            self.__dict__["_probe_hook"] = None
+            hook[1]()
+        return value
+
+    @_state.setter
+    def _state(self, value: str) -> None:
+        self.__dict__["_probe_state"] = value
+
+
+def _concurrent_trade_update_halt(runtime: EngineRuntime) -> None:
+    """Start the real trade-update failure halt on another thread and give
+    it a bounded chance to finish (it blocks while the caller holds the
+    state lock)."""
+    import asyncio
+
+    async def failing(_update: object) -> None:
+        raise RuntimeError("callback failed")
+
+    runtime._handle_trade_update = failing  # type: ignore[method-assign]
+    thread = threading.Thread(
+        target=lambda: asyncio.run(runtime._on_trade_update(SimpleNamespace(client_order_id="c1"))),  # type: ignore[arg-type]
+    )
+    thread.start()
+    thread.join(timeout=0.3)
+    runtime.__dict__["_halter"] = thread
+
+
+def test_warmup_promotion_never_overwrites_a_concurrent_halt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A halt raised between _refresh_readiness's warming_up check and its
+    "running" write must survive: the promotion is atomic with the halt."""
+    import parayabuck.runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module.alerts, "emit", lambda *_a, **_k: None)
+    monkeypatch.setattr(runtime_module.runtime_metrics_store, "record_event", lambda _kind: None)
+    runtime = _StateProbeRuntime.__new__(_StateProbeRuntime)
+    runtime._state = "warming_up"
+    runtime._running = True
+    runtime._state_lock = threading.RLock()
+    runtime._circuit_breaker_reason = None
+    runtime._not_ready_symbols = set()
+    runtime._portfolio_runtimes = ()
+    runtime._has_ready_symbols = lambda: True  # type: ignore[method-assign]
+    runtime.__dict__["_probe_hook"] = ("warming_up", lambda: _concurrent_trade_update_halt(runtime))
+
+    runtime._refresh_readiness()
+    runtime.__dict__["_halter"].join(timeout=5)
+
+    assert runtime._circuit_breaker_reason == "trade_update_callback_failure"
+    assert runtime._state == "halted"
+
+
+def test_warmup_promotion_never_runs_past_a_breaker() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._state = "warming_up"
+    runtime._running = True
+    runtime._state_lock = threading.RLock()
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime._not_ready_symbols = set()
+    runtime._portfolio_runtimes = ()
+    runtime._has_ready_symbols = lambda: True  # type: ignore[method-assign]
+
+    runtime._refresh_readiness()
+
+    assert runtime._state == "warming_up"
+
+
+def test_operator_reset_keeps_a_halt_raised_during_verification(tmp_path: Path) -> None:
+    """The breaker is cleared before the market halts are verified; a halt
+    another thread raises in that window must not be flipped to running."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "reconciliation_failed")
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime = _runtime_with_ledger(ledger)
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
+        account=lambda: account,
+    )
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._persist_risk_state = lambda _account: None  # type: ignore[method-assign]
+
+    def concurrent_halt(_halts: object) -> None:
+        runtime._circuit_breaker_reason = "portfolio_runtime_failure"
+        runtime._state = "halted"
+
+    runtime._verify_market_halts = concurrent_halt  # type: ignore[method-assign]
+
+    runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason == "portfolio_runtime_failure"
+    assert runtime._state == "halted"
+    ledger.close()
+
+
+class _LockCheckedStateRuntime(EngineRuntime):
+    """Records whether ``_state_lock`` was held at each ``_state`` write."""
+
+    @property
+    def _state(self) -> str:
+        return self.__dict__["_probe_state"]
+
+    @_state.setter
+    def _state(self, value: str) -> None:
+        lock = self.__dict__.get("_state_lock")
+        held = bool(lock is not None and lock._is_owned())  # type: ignore[attr-defined]
+        self.__dict__.setdefault("_state_writes", []).append((value, held))
+        self.__dict__["_probe_state"] = value
+
+
+def test_halt_writers_hold_the_state_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Queue overflow and the shared-worker restart limit write "halted"
+    under the state lock, so no locked check-then-set can overwrite it."""
+    import parayabuck.runtime as runtime_module
+    from parayabuck.runtime_health import WorkerHealth
+
+    monkeypatch.setattr(runtime_module.alerts, "emit", lambda *_a, **_k: None)
+    monkeypatch.setattr(runtime_module.runtime_metrics_store, "record_event", lambda _kind: None)
+    runtime = _LockCheckedStateRuntime.__new__(_LockCheckedStateRuntime)
+    runtime.__dict__["_probe_state"] = "running"
+    runtime._state_lock = threading.RLock()
+    runtime._event_stats_lock = threading.Lock()
+    runtime._circuit_breaker_reason = None
+    runtime._oldest_received_at = None
+    runtime._dropped_events = 0
+    runtime._events = SimpleNamespace(put_market_event=lambda _event: "overflow")
+
+    runtime._put_event("primary", SimpleNamespace())
+
+    now = datetime.now(UTC)
+    runtime._workers = {"pb-trade-updates": WorkerHealth(now, now, restart_count=5)}
+    runtime._running = True
+    runtime._stop_event = SimpleNamespace(wait=lambda _s: False)
+
+    def crash() -> None:
+        raise RuntimeError("down")
+
+    runtime._run_stream_worker("pb-trade-updates", crash)
+
+    halted = [held for value, held in runtime.__dict__["_state_writes"] if value == "halted"]
+    assert halted == [True, True]

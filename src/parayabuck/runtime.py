@@ -2383,10 +2383,21 @@ class EngineRuntime:
           the cadence position.
         """
         account_id = self.broker.account_id or "unknown"
-        # Every reason this module can assign to ``_circuit_breaker_reason``
-        # and persist must be restorable AND operator-resettable: a reason
-        # missing from either set leaves the row unrestored after a restart
-        # and then unresettable by the operator.
+        # Reasons in this set are exactly the ones ``reset_safety_lock``
+        # accepts as recoverable: a restored incident must never be a halt
+        # the operator cannot clear, so the two sets are kept in step and a
+        # reason added here must be added there in the same change.
+        # Deliberately NOT in the set, and therefore neither restored nor
+        # operator-resettable: the shared-worker f"{name}_restart_limit"
+        # halts (pb-decisions / pb-account / pb-trade-updates). The row is
+        # still written by ``_persist_risk_state`` (it records whatever
+        # reason is in effect) and stays as an audit trail. A restart
+        # re-arms those workers (restart_count starts at 0 again) and a
+        # repeat failure re-raises the halt by itself, so restoring the old
+        # row would halt a process whose workers are healthy. The market
+        # entry halts of the same name (pb-stocks / pb-crypto) are a
+        # different mechanism with their own verified recovery; see
+        # ``reset_safety_lock``.
         persistent_reasons = {
             "ambiguous_order_state",
             "protection_failure",
@@ -4098,36 +4109,47 @@ class EngineRuntime:
     def _refresh_readiness(self) -> None:
         runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
         required_symbols = {symbol for runtime in runtimes for symbol in runtime.symbols}
-        for symbol in required_symbols:
-            market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
-            relevant = [runtime for runtime in runtimes if runtime.market == market and symbol in runtime.history]
-            ready = bool(relevant)
-            for runtime in relevant:
-                series = runtime.history[symbol]
-                benchmark_symbol = "BTC/USD" if market == Market.CRYPTO else "SPY"
-                benchmark_series = runtime.history.get(benchmark_symbol, ())
-                expected_latest = (
-                    benchmark_series[-1].timestamp
-                    if benchmark_series
-                    else max(
-                        (candidate[-1].timestamp for candidate in runtime.history.values() if candidate),
-                        default=None,
+        # The universe/hot-swap thread mutates the live set from
+        # ``_apply_runtime_universes`` under this same lock, and comparing or
+        # copying it while a swap resizes it raises RuntimeError inside the
+        # decision worker. So every access is serialized here and the local
+        # is an immutable snapshot; state lock only, nothing inside the loop
+        # takes another lock.
+        state_lock = getattr(self, "_state_lock", threading.RLock())
+        with state_lock:
+            for symbol in required_symbols:
+                market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+                relevant = [runtime for runtime in runtimes if runtime.market == market and symbol in runtime.history]
+                ready = bool(relevant)
+                for runtime in relevant:
+                    series = runtime.history[symbol]
+                    benchmark_symbol = "BTC/USD" if market == Market.CRYPTO else "SPY"
+                    benchmark_series = runtime.history.get(benchmark_symbol, ())
+                    expected_latest = (
+                        benchmark_series[-1].timestamp
+                        if benchmark_series
+                        else max(
+                            (candidate[-1].timestamp for candidate in runtime.history.values() if candidate),
+                            default=None,
+                        )
                     )
-                )
-                ready = ready and (
-                    len(series) >= runtime.strategy.minimum_history_bars
-                    and expected_latest is not None
-                    and series[-1].timestamp == expected_latest
-                )
-            if ready:
-                self._not_ready_symbols.discard(symbol)
-            else:
-                self._not_ready_symbols.add(symbol)
-        pending = self._not_ready_symbols
+                    ready = ready and (
+                        len(series) >= runtime.strategy.minimum_history_bars
+                        and expected_latest is not None
+                        and series[-1].timestamp == expected_latest
+                    )
+                if ready:
+                    self._not_ready_symbols.discard(symbol)
+                else:
+                    self._not_ready_symbols.add(symbol)
+            pending = frozenset(self._not_ready_symbols)
         attempt = getattr(self, "_warmup_retry_attempt", 0)
-        # Any progress (the set emptied, or lost a member) resets the backoff;
-        # an unchanged set keeps doubling toward the cap.
-        if not pending or pending < getattr(self, "_warmup_retry_symbols", frozenset()):
+        # The counter describes the pending SET, not the process: it resets on
+        # ANY membership change — the set emptying, a member recovering, or a
+        # newly unready symbol that was never retried — so a chronically
+        # lagging symbol cannot push a brand-new one out to the ceiling.
+        # Only an unchanged set keeps doubling toward the cap.
+        if not pending or pending != getattr(self, "_warmup_retry_symbols", frozenset()):
             attempt = 0
             self._warmup_retry_attempt = 0
         retry_delay = _WARMUP_RETRY_SECONDS * 2 ** min(attempt, _WARMUP_RETRY_MAX_EXPONENT)
@@ -4151,7 +4173,10 @@ class EngineRuntime:
                 return
             self._last_warmup_retry_at = time.monotonic()
             self._warmup_retry_attempt += 1
-            self._warmup_retry_symbols = frozenset(self._not_ready_symbols)
+            # Same lock the universe/hot-swap thread takes: a resize racing
+            # this copy would raise out of the spawn lock.
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._warmup_retry_symbols = frozenset(self._not_ready_symbols)
             thread = threading.Thread(
                 target=self._retry_incomplete_warmup,
                 name="pb-warmup-retry",
@@ -4518,11 +4543,16 @@ class EngineRuntime:
         verifications may rely on it. Unverified halts stay active and are
         reported to the operator.
 
-        Every dict access takes the state lock so a concurrent halt writer
-        (stream worker, universe refresh, crypto protection) can neither lose
-        an update nor have one erased mid-verification. The lock is never held
-        across the verifications themselves, which take the ingestion and
-        portfolio locks and would invert the established lock order.
+        Every dict access takes the state lock, so each individual
+        read-modify-write is atomic against a concurrent halt writer (stream
+        worker, universe refresh, crypto protection): none of them can
+        overwrite an update in flight. What is NOT guaranteed is atomicity
+        across a whole verification — reading a halt and re-reading it after
+        the recovery attempt is a pair of locked accesses, so a halt raised
+        or replaced in between is left for the next reset instead of being
+        reported in ``retained`` here. The lock is never held across the
+        verifications themselves, which take the ingestion and portfolio
+        locks and would invert the established lock order.
         """
         retained: list[str] = []
         for market in (Market.EQUITY, Market.CRYPTO):

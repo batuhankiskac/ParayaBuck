@@ -432,13 +432,37 @@ def test_warmup_retry_backoff_resets_once_a_symbol_recovers() -> None:
     assert runtime._state == "running"
 
 
-# --- V2: every reason this module assigns is restorable and resettable ---
+def test_warmup_retry_backoff_resets_when_a_new_symbol_goes_pending() -> None:
+    """The counter tracks the pending SET, not the process: a symbol that
+    has never been retried must be retried at the 600s floor even while a
+    chronically lagging one has already saturated the backoff."""
+    runtime = _readiness_runtime(ready=False)
+
+    for _ in range(3):
+        _elapse(runtime, 100_000)
+    assert runtime._warmup_retry_attempt == 3
+    assert runtime._warmup_retry_symbols == frozenset({"AAA"})
+
+    # BBB joins with a history that never catches up to the benchmark.
+    runtime._portfolio_runtimes[0].symbols = ("AAA", "BBB")
+    runtime._portfolio_runtimes[0].history["BBB"] = _daily_bars("BBB")[:-1]
+
+    _elapse(runtime, 600)
+
+    assert runtime._warmup_retry_attempt == 1
+    assert runtime._warmup_retry_symbols == frozenset({"AAA", "BBB"})
 
 
-def _ledger_shell(ledger: ExecutionLedger) -> EngineRuntime:
+# --- V2: the restored reasons are exactly the operator-resettable ones ---
+
+
+def _ledger_shell(
+    ledger: ExecutionLedger,
+    runtime_class: type[EngineRuntime] = EngineRuntime,
+) -> EngineRuntime:
     """A minimal runtime wired to a real ledger (the persist/restore paths
     under test only touch the attributes set here)."""
-    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime = runtime_class.__new__(runtime_class)
     runtime.broker = SimpleNamespace(account_id="acct")
     runtime.ledger = ledger
     runtime.app_config = Config()
@@ -507,19 +531,44 @@ def test_assigned_circuit_breaker_reasons_are_operator_resettable(tmp_path: Path
 # --- V7: the entry-risk latch writers serialize against the evaluation ---
 
 
+class _LatchWriteProbeRuntime(EngineRuntime):
+    """Records whether ``_risk_state_lock`` was held at each
+    ``_entry_risk_latch`` assignment.
+
+    Counting lock acquisitions proves nothing here: the pre-existing
+    ``_persist_safety_state`` and ``_persist_risk_state`` helpers take the
+    same lock on these very call paths, so the old assertion passed with the
+    fix removed. The assignment is the one observation unique to it.
+    """
+
+    @property
+    def _entry_risk_latch(self) -> dict[Market, str | None]:
+        return self.__dict__["_probe_latch"]
+
+    @_entry_risk_latch.setter
+    def _entry_risk_latch(self, latch: dict[Market, str | None]) -> None:
+        lock = getattr(self, "_risk_state_lock", None)
+        self.__dict__.setdefault("_latch_write_lock_states", []).append(bool(getattr(lock, "held", False)))
+        self.__dict__["_probe_latch"] = latch
+
+    def latch_write_lock_states(self) -> list[bool]:
+        return self.__dict__.setdefault("_latch_write_lock_states", [])
+
+
 def test_ownership_drift_halt_takes_the_risk_state_lock(tmp_path: Path) -> None:
     """``_evaluate_entry_risk_latch`` rebuilds the latch dict from scratch
     while holding the risk-state lock. An unlocked drift halt can therefore
     be dropped by the very next account poll."""
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    runtime = _ledger_shell(ledger)
+    runtime = _ledger_shell(ledger, _LatchWriteProbeRuntime)
     risk_state_lock = _TrackedRLock()
     runtime._risk_state_lock = risk_state_lock  # type: ignore[assignment]
+    runtime.latch_write_lock_states().clear()  # drop the seeding write
 
     runtime._halt_for_ownership_drift()
 
     assert runtime._entry_risk_latch[Market.EQUITY] == "ownership_drift"
-    assert risk_state_lock.acquisitions >= 1
+    assert runtime.latch_write_lock_states() == [True]
     ledger.close()
 
 
@@ -528,7 +577,7 @@ def test_operator_latch_clear_takes_the_risk_state_lock(tmp_path: Path) -> None:
     risk-state lock the account loop's rebuild can restore a stale latch."""
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
-    runtime = _ledger_shell(ledger)
+    runtime = _ledger_shell(ledger, _LatchWriteProbeRuntime)
     runtime.broker = SimpleNamespace(
         account_id="acct",
         reconcile=lambda: dict(_CLEAN_RECONCILIATION),
@@ -546,9 +595,13 @@ def test_operator_latch_clear_takes_the_risk_state_lock(tmp_path: Path) -> None:
     runtime.market_state = SimpleNamespace(has_data_gaps=False)
     risk_state_lock = _TrackedRLock()
     runtime._risk_state_lock = risk_state_lock  # type: ignore[assignment]
+    runtime.latch_write_lock_states().clear()  # drop the seeding write
 
     runtime.reset_safety_lock()
 
     assert runtime._circuit_breaker_reason is None
-    assert risk_state_lock.acquisitions >= 1
+    # The first write is the operator's latch clear; the later ones are
+    # _evaluate_entry_risk_latch inside _persist_risk_state, which the
+    # pre-existing code already ran under the lock.
+    assert runtime.latch_write_lock_states()[0] is True
     ledger.close()

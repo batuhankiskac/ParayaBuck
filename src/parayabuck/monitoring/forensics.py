@@ -45,7 +45,11 @@ def _status_variants(statuses: frozenset[str]) -> tuple[str, ...]:
 
 
 def _orders_with_status(db_path: str | Path | None, wanted: frozenset[str]) -> list[dict[str, Any]]:
-    """Orders whose status is one of ``wanted`` (read-only, index-friendly).
+    """Orders whose status is one of ``wanted`` (read-only).
+
+    The SQL comparison normalises the column with ``lower()`` so a row written
+    with any casing (``Ambiguous``, ``AMBIGUOUS``) is never dropped before the
+    Python check below sees it; that check stays authoritative.
 
     Terminal statuses are excluded defensively so callers asking for a
     non-terminal status never see a settled order.
@@ -55,8 +59,8 @@ def _orders_with_status(db_path: str | Path | None, wanted: frozenset[str]) -> l
     wanted = wanted - _TERMINAL_STATUSES
     if not wanted:
         return []
-    variants = _status_variants(wanted)
-    placeholders = ",".join("?" * len(variants))
+    lowered = tuple(sorted(wanted))
+    placeholders = ",".join("?" * len(lowered))
     try:
         conn = sqlite3.connect(str(db_path), timeout=2.0)
         conn.row_factory = sqlite3.Row
@@ -64,8 +68,8 @@ def _orders_with_status(db_path: str | Path | None, wanted: frozenset[str]) -> l
             if not _table_exists(conn, "portfolio_orders"):
                 return []
             rows = conn.execute(
-                f"SELECT * FROM portfolio_orders WHERE status IN ({placeholders})",
-                variants,
+                f"SELECT * FROM portfolio_orders WHERE lower(status) IN ({placeholders})",
+                lowered,
             ).fetchall()
             return [dict(r) for r in rows if str(r["status"] or "").lower() in wanted]
         finally:

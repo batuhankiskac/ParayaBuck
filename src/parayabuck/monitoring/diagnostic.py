@@ -72,13 +72,20 @@ def _cap_rows(value: Any) -> Any:
 def _dump_section(content: Any) -> str:
     """Serialise one bundle section within the size budget, always as valid JSON.
 
-    Rows are capped first; only a single oversized value still needs the
-    truncation envelope, and that envelope is itself parseable JSON.
+    Rows are capped first; a section still over budget becomes the parseable
+    truncation envelope, and the *serialised* envelope — re-escaping of the
+    preview included — is shrunk until it fits the same hard bound.
     """
     text = json.dumps(_cap_rows(content), indent=2, default=str)
     if len(text) <= _MAX_SECTION_CHARS:
         return text
-    return json.dumps({"truncated": True, "size_chars": len(text), "preview": text[:_MAX_SECTION_CHARS]}, indent=2)
+    budget = _MAX_SECTION_CHARS // 2
+    while budget > 0:
+        envelope = json.dumps({"truncated": True, "size_chars": len(text), "preview": text[:budget]}, indent=2)
+        if len(envelope) <= _MAX_SECTION_CHARS:
+            return envelope
+        budget //= 2
+    return json.dumps({"truncated": True, "size_chars": len(text)}, indent=2)
 
 
 def _safe_git_info() -> dict[str, Any]:
@@ -151,8 +158,8 @@ def collect_bundle_data(
         data["status"] = {"error": str(exc)}
 
     # doctor — forensic ledger reads are shared with the sections below
-    dbp = Path(str(decision_db_path)) if decision_db_path else Path("data/runtime/parayabuck.sqlite3")
-    forensics_db = str(dbp) if dbp.exists() else None
+    dbp = Path(str(decision_db_path)) if decision_db_path else None
+    forensics_db = str(dbp) if dbp is not None and dbp.exists() else None
     forensics_data = _collect_forensics(forensics_db)
     try:
         # lazy import to avoid cycle
@@ -490,9 +497,9 @@ def create_bundle_zip(
     # Write zip with sanitized files, size bounded
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         # manifest
-        zf.writestr("manifest.json", json.dumps(data.get("manifest"), indent=2))
-        zf.writestr("status.json", json.dumps(data.get("status"), indent=2))
-        zf.writestr("doctor.json", json.dumps(data.get("doctor"), indent=2))
+        zf.writestr("manifest.json", _dump_section(data.get("manifest")))
+        zf.writestr("status.json", _dump_section(data.get("status")))
+        zf.writestr("doctor.json", _dump_section(data.get("doctor")))
         # recent events jsonl
         events = data.get("recent_events") or []
         if isinstance(events, list):

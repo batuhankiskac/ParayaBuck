@@ -10,11 +10,13 @@ event_id reaches both alert sinks. All offline (tmp_path, no network).
 from __future__ import annotations
 
 import json
+import sqlite3
 import threading
 import time
 import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -105,6 +107,19 @@ def test_forensic_readers_split_unresolved_orders(tmp_path: Path) -> None:
     assert len(unresolved_orders(str(db), include_terminal=True)) == 3
 
 
+@pytest.mark.parametrize(
+    ("reader", "statuses"),
+    [(ambiguous_orders, ["Ambiguous", "AmbigUOUS"]), (submitting_orders, ["SUBMITTING", "SubmITTing"])],
+)
+def test_status_readers_keep_rows_written_in_any_casing(
+    tmp_path: Path, reader: Any, statuses: list[str]
+) -> None:
+    db = tmp_path / "casing.sqlite3"
+    _order_ledger(db, [(f"ord-{index}", status, datetime.now(UTC)) for index, status in enumerate(statuses)])
+
+    assert sorted(o["client_order_id"] for o in reader(str(db))) == [f"ord-{i}" for i in range(len(statuses))]
+
+
 # ---------------------------------------------------------------------------
 # Alert check — dropped means undelivered webhooks, not throttled repeats
 # ---------------------------------------------------------------------------
@@ -170,7 +185,7 @@ def test_journal_writes_again_after_stop(tmp_path: Path) -> None:
     journal.start()
     journal.emit(create_event(kind="test", message="after restart"))
     deadline = time.monotonic() + 5.0
-    while time.monotonic() < deadline and journal._queue.qsize() > 0:
+    while time.monotonic() < deadline and journal.stats()["event_journal_written"] < 2:
         time.sleep(0.01)
 
     assert journal.stats()["event_journal_written"] == 2
@@ -275,6 +290,52 @@ def test_event_redaction_reaches_nested_and_decoded_values() -> None:
     assert decoded.fields["phase"] == "sell"
 
 
+def test_journal_query_redacts_legacy_sensitive_keys(tmp_path: Path) -> None:
+    """A pre-existing row whose key merely *contains* a secret token still decodes."""
+    journal = EventJournal(str(tmp_path / "legacy.sqlite3"))
+    journal.emit(create_event(kind="test", message="legacy row"))
+    journal.stop(timeout=5.0)
+    with sqlite3.connect(journal.path) as conn:
+        conn.execute(
+            "UPDATE operational_events SET fields_json = ?",
+            (json.dumps({"api_key_present": True, "phase": "sell"}),),
+        )
+
+    events = journal.query(limit=10)
+
+    assert [e.message for e in events] == ["legacy row"]
+    assert events[0].fields == {"api_key_present": "***REDACTED***", "phase": "sell"}
+
+
+def test_journal_stop_timeout_keeps_writer_accountable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stop that times out must not double count the event or orphan the writer."""
+    journal = EventJournal(str(tmp_path / "timeout.sqlite3"))
+    release = threading.Event()
+    write_batch = journal._flush_batch
+
+    def slow_flush(batch: list[OperationalEvent]) -> None:
+        assert release.wait(5.0)
+        write_batch(batch)
+
+    monkeypatch.setattr(journal, "_flush_batch", slow_flush)
+    journal.start()
+    journal.emit(create_event(kind="test", message="slow write"))
+    journal.stop(timeout=0.05)
+
+    assert journal._started is True
+    assert journal._writer_thread is not None
+    assert journal._writer_thread.is_alive()
+    assert journal.stats()["event_journal_dropped"] == 0
+
+    release.set()
+    assert journal._writer_thread.join(5.0) is None
+    assert journal.stats()["event_journal_written"] == 1
+    journal.start()
+    assert journal._started is True
+    assert journal._writer_thread is not None
+    journal.stop(timeout=5.0)
+
+
 # ---------------------------------------------------------------------------
 # Alert identity — one event_id for the journal and the webhook payload
 # ---------------------------------------------------------------------------
@@ -307,7 +368,7 @@ def test_supplied_event_id_reaches_both_sinks(monkeypatch: pytest.MonkeyPatch) -
 # ---------------------------------------------------------------------------
 
 
-def _read_bundle_section(tmp_path: Path, snapshot: dict[str, object], section: str) -> dict[str, object]:
+def _read_bundle_text(tmp_path: Path, snapshot: dict[str, object], section: str) -> str:
     snapshot_path = tmp_path / "health_snapshot.json"
     snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
     bundle_path = create_bundle_zip(
@@ -318,7 +379,12 @@ def _read_bundle_section(tmp_path: Path, snapshot: dict[str, object], section: s
         decision_db_path=tmp_path / "absent_db.sqlite3",
     )
     with zipfile.ZipFile(bundle_path) as archive:
-        return json.loads(archive.read(f"{section}.json"))
+        return archive.read(f"{section}.json").decode("utf-8")
+
+
+def _read_bundle_section(tmp_path: Path, snapshot: dict[str, object], section: str) -> dict[str, object]:
+    parsed: dict[str, object] = json.loads(_read_bundle_text(tmp_path, snapshot, section))
+    return parsed
 
 
 def test_bundle_caps_rows_and_keeps_section_parseable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -341,3 +407,14 @@ def test_bundle_marks_oversized_section_instead_of_corrupting_it(tmp_path: Path,
 
     assert section["truncated"] is True
     assert section["size_chars"] > 500_000
+
+
+def test_bundle_bounds_section_measured_after_escaping(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    # Quotes and newlines triple in size once the preview is re-escaped by json.dumps.
+    snapshot = {"written_at": datetime.now(UTC).isoformat(), "blob": 'a"\n' * 400_000}
+
+    text = _read_bundle_text(tmp_path, snapshot, "runtime_snapshot")
+
+    assert len(text) <= 500_000
+    assert json.loads(text)["truncated"] is True

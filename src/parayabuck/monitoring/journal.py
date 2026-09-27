@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from parayabuck.monitoring.operational_event import OperationalEvent
+from parayabuck.monitoring.operational_event import OperationalEvent, redact_fields
 
 log = logging.getLogger("parayabuck.monitoring.journal")
 
@@ -162,16 +162,36 @@ class EventJournal:
         if thread is not None:
             thread.join(timeout=timeout)
         with self._lock:
+            if thread is not None and thread.is_alive():
+                # The writer is still draining: keep the journal started (a later
+                # start() must not spawn a second writer) and leave the queued
+                # residue alone — it is still owned by the live writer.
+                log.warning(
+                    "journal stop timed out after %.3fs with %d events still queued",
+                    timeout,
+                    self._queue.qsize(),
+                )
+                return
             # A later start() must spawn a fresh writer instead of enqueuing onto a dead one
             self._started = False
             self._writer_thread = None
             leftover = self._queue.qsize()
             if leftover:
                 self._stats.dropped += leftover
-        if leftover:
-            log.warning("journal stopped with %d queued events dropped", leftover)
+                log.warning("journal stopped with %d queued events dropped", leftover)
 
     def _writer_loop(self) -> None:
+        try:
+            self._drain_loop()
+        finally:
+            with self._lock:
+                if self._writer_thread is threading.current_thread():
+                    # Writer retired on its own (e.g. stop() timed out): let a
+                    # later start() spawn a fresh one instead of enqueuing blind.
+                    self._writer_thread = None
+                    self._started = False
+
+    def _drain_loop(self) -> None:
         batch: list[OperationalEvent] = []
         # Keep draining after stop so queued events are written, not lost silently
         while not self._stop.is_set() or not self._queue.empty():
@@ -426,7 +446,7 @@ class EventJournal:
                             broker_order_id=row["broker_order_id"],
                             incident_id=row["incident_id"],
                             correlation_id=row["correlation_id"],
-                            fields=fields,
+                            fields=redact_fields(fields),
                         )
                     )
                 return events

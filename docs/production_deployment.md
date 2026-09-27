@@ -579,10 +579,13 @@ parayabuck ops bundle [--output PATH]
   `stuck_rebalance.json`, `sessions.json`, `database_checks.json`,
   `environment.json`, `sanitized_config.json`, `universe_status.json`,
   `alert_stats.json`, `journal_stats.json`. Every section stays valid JSON:
-  list rows are capped at 2000 and a section that still exceeds 500KB is
-  written as `{"truncated": true, "size_chars": …, "preview": …}`. Zip
-  <5MB, secrets redacted (`api_key`, `api_secret`, `webhook_url`,
-  `approval_key`, `password` → `***REDACTED***`).
+  list rows are capped at 2000 and a section that still exceeds the budget is
+  written as `{"truncated": true, "size_chars": …, "preview": …}`. Enforced:
+  each `.json` section is at most 500,000 characters as written into the zip,
+  measured after escaping. `recent_events.jsonl` is capped at 200 events (not
+  character-capped) and the zip total is not bounded — target <5MB. Secrets
+  redacted (`api_key`, `api_secret`, `webhook_url`, `approval_key`,
+  `password` → `***REDACTED***`).
 
 Incident flow (mirrors `docs/operational_observability.md`):
 

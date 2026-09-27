@@ -141,7 +141,7 @@ def _redact_value(value: object) -> object:
     return value
 
 
-def _redact_fields(fields: Mapping[str, object]) -> dict[str, object]:
+def redact_fields(fields: Mapping[str, object]) -> dict[str, object]:
     """Return copy with secret keys redacted, nested values included."""
     redacted: dict[str, object] = {}
     for key, value in fields.items():
@@ -274,7 +274,7 @@ class OperationalEvent:
             broker_order_id=data.get("broker_order_id"),
             incident_id=data.get("incident_id"),
             correlation_id=data.get("correlation_id"),
-            fields=_redact_fields(dict(data.get("fields") or {})),
+            fields=redact_fields(dict(data.get("fields") or {})),
         )
 
 
@@ -318,7 +318,7 @@ def create_event(
             )
         else:
             eid = random_event_id()
-    redacted = _redact_fields(dict(fields or {}))
+    redacted = redact_fields(dict(fields or {}))
     return OperationalEvent(
         event_id=eid,
         occurred_at=ts,
@@ -347,5 +347,6 @@ __all__ = [
     "create_event",
     "deterministic_event_id",
     "random_event_id",
+    "redact_fields",
     "severity_for_kind",
 ]

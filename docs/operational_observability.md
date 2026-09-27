@@ -142,7 +142,7 @@ parayabuck ops bundle
 `monitoring/diagnostic.py` `create_bundle_zip`:
 
 - `manifest.json`, `status.json`, `doctor.json`, `recent_events.jsonl` (200 newest), `runtime_snapshot.json`, `runtime_metrics.json`, `active_incidents.json`, `unresolved_orders.json`, `stuck_rebalance.json`, `sessions.json`, `database_checks.json`, `environment.json` (git HEAD, dirty, python, platform, version), `sanitized_config.json`, `universe_status.json`, `alert_stats.json`, `journal_stats.json`.
-- Size bounded without corrupting the artifact: list rows capped at 2000 per section; a section still over 500KB is written as `{"truncated": true, "size_chars": …, "preview": …}` (valid JSON, never a mid-token cut). `recent_events` limit 200, zip <5MB.
+- Size bounded without corrupting the artifact: list rows capped at 2000 per section; a section still over budget is written as `{"truncated": true, "size_chars": …, "preview": …}` (valid JSON, never a mid-token cut). Enforced: every `.json` section is at most 500,000 characters *as written into the zip* — the preview is re-measured after escaping, so a quote/newline-heavy payload cannot exceed it. `recent_events.jsonl` is capped at 200 events and is not character-capped; the zip total is not bounded (target <5MB).
 - Security: `_redact` allowlist — `api_key`, `api_secret`, `webhook_url`, `approval_key`, `password` → `***REDACTED***`; explicit tests.
 
 ## Alert Behavior

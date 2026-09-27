@@ -1034,6 +1034,7 @@ class PortfolioRuntime:
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
+        self._resolve_stale_submitting_rows()
         open_orders = self.repository.open_orders(self.account_id)
         reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
         open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
@@ -1483,6 +1484,19 @@ class PortfolioRuntime:
         unreachable or lacks the lookup — the caller retries without
         guessing.
         """
+        changed = self._resolve_submitting_rows(orders)
+        if changed is None:
+            return None
+        if not changed:
+            return orders
+        return self.repository.orders_for_decision(decision_id, side=side)
+
+    def _resolve_submitting_rows(self, orders: tuple[dict[str, object], ...]) -> bool | None:
+        """Resolve each ``submitting`` row against the broker.
+
+        Returns whether any row changed, or ``None`` when the broker lacks the
+        lookup. A row whose lookup fails stays ``submitting``.
+        """
         resolver = getattr(self.broker, "resolve_portfolio_submission", None)
         if resolver is None:
             return None
@@ -1504,9 +1518,22 @@ class PortfolioRuntime:
                 status, broker_order_id = outcome, str(item.get("broker_order_id") or "")
             self.repository.update_order(client_order_id, status, broker_order_id)
             changed = True
-        if not changed:
-            return orders
-        return self.repository.orders_for_decision(decision_id, side=side)
+        return changed
+
+    def _resolve_stale_submitting_rows(self) -> None:
+        """Resolve rows of earlier decisions still at ``submitting``.
+
+        A submit that raised mid-batch leaves the batch's untried rows at
+        ``submitting`` with no rebalance phase to resolve them. Each is
+        looked up by its deterministic client order id: a found order takes
+        its real status, an unknown one is canceled, and a failed lookup
+        leaves the row ``submitting`` so it still counts as open (fail
+        closed). Runs before a new decision exists, so its rows are never
+        touched.
+        """
+        rows = self.repository.submitting_orders(self.account_id, self.market)
+        if rows:
+            self._resolve_submitting_rows(rows)
 
     def _submit_deferred_buys(
         self,

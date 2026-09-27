@@ -663,6 +663,32 @@ class PortfolioStateRepository:
             for row in rows
         )
 
+    def submitting_orders(self, account_id: str, market: Market) -> tuple[dict[str, object], ...]:
+        """Rows of one account and market still at ``submitting``.
+
+        Attributed through the same decision/session lineage as
+        ``open_orders``; each row carries its ``decision_id``.
+        """
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                """SELECT o.client_order_id, o.decision_id, o.status, o.broker_order_id
+                   FROM portfolio_orders o
+                   JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                   JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                   WHERE s.account_id = ? AND o.market = ? AND o.status = 'submitting'
+                   ORDER BY o.created_at""",
+                (account_id, market.value),
+            ).fetchall()
+        return tuple(
+            {
+                "client_order_id": str(row[0]),
+                "decision_id": str(row[1]),
+                "status": str(row[2]),
+                "broker_order_id": str(row[3] or ""),
+            }
+            for row in rows
+        )
+
     def record_buy_admission_observation(
         self,
         decision_id: str,

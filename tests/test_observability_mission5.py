@@ -955,6 +955,25 @@ def test_ops_status_ignores_relative_defaults_when_paths_are_given(tmp_path: Pat
     assert execution["status"] == "UNKNOWN"
 
 
+def test_ops_status_text_prints_the_market_halts_check(tmp_path: Path) -> None:
+    """A market entry halt degrades overall health; the text view must show
+    why instead of a bare "Runtime DEGRADED"."""
+    health = {
+        "overall_health": "DEGRADED",
+        "trading_state": "RUNNING",
+        "checks": [
+            {"code": "market_halts", "status": "DEGRADED", "summary": "equity entries halted: worker_restart_limit"},
+        ],
+    }
+    with patch("parayabuck.monitoring.health.evaluate_health", return_value=health):
+        code, out, _ = _run_cli(
+            "ops", "status", "--snapshot", str(tmp_path / "absent.json"), "--db", str(tmp_path / "absent.sqlite3")
+        )
+
+    assert code == 0
+    assert "Market halts   DEGRADED — equity entries halted: worker_restart_limit" in out
+
+
 def test_ops_explain_health_reads_the_configured_snapshot(tmp_path: Path) -> None:
     """`ops explain` must evaluate health against observability.snapshot_path,
     not the relative data/runtime default."""

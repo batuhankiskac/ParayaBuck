@@ -698,6 +698,7 @@ def _ops_status(args: argparse.Namespace) -> int:
     print(_check_line("account", "Account"))
     print(_check_line("universe", "Universe"))
     print(_check_line("signal_adjustment", "Adjustment"))
+    print(_check_line("market_halts", "Market halts"))
     print("")
     # Queue
     q = checks.get("queue", {})

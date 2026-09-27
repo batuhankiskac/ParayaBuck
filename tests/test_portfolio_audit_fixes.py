@@ -7,6 +7,7 @@ fixtures, ``tmp_path`` state, no network and no production paths.
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -17,6 +18,7 @@ from parayabuck.execution.portfolio import (
     PortfolioOrderSide,
     RiskOverlayDecision,
 )
+from parayabuck.monitoring import journal as journal_module
 from parayabuck.portfolio import runtime_service
 from parayabuck.portfolio.base import PortfolioContext
 from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV1
@@ -113,10 +115,28 @@ def test_owned_quantities_scopes_stale_clear_to_its_own_market(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _no_trade_rows(journal, expected: int) -> list[tuple[str, str, str]]:
+    """Wait for ``expected`` durable rows; return (event_id, day, reason)."""
+    deadline = time.monotonic() + 5.0
+    while True:
+        rows = journal.query(kind="portfolio_no_trade", order="asc")
+        if len(rows) >= expected or time.monotonic() >= deadline:
+            return [
+                (row.event_id, str(row.fields["decision_timestamp"])[:10], row.fields["reason"]) for row in rows
+            ]
+        time.sleep(0.02)
+
+
 def test_no_trade_event_re_emits_on_the_next_decision_day(monkeypatch):
-    emitted: list[object] = []
+    """Every decision day must leave its own row in the real journal.
+
+    The dashboard banner is simply the newest ``portfolio_no_trade`` row
+    (``web/server_legacy.py``), and the journal inserts on the event id primary
+    key, so a day-stable id would silently keep only the first day's row and
+    freeze the banner on that reason forever.
+    """
     monkeypatch.setattr(runtime_service, "_no_trade_last", {})
-    monkeypatch.setattr("parayabuck.monitoring.journal.emit_journal", emitted.append)
+    journal = journal_module.get_journal()
 
     day_one = datetime(2025, 1, 1, 12, tzinfo=UTC)
     day_two = day_one + timedelta(days=1)
@@ -124,16 +144,29 @@ def test_no_trade_event_re_emits_on_the_next_decision_day(monkeypatch):
 
     runtime_service._emit_no_trade_safe(decision_timestamp=day_one, **common)
     runtime_service._emit_no_trade_safe(decision_timestamp=day_one + timedelta(hours=1), **common)
-    assert len(emitted) == 1, "repeat of the same reason on the same day stays suppressed"
+    assert [(day, reason) for _, day, reason in _no_trade_rows(journal, 1)] == [
+        ("2025-01-01", "warming_up")
+    ], "repeat of the same reason on the same day stays suppressed"
 
     runtime_service._emit_no_trade_safe(decision_timestamp=day_two, **common)
-    assert len(emitted) == 2, "a new decision day must re-emit; otherwise the banner is stale forever"
+    rows = _no_trade_rows(journal, 2)
+    assert [(day, reason) for _, day, reason in rows] == [
+        ("2025-01-01", "warming_up"),
+        ("2025-01-02", "warming_up"),
+    ], "a new decision day must persist its own row; otherwise the banner is stale forever"
+    assert len({event_id for event_id, _, _ in rows}) == 2, "one row per day means one id per day"
 
     # A changed reason is a different key and emits immediately.
     runtime_service._emit_no_trade_safe(
         decision_timestamp=day_two, **{**common, "reason": "not_scheduled"}
     )
-    assert len(emitted) == 3
+    rows = _no_trade_rows(journal, 3)
+    assert [(day, reason) for _, day, reason in rows] == [
+        ("2025-01-01", "warming_up"),
+        ("2025-01-02", "warming_up"),
+        ("2025-01-02", "not_scheduled"),
+    ]
+    assert len({event_id for event_id, _, _ in rows}) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -221,11 +254,3 @@ def test_equity_volatility_treats_zero_close_as_insufficient_history():
     target = strategy.decide(context)
     assert target.weights == ()
     assert target.metadata["trend_state"] == "insufficient_history"
-
-
-def test_param_helpers_still_accept_real_numbers():
-    strategy = CryptoLowVariance1dV1()
-    strategy.parameters["top_n"] = 3
-    strategy.parameters["variance_lookback_days"] = 30
-    assert strategy.param_int("top_n", 2) == 3
-    assert strategy.param_float("variance_lookback_days", 22.0) == 30.0

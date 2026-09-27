@@ -204,9 +204,11 @@ def _emit_no_trade_safe(
     """
     try:
         key = f"{market}:{strategy}:{reason}"
-        # The journal id is deterministic per market/strategy/reason/DAY, so
-        # dedup is day-scoped: suppressing forever would leave the dashboard
-        # banner showing the first day's reason indefinitely.
+        # The journal id hashes ``occurred_at``, so nothing dedups per day at
+        # the sink. Suppression must therefore be day-scoped here: the
+        # dashboard banner reads the newest portfolio_no_trade event with no
+        # age filter (web/server_legacy.py), so suppressing forever freezes
+        # it on the first day's reason.
         day = (decision_timestamp or datetime.now(UTC)).date().isoformat()
         if _no_trade_last.get(key) == day:
             return
@@ -1012,7 +1014,7 @@ class PortfolioRuntime:
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
         open_orders = self.repository.open_orders(self.account_id)
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders)
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
         open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
         risk = self.risk_overlay.apply(
             raw_target,
@@ -1188,7 +1190,9 @@ class PortfolioRuntime:
             admission.account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
             market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
-            reserved_position_keys=self._effective_reserved_position_keys(reserved_position_keys),
+            reserved_position_keys=self._effective_reserved_position_keys(
+                reserved_position_keys, open_orders=open_orders
+            ),
             open_order_symbols=tuple(sorted(self.broker.all_open_order_symbols())),
         )
         orders = buys
@@ -1405,7 +1409,7 @@ class PortfolioRuntime:
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
         open_orders = self.repository.open_orders(self.account_id)
         open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders)
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
         risk = self.risk_overlay.apply(
             adjusted_target,
             account,
@@ -1460,7 +1464,7 @@ class PortfolioRuntime:
         buy_orders = admission.orders
         account = admission.account
         open_orders = self.repository.open_orders(self.account_id)
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders)
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
         open_order_symbols, _open_order_sides = self._effective_open_order_constraints(open_orders)
         buy_orders = reserve_opening_order_slots(
             buy_orders,
@@ -1513,7 +1517,8 @@ class PortfolioRuntime:
     def _effective_reserved_position_keys(
         self,
         same_cycle_keys: tuple[tuple[Market, str], ...] = (),
-        open_orders: tuple[OpenPortfolioOrder, ...] | None = None,
+        *,
+        open_orders: tuple[OpenPortfolioOrder, ...],
     ) -> tuple[tuple[Market, str], ...]:
         """Return same-cycle plus persisted working order position slots.
 
@@ -1526,16 +1531,18 @@ class PortfolioRuntime:
         position. The planner's symbol-level open-order guard remains in
         place; this separate set reserves the account-level slot even when the
         next decision selects a different symbol.
+
+        ``open_orders`` is the caller's working-order snapshot and is required:
+        re-reading it here would let one decision cycle resolve two different
+        ledgers.
         """
-        if open_orders is None:
-            open_orders = self.repository.open_orders(self.account_id)
         slots = {(market, canonical_symbol(symbol, market)) for market, symbol in same_cycle_keys}
         slots.update((order.market, canonical_symbol(order.symbol, order.market)) for order in open_orders)
         return tuple(sorted(slots, key=lambda item: (item[0].value, item[1])))
 
     def _effective_open_order_constraints(
         self,
-        open_orders: tuple[OpenPortfolioOrder, ...] | None = None,
+        open_orders: tuple[OpenPortfolioOrder, ...],
     ) -> tuple[set[str], dict[str, frozenset[str]]]:
         """Return broker-wide symbols plus side-aware local ledger rows.
 
@@ -1544,11 +1551,12 @@ class PortfolioRuntime:
         directions. Account-local rows carry a trusted side and can therefore
         permit a risk-reducing SELL past a pending BUY while retaining
         duplicate/risk-increase suppression.
+
+        ``open_orders`` is the caller's snapshot, for the same single-read
+        reason as in ``_effective_reserved_position_keys``.
         """
         broker_symbols = set(self.broker.all_open_order_symbols())
         local_sides: dict[str, set[str]] = {}
-        if open_orders is None:
-            open_orders = self.repository.open_orders(self.account_id)
         for order in open_orders:
             if order.market != self.market:
                 continue

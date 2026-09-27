@@ -4,7 +4,10 @@ from datetime import datetime, timedelta
 from itertools import pairwise
 
 from parayabuck.core.models import Bar, Market
+from parayabuck.logger import get_logger
 from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES
+
+log = get_logger("parayabuck.data.aggregator")
 
 
 class TimeframeAggregator:
@@ -33,6 +36,7 @@ class TimeframeAggregator:
             # A late minute of a bucket that a flush already emitted must not
             # reopen it: the one-minute stub would later be emitted as a
             # second "final" candle for the same timestamp.
+            self._log_dropped_late_minute(bar, bucket_time)
             return None
         current = self._current.get(bar.symbol)
         if current is None:
@@ -48,12 +52,24 @@ class TimeframeAggregator:
             # forming bucket early (a partial candle would be emitted as
             # final) nor reopen the old bucket; corrections go through
             # ``update_correction``.
+            self._log_dropped_late_minute(bar, bucket_time)
             return None
         self._last_components[bar.symbol] = self._components.get(bar.symbol, {})
         self._closed_through[bar.symbol] = current.timestamp
         self._current[bar.symbol] = self._new_bucket(bar, bucket_time)
         self._components[bar.symbol] = {bar.timestamp: bar}
         return current
+
+    def _log_dropped_late_minute(self, bar: Bar, bucket_time: datetime) -> None:
+        # The closed candle permanently lacks this minute; surface it so a
+        # finalization grace shorter than the feed latency is visible.
+        log.warning(
+            "Late stream minute dropped: symbol=%s timeframe=%s minute=%s bucket=%s",
+            bar.symbol,
+            self.timeframe,
+            bar.timestamp.isoformat(),
+            bucket_time.isoformat(),
+        )
 
     def update_correction(self, bar: Bar) -> Bar | None:
         if self.minutes == 1:

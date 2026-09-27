@@ -1540,10 +1540,11 @@ class PortfolioBacktestEngine:
                     duration_days = (curve_timestamps[index] - curve_timestamps[peak_index]).total_seconds() / 86_400
                     max_drawdown_duration_days = max(max_drawdown_duration_days, int(duration_days))
         returns = [curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0]
-        downside = [value for value in returns if value < 0]
         mean_return = sum(returns) / len(returns) if returns else 0.0
         std = sample_stddev(returns)
-        downside_std = sample_stddev(downside)
+        # Sortino downside deviation: target 0, taken over ALL periods
+        # (population), so a single losing period still yields a finite ratio.
+        downside_std = math.sqrt(sum(min(value, 0.0) ** 2 for value in returns) / len(returns)) if returns else 0.0
         start_ts = curve_timestamps[0] if curve_timestamps else None
         end_ts = curve_timestamps[-1] if curve_timestamps else None
         duration_days = int((end_ts - start_ts).total_seconds() / 86_400) if start_ts and end_ts else 0

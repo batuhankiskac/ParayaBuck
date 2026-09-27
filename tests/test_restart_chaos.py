@@ -1134,3 +1134,74 @@ def test_stop_reports_stream_and_session_cleanup_failures_but_continues(
 
     assert calls == ["stop:bars", "stop:updates", "close:broker", "close:history"]
     assert runtime._state == "stop_failed"
+
+
+class _FakeMonotonic:
+    def __init__(self) -> None:
+        self.now = 1_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _patch_worker_clock_and_alerts(monkeypatch: Any) -> tuple[_FakeMonotonic, list[str]]:
+    clock = _FakeMonotonic()
+    emitted: list[str] = []
+    monkeypatch.setattr(runtime_module.time, "monotonic", clock)
+    monkeypatch.setattr(runtime_module.alerts, "emit", lambda kind, **_: emitted.append(kind))
+    monkeypatch.setattr(runtime_module.runtime_metrics_store, "record_event", lambda _kind: None)
+    return clock, emitted
+
+
+def test_sparse_trade_update_blips_never_accumulate_into_the_restart_limit(monkeypatch: Any) -> None:
+    """Each failure follows a long healthy run: it starts a fresh restart
+    budget, so blips spread over weeks never reach the (operator-unresettable)
+    pb-trade-updates_restart_limit halt, and the backoff stays at its floor."""
+    clock, emitted = _patch_worker_clock_and_alerts(monkeypatch)
+    runtime, worker = _trade_update_worker_runtime()
+    delays: list[float] = []
+
+    def wait(delay: float) -> bool:
+        delays.append(delay)
+        return False
+
+    runtime._stop_event = SimpleNamespace(wait=wait)
+    calls: list[int] = []
+
+    def healthy_then_blip() -> None:
+        calls.append(1)
+        if len(calls) > 10:
+            runtime._running = False
+            return
+        clock.now += 3_600.0  # an hour of healthy streaming, then a blip
+        raise RuntimeError("simulated trade-update disconnect")
+
+    runtime._run_stream_worker("pb-trade-updates", healthy_then_blip)
+
+    assert runtime._circuit_breaker_reason is None
+    assert runtime._state == "running"
+    assert worker.restart_count == 1
+    assert delays == [1.0] * 10
+    assert emitted == []
+
+
+@pytest.mark.parametrize("run_seconds", [0.0, 599.0])
+def test_trade_update_crash_loop_still_hits_the_restart_limit(monkeypatch: Any, run_seconds: float) -> None:
+    """A worker that never stays up for the healthy period keeps its restart
+    count: the sixth consecutive failure halts exactly as before."""
+    clock, emitted = _patch_worker_clock_and_alerts(monkeypatch)
+    runtime, worker = _trade_update_worker_runtime()
+    calls: list[int] = []
+
+    def crash() -> None:
+        calls.append(1)
+        clock.now += run_seconds
+        raise RuntimeError("simulated trade-update crash")
+
+    runtime._run_stream_worker("pb-trade-updates", crash)
+
+    assert len(calls) == 6
+    assert worker.restart_count == 6
+    assert runtime._circuit_breaker_reason == "pb-trade-updates_restart_limit"
+    assert runtime._state == "halted"
+    assert emitted == ["circuit_breaker"]

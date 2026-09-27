@@ -53,6 +53,7 @@ _CANONICAL_ACTION_COLUMNS = {
     "raw_id",
 }
 _CANONICAL_NON_CASH_ACTION_TYPES = {"stock_dividends", "forward_splits", "reverse_splits"}
+_CANONICAL_SPLIT_ACTION_TYPES = {"forward_splits", "reverse_splits"}
 
 
 @dataclass(frozen=True)
@@ -137,8 +138,26 @@ def _canonical_action_timestamp(raw_ex_date: object, *, row_number: int) -> date
     return parsed.replace(tzinfo=UTC)
 
 
+def _split_ratio(raw: dict[str, str], *, row_number: int) -> Decimal:
+    old_rate = _action_value(raw["old_rate"], row_number=row_number)
+    new_rate = _action_value(raw["new_rate"], row_number=row_number)
+    return new_rate / old_rate
+
+
 def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
-    """Load explicit dividend cash flows for split-adjusted equity price data."""
+    """Load explicit dividend cash flows for split-adjusted equity price data.
+
+    The product backtest runs on split-adjusted bars, so a dividend must be
+    credited per ADJUSTED share. Canonical v5 ``cash_dividends.rate`` is the
+    raw announced per-share amount (e.g. AAPL 2020-05-08 rate 0.82 alongside
+    a split-adjusted close of 77.53, pre-4:1-split raw ~310; QLD 2016-03-23
+    rate 0.084812 alongside close 4.448 after four later 2:1 splits), so
+    each rate is divided by the cumulative ratio of the same symbol's
+    forward/reverse splits with a strictly later ex_date. This assumes the
+    action file and the bars are one snapshot (no split in the file that the
+    bar download predates). The legacy dividend-only schema carries no split
+    rows and is passed through unadjusted.
+    """
     actions: list[CorporateAction] = []
     seen: set[tuple[str, datetime, CorporateActionType, Decimal]] = set()
     with Path(path).open(newline="", encoding="utf-8") as handle:
@@ -154,35 +173,50 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
         else:
             missing = sorted(_LEGACY_ACTION_COLUMNS - fieldnames)
             raise ValueError(f"Corporate-action CSV is missing required columns: {', '.join(missing)}")
+        rows = list(enumerate(reader, start=2))
 
-        for row_number, raw in enumerate(reader, start=2):
-            raw_action_type = str(raw["action_type"]).lower()
-            if schema == "canonical_v5" and raw_action_type in _CANONICAL_NON_CASH_ACTION_TYPES:
-                continue
-            expected_action_type = "dividend" if schema == "legacy" else "cash_dividends"
-            if raw_action_type != expected_action_type:
-                raise ValueError(f"Unsupported corporate-action type on row {row_number}: {raw_action_type}")
-            timestamp = (
-                _legacy_action_timestamp(raw["timestamp"], row_number=row_number)
-                if schema == "legacy"
-                else _canonical_action_timestamp(raw["ex_date"], row_number=row_number)
-            )
-            value = _action_value(raw["value"] if schema == "legacy" else raw["rate"], row_number=row_number)
-            raw_symbol = str(raw["symbol"])
-            symbol = canonical_symbol(raw_symbol, Market.EQUITY)
-            action_type = CorporateActionType.DIVIDEND
-            key = (symbol, timestamp, action_type, value)
-            if key in seen:
-                continue
-            seen.add(key)
-            actions.append(
-                CorporateAction(
-                    timestamp,
-                    raw_symbol if schema == "legacy" else symbol,
-                    action_type,
-                    float(value),
+    splits: dict[str, list[tuple[datetime, Decimal]]] = {}
+    if schema == "canonical_v5":
+        for row_number, raw in rows:
+            if str(raw["action_type"]).lower() in _CANONICAL_SPLIT_ACTION_TYPES:
+                splits.setdefault(canonical_symbol(str(raw["symbol"]), Market.EQUITY), []).append(
+                    (
+                        _canonical_action_timestamp(raw["ex_date"], row_number=row_number),
+                        _split_ratio(raw, row_number=row_number),
+                    )
                 )
+
+    for row_number, raw in rows:
+        raw_action_type = str(raw["action_type"]).lower()
+        if schema == "canonical_v5" and raw_action_type in _CANONICAL_NON_CASH_ACTION_TYPES:
+            continue
+        expected_action_type = "dividend" if schema == "legacy" else "cash_dividends"
+        if raw_action_type != expected_action_type:
+            raise ValueError(f"Unsupported corporate-action type on row {row_number}: {raw_action_type}")
+        timestamp = (
+            _legacy_action_timestamp(raw["timestamp"], row_number=row_number)
+            if schema == "legacy"
+            else _canonical_action_timestamp(raw["ex_date"], row_number=row_number)
+        )
+        value = _action_value(raw["value"] if schema == "legacy" else raw["rate"], row_number=row_number)
+        raw_symbol = str(raw["symbol"])
+        symbol = canonical_symbol(raw_symbol, Market.EQUITY)
+        action_type = CorporateActionType.DIVIDEND
+        key = (symbol, timestamp, action_type, value)
+        if key in seen:
+            continue
+        seen.add(key)
+        for split_timestamp, ratio in splits.get(symbol, ()):
+            if split_timestamp > timestamp:
+                value /= ratio
+        actions.append(
+            CorporateAction(
+                timestamp,
+                raw_symbol if schema == "legacy" else symbol,
+                action_type,
+                float(value),
             )
+        )
     return actions
 
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import math
-import threading
 from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -21,6 +20,7 @@ from parayabuck.execution.portfolio import PortfolioOrderRequest, RiskOverlayDec
 from parayabuck.logger import get_logger
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_models import (
+    _TERMINAL_ORDER_STATUSES,
     TERMINAL_ORDER_STATUSES_SQL,
     OpenPortfolioOrder,
     RebalanceExecutionState,
@@ -31,12 +31,23 @@ from parayabuck.storage import SQLiteStore
 
 log = get_logger("parayabuck.portfolio.runtime_repository")
 
+# A late or racing observation (a stream event applied before the submit
+# path records ``submitted``, a reconciliation snapshot taken before the
+# fill) must never move a final order back to a working status: the row
+# would re-enter ``open_orders`` and hold a position slot until the next
+# reconciliation. ``done_for_day`` is excluded because Alpaca resumes such
+# an order on the next session.
+_FINAL_ORDER_STATUSES_SQL = ", ".join(f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES - {"done_for_day"}))
+_NON_REGRESSING_STATUS_SQL = (
+    f"CASE WHEN status IN ({_FINAL_ORDER_STATUSES_SQL}) "
+    f"AND ? NOT IN ({TERMINAL_ORDER_STATUSES_SQL}) THEN status ELSE ? END"
+)
+
 
 class PortfolioStateRepository:
     def __init__(self, path: str | Path, *, store: SQLiteStore | None = None) -> None:
         self.store = store or SQLiteStore(path)
         self._owns_store = store is None
-        self._lock = threading.RLock()
         self._migrate()
 
     def _migrate(self) -> None:
@@ -714,9 +725,9 @@ class PortfolioStateRepository:
     def update_order(self, client_order_id: str, status: str, broker_order_id: str = "") -> None:
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
-                """UPDATE portfolio_orders SET status = ?, broker_order_id = ?
+                f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL}, broker_order_id = ?
                    WHERE client_order_id = ?""",
-                (status, broker_order_id, client_order_id),
+                (status, status, broker_order_id, client_order_id),
             )
 
     def record_protective_order(
@@ -941,7 +952,7 @@ class PortfolioStateRepository:
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
                 """SELECT o.cumulative_filled_quantity, o.reference_price, o.side,
-                          o.market, s.account_id, o.created_at
+                          o.market, s.account_id, o.created_at, o.symbol
                    FROM portfolio_orders o
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -999,6 +1010,7 @@ class PortfolioStateRepository:
             market = str(row[3] or "")
             account_id = str(row[4])
             created_at = str(row[5]) if row[5] is not None else None
+            symbol = str(row[6])
             # Alpaca deducts the taker fee from the acquired units on crypto
             # buys (position = fill qty * (1 - fee)); the gross fill would
             # overstate ownership by exactly the fee, and after a partial
@@ -1020,10 +1032,12 @@ class PortfolioStateRepository:
                 except (TypeError, ValueError):
                     delay_seconds = None
             self.store.connection.execute(
-                """UPDATE portfolio_orders SET status = ?, broker_order_id = ?,
-                   cumulative_filled_quantity = ?, average_fill_price = ?
+                f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL},
+                   broker_order_id = ?, cumulative_filled_quantity = ?,
+                   average_fill_price = COALESCE(?, average_fill_price)
                    WHERE client_order_id = ?""",
                 (
+                    status,
                     status,
                     broker_order_id,
                     max(previous, cumulative_filled_quantity),
@@ -1056,17 +1070,12 @@ class PortfolioStateRepository:
                     # A real SELL fill proves the sale that a stale-clear
                     # adjustment assumed; consume the adjustment instead of
                     # booking a second SELL on top of it.
-                    symbol = self.store.connection.execute(
-                        "SELECT symbol, market FROM portfolio_orders WHERE client_order_id = ?",
-                        (client_order_id,),
-                    ).fetchone()
-                    if symbol is not None:
-                        self._consume_ownership_adjustments_tx(
-                            account_id,
-                            str(symbol[0]),
-                            Market(str(symbol[1])),
-                            fill_delta,
-                        )
+                    self._consume_ownership_adjustments_tx(
+                        account_id,
+                        symbol,
+                        Market(market),
+                        fill_delta,
+                    )
         return True
 
     @staticmethod

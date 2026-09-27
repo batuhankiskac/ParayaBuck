@@ -628,13 +628,18 @@ def _resolved_timeframe(strategy: MarketStrategyConfig) -> MarketStrategyConfig:
     )
 
 
+def _block(value: Any) -> dict[str, Any]:
+    """Copy one YAML mapping block; a present-but-empty block (``None``) is empty."""
+    return {} if value is None else dict(value)
+
+
 def load_config(config_path: str | None = None) -> Config:
     load_dotenv()
     path = Path(config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml")
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    runtime_raw = dict(raw.get("runtime", {}))
+    runtime_raw = _block(raw.get("runtime"))
     # The pre-v1 ``risk_monitor_timeframe`` key was renamed to
     # ``market_state_timeframe`` (the cadence observes market state; risk
     # reactions live in the entry-risk latch). Accept the old key so an
@@ -651,7 +656,7 @@ def load_config(config_path: str | None = None) -> Config:
         if raw_mode == "backtest":
             raise ValueError("runtime.mode=backtest is CLI-only; use disabled, paper, or live")
         runtime_raw["mode"] = RuntimeMode(raw_mode)
-    engine_raw = dict(raw.get("engine", {}))
+    engine_raw = _block(raw.get("engine"))
     obsolete_engine = {
         "timeframe",
         "higher_timeframe",
@@ -666,7 +671,7 @@ def load_config(config_path: str | None = None) -> Config:
             + ", ".join(sorted(obsolete_engine))
             + "; use runtime execution/risk roles and strategy timeframes"
         )
-    risk_raw = dict(raw.get("risk", {}))
+    risk_raw = _block(raw.get("risk"))
     obsolete_risk = {
         "risk_per_trade_pct",
         "minimum_crypto_order_notional",
@@ -702,14 +707,14 @@ def load_config(config_path: str | None = None) -> Config:
         )
     else:
         universe_dict = dict(universe_raw)
-        equity_raw = dict(universe_dict.get("equity", {}))
+        equity_raw = _block(universe_dict.get("equity"))
         equity = EquityUniverseConfig(**equity_raw)
-        crypto_raw = dict(universe_dict.get("crypto", {}))
-        scanner = CryptoScannerConfig(**dict(crypto_raw.pop("scanner", {})))
+        crypto_raw = _block(universe_dict.get("crypto"))
+        scanner = CryptoScannerConfig(**_block(crypto_raw.pop("scanner", None)))
         crypto_universe = CryptoUniverseConfig(scanner=scanner, **crypto_raw)
-    strategy_raw = dict(raw.get("strategy", {}))
+    strategy_raw = _block(raw.get("strategy"))
     for _market_key in ("equity", "crypto"):
-        if _market_key in strategy_raw and "timeframe" in dict(strategy_raw[_market_key]):
+        if isinstance(strategy_raw.get(_market_key), dict) and "timeframe" in strategy_raw[_market_key]:
             warnings.warn(
                 f"strategy.{_market_key}.timeframe is deprecated: the strategy "
                 "owns its signal timeframe. The value is still validated "
@@ -741,12 +746,12 @@ def load_config(config_path: str | None = None) -> Config:
     equity_strategy = _strategy_from_raw(
         default_strategy.equity,
         default_strategy.equity.enabled if "equity" in strategy_raw else equity.enabled,
-        strategy_raw.get("equity", {}),
+        _block(strategy_raw.get("equity")),
     )
     crypto_strategy = _strategy_from_raw(
         default_strategy.crypto,
         default_strategy.crypto.enabled if "crypto" in strategy_raw else crypto_universe.enabled,
-        strategy_raw.get("crypto", {}),
+        _block(strategy_raw.get("crypto")),
     )
     equity_strategy = _resolved_timeframe(equity_strategy)
     crypto_strategy = _resolved_timeframe(crypto_strategy)
@@ -771,7 +776,7 @@ def load_config(config_path: str | None = None) -> Config:
             observation_strategy_timeframe=resolved_crypto.timeframe,
             observation_strategy_parameters_digest=params_digest,
         )
-    alpaca_raw = dict(raw.get("alpaca", {}))
+    alpaca_raw = _block(raw.get("alpaca"))
     legacy_paper = alpaca_raw.pop("paper", None)
     if legacy_paper is False:
         raise ValueError(
@@ -786,13 +791,13 @@ def load_config(config_path: str | None = None) -> Config:
         universe=UniverseConfig(equity=equity, crypto=crypto_universe),
         strategy=StrategyConfig(equity_strategy, crypto_strategy),
         risk=risk,
-        backtest=BacktestConfig(**dict(raw.get("backtest", {}))),
-        live=LiveConfig(**dict(raw.get("live", {}))),
+        backtest=BacktestConfig(**_block(raw.get("backtest"))),
+        live=LiveConfig(**_block(raw.get("live"))),
         engine=EngineConfig(**engine_raw),
-        execution=ExecutionConfig(**dict(raw.get("execution", {}))),
-        backup=BackupConfig(**dict(raw.get("backup", {}))),
-        alerting=AlertingConfig(**dict(raw.get("alerting", {}))),
-        observability=ObservabilityConfig(**dict(raw.get("observability", {}))),
+        execution=ExecutionConfig(**_block(raw.get("execution"))),
+        backup=BackupConfig(**_block(raw.get("backup"))),
+        alerting=AlertingConfig(**_block(raw.get("alerting"))),
+        observability=ObservabilityConfig(**_block(raw.get("observability"))),
     )
 
 

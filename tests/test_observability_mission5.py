@@ -953,3 +953,34 @@ def test_ops_status_ignores_relative_defaults_when_paths_are_given(tmp_path: Pat
     assert data["trading_state"] == "UNKNOWN"
     execution = next(c for c in data["checks"] if c["code"] == "execution")
     assert execution["status"] == "UNKNOWN"
+
+
+def test_ops_explain_health_reads_the_configured_snapshot(tmp_path: Path) -> None:
+    """`ops explain` must evaluate health against observability.snapshot_path,
+    not the relative data/runtime default."""
+    import yaml
+
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text())
+    raw.setdefault("runtime", {})["decision_db_path"] = str(tmp_path / "decisions.sqlite3")
+    raw["observability"] = {
+        **(raw.get("observability") or {}),
+        "snapshot_path": str(tmp_path / "configured_snapshot.json"),
+        "journal_path": str(tmp_path / "journal.sqlite3"),
+    }
+    config_path = tmp_path / "settings.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_health(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"checks": []}
+
+    with (
+        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}),
+        patch("parayabuck.monitoring.health.evaluate_health", side_effect=fake_health),
+    ):
+        code, _, _ = _run_cli("--config", str(config_path), "ops", "explain", "dec-1")
+
+    assert code == 0
+    assert captured["snapshot_path"] == str(tmp_path / "configured_snapshot.json")
+    assert captured["database_path"] == str(tmp_path / "decisions.sqlite3")

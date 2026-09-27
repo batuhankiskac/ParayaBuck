@@ -570,3 +570,154 @@ def test_incremental_merge_dedups_the_overlap_and_keeps_every_cached_bar(warmup_
     btc = result["BTC/USD"]
     assert [bar.timestamp for bar in btc] == sorted({bar.timestamp for bar in btc})
     assert next(bar.close for bar in btc if bar.timestamp == correction) == 100.5
+
+
+class _FailingCryptoBars:
+    """Provider outage: every request raises."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def get_crypto_bars(self, request: Any) -> Any:
+        self.calls += 1
+        raise RuntimeError("provider down")
+
+
+class _EmptyCryptoBars:
+    """Provider answers with no rows at all."""
+
+    def get_crypto_bars(self, request: Any) -> Any:
+        import pandas as pd
+
+        return SimpleNamespace(df=pd.DataFrame())
+
+
+def _seed_old_scope_cache(cache: Any, start: datetime, end: datetime) -> None:
+    """Fresh, window-covering rows recorded under a PREVIOUS config digest."""
+    _seed_crypto_cache(cache, _hour_grid(start, end))
+    cache.scope_set(_INCREMENTAL_SCOPE, "digest-old", "unit-test")
+
+
+def test_normal_incremental_fetch_stamps_the_scope(warmup_cache: Any) -> None:
+    history = _incremental_history(warmup_cache, _FakeCryptoBars())
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+
+    _fetch_incremental(history, end - timedelta(hours=6), end)
+
+    assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+
+
+def test_outage_served_cache_rows_are_not_stamped_into_the_new_scope(warmup_cache: Any) -> None:
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=6)
+    _seed_old_scope_cache(warmup_cache, start, end)
+    provider = _FailingCryptoBars()
+    history = _incremental_history(warmup_cache, provider)
+
+    result = _fetch_incremental(history, start, end)
+
+    assert provider.calls == 1
+    assert _window_pairs(result) == _expected_window(start, end)
+    assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+
+
+def test_empty_provider_response_does_not_stamp_the_scope(warmup_cache: Any) -> None:
+    history = _incremental_history(warmup_cache, _EmptyCryptoBars())
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+
+    result = _fetch_incremental(history, end - timedelta(hours=6), end)
+
+    assert result == {symbol: [] for symbol in _INCREMENTAL_SYMBOLS}
+    assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+
+
+def test_dedup_replay_of_an_outage_served_batch_does_not_stamp_the_scope(warmup_cache: Any) -> None:
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=6)
+    _seed_old_scope_cache(warmup_cache, start, end)
+    history = _incremental_history(warmup_cache, _FailingCryptoBars())
+    history.get_bars_batch(list(_INCREMENTAL_SYMBOLS), "1h", start, end)
+    # The provider recovers, but the identical request inside the dedup TTL
+    # replays the outage-served result instead of calling it.
+    healthy = _FakeCryptoBars()
+    history._crypto_client = healthy
+
+    _fetch_incremental(history, start, end)
+
+    assert healthy.requests == []
+    assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+
+
+def test_empty_equity_tail_keeps_a_valid_scope_and_the_next_refresh_stays_incremental(
+    warmup_cache: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Routine live case (weekend/holiday/no new closed bar): a scope-valid
+    equity 1d cache whose tail request returns no rows must stay scope-valid,
+    serve the cached window, and keep the next refresh a tail-only download."""
+    import pandas as pd
+
+    import parayabuck.data.alpaca as alpaca_module
+
+    monkeypatch.setattr(alpaca_module, "StockBarsRequest", lambda **kwargs: SimpleNamespace(**kwargs))
+    requests: list[Any] = []
+
+    def empty_stock_bars(request: Any) -> Any:
+        requests.append(request)
+        return SimpleNamespace(df=pd.DataFrame())
+
+    history = _incremental_history(warmup_cache, None)
+    history._stock_client = SimpleNamespace(get_stock_bars=empty_stock_bars)
+    symbols = ["SPY", "QQQ", "QLD"]
+    end = datetime.now(UTC)
+    start = end - timedelta(days=30)
+    day = start.replace(hour=4, minute=0, second=0, microsecond=0)
+    stamps: list[datetime] = []
+    while day < end - timedelta(hours=1):
+        if day.weekday() < 5:
+            stamps.append(day)
+        day += timedelta(days=1)
+    for symbol in symbols:
+        warmup_cache.upsert(
+            [
+                Bar(
+                    timestamp=stamp,
+                    symbol=symbol,
+                    timeframe="1d",
+                    open=100.0,
+                    high=101.0,
+                    low=99.0,
+                    close=100.0,
+                    volume=1000.0,
+                    market=Market.EQUITY,
+                )
+                for stamp in stamps
+            ],
+            feed="iex",
+            adjustment="splits",
+        )
+    warmup_cache.scope_set(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST, "unit-test")
+
+    def refresh() -> dict[str, list[Bar]]:
+        return history.get_bars_batch_incremental(
+            symbols,
+            "1d",
+            start=start,
+            end=end,
+            adjustment="splits",
+            scope=_INCREMENTAL_SCOPE,
+            config_digest=_INCREMENTAL_DIGEST,
+        )
+
+    first = refresh()
+    assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+    assert {symbol: [bar.timestamp for bar in bars] for symbol, bars in first.items()} == {
+        symbol: stamps for symbol in symbols
+    }
+    second = refresh()
+
+    assert second == first
+    assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
+    assert len(requests) == 2
+    # Both refreshes asked only for the overlap tail, never the full window.
+    for request in requests:
+        assert request.start >= stamps[-1] - timedelta(days=2)

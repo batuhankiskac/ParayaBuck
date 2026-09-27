@@ -29,6 +29,7 @@ from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
+from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
 from parayabuck.universe import (
@@ -637,13 +638,10 @@ def _run_ops(args: argparse.Namespace) -> int:
 
 def _ops_status(args: argparse.Namespace) -> int:
     # Load config optionally
-    config = None
     try:
         config = load_config(getattr(args, "config", None))
     except Exception:
-        from parayabuck.config import Config as _Cfg
-
-        config = _Cfg()
+        config = Config()
     # Explicit flags win; only an absent flag falls back to the configured paths.
     # Dropping them here made the relative data/runtime defaults answer for a
     # database and snapshot the operator never asked about.
@@ -672,9 +670,7 @@ def _ops_status(args: argparse.Namespace) -> int:
             snap_data = _json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         snap_data = None
-    mode = (snap_data.get("mode") if isinstance(snap_data, dict) else None) or (
-        config.runtime.mode.value if config and hasattr(config, "runtime") else "unknown"
-    )
+    mode = (snap_data.get("mode") if isinstance(snap_data, dict) else None) or config.runtime.mode.value
     session = (snap_data.get("session_id") if isinstance(snap_data, dict) else None) or "—"
     # Build checks map
     checks = {c["code"]: c for c in health.get("checks", []) if isinstance(c, dict)}
@@ -941,10 +937,12 @@ def _ops_explain(args: argparse.Namespace) -> int:
     target = getattr(args, "target", "latest") or "latest"
     db_path = getattr(args, "db", None)
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
+    snapshot_path = "data/runtime/health_snapshot.json"
     config_path = getattr(args, "config", None)
     cfg = None
     try:
         cfg = load_config(config_path)
+        snapshot_path = cfg.observability.snapshot_path
         if not db_path:
             db_path = cfg.runtime.decision_db_path
         if not getattr(args, "journal", None):
@@ -1074,7 +1072,7 @@ def _ops_explain(args: argparse.Namespace) -> int:
             try:
                 from parayabuck.monitoring.health import evaluate_health
 
-                h = evaluate_health(database_path=db_path)
+                h = evaluate_health(snapshot_path=snapshot_path, database_path=db_path)
                 for chk in h.get("checks", []):
                     if chk.get("status") in {"BLOCKED", "DEGRADED", "CRITICAL"}:
                         print(f"Health {chk.get('code')}: {chk.get('summary')}")
@@ -1266,7 +1264,9 @@ def _candidate_symbols(
     limit: int | None,
 ) -> list[str]:
     if explicit:
-        return list(dict.fromkeys(item.strip().upper() for item in explicit.split(",") if item.strip()))
+        # Canonical keys: the download batch is keyed by canonical symbols, so a
+        # legacy form such as ``BTCUSD`` must resolve to ``BTC/USD`` here too.
+        return list(dict.fromkeys(canonical_symbol(item, market) for item in explicit.split(",") if item.strip()))
     if market == Market.EQUITY:
         return list(config.universe.equity.symbols)
     source = Path(config.universe.crypto.active_universe_path)
@@ -1277,7 +1277,8 @@ def _candidate_symbols(
     required_order = list(dict.fromkeys(required))
     required_set = set(required_order)
     candidates = [symbol for symbol in dict.fromkeys(symbols) if symbol not in required_set]
-    return [*required_order, *candidates[: max(0, limit or len(candidates))]]
+    cap = len(candidates) if limit is None else max(0, limit)
+    return [*required_order, *candidates[:cap]]
 
 
 def _strategy_parameters(config: Config, market: Market, raw_overrides: list[str]) -> dict[str, object]:

@@ -447,6 +447,8 @@ def validate_active_crypto_universe(
         return (), "missing"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return (), "invalid"
         if payload.get("status") != "success":
             return (), "invalid"
         if payload.get("scanner_version") != CryptoUniverseScanner.version:
@@ -496,11 +498,14 @@ def validate_active_crypto_universe(
         if not isinstance(raw_candidates, list):
             return (), "invalid"
         candidates = {canonical_symbol(str(item), Market.CRYPTO) for item in raw_candidates}
+        score_breakdown = payload.get("score_breakdown", {})
+        if not isinstance(score_breakdown, dict):
+            return (), "invalid"
         managed_pins = {
             symbol
             for symbol in selected
-            if isinstance(payload.get("score_breakdown", {}).get(symbol), dict)
-            and payload["score_breakdown"][symbol].get("selection_role") == "managed_position"
+            if isinstance(score_breakdown.get(symbol), dict)
+            and score_breakdown[symbol].get("selection_role") == "managed_position"
         }
         if not set(selected).issubset(candidates | set(config.pinned_symbols) | managed_pins):
             return (), "outside_candidate_pool"

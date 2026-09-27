@@ -114,9 +114,9 @@ def build_observation_set(
         source = "strategy_alpha" if ranked else "no_ranker"
     if len(ranked) < maximum_stream_symbols - len(reserved) and scanner_fallback:
         fallback_candidates = tuple(
-            canonical_symbol(symbol, market)
+            candidate
             for symbol in scanner_fallback
-            if canonical_symbol(symbol, market) not in reserved and canonical_symbol(symbol, market) not in ranked
+            if (candidate := canonical_symbol(symbol, market)) not in reserved and candidate not in ranked
         )
         if strategy is not None:
             fallback_candidates = tuple(symbol for symbol in fallback_candidates if _ready(symbol))

@@ -457,6 +457,30 @@ def test_equity_candidate_symbols_are_the_configured_static_universe(tmp_path) -
     ]
 
 
+def test_explicit_crypto_symbols_are_canonicalized_to_download_keys(tmp_path) -> None:
+    # get_bars_batch keys its result by canonical symbol; a legacy
+    # ``BTCUSD`` must not become a key the download never returns.
+    config = _config(tmp_path)
+    assert cli_module._candidate_symbols(config, Market.CRYPTO, "btcusd, PAXGUSD,BTC/USD", None) == [
+        "BTC/USD",
+        "PAXG/USD",
+    ]
+
+
+def test_zero_candidate_limit_keeps_no_crypto_candidates(tmp_path) -> None:
+    config = _config(tmp_path)
+    crypto = replace(
+        config.universe.crypto,
+        active_universe_path=str(tmp_path / "missing_active.json"),
+        trade_symbols=("BTC/USD", "ETH/USD", "SOL/USD"),
+        pinned_symbols=("BTC/USD",),
+    )
+    config = replace(config, universe=replace(config.universe, crypto=crypto))
+    assert cli_module._candidate_symbols(config, Market.CRYPTO, None, None) == ["BTC/USD", "ETH/USD", "SOL/USD"]
+    assert cli_module._candidate_symbols(config, Market.CRYPTO, None, 1) == ["BTC/USD", "ETH/USD"]
+    assert cli_module._candidate_symbols(config, Market.CRYPTO, None, 0) == ["BTC/USD"]
+
+
 def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, monkeypatch) -> None:
     # _load_bars intentionally fails closed without credentials; provide
     # non-production test values so the provider itself can be replaced below

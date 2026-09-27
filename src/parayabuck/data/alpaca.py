@@ -193,7 +193,6 @@ class AlpacaHistoricalData:
         canonical = canonical_symbol(symbol)
         return self.get_bars_batch([canonical], timeframe, start, end, adjustment=adjustment).get(canonical, [])
 
-
     def get_bars_batch(
         self,
         symbols: list[str],

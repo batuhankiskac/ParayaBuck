@@ -31,8 +31,10 @@ def _parse_iso(value: str | None) -> datetime | None:
         return None
 
 
+# Includes the repository's own terminal vocabulary (runtime_models): the
+# TradingStream event name "fill" is persisted as-is, and "done_for_day".
 _TERMINAL_STATUSES: frozenset[str] = frozenset(
-    {"filled", "canceled", "cancelled", "rejected", "expired", "done", "complete"}
+    {"filled", "fill", "canceled", "cancelled", "rejected", "expired", "done_for_day", "done", "complete"}
 )
 _AMBIGUOUS_STATUSES: frozenset[str] = frozenset(
     {"ambiguous", "manual_intervention_required", "reconciliation_required"}
@@ -285,15 +287,19 @@ def decision_reconstruction(
     except Exception:
         pass
 
-    # Operational events correlated
-    if journal_path is not None and Path(str(journal_path)).exists():
-        try:
-            from parayabuck.monitoring.journal import EventJournal
+    # Operational events correlated. An explicit journal that is missing yields
+    # no events — never the cwd-relative default journal (which get_journal()
+    # would even create).
+    if journal_path is not None:
+        result["operational_events"] = []
+        if Path(str(journal_path)).exists():
+            try:
+                from parayabuck.monitoring.journal import EventJournal
 
-            j = EventJournal(str(journal_path))
-            result["operational_events"] = [e.to_dict() for e in j.query(decision_id=decision_id, limit=100)]
-        except Exception:
-            result["operational_events"] = []
+                j = EventJournal(str(journal_path))
+                result["operational_events"] = [e.to_dict() for e in j.query(decision_id=decision_id, limit=100)]
+            except Exception:
+                result["operational_events"] = []
     else:
         # Try default journal
         try:

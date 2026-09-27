@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from parayabuck.config import Config, load_config
+from parayabuck.markets.timeframes import is_regular_equity_time
 from parayabuck.monitoring import alerts, metrics
 from parayabuck.monitoring.journal import journal_stats
 
@@ -146,6 +147,31 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
     )
 
 
+# Per-worker liveness mirrors the runtime's own rules (_is_worker_healthy /
+# _stream_worker_delivering in runtime.py): the trade-update stream heartbeats
+# only at (re)start, the signal-adjustment monitor once per hourly pass, and a
+# market stream proves liveness by delivered bars, only while it must deliver.
+_EVENT_DRIVEN_WORKERS = frozenset({"pb-trade-updates"})
+_SIGNAL_ADJUSTMENT_WORKER = "pb-signal-adjustment"
+_SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
+_STREAM_WORKER_MARKETS = {"pb-stocks": "equity", "pb-crypto": "crypto"}
+
+
+def _worker_stale(name: str, info: dict[str, Any], now: datetime, ttl: float) -> bool:
+    if name in _EVENT_DRIVEN_WORKERS:
+        return False
+    market = _STREAM_WORKER_MARKETS.get(name)
+    if market is not None:
+        if market == "equity" and not is_regular_equity_time(now):
+            return False
+        last_event = _parse_iso(info.get("last_event_at"))
+        return last_event is None or (now - last_event).total_seconds() > max(180.0, ttl)
+    if name == _SIGNAL_ADJUSTMENT_WORKER:
+        ttl = _SIGNAL_ADJUSTMENT_CHECK_SECONDS + max(300.0, ttl)
+    last_hb = _parse_iso(info.get("last_heartbeat"))
+    return last_hb is not None and (now - last_hb).total_seconds() > ttl
+
+
 def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config: Config) -> HealthCheck:
     if health_snapshot is None:
         return HealthCheck(code="workers", status=HealthStatus.UNKNOWN, summary="no runtime health available")
@@ -158,11 +184,9 @@ def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config
     for name, info in workers.items():
         if not isinstance(info, dict):
             continue
-        alive = bool(info.get("alive"))
-        last_hb = _parse_iso(info.get("last_heartbeat"))
-        if not alive:
+        if not bool(info.get("alive")):
             dead.append(name)
-        elif last_hb is not None and (now - last_hb).total_seconds() > ttl:
+        elif _worker_stale(str(name), info, now, ttl):
             stale.append(name)
     if dead:
         return HealthCheck(
@@ -359,10 +383,11 @@ def _ledger_readable(db_path: str | Path) -> bool:
 
 
 def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | None) -> HealthCheck:
-    # Check entry latch and active incidents
+    # Check entry latch and active incidents. The runtime always reports every
+    # market ({"equity": None, ...}); only a market with a reason is latched.
     latch = {}
     if health_snapshot and isinstance(health_snapshot.get("entry_risk_latch"), dict):
-        latch = health_snapshot["entry_risk_latch"]
+        latch = {market: reason for market, reason in health_snapshot["entry_risk_latch"].items() if reason}
     if latch:
         return HealthCheck(
             code="risk",

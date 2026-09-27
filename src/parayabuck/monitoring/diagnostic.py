@@ -151,9 +151,15 @@ def collect_bundle_data(
     }
     # status
     try:
+        from parayabuck.config import Config, load_config
         from parayabuck.monitoring.health import evaluate_health
 
-        data["status"] = evaluate_health(snapshot_path=snapshot_path, database_path=decision_db_path)
+        # Judge health against the bundle's own config, never a cwd/env guess
+        try:
+            status_cfg = load_config(str(config_path)) if Path(str(config_path)).exists() else Config()
+        except Exception:
+            status_cfg = Config()
+        data["status"] = evaluate_health(snapshot_path=snapshot_path, database_path=decision_db_path, config=status_cfg)
     except Exception as exc:
         data["status"] = {"error": str(exc)}
 

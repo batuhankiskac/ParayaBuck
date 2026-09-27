@@ -70,7 +70,7 @@ class OperationalEvent:
 - **Severity**: `DEBUG/INFO/WARNING/CRITICAL`, centralized `severity_for_kind` (maps `WARNING_KINDS` + lifecycle).
 - **Vocabulary**: `monitoring/events.py` is authoritative for alert kinds (16 kinds). Lifecycle extensions (`LIFECYCLE_KINDS`) add `reconciliation_started/succeeded`, `account_became_stale/recovered`, `universe_became_stale/recovered`, `runtime_health_degraded/recovered`, `rebalance_phase_changed`, `decision_summary`, `observability_degraded/recovered`. Each answers an operator question (e.g. “when did account become stale?”).
 - **Correlation**: reuse domain IDs (`session_id`→`decision_id`→`client_order_id`→`incident_id`). No fake IDs.
-- **Secrets**: `_REDACTED_KEYS` — `api_key`, `webhook_url`, `approval_key` etc. — redacted to `***REDACTED***` at `create_event` time; `OperationalEvent.__post_init__` rejects plain secrets. `alerts.emit` applies the same redaction to its log line and webhook payload, and webhook delivery failures are logged with the webhook URL/path scrubbed.
+- **Secrets**: `_REDACTED_KEYS` — `api_key`, `webhook_url`, `approval_key` etc. — redacted to `***REDACTED***` at `create_event` time; `OperationalEvent.__post_init__` rejects plain secrets. `alerts.emit` applies the same redaction to its log line and webhook payload, and webhook delivery failures are logged with the webhook URL, path, query and password scrubbed.
 
 ## Retention
 
@@ -93,7 +93,7 @@ Schema version 1, idempotent migration, WAL.
 - **Areas** (11 checks): `runtime_heartbeat`, `workers`, `queue`, `account`, `reconciliation`, `universe`, `signal_adjustment`, `risk`, `execution`, `alerts`, `observability`.
 - **Thresholds** derived from config/runtime cadence:
   - heartbeat: 90s (snapshot interval 30s × 3)
-  - workers: `account_poll_interval * 3` (30s ×3 = 90s)
+  - workers: `max(30s, account_poll_interval * 3)` heartbeat age, with the runtime's own exceptions: `pb-trade-updates` is event-driven (no heartbeat age), `pb-signal-adjustment` allows its hourly pass (+ `max(300s, ttl)`), and the market streams are judged by the last delivered bar (`max(180s, ttl)`), equity only during regular hours
   - queue age: `engine.maximum_queue_age_seconds` (30s)
   - account/reconciliation: `maximum_account_age_for_entry_seconds *2` etc.
   - universe: `universe.crypto.active_universe_max_age_hours *3600` (the

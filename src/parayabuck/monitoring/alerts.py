@@ -189,13 +189,18 @@ def _scrub_webhook_url(text: str, url: str) -> str:
     """Remove the webhook URL (and its secret-bearing path) from an error text.
 
     ``requests`` puts the URL into its exception messages — the full URL for
-    HTTP errors, the path alone for connection errors — and a chat webhook's
+    HTTP errors, the path and query for connection errors — and a chat webhook's
     path *is* its credential, so it must never reach the log.
     """
-    path = urlsplit(url).path
+    parts = urlsplit(url)
     scrubbed = text.replace(url, "<webhook>") if url else text
-    if path and path != "/":
-        scrubbed = scrubbed.replace(path, "<webhook-path>")
+    # Connection errors print path *and* query; a query can carry the key/token
+    if parts.query:
+        scrubbed = scrubbed.replace(parts.query, "<webhook-query>")
+    if parts.password:
+        scrubbed = scrubbed.replace(parts.password, "<webhook-password>")
+    if parts.path and parts.path != "/":
+        scrubbed = scrubbed.replace(parts.path, "<webhook-path>")
     return scrubbed
 
 

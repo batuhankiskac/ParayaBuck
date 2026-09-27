@@ -149,8 +149,8 @@ def aggregate_historical_bars(
     expected = target_minutes // source_minutes
     result: list[Bar] = []
     source_delta = timedelta(minutes=source_minutes)
-    for (_symbol, bucket), components in sorted(buckets.items(), key=lambda item: (item[0][1], item[0][0])):
-        ordered = sorted(components, key=lambda item: item.timestamp)
+    # Each bucket list holds one symbol appended in timestamp order already.
+    for (_symbol, bucket), ordered in sorted(buckets.items(), key=lambda item: (item[0][1], item[0][0])):
         contiguous = all(
             current.timestamp - previous.timestamp == source_delta for previous, current in pairwise(ordered)
         )

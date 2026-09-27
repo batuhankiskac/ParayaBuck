@@ -59,53 +59,6 @@ class ProtectionState(StrEnum):
     FAILED = "failed"
 
 
-class TrailingStopType(StrEnum):
-    NONE = "none"
-    CHANDELIER = "chandelier"
-
-
-@dataclass(frozen=True)
-class ExitPolicy:
-    """Serializable, strategy-independent rules for managing an open trade.
-
-    Dynamic stops are calculated from completed bars and become active on the
-    following bar.  The policy deliberately excludes partial take-profit rules
-    so the portfolio surface stays small and auditable.
-    """
-
-    policy_id: str = "fixed"
-    initial_stop_atr_multiple: float | None = None
-    target_r_multiple: float | None = None
-    break_even_trigger_r: float | None = None
-    trailing_type: TrailingStopType = TrailingStopType.NONE
-    trailing_atr_multiple: float | None = None
-    trailing_atr_period: int = 14
-    trailing_activation_r: float | None = None
-    max_holding_bars: int | None = None
-    regime_exit: bool = False
-
-    def __post_init__(self) -> None:
-        if not self.policy_id.strip():
-            raise ValueError("Exit policy id cannot be empty")
-        positive_values = (
-            self.initial_stop_atr_multiple,
-            self.target_r_multiple,
-            self.break_even_trigger_r,
-            self.trailing_atr_multiple,
-            self.trailing_activation_r,
-        )
-        if any(value is not None and (not math.isfinite(value) or value <= 0) for value in positive_values):
-            raise ValueError("Exit policy numeric values must be finite and positive")
-        if self.max_holding_bars is not None and self.max_holding_bars <= 0:
-            raise ValueError("Maximum holding bars must be positive")
-        if self.trailing_atr_period <= 0:
-            raise ValueError("Trailing ATR period must be positive")
-        if self.trailing_type == TrailingStopType.NONE and self.trailing_atr_multiple is not None:
-            raise ValueError("A trailing multiple requires an active trailing type")
-        if self.trailing_type != TrailingStopType.NONE and self.trailing_atr_multiple is None:
-            raise ValueError("An active trailing type requires a trailing multiple")
-
-
 @dataclass(frozen=True)
 class ExecutionEvent:
     account_id: str
@@ -235,12 +188,6 @@ class OrderIntent:
     strategy: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     client_order_id: str = field(default_factory=lambda: f"parayabuck-{uuid4().hex}")
-    strategy_version: str = "1.0.0"
-    exit_policy: ExitPolicy = field(default_factory=ExitPolicy)
-    volatility_at_entry: float | None = None
-    signal_score: float = 0.0
-    normalized_expected_r: float | None = None
-    signal_regime: Regime = Regime.UNKNOWN
 
 
 @dataclass(frozen=True)

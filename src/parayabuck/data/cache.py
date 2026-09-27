@@ -102,11 +102,11 @@ class WarmupCache:
         Crash-safe recovery:
           A: modern bars, no legacy → no-op.
           B: old bars, no legacy → atomic rename → create → copy → drop.
-          C: no bars, legacy exists (crash after rename) → recreate bars and
-             copy legacy back, then drop legacy.
-          D: modern bars empty/full + legacy exists (crash after CREATE
-             but before DROP, or before COPY) → idempotently merge legacy
-             into bars then drop legacy.
+          D: modern bars empty/full + legacy exists (crash after RENAME,
+             CREATE, or COPY but before DROP) → idempotently merge legacy
+             into bars then drop legacy. A crash right after RENAME also
+             lands here: the constructor recreates an empty modern ``bars``
+             (``CREATE TABLE IF NOT EXISTS``) before this method runs.
           E: both exist → determine schema state; never blindly DROP legacy
              at the start (previous bug). Legacy is only removed after its
              rows are proven present in the new table or after a logged merge.
@@ -127,40 +127,6 @@ class WarmupCache:
 
             # Scenario A: already modern, no legacy → no-op
             if bars_exists and _is_modern_bars() and not legacy_exists:
-                return
-
-            # Scenario C: interrupted after RENAME, before COPY/COMMIT — bars missing
-            if not bars_exists and legacy_exists:
-                legacy_cols = {
-                    str(row[1]) for row in self.connection.execute("PRAGMA table_info(bars_legacy)").fetchall()
-                }
-                log.warning(
-                    "WarmupCache: recovering interrupted migration — bars missing, restoring %s rows from bars_legacy",
-                    self.connection.execute("SELECT COUNT(*) FROM bars_legacy").fetchone()[0],
-                )
-                self.connection.execute(self._SCHEMA)
-                if "adjustment" in legacy_cols:
-                    self.connection.execute(
-                        """
-                        INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
-                                                    open, high, low, close, volume, retrieved_at)
-                        SELECT feed, symbol, market, timeframe, adjustment, timestamp,
-                               open, high, low, close, volume, retrieved_at
-                        FROM bars_legacy
-                        """
-                    )
-                else:
-                    self.connection.execute(
-                        """
-                        INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
-                                                    open, high, low, close, volume, retrieved_at)
-                        SELECT feed, symbol, 'equity', timeframe, 'raw', timestamp,
-                               open, high, low, close, volume, retrieved_at
-                        FROM bars_legacy
-                        """
-                    )
-                self.connection.execute("DROP TABLE bars_legacy")
-                self.connection.commit()
                 return
 
             # Both tables exist

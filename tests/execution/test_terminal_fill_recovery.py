@@ -21,6 +21,7 @@ from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide, RiskOverlayDecision
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
+from parayabuck.portfolio.runtime_service import PortfolioRuntime
 
 _DECISION_AT = datetime(2026, 1, 2, 14, 0, tzinfo=UTC)
 
@@ -114,7 +115,7 @@ def test_crashed_buy_that_partially_filled_then_died_books_its_fill(tmp_path: Pa
     _record(repo, decision_id, "pb-buy", PortfolioOrderSide.BUY)
     broker = _broker(repo, _dead_partial("pb-buy", "buy"))
 
-    assert broker.resolve_portfolio_submission("pb-buy", "") == "canceled"
+    assert broker.resolve_portfolio_submission("pb-buy", "") == ("canceled", "b-1")
 
     assert _fills(repo, "pb-buy") == [(4.0, 101.0)]
     assert repo.owned_quantities("acct") == {"QLD": 4.0}
@@ -177,8 +178,26 @@ def test_dead_order_without_fill_books_nothing(tmp_path: Path) -> None:
     order = SimpleNamespace(id="b-1", status="expired", filled_qty="0", filled_avg_price=None)
     broker = _broker(repo, order)
 
-    assert broker.resolve_portfolio_submission("pb-buy", "") == "expired"
+    assert broker.resolve_portfolio_submission("pb-buy", "") == ("expired", "b-1")
     assert _fills(repo, "pb-buy") == []
+
+
+def test_resolved_crashed_submission_keeps_the_broker_order_id(tmp_path: Path) -> None:
+    """The service persists the resolver's broker id verbatim; a crashed
+    submit has none stored, so the broker's id must come back with the status
+    instead of the stored "" erasing the id the fill recovery just booked."""
+    repo, decision_id = _repository(tmp_path)
+    _record(repo, decision_id, "pb-buy", PortfolioOrderSide.BUY)
+    runtime = PortfolioRuntime.__new__(PortfolioRuntime)
+    runtime.broker = _broker(repo, _dead_partial("pb-buy", "buy"))
+    runtime.repository = repo
+
+    rows = runtime._resolve_stuck_submission_rows(decision_id, repo.orders_for_decision(decision_id, side="buy"), "buy")
+
+    assert rows is not None
+    assert [(row["status"], row["broker_order_id"], row["cumulative_filled_quantity"]) for row in rows] == [
+        ("canceled", "b-1", 4.0)
+    ]
 
 
 # -- FILL-activity backfill rows ---------------------------------------------
@@ -307,3 +326,38 @@ def test_activity_fee_is_kept_when_the_portfolio_journal_saw_no_fee(tmp_path: Pa
         ledger.close()
 
     assert telemetry.execution_metrics(db)["fees"]["total"] == pytest.approx(0.5)
+
+
+def test_backfilled_portfolio_sell_counts_as_one_order(tmp_path: Path) -> None:
+    db = tmp_path / "runtime.sqlite3"
+    repo, decision_id = _repository(tmp_path)
+    _record(repo, decision_id, "pb-sell", PortfolioOrderSide.SELL)
+    repo.apply_trade_update(
+        client_order_id="pb-sell",
+        broker_order_id="b-sell",
+        status="fill",
+        cumulative_filled_quantity=5.0,
+        average_fill_price=100.0,
+        occurred_at=datetime(2026, 9, 1, 15, 0, tzinfo=UTC),
+        activity_id="stream-execution-1",
+        fee=None,
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+    )
+    ledger = ExecutionLedger(str(db))
+    try:
+        _backfill(
+            ledger,
+            [
+                _activity("a1", "5", "100", "2026-09-01T15:00:00+00:00"),
+                # A manual broker sale has no portfolio order: its row counts.
+                {**_activity("a2", "1", "100", "2026-09-01T16:00:00+00:00"), "order_id": "b-manual"},
+            ],
+        )
+    finally:
+        ledger.close()
+
+    orders = telemetry.execution_metrics(db)["orders"]
+    assert orders["total"] == 2  # pb-sell once, plus the manual sale
+    assert orders["by_market"] == {"equity": {"total": 2, "filled": 2, "rejected": 0}}
+    assert telemetry.execution_metrics(db)["orders_with_fills"]["count"] == 1

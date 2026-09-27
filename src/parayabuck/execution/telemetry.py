@@ -28,6 +28,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from parayabuck.execution.ledger import FILL_ACTIVITY_RECOVERY_PREFIX
 from parayabuck.portfolio.runtime_models import _AMBIGUOUS_ORDER_STATUSES, is_terminal_order_status
 
 # Direction of the adverse-slippage sign convention: for a BUY a fill above
@@ -231,13 +232,29 @@ def execution_metrics(
         by_terminal: dict[str, int] = {}
         total_orders = 0
         open_orders = 0
+        # The FILL-activity backfill mirrors every portfolio SELL into a
+        # ledger recovery row; that row is the same broker order already
+        # counted from portfolio_orders below, so it is not counted twice.
+        # A recovery row with no portfolio order (a manual broker sale) stays.
+        portfolio_broker_ids = {
+            str(row[0])
+            for row in _query(connection, "SELECT broker_order_id FROM portfolio_orders WHERE broker_order_id <> ''")
+        }
+
+        def portfolio_shadow(client_order_id: object, broker_order_id: object) -> bool:
+            return str(client_order_id).startswith(FILL_ACTIVITY_RECOVERY_PREFIX) and (
+                str(broker_order_id or "") in portfolio_broker_ids
+            )
+
         for row in _query(
             connection,
             """
-            SELECT market, strategy, terminal_state FROM orders
+            SELECT market, strategy, terminal_state, client_order_id, broker_order_id FROM orders
             WHERE client_order_id IS NOT NULL
             """,
         ):
+            if portfolio_shadow(row[3], row[4]):
+                continue
             market = str(row[0] or "unknown")
             strategy = str(row[1] or "unknown")
             terminal = str(row[2] or "open")
@@ -321,14 +338,17 @@ def execution_metrics(
                 connection,
                 """
                 SELECT slippage_bps, filled_at, submitted_at, market,
-                       cumulative_filled_qty
+                       cumulative_filled_qty, client_order_id, broker_order_id
                 FROM orders
                 WHERE slippage_bps IS NOT NULL
                    OR filled_at IS NOT NULL
                    OR cumulative_filled_qty > 0
                 """,
             ):
-                stored_bps, filled_at, submitted_at, market, cumulative = row
+                stored_bps, filled_at, submitted_at, market, cumulative, client_order_id, broker_order_id = row
+                if portfolio_shadow(client_order_id, broker_order_id):
+                    # Already counted once from portfolio_fills above.
+                    continue
                 market_key = str(market or "unknown")
                 if cumulative is not None and float(cumulative) > 0:
                     # Legacy rows: ONE row per order, however many partial

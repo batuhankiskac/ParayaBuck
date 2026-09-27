@@ -190,3 +190,15 @@ def test_cash_hurdle_uses_point_in_time_rate_series() -> None:
     assert result.cash_yield > 0
     without_rate = MarketDataset(Market.EQUITY, "1d", bars, bars, _lineage())
     assert dataset.content_digest() != without_rate.content_digest()
+
+
+def test_content_digest_covers_corporate_actions() -> None:
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    bars = tuple(_bar(start + timedelta(days=index), 100.0) for index in range(3))
+    plain = MarketDataset(Market.EQUITY, "1d", bars, bars, _lineage())
+    dividend = CorporateAction(start + timedelta(days=1), "SPY", CorporateActionType.DIVIDEND, 1.5)
+    with_dividend = MarketDataset(Market.EQUITY, "1d", bars, bars, _lineage(), corporate_actions=(dividend,))
+    larger = CorporateAction(dividend.timestamp, "SPY", CorporateActionType.DIVIDEND, 2.0)
+    with_larger = MarketDataset(Market.EQUITY, "1d", bars, bars, _lineage(), corporate_actions=(larger,))
+    digests = {plain.content_digest(), with_dividend.content_digest(), with_larger.content_digest()}
+    assert len(digests) == 3

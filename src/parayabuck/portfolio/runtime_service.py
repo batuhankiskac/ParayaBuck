@@ -349,6 +349,9 @@ class PortfolioRuntime:
         self.startup_catch_up_at: datetime | None = None
         self.last_buy_admission: BuyAdmission | None = None
 
+    def _market_name(self) -> str:
+        return self.market.value if hasattr(self.market, "value") else str(self.market)
+
     def _with_paper_observability(
         self,
         target: TargetPortfolio,
@@ -482,7 +485,7 @@ class PortfolioRuntime:
             except Exception:
                 next_boundary = None
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="warming_up",
                 decision_timestamp=self.startup_catch_up_at,
@@ -499,7 +502,7 @@ class PortfolioRuntime:
             self.startup_catch_up_status = "incomplete_strategy_batch"
             last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="incomplete_strategy_batch",
                 decision_timestamp=self.startup_catch_up_at,
@@ -524,7 +527,7 @@ class PortfolioRuntime:
         if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
             self.startup_catch_up_status = "duplicate_decision"
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="duplicate_decision",
                 decision_timestamp=timestamp,
@@ -541,7 +544,7 @@ class PortfolioRuntime:
             # already running: a catch-up would be an out-of-cadence re-entry.
             self.startup_catch_up_status = "catch_up_superseded"
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="duplicate_decision",
                 decision_timestamp=timestamp,
@@ -560,7 +563,7 @@ class PortfolioRuntime:
             # top of an existing managed position.
             self.startup_catch_up_status = "already_invested"
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="already_invested",
                 decision_timestamp=timestamp,
@@ -582,7 +585,7 @@ class PortfolioRuntime:
             reason = "rebalance_blocked" if status == "rebalance_blocked" else "rebalance_in_progress"
             self.startup_catch_up_status = status
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason=reason,
                 decision_timestamp=timestamp,
@@ -739,7 +742,7 @@ class PortfolioRuntime:
             except Exception:
                 nb = None
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="warming_up",
                 decision_timestamp=timestamp,
@@ -755,7 +758,7 @@ class PortfolioRuntime:
         if missing_symbols:
             last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="incomplete_strategy_batch",
                 decision_timestamp=timestamp,
@@ -769,7 +772,7 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
         if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="duplicate_decision",
                 decision_timestamp=timestamp,
@@ -798,9 +801,8 @@ class PortfolioRuntime:
             if current_rebalance.phase == REBALANCE_PHASE_BLOCKED:
                 _emit_decision_summary_safe(
                     decision_id=current_rebalance.decision_id,
-                    market=self.market.value if hasattr(self.market, "value") else str(self.market),
-                    strategy=getattr(self, "strategy_name", None)
-                    or getattr(getattr(self, "strategy", None), "name", None),
+                    market=self._market_name(),
+                    strategy=getattr(getattr(self, "strategy", None), "name", None),
                     session_id=self.session_id,
                     account_id=self.account_id,
                     universe_version=self.universe_version,
@@ -809,7 +811,7 @@ class PortfolioRuntime:
                     no_trade_reason="SELL_PHASE_PENDING",
                 )
                 _emit_no_trade_safe(
-                    market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                    market=self._market_name(),
                     strategy=getattr(self.strategy, "name", None),
                     reason="rebalance_blocked",
                     decision_timestamp=timestamp,
@@ -820,8 +822,8 @@ class PortfolioRuntime:
                 return PortfolioRuntimeResult(current_rebalance.decision_id, None, None, (), (), "rebalance_blocked")
             _emit_decision_summary_safe(
                 decision_id=current_rebalance.decision_id,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
-                strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+                market=self._market_name(),
+                strategy=getattr(getattr(self, "strategy", None), "name", None),
                 session_id=self.session_id,
                 account_id=self.account_id,
                 universe_version=self.universe_version,
@@ -830,7 +832,7 @@ class PortfolioRuntime:
                 no_trade_reason="SELL_PHASE_PENDING",
             )
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="rebalance_in_progress",
                 decision_timestamp=timestamp,
@@ -859,7 +861,7 @@ class PortfolioRuntime:
         if not managed.issubset(batch_symbols):
             missing_managed = managed - batch_symbols
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="incomplete_managed_batch",
                 decision_timestamp=timestamp,
@@ -872,7 +874,7 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_managed_batch")
         if self.market == Market.CRYPTO and "BTC/USD" not in ready_history:
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="benchmark_not_ready",
                 decision_timestamp=timestamp,
@@ -895,7 +897,7 @@ class PortfolioRuntime:
             is PortfolioStrategy.requires_intermediate_risk_rebalance
         ):
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="not_scheduled",
                 decision_timestamp=timestamp,
@@ -939,7 +941,7 @@ class PortfolioRuntime:
                 require_product_universe(context)
         if not scheduled and not self.strategy.requires_intermediate_risk_rebalance(context):
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="not_scheduled",
                 decision_timestamp=timestamp,
@@ -1030,13 +1032,10 @@ class PortfolioRuntime:
         # exposure, emit persistent no-trade (e.g., 6×10% equity blocks crypto).
         if "exposure_scaled_to_limit" in risk.reasons and sum(w.weight for w in risk.target.weights) < 1e-9:
             # Compute capacity for diagnostics
-            try:
-                gross_before = risk.gross_before
-                gross_after = risk.gross_after
-            except Exception:
-                gross_before = gross_after = 0.0
+            gross_before = risk.gross_before
+            gross_after = risk.gross_after
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="exposure_scaled_to_limit",
                 decision_timestamp=timestamp,
@@ -1051,7 +1050,7 @@ class PortfolioRuntime:
         # Entry latch blocking check: if latch present and no buys planned
         elif entry_latch is not None and not any(w.weight > 1e-9 for w in risk.target.weights):
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason=entry_latch.split("|")[0] if "|" in str(entry_latch) else str(entry_latch),
                 decision_timestamp=timestamp,
@@ -1120,8 +1119,8 @@ class PortfolioRuntime:
             submitted = self._submit_orders(orders)
             _emit_decision_summary_safe(
                 decision_id=decision_id,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
-                strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+                market=self._market_name(),
+                strategy=getattr(getattr(self, "strategy", None), "name", None),
                 session_id=self.session_id,
                 account_id=self.account_id,
                 universe_version=self.universe_version,
@@ -1157,8 +1156,8 @@ class PortfolioRuntime:
             submitted = self._submit_orders(sells)
             _emit_decision_summary_safe(
                 decision_id=decision_id,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
-                strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+                market=self._market_name(),
+                strategy=getattr(getattr(self, "strategy", None), "name", None),
                 session_id=self.session_id,
                 account_id=self.account_id,
                 universe_version=self.universe_version,
@@ -1169,7 +1168,7 @@ class PortfolioRuntime:
                 decision_id,
                 None,
                 REBALANCE_PHASE_SELL_PENDING,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
@@ -1212,8 +1211,8 @@ class PortfolioRuntime:
         submitted = self._submit_orders(buys)
         _emit_decision_summary_safe(
             decision_id=decision_id,
-            market=self.market.value if hasattr(self.market, "value") else str(self.market),
-            strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+            market=self._market_name(),
+            strategy=getattr(getattr(self, "strategy", None), "name", None),
             session_id=self.session_id,
             account_id=self.account_id,
             universe_version=self.universe_version,
@@ -1278,7 +1277,7 @@ class PortfolioRuntime:
                     current.decision_id,
                     REBALANCE_PHASE_BUY_PENDING,
                     REBALANCE_PHASE_COMPLETE,
-                    market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                    market=self._market_name(),
                     account_id=self.account_id,
                     session_id=self.session_id,
                 )
@@ -1382,7 +1381,7 @@ class PortfolioRuntime:
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
                 REBALANCE_PHASE_BLOCKED,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
@@ -1398,7 +1397,7 @@ class PortfolioRuntime:
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
                 REBALANCE_PHASE_BLOCKED,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
@@ -1455,7 +1454,7 @@ class PortfolioRuntime:
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
                 REBALANCE_PHASE_COMPLETE,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
@@ -1489,7 +1488,7 @@ class PortfolioRuntime:
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
                 REBALANCE_PHASE_COMPLETE,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
@@ -1501,7 +1500,7 @@ class PortfolioRuntime:
             decision_id,
             REBALANCE_PHASE_BUY_READY,
             REBALANCE_PHASE_BUY_PENDING,
-            market=self.market.value if hasattr(self.market, "value") else str(self.market),
+            market=self._market_name(),
             account_id=self.account_id,
             session_id=self.session_id,
         )

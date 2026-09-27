@@ -28,6 +28,8 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from parayabuck.portfolio.runtime_models import _AMBIGUOUS_ORDER_STATUSES, is_terminal_order_status
+
 # Direction of the adverse-slippage sign convention: for a BUY a fill above
 # the reference price is adverse; for a SELL a fill below the reference is
 # adverse. Positive reported slippage bps always means "worse than reference".
@@ -238,7 +240,9 @@ def execution_metrics(
             elif terminal in {"rejected", "canceled", "cancelled", "expired"}:
                 bucket["rejected"] += 1
             by_terminal[terminal] = by_terminal.get(terminal, 0) + 1
-            if status not in {"filled", "fill", "canceled", "cancelled", "rejected", "expired"}:
+            # The repository's own terminal vocabulary: a ``done_for_day``
+            # order can never fill again and is not open.
+            if not is_terminal_order_status(status):
                 open_orders += 1
 
         fills_by_market: dict[str, int] = {}
@@ -476,11 +480,14 @@ def forward_metrics(
             + execution.get("canceled", 0)
             + execution.get("expired", 0)
         )
-        open_count = int(
-            execution.get("submitted", 0)
-            + execution.get("submitting", 0)
-            + execution.get("accepted", 0)
-            + execution.get("partially_filled", 0)
+        # Working orders carry the raw stream/broker status the repository
+        # stored ("new", "partial_fill", "pending_new", ...), so count every
+        # status that is neither terminal nor an unresolved outcome (those
+        # are reported separately as reconciliation_required).
+        open_count = sum(
+            count
+            for status, count in execution.items()
+            if not is_terminal_order_status(status) and status not in _AMBIGUOUS_ORDER_STATUSES
         )
 
         realized = 0.0

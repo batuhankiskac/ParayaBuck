@@ -212,3 +212,26 @@ def test_portfolio_submit_ambiguous_lookup_raises_ambiguous_state() -> None:
 
     with pytest.raises(AmbiguousOrderState):
         service._submit_with_recovery(SimpleNamespace(), "cid-1")
+
+
+def test_recovered_submission_fill_reports_the_fee_as_unobserved() -> None:
+    """An order lookup carries no fee: the recovered fill must hand ``None``
+    (unobserved) to the booking callback, never an observed ``0.0`` fee."""
+    recovered: list[tuple[Any, ...]] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = SimpleNamespace(  # type: ignore[attr-defined]
+        get_order_by_client_id=lambda _cid: SimpleNamespace(
+            id="b-1",
+            status="filled",
+            filled_qty="2",
+            filled_avg_price="101.5",
+            filled_at="2026-01-02T14:30:00+00:00",
+        ),
+    )
+    broker.portfolio_fill_recovered = lambda *args, **_kwargs: recovered.append(args)
+
+    assert broker.resolve_portfolio_submission("cid-1", "b-1") == "filled"
+
+    assert len(recovered) == 1
+    assert recovered[0][2:4] == (2.0, 101.5)
+    assert recovered[0][6] is None

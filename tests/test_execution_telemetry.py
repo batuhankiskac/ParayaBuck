@@ -515,3 +515,33 @@ def test_ledger_capture_short_sell_slippage_is_adverse_positive(tmp_path: Path) 
         assert row[0] == 50.0  # short filled below reference = adverse
     finally:
         ledger.close()
+
+
+def test_open_order_counts_follow_the_repository_terminal_vocabulary(tmp_path: Path) -> None:
+    """``done_for_day`` is terminal and never open; raw working stream
+    statuses (``new``, ``partial_fill``) are open; an unresolved outcome is
+    reported as reconciliation_required, not as open."""
+    db = tmp_path / "runtime.sqlite3"
+    _seed_portfolio_database(db)
+    connection = sqlite3.connect(db)
+    try:
+        for client_order_id, status in (
+            ("o-dfd", "done_for_day"),
+            ("o-new", "new"),
+            ("o-partial", "partial_fill"),
+            ("o-recon", "reconciliation_required"),
+        ):
+            connection.execute(
+                "INSERT INTO portfolio_orders VALUES "
+                "(?, 'd-eq-2', 'AAPL', 'equity', 'buy', 1.0, 100.0, ?, '', 0.0, NULL, "
+                "'2026-02-05T15:00:00+00:00')",
+                (client_order_id, status),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+    assert telemetry.execution_metrics(db)["orders"]["open"] == 3  # new, partial_fill, reconciliation_required
+    execution = telemetry.forward_metrics(db)["execution"]
+    assert execution["open"] == 2  # new, partial_fill
+    assert execution["reconciliation_required"] == 1

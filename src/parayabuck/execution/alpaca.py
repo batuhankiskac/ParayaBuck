@@ -762,7 +762,7 @@ class AlpacaBroker:
 
     def _fill_from_broker_order(
         self, order: Any, client_order_id: str, broker_order_id: str
-    ) -> tuple[str, str, float, float, datetime, str, float] | None:
+    ) -> tuple[str, str, float, float, datetime, str, float | None] | None:
         """Extract the real fill from a filled Alpaca order."""
         filled_qty = float(self._field(order, "filled_qty", 0) or 0)
         avg_price = float(self._field(order, "filled_avg_price", 0) or 0)
@@ -781,7 +781,10 @@ class AlpacaBroker:
             avg_price,
             occurred_at,
             f"{client_order_id}:recovered:{filled_qty}",
-            0.0,
+            # An order lookup does not establish a fee: ``None`` records it as
+            # unobserved, where ``0.0`` would claim an observed free fill and
+            # corrupt execution-quality measurement.
+            None,
         )
 
     def portfolio_open_order_symbols(self) -> set[str]:

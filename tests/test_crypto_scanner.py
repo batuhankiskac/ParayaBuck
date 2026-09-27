@@ -333,6 +333,25 @@ def test_persist_validate_and_fallback_rejections(tmp_path: Path) -> None:
     assert validate_active_crypto_universe(config)[1] == "invalid"
 
 
+@pytest.mark.parametrize("raw", ["null", "[]", "3", '"text"'])
+def test_validate_rejects_non_object_payload_as_invalid(tmp_path: Path, raw: str) -> None:
+    config = _config(tmp_path)
+    Path(config.active_universe_path).write_text(raw, encoding="utf-8")
+    assert validate_active_crypto_universe(config) == ((), "invalid")
+
+
+@pytest.mark.parametrize("breakdown", [[], "text", 3])
+def test_validate_rejects_non_object_score_breakdown_as_invalid(tmp_path: Path, breakdown: Any) -> None:
+    config = _config(tmp_path)
+    scanner = CryptoUniverseScanner(config)
+    now = datetime.now(UTC)
+    scanner.persist(scanner.scan(_candidates(), data_timestamp=now, selection_timestamp=now))
+    payload = json.loads(Path(config.active_universe_path).read_text(encoding="utf-8"))
+    payload["score_breakdown"] = breakdown
+    Path(config.active_universe_path).write_text(json.dumps(payload), encoding="utf-8")
+    assert validate_active_crypto_universe(config) == ((), "invalid")
+
+
 def test_dynamic_loader_reserves_managed_position_and_static_mode_is_unchanged(
     tmp_path: Path,
 ) -> None:

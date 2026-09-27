@@ -1063,6 +1063,25 @@ def test_aggregator_waits_for_finalization_grace() -> None:
     assert len(aggregator.flush_until(start + timedelta(minutes=5, seconds=2))) == 1
 
 
+def test_aggregator_late_minute_does_not_close_the_forming_bucket_early() -> None:
+    aggregator = TimeframeAggregator("5m")
+    start = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+
+    def minute(offset: int, price: float) -> Bar:
+        return Bar(start + timedelta(minutes=offset), "BTC/USD", "1m", price, price, price, price, 1, Market.CRYPTO)
+
+    emitted = [aggregator.update(minute(offset, 100 + offset)) for offset in range(7)]
+    assert [bar.timestamp for bar in emitted if bar is not None] == [start]
+    # A late minute of the already-closed 10:00 bucket arrives mid 10:05 bucket.
+    assert aggregator.update(minute(4, 999)) is None
+    for offset in (7, 8, 9):
+        assert aggregator.update(minute(offset, 100 + offset)) is None
+    closed = aggregator.update(minute(10, 110))
+    assert closed is not None
+    assert closed.timestamp == start + timedelta(minutes=5)
+    assert (closed.open, closed.close, closed.volume) == (105, 109, 5)
+
+
 def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime._circuit_breaker_reason = "ambiguous_order_state"

@@ -139,6 +139,21 @@ class MarketDataset:
             ("cash_rate", rate.timestamp.isoformat(), rate.annualized_rate)
             for rate in sorted(self.cash_rates, key=lambda item: item.timestamp)
         )
+        # Dividends and splits change simulated cash and quantities, so they
+        # are content too. An action-free dataset keeps its previous digest.
+        payload.extend(
+            (
+                "corporate_action",
+                action.timestamp.isoformat(),
+                canonical_symbol(action.symbol, self.market),
+                action.action_type.value,
+                action.value,
+            )
+            for action in sorted(
+                self.corporate_actions,
+                key=lambda item: (item.timestamp, canonical_symbol(item.symbol, self.market), item.action_type.value),
+            )
+        )
         return hashlib.sha256(json.dumps(payload, separators=(",", ":"), sort_keys=False).encode()).hexdigest()
 
 

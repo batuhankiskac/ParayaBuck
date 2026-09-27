@@ -35,6 +35,12 @@ class TimeframeAggregator:
             self._components[bar.symbol][bar.timestamp] = bar
             self._current[bar.symbol] = self._aggregate(self._components[bar.symbol], bucket_time)
             return None
+        if bucket_time < current.timestamp:
+            # A late minute for an already-closed bucket must not close the
+            # forming bucket early (a partial candle would be emitted as
+            # final) nor reopen the old bucket; corrections go through
+            # ``update_correction``.
+            return None
         self._last_components[bar.symbol] = self._components.get(bar.symbol, {})
         self._current[bar.symbol] = self._new_bucket(bar, bucket_time)
         self._components[bar.symbol] = {bar.timestamp: bar}

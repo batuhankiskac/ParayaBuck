@@ -17,14 +17,16 @@ from pathlib import Path
 import yaml
 
 from parayabuck.config import Config
+from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.monitoring import health as health_module
 from parayabuck.monitoring.alerts import _scrub_webhook_url
 from parayabuck.monitoring.diagnostic import collect_bundle_data
 from parayabuck.monitoring.forensics import decision_reconstruction, unresolved_orders
-from parayabuck.monitoring.health import HealthStatus, _check_risk, _check_workers
+from parayabuck.monitoring.health import HealthStatus, _check_account, _check_execution, _check_risk, _check_workers
 from parayabuck.monitoring.journal import get_journal
 from parayabuck.monitoring.operational_event import create_event
 from parayabuck.monitoring.snapshot import build_snapshot, write_snapshot_atomic
+from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 from parayabuck.runtime_health import WorkerHealth
 
 # A Saturday: equity is outside regular hours, crypto must still deliver bars
@@ -141,3 +143,55 @@ def test_bundle_status_uses_the_bundle_config(tmp_path: Path) -> None:
     queue = next(c for c in data["status"]["checks"] if c["code"] == "queue")
     assert queue["status"] == "CRITICAL"
     assert queue["threshold"]["cap"] == 10
+
+
+# ---------------------------------------------------------------------------
+# Lead decisions: account stale limit, schema-less ledger, strict incidents read
+# ---------------------------------------------------------------------------
+
+
+def test_account_stale_limit_covers_reconcile_and_snapshot_cadence() -> None:
+    config = Config()
+    # reconcile every 60 s + snapshot up to 30 s old: a healthy 95 s-old stamp
+    healthy = {"last_reconciliation_at": (_NOW - timedelta(seconds=95)).isoformat()}
+    stale = {"last_reconciliation_at": (_NOW - timedelta(seconds=200)).isoformat()}
+
+    assert _check_account(healthy, _NOW, config).status == HealthStatus.OK
+    assert _check_account(stale, _NOW, config).status == HealthStatus.DEGRADED
+    assert _check_account(healthy, _NOW, config).threshold == 60.0 + 30.0 + 15.0
+
+
+def test_schema_less_ledger_is_unknown(tmp_path: Path) -> None:
+    empty = tmp_path / "empty.sqlite3"
+    empty.write_bytes(b"")
+    foreign = tmp_path / "foreign.sqlite3"
+    conn = sqlite3.connect(foreign)
+    conn.execute("CREATE TABLE unrelated (x INTEGER)")
+    conn.commit()
+    conn.close()
+
+    for db in (empty, foreign):
+        assert _check_risk(db, None).status == HealthStatus.UNKNOWN
+        assert _check_execution(db).status == HealthStatus.UNKNOWN
+
+
+def test_freshly_created_ledger_is_ok(tmp_path: Path) -> None:
+    db = tmp_path / "parayabuck.sqlite3"
+    ExecutionLedger(str(db)).close()
+    PortfolioStateRepository(db).close()
+
+    assert _check_risk(db, None).status == HealthStatus.OK
+    assert _check_execution(db).status == HealthStatus.OK
+
+
+def test_risk_is_unknown_when_incidents_read_fails(tmp_path: Path) -> None:
+    db = tmp_path / "ledger.sqlite3"
+    conn = sqlite3.connect(db)
+    # the table exists (the readability probe passes) but the incidents query fails
+    conn.execute("CREATE TABLE safety_incidents (id INTEGER PRIMARY KEY, account_id TEXT)")
+    conn.commit()
+    conn.close()
+
+    check = _check_risk(db, None)
+
+    assert check.status == HealthStatus.UNKNOWN

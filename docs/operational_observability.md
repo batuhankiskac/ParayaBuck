@@ -89,13 +89,13 @@ Schema version 1, idempotent migration, WAL.
 
 - `HealthStatus`: `OK / DEGRADED / BLOCKED / CRITICAL / UNKNOWN`
 - `HealthCheck(code, status, summary, observed, threshold, since, action)`
-- `UNKNOWN` means “no evidence” — not `OK`. `risk` and `execution` read only the explicitly supplied ledger; an absent, unreadable or failing ledger read is `UNKNOWN`, never “no risk block” / “no stuck orders”.
+- `UNKNOWN` means “no evidence” — not `OK`. `risk` and `execution` read only the explicitly supplied ledger; an absent, unreadable or failing ledger read — including a zero-byte/foreign file without the `safety_incidents` (risk) or `portfolio_orders` (execution) table, and a failed incidents query — is `UNKNOWN`, never “no risk block” / “no stuck orders”.
 - **Areas** (11 checks): `runtime_heartbeat`, `workers`, `queue`, `account`, `reconciliation`, `universe`, `signal_adjustment`, `risk`, `execution`, `alerts`, `observability`.
 - **Thresholds** derived from config/runtime cadence:
   - heartbeat: 90s (snapshot interval 30s × 3)
   - workers: `max(30s, account_poll_interval * 3)` heartbeat age, with the runtime's own exceptions: `pb-trade-updates` is event-driven (no heartbeat age), `pb-signal-adjustment` allows its hourly pass (+ `max(300s, ttl)`), and the market streams are judged by the last delivered bar (`max(180s, ttl)`), equity only during regular hours
   - queue age: `engine.maximum_queue_age_seconds` (30s)
-  - account/reconciliation: `maximum_account_age_for_entry_seconds *2` etc.
+  - account (DEGRADED): `last_reconciliation_at` older than `60s reconcile interval + observability.snapshot_interval_seconds + engine.account_poll_interval_seconds` (default 60+30+15 = 105s), never below `maximum_account_age_for_entry_seconds * 2`; reconciliation (CRITICAL): `max(300s, account_poll_interval * 20)`
   - universe: `universe.crypto.active_universe_max_age_hours *3600` (the
     equity universe is static and has no age)
   - rebalance stuck: 3600s

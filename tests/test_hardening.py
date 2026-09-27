@@ -270,7 +270,7 @@ def test_partial_primary_batch_updates_market_state_without_legacy_decision(
     runtime._refresh_readiness = lambda: None
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_readiness_reasons = lambda _market=None: ()
-    runtime._engine_has_symbol_gap = lambda _symbol: False
+    runtime._engine_has_symbol_gap = lambda _symbol, _market=None: False
 
     runtime._process_timestamp({"AAPL": bar}, {"AAPL", "MSFT"})
 
@@ -315,7 +315,7 @@ def test_late_primary_bar_is_ingested_and_duplicate_is_correction() -> None:
     runtime._refresh_readiness = lambda: None
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_readiness_reasons = lambda _market=None: ()
-    runtime._engine_has_symbol_gap = lambda _symbol: False
+    runtime._engine_has_symbol_gap = lambda _symbol, _market=None: False
     runtime._expected_all_symbols = {"AAPL", "MSFT"}
     runtime._workers = {"pb-decisions": WorkerHealth(datetime.now(UTC), datetime.now(UTC))}
     runtime._events = _EventQueue(4096)

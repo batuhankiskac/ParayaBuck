@@ -44,7 +44,7 @@ Single `broker.account()` returns both account + positions. Cached `_last_accoun
 
 ## 7. Historical Warmup — `runtime.py:3435`, `data/alpaca.py:94`, `data/cache.py:15`
 
-`symbols` + `required_timeframes` + `minimum_history_bars` 200 (equity 200-session SMA) / 23 (crypto `variance_lookback_days` + 1) + `stock_feed` sip/iex. Cache digest `SHA256(timeframes+strategies)` gates reuse. Failure: coverage <60% → refetch; SIP 403 → degrade to iex; timeout → `TransientStartupError`. Retry: `_WARMUP_RETRY_SECONDS=600` singleton `pb-warmup-retry`. Fail-closed via `not_ready_symbols`. Telemetry: `Warmup starting/complete`, `Historical gap remains`.
+`symbols` + `required_timeframes` + `minimum_history_bars` 200 (equity 200-session SMA) / 23 (crypto `variance_lookback_days` + 1) + `stock_feed` sip/iex. Cache digest `SHA256(timeframes+strategies)` gates reuse. Failure: coverage <60% → refetch; SIP 403 → degrade to iex; timeout → `TransientStartupError`. Retry: `_WARMUP_RETRY_SECONDS=600` floor, doubling per consecutive attempt to a `600*2**6` (~10.7h) ceiling; singleton `pb-warmup-retry`. The counter tracks the pending `not_ready_symbols` set and resets to the floor whenever that set changes (empties, loses a member, or gains one that was never retried). Fail-closed via `not_ready_symbols`. Telemetry: `Warmup starting/complete`, `Historical gap remains`.
 
 ## 8. Universe Refresh — `universe/preflight.py:89`, `runtime.py:1077`
 

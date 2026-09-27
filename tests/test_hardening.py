@@ -1082,6 +1082,46 @@ def test_aggregator_late_minute_does_not_close_the_forming_bucket_early() -> Non
     assert (closed.open, closed.close, closed.volume) == (105, 109, 5)
 
 
+@pytest.mark.parametrize("timeframe", ["5m", "1d"])
+def test_aggregator_late_minute_after_a_flush_does_not_emit_a_second_final_candle(timeframe: str) -> None:
+    aggregator = TimeframeAggregator(timeframe, finalization_grace_seconds=2.0)
+    start = datetime(2026, 9, 28, 19, 55, tzinfo=UTC)  # 15:55 New York
+
+    def minute(offset: int, price: float) -> Bar:
+        return Bar(start + timedelta(minutes=offset), "SPY", "1m", price, price, price, price, 10, Market.EQUITY)
+
+    for offset in range(4):
+        assert aggregator.update(minute(offset, 100 + offset)) is None
+    session_close = start + timedelta(minutes=5)
+    flushed = aggregator.flush_session_close(session_close)
+    assert len(flushed) == 1
+    # The 15:59 minute arrives after the session-close flush already
+    # emitted its bucket: it must not reopen that bucket as a stub.
+    assert aggregator.update(minute(4, 999)) is None
+    assert aggregator.flush_session_close(session_close + timedelta(seconds=1)) == []
+    assert aggregator.flush_until(session_close + timedelta(days=2)) == []
+
+
+def test_aggregator_late_minute_after_a_grace_flush_does_not_emit_a_stub_candle() -> None:
+    aggregator = TimeframeAggregator("5m", finalization_grace_seconds=2.0)
+    start = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+
+    def minute(offset: int, price: float) -> Bar:
+        return Bar(start + timedelta(minutes=offset), "BTC/USD", "1m", price, price, price, price, 1, Market.CRYPTO)
+
+    for offset in range(4):
+        assert aggregator.update(minute(offset, 100 + offset)) is None
+    flushed = aggregator.flush_until(start + timedelta(minutes=5, seconds=3))
+    assert [bar.timestamp for bar in flushed] == [start]
+    assert aggregator.update(minute(4, 999)) is None
+    for offset in range(5, 10):
+        assert aggregator.update(minute(offset, 100 + offset)) is None
+    closed = aggregator.update(minute(10, 110))
+    assert closed is not None
+    assert closed.timestamp == start + timedelta(minutes=5)
+    assert (closed.open, closed.close, closed.volume) == (105, 109, 5)
+
+
 def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime._circuit_breaker_reason = "ambiguous_order_state"

@@ -293,7 +293,7 @@ def run_product_backtest(
         filtered = [bar for bar in available if start is None or bar.timestamp >= start]
         if not filtered:
             raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
-        warmup = [bar for bar in available if start is not None and bar.timestamp < start]
+        warmup = _normalized_warmup([bar for bar in available if start is not None and bar.timestamp < start])
         if universe is None:
             universe = build_product_universe(
                 config,
@@ -595,30 +595,39 @@ def _prepared_window(
         if bar.market == market and bar.timeframe == timeframe and (end is None or bar.timestamp <= end)
     ]
     filtered = [bar for bar in available if start is None or bar.timestamp >= start]
-    warmup = [bar for bar in available if start is not None and bar.timestamp < start]
-    if warmup:
-        canon_warmup: list[Bar] = []
-        for bar in warmup:
-            can = canonical_symbol(bar.symbol, bar.market)
-            if can != bar.symbol:
-                bar = Bar(
-                    timestamp=bar.timestamp,
-                    symbol=can,
-                    timeframe=bar.timeframe,
-                    open=bar.open,
-                    high=bar.high,
-                    low=bar.low,
-                    close=bar.close,
-                    volume=bar.volume,
-                    market=bar.market,
-                )
-            canon_warmup.append(bar)
-        warmup = sorted(canon_warmup, key=lambda b: (b.timestamp, b.symbol))
+    warmup = _normalized_warmup([bar for bar in available if start is not None and bar.timestamp < start])
     ordered = decision_bars = sorted(
         PortfolioBacktestEngine._deduplicate(filtered),
         key=lambda bar: (bar.timestamp, bar.symbol),
     )
     return filtered, warmup, (ordered, decision_bars)
+
+
+def _normalized_warmup(warmup: list[Bar]) -> list[Bar]:
+    """Canonicalize and timestamp-sort warmup bars for ``engine.run``.
+
+    The engine ingests warmup in the given order and keeps only bars strictly
+    newer than each series tail, so unsorted or alias-symbol warmup would be
+    silently dropped. Both the direct and the prepared (optimizer) paths use
+    this so identical parameters see identical warmup history.
+    """
+    canon_warmup: list[Bar] = []
+    for bar in warmup:
+        can = canonical_symbol(bar.symbol, bar.market)
+        if can != bar.symbol:
+            bar = Bar(
+                timestamp=bar.timestamp,
+                symbol=can,
+                timeframe=bar.timeframe,
+                open=bar.open,
+                high=bar.high,
+                low=bar.low,
+                close=bar.close,
+                volume=bar.volume,
+                market=bar.market,
+            )
+        canon_warmup.append(bar)
+    return sorted(canon_warmup, key=lambda b: (b.timestamp, b.symbol))
 
 
 def _optimization_sort_key(item: dict[str, object]) -> tuple[float, str]:

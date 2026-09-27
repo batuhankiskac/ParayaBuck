@@ -124,6 +124,37 @@ def test_dividend_and_split_are_credited_exactly_once() -> None:
     assert result.dividend_total == pytest.approx(initial_qty * 2)
 
 
+def test_split_on_first_fill_bar_rescales_the_resting_buy_order() -> None:
+    # The day-0 decision sizes a BUY in pre-split shares; the split's ex-date
+    # is the fill bar, before any position exists, so the resting order must
+    # be rescaled or it buys half the intended notional at the split open.
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    signal = tuple(_bar(start + timedelta(days=i), 100.0) for i in range(3))
+    execution = (
+        _bar(start, 100.0),
+        _bar(start + timedelta(days=1), 50.0),
+        _bar(start + timedelta(days=2), 50.0),
+    )
+    dataset = MarketDataset(
+        Market.EQUITY,
+        "1d",
+        signal,
+        execution,
+        _lineage(),
+        corporate_actions=(CorporateAction(start + timedelta(days=1), "SPY", CorporateActionType.SPLIT, 2.0),),
+    )
+    engine = PortfolioBacktestEngine(
+        _HalfInvested(),
+        RebalancePolicy(Market.EQUITY, "monthly"),
+        slippage_bps=0.0,
+        spread_bps=0.0,
+    )
+    result = engine.run_dataset(dataset, liquidate_at_end=False)
+    assert result.fills[0].timestamp == start + timedelta(days=1)
+    assert result.fills[0].qty == pytest.approx(1_000.0)
+    assert result.state.holdings["SPY"] == pytest.approx(1_000.0)
+
+
 def test_market_dataset_rejects_missing_execution_symbol() -> None:
     start = datetime(2025, 1, 1, tzinfo=UTC)
     qqq = Bar(start, "QQQ", "1d", 100, 100, 100, 100, 1_000, Market.EQUITY)

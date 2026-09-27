@@ -350,6 +350,52 @@ def test_portfolio_failure_classifies_the_same_sqlite_error_identically(monkeypa
     assert categories == [IncidentCategory.DATABASE_ERROR]
 
 
+def test_portfolio_provider_timeout_records_incident_without_a_doomed_retry(monkeypatch: Any) -> None:
+    """The halted fail-closed path must not burn the provider retry backoff on
+    the engine thread re-raising an exception that can never succeed: the
+    provider incident is recorded at once with no retry action."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+    runtime._portfolio_lock = threading.RLock()
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._last_portfolio_status = {}
+    runtime._entry_readiness_reasons = lambda _market: ()
+    runtime._equity_signal_basis_latch = lambda _timestamp: None
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: {})
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime._fresh_account_snapshot = lambda: account  # type: ignore[assignment]
+
+    def time_out(*_args: object, **_kwargs: object) -> None:
+        raise TimeoutError("provider timeout")
+
+    runtime._portfolio_runtimes = (
+        SimpleNamespace(
+            market=Market.EQUITY,
+            symbols=("AAA",),
+            strategy=SimpleNamespace(timeframe="1d", name="equity_test"),
+            process_closed_bars=time_out,
+        ),
+    )
+    calls: list[tuple[IncidentCategory, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        runtime_module,
+        "automate_incident_recovery",
+        lambda category, **kw: calls.append((category, kw)),
+    )
+    monkeypatch.setattr(runtime_module.alerts, "emit", lambda _kind, **_kw: None)
+    monkeypatch.setattr(runtime_module.runtime_metrics_store, "record_event", lambda _event: None)
+
+    runtime._process_portfolio_timestamp(
+        [Bar(datetime(2025, 1, 2, tzinfo=UTC), "AAA", "1d", 1.0, 1.0, 1.0, 1.0, 1.0, Market.EQUITY)]
+    )
+
+    assert runtime._circuit_breaker_reason == "portfolio_runtime_failure"
+    assert [category for category, _kw in calls] == [IncidentCategory.PROVIDER_UNAVAILABLE]
+    assert "provider_action" not in calls[0][1]
+
+
 # --- V17: warmup retries back off instead of running every 10 minutes ---
 
 

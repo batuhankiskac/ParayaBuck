@@ -400,12 +400,13 @@ def provider_temporary_retry(
     account_id: str | None = None,
     strategy: str | None = None,
     current_state: dict[str, Any] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> tuple[Any | None, IncidentRecord]:
     """Bounded exponential retry for provider-temporary incidents (5 attempts).
 
     Never raises: on success returns (result, success record), on exhaustion
-    returns (None, failure record). Backoff is (2,4,8,16,16) seconds per taxonomy;
-    callers may skip sleep in tests by invoking without delay (sleep is capped).
+    returns (None, failure record). Backoff is (2,4,8,16,16) seconds per taxonomy,
+    waited through the injectable ``sleep`` (tests pass a no-op).
     """
     spec = INCIDENT_TAXONOMY[category]
     intervals = spec.retry_interval_seconds or (2, 4, 8, 16, 16)
@@ -443,18 +444,7 @@ def provider_temporary_retry(
                 )
                 emit_incident_record(record)
                 return None, record
-            # Bounded sleep; truncate for test determinism (no real 16s wait in unit tests
-            # when action is mocked — sleep is short and interruptible)
-            delay: float = float(intervals[min(attempt - 1, len(intervals) - 1)])
-            # Cap delay to 0.01s when running under pytest to keep chaos tests deterministic
-            try:
-                import sys
-
-                if "pytest" in sys.modules:
-                    delay = min(delay, 0.01)
-            except Exception:
-                pass
-            time.sleep(delay)
+            sleep(float(intervals[min(attempt - 1, len(intervals) - 1)]))
     # Unreachable but typed
     record = create_incident(category, account_id=account_id, strategy=strategy, error=last_error)
     return None, record

@@ -868,7 +868,9 @@ def test_stream_worker_restart_limit_alerts_once_not_per_retry(monkeypatch: Any)
         "record_event",
         lambda event: recorded.append(event),
     )
-    monkeypatch.setattr(runtime_module.time, "sleep", lambda _seconds: None)
+    # The backoff waits on _stop_event (interruptible by stop()); a fake that
+    # never signals skips the real 1+2+4+8+16 s delays.
+    runtime._stop_event = SimpleNamespace(wait=lambda _seconds: False)
 
     def always_failing() -> None:
         raise RuntimeError("simulated stream outage")
@@ -887,6 +889,86 @@ def test_stream_worker_restart_limit_alerts_once_not_per_retry(monkeypatch: Any)
     assert runtime._market_entry_halts[Market.EQUITY] == "pb-stocks_restart_limit"
     assert emitted == ["circuit_breaker"]
     assert recorded == ["circuit_breaker"]
+
+
+def test_stream_worker_backoff_is_interrupted_by_stop_event() -> None:
+    """stop() joins stream workers with a 5 s timeout; a worker parked in its
+    (up to 16 s) restart backoff must wake on _stop_event instead of
+    outliving the join and forcing stop_failed."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    now = datetime.now(UTC)
+    # restart_count=3 -> next failure backs off 2 ** 3 = 8 s.
+    worker = WorkerHealth(started_at=now, last_heartbeat=now, restart_count=3, alive=True)
+    runtime._workers = {"pb-stocks": worker}
+    runtime._running = True
+    runtime._state = "running"
+    runtime._circuit_breaker_reason = None
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime._stop_event = threading.Event()
+    failed = threading.Event()
+
+    def failing() -> None:
+        failed.set()
+        raise RuntimeError("simulated stream outage")
+
+    thread = threading.Thread(target=runtime._run_stream_worker, args=("pb-stocks", failing))
+    thread.start()
+    assert failed.wait(timeout=5.0)
+    runtime._stop_event.set()
+    thread.join(timeout=2.0)
+
+    assert not thread.is_alive()
+    assert worker.alive is False
+
+
+def _trade_update_worker_runtime() -> tuple[EngineRuntime, WorkerHealth]:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    now = datetime.now(UTC)
+    worker = WorkerHealth(started_at=now, last_heartbeat=now, alive=True)
+    runtime._workers = {"pb-trade-updates": worker}
+    runtime._running = True
+    runtime._state = "running"
+    runtime._circuit_breaker_reason = None
+    runtime._state_lock = threading.RLock()
+    runtime._stop_event = SimpleNamespace(wait=lambda _seconds: False)
+    runtime._portfolio_runtimes = (SimpleNamespace(symbols=("AAPL",)),)
+    runtime._not_ready_symbols = set()
+    return runtime, worker
+
+
+def test_trade_update_blip_degrades_then_recovers_on_retry() -> None:
+    """A single transient pb-trade-updates failure marks the runtime degraded
+    but must not pin it there: the retry restores running before reconnect."""
+    runtime, _worker = _trade_update_worker_runtime()
+    states: list[str] = []
+
+    def flaky() -> None:
+        states.append(runtime._state)
+        if len(states) == 1:
+            raise RuntimeError("simulated trade-update disconnect")
+        runtime._running = False
+
+    runtime._run_stream_worker("pb-trade-updates", flaky)
+
+    assert states == ["running", "running"]
+    assert runtime._state == "running"
+
+
+def test_trade_update_blip_never_clears_a_circuit_breaker_halt() -> None:
+    """The degraded -> running restore applies only without a breaker."""
+    runtime, _worker = _trade_update_worker_runtime()
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    states: list[str] = []
+
+    def flaky() -> None:
+        states.append(runtime._state)
+        if len(states) == 1:
+            raise RuntimeError("simulated trade-update disconnect")
+        runtime._running = False
+
+    runtime._run_stream_worker("pb-trade-updates", flaky)
+
+    assert states == ["running", "degraded"]
 
 
 def test_stop_attempts_independent_storage_cleanup_after_portfolio_close_failure(

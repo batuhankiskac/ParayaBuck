@@ -145,3 +145,45 @@ def test_liquidated_account_keeps_the_capacity_sample() -> None:
     assert sample["positions_count"] == 0
     for key in ("realized_gross_pct", "cash_ratio_pct", "equity_sleeve_pct", "crypto_sleeve_pct"):
         assert sample[key] is None
+
+
+def test_capacity_sample_does_not_hold_portfolio_lock_across_broker_io() -> None:
+    """Dashboard polls must not serialize order submission behind the broker
+    and ledger round-trips of a capacity sample."""
+    lock = threading.Lock()
+    held: list[tuple[str, bool]] = []
+    account = AccountSnapshot(cash=100_000, equity=100_000, peak_equity=100_000, daily_pnl=0)
+    admission = BuyAdmission(account, (), 0, 0, 50_000, 60_000, None)
+
+    def capacity() -> BuyAdmission:
+        held.append(("admission", lock.locked()))
+        return admission
+
+    def working_orders() -> tuple[object, ...]:
+        held.append(("working_orders", lock.locked()))
+        return ()
+
+    def open_orders(_account_id: str) -> tuple[object, ...]:
+        held.append(("open_orders", lock.locked()))
+        return ()
+
+    engine = EngineRuntime.__new__(EngineRuntime)
+    engine._portfolio_lock = lock
+    engine._portfolio_runtimes = (
+        SimpleNamespace(
+            current_buy_capacity=capacity,
+            risk_overlay=SimpleNamespace(
+                limits=SimpleNamespace(maximum_positions=8, maximum_crypto_positions=2, maximum_gross=0.6)
+            ),
+            last_buy_admission=None,
+            market=Market.CRYPTO,
+        ),
+    )
+    engine._portfolio_repository = SimpleNamespace(open_orders=open_orders)
+    engine.broker = SimpleNamespace(account_id="synthetic", working_orders=working_orders)
+    engine._market_entry_halts = {}
+
+    sample = engine.capacity_health()
+
+    assert held == [("admission", False), ("working_orders", False), ("open_orders", False)]
+    assert sample["global_slot_cap"] == 8

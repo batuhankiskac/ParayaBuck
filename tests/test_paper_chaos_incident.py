@@ -106,7 +106,11 @@ def test_provider_timeout_exponential_retry_recovers() -> None:
         return "ok"
 
     result, record = provider_temporary_retry(
-        IncidentCategory.PROVIDER_UNAVAILABLE, flaky, account_id="acct", strategy="equity_leveraged_trend_v1"
+        IncidentCategory.PROVIDER_UNAVAILABLE,
+        flaky,
+        account_id="acct",
+        strategy="equity_leveraged_trend_v1",
+        sleep=lambda _seconds: None,
     )
     assert result == "ok"
     assert record.recovery_result == "recovered"
@@ -126,10 +130,16 @@ def test_provider_timeout_exhausts_after_5_attempts() -> None:
     def always_timeout() -> str:
         raise TimeoutError("provider timeout")
 
-    result, record = provider_temporary_retry(IncidentCategory.PROVIDER_UNAVAILABLE, always_timeout, account_id="acct")
+    delays: list[float] = []
+    result, record = provider_temporary_retry(
+        IncidentCategory.PROVIDER_UNAVAILABLE, always_timeout, account_id="acct", sleep=delays.append
+    )
     assert result is None
     assert record.recovery_result == "failed_exhausted"
     assert record.retry_attempt == 5
+    # The taxonomy backoff reaches the injected sleep unmodified (no
+    # test-runner detection inside production code).
+    assert delays == [2.0, 4.0, 8.0, 16.0]
     alerts.reset_for_tests()
 
 

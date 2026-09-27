@@ -503,7 +503,7 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
         return HealthCheck(
             code="risk", status=HealthStatus.UNKNOWN, summary="decision DB has no safety_incidents table"
         )
-    # One ledger read feeds both persisted checks; the snapshot carries both keys.
+    # One strict ledger read of the persisted incidents.
     # strict: a failed incidents read is UNKNOWN, never an empty "no incidents"
     try:
         snapshot: dict[str, Any] = metrics.runtime_metrics(database_path=db_path, strict=True)
@@ -526,18 +526,8 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
             )
     except Exception:
         pass
-    # Check drawdown halt via metrics entry_block
-    try:
-        duration = snapshot.get("entry_block_duration_seconds")
-        if isinstance(duration, (int, float)) and duration is not None:
-            return HealthCheck(
-                code="risk",
-                status=HealthStatus.BLOCKED,
-                summary=f"drawdown halt for {duration:.0f}s",
-                observed=duration,
-            )
-    except Exception:
-        pass
+    # A drawdown halt (entry_block_duration_seconds) is its own active
+    # portfolio_drawdown_halt incident, already reported above.
     return HealthCheck(code="risk", status=HealthStatus.OK, summary="no risk block")
 
 

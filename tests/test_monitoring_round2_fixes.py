@@ -231,3 +231,23 @@ def test_health_ledger_checks_close_their_connections(tmp_path: Path, monkeypatc
     for conn in opened:
         with pytest.raises(sqlite3.ProgrammingError):
             conn.execute("SELECT 1")
+
+
+def test_bundle_skips_runtime_metrics_without_explicit_ledger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+
+    def recording_metrics(database_path: object = None, **_: object) -> dict[str, object]:
+        calls.append(database_path)
+        return {"incidents": {"count": 0, "active": []}}
+
+    monkeypatch.setattr(metrics, "runtime_metrics", recording_metrics)
+
+    bundle = collect_bundle_data(
+        config_path=tmp_path / "absent.yaml",
+        snapshot_path=tmp_path / "absent_snapshot.json",
+        journal_path=tmp_path / "absent_journal.sqlite3",
+        decision_db_path=None,
+    )
+
+    assert calls == []
+    assert bundle["runtime_metrics"] == {"status": "no_db"}

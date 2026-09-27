@@ -199,11 +199,15 @@ def collect_bundle_data(
     except Exception as exc:
         data["runtime_snapshot"] = {"error": str(exc), "corrupt": True}
 
-    # runtime metrics
+    # runtime metrics — runtime_metrics(None) would resolve a cwd-relative
+    # config/ledger, so with no supplied path the section is no_db instead
     try:
         from parayabuck.monitoring import metrics
 
-        data["runtime_metrics"] = metrics.runtime_metrics(database_path=decision_db_path)
+        if dbp is None:
+            data["runtime_metrics"] = {"status": "no_db"}
+        else:
+            data["runtime_metrics"] = metrics.runtime_metrics(database_path=decision_db_path)
     except Exception as exc:
         data["runtime_metrics"] = {"error": str(exc)}
 

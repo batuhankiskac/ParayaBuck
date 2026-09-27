@@ -77,7 +77,8 @@ class OperationalEvent:
 `EventJournal` retention:
 - `event_retention_days` (default 30) — delete `occurred_at < cutoff` every ~100 writes.
 - `event_max_events` (default 50000) — delete oldest excess.
-- Configurable via `observability:` block; cleanup not on every event.
+- Cleanup runs every ~100 writes, not on every event.
+- The `observability:` journal settings (`journal_path`, `event_retention_days`, `event_queue_size`, `event_max_events`) are **not applied** to the runtime journal: the runtime and web use the default journal (`data/runtime/observability.sqlite3`, relative to the working directory) with the defaults above. Only the `ops` CLI commands read `observability.journal_path`.
 - Indexes: `occurred_at`, `kind`, `severity`, `session_id`, `decision_id`, `client_order_id`, `incident_id`.
 
 Schema version 1, idempotent migration, WAL.

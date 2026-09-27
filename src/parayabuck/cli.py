@@ -1073,7 +1073,13 @@ def _ops_explain(args: argparse.Namespace) -> int:
             try:
                 from parayabuck.monitoring.health import evaluate_health
 
-                h = evaluate_health(snapshot_path=snapshot_path, database_path=db_path)
+                # Judge health with the config this command resolved (defaults
+                # when it failed to load), never a CONFIG_PATH/cwd re-load.
+                h = evaluate_health(
+                    snapshot_path=snapshot_path,
+                    database_path=db_path,
+                    config=cfg if cfg is not None else Config(),
+                )
                 for chk in h.get("checks", []):
                     if chk.get("status") in {"BLOCKED", "DEGRADED", "CRITICAL"}:
                         print(f"Health {chk.get('code')}: {chk.get('summary')}")

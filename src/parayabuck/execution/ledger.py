@@ -23,6 +23,10 @@ from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
 
 log = get_logger("parayabuck.execution.ledger")
 
+# The side of an order row is the side of the position, not of the order
+# stream: an exit/stop closes a lot, so it always trades against the entry.
+_OPPOSITE_SIDES = {"long": "sell", "buy": "sell", "sell": "buy", "short": "buy"}
+
 
 @dataclass(frozen=True)
 class ManagedPosition:
@@ -822,37 +826,6 @@ class ExecutionLedger:
             ).fetchone()
         return float(row[0] if row else 0.0)
 
-    def record_fee_activity(
-        self,
-        activity_id: str,
-        client_order_id: str,
-        fee: float,
-        occurred_at: datetime,
-    ) -> bool:
-        """Record one fill-activity fee without touching the orders row.
-
-        Used by fill-activity recovery when the exit is already booked in the
-        ledger under a different client id: the fee leg is still real and must
-        be recorded exactly once, but re-running the order upsert would
-        violate the unique broker-order index.
-        """
-        if fee <= 0 or not activity_id:
-            return False
-        with self._lock:
-            self.connection.execute("BEGIN IMMEDIATE")
-            try:
-                self.connection.execute(
-                    """INSERT OR IGNORE INTO fee_activities(
-                        activity_id, client_order_id, fee, occurred_at
-                    ) VALUES (?, ?, ?, ?)""",
-                    (activity_id, client_order_id, fee, occurred_at.isoformat()),
-                )
-                self.connection.commit()
-            except Exception:
-                self.connection.rollback()
-                raise
-        return True
-
     def apply_fee_activity(
         self,
         account_id: str,
@@ -871,26 +844,41 @@ class ExecutionLedger:
             try:
                 order = self.connection.execute(
                     """
-                    SELECT entry_client_order_id, order_role
+                    SELECT client_order_id, entry_client_order_id, order_role
                     FROM orders WHERE broker_order_id=?
                     """,
                     (broker_order_id,),
                 ).fetchone()
-                if order is None or order[0] is None:
+                if order is None:
                     self.connection.rollback()
                     return False
+                entry_client_order_id = order[1]
                 inserted = self.connection.execute(
                     """
                     INSERT OR IGNORE INTO fee_activities(
                         activity_id, client_order_id, fee, occurred_at
                     ) VALUES (?, ?, ?, ?)
                     """,
-                    (activity_id, str(order[0]), fee, now),
+                    (activity_id, str(entry_client_order_id or order[0]), fee, now),
                 )
                 if not inserted.rowcount:
                     self.connection.commit()
                     return False
-                if OrderRole(str(order[1])) == OrderRole.ENTRY:
+                if entry_client_order_id is None:
+                    # The fee is real and must be recorded, but this order is
+                    # not linked to a managed lot, so there is no
+                    # managed_positions row to book it against.  Every
+                    # reconcile pass can rediscover the same order, so this
+                    # routine path must not warn.
+                    log.debug(
+                        "Fee recorded without a managed lot: activity_id=%s client_order_id=%s fee=%s",
+                        activity_id,
+                        order[0],
+                        fee,
+                    )
+                    self.connection.commit()
+                    return True
+                if OrderRole(str(order[2])) == OrderRole.ENTRY:
                     self.connection.execute(
                         """
                         UPDATE managed_positions
@@ -906,7 +894,7 @@ class ExecutionLedger:
                             updated_at=?
                         WHERE account_id=? AND entry_client_order_id=?
                         """,
-                        (fee, fee, now, account_id, str(order[0])),
+                        (fee, fee, now, account_id, str(entry_client_order_id)),
                     )
                 else:
                     self.connection.execute(
@@ -915,7 +903,7 @@ class ExecutionLedger:
                         SET exit_fees=exit_fees+?, realized_pnl=realized_pnl-?, updated_at=?
                         WHERE account_id=? AND entry_client_order_id=?
                         """,
-                        (fee, fee, now, account_id, str(order[0])),
+                        (fee, fee, now, account_id, str(entry_client_order_id)),
                     )
                 self.connection.commit()
                 return True
@@ -987,7 +975,7 @@ class ExecutionLedger:
                 existing = self.connection.execute(
                     """
                     SELECT cumulative_filled_qty, average_fill_price, terminal_state,
-                           entry_client_order_id, order_role
+                           entry_client_order_id, order_role, side
                     FROM orders WHERE client_order_id=?
                     """,
                     (event.client_order_id,),
@@ -995,6 +983,7 @@ class ExecutionLedger:
                 previous_filled = float(existing[0]) if existing else 0.0
                 previous_average = float(existing[1]) if existing and existing[1] is not None else None
                 previous_state = OrderState(existing[2]) if existing and existing[2] is not None else None
+                existing_side = str(existing[5] or "").strip().lower() if existing else ""
                 role = OrderRole(existing[4]) if existing else event.role
                 if role == OrderRole.MANUAL_EXIT and event.role != OrderRole.MANUAL_EXIT:
                     role = event.role
@@ -1034,6 +1023,32 @@ class ExecutionLedger:
                     )
                     if inserted_fee.rowcount:
                         fee_delta = event.fee
+                # A non-entry fill that cannot be linked to a managed lot is a
+                # real fill with no owner: never drop it silently, never stamp
+                # the row terminal, and log the recovery action.  The gate is
+                # the missing link, not the fill delta — reconciliation
+                # re-emits the same event on every pass, and a delta-gated
+                # guard would let the replay re-stamp the row terminal.
+                if role != OrderRole.ENTRY and entry_client_order_id is None and effective_cumulative > 0:
+                    terminal_state = None
+                    if fill_delta > 0 or fee_delta > 0:
+                        log.warning(
+                            "Unlinked execution fill: client_order_id=%s broker_order_id=%s "
+                            "role=%s fill_delta=%s fee=%s "
+                            "recovery_action=await_managed_entry_link",
+                            event.client_order_id,
+                            event.broker_order_id,
+                            role.value,
+                            fill_delta,
+                            fee_delta,
+                        )
+                # Never guess the side: the event carries no direction, so the
+                # only real evidence is the linked lot's recorded side.  With
+                # no link the row keeps the previous empty value, which the
+                # conflict clause backfills once the link appears.
+                order_side = self._resolved_order_side(
+                    event.client_order_id, role, entry_client_order_id, existing_side
+                )
                 self.connection.execute(
                     """
                     INSERT INTO orders(
@@ -1042,7 +1057,7 @@ class ExecutionLedger:
                         canonical_symbol, market, side, requested_qty,
                         cumulative_filled_qty, average_fill_price, terminal_state,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(client_order_id) DO UPDATE SET
                         account_id=excluded.account_id,
                         broker_order_id=COALESCE(excluded.broker_order_id, orders.broker_order_id),
@@ -1053,6 +1068,7 @@ class ExecutionLedger:
                             excluded.entry_client_order_id, orders.entry_client_order_id
                         ),
                         order_role=excluded.order_role,
+                        side=CASE WHEN orders.side='' THEN excluded.side ELSE orders.side END,
                         requested_qty=MAX(orders.requested_qty, excluded.requested_qty),
                         cumulative_filled_qty=MAX(
                             orders.cumulative_filled_qty, excluded.cumulative_filled_qty
@@ -1074,6 +1090,7 @@ class ExecutionLedger:
                         role.value,
                         canonical_symbol(event.symbol, event.market),
                         event.market.value,
+                        order_side,
                         requested,
                         effective_cumulative,
                         event.average_fill_price,
@@ -1148,8 +1165,13 @@ class ExecutionLedger:
                             except (TypeError, ValueError):
                                 delay = None
                         if reference and reference > 0:
-                            sign = 1.0 if direction in {"long", "buy"} else -1.0
-                            slippage = (fill_price - reference) / reference * 10_000.0 * sign
+                            sign: float | None = None
+                            if direction in {"long", "buy"}:
+                                sign = 1.0
+                            elif direction in {"sell", "short"}:
+                                sign = -1.0
+                            if sign is not None:
+                                slippage = (fill_price - reference) / reference * 10_000.0 * sign
                     self.connection.execute(
                         """
                         UPDATE orders
@@ -1181,6 +1203,25 @@ class ExecutionLedger:
             except Exception:
                 self.connection.rollback()
                 raise
+
+    def _resolved_order_side(
+        self, client_order_id: str, role: OrderRole, entry_client_order_id: str | None, existing_side: str
+    ) -> str:
+        """The side a fill order row really traded, or ``""`` when unknown.
+
+        ``ExecutionEvent`` has no direction field, so the role says nothing
+        about the side: a short entry still exits with a buy, and a buy-side
+        protective stop on a short closes with a buy.  Guessing from the role
+        would stamp the wrong sign on the slippage read of every such row.
+        """
+        if role == OrderRole.ENTRY or not entry_client_order_id or entry_client_order_id == client_order_id:
+            return existing_side
+        row = self.connection.execute(
+            "SELECT side FROM orders WHERE client_order_id=?",
+            (entry_client_order_id,),
+        ).fetchone()
+        entry_side = str(row[0] or "").strip().lower() if row else ""
+        return _OPPOSITE_SIDES.get(entry_side, existing_side)
 
     def _resolve_entry_client_order_id(self, event: ExecutionEvent, existing: tuple[object, ...] | None) -> str | None:
         """Link a child event to its managed entry lot.

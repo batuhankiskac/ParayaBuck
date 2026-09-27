@@ -239,11 +239,7 @@ class ReconciliationService:
                 existing_client = (
                     order_lookup(broker._account_id or "unknown", broker_order_id) if order_lookup is not None else None
                 )
-                if existing_client is not None:
-                    fee_recorder = getattr(ledger, "record_fee_activity", None)
-                    if fee_recorder is not None:
-                        fee_recorder(activity_id, existing_client, fee, occurred_at)
-                else:
+                if existing_client is None:
                     ledger.apply_execution_event(
                         ExecutionEvent(
                             account_id=broker._account_id or "unknown",
@@ -788,5 +784,8 @@ class ReconciliationService:
             categories["UNKNOWN_ORDER"].append(_cid)
         for _cid in sorted(_local_open_ids - _broker_open_ids):
             categories["MISSING_BROKER_ORDER"].append(_cid)
+            # Documented compatibility contract: a local open id the broker no
+            # longer lists is reported under both keys (see
+            # docs/disaster_recovery.md and docs/alpaca_broker_truth_matrix.md).
             categories["MISSING_LOCAL_ORDER"].append(_cid)
         return categories

@@ -15,6 +15,7 @@ from starlette.requests import Request
 
 from parayabuck import runtime as runtime_module
 from parayabuck.web import server
+from parayabuck.web.managers import websocket as ws_managers
 
 
 class _CountingEngineManager(server.EngineManager):
@@ -102,9 +103,10 @@ def test_concurrent_ws_ticket_issuance_never_drops_tickets() -> None:
     assert not errors
     assert len(issued) == workers * per_worker
     # Every ticket survived the concurrent prune-rebuild cycles and consumes
-    # exactly once; the map holds no stragglers afterwards.
+    # exactly once; the store holds none of them afterwards.
     assert all(manager.consume_ws_ticket(ticket, "stream") for ticket in issued)
-    assert not manager._ws_tickets
+    store = manager._ticket_store or ws_managers.ticket_store
+    assert not set(issued) & set(store.tickets)
 
 
 def test_reset_safety_lock_does_not_deadlock_on_state_lock() -> None:

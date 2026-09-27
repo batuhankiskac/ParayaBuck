@@ -42,36 +42,23 @@ def _equity_status(cfg: Any) -> str:
     return "static" if cfg.universe.equity.enabled else "disabled"
 
 
-def _dashboard_load_json(path: str | Path) -> dict[str, Any]:
-    """Read + parse one JSON file; {} on any error (read-only helper)."""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-        data = json.loads(text)
-        if isinstance(data, dict):
-            return data
-        return {}
-    except Exception:
-        return {}
-
-
 def _read_active_crypto_universe(cfg: Any) -> Any:
     """Strict read + parse of the active crypto universe snapshot."""
     path = Path(cfg.universe.crypto.active_universe_path)
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
-def strategy_metadata(cfg: Any, active_crypto_payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def strategy_metadata(cfg: Any, active_crypto_payload: dict[str, Any]) -> dict[str, Any]:
     """Declared strategy contracts plus live universe sizes for the Web UI.
 
-    Mirrors server.py:_strategy_metadata verbatim — no global timeframe,
-    each strategy owns its signal timeframe.
+    Shared by /api/status and the dashboard. There is deliberately NO global
+    strategy timeframe: each strategy owns its signal timeframe. A strategy
+    that cannot be constructed surfaces as an error, never disappears.
     """
     from parayabuck.portfolio import portfolio_strategy_from
 
     result: dict[str, Any] = {"equity": None, "crypto": None}
     equity_symbols = _equity_symbols(cfg)
-    if active_crypto_payload is None:
-        active_crypto_payload = _dashboard_load_json(cfg.universe.crypto.active_universe_path)
     crypto_candidates = active_crypto_payload.get("candidate_symbols")
     for market_key, selection, pool_size in (
         ("equity", cfg.strategy.equity, len(equity_symbols)),

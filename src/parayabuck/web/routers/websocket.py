@@ -11,13 +11,13 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 from typing import Any
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from parayabuck.logger import get_logger
-from parayabuck.web.managers.websocket import add_log_queue, remove_log_queue
+from parayabuck.web.managers.websocket import _LOG_QUEUE_MAXSIZE, add_log_queue, remove_log_queue
 from parayabuck.web.managers.websocket import consume_ws_ticket as _consume_shared
+from parayabuck.web.security import _trusted_browser_origin_for_middleware as _trusted_browser_origin
 
 log = get_logger("parayabuck.web.websocket")
 
@@ -58,14 +58,6 @@ def _consume_ticket(ticket: str, kind: str, websocket: WebSocket | None = None) 
     # Fail closed: with neither an app-scoped nor a process-wide store there
     # is no ticket to validate, so a missing ticket is never trusted.
     return False
-
-
-def _trusted_browser_origin(origin: str | None) -> bool:
-    # server.py semantics: empty Origin = non-browser/local client → trusted
-    if not origin:
-        return True
-    parsed = urlparse(origin)
-    return parsed.hostname in {"127.0.0.1", "localhost", "::1"}
 
 
 @router.websocket("/ws/stream")
@@ -124,7 +116,7 @@ async def websocket_logs(websocket: WebSocket) -> None:
             pass
         return
     await websocket.accept()
-    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=500)
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_LOG_QUEUE_MAXSIZE)
     loop = asyncio.get_running_loop()
     add_log_queue(queue, loop)
     try:

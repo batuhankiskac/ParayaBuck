@@ -1689,58 +1689,13 @@ async def get_control_token() -> JSONResponse:
 def _strategy_metadata(cfg: Any) -> dict[str, Any]:
     """Declared strategy contracts plus live universe sizes for the Web UI.
 
-    There is deliberately NO global strategy timeframe here: each strategy
-    owns its signal timeframe and the UI only surfaces the strategy's own
-    metadata (and, when a strategy supports multiple validated timeframes,
-    that restricted choice).
+    Delegates to the /api/status builder so both views share one
+    implementation; only the (mtime-cached) active-crypto read is local.
     """
-    from parayabuck.portfolio import portfolio_strategy_from
+    from parayabuck.web.services.status import strategy_metadata
 
-    result: dict[str, Any] = {"equity": None, "crypto": None}
-    equity_universe = cfg.universe.equity
-    equity_symbols = tuple(equity_universe.symbols) if equity_universe.enabled else ()
-    active_crypto_payload: dict[str, Any] = {}
-    active_crypto_payload.update(_dashboard_load_json(cfg.universe.crypto.active_universe_path))
-    crypto_candidates = active_crypto_payload.get("candidate_symbols")
-    for market_key, selection, pool_size in (
-        ("equity", cfg.strategy.equity, len(equity_symbols)),
-        (
-            "crypto",
-            cfg.strategy.crypto,
-            len(crypto_candidates) if isinstance(crypto_candidates, list) else None,
-        ),
-    ):
-        if not selection.enabled:
-            continue
-        try:
-            strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
-            spec = strategy.spec()
-            observation_size = (
-                len(equity_symbols)
-                if market_key == "equity"
-                else len(
-                    active_crypto_payload.get("observation_set", active_crypto_payload.get("selected_symbols", ()))
-                )
-            )
-            result[market_key] = {
-                "name": spec.name,
-                "display_name": spec.display_name,
-                "version": spec.version,
-                "signal_timeframe": spec.primary_timeframe,
-                "supported_timeframes": list(spec.supported_timeframes),
-                "rebalance_cadence": spec.rebalance_policy,
-                "minimum_history_bars": spec.minimum_history_bars,
-                "dynamic_universe_enabled": (
-                    False if market_key == "equity" else cfg.universe.crypto.dynamic_selection_enabled
-                ),
-                "candidate_pool_size": pool_size,
-                "observation_set_size": observation_size,
-            }
-        except Exception:
-            # A strategy that cannot be constructed must surface as an error,
-            # never silently disappear from the status UI.
-            result[market_key] = {"name": selection.name, "configuration_error": True}
-    return result
+    active_crypto_payload = dict(_dashboard_load_json(cfg.universe.crypto.active_universe_path))
+    return strategy_metadata(cfg, active_crypto_payload=active_crypto_payload)
 
 
 @app.get("/api/status")
@@ -2897,7 +2852,10 @@ def _dashboard_market_card(
 # Trailing 22d realized vol per crypto holding, computed from the warmup cache
 # with the strategy's own realized_volatility math. Minute-bucketed TTL so the
 # ~2 GB cache file is only queried at most once per minute per symbol set.
+# Payload builds run concurrently in worker threads, so every access to the
+# dict is under the lock (the computation itself is not).
 _crypto_vol_cache: dict[tuple[tuple[str, ...], int], dict[str, float | None]] = {}
+_crypto_vol_cache_lock = threading.Lock()
 
 
 def _crypto_realized_vols(symbols: list[str]) -> dict[str, float | None]:
@@ -2908,9 +2866,10 @@ def _crypto_realized_vols(symbols: list[str]) -> dict[str, float | None]:
     cache_key = (tuple(sorted(symbols)), bucket)
     # Keep only the current bucket per symbol set: one stale entry per key
     # instead of one per minute the dashboard keeps polling.
-    for stale_key in [key for key in _crypto_vol_cache if key[0] == cache_key[0]]:
-        _crypto_vol_cache.pop(stale_key, None)
-    cached = _crypto_vol_cache.get(cache_key)
+    with _crypto_vol_cache_lock:
+        for stale_key in [key for key in _crypto_vol_cache if key[0] == cache_key[0] and key != cache_key]:
+            _crypto_vol_cache.pop(stale_key, None)
+        cached = _crypto_vol_cache.get(cache_key)
     if cached is not None:
         return cached
     result: dict[str, float | None] = {}
@@ -2949,7 +2908,8 @@ def _crypto_realized_vols(symbols: list[str]) -> dict[str, float | None]:
             cache.close()
     except Exception:
         return dict.fromkeys(symbols)
-    _crypto_vol_cache[cache_key] = result
+    with _crypto_vol_cache_lock:
+        _crypto_vol_cache[cache_key] = result
     return result
 
 

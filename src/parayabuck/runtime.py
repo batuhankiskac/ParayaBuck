@@ -177,6 +177,10 @@ _WARMUP_RETRY_MAX_EXPONENT = 6
 # How often the split-adjustment reconciler compares raw vs split-adjusted
 # daily tails (hourly; a split is applied at most one check after it trades).
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
+# A verification counts as fresh for one check interval plus this slack:
+# the monitor waits a full interval AFTER each pass, so the next success
+# always lands a little past the previous one + 3600 s.
+_SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS = 300.0
 # Safety margin added ON TOP of the strategy history window so the batched
 # splits fetch always spans the full required signal window (never a short
 # tail standing in for a long history).
@@ -3918,7 +3922,9 @@ class EngineRuntime:
         last_success = state["last_success_at"]
         if not isinstance(last_success, datetime):
             return False
-        if (datetime.now(UTC) - last_success).total_seconds() > _SIGNAL_ADJUSTMENT_CHECK_SECONDS:
+        if (datetime.now(UTC) - last_success).total_seconds() > (
+            _SIGNAL_ADJUSTMENT_CHECK_SECONDS + _SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS
+        ):
             return False
         if decision_timestamp is None:
             return True

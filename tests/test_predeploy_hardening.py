@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from parayabuck.backup import BackupVerificationError, backup_database, verify_backup
 from parayabuck.config import LiveConfig, RuntimeConfig
 from parayabuck.execution.alpaca import AlpacaBroker, RiskStatePersistenceError
+from parayabuck.execution.risk_peak import RiskPeakService
 from parayabuck.monitoring import alerts
 from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.storage import SQLiteStore, StorageInitializationError
@@ -1021,8 +1022,8 @@ def test_peak_db_high_water_raises_fail_closed(tmp_path):
     peak = tmp_path / "paper_equity_peak.json"
     broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 50000.0)
     with patch.object(
-        AlpacaBroker,
-        "_query_persisted_peak",
+        RiskPeakService,
+        "query_persisted_peak",
         side_effect=RiskStatePersistenceError(
             "portfolio_high_water read failed for acct-A: injected high_water failure"
         ),
@@ -1045,8 +1046,8 @@ def test_peak_db_risk_state_raises_fail_closed(tmp_path):
     peak = tmp_path / "paper_equity_peak.json"
     broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 50000.0)
     with patch.object(
-        AlpacaBroker,
-        "_query_persisted_peak",
+        RiskPeakService,
+        "query_persisted_peak",
         side_effect=RiskStatePersistenceError("risk_state read failed for acct-A: injected risk_state failure"),
     ):
         with pytest.raises(RiskStatePersistenceError, match="risk_state read failed"):
@@ -1084,7 +1085,7 @@ def test_peak_db_persisted_100k_injected_failure_not_rebase(tmp_path):
     peak = tmp_path / "paper_equity_peak.json"
     assert not peak.exists()
     broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 94000.0)
-    with patch.object(AlpacaBroker, "_query_persisted_peak", side_effect=RiskStatePersistenceError("injected failure")):
+    with patch.object(RiskPeakService, "query_persisted_peak", side_effect=RiskStatePersistenceError("injected failure")):
         with pytest.raises(RiskStatePersistenceError):
             broker.account()
     # Must not have rebased to 94000
@@ -1107,7 +1108,7 @@ def test_peak_db_sidecar_valid_sqlite_fails_fail_closed(tmp_path):
     peak = tmp_path / "paper_equity_peak.json"
     peak.write_text(json.dumps({"account_id": "acct-A", "peak_equity": 100000.0, "epoch": 0}))
     broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 94000.0)
-    with patch.object(AlpacaBroker, "_query_persisted_peak", side_effect=RiskStatePersistenceError("injected")):
+    with patch.object(RiskPeakService, "query_persisted_peak", side_effect=RiskStatePersistenceError("injected")):
         with pytest.raises(RiskStatePersistenceError):
             broker.account()
     # Must not have used sidecar alone to return 100k
@@ -1157,6 +1158,6 @@ def test_peak_db_different_account_rows_ignored(tmp_path):
     # Force fresh reconciliation by clearing flag
     broker2._peak_reconciled = False
     broker2._peak_account_id = None
-    with patch.object(AlpacaBroker, "_query_persisted_peak", side_effect=RiskStatePersistenceError("injected for A")):
+    with patch.object(RiskPeakService, "query_persisted_peak", side_effect=RiskStatePersistenceError("injected for A")):
         with pytest.raises(RiskStatePersistenceError):
             broker2.account()

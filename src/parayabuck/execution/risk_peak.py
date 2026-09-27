@@ -138,25 +138,7 @@ class RiskPeakService:
     def peak_reconciled(self, value: bool) -> None:
         self._peak_reconciled = bool(value)
 
-    def _query_persisted_peak(self, account_id: str) -> tuple[float | None, int | None]:
-        return self.query_persisted_peak(account_id)
-
     def query_persisted_peak(self, account_id: str) -> tuple[float | None, int | None]:
-        # Honor test patch on AlpacaBroker._query_persisted_peak (e.g., injected failures)
-        try:
-            from unittest.mock import Mock
-
-            from parayabuck.execution.alpaca import AlpacaBroker as _AB
-
-            _meth = getattr(_AB, "_query_persisted_peak", None)
-            if isinstance(_meth, Mock):
-                return _meth(account_id)  # type: ignore[no-any-return]
-            if _meth is not None and hasattr(_meth, "side_effect") and _meth.side_effect is not None:
-                return _meth(account_id)  # type: ignore[no-any-return]
-        except RiskStatePersistenceError:
-            raise
-        except Exception:
-            pass
         if not account_id or self.ledger is None:
             return None, None
         try:
@@ -242,9 +224,6 @@ class RiskPeakService:
             raise
         except Exception as exc:
             raise RiskStatePersistenceError(f"persisted peak query failed for {account_id}: {exc}") from exc
-
-    def _ensure_peak_reconciled(self, account_id: str, current_equity: float) -> None:
-        self.ensure_reconciled(account_id, current_equity)
 
     def ensure_reconciled(self, account_id: str, current_equity: float) -> None:
         if not account_id:
@@ -388,9 +367,6 @@ class RiskPeakService:
             except Exception:
                 log.warning("Failed to reconcile peak sidecar to account %s", account_id, exc_info=True)
 
-    def _load_peak_equity(self, account_id: str | None = None) -> float:
-        return self.load_peak_equity(account_id)
-
     def load_peak_equity(self, account_id: str | None = None) -> float:
         acct = account_id or getattr(self, "_peak_account_id", None) or getattr(self, "_broker_account_id", None)
         if acct:
@@ -399,9 +375,6 @@ class RiskPeakService:
         if self.ledger is None:
             return float(self._peak_equity)
         return float(self._peak_equity)
-
-    def _save_peak_equity(self, account_id: str | None = None) -> None:
-        self.save_peak_equity(account_id)
 
     def save_peak_equity(self, account_id: str | None = None) -> None:
         if not math.isfinite(self._peak_equity) or self._peak_equity < 0:
@@ -450,20 +423,6 @@ class RiskPeakService:
             self._peak_epoch,
             "paper" if self._paper else "live",
         )
-
-    def maybe_update_peak(self, equity: float, account_id: str) -> bool:
-        self.ensure_reconciled(account_id, equity)
-        old = self._peak_equity
-        new = max(old, float(equity))
-        if new != old:
-            self._peak_equity = new
-            try:
-                self.save_peak_equity(account_id)
-            except (KeyboardInterrupt, SystemExit):
-                self._peak_equity = old
-                raise
-            return True
-        return False
 
 
 __all__ = ["RiskPeakService", "RiskStatePersistenceError", "resolve_peak_state_path"]

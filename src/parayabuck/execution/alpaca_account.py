@@ -133,11 +133,7 @@ class AccountService:
         account: Any = client.get_account()
         # Bind account id
         broker._account_id = str(getattr(account, "id", "") or getattr(account, "account_number", ""))
-        if (
-            bool(getattr(account, "account_blocked", False))
-            or bool(getattr(account, "trading_blocked", False))
-            or bool(getattr(account, "trade_suspended_by_user", False))
-        ):
+        if self.is_account_blocked(account):
             raise RuntimeError("Alpaca account is blocked from trading")
         equity = float(account.equity or 0)
         previous_equity = float(account.last_equity or equity)
@@ -157,8 +153,7 @@ class AccountService:
             current_price = float(raw.current_price)
             unrealized += float(raw.unrealized_pl or 0)
             intraday_unrealized += float(raw.unrealized_intraday_pl or 0)
-            asset_class = str(getattr(raw, "asset_class", "")).lower()
-            market = Market.CRYPTO if "crypto" in asset_class or is_crypto(str(raw.symbol)) else Market.EQUITY
+            market = self.classify_market(raw)
             canonical = canonical_symbol(str(raw.symbol), market)
             position_key = (market, canonical)
             if position_key in seen_position_keys:

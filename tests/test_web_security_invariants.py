@@ -50,6 +50,16 @@ def test_factory_apps_keep_control_and_websocket_state_isolated():
     assert manager_a.consume_ws_ticket(ticket, "stream") is True
 
 
+def test_ws_ticket_fails_closed_without_a_store() -> None:
+    """A ticket no store can validate is never trusted, empty or bogus."""
+    from parayabuck.web.managers.websocket import ticket_store
+    from parayabuck.web.routers.websocket import _consume_ticket
+
+    assert _consume_ticket("", "stream") is False
+    assert _consume_ticket("not-a-ticket", "stream") is False
+    assert _consume_ticket(ticket_store.issue("stream"), "stream") is True
+
+
 def test_trusted_host_allows_loopback_and_testserver():
     assert is_trusted_host("127.0.0.1")
     assert is_trusted_host("localhost")

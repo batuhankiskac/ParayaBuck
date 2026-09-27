@@ -473,3 +473,44 @@ def test_focused_endpoints_are_slices(
     slice_payload = asyncio.run(getattr(server, endpoint)())
     assert slice_payload == overview[panel]
     assert isinstance(slice_payload, dict)
+
+
+# ---------------------------------------------------------------------------
+# Failure reporting: the real cause must reach the operator
+# ---------------------------------------------------------------------------
+
+
+def test_panel_endpoint_surfaces_the_overview_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failing overview must not be reported as a missing panel on all 8 panels."""
+    from parayabuck.web import server_legacy
+    from parayabuck.web.services import dashboard as svc
+
+    def _boom(**_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("ledger locked")
+
+    monkeypatch.setattr(server_legacy, "_dashboard_payload", _boom)
+
+    assert svc.get_overview_payload() == {"unavailable": True, "error": "ledger locked"}
+    assert svc.get_panel("equity") == {"unavailable": True, "error": "ledger locked"}
+
+
+def test_market_decisions_failure_is_reported_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty market-decisions panel must say why the legacy call failed."""
+    from parayabuck.web import server_legacy
+
+    class _Log:
+        def __init__(self) -> None:
+            self.warnings: list[str] = []
+
+        def warning(self, fmt: str, *args: Any) -> None:
+            self.warnings.append(fmt % args if args else fmt)
+
+    def _boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("ledger locked")
+
+    log = _Log()
+    monkeypatch.setattr(server_legacy, "_dashboard_market_decisions", _boom)
+    monkeypatch.setattr(server, "log", log)
+
+    assert server._dashboard_market_decisions("acct-1") == {}
+    assert any("ledger locked" in message for message in log.warnings)

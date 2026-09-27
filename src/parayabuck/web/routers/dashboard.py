@@ -12,76 +12,57 @@ from parayabuck.web.services import dashboard as svc
 router = APIRouter(tags=["dashboard"])
 
 
-@router.get("/api/dashboard/overview")
-async def dashboard_overview(request: Request) -> dict[str, Any]:
+def _require_state(request: Request) -> Any:
+    """Bound WebState, or the 503 every read-only dashboard route answers."""
     state = getattr(request.app.state, "web", None)
     if state is None:
         raise HTTPException(status_code=503, detail="Web state unavailable")
-    return await asyncio.to_thread(svc.get_overview_payload, state)
+    return state
+
+
+@router.get("/api/dashboard/overview")
+async def dashboard_overview(request: Request) -> dict[str, Any]:
+    return await asyncio.to_thread(svc.get_overview_payload, _require_state(request))
 
 
 @router.get("/api/equity")
 async def dashboard_equity(request: Request) -> dict[str, Any]:
-    state = getattr(request.app.state, "web", None)
-    if state is None:
-        raise HTTPException(status_code=503, detail="Web state unavailable")
-    return await asyncio.to_thread(svc.get_panel, "equity", state)
+    return await asyncio.to_thread(svc.get_panel, "equity", _require_state(request))
 
 
 @router.get("/api/crypto")
 async def dashboard_crypto(request: Request) -> dict[str, Any]:
-    state = getattr(request.app.state, "web", None)
-    if state is None:
-        raise HTTPException(status_code=503, detail="Web state unavailable")
-    return await asyncio.to_thread(svc.get_panel, "crypto", state)
+    return await asyncio.to_thread(svc.get_panel, "crypto", _require_state(request))
 
 
 @router.get("/api/risk")
 async def dashboard_risk(request: Request) -> dict[str, Any]:
-    state = getattr(request.app.state, "web", None)
-    if state is None:
-        raise HTTPException(status_code=503, detail="Web state unavailable")
-    return await asyncio.to_thread(svc.get_panel, "risk", state)
+    return await asyncio.to_thread(svc.get_panel, "risk", _require_state(request))
 
 
 @router.get("/api/execution")
 async def dashboard_execution(request: Request) -> dict[str, Any]:
-    state = getattr(request.app.state, "web", None)
-    if state is None:
-        raise HTTPException(status_code=503, detail="Web state unavailable")
-    return await asyncio.to_thread(svc.get_panel, "execution", state)
+    return await asyncio.to_thread(svc.get_panel, "execution", _require_state(request))
 
 
 @router.get("/api/universe")
 async def dashboard_universe(request: Request) -> dict[str, Any]:
-    state = getattr(request.app.state, "web", None)
-    if state is None:
-        raise HTTPException(status_code=503, detail="Web state unavailable")
-    return await asyncio.to_thread(svc.get_panel, "universe", state)
+    return await asyncio.to_thread(svc.get_panel, "universe", _require_state(request))
 
 
 @router.get("/api/health")
 async def dashboard_health(request: Request) -> dict[str, Any]:
-    state = getattr(request.app.state, "web", None)
-    if state is None:
-        raise HTTPException(status_code=503, detail="Web state unavailable")
-    return await asyncio.to_thread(svc.get_panel, "health", state)
+    return await asyncio.to_thread(svc.get_panel, "health", _require_state(request))
 
 
 @router.get("/api/explanations")
 async def dashboard_explanations(request: Request) -> dict[str, Any]:
-    state = getattr(request.app.state, "web", None)
-    if state is None:
-        raise HTTPException(status_code=503, detail="Web state unavailable")
-    return await asyncio.to_thread(svc.get_panel, "explanations", state)
+    return await asyncio.to_thread(svc.get_panel, "explanations", _require_state(request))
 
 
 @router.get("/api/metrics")
 async def dashboard_metrics(request: Request) -> dict[str, Any]:
-    state = getattr(request.app.state, "web", None)
-    if state is None:
-        raise HTTPException(status_code=503, detail="Web state unavailable")
-    return await asyncio.to_thread(svc.get_panel, "metrics", state)
+    return await asyncio.to_thread(svc.get_panel, "metrics", _require_state(request))
 
 
 @router.get("/api/performance")
@@ -91,8 +72,6 @@ async def dashboard_performance(request: Request, period: str = "1M") -> dict[st
     from parayabuck.web.services import performance
 
     manager = get_engine_manager(request)
-    if manager is None:
-        raise HTTPException(status_code=503, detail="Engine manager unavailable")
     try:
         return await asyncio.to_thread(performance.portfolio_performance, manager, period)
     except ValueError as exc:

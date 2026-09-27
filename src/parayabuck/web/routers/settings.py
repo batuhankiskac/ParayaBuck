@@ -95,27 +95,11 @@ async def get_settings_slash(service: Any = Depends(get_settings_service)) -> di
 
 @router.post("/", include_in_schema=False)
 async def save_settings_slash(payload: SettingsPayload, service: Any = Depends(get_settings_service)) -> dict[str, Any]:
-    try:
-        return await service.save_settings(payload)  # type: ignore[no-any-return]
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception:
-        log.exception("Settings save failed with an unexpected error")
-        raise HTTPException(status_code=500, detail="Settings could not be saved") from None
+    return await save_settings(payload, service)  # type: ignore[no-any-return]
 
 
 @router.patch("/", include_in_schema=False)
 async def patch_settings_slash(
     payload: SettingsPayload, service: Any = Depends(get_settings_service)
 ) -> dict[str, Any]:
-    try:
-        return await service.save_settings(payload)  # type: ignore[no-any-return]
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception:
-        log.exception("Settings save failed with an unexpected error")
-        raise HTTPException(status_code=500, detail="Settings could not be saved") from None
+    return await patch_settings(payload, service)  # type: ignore[no-any-return]

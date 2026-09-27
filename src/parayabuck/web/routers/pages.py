@@ -50,19 +50,6 @@ def _resolve_manager() -> Any:
             return mgr
     except Exception:
         pass
-    # Last fallback: direct manager from managers.engine (legacy singletons)
-    try:
-        # Try to get global instance if one was created via _default_state
-        from parayabuck.web import state as _state_mod
-        from parayabuck.web.managers.engine import EngineManager  # noqa: F401
-
-        ws = _state_mod.get_web_state()
-        if ws is not None:
-            mgr = getattr(ws, "engine_manager", None)
-            if mgr is not None:
-                return mgr
-    except Exception:
-        pass
     return None
 
 

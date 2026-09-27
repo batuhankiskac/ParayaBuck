@@ -351,6 +351,26 @@ def test_live_mode_is_never_eligible_for_auto_start(tmp_path: Path, monkeypatch:
     assert manager.should_auto_start() is True
 
 
+
+@pytest.mark.parametrize(
+    ("config_text", "expected_paper"),
+    [
+        ("runtime:\n", True),
+        ("alpaca:\n  paper: true\nruntime:\n", True),
+        ("alpaca:\n  paper: false\nruntime:\n", False),
+    ],
+)
+def test_paper_mode_tolerates_an_empty_runtime_section(
+    tmp_path: Path, config_text: str, expected_paper: bool
+) -> None:
+    """`runtime:` with no value parses to None — the paper badge must still resolve."""
+    manager = server.EngineManager()
+    manager.config_path = tmp_path / "settings.yaml"
+    manager.config_path.write_text(config_text, encoding="utf-8")
+
+    assert manager.is_paper_mode() is expected_paper
+
+
 def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:
     calls: list[str] = []
 
@@ -755,6 +775,56 @@ def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
     assert status["strategy_status"] == "configuration_error"
     assert status["scanner"] == {"equity_status": "error", "crypto_status": "error"}
 
+
+
+def test_status_reports_scanner_error_when_active_crypto_json_is_invalid(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """A corrupt active-crypto snapshot is a scanner error, never a silent empty universe."""
+    from parayabuck.web import server
+
+    class StaticManager:
+        config_path = tmp_path / "settings.yaml"
+        runtime = None
+        last_engine_error = None
+        security_warning = None
+
+        def get_credentials(self) -> tuple[str, str]:
+            return "", ""
+
+        def current_engine_state(self) -> str:
+            return "stopped"
+
+        def is_paper_mode(self) -> bool:
+            return True
+
+    crypto_path = tmp_path / "active-crypto.json"
+    crypto_path.write_text("{not json", encoding="utf-8")
+    selection = type("Selection", (), {"enabled": True, "name": "crypto", "timeframe": "5m", "parameters": {}})()
+    disabled = type("Selection", (), {"enabled": False, "name": "equity_leveraged_trend_v1"})()
+    config = type(
+        "Config",
+        (),
+        {
+            "strategy": type("Strategy", (), {"equity": disabled, "crypto": selection})(),
+            "universe": type(
+                "Universe",
+                (),
+                {
+                    "equity": type("Equity", (), {"enabled": False, "symbols": ()})(),
+                    "crypto": type("Crypto", (), {"active_universe_path": str(crypto_path)})(),
+                },
+            )(),
+        },
+    )()
+
+    monkeypatch.setattr(server, "manager", StaticManager())
+    monkeypatch.setattr(server, "load_config", lambda _path: config)
+
+    status = asyncio.run(server.get_status())
+
+    assert status["strategy_status"] == "configured:crypto/crypto"
+    assert status["scanner"] == {"equity_status": "error", "crypto_status": "error"}
 
 def test_readyz_rejects_degraded_or_halted_runtime(monkeypatch: Any) -> None:
     from types import SimpleNamespace

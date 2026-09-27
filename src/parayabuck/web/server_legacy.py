@@ -286,8 +286,9 @@ class EngineManager:
                     return cached[1]
                 with open(self.config_path, encoding="utf-8") as f:
                     cfg = yaml.safe_load(f) or {}
-                runtime_mode = cfg.get("runtime", {}).get("mode")
-                if runtime_mode is None and cfg.get("alpaca", {}).get("paper") is False:
+                runtime = cfg.get("runtime") or {}
+                runtime_mode = runtime.get("mode")
+                if runtime_mode is None and (cfg.get("alpaca") or {}).get("paper") is False:
                     # A legacy live configuration must never be silently shown
                     # as paper while the operator migrates to runtime.mode.
                     paper = False

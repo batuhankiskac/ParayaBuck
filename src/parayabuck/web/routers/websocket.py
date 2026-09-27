@@ -9,13 +9,11 @@ parayabuck.web.managers.websocket (TTL30, lock, single-use, scope-bound).
 from __future__ import annotations
 
 import asyncio
-import os
 from contextlib import suppress
-from typing import Any, Literal
+from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, ConfigDict
 
 from parayabuck.logger import get_logger
 from parayabuck.web.managers.websocket import add_log_queue, remove_log_queue
@@ -57,10 +55,9 @@ def _consume_ticket(ticket: str, kind: str, websocket: WebSocket | None = None) 
                     return True
         except Exception:
             continue
-    # Empty ticket is considered valid for legacy test stubs that treat
-    # missing ticket as trusted when no WebSocket ticket was issued.
-    # Real manager will have rejected it above; this only helps stubs.
-    return not ticket
+    # Fail closed: with neither an app-scoped nor a process-wide store there
+    # is no ticket to validate, so a missing ticket is never trusted.
+    return False
 
 
 def _trusted_browser_origin(origin: str | None) -> bool:
@@ -69,22 +66,6 @@ def _trusted_browser_origin(origin: str | None) -> bool:
         return True
     parsed = urlparse(origin)
     return parsed.hostname in {"127.0.0.1", "localhost", "::1"}
-
-
-def _trusted_host(host_header: str | None) -> bool:  # kept for compatibility, not used by WS
-    host = urlparse(f"//{host_header or ''}").hostname or ""
-    allowed = {"127.0.0.1", "localhost", "::1"}
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        allowed.add("testserver")
-    # Empty host (e.g. test stub without headers) is trusted like empty Origin.
-    if not host:
-        return True
-    return host in allowed
-
-
-class WebSocketTicketPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    kind: Literal["stream", "logs"]
 
 
 @router.websocket("/ws/stream")

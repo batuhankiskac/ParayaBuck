@@ -77,7 +77,6 @@ def weekday_count(start: datetime, end: datetime) -> int:
     return total_days - weekend_days
 
 
-@lru_cache(maxsize=2048)
 def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: datetime | date | None = None) -> int:
     """Calendar span needed to collect ``bars`` of ``timeframe`` history.
 
@@ -92,12 +91,20 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
     (e.g. 2020), whose holiday calendar differs from today's, never around
     the current date.
 
-    Results are memoised per (symbol, timeframe, bars, end_date): the NYSE
-    calendar lookup is expensive and the arguments are immutable. With
-    ``end_date=None`` the anchor is the current date, so a long-lived process
-    may reuse a value anchored up to a day earlier — the same session-density
-    approximation the function already makes.
+    Results are memoised per (symbol, timeframe, bars, anchor): the NYSE
+    calendar lookup is expensive. ``end_date=None`` resolves to the current
+    date BEFORE the memo lookup, so a long-lived process never reuses a span
+    anchored on the day it started.
     """
+    # For live warmup the anchor is today; historical backtests pass the
+    # evaluation start so session density reflects that era's calendar. A
+    # datetime is a date, so the anchor keeps whatever the caller passed.
+    anchor: date = end_date if end_date is not None else datetime.now(UTC).date()
+    return _bars_to_calendar_days(symbol, timeframe, bars, anchor)
+
+
+@lru_cache(maxsize=2048)
+def _bars_to_calendar_days(symbol: str, timeframe: str, bars: int, today: date) -> int:
     minutes = TIMEFRAME_MINUTES[timeframe]
     if "/" in symbol:
         bars_per_day = 1440 / minutes
@@ -105,16 +112,11 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
         return max(2, math.ceil(bars / max(0.01, bars_per_day) * multiplier))
     bars_per_session = (390 / minutes) if minutes < 1440 else 1
     needed_sessions = max(1, math.ceil(bars / bars_per_session))
-    # A datetime is a date, so the anchor keeps whatever the caller passed.
-    anchor: date | None = end_date
     calendar_error: Exception | None = None
     try:
         from pandas_market_calendars import get_calendar
 
         calendar = get_calendar("NYSE")
-        # For live warmup the anchor is today; historical backtests pass the
-        # evaluation start so session density reflects that era's calendar.
-        today = anchor or datetime.now(UTC).date()
         # Grow the backward window until it contains enough real sessions,
         # then tighten to the exact minimum with a binary search.
         days = max(2, math.ceil(needed_sessions * 7 / 5))

@@ -984,3 +984,95 @@ def test_ops_explain_health_reads_the_configured_snapshot(tmp_path: Path) -> Non
     assert code == 0
     assert captured["snapshot_path"] == str(tmp_path / "configured_snapshot.json")
     assert captured["database_path"] == str(tmp_path / "decisions.sqlite3")
+
+
+def test_ops_doctor_explicit_paths_win_even_when_equal_to_the_relative_defaults(tmp_path: Path) -> None:
+    """An explicit `--snapshot`/`--journal` must never be replaced by the
+    configured path just because it spells the relative default."""
+    import yaml
+
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text())
+    raw.setdefault("runtime", {})["decision_db_path"] = str(tmp_path / "decisions.sqlite3")
+    raw["observability"] = {
+        **(raw.get("observability") or {}),
+        "snapshot_path": str(tmp_path / "configured_snapshot.json"),
+        "journal_path": str(tmp_path / "configured_journal.sqlite3"),
+    }
+    config_path = tmp_path / "settings.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_checks(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"checks": [], "overall": "OK"}
+
+    with patch("parayabuck.monitoring.diagnostic._run_doctor_checks", side_effect=fake_checks):
+        code, _, _ = _run_cli(
+            "--config",
+            str(config_path),
+            "ops",
+            "doctor",
+            "--snapshot",
+            "data/runtime/health_snapshot.json",
+            "--journal",
+            "data/runtime/observability.sqlite3",
+        )
+
+    assert code == 0
+    assert captured["snapshot_path"] == "data/runtime/health_snapshot.json"
+    assert captured["journal_path"] == "data/runtime/observability.sqlite3"
+    assert captured["decision_db_path"] == str(tmp_path / "decisions.sqlite3")
+
+    # Absent flags still fall back to the configured paths.
+    captured.clear()
+    with patch("parayabuck.monitoring.diagnostic._run_doctor_checks", side_effect=fake_checks):
+        code, _, _ = _run_cli("--config", str(config_path), "ops", "doctor")
+    assert code == 0
+    assert captured["snapshot_path"] == str(tmp_path / "configured_snapshot.json")
+    assert captured["journal_path"] == str(tmp_path / "configured_journal.sqlite3")
+
+
+def test_ops_explain_health_uses_the_resolved_config(tmp_path: Path) -> None:
+    """`ops explain` must hand evaluate_health the config it resolved from
+    --config (or defaults when that fails), never let it re-load CONFIG_PATH."""
+    import yaml
+
+    from parayabuck.config import Config
+
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text())
+    raw.setdefault("runtime", {})["decision_db_path"] = str(tmp_path / "decisions.sqlite3")
+    raw["observability"] = {
+        **(raw.get("observability") or {}),
+        "snapshot_path": str(tmp_path / "configured_snapshot.json"),
+        "journal_path": str(tmp_path / "journal.sqlite3"),
+        "snapshot_interval_seconds": 77.0,
+    }
+    config_path = tmp_path / "settings.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_health(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"checks": []}
+
+    with (
+        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}),
+        patch("parayabuck.monitoring.health.evaluate_health", side_effect=fake_health),
+    ):
+        code, _, _ = _run_cli("--config", str(config_path), "ops", "explain", "dec-1")
+    assert code == 0
+    resolved = captured["config"]
+    assert isinstance(resolved, Config)
+    assert resolved.observability.snapshot_interval_seconds == 77.0
+
+    # An unloadable config falls back to defaults rather than CONFIG_PATH.
+    captured.clear()
+    with (
+        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}),
+        patch("parayabuck.monitoring.health.evaluate_health", side_effect=fake_health),
+    ):
+        code, _, _ = _run_cli(
+            "--config", str(tmp_path / "missing.yaml"), "ops", "explain", "dec-1", "--db", str(tmp_path / "d.sqlite3")
+        )
+    assert code == 0
+    assert captured["config"] == Config()

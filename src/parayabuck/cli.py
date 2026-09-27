@@ -744,13 +744,14 @@ def _ops_doctor(args: argparse.Namespace) -> int:
         cfg = load_config(config_path if Path(config_path).exists() else None)
         if not db_path:
             db_path = cfg.runtime.decision_db_path
-        if not snapshot_path or snapshot_path == "data/runtime/health_snapshot.json":
-            # allow observability snapshot path
+        # Only an absent flag falls back to the configured path: an explicit
+        # flag that happens to equal the relative default must still win.
+        if not getattr(args, "snapshot", None):
             try:
                 snapshot_path = cfg.observability.snapshot_path
             except Exception:
                 pass
-        if not journal_path or journal_path == "data/runtime/observability.sqlite3":
+        if not getattr(args, "journal", None):
             try:
                 journal_path = cfg.observability.journal_path
             except Exception:
@@ -1072,7 +1073,13 @@ def _ops_explain(args: argparse.Namespace) -> int:
             try:
                 from parayabuck.monitoring.health import evaluate_health
 
-                h = evaluate_health(snapshot_path=snapshot_path, database_path=db_path)
+                # Judge health with the config this command resolved (defaults
+                # when it failed to load), never a CONFIG_PATH/cwd re-load.
+                h = evaluate_health(
+                    snapshot_path=snapshot_path,
+                    database_path=db_path,
+                    config=cfg if cfg is not None else Config(),
+                )
                 for chk in h.get("checks", []):
                     if chk.get("status") in {"BLOCKED", "DEGRADED", "CRITICAL"}:
                         print(f"Health {chk.get('code')}: {chk.get('summary')}")
@@ -1204,17 +1211,8 @@ def _load_bars(
             ]
             if not deficient:
                 break
-            if attempts >= 3:
-                log.warning(
-                    "Warmup still short of %d pre-start bars for %d symbol(s) after 3 extension attempts: %s",
-                    minimum_bars,
-                    len(deficient),
-                    ", ".join(sorted(deficient)[:20]),
-                )
-                continue
             # Extend the window backward for every symbol. The shortfall is
-            # converted to calendar days anchored at the evaluation start, plus
-            # a growth buffer so the next attempt makes real progress.
+            # converted to calendar days anchored at the evaluation start.
             from parayabuck.markets.timeframes import bars_to_calendar_days
 
             extra_days = bars_to_calendar_days(
@@ -1223,10 +1221,22 @@ def _load_bars(
                 minimum_bars,
                 end_date=start,
             )
-            start_at = min(
+            extended_start = min(
                 start_at,
                 start - timedelta(days=extra_days) if start is not None else start_at,
             )
+            # A window that does not move would only re-download the same bars:
+            # stop and report the residual shortfall instead.
+            if attempts >= 3 or extended_start >= start_at:
+                log.warning(
+                    "Warmup still short of %d pre-start bars for %d symbol(s) after %d download attempt(s): %s",
+                    minimum_bars,
+                    len(deficient),
+                    attempts,
+                    ", ".join(sorted(deficient)[:20]),
+                )
+                break
+            start_at = extended_start
     finally:
         provider.close()
     return [bar for symbol in symbols for bar in by_symbol.get(symbol, ())]

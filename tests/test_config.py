@@ -104,6 +104,16 @@ def test_non_finite_config_values_are_rejected() -> None:
         EngineConfig(event_grace_seconds=math.nan)
 
 
+@pytest.mark.parametrize("value", [math.nan, math.inf])
+def test_non_finite_active_universe_max_age_is_rejected(value: float) -> None:
+    # A NaN limit never compares greater than an age, so a stale persisted
+    # crypto universe would validate forever.
+    from parayabuck.config import CryptoUniverseConfig
+
+    with pytest.raises(ValueError, match="active_universe_max_age_hours"):
+        CryptoUniverseConfig(active_universe_max_age_hours=value)
+
+
 def test_obsolete_timeframe_and_placebo_risk_fields_get_migration_error(tmp_path: Path) -> None:
     raw = _settings()
     raw["engine"] = {"higher_timeframe": "1h"}

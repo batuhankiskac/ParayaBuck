@@ -85,8 +85,9 @@ Events show `account_became_stale` → `account_recovered` transitions (deduplic
 
 ## Universe stale
 
-**What it means**: the active crypto universe file is older than
-`universe.crypto.active_universe_max_age_hours` (12h) or its refresh failed.
+**What it means**: the last crypto universe refresh is overdue (older than
+`runtime.scanner_refresh_hours` + 1h, never below
+`universe.crypto.active_universe_max_age_hours`; default 25h) or its refresh failed.
 Equity has no universe artifact: `universe.equity.symbols` is static, so
 `doctor` reports `universe equity static` and only `universe_crypto` checks can
 fail.

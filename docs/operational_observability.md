@@ -96,8 +96,11 @@ Schema version 1, idempotent migration, WAL.
   - workers: `max(30s, account_poll_interval * 3)` heartbeat age, with the runtime's own exceptions: `pb-trade-updates` is event-driven (no heartbeat age), `pb-signal-adjustment` allows its hourly pass (+ `max(300s, ttl)`), and the market streams are judged by the last delivered bar (`max(180s, ttl)`), equity only during regular hours and only for an enabled market with symbols; all ages are measured as of the snapshot's `written_at` (snapshot age is the heartbeat check's job)
   - queue age: `engine.maximum_queue_age_seconds` (30s)
   - account (DEGRADED): `last_reconciliation_at` older than `60s reconcile interval + observability.snapshot_interval_seconds + engine.account_poll_interval_seconds` (default 60+30+15 = 105s), never below `maximum_account_age_for_entry_seconds * 2`; reconciliation (CRITICAL): `max(300s, account_poll_interval * 20)`
-  - universe: `universe.crypto.active_universe_max_age_hours *3600` (the
-    equity universe is static and has no age)
+  - universe: last refresh older than `max(universe.crypto.active_universe_max_age_hours, runtime.scanner_refresh_hours + 1)` hours
+    (default 25h: the runtime refreshes once per `scanner_refresh_hours`); a scanner failure counts only for a market the
+    runtime marks `scanner_critical` (the equity universe is static and has no age)
+  - risk: an active safety incident is `BLOCKED`, except the shared-worker `*_restart_limit` rows the runtime keeps as an
+    audit trail and never restores (a live one shows as a dead worker)
   - rebalance stuck: 3600s
 - **Overall derivation** precedence: `CRITICAL` > `BLOCKED` > `DEGRADED` > `UNKNOWN` > `OK`.
 - `trading_state` separate concept: `ACTIVE / ENTRY_BLOCKED / REBALANCE_BLOCKED / MARKET_HALTED / CIRCUIT_BREAKER / STOPPED / UNKNOWN`, derived from `RuntimeHealth` + risk latch/market halts. A runtime can be `healthy infrastructure` but `ENTRY_BLOCKED` by risk — distinction visible.

@@ -205,10 +205,6 @@ def _adverse_bps(slippage_bps: float, spread_bps: float) -> float:
     return slippage_bps + spread_bps / 2
 
 
-def _bar_timestamp(bar: Bar) -> datetime:
-    return bar.timestamp
-
-
 def session_date_for(timestamp: datetime, market: Market) -> date:
     """Trading-session date used for daily-loss risk accounting.
 
@@ -808,7 +804,7 @@ class PortfolioBacktestEngine:
         # The history is timestamp-ascending, so the point-in-time cutoff is a
         # bisect and the window is walked backwards: no full-series scan (and
         # no per-bar volume filter) on every pending-order fill attempt.
-        end = bisect_right(history, order.created_at, key=_bar_timestamp)
+        end = bisect_right(history, order.created_at, key=lambda bar: bar.timestamp)
         window: list[float] = []
         for index in range(end - 1, -1, -1):
             volume = history[index].volume

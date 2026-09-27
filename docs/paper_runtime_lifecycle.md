@@ -32,7 +32,7 @@ Inputs: YAML `runtime, engine, alpaca, data, universe, strategy, risk, execution
 
 ## 4. Broker Account & Position Fetch — `execution/alpaca.py:200`, `runtime.py:1735`
 
-Single `broker.account()` returns both account + positions. Cached `_last_account_snapshot/_last_account_at` (`runtime.py:446`). Failure: 429/5xx transient → `TransientStartupError`; 401/403 → permanent `ValueError`; `OwnershipDriftError` → halted. Retry: start path `_is_transient_network_error` → `TransientStartupError`; steady-state `_account_loop` 15s poll. Fail-closed on drift, defer on transient. Telemetry: `circuit_breaker ownership_drift`, `health.account_fresh` gate `maximum_account_age_for_entry_seconds=30`.
+Single `broker.account()` returns both account + positions. Cached `_last_account_snapshot/_last_account_at` (`runtime.py:446`). Failure: 429/5xx transient → `TransientStartupError`; 401/403 → permanent `ValueError`; `OwnershipDriftError` → halted. Retry: start path `_is_transient_network_error` → `TransientStartupError`; steady-state `_account_loop` 15s poll. Fail-closed on drift, defer on transient; persistent drift re-asserts the halt every poll but alerts only on the transition. Telemetry: `circuit_breaker ownership_drift`, `health.account_fresh` gate `maximum_account_age_for_entry_seconds=30`.
 
 ## 5. Persisted State Load & Circuit-Breaker Restore — `runtime.py:1912`
 
@@ -68,7 +68,7 @@ Finalized `Bar` batch after `event_grace_seconds=5.0` coalescing. `portfolio_dec
 
 ## 13. Fill / Update Reconciliation — `execution/alpaca_updates.py:33`, `runtime.py:1960`, `execution/alpaca.py:461`
 
-`TradingStream TradeUpdate` primary + REST `GetOrderById` fallback. `portfolio_orders`/`portfolio_fills` (`activity_id PK`) + `managed_positions` + `reconcile_watermarks`. Failure: unmanaged update → warning + reconcile; stale `submitting` no broker → `canceled`; missing `avg_price` → stays `submitted`. Stream `pb-trade-updates` with restart backoff `2^(n-1)` ≤16s. Idempotent, loss-less. Telemetry: `order_rejected/ambiguous_order`, `_persist_risk_state` after fill.
+`TradingStream TradeUpdate` primary + REST `GetOrderById` fallback. `portfolio_orders`/`portfolio_fills` (`activity_id PK`) + `managed_positions` + `reconcile_watermarks`. Failure: unmanaged update → warning + reconcile; stale `submitting` no broker → `canceled`; missing `avg_price` → stays `submitted`. Stream `pb-trade-updates` with restart backoff `2^(n-1)` ≤16s, waited on `_stop_event` so `stop()` interrupts it; a failure marks the runtime `degraded` and the next retry restores `running`/`warming_up` when no circuit breaker is set (>5 restarts → `pb-trade-updates_restart_limit` halt). Idempotent, loss-less. Telemetry: `order_rejected/ambiguous_order`, `_persist_risk_state` after fill.
 
 ## 14. Monitoring, Health & Shutdown/Restart — `runtime.py:583`, `monitoring/alerts.py:1`, `monitoring/metrics.py:1`, `backup.py:1`, `runtime.py:1641`
 

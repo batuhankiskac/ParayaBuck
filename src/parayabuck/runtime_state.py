@@ -54,12 +54,16 @@ class RuntimeMarketState:
     def has_data_gaps(self) -> bool:
         return bool(self._not_ready)
 
+    # health() calls these off the decision thread while ingest/repair resize
+    # _not_ready under the ingestion lock: iterate a one-call C-level
+    # frozenset snapshot so a concurrent add/discard cannot raise
+    # "Set changed size during iteration".
     def has_data_gaps_for_market(self, market: Market) -> bool:
-        return any(("/" in symbol) == (market == Market.CRYPTO) for symbol, _timeframe in self._not_ready)
+        return any(("/" in symbol) == (market == Market.CRYPTO) for symbol, _timeframe in frozenset(self._not_ready))
 
     def has_data_gaps_for_symbol(self, symbol: str, market: Market | None = None) -> bool:
         wanted = canonical_symbol(symbol, market)
-        return any(candidate == wanted for candidate, _timeframe in self._not_ready)
+        return any(candidate == wanted for candidate, _timeframe in frozenset(self._not_ready))
 
     def ingest_closed_bars(self, bars: list[Bar]) -> IngestionResult:
         ordered = tuple(sorted(bars, key=lambda item: (item.timestamp, item.symbol)))

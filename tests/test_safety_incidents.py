@@ -70,6 +70,32 @@ def test_ownership_drift_halt_survives_session_day_restart(tmp_path: Path) -> No
     ledger.close()
 
 
+def test_persistent_ownership_drift_alerts_only_on_transition(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The account loop re-enters the drift halt every poll while drift
+    persists: the halt state is re-asserted each time, but the operator
+    alert and circuit-breaker metric fire only once."""
+    import parayabuck.runtime as runtime_module
+
+    emitted: list[str] = []
+    recorded: list[str] = []
+    monkeypatch.setattr(runtime_module.alerts, "emit", lambda kind, **_: emitted.append(kind))
+    monkeypatch.setattr(runtime_module.runtime_metrics_store, "record_event", recorded.append)
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    runtime = _runtime_with_ledger(ledger)
+
+    for _ in range(3):
+        runtime._halt_for_ownership_drift()
+        runtime._state = "running"
+        runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._halt_for_ownership_drift()
+
+    assert emitted == ["circuit_breaker"]
+    assert recorded == ["circuit_breaker"]
+    assert runtime._state == "halted"
+    assert set(runtime._entry_risk_latch.values()) == {"ownership_drift"}
+    ledger.close()
+
+
 def test_persistent_incident_restores_after_midnight_restart(tmp_path: Path) -> None:
     """A halt persisted at 23:59 (ambiguous_order_state) is restored on a
     00:01 restart; restore reads incidents, not the today session row."""
@@ -583,6 +609,30 @@ def test_risk_epoch_reset_evaluates_the_latch_once(tmp_path: Path) -> None:
     # evaluation inside _persist_risk_state — never three.
     assert writes == ["portfolio_drawdown_halt", "portfolio_drawdown_halt"]
     assert runtime._entry_risk_latch[Market.EQUITY] is None
+    ledger.close()
+
+
+def test_risk_epoch_reset_reconciles_under_the_reconcile_lock(tmp_path: Path) -> None:
+    """The operator epoch reset runs from a web thread while pb-reconcile may
+    be mid-reconcile; its own broker reconcile must hold _reconcile_lock."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    broker = _EpochBroker(equity=94_000, peak=100_000)
+    runtime = _epoch_runtime(ledger, broker)
+    lock = threading.Lock()
+    runtime._reconcile_lock = lock  # type: ignore[attr-defined]
+    held: list[bool] = []
+    real_reconcile = broker.reconcile
+
+    def observing_reconcile() -> dict[str, list[object]]:
+        held.append(lock.locked())
+        return real_reconcile()
+
+    broker.reconcile = observing_reconcile  # type: ignore[method-assign]
+
+    runtime.start_new_risk_epoch()
+
+    assert held == [True]
+    assert not lock.locked()
     ledger.close()
 
 

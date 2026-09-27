@@ -558,6 +558,147 @@ def test_queue_overflow_never_evicts_final_primary_bar() -> None:
     assert runtime._dropped_events == 1
 
 
+def test_queue_overflow_breaker_marks_runtime_halted() -> None:
+    """The overflow breaker alerts "runtime halted"; the runtime's own state
+    must agree so health() reports halted and reset_safety_lock can restore
+    running."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._events = _EventQueue(maxsize=1)
+    runtime._dropped_events = 0
+    runtime._coalesced_events = 0
+    runtime._oldest_received_at = None
+    runtime._circuit_breaker_reason = None
+    runtime._state = "running"
+    timestamp = datetime.now(UTC)
+    runtime._events.put_nowait(
+        _Event("primary", Bar(timestamp, "AAPL", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY), timestamp)
+    )
+
+    runtime._put_event("primary", Bar(timestamp, "MSFT", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY))
+
+    assert runtime._circuit_breaker_reason == "final_market_event_queue_overflow"
+    assert runtime._state == "halted"
+
+
+class _ResizingDict(dict):  # type: ignore[type-arg]
+    """Simulates the universe-refresh thread resizing the dict while a
+    reader iterates its live view."""
+
+    def items(self):  # type: ignore[no-untyped-def]
+        for index, item in enumerate(super().items()):
+            self[f"late-{index}"] = 0
+            yield item
+
+
+def test_health_survives_concurrent_universe_retry_dict_resize() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    now = datetime.now(UTC)
+    runtime.symbols = ["BTC/USD"]
+    runtime.config = SimpleNamespace(
+        account_poll_interval_seconds=15,
+        maximum_account_age_for_entry_seconds=30,
+        maximum_queue_age_seconds=30,
+    )
+    runtime._workers = {
+        "pb-decisions": WorkerHealth(now, now, alive=True),
+        "pb-account": WorkerHealth(now, now, alive=True),
+        "pb-trade-updates": WorkerHealth(now, now, alive=True),
+        "pb-crypto": WorkerHealth(now, now, last_event_at=now, alive=True),
+    }
+    runtime._running = True
+    runtime._state = "running"
+    runtime._last_account_at = now
+    runtime._oldest_received_at = None
+    runtime._circuit_breaker_reason = None
+    runtime._events = SimpleNamespace(qsize=lambda: 0)
+    runtime._dropped_events = 0
+    runtime._coalesced_events = 0
+    runtime.market_state = SimpleNamespace(
+        has_data_gaps_for_market=lambda _market: False,
+        has_data_gaps_for_symbol=lambda _symbol: False,
+    )
+    runtime._universe_retry_at = _ResizingDict({Market.CRYPTO: time.monotonic() + 60.0})
+    runtime._universe_retry_attempt = _ResizingDict({Market.CRYPTO: 2})
+
+    health = runtime.health()
+
+    assert health.universe_refresh["retry_attempt"] == {"crypto": 2}
+    assert set(health.universe_refresh["retry_at"]) == {"crypto"}
+
+
+class _ClearingHalts(dict):  # type: ignore[type-arg]
+    """Simulates another thread clearing the halt right after it is read."""
+
+    def get(self, key, default=None):  # type: ignore[no-untyped-def]
+        value = super().get(key, default)
+        self[key] = None
+        return value
+
+
+def test_entry_readiness_never_reports_a_concurrently_cleared_halt_as_none() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.config = SimpleNamespace(maximum_queue_age_seconds=30, maximum_account_age_for_entry_seconds=300)
+    runtime._last_account_at = datetime.now(UTC)
+    runtime._circuit_breaker_reason = None
+    runtime._workers = {}
+    runtime._state = "running"
+    runtime._market_entry_halts = _ClearingHalts({Market.CRYPTO: "crypto_protection_failure"})
+
+    reasons = runtime._entry_readiness_reasons(Market.CRYPTO, health=SimpleNamespace(queue_age_seconds=0))
+
+    assert reasons == ("crypto_protection_failure",)
+    assert runtime._entry_readiness_reasons(Market.CRYPTO, health=SimpleNamespace(queue_age_seconds=0)) == ()
+
+
+def test_failed_no_trade_journal_emit_is_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A broken journal must not silently drop the operator's "why did
+    nothing trade" record: the readiness-blocked path logs the failure."""
+    from parayabuck.monitoring import journal as journal_module
+
+    def broken_emit(_event: object) -> None:
+        raise OSError("journal unwritable")
+
+    monkeypatch.setattr(journal_module, "emit_journal", broken_emit)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+    runtime._portfolio_runtimes = (
+        SimpleNamespace(
+            market=Market.CRYPTO,
+            strategy=SimpleNamespace(timeframe="1d", name="synthetic"),
+            symbols=("BTC/USD",),
+        ),
+    )
+    runtime._entry_readiness_reasons = lambda _market: ("account_snapshot_stale",)
+    bar = Bar(datetime(2025, 1, 2, tzinfo=UTC), "BTC/USD", "1d", 100, 101, 99, 100, 1_000, Market.CRYPTO)
+
+    runtime._process_portfolio_timestamp([bar])
+
+    assert "No-trade journal emit failed for market=crypto" in caplog.text
+
+
+class _ResizingSet(set):  # type: ignore[type-arg]
+    """Simulates the decision thread adding a gap while health() iterates
+    the live set."""
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        for index, item in enumerate(super().__iter__()):
+            self.add((f"LATE{index}", "5m"))
+            yield item
+
+
+def test_market_state_gap_queries_survive_concurrent_not_ready_resize() -> None:
+    state = RuntimeMarketState(EngineConfig())
+    state._not_ready = _ResizingSet({("AAPL", "5m"), ("BTC/USD", "1h")})
+
+    assert state.has_data_gaps_for_market(Market.CRYPTO) is True
+    assert state.has_data_gaps_for_symbol("MSFT", Market.EQUITY) is False
+    assert state.has_data_gaps_for_symbol("AAPL", Market.EQUITY) is True
+
+
 def test_equity_hour_buckets_anchor_at_0930_new_york_across_dst() -> None:
     aggregator = TimeframeAggregator("1h")
     winter = datetime(2025, 1, 2, 15, 31, tzinfo=UTC)  # 10:31 ET

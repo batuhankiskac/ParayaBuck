@@ -177,8 +177,6 @@ _WARMUP_RETRY_MAX_EXPONENT = 6
 # How often the split-adjustment reconciler compares raw vs split-adjusted
 # daily tails (hourly; a split is applied at most one check after it trades).
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
-# Calendar days of raw/splits daily tails fetched per batched verification.
-_SIGNAL_ADJUSTMENT_LOOKBACK_DAYS = 14
 # Safety margin added ON TOP of the strategy history window so the batched
 # splits fetch always spans the full required signal window (never a short
 # tail standing in for a long history).
@@ -192,6 +190,14 @@ _STREAM_WORKER_BY_MARKET = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypt
 _MARKET_BY_STREAM_WORKER = {worker: market for market, worker in _STREAM_WORKER_BY_MARKET.items()}
 
 
+def _reservation_sort_key(key: tuple[Any, str]) -> tuple[str, str]:
+    """Deterministic (market, symbol) order for reserved position keys."""
+    return (key[0].value if hasattr(key[0], "value") else str(key[0]), key[1])
+
+
+# Runtime states that block entries outright; a transient stream-worker
+# blip must never overwrite one of them with "degraded".
+_ENTRY_BLOCKING_STATES = frozenset({"halted", "error", "stop_failed", "stopping", "stopped"})
 _RECONCILIATION_INCIDENT_REASONS = frozenset({"reconciliation_failed", "reconciliation_bug_suspected"})
 
 
@@ -656,124 +662,122 @@ class EngineRuntime:
             queue_age=queue_age,
             workers=workers,
             market_health=market_health,
-            scanner_status=scanner_status,
         )
 
     def capacity_health(self) -> dict[str, object]:
         """Fresh read-only account capacity for the operator dashboard."""
+        # The broker/ledger reads are side-effect-free and run OUTSIDE the
+        # portfolio lock: holding it across three REST round-trips would
+        # stall order submission and rebalance advancement behind Alpaca
+        # latency on every dashboard poll. _portfolio_runtimes is an
+        # immutable tuple assigned once at start.
+        runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
+        if not runtimes:
+            return {"unavailable": True, "reason": "portfolio runtime not started"}
+        admission = runtimes[0].current_buy_capacity()
+        account = admission.account
+        broker_orders = self.broker.working_orders()
+        local_orders = self._portfolio_repository.open_orders(self.broker.account_id or "unknown")
+        # risk_overlay is swapped under this lock by _apply_runtime_universes.
         with self._portfolio_lock:
-            runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
-            if not runtimes:
-                return {"unavailable": True, "reason": "portfolio runtime not started"}
-            admission = runtimes[0].current_buy_capacity()
-            account = admission.account
-            broker_orders = self.broker.working_orders()
-            claims: dict[tuple[Market, str], set[str]] = {}
-            for position in account.positions:
-                if not position.is_flat:
-                    claims.setdefault((position.market, canonical_symbol(position.symbol, position.market)), set()).add(
-                        "POSITION"
-                    )
-            local_orders = self._portfolio_repository.open_orders(self.broker.account_id or "unknown")
-            for order in local_orders:
-                key = (order.market, canonical_symbol(order.symbol, order.market))
-                claims.setdefault(key, set()).add("RESERVED")
-                if str(getattr(order.side, "value", order.side)).lower() == "buy":
-                    claims[key].add("WORKING_OPENING")
-            for order in broker_orders:
-                symbol = str(self.broker._field(order, "symbol", "") or "")
-                if not symbol:
-                    raise ValueError("Broker OPEN order missing symbol")
-                market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
-                key = (market, canonical_symbol(symbol, market))
-                raw_side = self.broker._field(order, "side", "")
-                side = str(getattr(raw_side, "value", raw_side)).lower()
-                if side == "buy":
-                    claims.setdefault(key, set()).add("WORKING_OPENING")
-                elif side == "sell":
-                    claims.setdefault(key, set()).add("WORKING_ORDER")
-                else:
-                    # Unknown OPEN side retains conservative capacity behavior.
-                    claims.setdefault(key, set()).add("WORKING_UNKNOWN")
-            global_cap = runtimes[0].risk_overlay.limits.maximum_positions
-            crypto_cap = runtimes[0].risk_overlay.limits.maximum_crypto_positions
-            effective_global = len(claims)
-            effective_crypto = sum(market == Market.CRYPTO for market, _ in claims)
-            crypto_positions = sum(
-                position.market == Market.CRYPTO and not position.is_flat for position in account.positions
-            )
-            open_positions = sum(not position.is_flat for position in account.positions)
-            opening_keys = {
-                key for key, sources in claims.items() if "WORKING_OPENING" in sources and "POSITION" not in sources
-            }
-            # A fully liquidated account reports equity 0.0; the sleeve
-            # percentages are undefined, not infinite, so publish None
-            # instead of losing the whole capacity sample to a ZeroDivisionError.
-            equity = account.equity
-            has_equity = equity > 0
-            return {
-                "sampled_at": datetime.now(UTC).isoformat(),
-                "maximum_positions": global_cap,
-                "positions_count": open_positions,
-                "effective_slots": effective_global,
-                "broker_working_order_count": len(broker_orders),
-                "position_count": open_positions,
-                "effective_global_slot_claims": effective_global,
-                "global_slot_cap": global_cap,
-                "global_slots_available": max(0, global_cap - effective_global),
-                "crypto_position_count": crypto_positions,
-                "effective_crypto_slot_claims": effective_crypto,
-                "crypto_slot_cap": crypto_cap,
-                "crypto_slots_available": max(0, crypto_cap - effective_crypto),
-                "working_opening_order_count": len(opening_keys),
-                "slot_claims": [
-                    {"market": market.value, "symbol": symbol, "sources": sorted(sources)}
-                    for (market, symbol), sources in sorted(
-                        claims.items(), key=lambda item: (item[0][0].value, item[0][1])
-                    )
-                ],
-                "target_gross_pct": runtimes[0].risk_overlay.limits.maximum_gross * 100,
-                "realized_gross_pct": admission.realized_gross / equity * 100 if has_equity else None,
-                "available_gross_buy_headroom": admission.gross_headroom,
-                "committed_buy_notional": admission.committed_buy_notional,
-                "cash_ratio_pct": account.cash / equity * 100 if has_equity else None,
-                "available_cash_buy_headroom": admission.cash_headroom,
-                "equity_sleeve_pct": (
-                    sum(
-                        position.market_value for position in account.positions if position.market == Market.EQUITY
-                    )
-                    / equity
-                    * 100
-                    if has_equity
-                    else None
-                ),
-                "crypto_sleeve_pct": (
-                    sum(
-                        position.market_value for position in account.positions if position.market == Market.CRYPTO
-                    )
-                    / equity
-                    * 100
-                    if has_equity
-                    else None
-                ),
-                "suppression_reasons": {
-                    runtime.market.value: runtime.last_buy_admission.reason
-                    for runtime in runtimes
-                    if runtime.last_buy_admission is not None and runtime.last_buy_admission.reason
-                },
-                "halt_reasons": {
-                    market.value: reason
-                    for market, reason in getattr(self, "_market_entry_halts", {}).items()
-                    if reason
-                },
-                "reconciliation_status": (
-                    "failed"
-                    if getattr(self, "_reconcile_failed", False)
-                    else "complete"
-                    if getattr(self, "_last_reconciliation_at", None) is not None
-                    else "pending"
-                ),
-            }
+            limits = runtimes[0].risk_overlay.limits
+        claims: dict[tuple[Market, str], set[str]] = {}
+        for position in account.positions:
+            if not position.is_flat:
+                claims.setdefault((position.market, canonical_symbol(position.symbol, position.market)), set()).add(
+                    "POSITION"
+                )
+        for order in local_orders:
+            key = (order.market, canonical_symbol(order.symbol, order.market))
+            claims.setdefault(key, set()).add("RESERVED")
+            if str(getattr(order.side, "value", order.side)).lower() == "buy":
+                claims[key].add("WORKING_OPENING")
+        for order in broker_orders:
+            symbol = str(self.broker._field(order, "symbol", "") or "")
+            if not symbol:
+                raise ValueError("Broker OPEN order missing symbol")
+            market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+            key = (market, canonical_symbol(symbol, market))
+            raw_side = self.broker._field(order, "side", "")
+            side = str(getattr(raw_side, "value", raw_side)).lower()
+            if side == "buy":
+                claims.setdefault(key, set()).add("WORKING_OPENING")
+            elif side == "sell":
+                claims.setdefault(key, set()).add("WORKING_ORDER")
+            else:
+                # Unknown OPEN side retains conservative capacity behavior.
+                claims.setdefault(key, set()).add("WORKING_UNKNOWN")
+        global_cap = limits.maximum_positions
+        crypto_cap = limits.maximum_crypto_positions
+        effective_global = len(claims)
+        effective_crypto = sum(market == Market.CRYPTO for market, _ in claims)
+        crypto_positions = sum(
+            position.market == Market.CRYPTO and not position.is_flat for position in account.positions
+        )
+        open_positions = sum(not position.is_flat for position in account.positions)
+        opening_keys = {
+            key for key, sources in claims.items() if "WORKING_OPENING" in sources and "POSITION" not in sources
+        }
+        # A fully liquidated account reports equity 0.0; the sleeve
+        # percentages are undefined, not infinite, so publish None
+        # instead of losing the whole capacity sample to a ZeroDivisionError.
+        equity = account.equity
+        has_equity = equity > 0
+        return {
+            "sampled_at": datetime.now(UTC).isoformat(),
+            "maximum_positions": global_cap,
+            "positions_count": open_positions,
+            "effective_slots": effective_global,
+            "broker_working_order_count": len(broker_orders),
+            "position_count": open_positions,
+            "effective_global_slot_claims": effective_global,
+            "global_slot_cap": global_cap,
+            "global_slots_available": max(0, global_cap - effective_global),
+            "crypto_position_count": crypto_positions,
+            "effective_crypto_slot_claims": effective_crypto,
+            "crypto_slot_cap": crypto_cap,
+            "crypto_slots_available": max(0, crypto_cap - effective_crypto),
+            "working_opening_order_count": len(opening_keys),
+            "slot_claims": [
+                {"market": market.value, "symbol": symbol, "sources": sorted(sources)}
+                for (market, symbol), sources in sorted(claims.items(), key=lambda item: (item[0][0].value, item[0][1]))
+            ],
+            "target_gross_pct": limits.maximum_gross * 100,
+            "realized_gross_pct": admission.realized_gross / equity * 100 if has_equity else None,
+            "available_gross_buy_headroom": admission.gross_headroom,
+            "committed_buy_notional": admission.committed_buy_notional,
+            "cash_ratio_pct": account.cash / equity * 100 if has_equity else None,
+            "available_cash_buy_headroom": admission.cash_headroom,
+            "equity_sleeve_pct": (
+                sum(position.market_value for position in account.positions if position.market == Market.EQUITY)
+                / equity
+                * 100
+                if has_equity
+                else None
+            ),
+            "crypto_sleeve_pct": (
+                sum(position.market_value for position in account.positions if position.market == Market.CRYPTO)
+                / equity
+                * 100
+                if has_equity
+                else None
+            ),
+            "suppression_reasons": {
+                runtime.market.value: runtime.last_buy_admission.reason
+                for runtime in runtimes
+                if runtime.last_buy_admission is not None and runtime.last_buy_admission.reason
+            },
+            "halt_reasons": {
+                market.value: reason for market, reason in getattr(self, "_market_entry_halts", {}).items() if reason
+            },
+            "reconciliation_status": (
+                "failed"
+                if getattr(self, "_reconcile_failed", False)
+                else "complete"
+                if getattr(self, "_last_reconciliation_at", None) is not None
+                else "pending"
+            ),
+        }
 
     def _snapshot_health_state(
         self,
@@ -838,13 +842,7 @@ class EngineRuntime:
             ttl = _SIGNAL_ADJUSTMENT_CHECK_SECONDS + max(300.0, heartbeat_ttl)
             return (now - worker.last_heartbeat).total_seconds() <= ttl
         if name in _MARKET_BY_STREAM_WORKER:
-            market = _MARKET_BY_STREAM_WORKER[name]
-            event_required = market == Market.CRYPTO or is_regular_equity_time(now)
-            if not event_required:
-                return True
-            return bool(
-                worker.last_event_at and (now - worker.last_event_at).total_seconds() <= max(180.0, heartbeat_ttl)
-            )
+            return self._stream_worker_delivering(_MARKET_BY_STREAM_WORKER[name], worker, now, heartbeat_ttl)
         return (now - worker.last_heartbeat).total_seconds() <= heartbeat_ttl
 
     def _build_market_health(
@@ -866,21 +864,8 @@ class EngineRuntime:
             market_not_ready = symbols & not_ready_symbols
             ready_symbol_count = len(symbols) - len(market_not_ready)
             ready = not enabled or not symbols or ready_symbol_count > 0
-            event_required = market == Market.CRYPTO or is_regular_equity_time(now)
             stream_healthy = (
-                not enabled
-                or not symbols
-                or bool(
-                    worker
-                    and worker.alive
-                    and (
-                        not event_required
-                        or (
-                            worker.last_event_at is not None
-                            and (now - worker.last_event_at).total_seconds() <= max(180.0, heartbeat_ttl)
-                        )
-                    )
-                )
+                not enabled or not symbols or self._stream_worker_delivering(market, worker, now, heartbeat_ttl)
             )
             market_health[market.value] = {
                 "enabled": enabled,
@@ -908,11 +893,15 @@ class EngineRuntime:
         queue_age: float,
         workers: dict[str, WorkerHealth],
         market_health: dict[str, dict[str, object]],
-        scanner_status: dict[str, str],
     ) -> RuntimeHealth:
         last_reconciliation = getattr(self, "_last_reconciliation_at", None)
         last_universe_refresh = getattr(self, "_last_universe_refresh_at", None)
         next_universe_refresh = getattr(self, "_next_universe_refresh_at", None)
+        # The universe-refresh thread resizes these dicts without a lock and
+        # health() runs off that thread: iterate one-call C copies, not the
+        # live dicts, so a concurrent insert/pop cannot raise mid-iteration.
+        retry_at = dict(getattr(self, "_universe_retry_at", {}))
+        retry_attempt = dict(getattr(self, "_universe_retry_attempt", {}))
         return RuntimeHealth(
             state=state,
             healthy=healthy,
@@ -945,11 +934,9 @@ class EngineRuntime:
                     market.value: (
                         datetime.now(UTC) + timedelta(seconds=max(0.0, deadline - time.monotonic()))
                     ).isoformat()
-                    for market, deadline in getattr(self, "_universe_retry_at", {}).items()
+                    for market, deadline in retry_at.items()
                 },
-                "retry_attempt": {
-                    market.value: attempt for market, attempt in getattr(self, "_universe_retry_attempt", {}).items()
-                },
+                "retry_attempt": {market.value: attempt for market, attempt in retry_attempt.items()},
             },
             entry_risk_latch={
                 market.value: reason for market, reason in getattr(self, "_entry_risk_latch", {}).items()
@@ -2294,7 +2281,12 @@ class EngineRuntime:
         resumes the halt until an operator reconciles the inventory. Ownership
         drift halts orders entirely: a broken ownership model must not be
         traded against even with risk-reducing sells.
+
+        The account loop re-enters this on every poll while drift persists:
+        the state assertions re-apply each time, but the log/metric/alert fire
+        only on the transition into the ownership-drift halt.
         """
+        first = getattr(self, "_circuit_breaker_reason", None) != "ownership_drift"
         with getattr(self, "_state_lock", threading.RLock()):
             self._state = "halted"
         self._circuit_breaker_reason = "ownership_drift"
@@ -2304,6 +2296,8 @@ class EngineRuntime:
         with getattr(self, "_risk_state_lock", threading.Lock()):
             self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}), "ownership_drift")
         self._persist_safety_state("ownership_drift")
+        if not first:
+            return
         log.critical("Ownership drift detected; runtime halted and safety state persisted")
         runtime_metrics_store.record_event("circuit_breaker")
         alerts.emit(
@@ -2556,10 +2550,7 @@ class EngineRuntime:
             ordered_reservations = tuple(
                 sorted(
                     reserved_position_keys,
-                    key=lambda key: (
-                        key[0].value if hasattr(key[0], "value") else str(key[0]),
-                        key[1],
-                    ),
+                    key=_reservation_sort_key,
                 )
             )
             result = self._advance_portfolio_rebalance(
@@ -2688,7 +2679,9 @@ class EngineRuntime:
                     worker.restart_count += 1
                     market = _MARKET_BY_STREAM_WORKER.get(name)
                     if market is None:
-                        self._state = "degraded"
+                        with getattr(self, "_state_lock", threading.RLock()):
+                            if self._state not in _ENTRY_BLOCKING_STATES:
+                                self._state = "degraded"
                     if worker.restart_count > 5:
                         if market is None:
                             self._state = "halted"
@@ -2722,8 +2715,19 @@ class EngineRuntime:
                         delay,
                         exc,
                     )
-                    time.sleep(delay)
+                    # Interruptible backoff: stop() joins stream workers with
+                    # a 5 s timeout, shorter than the 16 s max delay.
+                    if self._stop_event.wait(delay):
+                        return
                     worker.last_heartbeat = datetime.now(UTC)
+                    # A shared-worker blip marks the runtime "degraded" above;
+                    # un-pin it before retrying so one transient failure does
+                    # not hold /readyz at 503 until a process restart. Only a
+                    # breaker-free degraded state is restored (never a halt),
+                    # to the same running/warming_up choice start() makes.
+                    with getattr(self, "_state_lock", threading.RLock()):
+                        if self._state == "degraded" and getattr(self, "_circuit_breaker_reason", None) is None:
+                            self._state = "running" if self._has_ready_symbols() else "warming_up"
         finally:
             worker.alive = False
 
@@ -2860,6 +2864,10 @@ class EngineRuntime:
             elif result == "replaced":
                 self._dropped_events += 1
             elif result == "overflow":
+                # Plain assignment under the stats lock (no nested _state_lock
+                # from the stream threads), matching every other breaker site
+                # that pairs the reason with the halted state.
+                self._state = "halted"
                 self._circuit_breaker_reason = "final_market_event_queue_overflow"
                 self._dropped_events += 1
                 runtime_metrics_store.record_event("circuit_breaker")
@@ -3246,7 +3254,13 @@ class EngineRuntime:
                     )
                     emit_journal(evt)
                 except Exception:
-                    pass
+                    # Best-effort, but never silent: this is the operator's
+                    # durable "why did nothing trade" record.
+                    log.warning(
+                        "No-trade journal emit failed for market=%s",
+                        getattr(portfolio_runtime.market, "value", portfolio_runtime.market),
+                        exc_info=True,
+                    )
                 continue
             # basis) must not freeze the whole decision: risk-reducing SELL
             # exits still run, only entries are blocked. The equity signal
@@ -3292,10 +3306,7 @@ class EngineRuntime:
                             kwargs["reserved_position_keys"] = tuple(
                                 sorted(
                                     reserved_position_keys,
-                                    key=lambda key: (
-                                        key[0].value if hasattr(key[0], "value") else str(key[0]),
-                                        key[1],
-                                    ),
+                                    key=_reservation_sort_key,
                                 )
                             )
                         portfolio_result = portfolio_runtime.process_closed_bars(relevant, **kwargs)
@@ -3351,7 +3362,6 @@ class EngineRuntime:
                         strategy=portfolio_runtime.strategy.name,
                         error=str(exc),
                         current_state={"market": portfolio_runtime.market.value},
-                        provider_action=lambda exc=exc: (_ for _ in ()).throw(exc),  # type: ignore[misc]
                     )
                 else:
                     automate_incident_recovery(
@@ -3625,10 +3635,7 @@ class EngineRuntime:
                     catch_up_kwargs["reserved_position_keys"] = tuple(
                         sorted(
                             reserved_position_keys,
-                            key=lambda key: (
-                                key[0].value if hasattr(key[0], "value") else str(key[0]),
-                                key[1],
-                            ),
+                            key=_reservation_sort_key,
                         )
                     )
                 result = portfolio_runtime.startup_catch_up(**catch_up_kwargs)
@@ -3652,7 +3659,7 @@ class EngineRuntime:
         if health is None:
             health = self.health()
         reasons: list[str] = []
-        if self._state in {"halted", "error", "stop_failed", "stopping", "stopped"}:
+        if self._state in _ENTRY_BLOCKING_STATES:
             reasons.append(f"runtime_state:{self._state}")
         if health.queue_age_seconds > self.config.maximum_queue_age_seconds:
             reasons.append("event_queue_stale")
@@ -3695,9 +3702,11 @@ class EngineRuntime:
         dead_workers = [name for name, worker in self._workers.items() if name in shared_workers and not worker.alive]
         if dead_workers:
             reasons.append("worker_unavailable:" + ",".join(sorted(dead_workers)))
-        market_halts = getattr(self, "_market_entry_halts", {})
-        if market is not None and market_halts.get(market):
-            reasons.append(str(market_halts[market]))
+        # One atomic read: writers clear halts under _state_lock on other
+        # threads, so a check-then-index pair could append the string "None".
+        halt_reason = getattr(self, "_market_entry_halts", {}).get(market) if market is not None else None
+        if halt_reason:
+            reasons.append(str(halt_reason))
         return tuple(reasons)
 
     def _engine_has_market_gap(self, market: Market) -> bool:
@@ -3976,24 +3985,20 @@ class EngineRuntime:
                         return True
                 else:
                     return True
-        adjusted: dict[str, list[Any]] | None = None
-        last_exc: BaseException | None = None
+        # Every loop exit either breaks with ``adjusted`` assigned or returns
+        # False from the except branch (always on the second attempt).
+        adjusted: dict[str, list[Any]] = {}
         for attempt in range(2):
             try:
                 adjusted = history_client.get_bars_batch(symbols, "1d", start=start, end=end, adjustment="splits")
-                last_exc = None
                 break
             except Exception as exc:
-                last_exc = exc
                 if not _is_transient_network_error(exc) or attempt == 1:
                     self._record_signal_adjustment_failure(f"provider fetch failed: {exc}")
                     return False
                 # Transient: bounded retry with short backoff.
                 time.sleep(0.5 * (attempt + 1))
                 continue
-        if adjusted is None:
-            self._record_signal_adjustment_failure(f"provider fetch failed: {last_exc}")
-            return False
         inadequate = [
             symbol
             for symbol in symbols
@@ -4405,22 +4410,26 @@ class EngineRuntime:
                 "Cannot reset the risk epoch while a circuit breaker is active "
                 f"({self._circuit_breaker_reason}); resolve that incident first"
             )
-        try:
-            report = ReconciliationReport.from_result(self.broker.reconcile())
-        except Exception as exc:
-            self._circuit_breaker_reason = "reconciliation_failed"
-            self._reconcile_failed = True
-            self._persist_reconciliation_incident("reconciliation_failed")
-            raise RuntimeError(f"Cannot reset the risk epoch before reconciliation succeeds: {exc}") from exc
-        if report.has_drift:
-            self._circuit_breaker_reason = "reconciliation_failed"
-            self._reconcile_failed = True
-            self._persist_reconciliation_incident("reconciliation_failed")
-            raise RuntimeError(
-                f"Cannot reset the risk epoch while reconciliation reports drift: {report.drift_categories}"
-            )
-        self._last_reconciliation_at = datetime.now(UTC)
-        self._clear_reconciliation_incidents()
+        # Serialize against pb-reconcile and reset_safety_lock: the broker's
+        # reconcile holds no lock of its own, and two interleaved runs would
+        # race stop restores, order cancels and ledger writes.
+        with getattr(self, "_reconcile_lock", threading.Lock()):
+            try:
+                report = ReconciliationReport.from_result(self.broker.reconcile())
+            except Exception as exc:
+                self._circuit_breaker_reason = "reconciliation_failed"
+                self._reconcile_failed = True
+                self._persist_reconciliation_incident("reconciliation_failed")
+                raise RuntimeError(f"Cannot reset the risk epoch before reconciliation succeeds: {exc}") from exc
+            if report.has_drift:
+                self._circuit_breaker_reason = "reconciliation_failed"
+                self._reconcile_failed = True
+                self._persist_reconciliation_incident("reconciliation_failed")
+                raise RuntimeError(
+                    f"Cannot reset the risk epoch while reconciliation reports drift: {report.drift_categories}"
+                )
+            self._last_reconciliation_at = datetime.now(UTC)
+            self._clear_reconciliation_incidents()
         account = self.broker.account()  # fresh authoritative snapshot
         account_id = self.broker.account_id or "unknown"
         new_baseline = float(account.equity)
@@ -4666,17 +4675,30 @@ class EngineRuntime:
                 time.sleep(0.05)
         return self._stream_worker_delivering(market, worker)
 
-    def _stream_worker_delivering(self, market: Market, worker: WorkerHealth | None) -> bool:
+    def _stream_worker_delivering(
+        self,
+        market: Market,
+        worker: WorkerHealth | None,
+        now: datetime | None = None,
+        heartbeat_ttl: float | None = None,
+    ) -> bool:
+        """Single source of truth for market stream-worker liveness.
+
+        Shared by the runtime health gate, the per-market health panel and
+        the verified-reconnect check so they can never disagree.
+        """
         if worker is None or not worker.alive:
             return False
-        now = datetime.now(UTC)
+        if now is None:
+            now = datetime.now(UTC)
         event_required = market == Market.CRYPTO or is_regular_equity_time(now)
         if not event_required:
             return True
         last_event = worker.last_event_at
         if last_event is None:
             return False
-        heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
+        if heartbeat_ttl is None:
+            heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
         return (now - last_event).total_seconds() <= max(180.0, heartbeat_ttl)
 
     def _rebalance_state_reconciled(self, market: Market) -> bool:

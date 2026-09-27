@@ -442,7 +442,9 @@ class EngineManager:
             self.invalidate_live_arming()
             raise
         try:
-            warning = _tracked_secret_warning(Path.cwd())
+            # Never memoized: a secret committed after import must still block
+            # this start, so the gate rescans on every attempt.
+            warning = _scan_tracked_secrets(Path.cwd())
             if warning:
                 raise ValueError(warning)
             cfg = load_config(str(self.config_path))
@@ -1225,7 +1227,11 @@ _SECRET_WARNING_CACHE: dict[Path, str | None] = {}
 
 
 def _tracked_secret_warning(root: Path) -> str | None:
-    """Scan once per resolved root — four EngineManagers are built at import."""
+    """Constructor-time warning, scanned once per resolved root.
+
+    Four EngineManagers are built at import; the engine-start gate calls
+    _scan_tracked_secrets directly so it never sees this memo.
+    """
     resolved = root.resolve()
     if resolved not in _SECRET_WARNING_CACHE:
         _SECRET_WARNING_CACHE[resolved] = _scan_tracked_secrets(resolved)

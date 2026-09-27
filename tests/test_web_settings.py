@@ -747,6 +747,60 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
     assert meta["crypto"] is None  # disabled strategy exposes no metadata
 
 
+def test_status_tolerates_non_object_crypto_universe_json(monkeypatch: Any, tmp_path: Path) -> None:
+    """A crypto universe file holding a JSON array is an empty universe, not a crash."""
+    from parayabuck.web.services import status as status_service
+
+    class StaticManager:
+        config_path = "config/settings.yaml"
+        runtime = None
+        last_engine_error = None
+        security_warning = None
+
+        def get_credentials(self) -> tuple[str, str]:
+            return "", ""
+
+        def current_engine_state(self) -> str:
+            return "stopped"
+
+        def is_paper_mode(self) -> bool:
+            return True
+
+    selection = type(
+        "Selection",
+        (),
+        {"enabled": True, "name": "equity_leveraged_trend_v1", "timeframe": "1d", "parameters": {}},
+    )()
+    universe = type(
+        "Universe",
+        (),
+        {
+            "equity": type("Equity", (), {"enabled": True, "symbols": ("A", "B")})(),
+            "crypto": type(
+                "Crypto",
+                (),
+                {
+                    "active_universe_path": str(tmp_path / "crypto.json"),
+                    "dynamic_selection_enabled": True,
+                },
+            )(),
+        },
+    )()
+    config = type(
+        "Config",
+        (),
+        {"strategy": type("Strategy", (), {"equity": selection, "crypto": selection})(), "universe": universe},
+    )()
+    (tmp_path / "crypto.json").write_text("[]", encoding="utf-8")
+
+    monkeypatch.setattr(status_service, "_load_config", lambda _path: config)
+    monkeypatch.setattr(status_service, "_validate_active_crypto_universe", lambda _cfg: ((), "ok"))
+
+    snapshot = status_service.build_status_snapshot(StaticManager())
+    assert snapshot["scanner"]["crypto_candidate_count"] == 0
+    assert snapshot["universe"]["crypto"]["pool_size"] == 0
+
+
 def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
     from parayabuck.web import server
 

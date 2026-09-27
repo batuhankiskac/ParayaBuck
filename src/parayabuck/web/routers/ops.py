@@ -21,7 +21,10 @@ async def get_ops_status() -> dict[str, Any]:
 async def get_ops_events(
     limit: int = Query(100, ge=1, le=1000),
     kind: str | None = None,
-    severity: str | None = None,
+    severity: str | None = Query(
+        None,
+        description="Exact severity: DEBUG, INFO, WARNING or CRITICAL. Any other value matches no events.",
+    ),
     market: str | None = None,
     decision_id: str | None = None,
     incident_id: str | None = None,

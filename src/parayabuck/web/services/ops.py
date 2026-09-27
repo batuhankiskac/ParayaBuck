@@ -84,13 +84,13 @@ def query_events(limit: int = 100, **filters: Any) -> list[dict[str, Any]]:
     except Exception:
         limit = 100
     limit = max(1, min(limit, _OPS_LIMIT_MAX))
-    # Normalize severity filter if present
+    # The journal stores Severity as DEBUG/INFO/WARNING/CRITICAL and matches it
+    # exactly, so the value is passed through verbatim: a wrong-case or unknown
+    # severity (e.g. "error") matches nothing instead of widening the query to
+    # every event.
     sev = filters.get("severity")
     if isinstance(sev, str) and sev.strip():
-        # The journal stores the uppercase Severity vocabulary, so normalize to
-        # it.  An unrecognised severity stays in the filter and matches
-        # nothing; dropping it would silently widen the query to every event.
-        filters["severity"] = sev.strip().upper()
+        filters["severity"] = sev.strip()
     try:
         from parayabuck.monitoring.journal import get_journal
 

@@ -127,13 +127,16 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
     cfg: Any = None
     # The active crypto universe is read once here and shared by the strategy
     # metadata and the scanner/universe blocks below.  A failed read is
-    # remembered so its strict parse error still surfaces there.
-    active_crypto: Any = None
+    # remembered so its strict parse error still surfaces there, and any
+    # non-object JSON is normalized once to an empty payload.
+    active_crypto: dict[str, Any] = {}
     active_crypto_error: Exception | None = None
     try:
         cfg = _load_config(str(manager.config_path))
         try:
-            active_crypto = _read_active_crypto_universe(cfg)
+            payload = _read_active_crypto_universe(cfg)
+            if isinstance(payload, dict):
+                active_crypto = payload
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             active_crypto_error = exc
         configured: list[str] = []
@@ -142,9 +145,7 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
         if cfg.strategy.crypto.enabled:
             configured.append(f"crypto/{cfg.strategy.crypto.name}")
         result["strategy_status"] = "configured:" + ",".join(configured)
-        result["strategy_metadata"] = strategy_metadata(
-            cfg, active_crypto_payload=active_crypto if isinstance(active_crypto, dict) else {}
-        )
+        result["strategy_metadata"] = strategy_metadata(cfg, active_crypto_payload=active_crypto)
     except Exception:
         result["strategy_status"] = "configuration_error"
         result["scanner"] = {"equity_status": "error", "crypto_status": "error"}

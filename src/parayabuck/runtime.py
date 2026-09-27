@@ -4652,8 +4652,15 @@ class EngineRuntime:
             self._persist_risk_state(account)
         with getattr(self, "_state_lock", threading.RLock()):
             # A halt raised by another thread since the breaker was cleared
-            # above set a new reason: keep that halt.
-            if self._running and self._state == "halted" and self._circuit_breaker_reason is None:
+            # above set a new reason: keep that halt. A trade-update blip while
+            # a non-halting breaker (protection_failure) was set left the
+            # runtime "degraded"; the blip restore never passes a breaker, so
+            # un-pin it here too, while the trade-update worker is alive.
+            trade_updates = dict(getattr(self, "_workers", {})).get("pb-trade-updates")
+            restorable = self._state == "halted" or (
+                self._state == "degraded" and trade_updates is not None and trade_updates.alive
+            )
+            if self._running and restorable and self._circuit_breaker_reason is None:
                 self._state = "running"
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
 

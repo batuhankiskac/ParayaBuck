@@ -104,7 +104,7 @@ def build_static_equity_point_in_time_universe(
     configured = set(config.symbols)
     digest = equity_universe_digest(config)
     snapshots: list[UniverseSnapshot] = []
-    members: list[str] = []
+    members: set[str] = set()
     for bar in sorted(
         (bar for bar in bars if bar.market == Market.EQUITY),
         key=lambda item: (item.timestamp, item.symbol),
@@ -112,7 +112,7 @@ def build_static_equity_point_in_time_universe(
         symbol = canonical_symbol(bar.symbol, Market.EQUITY)
         if symbol not in configured or symbol in members:
             continue
-        members.append(symbol)
+        members.add(symbol)
         observation = tuple(item for item in config.symbols if item in members)
         snapshot = UniverseSnapshot(
             effective_at=bar.timestamp,

@@ -111,31 +111,7 @@ def rates_for_trade_date(trade_date: date) -> RegulatoryFeeRates:
     )
 
 
-def crypto_taker_fee_bps_for_tier(thirty_day_volume_usd: float) -> int:
-    """Alpaca crypto taker fee in basis points for a 30-day executed volume.
-
-    Verified from Alpaca's published volume-tiered fee schedule. Market orders
-    always pay the taker rate; a low-volume account sits in tier 1 (25 bps).
-    """
-    if thirty_day_volume_usd < 100_000:
-        return 25
-    if thirty_day_volume_usd < 500_000:
-        return 22
-    if thirty_day_volume_usd < 1_000_000:
-        return 20
-    if thirty_day_volume_usd < 10_000_000:
-        return 18
-    if thirty_day_volume_usd < 25_000_000:
-        return 15
-    if thirty_day_volume_usd < 50_000_000:
-        return 13
-    if thirty_day_volume_usd < 100_000_000:
-        return 12
-    return 10
-
-
 __all__ = [
     "RegulatoryFeeRates",
-    "crypto_taker_fee_bps_for_tier",
     "rates_for_trade_date",
 ]

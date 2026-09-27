@@ -14,6 +14,7 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.execution.portfolio import PortfolioRiskLimits
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import (
+    PortfolioState,
     RebalancePolicy,
     TargetPortfolio,
     TargetWeight,
@@ -792,3 +793,53 @@ def test_crypto_daily_reset_uses_utc_boundary() -> None:
     decision_at_25 = next(record for record in result.rebalances if record.decision_timestamp == bars[25].timestamp)
     assert decision_at_25.risk_overlay_halted
     assert "daily_loss_limit" in decision_at_25.risk_overlay_reasons
+
+
+def test_worst_year_is_the_weakest_year_not_a_floor_at_zero() -> None:
+    """An all-profitable multi-year curve has a positive worst year."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    engine = _engine(_ScheduleStrategy({}, epoch))
+    curve = [110_000.0, 121_000.0, 133_100.0]
+    timestamps = [
+        datetime(2024, 12, 31, tzinfo=UTC),
+        datetime(2025, 12, 31, tzinfo=UTC),
+        datetime(2026, 12, 31, tzinfo=UTC),
+    ]
+    assert engine._worst_year(curve, timestamps) == pytest.approx(0.10)
+
+
+def test_on_target_symbol_never_produces_a_zero_quantity_order() -> None:
+    """A zero turnover_band cannot filter an on-target symbol out (``x < 0.0``
+    is false), so the delta guard must keep the zero-size order — and the
+    commission it would be charged — out of the pending book."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    strategy = _ScheduleStrategy({}, epoch)
+    state = PortfolioState(
+        strategy.name,
+        strategy.version,
+        holdings={"SPY": 100.0},
+        avg_prices={"SPY": 100.0},
+        cash=90_000.0,
+        last_prices={"SPY": 100.0},
+    )
+    engine = PortfolioBacktestEngine(
+        strategy,
+        RebalancePolicy(strategy.market, "monthly"),
+        starting_equity=100_000.0,
+        commission=1.0,
+        benchmark_symbol="SPY",
+        turnover_band=0.0,
+        minimum_order_notional=0.0,
+        state=state,
+    )
+    engine._apply_target(
+        TargetPortfolio(
+            strategy_name=strategy.name,
+            strategy_version=strategy.version,
+            decision_timestamp=epoch + timedelta(days=31),
+            weights=(TargetWeight("SPY", 0.1),),
+            cash_weight=0.9,
+            universe_version="test",
+        )
+    )
+    assert engine._pending == []

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -42,13 +43,6 @@ class RenameInterval:
     valid_from: date | None
     valid_to: date | None
 
-    def to_dict(self) -> dict[str, str | None]:
-        return {
-            "symbol": self.symbol,
-            "valid_from": self.valid_from.isoformat() if self.valid_from is not None else None,
-            "valid_to": self.valid_to.isoformat() if self.valid_to is not None else None,
-        }
-
 
 @dataclass(frozen=True)
 class EntityLifetimeRecord:
@@ -74,13 +68,6 @@ class UnresolvedLifetime:
     entity_id: str
     canonical_symbol: str
     reasons: tuple[str, ...]
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "entity_id": self.entity_id,
-            "canonical_symbol": self.canonical_symbol,
-            "reasons": list(self.reasons),
-        }
 
 
 @dataclass(frozen=True)
@@ -135,26 +122,28 @@ def load_entity_lifetimes(path: str | Path) -> LifetimeLoadResult:
     """
 
     source = Path(path)
-    source_bytes = source.read_bytes()
-    source_hash = hashlib.sha256(source_bytes).hexdigest()
+    # One read feeds both the digest and the parser: no second pass, and the
+    # digest stays over the exact file bytes (newline conventions included).
+    payload = source.read_bytes()
+    source_hash = hashlib.sha256(payload).hexdigest()
+    text = payload.decode("utf-8")
     records: list[EntityLifetimeRecord] = []
     entity_ids: set[str] = set()
     provider_ids: set[str] = set()
     symbols: set[str] = set()
 
-    with source.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        fields = tuple(reader.fieldnames or ())
-        if len(fields) != len(set(fields)) or set(fields) != set(CANONICAL_LIFETIME_FIELDS):
-            missing = sorted(set(CANONICAL_LIFETIME_FIELDS) - set(fields))
-            extra = sorted(set(fields) - set(CANONICAL_LIFETIME_FIELDS))
-            raise LifetimeSchemaError(f"Invalid lifetime CSV schema: missing={missing}, extra={extra}")
-        for row_number, raw in enumerate(reader, start=2):
-            record = _parse_record(raw, row_number)
-            _require_unique(record.entity_id, entity_ids, "entity_id", row_number)
-            _require_unique(record.provider_asset_id, provider_ids, "provider_asset_id", row_number)
-            _require_unique(record.canonical_symbol, symbols, "canonical_symbol", row_number)
-            records.append(record)
+    reader = csv.DictReader(io.StringIO(text, newline=""))
+    fields = tuple(reader.fieldnames or ())
+    if len(fields) != len(set(fields)) or set(fields) != set(CANONICAL_LIFETIME_FIELDS):
+        missing = sorted(set(CANONICAL_LIFETIME_FIELDS) - set(fields))
+        extra = sorted(set(fields) - set(CANONICAL_LIFETIME_FIELDS))
+        raise LifetimeSchemaError(f"Invalid lifetime CSV schema: missing={missing}, extra={extra}")
+    for row_number, raw in enumerate(reader, start=2):
+        record = _parse_record(raw, row_number)
+        _require_unique(record.entity_id, entity_ids, "entity_id", row_number)
+        _require_unique(record.provider_asset_id, provider_ids, "provider_asset_id", row_number)
+        _require_unique(record.canonical_symbol, symbols, "canonical_symbol", row_number)
+        records.append(record)
 
     terminals: list[tuple[str, TerminalLifecycle]] = []
     horizon_censored: list[str] = []

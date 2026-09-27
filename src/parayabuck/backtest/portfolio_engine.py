@@ -10,6 +10,7 @@ from enum import StrEnum
 from itertools import pairwise
 from pathlib import Path
 
+from parayabuck.backtest.regulatory_fees import rates_for_trade_date
 from parayabuck.backtest.stats import sample_stddev
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.data.market_dataset import (
@@ -26,6 +27,7 @@ from parayabuck.execution.portfolio import (
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import NEW_YORK
+from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy, require_product_universe
 from parayabuck.portfolio.idempotency import IdempotencyKeyFactory
 from parayabuck.portfolio.models import (
@@ -203,6 +205,10 @@ def _adverse_bps(slippage_bps: float, spread_bps: float) -> float:
     return slippage_bps + spread_bps / 2
 
 
+def _bar_timestamp(bar: Bar) -> datetime:
+    return bar.timestamp
+
+
 def session_date_for(timestamp: datetime, market: Market) -> date:
     """Trading-session date used for daily-loss risk accounting.
 
@@ -376,8 +382,7 @@ class PortfolioBacktestEngine:
         self.maximum_allocation = maximum_allocation
         # Offline backtests default to SHADOW drawdown halts (the alpha curve
         # keeps trading; breaches are recorded as events). Production-policy
-        # simulations opt into real enforcement plus an operator-reset policy
-        # through ``_risk_epoch_policy``.
+        # simulations opt into real enforcement with this constructor flag.
         self.enforce_drawdown_halt = bool(enforce_drawdown_halt)
         self.state = state or PortfolioState(strategy_name=strategy.name, strategy_version=strategy.version)
         self._idempotency = IdempotencyKeyFactory(strategy.name, strategy.version)
@@ -502,10 +507,15 @@ class PortfolioBacktestEngine:
             ordered, decision_bars = prepared_inputs
         else:
             ordered = sorted(self._deduplicate(bars), key=lambda bar: (bar.timestamp, bar.symbol))
-            decision_bars = sorted(
-                self._deduplicate(signal_bars if signal_bars is not None else bars),
-                key=lambda bar: (bar.timestamp, bar.symbol),
-            )
+            if signal_bars is None:
+                # The same bars decide and execute: one dedup/sort pass is
+                # enough and the watermark filter below rebinds both names.
+                decision_bars = ordered
+            else:
+                decision_bars = sorted(
+                    self._deduplicate(signal_bars),
+                    key=lambda bar: (bar.timestamp, bar.symbol),
+                )
         watermark = self.state.last_processed_bar
         cutoff: datetime | None = None
         if watermark:
@@ -638,11 +648,6 @@ class PortfolioBacktestEngine:
 
     # -- internals ----------------------------------------------------------
 
-    def _key(self, bar: Bar) -> tuple[str, str]:
-        # Bars are canonicalized at ingestion boundary (_deduplicate), so
-        # symbol is already canonical. Fast path avoids per-bar cache lookup.
-        return bar.symbol, bar.timeframe
-
     @staticmethod
     def _order_to_dict(order: PortfolioOrder) -> dict[str, object]:
         return {
@@ -671,18 +676,16 @@ class PortfolioBacktestEngine:
             return None
 
     def _ingest(self, bar: Bar) -> None:
-        key = (bar.symbol, bar.timeframe)
-        series = self._history.get(key)
-        if series is None:
-            self._history[key] = [bar]
-        elif series[-1].timestamp < bar.timestamp:
-            series.append(bar)
+        self._append_history(self._history, bar)
 
     def _ingest_execution(self, bar: Bar) -> None:
+        self._append_history(self._execution_history, bar)
+
+    def _append_history(self, target: dict[tuple[str, str], list[Bar]], bar: Bar) -> None:
         key = (bar.symbol, bar.timeframe)
-        series = self._execution_history.get(key)
+        series = target.get(key)
         if series is None:
-            self._execution_history[key] = [bar]
+            target[key] = [bar]
         elif series[-1].timestamp < bar.timestamp:
             series.append(bar)
 
@@ -746,10 +749,9 @@ class PortfolioBacktestEngine:
         ]
         concentration = max(single_values) / equity if equity > 0 and single_values else 0.0
         self._holdings_history.append((len(active), cash_ratio, concentration))
-        # Persist holdings/cash/prices after every completed bar (fills
-        # included) so a restart resumes the exact allocation of the last
-        # processed bar.
-        self._sync_state_bookkeeping()
+        # Refresh the persisted snapshot fields after every completed bar
+        # (fills included) so a restart resumes the exact allocation of the
+        # last processed bar.
         self.state.pending_orders = tuple(self._order_to_dict(order) for order in self._pending)
         self.state.last_processed_bar = timestamp.isoformat()
         # Persist the daily-loss/high-water lifecycle alongside holdings/cash
@@ -761,6 +763,9 @@ class PortfolioBacktestEngine:
             self._risk_session_date.isoformat() if self._risk_session_date is not None else None
         )
         if self.state_path is not None:
+            # Only the persisted state needs the mirrored books; without a
+            # state path _result() syncs them once before the result is read.
+            self._sync_state_bookkeeping()
             self.save_state()
 
     def _sync_state_bookkeeping(self) -> None:
@@ -799,9 +804,18 @@ class PortfolioBacktestEngine:
         ``bar.volume`` would leak the future session's completed volume into
         an opening fill. The cutoff makes the capacity model point-in-time.
         """
-        history = self._execution_history.get((order.symbol, timeframe), ())
-        known = [item.volume for item in history if item.timestamp <= order.created_at and item.volume > 0]
-        window = known[-self.liquidity_lookback_bars :]
+        history = self._execution_history.get((order.symbol, timeframe), [])
+        # The history is timestamp-ascending, so the point-in-time cutoff is a
+        # bisect and the window is walked backwards: no full-series scan (and
+        # no per-bar volume filter) on every pending-order fill attempt.
+        end = bisect_right(history, order.created_at, key=_bar_timestamp)
+        window: list[float] = []
+        for index in range(end - 1, -1, -1):
+            volume = history[index].volume
+            if volume > 0:
+                window.append(volume)
+                if len(window) >= self.liquidity_lookback_bars:
+                    break
         return sum(window) / len(window) if window else 0.0
 
     def _equity_fee(self, side: OrderSide, quantity: float, price: float, trade_date: date) -> float:
@@ -811,8 +825,6 @@ class PortfolioBacktestEngine:
         schedule; otherwise the configured flat rates apply.
         """
         if self.equity_use_effective_dated_fees:
-            from parayabuck.backtest.regulatory_fees import rates_for_trade_date
-
             rates = rates_for_trade_date(trade_date)
             fee = equity_regulatory_fee(
                 side,
@@ -868,7 +880,6 @@ class PortfolioBacktestEngine:
                 fee += fillable * fill_price * self.crypto_taker_fee_bps / 10_000
             else:
                 fee += self._equity_fee(side, fillable, fill_price, bar.timestamp.date())
-            filled_qty = fillable
             if side == OrderSide.BUY:
                 notional = fillable * fill_price
                 if notional + fee > self._cash:
@@ -894,8 +905,7 @@ class PortfolioBacktestEngine:
             else:
                 position = self._positions.get(symbol)
                 assert position is not None  # guaranteed by the SELL gate above
-                close_qty = min(fillable, position.qty)
-                filled_qty = close_qty
+                close_qty = fillable
                 notional = close_qty * fill_price
                 self._cash += notional - fee
                 # The entry-fee share is a real cost of the closed portion:
@@ -920,7 +930,7 @@ class PortfolioBacktestEngine:
                     symbol=symbol,
                     market=order.market,
                     side=side,
-                    qty=filled_qty,
+                    qty=fillable,
                     reference_price=bar.open,
                     fill_price=fill_price,
                     slippage_cost=slippage_cost,
@@ -930,14 +940,14 @@ class PortfolioBacktestEngine:
                     client_order_id=order.client_order_id,
                 )
             )
-            if filled_qty < order.qty:
+            if fillable < order.qty:
                 remaining.append(
                     PortfolioOrder(
                         order.client_order_id,
                         order.symbol,
                         order.market,
                         order.side,
-                        order.qty - filled_qty,
+                        order.qty - fillable,
                         bar.timestamp,
                         order.decision_timestamp,
                     )
@@ -945,10 +955,6 @@ class PortfolioBacktestEngine:
         self._pending = remaining
 
     def _decide(self, timestamp: datetime) -> None:
-        # Production-policy hook (no-op in standard runs): a simulation
-        # subclass may rebase the drawdown peak here to model an operator
-        # risk-epoch reset BEFORE this cycle's overlay evaluation.
-        self._risk_epoch_policy(timestamp)
         market = self.strategy.market
         previous = self._previous_timestamp[market]
         self._previous_timestamp[market] = timestamp
@@ -976,16 +982,7 @@ class PortfolioBacktestEngine:
             # Only enforce for dynamic product strategies; synthetic
             # strategies (not in PRODUCT_STRATEGY_NAMES) retain permissive
             # behaviour without an explicit opt-in.
-            try:
-                from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES
-
-                is_product = (
-                    self.strategy.name in PRODUCT_STRATEGY_NAMES
-                    or self.strategy.name == "crypto_low_variance_hysteresis_v1"
-                )
-            except Exception:
-                is_product = False
-            if is_product:
+            if self.strategy.name in PRODUCT_STRATEGY_NAMES:
                 require_product_universe(context)
             else:
                 # Non-product synthetic strategy: allow permissive universe
@@ -1075,21 +1072,6 @@ class PortfolioBacktestEngine:
             self._risk_session_date = session
         self._last_observed_equity = equity
         self._peak_equity = max(self._peak_equity, equity)
-
-    def _risk_epoch_policy(self, timestamp: datetime) -> None:
-        """Operator reset policy for production-policy simulations.
-
-        Default: never reset (P0). Simulations override this to rebase the
-        drawdown peak via :meth:`reset_peak_equity` under a PREDECLARED
-        deterministic policy. It runs before every decision cycle.
-        """
-
-    def reset_peak_equity(self) -> float:
-        """Simulation mirror of the runtime's operator risk-epoch reset: rebase
-        the drawdown peak to the current equity so a latched drawdown halt
-        can clear. Never called in the default backtest path."""
-        self._peak_equity = self._equity()
-        return self._peak_equity
 
     def _account_snapshot(self) -> AccountSnapshot:
         """Observational snapshot of the portfolio for the risk overlay.
@@ -1237,6 +1219,11 @@ class PortfolioBacktestEngine:
                 continue
             target_qty = target_weight * equity / price
             delta = target_qty - current_qty
+            if delta == 0.0:
+                # A zero turnover_band lets an already-on-target symbol past
+                # the band test; it must not become a zero-quantity order
+                # (and a commission charged for no shares).
+                continue
             if abs(delta) * price < self.minimum_order_notional:
                 continue
             side = OrderSide.BUY if delta > 0 else OrderSide.SELL
@@ -1695,13 +1682,7 @@ class PortfolioBacktestEngine:
             worst_year_return=worst_year,
             positive_month_ratio=positive_month_ratio,
             state=self.state,
-            terminal_events=tuple(
-                dict(event)
-                for event in (
-                    *getattr(self, "terminal_events_fired", ()),
-                    *self._liquidation_events,
-                )
-            ),
+            terminal_events=tuple(dict(event) for event in self._liquidation_events),
             information_ratio=information_ratio,
             cash_yield=cash_yield,
             dividend_total=self._dividend_total,
@@ -1807,15 +1788,14 @@ class PortfolioBacktestEngine:
         by_year: dict[int, list[int]] = {}
         for index, timestamp in enumerate(curve_timestamps):
             by_year.setdefault(timestamp.year, []).append(index)
-        worst = 0.0
+        year_returns: list[float] = []
         previous = self.starting_equity
         for year in sorted(by_year):
             indices = by_year[year]
             value = curve[indices[-1]]
-            year_return = value / previous - 1 if previous > 0 else 0.0
-            worst = min(worst, year_return)
+            year_returns.append(value / previous - 1 if previous > 0 else 0.0)
             previous = value
-        return worst
+        return min(year_returns, default=0.0)
 
     def _symbol_contributions(self) -> tuple[SymbolContribution, ...]:
         fee_by_symbol: dict[str, float] = {}

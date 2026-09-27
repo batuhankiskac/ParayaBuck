@@ -9,10 +9,7 @@ from parayabuck.backtest.portfolio_engine import (
     PortfolioBacktestEngine,
     equity_regulatory_fee,
 )
-from parayabuck.backtest.regulatory_fees import (
-    crypto_taker_fee_bps_for_tier,
-    rates_for_trade_date,
-)
+from parayabuck.backtest.regulatory_fees import rates_for_trade_date
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import RebalancePolicy, TargetPortfolio, TargetWeight
@@ -134,14 +131,6 @@ def test_equity_regulatory_fee_uses_2026_rates() -> None:
     )
     # TAF and SEC apply only to sells; CAT applies to both sides.
     assert buy == pytest.approx(0.003)
-
-
-def test_crypto_taker_fee_uses_market_order_tier() -> None:
-    # A low-volume account pays tier-1 taker: 25 bps.
-    assert crypto_taker_fee_bps_for_tier(50_000) == 25
-    assert crypto_taker_fee_bps_for_tier(250_000) == 22
-    assert crypto_taker_fee_bps_for_tier(9_000_000) == 18
-    assert crypto_taker_fee_bps_for_tier(150_000_000) == 10
 
 
 class _FixedTargetStrategy(PortfolioStrategy):

@@ -157,11 +157,20 @@ _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
 _STREAM_WORKER_MARKETS = {"pb-stocks": "equity", "pb-crypto": "crypto"}
 
 
-def _worker_stale(name: str, info: dict[str, Any], now: datetime, ttl: float) -> bool:
+def _worker_stale(
+    name: str, info: dict[str, Any], now: datetime, ttl: float, markets: dict[str, Any] | None = None
+) -> bool:
     if name in _EVENT_DRIVEN_WORKERS:
         return False
     market = _STREAM_WORKER_MARKETS.get(name)
     if market is not None:
+        # Like _required_workers: a market that is disabled or has no symbols
+        # does not need its stream to deliver.
+        market_info = (markets or {}).get(market)
+        if isinstance(market_info, dict) and (
+            market_info.get("enabled") is False or market_info.get("symbol_count") == 0
+        ):
+            return False
         if market == "equity" and not is_regular_equity_time(now):
             return False
         last_event = _parse_iso(info.get("last_event_at"))
@@ -179,6 +188,13 @@ def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config
     if not workers:
         return HealthCheck(code="workers", status=HealthStatus.UNKNOWN, summary="no worker data")
     ttl = max(30.0, config.engine.account_poll_interval_seconds * 3)
+    # Judge ages as of the snapshot, as the runtime did when it wrote it; the
+    # snapshot's own age is the runtime_heartbeat check's job. Measuring from
+    # the read time would add up to one snapshot interval to every age.
+    written_at = _parse_iso(health_snapshot.get("written_at") or health_snapshot.get("as_of"))
+    as_of = min(now, written_at) if written_at is not None else now
+    markets = health_snapshot.get("markets")
+    markets = markets if isinstance(markets, dict) else None
     stale: list[str] = []
     dead: list[str] = []
     for name, info in workers.items():
@@ -186,7 +202,7 @@ def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config
             continue
         if not bool(info.get("alive")):
             dead.append(name)
-        elif _worker_stale(str(name), info, now, ttl):
+        elif _worker_stale(str(name), info, as_of, ttl, markets):
             stale.append(name)
     if dead:
         return HealthCheck(

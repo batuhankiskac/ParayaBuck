@@ -1090,6 +1090,50 @@ def test_operator_reset_keeps_a_halt_raised_during_broker_reconcile(tmp_path: Pa
     ledger.close()
 
 
+@pytest.mark.parametrize(("alive", "expected"), [(True, "running"), (False, "degraded")])
+def test_operator_reset_restores_a_blip_degraded_runtime(tmp_path: Path, alive: bool, expected: str) -> None:
+    """protection_failure gates entries without halting; a trade-update blip
+    meanwhile leaves "degraded" (its restore never passes a breaker). The
+    reset that clears the breaker must un-pin it, as a clean reconcile does
+    for a reconciliation reason, but only while that worker is alive."""
+    from parayabuck.runtime_health import WorkerHealth
+
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "protection_failure")
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime = _runtime_with_ledger(ledger)
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
+        account=lambda: account,
+    )
+    now = datetime.now(UTC)
+    # A dead worker is refused up front; this models it exiting between that
+    # check and the reset tail.
+    worker = WorkerHealth(now, now, alive=True)
+    runtime._workers = {"pb-trade-updates": worker}
+    runtime._circuit_breaker_reason = "protection_failure"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._running = True
+    runtime._state = "degraded"
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+
+    def persist(_account: AccountSnapshot) -> None:
+        worker.alive = alive
+
+    runtime._persist_risk_state = persist  # type: ignore[method-assign]
+
+    runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason is None
+    assert runtime._state == expected
+    assert [incident.reason for incident in ledger.load_safety_incidents("acct")] == []
+    ledger.close()
+
+
 class _LockCheckedStateRuntime(EngineRuntime):
     """Records whether ``_state_lock`` was held at each ``_state`` write."""
 

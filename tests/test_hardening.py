@@ -1457,3 +1457,45 @@ def test_fill_activity_recovery_merges_activities_of_one_order(tmp_path: Path) -
     fee_rows = ledger.connection.execute("SELECT COUNT(*) FROM fee_activities").fetchone()[0]
     assert fee_rows == 2
     ledger.close()
+
+
+def test_session_close_flush_waits_for_the_finalization_grace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The 15:59 minute may arrive just after 16:00:00: the session-close
+    flush honors the same finalization grace as flush_until, so the daily
+    and 15:55 5m candles still include it."""
+    import parayabuck.runtime as runtime_module
+    from parayabuck.markets.timeframes import NEW_YORK
+
+    clock = {"now": datetime(2026, 9, 25, 16, 0, 0, 500_000, tzinfo=NEW_YORK).astimezone(UTC)}
+
+    class _Clock(datetime):
+        @classmethod
+        def now(cls, tz: Any = None) -> datetime:  # type: ignore[override]
+            return clock["now"]
+
+    monkeypatch.setattr(runtime_module, "datetime", _Clock)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.config = SimpleNamespace(data_finalization_grace_seconds=2.0)
+    runtime._ingestion_lock = threading.RLock()
+    runtime.aggregators = {tf: TimeframeAggregator(tf, 2.0) for tf in ("5m", "1d")}
+    emitted: list[Bar] = []
+    runtime._emit_finalized_bar = lambda _tf, bar: emitted.append(bar)  # type: ignore[method-assign]
+
+    def minute(hh: int, mm: int, close: float) -> Bar:
+        stamp = datetime(2026, 9, 25, hh, mm, tzinfo=NEW_YORK).astimezone(UTC)
+        return Bar(stamp, "SPY", "1m", close, close, close, close, 100, Market.EQUITY)
+
+    for tf_aggregator in runtime.aggregators.values():
+        for mm, close in ((55, 100.0), (56, 101.0), (57, 102.0), (58, 103.0)):
+            tf_aggregator.update(minute(15, mm, close))
+
+    runtime._flush_aggregators()
+    assert emitted == []  # inside the grace: not yet final
+
+    for tf_aggregator in runtime.aggregators.values():
+        tf_aggregator.update(minute(15, 59, 104.0))  # late 15:59 minute
+    clock["now"] = datetime(2026, 9, 25, 16, 0, 2, 100_000, tzinfo=NEW_YORK).astimezone(UTC)
+    runtime._flush_aggregators()
+
+    assert sorted(bar.timeframe for bar in emitted) == ["1d", "5m"]
+    assert all(bar.close == 104.0 for bar in emitted)

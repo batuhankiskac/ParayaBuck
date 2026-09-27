@@ -177,6 +177,10 @@ _WARMUP_RETRY_MAX_EXPONENT = 6
 # How often the split-adjustment reconciler compares raw vs split-adjusted
 # daily tails (hourly; a split is applied at most one check after it trades).
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
+# A verification counts as fresh for one check interval plus this slack:
+# the monitor waits a full interval AFTER each pass, so the next success
+# always lands a little past the previous one + 3600 s.
+_SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS = 300.0
 # Safety margin added ON TOP of the strategy history window so the batched
 # splits fetch always spans the full required signal window (never a short
 # tail standing in for a long history).
@@ -3147,12 +3151,15 @@ class EngineRuntime:
 
     def _flush_aggregators(self) -> None:
         now = datetime.now(UTC)
-        local = now.astimezone(NEW_YORK)
+        # Same finalization grace as flush_until: the 15:59 minute can arrive
+        # just after 16:00:00 and must still land in the session-close candles.
+        closing = now - timedelta(seconds=self.config.data_finalization_grace_seconds)
+        local = closing.astimezone(NEW_YORK)
         with self._ingestion_lock:
             finalized = {timeframe: aggregator.flush_until(now) for timeframe, aggregator in self.aggregators.items()}
             if local.weekday() < 5 and (local.hour, local.minute) >= (16, 0):
                 for timeframe, aggregator in self.aggregators.items():
-                    finalized[timeframe].extend(aggregator.flush_session_close(now))
+                    finalized[timeframe].extend(aggregator.flush_session_close(closing))
         for timeframe, bars in finalized.items():
             for bar in bars:
                 self._emit_finalized_bar(timeframe, bar)
@@ -3915,7 +3922,9 @@ class EngineRuntime:
         last_success = state["last_success_at"]
         if not isinstance(last_success, datetime):
             return False
-        if (datetime.now(UTC) - last_success).total_seconds() > _SIGNAL_ADJUSTMENT_CHECK_SECONDS:
+        if (datetime.now(UTC) - last_success).total_seconds() > (
+            _SIGNAL_ADJUSTMENT_CHECK_SECONDS + _SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS
+        ):
             return False
         if decision_timestamp is None:
             return True
@@ -4652,8 +4661,15 @@ class EngineRuntime:
             self._persist_risk_state(account)
         with getattr(self, "_state_lock", threading.RLock()):
             # A halt raised by another thread since the breaker was cleared
-            # above set a new reason: keep that halt.
-            if self._running and self._state == "halted" and self._circuit_breaker_reason is None:
+            # above set a new reason: keep that halt. A trade-update blip while
+            # a non-halting breaker (protection_failure) was set left the
+            # runtime "degraded"; the blip restore never passes a breaker, so
+            # un-pin it here too, while the trade-update worker is alive.
+            trade_updates = dict(getattr(self, "_workers", {})).get("pb-trade-updates")
+            restorable = self._state == "halted" or (
+                self._state == "degraded" and trade_updates is not None and trade_updates.alive
+            )
+            if self._running and restorable and self._circuit_breaker_reason is None:
                 self._state = "running"
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
 

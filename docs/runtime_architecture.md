@@ -125,7 +125,7 @@ Distinct, not collapsed.
 
 ## Signal Adjustment Verification
 
-- Hourly batched verification (`_SIGNAL_ADJUSTMENT_CHECK_SECONDS=3600`, lookback 14 days + 10 day margin) compares raw vs split-adjusted daily tails per symbol, verifies `adequate_coverage`, replaces `history` wholesale when provider rebased. Health field `signal_adjustment` reports coverage.
+- Hourly batched verification (`_SIGNAL_ADJUSTMENT_CHECK_SECONDS=3600`, a verification stays fresh for that interval + `_SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS=300`, lookback 14 days + 10 day margin) compares raw vs split-adjusted daily tails per symbol, verifies `adequate_coverage`, replaces `history` wholesale when provider rebased. Health field `signal_adjustment` reports coverage.
 
 ## Backtest artifacts
 

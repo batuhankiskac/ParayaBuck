@@ -1420,6 +1420,30 @@ class PortfolioRuntime:
             age_seconds=round(age),
         )
 
+    def _alert_completed_with_ambiguous_buys(self, decision_id: str) -> None:
+        """Raise one operator alert when a rebalance completes over an ambiguous BUY.
+
+        A BUY whose submit raised stays ``reconciliation_required`` while the
+        phase is still ``buy_ready``; the re-plan then suppresses its symbol
+        as an open order and may complete the rebalance with that BUY still
+        unresolved. No phase change and no halt: the row keeps counting as an
+        open order and reconciliation remains the path that resolves it.
+        """
+        stuck = [
+            str(item["client_order_id"])
+            for item in self.repository.orders_for_decision(decision_id, side="buy")
+            if str(item["status"]) == "reconciliation_required"
+        ]
+        if not stuck:
+            return
+        self._raise_operator_alert_once(
+            (decision_id, "rebalance_completed_with_ambiguous_buy"),
+            message="Rebalance completed while a deferred BUY awaits reconciliation",
+            category="rebalance_completed_with_ambiguous_buy",
+            decision_id=decision_id,
+            client_order_ids=",".join(stuck),
+        )
+
     def _operator_alert_keys(self) -> set[tuple[str, str]]:
         keys = getattr(self, "_raised_operator_alerts", None)
         if keys is None:
@@ -1575,6 +1599,7 @@ class PortfolioRuntime:
         replan_needs_sell = any(order.side == PortfolioOrderSide.SELL for order in planned)
         if not buy_orders:
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
+            self._alert_completed_with_ambiguous_buys(decision_id)
             _emit_rebalance_phase_safe(
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
@@ -1609,6 +1634,7 @@ class PortfolioRuntime:
                 # account snapshot permits the replacement opening.
                 return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_waiting_for_slot")
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
+            self._alert_completed_with_ambiguous_buys(decision_id)
             _emit_rebalance_phase_safe(
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
@@ -1618,6 +1644,12 @@ class PortfolioRuntime:
                 session_id=self.session_id,
             )
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
+        # The admission evidence references its order rows, which the direct
+        # BUY path writes with the decision; the re-planned BUYs exist only
+        # now. ``_submit_orders`` records the same ``submitting`` row
+        # (INSERT OR IGNORE) and submits it as before.
+        for order in buy_orders:
+            self.repository.record_order(order, "submitting")
         self._record_buy_admission_observation(decision_id, admission, buy_orders)
         submitted = self._submit_orders(buy_orders)
         self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BUY_PENDING)

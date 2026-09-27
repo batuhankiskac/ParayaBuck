@@ -105,7 +105,11 @@ def raised(monkeypatch) -> list[dict[str, object]]:
     captured: list[dict[str, object]] = []
 
     def emit(kind: str, *, message: str, **fields: object) -> None:
-        if fields.get("category") in {"rebalance_unrecoverable", "stuck_deferred_buy"}:
+        if fields.get("category") in {
+            "rebalance_unrecoverable",
+            "stuck_deferred_buy",
+            "rebalance_completed_with_ambiguous_buy",
+        }:
             captured.append({"kind": kind, **fields})
 
     monkeypatch.setattr(alerts, "emit", emit)
@@ -232,3 +236,81 @@ def test_stuck_deferred_buy_alerts_once_after_threshold_without_phase_change(tmp
     _settle(repository, buy, "buy-recovered")
     assert runtime.advance_rebalance().status == "rebalance_complete"
     assert len(raised) == 1
+
+
+def test_deferred_buy_phase_records_admission_evidence(tmp_path, monkeypatch) -> None:
+    """The deferred BUY rows exist before the admission observation that
+    references them, so the evidence is kept and no false incident fires."""
+    incidents: list[str] = []
+    monkeypatch.setattr(alerts, "emit", lambda kind, *, message, **fields: incidents.append(message))
+    broker = _Broker()
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime = PortfolioRuntime(
+        _Strategy(),
+        tuple(sorted(_TARGETS)),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    first = runtime.process_closed_bars(_bars(_DAY))
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _settle(repository, sell, "sell-fill")
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+
+    resumed = runtime.advance_rebalance()
+
+    assert resumed.status == "buy_phase_submitted"
+    buy_ids = sorted(order.client_order_id for order in resumed.orders)
+    observed = repository.store.connection.execute(
+        "SELECT client_order_id FROM portfolio_buy_admission_observations WHERE decision_id = ?",
+        (first.decision_id,),
+    ).fetchall()
+    assert sorted(str(row[0]) for row in observed) == buy_ids
+    assert "Final BUY admission evidence unavailable" not in incidents
+    assert [order.client_order_id for order in broker.submitted[1:]] == [
+        order.client_order_id for order in resumed.orders
+    ]
+
+
+def test_rebalance_completing_over_an_ambiguous_buy_alerts_once(tmp_path, raised) -> None:
+    broker = _Broker()
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime = PortfolioRuntime(
+        _Strategy(),
+        tuple(sorted(_TARGETS)),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    first = runtime.process_closed_bars(_bars(_DAY))
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _settle(repository, sell, "sell-fill")
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+    submit = broker.submit_portfolio_order
+
+    def timeout(order: PortfolioOrderRequest) -> str:
+        raise TimeoutError("broker timeout")
+
+    # The BUY submit times out: its row turns ambiguous and the phase stays buy_ready.
+    broker.submit_portfolio_order = timeout  # type: ignore[method-assign]
+    with pytest.raises(TimeoutError):
+        runtime.advance_rebalance()
+    buy_rows = repository.orders_for_decision(first.decision_id, side="buy")
+    assert [row["status"] for row in buy_rows] == ["reconciliation_required"]
+    assert raised == []
+
+    # The re-plan suppresses the ambiguous symbol and completes the rebalance.
+    broker.submit_portfolio_order = submit  # type: ignore[method-assign]
+    assert runtime.advance_rebalance().status == "rebalance_complete"
+    assert _phase(repository, first.decision_id)[0] == REBALANCE_PHASE_COMPLETE
+    runtime._alert_completed_with_ambiguous_buys(first.decision_id)
+
+    assert [(item["kind"], item["category"], item["client_order_ids"]) for item in raised] == [
+        ("paper_incident", "rebalance_completed_with_ambiguous_buy", buy_rows[0]["client_order_id"])
+    ]

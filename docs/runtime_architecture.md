@@ -25,7 +25,7 @@ EngineRuntime
 |--------|------|--------------|
 | `portfolio/runtime_models.py` | Immutable models, terminal order vocabulary (`_TERMINAL_ORDER_STATUSES`, `TERMINAL_ORDER_STATUSES_SQL`), rebalance phases, `PortfolioDecisionService`, `configuration_digest`, `_decision_id` | DB, broker, risk |
 | `portfolio/runtime_repository.py` | Persistence: migrations, sessions, decisions, orders, fills, ownership adjustments, rebalance execution, high-water, query helpers | Strategy, risk, broker |
-| `portfolio/runtime_rebalance.py` | Two-phase phase constants and predicates: `is_sell_phase_complete`, `requires_ambiguous_block` | DB SQL, broker |
+| `portfolio/runtime_rebalance.py` | Two-phase phase predicates: `is_sell_phase_complete`, `requires_ambiguous_block` (phase constants live in `runtime_models.py`) | DB SQL, broker |
 | `portfolio/runtime_ownership.py` | Pure net-ownership math (`net_owned_quantities`) | DB |
 | `portfolio/runtime_service.py` | Orchestration facade: `PortfolioRuntime` — builds context, applies risk, plans orders, drives two-phase submit, advances rebalance. Thin, delegates to models/repository/rebalance/ownership | Direct SQL, migration SQL |
 | `runtime_events.py` | `RuntimeEvent` / `EventQueue` with coalescing, replacement, overflow, ordering, thread Condition | Business logic |

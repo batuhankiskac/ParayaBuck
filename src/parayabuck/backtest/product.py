@@ -54,6 +54,7 @@ _CANONICAL_ACTION_COLUMNS = {
 }
 _CANONICAL_NON_CASH_ACTION_TYPES = {"stock_dividends", "forward_splits", "reverse_splits"}
 _CANONICAL_SPLIT_ACTION_TYPES = {"forward_splits", "reverse_splits"}
+_STOCK_DIVIDEND_ECHO_TOLERANCE = Decimal("1e-5")
 
 
 @dataclass(frozen=True)
@@ -155,8 +156,10 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
     each rate is divided by the cumulative ratio of the same symbol's
     forward/reverse splits with a strictly later ex_date. This assumes the
     action file and the bars are one snapshot (no split in the file that the
-    bar download predates). The legacy dividend-only schema carries no split
-    rows and is passed through unadjusted.
+    bar download predates). Stock dividends are not applied, and the
+    cash_dividends row v5 repeats for each of them (rate = share ratio) is
+    dropped. The legacy dividend-only schema carries no split or
+    stock-dividend rows and is passed through unadjusted.
     """
     actions: list[CorporateAction] = []
     seen: set[tuple[str, datetime, CorporateActionType, Decimal]] = set()
@@ -175,16 +178,28 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
             raise ValueError(f"Corporate-action CSV is missing required columns: {', '.join(missing)}")
         rows = list(enumerate(reader, start=2))
 
-    splits: dict[str, list[tuple[datetime, Decimal]]] = {}
+    # A set: a split repeated under another raw_id is one economic event and
+    # must not compound into the dividend rescale.
+    splits: dict[str, set[tuple[datetime, Decimal]]] = {}
+    stock_dividend_ratios: dict[tuple[str, datetime], list[Decimal]] = {}
     if schema == "canonical_v5":
         for row_number, raw in rows:
-            if str(raw["action_type"]).lower() in _CANONICAL_SPLIT_ACTION_TYPES:
-                splits.setdefault(canonical_symbol(str(raw["symbol"]), Market.EQUITY), []).append(
+            raw_action_type = str(raw["action_type"]).lower()
+            if raw_action_type in _CANONICAL_SPLIT_ACTION_TYPES:
+                splits.setdefault(canonical_symbol(str(raw["symbol"]), Market.EQUITY), set()).add(
                     (
                         _canonical_action_timestamp(raw["ex_date"], row_number=row_number),
                         _split_ratio(raw, row_number=row_number),
                     )
                 )
+            elif raw_action_type == "stock_dividends":
+                stock_dividend_ratios.setdefault(
+                    (
+                        canonical_symbol(str(raw["symbol"]), Market.EQUITY),
+                        _canonical_action_timestamp(raw["ex_date"], row_number=row_number),
+                    ),
+                    [],
+                ).append(_action_value(raw["rate"], row_number=row_number))
 
     for row_number, raw in rows:
         raw_action_type = str(raw["action_type"]).lower()
@@ -202,11 +217,21 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
         raw_symbol = str(raw["symbol"])
         symbol = canonical_symbol(raw_symbol, Market.EQUITY)
         action_type = CorporateActionType.DIVIDEND
+        if schema == "canonical_v5" and any(
+            abs(value - ratio) <= ratio * _STOCK_DIVIDEND_ECHO_TOLERANCE
+            for ratio in stock_dividend_ratios.get((symbol, timestamp), ())
+        ):
+            # v5 repeats each stock dividend as a cash_dividends row whose
+            # rate is the share ratio, sometimes re-rounded (CBSH 2020-12-01:
+            # 0.27 cash plus a 1.05 echo of the 5% stock dividend; CRESY
+            # 2023-12-06: 1.0098549 vs 1.00985). The echo is not cash.
+            continue
         key = (symbol, timestamp, action_type, value)
         if key in seen:
             continue
         seen.add(key)
-        for split_timestamp, ratio in splits.get(symbol, ()):
+        # Sorted: set order must not change the Decimal division order.
+        for split_timestamp, ratio in sorted(splits.get(symbol, ())):
             if split_timestamp > timestamp:
                 value /= ratio
         actions.append(

@@ -199,6 +199,13 @@ class PortfolioBacktestResult:
     # production would have halted) instead of halting the curve; each entry
     # is (decision timestamp, "portfolio_drawdown_halt").
     drawdown_halt_shadow_events: tuple[tuple[datetime, str], ...] = ()
+    # ``benchmark_return`` and every benchmark-derived metric (and
+    # ``benchmark_bars``) follow ``benchmark_return_basis``: "total_return"
+    # when corporate actions were supplied to a product-path run (cash
+    # dividends reinvested at the ex-date close), else "price". The
+    # split-adjusted price-only return is always kept here.
+    benchmark_price_return: float = 0.0
+    benchmark_return_basis: str = "price"
 
 
 def _adverse_bps(slippage_bps: float, spread_bps: float) -> float:
@@ -600,11 +607,72 @@ class PortfolioBacktestEngine:
                 self.state.cash = self._cash
                 if self.state_path is not None:
                     self.save_state()
-        benchmark = [bar for bar in decision_bars if bar.symbol == self.benchmark_symbol]
-        benchmark_return = (
-            benchmark[-1].close / benchmark[0].close - 1 if len(benchmark) > 1 and benchmark[0].close > 0 else 0.0
+        price_benchmark = [bar for bar in decision_bars if bar.symbol == self.benchmark_symbol]
+        benchmark_price_return = self._close_to_close_return(price_benchmark)
+        # The strategy is credited cash dividends from the action list, so the
+        # benchmark must earn them too. Only when the benchmark series is the
+        # executable series those dividends are denominated in: dataset runs
+        # take it from signal bars, which may already be total-return adjusted.
+        benchmark_basis = "price"
+        benchmark = price_benchmark
+        if corporate_actions and signal_bars is None:
+            benchmark = self._total_return_benchmark(price_benchmark, action_queue)
+            benchmark_basis = "total_return"
+        return self._result(
+            curve,
+            curve_timestamps,
+            self._close_to_close_return(benchmark),
+            tuple(benchmark),
+            benchmark_price_return=benchmark_price_return,
+            benchmark_return_basis=benchmark_basis,
         )
-        return self._result(curve, curve_timestamps, benchmark_return, tuple(benchmark))
+
+    @staticmethod
+    def _close_to_close_return(bars: list[Bar]) -> float:
+        return bars[-1].close / bars[0].close - 1 if len(bars) > 1 and bars[0].close > 0 else 0.0
+
+    def _total_return_benchmark(self, bars: list[Bar], actions: list[CorporateAction]) -> list[Bar]:
+        """Rescale benchmark bars to a total-return index.
+
+        Each cash dividend is reinvested at the close of its ex-date bar (the
+        first bar at or after the action timestamp, the same bar on which the
+        engine credits a held position), i.e. that bar's return is
+        ``(close + dividend) / previous close``. Bars are rescaled so the
+        first bar keeps its price; a dividend at or before the first bar has
+        no previous close to earn against and is ignored.
+        """
+        symbol = canonical_symbol(self.benchmark_symbol, self.strategy.market)
+        dividends = [
+            action
+            for action in actions
+            if action.action_type == CorporateActionType.DIVIDEND
+            and canonical_symbol(action.symbol, self.strategy.market) == symbol
+        ]
+        if not dividends or len(bars) < 2:
+            return bars
+        adjusted = [bars[0]]
+        index = 0
+        factor = 1.0
+        for previous, bar in pairwise(bars):
+            dividend = 0.0
+            while index < len(dividends) and dividends[index].timestamp <= bar.timestamp:
+                if dividends[index].timestamp > previous.timestamp:
+                    dividend += dividends[index].value
+                index += 1
+            if dividend > 0 and previous.close > 0 and bar.close > 0:
+                factor *= (bar.close + dividend) / bar.close
+            adjusted.append(
+                replace(
+                    bar,
+                    open=bar.open * factor,
+                    high=bar.high * factor,
+                    low=bar.low * factor,
+                    close=bar.close * factor,
+                )
+                if factor != 1.0
+                else bar
+            )
+        return adjusted
 
     def run_dataset(
         self,
@@ -1523,6 +1591,9 @@ class PortfolioBacktestEngine:
         curve_timestamps: list[datetime],
         benchmark_return: float,
         benchmark_bars: tuple[Bar, ...],
+        *,
+        benchmark_price_return: float | None = None,
+        benchmark_return_basis: str = "price",
     ) -> PortfolioBacktestResult:
         ending = curve[-1] if curve else self.starting_equity
         peak = self.starting_equity
@@ -1648,6 +1719,8 @@ class PortfolioBacktestEngine:
             ending_equity=ending,
             total_return=total_return,
             benchmark_return=benchmark_return,
+            benchmark_price_return=(benchmark_return if benchmark_price_return is None else benchmark_price_return),
+            benchmark_return_basis=benchmark_return_basis,
             excess_return=total_return - benchmark_return,
             gross_return=gross_return,
             net_return=total_return,

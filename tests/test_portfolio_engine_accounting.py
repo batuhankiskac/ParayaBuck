@@ -864,3 +864,56 @@ def test_sortino_uses_full_series_downside_deviation_with_zero_target() -> None:
     timestamps = [epoch + timedelta(days=index) for index in range(len(curve))]
     result = engine._result(curve, timestamps, 0.0, ())
     assert result.sortino == pytest.approx(0.025 / 0.05 * 365**0.5)
+
+
+def _benchmark_run(corporate_actions):
+    from parayabuck.backtest.portfolio_report import build_portfolio_report
+
+    epoch = datetime(2025, 3, 3, 5, tzinfo=UTC)
+    bars = [
+        Bar(epoch + timedelta(days=index), "SPY", "1d", close, close, close, close, 1_000_000, Market.EQUITY)
+        for index, close in enumerate((100.0, 102.0, 99.0, 101.0))
+    ]
+    engine = _engine(_ScheduleStrategy({}, epoch))
+    result = engine.run(bars, corporate_actions=corporate_actions)
+    return result, build_portfolio_report(result, strategy_name="schedule", strategy_version="1.0.0")
+
+
+def test_benchmark_is_total_return_when_dividends_are_supplied() -> None:
+    from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
+
+    ex_date = datetime(2025, 3, 5, tzinfo=UTC)  # the 99.0 bar
+    actions = [
+        CorporateAction(ex_date, "SPY", CorporateActionType.DIVIDEND, 1.0),
+        # Other symbols and a dividend on the first bar (no prior close) do
+        # not enter the benchmark.
+        CorporateAction(ex_date, "QQQ", CorporateActionType.DIVIDEND, 5.0),
+        CorporateAction(datetime(2025, 3, 3, tzinfo=UTC), "SPY", CorporateActionType.DIVIDEND, 7.0),
+    ]
+    result, report = _benchmark_run(actions)
+
+    # Reinvested at the ex-date close: 100 -> 102 -> 102*(99+1)/102 = 100
+    # -> 100*101/99. Price-only: 101/100 - 1.
+    total_return = 101.0 / 99.0 - 1
+    assert result.benchmark_return == pytest.approx(total_return)
+    assert result.benchmark_price_return == pytest.approx(0.01)
+    assert result.benchmark_return_basis == "total_return"
+    assert result.excess_return == pytest.approx(result.total_return - total_return)
+    assert [bar.close for bar in result.benchmark_bars] == pytest.approx([100.0, 102.0, 100.0, 10100.0 / 99.0])
+    assert result.benchmark_max_drawdown == pytest.approx(2.0 / 102.0)
+    assert report.summary["benchmark_return"] == pytest.approx(total_return)
+    assert report.summary["benchmark_price_return"] == pytest.approx(0.01)
+    assert report.summary["benchmark_return_basis"] == "total_return"
+    assert report.yearly_returns[0][2] == pytest.approx(total_return)
+
+
+@pytest.mark.parametrize("corporate_actions", [None, []])
+def test_benchmark_stays_price_only_without_corporate_actions(corporate_actions) -> None:
+    result, report = _benchmark_run(corporate_actions)
+
+    assert result.benchmark_return == pytest.approx(0.01)
+    assert result.benchmark_price_return == pytest.approx(0.01)
+    assert result.benchmark_return_basis == "price"
+    assert [bar.close for bar in result.benchmark_bars] == [100.0, 102.0, 99.0, 101.0]
+    assert result.benchmark_max_drawdown == pytest.approx(3.0 / 102.0)
+    assert report.summary["benchmark_return_basis"] == "price"

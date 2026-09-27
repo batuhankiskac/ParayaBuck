@@ -420,6 +420,32 @@ def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCh
     return HealthCheck(code="signal_adjustment", status=HealthStatus.OK, summary="verified")
 
 
+def _check_market_halts(health_snapshot: dict[str, Any] | None) -> HealthCheck:
+    # A market entry halt (protection failure, ambiguous exit, unreconciled
+    # rebalance, invalid universe, ...) stops that market's entries: never OK.
+    if health_snapshot is None:
+        return HealthCheck(code="market_halts", status=HealthStatus.UNKNOWN, summary="no market data")
+    markets = health_snapshot.get("markets")
+    halts = (
+        {
+            m: info["entry_halt_reason"]
+            for m, info in markets.items()
+            if isinstance(info, dict) and info.get("entry_halt_reason")
+        }
+        if isinstance(markets, dict)
+        else {}
+    )
+    if halts:
+        return HealthCheck(
+            code="market_halts",
+            status=HealthStatus.DEGRADED,
+            summary="entries halted: " + ", ".join(f"{m}={reason}" for m, reason in sorted(halts.items())),
+            observed=halts,
+            action="resolve the halt reason; reset_safety_lock verifies and clears it",
+        )
+    return HealthCheck(code="market_halts", status=HealthStatus.OK, summary="no market entry halts")
+
+
 def _ledger_tables(db_path: str | Path) -> frozenset[str] | None:
     """Tables of the ledger opened read-only; None when its schema is unreadable.
 
@@ -672,6 +698,7 @@ def evaluate_health(
     checks.append(_check_reconciliation(health_snapshot, now, config))
     checks.append(_check_universe(health_snapshot, now, config))
     checks.append(_check_signal_adjustment(health_snapshot))
+    checks.append(_check_market_halts(health_snapshot))
     checks.append(_check_risk(database_path, health_snapshot))
     checks.append(_check_execution(database_path))
     checks.append(_check_alerts())

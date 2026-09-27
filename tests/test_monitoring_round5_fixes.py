@@ -1,8 +1,8 @@
 """Regression tests for the fifth monitoring-layer defect pass.
 
 Health verdicts must match what the current runtime does: an incident row the
-runtime never restores is no block, and the universe is judged against the
-runtime's refresh cadence and relevance. All offline (tmp_path, no network).
+runtime never restores is no block, the universe is judged against the
+runtime's refresh cadence and relevance, and a market entry halt is never OK. All offline (tmp_path, no network).
 """
 
 from __future__ import annotations
@@ -10,9 +10,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from parayabuck.config import Config
 from parayabuck.execution.ledger import ExecutionLedger
-from parayabuck.monitoring.health import HealthStatus, _check_risk, _check_universe
+from parayabuck.monitoring import health as health_module
+from parayabuck.monitoring.health import HealthStatus, _check_risk, _check_universe, evaluate_health
+from parayabuck.monitoring.snapshot import build_snapshot, write_snapshot_atomic
+from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 
 _NOW = datetime(2026, 9, 26, 15, 0, tzinfo=UTC)
 
@@ -54,3 +59,44 @@ def test_scanner_failure_of_irrelevant_market_is_not_degraded() -> None:
     assert _check_universe(snapshot, _NOW, Config()).status == HealthStatus.OK
     snapshot["markets"] = {"crypto": {"scanner_critical": True}}
     assert _check_universe(snapshot, _NOW, Config()).status == HealthStatus.DEGRADED
+
+
+def test_market_entry_halt_makes_overall_degraded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # process-local alert/journal counters are not this test's subject
+    monkeypatch.setattr(health_module.alerts, "alert_stats", dict)
+    monkeypatch.setattr(health_module, "journal_stats", dict)
+    db = tmp_path / "parayabuck.sqlite3"
+    ExecutionLedger(str(db)).close()
+    PortfolioStateRepository(db).close()
+    now = datetime.now(UTC)
+    fresh = now.isoformat()
+    worker = {"alive": True, "last_heartbeat": fresh, "last_event_at": fresh}
+    runtime_health = {
+        "state": "running",
+        "healthy": True,
+        "workers": {"pb-decisions": worker, "pb-account": worker, "pb-crypto": worker},
+        "markets": {
+            "equity": {"enabled": True, "symbol_count": 3, "entry_halt_reason": None},
+            "crypto": {"enabled": True, "symbol_count": 2, "entry_halt_reason": None},
+        },
+        "last_reconciliation_at": fresh,
+        "universe_refresh": {"status": {"crypto": "success"}, "last_refresh_at": fresh},
+        "entry_risk_latch": {"equity": None, "crypto": None},
+        "signal_adjustment": {"healthy": True, "stale": False},
+    }
+    path = tmp_path / "health_snapshot.json"
+
+    def evaluate() -> dict[str, object]:
+        snap = build_snapshot(runtime_health=runtime_health, runtime_state="running")
+        write_snapshot_atomic(path, snap)
+        return evaluate_health(snapshot_path=path, database_path=db, config=Config(), now=now)
+
+    healthy = evaluate()
+    assert healthy["overall_health"] == "OK", healthy["checks"]
+    runtime_health["markets"]["crypto"]["entry_halt_reason"] = "crypto_protection_failure"  # type: ignore[index]
+    halted = evaluate()
+    check = next(c for c in halted["checks"] if c["code"] == "market_halts")  # type: ignore[union-attr]
+    assert halted["overall_health"] == "DEGRADED"
+    assert check["status"] == "DEGRADED"
+    assert "crypto=crypto_protection_failure" in check["summary"]
+    assert halted["trading_state"] == "MARKET_HALTED"

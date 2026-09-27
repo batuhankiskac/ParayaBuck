@@ -971,6 +971,27 @@ def test_trade_update_blip_never_clears_a_circuit_breaker_halt() -> None:
     assert states == ["running", "degraded"]
 
 
+@pytest.mark.parametrize("blocking_state", ["halted", "error", "stop_failed", "stopping", "stopped"])
+def test_trade_update_blip_never_overwrites_a_blocking_state(blocking_state: str) -> None:
+    """A pb-trade-updates failure must not downgrade a halted (or stopping)
+    runtime to "degraded"."""
+    runtime, _worker = _trade_update_worker_runtime()
+    runtime._state = blocking_state
+    runtime._circuit_breaker_reason = "reconciliation_failed" if blocking_state == "halted" else None
+    states: list[str] = []
+
+    def flaky() -> None:
+        states.append(runtime._state)
+        if len(states) == 1:
+            raise RuntimeError("simulated trade-update disconnect")
+        runtime._running = False
+
+    runtime._run_stream_worker("pb-trade-updates", flaky)
+
+    assert states == [blocking_state, blocking_state]
+    assert runtime._state == blocking_state
+
+
 def test_stop_attempts_independent_storage_cleanup_after_portfolio_close_failure(
     monkeypatch: Any,
 ) -> None:

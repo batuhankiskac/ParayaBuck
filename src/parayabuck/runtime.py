@@ -195,6 +195,9 @@ def _reservation_sort_key(key: tuple[Any, str]) -> tuple[str, str]:
     return (key[0].value if hasattr(key[0], "value") else str(key[0]), key[1])
 
 
+# Runtime states that block entries outright; a transient stream-worker
+# blip must never overwrite one of them with "degraded".
+_ENTRY_BLOCKING_STATES = frozenset({"halted", "error", "stop_failed", "stopping", "stopped"})
 _RECONCILIATION_INCIDENT_REASONS = frozenset({"reconciliation_failed", "reconciliation_bug_suspected"})
 
 
@@ -2676,7 +2679,9 @@ class EngineRuntime:
                     worker.restart_count += 1
                     market = _MARKET_BY_STREAM_WORKER.get(name)
                     if market is None:
-                        self._state = "degraded"
+                        with getattr(self, "_state_lock", threading.RLock()):
+                            if self._state not in _ENTRY_BLOCKING_STATES:
+                                self._state = "degraded"
                     if worker.restart_count > 5:
                         if market is None:
                             self._state = "halted"
@@ -3654,7 +3659,7 @@ class EngineRuntime:
         if health is None:
             health = self.health()
         reasons: list[str] = []
-        if self._state in {"halted", "error", "stop_failed", "stopping", "stopped"}:
+        if self._state in _ENTRY_BLOCKING_STATES:
             reasons.append(f"runtime_state:{self._state}")
         if health.queue_age_seconds > self.config.maximum_queue_age_seconds:
             reasons.append("event_queue_stale")

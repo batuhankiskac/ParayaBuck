@@ -680,6 +680,25 @@ def test_failed_no_trade_journal_emit_is_logged(
     assert "No-trade journal emit failed for market=crypto" in caplog.text
 
 
+class _ResizingSet(set):  # type: ignore[type-arg]
+    """Simulates the decision thread adding a gap while health() iterates
+    the live set."""
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        for index, item in enumerate(super().__iter__()):
+            self.add((f"LATE{index}", "5m"))
+            yield item
+
+
+def test_market_state_gap_queries_survive_concurrent_not_ready_resize() -> None:
+    state = RuntimeMarketState(EngineConfig())
+    state._not_ready = _ResizingSet({("AAPL", "5m"), ("BTC/USD", "1h")})
+
+    assert state.has_data_gaps_for_market(Market.CRYPTO) is True
+    assert state.has_data_gaps_for_symbol("MSFT", Market.EQUITY) is False
+    assert state.has_data_gaps_for_symbol("AAPL", Market.EQUITY) is True
+
+
 def test_equity_hour_buckets_anchor_at_0930_new_york_across_dst() -> None:
     aggregator = TimeframeAggregator("1h")
     winter = datetime(2025, 1, 2, 15, 31, tzinfo=UTC)  # 10:31 ET

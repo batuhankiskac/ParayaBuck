@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from collections import Counter
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 from parayabuck.core.models import Bar, Market
@@ -305,9 +304,6 @@ class WarmupCache:
             except Exception:
                 pass
         if not valid:
-            if off:
-                # All bars were off-grid; nothing to write.
-                return
             return
         retrieved_at = datetime.now(UTC).isoformat()
         rows = [
@@ -511,75 +507,6 @@ class WarmupCache:
                     pass
                 log.warning("WarmupCache.replace_window rollback (%s); cache preserved", exc)
                 return False
-
-    def health_metrics(
-        self,
-        symbols: list[str],
-        *,
-        market: Market,
-        timeframe: str,
-        feed: str,
-        adjustment: str = "all",
-        lookback_days: int = 60,
-    ) -> dict[str, object]:
-        """Cache health diagnostics for the report's acceptance checks.
-
-        Metrics:
-        - off_grid_bars: crypto 1d bars not on midnight grid (should be 0).
-        - duplicate_day_bars: extra bars sharing same calendar day (>1 per day).
-        - last_23_span_days: span between oldest and newest of last 23 bars.
-        - symbols_last_timestamp_spread_seconds: max-min last timestamp across symbols.
-        """
-        now = datetime.now(UTC)
-        start_check = now - timedelta(days=lookback_days)
-        off_grid = 0
-        duplicate_day = 0
-        last_timestamps: list[datetime] = []
-        spans: dict[str, float | None] = {}
-        for sym in symbols:
-            bars = self.get(sym, timeframe, market=market, feed=feed, start=start_check, end=now, adjustment=adjustment)
-            # off-grid already filtered on read, so count via raw query
-            with self._lock:
-                rows = self.connection.execute(
-                    "SELECT timestamp FROM bars WHERE feed=? AND symbol=? AND market=? AND timeframe=? AND adjustment=? AND timestamp>=? AND timestamp<=? ORDER BY timestamp",
-                    (
-                        feed,
-                        canonical_symbol(sym, market),
-                        market.value,
-                        timeframe,
-                        adjustment,
-                        start_check.isoformat(),
-                        now.isoformat(),
-                    ),
-                ).fetchall()
-            for (ts_raw,) in rows:
-                ts = datetime.fromisoformat(ts_raw)
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=UTC)
-                if market == Market.CRYPTO and timeframe == "1d" and not is_crypto_daily_grid(ts):
-                    off_grid += 1
-            if bars:
-                last_timestamps.append(bars[-1].timestamp)
-                # duplicate day: count days with >1 bar
-                day_counts = Counter(b.timestamp.date().isoformat() for b in bars)
-                duplicate_day += sum(count - 1 for count in day_counts.values() if count > 1)
-                if len(bars) >= 23:
-                    span_days = (bars[-1].timestamp - bars[-23].timestamp).total_seconds() / 86400
-                    spans[sym] = float(span_days)
-                else:
-                    spans[sym] = None
-            else:
-                spans[sym] = None
-        spread = None
-        if len(last_timestamps) >= 2:
-            spread = (max(last_timestamps) - min(last_timestamps)).total_seconds()
-        return {
-            "off_grid_bars": off_grid,
-            "duplicate_day_bars": duplicate_day,
-            "last_23_span_days_by_symbol": spans,
-            "symbols_last_timestamp_spread_seconds": spread,
-            "last_timestamps": {s: ts.isoformat() for s, ts in zip(symbols, last_timestamps, strict=False)},
-        }
 
     def scope_is_valid(self, scope: str, config_digest: str) -> bool:
         """Whether a cache scope was last written under ``config_digest``.

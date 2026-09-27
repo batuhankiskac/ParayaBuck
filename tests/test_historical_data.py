@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -8,6 +9,7 @@ import pytest
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
+from parayabuck.data.cache import WarmupCache
 from parayabuck.markets.timeframes import is_regular_equity_time
 
 
@@ -363,37 +365,208 @@ def test_batch_download_chunks_by_total_rows_not_per_symbol(monkeypatch: Any) ->
         assert rows * 12 <= 10_000
 
 
-def test_sip_quote_entitlement_failure_falls_back_to_iex_quotes_only(monkeypatch: Any) -> None:
-    """A SIP latest-quote entitlement failure degrades quotes to IEX without
-    downgrading the historical bar feed (Alpaca gates the two separately)."""
+# ---------------------------------------------------------------------------
+# incremental (cache-merge) fetch — the live PAPER warmup path
+# ---------------------------------------------------------------------------
+
+_INCREMENTAL_SCOPE = "warmup/unit-test"
+_INCREMENTAL_DIGEST = "digest-a"
+_INCREMENTAL_SYMBOLS = ("BTC/USD", "ETH/USD")
+
+
+@pytest.fixture
+def warmup_cache(tmp_path: Path) -> Any:
+    """A real ``WarmupCache`` under ``tmp_path`` — never touches data/cache/."""
+    cache = WarmupCache(str(tmp_path / "warmup.sqlite3"))
+    try:
+        yield cache
+    finally:
+        cache.close()
+
+
+def _hour_grid(start: datetime, end: datetime) -> list[datetime]:
+    """Hourly bar timestamps on ``[start, end]``; crypto trades 24/7."""
+    cursor = start.replace(minute=0, second=0, microsecond=0)
+    if cursor < start:
+        cursor += timedelta(hours=1)
+    stamps: list[datetime] = []
+    while cursor <= end:
+        stamps.append(cursor)
+        cursor += timedelta(hours=1)
+    return stamps
+
+
+class _FakeCryptoBars:
+    """Deterministic 1h crypto provider: synthetic rows, no network, no credentials."""
+
+    def __init__(
+        self,
+        *,
+        omit: tuple[str, ...] = (),
+        close_overrides: dict[datetime, float] | None = None,
+        reverse: bool = False,
+    ) -> None:
+        self.requests: list[tuple[list[str], datetime, datetime]] = []
+        self._omit = set(omit)
+        self._close_overrides = close_overrides or {}
+        self._reverse = reverse
+
+    def get_crypto_bars(self, request: Any) -> Any:
+        import pandas as pd
+
+        # The SDK hands the request bounds back naive; the production client
+        # reads every returned timestamp as UTC, so the fake does the same.
+        start = request.start.replace(tzinfo=UTC) if request.start.tzinfo is None else request.start.astimezone(UTC)
+        end = request.end.replace(tzinfo=UTC) if request.end.tzinfo is None else request.end.astimezone(UTC)
+        symbols = sorted(str(symbol) for symbol in request.symbol_or_symbols)
+        self.requests.append((symbols, start, end))
+        rows = [
+            {
+                "symbol": symbol,
+                "timestamp": stamp,
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": self._close_overrides.get(stamp, 100.0),
+                "volume": 1000.0,
+            }
+            for stamp in _hour_grid(start, end)
+            for symbol in symbols
+            if symbol not in self._omit
+        ]
+        frame = pd.DataFrame(rows)
+        if self._reverse:
+            frame = frame.iloc[::-1]
+        return SimpleNamespace(df=frame)
+
+
+def _incremental_history(cache: Any, provider: Any) -> Any:
     import parayabuck.data.alpaca as alpaca_module
 
-    quote_calls: list[object] = []
-
-    class QuoteFailingClient:
-        def get_stock_latest_quote(self, request: object) -> Any:
-            quote_calls.append(request)
-            if len(quote_calls) == 1:
-                raise RuntimeError("subscription does not permit querying recent SIP data")
-            return {"AAPL": object()}
-
     history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
-    history._stock_feed = "sip"
-    history._configured_stock_feed = "sip"
+    history._stock_feed = "iex"
+    history._configured_stock_feed = "iex"
     history._sip_fallback_active = False
     history._sip_quote_fallback_active = False
-    history._sip_quote_fallback_active = False
-    history._stock_client = QuoteFailingClient()
-    history._crypto_client = None
-    history._cache = SimpleNamespace(
-        get=lambda *args, **kwargs: [],
-        upsert=lambda *args, **kwargs: None,
+    history._stock_client = None
+    history._crypto_client = provider
+    history._cache = cache
+    return history
+
+
+def _seed_crypto_cache(cache: Any, stamps: list[datetime]) -> None:
+    """Write a scope-valid cache holding exactly ``stamps`` for every symbol."""
+    for symbol in _INCREMENTAL_SYMBOLS:
+        cache.upsert(
+            [
+                Bar(
+                    timestamp=stamp,
+                    symbol=symbol,
+                    timeframe="1h",
+                    open=100.0,
+                    high=101.0,
+                    low=99.0,
+                    close=100.0,
+                    volume=1000.0,
+                    market=Market.CRYPTO,
+                )
+                for stamp in stamps
+            ],
+            feed="crypto",
+            adjustment="raw",
+        )
+    cache.scope_set(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST, "unit-test")
+
+
+def _expected_window(
+    start: datetime,
+    end: datetime,
+    *,
+    close_overrides: dict[datetime, float] | None = None,
+) -> dict[str, list[tuple[datetime, float]]]:
+    """The (timestamp, close) pairs a complete download of the window returns."""
+    overrides = close_overrides or {}
+    return {
+        symbol: [(stamp, overrides.get(stamp, 100.0)) for stamp in _hour_grid(start, end)]
+        for symbol in _INCREMENTAL_SYMBOLS
+    }
+
+
+def _window_pairs(result: dict[str, list[Bar]]) -> dict[str, list[tuple[datetime, float]]]:
+    return {symbol: [(bar.timestamp, bar.close) for bar in bars] for symbol, bars in result.items()}
+
+
+def _fetch_incremental(history: Any, start: datetime, end: datetime, **kwargs: Any) -> dict[str, list[Bar]]:
+    return history.get_bars_batch_incremental(
+        list(_INCREMENTAL_SYMBOLS),
+        "1h",
+        start=start,
+        end=end,
+        scope=_INCREMENTAL_SCOPE,
+        config_digest=_INCREMENTAL_DIGEST,
+        **kwargs,
     )
 
-    quotes = history.get_latest_stock_quotes(["AAPL"])
-    assert "AAPL" in quotes
-    assert history._sip_quote_fallback_active is True
-    assert history._sip_fallback_active is False
-    # The bar feed keeps its configured SIP coverage.
-    assert history.feed_status()["effective"] == "sip"
-    assert history.feed_status()["quote_effective"] == "iex"
+
+def test_incremental_fetch_extends_a_valid_cache_with_a_tail_download_only(warmup_cache: Any) -> None:
+    """A scope-valid, head-covered, fresh cache must download only the tail
+    (plus the overlap bars) and still return the complete window."""
+    provider = _FakeCryptoBars()
+    history = _incremental_history(warmup_cache, provider)
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=8)
+
+    first = _fetch_incremental(history, start, end)
+    assert len(provider.requests) == 1, "a cache with no scope row must be fully downloaded"
+    assert provider.requests[0][1] == start
+    assert _window_pairs(first) == _expected_window(start, end)
+
+    later = end + timedelta(hours=1)
+    second = _fetch_incremental(history, start, later)
+    assert len(provider.requests) == 2
+    symbols, tail_start, tail_end = provider.requests[-1]
+    assert symbols == sorted(_INCREMENTAL_SYMBOLS)
+    # The overlap re-downloads the two bars before the newest cached bar.
+    assert tail_start == end - timedelta(hours=2)
+    assert tail_end == later
+    assert _window_pairs(second) == _expected_window(start, later)
+
+
+def test_incremental_fetch_serves_a_full_cache_hit_without_calling_the_provider(warmup_cache: Any) -> None:
+    """When the cache already reaches the request end there is nothing to
+    download, so the provider must not be called at all."""
+    provider = _FakeCryptoBars()
+    history = _incremental_history(warmup_cache, provider)
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=6)
+    _seed_crypto_cache(warmup_cache, _hour_grid(start, end))
+
+    result = _fetch_incremental(history, start, end, overlap_timeframes=0)
+
+    assert provider.requests == []
+    assert _window_pairs(result) == _expected_window(start, end)
+
+
+def test_incremental_merge_dedups_the_overlap_and_keeps_every_cached_bar(warmup_cache: Any) -> None:
+    """The tail overlaps the cache by design: the merge must produce exactly
+    the cached window extended by the tail — no gaps, no duplicate timestamps
+    (even when the provider answers out of order), the provider wins on a
+    corrected bar, and a symbol the provider omits keeps its cached bars."""
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=6)
+    correction = end - timedelta(hours=2)  # first bar of the overlap tail
+    provider = _FakeCryptoBars(omit=("ETH/USD",), close_overrides={correction: 100.5}, reverse=True)
+    _seed_crypto_cache(warmup_cache, _hour_grid(start, end))
+    history = _incremental_history(warmup_cache, provider)
+
+    result = _fetch_incremental(history, start, end)
+
+    assert len(provider.requests) == 1
+    assert provider.requests[0][1] == correction
+    expected = _expected_window(start, end, close_overrides={correction: 100.5})
+    # ETH/USD had no provider rows in the tail: its cached window must survive.
+    expected["ETH/USD"] = _expected_window(start, end)["ETH/USD"]
+    assert _window_pairs(result) == expected
+    btc = result["BTC/USD"]
+    assert [bar.timestamp for bar in btc] == sorted({bar.timestamp for bar in btc})
+    assert next(bar.close for bar in btc if bar.timestamp == correction) == 100.5

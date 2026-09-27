@@ -85,9 +85,12 @@ def crypto_candidate_from_bars(
     # ATR average). Named ``ranges`` so it does not shadow that helper.
     ranges: list[float] = []
     for previous, current in pairwise(ordered):
-        high = float(getattr(current, "high"))
-        low = float(getattr(current, "low"))
-        previous_close = float(getattr(previous, "close"))
+        try:
+            high = float(getattr(current, "high"))
+            low = float(getattr(current, "low"))
+            previous_close = float(getattr(previous, "close"))
+        except (TypeError, ValueError, AttributeError):
+            continue
         if all(math.isfinite(value) for value in (high, low, previous_close)):
             ranges.append(max(high - low, abs(high - previous_close), abs(low - previous_close)))
     price = float(getattr(ordered[-1], "close")) if ordered else 0.0
@@ -464,15 +467,9 @@ def validate_active_crypto_universe(
             if payload.get("observation_strategy_timeframe") != config.observation_strategy_timeframe:
                 return (), "observation_timeframe_mismatch"
             expected_digest = config.observation_strategy_parameters_digest
-            if expected_digest and payload.get("observation_strategy_parameters_digest") not in (
-                None,
-                "",
-                expected_digest,
-            ):
-                if payload.get("observation_strategy_parameters_digest") != expected_digest:
-                    return (), "observation_digest_mismatch"
-            elif expected_digest and not payload.get("observation_strategy_parameters_digest"):
-                return (), "observation_strategy_mismatch"
+            recorded_digest = payload.get("observation_strategy_parameters_digest")
+            if expected_digest and recorded_digest != expected_digest:
+                return (), "observation_strategy_mismatch" if not recorded_digest else "observation_digest_mismatch"
         selection_at = datetime.fromisoformat(str(payload["selection_timestamp"]))
         data_at = datetime.fromisoformat(str(payload["data_timestamp"]))
         if selection_at.tzinfo is None or data_at.tzinfo is None:

@@ -117,11 +117,6 @@ class LiveConfig:
             raise ValueError("Enabled live mode requires an operator approval file")
 
 
-# Canonical alert vocabulary is single-sourced in parayabuck.monitoring.events.
-# Keep private alias for any external introspection that imported config._ALERT_KINDS.
-_ALERT_KINDS = ALERT_KINDS_ORDERED
-
-
 @dataclass(frozen=True)
 class AlertingConfig:
     """Event-notification sink configuration (console/log always on)."""
@@ -784,10 +779,10 @@ def load_config(config_path: str | None = None) -> Config:
             "runtime.mode=live plus live.enabled and live safety controls"
         )
     return Config(
-        app=AppConfig(**raw.get("app", {})),
+        app=AppConfig(**dict(raw.get("app") or {})),
         runtime=RuntimeConfig(**runtime_raw),
         alpaca=AlpacaConfig(**alpaca_raw),
-        data=DataConfig(**raw.get("data", {})),
+        data=DataConfig(**dict(raw.get("data") or {})),
         universe=UniverseConfig(equity=equity, crypto=crypto_universe),
         strategy=StrategyConfig(equity_strategy, crypto_strategy),
         risk=risk,

@@ -11,7 +11,6 @@ from alpaca.data.requests import (
     CryptoBarsRequest,
     CryptoLatestQuoteRequest,
     StockBarsRequest,
-    StockLatestQuoteRequest,
 )
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
@@ -194,45 +193,6 @@ class AlpacaHistoricalData:
         canonical = canonical_symbol(symbol)
         return self.get_bars_batch([canonical], timeframe, start, end, adjustment=adjustment).get(canonical, [])
 
-    def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, Any]:
-        """Latest NBBO quotes through the market-data client.
-
-        Latest quotes are served by ``StockHistoricalDataClient``, not the
-        trading client; using the trading client here silently degrades every
-        equity scan to a neutral spread score. The quote endpoint has a
-        separate SIP entitlement from historical bars: when the configured
-        SIP feed is not entitled, the request falls back to IEX once and is
-        labeled by ``feed_status`` instead of failing the whole scan.
-        """
-        if not symbols:
-            return {}
-        try:
-            quote_feed = (
-                DataFeed("iex") if self._sip_quote_fallback_active or self._sip_fallback_active else self._stock_feed
-            )
-            response: Any = self._stock_client.get_stock_latest_quote(
-                StockLatestQuoteRequest(
-                    symbol_or_symbols=[canonical_symbol(symbol) for symbol in symbols],
-                    feed=quote_feed,
-                )
-            )
-        except Exception as exc:
-            if (
-                not getattr(self, "_sip_quote_fallback_active", False)
-                and not getattr(self, "_sip_fallback_active", False)
-                and self._effective_stock_feed_name == "sip"
-                and self._is_entitlement_error(exc)
-            ):
-                log.warning(
-                    "SIP latest-quote entitlement unavailable (%s); degrading "
-                    "to IEX quotes (bar coverage keeps its configured feed)",
-                    exc,
-                )
-                self._sip_quote_fallback_active = True
-                return self.get_latest_stock_quotes(symbols)
-            raise
-        return dict(response or {})
-
     def get_bars_batch(
         self,
         symbols: list[str],
@@ -386,9 +346,12 @@ class AlpacaHistoricalData:
         tail: list[str] = []
         tail_starts: dict[str, datetime] = {}
         head_reference = _first_expected_bar(market, timeframe, grid_start)
+        # The scope checks and the merge below need the same cached window, so
+        # each symbol's bars are materialised once and reused.
+        windows: dict[str, list[Bar]] = {}
         if cache.scope_is_valid(scope, config_digest):
             for symbol in symbols:
-                cached = self._cached_window(
+                cached = windows[symbol] = self._cached_window(
                     cache, symbol, timeframe, market, feed_name, adjustment, grid_start, end_at
                 )
                 if not cached:
@@ -422,13 +385,17 @@ class AlpacaHistoricalData:
             else:
                 # Cache already extends to the request end; nothing to fetch.
                 for symbol in tail:
-                    fetched[symbol] = self._cached_window(
-                        cache, symbol, timeframe, market, feed_name, adjustment, grid_start, end_at
-                    )
+                    fetched[symbol] = windows[symbol]
         result: dict[str, list[Bar]] = {}
         for symbol in symbols:
-            cached = self._cached_window(cache, symbol, timeframe, market, feed_name, adjustment, grid_start, end_at)
-            merged = {bar.timestamp: bar for bar in cached}
+            window = windows.get(symbol)
+            if window is None:
+                # An invalid scope reaches the cache for the first time here,
+                # after the refetch has refreshed it.
+                window = windows[symbol] = self._cached_window(
+                    cache, symbol, timeframe, market, feed_name, adjustment, grid_start, end_at
+                )
+            merged = {bar.timestamp: bar for bar in window}
             merged.update({bar.timestamp: bar for bar in fetched.get(symbol, [])})
             result[symbol] = [merged[key] for key in sorted(merged)]
         cache.scope_set(scope, config_digest, identity)
@@ -590,6 +557,16 @@ class AlpacaHistoricalData:
         fresh_cached = {
             symbol: bars for symbol, bars in cached.items() if self._cache_is_fresh(bars, market, timeframe, end_at)
         }
+
+        def _fallback(message: str) -> dict[str, list[Bar]] | None:
+            """Serve the local cache when the provider failed or returned nothing."""
+            if len(fresh_cached) == len(symbols) and all(
+                self._cache_covers_window(bars, market, timeframe, start_at, end_at) for bars in fresh_cached.values()
+            ):
+                log.warning(message)
+                return fresh_cached
+            return None
+
         response: Any
         try:
             if market == Market.CRYPTO:
@@ -641,22 +618,15 @@ class AlpacaHistoricalData:
                     adjustment,
                     market,
                 )
-            if len(fresh_cached) == len(symbols) and all(
-                self._cache_covers_window(bars, market, timeframe, start_at, end_at) for bars in fresh_cached.values()
-            ):
-                log.warning(
-                    "Historical API failed (%s); using feed-matched local warmup cache",
-                    exc,
-                )
-                return fresh_cached
+            served = _fallback(f"Historical API failed ({exc}); using feed-matched local warmup cache")
+            if served is not None:
+                return served
             raise
         frame = response.df
         if frame.empty:
-            if len(fresh_cached) == len(symbols) and all(
-                self._cache_covers_window(bars, market, timeframe, start_at, end_at) for bars in fresh_cached.values()
-            ):
-                log.warning("Historical API returned no rows; using feed-matched local cache")
-                return fresh_cached
+            served = _fallback("Historical API returned no rows; using feed-matched local cache")
+            if served is not None:
+                return served
             return {symbol: [] for symbol in symbols}
         bars: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
         off_grid_dropped = 0

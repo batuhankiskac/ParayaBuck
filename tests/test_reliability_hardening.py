@@ -596,18 +596,6 @@ def test_alpaca_dedup_measures_provider_calls() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_universe_pagination_150(tmp_path: Path) -> None:
-    from parayabuck.universe.preflight import _chunks
-
-    # Verify _chunks pagination is 150 for history
-    symbols = [f"SYM{i}" for i in range(310)]
-    chunks = _chunks(symbols, 150)
-    assert len(chunks) == 3
-    assert len(chunks[0]) == 150
-    assert len(chunks[1]) == 150
-    assert len(chunks[2]) == 10
-
-
 def _crypto_candidates(history_bars: int = 30) -> list[CryptoCandidate]:
     start = datetime(2025, 1, 1, tzinfo=UTC)
     series = [

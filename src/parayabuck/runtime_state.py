@@ -40,10 +40,12 @@ class RuntimeMarketState:
     def repair_gap(self, bars: list[Bar]) -> bool:
         self.bars.seed(bars)
         repaired = True
-        for bar in bars:
-            key = (canonical_symbol(bar.symbol, bar.market), bar.timeframe)
-            if self.bars.is_contiguous(*key):
-                self._not_ready.discard(key)
+        # One contiguity scan per symbol/timeframe instead of one per bar: each
+        # scan copies the whole bar window, so a long backfill would otherwise
+        # repeat identical work under the caller's ingestion lock.
+        for symbol, timeframe in {(canonical_symbol(bar.symbol, bar.market), bar.timeframe) for bar in bars}:
+            if self.bars.is_contiguous(symbol, timeframe):
+                self._not_ready.discard((symbol, timeframe))
             else:
                 repaired = False
         return repaired

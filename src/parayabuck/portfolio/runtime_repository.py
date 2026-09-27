@@ -44,6 +44,20 @@ _NON_REGRESSING_STATUS_SQL = (
 )
 
 
+def _latest_timestamp(*values: object) -> datetime | None:
+    """Latest of the stored ISO timestamps (naive values read as UTC)."""
+    parsed: list[datetime] = []
+    for value in values:
+        if not value:
+            continue
+        try:
+            moment = datetime.fromisoformat(str(value))
+        except ValueError:
+            continue
+        parsed.append(moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC))
+    return max(parsed, default=None)
+
+
 class PortfolioStateRepository:
     def __init__(self, path: str | Path, *, store: SQLiteStore | None = None) -> None:
         self.store = store or SQLiteStore(path)
@@ -931,7 +945,8 @@ class PortfolioStateRepository:
         """
         query = f"""
             SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
-                   o.cumulative_filled_quantity, o.broker_order_id, o.reference_price
+                   o.cumulative_filled_quantity, o.broker_order_id, o.reference_price,
+                   o.status, o.created_at, o.submit_call_started_at, o.submit_call_returned_at
             FROM portfolio_orders o
             JOIN portfolio_decisions d ON d.decision_id = o.decision_id
             JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -954,6 +969,8 @@ class PortfolioStateRepository:
                 cumulative_filled_quantity=float(row[5] or 0.0),
                 broker_order_id=str(row[6] or ""),
                 reference_price=float(row[7] or 0.0),
+                status=str(row[8] or ""),
+                last_updated_at=_latest_timestamp(row[9], row[10], row[11]),
             )
             for row in rows
         )

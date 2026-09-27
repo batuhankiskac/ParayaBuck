@@ -45,6 +45,14 @@ log = get_logger("parayabuck.execution.alpaca_reconciliation")
 # Absolute floor for ledger-vs-broker position quantity agreement.
 QUANTITY_MATCH_FLOOR = 1e-8
 
+# A local portfolio order still ``submitting`` or ``reconciliation_required``
+# whose client order id Alpaca definitively does not know (404) is closed as
+# ``canceled`` once its last write is this old: far beyond any submit call,
+# so an in-flight submit (reconcile does not hold the portfolio lock) can
+# never be canceled under it. Younger rows keep failing closed as drift.
+UNKNOWN_ORDER_CANCEL_AGE_SECONDS = 600.0
+_UNKNOWN_ORDER_CANCELABLE_STATUSES = frozenset({"submitting", "reconciliation_required"})
+
 RECONCILIATION_CATEGORIES: tuple[str, ...] = (
     "MATCH",
     "LOCAL_STALE",
@@ -355,7 +363,10 @@ class ReconciliationService:
                     continue  # The final OPEN-ID comparison still fails closed.
                 order = lookup(client_id, str(getattr(local, "broker_order_id", "") or ""))
             if order is None:
-                continue  # A targeted 404 is not evidence of a terminal outcome.
+                # A targeted 404 alone is not evidence of a terminal outcome;
+                # only an aged, never-acknowledged row is closed.
+                self._cancel_unknown_portfolio_order(local, client_id, lookup, callback)
+                continue
             actual_client_id = str(self._field(order, "client_order_id", "") or "")
             broker_id = str(self._field(order, "id", "") or "")
             if actual_client_id != client_id or not broker_id:
@@ -420,6 +431,65 @@ class ReconciliationService:
                 None,
                 status=local_status,
             )
+
+    def _cancel_unknown_portfolio_order(self, local: Any, client_id: str, lookup: Any, callback: Any) -> None:
+        """Close a never-accepted portfolio order the broker does not know.
+
+        Called after the targeted lookup returned 404. Only a row still
+        ``submitting`` or ``reconciliation_required``, whose last write is at
+        least ``UNKNOWN_ORDER_CANCEL_AGE_SECONDS`` old, is booked ``canceled``
+        with a zero fill, and only when the lookup went through a client-id
+        query (a missing query proves nothing). Anything else is unchanged and
+        the final OPEN-ID comparison still reports it as drift.
+        """
+        status = str(getattr(local, "status", "") or "").lower()
+        updated_at = getattr(local, "last_updated_at", None)
+        client = getattr(self._broker, "_client", None)
+        if (
+            status not in _UNKNOWN_ORDER_CANCELABLE_STATUSES
+            or not isinstance(updated_at, datetime)
+            or lookup is None
+            or callback is None
+            or getattr(client, "get_order_by_client_id", None) is None
+        ):
+            return
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        age = (datetime.now(UTC) - updated_at).total_seconds()
+        if age < UNKNOWN_ORDER_CANCEL_AGE_SECONDS:
+            return
+        callback(
+            client_id,
+            str(getattr(local, "broker_order_id", "") or ""),
+            0.0,
+            None,
+            datetime.now(UTC),
+            f"{client_id}:unknown_at_broker:canceled",
+            None,
+            status="canceled",
+        )
+        log.warning(
+            "Portfolio order unknown at the broker canceled: client_order_id=%s status=%s age_seconds=%d",
+            client_id,
+            status,
+            round(age),
+        )
+        try:
+            from parayabuck.monitoring import alerts
+
+            # One incident per order: the row is terminal afterwards, and the
+            # alert throttle keys paper_incident by its incident id.
+            alerts.emit(
+                "paper_incident",
+                message="Portfolio order never accepted by the broker was canceled",
+                category="unknown_order_canceled",
+                incident_id=f"unknown_order_canceled:{client_id}",
+                client_order_id=client_id,
+                previous_status=status,
+                age_seconds=round(age),
+            )
+        except Exception:
+            log.warning("Alert emission failed for unknown order %s", client_id, exc_info=True)
 
     def _adopt_broker_order_quantity(
         self, broker: Any, order: Any, client_id: str, filled: float, local_quantity: float

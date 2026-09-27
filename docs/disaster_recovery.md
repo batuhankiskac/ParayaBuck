@@ -329,6 +329,7 @@ Buckets (holdings layer):
 - `BROKER_STALE` + `MISSING_LOCAL_ORDER` — broker positive, local zero.
 - `UNKNOWN_ORDER` — broker `OPEN` `client_order_id` not in `portfolio_open_orders()`.
 - `MISSING_LOCAL_ORDER` — actually `MISSING_BROKER_ORDER` duplicate (repo open id not in broker OPEN) — upstream bug, treated same; reported in both keys for compatibility.
+- Before the comparison, a repo row still `submitting`/`reconciliation_required` whose client-id lookup returns 404 and whose last write is at least 10 min old (`UNKNOWN_ORDER_CANCEL_AGE_SECONDS`) is booked `canceled` with zero fill and one `paper_incident` (`unknown_order_canceled`); the next clean reconcile clears the breaker. Younger rows and failed lookups stay drift.
 
 **Prevent**: Watermarked fill-activity backfill (incremental, unbounded history without rescan); dedup by `activity.id`; `BEGIN IMMEDIATE` transactions; `INSERT OR IGNORE`.
 

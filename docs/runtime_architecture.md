@@ -72,7 +72,7 @@ No circular imports. `repository` does not import `PortfolioRuntime`. `rebalance
   - sell completed → transitions to `buy_ready` → `_submit_deferred_buys` re-plans from fresh account
   - `buy_ready` persisted → next start calls `advance_rebalance` and submits buys exactly once
   - `buy_pending` → checks buys terminal → `complete`
-  - Stuck `submitting` rows: `_resolve_stuck_submission_rows` uses broker `resolve_portfolio_submission` to prove whether order reached Alpaca; unknown id is treated as never-filled (safe to cancel), unreachable broker leaves for retry — no guessing. The same lookup runs in `buy_ready` before re-planning, and before each new decision for rows of earlier decisions still at `submitting` (e.g. a crash before the broker call). When a submit raises, the batch's later, never-sent rows are canceled at once.
+  - Stuck `submitting` rows: `_resolve_stuck_submission_rows` uses broker `resolve_portfolio_submission` to prove whether order reached Alpaca; unknown id is treated as never-filled (safe to cancel), unreachable broker leaves for retry — no guessing. The same lookup runs in `buy_ready` before re-planning, and before each new decision for rows of earlier decisions still at `submitting` (e.g. a crash before the broker call). When a submit raises, the batch's later, never-sent rows are canceled at once. Reconciliation cancels a `submitting`/`reconciliation_required` row the broker does not know (404) once its last write is 10 min old.
 - **High-water / epoch**: persisted in `portfolio_high_water` with `epoch` column; restart restores max peak only from rows of current epoch.
 
 ## PAPER / LIVE Shared Path

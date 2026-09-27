@@ -431,8 +431,8 @@ def test_buy_ready_resolves_a_crashed_submitting_buy_before_replanning(tmp_path)
 
 
 def _stranded_direct_buy(tmp_path):
-    """A pure-BUY decision whose first submit times out leaves its untried
-    sibling at ``submitting``."""
+    """A pure-BUY decision whose process dies at the second submit leaves
+    that order's row at ``submitting``."""
     broker = _Broker()
     broker.positions = []
     repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
@@ -447,15 +447,18 @@ def _stranded_direct_buy(tmp_path):
     )
     submit = broker.submit_portfolio_order
 
-    def timeout(order: PortfolioOrderRequest) -> str:
-        raise TimeoutError("broker timeout")
+    def crash_at_msft(order: PortfolioOrderRequest) -> str:
+        if order.symbol == "MSFT":
+            raise SystemExit("process crashed before the broker call")
+        return submit(order)
 
-    broker.submit_portfolio_order = timeout  # type: ignore[method-assign]
-    with pytest.raises(TimeoutError):
+    broker.submit_portfolio_order = crash_at_msft  # type: ignore[method-assign]
+    with pytest.raises(SystemExit):
         runtime.process_closed_bars(_bars(_DAY))
     broker.submit_portfolio_order = submit  # type: ignore[method-assign]
+    broker.submitted.clear()
     statuses = {str(row["symbol"]): str(row["status"]) for row in _all_orders(repository)}
-    assert statuses == {"AAPL": "reconciliation_required", "MSFT": "submitting"}
+    assert statuses == {"AAPL": "submitted", "MSFT": "submitting"}
     return runtime, repository, broker
 
 
@@ -481,8 +484,8 @@ def test_next_decision_cancels_an_untried_direct_order_unknown_to_the_broker(tmp
     assert lookups == [stranded["client_order_id"]]
     rows = {row["client_order_id"]: row for row in _all_orders(repository)}
     assert rows[stranded["client_order_id"]]["status"] == "canceled"
-    # The freed MSFT slot is planned again by the new decision; the ambiguous
-    # AAPL row is not a submitting row and keeps suppressing its symbol.
+    # The freed MSFT slot is planned again by the new decision; the working
+    # AAPL order is not a submitting row and keeps suppressing its symbol.
     assert [(order.symbol, order.decision_id) for order in broker.submitted] == [("MSFT", result.decision_id)]
     assert stranded["decision_id"] != result.decision_id
     open_ids = {order.client_order_id for order in repository.open_orders("acct")}
@@ -502,3 +505,37 @@ def test_unreachable_broker_keeps_an_untried_direct_order_open(tmp_path) -> None
     # Still an open order: the new decision submits nothing for either symbol.
     assert {order.symbol for order in repository.open_orders("acct")} == {"AAPL", "MSFT"}
     assert broker.submitted == []
+
+
+def test_failed_direct_submit_cancels_the_untried_rest_of_its_batch(tmp_path) -> None:
+    """Orders of a direct batch after a failed submit were never sent: their
+    rows are canceled at once, not left at ``submitting`` for reconciliation
+    to report as missing at the broker."""
+    broker = _Broker()
+    broker.positions = []
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime = PortfolioRuntime(
+        _Strategy(),
+        tuple(sorted(_TARGETS)),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    submit = broker.submit_portfolio_order
+
+    def timeout(order: PortfolioOrderRequest) -> str:
+        raise TimeoutError("broker timeout")
+
+    broker.submit_portfolio_order = timeout  # type: ignore[method-assign]
+    with pytest.raises(TimeoutError):
+        runtime.process_closed_bars(_bars(_DAY))
+    broker.submit_portfolio_order = submit  # type: ignore[method-assign]
+
+    statuses = {str(row["symbol"]): str(row["status"]) for row in _all_orders(repository)}
+    assert statuses == {"AAPL": "reconciliation_required", "MSFT": "canceled"}
+    assert {order.symbol for order in repository.open_orders("acct")} == {"AAPL"}
+    # No broker lookup is needed: the next decision plans MSFT again.
+    result = runtime.process_closed_bars(_bars(_DAY + timedelta(days=1)), force_scheduled=True)
+    assert [(order.symbol, order.decision_id) for order in broker.submitted] == [("MSFT", result.decision_id)]

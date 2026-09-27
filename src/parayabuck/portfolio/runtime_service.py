@@ -1523,7 +1523,7 @@ class PortfolioRuntime:
     def _resolve_stale_submitting_rows(self) -> None:
         """Resolve rows of earlier decisions still at ``submitting``.
 
-        A submit that raised mid-batch leaves the batch's untried rows at
+        A crash during a direct batch leaves its unsent rows at
         ``submitting`` with no rebalance phase to resolve them. Each is
         looked up by its deterministic client order id: a found order takes
         its real status, an unknown one is canceled, and a failed lookup
@@ -2006,7 +2006,7 @@ class PortfolioRuntime:
         if orders:
             rows = self.repository.orders_for_decision(orders[0].decision_id)
             existing_by_client = {str(row.get("client_order_id")): str(row.get("status", "")) for row in rows}
-        for order in orders:
+        for index, order in enumerate(orders):
             # Idempotency: if the logical order already exists with a terminal
             # or submitted status, do not submit a duplicate broker order.
             already = existing_by_client.get(order.client_order_id)
@@ -2041,6 +2041,13 @@ class PortfolioRuntime:
                 except Exception:
                     log.warning("Could not record order submit return for %s", order.client_order_id, exc_info=True)
                 self.repository.update_order(order.client_order_id, "reconciliation_required")
+                # The batch's later orders were never sent: their rows, written
+                # at ``submitting`` with the decision, are canceled now. Left
+                # as is they are missing at the broker, so reconciliation
+                # reports drift and halts decisions before any resolver runs.
+                for untried in orders[index + 1 :]:
+                    if existing_by_client.get(untried.client_order_id) == "submitting":
+                        self.repository.update_order(untried.client_order_id, "canceled")
                 raise
             try:
                 self.repository.record_submit_call_returned(order.client_order_id, datetime.now(UTC))

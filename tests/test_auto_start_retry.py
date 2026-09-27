@@ -688,3 +688,31 @@ def test_status_exposes_retry_info_only_while_retrying(monkeypatch: Any) -> None
         assert "engine" not in idle  # settled engine exposes no retry noise
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("raised", "expected_state"),
+    [("reconciliation_failed", "running"), ("portfolio_runtime_failure", "halted")],
+)
+def test_startup_state_never_pins_a_halt_a_clean_reconcile_would_orphan(raised: str, expected_state: str) -> None:
+    """A periodic reconcile (decision loop / trade-update stream) may fail
+    transiently while start() is still in its tail. Reconciliation reasons
+    gate entries without halting the state, and a clean reconcile clears
+    them; pinning "halted" here would outlive the cleared reason with no
+    reset path (reset refuses reason None). Stronger breakers still halt."""
+    runtime = _tail_capable_runtime()
+    runtime._has_ready_symbols = lambda: True  # type: ignore[method-assign]
+
+    def catch_up_with_concurrent_failure(*, account: object) -> None:
+        with runtime._state_lock:  # type: ignore[attr-defined]
+            runtime._circuit_breaker_reason = raised  # type: ignore[attr-defined]
+            if raised not in runtime_module._RECONCILIATION_INCIDENT_REASONS:
+                runtime._state = "halted"  # type: ignore[attr-defined]
+
+    runtime._run_startup_catch_up = catch_up_with_concurrent_failure  # type: ignore[method-assign]
+    runtime.start()
+    assert runtime._state == expected_state  # type: ignore[attr-defined]
+    runtime._clear_reconciliation_incidents()  # type: ignore[attr-defined]
+    if expected_state == "running":
+        assert runtime._circuit_breaker_reason is None  # type: ignore[attr-defined]
+        assert runtime._state not in runtime_module._ENTRY_BLOCKING_STATES  # type: ignore[attr-defined]

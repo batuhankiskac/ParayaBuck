@@ -1249,8 +1249,13 @@ class EngineRuntime:
         with self._state_lock:
             # Worker threads have been live since before warmup: a halt they
             # raised (or a restored persistent incident) must not be
-            # overwritten with a trading state here.
-            if self._circuit_breaker_reason is not None:
+            # overwritten with a trading state here. A reconciliation reason
+            # (e.g. a transient periodic-reconcile failure during warmup)
+            # gates entries without halting, exactly as _reconcile_safely
+            # leaves it: a clean reconcile clears it, and a pinned "halted"
+            # would then have no reason left for reset_safety_lock to clear.
+            breaker = self._circuit_breaker_reason
+            if breaker is not None and breaker not in _RECONCILIATION_INCIDENT_REASONS:
                 self._state = "halted"
             elif self._state not in _ENTRY_BLOCKING_STATES:
                 self._state = "running" if self._has_ready_symbols() else "warming_up"
@@ -4611,7 +4616,11 @@ class EngineRuntime:
                 raise ValueError("A managed position still requires manual intervention")
             account = self.broker.account()
             self._publish_account_snapshot(account)
-            self._circuit_breaker_reason = None
+            with getattr(self, "_state_lock", threading.RLock()):
+                # Clear only the reason being reset: a halt another thread
+                # raised during the broker calls above set its own reason.
+                if self._circuit_breaker_reason == reason:
+                    self._circuit_breaker_reason = None
             # The operator verified THIS halt's recovery condition above;
             # clear exactly its incident, never unrelated incidents (those
             # need their own per-halt verification).

@@ -1016,6 +1016,44 @@ def test_operator_reset_keeps_a_halt_raised_during_verification(tmp_path: Path) 
     ledger.close()
 
 
+def test_operator_reset_keeps_a_halt_raised_during_broker_reconcile(tmp_path: Path) -> None:
+    """The broker reconcile inside the reset is a slow network call; a halt
+    another thread raises meanwhile must survive the breaker clear, which
+    may only clear the reason being reset."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "ownership_drift")
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime = _runtime_with_ledger(ledger)
+
+    def reconcile_while_another_thread_halts() -> dict[str, list[str]]:
+        with runtime._state_lock:
+            runtime._circuit_breaker_reason = "portfolio_runtime_failure"
+            runtime._state = "halted"
+        return dict(_CLEAN_RECONCILIATION)
+
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        reconcile=reconcile_while_another_thread_halts,
+        account=lambda: account,
+    )
+    runtime._circuit_breaker_reason = "ownership_drift"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._state_lock = threading.RLock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._persist_risk_state = lambda _account: None  # type: ignore[method-assign]
+
+    runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason == "portfolio_runtime_failure"
+    assert runtime._state == "halted"
+    ledger.close()
+
+
 class _LockCheckedStateRuntime(EngineRuntime):
     """Records whether ``_state_lock`` was held at each ``_state`` write."""
 

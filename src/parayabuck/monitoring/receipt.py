@@ -55,8 +55,8 @@ class PaperReceipt:
         directory.mkdir(parents=True, exist_ok=True)
         # Filename: 2026-08-26_equity_v3.json  (date + market + strategy)
         date = self.decision_timestamp[:10]
-        # Use explicit market field if available, else heuristic on strategy name
-        market = getattr(self, "market", None) or ("equity" if "equity" in self.strategy_name else "crypto")
+        # Market is a strategy-name convention: PaperReceipt carries no market field
+        market = "equity" if "equity" in self.strategy_name else "crypto"
         filename = f"{date}_{market}_{self.strategy_name}.json"
         path = directory / filename
         # Atomic write via temp file in same dir — avoid with_suffix collision

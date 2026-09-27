@@ -31,12 +31,11 @@ import logging
 import queue
 import sqlite3
 import threading
-import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from parayabuck.monitoring.operational_event import OperationalEvent
+from parayabuck.monitoring.operational_event import OperationalEvent, redact_fields
 
 log = logging.getLogger("parayabuck.monitoring.journal")
 
@@ -85,7 +84,6 @@ class JournalStats:
     written: int = 0
     failed: int = 0
     dropped: int = 0
-    queue_depth: int = 0
     last_success_at: str | None = None
 
 
@@ -163,10 +161,40 @@ class EventJournal:
             thread = self._writer_thread
         if thread is not None:
             thread.join(timeout=timeout)
+        with self._lock:
+            if thread is not None and thread.is_alive():
+                # The writer is still draining: keep the journal started (a later
+                # start() must not spawn a second writer) and leave the queued
+                # residue alone — it is still owned by the live writer.
+                log.warning(
+                    "journal stop timed out after %.3fs with %d events still queued",
+                    timeout,
+                    self._queue.qsize(),
+                )
+                return
+            # A later start() must spawn a fresh writer instead of enqueuing onto a dead one
+            self._started = False
+            self._writer_thread = None
+            leftover = self._queue.qsize()
+            if leftover:
+                self._stats.dropped += leftover
+                log.warning("journal stopped with %d queued events dropped", leftover)
 
     def _writer_loop(self) -> None:
+        try:
+            self._drain_loop()
+        finally:
+            with self._lock:
+                if self._writer_thread is threading.current_thread():
+                    # Writer retired on its own (e.g. stop() timed out): let a
+                    # later start() spawn a fresh one instead of enqueuing blind.
+                    self._writer_thread = None
+                    self._started = False
+
+    def _drain_loop(self) -> None:
         batch: list[OperationalEvent] = []
-        while not self._stop.is_set():
+        # Keep draining after stop so queued events are written, not lost silently
+        while not self._stop.is_set() or not self._queue.empty():
             try:
                 item = self._queue.get(timeout=0.2)
             except queue.Empty:
@@ -235,7 +263,6 @@ class EventJournal:
                 with self._lock:
                     self._stats.written += len(rows)
                     self._stats.last_success_at = now_iso
-                    self._stats.queue_depth = self._queue.qsize()
                 self._writes_since_cleanup += len(rows)
                 if self._writes_since_cleanup >= 100:
                     self._writes_since_cleanup = 0
@@ -277,13 +304,10 @@ class EventJournal:
             if not self._started:
                 self.start()
             self._queue.put_nowait(event)
-            with self._lock:
-                self._stats.queue_depth = self._queue.qsize()
             return True
         except queue.Full:
             with self._lock:
                 self._stats.dropped += 1
-                self._stats.queue_depth = self._queue.qsize()
             log.warning("journal queue full; dropping event kind=%s", event.kind)
             return False
         except Exception:
@@ -336,12 +360,6 @@ class EventJournal:
                 self._stats.failed += 1
             log.warning("journal sync write failed", exc_info=True)
             return False
-
-    def flush(self, timeout: float = 2.0) -> None:
-        """Wait until queue drained (best effort)."""
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline and not self._queue.empty():
-            time.sleep(0.02)
 
     # ---------------------------------------------------------------- query
     def query(
@@ -428,7 +446,7 @@ class EventJournal:
                             broker_order_id=row["broker_order_id"],
                             incident_id=row["incident_id"],
                             correlation_id=row["correlation_id"],
-                            fields=fields,
+                            fields=redact_fields(fields),
                         )
                     )
                 return events
@@ -447,30 +465,6 @@ class EventJournal:
                 "event_journal_queue_depth": self._queue.qsize(),
                 "event_journal_last_success_at": self._stats.last_success_at,
             }
-
-    def reset_for_tests(self) -> None:
-        """Clear queue and reset counters (tests only)."""
-        try:
-            while not self._queue.empty():
-                try:
-                    self._queue.get_nowait()
-                except queue.Empty:
-                    break
-        except Exception:
-            pass
-        with self._lock:
-            self._stats = JournalStats()
-        # clear DB
-        try:
-            conn = self._connect()
-            try:
-                conn.execute("DELETE FROM operational_events")
-                conn.commit()
-            finally:
-                conn.close()
-        except Exception:
-            pass
-
 
 # ----------------------------------------------------------------------
 # Global singleton (process-local)
@@ -513,24 +507,6 @@ def journal_stats(path: str | Path | None = None) -> dict[str, object]:
         }
 
 
-def reset_journal_for_tests(path: str | Path | None = None) -> None:
-    global _global_journal
-    with _global_lock:
-        if _global_journal is not None:
-            try:
-                _global_journal.stop(timeout=0.5)
-            except Exception:
-                pass
-            _global_journal = None
-    if path is not None:
-        try:
-            Path(path).unlink(missing_ok=True)
-            for suffix in ("-wal", "-shm"):
-                Path(str(path) + suffix).unlink(missing_ok=True)
-        except Exception:
-            pass
-
-
 __all__ = [
     "DEFAULT_JOURNAL_PATH",
     "DEFAULT_MAX_EVENTS",
@@ -541,5 +517,4 @@ __all__ = [
     "emit_journal",
     "get_journal",
     "journal_stats",
-    "reset_journal_for_tests",
 ]

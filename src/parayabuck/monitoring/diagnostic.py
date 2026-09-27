@@ -56,6 +56,38 @@ def _redact(obj: Any) -> Any:
     return obj
 
 
+_MAX_SECTION_CHARS = 500_000
+_MAX_SECTION_ROWS = 2_000
+
+
+def _cap_rows(value: Any) -> Any:
+    """Cap list rows before serialisation so a big section shrinks first."""
+    if isinstance(value, list):
+        return value[:_MAX_SECTION_ROWS]
+    if isinstance(value, dict):
+        return {key: _cap_rows(item) for key, item in value.items()}
+    return value
+
+
+def _dump_section(content: Any) -> str:
+    """Serialise one bundle section within the size budget, always as valid JSON.
+
+    Rows are capped first; a section still over budget becomes the parseable
+    truncation envelope, and the *serialised* envelope — re-escaping of the
+    preview included — is shrunk until it fits the same hard bound.
+    """
+    text = json.dumps(_cap_rows(content), indent=2, default=str)
+    if len(text) <= _MAX_SECTION_CHARS:
+        return text
+    budget = _MAX_SECTION_CHARS // 2
+    while budget > 0:
+        envelope = json.dumps({"truncated": True, "size_chars": len(text), "preview": text[:budget]}, indent=2)
+        if len(envelope) <= _MAX_SECTION_CHARS:
+            return envelope
+        budget //= 2
+    return json.dumps({"truncated": True, "size_chars": len(text)}, indent=2)
+
+
 def _safe_git_info() -> dict[str, Any]:
     info: dict[str, Any] = {}
     try:
@@ -80,6 +112,21 @@ def _environment_info() -> dict[str, Any]:
     }
 
 
+def _collect_forensics(db_path: str | Path | None) -> dict[str, Any]:
+    """Read the forensic order/rebalance/session sections once (read-only)."""
+    from parayabuck.monitoring.forensics import (
+        ambiguous_orders,
+        find_stuck_rebalances,
+        runtime_session_forensics,
+    )
+
+    return {
+        "ambiguous": ambiguous_orders(db_path),
+        "stuck_rebalance": find_stuck_rebalances(db_path),
+        "sessions": runtime_session_forensics(db_path),
+    }
+
+
 def _parayabuck_version() -> str:
     try:
         import parayabuck
@@ -87,25 +134,6 @@ def _parayabuck_version() -> str:
         return getattr(parayabuck, "__version__", "unknown")
     except Exception:
         return "unknown"
-
-
-def _collect_status(snapshot_path: str | Path = "data/runtime/health_snapshot.json") -> dict[str, Any]:
-    try:
-        from parayabuck.monitoring.health import evaluate_health
-
-        return evaluate_health(snapshot_path=snapshot_path)
-    except Exception as exc:
-        return {"error": str(exc)}
-
-
-def _collect_doctor() -> dict[str, Any]:
-    try:
-        from parayabuck.monitoring.diagnostic import _run_doctor_checks
-
-        return _run_doctor_checks()
-    except Exception:
-        # fallback: import from cli helpers later
-        return {}
 
 
 def collect_bundle_data(
@@ -129,7 +157,10 @@ def collect_bundle_data(
     except Exception as exc:
         data["status"] = {"error": str(exc)}
 
-    # doctor
+    # doctor — forensic ledger reads are shared with the sections below
+    dbp = Path(str(decision_db_path)) if decision_db_path else None
+    forensics_db = str(dbp) if dbp is not None and dbp.exists() else None
+    forensics_data = _collect_forensics(forensics_db)
     try:
         # lazy import to avoid cycle
         from parayabuck.monitoring.diagnostic import _run_doctor_checks
@@ -139,15 +170,10 @@ def collect_bundle_data(
             snapshot_path=snapshot_path,
             journal_path=journal_path,
             decision_db_path=decision_db_path,
+            forensics=forensics_data,
         )
-    except Exception:
-        try:
-            # alternative: call via cli module
-
-            # use internal if exists
-            data["doctor"] = {}
-        except Exception as exc:
-            data["doctor"] = {"error": str(exc)}
+    except Exception as exc:
+        data["doctor"] = {"error": str(exc)}
 
     # recent events
     try:
@@ -183,20 +209,15 @@ def collect_bundle_data(
 
     # incidents / orders / rebalance via forensics
     try:
-        from parayabuck.monitoring.forensics import (
-            ambiguous_orders,
-            find_stuck_rebalances,
-            runtime_session_forensics,
-            unresolved_orders,
-        )
+        from parayabuck.monitoring.forensics import unresolved_orders
 
         data["active_incidents"] = (
             data["runtime_metrics"].get("incidents") if isinstance(data.get("runtime_metrics"), dict) else None
         )
-        data["unresolved_orders"] = unresolved_orders(decision_db_path)[:50]
-        data["ambiguous_orders"] = ambiguous_orders(decision_db_path)[:50]
-        data["stuck_rebalance"] = find_stuck_rebalances(decision_db_path)[:20]
-        data["sessions"] = runtime_session_forensics(decision_db_path)
+        data["unresolved_orders"] = unresolved_orders(forensics_db)[:50]
+        data["ambiguous_orders"] = (forensics_data.get("ambiguous") or [])[:50]
+        data["stuck_rebalance"] = (forensics_data.get("stuck_rebalance") or [])[:20]
+        data["sessions"] = forensics_data.get("sessions") or {}
     except Exception as exc:
         data["forensics_error"] = str(exc)
 
@@ -279,6 +300,7 @@ def _run_doctor_checks(
     snapshot_path: str | Path = "data/runtime/health_snapshot.json",
     journal_path: str | Path = "data/runtime/observability.sqlite3",
     decision_db_path: str | Path | None = None,
+    forensics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Lightweight doctor checks (read-only)."""
     checks: list[dict[str, Any]] = []
@@ -350,19 +372,27 @@ def _run_doctor_checks(
     try:
         from parayabuck.monitoring.forensics import ambiguous_orders, find_stuck_rebalances, runtime_session_forensics
 
-        amb = ambiguous_orders(str(dbp) if dbp.exists() else None)
+        if forensics is None:
+            forensics_db = str(dbp) if dbp.exists() else None
+            forensics = {
+                "ambiguous": ambiguous_orders(forensics_db),
+                "stuck_rebalance": find_stuck_rebalances(forensics_db),
+                "sessions": runtime_session_forensics(forensics_db),
+            }
+
+        amb = forensics.get("ambiguous") or []
         if amb:
             _add("ambiguous_orders", "CRITICAL", f"{len(amb)} ambiguous orders")
         else:
             _add("ambiguous_orders", "OK", "no ambiguous orders")
 
-        stuck = find_stuck_rebalances(str(dbp) if dbp.exists() else None)
+        stuck = forensics.get("stuck_rebalance") or []
         if stuck:
             _add("stuck_rebalance", "DEGRADED", f"{len(stuck)} stuck rebalance")
         else:
             _add("stuck_rebalance", "OK", "no stuck rebalance")
 
-        sess = runtime_session_forensics(str(dbp) if dbp.exists() else None)
+        sess = forensics.get("sessions") or {}
         if sess.get("unclean"):
             _add("sessions", "DEGRADED", f"{len(sess['unclean'])} unclean sessions")
         else:
@@ -467,9 +497,9 @@ def create_bundle_zip(
     # Write zip with sanitized files, size bounded
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         # manifest
-        zf.writestr("manifest.json", json.dumps(data.get("manifest"), indent=2))
-        zf.writestr("status.json", json.dumps(data.get("status"), indent=2))
-        zf.writestr("doctor.json", json.dumps(data.get("doctor"), indent=2))
+        zf.writestr("manifest.json", _dump_section(data.get("manifest")))
+        zf.writestr("status.json", _dump_section(data.get("status")))
+        zf.writestr("doctor.json", _dump_section(data.get("doctor")))
         # recent events jsonl
         events = data.get("recent_events") or []
         if isinstance(events, list):
@@ -495,10 +525,9 @@ def create_bundle_zip(
             if content is None:
                 continue
             try:
-                zf.writestr(f"{key}.json", json.dumps(content, indent=2, default=str)[:500_000])
+                zf.writestr(f"{key}.json", _dump_section(content))
             except Exception:
                 zf.writestr(f"{key}.json", json.dumps({"error": "serialize failed"}, indent=2))
-        # bundle size check: ensure not huge
     return out
 
 

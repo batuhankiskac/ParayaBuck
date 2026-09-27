@@ -491,3 +491,34 @@ def test_receipt_has_17_fields_and_is_json_serializable(tmp_path: Path) -> None:
 
     loaded = json.loads(path.read_text())
     assert loaded["strategy_name"] == "equity_leveraged_trend_v1"
+
+
+# ---------------------------------------------------------------------------
+# Automation failure — the fail-closed record must still be emitted
+# ---------------------------------------------------------------------------
+def test_incident_automation_failure_emits_fail_closed_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    from parayabuck.monitoring import paper_incident
+    from parayabuck.monitoring.incident import create_incident as real_create_incident
+
+    calls = {"n": 0}
+
+    def flaky_create(*args: object, **kwargs: object) -> object:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("incident store unavailable")
+        return real_create_incident(*args, **kwargs)  # type: ignore[arg-type]
+
+    emitted: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(paper_incident, "create_incident", flaky_create)
+    monkeypatch.setattr(alerts, "emit", lambda kind, **fields: emitted.append((kind, fields)))
+    alerts.reset_for_tests()
+
+    record = automate_incident_recovery(IncidentCategory.PROVIDER_UNAVAILABLE, account_id="acct")
+    alerts.reset_for_tests()
+
+    assert record.recovery_result == "halted"
+    assert record.attempted_recovery == "automation_error_fail_closed"
+    # The most severe path is the one that used to stay silent
+    assert len(emitted) == 1
+    assert emitted[0][0] == "scanner_refresh_failure"
+    assert emitted[0][1]["incident_id"] == record.incident_id

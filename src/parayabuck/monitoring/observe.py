@@ -126,37 +126,6 @@ def on_universe_refresh_failure(*, market: str, error: str, session_id: str | No
     )
 
 
-def on_universe_recovered(*, market: str, session_id: str | None = None) -> None:
-    key = f"universe_{market}"
-    if not _dedup(key, "ok"):
-        return
-    _emit_safely(
-        kind="scanner_recovered", message=f"universe recovered for {market}", market=market, session_id=session_id
-    )
-
-
-def on_universe_stale(*, market: str, age_seconds: float | None = None, session_id: str | None = None) -> None:
-    key = f"universe_stale_{market}"
-    if not _dedup(key, "stale"):
-        return
-    _emit_safely(
-        kind="universe_became_stale",
-        message=f"universe stale for {market}",
-        market=market,
-        session_id=session_id,
-        fields={"age_seconds": age_seconds} if age_seconds else {},
-    )
-
-
-def on_universe_unstale(*, market: str, session_id: str | None = None) -> None:
-    key = f"universe_stale_{market}"
-    if not _dedup(key, "fresh"):
-        return
-    _emit_safely(
-        kind="universe_recovered", message=f"universe fresh for {market}", market=market, session_id=session_id
-    )
-
-
 # ------------------------------------------------------------------ account
 def on_account_stale(
     *, age_seconds: float | None = None, session_id: str | None = None, account_id: str | None = None

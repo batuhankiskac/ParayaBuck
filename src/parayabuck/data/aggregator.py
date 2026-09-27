@@ -21,11 +21,19 @@ class TimeframeAggregator:
         self._current: dict[str, Bar] = {}
         self._components: dict[str, dict[datetime, Bar]] = {}
         self._last_components: dict[str, dict[datetime, Bar]] = {}
+        # Latest bucket already emitted as final, per symbol.
+        self._closed_through: dict[str, datetime] = {}
 
     def update(self, bar: Bar) -> Bar | None:
         if self.minutes == 1:
             return Bar(**{**bar.__dict__, "timeframe": self.timeframe})
         bucket_time = self._bucket(bar.timestamp, bar.market)
+        closed_through = self._closed_through.get(bar.symbol)
+        if closed_through is not None and bucket_time <= closed_through:
+            # A late minute of a bucket that a flush already emitted must not
+            # reopen it: the one-minute stub would later be emitted as a
+            # second "final" candle for the same timestamp.
+            return None
         current = self._current.get(bar.symbol)
         if current is None:
             self._current[bar.symbol] = self._new_bucket(bar, bucket_time)
@@ -42,6 +50,7 @@ class TimeframeAggregator:
             # ``update_correction``.
             return None
         self._last_components[bar.symbol] = self._components.get(bar.symbol, {})
+        self._closed_through[bar.symbol] = current.timestamp
         self._current[bar.symbol] = self._new_bucket(bar, bucket_time)
         self._components[bar.symbol] = {bar.timestamp: bar}
         return current
@@ -82,6 +91,7 @@ class TimeframeAggregator:
         for symbol, bar in list(self._current.items()):
             if bar.timestamp + duration + self.finalization_grace <= now:
                 flushed.append(self._current.pop(symbol))
+                self._closed_through[symbol] = bar.timestamp
                 self._last_components[symbol] = self._components.pop(symbol, {})
         return sorted(flushed, key=lambda bar: (bar.timestamp, bar.symbol))
 
@@ -91,6 +101,7 @@ class TimeframeAggregator:
         for symbol, bar in list(self._current.items()):
             if bar.market == Market.EQUITY and bar.timestamp.astimezone(NEW_YORK).date() == close_date:
                 flushed.append(self._current.pop(symbol))
+                self._closed_through[symbol] = bar.timestamp
                 self._last_components[symbol] = self._components.pop(symbol, {})
         return sorted(flushed, key=lambda bar: (bar.timestamp, bar.symbol))
 

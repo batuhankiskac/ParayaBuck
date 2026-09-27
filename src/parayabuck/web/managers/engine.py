@@ -92,10 +92,6 @@ class EngineManager:
         self._live_armed = False
         self._pending_live_arm: LiveArmToken | None = None
         self._live_arm_token: LiveArmToken | None = None
-        self._ws_tickets: dict[str, tuple[str, float]] = {}
-        # issue_ws_ticket rebuilds the map while consume_ws_ticket pops from
-        # it; concurrent issuers must not drop each other's fresh tickets.
-        self._ws_tickets_lock = threading.Lock()
         # Composition-owned applications bind an app-local ticket store.  A
         # missing store keeps the legacy direct-call behavior below.
         self._ticket_store = ticket_store
@@ -165,7 +161,7 @@ class EngineManager:
         """Auto-start configured paper engines without weakening live safeguards."""
         try:
             raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
-            app_config = (raw or {}).get("app", {})
+            app_config = (raw or {}).get("app") or {}
             runtime_config = (raw or {}).get("runtime", {})
             legacy_live = "mode" not in runtime_config and (raw or {}).get("alpaca", {}).get("paper") is False
             key, secret = self.get_credentials()
@@ -1189,14 +1185,7 @@ class EngineManager:
             from parayabuck.web.managers.websocket import ticket_store as legacy_store
 
             store = legacy_store
-        ticket = str(store.issue(kind))
-        # Keep legacy _ws_tickets mirror for tests that inspect it directly
-        try:
-            with self._ws_tickets_lock:
-                self._ws_tickets = dict(store.tickets)
-        except Exception:
-            pass
-        return ticket
+        return str(store.issue(kind))
 
     def consume_ws_ticket(self, ticket: str, kind: str) -> bool:
         store: Any = self._ticket_store
@@ -1204,13 +1193,7 @@ class EngineManager:
             from parayabuck.web.managers.websocket import ticket_store as legacy_store
 
             store = legacy_store
-        result = bool(store.consume(ticket, kind))
-        try:
-            with self._ws_tickets_lock:
-                self._ws_tickets = dict(store.tickets)
-        except Exception:
-            pass
-        return result
+        return bool(store.consume(ticket, kind))
 
 
 _PLACEHOLDERS = {

@@ -50,15 +50,13 @@ def _resolve_db_path(cfg: Any | None) -> str:
     return "data/runtime/parayabuck.sqlite3"
 
 
-def get_ops_status(
-    snapshot_path: str | Path | None = None, db_path: str | Path | None = None, config: Any | None = None
-) -> dict[str, Any]:
+def get_ops_status(config: Any | None = None) -> dict[str, Any]:
     try:
         from parayabuck.monitoring.health import evaluate_health
 
         cfg = config if config is not None else _current_config()
-        snap = str(snapshot_path) if snapshot_path else "data/runtime/health_snapshot.json"
-        db = str(db_path) if db_path else _resolve_db_path(cfg)
+        snap = "data/runtime/health_snapshot.json"
+        db = _resolve_db_path(cfg)
         if cfg is not None:
             try:
                 snap = getattr(cfg.observability, "snapshot_path", snap)

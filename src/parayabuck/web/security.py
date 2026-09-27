@@ -24,21 +24,12 @@ _TRUSTED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 _CONTROL_TOKEN_HEADER = "x-parayabuck-control-token"
 
 
-def trusted_browser_origin(origin: str | None) -> bool:
-    """Browser Origin must be loopback/local. Empty Origin is treated as non-browser (e.g. curl) and rejected for mutating methods via middleware but allowed for GET."""
-    if not origin:
-        return False
-    parsed = urlparse(origin)
-    return parsed.hostname in {"127.0.0.1", "localhost", "::1"}
-
-
 def _trusted_browser_origin_for_middleware(origin: str | None) -> bool:
     """Exact server.py middleware semantics: empty Origin = non-browser client -> trusted.
 
-    The standalone `trusted_browser_origin` helper above is stricter (empty
-    -> False) for direct callers. The HTTP middleware must allow curl/API
-    clients without an Origin header to proceed to the control-token check,
-    matching the original server.py `_trusted_browser_origin`.
+    The HTTP middleware must allow curl/API clients without an Origin header
+    to proceed to the control-token check, matching the original server.py
+    `_trusted_browser_origin`. The WebSocket routes share this predicate.
     """
     if not origin:
         return True

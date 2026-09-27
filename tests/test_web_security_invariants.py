@@ -21,8 +21,8 @@ from parayabuck.web.managers.backtest import BacktestManager
 from parayabuck.web.managers.engine import EngineManager
 from parayabuck.web.managers.websocket import WebSocketTicketStore
 from parayabuck.web.security import (
+    _trusted_browser_origin_for_middleware,
     is_trusted_host,
-    trusted_browser_origin,
     validate_control_token,
 )
 from parayabuck.web.state import WebState
@@ -135,15 +135,19 @@ def test_host_middleware_rejects_untrusted_host():
 # --- Origin ---
 
 
-def test_trusted_browser_origin_strict():
-    # trusted_browser_origin (strict) rejects empty, allows loopback
-    assert not trusted_browser_origin(None)
-    assert not trusted_browser_origin("")
-    assert trusted_browser_origin("http://127.0.0.1:8000")
-    assert trusted_browser_origin("http://localhost:3000")
-    assert trusted_browser_origin("http://[::1]:8000")
-    assert not trusted_browser_origin("http://evil.com")
-    assert not trusted_browser_origin("http://192.168.1.1")
+def test_trusted_browser_origin_allows_only_loopback_or_non_browser():
+    # Shared by the HTTP middleware and the WebSocket routes: an absent Origin
+    # is a non-browser client (the control token/ticket still applies).
+    from parayabuck.web.routers import websocket as ws_router
+
+    assert ws_router._trusted_browser_origin is _trusted_browser_origin_for_middleware
+    assert _trusted_browser_origin_for_middleware(None)
+    assert _trusted_browser_origin_for_middleware("")
+    assert _trusted_browser_origin_for_middleware("http://127.0.0.1:8000")
+    assert _trusted_browser_origin_for_middleware("http://localhost:3000")
+    assert _trusted_browser_origin_for_middleware("http://[::1]:8000")
+    assert not _trusted_browser_origin_for_middleware("http://evil.com")
+    assert not _trusted_browser_origin_for_middleware("http://192.168.1.1")
 
 
 def test_origin_middleware_allows_non_browser_then_checks_token(monkeypatch):

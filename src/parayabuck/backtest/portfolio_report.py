@@ -225,6 +225,8 @@ def build_portfolio_report(
         "ending_equity": result.ending_equity,
         "total_return": result.total_return,
         "benchmark_return": result.benchmark_return,
+        "benchmark_price_return": result.benchmark_price_return,
+        "benchmark_return_basis": result.benchmark_return_basis,
         "benchmark_symbol": result.benchmark_symbol,
         "excess_return": result.excess_return,
         "gross_return": result.gross_return,

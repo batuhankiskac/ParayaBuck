@@ -40,7 +40,7 @@ Single `broker.account()` returns both account + positions. Cached `_last_accoun
 
 ## 6. Reconcile (Startup & Periodic) — `runtime.py:3152`, `execution/alpaca.py:450`
 
-`broker.reconcile()` = owned quantities, open orders, ledger entries, crypto stops. On success `clear_safety_incident`; on `ProtectionReconciliationError`/`AmbiguousOrderState` → halt, `reconciliation_failed` deferred. Retry: startup transient → `TransientStartupError`; periodic `_schedule_reconcile` singleton `pb-reconcile` every 60s, `_generic_reconcile_failures≥3` → `reconciliation_bug_suspected` halt. Fail-closed on protection/drift. Telemetry: `reconciliation_failure/recovered`, `circuit_breaker`.
+`broker.reconcile()` = owned quantities, open orders, ledger entries, crypto stops. On success `clear_safety_incident`; on `ProtectionReconciliationError`/`AmbiguousOrderState` → halt, `reconciliation_failed` deferred. Retry: startup transient → `TransientStartupError`; periodic `_schedule_reconcile` singleton `pb-reconcile` every 60s, `_generic_reconcile_failures≥3` → `reconciliation_bug_suspected` halt. Fail-closed on protection/drift; persistent reconcile drift re-asserts the halt every pass but alerts only on the transition. Telemetry: `reconciliation_failure/recovered`, `circuit_breaker`.
 
 ## 7. Historical Warmup — `runtime.py:3435`, `data/alpaca.py:94`, `data/cache.py:15`
 
@@ -68,7 +68,7 @@ Finalized `Bar` batch after `event_grace_seconds=5.0` coalescing. `portfolio_dec
 
 ## 13. Fill / Update Reconciliation — `execution/alpaca_updates.py:33`, `runtime.py:1960`, `execution/alpaca.py:461`
 
-`TradingStream TradeUpdate` primary + REST `GetOrderById` fallback. `portfolio_orders`/`portfolio_fills` (`activity_id PK`) + `managed_positions` + `reconcile_watermarks`. Failure: unmanaged update → warning + reconcile; stale `submitting` no broker → `canceled`; missing `avg_price` → stays `submitted`. Stream `pb-trade-updates` with restart backoff `2^(n-1)` ≤16s, waited on `_stop_event` so `stop()` interrupts it; a failure marks the runtime `degraded` and the next retry restores `running`/`warming_up` when no circuit breaker is set (>5 restarts → `pb-trade-updates_restart_limit` halt). Idempotent, loss-less. Telemetry: `order_rejected/ambiguous_order`, `_persist_risk_state` after fill.
+`TradingStream TradeUpdate` primary + REST `GetOrderById` fallback. `portfolio_orders`/`portfolio_fills` (`activity_id PK`) + `managed_positions` + `reconcile_watermarks`. Failure: unmanaged update → warning + reconcile; stale `submitting` no broker → `canceled`; missing `avg_price` → stays `submitted`. Stream `pb-trade-updates` with restart backoff `2^(n-1)` ≤16s, waited on `_stop_event` so `stop()` interrupts it; a failure marks the runtime `degraded` and the next retry restores `running`/`warming_up` when no circuit breaker is set (if a reconciliation reason was set, the clean reconcile that clears it restores the state while the worker is alive) (>5 restarts → `pb-trade-updates_restart_limit` halt). Idempotent, loss-less. Telemetry: `order_rejected/ambiguous_order`, `_persist_risk_state` after fill.
 
 ## 14. Monitoring, Health & Shutdown/Restart — `runtime.py:583`, `monitoring/alerts.py:1`, `monitoring/metrics.py:1`, `backup.py:1`, `runtime.py:1641`
 

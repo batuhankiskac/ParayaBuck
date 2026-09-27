@@ -2403,6 +2403,18 @@ class EngineRuntime:
         with getattr(self, "_state_lock", threading.RLock()):
             if getattr(self, "_circuit_breaker_reason", None) in _RECONCILIATION_INCIDENT_REASONS:
                 self._circuit_breaker_reason = None
+                # A trade-update blip while this reason was set left the
+                # runtime "degraded" (its restore never passes a breaker);
+                # nothing else would un-pin it now that the reason is gone.
+                # Same running/warming_up rule as that restore, and only
+                # while the trade-update worker is alive.
+                trade_updates = dict(getattr(self, "_workers", {})).get("pb-trade-updates")
+                if (
+                    getattr(self, "_state", None) == "degraded"
+                    and trade_updates is not None
+                    and trade_updates.alive
+                ):
+                    self._state = "running" if self._has_ready_symbols() else "warming_up"
 
     def _restore_persistent_state(self) -> None:
         """Restore persisted runtime state at startup.
@@ -4402,16 +4414,23 @@ class EngineRuntime:
                 # reconcile -> state is the established order: no thread
                 # holding the state lock ever takes the reconcile lock.
                 with getattr(self, "_state_lock", threading.RLock()):
+                    first = self._circuit_breaker_reason != "ownership_drift"
                     self._circuit_breaker_reason = "ownership_drift"
                     self._state = "halted"
                 self._reconcile_failed = True
-                self._persist_safety_state("ownership_drift")
-                runtime_metrics_store.record_event("circuit_breaker")
-                alerts.emit(
-                    "circuit_breaker",
-                    message="Portfolio ownership drift detected; runtime halted",
-                    reason="ownership_drift",
-                )
+                try:
+                    self._persist_safety_state("ownership_drift")
+                finally:
+                    # Edge-triggered like the account-loop drift halt:
+                    # persistent drift re-asserts the halt every pass but
+                    # alerts once, even when this pass's persist raises.
+                    if first:
+                        runtime_metrics_store.record_event("circuit_breaker")
+                        alerts.emit(
+                            "circuit_breaker",
+                            message="Portfolio ownership drift detected; runtime halted",
+                            reason="ownership_drift",
+                        )
             except ProtectionReconciliationError:
                 log.exception("Managed position protection reconciliation failed")
                 self._raise_reconciliation_breaker("protection_failure")

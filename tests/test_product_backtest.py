@@ -532,10 +532,56 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
     assert first["adjustment"] == "splits"
     assert first["timeframe"] == "1d"
     assert first["symbols"] == config.universe.equity.symbols
-    # Empty downloads (no pre-start history) trigger the bounded warmup
-    # extension: at most three fetch attempts.
-    assert len(captured_requests) == 3
-    assert captured_requests[-1]["start"] <= first["start"]
+    # Empty downloads (no pre-start history) cannot be fixed by the warmup
+    # extension: its window already equals the strategy warmup span, so the
+    # loop stops instead of re-downloading the same window.
+    assert len(captured_requests) == 1
+
+
+def test_load_bars_returns_the_single_window_download_for_a_deficient_symbol(tmp_path, monkeypatch) -> None:
+    # One symbol has full pre-start history, one (a late listing) has none:
+    # the warmup extension cannot move the window, so exactly one download
+    # happens and the returned bars are that download's bars, unchanged.
+    monkeypatch.setenv("ALPACA_API_KEY", "unit-test-api-key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "unit-test-secret-key")
+    config = _config(tmp_path)
+    monkeypatch.setattr(cli_module, "ensure_active_universes", lambda *args, **kwargs: None)
+    start = datetime(2022, 1, 1, tzinfo=UTC)
+    end = datetime(2022, 3, 1, tzinfo=UTC)
+    requests: list[tuple[datetime, datetime]] = []
+
+    def series(symbol: str, first: datetime, last: datetime) -> list[Bar]:
+        bars: list[Bar] = []
+        cursor = first
+        while cursor <= last:
+            bars.append(Bar(cursor, symbol, "1d", 10.0, 11.0, 9.0, 10.5, 1_000.0))
+            cursor += timedelta(days=1)
+        return bars
+
+    class FakeProvider:
+        def get_bars_batch(self, symbols, timeframe, *, start, end, adjustment):  # type: ignore[no-untyped-def]
+            requests.append((start, end))
+            late_listing = datetime(2022, 2, 1, tzinfo=UTC)
+            return {
+                symbol: series(symbol, late_listing if symbol == "QLD" else start, end) for symbol in symbols
+            }
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(cli_module, "AlpacaHistoricalData", lambda *a, **k: FakeProvider())
+    args = SimpleNamespace(data=None, symbols=None, candidate_limit=None)
+
+    bars = cli_module._load_bars(config, args, Market.EQUITY, start, end)
+
+    assert len(requests) == 1
+    window_start, window_end = requests[0]
+    expected = [
+        bar
+        for symbol in config.universe.equity.symbols
+        for bar in series(symbol, datetime(2022, 2, 1, tzinfo=UTC) if symbol == "QLD" else window_start, window_end)
+    ]
+    assert bars == expected
 
 
 def test_warmup_window_covers_strategy_minimum_history_for_equity(

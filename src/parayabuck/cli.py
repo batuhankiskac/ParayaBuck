@@ -1205,17 +1205,8 @@ def _load_bars(
             ]
             if not deficient:
                 break
-            if attempts >= 3:
-                log.warning(
-                    "Warmup still short of %d pre-start bars for %d symbol(s) after 3 extension attempts: %s",
-                    minimum_bars,
-                    len(deficient),
-                    ", ".join(sorted(deficient)[:20]),
-                )
-                continue
             # Extend the window backward for every symbol. The shortfall is
-            # converted to calendar days anchored at the evaluation start, plus
-            # a growth buffer so the next attempt makes real progress.
+            # converted to calendar days anchored at the evaluation start.
             from parayabuck.markets.timeframes import bars_to_calendar_days
 
             extra_days = bars_to_calendar_days(
@@ -1224,10 +1215,22 @@ def _load_bars(
                 minimum_bars,
                 end_date=start,
             )
-            start_at = min(
+            extended_start = min(
                 start_at,
                 start - timedelta(days=extra_days) if start is not None else start_at,
             )
+            # A window that does not move would only re-download the same bars:
+            # stop and report the residual shortfall instead.
+            if attempts >= 3 or extended_start >= start_at:
+                log.warning(
+                    "Warmup still short of %d pre-start bars for %d symbol(s) after %d download attempt(s): %s",
+                    minimum_bars,
+                    len(deficient),
+                    attempts,
+                    ", ".join(sorted(deficient)[:20]),
+                )
+                break
+            start_at = extended_start
     finally:
         provider.close()
     return [bar for symbol in symbols for bar in by_symbol.get(symbol, ())]

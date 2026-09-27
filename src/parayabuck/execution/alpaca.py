@@ -753,6 +753,8 @@ class AlpacaBroker:
           that status;
         * present and still working -> ``"submitted"``.
 
+        A status read from a broker order comes back as
+        ``(status, broker_order_id)`` whenever the broker reports an id.
         Returns ``None`` when the broker is unreachable or the lookup
         capability is missing; the caller retries later without guessing.
         """
@@ -763,19 +765,27 @@ class AlpacaBroker:
         if broker_order is None:
             return "canceled"
         status = str(self._normalized_field(broker_order, "status") or "").lower()
+        # The caller persists the returned broker id verbatim; a crashed
+        # submit has none stored, so hand back the broker's own id rather
+        # than letting the stored "" erase the id the fill recovery booked.
+        broker_id = str(self._field(broker_order, "id", "") or broker_order_id)
+
+        def outcome(resolved: str) -> tuple[str, str] | str:
+            return (resolved, broker_id) if broker_id else resolved
+
         if status == "filled":
             recovered = self._fill_from_broker_order(broker_order, client_order_id, broker_order_id)
             if recovered is not None:
                 if fill_recovered := getattr(self, "portfolio_fill_recovered", None):
                     fill_recovered(*recovered)
-                return "filled"
+                return outcome("filled")
             # The order filled but its fill could not be extracted; keep the
             # row non-terminal so ownership is not silently released.
-            return "submitted"
+            return outcome("submitted")
         if status in _DEAD_ORDER_STATUSES:
             self._recover_terminal_partial_fill(broker_order, client_order_id, broker_order_id, status)
-            return status
-        return "submitted"
+            return outcome(status)
+        return outcome("submitted")
 
     def _fill_from_broker_order(
         self, order: Any, client_order_id: str, broker_order_id: str

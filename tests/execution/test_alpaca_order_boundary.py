@@ -230,7 +230,7 @@ def test_recovered_submission_fill_reports_the_fee_as_unobserved() -> None:
     )
     broker.portfolio_fill_recovered = lambda *args, **_kwargs: recovered.append(args)
 
-    assert broker.resolve_portfolio_submission("cid-1", "b-1") == "filled"
+    assert broker.resolve_portfolio_submission("cid-1", "b-1") == ("filled", "b-1")
 
     assert len(recovered) == 1
     assert recovered[0][2:4] == (2.0, 101.5)

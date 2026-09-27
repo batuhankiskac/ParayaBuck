@@ -76,6 +76,8 @@ Empty mismatch buckets (`QUANTITY_MISMATCH`, `LOCAL_STALE`, `BROKER_STALE`, `UNK
 |R6|`get_order_by_client_id` missing / `None` capability, or network error|Broker unreachable|Return `None` (caller retries later, no state change)|Guess|
 |R7|Exception with `status_code != 404` during fetch|Lookup itself failed|Propagate (do not guess) → caller treats as `None` retry|Swallow as 404|
 
+R2–R5 return the status paired with the broker's order id, `(status, broker_order_id)`, so the caller persists the real id instead of the empty id a crashed submit left behind.
+
 ---
 
 ## 5. Available Quantity Resolution (`resolve_available_position_qty`)

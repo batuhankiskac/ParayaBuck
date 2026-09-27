@@ -841,12 +841,26 @@ def test_on_target_symbol_never_produces_a_zero_quantity_order() -> None:
     )
     # Two liquid bars: the decision lands on the first, and the second bar's
     # fill cycle is where a leaked zero-quantity order would be booked.
-    bars = [
-        _bar(epoch + timedelta(days=offset), "SPY", 100.0, Market.EQUITY, 1_000_000) for offset in (1, 2)
-    ]
+    bars = [_bar(epoch + timedelta(days=offset), "SPY", 100.0, Market.EQUITY, 1_000_000) for offset in (1, 2)]
     result = engine.run(bars, liquidate_at_end=False)
     assert engine._pending == []
     assert result.fills == ()
     assert result.fee_total == 0.0
     assert result.realized_pnl_events == ()
 
+
+def test_sortino_uses_full_series_downside_deviation_with_zero_target() -> None:
+    # Returns +10%, -10%, 0%, +10%: mean 0.025; downside deviation over ALL
+    # four periods is sqrt(0.01 / 4) = 0.05. Four daily steps over four days
+    # annualize by sqrt(365), matching the Sharpe annualizer. One losing
+    # period must still give a finite ratio, not 0.0.
+    engine = PortfolioBacktestEngine(
+        _HoldStrategy("SPY", 0.5),
+        RebalancePolicy(Market.EQUITY, "monthly"),
+        starting_equity=100.0,
+    )
+    epoch = datetime(2025, 1, 1, tzinfo=UTC)
+    curve = [100.0, 110.0, 99.0, 99.0, 108.9]
+    timestamps = [epoch + timedelta(days=index) for index in range(len(curve))]
+    result = engine._result(curve, timestamps, 0.0, ())
+    assert result.sortino == pytest.approx(0.025 / 0.05 * 365**0.5)

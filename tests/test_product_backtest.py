@@ -652,3 +652,25 @@ def test_persisted_data_feed_note_never_claims_a_feed_the_run_did_not_get(tmp_pa
         data_feed="iex",
     )
     assert iex.report.summary["data_feed_note"].startswith("IEX historical data reflects one exchange's prints")
+
+
+def test_direct_run_normalizes_unsorted_warmup_like_the_optimizer(tmp_path) -> None:
+    # Warmup reached the engine in caller order on the
+    # direct path; the engine keeps only strictly newer bars per series, so
+    # without normalization the warmup history silently collapses.
+    config = _config(tmp_path)
+    bars = _bars()
+    start = datetime(2023, 1, 1, tzinfo=UTC) + timedelta(days=200)
+    warmup_first = sorted(
+        (bar for bar in bars if bar.timestamp < start),
+        key=lambda bar: bar.timestamp,
+        reverse=True,
+    )
+    shuffled = warmup_first + [bar for bar in bars if bar.timestamp >= start]
+    kwargs = {"market": Market.EQUITY, "start": start, "persist": False, "persist_artifacts": False}
+
+    baseline = run_product_backtest(config, bars, **kwargs)
+    unsorted = run_product_backtest(config, shuffled, **kwargs)
+
+    assert baseline.result.equity_curve == unsorted.result.equity_curve
+    assert [fill.timestamp for fill in baseline.result.fills] == [fill.timestamp for fill in unsorted.result.fills]

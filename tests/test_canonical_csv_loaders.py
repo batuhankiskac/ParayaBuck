@@ -44,18 +44,21 @@ def _canonical_action_row(
     rate: str = "0.34",
     payable_date: str = "2025-06-12",
     raw_id: str = "raw-1",
+    old_rate: str = "",
+    new_rate: str = "",
+    symbol: str = "ACNB",
 ) -> tuple[str, ...]:
     return (
         action_type,
-        "ACNB",
+        symbol,
         ex_date,
         "2025-05-30",
         payable_date,
         rate,
-        "",
-        "",
-        "ACNB",
-        "ACNB",
+        old_rate,
+        new_rate,
+        symbol,
+        symbol,
         raw_id,
     )
 
@@ -116,8 +119,10 @@ def test_canonical_actions_skip_splits_and_deduplicate_economic_dividends(tmp_pa
         ),
         _canonical_action_row("cash_dividends", rate="0.12", raw_id="raw-3"),
         _canonical_action_row("stock_dividends", raw_id="raw-4"),
-        _canonical_action_row("forward_splits", raw_id="raw-5"),
-        _canonical_action_row("reverse_splits", raw_id="raw-6"),
+        # Same-ex-date splits are already reflected in that day's bars, so
+        # they do not rescale the dividend.
+        _canonical_action_row("forward_splits", rate="", old_rate="1", new_rate="2", raw_id="raw-5"),
+        _canonical_action_row("reverse_splits", rate="", old_rate="10", new_rate="1", raw_id="raw-6"),
     ]
     _write_csv(path, _CANONICAL_ACTION_HEADER, rows)
 
@@ -128,6 +133,47 @@ def test_canonical_actions_skip_splits_and_deduplicate_economic_dividends(tmp_pa
     assert all(action.symbol == "ACNB" for action in actions)
     assert all(action.timestamp == datetime(2025, 5, 30, tzinfo=UTC) for action in actions)
     assert all(action.action_type == CorporateActionType.DIVIDEND for action in actions)
+
+
+def test_canonical_dividends_are_rescaled_by_later_splits_to_adjusted_shares(tmp_path: Path) -> None:
+    # Bars are split-adjusted but v5 rates are raw per share: a dividend
+    # before a later 2:1 forward and 10:1 reverse split is paid on
+    # 2 / 10 = 0.2x as many adjusted shares' worth, so its per-adjusted-share
+    # rate is raw / (2 * 0.1) = 5x raw. Later dividends and other symbols'
+    # splits leave the rate unchanged.
+    path = tmp_path / "split_adjusted.csv"
+    rows = [
+        _canonical_action_row("cash_dividends", ex_date="2020-01-10", rate="0.50", raw_id="d1"),
+        _canonical_action_row("forward_splits", ex_date="2021-01-11", rate="", old_rate="1", new_rate="2", raw_id="s1"),
+        _canonical_action_row("cash_dividends", ex_date="2021-06-10", rate="0.30", raw_id="d2"),
+        _canonical_action_row(
+            "reverse_splits", ex_date="2022-01-10", rate="", old_rate="10", new_rate="1", raw_id="s2"
+        ),
+        _canonical_action_row("cash_dividends", ex_date="2023-01-10", rate="0.40", raw_id="d3"),
+        _canonical_action_row(
+            "forward_splits",
+            ex_date="2024-01-10",
+            rate="",
+            old_rate="1",
+            new_rate="4",
+            symbol="SPY",
+            raw_id="s3",
+        ),
+    ]
+    _write_csv(path, _CANONICAL_ACTION_HEADER, rows)
+
+    actions = load_csv_corporate_actions(path)
+
+    assert [action.value for action in actions] == pytest.approx([0.50 * 5, 0.30 * 10, 0.40])
+
+
+def test_canonical_split_rows_with_invalid_ratio_fail_closed(tmp_path: Path) -> None:
+    path = tmp_path / "bad_split.csv"
+    rows = [_canonical_action_row("forward_splits", rate="", old_rate="", new_rate="2", raw_id="s1")]
+    _write_csv(path, _CANONICAL_ACTION_HEADER, rows)
+
+    with pytest.raises(ValueError, match="invalid value"):
+        load_csv_corporate_actions(path)
 
 
 @pytest.mark.parametrize(

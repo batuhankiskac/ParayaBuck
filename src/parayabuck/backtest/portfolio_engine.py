@@ -518,7 +518,8 @@ class PortfolioBacktestEngine:
             cutoff = datetime.fromisoformat(watermark)
             ordered = [bar for bar in ordered if bar.timestamp > cutoff]
             decision_bars = [bar for bar in decision_bars if bar.timestamp > cutoff]
-        # Warmup is already sorted and canonicalized in _prepared_window; avoid per-trial sort.
+        # Callers pass warmup sorted and canonicalized (the product runner uses
+        # _normalized_warmup on both paths); avoid a per-trial sort here.
         for bar in warmup or []:
             self._ingest(bar)
             self._ingest_execution(bar)
@@ -688,19 +689,24 @@ class PortfolioBacktestEngine:
     def _apply_corporate_action(self, action: CorporateAction) -> None:
         symbol = canonical_symbol(action.symbol, self.strategy.market)
         position = self._positions.get(symbol)
-        if position is None or position.qty <= 0:
-            return
         if action.action_type == CorporateActionType.DIVIDEND:
+            if position is None or position.qty <= 0:
+                return
             cash_credit = position.qty * action.value
             self._cash += cash_credit
             self._dividend_total += cash_credit
             return
         ratio = action.value
-        position.qty *= ratio
-        position.avg_price /= ratio
+        # Resting orders are sized in pre-split shares whether or not the
+        # symbol is held yet: a first BUY filling on the ex-date bar must
+        # not execute the pre-split share count at the post-split open.
         for order in self._pending:
             if order.symbol == symbol:
                 order.qty *= ratio
+        if position is None or position.qty <= 0:
+            return
+        position.qty *= ratio
+        position.avg_price /= ratio
 
     @staticmethod
     def _deduplicate(bars: list[Bar]) -> list[Bar]:
@@ -1175,7 +1181,6 @@ class PortfolioBacktestEngine:
             # total-return adjusted and is intentionally not a cash price.
             prices[symbol] = self._last_price.get(symbol, eligible[-1].close)
         holdings = {symbol: position.qty for symbol, position in self._positions.items() if position.qty > 0}
-        benchmark = "BTC/USD" if self.strategy.market == Market.CRYPTO else "SPY"
         return PortfolioContext(
             decision_timestamp=timestamp,
             market=self.strategy.market,
@@ -1186,7 +1191,7 @@ class PortfolioBacktestEngine:
             equity=self._equity(),
             holdings=holdings,
             prices=prices,
-            benchmark_symbol=benchmark,
+            benchmark_symbol=benchmark_key,
         )
 
     def _apply_target(self, target: TargetPortfolio) -> None:
@@ -1405,6 +1410,8 @@ class PortfolioBacktestEngine:
         return validated
 
     def _fail_on_overdue_terminal_inventory(self, timestamp: datetime) -> None:
+        if not self.terminal_lifecycles:
+            return
         managed = {symbol for symbol, position in self._positions.items() if position.qty > 0}
         managed.update(order.symbol for order in self._pending)
         overdue = sorted(
@@ -1533,10 +1540,11 @@ class PortfolioBacktestEngine:
                     duration_days = (curve_timestamps[index] - curve_timestamps[peak_index]).total_seconds() / 86_400
                     max_drawdown_duration_days = max(max_drawdown_duration_days, int(duration_days))
         returns = [curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0]
-        downside = [value for value in returns if value < 0]
         mean_return = sum(returns) / len(returns) if returns else 0.0
         std = sample_stddev(returns)
-        downside_std = sample_stddev(downside)
+        # Sortino downside deviation: target 0, taken over ALL periods
+        # (population), so a single losing period still yields a finite ratio.
+        downside_std = math.sqrt(sum(min(value, 0.0) ** 2 for value in returns) / len(returns)) if returns else 0.0
         start_ts = curve_timestamps[0] if curve_timestamps else None
         end_ts = curve_timestamps[-1] if curve_timestamps else None
         duration_days = int((end_ts - start_ts).total_seconds() / 86_400) if start_ts and end_ts else 0

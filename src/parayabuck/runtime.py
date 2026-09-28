@@ -2381,6 +2381,10 @@ class EngineRuntime:
                     consecutive_losses=previous.consecutive_losses,
                     circuit_breaker_reason=reason,
                     updated_at=datetime.now(UTC),
+                    # The persisted-peak restore groups risk_state rows by
+                    # epoch: dropping it would re-file a post-reset peak
+                    # under epoch 0.
+                    peak_epoch=previous.peak_epoch,
                 )
             )
 

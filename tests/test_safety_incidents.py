@@ -70,6 +70,36 @@ def test_ownership_drift_halt_survives_session_day_restart(tmp_path: Path) -> No
     ledger.close()
 
 
+def test_drift_halt_rewrite_keeps_the_risk_state_peak_epoch(tmp_path: Path) -> None:
+    """The halt's risk_state rewrite must not reset a post-reset peak epoch
+    to 0 (the persisted-peak restore groups rows by epoch)."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_risk_state(
+        RiskState(
+            account_id="acct",
+            session_date=datetime.now(UTC).date(),
+            day_start_equity=9_000.0,
+            peak_equity=9_000.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            fees=0.0,
+            consecutive_losses=0,
+            circuit_breaker_reason=None,
+            updated_at=datetime.now(UTC),
+            peak_epoch=3,
+        )
+    )
+    runtime = _runtime_with_ledger(ledger)
+
+    runtime._halt_for_ownership_drift()
+
+    saved = ledger.load_risk_state("acct", datetime.now(UTC).date())
+    assert saved is not None
+    assert saved.circuit_breaker_reason == "ownership_drift"
+    assert saved.peak_epoch == 3
+    ledger.close()
+
+
 def test_persistent_ownership_drift_alerts_only_on_transition(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The account loop re-enters the drift halt every poll while drift
     persists: the halt state is re-asserted each time, but the operator

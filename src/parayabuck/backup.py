@@ -1,3 +1,11 @@
+"""Consistent SQLite backups of the runtime decision database.
+
+Uses the sqlite3 online backup API for a consistent snapshot while the
+runtime WAL database is open. The snapshot is verified via
+PRAGMA integrity_check before pruning old backups, and fsync durability
+is enforced so a verified backup survives a crash.
+"""
+
 from __future__ import annotations
 
 import errno
@@ -8,14 +16,6 @@ import tempfile
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-
-"""Consistent SQLite backups of the runtime decision database.
-
-Uses the sqlite3 online backup API for a consistent snapshot while the
-runtime WAL database is open. The snapshot is verified via
-PRAGMA integrity_check before pruning old backups, and fsync durability
-is enforced so a verified backup survives a crash.
-"""
 
 BACKUP_PREFIX = "parayabuck-"
 BACKUP_SUFFIX = ".sqlite3"

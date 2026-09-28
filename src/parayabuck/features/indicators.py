@@ -6,12 +6,6 @@ from itertools import pairwise
 from parayabuck.core.models import Bar
 
 
-def sma(values: list[float], period: int) -> float | None:
-    if period <= 0 or len(values) < period:
-        return None
-    return sum(values[-period:]) / period
-
-
 def rsi(values: list[float], period: int = 14) -> float | None:
     if period <= 0 or len(values) < period + 1:
         return None

@@ -90,14 +90,19 @@ def create_lifespan(state_provider: Any) -> Any:
         finally:
             if auto_start_task is not None and manager is not None:
                 # Cancel a pending backoff sleep promptly; in-flight start
-                # still finishes.
+                # still finishes. An in-flight attempt that then fails
+                # transiently schedules a fresh backoff sleep, so keep
+                # cancelling until the task ends, or shutdown would wait on
+                # retries for as long as the network stays down.
                 cancel = getattr(manager, "_cancel_pending_retry", None)
-                if callable(cancel):
-                    try:
-                        cancel()
-                    except Exception:
-                        pass
                 with suppress(asyncio.CancelledError):
+                    while not auto_start_task.done():
+                        if callable(cancel):
+                            try:
+                                cancel()
+                            except Exception:
+                                pass
+                        await asyncio.wait({auto_start_task}, timeout=0.05)
                     await auto_start_task
             # Uvicorn shutdown must release sockets. Use to_thread so the
             # event loop is not blocked while the runtime joins workers.

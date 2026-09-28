@@ -1434,13 +1434,18 @@ async def app_lifespan(_app: FastAPI) -> Any:
 # Custom WebSocket Log Handler
 class WebSocketLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
-        log_entry = {
-            "level": record.levelname,
-            "levelno": record.levelno,
-            "name": record.name,
-            "message": record.getMessage(),
-            "time": self.formatter.formatTime(record) if self.formatter else "",
-        }
+        # Never raise into the logging caller; see managers/websocket.py.
+        try:
+            log_entry = {
+                "level": record.levelname,
+                "levelno": record.levelno,
+                "name": record.name,
+                "message": record.getMessage(),
+                "time": self.formatter.formatTime(record) if self.formatter else "",
+            }
+        except Exception:
+            self.handleError(record)
+            return
         with manager._log_queues_lock:
             subscribers = tuple(manager.log_queues)
         for queue, loop in subscribers:

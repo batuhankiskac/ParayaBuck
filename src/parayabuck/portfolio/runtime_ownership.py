@@ -16,6 +16,18 @@ from collections.abc import Collection
 # broker neither reports nor lets anyone trade. A crypto net below this floor
 # (the reconciler's QUANTITY_MATCH_FLOOR) is flat, not owned inventory.
 CRYPTO_OWNERSHIP_DUST = 1e-8
+# Hiding the residue is not enough: it accumulates across round trips. A crypto
+# SELL fill that leaves a net in (0, CRYPTO_OWNERSHIP_DUST] therefore books a
+# non-consumable adjustment of this kind that zeroes it. It counts in the net
+# like any adjustment, but a later real SELL never consumes it (that would
+# resurrect the dust) and operator anomaly listings leave it out.
+CRYPTO_DUST_CLEAR_KIND = "crypto_dust_clear"
+# A crypto stale-clear smaller than this (broker flat, local residue that
+# accumulated before the per-exit dust clear existed) is recorded with the
+# dust kind too. Real crypto positions are orders of magnitude larger
+# (Alpaca's minimum crypto order sizes are >= 1e-5), so only ledger residue
+# falls below it.
+CRYPTO_STALE_DUST_BAND = 1e-6
 
 
 def net_owned_quantities(
@@ -27,7 +39,7 @@ def net_owned_quantities(
 
     ``order_rows``: iterable of (symbol, side, filled_qty)
     ``adjustments``: iterable of (symbol, outstanding_adjusted_qty) where
-      outstanding = quantity - consumed_quantity for stale_ownership_clear.
+      outstanding = quantity - consumed_quantity over every adjustment kind.
 
     Raises ``RuntimeError`` on negative net ownership (invariant violation).
     Filters out near-zero dust (|qty| <= 1e-12), and for ``crypto_symbols``
@@ -50,4 +62,4 @@ def net_owned_quantities(
     return {s: q for s, q in net.items() if q > 1e-12 and not (s in crypto_symbols and q < CRYPTO_OWNERSHIP_DUST)}
 
 
-__all__ = ["CRYPTO_OWNERSHIP_DUST", "net_owned_quantities"]
+__all__ = ["CRYPTO_DUST_CLEAR_KIND", "CRYPTO_OWNERSHIP_DUST", "CRYPTO_STALE_DUST_BAND", "net_owned_quantities"]

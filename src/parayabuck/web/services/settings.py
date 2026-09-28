@@ -126,7 +126,7 @@ class SettingsService:
             "open_browser": app_cfg.get("open_browser", True),
             "log_level": app_cfg.get("log_level", "INFO"),
             "equity_trading_enabled": (strategy_cfg.get("equity") or {}).get("enabled", True),
-            "crypto_trading_enabled": (strategy_cfg.get("crypto") or {}).get("enabled", True),
+            "crypto_trading_enabled": (strategy_cfg.get("crypto") or {}).get("enabled", False),
             "live_trading_enabled": live_cfg.get("enabled", False),
             "live_dollar_cap": live_cfg.get("hard_dollar_cap", 0.0),
             "live_operator_approval_path": live_cfg.get("operator_approval_path", ""),

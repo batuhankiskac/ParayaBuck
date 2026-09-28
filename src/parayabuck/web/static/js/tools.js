@@ -157,7 +157,7 @@
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
         });
         const data = await api.responsePayload(res);
-        if (!res.ok) throw new Error(data.detail || "Backtest başlatılamadı");
+        if (!res.ok) throw new Error(api.detailText(data, "Backtest başlatılamadı"));
         PB.toast("Backtest başladı (" + data.run_id + ").", "success");
         lastState = "running";
         await refreshBacktest();

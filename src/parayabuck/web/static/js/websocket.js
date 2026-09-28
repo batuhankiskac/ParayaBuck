@@ -13,7 +13,7 @@
       body: JSON.stringify({ kind: kind })
     });
     const payload = await resp.json();
-    if (!resp.ok) throw new Error(payload.detail || "ticket al\u0131namad\u0131");
+    if (!resp.ok) throw new Error(global.PBApi.detailText(payload, "ticket al\u0131namad\u0131"));
     return payload.ticket;
   }
   function connectStream(onUpdate) {

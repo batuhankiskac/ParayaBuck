@@ -494,6 +494,10 @@ class EngineRuntime:
         self._live_startup_proof = live_startup_proof
         self._startup_committed = False
         self._snapshot_writer_started = False
+        # Set once start() launches the stream worker threads. A start that
+        # aborts earlier (e.g. startup reconciliation drift) never ran the
+        # SDK sockets, whose stop() is not safe before run().
+        self._stream_workers_launched = False
 
     @staticmethod
     def _validate_execution_mode(config: Config) -> None:
@@ -1192,6 +1196,7 @@ class EngineRuntime:
             for thread in self._threads:
                 now = datetime.now(UTC)
                 self._workers[thread.name] = WorkerHealth(now, now)
+        self._stream_workers_launched = True
         for thread in self._threads:
             thread.start()
         try:
@@ -1893,7 +1898,15 @@ class EngineRuntime:
                         self._events.put_nowait(None)
             except Exception:
                 pass
-        for stream in (getattr(self, "stream", None), getattr(self, "trading_updates", None)):
+        # A start that aborted before launching the stream workers has no
+        # socket to stop. getattr default True: partially constructed
+        # runtimes (EngineRuntime.__new__ in tests) keep the stop attempt.
+        streams = (
+            (getattr(self, "stream", None), getattr(self, "trading_updates", None))
+            if getattr(self, "_stream_workers_launched", True)
+            else ()
+        )
+        for stream in streams:
             if stream is None:
                 continue
             stop_stream = getattr(stream, "stop", None)

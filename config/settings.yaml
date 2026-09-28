@@ -90,7 +90,7 @@ strategy:
   # hold QLD (2x Nasdaq-100) while QQQ's completed close is above its
   # 200-session SMA, sized min(1, 0.35 / 20-session realized QLD volatility),
   # cash otherwise; decided every session. Validated by
-  # docs/research/profit_max_v1.md (29.3% CAGR, 29.2% max drawdown vs VOO
+  # docs/research/profit_max_v1.md (29.0% CAGR, 29.2% max drawdown vs VOO
   # 14.5% / 32.0%, 2017-2026 shared-ledger replay). The residual-momentum V3
   # and dividend/gold sleeve identities were removed; they are recoverable
   # from git history (tag archive/research/profit-max-v1-2026-09 records the

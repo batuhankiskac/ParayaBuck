@@ -31,7 +31,12 @@ from parayabuck.portfolio.runtime_models import (
     RebalanceExecutionState,
     _decision_id,
 )
-from parayabuck.portfolio.runtime_ownership import net_owned_quantities
+from parayabuck.portfolio.runtime_ownership import (
+    CRYPTO_DUST_CLEAR_KIND,
+    CRYPTO_OWNERSHIP_DUST,
+    CRYPTO_STALE_DUST_BAND,
+    net_owned_quantities,
+)
 from parayabuck.storage import SQLiteStore
 
 log = get_logger("parayabuck.portfolio.runtime_repository")
@@ -873,10 +878,25 @@ class PortfolioStateRepository:
         an unknown exit is an anomaly, not a normal trading fill. The
         adjustment reduces owned quantity and can be consumed later by a real
         fill arriving after reconciliation (stream downtime race). Idempotent:
-        returns the adjusted quantity (0.0 when nothing is owned anymore)."""
+        returns the adjusted quantity (0.0 when nothing is owned anymore).
+
+        A crypto remainder below ``CRYPTO_STALE_DUST_BAND`` is accumulated
+        fee-net residue, not a missed exit: it is booked with the
+        non-consumable dust kind, so the next real SELL cannot consume it
+        and resurrect the residue."""
         owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
         if owned <= 1e-12:
             return 0.0
+        if market == Market.CRYPTO and owned < CRYPTO_STALE_DUST_BAND:
+            self.record_ownership_adjustment(
+                account_id,
+                symbol,
+                market,
+                owned,
+                kind=CRYPTO_DUST_CLEAR_KIND,
+                note="broker position absent; accumulated sub-precision crypto residue",
+            )
+            return owned
         self.record_ownership_adjustment(
             account_id,
             symbol,
@@ -909,21 +929,65 @@ class PortfolioStateRepository:
         if not math.isfinite(quantity) or quantity <= 0:
             raise ValueError("Adjustment quantity must be finite and positive")
         with self.store.lock, self.store.connection:
-            self.store.connection.execute(
-                """INSERT INTO portfolio_ownership_adjustments(
-                    adjustment_id, account_id, symbol, market, quantity, kind,
-                    note, created_at, consumed_quantity
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
-                (
-                    uuid4().hex,
-                    account_id,
-                    symbol,
-                    market.value,
-                    quantity,
-                    kind,
-                    note,
-                    datetime.now(UTC).isoformat(),
-                ),
+            self._insert_ownership_adjustment_tx(account_id, symbol, market, quantity, kind, note)
+
+    def _insert_ownership_adjustment_tx(
+        self, account_id: str, symbol: str, market: Market, quantity: float, kind: str, note: str
+    ) -> None:
+        self.store.connection.execute(
+            """INSERT INTO portfolio_ownership_adjustments(
+                adjustment_id, account_id, symbol, market, quantity, kind,
+                note, created_at, consumed_quantity
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+            (
+                uuid4().hex,
+                account_id,
+                symbol,
+                market.value,
+                quantity,
+                kind,
+                note,
+                datetime.now(UTC).isoformat(),
+            ),
+        )
+
+    def _clear_crypto_exit_dust_tx(self, account_id: str, symbol: str, market: Market) -> None:
+        """Zero a crypto SELL's sub-precision remainder inside its fill transaction.
+
+        Crypto BUYs are booked fee-net at full float precision while exits
+        sell the broker's 9-decimal position, so every round trip leaves a
+        residue of about 1e-9. Only hiding it (``net_owned_quantities``) lets
+        it accumulate past ``CRYPTO_OWNERSHIP_DUST`` and drift again. A net in
+        (0, CRYPTO_OWNERSHIP_DUST] after this fill is booked away with the
+        non-consumable dust kind. Idempotent: once cleared the net is 0, and
+        a redelivered fill has no delta and never reaches this call."""
+        rows = self.store.connection.execute(
+            """SELECT o.side, o.cumulative_filled_quantity
+               FROM portfolio_orders o
+               JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+               JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+               WHERE s.account_id = ? AND o.market = ? AND o.symbol = ?""",
+            (account_id, market.value, symbol),
+        ).fetchall()
+        adjusted = self.store.connection.execute(
+            """SELECT COALESCE(SUM(quantity - consumed_quantity), 0)
+               FROM portfolio_ownership_adjustments
+               WHERE account_id = ? AND market = ? AND symbol = ? AND consumed_quantity < quantity""",
+            (account_id, market.value, symbol),
+        ).fetchone()
+        net = -float(adjusted[0] or 0.0)
+        for side, filled in rows:
+            quantity = float(filled or 0.0)
+            if quantity > 0:
+                net += quantity if str(side) == "buy" else -quantity
+        if 0 < net <= CRYPTO_OWNERSHIP_DUST:
+            self._insert_ownership_adjustment_tx(
+                account_id,
+                symbol,
+                market,
+                net,
+                CRYPTO_DUST_CLEAR_KIND,
+                "sub-precision crypto residue left by a SELL fill",
             )
 
     def _consume_ownership_adjustments_tx(
@@ -1167,6 +1231,8 @@ class PortfolioStateRepository:
                         Market(market),
                         fill_delta,
                     )
+                    if market == Market.CRYPTO.value:
+                        self._clear_crypto_exit_dust_tx(account_id, symbol, Market.CRYPTO)
         return True
 
     @staticmethod
@@ -1310,15 +1376,18 @@ class PortfolioStateRepository:
         return set(self.owned_quantities(account_id, market))
 
     def ownership_adjustments(self, account_id: str = "unknown") -> tuple[dict[str, object], ...]:
-        """Outstanding ownership reconciliation adjustments/anomalies."""
+        """Outstanding ownership reconciliation adjustments/anomalies.
+
+        Crypto dust clears are routine bookkeeping, not anomalies, and are
+        left out."""
         with self.store.lock:
             rows = self.store.connection.execute(
                 """SELECT adjustment_id, symbol, market, quantity, consumed_quantity,
                           kind, note, created_at
                    FROM portfolio_ownership_adjustments
-                   WHERE account_id = ? AND consumed_quantity < quantity
+                   WHERE account_id = ? AND consumed_quantity < quantity AND kind != ?
                    ORDER BY created_at""",
-                (account_id,),
+                (account_id, CRYPTO_DUST_CLEAR_KIND),
             ).fetchall()
         return tuple(
             {

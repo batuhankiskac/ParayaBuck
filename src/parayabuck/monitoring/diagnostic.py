@@ -405,8 +405,14 @@ def _run_doctor_checks(
             _add("stuck_rebalance", "OK", "no stuck rebalance")
 
         sess = forensics.get("sessions") or {}
-        if sess.get("unclean"):
-            _add("sessions", "DEGRADED", f"{len(sess['unclean'])} unclean sessions")
+        # Only crashes after the latest clean stop need attention; older ones
+        # stay in the history count.
+        recent = sess.get("unclean_since_clean") or []
+        historical = len(sess.get("unclean") or [])
+        if recent:
+            _add("sessions", "DEGRADED", f"{len(recent)} unclean sessions since last clean stop")
+        elif historical:
+            _add("sessions", "OK", f"sessions ok ({historical} historical unclean)")
         else:
             _add("sessions", "OK", "sessions ok")
     except Exception as exc:

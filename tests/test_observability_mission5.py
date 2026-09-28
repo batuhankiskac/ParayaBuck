@@ -1124,3 +1124,28 @@ def test_ops_explain_json_latest_keeps_stdout_pure_json(tmp_path: Path) -> None:
     assert code == 0
     assert json.loads(out)["decision_id"] == "dec-9"
     assert "Latest decision: dec-9" in err
+
+
+@pytest.mark.parametrize(
+    ("with_db", "message"),
+    [(False, "No decision DB found — fresh install"), (True, "No decisions found in DB")],
+)
+def test_ops_explain_json_without_decisions_prints_one_json_object(tmp_path: Path, with_db: bool, message: str) -> None:
+    """With no DB or an empty decisions table, `ops explain --json` must still
+    emit exactly one JSON object on stdout and exit 0."""
+    db = tmp_path / "decisions.sqlite3"
+    if with_db:
+        with contextlib.closing(sqlite3.connect(db)) as conn:
+            conn.execute(
+                "CREATE TABLE portfolio_decisions "
+                "(decision_id TEXT, decision_timestamp TEXT, market TEXT, strategy_name TEXT)"
+            )
+            conn.commit()
+
+    code, out, _ = _run_cli("--config", str(tmp_path / "missing.yaml"), "ops", "explain", "--json", "--db", str(db))
+    assert code == 0
+    assert json.loads(out) == {"decision": None, "message": message}
+
+    code, out, _ = _run_cli("--config", str(tmp_path / "missing.yaml"), "ops", "explain", "--db", str(db))
+    assert code == 0
+    assert out.strip() == message

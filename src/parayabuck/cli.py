@@ -972,8 +972,10 @@ def _ops_explain(args: argparse.Namespace) -> int:
                     row = cur.fetchone()
                     if row:
                         decision_id = row["decision_id"]
+                        # --json keeps stdout a single parseable document.
                         print(
-                            f"Latest decision: {decision_id} at {row['decision_timestamp']} market={row['market']} strategy={row['strategy_name']}"
+                            f"Latest decision: {decision_id} at {row['decision_timestamp']} market={row['market']} strategy={row['strategy_name']}",
+                            file=sys.stderr if getattr(args, "json", False) else sys.stdout,
                         )
                     else:
                         print("No decisions found in DB")

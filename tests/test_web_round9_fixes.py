@@ -116,9 +116,10 @@ def test_dashboard_anomalies_skip_crypto_dust_clear_bookkeeping(monkeypatch: Any
     )
     # Newer dust rows would otherwise fill the LIMIT 10 window.
     for minute in range(12):
+        kind = "crypto_dust_clear" if minute % 2 else "crypto_dust_credit"
         connection.execute(
             "INSERT INTO portfolio_ownership_adjustments VALUES "
-            f"('acct', 'BTC/USD', 'crypto', 1e-9, 'crypto_dust_clear', 'dust', '2026-09-02T00:{minute:02d}:00+00:00')"
+            f"('acct', 'BTC/USD', 'crypto', 1e-9, '{kind}', 'dust', '2026-09-02T00:{minute:02d}:00+00:00')"
         )
     monkeypatch.setattr(server_legacy, "_dashboard_readonly_connection", lambda: connection)
     monkeypatch.setattr(server_legacy, "_dashboard_account_id", lambda: "acct")

@@ -33,6 +33,7 @@ from parayabuck.portfolio.runtime_models import (
 )
 from parayabuck.portfolio.runtime_ownership import (
     CRYPTO_DUST_CLEAR_KIND,
+    CRYPTO_DUST_CREDIT_KIND,
     CRYPTO_OWNERSHIP_DUST,
     CRYPTO_STALE_DUST_BAND,
     net_owned_quantities,
@@ -40,6 +41,13 @@ from parayabuck.portfolio.runtime_ownership import (
 from parayabuck.storage import SQLiteStore
 
 log = get_logger("parayabuck.portfolio.runtime_repository")
+
+# Outstanding adjustment quantity as subtracted from net ownership: every kind
+# reduces the net except a crypto dust credit, which adds to it.
+_SIGNED_OUTSTANDING_SQL = (
+    f"CASE WHEN kind = '{CRYPTO_DUST_CREDIT_KIND}' THEN consumed_quantity - quantity"
+    " ELSE quantity - consumed_quantity END"
+)
 
 # A late or racing observation (a stream event applied before the submit
 # path records ``submitted``, a reconciliation snapshot taken before the
@@ -971,7 +979,11 @@ class PortfolioStateRepository:
         fill, or a late fill after a band stale-clear) would push the net
         below zero and trip the ownership invariant. Dust clears are then
         consumed by exactly the shortfall, never more, so no residue is
-        resurrected."""
+        resurrected. A shortfall still left within CRYPTO_OWNERSHIP_DUST (an
+        exit that sold a few 9th-decimal units above the fee-net booking) is
+        booked as a never-consumed dust credit that returns the net to 0; a
+        larger one is a real oversell and is left to trip the invariant.
+        Nothing in this transaction evaluates the invariant before then."""
         rows = self.store.connection.execute(
             """SELECT o.side, o.cumulative_filled_quantity
                FROM portfolio_orders o
@@ -981,7 +993,7 @@ class PortfolioStateRepository:
             (account_id, market.value, symbol),
         ).fetchall()
         adjusted = self.store.connection.execute(
-            """SELECT COALESCE(SUM(quantity - consumed_quantity), 0)
+            f"""SELECT COALESCE(SUM({_SIGNED_OUTSTANDING_SQL}), 0)
                FROM portfolio_ownership_adjustments
                WHERE account_id = ? AND market = ? AND symbol = ? AND consumed_quantity < quantity""",
             (account_id, market.value, symbol),
@@ -1019,6 +1031,15 @@ class PortfolioStateRepository:
                 net,
                 CRYPTO_DUST_CLEAR_KIND,
                 "sub-precision crypto residue left by a SELL fill",
+            )
+        elif -CRYPTO_OWNERSHIP_DUST <= net < 0:
+            self._insert_ownership_adjustment_tx(
+                account_id,
+                symbol,
+                market,
+                -net,
+                CRYPTO_DUST_CREDIT_KIND,
+                "sub-precision crypto oversell left by a SELL fill",
             )
 
     def _consume_ownership_adjustments_tx(
@@ -1378,7 +1399,7 @@ class PortfolioStateRepository:
             # A stale-clear adjustment belongs to the market it was raised
             # for; without the same market filter it is subtracted from the
             # other market's net and the ownership invariant trips.
-            adjustments_query = """SELECT symbol, SUM(quantity - consumed_quantity)
+            adjustments_query = f"""SELECT symbol, SUM({_SIGNED_OUTSTANDING_SQL})
                    FROM portfolio_ownership_adjustments
                    WHERE account_id = ? AND consumed_quantity < quantity"""
             adjustments_params: tuple[object, ...] = (account_id,)
@@ -1409,16 +1430,16 @@ class PortfolioStateRepository:
     def ownership_adjustments(self, account_id: str = "unknown") -> tuple[dict[str, object], ...]:
         """Outstanding ownership reconciliation adjustments/anomalies.
 
-        Crypto dust clears are routine bookkeeping, not anomalies, and are
-        left out."""
+        Crypto dust clears and credits are routine bookkeeping, not
+        anomalies, and are left out."""
         with self.store.lock:
             rows = self.store.connection.execute(
                 """SELECT adjustment_id, symbol, market, quantity, consumed_quantity,
                           kind, note, created_at
                    FROM portfolio_ownership_adjustments
-                   WHERE account_id = ? AND consumed_quantity < quantity AND kind != ?
+                   WHERE account_id = ? AND consumed_quantity < quantity AND kind NOT IN (?, ?)
                    ORDER BY created_at""",
-                (account_id, CRYPTO_DUST_CLEAR_KIND),
+                (account_id, CRYPTO_DUST_CLEAR_KIND, CRYPTO_DUST_CREDIT_KIND),
             ).fetchall()
         return tuple(
             {

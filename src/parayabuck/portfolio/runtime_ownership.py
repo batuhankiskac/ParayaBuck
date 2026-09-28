@@ -23,6 +23,14 @@ CRYPTO_OWNERSHIP_DUST = 1e-8
 # shortfall that would otherwise make the net negative (never more, which would
 # resurrect the dust), and operator anomaly listings leave it out.
 CRYPTO_DUST_CLEAR_KIND = "crypto_dust_clear"
+# The mirror case: an exit that sells slightly more than the fee-net booked
+# quantity (broker 9-decimal rounding above the ledger) leaves a net in
+# [-CRYPTO_OWNERSHIP_DUST, 0) once dust clears are used up. That SELL books a
+# credit of this kind that returns the net to exactly 0. A credit ADDS its
+# quantity to the net (every other kind subtracts), is never consumed, and is
+# left out of operator anomaly listings. A larger shortfall is a real
+# oversell and still trips the ownership invariant.
+CRYPTO_DUST_CREDIT_KIND = "crypto_dust_credit"
 # A crypto stale-clear smaller than this (broker flat, local residue that
 # accumulated before the per-exit dust clear existed) is recorded with the
 # dust kind too. Real crypto positions are orders of magnitude larger
@@ -40,7 +48,8 @@ def net_owned_quantities(
 
     ``order_rows``: iterable of (symbol, side, filled_qty)
     ``adjustments``: iterable of (symbol, outstanding_adjusted_qty) where
-      outstanding = quantity - consumed_quantity over every adjustment kind.
+      outstanding = quantity - consumed_quantity over every adjustment kind,
+      negated for ``CRYPTO_DUST_CREDIT_KIND`` (a credit adds to the net).
 
     Raises ``RuntimeError`` on negative net ownership (invariant violation).
     Filters out near-zero dust (|qty| <= 1e-12), and for ``crypto_symbols``
@@ -63,4 +72,10 @@ def net_owned_quantities(
     return {s: q for s, q in net.items() if q > 1e-12 and not (s in crypto_symbols and q < CRYPTO_OWNERSHIP_DUST)}
 
 
-__all__ = ["CRYPTO_DUST_CLEAR_KIND", "CRYPTO_OWNERSHIP_DUST", "CRYPTO_STALE_DUST_BAND", "net_owned_quantities"]
+__all__ = [
+    "CRYPTO_DUST_CLEAR_KIND",
+    "CRYPTO_DUST_CREDIT_KIND",
+    "CRYPTO_OWNERSHIP_DUST",
+    "CRYPTO_STALE_DUST_BAND",
+    "net_owned_quantities",
+]

@@ -167,7 +167,7 @@ class SnapshotWriter:
                     rh = asdict(provided)
                     snap = build_snapshot(runtime_health=rh, runtime_state=rh.get("state"))
                 else:
-                    snap = provided if isinstance(provided, dict) else None
+                    snap = None
             if snap is None:
                 snap = build_snapshot()
         except Exception:
@@ -191,7 +191,6 @@ class SnapshotWriter:
         """Attempt to write stopped state on clean shutdown (best effort)."""
         try:
             snap = build_snapshot(runtime_state="stopped")
-            snap["runtime_state"] = "stopped"
             write_snapshot_atomic(self.path, snap)
         except Exception:
             log.warning("snapshot stopped write failed", exc_info=True)

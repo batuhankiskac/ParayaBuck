@@ -20,6 +20,7 @@ from parayabuck.execution.alpaca import (
     OwnershipDriftError,
     RiskStatePersistenceError,
 )
+from parayabuck.execution.alpaca_account import AccountService
 from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.ledger import ExecutionLedger
 
@@ -120,6 +121,17 @@ def test_account_market_classification_crypto_vs_equity(tmp_path: Path) -> None:
     iwm = next(p for p in snap.positions if p.symbol == "IWM")
     assert btc.market == Market.CRYPTO
     assert iwm.market == Market.EQUITY
+
+
+@pytest.mark.parametrize("asset_class", ["", "us_equity"])
+def test_crypto_pair_is_classified_crypto_whatever_the_asset_class(asset_class: str) -> None:
+    """A crypto position can arrive with a missing or equity asset class; the
+    symbol is the second, independent signal. Reading the class alone makes
+    ``canonical_symbol`` raise or key the position as an equity lot."""
+    asset = SimpleNamespace(symbol="BTC/USD", asset_class=asset_class)
+
+    assert AccountService.classify_market(asset) is Market.CRYPTO
+    assert AccountService.classify_market(SimpleNamespace(symbol="IWM", asset_class=asset_class)) is Market.EQUITY
 
 
 # --- Ownership ---

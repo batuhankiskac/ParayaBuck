@@ -29,6 +29,7 @@ from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
+from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
 from parayabuck.universe import (
@@ -418,8 +419,6 @@ def _run_doctor(args: argparse.Namespace) -> int:
             except Exception as exc:
                 add(label, False, f"{p}: {exc}")
         cfg_p = Path(config_path) if config_path and Path(config_path).exists() else Path("config/settings.yaml")
-        if not cfg_p.exists():
-            cfg_p = Path("config/settings.yaml")
         try:
             cfg_p.parent.mkdir(parents=True, exist_ok=True)
             add("config state writable", os.access(cfg_p.parent, os.W_OK), str(cfg_p.parent))
@@ -464,8 +463,11 @@ def _run_doctor(args: argparse.Namespace) -> int:
 
                     probe = Path(td) / "probe.sqlite3"
                     store = SQLiteStore(probe)
-                    add("sqlite WAL capability", True, "probe WAL ok")
-                    store.connection.close()
+                    store.acquire()
+                    try:
+                        add("sqlite WAL capability", True, "probe WAL ok")
+                    finally:
+                        store.release()
             except Exception as exc:
                 add("sqlite WAL capability", False, str(exc))
         if config.universe.equity.enabled:
@@ -636,31 +638,15 @@ def _run_ops(args: argparse.Namespace) -> int:
 
 def _ops_status(args: argparse.Namespace) -> int:
     # Load config optionally
-    config = None
     try:
         config = load_config(getattr(args, "config", None))
     except Exception:
-        from parayabuck.config import Config as _Cfg
-
-        config = _Cfg()
-    snapshot_path = (
-        getattr(args, "snapshot", None)
-        or getattr(config, "observability", None)
-        and getattr(config.observability, "snapshot_path", None)
-        or "data/runtime/health_snapshot.json"
-    )
-    db_path = (
-        getattr(args, "db", None)
-        or getattr(config, "runtime", None)
-        and getattr(config.runtime, "decision_db_path", None)
-        or "data/runtime/parayabuck.sqlite3"
-    )
-    # allow explicit snapshot path via config.observability
-    if config is not None and hasattr(config, "observability"):
-        if not getattr(args, "snapshot", None):
-            snapshot_path = config.observability.snapshot_path
-        if not getattr(args, "db", None):
-            db_path = config.runtime.decision_db_path
+        config = Config()
+    # Explicit flags win; only an absent flag falls back to the configured paths.
+    # Dropping them here made the relative data/runtime defaults answer for a
+    # database and snapshot the operator never asked about.
+    snapshot_path = getattr(args, "snapshot", None) or config.observability.snapshot_path
+    db_path = getattr(args, "db", None) or config.runtime.decision_db_path
     from parayabuck.monitoring.health import evaluate_health
 
     health = evaluate_health(snapshot_path=snapshot_path, database_path=db_path, config=config)
@@ -684,9 +670,7 @@ def _ops_status(args: argparse.Namespace) -> int:
             snap_data = _json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         snap_data = None
-    mode = (snap_data.get("mode") if isinstance(snap_data, dict) else None) or (
-        config.runtime.mode.value if config and hasattr(config, "runtime") else "unknown"
-    )
+    mode = (snap_data.get("mode") if isinstance(snap_data, dict) else None) or config.runtime.mode.value
     session = (snap_data.get("session_id") if isinstance(snap_data, dict) else None) or "—"
     # Build checks map
     checks = {c["code"]: c for c in health.get("checks", []) if isinstance(c, dict)}
@@ -709,14 +693,12 @@ def _ops_status(args: argparse.Namespace) -> int:
     print(f"Session       {session}")
     print("")
     # Markets
-    for market_label in ("equity", "crypto"):
-        # health markets are per market? We have workers check etc. For now show from checks
-        pass
     print(_check_line("workers", "Workers"))
     print(_check_line("reconciliation", "Reconcile"))
     print(_check_line("account", "Account"))
     print(_check_line("universe", "Universe"))
     print(_check_line("signal_adjustment", "Adjustment"))
+    print(_check_line("market_halts", "Market halts"))
     print("")
     # Queue
     q = checks.get("queue", {})
@@ -759,22 +741,24 @@ def _ops_doctor(args: argparse.Namespace) -> int:
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
     db_path = getattr(args, "db", None)
     # Try to get db from config if not provided
-    if not db_path:
-        try:
-            cfg = load_config(config_path if Path(config_path).exists() else None)
+    try:
+        cfg = load_config(config_path if Path(config_path).exists() else None)
+        if not db_path:
             db_path = cfg.runtime.decision_db_path
-            if not snapshot_path or snapshot_path == "data/runtime/health_snapshot.json":
-                # allow observability snapshot path
-                try:
-                    snapshot_path = cfg.observability.snapshot_path
-                except Exception:
-                    pass
-            if not journal_path or journal_path == "data/runtime/observability.sqlite3":
-                try:
-                    journal_path = cfg.observability.journal_path
-                except Exception:
-                    pass
-        except Exception:
+        # Only an absent flag falls back to the configured path: an explicit
+        # flag that happens to equal the relative default must still win.
+        if not getattr(args, "snapshot", None):
+            try:
+                snapshot_path = cfg.observability.snapshot_path
+            except Exception:
+                pass
+        if not getattr(args, "journal", None):
+            try:
+                journal_path = cfg.observability.journal_path
+            except Exception:
+                pass
+    except Exception:
+        if not db_path:
             db_path = "data/runtime/parayabuck.sqlite3"
     try:
         from parayabuck.monitoring.diagnostic import _run_doctor_checks
@@ -860,16 +844,18 @@ def _ops_timeline(args: argparse.Namespace) -> int:
     incident_id = getattr(args, "incident", None)
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
     db_path = getattr(args, "db", None)
-    if not db_path:
-        try:
-            cfg = load_config(getattr(args, "config", None))
+    # allow config override
+    try:
+        cfg = load_config(getattr(args, "config", None))
+        if not getattr(args, "journal", None):
+            try:
+                journal_path = cfg.observability.journal_path
+            except Exception:
+                pass
+        if not db_path:
             db_path = cfg.runtime.decision_db_path
-            if not getattr(args, "journal", None):
-                try:
-                    journal_path = cfg.observability.journal_path
-                except Exception:
-                    pass
-        except Exception:
+    except Exception:
+        if not db_path:
             db_path = "data/runtime/parayabuck.sqlite3"
     limit = int(getattr(args, "limit", 100) or 100)
     events: list[Any] = []
@@ -953,10 +939,12 @@ def _ops_explain(args: argparse.Namespace) -> int:
     target = getattr(args, "target", "latest") or "latest"
     db_path = getattr(args, "db", None)
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
+    snapshot_path = "data/runtime/health_snapshot.json"
     config_path = getattr(args, "config", None)
     cfg = None
     try:
         cfg = load_config(config_path)
+        snapshot_path = cfg.observability.snapshot_path
         if not db_path:
             db_path = cfg.runtime.decision_db_path
         if not getattr(args, "journal", None):
@@ -1086,7 +1074,13 @@ def _ops_explain(args: argparse.Namespace) -> int:
             try:
                 from parayabuck.monitoring.health import evaluate_health
 
-                h = evaluate_health(database_path=db_path)
+                # Judge health with the config this command resolved (defaults
+                # when it failed to load), never a CONFIG_PATH/cwd re-load.
+                h = evaluate_health(
+                    snapshot_path=snapshot_path,
+                    database_path=db_path,
+                    config=cfg if cfg is not None else Config(),
+                )
                 for chk in h.get("checks", []):
                     if chk.get("status") in {"BLOCKED", "DEGRADED", "CRITICAL"}:
                         print(f"Health {chk.get('code')}: {chk.get('summary')}")
@@ -1218,17 +1212,8 @@ def _load_bars(
             ]
             if not deficient:
                 break
-            if attempts >= 3:
-                log.warning(
-                    "Warmup still short of %d pre-start bars for %d symbol(s) after 3 extension attempts: %s",
-                    minimum_bars,
-                    len(deficient),
-                    ", ".join(sorted(deficient)[:20]),
-                )
-                continue
-            # Extend the window backward for the deficient symbols only. The
-            # shortfall is converted to calendar days anchored at the evaluation
-            # start, plus a growth buffer so the next attempt makes real progress.
+            # Extend the window backward for every symbol. The shortfall is
+            # converted to calendar days anchored at the evaluation start.
             from parayabuck.markets.timeframes import bars_to_calendar_days
 
             extra_days = bars_to_calendar_days(
@@ -1237,12 +1222,22 @@ def _load_bars(
                 minimum_bars,
                 end_date=start,
             )
-            symbols_to_retry = sorted(set(deficient))
-            symbols = [s for s in symbols if s not in symbols_to_retry] + symbols_to_retry
-            start_at = min(
+            extended_start = min(
                 start_at,
                 start - timedelta(days=extra_days) if start is not None else start_at,
             )
+            # A window that does not move would only re-download the same bars:
+            # stop and report the residual shortfall instead.
+            if attempts >= 3 or extended_start >= start_at:
+                log.warning(
+                    "Warmup still short of %d pre-start bars for %d symbol(s) after %d download attempt(s): %s",
+                    minimum_bars,
+                    len(deficient),
+                    attempts,
+                    ", ".join(sorted(deficient)[:20]),
+                )
+                break
+            start_at = extended_start
     finally:
         provider.close()
     return [bar for symbol in symbols for bar in by_symbol.get(symbol, ())]
@@ -1280,7 +1275,9 @@ def _candidate_symbols(
     limit: int | None,
 ) -> list[str]:
     if explicit:
-        return list(dict.fromkeys(item.strip().upper() for item in explicit.split(",") if item.strip()))
+        # Canonical keys: the download batch is keyed by canonical symbols, so a
+        # legacy form such as ``BTCUSD`` must resolve to ``BTC/USD`` here too.
+        return list(dict.fromkeys(canonical_symbol(item, market) for item in explicit.split(",") if item.strip()))
     if market == Market.EQUITY:
         return list(config.universe.equity.symbols)
     source = Path(config.universe.crypto.active_universe_path)
@@ -1291,7 +1288,8 @@ def _candidate_symbols(
     required_order = list(dict.fromkeys(required))
     required_set = set(required_order)
     candidates = [symbol for symbol in dict.fromkeys(symbols) if symbol not in required_set]
-    return [*required_order, *candidates[: max(0, limit or len(candidates))]]
+    cap = len(candidates) if limit is None else max(0, limit)
+    return [*required_order, *candidates[:cap]]
 
 
 def _strategy_parameters(config: Config, market: Market, raw_overrides: list[str]) -> dict[str, object]:

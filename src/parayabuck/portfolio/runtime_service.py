@@ -40,6 +40,7 @@ from parayabuck.portfolio.runtime_models import (
     REBALANCE_PHASE_SELL_PENDING,
     TERMINAL_ORDER_STATUSES_SQL,
     BuyAdmission,
+    OpenPortfolioOrder,
     PortfolioDecisionService,
     PortfolioRuntimeBroker,
     PortfolioRuntimeResult,
@@ -55,6 +56,15 @@ from parayabuck.portfolio.runtime_rebalance import (
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 
 log = get_logger("parayabuck.portfolio.runtime_service")
+
+# A deferred BUY left at ``reconciliation_required`` normally resolves at the
+# next broker reconciliation; one still ambiguous after this long is raised
+# to the operator (once per episode, never per bar).
+STUCK_DEFERRED_BUY_ALERT_SECONDS = 900.0
+
+# Rebalance ``status`` recorded when a settled BLOCKED rebalance is closed
+# without submitting its deferred BUYs (phase becomes ``complete``).
+REBALANCE_STATUS_CLOSED_UNRESOLVED = "closed_unresolved"
 
 # Observability hook — isolated, never raises, lazy import inside functions to avoid cycles
 try:
@@ -155,6 +165,7 @@ def _emit_rebalance_phase_safe(
     market: str | None = None,
     account_id: str | None = None,
     session_id: str | None = None,
+    reason: str | None = None,
 ) -> None:
     try:
         if _observe is None:
@@ -166,11 +177,13 @@ def _emit_rebalance_phase_safe(
             session_id=session_id,
             from_phase=from_phase,
             to_phase=to_phase,
+            reason=reason,
         )
     except Exception:
         pass
 
 
+# market/strategy/reason -> decision day it was last journalled
 _no_trade_last: dict[str, str] = {}
 
 
@@ -197,20 +210,23 @@ def _emit_no_trade_safe(
     Fields cover report's acceptance list: market, strategy, karar/veri zamanı,
     eksik/ısınan semboller, her sembolün son zaman damgası, bir sonraki 96h sınırı,
     hedef ve risk sonrası ağırlık, kapasite, engelleyen latch.
-    Repeated identical reason for same market/strategy is suppressed (dedup).
+    Repeat of the same reason for the same market/strategy is suppressed for
+    that day only; a new day (or a new reason) re-emits.
     """
     try:
         key = f"{market}:{strategy}:{reason}"
-        # Suppress exact duplicate consecutive emits (same market/strategy/reason)
-        if _no_trade_last.get(key) == reason:
-            # Still emit if more than an hour has passed? For now suppress.
+        # The journal id hashes ``occurred_at``, so nothing dedups per day at
+        # the sink. Suppression must therefore be day-scoped here: the
+        # dashboard banner reads the newest portfolio_no_trade event with no
+        # age filter (web/server_legacy.py), so suppressing forever freezes
+        # it on the first day's reason.
+        day = (decision_timestamp or datetime.now(UTC)).date().isoformat()
+        if _no_trade_last.get(key) == day:
             return
-        _no_trade_last[key] = reason
+        _no_trade_last[key] = day
         from parayabuck.monitoring.journal import emit_journal
         from parayabuck.monitoring.operational_event import create_event
 
-        # Use deterministic id per market/strategy/reason/day so journal dedups
-        day = (decision_timestamp or datetime.now(UTC)).date().isoformat()
         det_extra = f"{market}:{strategy}:{reason}:{day}"
         fields: dict[str, Any] = {
             "reason": reason,
@@ -343,6 +359,11 @@ class PortfolioRuntime:
         self.startup_catch_up_status: str | None = None
         self.startup_catch_up_at: datetime | None = None
         self.last_buy_admission: BuyAdmission | None = None
+        # Operator alert keys already raised by this process (edge-triggered).
+        self._raised_operator_alerts: set[tuple[str, str]] = set()
+
+    def _market_name(self) -> str:
+        return self.market.value if hasattr(self.market, "value") else str(self.market)
 
     def _with_paper_observability(
         self,
@@ -477,7 +498,7 @@ class PortfolioRuntime:
             except Exception:
                 next_boundary = None
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="warming_up",
                 decision_timestamp=self.startup_catch_up_at,
@@ -494,7 +515,7 @@ class PortfolioRuntime:
             self.startup_catch_up_status = "incomplete_strategy_batch"
             last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="incomplete_strategy_batch",
                 decision_timestamp=self.startup_catch_up_at,
@@ -519,7 +540,7 @@ class PortfolioRuntime:
         if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
             self.startup_catch_up_status = "duplicate_decision"
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="duplicate_decision",
                 decision_timestamp=timestamp,
@@ -536,7 +557,7 @@ class PortfolioRuntime:
             # already running: a catch-up would be an out-of-cadence re-entry.
             self.startup_catch_up_status = "catch_up_superseded"
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="duplicate_decision",
                 decision_timestamp=timestamp,
@@ -555,7 +576,7 @@ class PortfolioRuntime:
             # top of an existing managed position.
             self.startup_catch_up_status = "already_invested"
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="already_invested",
                 decision_timestamp=timestamp,
@@ -577,7 +598,7 @@ class PortfolioRuntime:
             reason = "rebalance_blocked" if status == "rebalance_blocked" else "rebalance_in_progress"
             self.startup_catch_up_status = status
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason=reason,
                 decision_timestamp=timestamp,
@@ -734,7 +755,7 @@ class PortfolioRuntime:
             except Exception:
                 nb = None
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="warming_up",
                 decision_timestamp=timestamp,
@@ -750,7 +771,7 @@ class PortfolioRuntime:
         if missing_symbols:
             last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="incomplete_strategy_batch",
                 decision_timestamp=timestamp,
@@ -764,7 +785,7 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
         if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="duplicate_decision",
                 decision_timestamp=timestamp,
@@ -789,13 +810,18 @@ class PortfolioRuntime:
         if advance_result is not None and advance_result.status == "rebalance_complete":
             return advance_result
         current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
+        if (
+            current_rebalance is not None
+            and current_rebalance.phase == REBALANCE_PHASE_BLOCKED
+            and self._close_settled_blocked_rebalance(current_rebalance.decision_id)
+        ):
+            current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
             if current_rebalance.phase == REBALANCE_PHASE_BLOCKED:
                 _emit_decision_summary_safe(
                     decision_id=current_rebalance.decision_id,
-                    market=self.market.value if hasattr(self.market, "value") else str(self.market),
-                    strategy=getattr(self, "strategy_name", None)
-                    or getattr(getattr(self, "strategy", None), "name", None),
+                    market=self._market_name(),
+                    strategy=getattr(getattr(self, "strategy", None), "name", None),
                     session_id=self.session_id,
                     account_id=self.account_id,
                     universe_version=self.universe_version,
@@ -804,7 +830,7 @@ class PortfolioRuntime:
                     no_trade_reason="SELL_PHASE_PENDING",
                 )
                 _emit_no_trade_safe(
-                    market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                    market=self._market_name(),
                     strategy=getattr(self.strategy, "name", None),
                     reason="rebalance_blocked",
                     decision_timestamp=timestamp,
@@ -815,8 +841,8 @@ class PortfolioRuntime:
                 return PortfolioRuntimeResult(current_rebalance.decision_id, None, None, (), (), "rebalance_blocked")
             _emit_decision_summary_safe(
                 decision_id=current_rebalance.decision_id,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
-                strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+                market=self._market_name(),
+                strategy=getattr(getattr(self, "strategy", None), "name", None),
                 session_id=self.session_id,
                 account_id=self.account_id,
                 universe_version=self.universe_version,
@@ -825,7 +851,7 @@ class PortfolioRuntime:
                 no_trade_reason="SELL_PHASE_PENDING",
             )
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="rebalance_in_progress",
                 decision_timestamp=timestamp,
@@ -854,7 +880,7 @@ class PortfolioRuntime:
         if not managed.issubset(batch_symbols):
             missing_managed = managed - batch_symbols
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="incomplete_managed_batch",
                 decision_timestamp=timestamp,
@@ -867,7 +893,7 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_managed_batch")
         if self.market == Market.CRYPTO and "BTC/USD" not in ready_history:
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="benchmark_not_ready",
                 decision_timestamp=timestamp,
@@ -890,7 +916,7 @@ class PortfolioRuntime:
             is PortfolioStrategy.requires_intermediate_risk_rebalance
         ):
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="not_scheduled",
                 decision_timestamp=timestamp,
@@ -934,7 +960,7 @@ class PortfolioRuntime:
                 require_product_universe(context)
         if not scheduled and not self.strategy.requires_intermediate_risk_rebalance(context):
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="not_scheduled",
                 decision_timestamp=timestamp,
@@ -1008,8 +1034,10 @@ class PortfolioRuntime:
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys)
-        open_order_symbols, open_order_sides = self._effective_open_order_constraints()
+        self._resolve_stale_submitting_rows()
+        open_orders = self.repository.open_orders(self.account_id)
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
+        open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
         risk = self.risk_overlay.apply(
             raw_target,
             account,
@@ -1024,13 +1052,10 @@ class PortfolioRuntime:
         # exposure, emit persistent no-trade (e.g., 6×10% equity blocks crypto).
         if "exposure_scaled_to_limit" in risk.reasons and sum(w.weight for w in risk.target.weights) < 1e-9:
             # Compute capacity for diagnostics
-            try:
-                gross_before = risk.gross_before
-                gross_after = risk.gross_after
-            except Exception:
-                gross_before = gross_after = 0.0
+            gross_before = risk.gross_before
+            gross_after = risk.gross_after
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason="exposure_scaled_to_limit",
                 decision_timestamp=timestamp,
@@ -1045,7 +1070,7 @@ class PortfolioRuntime:
         # Entry latch blocking check: if latch present and no buys planned
         elif entry_latch is not None and not any(w.weight > 1e-9 for w in risk.target.weights):
             _emit_no_trade_safe(
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
                 reason=entry_latch.split("|")[0] if "|" in str(entry_latch) else str(entry_latch),
                 decision_timestamp=timestamp,
@@ -1073,6 +1098,7 @@ class PortfolioRuntime:
             open_order_symbols=open_order_symbols,
             open_order_sides=open_order_sides,
             decision_id=decision_id,
+            client_order_salt=self.repository.client_order_salt(decision_id),
         )
         if not any(order.side == PortfolioOrderSide.SELL for order in planned):
             planned = reserve_opening_order_slots(
@@ -1114,8 +1140,8 @@ class PortfolioRuntime:
             submitted = self._submit_orders(orders)
             _emit_decision_summary_safe(
                 decision_id=decision_id,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
-                strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+                market=self._market_name(),
+                strategy=getattr(getattr(self, "strategy", None), "name", None),
                 session_id=self.session_id,
                 account_id=self.account_id,
                 universe_version=self.universe_version,
@@ -1151,8 +1177,8 @@ class PortfolioRuntime:
             submitted = self._submit_orders(sells)
             _emit_decision_summary_safe(
                 decision_id=decision_id,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
-                strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+                market=self._market_name(),
+                strategy=getattr(getattr(self, "strategy", None), "name", None),
                 session_id=self.session_id,
                 account_id=self.account_id,
                 universe_version=self.universe_version,
@@ -1163,7 +1189,7 @@ class PortfolioRuntime:
                 decision_id,
                 None,
                 REBALANCE_PHASE_SELL_PENDING,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
@@ -1184,7 +1210,9 @@ class PortfolioRuntime:
             admission.account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
             market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
-            reserved_position_keys=self._effective_reserved_position_keys(reserved_position_keys),
+            reserved_position_keys=self._effective_reserved_position_keys(
+                reserved_position_keys, open_orders=open_orders
+            ),
             open_order_symbols=tuple(sorted(self.broker.all_open_order_symbols())),
         )
         orders = buys
@@ -1204,8 +1232,8 @@ class PortfolioRuntime:
         submitted = self._submit_orders(buys)
         _emit_decision_summary_safe(
             decision_id=decision_id,
-            market=self.market.value if hasattr(self.market, "value") else str(self.market),
-            strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+            market=self._market_name(),
+            strategy=getattr(getattr(self, "strategy", None), "name", None),
             session_id=self.session_id,
             account_id=self.account_id,
             universe_version=self.universe_version,
@@ -1264,13 +1292,14 @@ class PortfolioRuntime:
                 if resolved is None:
                     return None
                 buys = resolved
+            self._alert_stuck_deferred_buys(current, buys)
             if buys and all(is_terminal_order_status(str(item["status"])) for item in buys):
                 self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_COMPLETE)
                 _emit_rebalance_phase_safe(
                     current.decision_id,
                     REBALANCE_PHASE_BUY_PENDING,
                     REBALANCE_PHASE_COMPLETE,
-                    market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                    market=self._market_name(),
                     account_id=self.account_id,
                     session_id=self.session_id,
                 )
@@ -1313,6 +1342,135 @@ class PortfolioRuntime:
             reserved_position_keys=reserved_position_keys,
         )
 
+    def _close_settled_blocked_rebalance(self, decision_id: str) -> bool:
+        """Close a BLOCKED rebalance whose orders have all settled.
+
+        Only the decision path calls this, and the engine runs that path only
+        while the market has no entry halt, i.e. after reconciliation verified
+        the blocked decision. The stale deferred BUYs are never submitted: the
+        rebalance is closed as ``complete``/``closed_unresolved`` and the next
+        scheduled decision re-plans from a fresh target. A block whose decision
+        cannot be restored stays BLOCKED and is raised to the operator once.
+        Returns True when the rebalance was closed.
+        """
+        if not self._rebalance_target_recoverable(decision_id):
+            self._raise_operator_alert_once(
+                (decision_id, "rebalance_unrecoverable"),
+                message="Blocked rebalance decision cannot be restored; manual intervention required",
+                category="rebalance_unrecoverable",
+                decision_id=decision_id,
+            )
+            return False
+        orders = self.repository.orders_for_decision(decision_id)
+        if not orders or not all(is_terminal_order_status(str(item["status"])) for item in orders):
+            return False
+        self.repository.update_rebalance_execution(
+            decision_id, REBALANCE_PHASE_COMPLETE, status=REBALANCE_STATUS_CLOSED_UNRESOLVED
+        )
+        log.warning(
+            "Blocked rebalance closed after its orders settled; deferred BUYs discarded: market=%s decision=%s",
+            self._market_name(),
+            decision_id,
+        )
+        _emit_rebalance_phase_safe(
+            decision_id,
+            REBALANCE_PHASE_BLOCKED,
+            REBALANCE_PHASE_COMPLETE,
+            market=self._market_name(),
+            account_id=self.account_id,
+            session_id=self.session_id,
+            reason=REBALANCE_STATUS_CLOSED_UNRESOLVED,
+        )
+        return True
+
+    def _rebalance_target_recoverable(self, decision_id: str) -> bool:
+        """Whether the decision's risk-adjusted target can still be restored."""
+        decision = self.repository.decision_row(decision_id)
+        if decision is None:
+            return False
+        try:
+            TargetPortfolio.from_dict(json.loads(str(decision["risk_json"]))["target"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        return True
+
+    def _alert_stuck_deferred_buys(self, current: RebalanceExecutionState, buys: tuple[dict[str, object], ...]) -> None:
+        """Raise one operator alert per episode of an ambiguous deferred BUY.
+
+        The ``buy_pending`` phase is written when the BUY batch is submitted,
+        so its ``updated_at`` bounds how long an ambiguous BUY has waited for
+        reconciliation. No phase change and no halt: reconciliation remains
+        the path that resolves the order.
+        """
+        key = (current.decision_id, "stuck_deferred_buy")
+        stuck = [str(item["client_order_id"]) for item in buys if str(item["status"]) == "reconciliation_required"]
+        if not stuck:
+            self._operator_alert_keys().discard(key)
+            return
+        updated_at = current.updated_at
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        age = (datetime.now(UTC) - updated_at).total_seconds()
+        if age < STUCK_DEFERRED_BUY_ALERT_SECONDS:
+            return
+        self._raise_operator_alert_once(
+            key,
+            message="Deferred BUY still awaiting reconciliation",
+            category="stuck_deferred_buy",
+            decision_id=current.decision_id,
+            client_order_ids=",".join(stuck),
+            age_seconds=round(age),
+        )
+
+    def _alert_completed_with_ambiguous_buys(self, decision_id: str) -> None:
+        """Raise one operator alert when a rebalance completes over an ambiguous BUY.
+
+        A BUY whose submit raised stays ``reconciliation_required`` while the
+        phase is still ``buy_ready``; the re-plan then suppresses its symbol
+        as an open order and may complete the rebalance with that BUY still
+        unresolved. No phase change and no halt: the row keeps counting as an
+        open order and reconciliation remains the path that resolves it.
+        """
+        stuck = [
+            str(item["client_order_id"])
+            for item in self.repository.orders_for_decision(decision_id, side="buy")
+            if str(item["status"]) == "reconciliation_required"
+        ]
+        if not stuck:
+            return
+        self._raise_operator_alert_once(
+            (decision_id, "rebalance_completed_with_ambiguous_buy"),
+            message="Rebalance completed while a deferred BUY awaits reconciliation",
+            category="rebalance_completed_with_ambiguous_buy",
+            decision_id=decision_id,
+            client_order_ids=",".join(stuck),
+        )
+
+    def _operator_alert_keys(self) -> set[tuple[str, str]]:
+        keys = getattr(self, "_raised_operator_alerts", None)
+        if keys is None:
+            keys = self._raised_operator_alerts = set()
+        return keys
+
+    def _raise_operator_alert_once(self, key: tuple[str, str], *, message: str, **fields: object) -> None:
+        keys = self._operator_alert_keys()
+        if key in keys:
+            return
+        keys.add(key)
+        log.critical("%s: market=%s %s", message, self._market_name(), fields)
+        try:
+            from parayabuck.monitoring import alerts
+
+            alerts.emit(
+                "paper_incident",
+                message=message,
+                incident_id=f"{key[1]}:{key[0]}",
+                market=self._market_name(),
+                **fields,
+            )
+        except Exception:
+            pass
+
     def _resolve_stuck_submission_rows(
         self, decision_id: str, orders: tuple[dict[str, object], ...], side: str
     ) -> tuple[dict[str, object], ...] | None:
@@ -1326,6 +1484,19 @@ class PortfolioRuntime:
         submitted. Returns the re-read rows, or ``None`` when the broker was
         unreachable or lacks the lookup — the caller retries without
         guessing.
+        """
+        changed = self._resolve_submitting_rows(orders)
+        if changed is None:
+            return None
+        if not changed:
+            return orders
+        return self.repository.orders_for_decision(decision_id, side=side)
+
+    def _resolve_submitting_rows(self, orders: tuple[dict[str, object], ...]) -> bool | None:
+        """Resolve each ``submitting`` row against the broker.
+
+        Returns whether any row changed, or ``None`` when the broker lacks the
+        lookup. A row whose lookup fails stays ``submitting``.
         """
         resolver = getattr(self.broker, "resolve_portfolio_submission", None)
         if resolver is None:
@@ -1348,9 +1519,22 @@ class PortfolioRuntime:
                 status, broker_order_id = outcome, str(item.get("broker_order_id") or "")
             self.repository.update_order(client_order_id, status, broker_order_id)
             changed = True
-        if not changed:
-            return orders
-        return self.repository.orders_for_decision(decision_id, side=side)
+        return changed
+
+    def _resolve_stale_submitting_rows(self) -> None:
+        """Resolve rows of earlier decisions still at ``submitting``.
+
+        A crash during a direct batch leaves its unsent rows at
+        ``submitting`` with no rebalance phase to resolve them. Each is
+        looked up by its deterministic client order id: a found order takes
+        its real status, an unknown one is canceled, and a failed lookup
+        leaves the row ``submitting`` so it still counts as open (fail
+        closed). Runs before a new decision exists, so its rows are never
+        touched.
+        """
+        rows = self.repository.submitting_orders(self.account_id, self.market)
+        if rows:
+            self._resolve_submitting_rows(rows)
 
     def _submit_deferred_buys(
         self,
@@ -1374,7 +1558,7 @@ class PortfolioRuntime:
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
                 REBALANCE_PHASE_BLOCKED,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
@@ -1390,17 +1574,28 @@ class PortfolioRuntime:
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
                 REBALANCE_PHASE_BLOCKED,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
             return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_blocked")
+        # A crash between persisting a BUY row and its broker acknowledgement
+        # leaves it at ``submitting`` in this phase. Resolve it against the
+        # broker first, as the pending phases do: left as is, the re-plan would
+        # suppress its symbol and could complete the rebalance with the row
+        # never resolved. An unresolved row waits for a later advance.
+        buys = self.repository.orders_for_decision(decision_id, side="buy")
+        if any(str(item["status"]) == "submitting" for item in buys):
+            resolved = self._resolve_stuck_submission_rows(decision_id, buys, "buy")
+            if resolved is None or any(str(item["status"]) == "submitting" for item in resolved):
+                return None
         account = account or self.broker.account()
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
-        open_order_symbols, open_order_sides = self._effective_open_order_constraints()
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys)
+        open_orders = self.repository.open_orders(self.account_id)
+        open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
         risk = self.risk_overlay.apply(
             adjusted_target,
             account,
@@ -1433,6 +1628,7 @@ class PortfolioRuntime:
             open_order_symbols=open_order_symbols,
             open_order_sides=open_order_sides,
             decision_id=decision_id,
+            client_order_salt=self.repository.client_order_salt(decision_id),
         )
         buy_orders = tuple(
             PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id})
@@ -1442,11 +1638,12 @@ class PortfolioRuntime:
         replan_needs_sell = any(order.side == PortfolioOrderSide.SELL for order in planned)
         if not buy_orders:
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
+            self._alert_completed_with_ambiguous_buys(decision_id)
             _emit_rebalance_phase_safe(
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
                 REBALANCE_PHASE_COMPLETE,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
@@ -1454,8 +1651,9 @@ class PortfolioRuntime:
         admission = self._size_buys_to_safe_capacity(buy_orders)
         buy_orders = admission.orders
         account = admission.account
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys)
-        open_order_symbols, _open_order_sides = self._effective_open_order_constraints()
+        open_orders = self.repository.open_orders(self.account_id)
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
+        open_order_symbols, _open_order_sides = self._effective_open_order_constraints(open_orders)
         buy_orders = reserve_opening_order_slots(
             buy_orders,
             account,
@@ -1475,23 +1673,34 @@ class PortfolioRuntime:
                 # account snapshot permits the replacement opening.
                 return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_waiting_for_slot")
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
+            self._alert_completed_with_ambiguous_buys(decision_id)
             _emit_rebalance_phase_safe(
                 decision_id,
                 REBALANCE_PHASE_BUY_READY,
                 REBALANCE_PHASE_COMPLETE,
-                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                market=self._market_name(),
                 account_id=self.account_id,
                 session_id=self.session_id,
             )
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
-        self._record_buy_admission_observation(decision_id, admission, buy_orders)
-        submitted = self._submit_orders(buy_orders)
+        # The admission evidence references its order rows, which the direct
+        # BUY path writes with the decision; the re-planned BUYs exist only
+        # now. Each row is written just before its own submit (the
+        # observation keeps the whole batch's notional): a failed submit then
+        # leaves no ``submitting`` row for a later BUY that never reached the
+        # broker, so the next re-plan submits it instead of suppressing it.
+        # ``_submit_orders`` records the same row (INSERT OR IGNORE).
+        submitted: tuple[str, ...] = ()
+        for order in buy_orders:
+            self.repository.record_order(order, "submitting")
+            self._record_buy_admission_observation(decision_id, admission, buy_orders, linked=(order,))
+            submitted += self._submit_orders((order,))
         self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BUY_PENDING)
         _emit_rebalance_phase_safe(
             decision_id,
             REBALANCE_PHASE_BUY_READY,
             REBALANCE_PHASE_BUY_PENDING,
-            market=self.market.value if hasattr(self.market, "value") else str(self.market),
+            market=self._market_name(),
             account_id=self.account_id,
             session_id=self.session_id,
         )
@@ -1507,6 +1716,8 @@ class PortfolioRuntime:
     def _effective_reserved_position_keys(
         self,
         same_cycle_keys: tuple[tuple[Market, str], ...] = (),
+        *,
+        open_orders: tuple[OpenPortfolioOrder, ...],
     ) -> tuple[tuple[Market, str], ...]:
         """Return same-cycle plus persisted working order position slots.
 
@@ -1519,26 +1730,19 @@ class PortfolioRuntime:
         position. The planner's symbol-level open-order guard remains in
         place; this separate set reserves the account-level slot even when the
         next decision selects a different symbol.
+
+        ``open_orders`` is the caller's working-order snapshot and is required:
+        re-reading it here would let one decision cycle resolve two different
+        ledgers.
         """
         slots = {(market, canonical_symbol(symbol, market)) for market, symbol in same_cycle_keys}
-        slots.update(
-            (order.market, canonical_symbol(order.symbol, order.market))
-            for order in self.repository.open_orders(self.account_id)
-        )
+        slots.update((order.market, canonical_symbol(order.symbol, order.market)) for order in open_orders)
         return tuple(sorted(slots, key=lambda item: (item[0].value, item[1])))
 
-    def _effective_open_order_symbols(self) -> set[str]:
-        """Union broker-visible and account-local nonterminal order symbols.
-
-        The broker open-order endpoint may omit a submission during a crash
-        window or transiently lag the local ledger. Local rows are account and
-        market scoped through their persisted session lineage, so they suppress
-        duplicate planner output without importing manual/external orders.
-        """
-        broker_symbols, local_sides = self._effective_open_order_constraints()
-        return broker_symbols | set(local_sides)
-
-    def _effective_open_order_constraints(self) -> tuple[set[str], dict[str, frozenset[str]]]:
+    def _effective_open_order_constraints(
+        self,
+        open_orders: tuple[OpenPortfolioOrder, ...],
+    ) -> tuple[set[str], dict[str, frozenset[str]]]:
         """Return broker-wide symbols plus side-aware local ledger rows.
 
         ``all_open_order_symbols`` intentionally remains conservative because
@@ -1546,10 +1750,13 @@ class PortfolioRuntime:
         directions. Account-local rows carry a trusted side and can therefore
         permit a risk-reducing SELL past a pending BUY while retaining
         duplicate/risk-increase suppression.
+
+        ``open_orders`` is the caller's snapshot, for the same single-read
+        reason as in ``_effective_reserved_position_keys``.
         """
         broker_symbols = set(self.broker.all_open_order_symbols())
         local_sides: dict[str, set[str]] = {}
-        for order in self.repository.open_orders(self.account_id):
+        for order in open_orders:
             if order.market != self.market:
                 continue
             symbol = canonical_symbol(order.symbol, order.market)
@@ -1731,9 +1938,18 @@ class PortfolioRuntime:
         return self._size_buys_to_safe_capacity(())
 
     def _record_buy_admission_observation(
-        self, decision_id: str, admission: BuyAdmission, orders: tuple[PortfolioOrderRequest, ...]
+        self,
+        decision_id: str,
+        admission: BuyAdmission,
+        orders: tuple[PortfolioOrderRequest, ...],
+        *,
+        linked: tuple[PortfolioOrderRequest, ...] | None = None,
     ) -> None:
-        """Best-effort PAPER telemetry for the final direct or deferred BUY gate."""
+        """Best-effort PAPER telemetry for the final direct or deferred BUY gate.
+
+        ``orders`` is the admitted batch (its notional is recorded); ``linked``
+        narrows which of its order rows the observation is written for.
+        """
         if self.mode != "paper" or not orders:
             return
         writer = getattr(self.repository, "record_buy_admission_observation", None)
@@ -1751,7 +1967,7 @@ class PortfolioRuntime:
         try:
             writer(
                 decision_id,
-                tuple(order.client_order_id for order in orders),
+                tuple(order.client_order_id for order in (orders if linked is None else linked)),
                 account_equity=admission.account.equity,
                 account_cash=admission.account.cash,
                 realized_gross=admission.realized_gross,
@@ -1774,8 +1990,8 @@ class PortfolioRuntime:
     def _submit_orders(self, orders: tuple[PortfolioOrderRequest, ...]) -> tuple[str, ...]:
         """Persist and submit one order batch with broker idempotency keys.
 
-        The client order id is deterministic ``parayabuck-{decision_id}-{symbol}-{side}``
-        so a crash between persistence and broker acknowledgement cannot produce a
+        The client order id is deterministic ``parayabuck-{decision_id}-{salt}-{symbol}-{side}``
+        (``salt`` persisted once per ledger) so a crash between persistence and broker acknowledgement cannot produce a
         duplicate broker order (Alpaca rejects a reused client id and the
         broker's ambiguity recovery resolves the existing order). Duplicate
         decisions produce the same id and ``record_order`` is ``INSERT OR IGNORE``
@@ -1785,13 +2001,19 @@ class PortfolioRuntime:
         requires ``reconcile()`` before retry.
         """
         submitted: list[str] = []
-        for order in orders:
+        # Every order in a batch shares one decision id, so the ledger is read
+        # once. The map is keyed by client order id, which is stable per
+        # decision, so a row recorded in an earlier batch is still found.
+        existing_by_client = {}
+        if orders:
+            rows = self.repository.orders_for_decision(orders[0].decision_id)
+            existing_by_client = {str(row.get("client_order_id")): str(row.get("status", "")) for row in rows}
+        for index, order in enumerate(orders):
             # Idempotency: if the logical order already exists with a terminal
             # or submitted status, do not submit a duplicate broker order.
-            existing = self.repository.orders_for_decision(order.decision_id)
-            already = next((o for o in existing if str(o.get("client_order_id")) == order.client_order_id), None)
+            already = existing_by_client.get(order.client_order_id)
             if already is not None:
-                status = str(already.get("status", ""))
+                status = already
                 if status in {
                     "submitted",
                     "new",
@@ -1801,10 +2023,6 @@ class PortfolioRuntime:
                     "pending_replace",
                     "accepted_for_bidding",
                     "partial_fill",
-                    "filled",
-                    "canceled",
-                    "rejected",
-                    "expired",
                 }:
                     continue
                 if is_terminal_order_status(status) or status in _AMBIGUOUS_ORDER_STATUSES:
@@ -1825,6 +2043,13 @@ class PortfolioRuntime:
                 except Exception:
                     log.warning("Could not record order submit return for %s", order.client_order_id, exc_info=True)
                 self.repository.update_order(order.client_order_id, "reconciliation_required")
+                # The batch's later orders were never sent: their rows, written
+                # at ``submitting`` with the decision, are canceled now. Left
+                # as is they are missing at the broker, so reconciliation
+                # reports drift and halts decisions before any resolver runs.
+                for untried in orders[index + 1 :]:
+                    if existing_by_client.get(untried.client_order_id) == "submitting":
+                        self.repository.update_order(untried.client_order_id, "canceled")
                 raise
             try:
                 self.repository.record_submit_call_returned(order.client_order_id, datetime.now(UTC))

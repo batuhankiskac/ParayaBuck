@@ -153,3 +153,14 @@ def test_stop_preserves_both_errors_when_both_streams_fail() -> None:
     assert error.value.__context__ is stock_failure
     adapter.stock.stop.assert_called_once_with()
     adapter.crypto.stop.assert_called_once_with()
+
+
+def test_stop_skips_sdk_stream_that_never_ran() -> None:
+    # alpaca-py sets ``_loop`` only inside run(); stop() before run() used to
+    # raise AttributeError on the None loop.
+    adapter = _adapter()
+    adapter.stock = Mock(_loop=None)
+    adapter.crypto = Mock()
+    adapter.stop()
+    adapter.stock.stop.assert_not_called()
+    adapter.crypto.stop.assert_called_once_with()

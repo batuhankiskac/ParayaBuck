@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -32,18 +31,61 @@ def _parse_iso(value: str | None) -> datetime | None:
         return None
 
 
-@dataclass(frozen=True)
-class OrderForensic:
-    client_order_id: str
-    decision_id: str
-    symbol: str
-    market: str
-    side: str
-    quantity: float
-    status: str
-    broker_order_id: str
-    created_at: str
-    age_seconds: float | None = None
+# Includes the repository's own terminal vocabulary (runtime_models): the
+# TradingStream event name "fill" is persisted as-is, and "done_for_day".
+_TERMINAL_STATUSES: frozenset[str] = frozenset(
+    {"filled", "fill", "canceled", "cancelled", "rejected", "expired", "done_for_day", "done", "complete"}
+)
+_AMBIGUOUS_STATUSES: frozenset[str] = frozenset(
+    {"ambiguous", "manual_intervention_required", "reconciliation_required"}
+)
+
+
+def _status_variants(statuses: frozenset[str]) -> tuple[str, ...]:
+    """Lower/Title/UPPER spellings of ``statuses`` for case-insensitive SQL matching."""
+    return tuple(sorted({value for status in statuses for value in (status, status.capitalize(), status.upper())}))
+
+
+def _orders_with_status(
+    db_path: str | Path | None, wanted: frozenset[str], *, strict: bool = False
+) -> list[dict[str, Any]]:
+    """Orders whose status is one of ``wanted`` (read-only).
+
+    The SQL comparison normalises the column with ``lower()`` so a row written
+    with any casing (``Ambiguous``, ``AMBIGUOUS``) is never dropped before the
+    Python check below sees it; that check stays authoritative.
+
+    Terminal statuses are excluded defensively so callers asking for a
+    non-terminal status never see a settled order.
+
+    ``strict=True`` re-raises a read failure instead of answering ``[]``, so a
+    health verdict can tell "no such orders" from "ledger unreadable".
+    """
+    if db_path is None or not Path(str(db_path)).exists():
+        return []
+    wanted = wanted - _TERMINAL_STATUSES
+    if not wanted:
+        return []
+    lowered = tuple(sorted(wanted))
+    placeholders = ",".join("?" * len(lowered))
+    try:
+        conn = sqlite3.connect(str(db_path), timeout=2.0)
+        conn.row_factory = sqlite3.Row
+        try:
+            if not _table_exists(conn, "portfolio_orders", strict=strict):
+                return []
+            rows = conn.execute(
+                f"SELECT * FROM portfolio_orders WHERE lower(status) IN ({placeholders})",
+                lowered,
+            ).fetchall()
+            return [dict(r) for r in rows if str(r["status"] or "").lower() in wanted]
+        finally:
+            conn.close()
+    except Exception:
+        if strict:
+            raise
+        log.warning("forensics status query failed for %s", sorted(wanted), exc_info=True)
+        return []
 
 
 def unresolved_orders(db_path: str | Path | None, *, include_terminal: bool = False) -> list[dict[str, Any]]:
@@ -57,12 +99,19 @@ def unresolved_orders(db_path: str | Path | None, *, include_terminal: bool = Fa
         try:
             if not _table_exists(conn, "portfolio_orders"):
                 return []
-            rows = conn.execute("SELECT * FROM portfolio_orders").fetchall()
-            terminal = {"filled", "canceled", "cancelled", "rejected", "expired", "done", "complete"}
+            if include_terminal:
+                rows = conn.execute("SELECT * FROM portfolio_orders").fetchall()
+            else:
+                terminal = _status_variants(_TERMINAL_STATUSES)
+                placeholders = ",".join("?" * len(terminal))
+                rows = conn.execute(
+                    f"SELECT * FROM portfolio_orders WHERE status NOT IN ({placeholders})",
+                    terminal,
+                ).fetchall()
             out = []
             for r in rows:
                 status = str(r["status"] or "")
-                if not include_terminal and status.lower() in terminal:
+                if not include_terminal and status.lower() in _TERMINAL_STATUSES:
                     continue
                 out.append(dict(r))
             return out
@@ -73,22 +122,21 @@ def unresolved_orders(db_path: str | Path | None, *, include_terminal: bool = Fa
         return []
 
 
-def ambiguous_orders(db_path: str | Path | None) -> list[dict[str, Any]]:
-    all_orders = unresolved_orders(db_path, include_terminal=False)
-    return [
-        o
-        for o in all_orders
-        if str(o.get("status", "")).lower() in {"ambiguous", "manual_intervention_required", "reconciliation_required"}
-    ]
+def ambiguous_orders(db_path: str | Path | None, *, strict: bool = False) -> list[dict[str, Any]]:
+    return _orders_with_status(db_path, _AMBIGUOUS_STATUSES, strict=strict)
 
 
-def submitting_orders(db_path: str | Path | None) -> list[dict[str, Any]]:
-    all_orders = unresolved_orders(db_path, include_terminal=False)
-    return [o for o in all_orders if str(o.get("status", "")).lower() == "submitting"]
+def submitting_orders(db_path: str | Path | None, *, strict: bool = False) -> list[dict[str, Any]]:
+    return _orders_with_status(db_path, frozenset({"submitting"}), strict=strict)
 
 
-def find_stuck_rebalances(db_path: str | Path | None, *, threshold_seconds: float = 3600) -> list[dict[str, Any]]:
-    """Rebalances remaining in non-terminal phase longer than threshold."""
+def find_stuck_rebalances(
+    db_path: str | Path | None, *, threshold_seconds: float = 3600, strict: bool = False
+) -> list[dict[str, Any]]:
+    """Rebalances remaining in non-terminal phase longer than threshold.
+
+    ``strict=True`` re-raises a read failure instead of answering ``[]``.
+    """
     if db_path is None or not Path(str(db_path)).exists():
         return []
     terminal_phases = {"COMPLETE", "BLOCKED", "complete", "blocked"}
@@ -97,7 +145,7 @@ def find_stuck_rebalances(db_path: str | Path | None, *, threshold_seconds: floa
         conn = sqlite3.connect(str(db_path), timeout=2.0)
         conn.row_factory = sqlite3.Row
         try:
-            if not _table_exists(conn, "portfolio_rebalance_executions"):
+            if not _table_exists(conn, "portfolio_rebalance_executions", strict=strict):
                 return []
             rows = conn.execute("SELECT * FROM portfolio_rebalance_executions").fetchall()
             now = datetime.now(UTC)
@@ -120,6 +168,8 @@ def find_stuck_rebalances(db_path: str | Path | None, *, threshold_seconds: floa
         finally:
             conn.close()
     except Exception:
+        if strict:
+            raise
         log.warning("stuck rebalance query failed", exc_info=True)
         return []
 
@@ -138,19 +188,14 @@ def runtime_session_forensics(db_path: str | Path | None) -> dict[str, Any]:
                     sessions = [dict(r) for r in rows]
                     if not sessions:
                         return {"sessions": [], "unclean": [], "current": None}
-
-                    # Sort by started_at
-                    def _ts(s: dict[str, Any]) -> str:
-                        return str(s.get("started_at") or "")
-
-                    sessions.sort(key=_ts)
+                    # Rows arrive ordered by started_at; the last one is the current session
                     unclean: list[dict[str, Any]] = []
                     for idx, s in enumerate(sessions):
                         ended = s.get("ended_at")
                         is_last = idx == len(sessions) - 1
                         if not ended and not is_last:
                             unclean.append(s)
-                    current = sessions[-1] if sessions else None
+                    current = sessions[-1]
                     # If current is running (no ended_at), it's not unclean by itself
                     return {"sessions": sessions, "unclean": unclean, "current": current}
             return {"sessions": [], "unclean": [], "current": None}
@@ -215,34 +260,46 @@ def decision_reconstruction(
     except Exception as exc:
         result["error"] = str(exc)
 
-    # Try to find paper receipt
-    try:
-        from pathlib import Path as _P
+    # Try to find paper receipt — match the identity fields, never the blob text
+    # The runtime writes receipts via receipt.default_receipt_dir(); read that
+    # same directory instead of a cwd-relative guess.
+    from parayabuck.monitoring import receipt as receipt_module
 
-        receipt_dir = _P("data/runtime/paper_receipts")
+    try:
+        receipt_dir = receipt_module.default_receipt_dir()
         if receipt_dir.exists():
             for p in receipt_dir.glob("*.json"):
                 try:
                     data = json.loads(p.read_text(encoding="utf-8"))
-                    # heuristic: check decision_id fields
-                    if decision_id in json.dumps(data):
-                        result["receipt_path"] = str(p)
-                        result["receipt"] = data
-                        break
                 except Exception:
                     continue
+                if not isinstance(data, dict):
+                    continue
+                if data.get("decision_id") == decision_id or data.get("receipt_id") == decision_id:
+                    result["receipt_path"] = str(p)
+                    result["receipt"] = data
+                    break
+                # V1 receipts carry no id field; fall back to a substring probe
+                if "decision_id" not in data and "receipt_id" not in data and decision_id in json.dumps(data):
+                    result["receipt_path"] = str(p)
+                    result["receipt"] = data
+                    break
     except Exception:
         pass
 
-    # Operational events correlated
-    if journal_path is not None and Path(str(journal_path)).exists():
-        try:
-            from parayabuck.monitoring.journal import EventJournal
+    # Operational events correlated. An explicit journal that is missing yields
+    # no events — never the cwd-relative default journal (which get_journal()
+    # would even create).
+    if journal_path is not None:
+        result["operational_events"] = []
+        if Path(str(journal_path)).exists():
+            try:
+                from parayabuck.monitoring.journal import EventJournal
 
-            j = EventJournal(str(journal_path))
-            result["operational_events"] = [e.to_dict() for e in j.query(decision_id=decision_id, limit=100)]
-        except Exception:
-            result["operational_events"] = []
+                j = EventJournal(str(journal_path))
+                result["operational_events"] = [e.to_dict() for e in j.query(decision_id=decision_id, limit=100)]
+            except Exception:
+                result["operational_events"] = []
     else:
         # Try default journal
         try:
@@ -259,29 +316,39 @@ def decision_reconstruction(
     return result
 
 
-def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+def _table_exists(conn: sqlite3.Connection, table: str, *, strict: bool = False) -> bool:
     try:
         cur = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,))
         return cur.fetchone() is not None
     except Exception:
+        # An unreadable file is not "table absent"; strict callers must see it
+        if strict:
+            raise
         return False
 
 
 # ------------------------------------------------------------------ No-trade vocabulary
-NO_TRADE_REASONS: tuple[str, ...] = (
-    "NO_TARGET_CHANGE",
-    "REBALANCE_BAND",
-    "MIN_NOTIONAL",
-    "NO_QUALIFIED_CANDIDATES",
-    "RISK_BLOCKED",
-    "ENTRY_LATCH",
-    "ACCOUNT_STALE",
-    "UNIVERSE_UNAVAILABLE",
-    "SELL_PHASE_PENDING",
-    "AMBIGUOUS_ORDER",
-    "EXTERNAL_OWNERSHIP",
-    "MARKET_DISABLED",
-)
+
+
+_NO_TRADE_PATTERNS: dict[str, str] = {
+    "rebalance_band": "REBALANCE_BAND",
+    "band": "REBALANCE_BAND",
+    "min_notional": "MIN_NOTIONAL",
+    "minimum_order_notional": "MIN_NOTIONAL",
+    "no_qualified": "NO_QUALIFIED_CANDIDATES",
+    "risk": "RISK_BLOCKED",
+    "latch": "ENTRY_LATCH",
+    "account_stale": "ACCOUNT_STALE",
+    "stale_account": "ACCOUNT_STALE",
+    "universe": "UNIVERSE_UNAVAILABLE",
+    "sell_pending": "SELL_PHASE_PENDING",
+    "sell_phase_pending": "SELL_PHASE_PENDING",
+    "sell phase": "SELL_PHASE_PENDING",
+    "ambiguous": "AMBIGUOUS_ORDER",
+    "external": "EXTERNAL_OWNERSHIP",
+    "market_disabled": "MARKET_DISABLED",
+    "no_target": "NO_TARGET_CHANGE",
+}
 
 
 def map_no_trade_reason(detail: str | None) -> str:
@@ -289,32 +356,13 @@ def map_no_trade_reason(detail: str | None) -> str:
     if not detail:
         return "NO_TARGET_CHANGE"
     lower = detail.lower()
-    mapping = {
-        "rebalance_band": "REBALANCE_BAND",
-        "band": "REBALANCE_BAND",
-        "min_notional": "MIN_NOTIONAL",
-        "minimum_order_notional": "MIN_NOTIONAL",
-        "no_qualified": "NO_QUALIFIED_CANDIDATES",
-        "risk": "RISK_BLOCKED",
-        "latch": "ENTRY_LATCH",
-        "account_stale": "ACCOUNT_STALE",
-        "stale_account": "ACCOUNT_STALE",
-        "universe": "UNIVERSE_UNAVAILABLE",
-        "sell_pending": "SELL_PHASE_PENDING",
-        "sell phase": "SELL_PHASE_PENDING",
-        "ambiguous": "AMBIGUOUS_ORDER",
-        "external": "EXTERNAL_OWNERSHIP",
-        "market_disabled": "MARKET_DISABLED",
-        "no_target": "NO_TARGET_CHANGE",
-    }
-    for key, canon in mapping.items():
+    for key, canon in _NO_TRADE_PATTERNS.items():
         if key in lower:
             return canon
     return "NO_TARGET_CHANGE"
 
 
 __all__ = [
-    "NO_TRADE_REASONS",
     "ambiguous_orders",
     "decision_reconstruction",
     "find_stuck_rebalances",

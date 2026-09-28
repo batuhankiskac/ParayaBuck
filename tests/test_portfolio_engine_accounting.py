@@ -14,6 +14,7 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.execution.portfolio import PortfolioRiskLimits
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import (
+    PortfolioState,
     RebalancePolicy,
     TargetPortfolio,
     TargetWeight,
@@ -792,3 +793,127 @@ def test_crypto_daily_reset_uses_utc_boundary() -> None:
     decision_at_25 = next(record for record in result.rebalances if record.decision_timestamp == bars[25].timestamp)
     assert decision_at_25.risk_overlay_halted
     assert "daily_loss_limit" in decision_at_25.risk_overlay_reasons
+
+
+def test_worst_year_is_the_weakest_year_not_a_floor_at_zero() -> None:
+    """The weakest year is reported, not a floor at zero and not a fixed year."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    engine = _engine(_ScheduleStrategy({}, epoch))
+    timestamps = [
+        datetime(2024, 12, 31, tzinfo=UTC),
+        datetime(2025, 12, 31, tzinfo=UTC),
+        datetime(2026, 12, 31, tzinfo=UTC),
+    ]
+    # +10%, then -5%, then +20%: the minimum is 2025, which is neither the
+    # first nor the last year, and is below the 0.0 the old clamp returned.
+    curve = [110_000.0, 104_500.0, 125_400.0]
+    assert engine._worst_year(curve, timestamps) == pytest.approx(104_500.0 / 110_000.0 - 1)
+    # An all-profitable curve still reports a positive worst year.
+    assert engine._worst_year([110_000.0, 121_000.0, 133_100.0], timestamps) == pytest.approx(0.10)
+
+
+def test_on_target_symbol_never_produces_a_zero_quantity_order() -> None:
+    """A zero turnover_band cannot filter an on-target symbol out (``x < 0.0``
+    is false), so the delta guard must keep the zero-size order out of the
+    pending book: no fill, no commission and no realized-PnL event for a
+    decision that trades nothing."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    # Weight 0.1 of a 100_000 book at a 100.0 price is exactly the 100
+    # shares already held, so the target delta is exactly 0.0.
+    strategy = _ScheduleStrategy({0: {"SPY": 0.1}}, epoch)
+    state = PortfolioState(
+        strategy.name,
+        strategy.version,
+        holdings={"SPY": 100.0},
+        avg_prices={"SPY": 100.0},
+        cash=90_000.0,
+        last_prices={"SPY": 100.0},
+    )
+    engine = PortfolioBacktestEngine(
+        strategy,
+        RebalancePolicy(strategy.market, "monthly"),
+        starting_equity=100_000.0,
+        commission=1.0,
+        benchmark_symbol="SPY",
+        turnover_band=0.0,
+        minimum_order_notional=0.0,
+        state=state,
+    )
+    # Two liquid bars: the decision lands on the first, and the second bar's
+    # fill cycle is where a leaked zero-quantity order would be booked.
+    bars = [_bar(epoch + timedelta(days=offset), "SPY", 100.0, Market.EQUITY, 1_000_000) for offset in (1, 2)]
+    result = engine.run(bars, liquidate_at_end=False)
+    assert engine._pending == []
+    assert result.fills == ()
+    assert result.fee_total == 0.0
+    assert result.realized_pnl_events == ()
+
+
+def test_sortino_uses_full_series_downside_deviation_with_zero_target() -> None:
+    # Returns +10%, -10%, 0%, +10%: mean 0.025; downside deviation over ALL
+    # four periods is sqrt(0.01 / 4) = 0.05. Four daily steps over four days
+    # annualize by sqrt(365), matching the Sharpe annualizer. One losing
+    # period must still give a finite ratio, not 0.0.
+    engine = PortfolioBacktestEngine(
+        _HoldStrategy("SPY", 0.5),
+        RebalancePolicy(Market.EQUITY, "monthly"),
+        starting_equity=100.0,
+    )
+    epoch = datetime(2025, 1, 1, tzinfo=UTC)
+    curve = [100.0, 110.0, 99.0, 99.0, 108.9]
+    timestamps = [epoch + timedelta(days=index) for index in range(len(curve))]
+    result = engine._result(curve, timestamps, 0.0, ())
+    assert result.sortino == pytest.approx(0.025 / 0.05 * 365**0.5)
+
+
+def _benchmark_run(corporate_actions):
+    from parayabuck.backtest.portfolio_report import build_portfolio_report
+
+    epoch = datetime(2025, 3, 3, 5, tzinfo=UTC)
+    bars = [
+        Bar(epoch + timedelta(days=index), "SPY", "1d", close, close, close, close, 1_000_000, Market.EQUITY)
+        for index, close in enumerate((100.0, 102.0, 99.0, 101.0))
+    ]
+    engine = _engine(_ScheduleStrategy({}, epoch))
+    result = engine.run(bars, corporate_actions=corporate_actions)
+    return result, build_portfolio_report(result, strategy_name="schedule", strategy_version="1.0.0")
+
+
+def test_benchmark_is_total_return_when_dividends_are_supplied() -> None:
+    from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
+
+    ex_date = datetime(2025, 3, 5, tzinfo=UTC)  # the 99.0 bar
+    actions = [
+        CorporateAction(ex_date, "SPY", CorporateActionType.DIVIDEND, 1.0),
+        # Other symbols and a dividend on the first bar (no prior close) do
+        # not enter the benchmark.
+        CorporateAction(ex_date, "QQQ", CorporateActionType.DIVIDEND, 5.0),
+        CorporateAction(datetime(2025, 3, 3, tzinfo=UTC), "SPY", CorporateActionType.DIVIDEND, 7.0),
+    ]
+    result, report = _benchmark_run(actions)
+
+    # Reinvested at the ex-date close: 100 -> 102 -> 102*(99+1)/102 = 100
+    # -> 100*101/99. Price-only: 101/100 - 1.
+    total_return = 101.0 / 99.0 - 1
+    assert result.benchmark_return == pytest.approx(total_return)
+    assert result.benchmark_price_return == pytest.approx(0.01)
+    assert result.benchmark_return_basis == "total_return"
+    assert result.excess_return == pytest.approx(result.total_return - total_return)
+    assert [bar.close for bar in result.benchmark_bars] == pytest.approx([100.0, 102.0, 100.0, 10100.0 / 99.0])
+    assert result.benchmark_max_drawdown == pytest.approx(2.0 / 102.0)
+    assert report.summary["benchmark_return"] == pytest.approx(total_return)
+    assert report.summary["benchmark_price_return"] == pytest.approx(0.01)
+    assert report.summary["benchmark_return_basis"] == "total_return"
+    assert report.yearly_returns[0][2] == pytest.approx(total_return)
+
+
+@pytest.mark.parametrize("corporate_actions", [None, []])
+def test_benchmark_stays_price_only_without_corporate_actions(corporate_actions) -> None:
+    result, report = _benchmark_run(corporate_actions)
+
+    assert result.benchmark_return == pytest.approx(0.01)
+    assert result.benchmark_price_return == pytest.approx(0.01)
+    assert result.benchmark_return_basis == "price"
+    assert [bar.close for bar in result.benchmark_bars] == [100.0, 102.0, 99.0, 101.0]
+    assert result.benchmark_max_drawdown == pytest.approx(3.0 / 102.0)
+    assert report.summary["benchmark_return_basis"] == "price"

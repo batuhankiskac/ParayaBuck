@@ -206,9 +206,6 @@ class AlpacaClient:
             return alt(order_id)
         raise AttributeError("underlying client has no cancel_order_by_id")
 
-    def cancel_order(self, order_id: str) -> Any:
-        return self.cancel_order_by_id(order_id)
-
     def request(self, method: str, path: str, data: dict[str, object] | None = None) -> Any:
         """Raw ``_request`` wrapper for Fill activity pagination (FILL).
 
@@ -222,10 +219,6 @@ class AlpacaClient:
             return req(method, path, data=data)
         return req(method, path)
 
-    # Back-compat alias used by existing callers that accessed _request
-    def _request(self, method: str, path: str, data: dict[str, object] | None = None) -> Any:
-        return self.request(method, path, data=data)
-
     # -- normalization helpers (kept at SDK boundary) -------------------
 
     @staticmethod
@@ -234,11 +227,6 @@ class AlpacaClient:
 
     def _normalized_field(self, value: Any, name: str) -> str:
         return str(self._field(value, name, "")).lower().split(".")[-1]
-
-    # Re-export for callers that imported field_value via adapter
-    @staticmethod
-    def field_value(value: Any, name: str, default: Any = None) -> Any:
-        return field_value(value, name, default)
 
     def _asset(self, symbol: str) -> Any:
         identity = normalize_symbol(symbol)

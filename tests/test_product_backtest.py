@@ -457,6 +457,30 @@ def test_equity_candidate_symbols_are_the_configured_static_universe(tmp_path) -
     ]
 
 
+def test_explicit_crypto_symbols_are_canonicalized_to_download_keys(tmp_path) -> None:
+    # get_bars_batch keys its result by canonical symbol; a legacy
+    # ``BTCUSD`` must not become a key the download never returns.
+    config = _config(tmp_path)
+    assert cli_module._candidate_symbols(config, Market.CRYPTO, "btcusd, PAXGUSD,BTC/USD", None) == [
+        "BTC/USD",
+        "PAXG/USD",
+    ]
+
+
+def test_zero_candidate_limit_keeps_no_crypto_candidates(tmp_path) -> None:
+    config = _config(tmp_path)
+    crypto = replace(
+        config.universe.crypto,
+        active_universe_path=str(tmp_path / "missing_active.json"),
+        trade_symbols=("BTC/USD", "ETH/USD", "SOL/USD"),
+        pinned_symbols=("BTC/USD",),
+    )
+    config = replace(config, universe=replace(config.universe, crypto=crypto))
+    assert cli_module._candidate_symbols(config, Market.CRYPTO, None, None) == ["BTC/USD", "ETH/USD", "SOL/USD"]
+    assert cli_module._candidate_symbols(config, Market.CRYPTO, None, 1) == ["BTC/USD", "ETH/USD"]
+    assert cli_module._candidate_symbols(config, Market.CRYPTO, None, 0) == ["BTC/USD"]
+
+
 def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, monkeypatch) -> None:
     # _load_bars intentionally fails closed without credentials; provide
     # non-production test values so the provider itself can be replaced below
@@ -508,10 +532,56 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
     assert first["adjustment"] == "splits"
     assert first["timeframe"] == "1d"
     assert first["symbols"] == config.universe.equity.symbols
-    # Empty downloads (no pre-start history) trigger the bounded warmup
-    # extension: at most three fetch attempts.
-    assert len(captured_requests) == 3
-    assert captured_requests[-1]["start"] <= first["start"]
+    # Empty downloads (no pre-start history) cannot be fixed by the warmup
+    # extension: its window already equals the strategy warmup span, so the
+    # loop stops instead of re-downloading the same window.
+    assert len(captured_requests) == 1
+
+
+def test_load_bars_returns_the_single_window_download_for_a_deficient_symbol(tmp_path, monkeypatch) -> None:
+    # One symbol has full pre-start history, one (a late listing) has none:
+    # the warmup extension cannot move the window, so exactly one download
+    # happens and the returned bars are that download's bars, unchanged.
+    monkeypatch.setenv("ALPACA_API_KEY", "unit-test-api-key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "unit-test-secret-key")
+    config = _config(tmp_path)
+    monkeypatch.setattr(cli_module, "ensure_active_universes", lambda *args, **kwargs: None)
+    start = datetime(2022, 1, 1, tzinfo=UTC)
+    end = datetime(2022, 3, 1, tzinfo=UTC)
+    requests: list[tuple[datetime, datetime]] = []
+
+    def series(symbol: str, first: datetime, last: datetime) -> list[Bar]:
+        bars: list[Bar] = []
+        cursor = first
+        while cursor <= last:
+            bars.append(Bar(cursor, symbol, "1d", 10.0, 11.0, 9.0, 10.5, 1_000.0))
+            cursor += timedelta(days=1)
+        return bars
+
+    class FakeProvider:
+        def get_bars_batch(self, symbols, timeframe, *, start, end, adjustment):  # type: ignore[no-untyped-def]
+            requests.append((start, end))
+            late_listing = datetime(2022, 2, 1, tzinfo=UTC)
+            return {
+                symbol: series(symbol, late_listing if symbol == "QLD" else start, end) for symbol in symbols
+            }
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(cli_module, "AlpacaHistoricalData", lambda *a, **k: FakeProvider())
+    args = SimpleNamespace(data=None, symbols=None, candidate_limit=None)
+
+    bars = cli_module._load_bars(config, args, Market.EQUITY, start, end)
+
+    assert len(requests) == 1
+    window_start, window_end = requests[0]
+    expected = [
+        bar
+        for symbol in config.universe.equity.symbols
+        for bar in series(symbol, datetime(2022, 2, 1, tzinfo=UTC) if symbol == "QLD" else window_start, window_end)
+    ]
+    assert bars == expected
 
 
 def test_warmup_window_covers_strategy_minimum_history_for_equity(
@@ -601,3 +671,76 @@ def test_configured_symbol_without_bars_never_blocks_periods(tmp_path) -> None:
         assert "TQQQ" not in snapshot.symbols
         assert all(symbol in available for symbol in snapshot.symbols)
         assert all(symbol in available for symbol in snapshot.observation_set)
+
+
+def test_explicit_zero_starting_equity_is_rejected_not_replaced_by_config(tmp_path) -> None:
+    """``initial_cash=0.0`` is an explicit request, not "unset": it must reach
+    the engine's own positivity guard instead of silently falling back to
+    ``config.backtest.initial_cash``."""
+    with pytest.raises(ValueError, match="Starting equity must be positive"):
+        run_product_backtest(
+            _config(tmp_path),
+            _bars(120),
+            market=Market.EQUITY,
+            initial_cash=0.0,
+            persist=False,
+            persist_artifacts=False,
+        )
+
+
+def test_persisted_data_feed_note_never_claims_a_feed_the_run_did_not_get(tmp_path) -> None:
+    config = _config(tmp_path)
+    bars = _bars(120)
+    unknown = run_product_backtest(
+        config,
+        bars,
+        market=Market.EQUITY,
+        persist=False,
+        persist_artifacts=False,
+    )
+    assert unknown.report.summary["data_feed"] == (
+        "offline csv (feed unknown; downloader used the configured historical feed)"
+    )
+    assert unknown.report.summary["data_feed_note"] == "Feed unknown; provenance not verified for this offline run."
+
+    sip = run_product_backtest(
+        config,
+        bars,
+        market=Market.EQUITY,
+        persist=False,
+        persist_artifacts=False,
+        data_feed="sip",
+    )
+    assert sip.report.summary["data_feed_note"] == "SIP consolidates the national market system tape."
+
+    iex = run_product_backtest(
+        config,
+        bars,
+        market=Market.EQUITY,
+        persist=False,
+        persist_artifacts=False,
+        data_feed="iex",
+    )
+    assert iex.report.summary["data_feed_note"].startswith("IEX historical data reflects one exchange's prints")
+
+
+def test_direct_run_normalizes_unsorted_warmup_like_the_optimizer(tmp_path) -> None:
+    # Warmup reached the engine in caller order on the
+    # direct path; the engine keeps only strictly newer bars per series, so
+    # without normalization the warmup history silently collapses.
+    config = _config(tmp_path)
+    bars = _bars()
+    start = datetime(2023, 1, 1, tzinfo=UTC) + timedelta(days=200)
+    warmup_first = sorted(
+        (bar for bar in bars if bar.timestamp < start),
+        key=lambda bar: bar.timestamp,
+        reverse=True,
+    )
+    shuffled = warmup_first + [bar for bar in bars if bar.timestamp >= start]
+    kwargs = {"market": Market.EQUITY, "start": start, "persist": False, "persist_artifacts": False}
+
+    baseline = run_product_backtest(config, bars, **kwargs)
+    unsorted = run_product_backtest(config, shuffled, **kwargs)
+
+    assert baseline.result.equity_curve == unsorted.result.equity_curve
+    assert [fill.timestamp for fill in baseline.result.fills] == [fill.timestamp for fill in unsorted.result.fills]

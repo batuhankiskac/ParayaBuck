@@ -270,7 +270,7 @@ def test_partial_primary_batch_updates_market_state_without_legacy_decision(
     runtime._refresh_readiness = lambda: None
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_readiness_reasons = lambda _market=None: ()
-    runtime._engine_has_symbol_gap = lambda _symbol: False
+    runtime._engine_has_symbol_gap = lambda _symbol, _market=None: False
 
     runtime._process_timestamp({"AAPL": bar}, {"AAPL", "MSFT"})
 
@@ -315,7 +315,7 @@ def test_late_primary_bar_is_ingested_and_duplicate_is_correction() -> None:
     runtime._refresh_readiness = lambda: None
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_readiness_reasons = lambda _market=None: ()
-    runtime._engine_has_symbol_gap = lambda _symbol: False
+    runtime._engine_has_symbol_gap = lambda _symbol, _market=None: False
     runtime._expected_all_symbols = {"AAPL", "MSFT"}
     runtime._workers = {"pb-decisions": WorkerHealth(datetime.now(UTC), datetime.now(UTC))}
     runtime._events = _EventQueue(4096)
@@ -556,6 +556,147 @@ def test_queue_overflow_never_evicts_final_primary_bar() -> None:
     ]
     assert runtime._circuit_breaker_reason == "final_market_event_queue_overflow"
     assert runtime._dropped_events == 1
+
+
+def test_queue_overflow_breaker_marks_runtime_halted() -> None:
+    """The overflow breaker alerts "runtime halted"; the runtime's own state
+    must agree so health() reports halted and reset_safety_lock can restore
+    running."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._events = _EventQueue(maxsize=1)
+    runtime._dropped_events = 0
+    runtime._coalesced_events = 0
+    runtime._oldest_received_at = None
+    runtime._circuit_breaker_reason = None
+    runtime._state = "running"
+    timestamp = datetime.now(UTC)
+    runtime._events.put_nowait(
+        _Event("primary", Bar(timestamp, "AAPL", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY), timestamp)
+    )
+
+    runtime._put_event("primary", Bar(timestamp, "MSFT", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY))
+
+    assert runtime._circuit_breaker_reason == "final_market_event_queue_overflow"
+    assert runtime._state == "halted"
+
+
+class _ResizingDict(dict):  # type: ignore[type-arg]
+    """Simulates the universe-refresh thread resizing the dict while a
+    reader iterates its live view."""
+
+    def items(self):  # type: ignore[no-untyped-def]
+        for index, item in enumerate(super().items()):
+            self[f"late-{index}"] = 0
+            yield item
+
+
+def test_health_survives_concurrent_universe_retry_dict_resize() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    now = datetime.now(UTC)
+    runtime.symbols = ["BTC/USD"]
+    runtime.config = SimpleNamespace(
+        account_poll_interval_seconds=15,
+        maximum_account_age_for_entry_seconds=30,
+        maximum_queue_age_seconds=30,
+    )
+    runtime._workers = {
+        "pb-decisions": WorkerHealth(now, now, alive=True),
+        "pb-account": WorkerHealth(now, now, alive=True),
+        "pb-trade-updates": WorkerHealth(now, now, alive=True),
+        "pb-crypto": WorkerHealth(now, now, last_event_at=now, alive=True),
+    }
+    runtime._running = True
+    runtime._state = "running"
+    runtime._last_account_at = now
+    runtime._oldest_received_at = None
+    runtime._circuit_breaker_reason = None
+    runtime._events = SimpleNamespace(qsize=lambda: 0)
+    runtime._dropped_events = 0
+    runtime._coalesced_events = 0
+    runtime.market_state = SimpleNamespace(
+        has_data_gaps_for_market=lambda _market: False,
+        has_data_gaps_for_symbol=lambda _symbol: False,
+    )
+    runtime._universe_retry_at = _ResizingDict({Market.CRYPTO: time.monotonic() + 60.0})
+    runtime._universe_retry_attempt = _ResizingDict({Market.CRYPTO: 2})
+
+    health = runtime.health()
+
+    assert health.universe_refresh["retry_attempt"] == {"crypto": 2}
+    assert set(health.universe_refresh["retry_at"]) == {"crypto"}
+
+
+class _ClearingHalts(dict):  # type: ignore[type-arg]
+    """Simulates another thread clearing the halt right after it is read."""
+
+    def get(self, key, default=None):  # type: ignore[no-untyped-def]
+        value = super().get(key, default)
+        self[key] = None
+        return value
+
+
+def test_entry_readiness_never_reports_a_concurrently_cleared_halt_as_none() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.config = SimpleNamespace(maximum_queue_age_seconds=30, maximum_account_age_for_entry_seconds=300)
+    runtime._last_account_at = datetime.now(UTC)
+    runtime._circuit_breaker_reason = None
+    runtime._workers = {}
+    runtime._state = "running"
+    runtime._market_entry_halts = _ClearingHalts({Market.CRYPTO: "crypto_protection_failure"})
+
+    reasons = runtime._entry_readiness_reasons(Market.CRYPTO, health=SimpleNamespace(queue_age_seconds=0))
+
+    assert reasons == ("crypto_protection_failure",)
+    assert runtime._entry_readiness_reasons(Market.CRYPTO, health=SimpleNamespace(queue_age_seconds=0)) == ()
+
+
+def test_failed_no_trade_journal_emit_is_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A broken journal must not silently drop the operator's "why did
+    nothing trade" record: the readiness-blocked path logs the failure."""
+    from parayabuck.monitoring import journal as journal_module
+
+    def broken_emit(_event: object) -> None:
+        raise OSError("journal unwritable")
+
+    monkeypatch.setattr(journal_module, "emit_journal", broken_emit)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+    runtime._portfolio_runtimes = (
+        SimpleNamespace(
+            market=Market.CRYPTO,
+            strategy=SimpleNamespace(timeframe="1d", name="synthetic"),
+            symbols=("BTC/USD",),
+        ),
+    )
+    runtime._entry_readiness_reasons = lambda _market: ("account_snapshot_stale",)
+    bar = Bar(datetime(2025, 1, 2, tzinfo=UTC), "BTC/USD", "1d", 100, 101, 99, 100, 1_000, Market.CRYPTO)
+
+    runtime._process_portfolio_timestamp([bar])
+
+    assert "No-trade journal emit failed for market=crypto" in caplog.text
+
+
+class _ResizingSet(set):  # type: ignore[type-arg]
+    """Simulates the decision thread adding a gap while health() iterates
+    the live set."""
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        for index, item in enumerate(super().__iter__()):
+            self.add((f"LATE{index}", "5m"))
+            yield item
+
+
+def test_market_state_gap_queries_survive_concurrent_not_ready_resize() -> None:
+    state = RuntimeMarketState(EngineConfig())
+    state._not_ready = _ResizingSet({("AAPL", "5m"), ("BTC/USD", "1h")})
+
+    assert state.has_data_gaps_for_market(Market.CRYPTO) is True
+    assert state.has_data_gaps_for_symbol("MSFT", Market.EQUITY) is False
+    assert state.has_data_gaps_for_symbol("AAPL", Market.EQUITY) is True
 
 
 def test_equity_hour_buckets_anchor_at_0930_new_york_across_dst() -> None:
@@ -922,6 +1063,91 @@ def test_aggregator_waits_for_finalization_grace() -> None:
     assert len(aggregator.flush_until(start + timedelta(minutes=5, seconds=2))) == 1
 
 
+def test_aggregator_late_minute_does_not_close_the_forming_bucket_early() -> None:
+    aggregator = TimeframeAggregator("5m")
+    start = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+
+    def minute(offset: int, price: float) -> Bar:
+        return Bar(start + timedelta(minutes=offset), "BTC/USD", "1m", price, price, price, price, 1, Market.CRYPTO)
+
+    emitted = [aggregator.update(minute(offset, 100 + offset)) for offset in range(7)]
+    assert [bar.timestamp for bar in emitted if bar is not None] == [start]
+    # A late minute of the already-closed 10:00 bucket arrives mid 10:05 bucket.
+    assert aggregator.update(minute(4, 999)) is None
+    for offset in (7, 8, 9):
+        assert aggregator.update(minute(offset, 100 + offset)) is None
+    closed = aggregator.update(minute(10, 110))
+    assert closed is not None
+    assert closed.timestamp == start + timedelta(minutes=5)
+    assert (closed.open, closed.close, closed.volume) == (105, 109, 5)
+
+
+@pytest.mark.parametrize("timeframe", ["5m", "1d"])
+def test_aggregator_late_minute_after_a_flush_does_not_emit_a_second_final_candle(timeframe: str) -> None:
+    aggregator = TimeframeAggregator(timeframe, finalization_grace_seconds=2.0)
+    start = datetime(2026, 9, 28, 19, 55, tzinfo=UTC)  # 15:55 New York
+
+    def minute(offset: int, price: float) -> Bar:
+        return Bar(start + timedelta(minutes=offset), "SPY", "1m", price, price, price, price, 10, Market.EQUITY)
+
+    for offset in range(4):
+        assert aggregator.update(minute(offset, 100 + offset)) is None
+    session_close = start + timedelta(minutes=5)
+    flushed = aggregator.flush_session_close(session_close)
+    assert len(flushed) == 1
+    # The 15:59 minute arrives after the session-close flush already
+    # emitted its bucket: it must not reopen that bucket as a stub.
+    assert aggregator.update(minute(4, 999)) is None
+    assert aggregator.flush_session_close(session_close + timedelta(seconds=1)) == []
+    assert aggregator.flush_until(session_close + timedelta(days=2)) == []
+
+
+def test_aggregator_late_minute_after_a_grace_flush_does_not_emit_a_stub_candle() -> None:
+    aggregator = TimeframeAggregator("5m", finalization_grace_seconds=2.0)
+    start = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+
+    def minute(offset: int, price: float) -> Bar:
+        return Bar(start + timedelta(minutes=offset), "BTC/USD", "1m", price, price, price, price, 1, Market.CRYPTO)
+
+    for offset in range(4):
+        assert aggregator.update(minute(offset, 100 + offset)) is None
+    flushed = aggregator.flush_until(start + timedelta(minutes=5, seconds=3))
+    assert [bar.timestamp for bar in flushed] == [start]
+    assert aggregator.update(minute(4, 999)) is None
+    for offset in range(5, 10):
+        assert aggregator.update(minute(offset, 100 + offset)) is None
+    closed = aggregator.update(minute(10, 110))
+    assert closed is not None
+    assert closed.timestamp == start + timedelta(minutes=5)
+    assert (closed.open, closed.close, closed.volume) == (105, 109, 5)
+
+
+def test_aggregator_logs_a_dropped_late_minute(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A dropped late minute is permanent data loss for the closed candle and
+    must not be silent, or a too-short finalization grace goes unnoticed."""
+    import parayabuck.data.aggregator as aggregator_module
+
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        aggregator_module,
+        "log",
+        SimpleNamespace(warning=lambda message, *args: warnings.append(message % args)),
+    )
+    aggregator = TimeframeAggregator("5m", finalization_grace_seconds=2.0)
+    start = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+
+    def minute(offset: int) -> Bar:
+        return Bar(start + timedelta(minutes=offset), "BTC/USD", "1m", 100, 100, 100, 100, 1, Market.CRYPTO)
+
+    for offset in range(4):
+        aggregator.update(minute(offset))
+    aggregator.flush_until(start + timedelta(minutes=5, seconds=3))
+    assert warnings == []
+    assert aggregator.update(minute(4)) is None
+    assert len(warnings) == 1
+    assert "symbol=BTC/USD timeframe=5m" in warnings[0]
+
+
 def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime._circuit_breaker_reason = "ambiguous_order_state"
@@ -1252,8 +1478,50 @@ def test_fill_activity_recovery_merges_activities_of_one_order(tmp_path: Path) -
            FROM orders WHERE broker_order_id = 'broker-exit'"""
     ).fetchall()
     # One merged row per broker order; the second activity updated it instead
-    # of colliding on the unique index.
-    assert rows == [("alpaca-fill-activity-broker-exit", "broker-exit", 5.0)]
+    # of colliding on the unique index, and its quantity is added (5 + 5).
+    assert rows == [("alpaca-fill-activity-broker-exit", "broker-exit", 10.0)]
     fee_rows = ledger.connection.execute("SELECT COUNT(*) FROM fee_activities").fetchone()[0]
     assert fee_rows == 2
     ledger.close()
+
+
+def test_session_close_flush_waits_for_the_finalization_grace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The 15:59 minute may arrive just after 16:00:00: the session-close
+    flush honors the same finalization grace as flush_until, so the daily
+    and 15:55 5m candles still include it."""
+    import parayabuck.runtime as runtime_module
+    from parayabuck.markets.timeframes import NEW_YORK
+
+    clock = {"now": datetime(2026, 9, 25, 16, 0, 0, 500_000, tzinfo=NEW_YORK).astimezone(UTC)}
+
+    class _Clock(datetime):
+        @classmethod
+        def now(cls, tz: Any = None) -> datetime:  # type: ignore[override]
+            return clock["now"]
+
+    monkeypatch.setattr(runtime_module, "datetime", _Clock)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.config = SimpleNamespace(data_finalization_grace_seconds=2.0)
+    runtime._ingestion_lock = threading.RLock()
+    runtime.aggregators = {tf: TimeframeAggregator(tf, 2.0) for tf in ("5m", "1d")}
+    emitted: list[Bar] = []
+    runtime._emit_finalized_bar = lambda _tf, bar: emitted.append(bar)  # type: ignore[method-assign]
+
+    def minute(hh: int, mm: int, close: float) -> Bar:
+        stamp = datetime(2026, 9, 25, hh, mm, tzinfo=NEW_YORK).astimezone(UTC)
+        return Bar(stamp, "SPY", "1m", close, close, close, close, 100, Market.EQUITY)
+
+    for tf_aggregator in runtime.aggregators.values():
+        for mm, close in ((55, 100.0), (56, 101.0), (57, 102.0), (58, 103.0)):
+            tf_aggregator.update(minute(15, mm, close))
+
+    runtime._flush_aggregators()
+    assert emitted == []  # inside the grace: not yet final
+
+    for tf_aggregator in runtime.aggregators.values():
+        tf_aggregator.update(minute(15, 59, 104.0))  # late 15:59 minute
+    clock["now"] = datetime(2026, 9, 25, 16, 0, 2, 100_000, tzinfo=NEW_YORK).astimezone(UTC)
+    runtime._flush_aggregators()
+
+    assert sorted(bar.timeframe for bar in emitted) == ["1d", "5m"]
+    assert all(bar.close == 104.0 for bar in emitted)

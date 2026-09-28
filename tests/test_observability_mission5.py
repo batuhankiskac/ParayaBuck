@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import contextlib
 import json
 import sqlite3
 import time
@@ -429,6 +431,29 @@ def test_cli_ops_events_filters(tmp_path: Path) -> None:
     assert code == 0
 
 
+def test_web_ops_severity_filter_never_widens_the_result() -> None:
+    """The stored severity vocabulary narrows to it; any other value narrows to nothing."""
+    from parayabuck.monitoring.journal import get_journal
+    from parayabuck.web.services import ops
+
+    now = datetime.now(UTC)
+    journal = get_journal()
+    journal.emit_sync(
+        create_event(
+            kind="reconciliation_failure",
+            message="drift",
+            occurred_at=now - timedelta(minutes=5),
+        )
+    )
+    journal.emit_sync(create_event(kind="runtime_started", message="started", occurred_at=now))
+
+    assert len(ops.query_events(10)) >= 2
+    assert {e["kind"] for e in ops.query_events(10, severity="WARNING")} == {"reconciliation_failure"}
+    assert ops.query_events(10, severity="warning") == []
+    assert ops.query_events(10, severity="error") == []
+    assert ops.query_events(10, severity="typo") == []
+
+
 def test_cli_ops_timeline(tmp_path: Path) -> None:
     jp = tmp_path / "timeline.sqlite3"
     j = EventJournal(str(jp))
@@ -439,6 +464,84 @@ def test_cli_ops_timeline(tmp_path: Path) -> None:
     assert code == 0
     data = json.loads(out)
     assert "events" in data
+
+
+def test_ops_timeline_uses_configured_journal_path_with_explicit_db(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``--db`` overrides the decision DB only; the journal path still comes
+    from the config unless ``--journal`` is given."""
+    from parayabuck.cli import _ops_timeline
+
+    journal = tmp_path / "observability.sqlite3"
+    decision = "dec-configured-journal"
+    EventJournal(str(journal)).emit_sync(create_event(kind="decision_summary", message="summary", decision_id=decision))
+    config = tmp_path / "settings.yaml"
+    config.write_text(
+        "symbols: [AAPL]\n"
+        "strategy:\n"
+        "  equity:\n"
+        "    name: equity_leveraged_trend_v1\n"
+        "observability:\n"
+        f'  journal_path: "{journal}"\n'
+    )
+
+    code = _ops_timeline(
+        argparse.Namespace(
+            decision=decision,
+            order=None,
+            incident=None,
+            journal=None,
+            db=str(tmp_path / "decisions.sqlite3"),
+            config=str(config),
+            limit=100,
+            json=True,
+        )
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert [event["kind"] for event in payload["events"]] == ["decision_summary"]
+
+
+def test_doctor_wal_probe_closes_the_store_through_the_ownership_api(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fresh-install WAL probe owns a store, so it must hand the connection
+    back through ``release`` rather than closing it behind the store's back."""
+    import parayabuck.cli as cli_module
+    import parayabuck.storage as storage_module
+
+    probe_stores: list[storage_module.SQLiteStore] = []
+
+    class _RecordingStore(storage_module.SQLiteStore):
+        def __init__(self, path: str | Path) -> None:
+            super().__init__(path)
+            probe_stores.append(self)
+
+    monkeypatch.setattr(storage_module, "SQLiteStore", _RecordingStore)
+    config = tmp_path / "settings.yaml"
+    config.write_text(
+        "symbols: [AAPL]\n"
+        "strategy:\n"
+        "  equity:\n"
+        "    name: equity_leveraged_trend_v1\n"
+        "runtime:\n"
+        f"  decision_db_path: {tmp_path / 'parayabuck.sqlite3'}\n"
+        "backtest:\n"
+        f"  output_dir: {tmp_path / 'reports'}\n"
+        "backup:\n"
+        f"  path: {tmp_path / 'backups'}\n"
+    )
+
+    cli_module._run_doctor(
+        argparse.Namespace(config=str(config), paper=False, offline=True, strict=False, json=False)
+    )
+
+    assert len(probe_stores) == 1
+    assert probe_stores[0]._closed is True
 
 
 def test_cli_ops_bundle(tmp_path: Path) -> None:
@@ -812,3 +915,183 @@ def test_missing_db_produces_unknown(tmp_path: Path) -> None:
     data = json.loads(out)
     assert data["overall_health"] == "UNKNOWN"
     assert data["trading_state"] == "UNKNOWN"
+
+
+def test_ops_status_ignores_relative_defaults_when_paths_are_given(tmp_path: Path) -> None:
+    """`--snapshot`/`--db` must win: a repo-shaped decoy under the cwd never answers."""
+
+    decoy_root = tmp_path / "decoy_repo"
+    runtime = decoy_root / "data" / "runtime"
+    runtime.mkdir(parents=True)
+    decoy_db = runtime / "parayabuck.sqlite3"
+    conn = sqlite3.connect(str(decoy_db))
+    try:
+        conn.execute("CREATE TABLE portfolio_orders (client_order_id TEXT PRIMARY KEY, status TEXT NOT NULL)")
+        conn.execute("INSERT INTO portfolio_orders VALUES ('decoy-1', 'ambiguous')")
+        conn.commit()
+    finally:
+        conn.close()
+    # A stale snapshot at the relative default would read CRITICAL if it were used.
+    (runtime / "health_snapshot.json").write_text(
+        json.dumps({"written_at": (datetime.now(UTC) - timedelta(hours=1)).isoformat()}), encoding="utf-8"
+    )
+
+    with contextlib.chdir(decoy_root):
+        code, out, _ = _run_cli(
+            "ops",
+            "status",
+            "--snapshot",
+            str(tmp_path / "absent.json"),
+            "--db",
+            str(tmp_path / "absent.sqlite3"),
+            "--json",
+        )
+
+    assert code == 0
+    data = json.loads(out)
+    assert data["overall_health"] == "UNKNOWN"
+    assert data["trading_state"] == "UNKNOWN"
+    execution = next(c for c in data["checks"] if c["code"] == "execution")
+    assert execution["status"] == "UNKNOWN"
+
+
+def test_ops_status_text_prints_the_market_halts_check(tmp_path: Path) -> None:
+    """A market entry halt degrades overall health; the text view must show
+    why instead of a bare "Runtime DEGRADED"."""
+    health = {
+        "overall_health": "DEGRADED",
+        "trading_state": "RUNNING",
+        "checks": [
+            {"code": "market_halts", "status": "DEGRADED", "summary": "equity entries halted: worker_restart_limit"},
+        ],
+    }
+    with patch("parayabuck.monitoring.health.evaluate_health", return_value=health):
+        code, out, _ = _run_cli(
+            "ops", "status", "--snapshot", str(tmp_path / "absent.json"), "--db", str(tmp_path / "absent.sqlite3")
+        )
+
+    assert code == 0
+    assert "Market halts   DEGRADED — equity entries halted: worker_restart_limit" in out
+
+
+def test_ops_explain_health_reads_the_configured_snapshot(tmp_path: Path) -> None:
+    """`ops explain` must evaluate health against observability.snapshot_path,
+    not the relative data/runtime default."""
+    import yaml
+
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text())
+    raw.setdefault("runtime", {})["decision_db_path"] = str(tmp_path / "decisions.sqlite3")
+    raw["observability"] = {
+        **(raw.get("observability") or {}),
+        "snapshot_path": str(tmp_path / "configured_snapshot.json"),
+        "journal_path": str(tmp_path / "journal.sqlite3"),
+    }
+    config_path = tmp_path / "settings.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_health(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"checks": []}
+
+    with (
+        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}),
+        patch("parayabuck.monitoring.health.evaluate_health", side_effect=fake_health),
+    ):
+        code, _, _ = _run_cli("--config", str(config_path), "ops", "explain", "dec-1")
+
+    assert code == 0
+    assert captured["snapshot_path"] == str(tmp_path / "configured_snapshot.json")
+    assert captured["database_path"] == str(tmp_path / "decisions.sqlite3")
+
+
+def test_ops_doctor_explicit_paths_win_even_when_equal_to_the_relative_defaults(tmp_path: Path) -> None:
+    """An explicit `--snapshot`/`--journal` must never be replaced by the
+    configured path just because it spells the relative default."""
+    import yaml
+
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text())
+    raw.setdefault("runtime", {})["decision_db_path"] = str(tmp_path / "decisions.sqlite3")
+    raw["observability"] = {
+        **(raw.get("observability") or {}),
+        "snapshot_path": str(tmp_path / "configured_snapshot.json"),
+        "journal_path": str(tmp_path / "configured_journal.sqlite3"),
+    }
+    config_path = tmp_path / "settings.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_checks(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"checks": [], "overall": "OK"}
+
+    with patch("parayabuck.monitoring.diagnostic._run_doctor_checks", side_effect=fake_checks):
+        code, _, _ = _run_cli(
+            "--config",
+            str(config_path),
+            "ops",
+            "doctor",
+            "--snapshot",
+            "data/runtime/health_snapshot.json",
+            "--journal",
+            "data/runtime/observability.sqlite3",
+        )
+
+    assert code == 0
+    assert captured["snapshot_path"] == "data/runtime/health_snapshot.json"
+    assert captured["journal_path"] == "data/runtime/observability.sqlite3"
+    assert captured["decision_db_path"] == str(tmp_path / "decisions.sqlite3")
+
+    # Absent flags still fall back to the configured paths.
+    captured.clear()
+    with patch("parayabuck.monitoring.diagnostic._run_doctor_checks", side_effect=fake_checks):
+        code, _, _ = _run_cli("--config", str(config_path), "ops", "doctor")
+    assert code == 0
+    assert captured["snapshot_path"] == str(tmp_path / "configured_snapshot.json")
+    assert captured["journal_path"] == str(tmp_path / "configured_journal.sqlite3")
+
+
+def test_ops_explain_health_uses_the_resolved_config(tmp_path: Path) -> None:
+    """`ops explain` must hand evaluate_health the config it resolved from
+    --config (or defaults when that fails), never let it re-load CONFIG_PATH."""
+    import yaml
+
+    from parayabuck.config import Config
+
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text())
+    raw.setdefault("runtime", {})["decision_db_path"] = str(tmp_path / "decisions.sqlite3")
+    raw["observability"] = {
+        **(raw.get("observability") or {}),
+        "snapshot_path": str(tmp_path / "configured_snapshot.json"),
+        "journal_path": str(tmp_path / "journal.sqlite3"),
+        "snapshot_interval_seconds": 77.0,
+    }
+    config_path = tmp_path / "settings.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_health(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"checks": []}
+
+    with (
+        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}),
+        patch("parayabuck.monitoring.health.evaluate_health", side_effect=fake_health),
+    ):
+        code, _, _ = _run_cli("--config", str(config_path), "ops", "explain", "dec-1")
+    assert code == 0
+    resolved = captured["config"]
+    assert isinstance(resolved, Config)
+    assert resolved.observability.snapshot_interval_seconds == 77.0
+
+    # An unloadable config falls back to defaults rather than CONFIG_PATH.
+    captured.clear()
+    with (
+        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}),
+        patch("parayabuck.monitoring.health.evaluate_health", side_effect=fake_health),
+    ):
+        code, _, _ = _run_cli(
+            "--config", str(tmp_path / "missing.yaml"), "ops", "explain", "dec-1", "--db", str(tmp_path / "d.sqlite3")
+        )
+    assert code == 0
+    assert captured["config"] == Config()

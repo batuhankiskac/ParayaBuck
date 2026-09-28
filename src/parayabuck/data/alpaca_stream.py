@@ -247,8 +247,16 @@ class AlpacaBarStream:
     def run_crypto(self) -> None:
         self.crypto.run()
 
+    @staticmethod
+    def _stop_sdk_stream(stream: Any) -> None:
+        # alpaca-py creates the event loop only inside run(); its stop()
+        # dereferences that loop, so a never-run stream has nothing to stop.
+        if getattr(stream, "_loop", ...) is None:
+            return
+        stream.stop()
+
     def stop(self) -> None:
         try:
-            self.stock.stop()
+            self._stop_sdk_stream(self.stock)
         finally:
-            self.crypto.stop()
+            self._stop_sdk_stream(self.crypto)

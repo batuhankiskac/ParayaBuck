@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from parayabuck.config import Config, load_config
+from parayabuck.markets.timeframes import is_regular_equity_time
 from parayabuck.monitoring import alerts, metrics
 from parayabuck.monitoring.journal import journal_stats
 
@@ -145,6 +147,40 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
     )
 
 
+# Per-worker liveness mirrors the runtime's own rules (_is_worker_healthy /
+# _stream_worker_delivering in runtime.py): the trade-update stream heartbeats
+# only at (re)start, the signal-adjustment monitor once per hourly pass, and a
+# market stream proves liveness by delivered bars, only while it must deliver.
+_EVENT_DRIVEN_WORKERS = frozenset({"pb-trade-updates"})
+_SIGNAL_ADJUSTMENT_WORKER = "pb-signal-adjustment"
+_SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
+_STREAM_WORKER_MARKETS = {"pb-stocks": "equity", "pb-crypto": "crypto"}
+
+
+def _worker_stale(
+    name: str, info: dict[str, Any], now: datetime, ttl: float, markets: dict[str, Any] | None = None
+) -> bool:
+    if name in _EVENT_DRIVEN_WORKERS:
+        return False
+    market = _STREAM_WORKER_MARKETS.get(name)
+    if market is not None:
+        # Like _required_workers: a market that is disabled or has no symbols
+        # does not need its stream to deliver.
+        market_info = (markets or {}).get(market)
+        if isinstance(market_info, dict) and (
+            market_info.get("enabled") is False or market_info.get("symbol_count") == 0
+        ):
+            return False
+        if market == "equity" and not is_regular_equity_time(now):
+            return False
+        last_event = _parse_iso(info.get("last_event_at"))
+        return last_event is None or (now - last_event).total_seconds() > max(180.0, ttl)
+    if name == _SIGNAL_ADJUSTMENT_WORKER:
+        ttl = _SIGNAL_ADJUSTMENT_CHECK_SECONDS + max(300.0, ttl)
+    last_hb = _parse_iso(info.get("last_heartbeat"))
+    return last_hb is not None and (now - last_hb).total_seconds() > ttl
+
+
 def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config: Config) -> HealthCheck:
     if health_snapshot is None:
         return HealthCheck(code="workers", status=HealthStatus.UNKNOWN, summary="no runtime health available")
@@ -152,16 +188,21 @@ def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config
     if not workers:
         return HealthCheck(code="workers", status=HealthStatus.UNKNOWN, summary="no worker data")
     ttl = max(30.0, config.engine.account_poll_interval_seconds * 3)
+    # Judge ages as of the snapshot, as the runtime did when it wrote it; the
+    # snapshot's own age is the runtime_heartbeat check's job. Measuring from
+    # the read time would add up to one snapshot interval to every age.
+    written_at = _parse_iso(health_snapshot.get("written_at") or health_snapshot.get("as_of"))
+    as_of = min(now, written_at) if written_at is not None else now
+    markets = health_snapshot.get("markets")
+    markets = markets if isinstance(markets, dict) else None
     stale: list[str] = []
     dead: list[str] = []
     for name, info in workers.items():
         if not isinstance(info, dict):
             continue
-        alive = bool(info.get("alive"))
-        last_hb = _parse_iso(info.get("last_heartbeat"))
-        if not alive:
+        if not bool(info.get("alive")):
             dead.append(name)
-        elif last_hb is not None and (now - last_hb).total_seconds() > ttl:
+        elif _worker_stale(str(name), info, as_of, ttl, markets):
             stale.append(name)
     if dead:
         return HealthCheck(
@@ -223,6 +264,27 @@ def _check_queue(health_snapshot: dict[str, Any] | None, config: Config) -> Heal
     )
 
 
+# The runtime's decisions loop schedules a reconciliation every 60 s
+# (runtime.py, ``next_reconcile``); it is a runtime constant, not a config field.
+_RECONCILE_INTERVAL_SECONDS = 60.0
+
+
+def _account_stale_seconds(config: Config) -> float:
+    """Age of ``last_reconciliation_at`` past which the account is stale.
+
+    A healthy runtime's stamp can be one reconciliation interval old when the
+    snapshot is written, and the snapshot itself up to one snapshot interval
+    old when read; one account poll interval is the margin. Never tighter than
+    the previous ``maximum_account_age_for_entry_seconds * 2``.
+    """
+    derived = (
+        _RECONCILE_INTERVAL_SECONDS
+        + float(config.observability.snapshot_interval_seconds)
+        + float(config.engine.account_poll_interval_seconds)
+    )
+    return max(derived, float(config.engine.maximum_account_age_for_entry_seconds) * 2)
+
+
 def _check_account(health_snapshot: dict[str, Any] | None, now: datetime, config: Config) -> HealthCheck:
     # account freshness is not persisted directly; infer from reconciliation / health
     # Use last_reconciliation as proxy if no direct account timestamp.
@@ -234,7 +296,7 @@ def _check_account(health_snapshot: dict[str, Any] | None, now: datetime, config
     # Try to find stale indicator in runtime_state? Offline we fallback to UNKNOWN if no signal.
     # Use last_reconciliation age as account proxy
     last_rec = health_snapshot.get("last_reconciliation_at")
-    max_age = float(config.engine.maximum_account_age_for_entry_seconds) * 2  # conservative
+    max_age = _account_stale_seconds(config)
     age = _age_seconds(last_rec, now) if isinstance(last_rec, str) else None
     if age is None:
         return HealthCheck(code="account", status=HealthStatus.UNKNOWN, summary="no reconciliation timestamp")
@@ -289,7 +351,16 @@ def _check_universe(health_snapshot: dict[str, Any] | None, now: datetime, confi
     errors = refresh.get("errors") if isinstance(refresh, dict) else {}
     last_refresh = refresh.get("last_refresh_at") if isinstance(refresh, dict) else None
     # Check for any refresh_failed
-    failed = [k for k, v in (status_map or {}).items() if v in ("refresh_failed", "apply_failed")]
+    # Like the runtime's scanner_degraded: a failure only matters for a market
+    # that is operationally relevant (the snapshot's scanner_critical).
+    markets = health_snapshot.get("markets")
+    markets = markets if isinstance(markets, dict) else {}
+    failed = [
+        k
+        for k, v in (status_map or {}).items()
+        if v in ("refresh_failed", "apply_failed")
+        and not (isinstance(markets.get(k), dict) and markets[k].get("scanner_critical") is False)
+    ]
     if failed:
         return HealthCheck(
             code="universe",
@@ -300,8 +371,14 @@ def _check_universe(health_snapshot: dict[str, Any] | None, now: datetime, confi
         )
     if isinstance(last_refresh, str) and last_refresh:
         age = _age_seconds(last_refresh, now)
-        max_age_h = config.universe.crypto.active_universe_max_age_hours
-        max_age_s = max_age_h * 3600
+        # The runtime stamps last_refresh_at once per scheduled refresh (even a
+        # failed one, which the status branch above reports), so it is stale
+        # only past the refresh cadence plus an hour of slack; never tighter
+        # than the artifact's own max age.
+        max_age_s = max(
+            config.universe.crypto.active_universe_max_age_hours * 3600,
+            config.runtime.scanner_refresh_hours * 3600 + 3600,
+        )
         if age is not None and age > max_age_s:
             return HealthCheck(
                 code="universe",
@@ -343,11 +420,68 @@ def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCh
     return HealthCheck(code="signal_adjustment", status=HealthStatus.OK, summary="verified")
 
 
+def _check_market_halts(health_snapshot: dict[str, Any] | None) -> HealthCheck:
+    # A market entry halt (protection failure, ambiguous exit, unreconciled
+    # rebalance, invalid universe, ...) stops that market's entries: never OK.
+    if health_snapshot is None:
+        return HealthCheck(code="market_halts", status=HealthStatus.UNKNOWN, summary="no market data")
+    markets = health_snapshot.get("markets")
+    halts = (
+        {
+            m: info["entry_halt_reason"]
+            for m, info in markets.items()
+            if isinstance(info, dict) and info.get("entry_halt_reason")
+        }
+        if isinstance(markets, dict)
+        else {}
+    )
+    if halts:
+        return HealthCheck(
+            code="market_halts",
+            status=HealthStatus.DEGRADED,
+            summary="entries halted: " + ", ".join(f"{m}={reason}" for m, reason in sorted(halts.items())),
+            observed=halts,
+            action="resolve the halt reason; reset_safety_lock verifies and clears it",
+        )
+    return HealthCheck(code="market_halts", status=HealthStatus.OK, summary="no market entry halts")
+
+
+def _ledger_tables(db_path: str | Path) -> frozenset[str] | None:
+    """Tables of the ledger opened read-only; None when its schema is unreadable.
+
+    A zero-byte or foreign SQLite file reads fine but lacks the ledger tables,
+    so callers check for the table they need instead of trusting "readable".
+    """
+    try:
+        conn = sqlite3.connect(f"file:{Path(str(db_path)).resolve()}?mode=ro", uri=True, timeout=2.0)
+        try:
+            rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        finally:
+            conn.close()
+        return frozenset(str(row[0]) for row in rows)
+    except sqlite3.Error:
+        log.warning("decision DB unreadable at %s", db_path, exc_info=True)
+        return None
+
+
+# The runtime persists every breaker reason in effect, but never restores or
+# clears the shared-worker f"{name}_restart_limit" halts (runtime.py
+# _restore_persistent_state): the row stays as an audit trail after a restart
+# re-arms the worker. A live one shows through the snapshot (dead worker,
+# circuit_breaker_reason), so the row itself is not an active block.
+_UNRESTORED_INCIDENT_SUFFIX = "_restart_limit"
+
+
+def _unrestored_incident(incident: object) -> bool:
+    return isinstance(incident, dict) and str(incident.get("reason") or "").endswith(_UNRESTORED_INCIDENT_SUFFIX)
+
+
 def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | None) -> HealthCheck:
-    # Check entry latch and active incidents
+    # Check entry latch and active incidents. The runtime always reports every
+    # market ({"equity": None, ...}); only a market with a reason is latched.
     latch = {}
     if health_snapshot and isinstance(health_snapshot.get("entry_risk_latch"), dict):
-        latch = health_snapshot["entry_risk_latch"]
+        latch = {market: reason for market, reason in health_snapshot["entry_risk_latch"].items() if reason}
     if latch:
         return HealthCheck(
             code="risk",
@@ -356,11 +490,31 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
             observed=latch,
             action="risk latch blocks new entries; check drawdown/daily loss",
         )
+    # Fail closed: with no explicitly configured, readable ledger the persisted
+    # incidents are unknown — never "no risk block". runtime_metrics(None) would
+    # otherwise fall back to a cwd-relative ledger, and it answers an unreadable
+    # one with the empty shape.
+    if db_path is None or not Path(str(db_path)).exists():
+        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="no decision DB")
+    tables = _ledger_tables(db_path)
+    if tables is None:
+        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="decision DB unreadable")
+    if "safety_incidents" not in tables:
+        return HealthCheck(
+            code="risk", status=HealthStatus.UNKNOWN, summary="decision DB has no safety_incidents table"
+        )
+    # One strict ledger read of the persisted incidents.
+    # strict: a failed incidents read is UNKNOWN, never an empty "no incidents"
+    try:
+        snapshot: dict[str, Any] = metrics.runtime_metrics(database_path=db_path, strict=True)
+    except Exception as exc:
+        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary=f"risk check failed: {exc}")
     # Check persisted incidents
     try:
-        snapshot = metrics.runtime_metrics(database_path=db_path)
         incidents = snapshot.get("incidents") or {}
         active = incidents.get("active") if isinstance(incidents, dict) else None
+        if isinstance(active, list):
+            active = [item for item in active if not _unrestored_incident(item)]
         if isinstance(active, list) and active:
             # If any incident is BLOCKED-like, treat as BLOCKED else CRITICAL
             return HealthCheck(
@@ -372,59 +526,28 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
             )
     except Exception:
         pass
-    # Check drawdown halt via metrics entry_block
-    try:
-        snapshot = metrics.runtime_metrics(database_path=db_path)
-        duration = snapshot.get("entry_block_duration_seconds")
-        if isinstance(duration, (int, float)) and duration is not None:
-            return HealthCheck(
-                code="risk",
-                status=HealthStatus.BLOCKED,
-                summary=f"drawdown halt for {duration:.0f}s",
-                observed=duration,
-            )
-    except Exception:
-        pass
+    # A drawdown halt (entry_block_duration_seconds) is its own active
+    # portfolio_drawdown_halt incident, already reported above.
     return HealthCheck(code="risk", status=HealthStatus.OK, summary="no risk block")
 
 
 def _check_execution(db_path: str | Path | None) -> HealthCheck:
     try:
-        # Use portfolio repository to find orders
-        from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
-
         if db_path is None or not Path(str(db_path)).exists():
             return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="no decision DB")
-        repo = PortfolioStateRepository(str(db_path))
-        ambiguous: list[Any] = []
-        stuck: list[Any] = []
-        try:
-            # ambiguous: orders with status ambiguous? Check open orders
-            for account in repo.list_accounts():  # type: ignore[attr-defined]
-                orders = repo.open_orders(account, None)
-                for o in orders:
-                    status = getattr(o, "status", "")
-                    if status == "ambiguous" or status == "manual_intervention_required":
-                        ambiguous.append(o)
-                    if status == "submitting":
-                        # check age
-                        created = getattr(o, "created_at", None)
-                        if created:
-                            try:
-                                dt = datetime.fromisoformat(str(created))
-                                if dt.tzinfo is None:
-                                    dt = dt.replace(tzinfo=UTC)
-                                if (datetime.now(UTC) - dt).total_seconds() > 600:
-                                    stuck.append(o)
-                            except Exception:
-                                stuck.append(o)
-        except Exception:
-            pass
-        finally:
-            try:
-                repo.store.release()
-            except Exception:
-                pass
+        tables = _ledger_tables(db_path)
+        if tables is None:
+            return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="decision DB unreadable")
+        if "portfolio_orders" not in tables:
+            return HealthCheck(
+                code="execution", status=HealthStatus.UNKNOWN, summary="decision DB has no portfolio_orders table"
+            )
+        from parayabuck.monitoring import forensics
+
+        # strict reads: an unreadable ledger must surface as UNKNOWN below, not as
+        # an empty result that reads as "no stuck/ambiguous orders"
+        # ambiguous: orders the ledger could not resolve — operator action required
+        ambiguous = forensics.ambiguous_orders(db_path, strict=True)
         if ambiguous:
             return HealthCheck(
                 code="execution",
@@ -433,6 +556,16 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
                 observed=len(ambiguous),
                 action="resolve ambiguous orders before trading resumes",
             )
+        # submitting: an order that never got an ack and is older than 10 minutes
+        now = datetime.now(UTC)
+        stuck: list[Any] = []
+        for order in forensics.submitting_orders(db_path, strict=True):
+            created = str(order.get("created_at") or "")
+            if not created:
+                continue
+            age = _age_seconds(created, now)
+            if age is None or age > 600:
+                stuck.append(order)
         if stuck:
             return HealthCheck(
                 code="execution",
@@ -440,10 +573,7 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
                 summary=f"{len(stuck)} stuck submitting orders >10m",
                 observed=len(stuck),
             )
-        # check rebalance stuck via forensics helper
-        from parayabuck.monitoring.forensics import find_stuck_rebalances
-
-        stuck_rb = find_stuck_rebalances(db_path, threshold_seconds=3600)
+        stuck_rb = forensics.find_stuck_rebalances(db_path, threshold_seconds=3600, strict=True)
         if stuck_rb:
             return HealthCheck(
                 code="execution",
@@ -461,8 +591,7 @@ def _check_alerts() -> HealthCheck:
         stats = alerts.alert_stats()
         failed = int(stats.get("webhook_failed", 0) or 0)  # type: ignore[call-overload]
         attempted = int(stats.get("webhook_attempted", 0) or 0)  # type: ignore[call-overload]
-        dropped = int(stats.get("dropped_alert_delivery", 0) or stats.get("suppressed", 0) or 0)  # type: ignore[call-overload]
-        # also journal stats for delivery queue
+        dropped = int(stats.get("webhook_dropped", 0) or 0)  # type: ignore[call-overload]
         jstats = journal_stats()
         j_dropped = int(jstats.get("event_journal_dropped", 0) or 0)  # type: ignore[call-overload]
         total_dropped = dropped + j_dropped
@@ -530,9 +659,7 @@ def evaluate_health(
         try:
             config = load_config()
         except Exception:
-            from parayabuck.config import Config as _Config
-
-            config = _Config()
+            config = Config()
 
     health_snapshot: dict[str, Any] | None = None
     if snapshot_path.exists():
@@ -561,6 +688,7 @@ def evaluate_health(
     checks.append(_check_reconciliation(health_snapshot, now, config))
     checks.append(_check_universe(health_snapshot, now, config))
     checks.append(_check_signal_adjustment(health_snapshot))
+    checks.append(_check_market_halts(health_snapshot))
     checks.append(_check_risk(database_path, health_snapshot))
     checks.append(_check_execution(database_path))
     checks.append(_check_alerts())

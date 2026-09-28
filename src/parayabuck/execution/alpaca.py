@@ -61,6 +61,9 @@ from .alpaca_models import (  # noqa: E402
     RiskStatePersistenceError,
 )
 
+# Broker order states that can never fill again (``rejected`` never filled).
+_DEAD_ORDER_STATUSES = frozenset({"canceled", "cancelled", "expired", "rejected", "done_for_day"})
+
 
 def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
     """Emit one execution alert without ever affecting order flow.
@@ -684,18 +687,31 @@ class AlpacaBroker:
                         fill_recovered(*recovered)
                     return True
                 continue
-            if status not in {
-                "canceled",
-                "cancelled",
-                "rejected",
-                "expired",
-                "done_for_day",
-            }:
+            if status not in _DEAD_ORDER_STATUSES:
                 # The exit is genuinely still working at the broker; keep
                 # ownership until it completes.
                 return True
-            # The order died without filling: fall through to the adjustment.
+            # The order died: book any partial fill it made before dying,
+            # then fall through to the adjustment for the remainder.
+            self._recover_terminal_partial_fill(broker_order, client_order_id, broker_order_id, status)
         return False
+
+    def _recover_terminal_partial_fill(
+        self, broker_order: Any, client_order_id: str, broker_order_id: str, status: str
+    ) -> None:
+        """Book the real fill of an order that ended terminal after filling.
+
+        A canceled/expired/done_for_day order can still have filled part of
+        its quantity; dropping that fill orphans bought units as external
+        inventory or leaves sold units owned (ownership drift). The booking
+        is cumulative and keyed by the recovered activity id, so a later
+        stream or reconcile delivery of the same fill books nothing twice.
+        """
+        recovered = self._fill_from_broker_order(broker_order, client_order_id, broker_order_id)
+        if recovered is None:
+            return
+        if fill_recovered := getattr(self, "portfolio_fill_recovered", None):
+            fill_recovered(*recovered, status=status)
 
     def _fetch_broker_order(self, client_order_id: str, broker_order_id: str) -> Any | None:
         """Resolve one repo order at Alpaca. A 404/unknown order is ``None``;
@@ -737,6 +753,8 @@ class AlpacaBroker:
           that status;
         * present and still working -> ``"submitted"``.
 
+        A status read from a broker order comes back as
+        ``(status, broker_order_id)`` whenever the broker reports an id.
         Returns ``None`` when the broker is unreachable or the lookup
         capability is missing; the caller retries later without guessing.
         """
@@ -747,31 +765,47 @@ class AlpacaBroker:
         if broker_order is None:
             return "canceled"
         status = str(self._normalized_field(broker_order, "status") or "").lower()
+        # The caller persists the returned broker id verbatim; a crashed
+        # submit has none stored, so hand back the broker's own id rather
+        # than letting the stored "" erase the id the fill recovery booked.
+        broker_id = str(self._field(broker_order, "id", "") or broker_order_id)
+
+        def outcome(resolved: str) -> tuple[str, str] | str:
+            return (resolved, broker_id) if broker_id else resolved
+
         if status == "filled":
             recovered = self._fill_from_broker_order(broker_order, client_order_id, broker_order_id)
             if recovered is not None:
                 if fill_recovered := getattr(self, "portfolio_fill_recovered", None):
                     fill_recovered(*recovered)
-                return "filled"
+                return outcome("filled")
             # The order filled but its fill could not be extracted; keep the
             # row non-terminal so ownership is not silently released.
-            return "submitted"
-        if status in {"canceled", "cancelled", "expired", "rejected", "done_for_day"}:
-            return status
-        return "submitted"
+            return outcome("submitted")
+        if status in _DEAD_ORDER_STATUSES:
+            self._recover_terminal_partial_fill(broker_order, client_order_id, broker_order_id, status)
+            return outcome(status)
+        return outcome("submitted")
 
     def _fill_from_broker_order(
         self, order: Any, client_order_id: str, broker_order_id: str
-    ) -> tuple[str, str, float, float, datetime, str, float] | None:
+    ) -> tuple[str, str, float, float, datetime, str, float | None] | None:
         """Extract the real fill from a filled Alpaca order."""
-        filled_qty = float(self._field(order, "filled_qty", 0) or self._field(order, "cumulative_qty", 0) or 0)
+        filled_qty = float(self._field(order, "filled_qty", 0) or 0)
         avg_price = float(self._field(order, "filled_avg_price", 0) or 0)
         if filled_qty <= 0 or avg_price <= 0:
             return None
-        filled_at_raw = self._field(
-            order, "filled_at", self._field(order, "submitted_at", datetime.now(UTC).isoformat())
+        # A partially filled order that then died has no ``filled_at``; fall
+        # back to its last update rather than parsing ``None``.
+        filled_at_raw = (
+            self._field(order, "filled_at", None)
+            or self._field(order, "updated_at", None)
+            or self._field(order, "submitted_at", None)
+            or datetime.now(UTC)
         )
-        occurred_at = datetime.fromisoformat(str(filled_at_raw))
+        occurred_at = (
+            filled_at_raw if isinstance(filled_at_raw, datetime) else datetime.fromisoformat(str(filled_at_raw))
+        )
         if occurred_at.tzinfo is None:
             occurred_at = occurred_at.replace(tzinfo=UTC)
         return (
@@ -781,7 +815,10 @@ class AlpacaBroker:
             avg_price,
             occurred_at,
             f"{client_order_id}:recovered:{filled_qty}",
-            0.0,
+            # An order lookup does not establish a fee: ``None`` records it as
+            # unobserved, where ``0.0`` would claim an observed free fill and
+            # corrupt execution-quality measurement.
+            None,
         )
 
     def portfolio_open_order_symbols(self) -> set[str]:
@@ -858,65 +895,6 @@ class AlpacaBroker:
             self.__dict__["_reconciliation_service"] = svc
         return svc.reconcile()
 
-    def _reconcile_crypto_exit_state(self, ledger: Any) -> None:
-        """Drive pending crypto exits and stop-failover paths to completion."""
-        for entry in ledger.managed_entries_for_account(self._account_id or "unknown"):
-            if entry.market != Market.CRYPTO:
-                continue
-            if entry.exit_client_order_id:
-                self._reconcile_crypto_exit(entry)
-            elif entry.stop_state == "cancel_requested" and entry.target_state in {
-                "target_triggered",
-                "stop_failover_triggered",
-            }:
-                self._cancel_stop_then_exit(
-                    entry,
-                    "target" if entry.target_state == "target_triggered" else "stop_failover",
-                )
-
-    def _reconcile_stale_ledger_entries(
-        self,
-        ledger: Any,
-        broker_symbols: set[str],
-        fill_activities_reconciled: bool,
-    ) -> None:
-        """Close managed entries the broker snapshot proves flat."""
-        for entry in ledger.managed_entries_for_account(self._account_id or "unknown"):
-            if entry.owned_qty <= 0 or entry.canonical_symbol in broker_symbols:
-                continue
-            if entry.exit_client_order_id:
-                self._reconcile_crypto_exit(entry)
-                continue
-            if entry.market == Market.EQUITY and not fill_activities_reconciled:
-                ledger.mark_manual_intervention(
-                    self._account_id or "unknown",
-                    entry.entry_client_order_id,
-                )
-                log.warning(
-                    "Managed ledger close deferred: market=equity symbol=%s "
-                    "entry_client_order_id=%s "
-                    "recovery_action=await_fill_activity_reconciliation",
-                    entry.canonical_symbol,
-                    entry.entry_client_order_id,
-                )
-                continue
-            # ``account()`` has successfully returned Alpaca's complete
-            # position snapshot.  A managed symbol absent from that
-            # snapshot is flat at the broker (for example, after a
-            # bracket leg filled while the trading stream was offline).
-            # Keep the durable ownership ledger in sync instead of
-            # repeatedly halting all reconciliation on a stale entry.
-            ledger.mark_position_closed(self._account_id or "unknown", entry.entry_client_order_id)
-            log.warning(
-                "Stale managed ledger entry closed: market=%s symbol=%s "
-                "entry_client_order_id=%s managed_qty=%s "
-                "recovery_action=broker_position_snapshot_confirmed_flat",
-                entry.market.value,
-                entry.canonical_symbol,
-                entry.entry_client_order_id,
-                entry.owned_qty,
-            )
-
     def _reconcile_fill_activity_fees(self) -> bool:
         svc = self.__dict__.get("_reconciliation_service")
         if svc is None:
@@ -926,17 +904,6 @@ class AlpacaBroker:
             except Exception:
                 return False
         return svc._reconcile_fill_activity_fees()
-
-    def _reconcile_crypto_exit(self, position: ManagedPosition) -> None:
-        svc = self.__dict__.get("_reconciliation_service")
-        if svc is None:
-            try:
-                svc = ReconciliationService(self)
-                self.__dict__["_reconciliation_service"] = svc
-            except Exception:
-                return
-        svc._reconcile_crypto_exit(position)
-        return
 
     def _reprotect_after_terminal_exit(self, position: ManagedPosition) -> None:
         svc = self.__dict__.get("_crypto_service") or self.__dict__.get("_reconciliation_service")
@@ -965,7 +932,19 @@ class AlpacaBroker:
             status = self._normalized_field(order, "status")
             if (
                 side == closing_side
-                and status not in {"canceled", "expired", "filled", "rejected"}
+                # Same dead-leg vocabulary as _open_protective_orders: a
+                # done_for_day/replaced/stopped leg no longer protects.
+                and status
+                not in {
+                    "canceled",
+                    "cancelled",
+                    "done_for_day",
+                    "expired",
+                    "filled",
+                    "rejected",
+                    "replaced",
+                    "stopped",
+                }
                 and (stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"})
             ):
                 # Only the still-working remainder protects the position; an
@@ -1048,7 +1027,6 @@ class AlpacaBroker:
                         filled_price,
                         intent.direction,
                         datetime.now(UTC),
-                        commission=float(self._field(order, "fees", 0) or 0),
                     )
                 if status == "filled":
                     return OrderState.FILLED, fill
@@ -1064,7 +1042,9 @@ class AlpacaBroker:
                     state = OrderState.ACCEPTED
             except Exception as exc:
                 log.warning("Order status lookup failed for %s: %s", order_id, exc)
-                state = OrderState.ACCEPTED
+                # A failed lookup is not new information: keep the last
+                # observed state so a PARTIALLY_FILLED order is still
+                # cancel/re-protected instead of silently downgraded.
             time.sleep(0.5)
         log.warning("Order %s not filled within %.1fs", order_id, timeout)
         return state, fill
@@ -1421,15 +1401,6 @@ class AlpacaBroker:
         # Fallback for __new__ without service
         return None
 
-    def _poll_stop_cancellation(self, position: Any, stop_id: str) -> tuple[Any, str]:
-        svc = self.__dict__.get("_crypto_service")
-        if svc is not None:
-            return svc._poll_stop_cancellation(position, stop_id)  # type: ignore[no-any-return]
-        # Fallback
-        raise AmbiguousOrderState(
-            f"Stop cancellation is unverified for {getattr(position, 'canonical_symbol', 'unknown')}: no service"
-        )
-
     def _submit_with_recovery(self, request: Any, client_order_id: str) -> Any:
         try:
             return self._client.submit_order(request)
@@ -1449,7 +1420,7 @@ class AlpacaBroker:
                     lookup_error = lookup_exc
                 if recovered is not None:
                     status = self._normalized_field(recovered, "status")
-                    if status in {"rejected", "canceled", "cancelled", "expired"}:
+                    if status in {"rejected", "canceled", "cancelled", "expired", "done_for_day"}:
                         # A broker-confirmed terminal response is known, not
                         # ambiguous. Preserve the original submit failure.
                         raise submit_exc
@@ -1658,21 +1629,9 @@ class AlpacaBroker:
 
             return _fv(value, name, default)
 
-    def _query_persisted_peak(self, account_id: str) -> tuple[float | None, int | None]:
-        return self._get_peak_service().query_persisted_peak(account_id)
-
     def _ensure_peak_reconciled(self, account_id: str, current_equity: float) -> None:
         svc = self._get_peak_service()
         svc.ensure_reconciled(account_id, current_equity)
-
-    def _load_peak_equity(self) -> float:
-        svc = self._get_peak_service()
-        try:
-            svc._broker_account_id = self.__dict__.get("_account_id") or None
-        except Exception:
-            pass
-        acct = getattr(svc, "_peak_account_id", None) or self.__dict__.get("_account_id")
-        return svc.load_peak_equity(str(acct) if acct else None)
 
     def _save_peak_equity(self) -> None:
         svc = self._get_peak_service()

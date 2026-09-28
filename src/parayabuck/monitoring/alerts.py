@@ -31,11 +31,13 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import requests
 
 from parayabuck.monitoring.events import ALERT_KINDS
 from parayabuck.monitoring.events import WARNING_KINDS as _WARNING_KINDS
+from parayabuck.monitoring.operational_event import redact_fields
 
 log = logging.getLogger("parayabuck.monitoring.alerts")
 
@@ -44,6 +46,7 @@ _WEBHOOK_TIMEOUT = (3.0, 8.0)  # (connect, read) — never block the caller
 _WEBHOOK_QUEUE_SIZE = 256
 _WEBHOOK_MAX_RETRIES = 3
 _WEBHOOK_RETRY_BACKOFF = (0.5, 1.0, 2.0)
+_THROTTLE_KEYS_MAX = 4096
 
 _lock = threading.Lock()
 _settings: dict[str, object] = {
@@ -171,9 +174,7 @@ def _throttle_key(kind: str, fields: dict[str, object]) -> str:
             # limit to first 2 dimensions to avoid key explosion but preserve distinction
             if len(parts) >= 3:
                 break
-    if len(parts) > 1:
-        return ":".join(parts)
-    return kind
+    return ":".join(parts)
 
 
 def _severity(kind: str) -> int:
@@ -182,6 +183,25 @@ def _severity(kind: str) -> int:
 
 def _severity_str(kind: str) -> str:
     return "warning" if kind in _WARNING_KINDS else "info"
+
+
+def _scrub_webhook_url(text: str, url: str) -> str:
+    """Remove the webhook URL (and its secret-bearing path) from an error text.
+
+    ``requests`` puts the URL into its exception messages — the full URL for
+    HTTP errors, the path and query for connection errors — and a chat webhook's
+    path *is* its credential, so it must never reach the log.
+    """
+    parts = urlsplit(url)
+    scrubbed = text.replace(url, "<webhook>") if url else text
+    # Connection errors print path *and* query; a query can carry the key/token
+    if parts.query:
+        scrubbed = scrubbed.replace(parts.query, "<webhook-query>")
+    if parts.password:
+        scrubbed = scrubbed.replace(parts.password, "<webhook-password>")
+    if parts.path and parts.path != "/":
+        scrubbed = scrubbed.replace(parts.path, "<webhook-path>")
+    return scrubbed
 
 
 def _ensure_webhook_worker() -> None:
@@ -227,7 +247,7 @@ def _webhook_worker_loop() -> None:
                         "Alert webhook delivery failed for kind=%s after %d attempts: %s",
                         payload.get("kind"),
                         _WEBHOOK_MAX_RETRIES,
-                        exc,
+                        _scrub_webhook_url(str(exc), url),
                     )
                 else:
                     backoff = _WEBHOOK_RETRY_BACKOFF[min(attempt, len(_WEBHOOK_RETRY_BACKOFF) - 1)]
@@ -254,7 +274,9 @@ def _post_webhook(url: str, payload: dict[str, object]) -> None:
             global _webhook_failed, _webhook_last_failure_at
             _webhook_failed += 1
             _webhook_last_failure_at = datetime.now(UTC).isoformat()
-        log.warning("Alert webhook delivery failed for kind=%s: %s", payload.get("kind"), exc)
+        log.warning(
+            "Alert webhook delivery failed for kind=%s: %s", payload.get("kind"), _scrub_webhook_url(str(exc), url)
+        )
 
 
 def _enqueue_webhook(url: str, payload: dict[str, object]) -> None:
@@ -302,16 +324,26 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
                 log.debug("Alert %s suppressed (throttle window %.0fs)", kind, throttle)
                 return
             _last_emitted_at[throttle_key] = now
+            if len(_last_emitted_at) > _THROTTLE_KEYS_MAX:
+                # Keys carry per-incident/order ids, so the map grows for the life
+                # of the process; an entry past its window can never suppress again
+                for key in [k for k, t in _last_emitted_at.items() if now - t >= throttle]:
+                    del _last_emitted_at[key]
         with _lock:
             _delivered_counts[kind] = _delivered_counts.get(kind, 0) + 1
-        log.log(_severity(kind), "ALERT %s: %s fields=%s", kind, message, dict(fields))
+        # The journal redacts its copy; the log line and the external webhook
+        # must never carry a secret-named field in the clear either
+        safe_fields = redact_fields(fields)
+        log.log(_severity(kind), "ALERT %s: %s fields=%s", kind, message, safe_fields)
+        # Reuse event_id if supplied, else generate; include correlation from fields
+        eid = str(fields.get("event_id") or "") or None
         # Durable operational journal — best effort, never raises, isolated from trading
         try:
             from parayabuck.monitoring.journal import emit_journal
             from parayabuck.monitoring.operational_event import create_event
 
-            # Reuse event_id if supplied, else generate; include correlation from fields
             ev = create_event(
+                event_id=eid,
                 kind=kind,
                 message=message,
                 fields=dict(fields),
@@ -332,14 +364,14 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
             _webhook_count += 1
             _webhook_attempted += 1
         # Build webhook payload with correlation fields and stable event_id
-        event_id = str(fields.get("event_id") or uuid.uuid4().hex)
+        event_id = eid or uuid.uuid4().hex
         payload: dict[str, object] = {
             "event_id": event_id,
             "kind": kind,
             "severity": _severity_str(kind),
             "message": message,
             "occurred_at": _now_iso(),
-            "fields": dict(fields),
+            "fields": safe_fields,
         }
         # Promote correlation fields to top-level for operator convenience
         for corr_key in (
@@ -363,36 +395,6 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
-
-
-def emit_incident(
-    category: str,
-    severity: str,
-    *,
-    message: str,
-    incident_id: str | None = None,
-    account_id: str | None = None,
-    **fields: object,
-) -> None:
-    """Emit a canonical incident record via the alert sink (never raises).
-
-    Thin wrapper over emit() that guarantees incident_id/timestamp/category/
-    severity are present as structured fields. Bounded throttling still applies
-    per kind (paper_incident). Integrates with metrics via caller; this helper
-    only drives the alert sink.
-    """
-    try:
-        emit(
-            "paper_incident",
-            message=message,
-            incident_id=incident_id or "",
-            category=category,
-            severity=severity,
-            account_id=account_id or "unknown",
-            **fields,
-        )
-    except Exception:
-        log.warning("emit_incident failed for category=%s", category, exc_info=True)
 
 
 def alert_stats() -> dict[str, object]:
@@ -463,28 +465,10 @@ def reset_for_tests() -> None:
             pass
 
 
-def shutdown_webhook_worker(timeout: float = 1.0) -> None:
-    """Stop webhook worker cleanly (best effort)."""
-    global _webhook_worker_running
-    with _lock:
-        _webhook_worker_running = False
-    try:
-        _webhook_queue.put_nowait(None)
-    except queue.Full:
-        pass
-    if _webhook_worker is not None:
-        try:
-            _webhook_worker.join(timeout=timeout)
-        except Exception:
-            pass
-
-
 __all__ = [
     "ALERT_KINDS",
     "alert_stats",
     "configure_alerting",
     "emit",
-    "emit_incident",
     "reset_for_tests",
-    "shutdown_webhook_worker",
 ]

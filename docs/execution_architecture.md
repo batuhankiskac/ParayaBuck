@@ -42,11 +42,11 @@ AlpacaBroker facade (src/parayabuck/execution/alpaca.py ~800 lines after)
 ### 2.2 `alpaca_client.py`
 - Thin adapter around `TradingClient`: `get_account`, `get_all_positions`, `get_open_position`, `get_asset`, `get_orders`, `get_order_by_id`, `get_order_by_client_id`, `submit_order`, `cancel_order_by_id`, `_request(FILL)`
 - Session timeout `patch_session_timeout(15.0)`, `close()` idempotent
-- Normalization helpers: `_field`, `field_value`, `_normalized_field`, `_asset`, `_price_step`, `_round_to_step`, order status mapping to `OrderState`
+- Normalization helpers: `_field`, `_normalized_field`, `_asset`, `_price_step`, `_round_to_step`, order status mapping to `OrderState`
 - Keeps `Alpaca SDK` DTO quirks isolated; domain services never call `getattr(raw, ...)` directly.
 
 ### 2.3 `risk_peak.py`
-- `PeakStateService` owns `peak_equity`, `epoch`, `account_id` binding, `sidecar` path resolution, `atomic_write`, `ledger._lock` for `_query_persisted_peak`
+- `PeakStateService` owns `peak_equity`, `epoch`, `account_id` binding, `sidecar` path resolution, `atomic_write`, `ledger._lock` for `query_persisted_peak`
 - Fail-closed: malformed JSON, non-finite, negative, missing key, invalid epoch, unreadable → `RiskStatePersistenceError`; missing file → bootstrap 0.0
 - Account-scoped: never cross-pollute peaks, `RuntimeError` on identity change
 - `reset_peak_equity` operator verb (epoch+1, atomic)
@@ -101,7 +101,7 @@ runtime.py, portfolio/runtime_service.py, web/managers/engine.py, cli.py
 - `symbol_exit_locks: dict[str, threading.Lock]` + `_symbol_exit_locks_guard` → same-symbol crypto exit serialized, different symbols not blocked, no global broker lock
 - `asset_cache` access is single-threaded via `alpaca_client` (no lock needed, cache is per-broker)
 - `snapshot_cache` is immutable `AccountSnapshot` + monotonic timestamp, no lock
-- Ledger `store.lock` is held only inside `risk_peak._query_persisted_peak` and `ledger` methods, never across broker REST calls → no deadlock with broker locks
+- Ledger `store.lock` is held only inside `risk_peak.query_persisted_peak` and `ledger` methods, never across broker REST calls → no deadlock with broker locks
 
 ## 5. Observability
 

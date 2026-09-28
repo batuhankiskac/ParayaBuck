@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from parayabuck.logger import get_logger
+
+log = get_logger("parayabuck.web.services.dashboard")
+
 
 def _context(state: Any | None) -> Any:
     import parayabuck.web.server as srv
@@ -30,12 +34,17 @@ def get_overview_payload(state: Any | None = None) -> dict[str, Any]:
         import parayabuck.web.server_legacy as leg
 
         return leg._dashboard_payload(context=_context(state))
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
+        log.exception("Dashboard overview payload failed: %s", exc)
         return {"unavailable": True, "error": str(exc)}
 
 
 def get_panel(key: str, state: Any | None = None) -> dict[str, Any]:
     payload = get_overview_payload(state)
+    if isinstance(payload, dict) and payload.get("unavailable"):
+        # The overview itself failed — hand its real cause back instead of
+        # masking it as a missing panel.
+        return payload
     if isinstance(payload, dict) and key in payload:
         return payload[key]  # type: ignore[no-any-return]
     return {"unavailable": True, "error": f"panel {key} not found"}

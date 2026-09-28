@@ -325,10 +325,11 @@ Evidence: `src/parayabuck/execution/alpaca_reconciliation.py:1-15, 327-564` — 
 Buckets (holdings layer):
 - `MATCH` — `|local_qty - broker_qty| <= tol` (where `tol = max(1e-9, local*1e-8)`) and both `>1e-12`.
 - `QUANTITY_MISMATCH` — both sides positive but difference exceeds tolerance.
-- `LOCAL_STALE` + `MISSING_BROKER_ORDER` — local positive, broker zero.
+- `LOCAL_STALE` + `MISSING_BROKER_ORDER` — local positive, broker zero. A crypto net ownership below `CRYPTO_OWNERSHIP_DUST` (1e-8, `portfolio/runtime_ownership.py`) is flat: fee-net fills booked at full precision minus a 9-decimal stop exit leave sub-precision dust the broker never holds.
 - `BROKER_STALE` + `MISSING_LOCAL_ORDER` — broker positive, local zero.
 - `UNKNOWN_ORDER` — broker `OPEN` `client_order_id` not in `portfolio_open_orders()`.
 - `MISSING_LOCAL_ORDER` — actually `MISSING_BROKER_ORDER` duplicate (repo open id not in broker OPEN) — upstream bug, treated same; reported in both keys for compatibility.
+- Before the comparison, a repo row still `submitting`/`reconciliation_required` whose client-id lookup returns 404 and whose last write is at least 10 min old (`UNKNOWN_ORDER_CANCEL_AGE_SECONDS`) is booked `canceled` with zero fill and one `paper_incident` (`unknown_order_canceled`); the next clean reconcile clears the breaker. Younger rows and failed lookups stay drift.
 
 **Prevent**: Watermarked fill-activity backfill (incremental, unbounded history without rescan); dedup by `activity.id`; `BEGIN IMMEDIATE` transactions; `INSERT OR IGNORE`.
 

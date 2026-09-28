@@ -70,14 +70,15 @@ class OperationalEvent:
 - **Severity**: `DEBUG/INFO/WARNING/CRITICAL`, centralized `severity_for_kind` (maps `WARNING_KINDS` + lifecycle).
 - **Vocabulary**: `monitoring/events.py` is authoritative for alert kinds (16 kinds). Lifecycle extensions (`LIFECYCLE_KINDS`) add `reconciliation_started/succeeded`, `account_became_stale/recovered`, `universe_became_stale/recovered`, `runtime_health_degraded/recovered`, `rebalance_phase_changed`, `decision_summary`, `observability_degraded/recovered`. Each answers an operator question (e.g. “when did account become stale?”).
 - **Correlation**: reuse domain IDs (`session_id`→`decision_id`→`client_order_id`→`incident_id`). No fake IDs.
-- **Secrets**: `_REDACTED_KEYS` — `api_key`, `webhook_url`, `approval_key` etc. — redacted to `***REDACTED***` at `create_event` time; `OperationalEvent.__post_init__` rejects plain secrets.
+- **Secrets**: `_REDACTED_KEYS` — `api_key`, `webhook_url`, `approval_key` etc. — redacted to `***REDACTED***` at `create_event` time; `OperationalEvent.__post_init__` rejects plain secrets. `alerts.emit` applies the same redaction to its log line and webhook payload, and webhook delivery failures are logged with the webhook URL, path, query and password scrubbed.
 
 ## Retention
 
 `EventJournal` retention:
 - `event_retention_days` (default 30) — delete `occurred_at < cutoff` every ~100 writes.
 - `event_max_events` (default 50000) — delete oldest excess.
-- Configurable via `observability:` block; cleanup not on every event.
+- Cleanup runs every ~100 writes, not on every event.
+- The `observability:` journal settings (`journal_path`, `event_retention_days`, `event_queue_size`, `event_max_events`) are **not applied** to the runtime journal: the runtime and web use the default journal (`data/runtime/observability.sqlite3`, relative to the working directory) with the defaults above. Only the `ops` CLI commands read `observability.journal_path`.
 - Indexes: `occurred_at`, `kind`, `severity`, `session_id`, `decision_id`, `client_order_id`, `incident_id`.
 
 Schema version 1, idempotent migration, WAL.
@@ -88,15 +89,18 @@ Schema version 1, idempotent migration, WAL.
 
 - `HealthStatus`: `OK / DEGRADED / BLOCKED / CRITICAL / UNKNOWN`
 - `HealthCheck(code, status, summary, observed, threshold, since, action)`
-- `UNKNOWN` means “no evidence” — not `OK`.
-- **Areas** (11 checks): `runtime_heartbeat`, `workers`, `queue`, `account`, `reconciliation`, `universe`, `signal_adjustment`, `risk`, `execution`, `alerts`, `observability`.
+- `UNKNOWN` means “no evidence” — not `OK`. `risk` and `execution` read only the explicitly supplied ledger; an absent, unreadable or failing ledger read — including a zero-byte/foreign file without the `safety_incidents` (risk) or `portfolio_orders` (execution) table, and a failed incidents query — is `UNKNOWN`, never “no risk block” / “no stuck orders”.
+- **Areas** (12 checks): `runtime_heartbeat`, `workers`, `queue`, `account`, `reconciliation`, `universe`, `signal_adjustment`, `market_halts` (any market `entry_halt_reason` → `DEGRADED`, naming market and reason), `risk`, `execution`, `alerts`, `observability`.
 - **Thresholds** derived from config/runtime cadence:
   - heartbeat: 90s (snapshot interval 30s × 3)
-  - workers: `account_poll_interval * 3` (30s ×3 = 90s)
+  - workers: `max(30s, account_poll_interval * 3)` heartbeat age, with the runtime's own exceptions: `pb-trade-updates` is event-driven (no heartbeat age), `pb-signal-adjustment` allows its hourly pass (+ `max(300s, ttl)`), and the market streams are judged by the last delivered bar (`max(180s, ttl)`), equity only during regular hours and only for an enabled market with symbols; all ages are measured as of the snapshot's `written_at` (snapshot age is the heartbeat check's job)
   - queue age: `engine.maximum_queue_age_seconds` (30s)
-  - account/reconciliation: `maximum_account_age_for_entry_seconds *2` etc.
-  - universe: `universe.crypto.active_universe_max_age_hours *3600` (the
-    equity universe is static and has no age)
+  - account (DEGRADED): `last_reconciliation_at` older than `60s reconcile interval + observability.snapshot_interval_seconds + engine.account_poll_interval_seconds` (default 60+30+15 = 105s), never below `maximum_account_age_for_entry_seconds * 2`; reconciliation (CRITICAL): `max(300s, account_poll_interval * 20)`
+  - universe: last refresh older than `max(universe.crypto.active_universe_max_age_hours, runtime.scanner_refresh_hours + 1)` hours
+    (default 25h: the runtime refreshes once per `scanner_refresh_hours`); a scanner failure counts only for a market the
+    runtime marks `scanner_critical` (the equity universe is static and has no age)
+  - risk: an active safety incident is `BLOCKED`, except the shared-worker `*_restart_limit` rows the runtime keeps as an
+    audit trail and never restores (a live one shows as a dead worker)
   - rebalance stuck: 3600s
 - **Overall derivation** precedence: `CRITICAL` > `BLOCKED` > `DEGRADED` > `UNKNOWN` > `OK`.
 - `trading_state` separate concept: `ACTIVE / ENTRY_BLOCKED / REBALANCE_BLOCKED / MARKET_HALTED / CIRCUIT_BREAKER / STOPPED / UNKNOWN`, derived from `RuntimeHealth` + risk latch/market halts. A runtime can be `healthy infrastructure` but `ENTRY_BLOCKED` by risk — distinction visible.
@@ -142,7 +146,7 @@ parayabuck ops bundle
 `monitoring/diagnostic.py` `create_bundle_zip`:
 
 - `manifest.json`, `status.json`, `doctor.json`, `recent_events.jsonl` (200 newest), `runtime_snapshot.json`, `runtime_metrics.json`, `active_incidents.json`, `unresolved_orders.json`, `stuck_rebalance.json`, `sessions.json`, `database_checks.json`, `environment.json` (git HEAD, dirty, python, platform, version), `sanitized_config.json`, `universe_status.json`, `alert_stats.json`, `journal_stats.json`.
-- Size bounded: each JSON truncated 500KB, recent_events limit 200, zip <5MB.
+- Size bounded without corrupting the artifact: list rows capped at 2000 per section; a section still over budget is written as `{"truncated": true, "size_chars": …, "preview": …}` (valid JSON, never a mid-token cut). Enforced: every `.json` section is at most 500,000 characters *as written into the zip* — the preview is re-measured after escaping, so a quote/newline-heavy payload cannot exceed it. `recent_events.jsonl` is capped at 200 events and is not character-capped; the zip total is not bounded (target <5MB).
 - Security: `_redact` allowlist — `api_key`, `api_secret`, `webhook_url`, `approval_key`, `password` → `***REDACTED***`; explicit tests.
 
 ## Alert Behavior

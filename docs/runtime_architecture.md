@@ -6,9 +6,8 @@
 EngineRuntime
   ├─ event / stream layer          runtime_events.py      (RuntimeEvent, EventQueue)
   ├─ health / snapshot assembly    runtime_health.py      (WorkerHealth, RuntimeHealth, _portfolio_catch_up_health)
-  ├─ universe lifecycle            runtime_universe.py    (RuntimeUniverseManager, UniverseRefreshState)
+  ├─ product universe              runtime_universe.py    (ActiveProductUniverse, load_active_product_universe)
   │     ├─ active symbol sets (static equity config / crypto observation set)
-  │     ├─ crypto scanner refresh scheduling + backoff (300/900/1800/3600s)
   │     └─ validation (ensure_active_universes, validate_active_crypto_universe)
   ├─ portfolio runtimes (per-market)
   │     ├─ decision                portfolio/runtime_models.py       (PortfolioDecisionService, PortfolioContext)
@@ -16,7 +15,6 @@ EngineRuntime
   │     ├─ rebalance execution     portfolio/runtime_rebalance.py    (sell_pending → buy_ready → buy_pending → complete/blocked)
   │     ├─ ownership               portfolio/runtime_ownership.py    (net_owned_quantities pure helper)
   │     └─ repository              portfolio/runtime_repository.py   (PortfolioStateRepository, SQLite, WAL)
-  ├─ reconciliation & recovery     portfolio/runtime_recovery.py     (restart helpers, stuck-submission resolution)
   ├─ warmup / cache                data/cache.py                     (WarmupCache, crash-safe migration)
   └─ health + dashboard            web/server.py reads RuntimeHealth snapshots
 ```
@@ -27,13 +25,12 @@ EngineRuntime
 |--------|------|--------------|
 | `portfolio/runtime_models.py` | Immutable models, terminal order vocabulary (`_TERMINAL_ORDER_STATUSES`, `TERMINAL_ORDER_STATUSES_SQL`), rebalance phases, `PortfolioDecisionService`, `configuration_digest`, `_decision_id` | DB, broker, risk |
 | `portfolio/runtime_repository.py` | Persistence: migrations, sessions, decisions, orders, fills, ownership adjustments, rebalance execution, high-water, query helpers | Strategy, risk, broker |
-| `portfolio/runtime_rebalance.py` | Two-phase state machine: allowed transitions, `is_sell_phase_complete`, `requires_ambiguous_block` | DB SQL, broker |
+| `portfolio/runtime_rebalance.py` | Two-phase phase predicates: `is_sell_phase_complete`, `requires_ambiguous_block` (phase constants live in `runtime_models.py`) | DB SQL, broker |
 | `portfolio/runtime_ownership.py` | Pure net-ownership math (`net_owned_quantities`) | DB |
-| `portfolio/runtime_recovery.py` | Restart idempotency helpers | Strategy |
 | `portfolio/runtime_service.py` | Orchestration facade: `PortfolioRuntime` — builds context, applies risk, plans orders, drives two-phase submit, advances rebalance. Thin, delegates to models/repository/rebalance/ownership | Direct SQL, migration SQL |
 | `runtime_events.py` | `RuntimeEvent` / `EventQueue` with coalescing, replacement, overflow, ordering, thread Condition | Business logic |
 | `runtime_health.py` | `WorkerHealth`, `RuntimeHealth`, `_portfolio_catch_up_health` assembly | Threading, queue mechanics |
-| `runtime_universe.py` | `RuntimeUniverseManager`, `UniverseRefreshState`, backoff constants | Strategy, broker |
+| `runtime_universe.py` | Immutable `ActiveProductUniverse` membership snapshot and its fail-closed loader | Strategy, broker, refresh scheduling |
 | `runtime.py` | `EngineRuntime` facade: startup, strategy init, worker lifecycle, account polling, reconciliation scheduling, warmup retry, universe refresh scheduling, signal-adjustment verification, entry-risk latch, circuit breaking, shutdown | Direct queue/health/universe internals (delegates) |
 
 ## Dependency Direction
@@ -75,7 +72,7 @@ No circular imports. `repository` does not import `PortfolioRuntime`. `rebalance
   - sell completed → transitions to `buy_ready` → `_submit_deferred_buys` re-plans from fresh account
   - `buy_ready` persisted → next start calls `advance_rebalance` and submits buys exactly once
   - `buy_pending` → checks buys terminal → `complete`
-  - Stuck `submitting` rows: `_resolve_stuck_submission_rows` uses broker `resolve_portfolio_submission` to prove whether order reached Alpaca; unknown id is treated as never-filled (safe to cancel), unreachable broker leaves for retry — no guessing.
+  - Stuck `submitting` rows: `_resolve_stuck_submission_rows` uses broker `resolve_portfolio_submission` to prove whether order reached Alpaca; unknown id is treated as never-filled (safe to cancel), unreachable broker leaves for retry — no guessing. The same lookup runs in `buy_ready` before re-planning, and before each new decision for rows of earlier decisions still at `submitting` (e.g. a crash before the broker call). When a submit raises, the batch's later, never-sent rows are canceled at once. Reconciliation cancels a `submitting`/`reconciliation_required` row the broker does not know (404) once its last write is 10 min old.
 - **High-water / epoch**: persisted in `portfolio_high_water` with `epoch` column; restart restores max peak only from rows of current epoch.
 
 ## PAPER / LIVE Shared Path
@@ -93,6 +90,7 @@ No circular imports. `repository` does not import `PortfolioRuntime`. `rebalance
 | Fills | `portfolio_fills` | `activity_id` PK, FK `client_order_id`, includes `fill_delay_seconds` |
 | Rebalance | `portfolio_rebalance_executions` | `decision_id` PK, `phase` + `status` + `buy_orders_json` |
 | Ownership adjustments | `portfolio_ownership_adjustments` | `adjustment_id` PK |
+| Ledger identity | `portfolio_ledger_identity` | `singleton` PK (`client_order_salt`, created once) |
 | High-water | `portfolio_high_water` | `account_id` PK (`equity`, `epoch`, `updated_at`) |
 | Warmup bars | `data/cache/warmup.sqlite3` (`bars`, `scope_meta`) | PK `(feed, symbol, market, timeframe, adjustment, timestamp)` |
 | Execution ledger | `ExecutionLedger` (`orders`, `fills`, `managed_positions`, `risk_state`) | SQLite WAL, `busy_timeout=5000` |
@@ -128,7 +126,7 @@ Distinct, not collapsed.
 
 ## Signal Adjustment Verification
 
-- Hourly batched verification (`_SIGNAL_ADJUSTMENT_CHECK_SECONDS=3600`, lookback 14 days + 10 day margin) compares raw vs split-adjusted daily tails per symbol, verifies `adequate_coverage`, replaces `history` wholesale when provider rebased. Health field `signal_adjustment` reports coverage.
+- Hourly batched verification (`_SIGNAL_ADJUSTMENT_CHECK_SECONDS=3600`, a verification stays fresh for that interval + `_SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS=300`, lookback 14 days + 10 day margin) compares raw vs split-adjusted daily tails per symbol, verifies `adequate_coverage`, replaces `history` wholesale when provider rebased. Health field `signal_adjustment` reports coverage.
 
 ## Backtest artifacts
 

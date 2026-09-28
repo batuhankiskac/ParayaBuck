@@ -40,14 +40,17 @@ _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
 )
 _START_ENGINE_BLOCKING_STATES: frozenset[str] = _ACTIVE_ENGINE_STATES - {"starting"}
 
-_PLACEHOLDERS = {
-    "",
-    "your_secret_key_here",
-    "your-secret-key",
-    "replace_me",
-    "changeme",
-    "<secret>",
-}
+
+def _yaml_block(raw: dict[str, Any], name: str) -> dict[str, Any]:
+    """Return ``raw[name]``, creating it when absent or an empty YAML block.
+
+    ``load_config`` treats ``runtime:`` (a key with no value) like a missing
+    block; ``setdefault`` would return that ``None`` and crash the caller.
+    """
+    value = raw.get(name)
+    if value is None:
+        value = raw[name] = {}
+    return value
 
 
 @dataclass(frozen=True)
@@ -101,10 +104,6 @@ class EngineManager:
         self._live_armed = False
         self._pending_live_arm: LiveArmToken | None = None
         self._live_arm_token: LiveArmToken | None = None
-        self._ws_tickets: dict[str, tuple[str, float]] = {}
-        # issue_ws_ticket rebuilds the map while consume_ws_ticket pops from
-        # it; concurrent issuers must not drop each other's fresh tickets.
-        self._ws_tickets_lock = threading.Lock()
         # Composition-owned applications bind an app-local ticket store.  A
         # missing store keeps the legacy direct-call behavior below.
         self._ticket_store = ticket_store
@@ -148,8 +147,9 @@ class EngineManager:
                     return cached[1]
                 with open(self.config_path, encoding="utf-8") as f:
                     cfg = yaml.safe_load(f) or {}
-                runtime_mode = cfg.get("runtime", {}).get("mode")
-                if runtime_mode is None and cfg.get("alpaca", {}).get("paper") is False:
+                runtime = cfg.get("runtime") or {}
+                runtime_mode = runtime.get("mode")
+                if runtime_mode is None and (cfg.get("alpaca") or {}).get("paper") is False:
                     # A legacy live configuration must never be silently shown
                     # as paper while the operator migrates to runtime.mode.
                     paper = False
@@ -173,9 +173,9 @@ class EngineManager:
         """Auto-start configured paper engines without weakening live safeguards."""
         try:
             raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
-            app_config = (raw or {}).get("app", {})
-            runtime_config = (raw or {}).get("runtime", {})
-            legacy_live = "mode" not in runtime_config and (raw or {}).get("alpaca", {}).get("paper") is False
+            app_config = (raw or {}).get("app") or {}
+            runtime_config = (raw or {}).get("runtime") or {}
+            legacy_live = "mode" not in runtime_config and ((raw or {}).get("alpaca") or {}).get("paper") is False
             key, secret = self.get_credentials()
             return bool(
                 app_config.get("auto_start_engine", True)
@@ -281,7 +281,7 @@ class EngineManager:
             with open(self.config_path, encoding="utf-8") as f:
                 cfg_raw = yaml.safe_load(f) or {}
 
-        old_app = dict(cfg_raw.get("app", {}))
+        old_app = dict(cfg_raw.get("app") or {})
 
         # Obsolete engine/risk keys from older Web saves would make the next
         # load_config() reject the whole file. Strip them so saving settings
@@ -294,7 +294,7 @@ class EngineManager:
             "ai_log_path",
             "prediction_horizon_bars",
         }
-        engine_raw = dict(cfg_raw.get("engine", {}))
+        engine_raw = dict(cfg_raw.get("engine") or {})
         for key in obsolete_engine_keys:
             engine_raw.pop(key, None)
         if engine_raw:
@@ -314,12 +314,12 @@ class EngineManager:
             "minimum_volatility_scale",
             "maximum_volatility_scale",
         }
-        risk_raw = dict(cfg_raw.get("risk", {}))
+        risk_raw = dict(cfg_raw.get("risk") or {})
         for key in obsolete_risk_keys:
             risk_raw.pop(key, None)
         cfg_raw["risk"] = risk_raw
 
-        cfg_raw.setdefault("runtime", {})
+        _yaml_block(cfg_raw, "runtime")
         # Normalize the pre-v1 risk_monitor_timeframe rename on save so the
         # operator UI heals configs that still carry the old key.
         runtime_save = dict(cfg_raw["runtime"])
@@ -331,23 +331,23 @@ class EngineManager:
         if "execution_timeframe" in fields_set:
             runtime_save["execution_timeframe"] = payload.execution_timeframe
         cfg_raw["runtime"] = runtime_save
-        live = cfg_raw.setdefault("live", {})
+        live = _yaml_block(cfg_raw, "live")
         if "paper_mode" in fields_set or "live_trading_enabled" in fields_set:
             live["enabled"] = not target_paper
         if "live_dollar_cap" in fields_set:
             live["hard_dollar_cap"] = payload.live_dollar_cap
         if "live_operator_approval_path" in fields_set:
             live["operator_approval_path"] = payload.live_operator_approval_path
-        strategy = cfg_raw.setdefault("strategy", {})
+        strategy = _yaml_block(cfg_raw, "strategy")
         risk = cfg_raw["risk"]
         if "daily_loss_limit_pct" in fields_set:
             risk["daily_loss_limit_pct"] = payload.daily_loss_limit_pct / 100
         if "max_drawdown_pct" in fields_set:
             risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
         if "equity_trading_enabled" in fields_set:
-            strategy.setdefault("equity", {})["enabled"] = payload.equity_trading_enabled
+            _yaml_block(strategy, "equity")["enabled"] = payload.equity_trading_enabled
         if "crypto_trading_enabled" in fields_set:
-            strategy.setdefault("crypto", {})["enabled"] = payload.crypto_trading_enabled
+            _yaml_block(strategy, "crypto")["enabled"] = payload.crypto_trading_enabled
         # App PATCH semantics
         app_patch: dict[str, Any] = {}
         if "host" in fields_set:
@@ -450,7 +450,9 @@ class EngineManager:
             self.invalidate_live_arming()
             raise
         try:
-            warning = _tracked_secret_warning(Path.cwd())
+            # Never memoized: a secret committed after import must still block
+            # this start, so the gate rescans on every attempt.
+            warning = _scan_tracked_secrets(Path.cwd())
             if warning:
                 raise ValueError(warning)
             cfg = load_config(str(self.config_path))
@@ -585,8 +587,16 @@ class EngineManager:
                 self.engine_state = "stopped"
                 self.last_engine_error = None
                 self.runtime = None
+                broker = self.broker
                 self.broker = None
                 self.last_account = None
+        # runtime.stop() closed the runtime's own broker; a lazily created
+        # account broker must be closed here or its HTTP pool leaks.
+        if broker is not None and broker is not getattr(runtime, "broker", None):
+            try:
+                broker.close()
+            except Exception:
+                log.exception("Closing the account broker after engine stop failed")
         self.invalidate_live_arming()
         log.info("ParayaBuck engine stopped")
 
@@ -600,8 +610,12 @@ class EngineManager:
         """
         with self._account_lock:
             broker = self.broker
-            self.broker = None
-        if broker is not None and broker is not getattr(self.runtime, "broker", None):
+            # A running runtime keeps serving account polling with its own
+            # broker; dropping it would make the next poll open a second
+            # AlpacaBroker (and HTTP pool) on the same key.
+            runtime_broker = getattr(self.runtime, "broker", None)
+            self.broker = runtime_broker
+        if broker is not None and broker is not runtime_broker:
             broker.close()
 
     def _reset_retry_state(self) -> None:
@@ -1183,7 +1197,7 @@ class EngineManager:
     @staticmethod
     def _digest_config(raw: dict[str, Any], *, paper: bool) -> str:
         raw = json.loads(json.dumps(raw))
-        raw.setdefault("runtime", {})["mode"] = "paper" if paper else "live"
+        _yaml_block(raw, "runtime")["mode"] = "paper" if paper else "live"
         encoded = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 
@@ -1195,14 +1209,7 @@ class EngineManager:
             from parayabuck.web.managers.websocket import ticket_store as legacy_store
 
             store = legacy_store
-        ticket = str(store.issue(kind))
-        # Keep legacy _ws_tickets mirror for tests that inspect it directly
-        try:
-            with self._ws_tickets_lock:
-                self._ws_tickets = dict(store.tickets)
-        except Exception:
-            pass
-        return ticket
+        return str(store.issue(kind))
 
     def consume_ws_ticket(self, ticket: str, kind: str) -> bool:
         store: Any = self._ticket_store
@@ -1210,13 +1217,7 @@ class EngineManager:
             from parayabuck.web.managers.websocket import ticket_store as legacy_store
 
             store = legacy_store
-        result = bool(store.consume(ticket, kind))
-        try:
-            with self._ws_tickets_lock:
-                self._ws_tickets = dict(store.tickets)
-        except Exception:
-            pass
-        return result
+        return bool(store.consume(ticket, kind))
 
 
 _PLACEHOLDERS = {
@@ -1229,7 +1230,22 @@ _PLACEHOLDERS = {
 }
 
 
+_SECRET_WARNING_CACHE: dict[Path, str | None] = {}
+
+
 def _tracked_secret_warning(root: Path) -> str | None:
+    """Constructor-time warning, scanned once per resolved root.
+
+    Four EngineManagers are built at import; the engine-start gate calls
+    _scan_tracked_secrets directly so it never sees this memo.
+    """
+    resolved = root.resolve()
+    if resolved not in _SECRET_WARNING_CACHE:
+        _SECRET_WARNING_CACHE[resolved] = _scan_tracked_secrets(resolved)
+    return _SECRET_WARNING_CACHE[resolved]
+
+
+def _scan_tracked_secrets(root: Path) -> str | None:
     try:
         result = subprocess.run(
             ["git", "ls-files", "-z"],
@@ -1293,10 +1309,6 @@ def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> Non
         if name not in seen:
             lines.append(f"{name}={_quote_dotenv_value(value)}")
     atomic_write(path, "\n".join(lines).rstrip() + "\n", 0o600)
-
-
-def _engine_singleton() -> EngineManager:  # kept for type checkers, not instantiated at import
-    return EngineManager()
 
 
 # Singleton for legacy import path `from parayabuck.web.managers.engine import manager`

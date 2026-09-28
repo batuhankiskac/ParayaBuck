@@ -24,8 +24,8 @@ class SettingsPayload(BaseModel):
     api_key: str = Field("", description="Alpaca API Key")
     secret_key: str = Field("", description="Alpaca Secret Key")
     paper_mode: bool = Field(True, description="Paper mode toggle")
-    daily_loss_limit_pct: float = Field(1.5, gt=0, le=10)
-    max_drawdown_pct: float = Field(10.0, gt=0, le=30)
+    daily_loss_limit_pct: float = Field(1.5, gt=0, le=100)
+    max_drawdown_pct: float = Field(10.0, gt=0, le=100)
     execution_timeframe: Literal["5m"] = "5m"
     host: Literal["127.0.0.1", "localhost", "::1"] = "127.0.0.1"
     port: int = Field(8000, ge=1, le=65535)

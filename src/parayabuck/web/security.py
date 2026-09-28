@@ -24,21 +24,12 @@ _TRUSTED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 _CONTROL_TOKEN_HEADER = "x-parayabuck-control-token"
 
 
-def trusted_browser_origin(origin: str | None) -> bool:
-    """Browser Origin must be loopback/local. Empty Origin is treated as non-browser (e.g. curl) and rejected for mutating methods via middleware but allowed for GET."""
-    if not origin:
-        return False
-    parsed = urlparse(origin)
-    return parsed.hostname in {"127.0.0.1", "localhost", "::1"}
-
-
 def _trusted_browser_origin_for_middleware(origin: str | None) -> bool:
     """Exact server.py middleware semantics: empty Origin = non-browser client -> trusted.
 
-    The standalone `trusted_browser_origin` helper above is stricter (empty
-    -> False) for direct callers. The HTTP middleware must allow curl/API
-    clients without an Origin header to proceed to the control-token check,
-    matching the original server.py `_trusted_browser_origin`.
+    The HTTP middleware must allow curl/API clients without an Origin header
+    to proceed to the control-token check, matching the original server.py
+    `_trusted_browser_origin`. The WebSocket routes share this predicate.
     """
     if not origin:
         return True
@@ -55,20 +46,12 @@ def is_trusted_host(host_header: str) -> bool:
     return host in allowed
 
 
-def is_mutating_method(method: str) -> bool:
-    return method not in {"GET", "HEAD", "OPTIONS"}
-
-
 def validate_control_token(provided: str | None, expected: str | None) -> bool:
     if not isinstance(provided, str) or not provided:
         return False
     if not isinstance(expected, str) or not expected:
         return False
     return secrets.compare_digest(provided, expected)
-
-
-def validate_host_header(host_header: str) -> bool:
-    return is_trusted_host(host_header)
 
 
 def build_protect_middleware(
@@ -88,12 +71,7 @@ def build_protect_middleware(
     """
 
     async def protect_local_control_api(request: Request, call_next: Any) -> Any:
-        host_header = request.headers.get("host") or ""
-        host = urlparse(f"//{host_header}").hostname or ""
-        allowed = {"127.0.0.1", "localhost", "::1"}
-        if os.getenv("PYTEST_CURRENT_TEST"):
-            allowed = allowed | {"testserver"}
-        if host not in allowed:
+        if not is_trusted_host(request.headers.get("host") or ""):
             return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
         if request.method not in {"GET", "HEAD", "OPTIONS"} and not _trusted_browser_origin_for_middleware(
             request.headers.get("origin")

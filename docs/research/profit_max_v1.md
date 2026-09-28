@@ -38,18 +38,38 @@ tag `archive/research/profit-max-v1-2026-09`.
 |---|---:|---:|---:|---:|---:|---:|---:|
 | H_VOO (VOO hold) | 14.54% | 0.885 | 32.0% | −19.4% | 17.16% | 11.77% | 367k |
 | Q2 (QLD trend) | 30.84% | 1.014 | 39.1% | −27.6% | 40.82% | 20.80% | 1.31M |
-| **VT35 (QLD trend, vol target 35%)** | **29.34%** | **1.078** | **29.2%** | **−22.0%** | **36.79%** | **21.72%** | **1.17M** |
+| **VT35 (QLD trend, vol target 35%)** | **28.98%** | **1.068** | **29.2%** | **−22.0%** | **36.79%** | **21.72%** | **1.14M** |
 | Q2BH (QLD hold, control) | 31.92% | 0.870 | 62.3% | −58.8% | 49.39% | 15.22% | 1.42M |
 | Q3 (TQQQ trend, report only) | 42.23% | 0.992 | 53.8% | −38.1% | 59.07% | 25.94% | 2.91M |
 | V3 at 0.93 | 8.34% | 0.596 | 26.8% | −20.4% | 12.93% | 3.55% | 215k |
 
-- **VT35 at 2x / 3x costs:** 28.95% / 28.66% CAGR, against VOO's 14.44% /
-  14.35%.
+- **VT35 at 2x / 3x costs:** 28.70% / 28.38% CAGR (29.5% / 29.9% max DD),
+  against VOO's 14.44% / 14.35%.
+- **VT35 excess over H_VOO:** +14.44 pp CAGR at 1x costs. For reference, pure
+  100% VOO total return with no costs made 15.12% CAGR with a 34.0% max DD.
 - **Gates:** VT35 passes every gate, including a max drawdown at or below VOO's.
   Q2 passes every return gate but not the drawdown rule added for the
   sweet-spot search.
 - **3x excluded:** 3x arms were excluded before the runs. At Nasdaq-100
   volatility the growth-optimal leverage is about 2x.
+
+**2026-09-28 re-run on main after the dividend split-basis fix.** The Stage B
+replay credited QLD dividends on split-adjusted bars with raw per-share rates,
+over-crediting pre-2025 dividends by up to 16x. Re-running the same replay
+(2017-01-03 → 2026-07-30, $100k, 1x costs) on corrected main changed VT35 as
+follows (old → new):
+
+- CAGR 29.34% → 28.98%; total return 1072.6% → 1041.5% (ending NAV 1.17M →
+  1.14M)
+- Sharpe 1.078 → 1.068; Calmar 1.006 → 0.994; max DD 29.16% (unchanged)
+- Dividend income $10,903 → $4,767
+- 2x / 3x costs CAGR 28.95% / 28.66% → 28.70% / 28.38%
+- Excess CAGR over H_VOO +14.80 pp → +14.44 pp
+
+H_VOO is unchanged (14.54% CAGR, 31.98% DD, Sharpe 0.885). The table above
+shows the corrected VT35 CAGR, Sharpe and ending NAV. Its 2022 and sub-period
+columns are from the original run and were not re-reported. The other arms
+were not re-run.
 
 ## Method
 

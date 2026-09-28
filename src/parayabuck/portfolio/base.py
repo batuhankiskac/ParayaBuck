@@ -3,14 +3,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.models import TargetPortfolio
-
-if TYPE_CHECKING:
-    pass
 
 
 @dataclass(frozen=True)
@@ -228,15 +224,21 @@ class PortfolioStrategy(ABC):
 
     def param_int(self, name: str, default: int) -> int:
         value = self.parameters.get(name, default)
-        if not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{name} must be numeric")
         return int(value)
 
     def param_float(self, name: str, default: float) -> float:
         value = self.parameters.get(name, default)
-        if not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{name} must be numeric")
         return float(value)
 
 
-__all__ = ["PortfolioContext", "PortfolioStrategy", "StrategySpec", "require_product_universe"]
+__all__ = [
+    "PortfolioContext",
+    "PortfolioStrategy",
+    "StrategySpec",
+    "require_product_universe",
+    "require_product_universe_dependency",
+]

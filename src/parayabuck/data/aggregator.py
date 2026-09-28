@@ -4,7 +4,10 @@ from datetime import datetime, timedelta
 from itertools import pairwise
 
 from parayabuck.core.models import Bar, Market
+from parayabuck.logger import get_logger
 from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES
+
+log = get_logger("parayabuck.data.aggregator")
 
 
 class TimeframeAggregator:
@@ -21,11 +24,20 @@ class TimeframeAggregator:
         self._current: dict[str, Bar] = {}
         self._components: dict[str, dict[datetime, Bar]] = {}
         self._last_components: dict[str, dict[datetime, Bar]] = {}
+        # Latest bucket already emitted as final, per symbol.
+        self._closed_through: dict[str, datetime] = {}
 
     def update(self, bar: Bar) -> Bar | None:
         if self.minutes == 1:
             return Bar(**{**bar.__dict__, "timeframe": self.timeframe})
         bucket_time = self._bucket(bar.timestamp, bar.market)
+        closed_through = self._closed_through.get(bar.symbol)
+        if closed_through is not None and bucket_time <= closed_through:
+            # A late minute of a bucket that a flush already emitted must not
+            # reopen it: the one-minute stub would later be emitted as a
+            # second "final" candle for the same timestamp.
+            self._log_dropped_late_minute(bar, bucket_time)
+            return None
         current = self._current.get(bar.symbol)
         if current is None:
             self._current[bar.symbol] = self._new_bucket(bar, bucket_time)
@@ -35,10 +47,29 @@ class TimeframeAggregator:
             self._components[bar.symbol][bar.timestamp] = bar
             self._current[bar.symbol] = self._aggregate(self._components[bar.symbol], bucket_time)
             return None
+        if bucket_time < current.timestamp:
+            # A late minute for an already-closed bucket must not close the
+            # forming bucket early (a partial candle would be emitted as
+            # final) nor reopen the old bucket; corrections go through
+            # ``update_correction``.
+            self._log_dropped_late_minute(bar, bucket_time)
+            return None
         self._last_components[bar.symbol] = self._components.get(bar.symbol, {})
+        self._closed_through[bar.symbol] = current.timestamp
         self._current[bar.symbol] = self._new_bucket(bar, bucket_time)
         self._components[bar.symbol] = {bar.timestamp: bar}
         return current
+
+    def _log_dropped_late_minute(self, bar: Bar, bucket_time: datetime) -> None:
+        # The closed candle permanently lacks this minute; surface it so a
+        # finalization grace shorter than the feed latency is visible.
+        log.warning(
+            "Late stream minute dropped: symbol=%s timeframe=%s minute=%s bucket=%s",
+            bar.symbol,
+            self.timeframe,
+            bar.timestamp.isoformat(),
+            bucket_time.isoformat(),
+        )
 
     def update_correction(self, bar: Bar) -> Bar | None:
         if self.minutes == 1:
@@ -76,6 +107,7 @@ class TimeframeAggregator:
         for symbol, bar in list(self._current.items()):
             if bar.timestamp + duration + self.finalization_grace <= now:
                 flushed.append(self._current.pop(symbol))
+                self._closed_through[symbol] = bar.timestamp
                 self._last_components[symbol] = self._components.pop(symbol, {})
         return sorted(flushed, key=lambda bar: (bar.timestamp, bar.symbol))
 
@@ -85,6 +117,7 @@ class TimeframeAggregator:
         for symbol, bar in list(self._current.items()):
             if bar.market == Market.EQUITY and bar.timestamp.astimezone(NEW_YORK).date() == close_date:
                 flushed.append(self._current.pop(symbol))
+                self._closed_through[symbol] = bar.timestamp
                 self._last_components[symbol] = self._components.pop(symbol, {})
         return sorted(flushed, key=lambda bar: (bar.timestamp, bar.symbol))
 
@@ -149,8 +182,8 @@ def aggregate_historical_bars(
     expected = target_minutes // source_minutes
     result: list[Bar] = []
     source_delta = timedelta(minutes=source_minutes)
-    for (_symbol, bucket), components in sorted(buckets.items(), key=lambda item: (item[0][1], item[0][0])):
-        ordered = sorted(components, key=lambda item: item.timestamp)
+    # Each bucket list holds one symbol appended in timestamp order already.
+    for (_symbol, bucket), ordered in sorted(buckets.items(), key=lambda item: (item[0][1], item[0][0])):
         contiguous = all(
             current.timestamp - previous.timestamp == source_delta for previous, current in pairwise(ordered)
         )

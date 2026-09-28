@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from parayabuck import Config, EngineConfig, RiskLimits, load_config
-from parayabuck.config import RuntimeMode
+from parayabuck.config import AppConfig, DataConfig, RuntimeMode
 
 
 def _settings() -> dict[str, object]:
@@ -102,6 +102,16 @@ def test_non_finite_config_values_are_rejected() -> None:
         RiskLimits(max_position_pct=math.nan)
     with pytest.raises(ValueError, match="timing"):
         EngineConfig(event_grace_seconds=math.nan)
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf])
+def test_non_finite_active_universe_max_age_is_rejected(value: float) -> None:
+    # A NaN limit never compares greater than an age, so a stale persisted
+    # crypto universe would validate forever.
+    from parayabuck.config import CryptoUniverseConfig
+
+    with pytest.raises(ValueError, match="active_universe_max_age_hours"):
+        CryptoUniverseConfig(active_universe_max_age_hours=value)
 
 
 def test_obsolete_timeframe_and_placebo_risk_fields_get_migration_error(tmp_path: Path) -> None:
@@ -209,4 +219,57 @@ def test_unsupported_strategy_timeframe_is_rejected_at_load(tmp_path: Path) -> N
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
     with pytest.raises(ValueError, match="cannot run on timeframe 4h"):
+        load_config(str(path))
+
+
+def test_present_but_empty_app_and_data_blocks_load_with_defaults(tmp_path: Path) -> None:
+    """``app:`` / ``data:`` with no value parse to None; loading must fall back
+    to the defaults instead of raising a bare TypeError."""
+    raw = _settings()
+    raw["app"] = None
+    raw["data"] = None
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    config = load_config(str(path))
+
+    assert config.app == AppConfig()
+    assert config.data == DataConfig()
+
+
+@pytest.mark.parametrize(
+    "block",
+    ["runtime", "engine", "risk", "alpaca", "backtest", "live", "execution", "backup", "alerting", "observability"],
+)
+def test_present_but_empty_top_level_block_loads_with_defaults(tmp_path: Path, block: str) -> None:
+    raw = _settings()
+    raw[block] = None
+    empty_path = tmp_path / "empty.yaml"
+    empty_path.write_text(yaml.safe_dump(raw))
+    del raw[block]
+    absent_path = tmp_path / "absent.yaml"
+    absent_path.write_text(yaml.safe_dump(raw))
+
+    assert load_config(str(empty_path)) == load_config(str(absent_path))
+
+
+def test_present_but_empty_universe_sub_blocks_load_with_defaults(tmp_path: Path) -> None:
+    raw = _settings()
+    del raw["symbols"]
+    raw["universe"] = {"equity": None, "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"], "scanner": None}}
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    config = load_config(str(path))
+
+    assert config.universe.crypto.trade_symbols == ("BTC/USD",)
+
+
+def test_present_but_empty_enabled_strategy_block_fails_closed_with_message(tmp_path: Path) -> None:
+    raw = _settings()
+    raw["strategy"] = {"equity": None, "crypto": {"enabled": True, "name": "crypto_low_variance_v2"}}
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match="strategy.equity block with name is required"):
         load_config(str(path))

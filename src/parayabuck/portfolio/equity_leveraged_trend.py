@@ -75,7 +75,7 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
 
     @property
     def sma_bars(self) -> int:
-        return int(self.parameters["sma_bars"])  # type: ignore[call-overload]
+        return int(self.parameters["sma_bars"])  # type: ignore[call-overload, no-any-return]
 
     @property
     def vol_target(self) -> float:
@@ -83,7 +83,7 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
 
     @property
     def vol_window(self) -> int:
-        return int(self.parameters["vol_window"])  # type: ignore[call-overload]
+        return int(self.parameters["vol_window"])  # type: ignore[call-overload, no-any-return]
 
     @property
     def minimum_history_bars(self) -> int:
@@ -94,7 +94,13 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         closes = context.closes(self.hold_symbol)[-(self.vol_window + 1) :]
         if len(closes) < self.vol_window + 1:
             return None
-        returns = [closes[index] / closes[index - 1] - 1.0 for index in range(1, len(closes))]
+        # A degenerate bar with a non-positive close has no defined return;
+        # skip it (as the crypto twin does) instead of raising out of decide().
+        returns = [
+            closes[index] / closes[index - 1] - 1.0 for index in range(1, len(closes)) if closes[index - 1] > 0
+        ]
+        if len(returns) < 2:
+            return None
         mean = sum(returns) / len(returns)
         variance = sum((value - mean) ** 2 for value in returns) / (len(returns) - 1)
         return math.sqrt(variance * 252.0)

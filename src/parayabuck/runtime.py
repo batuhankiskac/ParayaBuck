@@ -5,6 +5,7 @@ import contextlib
 import hashlib
 import os
 import queue
+import sqlite3
 import threading
 import time
 from _thread import LockType
@@ -44,6 +45,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
     NEW_YORK,
+    bars_to_calendar_days,
     is_regular_equity_time,
 )
 from parayabuck.monitoring import alerts
@@ -142,13 +144,43 @@ def _is_transient_network_error(exc: BaseException) -> bool:
     return False
 
 
+_DATABASE_ERROR_TOKENS = ("database", "locked", "integrity", "sqlite")
+
+
+def _is_database_error(exc: BaseException) -> bool:
+    """True when ``exc`` is a local database failure rather than a provider one.
+
+    ``sqlite3.Error`` recognises the driver's own classes (``OperationalError``,
+    ``IntegrityError``) no matter how the message reads. Providers wrap and
+    re-word driver failures, so a message scan stays as the fallback. Both
+    fail-closed call sites must agree on this predicate: disagreeing token
+    sets route the same failure into different incident categories and
+    therefore different recovery paths.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, sqlite3.Error):
+            return True
+        current = current.__cause__ or current.__context__
+    message = str(exc).lower()
+    return any(token in message for token in _DATABASE_ERROR_TOKENS)
+
+
 _WARMUP_SYMBOL_BATCH_SIZE = 8
 _WARMUP_RETRY_SECONDS = 600.0
+# Consecutive warmup retries before the delay reaches its ceiling
+# (600s * 2**6 ~= 10.7h: roughly a daily cadence for a symbol whose last bar
+# permanently lags its benchmark's).
+_WARMUP_RETRY_MAX_EXPONENT = 6
 # How often the split-adjustment reconciler compares raw vs split-adjusted
 # daily tails (hourly; a split is applied at most one check after it trades).
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
-# Calendar days of raw/splits daily tails fetched per batched verification.
-_SIGNAL_ADJUSTMENT_LOOKBACK_DAYS = 14
+# A verification counts as fresh for one check interval plus this slack:
+# the monitor waits a full interval AFTER each pass, so the next success
+# always lands a little past the previous one + 3600 s.
+_SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS = 300.0
 # Safety margin added ON TOP of the strategy history window so the batched
 # splits fetch always spans the full required signal window (never a short
 # tail standing in for a long history).
@@ -156,6 +188,25 @@ _SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS = 10
 # Per-market scanner-refresh backoff (seconds) after a failed scheduled
 # refresh: ~5 min, then ~15, ~30, capped at ~60 min per consecutive failure.
 _UNIVERSE_RETRY_BACKOFF_SECONDS = (300.0, 900.0, 1800.0, 3600.0)
+# Stream worker name <-> market. Single source of truth so health
+# reporting, halt tracking and worker restart handling cannot disagree.
+_STREAM_WORKER_BY_MARKET = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}
+_MARKET_BY_STREAM_WORKER = {worker: market for market, worker in _STREAM_WORKER_BY_MARKET.items()}
+
+
+def _reservation_sort_key(key: tuple[Any, str]) -> tuple[str, str]:
+    """Deterministic (market, symbol) order for reserved position keys."""
+    return (key[0].value if hasattr(key[0], "value") else str(key[0]), key[1])
+
+
+# Runtime states that block entries outright; a transient stream-worker
+# blip must never overwrite one of them with "degraded".
+_ENTRY_BLOCKING_STATES = frozenset({"halted", "error", "stop_failed", "stopping", "stopped"})
+# A shared stream worker (pb-trade-updates) that ran this long before failing
+# was healthy: its failure starts a fresh restart budget and backoff, so
+# sparse blips over weeks cannot add up to the restart-limit halt. A crash
+# loop never runs this long and still hits the limit.
+_SHARED_WORKER_HEALTHY_RESET_SECONDS = 600.0
 _RECONCILIATION_INCIDENT_REASONS = frozenset({"reconciliation_failed", "reconciliation_bug_suspected"})
 
 
@@ -360,6 +411,12 @@ class EngineRuntime:
         self._risk_state_lock = threading.Lock()
         self._warmup_retry_thread: threading.Thread | None = None
         self._last_warmup_retry_at = time.monotonic()
+        # Warmup-retry backoff: consecutive-attempt count plus the pending
+        # symbol set it was raised for. A symbol whose bar lags its
+        # benchmark's permanently must not drive a provider round-trip every
+        # 10 minutes for the life of the process.
+        self._warmup_retry_attempt = 0
+        self._warmup_retry_symbols: frozenset[str] = frozenset()
         self._stop_event = threading.Event()
         self._running = False
         self._ingestion_lock = threading.Lock()
@@ -389,21 +446,10 @@ class EngineRuntime:
         self._snapshot_writer = None
         try:
             if SnapshotWriter is not None:
-                # Use config observability if available else defaults
-                snap_path = getattr(getattr(self, "app_config", None), "observability", None)
-                if snap_path is not None:
-                    snap_path = getattr(snap_path, "snapshot_path", None) or "data/runtime/health_snapshot.json"
-                    interval = getattr(
-                        getattr(getattr(self, "app_config", None), "observability", None),
-                        "snapshot_interval_seconds",
-                        30.0,
-                    )
-                else:
-                    snap_path = "data/runtime/health_snapshot.json"
-                    interval = 30.0
+                observability = self.app_config.observability
                 self._snapshot_writer = SnapshotWriter(
-                    path=snap_path,
-                    interval_seconds=interval,
+                    path=observability.snapshot_path,
+                    interval_seconds=observability.snapshot_interval_seconds,
                     provider=lambda: self.health() if hasattr(self, "health") else None,
                 )
         except Exception:
@@ -448,6 +494,10 @@ class EngineRuntime:
         self._live_startup_proof = live_startup_proof
         self._startup_committed = False
         self._snapshot_writer_started = False
+        # Set once start() launches the stream worker threads. A start that
+        # aborts earlier (e.g. startup reconciliation drift) never ran the
+        # SDK sockets, whose stop() is not safe before run().
+        self._stream_workers_launched = False
 
     @staticmethod
     def _validate_execution_mode(config: Config) -> None:
@@ -552,10 +602,6 @@ class EngineRuntime:
             raise RuntimeError("Live startup proof does not match the verified broker account")
         return approval
 
-    @property
-    def is_running(self) -> bool:
-        return self.health().healthy
-
     def _market_operationally_relevant(
         self, market: Market, *, strategy_enabled: dict[Market, bool] | None = None
     ) -> bool:
@@ -629,110 +675,122 @@ class EngineRuntime:
             queue_age=queue_age,
             workers=workers,
             market_health=market_health,
-            scanner_status=scanner_status,
         )
 
     def capacity_health(self) -> dict[str, object]:
         """Fresh read-only account capacity for the operator dashboard."""
+        # The broker/ledger reads are side-effect-free and run OUTSIDE the
+        # portfolio lock: holding it across three REST round-trips would
+        # stall order submission and rebalance advancement behind Alpaca
+        # latency on every dashboard poll. _portfolio_runtimes is an
+        # immutable tuple assigned once at start.
+        runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
+        if not runtimes:
+            return {"unavailable": True, "reason": "portfolio runtime not started"}
+        admission = runtimes[0].current_buy_capacity()
+        account = admission.account
+        broker_orders = self.broker.working_orders()
+        local_orders = self._portfolio_repository.open_orders(self.broker.account_id or "unknown")
+        # risk_overlay is swapped under this lock by _apply_runtime_universes.
         with self._portfolio_lock:
-            runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
-            if not runtimes:
-                return {"unavailable": True, "reason": "portfolio runtime not started"}
-            admission = runtimes[0].current_buy_capacity()
-            account = admission.account
-            broker_orders = self.broker.working_orders()
-            claims: dict[tuple[Market, str], set[str]] = {}
-            for position in account.positions:
-                if not position.is_flat:
-                    claims.setdefault((position.market, canonical_symbol(position.symbol, position.market)), set()).add(
-                        "POSITION"
-                    )
-            local_orders = self._portfolio_repository.open_orders(self.broker.account_id or "unknown")
-            for order in local_orders:
-                key = (order.market, canonical_symbol(order.symbol, order.market))
-                claims.setdefault(key, set()).add("RESERVED")
-                if str(getattr(order.side, "value", order.side)).lower() == "buy":
-                    claims[key].add("WORKING_OPENING")
-            for order in broker_orders:
-                symbol = str(self.broker._field(order, "symbol", "") or "")
-                if not symbol:
-                    raise ValueError("Broker OPEN order missing symbol")
-                market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
-                key = (market, canonical_symbol(symbol, market))
-                raw_side = self.broker._field(order, "side", "")
-                side = str(getattr(raw_side, "value", raw_side)).lower()
-                if side == "buy":
-                    claims.setdefault(key, set()).add("WORKING_OPENING")
-                elif side == "sell":
-                    claims.setdefault(key, set()).add("WORKING_ORDER")
-                else:
-                    # Unknown OPEN side retains conservative capacity behavior.
-                    claims.setdefault(key, set()).add("WORKING_UNKNOWN")
-            global_cap = runtimes[0].risk_overlay.limits.maximum_positions
-            crypto_cap = runtimes[0].risk_overlay.limits.maximum_crypto_positions
-            effective_global = len(claims)
-            effective_crypto = sum(market == Market.CRYPTO for market, _ in claims)
-            crypto_positions = sum(
-                position.market == Market.CRYPTO and not position.is_flat for position in account.positions
-            )
-            opening_keys = {
-                key for key, sources in claims.items() if "WORKING_OPENING" in sources and "POSITION" not in sources
-            }
-            return {
-                "sampled_at": datetime.now(UTC).isoformat(),
-                "maximum_positions": global_cap,
-                "positions_count": sum(not position.is_flat for position in account.positions),
-                "effective_slots": effective_global,
-                "broker_working_order_count": len(broker_orders),
-                "position_count": sum(not position.is_flat for position in account.positions),
-                "effective_global_slot_claims": effective_global,
-                "global_slot_cap": global_cap,
-                "global_slots_available": max(0, global_cap - effective_global),
-                "crypto_position_count": crypto_positions,
-                "effective_crypto_slot_claims": effective_crypto,
-                "crypto_slot_cap": crypto_cap,
-                "crypto_slots_available": max(0, crypto_cap - effective_crypto),
-                "working_opening_order_count": len(opening_keys),
-                "slot_claims": [
-                    {"market": market.value, "symbol": symbol, "sources": sorted(sources)}
-                    for (market, symbol), sources in sorted(
-                        claims.items(), key=lambda item: (item[0][0].value, item[0][1])
-                    )
-                ],
-                "target_gross_pct": runtimes[0].risk_overlay.limits.maximum_gross * 100,
-                "realized_gross_pct": admission.realized_gross / account.equity * 100,
-                "available_gross_buy_headroom": admission.gross_headroom,
-                "committed_buy_notional": admission.committed_buy_notional,
-                "cash_ratio_pct": account.cash / account.equity * 100,
-                "available_cash_buy_headroom": admission.cash_headroom,
-                "equity_sleeve_pct": sum(
-                    position.market_value for position in account.positions if position.market == Market.EQUITY
+            limits = runtimes[0].risk_overlay.limits
+        claims: dict[tuple[Market, str], set[str]] = {}
+        for position in account.positions:
+            if not position.is_flat:
+                claims.setdefault((position.market, canonical_symbol(position.symbol, position.market)), set()).add(
+                    "POSITION"
                 )
-                / account.equity
-                * 100,
-                "crypto_sleeve_pct": sum(
-                    position.market_value for position in account.positions if position.market == Market.CRYPTO
-                )
-                / account.equity
-                * 100,
-                "suppression_reasons": {
-                    runtime.market.value: runtime.last_buy_admission.reason
-                    for runtime in runtimes
-                    if runtime.last_buy_admission is not None and runtime.last_buy_admission.reason
-                },
-                "halt_reasons": {
-                    market.value: reason
-                    for market, reason in getattr(self, "_market_entry_halts", {}).items()
-                    if reason
-                },
-                "reconciliation_status": (
-                    "failed"
-                    if getattr(self, "_reconcile_failed", False)
-                    else "complete"
-                    if getattr(self, "_last_reconciliation_at", None) is not None
-                    else "pending"
-                ),
-            }
+        for order in local_orders:
+            key = (order.market, canonical_symbol(order.symbol, order.market))
+            claims.setdefault(key, set()).add("RESERVED")
+            if str(getattr(order.side, "value", order.side)).lower() == "buy":
+                claims[key].add("WORKING_OPENING")
+        for order in broker_orders:
+            symbol = str(self.broker._field(order, "symbol", "") or "")
+            if not symbol:
+                raise ValueError("Broker OPEN order missing symbol")
+            market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+            key = (market, canonical_symbol(symbol, market))
+            raw_side = self.broker._field(order, "side", "")
+            side = str(getattr(raw_side, "value", raw_side)).lower()
+            if side == "buy":
+                claims.setdefault(key, set()).add("WORKING_OPENING")
+            elif side == "sell":
+                claims.setdefault(key, set()).add("WORKING_ORDER")
+            else:
+                # Unknown OPEN side retains conservative capacity behavior.
+                claims.setdefault(key, set()).add("WORKING_UNKNOWN")
+        global_cap = limits.maximum_positions
+        crypto_cap = limits.maximum_crypto_positions
+        effective_global = len(claims)
+        effective_crypto = sum(market == Market.CRYPTO for market, _ in claims)
+        crypto_positions = sum(
+            position.market == Market.CRYPTO and not position.is_flat for position in account.positions
+        )
+        open_positions = sum(not position.is_flat for position in account.positions)
+        opening_keys = {
+            key for key, sources in claims.items() if "WORKING_OPENING" in sources and "POSITION" not in sources
+        }
+        # A fully liquidated account reports equity 0.0; the sleeve
+        # percentages are undefined, not infinite, so publish None
+        # instead of losing the whole capacity sample to a ZeroDivisionError.
+        equity = account.equity
+        has_equity = equity > 0
+        return {
+            "sampled_at": datetime.now(UTC).isoformat(),
+            "maximum_positions": global_cap,
+            "positions_count": open_positions,
+            "effective_slots": effective_global,
+            "broker_working_order_count": len(broker_orders),
+            "position_count": open_positions,
+            "effective_global_slot_claims": effective_global,
+            "global_slot_cap": global_cap,
+            "global_slots_available": max(0, global_cap - effective_global),
+            "crypto_position_count": crypto_positions,
+            "effective_crypto_slot_claims": effective_crypto,
+            "crypto_slot_cap": crypto_cap,
+            "crypto_slots_available": max(0, crypto_cap - effective_crypto),
+            "working_opening_order_count": len(opening_keys),
+            "slot_claims": [
+                {"market": market.value, "symbol": symbol, "sources": sorted(sources)}
+                for (market, symbol), sources in sorted(claims.items(), key=lambda item: (item[0][0].value, item[0][1]))
+            ],
+            "target_gross_pct": limits.maximum_gross * 100,
+            "realized_gross_pct": admission.realized_gross / equity * 100 if has_equity else None,
+            "available_gross_buy_headroom": admission.gross_headroom,
+            "committed_buy_notional": admission.committed_buy_notional,
+            "cash_ratio_pct": account.cash / equity * 100 if has_equity else None,
+            "available_cash_buy_headroom": admission.cash_headroom,
+            "equity_sleeve_pct": (
+                sum(position.market_value for position in account.positions if position.market == Market.EQUITY)
+                / equity
+                * 100
+                if has_equity
+                else None
+            ),
+            "crypto_sleeve_pct": (
+                sum(position.market_value for position in account.positions if position.market == Market.CRYPTO)
+                / equity
+                * 100
+                if has_equity
+                else None
+            ),
+            "suppression_reasons": {
+                runtime.market.value: runtime.last_buy_admission.reason
+                for runtime in runtimes
+                if runtime.last_buy_admission is not None and runtime.last_buy_admission.reason
+            },
+            "halt_reasons": {
+                market.value: reason for market, reason in getattr(self, "_market_entry_halts", {}).items() if reason
+            },
+            "reconciliation_status": (
+                "failed"
+                if getattr(self, "_reconcile_failed", False)
+                else "complete"
+                if getattr(self, "_last_reconciliation_at", None) is not None
+                else "pending"
+            ),
+        }
 
     def _snapshot_health_state(
         self,
@@ -796,14 +854,8 @@ class EngineRuntime:
             # The monitor heartbeats once per check interval, not per poll.
             ttl = _SIGNAL_ADJUSTMENT_CHECK_SECONDS + max(300.0, heartbeat_ttl)
             return (now - worker.last_heartbeat).total_seconds() <= ttl
-        if name in {"pb-stocks", "pb-crypto"}:
-            market = Market.EQUITY if name == "pb-stocks" else Market.CRYPTO
-            event_required = market == Market.CRYPTO or is_regular_equity_time(now)
-            if not event_required:
-                return True
-            return bool(
-                worker.last_event_at and (now - worker.last_event_at).total_seconds() <= max(180.0, heartbeat_ttl)
-            )
+        if name in _MARKET_BY_STREAM_WORKER:
+            return self._stream_worker_delivering(_MARKET_BY_STREAM_WORKER[name], worker, now, heartbeat_ttl)
         return (now - worker.last_heartbeat).total_seconds() <= heartbeat_ttl
 
     def _build_market_health(
@@ -817,10 +869,7 @@ class EngineRuntime:
     ) -> dict[str, dict[str, object]]:
         portfolio_runtime_by_market = {runtime.market: runtime for runtime in getattr(self, "_portfolio_runtimes", ())}
         market_health: dict[str, dict[str, object]] = {}
-        for market, worker_name in (
-            (Market.EQUITY, "pb-stocks"),
-            (Market.CRYPTO, "pb-crypto"),
-        ):
+        for market, worker_name in _STREAM_WORKER_BY_MARKET.items():
             enabled = market_enabled.get(market, False)
             symbols = symbols_by_market.get(market, set())
             worker = workers.get(worker_name)
@@ -828,21 +877,8 @@ class EngineRuntime:
             market_not_ready = symbols & not_ready_symbols
             ready_symbol_count = len(symbols) - len(market_not_ready)
             ready = not enabled or not symbols or ready_symbol_count > 0
-            event_required = market == Market.CRYPTO or is_regular_equity_time(now)
             stream_healthy = (
-                not enabled
-                or not symbols
-                or bool(
-                    worker
-                    and worker.alive
-                    and (
-                        not event_required
-                        or (
-                            worker.last_event_at is not None
-                            and (now - worker.last_event_at).total_seconds() <= max(180.0, heartbeat_ttl)
-                        )
-                    )
-                )
+                not enabled or not symbols or self._stream_worker_delivering(market, worker, now, heartbeat_ttl)
             )
             market_health[market.value] = {
                 "enabled": enabled,
@@ -870,11 +906,15 @@ class EngineRuntime:
         queue_age: float,
         workers: dict[str, WorkerHealth],
         market_health: dict[str, dict[str, object]],
-        scanner_status: dict[str, str],
     ) -> RuntimeHealth:
         last_reconciliation = getattr(self, "_last_reconciliation_at", None)
         last_universe_refresh = getattr(self, "_last_universe_refresh_at", None)
         next_universe_refresh = getattr(self, "_next_universe_refresh_at", None)
+        # The universe-refresh thread resizes these dicts without a lock and
+        # health() runs off that thread: iterate one-call C copies, not the
+        # live dicts, so a concurrent insert/pop cannot raise mid-iteration.
+        retry_at = dict(getattr(self, "_universe_retry_at", {}))
+        retry_attempt = dict(getattr(self, "_universe_retry_attempt", {}))
         return RuntimeHealth(
             state=state,
             healthy=healthy,
@@ -907,11 +947,9 @@ class EngineRuntime:
                     market.value: (
                         datetime.now(UTC) + timedelta(seconds=max(0.0, deadline - time.monotonic()))
                     ).isoformat()
-                    for market, deadline in getattr(self, "_universe_retry_at", {}).items()
+                    for market, deadline in retry_at.items()
                 },
-                "retry_attempt": {
-                    market.value: attempt for market, attempt in getattr(self, "_universe_retry_attempt", {}).items()
-                },
+                "retry_attempt": {market.value: attempt for market, attempt in retry_attempt.items()},
             },
             entry_risk_latch={
                 market.value: reason for market, reason in getattr(self, "_entry_risk_latch", {}).items()
@@ -991,9 +1029,10 @@ class EngineRuntime:
         try:
             reconciliation = ReconciliationReport.from_result(self.broker.reconcile())
             if reconciliation.has_drift:
-                self._circuit_breaker_reason = "reconciliation_failed"
                 self._reconcile_failed = True
-                self._state = "halted"
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._circuit_breaker_reason = "reconciliation_failed"
+                    self._state = "halted"
                 raise ReconciliationResultError(
                     f"Startup reconciliation found drift: {reconciliation.drift_categories}"
                 )
@@ -1022,7 +1061,8 @@ class EngineRuntime:
                 else "reconciliation_failed"
             )
             self._persist_reconciliation_incident(self._circuit_breaker_reason)
-            self._state = "halted"
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._state = "halted"
             alerts.emit(
                 "reconciliation_failure",
                 message="Startup reconciliation failed; runtime not started",
@@ -1156,6 +1196,7 @@ class EngineRuntime:
             for thread in self._threads:
                 now = datetime.now(UTC)
                 self._workers[thread.name] = WorkerHealth(now, now)
+        self._stream_workers_launched = True
         for thread in self._threads:
             thread.start()
         try:
@@ -1214,7 +1255,19 @@ class EngineRuntime:
                 ) from exc
             raise
         self._refresh_readiness()
-        self._state = "running" if self._has_ready_symbols() else "warming_up"
+        with self._state_lock:
+            # Worker threads have been live since before warmup: a halt they
+            # raised (or a restored persistent incident) must not be
+            # overwritten with a trading state here. A reconciliation reason
+            # (e.g. a transient periodic-reconcile failure during warmup)
+            # gates entries without halting, exactly as _reconcile_safely
+            # leaves it: a clean reconcile clears it, and a pinned "halted"
+            # would then have no reason left for reset_safety_lock to clear.
+            breaker = self._circuit_breaker_reason
+            if breaker is not None and breaker not in _RECONCILIATION_INCIDENT_REASONS:
+                self._state = "halted"
+            elif self._state not in _ENTRY_BLOCKING_STATES:
+                self._state = "running" if self._has_ready_symbols() else "warming_up"
         record_session = getattr(self.ledger, "record_runtime_session", None)
         if record_session is not None:
             # Observability-only; fake ledgers in unit tests may omit it.
@@ -1380,9 +1433,10 @@ class EngineRuntime:
             sorted(self._symbols_by_market[Market.CRYPTO]),
         )
         self._resync_pending = False
-        for market in list(self._market_entry_halts):
-            if self._market_entry_halts.get(market) == "subscription_state_unknown":
-                self._market_entry_halts[market] = None
+        with getattr(self, "_state_lock", threading.RLock()):
+            for market in list(self._market_entry_halts):
+                if self._market_entry_halts.get(market) == "subscription_state_unknown":
+                    self._market_entry_halts[market] = None
         log.warning("Stream membership reconnected from the authoritative desired set")
 
     def _refresh_runtime_universes(self, target: Market | None = None) -> None:
@@ -1422,7 +1476,8 @@ class EngineRuntime:
                 _symbols, snapshot_status = validate_active_crypto_universe(self.app_config.universe.crypto)
                 fallback_allowed = self.app_config.universe.crypto.allow_static_fallback_trading
                 if snapshot_status != "success" and not fallback_allowed:
-                    self._market_entry_halts[market] = "invalid_dynamic_universe"
+                    with getattr(self, "_state_lock", threading.RLock()):
+                        self._market_entry_halts[market] = "invalid_dynamic_universe"
 
         crypto_config = self.app_config.universe.crypto
         if target in {None, Market.CRYPTO} and crypto_config.enabled and crypto_config.dynamic_selection_enabled:
@@ -1447,9 +1502,10 @@ class EngineRuntime:
                     self._last_universe_refresh_error[market.value] = str(exc)
                 raise
             else:
-                for market in desired:
-                    if self._market_entry_halts.get(market) == "invalid_dynamic_universe":
-                        self._market_entry_halts[market] = None
+                with getattr(self, "_state_lock", threading.RLock()):
+                    for market in desired:
+                        if self._market_entry_halts.get(market) == "invalid_dynamic_universe":
+                            self._market_entry_halts[market] = None
         self._last_universe_refresh_at = datetime.now(UTC)
 
     def _apply_runtime_universes(
@@ -1800,11 +1856,6 @@ class EngineRuntime:
         )
         self._not_ready_symbols.update(equity_pins)
         self._not_ready_symbols.update(crypto_pins)
-        for runtime in getattr(self, "_portfolio_runtimes", ()):
-            market_symbols = tuple(sorted(self._symbols_by_market[runtime.market]))
-            runtime.symbols = market_symbols
-            for symbol in market_symbols:
-                runtime.history.setdefault(symbol, [])
 
     def stop(self) -> bool:
         self._startup_cleanup_attempted = True
@@ -1847,7 +1898,15 @@ class EngineRuntime:
                         self._events.put_nowait(None)
             except Exception:
                 pass
-        for stream in (getattr(self, "stream", None), getattr(self, "trading_updates", None)):
+        # A start that aborted before launching the stream workers has no
+        # socket to stop. getattr default True: partially constructed
+        # runtimes (EngineRuntime.__new__ in tests) keep the stop attempt.
+        streams = (
+            (getattr(self, "stream", None), getattr(self, "trading_updates", None))
+            if getattr(self, "_stream_workers_launched", True)
+            else ()
+        )
+        for stream in streams:
             if stream is None:
                 continue
             stop_stream = getattr(stream, "stop", None)
@@ -2041,7 +2100,7 @@ class EngineRuntime:
             account: AccountSnapshot = self.broker.account()
         except Exception as exc:
             # Provider/broker temporary -> bounded retry 5 attempts; DB errors fail closed immediately is handled elsewhere
-            if "database" in str(exc).lower() or "locked" in str(exc).lower() or "integrity" in str(exc).lower():
+            if _is_database_error(exc):
                 automate_incident_recovery(
                     IncidentCategory.DATABASE_ERROR,
                     account_id=getattr(self.broker, "account_id", "unknown"),
@@ -2060,22 +2119,6 @@ class EngineRuntime:
                 },
             )
             raise
-        else:
-            # Freshness check after fetch: if broker returned timestamp is stale, treat as incident but still return snapshot
-            # (readiness gate will block entries); we emit incident for observability
-            try:
-                ts = getattr(account, "timestamp", None) or getattr(account, "updated_at", None)
-                if ts is not None and hasattr(ts, "tzinfo"):
-                    age = (datetime.now(UTC) - ts).total_seconds() if ts.tzinfo else None
-                    if age is not None and age > self.config.maximum_account_age_for_entry_seconds * 2:
-                        automate_incident_recovery(
-                            IncidentCategory.BROKER_ACCOUNT_STALE,
-                            account_id=getattr(self.broker, "account_id", "unknown"),
-                            error=f"broker account snapshot stale age={age:.1f}s",
-                            current_state={"age_seconds": age},
-                        )
-            except Exception:
-                pass
         now = datetime.now(UTC)
         if self._publish_account_snapshot(account, expected_generation=fetch_generation, timestamp=now):
             return account
@@ -2202,7 +2245,15 @@ class EngineRuntime:
                     # managed. Halt the runtime, persist the safety state and
                     # keep entries blocked instead of logging and continuing
                     # until the next strategy decision.
-                    self._halt_for_ownership_drift()
+                    try:
+                        self._halt_for_ownership_drift()
+                    except Exception as exc:
+                        # The halt is already asserted in memory before the
+                        # persist; a failed ledger write must not kill the
+                        # only drift detector. The next poll re-enters and
+                        # retries the persist.
+                        worker.last_error = str(exc)
+                        log.exception("Ownership drift halt could not be persisted; retrying next poll")
                 except Exception as exc:
                     # Temporary broker/API errors are retried on the next
                     # poll; only drift escalates to a runtime halt here.
@@ -2274,19 +2325,34 @@ class EngineRuntime:
         resumes the halt until an operator reconciles the inventory. Ownership
         drift halts orders entirely: a broken ownership model must not be
         traded against even with risk-reducing sells.
+
+        The account loop re-enters this on every poll while drift persists:
+        the state assertions re-apply each time, but the log/metric/alert fire
+        only on the transition into the ownership-drift halt.
         """
+        first = getattr(self, "_circuit_breaker_reason", None) != "ownership_drift"
         with getattr(self, "_state_lock", threading.RLock()):
+            self._circuit_breaker_reason = "ownership_drift"
             self._state = "halted"
-        self._circuit_breaker_reason = "ownership_drift"
-        self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}), "ownership_drift")
-        self._persist_safety_state("ownership_drift")
-        log.critical("Ownership drift detected; runtime halted and safety state persisted")
-        runtime_metrics_store.record_event("circuit_breaker")
-        alerts.emit(
-            "circuit_breaker",
-            message="Ownership drift detected; runtime halted and safety state persisted",
-            reason="ownership_drift",
-        )
+        # Serialize against the account loop's _evaluate_entry_risk_latch,
+        # which runs under this lock inside _persist_risk_state: its
+        # read-copy-rebuild-assign would otherwise drop this halt.
+        with getattr(self, "_risk_state_lock", threading.Lock()):
+            self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}), "ownership_drift")
+        try:
+            self._persist_safety_state("ownership_drift")
+        finally:
+            # The transition alert fires even when the persist raises: later
+            # polls see the reason already set and never alert, so skipping
+            # it here would leave the halt unannounced for good.
+            if first:
+                log.critical("Ownership drift detected; runtime halted and safety state persisted")
+                runtime_metrics_store.record_event("circuit_breaker")
+                alerts.emit(
+                    "circuit_breaker",
+                    message="Ownership drift detected; runtime halted and safety state persisted",
+                    reason="ownership_drift",
+                )
 
     def _persist_safety_state(self, reason: str) -> None:
         """Persist the halted circuit-breaker reason with the last known
@@ -2327,6 +2393,21 @@ class EngineRuntime:
             return
         log.critical("Safety incident could not be persisted; ledger has no incident writer: %s", reason)
 
+    def _raise_reconciliation_breaker(self, reason: str) -> None:
+        """Set a reconciliation-raised breaker without masking a stronger one.
+
+        A reconciliation failure may only replace no reason or another
+        reconciliation-owned reason (e.g. escalate to
+        ``reconciliation_bug_suspected``). Replacing ownership_drift,
+        portfolio_runtime_failure, a worker crash etc. would let the next
+        clean reconcile clear it via ``_clear_reconciliation_incidents`` while
+        its incident row still demands operator-verified recovery.
+        """
+        with getattr(self, "_state_lock", threading.RLock()):
+            current = getattr(self, "_circuit_breaker_reason", None)
+            if current is None or current in _RECONCILIATION_INCIDENT_REASONS:
+                self._circuit_breaker_reason = reason
+
     def _clear_reconciliation_incidents(self) -> None:
         """Clear only incidents whose documented recovery is clean reconcile."""
         account_id = getattr(self.broker, "account_id", None) or "unknown"
@@ -2334,8 +2415,23 @@ class EngineRuntime:
         if callable(clear):
             for reason in sorted(_RECONCILIATION_INCIDENT_REASONS):
                 clear(account_id, reason)
-        if getattr(self, "_circuit_breaker_reason", None) in _RECONCILIATION_INCIDENT_REASONS:
-            self._circuit_breaker_reason = None
+        # Only a reconciliation-owned reason clears here; every other breaker
+        # keeps its own verified recovery (reset_safety_lock).
+        with getattr(self, "_state_lock", threading.RLock()):
+            if getattr(self, "_circuit_breaker_reason", None) in _RECONCILIATION_INCIDENT_REASONS:
+                self._circuit_breaker_reason = None
+                # A trade-update blip while this reason was set left the
+                # runtime "degraded" (its restore never passes a breaker);
+                # nothing else would un-pin it now that the reason is gone.
+                # Same running/warming_up rule as that restore, and only
+                # while the trade-update worker is alive.
+                trade_updates = dict(getattr(self, "_workers", {})).get("pb-trade-updates")
+                if (
+                    getattr(self, "_state", None) == "degraded"
+                    and trade_updates is not None
+                    and trade_updates.alive
+                ):
+                    self._state = "running" if self._has_ready_symbols() else "warming_up"
 
     def _restore_persistent_state(self) -> None:
         """Restore persisted runtime state at startup.
@@ -2359,6 +2455,21 @@ class EngineRuntime:
           the cadence position.
         """
         account_id = self.broker.account_id or "unknown"
+        # Reasons in this set are exactly the ones ``reset_safety_lock``
+        # accepts as recoverable: a restored incident must never be a halt
+        # the operator cannot clear, so the two sets are kept in step and a
+        # reason added here must be added there in the same change.
+        # Deliberately NOT in the set, and therefore neither restored nor
+        # operator-resettable: the shared-worker f"{name}_restart_limit"
+        # halts (pb-decisions / pb-account / pb-trade-updates). The row is
+        # still written by ``_persist_risk_state`` (it records whatever
+        # reason is in effect) and stays as an audit trail. A restart
+        # re-arms those workers (restart_count starts at 0 again) and a
+        # repeat failure re-raises the halt by itself, so restoring the old
+        # row would halt a process whose workers are healthy. The market
+        # entry halts of the same name (pb-stocks / pb-crypto) are a
+        # different mechanism with their own verified recovery; see
+        # ``reset_safety_lock``.
         persistent_reasons = {
             "ambiguous_order_state",
             "protection_failure",
@@ -2369,12 +2480,17 @@ class EngineRuntime:
             "ownership_drift",
             "reconciliation_failed",
             "reconciliation_bug_suspected",
+            "portfolio_runtime_failure",
+            "decision_worker_crashed",
+            "trade_update_callback_failure",
         }
         incidents = self.ledger.load_safety_incidents(account_id)
-        for incident in incidents:
-            if incident.reason in persistent_reasons:
-                self._circuit_breaker_reason = incident.reason
-                break
+        # Newest first, but a reconciliation-owned reason never masks another
+        # persisted halt: a clean reconcile would clear it and resume trading.
+        restorable = [incident.reason for incident in incidents if incident.reason in persistent_reasons]
+        preferred = [reason for reason in restorable if reason not in _RECONCILIATION_INCIDENT_REASONS]
+        if preferred or restorable:
+            self._circuit_breaker_reason = (preferred or restorable)[0]
         if any(incident.reason == "portfolio_drawdown_halt" for incident in incidents):
             # A drawdown breach is an operational incident with an explicit
             # recovery (verified risk-epoch reset). Restore the entry latch
@@ -2430,12 +2546,20 @@ class EngineRuntime:
             # worker (or run unobserved inside the SDK loop), degrading the
             # whole runtime. Escalate to a halt instead of failing silently.
             with getattr(self, "_state_lock", threading.RLock()):
-                self._state = "halted"
                 self._circuit_breaker_reason = "trade_update_callback_failure"
+                self._state = "halted"
             log.exception(
                 "Trade update handling failed for order %s: %s",
                 update.client_order_id,
                 exc,
+            )
+            runtime_metrics_store.record_event("circuit_breaker")
+            alerts.emit(
+                "circuit_breaker",
+                message="Trade update handling failed; runtime halted",
+                reason="trade_update_callback_failure",
+                client_order_id=update.client_order_id,
+                error=str(exc),
             )
 
     def _advance_portfolio_rebalance(
@@ -2506,10 +2630,7 @@ class EngineRuntime:
             ordered_reservations = tuple(
                 sorted(
                     reserved_position_keys,
-                    key=lambda key: (
-                        key[0].value if hasattr(key[0], "value") else str(key[0]),
-                        key[1],
-                    ),
+                    key=_reservation_sort_key,
                 )
             )
             result = self._advance_portfolio_rebalance(
@@ -2628,6 +2749,7 @@ class EngineRuntime:
         worker.last_heartbeat = datetime.now(UTC)
         try:
             while self._running:
+                run_started = time.monotonic()
                 try:
                     target()
                     if not self._running:
@@ -2635,17 +2757,21 @@ class EngineRuntime:
                     raise RuntimeError("stream worker returned unexpectedly")
                 except Exception as exc:
                     worker.last_error = str(exc)
+                    market = _MARKET_BY_STREAM_WORKER.get(name)
+                    # Market workers reset on a verified live event instead
+                    # (_mark_market_stream_recovered).
+                    if market is None and time.monotonic() - run_started >= _SHARED_WORKER_HEALTHY_RESET_SECONDS:
+                        worker.restart_count = 0
                     worker.restart_count += 1
-                    market = {
-                        "pb-stocks": Market.EQUITY,
-                        "pb-crypto": Market.CRYPTO,
-                    }.get(name)
                     if market is None:
-                        self._state = "degraded"
+                        with getattr(self, "_state_lock", threading.RLock()):
+                            if self._state not in _ENTRY_BLOCKING_STATES:
+                                self._state = "degraded"
                     if worker.restart_count > 5:
                         if market is None:
-                            self._state = "halted"
-                            self._circuit_breaker_reason = f"{name}_restart_limit"
+                            with getattr(self, "_state_lock", threading.RLock()):
+                                self._circuit_breaker_reason = f"{name}_restart_limit"
+                                self._state = "halted"
                             log.exception("%s shared worker restart limit reached", name)
                             runtime_metrics_store.record_event("circuit_breaker")
                             alerts.emit(
@@ -2654,7 +2780,8 @@ class EngineRuntime:
                                 reason=self._circuit_breaker_reason,
                             )
                             return
-                        self._market_entry_halts[market] = f"{name}_restart_limit"
+                        with getattr(self, "_state_lock", threading.RLock()):
+                            self._market_entry_halts[market] = f"{name}_restart_limit"
                         if worker.restart_count == 6:
                             # Edge-triggered: the alert/metric fire once at the
                             # threshold crossing; retries past it only re-assert
@@ -2674,14 +2801,25 @@ class EngineRuntime:
                         delay,
                         exc,
                     )
-                    time.sleep(delay)
+                    # Interruptible backoff: stop() joins stream workers with
+                    # a 5 s timeout, shorter than the 16 s max delay.
+                    if self._stop_event.wait(delay):
+                        return
                     worker.last_heartbeat = datetime.now(UTC)
+                    # A shared-worker blip marks the runtime "degraded" above;
+                    # un-pin it before retrying so one transient failure does
+                    # not hold /readyz at 503 until a process restart. Only a
+                    # breaker-free degraded state is restored (never a halt),
+                    # to the same running/warming_up choice start() makes.
+                    with getattr(self, "_state_lock", threading.RLock()):
+                        if self._state == "degraded" and getattr(self, "_circuit_breaker_reason", None) is None:
+                            self._state = "running" if self._has_ready_symbols() else "warming_up"
         finally:
             worker.alive = False
 
     def _mark_market_stream_recovered(self, market: Market) -> None:
         """Clear a market-only failure after a real event proves reconnect health."""
-        worker_name = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}[market]
+        worker_name = _STREAM_WORKER_BY_MARKET[market]
         worker = self._workers.get(worker_name)
         if worker is None or worker.last_error is None:
             return
@@ -2690,8 +2828,11 @@ class EngineRuntime:
         worker.last_error = None
         worker.restart_count = 0
         worker.last_event_at = datetime.now(UTC)
-        if self._market_entry_halts.get(market) == f"{worker_name}_restart_limit":
-            self._market_entry_halts[market] = None
+        with getattr(self, "_state_lock", threading.RLock()):
+            cleared = self._market_entry_halts.get(market) == f"{worker_name}_restart_limit"
+            if cleared:
+                self._market_entry_halts[market] = None
+        if cleared:
             log.warning(
                 "Market halt cleared after verified reconnect: market=%s "
                 "worker_restart_count=%d recovery_action=market_halt_cleared",
@@ -2716,7 +2857,7 @@ class EngineRuntime:
         """Ingest a live or corrected bar into the aggregation pipeline."""
         if bar.market.value == "equity" and not is_regular_equity_time(bar.timestamp):
             return
-        worker_name = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}[bar.market]
+        worker_name = _STREAM_WORKER_BY_MARKET[bar.market]
         if worker := self._workers.get(worker_name):
             worker.last_heartbeat = datetime.now(UTC)
             worker.last_event_at = datetime.now(UTC)
@@ -2769,14 +2910,17 @@ class EngineRuntime:
             # again: clear a TRANSIENT halt so a one-off API blip does
             # not permanently brick crypto entries. Ambiguity is never
             # cleared here (reconciliation decides that). The check-then-
-            # clear runs under the halt lock because live and corrected
-            # price passes can run concurrently.
-            with getattr(self, "_event_stats_lock", threading.Lock()):
-                if self._market_entry_halts.get(Market.CRYPTO) == "crypto_protection_failure":
+            # clear runs under the state lock because live and corrected
+            # price passes can run concurrently and share this dict with
+            # every other halt writer.
+            with getattr(self, "_state_lock", threading.RLock()):
+                recovered = self._market_entry_halts.get(Market.CRYPTO) == "crypto_protection_failure"
+                if recovered:
                     self._market_entry_halts[Market.CRYPTO] = None
-                    log.warning("Crypto protection watcher recovered; crypto entries unhalted")
+            if recovered:
+                log.warning("Crypto protection watcher recovered; crypto entries unhalted")
         except AmbiguousOrderState as exc:
-            with getattr(self, "_event_stats_lock", threading.Lock()):
+            with getattr(self, "_state_lock", threading.RLock()):
                 self._market_entry_halts[Market.CRYPTO] = "ambiguous_crypto_exit"
             log.critical("Crypto exit state is ambiguous; crypto entries halted: %s", exc)
             runtime_metrics_store.record_event("ambiguous_order")
@@ -2787,7 +2931,7 @@ class EngineRuntime:
                 error=str(exc),
             )
         except Exception as exc:
-            with getattr(self, "_event_stats_lock", threading.Lock()):
+            with getattr(self, "_state_lock", threading.RLock()):
                 self._market_entry_halts[Market.CRYPTO] = "crypto_protection_failure"
             log.exception(
                 "Crypto protection watcher failed (entries halted until the next verified price pass): %s",
@@ -2800,22 +2944,29 @@ class EngineRuntime:
         # _put_event runs from several threads (stock stream, crypto stream,
         # decision loop); the diagnostics counters must not be mutated
         # unsynchronized.
+        overflowed = False
         with getattr(self, "_event_stats_lock", threading.Lock()):
             if result == "coalesced":
                 self._coalesced_events += 1
             elif result == "replaced":
                 self._dropped_events += 1
             elif result == "overflow":
-                self._circuit_breaker_reason = "final_market_event_queue_overflow"
+                overflowed = True
                 self._dropped_events += 1
-                runtime_metrics_store.record_event("circuit_breaker")
-                alerts.emit(
-                    "circuit_breaker",
-                    message="Final market event queue overflow; runtime halted",
-                    reason="final_market_event_queue_overflow",
-                )
             if self._oldest_received_at is None:
                 self._oldest_received_at = event.received_at
+        if overflowed:
+            # The halt takes the state lock only after the stats lock is
+            # released: no stats -> state nesting from the stream threads.
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._circuit_breaker_reason = "final_market_event_queue_overflow"
+                self._state = "halted"
+            runtime_metrics_store.record_event("circuit_breaker")
+            alerts.emit(
+                "circuit_breaker",
+                message="Final market event queue overflow; runtime halted",
+                reason="final_market_event_queue_overflow",
+            )
 
     def _decision_loop(self) -> None:
         worker = self._workers["pb-decisions"]
@@ -2994,11 +3145,12 @@ class EngineRuntime:
                     next_reconcile = time.monotonic() + 60.0
         except Exception as exc:
             worker.last_error = str(exc)
-            self._state = "halted"
-            if isinstance(exc, OwnershipDriftError):
-                self._circuit_breaker_reason = "ownership_drift"
-            else:
-                self._circuit_breaker_reason = "decision_worker_crashed"
+            # Every with-block of the loop body has exited here: no lock held.
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._circuit_breaker_reason = (
+                    "ownership_drift" if isinstance(exc, OwnershipDriftError) else "decision_worker_crashed"
+                )
+                self._state = "halted"
             log.exception("Decision worker failed")
             runtime_metrics_store.record_event("circuit_breaker")
             alerts.emit(
@@ -3012,12 +3164,15 @@ class EngineRuntime:
 
     def _flush_aggregators(self) -> None:
         now = datetime.now(UTC)
-        local = now.astimezone(NEW_YORK)
+        # Same finalization grace as flush_until: the 15:59 minute can arrive
+        # just after 16:00:00 and must still land in the session-close candles.
+        closing = now - timedelta(seconds=self.config.data_finalization_grace_seconds)
+        local = closing.astimezone(NEW_YORK)
         with self._ingestion_lock:
             finalized = {timeframe: aggregator.flush_until(now) for timeframe, aggregator in self.aggregators.items()}
             if local.weekday() < 5 and (local.hour, local.minute) >= (16, 0):
                 for timeframe, aggregator in self.aggregators.items():
-                    finalized[timeframe].extend(aggregator.flush_session_close(now))
+                    finalized[timeframe].extend(aggregator.flush_session_close(closing))
         for timeframe, bars in finalized.items():
             for bar in bars:
                 self._emit_finalized_bar(timeframe, bar)
@@ -3061,15 +3216,9 @@ class EngineRuntime:
             except TypeError:
                 market_reasons[candidate_market] = gate(candidate_market)
 
-        def _has_symbol_gap(sym: str, mkt: Market) -> bool:
-            try:
-                return bool(self._engine_has_symbol_gap(sym, mkt))
-            except TypeError:
-                return bool(self._engine_has_symbol_gap(sym))
-
         if not any(
             symbol not in self._not_ready_symbols
-            and not _has_symbol_gap(symbol, bar.market)
+            and not self._engine_has_symbol_gap(symbol, bar.market)
             and not market_reasons[bar.market]
             for symbol, bar in bars_by_symbol.items()
         ):
@@ -3198,7 +3347,13 @@ class EngineRuntime:
                     )
                     emit_journal(evt)
                 except Exception:
-                    pass
+                    # Best-effort, but never silent: this is the operator's
+                    # durable "why did nothing trade" record.
+                    log.warning(
+                        "No-trade journal emit failed for market=%s",
+                        getattr(portfolio_runtime.market, "value", portfolio_runtime.market),
+                        exc_info=True,
+                    )
                 continue
             # basis) must not freeze the whole decision: risk-reducing SELL
             # exits still run, only entries are blocked. The equity signal
@@ -3244,10 +3399,7 @@ class EngineRuntime:
                             kwargs["reserved_position_keys"] = tuple(
                                 sorted(
                                     reserved_position_keys,
-                                    key=lambda key: (
-                                        key[0].value if hasattr(key[0], "value") else str(key[0]),
-                                        key[1],
-                                    ),
+                                    key=_reservation_sort_key,
                                 )
                             )
                         portfolio_result = portfolio_runtime.process_closed_bars(relevant, **kwargs)
@@ -3255,8 +3407,11 @@ class EngineRuntime:
                         if account_lease is not None:
                             self._release_account_snapshot_lease(account_lease)
             except OwnershipDriftError as exc:
-                self._circuit_breaker_reason = "ownership_drift"
-                self._state = "halted"
+                # The portfolio lock was released when the exception left its
+                # with-block, and this path never holds the ingestion lock.
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._circuit_breaker_reason = "ownership_drift"
+                    self._state = "halted"
                 _broker = getattr(self, "broker", None)
                 automate_incident_recovery(
                     IncidentCategory.POSITION_DRIFT,
@@ -3280,11 +3435,12 @@ class EngineRuntime:
                 )
                 return
             except Exception as exc:
-                self._circuit_breaker_reason = "portfolio_runtime_failure"
-                self._state = "halted"
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._circuit_breaker_reason = "portfolio_runtime_failure"
+                    self._state = "halted"
                 # DB integrity: fail closed immediately, never retry
                 err_lower = str(exc).lower()
-                if "database" in err_lower or "locked" in err_lower or "sqlite" in err_lower:
+                if _is_database_error(exc):
                     automate_incident_recovery(
                         IncidentCategory.DATABASE_ERROR,
                         account_id=getattr(self.broker, "account_id", "unknown")
@@ -3303,7 +3459,6 @@ class EngineRuntime:
                         strategy=portfolio_runtime.strategy.name,
                         error=str(exc),
                         current_state={"market": portfolio_runtime.market.value},
-                        provider_action=lambda exc=exc: (_ for _ in ()).throw(exc),  # type: ignore[misc]
                     )
                 else:
                     automate_incident_recovery(
@@ -3577,10 +3732,7 @@ class EngineRuntime:
                     catch_up_kwargs["reserved_position_keys"] = tuple(
                         sorted(
                             reserved_position_keys,
-                            key=lambda key: (
-                                key[0].value if hasattr(key[0], "value") else str(key[0]),
-                                key[1],
-                            ),
+                            key=_reservation_sort_key,
                         )
                     )
                 result = portfolio_runtime.startup_catch_up(**catch_up_kwargs)
@@ -3604,7 +3756,7 @@ class EngineRuntime:
         if health is None:
             health = self.health()
         reasons: list[str] = []
-        if self._state in {"halted", "error", "stop_failed", "stopping", "stopped"}:
+        if self._state in _ENTRY_BLOCKING_STATES:
             reasons.append(f"runtime_state:{self._state}")
         if health.queue_age_seconds > self.config.maximum_queue_age_seconds:
             reasons.append("event_queue_stale")
@@ -3638,25 +3790,20 @@ class EngineRuntime:
                 pass
         if self._circuit_breaker_reason:
             reasons.append(self._circuit_breaker_reason)
-        relevant_stream = (
-            {
-                Market.EQUITY: "pb-stocks",
-                Market.CRYPTO: "pb-crypto",
-            }.get(market)
-            if market is not None
-            else None
-        )
+        relevant_stream = _STREAM_WORKER_BY_MARKET.get(market) if market is not None else None
         shared_workers = {"pb-decisions", "pb-account", "pb-trade-updates"}
         if relevant_stream:
             shared_workers.add(relevant_stream)
         else:
-            shared_workers.update({"pb-stocks", "pb-crypto"})
+            shared_workers.update(_MARKET_BY_STREAM_WORKER)
         dead_workers = [name for name, worker in self._workers.items() if name in shared_workers and not worker.alive]
         if dead_workers:
             reasons.append("worker_unavailable:" + ",".join(sorted(dead_workers)))
-        market_halts = getattr(self, "_market_entry_halts", {})
-        if market is not None and market_halts.get(market):
-            reasons.append(str(market_halts[market]))
+        # One atomic read: writers clear halts under _state_lock on other
+        # threads, so a check-then-index pair could append the string "None".
+        halt_reason = getattr(self, "_market_entry_halts", {}).get(market) if market is not None else None
+        if halt_reason:
+            reasons.append(str(halt_reason))
         return tuple(reasons)
 
     def _engine_has_market_gap(self, market: Market) -> bool:
@@ -3788,7 +3935,9 @@ class EngineRuntime:
         last_success = state["last_success_at"]
         if not isinstance(last_success, datetime):
             return False
-        if (datetime.now(UTC) - last_success).total_seconds() > _SIGNAL_ADJUSTMENT_CHECK_SECONDS:
+        if (datetime.now(UTC) - last_success).total_seconds() > (
+            _SIGNAL_ADJUSTMENT_CHECK_SECONDS + _SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS
+        ):
             return False
         if decision_timestamp is None:
             return True
@@ -3867,8 +4016,6 @@ class EngineRuntime:
         # so comparing provider_oldest against the request start would fail
         # every honest response. We derive the strategy-required oldest
         # timestamp, then request with a safety margin BEFORE it.
-        from parayabuck.markets.timeframes import bars_to_calendar_days
-
         required_bars = max(
             (runtime.strategy.minimum_history_bars + 1 for runtime in runtimes),
             default=1,
@@ -3937,26 +4084,20 @@ class EngineRuntime:
                         return True
                 else:
                     return True
-        adjusted: dict[str, list[Any]] | None = None
-        last_exc: BaseException | None = None
+        # Every loop exit either breaks with ``adjusted`` assigned or returns
+        # False from the except branch (always on the second attempt).
+        adjusted: dict[str, list[Any]] = {}
         for attempt in range(2):
             try:
                 adjusted = history_client.get_bars_batch(symbols, "1d", start=start, end=end, adjustment="splits")
-                last_exc = None
                 break
             except Exception as exc:
-                last_exc = exc
                 if not _is_transient_network_error(exc) or attempt == 1:
                     self._record_signal_adjustment_failure(f"provider fetch failed: {exc}")
                     return False
                 # Transient: bounded retry with short backoff.
-                import time as _t
-
-                _t.sleep(0.5 * (attempt + 1))
+                time.sleep(0.5 * (attempt + 1))
                 continue
-        if adjusted is None:
-            self._record_signal_adjustment_failure(f"provider fetch failed: {last_exc}")
-            return False
         inadequate = [
             symbol
             for symbol in symbols
@@ -3974,11 +4115,18 @@ class EngineRuntime:
         }
         try:
             changed_total = 0
-            for runtime in runtimes:
-                changed_total += runtime.adopt_authoritative_signal_history(
-                    {symbol: adjusted.get(symbol, []) for symbol in runtime.symbols},
-                    verified_through_by_symbol,
-                )
+            # ``adopt_authoritative_signal_history`` REPLACES the per-symbol
+            # list object. ``process_closed_bars`` runs under this same lock
+            # and appends to the list it read, so an unlocked swap between
+            # its read and its append would orphan the completed bar. The
+            # lock is taken here alone — no caller holds the ingestion lock
+            # on the way in, so the ingestion -> portfolio order holds.
+            with getattr(self, "_portfolio_lock", threading.RLock()):
+                for runtime in runtimes:
+                    changed_total += runtime.adopt_authoritative_signal_history(
+                        {symbol: adjusted.get(symbol, []) for symbol in runtime.symbols},
+                        verified_through_by_symbol,
+                    )
         except Exception as exc:
             self._record_signal_adjustment_failure(f"rebuild failed: {exc}")
             return False
@@ -4065,39 +4213,65 @@ class EngineRuntime:
     def _refresh_readiness(self) -> None:
         runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
         required_symbols = {symbol for runtime in runtimes for symbol in runtime.symbols}
-        for symbol in required_symbols:
-            market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
-            relevant = [runtime for runtime in runtimes if runtime.market == market and symbol in runtime.history]
-            ready = bool(relevant)
-            for runtime in relevant:
-                series = runtime.history[symbol]
-                benchmark_symbol = "BTC/USD" if market == Market.CRYPTO else "SPY"
-                benchmark_series = runtime.history.get(benchmark_symbol, ())
-                expected_latest = (
-                    benchmark_series[-1].timestamp
-                    if benchmark_series
-                    else max(
-                        (candidate[-1].timestamp for candidate in runtime.history.values() if candidate),
-                        default=None,
+        # The universe/hot-swap thread mutates the live set from
+        # ``_apply_runtime_universes`` under this same lock, and comparing or
+        # copying it while a swap resizes it raises RuntimeError inside the
+        # decision worker. So every access is serialized here and the local
+        # is an immutable snapshot; state lock only, nothing inside the loop
+        # takes another lock.
+        state_lock = getattr(self, "_state_lock", threading.RLock())
+        with state_lock:
+            for symbol in required_symbols:
+                market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+                relevant = [runtime for runtime in runtimes if runtime.market == market and symbol in runtime.history]
+                ready = bool(relevant)
+                for runtime in relevant:
+                    series = runtime.history[symbol]
+                    benchmark_symbol = "BTC/USD" if market == Market.CRYPTO else "SPY"
+                    benchmark_series = runtime.history.get(benchmark_symbol, ())
+                    expected_latest = (
+                        benchmark_series[-1].timestamp
+                        if benchmark_series
+                        else max(
+                            (candidate[-1].timestamp for candidate in runtime.history.values() if candidate),
+                            default=None,
+                        )
                     )
-                )
-                ready = ready and (
-                    len(series) >= runtime.strategy.minimum_history_bars
-                    and expected_latest is not None
-                    and series[-1].timestamp == expected_latest
-                )
-            if ready:
-                self._not_ready_symbols.discard(symbol)
-            else:
-                self._not_ready_symbols.add(symbol)
+                    ready = ready and (
+                        len(series) >= runtime.strategy.minimum_history_bars
+                        and expected_latest is not None
+                        and series[-1].timestamp == expected_latest
+                    )
+                if ready:
+                    self._not_ready_symbols.discard(symbol)
+                else:
+                    self._not_ready_symbols.add(symbol)
+            pending = frozenset(self._not_ready_symbols)
+        attempt = getattr(self, "_warmup_retry_attempt", 0)
+        # The counter describes the pending SET, not the process: it resets on
+        # ANY membership change — the set emptying, a member recovering, or a
+        # newly unready symbol that was never retried — so a chronically
+        # lagging symbol cannot push a brand-new one out to the ceiling.
+        # Only an unchanged set keeps doubling toward the cap.
+        if not pending or pending != getattr(self, "_warmup_retry_symbols", frozenset()):
+            attempt = 0
+            self._warmup_retry_attempt = 0
+        retry_delay = _WARMUP_RETRY_SECONDS * 2 ** min(attempt, _WARMUP_RETRY_MAX_EXPONENT)
         if (
             self._running
-            and self._not_ready_symbols
-            and time.monotonic() - getattr(self, "_last_warmup_retry_at", time.monotonic()) >= _WARMUP_RETRY_SECONDS
+            and pending
+            and time.monotonic() - getattr(self, "_last_warmup_retry_at", time.monotonic()) >= retry_delay
         ):
             self._schedule_warmup_retry()
-        if self._running and self._has_ready_symbols() and self._state == "warming_up":
-            self._state = "running"
+        with state_lock:
+            # Atomic with every halt writer, and never promotes past a breaker.
+            if (
+                self._running
+                and self._state == "warming_up"
+                and getattr(self, "_circuit_breaker_reason", None) is None
+                and self._has_ready_symbols()
+            ):
+                self._state = "running"
 
     def _schedule_warmup_retry(self) -> None:
         # Reached from the decision loop, the universe-refresh thread and the
@@ -4109,6 +4283,11 @@ class EngineRuntime:
             if current is not None and current.is_alive():
                 return
             self._last_warmup_retry_at = time.monotonic()
+            self._warmup_retry_attempt += 1
+            # Same lock the universe/hot-swap thread takes: a resize racing
+            # this copy would raise out of the spawn lock.
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._warmup_retry_symbols = frozenset(self._not_ready_symbols)
             thread = threading.Thread(
                 target=self._retry_incomplete_warmup,
                 name="pb-warmup-retry",
@@ -4190,7 +4369,7 @@ class EngineRuntime:
                         "Reconciliation categories show drift (fail-closed, new orders blocked): %s",
                         "; ".join(f"{key}={values}" for key, values in report.drift_categories.items()),
                     )
-                    self._circuit_breaker_reason = "reconciliation_failed"
+                    self._raise_reconciliation_breaker("reconciliation_failed")
                     self._reconcile_failed = True
                     self._persist_reconciliation_incident("reconciliation_failed")
                     runtime_metrics_store.record_event("reconciliation_failure")
@@ -4227,7 +4406,7 @@ class EngineRuntime:
                     )
                 self._clear_reconciliation_incidents()
             except ReconciliationResultError as exc:
-                self._circuit_breaker_reason = "reconciliation_failed"
+                self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("reconciliation_failed")
                 runtime_metrics_store.record_event("reconciliation_failure")
@@ -4242,7 +4421,7 @@ class EngineRuntime:
                 # scheduled reconciliation retries it; a full traceback every
                 # minute obscures actionable protection failures.
                 log.warning("Position protection check deferred after Alpaca API error: %s", exc)
-                self._circuit_breaker_reason = "reconciliation_failed"
+                self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("reconciliation_failed")
                 runtime_metrics_store.record_event("reconciliation_failure")
@@ -4254,20 +4433,29 @@ class EngineRuntime:
                 )
             except OwnershipDriftError:
                 log.exception("Portfolio ownership drift detected; entries halted")
+                # reconcile -> state is the established order: no thread
+                # holding the state lock ever takes the reconcile lock.
                 with getattr(self, "_state_lock", threading.RLock()):
+                    first = self._circuit_breaker_reason != "ownership_drift"
+                    self._circuit_breaker_reason = "ownership_drift"
                     self._state = "halted"
-                self._circuit_breaker_reason = "ownership_drift"
                 self._reconcile_failed = True
-                self._persist_safety_state("ownership_drift")
-                runtime_metrics_store.record_event("circuit_breaker")
-                alerts.emit(
-                    "circuit_breaker",
-                    message="Portfolio ownership drift detected; runtime halted",
-                    reason="ownership_drift",
-                )
+                try:
+                    self._persist_safety_state("ownership_drift")
+                finally:
+                    # Edge-triggered like the account-loop drift halt:
+                    # persistent drift re-asserts the halt every pass but
+                    # alerts once, even when this pass's persist raises.
+                    if first:
+                        runtime_metrics_store.record_event("circuit_breaker")
+                        alerts.emit(
+                            "circuit_breaker",
+                            message="Portfolio ownership drift detected; runtime halted",
+                            reason="ownership_drift",
+                        )
             except ProtectionReconciliationError:
                 log.exception("Managed position protection reconciliation failed")
-                self._circuit_breaker_reason = "protection_failure"
+                self._raise_reconciliation_breaker("protection_failure")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("protection_failure")
                 runtime_metrics_store.record_event("reconciliation_failure")
@@ -4284,16 +4472,16 @@ class EngineRuntime:
                 self._generic_reconcile_failures = getattr(self, "_generic_reconcile_failures", 0) + 1
                 log.exception("Periodic position protection check failed")
                 self._reconcile_failed = True
-                if self._generic_reconcile_failures >= 3:
-                    self._circuit_breaker_reason = "reconciliation_bug_suspected"
-                else:
-                    self._circuit_breaker_reason = "reconciliation_failed"
-                self._persist_reconciliation_incident(self._circuit_breaker_reason)
+                failure_reason = (
+                    "reconciliation_bug_suspected" if self._generic_reconcile_failures >= 3 else "reconciliation_failed"
+                )
+                self._raise_reconciliation_breaker(failure_reason)
+                self._persist_reconciliation_incident(failure_reason)
                 runtime_metrics_store.record_event("reconciliation_failure")
                 alerts.emit(
                     "reconciliation_failure",
                     message="Periodic position protection check failed",
-                    reason=self._circuit_breaker_reason,
+                    reason=failure_reason,
                     consecutive_failures=self._generic_reconcile_failures,
                 )
 
@@ -4337,22 +4525,26 @@ class EngineRuntime:
                 "Cannot reset the risk epoch while a circuit breaker is active "
                 f"({self._circuit_breaker_reason}); resolve that incident first"
             )
-        try:
-            report = ReconciliationReport.from_result(self.broker.reconcile())
-        except Exception as exc:
-            self._circuit_breaker_reason = "reconciliation_failed"
-            self._reconcile_failed = True
-            self._persist_reconciliation_incident("reconciliation_failed")
-            raise RuntimeError(f"Cannot reset the risk epoch before reconciliation succeeds: {exc}") from exc
-        if report.has_drift:
-            self._circuit_breaker_reason = "reconciliation_failed"
-            self._reconcile_failed = True
-            self._persist_reconciliation_incident("reconciliation_failed")
-            raise RuntimeError(
-                f"Cannot reset the risk epoch while reconciliation reports drift: {report.drift_categories}"
-            )
-        self._last_reconciliation_at = datetime.now(UTC)
-        self._clear_reconciliation_incidents()
+        # Serialize against pb-reconcile and reset_safety_lock: the broker's
+        # reconcile holds no lock of its own, and two interleaved runs would
+        # race stop restores, order cancels and ledger writes.
+        with getattr(self, "_reconcile_lock", threading.Lock()):
+            try:
+                report = ReconciliationReport.from_result(self.broker.reconcile())
+            except Exception as exc:
+                self._raise_reconciliation_breaker("reconciliation_failed")
+                self._reconcile_failed = True
+                self._persist_reconciliation_incident("reconciliation_failed")
+                raise RuntimeError(f"Cannot reset the risk epoch before reconciliation succeeds: {exc}") from exc
+            if report.has_drift:
+                self._raise_reconciliation_breaker("reconciliation_failed")
+                self._reconcile_failed = True
+                self._persist_reconciliation_incident("reconciliation_failed")
+                raise RuntimeError(
+                    f"Cannot reset the risk epoch while reconciliation reports drift: {report.drift_categories}"
+                )
+            self._last_reconciliation_at = datetime.now(UTC)
+            self._clear_reconciliation_incidents()
         account = self.broker.account()  # fresh authoritative snapshot
         account_id = self.broker.account_id or "unknown"
         new_baseline = float(account.equity)
@@ -4368,7 +4560,6 @@ class EngineRuntime:
         # re-trigger the breach we just cleared.
         rebased = self.broker.account()
         self._persist_risk_state(rebased)
-        self._evaluate_entry_risk_latch(rebased)
         log.warning(
             "New risk epoch started: drawdown baseline rebased to %.2f (account=%s)",
             new_baseline,
@@ -4416,10 +4607,26 @@ class EngineRuntime:
             "final_market_event_queue_overflow",
             "reconciliation_failed",
             "reconciliation_bug_suspected",
+            "portfolio_runtime_failure",
+            "decision_worker_crashed",
+            "trade_update_callback_failure",
         }
         reason = self._circuit_breaker_reason
         if reason not in recoverable:
             raise ValueError(f"Safety lock is not operator-resettable: {reason or 'none'}")
+        # A reset cannot revive a shared worker that exited (e.g. the decision
+        # loop after decision_worker_crashed): clearing the breaker would
+        # report "running" while no decision/account/fill processing runs.
+        dead_shared = sorted(
+            name
+            for name, worker in dict(getattr(self, "_workers", {})).items()
+            if name in {"pb-decisions", "pb-account", "pb-trade-updates"} and not worker.alive
+        )
+        if getattr(self, "_running", False) and dead_shared:
+            raise ValueError(
+                "Safety lock cannot be reset while shared workers are stopped "
+                f"({','.join(dead_shared)}); restart the process to recover"
+            )
         if not self._events.empty():
             raise ValueError("Market event queue must drain before resetting the safety lock")
         if self.market_state.has_data_gaps or self._not_ready_symbols:
@@ -4450,7 +4657,11 @@ class EngineRuntime:
                 raise ValueError("A managed position still requires manual intervention")
             account = self.broker.account()
             self._publish_account_snapshot(account)
-            self._circuit_breaker_reason = None
+            with getattr(self, "_state_lock", threading.RLock()):
+                # Clear only the reason being reset: a halt another thread
+                # raised during the broker calls above set its own reason.
+                if self._circuit_breaker_reason == reason:
+                    self._circuit_breaker_reason = None
             # The operator verified THIS halt's recovery condition above;
             # clear exactly its incident, never unrelated incidents (those
             # need their own per-halt verification).
@@ -4458,10 +4669,21 @@ class EngineRuntime:
             market_halts = getattr(self, "_market_entry_halts", None)
             if market_halts is not None:
                 self._verify_market_halts(market_halts)
-            self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}))
+            with getattr(self, "_risk_state_lock", threading.Lock()):
+                self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}))
             self._persist_risk_state(account)
-        if self._running and self._state == "halted":
-            self._state = "running"
+        with getattr(self, "_state_lock", threading.RLock()):
+            # A halt raised by another thread since the breaker was cleared
+            # above set a new reason: keep that halt. A trade-update blip while
+            # a non-halting breaker (protection_failure) was set left the
+            # runtime "degraded"; the blip restore never passes a breaker, so
+            # un-pin it here too, while the trade-update worker is alive.
+            trade_updates = dict(getattr(self, "_workers", {})).get("pb-trade-updates")
+            restorable = self._state == "halted" or (
+                self._state == "degraded" and trade_updates is not None and trade_updates.alive
+            )
+            if self._running and restorable and self._circuit_breaker_reason is None:
+                self._state = "running"
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
 
     def _verify_market_halts(self, market_halts: dict[Market, str | None]) -> None:
@@ -4471,10 +4693,22 @@ class EngineRuntime:
         above already verified protection and exit state, so per-halt
         verifications may rely on it. Unverified halts stay active and are
         reported to the operator.
+
+        Every dict access takes the state lock, so each individual
+        read-modify-write is atomic against a concurrent halt writer (stream
+        worker, universe refresh, crypto protection): none of them can
+        overwrite an update in flight. What is NOT guaranteed is atomicity
+        across a whole verification — reading a halt and re-reading it after
+        the recovery attempt is a pair of locked accesses, so a halt raised
+        or replaced in between is left for the next reset instead of being
+        reported in ``retained`` here. The lock is never held across the
+        verifications themselves, which take the ingestion and portfolio
+        locks and would invert the established lock order.
         """
         retained: list[str] = []
         for market in (Market.EQUITY, Market.CRYPTO):
-            halt = market_halts.get(market)
+            with getattr(self, "_state_lock", threading.RLock()):
+                halt = market_halts.get(market)
             if halt is None:
                 continue
             if halt == "subscription_state_unknown":
@@ -4485,7 +4719,9 @@ class EngineRuntime:
                     self._resync_stream_if_needed()
                 except Exception as exc:
                     retained.append(f"{market.value}:{halt}:{exc}")
-                if market_halts.get(market) == halt:
+                with getattr(self, "_state_lock", threading.RLock()):
+                    still_halted = market_halts.get(market) == halt
+                if still_halted:
                     retained.append(f"{market.value}:{halt}:resync_did_not_clear")
                 continue
             if halt == "invalid_dynamic_universe":
@@ -4496,14 +4732,17 @@ class EngineRuntime:
                     self._refresh_runtime_universes(market)
                 except Exception as exc:
                     retained.append(f"{market.value}:{halt}:{exc}")
-                if market_halts.get(market) == halt:
+                with getattr(self, "_state_lock", threading.RLock()):
+                    still_halted = market_halts.get(market) == halt
+                if still_halted:
                     retained.append(f"{market.value}:{halt}:refresh_did_not_clear")
                 continue
             if halt == "crypto_protection_failure":
                 # The broker reconciliation above is the verified protection
                 # pass: it restores managed crypto stops and raises on
                 # failure, so a completed reconcile proves the pass.
-                market_halts[market] = None
+                with getattr(self, "_state_lock", threading.RLock()):
+                    market_halts[market] = None
                 continue
             if halt == "ambiguous_crypto_exit":
                 # Only authoritative broker reconciliation proving terminal
@@ -4511,7 +4750,8 @@ class EngineRuntime:
                 # _reconcile_crypto_exit for every in-flight exit and raises
                 # on ambiguity. Verify nothing remains unresolved.
                 if self._crypto_exits_are_terminal():
-                    market_halts[market] = None
+                    with getattr(self, "_state_lock", threading.RLock()):
+                        market_halts[market] = None
                 else:
                     retained.append(f"{market.value}:{halt}:exit_state_not_terminal")
                 continue
@@ -4520,13 +4760,15 @@ class EngineRuntime:
                 # worker and require it to be alive and (when the market is
                 # live) delivering fresh events.
                 if self._restart_stream_worker(market):
-                    market_halts[market] = None
+                    with getattr(self, "_state_lock", threading.RLock()):
+                        market_halts[market] = None
                 else:
                     retained.append(f"{market.value}:{halt}:worker_not_delivering")
                 continue
             if halt == "rebalance_reconciliation_required":
                 if self._rebalance_state_reconciled(market):
-                    market_halts[market] = None
+                    with getattr(self, "_state_lock", threading.RLock()):
+                        market_halts[market] = None
                 else:
                     retained.append(f"{market.value}:{halt}:rebalance_state_unresolved")
                 continue
@@ -4553,7 +4795,7 @@ class EngineRuntime:
         spawns a fresh worker. The halt clears only when the worker is alive
         and — while the market is live — delivering fresh stream events.
         """
-        worker_name = "pb-stocks" if market == Market.EQUITY else "pb-crypto"
+        worker_name = _STREAM_WORKER_BY_MARKET[market]
         worker = self._workers.get(worker_name)
         target = self.stream.run_stock if market == Market.EQUITY else self.stream.run_crypto
         if worker is None or not worker.alive:
@@ -4575,17 +4817,30 @@ class EngineRuntime:
                 time.sleep(0.05)
         return self._stream_worker_delivering(market, worker)
 
-    def _stream_worker_delivering(self, market: Market, worker: WorkerHealth | None) -> bool:
+    def _stream_worker_delivering(
+        self,
+        market: Market,
+        worker: WorkerHealth | None,
+        now: datetime | None = None,
+        heartbeat_ttl: float | None = None,
+    ) -> bool:
+        """Single source of truth for market stream-worker liveness.
+
+        Shared by the runtime health gate, the per-market health panel and
+        the verified-reconnect check so they can never disagree.
+        """
         if worker is None or not worker.alive:
             return False
-        now = datetime.now(UTC)
+        if now is None:
+            now = datetime.now(UTC)
         event_required = market == Market.CRYPTO or is_regular_equity_time(now)
         if not event_required:
             return True
         last_event = worker.last_event_at
         if last_event is None:
             return False
-        heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
+        if heartbeat_ttl is None:
+            heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
         return (now - last_event).total_seconds() <= max(180.0, heartbeat_ttl)
 
     def _rebalance_state_reconciled(self, market: Market) -> bool:
@@ -4593,7 +4848,10 @@ class EngineRuntime:
 
         The broker reconciliation above resolves working orders into terminal
         states; once every order of the blocked decision is terminal the halt
-        can clear and the runtime completes the deferred BUY phase normally.
+        can clear. The next gated decision then closes the blocked rebalance
+        WITHOUT submitting its stale deferred BUYs and plans from a fresh
+        target (``PortfolioRuntime._close_settled_blocked_rebalance``); a
+        block whose decision cannot be restored stays blocked.
         """
         repository = getattr(self, "_portfolio_repository", None)
         if repository is None:
@@ -4634,7 +4892,6 @@ class EngineRuntime:
         additionally guards against a shorter window silently standing in
         for a longer one.
         """
-        import hashlib
         import json as _json
 
         payload = {
@@ -4746,7 +5003,12 @@ class EngineRuntime:
                                 with self._ingestion_lock, self._portfolio_lock:
                                     self.market_state.seed(raw_tail)
                                     for runtime in self._portfolio_runtimes:
-                                        if runtime.market == market:
+                                        # Only the runtime whose strategy reads
+                                        # this cadence: an operational pass
+                                        # (5m execution) would otherwise call
+                                        # seed() with an all-filtered list and
+                                        # still bump previous_timestamp.
+                                        if runtime.strategy.timeframe == timeframe and runtime.market == market:
                                             runtime.seed(signal_tail)
                             if len(signal_tail) < requested_bars:
                                 log.warning(
@@ -4775,8 +5037,6 @@ def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:
 
 
 def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
-    from parayabuck.markets.timeframes import bars_to_calendar_days
-
     days = bars_to_calendar_days(symbol, timeframe, bars)
     return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
 

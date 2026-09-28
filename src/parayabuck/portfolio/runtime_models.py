@@ -53,13 +53,6 @@ REBALANCE_PHASE_BUY_READY = "buy_ready"
 REBALANCE_PHASE_BUY_PENDING = "buy_pending"
 REBALANCE_PHASE_COMPLETE = "complete"
 REBALANCE_PHASE_BLOCKED = "blocked"
-_NON_TERMINAL_REBALANCE_PHASES = frozenset(
-    {
-        REBALANCE_PHASE_SELL_PENDING,
-        REBALANCE_PHASE_BUY_READY,
-        REBALANCE_PHASE_BUY_PENDING,
-    }
-)
 
 
 def is_terminal_order_status(status: str) -> bool:
@@ -69,22 +62,6 @@ def is_terminal_order_status(status: str) -> bool:
 # Single SQL source for the terminal set above: queries must never hardcode
 # a second copy that can drift from is_terminal_order_status.
 TERMINAL_ORDER_STATUSES_SQL = ", ".join(f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES))
-
-
-# Allowed rebalance transitions (fail-closed state machine).
-# Documented for review; enforcement is via repository + runtime.
-REBALANCE_TRANSITIONS: dict[str, frozenset[str]] = {
-    REBALANCE_PHASE_SELL_PENDING: frozenset({REBALANCE_PHASE_BUY_READY, REBALANCE_PHASE_BLOCKED}),
-    REBALANCE_PHASE_BUY_READY: frozenset({REBALANCE_PHASE_BUY_PENDING, REBALANCE_PHASE_BLOCKED}),
-    REBALANCE_PHASE_BUY_PENDING: frozenset({REBALANCE_PHASE_COMPLETE, REBALANCE_PHASE_BLOCKED}),
-    REBALANCE_PHASE_BLOCKED: frozenset({REBALANCE_PHASE_SELL_PENDING}),  # new rebalance after block
-    REBALANCE_PHASE_COMPLETE: frozenset({REBALANCE_PHASE_SELL_PENDING}),  # next decision starts new cycle
-}
-
-
-def is_allowed_rebalance_transition(frm: str, to: str) -> bool:
-    """Whether a persisted rebalance phase transition is allowed."""
-    return to in REBALANCE_TRANSITIONS.get(frm, frozenset())
 
 
 @dataclass(frozen=True)
@@ -99,6 +76,10 @@ class OpenPortfolioOrder:
     cumulative_filled_quantity: float
     broker_order_id: str = ""
     reference_price: float = 0.0
+    # Row status and its latest write time (creation or broker-call start or
+    # return); reconciliation uses them to close a never-accepted order.
+    status: str = ""
+    last_updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -118,10 +99,6 @@ class RebalanceExecutionState:
     phase: str
     status: str
     updated_at: datetime
-
-    @property
-    def active(self) -> bool:
-        return self.phase in _NON_TERMINAL_REBALANCE_PHASES and self.status == "active"
 
 
 @dataclass(frozen=True)
@@ -225,7 +202,6 @@ __all__ = [
     "REBALANCE_PHASE_BUY_READY",
     "REBALANCE_PHASE_COMPLETE",
     "REBALANCE_PHASE_SELL_PENDING",
-    "REBALANCE_TRANSITIONS",
     "TERMINAL_ORDER_STATUSES_SQL",
     "OpenPortfolioOrder",
     "PortfolioDecisionService",
@@ -233,9 +209,7 @@ __all__ = [
     "PortfolioRuntimeResult",
     "RebalanceExecutionState",
     "_AMBIGUOUS_ORDER_STATUSES",
-    "_NON_TERMINAL_REBALANCE_PHASES",
     "_TERMINAL_ORDER_STATUSES",
     "configuration_digest",
-    "is_allowed_rebalance_transition",
     "is_terminal_order_status",
 ]

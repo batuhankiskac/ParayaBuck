@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from parayabuck.logger import get_logger
 from parayabuck.utils.io import atomic_write
+from parayabuck.web.managers.engine import _yaml_block
 from parayabuck.web.schemas.settings import LiveConfirmationPayload, ModePayload, WebSocketTicketPayload
 
 log = get_logger("parayabuck.web.routers.safety")
@@ -93,9 +94,9 @@ async def toggle_mode(payload: ModePayload, request: Request) -> dict[str, Any]:
         if manager.config_path.exists():
             with open(manager.config_path, encoding="utf-8") as f:
                 raw = yaml.safe_load(f) or {}
-        raw.setdefault("runtime", {})["mode"] = "paper" if payload.paper else "live"
+        _yaml_block(raw, "runtime")["mode"] = "paper" if payload.paper else "live"
         if not payload.paper:
-            raw.setdefault("live", {})["enabled"] = True
+            _yaml_block(raw, "live")["enabled"] = True
         atomic_write(
             manager.config_path,
             yaml.safe_dump(raw, sort_keys=False, default_flow_style=False),

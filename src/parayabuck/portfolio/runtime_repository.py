@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import math
-import threading
 from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -17,25 +16,57 @@ from uuid import uuid4
 
 from parayabuck.core.models import Market
 from parayabuck.execution.alpaca import CRYPTO_TAKER_FEE_RESERVE
-from parayabuck.execution.portfolio import PortfolioOrderRequest, RiskOverlayDecision
+from parayabuck.execution.portfolio import (
+    PortfolioOrderRequest,
+    PortfolioOrderSide,
+    RiskOverlayDecision,
+    _client_order_id,
+)
 from parayabuck.logger import get_logger
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_models import (
+    _TERMINAL_ORDER_STATUSES,
     TERMINAL_ORDER_STATUSES_SQL,
     OpenPortfolioOrder,
     RebalanceExecutionState,
     _decision_id,
 )
+from parayabuck.portfolio.runtime_ownership import net_owned_quantities
 from parayabuck.storage import SQLiteStore
 
 log = get_logger("parayabuck.portfolio.runtime_repository")
+
+# A late or racing observation (a stream event applied before the submit
+# path records ``submitted``, a reconciliation snapshot taken before the
+# fill) must never move a final order back to a working status: the row
+# would re-enter ``open_orders`` and hold a position slot until the next
+# reconciliation. ``done_for_day`` is excluded because Alpaca resumes such
+# an order on the next session.
+_FINAL_ORDER_STATUSES_SQL = ", ".join(f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES - {"done_for_day"}))
+_NON_REGRESSING_STATUS_SQL = (
+    f"CASE WHEN status IN ({_FINAL_ORDER_STATUSES_SQL}) "
+    f"AND ? NOT IN ({TERMINAL_ORDER_STATUSES_SQL}) THEN status ELSE ? END"
+)
+
+
+def _latest_timestamp(*values: object) -> datetime | None:
+    """Latest of the stored ISO timestamps (naive values read as UTC)."""
+    parsed: list[datetime] = []
+    for value in values:
+        if not value:
+            continue
+        try:
+            moment = datetime.fromisoformat(str(value))
+        except ValueError:
+            continue
+        parsed.append(moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC))
+    return max(parsed, default=None)
 
 
 class PortfolioStateRepository:
     def __init__(self, path: str | Path, *, store: SQLiteStore | None = None) -> None:
         self.store = store or SQLiteStore(path)
         self._owns_store = store is None
-        self._lock = threading.RLock()
         self._migrate()
 
     def _migrate(self) -> None:
@@ -115,6 +146,11 @@ class PortfolioStateRepository:
                     buy_orders_json TEXT NOT NULL DEFAULT '[]',
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY(decision_id) REFERENCES portfolio_decisions(decision_id)
+                );
+                CREATE TABLE IF NOT EXISTS portfolio_ledger_identity (
+                    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                    client_order_salt TEXT NOT NULL,
+                    created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS portfolio_buy_admission_observations (
                     observation_id TEXT PRIMARY KEY,
@@ -227,6 +263,17 @@ class PortfolioStateRepository:
                 self.store.connection.execute(
                     "ALTER TABLE portfolio_high_water ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0"
                 )
+            # One random salt per ledger, created once and reused forever, so
+            # client order ids stay idempotent across restarts of this ledger
+            # but never collide with ids another ledger (a fresh DB, or a
+            # second process on the same Alpaca key) derives for the same
+            # decision. Written last: an earlier write would open the
+            # transaction the decisions rebuild needs to be outside of.
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_ledger_identity(singleton, client_order_salt, created_at)
+                   VALUES (1, ?, ?)""",
+                (uuid4().hex[:12], datetime.now(UTC).isoformat()),
+            )
 
     def _ensure_hot_path_indexes(self) -> None:
         """Additive, backward-compatible hot-path indexes (idempotent).
@@ -622,6 +669,33 @@ class PortfolioStateRepository:
             return ()
         return tuple(dict(item) for item in parsed if isinstance(item, dict))
 
+    def client_order_salt(self, decision_id: str) -> str:
+        """Ledger salt for the client order ids of ``decision_id``.
+
+        A decision that already persisted legacy unsalted ids
+        (``parayabuck-{decision_id}-{symbol}-{side}``) keeps the legacy form,
+        so a re-plan of an in-flight pre-salt decision regenerates the same
+        ids and stays idempotent. Every other decision uses this ledger's
+        persisted salt.
+        """
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                "SELECT client_order_id, symbol, side FROM portfolio_orders WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchall()
+            if any(
+                str(row[0]) == _client_order_id(decision_id, str(row[1]), PortfolioOrderSide(str(row[2])))
+                for row in rows
+                if str(row[2]) in {"buy", "sell"}
+            ):
+                return ""
+            salt = self.store.connection.execute(
+                "SELECT client_order_salt FROM portfolio_ledger_identity WHERE singleton = 1"
+            ).fetchone()
+        if salt is None or not str(salt[0]):
+            raise RuntimeError("Portfolio ledger has no client order salt")
+        return str(salt[0])
+
     def orders_for_decision(self, decision_id: str, side: str | None = None) -> tuple[dict[str, object], ...]:
         """Order rows attributed to one decision (used by rebalance recovery)."""
         query = """SELECT client_order_id, symbol, market, side, quantity,
@@ -647,6 +721,32 @@ class PortfolioStateRepository:
                 "broker_order_id": str(row[7] or ""),
                 "reference_price": float(row[8] or 0.0),
                 "average_fill_price": float(row[9]) if row[9] is not None else None,
+            }
+            for row in rows
+        )
+
+    def submitting_orders(self, account_id: str, market: Market) -> tuple[dict[str, object], ...]:
+        """Rows of one account and market still at ``submitting``.
+
+        Attributed through the same decision/session lineage as
+        ``open_orders``; each row carries its ``decision_id``.
+        """
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                """SELECT o.client_order_id, o.decision_id, o.status, o.broker_order_id
+                   FROM portfolio_orders o
+                   JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                   JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                   WHERE s.account_id = ? AND o.market = ? AND o.status = 'submitting'
+                   ORDER BY o.created_at""",
+                (account_id, market.value),
+            ).fetchall()
+        return tuple(
+            {
+                "client_order_id": str(row[0]),
+                "decision_id": str(row[1]),
+                "status": str(row[2]),
+                "broker_order_id": str(row[3] or ""),
             }
             for row in rows
         )
@@ -713,9 +813,9 @@ class PortfolioStateRepository:
     def update_order(self, client_order_id: str, status: str, broker_order_id: str = "") -> None:
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
-                """UPDATE portfolio_orders SET status = ?, broker_order_id = ?
+                f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL}, broker_order_id = ?
                    WHERE client_order_id = ?""",
-                (status, broker_order_id, client_order_id),
+                (status, status, broker_order_id, client_order_id),
             )
 
     def record_protective_order(
@@ -893,7 +993,8 @@ class PortfolioStateRepository:
         """
         query = f"""
             SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
-                   o.cumulative_filled_quantity, o.broker_order_id, o.reference_price
+                   o.cumulative_filled_quantity, o.broker_order_id, o.reference_price,
+                   o.status, o.created_at, o.submit_call_started_at, o.submit_call_returned_at
             FROM portfolio_orders o
             JOIN portfolio_decisions d ON d.decision_id = o.decision_id
             JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -916,6 +1017,8 @@ class PortfolioStateRepository:
                 cumulative_filled_quantity=float(row[5] or 0.0),
                 broker_order_id=str(row[6] or ""),
                 reference_price=float(row[7] or 0.0),
+                status=str(row[8] or ""),
+                last_updated_at=_latest_timestamp(row[9], row[10], row[11]),
             )
             for row in rows
         )
@@ -940,7 +1043,7 @@ class PortfolioStateRepository:
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
                 """SELECT o.cumulative_filled_quantity, o.reference_price, o.side,
-                          o.market, s.account_id, o.created_at
+                          o.market, s.account_id, o.created_at, o.symbol
                    FROM portfolio_orders o
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -998,6 +1101,7 @@ class PortfolioStateRepository:
             market = str(row[3] or "")
             account_id = str(row[4])
             created_at = str(row[5]) if row[5] is not None else None
+            symbol = str(row[6])
             # Alpaca deducts the taker fee from the acquired units on crypto
             # buys (position = fill qty * (1 - fee)); the gross fill would
             # overstate ownership by exactly the fee, and after a partial
@@ -1019,10 +1123,12 @@ class PortfolioStateRepository:
                 except (TypeError, ValueError):
                     delay_seconds = None
             self.store.connection.execute(
-                """UPDATE portfolio_orders SET status = ?, broker_order_id = ?,
-                   cumulative_filled_quantity = ?, average_fill_price = ?
+                f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL},
+                   broker_order_id = ?, cumulative_filled_quantity = ?,
+                   average_fill_price = COALESCE(?, average_fill_price)
                    WHERE client_order_id = ?""",
                 (
+                    status,
                     status,
                     broker_order_id,
                     max(previous, cumulative_filled_quantity),
@@ -1055,17 +1161,12 @@ class PortfolioStateRepository:
                     # A real SELL fill proves the sale that a stale-clear
                     # adjustment assumed; consume the adjustment instead of
                     # booking a second SELL on top of it.
-                    symbol = self.store.connection.execute(
-                        "SELECT symbol, market FROM portfolio_orders WHERE client_order_id = ?",
-                        (client_order_id,),
-                    ).fetchone()
-                    if symbol is not None:
-                        self._consume_ownership_adjustments_tx(
-                            account_id,
-                            str(symbol[0]),
-                            Market(str(symbol[1])),
-                            fill_delta,
-                        )
+                    self._consume_ownership_adjustments_tx(
+                        account_id,
+                        symbol,
+                        Market(market),
+                        fill_delta,
+                    )
         return True
 
     @staticmethod
@@ -1116,22 +1217,16 @@ class PortfolioStateRepository:
                 existing_equity = float(row[0])
                 existing_epoch = int(row[1] or 0)
                 high_water = max(existing_equity, equity)
-                self.store.connection.execute(
-                    """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
-                   VALUES (?, ?, ?, ?)
-                   ON CONFLICT(account_id) DO UPDATE SET
-                     equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
-                    (account_id, high_water, datetime.now(UTC).isoformat(), existing_epoch),
-                )
             else:
+                existing_epoch = 0
                 high_water = equity
-                self.store.connection.execute(
-                    """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
+            self.store.connection.execute(
+                """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
                    VALUES (?, ?, ?, ?)
                    ON CONFLICT(account_id) DO UPDATE SET
                      equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
-                    (account_id, high_water, datetime.now(UTC).isoformat(), 0),
-                )
+                (account_id, high_water, datetime.now(UTC).isoformat(), existing_epoch),
+            )
         return high_water
 
     def high_water(self, account_id: str) -> float:
@@ -1141,25 +1236,6 @@ class PortfolioStateRepository:
                 (account_id,),
             ).fetchone()
         return float(row[0]) if row is not None else 0.0
-
-    def high_water_with_epoch(self, account_id: str) -> tuple[float, int]:
-        """Return (equity, epoch) for ``account_id``; epoch defaults to 0."""
-        with self.store.lock:
-            row = self.store.connection.execute(
-                "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
-                (account_id,),
-            ).fetchone()
-        if row is None:
-            return 0.0, 0
-        return float(row[0]), int(row[1] or 0)
-
-    def high_water_epoch(self, account_id: str) -> int:
-        with self.store.lock:
-            row = self.store.connection.execute(
-                "SELECT epoch FROM portfolio_high_water WHERE account_id = ?",
-                (account_id,),
-            ).fetchone()
-        return int(row[0] or 0) if row is not None else 0
 
     def reset_high_water(self, account_id: str, equity: float) -> None:
         """Rebase the persisted portfolio high-water to ``equity`` (a new
@@ -1202,19 +1278,26 @@ class PortfolioStateRepository:
             params = (account_id, market.value)
         with self.store.lock:
             rows = self.store.connection.execute(query, params).fetchall()
-            adjustments = self.store.connection.execute(
-                """SELECT symbol, SUM(quantity - consumed_quantity)
+            # A stale-clear adjustment belongs to the market it was raised
+            # for; without the same market filter it is subtracted from the
+            # other market's net and the ownership invariant trips.
+            adjustments_query = """SELECT symbol, SUM(quantity - consumed_quantity)
                    FROM portfolio_ownership_adjustments
-                   WHERE account_id = ? AND consumed_quantity < quantity
-                   GROUP BY symbol""",
-                (account_id,),
+                   WHERE account_id = ? AND consumed_quantity < quantity"""
+            adjustments_params: tuple[object, ...] = (account_id,)
+            if market is not None:
+                adjustments_query += " AND market = ?"
+                adjustments_params = (account_id, market.value)
+            adjustments_query += " GROUP BY symbol"
+            adjustments = self.store.connection.execute(
+                adjustments_query,
+                adjustments_params,
             ).fetchall()
         # Pure computation delegated
-        from parayabuck.portfolio.runtime_ownership import net_owned_quantities
-
         order_tuples = [(str(r[0]), str(r[2]), float(r[3] or 0.0)) for r in rows]
         adj_tuples = [(str(r[0]), float(r[1] or 0.0)) for r in adjustments]
-        return net_owned_quantities(order_tuples, adj_tuples)
+        crypto_symbols = {str(r[0]) for r in rows if str(r[1]) == Market.CRYPTO.value}
+        return net_owned_quantities(order_tuples, adj_tuples, crypto_symbols)
 
     def owned_symbols(self, account_id: str = "unknown", market: Market | None = None) -> set[str]:
         """Symbols the portfolio path still owns: net filled quantity > 0.

@@ -85,9 +85,12 @@ def crypto_candidate_from_bars(
     # ATR average). Named ``ranges`` so it does not shadow that helper.
     ranges: list[float] = []
     for previous, current in pairwise(ordered):
-        high = float(getattr(current, "high"))
-        low = float(getattr(current, "low"))
-        previous_close = float(getattr(previous, "close"))
+        try:
+            high = float(getattr(current, "high"))
+            low = float(getattr(current, "low"))
+            previous_close = float(getattr(previous, "close"))
+        except (TypeError, ValueError, AttributeError):
+            continue
         if all(math.isfinite(value) for value in (high, low, previous_close)):
             ranges.append(max(high - low, abs(high - previous_close), abs(low - previous_close)))
     price = float(getattr(ordered[-1], "close")) if ordered else 0.0
@@ -444,6 +447,8 @@ def validate_active_crypto_universe(
         return (), "missing"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return (), "invalid"
         if payload.get("status") != "success":
             return (), "invalid"
         if payload.get("scanner_version") != CryptoUniverseScanner.version:
@@ -464,15 +469,9 @@ def validate_active_crypto_universe(
             if payload.get("observation_strategy_timeframe") != config.observation_strategy_timeframe:
                 return (), "observation_timeframe_mismatch"
             expected_digest = config.observation_strategy_parameters_digest
-            if expected_digest and payload.get("observation_strategy_parameters_digest") not in (
-                None,
-                "",
-                expected_digest,
-            ):
-                if payload.get("observation_strategy_parameters_digest") != expected_digest:
-                    return (), "observation_digest_mismatch"
-            elif expected_digest and not payload.get("observation_strategy_parameters_digest"):
-                return (), "observation_strategy_mismatch"
+            recorded_digest = payload.get("observation_strategy_parameters_digest")
+            if expected_digest and recorded_digest != expected_digest:
+                return (), "observation_strategy_mismatch" if not recorded_digest else "observation_digest_mismatch"
         selection_at = datetime.fromisoformat(str(payload["selection_timestamp"]))
         data_at = datetime.fromisoformat(str(payload["data_timestamp"]))
         if selection_at.tzinfo is None or data_at.tzinfo is None:
@@ -499,11 +498,14 @@ def validate_active_crypto_universe(
         if not isinstance(raw_candidates, list):
             return (), "invalid"
         candidates = {canonical_symbol(str(item), Market.CRYPTO) for item in raw_candidates}
+        score_breakdown = payload.get("score_breakdown", {})
+        if not isinstance(score_breakdown, dict):
+            return (), "invalid"
         managed_pins = {
             symbol
             for symbol in selected
-            if isinstance(payload.get("score_breakdown", {}).get(symbol), dict)
-            and payload["score_breakdown"][symbol].get("selection_role") == "managed_position"
+            if isinstance(score_breakdown.get(symbol), dict)
+            and score_breakdown[symbol].get("selection_role") == "managed_position"
         }
         if not set(selected).issubset(candidates | set(config.pinned_symbols) | managed_pins):
             return (), "outside_candidate_pool"

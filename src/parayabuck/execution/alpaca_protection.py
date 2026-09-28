@@ -107,7 +107,19 @@ class ProtectionService:
             status = self._normalized_field(order, "status")
             if (
                 side == closing_side
-                and status not in {"canceled", "expired", "filled", "rejected"}
+                # Same dead-leg vocabulary as _open_protective_orders: a
+                # done_for_day/replaced/stopped leg no longer protects.
+                and status
+                not in {
+                    "canceled",
+                    "cancelled",
+                    "done_for_day",
+                    "expired",
+                    "filled",
+                    "rejected",
+                    "replaced",
+                    "stopped",
+                }
                 and (stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"})
             ):
                 return max(

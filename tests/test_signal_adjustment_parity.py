@@ -736,3 +736,22 @@ def test_newer_listed_symbol_with_short_history_verifies_without_growing_global_
         "OLD_SYM": dates_long[-1],
         "NEW_SYM": dates_short[-1],
     }
+
+
+@pytest.mark.parametrize(("age", "verified"), [(3600.0 + 5.0, True), (3600.0 + 299.0, True), (3600.0 + 301.0, False)])
+def test_signal_basis_freshness_tolerates_the_monitor_cadence(age: float, verified: bool) -> None:
+    """The monitor waits a full check interval after each pass, so the next
+    success lands just past last + 3600 s; freshness allows a bounded slack
+    instead of blipping stale every hour."""
+    from parayabuck.runtime import EngineRuntime
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._symbols_by_market = {Market.EQUITY: {"SPY"}}
+    runtime._signal_adjustment = {
+        "healthy": True,
+        "last_success_at": datetime.now(UTC) - timedelta(seconds=age),
+        "last_failure_at": None,
+        "last_error": None,
+        "verified_through_by_symbol": {},
+    }
+    assert runtime._equity_signal_basis_verified() is verified

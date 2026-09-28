@@ -53,6 +53,8 @@ _CANONICAL_ACTION_COLUMNS = {
     "raw_id",
 }
 _CANONICAL_NON_CASH_ACTION_TYPES = {"stock_dividends", "forward_splits", "reverse_splits"}
+_CANONICAL_SPLIT_ACTION_TYPES = {"forward_splits", "reverse_splits"}
+_STOCK_DIVIDEND_ECHO_TOLERANCE = Decimal("1e-5")
 
 
 @dataclass(frozen=True)
@@ -137,8 +139,28 @@ def _canonical_action_timestamp(raw_ex_date: object, *, row_number: int) -> date
     return parsed.replace(tzinfo=UTC)
 
 
+def _split_ratio(raw: dict[str, str], *, row_number: int) -> Decimal:
+    old_rate = _action_value(raw["old_rate"], row_number=row_number)
+    new_rate = _action_value(raw["new_rate"], row_number=row_number)
+    return new_rate / old_rate
+
+
 def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
-    """Load explicit dividend cash flows for split-adjusted equity price data."""
+    """Load explicit dividend cash flows for split-adjusted equity price data.
+
+    The product backtest runs on split-adjusted bars, so a dividend must be
+    credited per ADJUSTED share. Canonical v5 ``cash_dividends.rate`` is the
+    raw announced per-share amount (e.g. AAPL 2020-05-08 rate 0.82 alongside
+    a split-adjusted close of 77.53, pre-4:1-split raw ~310; QLD 2016-03-23
+    rate 0.084812 alongside close 4.448 after four later 2:1 splits), so
+    each rate is divided by the cumulative ratio of the same symbol's
+    forward/reverse splits with a strictly later ex_date. This assumes the
+    action file and the bars are one snapshot (no split in the file that the
+    bar download predates). Stock dividends are not applied, and the
+    cash_dividends row v5 repeats for each of them (rate = share ratio) is
+    dropped. The legacy dividend-only schema carries no split or
+    stock-dividend rows and is passed through unadjusted.
+    """
     actions: list[CorporateAction] = []
     seen: set[tuple[str, datetime, CorporateActionType, Decimal]] = set()
     with Path(path).open(newline="", encoding="utf-8") as handle:
@@ -154,35 +176,72 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
         else:
             missing = sorted(_LEGACY_ACTION_COLUMNS - fieldnames)
             raise ValueError(f"Corporate-action CSV is missing required columns: {', '.join(missing)}")
+        rows = list(enumerate(reader, start=2))
 
-        for row_number, raw in enumerate(reader, start=2):
+    # A set: a split repeated under another raw_id is one economic event and
+    # must not compound into the dividend rescale.
+    splits: dict[str, set[tuple[datetime, Decimal]]] = {}
+    stock_dividend_ratios: dict[tuple[str, datetime], list[Decimal]] = {}
+    if schema == "canonical_v5":
+        for row_number, raw in rows:
             raw_action_type = str(raw["action_type"]).lower()
-            if schema == "canonical_v5" and raw_action_type in _CANONICAL_NON_CASH_ACTION_TYPES:
-                continue
-            expected_action_type = "dividend" if schema == "legacy" else "cash_dividends"
-            if raw_action_type != expected_action_type:
-                raise ValueError(f"Unsupported corporate-action type on row {row_number}: {raw_action_type}")
-            timestamp = (
-                _legacy_action_timestamp(raw["timestamp"], row_number=row_number)
-                if schema == "legacy"
-                else _canonical_action_timestamp(raw["ex_date"], row_number=row_number)
-            )
-            value = _action_value(raw["value"] if schema == "legacy" else raw["rate"], row_number=row_number)
-            raw_symbol = str(raw["symbol"])
-            symbol = canonical_symbol(raw_symbol, Market.EQUITY)
-            action_type = CorporateActionType.DIVIDEND
-            key = (symbol, timestamp, action_type, value)
-            if key in seen:
-                continue
-            seen.add(key)
-            actions.append(
-                CorporateAction(
-                    timestamp,
-                    raw_symbol if schema == "legacy" else symbol,
-                    action_type,
-                    float(value),
+            if raw_action_type in _CANONICAL_SPLIT_ACTION_TYPES:
+                splits.setdefault(canonical_symbol(str(raw["symbol"]), Market.EQUITY), set()).add(
+                    (
+                        _canonical_action_timestamp(raw["ex_date"], row_number=row_number),
+                        _split_ratio(raw, row_number=row_number),
+                    )
                 )
+            elif raw_action_type == "stock_dividends":
+                stock_dividend_ratios.setdefault(
+                    (
+                        canonical_symbol(str(raw["symbol"]), Market.EQUITY),
+                        _canonical_action_timestamp(raw["ex_date"], row_number=row_number),
+                    ),
+                    [],
+                ).append(_action_value(raw["rate"], row_number=row_number))
+
+    for row_number, raw in rows:
+        raw_action_type = str(raw["action_type"]).lower()
+        if schema == "canonical_v5" and raw_action_type in _CANONICAL_NON_CASH_ACTION_TYPES:
+            continue
+        expected_action_type = "dividend" if schema == "legacy" else "cash_dividends"
+        if raw_action_type != expected_action_type:
+            raise ValueError(f"Unsupported corporate-action type on row {row_number}: {raw_action_type}")
+        timestamp = (
+            _legacy_action_timestamp(raw["timestamp"], row_number=row_number)
+            if schema == "legacy"
+            else _canonical_action_timestamp(raw["ex_date"], row_number=row_number)
+        )
+        value = _action_value(raw["value"] if schema == "legacy" else raw["rate"], row_number=row_number)
+        raw_symbol = str(raw["symbol"])
+        symbol = canonical_symbol(raw_symbol, Market.EQUITY)
+        action_type = CorporateActionType.DIVIDEND
+        if schema == "canonical_v5" and any(
+            abs(value - ratio) <= ratio * _STOCK_DIVIDEND_ECHO_TOLERANCE
+            for ratio in stock_dividend_ratios.get((symbol, timestamp), ())
+        ):
+            # v5 repeats each stock dividend as a cash_dividends row whose
+            # rate is the share ratio, sometimes re-rounded (CBSH 2020-12-01:
+            # 0.27 cash plus a 1.05 echo of the 5% stock dividend; CRESY
+            # 2023-12-06: 1.0098549 vs 1.00985). The echo is not cash.
+            continue
+        key = (symbol, timestamp, action_type, value)
+        if key in seen:
+            continue
+        seen.add(key)
+        # Sorted: set order must not change the Decimal division order.
+        for split_timestamp, ratio in sorted(splits.get(symbol, ())):
+            if split_timestamp > timestamp:
+                value /= ratio
+        actions.append(
+            CorporateAction(
+                timestamp,
+                raw_symbol if schema == "legacy" else symbol,
+                action_type,
+                float(value),
             )
+        )
     return actions
 
 
@@ -293,7 +352,7 @@ def run_product_backtest(
         filtered = [bar for bar in available if start is None or bar.timestamp >= start]
         if not filtered:
             raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
-        warmup = [bar for bar in available if start is not None and bar.timestamp < start]
+        warmup = _normalized_warmup([bar for bar in available if start is not None and bar.timestamp < start])
         if universe is None:
             universe = build_product_universe(
                 config,
@@ -313,10 +372,12 @@ def run_product_backtest(
         prepared = (ordered, decision_bars)
     risk = portfolio_risk_limits_from_config(config.risk)
     benchmark = "SPY" if market == Market.EQUITY else "BTC/USD"
+
+    universe_hash = hash_point_in_time_universe(universe)
     engine = PortfolioBacktestEngine(
         strategy,
         rebalance_policy_for(strategy),
-        starting_equity=initial_cash or config.backtest.initial_cash,
+        starting_equity=initial_cash if initial_cash is not None else config.backtest.initial_cash,
         slippage_bps=config.backtest.slippage_bps * cost_multiplier,
         spread_bps=config.backtest.spread_bps * cost_multiplier,
         commission=config.backtest.commission,
@@ -329,7 +390,7 @@ def run_product_backtest(
         equity_regulatory_fee_multiplier=cost_multiplier,
         benchmark_symbol=benchmark,
         universe=universe,
-        universe_version=hash_point_in_time_universe(universe),
+        universe_version=universe_hash,
         risk_limits=risk,
         maximum_allocation=selection.maximum_allocation,
         execution_policy=PortfolioExecutionPolicy(
@@ -361,17 +422,11 @@ def run_product_backtest(
                 else "raw crypto prices; no corporate actions"
             ),
             "cost_multiplier": cost_multiplier,
-            "universe_hash": hash_point_in_time_universe(universe),
+            "universe_hash": universe_hash,
             "universe_methodology": universe.methodology,
             "scanner_versions": sorted({snapshot.scanner_version for snapshot in universe.snapshots}),
             "data_feed": (data_feed or "offline csv (feed unknown; downloader used the configured historical feed)"),
-            "data_feed_note": (
-                "IEX historical data reflects one exchange's prints, not the "
-                "consolidated SIP/NBBO tape; liquidity, spread and volume "
-                "proxies derived from IEX understate full-market conditions."
-                if (data_feed or "").lower() == "iex"
-                else "SIP consolidates the national market system tape."
-            ),
+            "data_feed_note": _data_feed_note(data_feed),
             "survivorship_bias_limitation": (
                 "Candidate metadata may reflect currently supported Alpaca assets; historical "
                 "scanner membership is point-in-time within the supplied bar set, but delisted "
@@ -561,6 +616,24 @@ def optimize_grid(
     return payload
 
 
+def _data_feed_note(data_feed: str | None) -> str:
+    """Provenance caveat matching the feed the run actually received.
+
+    Claiming the consolidated SIP tape for an unverified offline download
+    would put a false provenance claim in a persisted research artifact.
+    """
+    normalized = (data_feed or "").lower()
+    if normalized == "iex":
+        return (
+            "IEX historical data reflects one exchange's prints, not the "
+            "consolidated SIP/NBBO tape; liquidity, spread and volume "
+            "proxies derived from IEX understate full-market conditions."
+        )
+    if normalized == "sip":
+        return "SIP consolidates the national market system tape."
+    return "Feed unknown; provenance not verified for this offline run."
+
+
 def _prepared_window(
     bars: list[Bar],
     market: Market,
@@ -581,32 +654,39 @@ def _prepared_window(
         if bar.market == market and bar.timeframe == timeframe and (end is None or bar.timestamp <= end)
     ]
     filtered = [bar for bar in available if start is None or bar.timestamp >= start]
-    warmup = [bar for bar in available if start is not None and bar.timestamp < start]
-    if warmup:
-        from parayabuck.markets.symbols import canonical_symbol
-
-        canon_warmup: list[Bar] = []
-        for bar in warmup:
-            can = canonical_symbol(bar.symbol, bar.market)
-            if can != bar.symbol:
-                bar = Bar(
-                    timestamp=bar.timestamp,
-                    symbol=can,
-                    timeframe=bar.timeframe,
-                    open=bar.open,
-                    high=bar.high,
-                    low=bar.low,
-                    close=bar.close,
-                    volume=bar.volume,
-                    market=bar.market,
-                )
-            canon_warmup.append(bar)
-        warmup = sorted(canon_warmup, key=lambda b: (b.timestamp, b.symbol))
+    warmup = _normalized_warmup([bar for bar in available if start is not None and bar.timestamp < start])
     ordered = decision_bars = sorted(
         PortfolioBacktestEngine._deduplicate(filtered),
         key=lambda bar: (bar.timestamp, bar.symbol),
     )
     return filtered, warmup, (ordered, decision_bars)
+
+
+def _normalized_warmup(warmup: list[Bar]) -> list[Bar]:
+    """Canonicalize and timestamp-sort warmup bars for ``engine.run``.
+
+    The engine ingests warmup in the given order and keeps only bars strictly
+    newer than each series tail, so unsorted or alias-symbol warmup would be
+    silently dropped. Both the direct and the prepared (optimizer) paths use
+    this so identical parameters see identical warmup history.
+    """
+    canon_warmup: list[Bar] = []
+    for bar in warmup:
+        can = canonical_symbol(bar.symbol, bar.market)
+        if can != bar.symbol:
+            bar = Bar(
+                timestamp=bar.timestamp,
+                symbol=can,
+                timeframe=bar.timeframe,
+                open=bar.open,
+                high=bar.high,
+                low=bar.low,
+                close=bar.close,
+                volume=bar.volume,
+                market=bar.market,
+            )
+        canon_warmup.append(bar)
+    return sorted(canon_warmup, key=lambda b: (b.timestamp, b.symbol))
 
 
 def _optimization_sort_key(item: dict[str, object]) -> tuple[float, str]:

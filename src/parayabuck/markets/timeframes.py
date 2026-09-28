@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from datetime import UTC, date, datetime, timedelta
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from parayabuck.logger import get_logger
@@ -33,11 +34,6 @@ def is_regular_equity_time(timestamp: datetime) -> bool:
     return local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60
 
 
-def bar_bucket_end(timestamp: datetime, timeframe: str) -> datetime:
-    """When a bar's fixed time bucket fully elapses (24/7 calendar rule)."""
-    return timestamp + timeframe_duration(timeframe)
-
-
 def bar_is_closed(timestamp: datetime, timeframe: str, now: datetime) -> bool:
     """Whether a bar is fully closed at ``now`` under the 24/7 bucket rule.
 
@@ -47,7 +43,7 @@ def bar_is_closed(timestamp: datetime, timeframe: str, now: datetime) -> bool:
     current bucket, whose close is partial data; seeding or ranking on it
     would let a partial close masquerade as the true close.
     """
-    return bar_bucket_end(timestamp, timeframe) <= now
+    return timestamp + timeframe_duration(timeframe) <= now
 
 
 def equity_day_bar_is_closed(timestamp: datetime, now: datetime) -> bool:
@@ -94,7 +90,21 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
     backtests must size their warmup around the requested evaluation start
     (e.g. 2020), whose holiday calendar differs from today's, never around
     the current date.
+
+    Results are memoised per (symbol, timeframe, bars, anchor): the NYSE
+    calendar lookup is expensive. ``end_date=None`` resolves to the current
+    date BEFORE the memo lookup, so a long-lived process never reuses a span
+    anchored on the day it started.
     """
+    # For live warmup the anchor is today; historical backtests pass the
+    # evaluation start so session density reflects that era's calendar. A
+    # datetime is a date, so the anchor keeps whatever the caller passed.
+    anchor: date = end_date if end_date is not None else datetime.now(UTC).date()
+    return _bars_to_calendar_days(symbol, timeframe, bars, anchor)
+
+
+@lru_cache(maxsize=2048)
+def _bars_to_calendar_days(symbol: str, timeframe: str, bars: int, today: date) -> int:
     minutes = TIMEFRAME_MINUTES[timeframe]
     if "/" in symbol:
         bars_per_day = 1440 / minutes
@@ -102,17 +112,11 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
         return max(2, math.ceil(bars / max(0.01, bars_per_day) * multiplier))
     bars_per_session = (390 / minutes) if minutes < 1440 else 1
     needed_sessions = max(1, math.ceil(bars / bars_per_session))
-    anchor: date | None = None
-    if end_date is not None:
-        anchor = end_date if isinstance(end_date, date) else end_date.date()
     calendar_error: Exception | None = None
     try:
         from pandas_market_calendars import get_calendar
 
         calendar = get_calendar("NYSE")
-        # For live warmup the anchor is today; historical backtests pass the
-        # evaluation start so session density reflects that era's calendar.
-        today = anchor or datetime.now(UTC).date()
         # Grow the backward window until it contains enough real sessions,
         # then tighten to the exact minimum with a binary search.
         days = max(2, math.ceil(needed_sessions * 7 / 5))
@@ -151,7 +155,6 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
 __all__ = [
     "NEW_YORK",
     "TIMEFRAME_MINUTES",
-    "bar_bucket_end",
     "bar_is_closed",
     "bars_to_calendar_days",
     "equity_day_bar_is_closed",

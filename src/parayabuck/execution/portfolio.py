@@ -450,6 +450,7 @@ class TargetToOrderPlanner:
         open_order_symbols: set[str] | None = None,
         open_order_sides: Mapping[str, set[str] | frozenset[str]] | None = None,
         decision_id: str | None = None,
+        client_order_salt: str = "",
     ) -> tuple[PortfolioOrderRequest, ...]:
         """Build rebalance orders from a target.
 
@@ -457,6 +458,8 @@ class TargetToOrderPlanner:
         identity from the runtime repository; when provided it seeds the
         client order ids so that two configurations sharing a strategy name,
         version and timestamp never produce the same broker idempotency key.
+        ``client_order_salt`` is the per-ledger salt that keeps those ids
+        distinct from ids another ledger derives for the same decision.
         """
         _validate_unique_account_positions(account)
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
@@ -541,7 +544,7 @@ class TargetToOrderPlanner:
                 continue
             orders.append(
                 PortfolioOrderRequest(
-                    client_order_id=_client_order_id(decision_id, symbol, side),
+                    client_order_id=_client_order_id(decision_id, symbol, side, client_order_salt),
                     decision_id=decision_id,
                     symbol=symbol,
                     market=market,
@@ -640,13 +643,16 @@ def _decision_id(target: TargetPortfolio) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 
-def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide) -> str:
+def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide, salt: str = "") -> str:
     """Deterministic broker idempotency key for one decision leg.
 
-    Format ``parayabuck-{decision_id}-{symbol}-{side}`` is stable across
-    restarts and unique per decision/symbol/side. The decision_id itself is
-    already scoped to account+digest+timestamp+market, so the full key is
-    globally unique without hashing. Persisted via ``portfolio_orders``;
+    Format ``parayabuck-{decision_id}-{salt}-{symbol}-{side}`` is stable
+    across restarts and unique per decision/symbol/side. The decision_id is
+    scoped to account+digest+timestamp+market, but a fresh ledger (or another
+    process on the same account) derives the same decision_id, so the
+    persisted per-ledger ``salt`` keeps its key from matching — and adopting —
+    a broker order this ledger never created. An empty salt yields the legacy
+    ``parayabuck-{decision_id}-{symbol}-{side}`` form. Persisted via ``portfolio_orders``;
     duplicate decisions map to the same logical order and ``INSERT OR IGNORE``
     prevents a second broker submission. Partial fills keep the same key and
     only the residual is re-planned; broker timeouts leave the row at
@@ -655,6 +661,8 @@ def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide) ->
     canonical = canonical_symbol(symbol, Market.CRYPTO if "/" in symbol else Market.EQUITY)
     # Use the canonical symbol in the key so ``BTC/USD`` vs ``BTCUSD`` do not
     # create duplicate broker orders for the same logical leg.
+    if salt:
+        return f"parayabuck-{decision_id}-{salt}-{canonical}-{side.value}"
     return f"parayabuck-{decision_id}-{canonical}-{side.value}"
 
 

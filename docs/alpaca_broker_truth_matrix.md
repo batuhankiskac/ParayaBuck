@@ -41,7 +41,7 @@ Derived from `ledger + portfolio` vs `broker` quantities with tolerance `max(1e-
 |`BROKER_STALE`|Local 0, broker >0|Append to `MISSING_LOCAL_ORDER`; warn; protect if `manage_external` or crypto portfolio-owned|Auto-adopt as managed|
 |`QUANTITY_MISMATCH`|Both >0 but `abs(local-broker)>tol`|Append `QUANTITY_MISMATCH`|Overwrite local with broker|
 |`UNKNOWN_ORDER`|`broker_open_ids - local_open_ids` (broker has order local doesn't)|Append `UNKNOWN_ORDER` per client_order_id|Assume it's managed|
-|`MISSING_BROKER_ORDER`|`local_open_ids - broker_open_ids` (local expects order missing at broker)|Append `MISSING_BROKER_ORDER` + `MISSING_LOCAL_ORDER` (alias for stale)|Ignore|
+|`MISSING_BROKER_ORDER`|`local_open_ids - broker_open_ids` (local expects order missing at broker)|Append `MISSING_BROKER_ORDER` + `MISSING_LOCAL_ORDER` (alias for stale); a `submitting`/`reconciliation_required` row whose client-id lookup is a 404 and whose last write is ≥ `UNKNOWN_ORDER_CANCEL_AGE_SECONDS` (600 s) old is first booked `canceled` with zero fill (warning + one `paper_incident` `unknown_order_canceled`)|Ignore; cancel a younger row or one whose lookup failed|
 |`MISSING_LOCAL_ORDER`|Broker has open order not in local (same as UNKNOWN but per-symbol bucket)|Listed above|—|
 
 Empty mismatch buckets (`QUANTITY_MISMATCH`, `LOCAL_STALE`, `BROKER_STALE`, `UNKNOWN_ORDER` non-empty) must be treated fail-closed by caller (`runtime.py` halts).
@@ -71,10 +71,12 @@ Empty mismatch buckets (`QUANTITY_MISMATCH`, `LOCAL_STALE`, `BROKER_STALE`, `UNK
 |R1|404 / `None`|Order never reached Alpaca, can never fill|Return `"canceled"` (safe to mark canceled)|Mark filled or leave submitting forever|
 |R2|Status `filled` and `filled_qty>0 && avg_price>0`|Order filled at broker at real price|Invoke `portfolio_fill_recovered` (recovery path), return `"filled"`|Invent synthetic fill at reference price|
 |R3|Same but filled but `filled_qty/avg_price` unextractable|Fill not provable|Return `"submitted"` (keep non-terminal, don't release ownership)|Guess fill qty/price|
-|R4|Status `canceled|cancelled|expired|rejected|done_for_day`|Terminal without fill|Return that status (maps to canceled in repo)|Mark filled|
+|R4|Status `canceled|cancelled|expired|rejected|done_for_day`|Terminal; any `filled_qty>0 && avg_price>0` is a real partial fill|Invoke `portfolio_fill_recovered(..., status=<status>)` for a real partial fill (cumulative, so a later delivery never double-books), then return that status|Mark filled; drop a real partial fill|
 |R5|Status `accepted|pending|working|partially_filled` etc.|Still working|Return `"submitted"`|Mark completed|
 |R6|`get_order_by_client_id` missing / `None` capability, or network error|Broker unreachable|Return `None` (caller retries later, no state change)|Guess|
 |R7|Exception with `status_code != 404` during fetch|Lookup itself failed|Propagate (do not guess) → caller treats as `None` retry|Swallow as 404|
+
+R2–R5 return the status paired with the broker's order id, `(status, broker_order_id)`, so the caller persists the real id instead of the empty id a crashed submit left behind.
 
 ---
 

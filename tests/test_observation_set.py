@@ -128,6 +128,41 @@ def test_strategy_ranked_stale_symbol_is_excluded_but_stale_pin_is_preserved() -
     assert observation.source == "strategy_alpha"
 
 
+def test_ranked_and_fallback_names_without_history_are_skipped() -> None:
+    """A ranker may name a symbol the caller never loaded history for (and a
+    strategy may declare no minimum): the name is skipped, not a KeyError."""
+
+    class _Ranker:
+        name = "test_ranker"
+        minimum_history_bars = 0
+
+        @staticmethod
+        def rank_candidates(_context: PortfolioContext) -> tuple[str, ...]:
+            return ("GHOST", "READY")
+
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+
+    def series(symbol: str, days: tuple[int, ...]) -> tuple[Bar, ...]:
+        return tuple(_bar(symbol, start + timedelta(days=day), 100.0 + day, Market.EQUITY) for day in days)
+
+    observation = build_observation_set(
+        _Ranker(),  # type: ignore[arg-type]
+        {
+            "SPY": series("SPY", (0, 1, 2)),
+            "READY": series("READY", (0, 1, 2)),
+        },
+        ("SPY", "READY", "GHOST"),
+        market=Market.EQUITY,
+        timeframe="1d",
+        decision_timestamp=start + timedelta(days=2),
+        maximum_stream_symbols=2,
+        scanner_fallback=("GHOST", "READY"),
+    )
+
+    assert observation.observation_set == ("READY",)
+    assert observation.ranked_pool == ("READY",)
+
+
 def test_observation_set_respects_capacity_and_rejects_overflow_pins() -> None:
     with pytest.raises(ValueError, match="exceed maximum_stream_symbols"):
         build_observation_set(

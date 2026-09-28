@@ -40,7 +40,6 @@ def create_app(state: WebState | None = None) -> FastAPI:
 
     app = FastAPI(title="ParayaBuck Trading Terminal", lifespan=lifespan)
     app.state.web = state
-    app.state.web_state = state
 
     def _token_provider(request: Request) -> str:
         token = getattr(request.app.state.web.engine_manager, "control_token", None)

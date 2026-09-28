@@ -8,7 +8,10 @@ against the factory app, not per-router.
 
 from __future__ import annotations
 
+import contextlib
+import subprocess
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,8 +21,8 @@ from parayabuck.web.managers.backtest import BacktestManager
 from parayabuck.web.managers.engine import EngineManager
 from parayabuck.web.managers.websocket import WebSocketTicketStore
 from parayabuck.web.security import (
+    _trusted_browser_origin_for_middleware,
     is_trusted_host,
-    trusted_browser_origin,
     validate_control_token,
 )
 from parayabuck.web.state import WebState
@@ -48,6 +51,57 @@ def test_factory_apps_keep_control_and_websocket_state_isolated():
     ticket = manager_a.issue_ws_ticket("stream")
     assert manager_b.consume_ws_ticket(ticket, "stream") is False
     assert manager_a.consume_ws_ticket(ticket, "stream") is True
+
+
+def test_ws_ticket_fails_closed_without_a_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A live store validates its own ticket; with no store at all nothing is trusted."""
+    import parayabuck.web.managers.engine as engine_module
+    import parayabuck.web.routers.websocket as ws_router
+    from parayabuck.web.managers.websocket import ticket_store
+
+    assert ws_router._consume_ticket(ticket_store.issue("stream"), "stream") is True
+
+    # No app-scoped store, no shared store and no module singletons: there is
+    # nothing that could validate a ticket, so none may be trusted.
+    monkeypatch.setattr(ws_router, "_consume_shared", lambda _ticket, _kind: False)
+    monkeypatch.setattr(engine_module, "manager", None)
+    monkeypatch.setattr("parayabuck.web.server.manager", None)
+
+    assert ws_router._consume_ticket("", "stream") is False
+    assert ws_router._consume_ticket("not-a-ticket", "stream") is False
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-c", "user.email=t@example.com", "-c", "user.name=t", *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_engine_start_rescans_tracked_secrets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A secret committed after the manager was built still blocks the engine start."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    tracked = repo / "settings.yaml"
+    tracked.write_text("ALPACA_SECRET_KEY=replace_me\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "clean")
+    # EngineManager scans Path.cwd(); the context manager restores the cwd before
+    # the conftest production-path guard stats its relative paths.
+    with contextlib.chdir(repo):
+        manager = EngineManager()
+        assert manager.security_warning is None
+
+        tracked.write_text("ALPACA_SECRET_KEY=realsecret123\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "leaked")
+        monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
+
+        with pytest.raises(ValueError, match="SECURITY BLOCK"):
+            manager.start_engine()
 
 
 def test_trusted_host_allows_loopback_and_testserver():
@@ -81,15 +135,19 @@ def test_host_middleware_rejects_untrusted_host():
 # --- Origin ---
 
 
-def test_trusted_browser_origin_strict():
-    # trusted_browser_origin (strict) rejects empty, allows loopback
-    assert not trusted_browser_origin(None)
-    assert not trusted_browser_origin("")
-    assert trusted_browser_origin("http://127.0.0.1:8000")
-    assert trusted_browser_origin("http://localhost:3000")
-    assert trusted_browser_origin("http://[::1]:8000")
-    assert not trusted_browser_origin("http://evil.com")
-    assert not trusted_browser_origin("http://192.168.1.1")
+def test_trusted_browser_origin_allows_only_loopback_or_non_browser():
+    # Shared by the HTTP middleware and the WebSocket routes: an absent Origin
+    # is a non-browser client (the control token/ticket still applies).
+    from parayabuck.web.routers import websocket as ws_router
+
+    assert ws_router._trusted_browser_origin is _trusted_browser_origin_for_middleware
+    assert _trusted_browser_origin_for_middleware(None)
+    assert _trusted_browser_origin_for_middleware("")
+    assert _trusted_browser_origin_for_middleware("http://127.0.0.1:8000")
+    assert _trusted_browser_origin_for_middleware("http://localhost:3000")
+    assert _trusted_browser_origin_for_middleware("http://[::1]:8000")
+    assert not _trusted_browser_origin_for_middleware("http://evil.com")
+    assert not _trusted_browser_origin_for_middleware("http://192.168.1.1")
 
 
 def test_origin_middleware_allows_non_browser_then_checks_token(monkeypatch):

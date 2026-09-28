@@ -5,6 +5,7 @@ import statistics
 from datetime import timedelta
 
 from parayabuck.core.models import Market
+from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import RebalanceReason, TargetPortfolio, TargetWeight
 
@@ -96,20 +97,21 @@ class CryptoLowVariance1dV1(PortfolioStrategy):
         for symbol in sorted(context.history):
             if not context.in_universe(symbol):
                 continue
-            closes = context.closes(symbol)
-            if len(closes) < self.minimum_history_bars:
+            # Only the trailing window is read, so the copy is trimmed to it
+            # instead of materializing the unbounded full history.
+            bars = context.history.get(canonical_symbol(symbol, self.market), ())
+            if len(bars) < self.minimum_history_bars:
                 continue
             # Consecutive-days rule: the last 23 completed bars must span
             # exactly 22 calendar days, i.e. no missing day inside the
             # lookback window (handles SOL/XRP-style data holes).
-            bars = context.history[symbol]
             window_bars = bars[-(lookback + 1) :]
             if window_bars[-1].timestamp - window_bars[0].timestamp != timedelta(days=lookback):
                 continue
-            window_closes = closes[-(lookback + 1) :]
+            window_closes = [bar.close for bar in window_bars]
             if not all(math.isfinite(close) and close > 0 for close in window_closes):
                 continue
-            sigma = realized_volatility(closes, lookback)
+            sigma = realized_volatility(window_closes, lookback)
             if not math.isfinite(sigma):
                 continue
             qualified.append((sigma, symbol))

@@ -35,6 +35,7 @@ from parayabuck.core.models import (
     ProtectionState,
 )
 from parayabuck.execution.alpaca_models import ProtectionReconciliationError
+from parayabuck.execution.ledger import FILL_ACTIVITY_RECOVERY_PREFIX
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.utils import is_crypto
@@ -43,6 +44,14 @@ log = get_logger("parayabuck.execution.alpaca_reconciliation")
 
 # Absolute floor for ledger-vs-broker position quantity agreement.
 QUANTITY_MATCH_FLOOR = 1e-8
+
+# A local portfolio order still ``submitting`` or ``reconciliation_required``
+# whose client order id Alpaca definitively does not know (404) is closed as
+# ``canceled`` once its last write is this old: far beyond any submit call,
+# so an in-flight submit (reconcile does not hold the portfolio lock) can
+# never be canceled under it. Younger rows keep failing closed as drift.
+UNKNOWN_ORDER_CANCEL_AGE_SECONDS = 600.0
+_UNKNOWN_ORDER_CANCELABLE_STATUSES = frozenset({"submitting", "reconciliation_required"})
 
 RECONCILIATION_CATEGORIES: tuple[str, ...] = (
     "MATCH",
@@ -209,6 +218,10 @@ class ReconciliationService:
             return False
         activities.sort(key=lambda item: str(item.get("transaction_time") or item.get("date") or ""))
         recovered_buy_fills: dict[str, list[tuple[float, float, datetime, str, str]]] = {}
+        # Running (quantity, notional) of the SELL fills seen per broker order
+        # in time order: one order can fill in several activities, and the
+        # ledger event is cumulative, so each activity must carry the sum.
+        recovered_sell_totals: dict[str, tuple[float, float]] = {}
         applied_watermark: datetime | None = None
         for activity in activities:
             fee_raw = activity.get("commission", activity.get("fee", 0))
@@ -239,24 +252,25 @@ class ReconciliationService:
                 existing_client = (
                     order_lookup(broker._account_id or "unknown", broker_order_id) if order_lookup is not None else None
                 )
-                if existing_client is not None:
-                    fee_recorder = getattr(ledger, "record_fee_activity", None)
-                    if fee_recorder is not None:
-                        fee_recorder(activity_id, existing_client, fee, occurred_at)
-                else:
+                recovery_client_id = f"{FILL_ACTIVITY_RECOVERY_PREFIX}{broker_order_id}"
+                previous_qty, previous_notional = recovered_sell_totals.get(broker_order_id, (0.0, 0.0))
+                cumulative_qty = previous_qty + qty
+                cumulative_notional = previous_notional + qty * price
+                recovered_sell_totals[broker_order_id] = (cumulative_qty, cumulative_notional)
+                if existing_client is None or existing_client == recovery_client_id:
                     ledger.apply_execution_event(
                         ExecutionEvent(
                             account_id=broker._account_id or "unknown",
-                            client_order_id=f"alpaca-fill-activity-{broker_order_id}",
+                            client_order_id=recovery_client_id,
                             broker_order_id=broker_order_id,
                             parent_order_id=None,
                             role=OrderRole.MANUAL_EXIT,
                             symbol=canonical_symbol(symbol, market),
                             market=market,
                             state=OrderState.FILLED,
-                            requested_qty=qty,
-                            cumulative_filled_qty=qty,
-                            average_fill_price=price,
+                            requested_qty=cumulative_qty,
+                            cumulative_filled_qty=cumulative_qty,
+                            average_fill_price=cumulative_notional / cumulative_qty,
                             occurred_at=occurred_at,
                             fee=fee,
                             activity_id=activity_id,
@@ -349,7 +363,10 @@ class ReconciliationService:
                     continue  # The final OPEN-ID comparison still fails closed.
                 order = lookup(client_id, str(getattr(local, "broker_order_id", "") or ""))
             if order is None:
-                continue  # A targeted 404 is not evidence of a terminal outcome.
+                # A targeted 404 alone is not evidence of a terminal outcome;
+                # only an aged, never-acknowledged row is closed.
+                self._cancel_unknown_portfolio_order(local, client_id, lookup, callback)
+                continue
             actual_client_id = str(self._field(order, "client_order_id", "") or "")
             broker_id = str(self._field(order, "id", "") or "")
             if actual_client_id != client_id or not broker_id:
@@ -414,6 +431,65 @@ class ReconciliationService:
                 None,
                 status=local_status,
             )
+
+    def _cancel_unknown_portfolio_order(self, local: Any, client_id: str, lookup: Any, callback: Any) -> None:
+        """Close a never-accepted portfolio order the broker does not know.
+
+        Called after the targeted lookup returned 404. Only a row still
+        ``submitting`` or ``reconciliation_required``, whose last write is at
+        least ``UNKNOWN_ORDER_CANCEL_AGE_SECONDS`` old, is booked ``canceled``
+        with a zero fill, and only when the lookup went through a client-id
+        query (a missing query proves nothing). Anything else is unchanged and
+        the final OPEN-ID comparison still reports it as drift.
+        """
+        status = str(getattr(local, "status", "") or "").lower()
+        updated_at = getattr(local, "last_updated_at", None)
+        client = getattr(self._broker, "_client", None)
+        if (
+            status not in _UNKNOWN_ORDER_CANCELABLE_STATUSES
+            or not isinstance(updated_at, datetime)
+            or lookup is None
+            or callback is None
+            or getattr(client, "get_order_by_client_id", None) is None
+        ):
+            return
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        age = (datetime.now(UTC) - updated_at).total_seconds()
+        if age < UNKNOWN_ORDER_CANCEL_AGE_SECONDS:
+            return
+        callback(
+            client_id,
+            str(getattr(local, "broker_order_id", "") or ""),
+            0.0,
+            None,
+            datetime.now(UTC),
+            f"{client_id}:unknown_at_broker:canceled",
+            None,
+            status="canceled",
+        )
+        log.warning(
+            "Portfolio order unknown at the broker canceled: client_order_id=%s status=%s age_seconds=%d",
+            client_id,
+            status,
+            round(age),
+        )
+        try:
+            from parayabuck.monitoring import alerts
+
+            # One incident per order: the row is terminal afterwards, and the
+            # alert throttle keys paper_incident by its incident id.
+            alerts.emit(
+                "paper_incident",
+                message="Portfolio order never accepted by the broker was canceled",
+                category="unknown_order_canceled",
+                incident_id=f"unknown_order_canceled:{client_id}",
+                client_order_id=client_id,
+                previous_status=status,
+                age_seconds=round(age),
+            )
+        except Exception:
+            log.warning("Alert emission failed for unknown order %s", client_id, exc_info=True)
 
     def _adopt_broker_order_quantity(
         self, broker: Any, order: Any, client_id: str, filled: float, local_quantity: float
@@ -788,5 +864,8 @@ class ReconciliationService:
             categories["UNKNOWN_ORDER"].append(_cid)
         for _cid in sorted(_local_open_ids - _broker_open_ids):
             categories["MISSING_BROKER_ORDER"].append(_cid)
+            # Documented compatibility contract: a local open id the broker no
+            # longer lists is reported under both keys (see
+            # docs/disaster_recovery.md and docs/alpaca_broker_truth_matrix.md).
             categories["MISSING_LOCAL_ORDER"].append(_cid)
         return categories

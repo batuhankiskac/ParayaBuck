@@ -327,7 +327,7 @@
     if (body !== undefined) { opts.headers = { "Content-Type": "application/json" }; opts.body = JSON.stringify(body); }
     const res = await api.controlFetch(url, opts);
     const data = await api.responsePayload(res);
-    if (!res.ok) throw new Error(data.detail || "İstek başarısız (" + res.status + ")");
+    if (!res.ok) throw new Error(api.detailText(data, "İstek başarısız (" + res.status + ")"));
     return data;
   }
   async function withButton(button, fn) {
@@ -450,7 +450,6 @@
         byId("paperModeCheck").checked = !!data.paper_mode;
         byId("equityTradingCheck").checked = data.equity_trading_enabled !== false;
         byId("cryptoTradingCheck").checked = data.crypto_trading_enabled === true;
-        byId("liveTradingCheck").checked = data.live_trading_enabled === true;
         byId("maxDailyLoss").value = data.daily_loss_limit_pct || 1.5;
         byId("maxDrawdown").value = data.max_drawdown_pct || 10;
         byId("timeframe").value = data.timeframe || "5m";
@@ -480,7 +479,6 @@
         paper_mode: byId("paperModeCheck").checked,
         equity_trading_enabled: byId("equityTradingCheck").checked,
         crypto_trading_enabled: byId("cryptoTradingCheck").checked,
-        live_trading_enabled: byId("liveTradingCheck").checked,
         daily_loss_limit_pct: parseFloat(byId("maxDailyLoss").value),
         max_drawdown_pct: parseFloat(byId("maxDrawdown").value),
         execution_timeframe: byId("timeframe").value,

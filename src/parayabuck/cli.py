@@ -935,6 +935,14 @@ def _ops_timeline(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_explain_empty(args: argparse.Namespace, message: str) -> None:
+    """Report that there is no decision to explain; --json stays one JSON object."""
+    if getattr(args, "json", False):
+        print(json.dumps({"decision": None, "message": message}))
+    else:
+        print(message)
+
+
 def _ops_explain(args: argparse.Namespace) -> int:
     target = getattr(args, "target", "latest") or "latest"
     db_path = getattr(args, "db", None)
@@ -972,16 +980,18 @@ def _ops_explain(args: argparse.Namespace) -> int:
                     row = cur.fetchone()
                     if row:
                         decision_id = row["decision_id"]
+                        # --json keeps stdout a single parseable document.
                         print(
-                            f"Latest decision: {decision_id} at {row['decision_timestamp']} market={row['market']} strategy={row['strategy_name']}"
+                            f"Latest decision: {decision_id} at {row['decision_timestamp']} market={row['market']} strategy={row['strategy_name']}",
+                            file=sys.stderr if getattr(args, "json", False) else sys.stdout,
                         )
                     else:
-                        print("No decisions found in DB")
+                        _print_explain_empty(args, "No decisions found in DB")
                         return 0
                 finally:
                     conn.close()
             else:
-                print("No decision DB found — fresh install")
+                _print_explain_empty(args, "No decision DB found — fresh install")
                 return 0
         except Exception as exc:
             print(f"Failed to find latest decision: {exc}", file=sys.stderr)

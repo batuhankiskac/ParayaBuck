@@ -1095,3 +1095,57 @@ def test_ops_explain_health_uses_the_resolved_config(tmp_path: Path) -> None:
         )
     assert code == 0
     assert captured["config"] == Config()
+
+
+def test_ops_explain_json_latest_keeps_stdout_pure_json(tmp_path: Path) -> None:
+    """`ops explain --json` resolving `latest` must not prefix the JSON
+    payload with the human "Latest decision" line on stdout."""
+    db = tmp_path / "decisions.sqlite3"
+    with contextlib.closing(sqlite3.connect(db)) as conn:
+        conn.execute(
+            "CREATE TABLE portfolio_decisions (decision_id TEXT, decision_timestamp TEXT, market TEXT, strategy_name TEXT)"
+        )
+        conn.execute("INSERT INTO portfolio_decisions VALUES ('dec-9', '2026-09-01T20:00:00+00:00', 'equity', 's')")
+        conn.commit()
+
+    with patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}):
+        code, out, err = _run_cli(
+            "--config",
+            str(tmp_path / "missing.yaml"),
+            "ops",
+            "explain",
+            "--json",
+            "--db",
+            str(db),
+            "--journal",
+            str(tmp_path / "absent.sqlite3"),
+        )
+
+    assert code == 0
+    assert json.loads(out)["decision_id"] == "dec-9"
+    assert "Latest decision: dec-9" in err
+
+
+@pytest.mark.parametrize(
+    ("with_db", "message"),
+    [(False, "No decision DB found — fresh install"), (True, "No decisions found in DB")],
+)
+def test_ops_explain_json_without_decisions_prints_one_json_object(tmp_path: Path, with_db: bool, message: str) -> None:
+    """With no DB or an empty decisions table, `ops explain --json` must still
+    emit exactly one JSON object on stdout and exit 0."""
+    db = tmp_path / "decisions.sqlite3"
+    if with_db:
+        with contextlib.closing(sqlite3.connect(db)) as conn:
+            conn.execute(
+                "CREATE TABLE portfolio_decisions "
+                "(decision_id TEXT, decision_timestamp TEXT, market TEXT, strategy_name TEXT)"
+            )
+            conn.commit()
+
+    code, out, _ = _run_cli("--config", str(tmp_path / "missing.yaml"), "ops", "explain", "--json", "--db", str(db))
+    assert code == 0
+    assert json.loads(out) == {"decision": None, "message": message}
+
+    code, out, _ = _run_cli("--config", str(tmp_path / "missing.yaml"), "ops", "explain", "--db", str(db))
+    assert code == 0
+    assert out.strip() == message

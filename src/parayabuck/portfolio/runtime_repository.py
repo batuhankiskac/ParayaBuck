@@ -883,28 +883,33 @@ class PortfolioStateRepository:
         A crypto remainder below ``CRYPTO_STALE_DUST_BAND`` is accumulated
         fee-net residue, not a missed exit: it is booked with the
         non-consumable dust kind, so the next real SELL cannot consume it
-        and resurrect the residue."""
-        owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
-        if owned <= 1e-12:
-            return 0.0
-        if market == Market.CRYPTO and owned < CRYPTO_STALE_DUST_BAND:
+        and resurrect the residue.
+
+        The read and the insert share one lock hold: a late SELL fill applied
+        by the trade-update thread between them would already have removed
+        the quantity, and the clear would then drive the net negative."""
+        with self.store.lock:
+            owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
+            if owned <= 1e-12:
+                return 0.0
+            if market == Market.CRYPTO and owned < CRYPTO_STALE_DUST_BAND:
+                self.record_ownership_adjustment(
+                    account_id,
+                    symbol,
+                    market,
+                    owned,
+                    kind=CRYPTO_DUST_CLEAR_KIND,
+                    note="broker position absent; accumulated sub-precision crypto residue",
+                )
+                return owned
             self.record_ownership_adjustment(
                 account_id,
                 symbol,
                 market,
                 owned,
-                kind=CRYPTO_DUST_CLEAR_KIND,
-                note="broker position absent; accumulated sub-precision crypto residue",
+                kind="stale_ownership_clear",
+                note="broker position absent and no real fill found in activity history",
             )
-            return owned
-        self.record_ownership_adjustment(
-            account_id,
-            symbol,
-            market,
-            owned,
-            kind="stale_ownership_clear",
-            note="broker position absent and no real fill found in activity history",
-        )
         log.warning(
             "Recorded stale-ownership adjustment: account=%s symbol=%s qty=%s (no broker position found)",
             account_id,

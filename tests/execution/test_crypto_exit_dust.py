@@ -7,9 +7,12 @@ position, leaving 4.375e-10 ETH and 1.66e-9 BTC of phantom ownership.
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
+
+import pytest
 
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.alpaca_reconciliation import ReconciliationService
@@ -305,6 +308,32 @@ def test_late_sell_after_band_stale_clear_nets_to_zero(tmp_path) -> None:
     assert _dust_clears(repository) == 2  # ETH exit dust + the 5e-7 BTC band stale-clear
 
     _fill(repository, "parayabuck-stop-BTC/USD", 0.0290612996625)
+
+    assert repository.owned_quantities("acct") == {}
+    assert abs(_raw_net(repository, "BTC/USD")) < 1e-15
+
+
+@pytest.mark.parametrize("remainder", [5e-7, 0.01], ids=["band-dust-clear", "stale-clear"])
+def test_late_sell_racing_the_stale_clear_never_goes_negative(tmp_path, remainder) -> None:
+    booked = _FILLS["BTC/USD"][1]
+    repository = _crypto_round_trip(tmp_path, {"ETH/USD": _FILLS["ETH/USD"][2], "BTC/USD": booked - remainder})
+    original_owned = repository.owned_quantities
+    late_fill = threading.Thread(target=_fill, args=(repository, "parayabuck-stop-BTC/USD", booked))
+
+    def owned_then_late_fill(*args: Any, **kwargs: Any) -> dict[str, float]:
+        owned = original_owned(*args, **kwargs)
+        if not late_fill.is_alive() and late_fill.ident is None:
+            # The trade-update thread books the late final fill right after
+            # the reconcile thread read the pre-fill ownership.
+            late_fill.start()
+            late_fill.join(timeout=0.3)
+        return owned
+
+    repository.owned_quantities = owned_then_late_fill  # type: ignore[method-assign]
+    assert repository.clear_stale_ownership("acct", "BTC/USD", Market.CRYPTO) > 0
+    late_fill.join(timeout=10)
+    assert not late_fill.is_alive()
+    repository.owned_quantities = original_owned  # type: ignore[method-assign]
 
     assert repository.owned_quantities("acct") == {}
     assert abs(_raw_net(repository, "BTC/USD")) < 1e-15

@@ -63,13 +63,19 @@ class WebSocketLogHandler(logging.Handler):
     """Fan-out handler that coalesces into each subscriber's bounded queue."""
 
     def emit(self, record: logging.LogRecord) -> None:
-        log_entry = {
-            "level": record.levelname,
-            "levelno": record.levelno,
-            "name": record.name,
-            "message": record.getMessage(),
-            "time": self.formatter.formatTime(record) if self.formatter else "",
-        }
+        # A handler must never raise into the logging caller (an engine
+        # worker thread); a malformed record goes to handleError instead.
+        try:
+            log_entry = {
+                "level": record.levelname,
+                "levelno": record.levelno,
+                "name": record.name,
+                "message": record.getMessage(),
+                "time": self.formatter.formatTime(record) if self.formatter else "",
+            }
+        except Exception:
+            self.handleError(record)
+            return
         subscribers = get_log_queues_snapshot()
         for queue, loop in subscribers:
             with suppress(Exception):

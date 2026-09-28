@@ -90,6 +90,7 @@ No circular imports. `repository` does not import `PortfolioRuntime`. `rebalance
 | Fills | `portfolio_fills` | `activity_id` PK, FK `client_order_id`, includes `fill_delay_seconds` |
 | Rebalance | `portfolio_rebalance_executions` | `decision_id` PK, `phase` + `status` + `buy_orders_json` |
 | Ownership adjustments | `portfolio_ownership_adjustments` | `adjustment_id` PK |
+| Ledger identity | `portfolio_ledger_identity` | `singleton` PK (`client_order_salt`, created once) |
 | High-water | `portfolio_high_water` | `account_id` PK (`equity`, `epoch`, `updated_at`) |
 | Warmup bars | `data/cache/warmup.sqlite3` (`bars`, `scope_meta`) | PK `(feed, symbol, market, timeframe, adjustment, timestamp)` |
 | Execution ledger | `ExecutionLedger` (`orders`, `fills`, `managed_positions`, `risk_state`) | SQLite WAL, `busy_timeout=5000` |

@@ -280,8 +280,9 @@ def test_restart_scenario_D_partial_fill_residual_only(tmp_path: Path) -> None:
     result_a = rt_a.process_closed_bars(_bars(("AAPL",), day=day))
     assert result_a.orders
     cid = result_a.orders[0].client_order_id
-    # Deterministic id must be parayabuck-{decision_id}-{symbol}-{side}
-    assert cid.startswith(f"parayabuck-{result_a.decision_id}-AAPL-")
+    # Deterministic id must be parayabuck-{decision_id}-{ledger salt}-{symbol}-{side}
+    salt = repo_a.client_order_salt(result_a.decision_id)
+    assert cid.startswith(f"parayabuck-{result_a.decision_id}-{salt}-AAPL-")
     # Partial fill
     repo_a.apply_trade_update(
         client_order_id=cid,
@@ -558,9 +559,10 @@ def test_order_idempotency_same_decision_twice_one_order(tmp_path: Path) -> None
     assert r1.decision_id is not None
     first_ids = sorted(o.client_order_id for o in r1.orders)
     assert all(cid.startswith("parayabuck-") for cid in first_ids)
-    # Deterministic: parayabuck-{decision_id}-{symbol}-{side}
+    # Deterministic: parayabuck-{decision_id}-{ledger salt}-{symbol}-{side}
+    salt = repo.client_order_salt(r1.decision_id)
     for cid, order in zip(first_ids, sorted(r1.orders, key=lambda o: o.client_order_id), strict=False):
-        assert cid == f"parayabuck-{r1.decision_id}-{order.symbol}-{order.side.value}"
+        assert cid == f"parayabuck-{r1.decision_id}-{salt}-{order.symbol}-{order.side.value}"
     # Second call with same timestamp should be duplicate_decision -> no new orders
     for b in _bars(("AAPL", "MSFT"), day=day):
         # history already has this timestamp, re-adding is filtered

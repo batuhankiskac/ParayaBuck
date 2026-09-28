@@ -80,7 +80,7 @@ No file in this audit mutates `config/settings.yaml`, `.env`, `live.*`, or creat
 
 ### 3.2 Execution — orders / ambiguity
 
-**Code path.** `execution/alpaca_orders.py` (produced) + facade. `AmbiguousOrderState` raised when submit hits timeout and recovery lookup is inconclusive (`docs/alpaca_broker_truth_matrix.md`). `PortfolioRuntimeBroker.submit_portfolio_order` uses deterministic `client_order_id = f"parayabuck-{decision_id}-{symbol}-{side}"` (`paper_runtime_lifecycle.md:62`).
+**Code path.** `execution/alpaca_orders.py` (produced) + facade. `AmbiguousOrderState` raised when submit hits timeout and recovery lookup is inconclusive (`docs/alpaca_broker_truth_matrix.md`). `PortfolioRuntimeBroker.submit_portfolio_order` uses deterministic `client_order_id = f"parayabuck-{decision_id}-{salt}-{symbol}-{side}"` (per-ledger salt) (`paper_runtime_lifecycle.md:62`).
 
 **Evidence.** `tests/execution/test_alpaca_faults.py:5` — proven accepted via `get_order_by_client_id`, proven rejected via `404`, ambiguous when lookup fails, cancel-unconfirmed ambiguous. Fake `FakeTradingClient` `script_submit/script_get_order_by_client_id/submit_then_raise` (`execution/fake_client.py:363`).
 

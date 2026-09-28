@@ -15,6 +15,7 @@ import threading
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
@@ -34,6 +35,7 @@ from parayabuck.execution.alpaca_reconciliation import (
     RECONCILIATION_DRIFT_CATEGORIES,
     ReconciliationResultError,
 )
+from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream
 from parayabuck.runtime import EngineRuntime
 
 
@@ -133,3 +135,18 @@ def test_start_aborted_by_reconcile_drift_cleans_up_and_later_start_succeeds(
     assert retried._state in {"running", "warming_up"}
     assert retried.stop() is True
     assert "Runtime cleanup did not complete" not in caplog.text
+
+
+def test_trade_update_stream_stop_before_run_is_a_no_op() -> None:
+    # A stop racing a worker that has not entered run() must not raise on the
+    # SDK's still-unset event loop; once the loop exists the SDK stop runs.
+    stream = AlpacaTradingUpdateStream("key", "secret", True, _noop_handler)
+    stream.stop()
+    sdk = Mock(_loop=object())
+    stream._stream = sdk
+    stream.stop()
+    sdk.stop.assert_called_once_with()
+
+
+async def _noop_handler(_update: object) -> None:
+    pass

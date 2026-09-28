@@ -145,6 +145,10 @@ class AlpacaTradingUpdateStream:
         self._stream.run()
 
     def stop(self) -> None:
+        # alpaca-py creates the event loop only inside run(); its stop()
+        # dereferences that loop, so a never-run stream has nothing to stop.
+        if getattr(self._stream, "_loop", ...) is None:
+            return
         self._stream.stop()
 
 

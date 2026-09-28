@@ -3128,6 +3128,8 @@ def _dashboard_execution() -> dict[str, Any]:
             SELECT symbol, market, quantity, kind, note, created_at
             FROM portfolio_ownership_adjustments
             WHERE account_id = ?
+              -- crypto_dust_clear rows are bookkeeping, not anomalies
+              AND kind != 'crypto_dust_clear'
             ORDER BY created_at DESC LIMIT 10
             """,
             (account_id,),

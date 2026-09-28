@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -101,3 +102,27 @@ def test_settings_save_validates_a_config_without_symbols_or_universe(tmp_path: 
     assert "enabled market symbol" in str(excinfo.value.detail)
     assert manager.config_path.read_text(encoding="utf-8") == original
     assert not (tmp_path / ".settings.yaml.validate").exists()
+
+
+def test_dashboard_anomalies_skip_crypto_dust_clear_bookkeeping(monkeypatch: Any) -> None:
+    connection = sqlite3.connect(":memory:")
+    connection.execute(
+        "CREATE TABLE portfolio_ownership_adjustments (account_id TEXT, symbol TEXT, market TEXT, "
+        "quantity REAL, kind TEXT, note TEXT, created_at TEXT)"
+    )
+    connection.execute(
+        "INSERT INTO portfolio_ownership_adjustments VALUES "
+        "('acct', 'SPY', 'equity', 1.0, 'external_sell', 'real', '2026-09-01T00:00:00+00:00')"
+    )
+    # Newer dust rows would otherwise fill the LIMIT 10 window.
+    for minute in range(12):
+        connection.execute(
+            "INSERT INTO portfolio_ownership_adjustments VALUES "
+            f"('acct', 'BTC/USD', 'crypto', 1e-9, 'crypto_dust_clear', 'dust', '2026-09-02T00:{minute:02d}:00+00:00')"
+        )
+    monkeypatch.setattr(server_legacy, "_dashboard_readonly_connection", lambda: connection)
+    monkeypatch.setattr(server_legacy, "_dashboard_account_id", lambda: "acct")
+
+    anomalies = server_legacy._dashboard_execution()["reconciliation_anomalies"]
+
+    assert [(row["symbol"], row["kind"]) for row in anomalies] == [("SPY", "external_sell")]

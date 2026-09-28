@@ -19,8 +19,9 @@ CRYPTO_OWNERSHIP_DUST = 1e-8
 # Hiding the residue is not enough: it accumulates across round trips. A crypto
 # SELL fill that leaves a net in (0, CRYPTO_OWNERSHIP_DUST] therefore books a
 # non-consumable adjustment of this kind that zeroes it. It counts in the net
-# like any adjustment, but a later real SELL never consumes it (that would
-# resurrect the dust) and operator anomaly listings leave it out.
+# like any adjustment, but a later real SELL consumes it only by the exact
+# shortfall that would otherwise make the net negative (never more, which would
+# resurrect the dust), and operator anomaly listings leave it out.
 CRYPTO_DUST_CLEAR_KIND = "crypto_dust_clear"
 # A crypto stale-clear smaller than this (broker flat, local residue that
 # accumulated before the per-exit dust clear existed) is recorded with the

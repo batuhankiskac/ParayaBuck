@@ -960,7 +960,13 @@ class PortfolioStateRepository:
         it accumulate past ``CRYPTO_OWNERSHIP_DUST`` and drift again. A net in
         (0, CRYPTO_OWNERSHIP_DUST] after this fill is booked away with the
         non-consumable dust kind. Idempotent: once cleared the net is 0, and
-        a redelivered fill has no delta and never reaches this call."""
+        a redelivered fill has no delta and never reaches this call.
+
+        A real SELL delta arriving after a dust clear (a trailing tiny partial
+        fill, or a late fill after a band stale-clear) would push the net
+        below zero and trip the ownership invariant. Dust clears are then
+        consumed by exactly the shortfall, never more, so no residue is
+        resurrected."""
         rows = self.store.connection.execute(
             """SELECT o.side, o.cumulative_filled_quantity
                FROM portfolio_orders o
@@ -980,6 +986,26 @@ class PortfolioStateRepository:
             quantity = float(filled or 0.0)
             if quantity > 0:
                 net += quantity if str(side) == "buy" else -quantity
+        if net < 0:
+            dust_rows = self.store.connection.execute(
+                """SELECT adjustment_id, quantity - consumed_quantity
+                   FROM portfolio_ownership_adjustments
+                   WHERE account_id = ? AND market = ? AND symbol = ? AND kind = ?
+                     AND consumed_quantity < quantity
+                   ORDER BY created_at""",
+                (account_id, market.value, symbol, CRYPTO_DUST_CLEAR_KIND),
+            ).fetchall()
+            for adjustment_id, outstanding in dust_rows:
+                if net >= 0:
+                    break
+                consume = min(float(outstanding), -net)
+                self.store.connection.execute(
+                    """UPDATE portfolio_ownership_adjustments
+                       SET consumed_quantity = consumed_quantity + ?
+                       WHERE adjustment_id = ?""",
+                    (consume, str(adjustment_id)),
+                )
+                net += consume
         if 0 < net <= CRYPTO_OWNERSHIP_DUST:
             self._insert_ownership_adjustment_tx(
                 account_id,

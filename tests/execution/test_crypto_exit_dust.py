@@ -281,3 +281,30 @@ def test_equity_residue_keeps_existing_ownership_semantics(tmp_path) -> None:
     assert set(repository.owned_quantities("acct")) == {"SPY"}
     assert repository.clear_stale_ownership("acct", "SPY", Market.EQUITY) > 0
     assert [row["kind"] for row in repository.ownership_adjustments("acct")] == ["stale_ownership_clear"]
+
+
+def test_trailing_sell_after_dust_clears_consumes_exact_shortfall(tmp_path) -> None:
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    session = repository.begin_session("acct", "digest", "paper")
+    # Four BTC exits book ~6.65e-9 of dust clears.
+    assert _stale_after_each_cycle(repository, session, range(4), ("BTC/USD",)) == [[]] * 4
+    stop = _FILLS["BTC/USD"][2]
+
+    # A trailing 5e-9 SELL delta on the last stop would otherwise go negative.
+    _fill(repository, "parayabuck-stop-3-BTC/USD", stop + 5e-9)
+
+    assert repository.owned_quantities("acct") == {}
+    assert abs(_raw_net(repository, "BTC/USD")) < 1e-15
+    assert ReconciliationService(_flat_broker(repository)).reconcile()["LOCAL_STALE"] == []
+
+
+def test_late_sell_after_band_stale_clear_nets_to_zero(tmp_path) -> None:
+    exits = {"ETH/USD": _FILLS["ETH/USD"][2], "BTC/USD": 0.0290612996625 - 5e-7}
+    repository = _crypto_round_trip(tmp_path, exits)
+    assert ReconciliationService(_flat_broker(repository)).reconcile()["LOCAL_STALE"] == ["BTC/USD"]
+    assert _dust_clears(repository) == 2  # ETH exit dust + the 5e-7 BTC band stale-clear
+
+    _fill(repository, "parayabuck-stop-BTC/USD", 0.0290612996625)
+
+    assert repository.owned_quantities("acct") == {}
+    assert abs(_raw_net(repository, "BTC/USD")) < 1e-15

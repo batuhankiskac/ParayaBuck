@@ -16,7 +16,12 @@ from uuid import uuid4
 
 from parayabuck.core.models import Market
 from parayabuck.execution.alpaca import CRYPTO_TAKER_FEE_RESERVE
-from parayabuck.execution.portfolio import PortfolioOrderRequest, RiskOverlayDecision
+from parayabuck.execution.portfolio import (
+    PortfolioOrderRequest,
+    PortfolioOrderSide,
+    RiskOverlayDecision,
+    _client_order_id,
+)
 from parayabuck.logger import get_logger
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_models import (
@@ -142,6 +147,11 @@ class PortfolioStateRepository:
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY(decision_id) REFERENCES portfolio_decisions(decision_id)
                 );
+                CREATE TABLE IF NOT EXISTS portfolio_ledger_identity (
+                    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                    client_order_salt TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS portfolio_buy_admission_observations (
                     observation_id TEXT PRIMARY KEY,
                     client_order_id TEXT NOT NULL,
@@ -253,6 +263,17 @@ class PortfolioStateRepository:
                 self.store.connection.execute(
                     "ALTER TABLE portfolio_high_water ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0"
                 )
+            # One random salt per ledger, created once and reused forever, so
+            # client order ids stay idempotent across restarts of this ledger
+            # but never collide with ids another ledger (a fresh DB, or a
+            # second process on the same Alpaca key) derives for the same
+            # decision. Written last: an earlier write would open the
+            # transaction the decisions rebuild needs to be outside of.
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_ledger_identity(singleton, client_order_salt, created_at)
+                   VALUES (1, ?, ?)""",
+                (uuid4().hex[:12], datetime.now(UTC).isoformat()),
+            )
 
     def _ensure_hot_path_indexes(self) -> None:
         """Additive, backward-compatible hot-path indexes (idempotent).
@@ -647,6 +668,33 @@ class PortfolioStateRepository:
         except (TypeError, ValueError):
             return ()
         return tuple(dict(item) for item in parsed if isinstance(item, dict))
+
+    def client_order_salt(self, decision_id: str) -> str:
+        """Ledger salt for the client order ids of ``decision_id``.
+
+        A decision that already persisted legacy unsalted ids
+        (``parayabuck-{decision_id}-{symbol}-{side}``) keeps the legacy form,
+        so a re-plan of an in-flight pre-salt decision regenerates the same
+        ids and stays idempotent. Every other decision uses this ledger's
+        persisted salt.
+        """
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                "SELECT client_order_id, symbol, side FROM portfolio_orders WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchall()
+            if any(
+                str(row[0]) == _client_order_id(decision_id, str(row[1]), PortfolioOrderSide(str(row[2])))
+                for row in rows
+                if str(row[2]) in {"buy", "sell"}
+            ):
+                return ""
+            salt = self.store.connection.execute(
+                "SELECT client_order_salt FROM portfolio_ledger_identity WHERE singleton = 1"
+            ).fetchone()
+        if salt is None or not str(salt[0]):
+            raise RuntimeError("Portfolio ledger has no client order salt")
+        return str(salt[0])
 
     def orders_for_decision(self, decision_id: str, side: str | None = None) -> tuple[dict[str, object], ...]:
         """Order rows attributed to one decision (used by rebalance recovery)."""
@@ -1248,7 +1296,8 @@ class PortfolioStateRepository:
         # Pure computation delegated
         order_tuples = [(str(r[0]), str(r[2]), float(r[3] or 0.0)) for r in rows]
         adj_tuples = [(str(r[0]), float(r[1] or 0.0)) for r in adjustments]
-        return net_owned_quantities(order_tuples, adj_tuples)
+        crypto_symbols = {str(r[0]) for r in rows if str(r[1]) == Market.CRYPTO.value}
+        return net_owned_quantities(order_tuples, adj_tuples, crypto_symbols)
 
     def owned_symbols(self, account_id: str = "unknown", market: Market | None = None) -> set[str]:
         """Symbols the portfolio path still owns: net filled quantity > 0.

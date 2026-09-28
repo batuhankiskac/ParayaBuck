@@ -1098,6 +1098,7 @@ class PortfolioRuntime:
             open_order_symbols=open_order_symbols,
             open_order_sides=open_order_sides,
             decision_id=decision_id,
+            client_order_salt=self.repository.client_order_salt(decision_id),
         )
         if not any(order.side == PortfolioOrderSide.SELL for order in planned):
             planned = reserve_opening_order_slots(
@@ -1627,6 +1628,7 @@ class PortfolioRuntime:
             open_order_symbols=open_order_symbols,
             open_order_sides=open_order_sides,
             decision_id=decision_id,
+            client_order_salt=self.repository.client_order_salt(decision_id),
         )
         buy_orders = tuple(
             PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id})
@@ -1988,8 +1990,8 @@ class PortfolioRuntime:
     def _submit_orders(self, orders: tuple[PortfolioOrderRequest, ...]) -> tuple[str, ...]:
         """Persist and submit one order batch with broker idempotency keys.
 
-        The client order id is deterministic ``parayabuck-{decision_id}-{symbol}-{side}``
-        so a crash between persistence and broker acknowledgement cannot produce a
+        The client order id is deterministic ``parayabuck-{decision_id}-{salt}-{symbol}-{side}``
+        (``salt`` persisted once per ledger) so a crash between persistence and broker acknowledgement cannot produce a
         duplicate broker order (Alpaca rejects a reused client id and the
         broker's ambiguity recovery resolves the existing order). Duplicate
         decisions produce the same id and ``record_order`` is ``INSERT OR IGNORE``

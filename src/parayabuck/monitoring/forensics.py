@@ -175,9 +175,14 @@ def find_stuck_rebalances(
 
 
 def runtime_session_forensics(db_path: str | Path | None) -> dict[str, Any]:
-    """Detect unclean previous sessions: no ended_at with newer session exists."""
+    """Detect unclean previous sessions: no ended_at with newer session exists.
+
+    ``unclean`` is the full history. ``unclean_since_clean`` keeps only those
+    started after the most recent cleanly ended session: a crash followed by a
+    clean stop is history, not a current cause for attention.
+    """
     if db_path is None or not Path(str(db_path)).exists():
-        return {"sessions": [], "unclean": [], "current": None}
+        return {"sessions": [], "unclean": [], "unclean_since_clean": [], "current": None}
     try:
         conn = sqlite3.connect(str(db_path), timeout=2.0)
         conn.row_factory = sqlite3.Row
@@ -187,23 +192,32 @@ def runtime_session_forensics(db_path: str | Path | None) -> dict[str, Any]:
                     rows = conn.execute(f"SELECT * FROM {table} ORDER BY started_at ASC").fetchall()
                     sessions = [dict(r) for r in rows]
                     if not sessions:
-                        return {"sessions": [], "unclean": [], "current": None}
+                        return {"sessions": [], "unclean": [], "unclean_since_clean": [], "current": None}
                     # Rows arrive ordered by started_at; the last one is the current session
                     unclean: list[dict[str, Any]] = []
+                    unclean_since_clean: list[dict[str, Any]] = []
                     for idx, s in enumerate(sessions):
                         ended = s.get("ended_at")
                         is_last = idx == len(sessions) - 1
-                        if not ended and not is_last:
+                        if ended:
+                            unclean_since_clean.clear()
+                        elif not is_last:
                             unclean.append(s)
+                            unclean_since_clean.append(s)
                     current = sessions[-1]
                     # If current is running (no ended_at), it's not unclean by itself
-                    return {"sessions": sessions, "unclean": unclean, "current": current}
-            return {"sessions": [], "unclean": [], "current": None}
+                    return {
+                        "sessions": sessions,
+                        "unclean": unclean,
+                        "unclean_since_clean": unclean_since_clean,
+                        "current": current,
+                    }
+            return {"sessions": [], "unclean": [], "unclean_since_clean": [], "current": None}
         finally:
             conn.close()
     except Exception:
         log.warning("session forensics failed", exc_info=True)
-        return {"sessions": [], "unclean": [], "current": None, "error": "query failed"}
+        return {"sessions": [], "unclean": [], "unclean_since_clean": [], "current": None, "error": "query failed"}
 
 
 def decision_reconstruction(

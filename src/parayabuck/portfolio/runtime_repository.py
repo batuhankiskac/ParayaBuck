@@ -1248,7 +1248,8 @@ class PortfolioStateRepository:
         # Pure computation delegated
         order_tuples = [(str(r[0]), str(r[2]), float(r[3] or 0.0)) for r in rows]
         adj_tuples = [(str(r[0]), float(r[1] or 0.0)) for r in adjustments]
-        return net_owned_quantities(order_tuples, adj_tuples)
+        crypto_symbols = {str(r[0]) for r in rows if str(r[1]) == Market.CRYPTO.value}
+        return net_owned_quantities(order_tuples, adj_tuples, crypto_symbols)
 
     def owned_symbols(self, account_id: str = "unknown", market: Market | None = None) -> set[str]:
         """Symbols the portfolio path still owns: net filled quantity > 0.

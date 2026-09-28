@@ -325,7 +325,7 @@ Evidence: `src/parayabuck/execution/alpaca_reconciliation.py:1-15, 327-564` — 
 Buckets (holdings layer):
 - `MATCH` — `|local_qty - broker_qty| <= tol` (where `tol = max(1e-9, local*1e-8)`) and both `>1e-12`.
 - `QUANTITY_MISMATCH` — both sides positive but difference exceeds tolerance.
-- `LOCAL_STALE` + `MISSING_BROKER_ORDER` — local positive, broker zero.
+- `LOCAL_STALE` + `MISSING_BROKER_ORDER` — local positive, broker zero. A crypto net ownership below `CRYPTO_OWNERSHIP_DUST` (1e-8, `portfolio/runtime_ownership.py`) is flat: fee-net fills booked at full precision minus a 9-decimal stop exit leave sub-precision dust the broker never holds.
 - `BROKER_STALE` + `MISSING_LOCAL_ORDER` — broker positive, local zero.
 - `UNKNOWN_ORDER` — broker `OPEN` `client_order_id` not in `portfolio_open_orders()`.
 - `MISSING_LOCAL_ORDER` — actually `MISSING_BROKER_ORDER` duplicate (repo open id not in broker OPEN) — upstream bug, treated same; reported in both keys for compatibility.

@@ -1,4 +1,5 @@
-"""Round-9 Web fixes: shutdown during an in-flight auto-start, log handler safety."""
+"""Round-9 Web fixes: shutdown during an in-flight auto-start, log handler
+safety, and settings-save validation of configs without a universe block."""
 
 from __future__ import annotations
 
@@ -6,13 +7,20 @@ import asyncio
 import logging
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
+from fastapi import HTTPException
 
 from parayabuck.web import server_legacy
 from parayabuck.web.lifespan import create_lifespan
 from parayabuck.web.managers import websocket as ws_manager
+from parayabuck.web.managers.engine import EngineManager
+from parayabuck.web.routers import settings as settings_router
+from parayabuck.web.schemas.settings import SettingsPayload
+from parayabuck.web.services.settings import SettingsService
 from tests.test_auto_start_retry import _REAL_SLEEP, _FlakyRuntime, _manager_with
 
 
@@ -73,3 +81,23 @@ def test_log_handler_never_raises_into_the_logging_caller(monkeypatch: Any, hand
     finally:
         logger.removeHandler(handler)
         logger.propagate = True
+
+
+def test_settings_save_validates_a_config_without_symbols_or_universe(tmp_path: Path) -> None:
+    # No symbols/universe key: load_config rejects this config (no enabled
+    # market), so the save must be refused instead of persisted unvalidated.
+    original = yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {"daily_loss_limit_pct": 0.02}})
+    manager = EngineManager()
+    manager.config_path = tmp_path / "settings.yaml"
+    manager.config_path.write_text(original, encoding="utf-8")
+    manager.env_path = tmp_path / ".env"
+    manager.get_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
+    manager.engine_state = "stopped"
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(settings_router.save_settings(SettingsPayload(log_level="DEBUG"), SettingsService(manager)))
+
+    assert excinfo.value.status_code == 400
+    assert "enabled market symbol" in str(excinfo.value.detail)
+    assert manager.config_path.read_text(encoding="utf-8") == original
+    assert not (tmp_path / ".settings.yaml.validate").exists()

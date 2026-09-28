@@ -20,6 +20,12 @@ from parayabuck.web.services.settings import SettingsService
 
 WEB = Path(__file__).resolve().parents[1] / "src" / "parayabuck" / "web"
 EMPTY_BLOCKS = "app:\nruntime:\nlive:\nstrategy:\nalpaca:\nrisk:\nengine:\n"
+# Settings saves validate the full config with load_config, which requires
+# at least one enabled market; fixtures carry the smallest loadable one.
+_LOADABLE_MARKETS: dict[str, Any] = {
+    "universe": {"equity": {"enabled": True}},
+    "strategy": {"equity": {"enabled": True, "name": "equity_leveraged_trend_v1"}},
+}
 
 
 def _manager(tmp_path: Path, config_text: str) -> EngineManager:
@@ -67,7 +73,12 @@ def test_get_settings_with_empty_blocks_returns_absent_block_digest(tmp_path: Pa
 
 
 def test_settings_save_with_empty_blocks_succeeds(tmp_path: Path) -> None:
-    manager = _manager(tmp_path, EMPTY_BLOCKS + "strategy:\n  equity:\n  crypto:\n")
+    manager = _manager(
+        tmp_path,
+        EMPTY_BLOCKS
+        + "universe:\n  equity:\n    enabled: true\n"
+        + "strategy:\n  equity:\n    name: equity_leveraged_trend_v1\n  crypto:\n",
+    )
 
     result = asyncio.run(
         SettingsService(manager).save_settings(
@@ -78,7 +89,10 @@ def test_settings_save_with_empty_blocks_succeeds(tmp_path: Path) -> None:
     assert result["status"] == "success"
     saved = yaml.safe_load(manager.config_path.read_text(encoding="utf-8"))
     assert saved["app"]["log_level"] == "DEBUG"
-    assert saved["strategy"] == {"equity": {"enabled": True}, "crypto": {"enabled": False}}
+    assert saved["strategy"] == {
+        "equity": {"name": "equity_leveraged_trend_v1", "enabled": True},
+        "crypto": {"enabled": False},
+    }
     assert saved["live"] == {}
 
 
@@ -113,7 +127,11 @@ def test_saving_production_risk_limits_round_trips(tmp_path: Path) -> None:
     manager = _manager(
         tmp_path,
         yaml.safe_dump(
-            {"runtime": {"mode": "paper"}, "risk": {"daily_loss_limit_pct": 0.20, "max_drawdown_pct": 0.75}}
+            {
+                "runtime": {"mode": "paper"},
+                "risk": {"daily_loss_limit_pct": 0.20, "max_drawdown_pct": 0.75},
+                **_LOADABLE_MARKETS,
+            }
         ),
     )
     service = SettingsService(manager)
@@ -266,7 +284,9 @@ def test_settings_drawer_no_longer_has_live_trading_checkbox() -> None:
 
 
 def test_paper_mode_save_from_live_config_still_switches_to_paper(tmp_path: Path) -> None:
-    manager = _manager(tmp_path, yaml.safe_dump({"runtime": {"mode": "live"}, "live": {"enabled": True}}))
+    manager = _manager(
+        tmp_path, yaml.safe_dump({"runtime": {"mode": "live"}, "live": {"enabled": True}, **_LOADABLE_MARKETS})
+    )
 
     result = asyncio.run(SettingsService(manager).save_settings(SettingsPayload(paper_mode=True)))
 

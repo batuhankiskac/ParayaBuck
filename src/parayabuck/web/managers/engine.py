@@ -376,8 +376,7 @@ class EngineManager:
             yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
         )
         try:
-            if cfg_raw.get("symbols") or cfg_raw.get("universe"):
-                load_config(str(temporary_config))
+            load_config(str(temporary_config))
         finally:
             temporary_config.unlink(missing_ok=True)
         if entering_live and credentials_changed:

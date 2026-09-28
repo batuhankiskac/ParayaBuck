@@ -17,6 +17,13 @@ from parayabuck import runtime as runtime_module
 from parayabuck.web import server
 from parayabuck.web.managers import websocket as ws_managers
 
+# Settings saves validate the full config with load_config, which requires
+# at least one enabled market; fixtures carry the smallest loadable one.
+_LOADABLE_MARKETS: dict[str, Any] = {
+    "universe": {"equity": {"enabled": True}},
+    "strategy": {"equity": {"enabled": True, "name": "equity_leveraged_trend_v1"}},
+}
+
 
 class _CountingEngineManager(server.EngineManager):
     def __init__(self, root: Path) -> None:
@@ -155,6 +162,7 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_
                     "daily_loss_limit_pct": 0.015,
                     "max_drawdown_pct": 0.10,
                 },
+                **_LOADABLE_MARKETS,
             }
         )
     )
@@ -189,7 +197,7 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_
 
 def test_settings_save_succeeds_when_automatic_restart_times_out(tmp_path: Path, monkeypatch: Any) -> None:
     manager = _RestartFailureManagerStub(tmp_path)
-    manager.config_path.write_text(yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {}}))
+    manager.config_path.write_text(yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {}, **_LOADABLE_MARKETS}))
     monkeypatch.setattr(server, "manager", manager)
 
     result = asyncio.run(server.save_settings(server.SettingsPayload(execution_timeframe="5m")))
@@ -210,7 +218,7 @@ def test_settings_save_strips_obsolete_engine_keys_so_config_loads_again(tmp_pat
                 "runtime": {"mode": "paper"},
                 "risk": {"daily_loss_limit_pct": 0.015, "max_drawdown_pct": 0.10},
                 "engine": {"timeframe": "15m", "warmup_bars": 5},
-                "strategy": {"equity": {"enabled": True}},
+                **_LOADABLE_MARKETS,
             }
         )
     )
@@ -246,7 +254,7 @@ def test_settings_save_strips_obsolete_risk_keys_so_config_loads_again(tmp_path:
                     "volatility_targeting_enabled": True,
                     "risk_per_trade_pct": 0.01,
                 },
-                "strategy": {"equity": {"enabled": True}},
+                **_LOADABLE_MARKETS,
             }
         )
     )

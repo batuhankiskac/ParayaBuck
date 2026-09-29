@@ -215,3 +215,21 @@ alerting:
   - risk_epoch_reset
   - circuit_breaker
   - daily_summary
+  - intent_alarm
+  - intent_recovered
+intent_watchdog:
+  # Intent-vs-reality watchdog (observability only; never gates trading).
+  # Alarms (alert kind intent_alarm) when, on the NYSE calendar, no equity
+  # decision exists for the last session after close (>= 16:00 ET) + grace,
+  # when a crypto cadence-boundary decision is overdue, or when a positive
+  # target is not held (held < minimum_held_fraction x target) after the
+  # fill window (equity: next open + grace; crypto: decision + grace).
+  # Active alarms appear as degraded_reasons in /readyz and /api/status.
+  enabled: true
+  equity_decision_grace_minutes: 45
+  equity_fill_grace_minutes: 30
+  crypto_decision_grace_minutes: 120
+  crypto_fill_grace_minutes: 60
+  minimum_held_fraction: 0.5
+  fail_readiness: true
+  evaluation_interval_seconds: 60

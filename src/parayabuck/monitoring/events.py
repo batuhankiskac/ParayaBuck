@@ -50,6 +50,9 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     "paper_receipt",
     # One-line operator summary after each equity session-close decision.
     "daily_summary",
+    # Intent watchdog: a scheduled decision or its fills did not happen.
+    "intent_alarm",
+    "intent_recovered",
 )
 
 ALERT_KINDS: frozenset[str] = frozenset(ALERT_KINDS_ORDERED)
@@ -68,6 +71,7 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "drawdown_halt",
         "circuit_breaker",
         "paper_incident",
+        "intent_alarm",
     }
 )
 

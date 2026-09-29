@@ -544,6 +544,51 @@ class ObservabilityConfig:
 
 
 @dataclass(frozen=True)
+class IntentWatchdogConfig:
+    """Intent-vs-reality watchdog (``intent_watchdog:`` block).
+
+    Observability only: alarms are alerted (``intent_alarm``) and surfaced
+    as degraded reasons in RuntimeHealth and /readyz; they never gate or
+    change trading.
+    """
+
+    enabled: bool = True
+    # Minutes after the expected equity decision (NYSE close, never before
+    # 16:00 ET) before a missing decision alarms.
+    equity_decision_grace_minutes: float = 45.0
+    # Minutes after the next NYSE open following a decision before a
+    # missing/under-target position alarms.
+    equity_fill_grace_minutes: float = 30.0
+    # Minutes after the next crypto cadence-boundary bar closes before a
+    # missing crypto decision alarms.
+    crypto_decision_grace_minutes: float = 120.0
+    # Minutes after a crypto decision before an under-target position alarms.
+    crypto_fill_grace_minutes: float = 60.0
+    # Held weight below this fraction of the decided target weight counts as
+    # "under target" (drift alone rarely halves a position in one session).
+    minimum_held_fraction: float = 0.5
+    # When an alarm is active and trading is expected, /readyz reports
+    # ready=false (HTTP 503) with the alarm codes as degraded_reasons.
+    fail_readiness: bool = True
+    evaluation_interval_seconds: float = 60.0
+
+    def __post_init__(self) -> None:
+        for name in (
+            "equity_decision_grace_minutes",
+            "equity_fill_grace_minutes",
+            "crypto_decision_grace_minutes",
+            "crypto_fill_grace_minutes",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"intent_watchdog.{name} must be non-negative")
+        if not math.isfinite(self.minimum_held_fraction) or not 0 < self.minimum_held_fraction <= 1:
+            raise ValueError("intent_watchdog.minimum_held_fraction must be in (0, 1]")
+        if not math.isfinite(self.evaluation_interval_seconds) or self.evaluation_interval_seconds <= 0:
+            raise ValueError("intent_watchdog.evaluation_interval_seconds must be positive")
+
+
+@dataclass(frozen=True)
 class Config:
     app: AppConfig = field(default_factory=AppConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
@@ -559,6 +604,7 @@ class Config:
     alerting: AlertingConfig = field(default_factory=AlertingConfig)
     backup: BackupConfig = field(default_factory=BackupConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
+    intent_watchdog: IntentWatchdogConfig = field(default_factory=IntentWatchdogConfig)
 
     def __post_init__(self) -> None:
         if not self.symbols:
@@ -805,6 +851,7 @@ def load_config(config_path: str | None = None) -> Config:
         backup=BackupConfig(**_block(raw.get("backup"))),
         alerting=AlertingConfig(**_block(raw.get("alerting"))),
         observability=ObservabilityConfig(**_block(raw.get("observability"))),
+        intent_watchdog=IntentWatchdogConfig(**_block(raw.get("intent_watchdog"))),
     )
 
 
@@ -821,6 +868,7 @@ __all__ = [
     "EngineConfig",
     "EquityUniverseConfig",
     "ExecutionConfig",
+    "IntentWatchdogConfig",
     "LiveConfig",
     "MarketStrategyConfig",
     "ObservabilityConfig",

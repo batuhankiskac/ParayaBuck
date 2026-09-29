@@ -36,6 +36,9 @@ class RuntimeHealth:
     universe_refresh: dict[str, object] = field(default_factory=dict)
     entry_risk_latch: dict[str, str | None] = field(default_factory=dict)
     signal_adjustment: dict[str, object] = field(default_factory=dict)
+    # Intent-vs-reality watchdog: {"enabled", "evaluated_at", "alarms",
+    # "degraded_reasons"}. Observability only; never part of ``healthy``.
+    intent_watchdog: dict[str, object] = field(default_factory=dict)
 
 
 def _portfolio_catch_up_health(runtime: object) -> dict[str, str | None]:

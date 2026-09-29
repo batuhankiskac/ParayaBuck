@@ -415,6 +415,31 @@ class PortfolioStateRepository:
             ).fetchone()
         return datetime.fromisoformat(str(row[0])) if row and row[0] is not None else None
 
+    def latest_decision_target(self, account_id: str, market: Market) -> tuple[datetime, dict[str, float]] | None:
+        """Newest persisted decision for ``market`` (any configuration digest)
+        as ``(decision_timestamp, {symbol: post-risk account weight})``.
+
+        Read-only observability for the intent watchdog: a configuration
+        change must not make the previous identity's last decision vanish.
+        """
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT decision_timestamp, target_json FROM portfolio_decisions
+                   WHERE account_id = ? AND market = ?
+                   ORDER BY decision_timestamp DESC LIMIT 1""",
+                (account_id, market.value),
+            ).fetchone()
+        if row is None:
+            return None
+        weights: dict[str, float] = {}
+        try:
+            raw = json.loads(str(row[1]))
+            for item in raw.get("weights", ()) if isinstance(raw, dict) else ():
+                weights[str(item["symbol"])] = float(item["weight"])
+        except (TypeError, ValueError, KeyError):
+            weights = {}
+        return datetime.fromisoformat(str(row[0])), weights
+
     def record_decision(
         self,
         session_id: str,

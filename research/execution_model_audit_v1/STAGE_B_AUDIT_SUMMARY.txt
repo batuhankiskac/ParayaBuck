@@ -1,0 +1,17 @@
+ending 1141851.319866288 counts {'decisions': 2860, 'fills': 1290} costs {'fees': 4848.163992918968, 'slippage': 3515.328942315009, 'spread': 1757.6644711575045}
+skips 99 [('2021-09-22', 3), ('2021-12-03', 3), ('2022-04-30', 3)] ['Historical strategy batch incomplete; decision skipped: timestamp=2021-09-22T00:00:00+00:00', 'Historical strategy batch incomplete; decision skipped: timestamp=2021-09-22T00:00:00+00:00', 'Historical strategy batch incomplete; decision skipped: timestamp=2021-09-22T00:00:00+00:00']
+non-midnight skips 0 []
+decide calls 2406 2017-01-03T05:00:00+00:00 2026-07-30T04:00:00+00:00
+trend states Counter({'uptrend': 1993, 'downtrend': 413})
+equity event kinds Counter({'corporate_action': 131436, 'decision': 2406, 'fill': 585, 'final_liquidation': 1})
+fills 585 Counter({('QLD', 'sell'): 307, ('QLD', 'buy'): 278})
+fill session lag (sessions after decision) Counter({1: 585})
+reference_price == session open max abs dev 0.0
+fill hour UTC [('13:30', 367), ('14:30', 218)]
+adverse bps Counter({3.0: 585})
+decisions with >1 fill same side 0
+equity decision events 2406 2017-01-03T21:00:00+00:00 2017-01-03T05:00:00+00:00
+decision time-of-day UTC [('20:00', 1584), ('21:00', 802), ('18:00', 14), ('17:00', 6)]
+order_created_at sample 2017-01-03T21:00:00+00:00 2017-01-04T14:30:00+00:00 2017-01-03T05:00:00+00:00
+decide_log vs independent recomputation mismatches 0
+deferred events 2000

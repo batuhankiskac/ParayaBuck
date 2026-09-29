@@ -1,5 +1,0 @@
-# FILL traversal design
-
-Use the activity-type endpoint with descending direction and 100-item pages. A nonempty page must be a list of at most 100 well-formed FILL records; the final activity ID becomes the next token. Reject an unchanged/repeated token, a page with no unseen ID, missing ID, malformed fill identity/quantity/time, and later-page transport failure. Deduplicate overlap by activity ID. Continue until an explicit empty page, even after a short page. Stage all validated pages first, then sort by transaction time and apply fees/fills and the durable watermark. A traversal failure applies none of the staged activity.
-
-The existing account-scoped timestamp watermark uses a 24-hour overlap in the `after` filter, with activity-ID deduplication in the ledger. This repair preserves that checkpoint design; no new storage scheme is introduced. `after` boundary inclusion is not relied on because the overlap precedes the watermark. Very long downtime beyond the retained broker history or the 24-hour overlap remains an operational history-availability concern, not evidence that a partial page is complete.

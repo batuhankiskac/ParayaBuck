@@ -1,3 +1,0 @@
-# Cap-8 to cap-6 rollback
-
-`reserve_opening_order_slots` counts nonflat broker positions and reserved/working symbol claims before considering a new opening. At an effective occupancy of seven or eight, setting `risk.max_positions` back to six blocks new openings; it does not force SELLs. Existing inventory remains until normal strategy/rebalance exits. A pending/unfilled SELL does not release a slot; a fresh authoritative flat position does. Managed risk-reducing exits remain available. Broker OPEN orders and durable local orders must be reconciled at startup before relying on the new cap. The PAPER rollback is solely `risk.max_positions: 8 -> 6`, with LIVE still disabled.

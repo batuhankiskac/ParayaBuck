@@ -1,3 +1,0 @@
-# Effective capacity claim semantics
-
-The dashboard calls `EngineRuntime.capacity_health`, which uses fresh `current_buy_capacity` account state, local nonterminal BUY orders and broker OPEN BUY orders. Claims are keyed by `(market, canonical_symbol)` and deduplicated. `POSITION`, `RESERVED`, `WORKING_OPENING` and conservatively unknown OPEN order sources are visible. A local nonterminal SELL remains a conservative `RESERVED` claim under the same admission semantics; it is not labeled `WORKING_OPENING`. A held position continues to claim until fresh authoritative account state is flat. Existing-symbol BUY never adds a second claim. Effective counts are not clamped to caps; an injected breach displays 9 global or 3 crypto claims. Global cap is 8 and crypto cap is 2.

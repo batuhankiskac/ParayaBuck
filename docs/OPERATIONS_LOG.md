@@ -1,0 +1,64 @@
+# Operations log
+
+Append a row at the top on every deploy, config/identity change, incident or research decision; one line per row, dates in UTC.
+"Deployed to VM?" = the change is in the build the GCP VM runs (`yes`), is not (`no`), or can't be established from the record (`unknown`, mostly the pre-VM era).
+The PAPER bot runs only on the GCP VM (systemd, deployed by git bundle, see `docs/deployment.md`) since 2026-09-26; the VM currently runs `b976749`.
+
+| Date (UTC) | Change | Why | Commit / tag | Deployed to VM? |
+|---|---|---|---|---|
+| 2026-09-30 | Pruned pre-VT35 research artifacts; added `docs/research/INDEX.md` and this log | Operator: no dead weight; everything recoverable from git | `1fae547`; tag `archive/research/pre-prune-2026-09-30` (local) | no (docs only) |
+| 2026-09-29 21:05 | paper_config_v2: crypto sleeve disabled, equity allocation and `max_position_pct` 0.93 → 0.98, BIL sweep off; startup alerts on bot inventory in a disabled market | Stage B S1 29.35% CAGR / 27.7% DD vs 28.98% / 29.2%; BIL sweep failed the 2x-cost gate | `83befd9` (merge `1d55ef2`); `docs/research/paper_config_v2.md` | no; digest changes, start a new soak window |
+| 2026-09-29 20:52 | Intent-vs-reality watchdog in health and `/readyz` | Runtime had not executed the strategy for four sessions while every probe was green | `501aeee` (merge `da397d4`) | no |
+| 2026-09-29 20:51 | Opt-in BIL idle-cash sweep (flag, off) + paper_config_v2 preregistration | Test the T-bill parking idea in Stage B | `d31088e` | no |
+| 2026-09-29 20:46 | Research: rule_variants_v1, no VT35 rule variant passes the gate | Look for a better VT35 rule before LIVE | `89fedbe`; `docs/research/rule_variants_v1.md` | no (research) |
+| 2026-09-29 20:45 | One-line daily summary alert after each equity decision | Operator visibility | `4d0f417` | no |
+| 2026-09-29 20:42 | Research: execution_model_audit_v1, backtest and live share one execution model; added `scripts/backtest_live_comparison.py` | Check the Stage B result is achievable live | `aa0f516`; `docs/research/execution_model_audit_v1.md` | no |
+| 2026-09-29 20:38 | Fix: ignore unfinished equity daily bars in the signal path | An intra-session restart's catch-up could decide on a forming (partial) daily bar | `4b6f6e1` | no |
+| 2026-09-29 20:38 | Research: stress_robustness_v1, VT35 passes the small-LIVE bar on 1999–2026 history | Robustness before any LIVE talk | `2e67432`; `docs/research/stress_robustness_v1.md` | no (research) |
+| 2026-09-29 20:35 | Research: crypto_sleeve_decision_v1, recommends removing the crypto sleeve | ~+1 pp/yr, not significant, high ops burden | `83e7eba`, `1cace85`; `docs/research/crypto_sleeve_decision_v1.md` | no (research) |
+| 2026-09-29 | Deploy `b976749` to the GCP VM (exact time not recorded) | Ship the entry-latch and crypto-stop fixes | `b976749` | yes (current) |
+| 2026-09-29 19:54 | Fix: no protective stops on portfolio-owned crypto positions | A 75 bps stop was placed on every crypto buy; PAPER crypto results before this are invalid | `922fb5f` | yes |
+| 2026-09-29 19:52 | Incident fix: entry latch compared label instants (09:30 ET vs 00:00 ET), so every scheduled equity decision was latched `signal_adjustment_unverified`; also stops the same session appearing twice (duplicate bar) in signal history | Entries blocked since the VT35 switch; duplicate bar distorted SMA/vol metadata | `ebcae9c` | yes |
+| 2026-09-28 13:48 | Cleanup waves r9/r10: crypto dust bookkeeping, store lock, web settings validation, ops explain JSON | Audit findings | `8ac0097`…`722f23e`, `e013e97` | yes |
+| 2026-09-28 06:05 | VT35 research figures corrected after the dividend split-basis fix (Stage B 28.98% CAGR) | Dividends were credited per unadjusted share | `26ca23e`, `22ae821` | yes |
+| 2026-09-28 06:01 | Salt portfolio client order ids per ledger | Stop one ledger adopting another ledger's orders on the shared Alpaca account | `4f960dd` | yes |
+| 2026-09-27 20:49 | Cleanup waves r1–r6 (~70 commits): runtime halt/health, monitoring, ledger, backtest and web fixes | Full-repo audit findings | `180b02d`…`74ad063` | yes |
+| 2026-09-26 05:24 | Fix: hourly signal-adjustment monitor gets its own heartbeat TTL | Runtime reported degraded about a minute after every start | `25c56b3` | yes |
+| 2026-09-26 05:18 | Fix: tolerate broker 9th-decimal quantity differences | `QUANTITY_MISMATCH` blocked startup | `1abc678` | yes |
+| 2026-09-26 | PAPER bot moved to the GCP VM (systemd), deployed by git bundle; engine never runs locally | Single runner after the double-run incident | n/a | yes |
+| 2026-09-25 | Incident: laptop and VM both ran the PAPER engine against the same Alpaca PAPER account (double-run) | Two runners on one account; laptop stopped | n/a | yes |
+| 2026-09-25 20:15 | Fix: adopt the broker's ordered quantity for recovered deterministic orders | Restart re-sized a recovered order; reconciliation failed closed | `28da561` | yes |
+| 2026-09-25 19:15 | Web UI rebuilt; VOO performance chart | Goal is beating VOO | `20194b6` | yes |
+| 2026-09-25 18:01 | Dynamic equity scanner removed; equity universe static SPY/QQQ/QLD | VT35 needs only these symbols | `701fe74` | yes |
+| 2026-09-25 17:30 | **Identity switch: PAPER equity V3 + sleeve → VT35** (`equity_leveraged_trend_v1`, equity 0.93, crypto 0.05 unchanged); V1/V2/V3 and sleeve code removed | profit_max_v1: VT35 Stage B far above VOO; V3 + sleeve ~7% CAGR | `da6190b`; evidence `5d61c8c`, tag `archive/research/profit-max-v1-2026-09` | yes |
+| 2026-09-25 13:41 | Gold added to the PAPER equity sleeve (V3 0.30 + five-ETF sleeve 0.25); superseded the same day | Sleeve validation (later found to use inflated dividend data) | `7b35c78`; tag `archive/research/gold-sleeve-production-v1-2026-09` | unknown |
+| 2026-09-25 13:00 | Dividend-growth sleeve shipped as the PAPER equity identity; superseded the same day | Sleeve candidates v2/v3 | `1fbc141`; tag `archive/research/dividend-sleeve-production-v1-2026-09` | unknown |
+| 2026-09-25 07:01 | ETF diversifier v1 fails Stage B; sleeve candidates v2/v3 closed | Research | `424ac7a`, `8545b69`; tags `archive/research/etf-diversifier-v1-stage-b-fail-2026-09`, `…/sleeve-candidates-v2-v3-2026-09` | no (research) |
+| 2026-09-24 14:52 | Two-market PAPER observability repair: receipt schema V2, soak auditor | Readiness audit was blocked | `e1e2663`; tag `archive/audit/paper-forward-readiness-v1-blocked-2026-09` | unknown |
+| 2026-09-24 11:18 | Fix: enforce the crypto slot cap at portfolio order submission | Cap could be exceeded | `a167a49`, `7724a2b` | unknown |
+| 2026-09-24 05:58 | Cap-eight account capacity integrated in PAPER config (global cap 8, crypto cap 2) | Account-capacity migration v3 accepted | `49ba2ce`; tag `archive/production/production-correctness-cap8-readiness-v1-2026-09` | unknown |
+| 2026-09-23 23:12 | Gate all BUYs on fresh gross cash and working-order capacity | Cap-8 readiness | `8b0b8bb` | unknown |
+| 2026-09-23 22:27 | Fix restart order recovery and FILL pagination completeness | Restart reconciliation audit | `96254b7`; tag `archive/audit/production-restart-reconciliation-v1-2026-09` | unknown |
+| 2026-09-23 18:11 | Canonical crypto baseline repaired (causal execution) | Old replay filled before the signal was available | `b135d73`; tag `archive/maintenance/crypto-canonical-causal-execution-v1-2026-09` | no (research) |
+| 2026-09-23 07:32 | Fix: account-wide opening slot reservations | Global slot accounting bug | `3f97c02` | unknown |
+| 2026-09-22 19:40 | Fix: exhaust Alpaca open-order pages | Open orders beyond page 1 were missed | `aec5ea9` | unknown |
+| 2026-09-21 → 09-24 | Alpha research waves closed (52-week high, abnormal volume, insider, 13D, earnings, spin-off, etc.); public-data discovery exhausted | No candidate passed | tags `archive/research/*-2026-09` | no (research) |
+| 2026-09-21 12:40 | Fix: causal month-end first-open scheduling | V3 rebalance timing | `980c6b9` | unknown |
+| 2026-09-20 15:49 | Fix canonical backtest data and cost semantics | Backtest correctness | `839e92c` | unknown |
+| 2026-09-18 18:51 | Fix: isolate reserved equity roles (SH/PSQ/DOG) from V3 alpha; research archive consolidated | V3 could rank hedge ETFs | `bdfa55e`, `2e88035` | unknown |
+| 2026-09-15 | H06 research rejected; old research files removed | Research | `90988e7`, `8123694` | no (research) |
+| 2026-09-12 | Persistence/runtime safety hardening; production isolation gate for tests | Safety | `8f00708`, `1769c7a` | unknown |
+| 2026-09-11 | Repo cleanup: obsolete files and V3 integrity tests removed; research tests split out of CI | Maintenance | `b3604d9`, `845c58c` | unknown |
+| 2026-09-01 → 09-05 | M3 / OCP / survivorship research (no production change) | Research | `9578d5b`, `ed11beb` | no (research) |
+| 2026-08-29 10:16 | Production deployment guide (PAPER) | Ops docs | `e640873` | unknown |
+| 2026-08-27 13:57 | Hardened systemd unit, backup timer, docker policy | Deployment | `d0ee47c` | unknown |
+| 2026-08-26 21:41 | Identity: crypto T1 hysteresis v1 (`crypto_low_variance_hysteresis_v1`) promoted to PAPER; T1 PAPER period starts 08-27 | Tournament winner | `6b155c3`, `280a8d9` | unknown |
+| 2026-08-24 11:46 | Identity: MH_RAW V3 (`equity_residual_momentum_v3`) promoted to PAPER | Research result | `39c78ae` | unknown |
+| 2026-08-23 10:45 | Equity signal-basis verification and adjustment latch introduced | Detect split-basis mismatch before trading | `a2f9f93` | unknown |
+| 2026-08-18 22:00 | Crypto fixes: net-quantity fills (ownership-drift halt), stops kept in fee band (were cancelled every 60 s), BTC/USD symbol lookup | PAPER incidents | `bc0a520`, `e09e89c`, `93ab8a9` | unknown |
+| 2026-08-18 16:35 | Identity: validated v2 PAPER selections promoted | Research result | `17c0456` | unknown |
+| 2026-08-13 13:57 | Operator dashboard with PAPER/LIVE badge; backup CLI; health vs readiness | Operability | `d0527df`, `6725990` | unknown |
+| 2026-08-12 | Multi-market strategy layer (residual momentum equity, crypto); crypto low-variance chosen | New architecture | `9baedbb`, `7016c90` | unknown |
+| 2026-08-10 20:29 | Two-phase rebalance, execution policy parity, granular safety reset | Correctness | `cde51a5` | unknown |
+| 2026-08-09 09:21 | Unified portfolio trading system | Architecture | `84c4fbc` | unknown |
+| 2026-08-06 20:10 | Dual momentum family archived (rerun_2 RED) | Research | `e522bc1` | no (research) |

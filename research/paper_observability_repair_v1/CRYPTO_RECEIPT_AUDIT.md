@@ -1,3 +1,0 @@
-# Crypto receipt audit
-
-The shared V2 shape records crypto selected-symbol ranks, `retained` hysteresis flags, predecision crypto holdings, target weights, active-universe version and observation digest. Capacity snapshots include canonical position, reservation and broker OPEN BUY claim sources. A partial fill plus a working order remains one symbol claim. A requested cancellation remains a claim while OPEN. Terminal unfilled release requires the order to leave local and broker OPEN state. A rejected SELL never releases a held position claim. Synthetic capacity cases D1-D7 are in `tests/test_paper_capacity_observability.py`; receipt identity/origin cases are in `tests/test_paper_receipt_v2.py`.

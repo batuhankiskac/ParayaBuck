@@ -1,7 +1,0 @@
-{
-  "classification": "PRODUCTION_REBALANCE_INTERACTION_BUG_CONFIRMED",
-  "evidence": "Production overlay treated an omitted managed current-market position as replaceable; planner suppressed its actual SELL below the 0.005 band, while admitting a new-symbol BUY against the assumed free slot.",
-  "production_vs_replay": "The synthetic production overlay-plus-planner path reproduced seven occupied/reserved names at cap six. Replay V1 reproduced the same interaction in historical combined state; its research implementation is not the sole cause.",
-  "maximum_positions": 6,
-  "strategy_or_band_parameter_changed": false
-}

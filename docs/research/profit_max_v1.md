@@ -26,7 +26,8 @@ tag `archive/research/profit-max-v1-2026-09`.
   in the sleeve campaigns. With rates restated to post-split shares:
   - The shipped dividend sleeve P still beats V3-only A (7.08% vs 6.69%).
   - The gold variant G3 falls below P (6.72%). The G3 ship
-    (`docs/research/gold_sleeve_production_v1.md`) was based on inflated data.
+    (`docs/research/gold_sleeve_production_v1.md`, pruned; tag
+    `archive/research/pre-prune-2026-09-30`) was based on inflated data.
 - **Leverage, not the filter, drives return.** The filter mainly shortens the
   worst losses:
   - QLD unfiltered: 31.9% CAGR, 62% max drawdown.

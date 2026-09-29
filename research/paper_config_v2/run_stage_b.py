@@ -145,7 +145,11 @@ def main() -> int:
         allow_test_strategies=True,  # product identities outside the frozen migration arms
     )
     crypto_input = None
-    if config.strategy.crypto.enabled:
+    # Crypto support was removed after this study (docs/research/crypto_removal_v1.md).
+    # Current code runs the adopted equity-only config (config/settings.yaml,
+    # equivalent to S1); the S0/S1/S2 arm configs carry crypto keys and, like
+    # the crypto branch below, need tag archive/code/crypto-sleeve-2026-09.
+    if getattr(config.strategy, "crypto", None) is not None and config.strategy.crypto.enabled:
         with patch.object(rh, "_engine", build):
             crypto_input, _crypto_identity = rh._crypto_input(config, replay)
 

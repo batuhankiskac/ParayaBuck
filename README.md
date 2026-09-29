@@ -2,13 +2,12 @@
 
 > **Project status — production-only surface**
 >
-> - **Equity:** `equity_leveraged_trend_v1` (Leveraged Index Trend v1 — holds QLD, the 2x Nasdaq-100 ETF, while QQQ's completed close is above its 200-session SMA, sized to a 35% volatility target) — 0.93 maximum allocation, decided every session, cash otherwise; **LIVE disabled**
-> - **Crypto:** `crypto_low_variance_hysteresis_v1` — 1d signal, 96h rebalance, 0.05 allocation; validated low-variance hysteresis product identity
+> - **Equity:** `equity_leveraged_trend_v1` (Leveraged Index Trend v1 — holds QLD, the 2x Nasdaq-100 ETF, while QQQ's completed close is above its 200-session SMA, sized to a 35% volatility target) — 0.98 maximum allocation, decided every session, cash otherwise; **LIVE disabled**
+> - **Crypto:** removed 2026-09-30 (equity-only; `docs/research/crypto_removal_v1.md`, tag `archive/code/crypto-sleeve-2026-09`)
 > - **Dataset:** point-in-time historical manifests and corporate-action data remain under `data/historical/`; large provider datasets are local/ignored
 
-Automated multi-market Alpaca trading bot: a static equity universe and a
-scanner-selected crypto universe, validated portfolio strategies, strict risk
-overlay, and deterministic execution through the same pipeline in backtest,
+Automated equity Alpaca trading bot: a static equity universe, a validated
+portfolio strategy, strict risk overlay, and deterministic execution through the same pipeline in backtest,
 paper, and live modes.
 
 Live trading is disabled by default. Supplying Alpaca credentials alone cannot
@@ -16,22 +15,23 @@ enable it (see [Enabling live safely](#enabling-live-safely)).
 
 ## Current PAPER strategies
 
-The PAPER product runs the current validated equity and crypto identities
+The PAPER product runs the current validated equity identity
 (see `docs/validated_strategies.md` and the
 [profit maximization v1 evidence](docs/research/profit_max_v1.md)):
 
 | Market | Strategy | Signal | Rebalance | Allocation |
 |---|---|---|---|---|
-| Equity | Leveraged Index Trend v1 (`equity_leveraged_trend_v1`) — QQQ 200-session SMA filter, `min(1, 0.35 / 20-session realized QLD volatility)` | 1d | daily (`rebalance_frequency: hours:24`) | 0.93 |
-| Crypto | Low Realized Variance Hysteresis v1 (`crypto_low_variance_hysteresis_v1`) — retention rank 4, lookback 22, top2, 96h | 1d | 96h | 0.05 |
+| Equity | Leveraged Index Trend v1 (`equity_leveraged_trend_v1`) — QQQ 200-session SMA filter, `min(1, 0.35 / 20-session realized QLD volatility)` | 1d | daily (`rebalance_frequency: hours:24`) | 0.98 |
 
 The equity target is cash when QQQ is in a downtrend, when history is
 insufficient, or when QLD is unavailable. The residual-momentum
 v1/v2/v3 identities and the dividend-growth and gold sleeve composition were
 removed on 2026-09-25; they are recoverable from git history (`5d61c8c` on
 `profit-max-v1`, `ec4e2df` on `main`) and are documented as historical, not
-selectable. `crypto_low_variance_v1` (168h) remains a constructible
-historical baseline for controlled backtests.
+selectable. The crypto sleeve was disabled by `paper_config_v2` and its code
+deleted on 2026-09-30 (`docs/research/crypto_removal_v1.md`). Crypto
+positions found in the shared account are left untouched and raise a
+`risk_incident` alert at startup.
 
 Backtest economics do not imply forward live returns; controlled PAPER
 operation remains the gate before any live consideration.
@@ -39,7 +39,7 @@ operation remains the gate before any live consideration.
 ## Architecture
 
 ```text
-Alpaca assets/data -> static equity symbols / crypto scanner -> active universe
+Alpaca assets/data -> static equity symbols -> active universe
   -> production strategy -> target portfolio -> risk overlay -> order planner
   -> historical broker / Alpaca paper / explicitly authorized Alpaca live
 ```
@@ -55,17 +55,11 @@ Alpaca assets/data -> static equity symbols / crypto scanner -> active universe
   (`_pin_managed_symbols`) at startup until sold. Backtests use
   `build_static_equity_point_in_time_universe` — each configured symbol joins
   at its first bar.
-- The crypto universe stays dynamic: all supported USD pairs are scanned
-  (liquidity, spread, ATR, BTC-correlation, category limits) into a
-  point-in-time observation set bounded by
-  `universe.crypto.maximum_stream_symbols` (12). The crypto scanner, active
-  universe, refresh loop and preflight are unchanged.
-- Strict risk overlay: market allocations remain 0.93 equity / 0.05 crypto.
-  Equity limits are 0.93 per asset, 0.98 gross and a 0.02 cash buffer; the
+- Strict risk overlay: the equity allocation is 0.98. Equity limits are
+  0.98 per asset, 0.98 gross and a 0.02 cash buffer; the
   0.20 daily-loss and 0.75 drawdown latches are catastrophe brakes for a 2x
   index ETF, and the drawdown halt persists until an operator risk-epoch reset.
-  Crypto limits remain 0.10 exposure / 0.05 per position / 2 positions;
-  max positions 8, stale-account pauses, ownership-drift halts, and duplicate
+  Max positions 8, stale-account pauses, ownership-drift halts, and duplicate
   order/decision protection remain unchanged.
 - Startup catch-up: a fresh mid-period deployment decides immediately on the
   latest closed warmup bars (`decision_origin: startup_catch_up`) instead of
@@ -102,7 +96,7 @@ loopback; see `docs/operations.md` (Docker, backup, incident recovery) and
 procedures).
 
 Configuration lives in `config/settings.yaml` (`runtime.mode`, universe,
-`strategy.equity` / `strategy.crypto`, `risk`, `backtest`, `live`, engine,
+`strategy.equity`, `risk`, `backtest`, `live`, engine,
 execution, backup, alerting). The current equity selection is
 `equity_leveraged_trend_v1`; its parameters are `signal_symbol`, `hold_symbol`,
 `sma_bars`, `vol_target`, `vol_window` and `rebalance_frequency`, with QQQ/QLD
@@ -116,16 +110,15 @@ from commit `ec4e2df` (main before the switch), e.g.
 ## Backtesting
 
 ```bash
-.venv/bin/parayabuck backtest --market equity --data bars.csv
-.venv/bin/parayabuck backtest --market crypto --data bars.csv --cost-stress
+.venv/bin/parayabuck backtest --market equity --data bars.csv --cost-stress
 ```
 
 CSV columns are `timestamp,symbol,open,high,low,close,volume` plus optional
 `market,timeframe`. Downloads (`--start/--end`) use the configured Alpaca
 credentials; equity history downloads the configured `universe.equity.symbols`
 only (no Alpaca asset listing). `--cost-stress` repeats at
-1x/2x/3x costs. Equity regulatory fees follow an effective-dated schedule;
-crypto backtests use Alpaca's tier-1 taker rate (25 bps). Reports include
+1x/2x/3x costs. Equity regulatory fees follow an effective-dated schedule.
+Reports include
 return, CAGR, Sharpe, Sortino, max drawdown, Calmar, profit factor, costs,
 exposure, and SPY comparison. Survivorship limits are disclosed in reports.
 

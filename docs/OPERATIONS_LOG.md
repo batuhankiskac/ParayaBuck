@@ -6,6 +6,7 @@ The PAPER bot runs only on the GCP VM (systemd, deployed by git bundle, see `doc
 
 | Date (UTC) | Change | Why | Commit / tag | Deployed to VM? |
 |---|---|---|---|---|
+| 2026-09-30 | Crypto support deleted (code, config keys, tests, crypto data) and BIL sweep code removed; startup raises `risk_incident` on any crypto held in the account. The new `config/settings.yaml` is mandatory (old crypto keys are rejected) | Operator: remove the crypto sleeve permanently, no dead code. Stage B S1 reproduced exactly (NAV 1,173,537.61); config digest changes | branch `worktree-agent-af0773debcfc110cb`; tag `archive/code/crypto-sleeve-2026-09` (local); `docs/research/crypto_removal_v1.md` | no |
 | 2026-09-30 | Pruned pre-VT35 research artifacts; added `docs/research/INDEX.md` and this log | Operator: no dead weight; everything recoverable from git | `1fae547`; tag `archive/research/pre-prune-2026-09-30` (local) | no (docs only) |
 | 2026-09-29 21:05 | paper_config_v2: crypto sleeve disabled, equity allocation and `max_position_pct` 0.93 → 0.98, BIL sweep off; startup alerts on bot inventory in a disabled market | Stage B S1 29.35% CAGR / 27.7% DD vs 28.98% / 29.2%; BIL sweep failed the 2x-cost gate | `83befd9` (merge `1d55ef2`); `docs/research/paper_config_v2.md` | no; digest changes, start a new soak window |
 | 2026-09-29 20:52 | Intent-vs-reality watchdog in health and `/readyz` | Runtime had not executed the strategy for four sessions while every probe was green | `501aeee` (merge `da397d4`) | no |

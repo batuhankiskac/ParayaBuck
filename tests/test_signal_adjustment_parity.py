@@ -204,7 +204,7 @@ def _engine_with_equity_runtime(symbols: tuple[str, ...]):
     from parayabuck.runtime import EngineRuntime
 
     engine = EngineRuntime.__new__(EngineRuntime)
-    engine._symbols_by_market = {Market.EQUITY: set(symbols), Market.CRYPTO: set()}
+    engine._symbols_by_market = {Market.EQUITY: set(symbols)}
     equity = _bare_runtime(symbols[0])
     equity.symbols = symbols
     equity.history = {symbol: [] for symbol in symbols}
@@ -319,21 +319,6 @@ def test_restart_between_splits_lands_on_provider_authority() -> None:
     post_restart.seed(list(provider_now))
 
     assert [b.close for b in pre_restart.history["AAA"]] == [b.close for b in post_restart.history["AAA"]]
-
-
-def test_crypto_runtime_is_never_touched_by_the_bridge() -> None:
-    runtime = object.__new__(PortfolioRuntime)
-    runtime.market = Market.CRYPTO
-    runtime.symbols = ("BTC/USD",)
-    runtime.history = {"BTC/USD": [_bar("BTC/USD", _TS0, 50_000.0)]}
-    runtime.signal_verified_through_by_symbol = {}
-    runtime.signal_last_verified_at = None
-    assert runtime.signal_history_matches_provider({}) is True
-    assert runtime.adopt_authoritative_signal_history({}, {"BTC/USD": _TS0}) == 0
-    bar = _bar("BTC/USD", _TS0 + timedelta(days=1), 51_000.0)
-    bar = Bar(bar.timestamp, "BTC/USD", "1d", *([51_000.0] * 4), 1_000, Market.CRYPTO)
-    runtime._append_signal_bar(bar)
-    assert runtime.history["BTC/USD"][-1].close == 51_000.0
 
 
 def test_tolerance_rejects_rounding_noise_only() -> None:
@@ -495,7 +480,7 @@ def _process_engine(provider: dict[str, list[Bar]], dates: list[datetime]):
     engine = EngineRuntime.__new__(EngineRuntime)
     engine._warming_up = False
     engine._circuit_breaker_reason = None
-    engine._symbols_by_market = {Market.EQUITY: {"AAA"}, Market.CRYPTO: set()}
+    engine._symbols_by_market = {Market.EQUITY: {"AAA"}}
     engine._portfolio_lock = threading.RLock()
     engine._last_portfolio_status = {}
     engine._historical = FakeHistory(raw={}, splits=provider)

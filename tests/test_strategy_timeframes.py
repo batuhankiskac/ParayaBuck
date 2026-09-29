@@ -8,7 +8,6 @@ it does not validate.
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -34,7 +33,6 @@ from parayabuck.portfolio.runtime_service import (
 )
 
 EQUITY_SYMBOLS = ("AAPL", "MSFT", "NVDA", "SPY", "QQQ", "QLD")
-CRYPTO_SYMBOLS = ("BTC/USD", "ETH/USD", "SOL/USD")
 
 
 def _bar(symbol: str, timestamp: datetime, timeframe: str, market: Market, close: float) -> Bar:
@@ -55,7 +53,6 @@ def _daily_series(
     symbols: tuple[str, ...],
     days: int = 320,
     base: datetime | None = None,
-    market: Market = Market.EQUITY,
 ) -> list[Bar]:
     start = base or datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
     bars: list[Bar] = []
@@ -67,17 +64,17 @@ def _daily_series(
                     symbol,
                     timestamp,
                     "1d",
-                    market,
+                    Market.EQUITY,
                     100 * (1.001 + offset * 0.0001) ** index,
                 )
             )
     return bars
 
 
-def _crypto_4h_series(symbols: tuple[str, ...], hours: int = 800) -> list[Bar]:
+def _equity_4h_series(symbols: tuple[str, ...], count: int) -> list[Bar]:
     start = datetime(2024, 1, 1, tzinfo=UTC)
     bars: list[Bar] = []
-    for index in range(hours):
+    for index in range(count):
         timestamp = start + timedelta(hours=4 * index)
         for offset, symbol in enumerate(symbols):
             bars.append(
@@ -85,7 +82,7 @@ def _crypto_4h_series(symbols: tuple[str, ...], hours: int = 800) -> list[Bar]:
                     symbol,
                     timestamp,
                     "4h",
-                    Market.CRYPTO,
+                    Market.EQUITY,
                     100 * (1.001 + offset * 0.0002) ** index,
                 )
             )
@@ -123,15 +120,6 @@ def test_strategy_cannot_run_on_unsupported_timeframe() -> None:
     validate_strategy_timeframe(strategy, "1d")
 
 
-def test_crypto_strategy_supports_only_validated_variants() -> None:
-    strategy = portfolio_strategy_from("crypto_low_variance_v1", timeframe="1d")
-    assert strategy.timeframe == "1d"
-    validate_strategy_timeframe(strategy, "1d")
-    for bad in ("5m", "1h", "4h", "15m"):
-        with pytest.raises(ValueError):
-            portfolio_strategy_from("crypto_low_variance_v1", timeframe=bad)
-
-
 def test_spec_declares_owned_timeframes_and_cadence() -> None:
     spec = portfolio_strategy_from("equity_leveraged_trend_v1").spec()
     assert spec.primary_timeframe == "1d"
@@ -142,90 +130,23 @@ def test_spec_declares_owned_timeframes_and_cadence() -> None:
 
 
 def test_required_timeframe_aggregation_is_initialized() -> None:
-    # 4h crypto bars must be reproducible from the streaming path used by
-    # paper/live (1h aggregation) AND from historical aggregation.
-    one_hour_bars = []
-    start = datetime(2024, 1, 1, tzinfo=UTC)
-    for index in range(48):
-        timestamp = start + timedelta(hours=index)
-        one_hour_bars.append(_bar("BTC/USD", timestamp, "1h", Market.CRYPTO, 100.0 + index))
-    aggregated = aggregate_historical_bars(one_hour_bars, "4h", require_complete=True)
-    assert len(aggregated) == 12
+    # 1h equity bars must be reproducible from the streaming path used by
+    # paper/live AND from historical aggregation of 30m session bars.
+    session_open = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)  # 09:30 ET
+    half_hour_bars = [
+        _bar("SPY", session_open + timedelta(minutes=30 * index), "30m", Market.EQUITY, 100.0 + index)
+        for index in range(13)  # 09:30 .. 15:30 ET
+    ]
+    aggregated = aggregate_historical_bars(half_hour_bars, "1h", require_complete=True)
+    # Buckets are anchored at the 09:30 ET open; the 15:30 bucket holds a
+    # single 30m bar and is incomplete, so it is never emitted.
+    assert [bar.timestamp for bar in aggregated] == [session_open + timedelta(hours=index) for index in range(6)]
     assert aggregated[0].open == 100.0
-    assert aggregated[0].close == 103.0
-    assert aggregated[-1].close == 147.0
-    # The streaming aggregator buckets 4h bars at UTC 00/04/08/12/16/20.
-    aggregator = TimeframeAggregator("4h")
-    assert aggregator.timeframe == "4h"
-    assert aggregator.minutes == 240
-    # Daily aggregation from 1h must also be complete.
-    daily = aggregate_historical_bars(one_hour_bars, "1d", require_complete=True)
-    assert len(daily) == 2
-    assert daily[0].open == 100.0 and daily[0].close == 123.0
-
-
-def test_multiple_markets_run_simultaneously_with_distinct_cadences(tmp_path) -> None:
-    """Equity (daily) and crypto (hours:168) run at the same time, one
-    account, one risk layer, one repository, without interfering."""
-    broker = _Broker()
-    repository = PortfolioStateRepository(tmp_path / "shared.sqlite3")
-    equity = portfolio_strategy_from(
-        "equity_leveraged_trend_v1",
-        {"sma_bars": 5},
-        timeframe="1d",
-    )
-    crypto = portfolio_strategy_from("crypto_low_variance_v1", {"top_n": 2, "rebalance_hours": 168}, timeframe="1d")
-    risk = PortfolioRiskLimits(
-        daily_loss_limit=0.05,
-        drawdown_halt=0.20,
-        maximum_gross=0.60,
-        maximum_equity=0.60,
-        maximum_crypto=0.10,
-        maximum_equity_asset=0.10,
-        maximum_crypto_asset=0.05,
-        minimum_cash=0.40,
-        maximum_positions=6,
-        maximum_crypto_positions=2,
-    )
-    equity_runtime = PortfolioRuntime(
-        equity,
-        EQUITY_SYMBOLS,
-        broker,
-        repository,
-        mode="paper",
-        maximum_allocation=0.50,
-        risk_limits=risk,
-        allow_static_universe=True,
-    )
-    crypto_runtime = PortfolioRuntime(
-        crypto,
-        CRYPTO_SYMBOLS,
-        broker,
-        repository,
-        mode="paper",
-        maximum_allocation=0.10,
-        risk_limits=risk,
-        account_id="shared-account",
-        allow_static_universe=True,
-    )
-    assert equity_runtime.strategy.timeframe == "1d"
-    assert crypto_runtime.strategy.timeframe == "1d"
-    assert equity_runtime.policy.frequency == "hours:24"
-    assert crypto_runtime.policy.frequency == "hours:168"
-
-    # Both markets decide on their own closed-bar batches.
-    equity_result = equity_runtime.process_closed_bars(_daily_series(EQUITY_SYMBOLS))
-    assert equity_result.status == "submitted"
-    crypto_result = crypto_runtime.process_closed_bars(_daily_series(CRYPTO_SYMBOLS, market=Market.CRYPTO))
-    assert crypto_result.status == "submitted"
-    submitted_symbols = {order.symbol for order in broker.submitted}
-    assert any("/" in symbol for symbol in submitted_symbols)
-    assert any("/" not in symbol for symbol in submitted_symbols)
-    with sqlite3.connect(tmp_path / "shared.sqlite3") as connection:
-        markets = {str(row[0]) for row in connection.execute("SELECT DISTINCT market FROM portfolio_decisions")}
-    assert markets == {"equity", "crypto"}
-    equity_runtime.close()
-    crypto_runtime.close()
+    assert aggregated[0].close == 101.0
+    assert aggregated[-1].close == 111.0
+    aggregator = TimeframeAggregator("1h")
+    assert aggregator.timeframe == "1h"
+    assert aggregator.minutes == 60
 
 
 def test_execution_timeframe_remains_independent() -> None:
@@ -250,13 +171,13 @@ def test_backtest_uses_same_strategy_timeframe() -> None:
     from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
     from parayabuck.data.market_dataset import DatasetLineage, MarketDataset
 
-    strategy = portfolio_strategy_from("crypto_low_variance_v1", timeframe="1d")
+    strategy = portfolio_strategy_from("equity_leveraged_trend_v1")
     engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy))
     # The backtest engine refuses a dataset whose timeframe differs from the
     # strategy's signal timeframe: no silent reinterpretation.
-    bars_4h = _crypto_4h_series(("BTC/USD",), hours=40)
+    bars_4h = _equity_4h_series(("SPY",), count=40)
     dataset = MarketDataset(
-        market=Market.CRYPTO,
+        market=Market.EQUITY,
         timeframe="4h",
         signal_bars=tuple(bars_4h),
         executable_bars=tuple(bars_4h),
@@ -280,7 +201,7 @@ def test_paper_runtime_uses_same_strategy_timeframe(tmp_path) -> None:
         allow_static_universe=True,
     )
     # Seeding non-strategy-timeframe bars must be ignored.
-    runtime.seed(_crypto_4h_series(("BTC/USD",), hours=10))
+    runtime.seed(_equity_4h_series(EQUITY_SYMBOLS, count=10))
     assert all(not series for series in runtime.history.values())
     runtime.seed(_daily_series(EQUITY_SYMBOLS, days=30))
     assert all(len(series) == 30 for series in runtime.history.values())

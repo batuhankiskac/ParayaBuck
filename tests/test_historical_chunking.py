@@ -21,13 +21,12 @@ class _RecordingFetcher:
     bar generator: bars exist on the timeframe grid inside the window only,
     matching Alpaca's real truncation behavior (never more generous)."""
 
-    def __init__(self, timeframe: str, market: Market) -> None:
+    def __init__(self, timeframe: str) -> None:
         self.timeframe = timeframe
-        self.market = market
         self.requests: list[tuple[list[str], datetime, datetime]] = []
         self.bars_per_request: list[int] = []
 
-    def __call__(self, symbols, timeframe, start, end, adjustment, market) -> dict[str, list[Bar]]:
+    def __call__(self, symbols, timeframe, start, end, adjustment) -> dict[str, list[Bar]]:
         self.requests.append((list(symbols), start, end))
         step = timedelta(minutes=TIMEFRAME_MINUTES[timeframe])
         result: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
@@ -44,7 +43,7 @@ class _RecordingFetcher:
                         1.0,
                         1.0,
                         1000,
-                        market,
+                        Market.EQUITY,
                     )
                 )
             cursor += step
@@ -57,14 +56,13 @@ def _fetch(
     timeframe: str,
     days: int,
 ) -> tuple[dict[str, list[Bar]], _RecordingFetcher]:
-    market = Market.CRYPTO if any("/" in s for s in symbols) else Market.EQUITY
     minutes = TIMEFRAME_MINUTES[timeframe]
     client = AlpacaHistoricalData.__new__(AlpacaHistoricalData)
-    recording = _RecordingFetcher(timeframe, market)
+    recording = _RecordingFetcher(timeframe)
     client._fetch_window = recording
     start = datetime(2024, 1, 1, tzinfo=UTC)
     end = start + timedelta(days=days)
-    merged = client._fetch_chunked_windows(symbols, timeframe, start, end, minutes, "raw", market)
+    merged = client._fetch_chunked_windows(symbols, timeframe, start, end, minutes, "raw")
     return merged, recording
 
 
@@ -133,8 +131,8 @@ def test_twenty_symbols_never_exceed_budget() -> None:
 
 
 def test_intraday_timeframe_chunking() -> None:
-    """1h crypto bars across many days: budget holds per request."""
-    symbols = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD"]
+    """1h bars across many days: budget holds per request."""
+    symbols = ["SPY", "QQQ", "IWM", "DIA"]
     merged, recording = _fetch(symbols, "1h", 400)
     _assert_budget_and_completeness(symbols, "1h", 400)
     assert len(recording.requests) >= 2

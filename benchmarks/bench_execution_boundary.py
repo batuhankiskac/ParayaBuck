@@ -1,6 +1,6 @@
 """Execution boundary benchmarks — broker path latency without network.
 
-Scope: AlpacaBroker facade + AccountService/OrderService/Reconciliation/Protection/Crypto via FakeTradingClient.
+Scope: AlpacaBroker facade + AccountService/OrderService/Reconciliation/Protection via FakeTradingClient.
 Dataset: synthetic 100 positions, no CSV, no universe.
 Window: N/A (broker isolated).
 Setup: ledger + fake client, peak temp dir, no network.
@@ -16,7 +16,6 @@ Cases:
 - reconcile 20 positions (no protection)
 - reconcile 20 protected positions (requires stop lifecycle)
 - protection matching (20 positions)
-- crypto pending exit recovery (1 crypto position with pending exit)
 - peak state atomic save
 """
 
@@ -38,7 +37,6 @@ sys.path.insert(0, str(ROOT / "src"))
 from benchmarks.harness import Report, timeit
 from parayabuck.core.models import Market
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.alpaca_models import CryptoPriceObservation
 from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide
@@ -249,35 +247,6 @@ def bench_protection_matching(report: Report) -> None:
     report.add(timing)
 
 
-def bench_crypto_pending_exit(report: Report) -> None:
-    broker, fake, _ = _broker_with_fake()
-    fake.set_account(equity="100000")
-    fake.set_position("BTC/USD", qty=0.5, market="crypto")
-    fake.set_asset("BTC/USD")
-    # Create a managed crypto position with pending exit in ledger
-    ledger = broker.ledger
-    assert ledger is not None
-
-    # Insert a fake managed entry directly via ledger for bench
-    # Use the ledger's API to create an entry if available, else just measure reconcile path
-    def _recovery() -> None:
-        # Simulate process_crypto_price triggering pending recovery via reconcile
-        obs = CryptoPriceObservation(
-            symbol="BTC/USD", high=61000, low=59000, timestamp=datetime.now(UTC), source="bench"
-        )
-        try:
-            broker.process_crypto_price(obs)
-        except Exception:
-            pass
-        try:
-            broker.reconcile()
-        except Exception:
-            pass
-
-    timing, _ = timeit(_recovery, label="crypto pending exit recovery (Fake)", runs=100)
-    report.add(timing)
-
-
 def bench_peak(report: Report) -> None:
     broker, _fake, _ = _broker_with_fake()
 
@@ -299,7 +268,6 @@ if __name__ == "__main__":
     bench_reconcile_20(report)
     bench_reconcile_20_protected(report)
     bench_protection_matching(report)
-    bench_crypto_pending_exit(report)
     bench_peak(report)
     report.print_table(scale=1)
     # Write JSON artifact

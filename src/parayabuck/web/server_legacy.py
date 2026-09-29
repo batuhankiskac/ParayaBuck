@@ -1667,7 +1667,16 @@ async def readyz() -> JSONResponse:
     # trading. An intentional operator stop (or auto_start_engine=false)
     # means trading is not expected and the control plane is ready.
     trading_expected = configured_to_trade or manager.has_active_runtime() or engine_error
-    ready = config_valid and (not trading_expected or trading_ready)
+    from parayabuck.web.routers.health import _intent_degraded_reasons
+
+    degraded_reasons = _intent_degraded_reasons(health)
+    watchdog_config = getattr(cfg, "intent_watchdog", None) if cfg is not None else None
+    fail_on_intent = bool(getattr(watchdog_config, "fail_readiness", True))
+    ready = (
+        config_valid
+        and (not trading_expected or trading_ready)
+        and not (trading_expected and fail_on_intent and degraded_reasons)
+    )
     return JSONResponse(
         {
             "ready": ready,
@@ -1678,6 +1687,7 @@ async def readyz() -> JSONResponse:
             "engine_state": engine_state,
             # Legacy alias for older probes.
             "runtime_expected": manager.has_active_runtime(),
+            "degraded_reasons": degraded_reasons,
             "error": config_error,
         },
         status_code=200 if ready else 503,

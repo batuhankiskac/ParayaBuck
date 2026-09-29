@@ -72,6 +72,13 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _intent_degraded_reasons(health: object) -> list[str]:
+    """Active intent-watchdog alarm codes from a RuntimeHealth (or none)."""
+    watchdog = getattr(health, "intent_watchdog", None) if health is not None else None
+    reasons = watchdog.get("degraded_reasons") if isinstance(watchdog, dict) else None
+    return [str(reason) for reason in reasons] if isinstance(reasons, list) else []
+
+
 @router.get("/readyz")
 async def readyz() -> JSONResponse:
     """Deployment/trading readiness, distinct from /healthz process liveness."""
@@ -153,7 +160,14 @@ async def readyz() -> JSONResponse:
         has_active = False
 
     trading_expected = configured_to_trade or has_active or engine_error
-    ready = config_valid and (not trading_expected or trading_ready)
+    degraded_reasons = _intent_degraded_reasons(health)
+    watchdog_config = getattr(cfg, "intent_watchdog", None) if cfg is not None else None
+    fail_on_intent = bool(getattr(watchdog_config, "fail_readiness", True))
+    ready = (
+        config_valid
+        and (not trading_expected or trading_ready)
+        and not (trading_expected and fail_on_intent and degraded_reasons)
+    )
 
     return JSONResponse(
         {
@@ -164,6 +178,7 @@ async def readyz() -> JSONResponse:
             "trading_ready": trading_ready,
             "engine_state": engine_state,
             "runtime_expected": has_active,
+            "degraded_reasons": degraded_reasons,
             "error": config_error,
         },
         status_code=200 if ready else 503,

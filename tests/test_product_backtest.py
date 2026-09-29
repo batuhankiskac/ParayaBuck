@@ -634,15 +634,25 @@ def test_warmup_window_never_shrinks_below_scanner_lookback_for_intraday(
 
 
 def test_bars_to_calendar_days_scales_by_session_density() -> None:
+    from datetime import date
+
     from parayabuck.markets.timeframes import bars_to_calendar_days
 
-    # Equity daily bars need more calendar days than bars: at least the
-    # no-holiday Mon-Fri density (61*7/5=86), never fewer.
-    daily_61 = bars_to_calendar_days("SPY", "1d", 61)
-    assert 86 <= daily_61 <= 120
-    assert bars_to_calendar_days("SPY", "1d", 150) > 150
-    # Intraday equity fits several sessions per calendar day.
-    assert bars_to_calendar_days("SPY", "1h", 150) < 60
+    # Fixed anchors keep this deterministic: the span depends on the anchor's
+    # weekday and nearby holidays, so an implicit "today" anchor made the
+    # bound flaky. The window [anchor - span, anchor] is INCLUSIVE of both
+    # ends (span + 1 dates), so 61 Mon-Fri sessions need at least
+    # (61 - 1) * 7 / 5 = 84 days of span with no holidays, never fewer.
+    # Tuesday 2026-09-29 (Labor Day inside the window) needs exactly 85;
+    # a Friday anchor needs 86.
+    assert bars_to_calendar_days("SPY", "1d", 61, end_date=date(2026, 9, 29)) == 85
+    assert bars_to_calendar_days("SPY", "1d", 61, end_date=date(2026, 9, 25)) == 86
+    for anchor in (date(2026, 9, 28), date(2026, 9, 29), date(2026, 7, 1), date(2025, 12, 31)):
+        daily_61 = bars_to_calendar_days("SPY", "1d", 61, end_date=anchor)
+        assert 84 <= daily_61 <= 120
+        assert bars_to_calendar_days("SPY", "1d", 150, end_date=anchor) > 150
+        # Intraday equity fits several sessions per calendar day.
+        assert bars_to_calendar_days("SPY", "1h", 150, end_date=anchor) < 60
     # Crypto trades 24/7: the span is close to bars / 24.
     assert bars_to_calendar_days("BTC/USD", "1h", 150) == 7
     assert bars_to_calendar_days("BTC/USD", "1d", 61) == 65

@@ -194,8 +194,13 @@ alerting:
   # always attached; webhook_url enables an additional generic POST sink
   # (also overridable via PARAYABUCK_ALERT_WEBHOOK_URL). Failure events are
   # throttled per kind so a broken scanner/broker cannot spam the webhook.
+  # Keep the URL (it is a credential) out of this file: leave webhook_url
+  # empty and set PARAYABUCK_ALERT_WEBHOOK_URL in the service EnvironmentFile.
   enabled: true
   webhook_url: ""
+  # One-line summary after each equity session-close decision (event
+  # daily_summary; log/journal always, webhook when a URL is configured).
+  daily_summary: true
   events:
   - runtime_started
   - runtime_stopped_unexpected
@@ -209,3 +214,22 @@ alerting:
   - drawdown_halt
   - risk_epoch_reset
   - circuit_breaker
+  - daily_summary
+  - intent_alarm
+  - intent_recovered
+intent_watchdog:
+  # Intent-vs-reality watchdog (observability only; never gates trading).
+  # Alarms (alert kind intent_alarm) when, on the NYSE calendar, no equity
+  # decision exists for the last session after close (>= 16:00 ET) + grace,
+  # when a crypto cadence-boundary decision is overdue, or when a positive
+  # target is not held (held < minimum_held_fraction x target) after the
+  # fill window (equity: next open + grace; crypto: decision + grace).
+  # Active alarms appear as degraded_reasons in /readyz and /api/status.
+  enabled: true
+  equity_decision_grace_minutes: 45
+  equity_fill_grace_minutes: 30
+  crypto_decision_grace_minutes: 120
+  crypto_fill_grace_minutes: 60
+  minimum_held_fraction: 0.5
+  fail_readiness: true
+  evaluation_interval_seconds: 60

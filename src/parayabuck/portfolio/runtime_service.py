@@ -62,6 +62,23 @@ log = get_logger("parayabuck.portfolio.runtime_service")
 # to the operator (once per episode, never per bar).
 STUCK_DEFERRED_BUY_ALERT_SECONDS = 900.0
 
+
+def _utcnow() -> datetime:
+    """Decision wall clock (module-level so tests can pin it deterministically)."""
+    return datetime.now(UTC)
+
+
+def _is_unfinished_signal_bar(market: Market, bar: Bar, now: datetime) -> bool:
+    """An equity daily bar whose New York session has not closed at ``now``.
+
+    The provider publishes (and the split-verification merge adopts) a
+    session's daily bar while that session is still trading; its close is
+    the latest trade, not the session close. The signal path must never
+    decide on it. Crypto and intraday bars are untouched.
+    """
+    return market == Market.EQUITY and bar.timeframe == "1d" and not equity_day_bar_is_closed(bar.timestamp, now)
+
+
 # Rebalance ``status`` recorded when a settled BLOCKED rebalance is closed
 # without submitting its deferred BUYs (phase becomes ``complete``).
 REBALANCE_STATUS_CLOSED_UNRESOLVED = "closed_unresolved"
@@ -455,6 +472,30 @@ class PortfolioRuntime:
                 common_latest = max(common_timestamps)
                 self.previous_timestamp = max(filter(None, (self.previous_timestamp, common_latest)))
 
+    def prune_unfinished_signal_sessions(self, now: datetime | None = None) -> int:
+        """Drop equity daily bars whose session has not closed from the
+        signal history tail. Returns the number of bars dropped.
+
+        Unfinished sessions can only sit at the tail (history is ordered), so
+        this is a cheap tail scan. The completed session re-enters later via
+        the finalized stream bar or the next provider verification.
+        """
+        if self.market != Market.EQUITY or getattr(self.strategy, "timeframe", None) != "1d":
+            return 0
+        now = now or _utcnow()
+        dropped = 0
+        for symbol, series in self.history.items():
+            while series and _is_unfinished_signal_bar(self.market, series[-1], now):
+                removed = series.pop()
+                dropped += 1
+                log.warning(
+                    "Ignored unfinished equity daily bar in signal history: symbol=%s session_label=%s close=%s",
+                    symbol,
+                    removed.timestamp.isoformat(),
+                    removed.close,
+                )
+        return dropped
+
     def startup_catch_up(
         self,
         *,
@@ -476,6 +517,9 @@ class PortfolioRuntime:
         market. Never re-enters after ANY prior decision (restart safety).
         """
         self.startup_catch_up_at = datetime.now(UTC)
+        # An intra-session restart may have adopted the provider's forming
+        # bar for today; the catch-up decides on the last COMPLETED session.
+        self.prune_unfinished_signal_sessions()
         series_by_symbol = dict(self.history)
         timestamps = [series[-1].timestamp if series else None for series in series_by_symbol.values()]
         if any(timestamp is None for timestamp in timestamps) or any(
@@ -706,8 +750,13 @@ class PortfolioRuntime:
         if self.market != Market.EQUITY:
             return 0
         changed_symbols = 0
+        now = _utcnow()
         for symbol, series in self.history.items():
-            provider = provider_splits.get(symbol)
+            # Never adopt a provider bar for a session that is still trading:
+            # its close is intraday, not the session close.
+            provider = [
+                bar for bar in provider_splits.get(symbol) or () if not _is_unfinished_signal_bar(self.market, bar, now)
+            ]
             if not provider:
                 continue
             merged, changed = merge_provider_authority(tuple(series), provider)
@@ -732,13 +781,18 @@ class PortfolioRuntime:
         account: AccountSnapshot | None = None,
         reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     ) -> PortfolioRuntimeResult:
+        now = _utcnow()
         eligible = [
             bar
             for bar in bars
             if bar.market == self.market
             and bar.timeframe == self.strategy.timeframe
             and canonical_symbol(bar.symbol, bar.market) in self.history
+            and not _is_unfinished_signal_bar(self.market, bar, now)
         ]
+        # Defense in depth: the decision context reads the whole history, so
+        # an unfinished session adopted earlier must not be its tail either.
+        self.prune_unfinished_signal_sessions(now)
         if not eligible:
             return PortfolioRuntimeResult(None, None, None, (), (), "no_eligible_bars")
         timestamp = max(bar.timestamp for bar in eligible)

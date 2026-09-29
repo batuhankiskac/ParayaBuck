@@ -17,7 +17,7 @@ from typing import Any, Protocol
 
 from requests.exceptions import RequestException
 
-from parayabuck.config import Config, RuntimeMode
+from parayabuck.config import Config, IntentWatchdogConfig, RuntimeMode
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -474,9 +474,12 @@ class EngineRuntime:
         # Observability state: the alert sink is configured once from the
         # config block; the runtime session row pairs with the ledger's
         # runtime_sessions table so restart counts are persisted.
+        # An empty ``alerting.webhook_url`` falls back to the documented
+        # PARAYABUCK_ALERT_WEBHOOK_URL environment override, so the secret
+        # URL can live in the service EnvironmentFile instead of the YAML.
         alerts.configure_alerting(
             enabled=config.alerting.enabled,
-            webhook_url=config.alerting.webhook_url,
+            webhook_url=config.alerting.webhook_url or os.getenv("PARAYABUCK_ALERT_WEBHOOK_URL", "").strip(),
             events=config.alerting.events,
         )
         self._runtime_session_id: str | None = None
@@ -945,7 +948,126 @@ class EngineRuntime:
                 market.value: reason for market, reason in getattr(self, "_entry_risk_latch", {}).items()
             },
             signal_adjustment=self.signal_adjustment_status(),
+            intent_watchdog=self.intent_watchdog_status(),
         )
+
+    def _intent_watchdog_config(self) -> IntentWatchdogConfig:
+        configured = getattr(getattr(self, "app_config", None), "intent_watchdog", None)
+        return configured if isinstance(configured, IntentWatchdogConfig) else IntentWatchdogConfig()
+
+    def intent_watchdog_status(self) -> dict[str, object]:
+        """Last intent-watchdog evaluation (copy); empty before the first pass."""
+        state = getattr(self, "_intent_watchdog_state", None)
+        if not isinstance(state, dict):
+            return {
+                "enabled": self._intent_watchdog_config().enabled,
+                "evaluated_at": None,
+                "alarms": [],
+                "degraded_reasons": [],
+            }
+        return {
+            **state,
+            "alarms": [dict(alarm) for alarm in state.get("alarms", [])],
+            "degraded_reasons": list(state.get("degraded_reasons", [])),
+        }
+
+    def _maybe_run_intent_watchdog(self) -> None:
+        """Rate-limited watchdog pass from the account loop. Never raises."""
+        try:
+            config = self._intent_watchdog_config()
+            now_mono = time.monotonic()
+            last = getattr(self, "_intent_watchdog_last_mono", None)
+            if last is not None and now_mono - last < config.evaluation_interval_seconds:
+                return
+            self._intent_watchdog_last_mono = now_mono
+            self._intent_watchdog_pass()
+        except Exception:
+            log.warning("Intent watchdog pass failed", exc_info=True)
+
+    def _intent_watchdog_pass(self, now: datetime | None = None) -> list[dict[str, str]]:
+        """Compare scheduled intent with the decision DB and account.
+
+        Alarms are edge-triggered: ``intent_alarm`` when a code becomes
+        active, ``intent_recovered`` when it clears. Active codes are
+        surfaced as degraded reasons in health/readiness; trading gates are
+        never touched.
+        """
+        from parayabuck.monitoring.intent_watchdog import (
+            IntentWatchdogSettings,
+            LatestDecision,
+            evaluate_crypto,
+            evaluate_equity,
+        )
+
+        config = self._intent_watchdog_config()
+        now = now or datetime.now(UTC)
+        previous = getattr(self, "_intent_watchdog_state", None)
+        previous_codes = set(previous.get("degraded_reasons", ())) if isinstance(previous, dict) else set()
+        if not config.enabled or not getattr(self, "_startup_committed", False):
+            self._intent_watchdog_state = {
+                "enabled": config.enabled,
+                "evaluated_at": now.isoformat(),
+                "alarms": [],
+                "degraded_reasons": [],
+            }
+            return []
+        settings = IntentWatchdogSettings(
+            equity_decision_grace=timedelta(minutes=config.equity_decision_grace_minutes),
+            equity_fill_grace=timedelta(minutes=config.equity_fill_grace_minutes),
+            crypto_decision_grace=timedelta(minutes=config.crypto_decision_grace_minutes),
+            crypto_fill_grace=timedelta(minutes=config.crypto_fill_grace_minutes),
+            minimum_held_fraction=config.minimum_held_fraction,
+        )
+        account, _, _ = self._account_snapshot_cache_state()
+        alarms = []
+        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+            raw = portfolio_runtime.repository.latest_decision_target(
+                portfolio_runtime.account_id, portfolio_runtime.market
+            )
+            latest = LatestDecision(raw[0], raw[1]) if raw is not None else None
+            if portfolio_runtime.market == Market.EQUITY:
+                alarms.extend(
+                    evaluate_equity(
+                        now,
+                        latest,
+                        account,
+                        running_since=getattr(self, "_intent_watchdog_running_since", None),
+                        settings=settings,
+                    )
+                )
+            else:
+                alarms.extend(
+                    evaluate_crypto(
+                        now,
+                        latest,
+                        account,
+                        policy=portfolio_runtime.policy,
+                        timeframe=portfolio_runtime.strategy.timeframe,
+                        settings=settings,
+                    )
+                )
+        codes = sorted({alarm.code for alarm in alarms})
+        for alarm in alarms:
+            if alarm.code not in previous_codes:
+                log.warning("Intent watchdog alarm %s: %s", alarm.code, alarm.message)
+                alerts.emit(
+                    "intent_alarm",
+                    message=alarm.message,
+                    market=alarm.market,
+                    category=alarm.code,
+                    due_at=alarm.due_at,
+                )
+        for code in sorted(previous_codes - set(codes)):
+            log.info("Intent watchdog recovered: %s", code)
+            alerts.emit("intent_recovered", message=f"intent watchdog recovered: {code}", category=code)
+        payload = [alarm.to_dict() for alarm in alarms]
+        self._intent_watchdog_state = {
+            "enabled": True,
+            "evaluated_at": now.isoformat(),
+            "alarms": payload,
+            "degraded_reasons": codes,
+        }
+        return payload
 
     def signal_adjustment_status(self) -> dict[str, object]:
         """Operational visibility for the equity signal-basis verifier."""
@@ -1262,6 +1384,7 @@ class EngineRuntime:
         if record_session is not None:
             # Observability-only; fake ledgers in unit tests may omit it.
             self._runtime_session_id = record_session(self.broker.account_id or "unknown", self.mode.value)
+        self._intent_watchdog_running_since = datetime.now(UTC)
         self._startup_committed = True
         try:
             if getattr(self, "_snapshot_writer", None) is not None:
@@ -2249,6 +2372,7 @@ class EngineRuntime:
                     # poll; only drift escalates to a runtime halt here.
                     worker.last_error = str(exc)
                     log.warning("Account refresh failed: %s", exc)
+                self._maybe_run_intent_watchdog()
                 self._stop_event.wait(self.config.account_poll_interval_seconds)
         finally:
             worker.alive = False
@@ -3521,6 +3645,7 @@ class EngineRuntime:
                     observability.get("blocked_or_skipped_reason"),
                 )
             self._record_paper_decision_receipt(portfolio_runtime, portfolio_result, account)
+            self._emit_equity_daily_summary(portfolio_runtime, portfolio_result, account)
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
             reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, portfolio_result))
 
@@ -3686,6 +3811,34 @@ class EngineRuntime:
             except Exception:
                 log.warning("Could not emit PAPER receipt incident for %s", result.decision_id, exc_info=True)
 
+    def _emit_equity_daily_summary(self, portfolio_runtime: Any, result: Any, account: AccountSnapshot | None) -> None:
+        """One-line operator summary of a persisted equity decision. Never raises."""
+        try:
+            if (
+                getattr(portfolio_runtime, "market", None) != Market.EQUITY
+                or result is None
+                or getattr(result, "decision_id", None) is None
+                or getattr(result, "target", None) is None
+            ):
+                return
+            app_config = getattr(self, "app_config", None)
+            alerting_config = getattr(app_config, "alerting", None)
+            if alerting_config is not None and not getattr(alerting_config, "daily_summary", True):
+                return
+            from parayabuck.monitoring.daily_summary import build_equity_daily_summary
+
+            message, fields = build_equity_daily_summary(
+                result.target,
+                account,
+                status=str(result.status),
+                decision_id=result.decision_id,
+                orders=len(result.orders),
+                submitted=len(result.submitted_order_ids),
+            )
+            alerts.emit("daily_summary", message=message, **fields)
+        except Exception:
+            log.warning("Equity daily summary failed", exc_info=True)
+
     def _run_startup_catch_up(self, *, account: AccountSnapshot | None = None) -> None:
         """Force an immediate full-target decision on the latest warmup bars.
 
@@ -3711,6 +3864,12 @@ class EngineRuntime:
                 continue
             entry_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
             if portfolio_runtime.market == Market.EQUITY:
+                # Latch on the last COMPLETED session, never on a forming
+                # provider bar adopted by an intra-session verification.
+                prune = getattr(portfolio_runtime, "prune_unfinished_signal_sessions", None)
+                if prune is not None:
+                    with self._portfolio_lock:
+                        prune()
                 newest = max(
                     (series[-1].timestamp for series in portfolio_runtime.history.values() if series),
                     default=None,
@@ -3731,6 +3890,7 @@ class EngineRuntime:
                     )
                 result = portfolio_runtime.startup_catch_up(**catch_up_kwargs)
             self._record_paper_decision_receipt(portfolio_runtime, result, account)
+            self._emit_equity_daily_summary(portfolio_runtime, result, account)
             reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, result))
             log.info(
                 "Startup catch-up: market=%s status=%s decision_id=%s",

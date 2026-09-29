@@ -9,6 +9,16 @@ weight is ``min(1, vol_target / realized volatility)`` of ``hold_symbol`` over
 the last ``vol_window`` completed sessions (annualized), the rest cash, so the
 position shrinks when the leveraged ETF is turbulent.
 
+Optional idle-cash sweep (``cash_sweep_symbol``, e.g. ``BIL``; off unless
+set): the part of the managed allocation not targeted to ``hold_symbol`` (the
+whole allocation in a downtrend, ``1 - weight`` when volatility targeting
+shrinks the position) is targeted to the sweep ETF instead of cash. Orders go
+through the same rebalance band as ``hold_symbol``. The account-level cash
+buffer (``risk.cash_buffer_pct``) stays cash because it lies outside the
+managed allocation. When unset, the parameter is absent from
+``parameter_tuple()``, so the configuration digest of a sweep-less
+configuration is unchanged; when set, it enters the digest.
+
 Research: ``docs/research/profit_max_v1.md``. The rule is the long-standing
 200-day moving-average filter on a leveraged index; the leverage, not the
 filter, drives the return, and the filter mainly shortens drawdowns.
@@ -44,6 +54,9 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         merged.setdefault("vol_target", 0.0)
         merged.setdefault("vol_window", 20)
         merged.setdefault("rebalance_frequency", "hours:24")
+        # Off unless set; an empty value is dropped so it stays out of the digest.
+        if merged.get("cash_sweep_symbol") in (None, ""):
+            merged.pop("cash_sweep_symbol", None)
         super().__init__(merged)
 
     def _validate_parameters(self) -> None:
@@ -64,6 +77,14 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         window = self.parameters.get("vol_window")
         if isinstance(window, bool) or not isinstance(window, int) or window < 2:
             raise ValueError("vol_window must be an integer of at least 2")
+        if "cash_sweep_symbol" in self.parameters:
+            sweep = self.parameters["cash_sweep_symbol"]
+            if not isinstance(sweep, str) or not sweep.strip():
+                raise ValueError("cash_sweep_symbol must be a symbol (omit it to disable the sweep)")
+            sweep = canonical_symbol(sweep, Market.EQUITY)
+            if sweep in (self.parameters["signal_symbol"], self.parameters["hold_symbol"]):
+                raise ValueError("cash_sweep_symbol must differ from signal_symbol and hold_symbol")
+            self.parameters["cash_sweep_symbol"] = sweep
 
     @property
     def signal_symbol(self) -> str:
@@ -72,6 +93,12 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
     @property
     def hold_symbol(self) -> str:
         return str(self.parameters["hold_symbol"])
+
+    @property
+    def cash_sweep_symbol(self) -> str | None:
+        """Idle-cash sweep ETF, or ``None`` when the sweep is off."""
+        value = self.parameters.get("cash_sweep_symbol")
+        return str(value) if value else None
 
     @property
     def sma_bars(self) -> int:
@@ -130,19 +157,29 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         weight = 1.0
         if self.vol_target and volatility is not None:
             weight = 1.0 if volatility <= 0 else min(1.0, self.vol_target / volatility)
-        weights = (TargetWeight(self.hold_symbol, weight, reason="trend_up", rank=1),) if state == "uptrend" else ()
+        weights: tuple[TargetWeight, ...] = (
+            (TargetWeight(self.hold_symbol, weight, reason="trend_up", rank=1),) if state == "uptrend" else ()
+        )
+        holds_trend = bool(weights)
+        sweep = self.cash_sweep_symbol
+        sweep_weight = 0.0
+        if sweep is not None and bool(context.history.get(sweep)) and context.in_universe(sweep):
+            sweep_weight = max(0.0, 1.0 - sum(item.weight for item in weights))
+            if sweep_weight > 0.0:
+                weights = (*weights, TargetWeight(sweep, sweep_weight, reason="cash_sweep", rank=2))
         return TargetPortfolio(
             strategy_name=self.name,
             strategy_version=self.version,
             decision_timestamp=context.decision_timestamp,
             data_timestamp=context.decision_timestamp,
             weights=weights,
-            cash_weight=1.0 - sum(item.weight for item in weights),
-            rebalance_reason=RebalanceReason.SCHEDULED if weights else RebalanceReason.RISK_OFF,
+            cash_weight=max(0.0, 1.0 - sum(item.weight for item in weights)),
+            rebalance_reason=RebalanceReason.SCHEDULED if holds_trend else RebalanceReason.RISK_OFF,
             universe_version=context.universe_version,
             universe_snapshot_id=context.universe_version,
             parameters=self.parameter_tuple(),
             metadata={
+                **({"cash_sweep_symbol": sweep, "cash_sweep_weight": sweep_weight} if sweep is not None else {}),
                 "trend_state": state,
                 "signal_symbol": self.signal_symbol,
                 "hold_symbol": self.hold_symbol,

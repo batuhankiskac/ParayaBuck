@@ -14,9 +14,17 @@ import yaml
 from parayabuck.web import server
 
 
-def _repo_config(root: Path, *, mode: str = "paper", live_enabled: bool = False) -> Path:
-    """Base a settings file on the repo config, flipping mode/live as asked."""
+def _repo_config(root: Path, *, mode: str = "paper", live_enabled: bool = False, crypto_enabled: bool = False) -> Path:
+    """Base a settings file on the repo config, flipping mode/live as asked.
+
+    ``crypto_enabled`` re-enables the (shipped-disabled) crypto sleeve with the
+    pre-2026-09-29 allocation split, for tests of the crypto card itself.
+    """
     raw = yaml.safe_load(Path("config/settings.yaml").read_text(encoding="utf-8"))
+    if crypto_enabled:
+        raw["strategy"]["crypto"]["enabled"] = True
+        raw["universe"]["crypto"]["enabled"] = True
+        raw["strategy"]["equity"]["maximum_allocation"] = 0.93
     raw["runtime"]["mode"] = mode
     raw["runtime"]["decision_db_path"] = str(root / "runtime.sqlite3")
     raw["live"]["enabled"] = live_enabled
@@ -225,10 +233,17 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkey
     assert equity["strategy"]["display_name"] == "Leveraged index trend v1"
     assert equity["strategy"]["signal_timeframe"] == "1d"
     assert equity["strategy"]["rebalance_cadence"] == "hours:24"
-    assert equity["maximum_allocation_pct"] == pytest.approx(93.0)
+    assert equity["maximum_allocation_pct"] == pytest.approx(98.0)
     assert equity["observation_set_size"] is not None
     assert isinstance(equity["holdings"], list)
+    assert crypto["name"] == "crypto_low_variance_hysteresis_v1"
 
+    # The shipped config disables crypto (paper_config_v2); the crypto card
+    # contract is checked with the sleeve re-enabled.
+    enabled_root = tmp_path / "crypto"
+    enabled_root.mkdir()
+    monkeypatch.setattr(server, "manager", _stub_manager(_repo_config(enabled_root, crypto_enabled=True)))
+    crypto = asyncio.run(server.dashboard_overview())["crypto"]
     assert crypto["name"] == "crypto_low_variance_hysteresis_v1"
     assert crypto["strategy"]["display_name"] == "Low Variance Hysteresis v1 (T1)"
     assert crypto["strategy"]["rebalance_cadence"] == "hours:96"
@@ -344,7 +359,7 @@ def _crypto_decision() -> dict[str, Any]:
 
 
 def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = _repo_config(tmp_path)
+    config_path = _repo_config(tmp_path, crypto_enabled=True)
     positions = [
         {
             "symbol": "BTC/USD",

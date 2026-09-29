@@ -151,19 +151,24 @@ def test_shipped_paper_config_has_integrated_cap8_with_other_limits_unchanged() 
     assert config.risk.max_crypto_positions == 2
     assert config.risk.max_gross_exposure_pct == 0.98
     assert config.risk.cash_buffer_pct == 0.02
-    assert config.risk.max_position_pct == 0.93
+    # 2026-09-29 (paper_config_v2): crypto disabled, equity 0.98.
+    assert config.risk.max_position_pct == 0.98
     assert config.risk.max_crypto_position_pct == 0.05
     assert config.risk.max_crypto_exposure_pct == 0.10
     assert config.risk.daily_loss_limit_pct == 0.20
     assert config.risk.max_drawdown_pct == 0.75
     assert config.strategy.equity.name == "equity_leveraged_trend_v1"
-    assert config.strategy.equity.maximum_allocation == 0.93
+    assert config.strategy.equity.maximum_allocation == 0.98
+    assert "cash_sweep_symbol" not in config.strategy.equity.parameters
+    assert config.universe.equity.symbols == ("SPY", "QQQ", "QLD")
     assert config.strategy.equity.parameters["signal_symbol"] == "QQQ"
     assert config.strategy.equity.parameters["hold_symbol"] == "QLD"
     assert config.strategy.equity.parameters["sma_bars"] == 200
     assert config.strategy.equity.parameters["vol_target"] == 0.35
     assert config.strategy.equity.parameters["vol_window"] == 20
     assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
+    assert config.strategy.crypto.enabled is False
+    assert config.universe.crypto.enabled is False
     assert config.strategy.crypto.maximum_allocation == 0.05
     assert config.execution.rebalance_band_pct == 0.005
 
@@ -273,3 +278,36 @@ def test_present_but_empty_enabled_strategy_block_fails_closed_with_message(tmp_
 
     with pytest.raises(ValueError, match="strategy.equity block with name is required"):
         load_config(str(path))
+
+
+def _sweep_config_file(tmp_path: Path, *, sweep: str | None, universe: list[str]) -> Path:
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text())
+    raw["universe"]["equity"]["symbols"] = universe
+    if sweep is not None:
+        raw["strategy"]["equity"]["parameters"]["cash_sweep_symbol"] = sweep
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    return path
+
+
+def test_cash_sweep_symbol_must_be_in_the_static_equity_universe(tmp_path) -> None:
+    path = _sweep_config_file(tmp_path, sweep="BIL", universe=["SPY", "QQQ", "QLD"])
+    with pytest.raises(ValueError, match="cash_sweep_symbol must be in universe.equity.symbols"):
+        load_config(str(path))
+
+
+def test_cash_sweep_flag_enters_the_configuration_digest(tmp_path) -> None:
+    from parayabuck.portfolio import product_strategy_from
+    from parayabuck.portfolio.runtime_service import configuration_digest
+
+    def digest(config: Config) -> str:
+        selection = config.strategy.equity
+        strategy = product_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
+        return configuration_digest(strategy, "paper", selection.maximum_allocation, "universe")
+
+    (tmp_path / "off").mkdir()
+    (tmp_path / "on").mkdir()
+    off = load_config(str(_sweep_config_file(tmp_path / "off", sweep=None, universe=["SPY", "QQQ", "QLD"])))
+    on = load_config(str(_sweep_config_file(tmp_path / "on", sweep="BIL", universe=["SPY", "QQQ", "QLD", "BIL"])))
+    assert "BIL" in on.universe.equity.symbols and "BIL" not in off.universe.equity.symbols
+    assert digest(on) != digest(off)

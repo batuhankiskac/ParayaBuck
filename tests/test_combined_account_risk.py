@@ -112,7 +112,7 @@ def test_frozen_strategy_parameters_and_paper_mode() -> None:
 
 
 def test_combined_allocations_fit_gross_cap_and_cash_buffer() -> None:
-    """2026-09-25 (profit_max_v1): equity 0.93 + crypto 0.05 == gross 0.98
+    """2026-09-29 (paper_config_v2): crypto disabled, equity 0.98 == gross 0.98
 
     Invariant: sum(effective allocations) <= max_gross <= 1 - cash_buffer.
     This guarantees deterministic sizing regardless of market processing order
@@ -120,15 +120,14 @@ def test_combined_allocations_fit_gross_cap_and_cash_buffer() -> None:
     """
     config = load_config()
     equity_allocation = config.strategy.equity.maximum_allocation
-    crypto_allocation = config.strategy.crypto.maximum_allocation
+    assert config.strategy.crypto.enabled is False
     gross_cap = config.risk.max_gross_exposure_pct
     cash_buffer = config.risk.cash_buffer_pct
-    assert equity_allocation == pytest.approx(0.93)
-    assert crypto_allocation == pytest.approx(0.05)
+    assert equity_allocation == pytest.approx(0.98)
+    assert config.risk.max_position_pct == pytest.approx(0.98)
     assert gross_cap == pytest.approx(0.98)
     assert cash_buffer == pytest.approx(0.02)
-    # Invariant from config.__post_init__
-    assert equity_allocation + crypto_allocation <= gross_cap + _EPS
+    # Invariant from config.__post_init__ (only enabled sleeves count)
     assert gross_cap + cash_buffer <= 1.0 + _EPS
     assert equity_allocation <= gross_cap + _EPS
 

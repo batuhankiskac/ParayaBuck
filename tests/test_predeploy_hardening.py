@@ -574,7 +574,7 @@ def test_settings_patch_preserves_omitted(tmp_path, monkeypatch):
         result = asyncio.run(get_settings())
         assert result["daily_loss_limit_pct"] == 20.0
         assert result["max_drawdown_pct"] == 75.0
-        assert result["crypto_trading_enabled"] is True
+        assert result["crypto_trading_enabled"] is False  # paper_config_v2: crypto disabled
         assert "config_digest" in result
         # PATCH with only log_level should preserve risk
         payload = SettingsPayload(log_level="DEBUG")

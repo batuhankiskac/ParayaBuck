@@ -38,6 +38,20 @@ def _flat(symbol: str, close: float = 100.0) -> tuple[Bar, ...]:
     return _series(symbol, [close] * 23)
 
 
+def _t1_enabled_config(tmp_path: Path):
+    """The shipped config with the crypto sleeve re-enabled (shipped disabled
+    since paper_config_v2), so the scanner carries T1 observation provenance."""
+    import yaml
+
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text(encoding="utf-8"))
+    raw["strategy"]["crypto"]["enabled"] = True
+    raw["universe"]["crypto"]["enabled"] = True
+    raw["strategy"]["equity"]["maximum_allocation"] = 0.93
+    path = tmp_path / "settings_t1.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    return load_config(str(path))
+
+
 def _volatile(symbol: str, amp: float) -> tuple[Bar, ...]:
     closes = [100.0 + amp if i % 2 else 100.0 for i in range(23)]
     return _series(symbol, closes)
@@ -79,7 +93,7 @@ def _with_ranked(strategy, ranked):
 def test_persisted_v2_snapshot_rejected_after_t1_promotion(tmp_path: Path) -> None:
     """Persisted v2 observation snapshot + promoted T1 config => observation_strategy_mismatch."""
     # Build a minimal active_crypto_universe.json that looks like v2
-    crypto_cfg = load_config().universe.crypto
+    crypto_cfg = _t1_enabled_config(tmp_path).universe.crypto
     # write temp file mimicking v2 snapshot
     payload = {
         "status": "success",
@@ -111,7 +125,7 @@ def test_persisted_v2_snapshot_rejected_after_t1_promotion(tmp_path: Path) -> No
     tmp_file = tmp_path / "active_crypto_universe.json"
     tmp_file.write_text(json.dumps(payload), encoding="utf-8")
     # config now is T1 (promoted) — verify it expects hysteresis
-    cfg = load_config()
+    cfg = _t1_enabled_config(tmp_path)
     assert cfg.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
     # point config's universe path to our temp file via replace
     from dataclasses import replace

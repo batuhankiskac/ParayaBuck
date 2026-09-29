@@ -1184,6 +1184,7 @@ class EngineRuntime:
             raise
         with self._state_lock:
             self._pin_managed_symbols()
+        self._warn_disabled_market_inventory()
         refreshed_specs = []
         for strategy, _symbols, maximum_allocation in self._strategy_specs:
             refreshed_specs.append(
@@ -1874,6 +1875,29 @@ class EngineRuntime:
         )
         if not applied:
             raise RuntimeError(f"Recovered broker order has no durable portfolio row: {client_order_id}")
+
+    def _warn_disabled_market_inventory(self) -> None:
+        """Alert when bot-owned inventory sits in a market whose strategy is disabled.
+
+        Such positions stay pinned and observed (``_pin_managed_symbols``) but
+        no strategy decides for them, so nothing sells them: the operator must
+        liquidate them (or re-enable the strategy). Startup is not blocked.
+        """
+        strategy_enabled = getattr(self, "_strategy_enabled", {})
+        pins = getattr(self, "_managed_pin_symbols", set())
+        for market in (Market.EQUITY, Market.CRYPTO):
+            if strategy_enabled.get(market, True):
+                continue
+            stranded = sorted(symbol for symbol in pins if is_crypto(symbol) == (market == Market.CRYPTO))
+            if not stranded:
+                continue
+            message = (
+                f"{market.value} strategy is disabled but bot-owned {market.value} inventory exists "
+                f"({', '.join(stranded)}); positions are observed but no strategy will exit them — "
+                "liquidate manually or re-enable the strategy"
+            )
+            log.warning(message)
+            alerts.emit("risk_incident", message=message, market=market.value, symbols=stranded)
 
     def _pin_managed_symbols(self) -> None:
         """Keep managed positions observable even after scanner/config removal."""

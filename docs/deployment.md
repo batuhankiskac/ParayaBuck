@@ -1,188 +1,146 @@
-# Deployment — systemd on Google Cloud
+# Deployment — GCP VM, systemd, git bundle
 
-ParayaBuck runs as a single process (`parayabuck web`) that serves the
-operator console AND runs the PAPER engine in-process. All commands below
-were verified against this release (`parayabuck web` == `parayabuck` with no
-arguments; `cli.py` routes both to `web.app.main()`; engine auto-start on
-paper mode with credentials). `REPLACE:` values are install-time.
+The PAPER bot runs in exactly one place: a Google Cloud VM, as systemd units.
+It is updated by `git bundle` because the GitHub repo is private and the VM has
+no GitHub credentials. **Never start the engine anywhere else** — the laptop and
+the VM share one Alpaca PAPER key, and two runners on one account corrupt the
+ledger (double-run incident, 2026-09-25). Record every deploy in
+`docs/OPERATIONS_LOG.md`.
 
-## Launch facts
+## Process facts
 
-- Entry point: `parayabuck web` — uvicorn on `HOST`/`PORT` (default
-  `127.0.0.1:8000` from `config/settings.yaml`). Loopback-only unless
-  `PARAYABUCK_CONTAINER=YES` + `HOST=0.0.0.0` (Docker only).
-- `WorkingDirectory` MUST be the repo root: `CONFIG_PATH=./config/settings.yaml`
-  and all `data/runtime/...` paths are relative to the process cwd.
-- Health: `GET /healthz` → `200 {"status":"ok"}` (liveness);
-  `GET /readyz` → JSON `{ready, process_alive, config_valid,
-  trading_expected, trading_ready, engine_state, runtime_expected, error}`,
-  `200` when ready, `503` otherwise. A `503` during warmup
-  (`engine_state=warming_up`) is expected behavior.
-- Env (`.env`, mode 600): `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` (required,
-  paper), `PARAYABUCK_ENABLE_LIVE=NO`, `CONFIG_PATH`,
-  `PARAYABUCK_OPERATOR_APPROVAL_KEY` (live-only), `PARAYABUCK_ALERT_WEBHOOK_URL`
-  (optional), `LOG_LEVEL`, `OPEN_BROWSER=0` (headless).
-- Backup: `parayabuck backup [--retention-days N]` — consistent SQLite online
-  backup to `data/backups/` with integrity check (safe while running).
+| Item | Value |
+|---|---|
+| Entry point | `parayabuck web` — serves the loopback console **and** runs the engine in-process (auto-starts in `paper` mode when credentials are present) |
+| Bind | `127.0.0.1:8000` (`app.host/port`); reach it through an SSH tunnel: `ssh -L 8000:127.0.0.1:8000 <vm>` |
+| Working directory | Must be the repo root: `CONFIG_PATH=./config/settings.yaml` and every `data/runtime/...` path are cwd-relative |
+| Preflight | `ExecStartPre=parayabuck doctor --strict --paper --offline` — the unit refuses to start on a bad config, non-paper mode, live enabled, missing credentials, unwritable config dir, failed SQLite `integrity_check` or a tracked `.env` |
+| Stop | `SIGTERM` stops the engine gracefully (ledger close, socket release); keep `TimeoutStopSec` ≥ 35 |
+| Liveness / readiness | `GET /healthz` (always 200 while the process serves) / `GET /readyz` (200 ready, 503 not; see `docs/operations.md`) |
+| Backups | `parayabuck-backup.timer` runs `parayabuck backup` every 6 h (10 min after boot) |
 
-## systemd unit (`/etc/systemd/system/parayabuck.service`)
+## Units (`deploy/systemd/`)
 
-Track actual hardened templates in `deploy/systemd/`:
-`parayabuck.service` (non-root, loopback, `EnvironmentFile`, `Restart=on-failure`, `TimeoutStopSec=35`, `UMask=0077`, `NoNewPrivileges=true`, `PrivateTmp=true`, `ProtectSystem=strict`, `ProtectHome=true` with `ReadWritePaths` for `/opt/parayabuck/{config,data,reports}`, `ExecStartPre=parayabuck doctor --strict --paper --offline`), plus `parayabuck-backup.service`/`parayabuck-backup.timer` every 6h with verified backups.
+| File | Purpose |
+|---|---|
+| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `TimeoutStopSec=35`, `UMask=0077`, `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome=true`, `ReadWritePaths` = `config/`, `data/`, `reports/` |
+| `parayabuck-backup.service` | Oneshot `parayabuck backup` with the same env file and hardening |
+| `parayabuck-backup.timer` | `OnBootSec=10min`, `OnUnitActiveSec=6h`, `Persistent=true` |
 
-```ini
-[Unit]
-Description=ParayaBuck Paper Trading Engine
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=simple
-User=REPLACE:non-root-user
-Group=REPLACE:non-root-group
-WorkingDirectory=REPLACE:/opt/parayabuck
-EnvironmentFile=REPLACE:/opt/parayabuck/.env
-ExecStartPre=REPLACE:/opt/parayabuck/.venv/bin/parayabuck doctor --strict --paper --offline
-ExecStart=REPLACE:/opt/parayabuck/.venv/bin/parayabuck web
-Restart=on-failure
-RestartSec=5
-TimeoutStopSec=35
-UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=REPLACE:/opt/parayabuck/data REPLACE:/opt/parayabuck/config REPLACE:/opt/parayabuck/reports
-
-[Install]
-WantedBy=multi-user.target
-```
-
-`SIGTERM` (systemd's default kill signal) triggers a graceful engine stop
-(ledger close, broker socket release); do not set `TimeoutStopSec` below ~30s.
+The templates assume an install at `/opt/parayabuck`. The current VM runs from
+the deploy user's home checkout (`~/ParayaBuck`, `.venv` inside it) with the
+unit paths rewritten to that directory and `ProtectHome=read-only`. Always check
+the installed unit rather than the template:
 
 ```bash
-sudo cp parayabuck.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now parayabuck
-sudo systemctl status parayabuck
-sudo journalctl -u parayabuck -f
+systemctl cat parayabuck | grep -E 'WorkingDirectory|EnvironmentFile|ExecStart'
 ```
 
-## Google Cloud update procedure (current PAPER leveraged-trend release)
+### Environment file
 
-1. **Stop safely**
+The file named by `EnvironmentFile=` (template: `/opt/parayabuck/.env`; on the
+current VM, `.env` in the checkout) is mode `0600` and holds every secret. The
+config loader also reads `.env` from the working directory.
 
-   ```bash
-   sudo systemctl stop parayabuck
-   curl -s -m 3 http://127.0.0.1:8000/healthz || echo "port closed"
-   ```
+| Variable | Required | Notes |
+|---|---|---|
+| `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` | yes | PAPER keys |
+| `PARAYABUCK_ENABLE_LIVE` | yes | `NO` |
+| `CONFIG_PATH` | no | default `./config/settings.yaml` |
+| `OPEN_BROWSER` | no | `0` on the VM |
+| `LOG_LEVEL` | no | default `INFO` |
+| `PARAYABUCK_ALERT_WEBHOOK_URL` | no | alert webhook (below) |
+| `PARAYABUCK_OPERATOR_APPROVAL_KEY` | live only | unused in PAPER |
 
-2. **Inspect the broker PAPER account** (authoritative external view):
-   positions and open orders on https://app.alpaca.markets/paper. Record them
-   for post-restart comparison.
+### Enabling the alert webhook
 
-3. **Back up runtime state**
+1. Create an incoming webhook that accepts a JSON POST (Slack, Discord,
+   Mattermost or any generic receiver; the payload carries `message`, `text`
+   and `content`).
+2. On the VM, add `PARAYABUCK_ALERT_WEBHOOK_URL=<url>` to the env file above.
+   Keep `alerting.webhook_url: ""` in `config/settings.yaml` — the URL is a
+   secret, and a non-empty YAML value overrides the environment variable.
+3. `sudo systemctl restart parayabuck` (the alert sink is configured at engine
+   start).
+4. Confirm: a `runtime_started` alert arrives, and `parayabuck ops status`
+   shows the `alerts` check without failures. Without a URL, alerts still go
+   to the journal/log.
 
-   ```bash
-   cd /opt/parayabuck
-   sudo -u parayabuck .venv/bin/parayabuck backup
-   sudo -u parayabuck tar czf ~/backups/parayabuck-config-$(date +%Y%m%dT%H%M%SZ).tgz \
-     config/ .env data/runtime/active_crypto_universe.json
-   ```
+## First install (fresh VM)
 
-4. **Pull the release**
+```bash
+sudo useradd --system --home /opt/parayabuck --create-home parayabuck
+# full bundle from the laptop: `git bundle create pb.bundle main`, scp it, then
+sudo -u parayabuck git clone -b main ~/pb.bundle /opt/parayabuck
+cd /opt/parayabuck
+sudo -u parayabuck python3 -m venv .venv
+sudo -u parayabuck .venv/bin/pip install -r requirements.lock
+sudo -u parayabuck .venv/bin/pip install -e . --no-deps
+sudo install -m 0600 -o parayabuck -g parayabuck /dev/null .env   # then fill it
+sudo -u parayabuck .venv/bin/parayabuck doctor --strict --paper --offline
+sudo cp deploy/systemd/parayabuck*.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now parayabuck.service parayabuck-backup.timer
+```
 
-   ```bash
-   sudo -u parayabuck git fetch --tags origin
-   sudo -u parayabuck git checkout <RELEASE_TAG>     # e.g. parayabuck-paper-v1.0.0
-   git -C . diff HEAD -- config/settings.yaml .env  # confirm no tracked drift
-   ```
+## Update by git bundle
 
-5. **Install dependencies**
+On the laptop (`<deployed-sha>` = the commit the VM runs, from
+`docs/OPERATIONS_LOG.md` or `git -C <checkout> rev-parse HEAD` on the VM):
 
-   ```bash
-   sudo -u parayabuck .venv/bin/pip install -r requirements.lock
-   sudo -u parayabuck .venv/bin/pip install -e . --no-deps
-   ```
+```bash
+git bundle create /tmp/pb-update.bundle <deployed-sha>..main
+gcloud compute scp /tmp/pb-update.bundle <vm>:~/pb-update.bundle --zone <zone>
+```
 
-6. **Offline tests** (no broker/network)
+On the VM, in the checkout:
 
-   ```bash
-   cd /opt/parayabuck
-   sudo -u parayabuck .venv/bin/python -m pytest -q \
-     tests/test_cadence_v2_identities.py tests/test_strategy_spec_freeze.py \
-     tests/test_dual_market_startup.py tests/test_release_v2_integration.py
-   ```
+```bash
+.venv/bin/parayabuck backup                       # verified snapshot first
+git fetch ~/pb-update.bundle main:refs/remotes/bundle/main
+git log --oneline HEAD..bundle/main               # review what ships
+git merge --ff-only bundle/main
+.venv/bin/pip install -e . --no-deps              # when dependencies or entry points changed
+.venv/bin/parayabuck doctor --strict --paper --offline
+sudo systemctl restart parayabuck
+```
 
-7. **Start**
+Verify:
 
-   ```bash
-   sudo systemctl start parayabuck
-   ```
+```bash
+curl -s http://127.0.0.1:8000/healthz
+curl -s http://127.0.0.1:8000/readyz | python3 -m json.tool   # ready=true after warmup
+sudo journalctl -u parayabuck -n 200 --no-pager
+.venv/bin/parayabuck ops status
+```
 
-8. **Verify**
+A `503` with `engine_state=warming_up` during warmup is normal. The dashboard
+must show the PAPER badge, the **Leveraged Index Trend v1** card and a running
+engine. A change to the configuration digest (strategy, universe, risk,
+allocation) starts a new decision identity; note it in the operations log.
 
-   ```bash
-   curl -s -m 5 http://127.0.0.1:8000/healthz                      # 200 {"status":"ok"}
-   curl -s -m 5 http://127.0.0.1:8000/readyz | python3 -m json.tool # eventually ready=true
-   sudo systemctl status parayabuck
-   sudo journalctl -u parayabuck -n 200 --no-pager
-   ```
-
-   Dashboard (`http://127.0.0.1:8000/` via SSH tunnel) must show: PAPER
-   badge, **Leveraged Index Trend v1** (`equity_leveraged_trend_v1`: holds QLD,
-   the 2x Nasdaq-100 ETF, while QQQ's completed close is above its 200-session
-   SMA, sized `min(1, 0.35 / 20-session annualized realized QLD volatility)`,
-   inside the 0.93 equity maximum, cash otherwise), and
-   unchanged `crypto_low_variance_hysteresis_v1` (96h, lookback 22, top2, retention rank
-   4, allocation 0.05) cards, engine running, catch-up status per card. See the
-   [profit maximization v1 evidence](research/profit_max_v1.md).
-9. **Verify the persisted catch-up decision** (fresh account only):
-
-   ```bash
-   sqlite3 data/runtime/parayabuck.sqlite3 \
-     "SELECT market, decision_timestamp, strategy_name,
-             json_extract(target_json, '$.metadata.decision_origin') AS origin
-      FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 8;"
-   ```
-
-   Expect `origin='startup_catch_up'` for the newest rows; current equity rows
-   use `strategy_name='equity_leveraged_trend_v1'`, and
-   later scheduled decisions carry `'scheduled'`. An account that already holds
-   managed positions shows catch-up status `already_invested` (positions stay
-   managed; the first scheduled equity boundary rebalances them normally) —
-   never a duplicate order set. The equity target is the ordinary daily
-   QQQ-trend decision: QLD at the volatility target while QQQ is above its
-   200-session SMA, cash otherwise.
+Then add a row to `docs/OPERATIONS_LOG.md` with the deployed sha.
 
 ## Rollback
 
-1. Stop: `sudo systemctl stop parayabuck`
-2. Snapshot the CURRENT state (backup CLI + config tarball) in case the
-   rollback itself must be reverted.
-3. `git checkout <PREVIOUS_RELEASE_TAG>`; re-apply the pre-deploy config/env
-   snapshot (config is operator state — `git checkout` must NOT clobber it).
-   Reverting the 2026-09-25 equity identity switch additionally restores
-   `config/settings.yaml` and the removed modules from commit `ec4e2df`
-   (main before the switch), e.g.
-   `git checkout ec4e2df -- config/settings.yaml src/parayabuck`;
-   then run
-   `pip install -r requirements.lock && pip install -e . --no-deps`.
-4. Restore the runtime DB only when the new release corrupted/partially
-   migrated it (loud schema errors on startup). A healthy new ledger is kept:
-   it contains fills the broker already executed.
-5. Broker reconciliation is authoritative: the engine reconciles the ledger
-   TO the current Alpaca paper account on every start and halts loudly on
-   mismatch (`reconciliation_failure`). Never cancel/flatten broker positions
-   as part of a rollback; startup reconciliation re-adopts open positions.
-6. Restart and verify (`systemctl status`, `journalctl`, `/healthz`,
-   `/readyz`, dashboard).
+1. `.venv/bin/parayabuck backup`, then `sudo systemctl stop parayabuck`.
+2. `git reset --hard <previous-sha>` (or check out a tag), reinstall with
+   `pip install -e . --no-deps`, restart. `config/settings.yaml` is tracked:
+   the rolled-back commit brings its own config, which must match its code
+   (e.g. a pre-2026-09-30 build needs its crypto keys; the current build
+   rejects them).
+3. Restore the runtime DB only when the new release corrupted or migrated it
+   (loud schema errors at startup). Migrations are forward-only: an older build
+   may not open a DB a newer build migrated, so keep the pre-deploy backup
+   until the release is stable. Otherwise keep the current ledger — it holds
+   fills the broker already executed.
+4. Broker state is authoritative. The engine reconciles the ledger to the
+   Alpaca account on every start and halts on mismatch. Never flatten or cancel
+   broker positions as part of a rollback.
 
-## Docker (alternative deployment)
+## Docker (not used in production)
 
-`docker-compose.yml` runs `parayabuck:local` (non-root, `CMD ["parayabuck","web"]`,
-`HEALTHCHECK /healthz`) with `./config`, `./data`, `./reports` bind-mounted,
-`env_file: .env`, `restart: unless-stopped`. Container update: `docker compose
-pull`-style rebuild, `docker compose up -d`. The systemd unit is the
-recommended Google Cloud deployment; Docker is for evaluation/containers.
+`docker-compose.yml` builds the `Dockerfile` (python:3.12-slim, non-root,
+`HEALTHCHECK /healthz`, loopback `127.0.0.1:8000`, `restart: unless-stopped`,
+`./config`, `./data`, `./reports` mounted, `env_file: .env`). It starts the
+engine, so the one-runner rule applies: never run it while the VM runs.

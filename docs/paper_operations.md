@@ -79,8 +79,9 @@ before any operator PAPER start; `doctor --offline` can report
 `REFRESH_NEEDED` without refreshing them. Freeze a 14-calendar-day window with
 the current identities (`equity_leveraged_trend_v1` at 0.93 and
 `crypto_low_variance_hysteresis_v1`), cap 8, crypto cap 2, receipt schema V2,
-and S1-S12 gates in
-`research/paper_observability_repair_v1/FORWARD_OBSERVATION_PROTOCOL_V2.md`.
+and the S1-S12 gates checked by `scripts/audit_paper_soak.py` (the original
+protocol text, `research/paper_observability_repair_v1/FORWARD_OBSERVATION_PROTOCOL_V2.md`,
+was pruned on 2026-09-30; see tag `archive/research/pre-prune-2026-09-30`).
 
 ```sh
 PYTHONPATH=src python scripts/audit_paper_soak.py \

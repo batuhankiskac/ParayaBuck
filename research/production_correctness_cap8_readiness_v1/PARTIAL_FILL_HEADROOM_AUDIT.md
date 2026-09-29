@@ -1,5 +1,0 @@
-# Partial-fill and cancel headroom
-
-Current broker marked position includes the filled quantity. Durable `quantity - cumulative_filled_quantity` and broker `qty - filled_qty` retain only the working remainder. Matching client IDs take the larger conservative estimate once. A cancel request remains a commitment while the order is OPEN or locally nonterminal; only authoritative terminal reconciliation releases it. A late fill after cancellation is covered by the accepted RR-01/RR-02 recovery tests: broker identity and complete FILL history resolve position/order state before drift and before fresh BUY admission. Tests verify a 20/50 partial BUY contributes the 20 filled shares in the position and 30 shares as commitment, and that a pending 30-share cancellation does not release headroom early.
-
-An order whose remaining quantity/notional cannot be established or priced blocks new BUY admission. This preserves a conservative result under missing broker fields rather than assuming zero commitment.

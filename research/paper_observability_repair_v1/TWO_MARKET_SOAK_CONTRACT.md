@@ -1,7 +1,0 @@
-# Two-market PAPER soak
-
-Run `PYTHONPATH=src python scripts/audit_paper_soak.py --db data/runtime/parayabuck.sqlite3 --receipts data/runtime/paper_receipts --journal data/runtime/observability.sqlite3 --config config/settings.yaml --start 2026-09-24T00:00:00+00:00 --output report.json`. The script opens SQLite with `mode=ro` and `query_only=ON` and reads receipts/config; it imports no broker. It emits JSON to stdout and a short summary to stderr. Any missing required evidence fails closed. V1 files are historical and excluded from the V2 observation window.
-
-The auditor reports session, decision class, no-order, order status, fill, execution event, rebalance and admission counts. It checks frozen config/strategy identity, receipt identity, DB linkage, lifecycle anomalies, effective slots, final BUY headroom, successful scanner refresh and recovery, successful reconciliation run events, failures/recoveries, operational decision summaries and LIVE markers. The scheduled gap check uses 8 days for equity and 5 days for crypto between observed scheduled decisions. This is a conservative offline screen; calendar edges and warm/eligibility cannot be certified from two timestamps alone. Operators must retain no-trade/eligibility evidence for edge gaps during the real observation.
-
-Supply the actual deployment timestamp to `--start`; this example is illustrative. `--end` freezes the final observation boundary. The auditor includes only decisions and related lifecycle after that boundary, while detecting orphan rows created within it.

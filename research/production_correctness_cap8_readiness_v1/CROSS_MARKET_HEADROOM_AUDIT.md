@@ -1,5 +1,0 @@
-# Cross-market headroom audit
-
-Equity and crypto read the same account and account-scoped durable order ledger. The gate does not filter committed BUYs by strategy market. Synthetic tests cover equity OPEN BUY then crypto candidate (X1), crypto OPEN BUY then equity candidate (X2), and both decision orders against one shared broker/repository (X3). The second decision observes the first working BUY and scales to remaining shared headroom; aggregate admitted notional stays within gross/cash capacity. A partial fill moves notional from working remainder into marked position without freeing it twice (X4). A SELL only frees capacity after the broker position snapshot reflects the reduction; pending SELL intent does not (X5).
-
-The production engine's portfolio lock serializes decisions in one process. Multi-process deployment or independent manual trading is outside that serialization and requires the existing broker reconciliation barrier plus fresh reads; this change does not invent distributed reservations.

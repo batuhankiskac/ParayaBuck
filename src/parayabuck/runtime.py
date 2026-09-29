@@ -3711,6 +3711,12 @@ class EngineRuntime:
                 continue
             entry_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
             if portfolio_runtime.market == Market.EQUITY:
+                # Latch on the last COMPLETED session, never on a forming
+                # provider bar adopted by an intra-session verification.
+                prune = getattr(portfolio_runtime, "prune_unfinished_signal_sessions", None)
+                if prune is not None:
+                    with self._portfolio_lock:
+                        prune()
                 newest = max(
                     (series[-1].timestamp for series in portfolio_runtime.history.values() if series),
                     default=None,

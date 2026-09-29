@@ -85,9 +85,10 @@ def test_production_equity_selection_is_leveraged_trend_v1(config: Config) -> No
     equity = config.strategy.equity
     assert equity.enabled is True
     assert equity.name == "equity_leveraged_trend_v1"
-    # 2026-09-25 (profit_max_v1): equity 0.93 + crypto 0.05 == 0.98 == max_gross,
-    # cash buffer 0.02. Alpha params are the frozen VT35 set.
-    assert equity.maximum_allocation == 0.93
+    # 2026-09-29 (paper_config_v2): crypto disabled, equity 0.98 == max_gross,
+    # cash buffer 0.02. Alpha params are the frozen VT35 set; the BIL
+    # idle-cash sweep failed its Stage B gate and stays off.
+    assert equity.maximum_allocation == 0.98
     assert _params_dict(equity.parameters) == PRODUCTION_EQUITY_PARAMETERS
     strategy = portfolio_strategy_from(equity.name, equity.parameters)
     assert rebalance_policy_for(strategy).hours == 24
@@ -98,7 +99,9 @@ def test_production_crypto_selection_is_hysteresis_v1(config: Config) -> None:
     # 2026-08-27 T1 PROMOTION: PAPER now hysteresis v1 (same alpha 22/2/96 + rank<=4)
     # v2 and v1 stay frozen historical baselines for rollback.
     assert crypto.maximum_allocation == 0.05
-    assert crypto.enabled is True
+    # 2026-09-29 (paper_config_v2): disabled at the config level; the identity
+    # stays registered until the full crypto code deletion.
+    assert crypto.enabled is False
     assert crypto.name == "crypto_low_variance_hysteresis_v1"
     assert _params_dict(crypto.parameters) == PRODUCTION_CRYPTO_PARAMETERS
     strategy = portfolio_strategy_from(crypto.name, crypto.parameters)

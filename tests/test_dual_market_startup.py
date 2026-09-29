@@ -11,6 +11,10 @@ submitted orders.
 
 The strategy parameters below are the validated PRODUCTION specs (they mirror
 the shipped config block); they are asserted, never changed.
+
+Since 2026-09-29 (paper_config_v2) the shipped config disables the crypto
+sleeve at the config level; the crypto code path stays until its full deletion,
+so the dual-market mechanics are still exercised here with explicit runtimes.
 """
 
 from __future__ import annotations
@@ -131,13 +135,13 @@ def _assert_frozen_config():
     """The validated strategy/risk specs are FROZEN: assert, never change."""
     config = load_config(str(ROOT / "config" / "settings.yaml"))
     assert config.runtime.mode == RuntimeMode.PAPER
-    assert config.universe.equity.enabled and config.universe.crypto.enabled
-    assert config.strategy.equity.enabled and config.strategy.crypto.enabled
+    assert config.universe.equity.enabled and not config.universe.crypto.enabled
+    assert config.strategy.equity.enabled and not config.strategy.crypto.enabled
     assert config.live.enabled is False
     assert config.strategy.equity.name == "equity_leveraged_trend_v1"
     assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
-    # 2026-09-25 (profit_max_v1): equity 0.93 so 0.93+0.05==0.98 gross invariant
-    assert config.strategy.equity.maximum_allocation == 0.93
+    # 2026-09-29 (paper_config_v2): crypto disabled, equity 0.98 == gross cap
+    assert config.strategy.equity.maximum_allocation == 0.98
     assert config.strategy.equity.parameters == PRODUCTION_EQUITY
     assert config.strategy.crypto.maximum_allocation == 0.05
     risk = config.risk

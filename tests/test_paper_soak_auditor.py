@@ -1,4 +1,8 @@
-"""The account auditor fails closed on synthetic two-market evidence."""
+"""The account auditor fails closed on synthetic equity-only PAPER evidence.
+
+Since paper_config_v2 (2026-09-29) the crypto sleeve is disabled, so the
+clean fixture carries equity decisions only and a crypto decision fails S1.
+"""
 
 from __future__ import annotations
 
@@ -38,9 +42,9 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             ("eq-scheduled-1", "equity", "scheduled", "equity_leveraged_trend_v1"),
             ("eq-catchup-1", "equity", "startup_catch_up", "equity_leveraged_trend_v1"),
             ("eq-scheduled-2", "equity", "scheduled", "equity_leveraged_trend_v1"),
-            ("cr-scheduled-1", "crypto", "scheduled", "crypto_low_variance_hysteresis_v1"),
-            ("cr-catchup-1", "crypto", "startup_catch_up", "crypto_low_variance_hysteresis_v1"),
-            ("cr-scheduled-2", "crypto", "scheduled", "crypto_low_variance_hysteresis_v1"),
+            ("eq-scheduled-3", "equity", "scheduled", "equity_leveraged_trend_v1"),
+            ("eq-catchup-2", "equity", "startup_catch_up", "equity_leveraged_trend_v1"),
+            ("eq-scheduled-4", "equity", "scheduled", "equity_leveraged_trend_v1"),
         ]
         statuses = ["filled", None, "rejected", "partially_filled", "canceled", "submitted"]
         for index, (decision_id, market, origin, strategy) in enumerate(decisions):
@@ -65,7 +69,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                         order_id,
                         decision_id,
                         market,
-                        "BTC/USD" if market == "crypto" else "AAPL",
+                        "QLD",
                         "buy",
                         1.0,
                         1.0 if status == "filled" else 0.5 if status == "partially_filled" else 0.0,
@@ -91,7 +95,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "strategy": {
                     "name": strategy,
                     "version": "1",
-                    "maximum_allocation": 0.93 if market == "equity" else 0.05,
+                    "maximum_allocation": 0.98,
                 },
                 "configuration_digest": "config-1",
                 "universe": {"version": "universe-1"},
@@ -99,7 +103,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "capacity_snapshot": {
                     "effective_global_slot_claims": 7,
                     "global_slot_cap": 8,
-                    "effective_crypto_slot_claims": 2,
+                    "effective_crypto_slot_claims": 0,
                     "crypto_slot_cap": 2,
                 },
                 "target_state": {"kind": "INTENDED_POST_RISK", "weights": {}},
@@ -110,7 +114,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "final_buy_admission": {"gross_headroom": 1000, "cash_headroom": 1000} if status else None,
             }
             (receipts / f"{decision_id}.v2.json").write_text(json.dumps(payload), encoding="utf-8")
-        con.execute("INSERT INTO portfolio_rebalance_executions VALUES ('cr-catchup-1')")
+        con.execute("INSERT INTO portfolio_rebalance_executions VALUES ('eq-catchup-2')")
     with sqlite3.connect(journal) as con:
         con.execute(
             "CREATE TABLE operational_events(event_id TEXT, kind TEXT, market TEXT, mode TEXT, occurred_at TEXT, decision_id TEXT)"
@@ -122,9 +126,6 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 ("reconcile-complete", "reconciliation_succeeded", None, "paper", "2026-09-01T00:00:00+00:00", None),
                 ("eq-recover", "scanner_recovered", "equity", "paper", "2026-09-02T00:00:00+00:00", None),
                 ("eq-complete", "scanner_refresh_complete", "equity", "paper", "2026-09-02T00:00:00+00:00", None),
-                ("cr-fail", "scanner_refresh_failure", "crypto", "paper", "2026-09-02T00:00:00+00:00", None),
-                ("cr-recover", "scanner_recovered", "crypto", "paper", "2026-09-03T00:00:00+00:00", None),
-                ("cr-complete", "scanner_refresh_complete", "crypto", "paper", "2026-09-03T00:00:00+00:00", None),
                 *[
                     (
                         f"summary-{decision_id}",
@@ -145,15 +146,13 @@ def _audit(db: Path, receipts: Path, journal: Path) -> dict[str, object]:
     return auditor.audit(db, receipts, ROOT / "config/settings.yaml", journal)
 
 
-def test_clean_two_market_fixture_passes(tmp_path: Path) -> None:
+def test_clean_equity_only_fixture_passes(tmp_path: Path) -> None:
     db, receipts, journal = _fixture(tmp_path)
     report = _audit(db, receipts, journal)
     assert report["status"] == "PASS", report
     assert report["counts"]["decision_classes"] == {  # type: ignore[index]
-        "equity_scheduled": 2,
-        "equity_startup_catch_up": 1,
-        "crypto_scheduled": 2,
-        "crypto_startup_catch_up": 1,
+        "equity_scheduled": 4,
+        "equity_startup_catch_up": 2,
     }
     assert report["counts"]["reconciliation_runs_observed"] == 1  # type: ignore[index]
     assert report["counts"]["restarts_observed"] == 1  # type: ignore[index]
@@ -186,6 +185,7 @@ def test_v2_start_boundary_excludes_historical_v1_decision(tmp_path: Path) -> No
         ("duplicate_order", "S4"),
         ("orphan_fill", "S3"),
         ("wrong_strategy", "S1"),
+        ("crypto_decision", "S1"),
         ("live", "S12"),
         ("ambiguous", "S3"),
         ("buy_headroom", "S7"),
@@ -198,7 +198,7 @@ def test_v2_start_boundary_excludes_historical_v1_decision(tmp_path: Path) -> No
 def test_independent_invalid_states_fail(tmp_path: Path, mutation: str, gate: str) -> None:
     db, receipts, journal = _fixture(tmp_path)
     if mutation in {"global_nine", "crypto_three"}:
-        path = receipts / "cr-scheduled-1.v2.json"
+        path = receipts / "eq-scheduled-3.v2.json"
         payload = json.loads(path.read_text(encoding="utf-8"))
         payload["capacity_snapshot"][
             "effective_global_slot_claims" if mutation == "global_nine" else "effective_crypto_slot_claims"
@@ -207,18 +207,24 @@ def test_independent_invalid_states_fail(tmp_path: Path, mutation: str, gate: st
     elif mutation == "duplicate_order":
         with sqlite3.connect(db) as con:
             con.execute(
-                "INSERT INTO portfolio_orders VALUES ('order-duplicate','cr-scheduled-1','crypto','BTC/USD','buy',1,0,'submitted')"
+                "INSERT INTO portfolio_orders VALUES ('order-duplicate','eq-scheduled-3','equity','QLD','buy',1,0,'submitted')"
             )
     elif mutation == "orphan_fill":
         with sqlite3.connect(db) as con:
             con.execute("INSERT INTO portfolio_fills VALUES ('orphan','missing-order')")
     elif mutation == "wrong_strategy":
         with sqlite3.connect(db) as con:
-            con.execute("UPDATE portfolio_decisions SET strategy_name='wrong' WHERE decision_id='cr-scheduled-1'")
+            con.execute("UPDATE portfolio_decisions SET strategy_name='wrong' WHERE decision_id='eq-scheduled-3'")
+    elif mutation == "crypto_decision":
+        with sqlite3.connect(db) as con:
+            con.execute(
+                "UPDATE portfolio_decisions SET market='crypto', strategy_name='crypto_low_variance_hysteresis_v1' "
+                "WHERE decision_id='eq-scheduled-3'"
+            )
     elif mutation == "live":
         with sqlite3.connect(journal) as con:
             con.execute(
-                "INSERT INTO operational_events VALUES ('live','broker_submit','crypto','live','2026-09-03',NULL)"
+                "INSERT INTO operational_events VALUES ('live','broker_submit','equity','live','2026-09-03',NULL)"
             )
     elif mutation == "ambiguous":
         with sqlite3.connect(db) as con:
@@ -234,11 +240,11 @@ def test_independent_invalid_states_fail(tmp_path: Path, mutation: str, gate: st
                 "UPDATE portfolio_buy_admission_observations SET cash_headroom=20000 WHERE client_order_id='order-0'"
             )
     elif mutation == "missing_receipt":
-        (receipts / "cr-scheduled-1.v2.json").unlink()
+        (receipts / "eq-scheduled-3.v2.json").unlink()
     elif mutation == "stale_universe":
         with sqlite3.connect(journal) as con:
             con.execute(
-                "INSERT INTO operational_events VALUES ('stale','universe_became_stale','crypto','paper','2026-09-04T00:00:00+00:00',NULL)"
+                "INSERT INTO operational_events VALUES ('stale','universe_became_stale','equity','paper','2026-09-04T00:00:00+00:00',NULL)"
             )
     elif mutation == "missing_reconciliation":
         with sqlite3.connect(journal) as con:

@@ -33,7 +33,9 @@ universe:
     - QQQ
     - QLD
   crypto:
-    enabled: true
+    # 2026-09-29 (paper_config_v2): crypto sleeve removed from PAPER at the
+    # config level; the block stays so the loader and scanner code resolve.
+    enabled: false
     dynamic_selection_enabled: true
     allow_static_fallback_trading: false
     maximum_stream_symbols: 12
@@ -98,8 +100,10 @@ strategy:
   equity:
     enabled: true
     name: equity_leveraged_trend_v1
-    # equity 0.93 + crypto 0.05 = 0.98 = max_gross; cash buffer 0.02.
-    maximum_allocation: 0.93
+    # 2026-09-29 (paper_config_v2): crypto sleeve removed, equity 0.93 -> 0.98
+    # = max_gross; cash buffer 0.02. Stage B 2017-2026: 29.35% CAGR, 27.7%
+    # max drawdown (docs/research/paper_config_v2.md).
+    maximum_allocation: 0.98
     parameters:
       signal_symbol: QQQ
       hold_symbol: QLD
@@ -114,7 +118,9 @@ strategy:
     # 5.25%->10.54%) are historical; the current causal canonical replay is
     # docs/research/canonical_crypto_baseline.md (total return 5.42%, turnover 3.52).
     # v2 and v1 stay frozen historical baselines for rollback.
-    enabled: true
+    # 2026-09-29 (paper_config_v2): disabled; docs/research/crypto_sleeve_decision_v1.md.
+    # Full code deletion is a separate later task.
+    enabled: false
     name: crypto_low_variance_hysteresis_v1
     # 2026-08-21 operator decision: sleeve halved 0.10 -> 0.05 to reduce the
     # crypto drawdown contribution (historical rationale; the original
@@ -130,7 +136,10 @@ risk:
   # and the daily-loss (0.20) and drawdown (0.75) latches are catastrophe
   # brakes only: a 2x index ETF routinely moves more than the former
   # 0.5% / 5% latches, which would have blocked the strategy.
-  max_position_pct: 0.93
+  # 2026-09-29 (paper_config_v2): 0.93 -> 0.98 with the equity allocation.
+  # max_crypto_* stay unchanged (in the configuration digest; unused while
+  # the crypto sleeve is disabled).
+  max_position_pct: 0.98
   max_crypto_exposure_pct: 0.1
   max_crypto_position_pct: 0.05
   max_crypto_positions: 2

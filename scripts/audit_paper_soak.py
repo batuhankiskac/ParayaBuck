@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Read-only, fail-closed audit of the two-market PAPER observation ledger.
+"""Read-only, fail-closed audit of the PAPER observation ledger.
+
+Since 2026-09-29 (paper_config_v2) PAPER is equity-only: the crypto sleeve is
+disabled, so only equity decisions are expected and a crypto decision fails S1.
 
 Receipts are decision snapshots. SQLite portfolio tables remain authoritative for
 orders, fills and their final statuses. This program never imports a broker.
@@ -19,8 +22,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = {
-    "equity": ("equity_leveraged_trend_v1", 0.93),
-    "crypto": ("crypto_low_variance_hysteresis_v1", 0.05),
+    "equity": ("equity_leveraged_trend_v1", 0.98),
 }
 TERMINAL = {"filled", "fill", "rejected", "canceled", "cancelled", "expired", "done_for_day"}
 AMBIGUOUS = {"reconciliation_required", "manual_intervention_required"}
@@ -96,6 +98,7 @@ def audit(
         and settings["risk"]["max_crypto_positions"] == 2
         and settings["risk"]["max_gross_exposure_pct"] == 0.98
         and settings["risk"]["cash_buffer_pct"] == 0.02
+        and settings["strategy"]["crypto"]["enabled"] is False
         and all(
             settings["strategy"][market]["name"] == name
             and settings["strategy"][market]["maximum_allocation"] == allocation

@@ -163,7 +163,7 @@ class PortfolioDecisionService:
                 if position.market == strategy.market
             },
             prices={symbol: series[-1].close for symbol, series in history.items()},
-            benchmark_symbol="BTC/USD" if strategy.market == Market.CRYPTO else "SPY",
+            benchmark_symbol="SPY",
         )
 
 

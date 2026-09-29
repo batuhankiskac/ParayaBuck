@@ -102,31 +102,22 @@ class _ScheduleStrategy(PortfolioStrategy):
         )
 
 
-class _CryptoScheduleStrategy(_ScheduleStrategy):
-    name = "crypto_schedule"
-    market = Market.CRYPTO
-    timeframe = "1h"
-
-
 def _engine(
     strategy: PortfolioStrategy,
     *,
     commission: float = 0.0,
-    crypto_taker_fee_bps: float = 0.0,
     state_path: str | None = None,
     state=None,
     risk_limits=None,
 ) -> PortfolioBacktestEngine:
-    frequency = "hours:24" if strategy.market == Market.CRYPTO else "monthly"
     return PortfolioBacktestEngine(
         strategy,
-        RebalancePolicy(strategy.market, frequency),
+        RebalancePolicy(strategy.market, "monthly"),
         starting_equity=100_000.0,
         slippage_bps=2.0,
         spread_bps=4.0,
         commission=commission,
-        crypto_taker_fee_bps=crypto_taker_fee_bps,
-        benchmark_symbol="SPY" if strategy.market == Market.EQUITY else "BTC/USD",
+        benchmark_symbol="SPY",
         max_participation_pct=0.10,
         turnover_band=0.005,
         minimum_order_notional=10.0,
@@ -264,30 +255,6 @@ def test_multiple_entries_use_average_price_and_full_exit_realizes_all() -> None
     assert len(buy_fills) == 2
     average_price = result.state.avg_prices.get("SPY")
     assert average_price is None  # position fully closed
-    equity_change = result.ending_equity - result.starting_equity
-    assert sum(result.realized_pnls) == pytest.approx(equity_change)
-
-
-def test_crypto_taker_fee_applies_on_both_sides() -> None:
-    epoch = datetime(2024, 1, 1, tzinfo=UTC)
-    strategy = _CryptoScheduleStrategy({0: {"BTC/USD": 0.5}, 1: {}}, epoch)
-    engine = _engine(strategy, crypto_taker_fee_bps=5.0)
-    bars = [
-        _bar(
-            epoch + timedelta(hours=index),
-            "BTC/USD",
-            50_000.0 + index * 10,
-            Market.CRYPTO,
-            100_000,
-        )
-        for index in range(24 * 65)
-    ]
-    result = engine.run(bars, liquidate_at_end=True)
-    assert result.closed_positions == 1
-    # Both the buy and the sell pay the taker fee.
-    buy_fee = sum(fill.fee for fill in result.fills if fill.side == OrderSide.BUY)
-    sell_fee = sum(fill.fee for fill in result.fills if fill.side == OrderSide.SELL)
-    assert buy_fee > 0 and sell_fee > 0
     equity_change = result.ending_equity - result.starting_equity
     assert sum(result.realized_pnls) == pytest.approx(equity_change)
 
@@ -595,11 +562,9 @@ class _DailyRiskStrategy(PortfolioStrategy):
     timeframe = "1d"
     minimum_history_bars = 1
 
-    def __init__(self, symbol: str, weight: float, market: Market = Market.EQUITY) -> None:
+    def __init__(self, symbol: str, weight: float) -> None:
         self._symbol = symbol
         self._weight = weight
-        self.market = market
-        self.timeframe = "1h" if market == Market.CRYPTO else "1d"
         super().__init__()
 
     def _validate_parameters(self) -> None:
@@ -762,37 +727,7 @@ def test_session_date_for_equity_uses_new_york_trading_date() -> None:
     # 2024-07-04 01:00 UTC is 2024-07-03 21:00 ET: the UTC day is the 4th but
     # the trading session belongs to the 3rd.
     late_utc = datetime(2024, 7, 4, 1, 0, tzinfo=UTC)
-    assert session_date_for(late_utc, Market.EQUITY) == datetime(2024, 7, 3).date()
-    assert session_date_for(late_utc, Market.CRYPTO) == datetime(2024, 7, 4).date()
-
-
-def test_crypto_daily_reset_uses_utc_boundary() -> None:
-    """Crypto daily-loss resets at the UTC calendar boundary (documented)."""
-    epoch = datetime(2024, 1, 1, tzinfo=UTC)
-    bars = [_bar(epoch + timedelta(hours=index), "BTC/USD", 100.0, Market.CRYPTO, 100_000) for index in range(48)]
-    bars[25] = _bar(epoch + timedelta(hours=25), "BTC/USD", 89.0, Market.CRYPTO, 100_000)
-    strategy = _DailyRiskStrategy("BTC/USD", 0.6, market=Market.CRYPTO)
-    engine = PortfolioBacktestEngine(
-        strategy,
-        RebalancePolicy(strategy.market, "hours:24"),
-        starting_equity=100_000.0,
-        slippage_bps=2.0,
-        spread_bps=4.0,
-        benchmark_symbol="BTC/USD",
-        max_participation_pct=0.10,
-        turnover_band=0.005,
-        minimum_order_notional=10.0,
-        risk_limits=_risk_limits(),
-    )
-    result = engine.run(bars, liquidate_at_end=False)
-    # The crypto sleeve caps the position at 5% (50 units at $100). Hour 25
-    # falls on the second UTC day; its day-start is hour 24's equity, so the
-    # >11% drop at hour 25 registers as a daily loss past the 0.5% limit and
-    # halts the hour-25 decision. If the day-start had been reset to the
-    # post-close equity of hour 25 itself, no daily loss would register.
-    decision_at_25 = next(record for record in result.rebalances if record.decision_timestamp == bars[25].timestamp)
-    assert decision_at_25.risk_overlay_halted
-    assert "daily_loss_limit" in decision_at_25.risk_overlay_reasons
+    assert session_date_for(late_utc) == datetime(2024, 7, 3).date()
 
 
 def test_worst_year_is_the_weakest_year_not_a_floor_at_zero() -> None:

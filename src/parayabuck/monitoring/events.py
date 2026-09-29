@@ -33,8 +33,9 @@ from __future__ import annotations
 ALERT_KINDS_ORDERED: tuple[str, ...] = (
     "runtime_started",
     "runtime_stopped_unexpected",
+    # Warning-level provider incidents (paper_incident.emit_incident_record
+    # maps PROVIDER_UNAVAILABLE here); the name predates the equity-only runtime.
     "scanner_refresh_failure",
-    "scanner_recovered",
     "order_rejected",
     "ambiguous_order",
     "order_recovered",

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from parayabuck.config import EngineConfig
-from parayabuck.core.models import Bar, Market
+from parayabuck.core.models import Bar
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.markets.symbols import canonical_symbol
 
@@ -15,7 +15,7 @@ class IngestionResult:
 
 
 class RuntimeMarketState:
-    """Operational bars, gaps, lifecycle, and risk state without decisions."""
+    """Operational bars and lifecycle state without decisions."""
 
     def __init__(
         self,
@@ -30,50 +30,16 @@ class RuntimeMarketState:
             else None
         )
         # Strategy warmup requirements are owned by PortfolioRuntime. This
-        # operational store keeps a generous rolling window for gap repair.
+        # operational store keeps a generous rolling window of execution bars.
         self.bars = BarStore(5000)
-        self._not_ready: set[tuple[str, str]] = set()
 
     def seed(self, bars: list[Bar]) -> None:
         self.bars.seed(bars)
 
-    def repair_gap(self, bars: list[Bar]) -> bool:
-        self.bars.seed(bars)
-        repaired = True
-        # One contiguity scan per symbol/timeframe instead of one per bar: each
-        # scan copies the whole bar window, so a long backfill would otherwise
-        # repeat identical work under the caller's ingestion lock.
-        for symbol, timeframe in {(canonical_symbol(bar.symbol, bar.market), bar.timeframe) for bar in bars}:
-            if self.bars.is_contiguous(symbol, timeframe):
-                self._not_ready.discard((symbol, timeframe))
-            else:
-                repaired = False
-        return repaired
-
-    @property
-    def has_data_gaps(self) -> bool:
-        return bool(self._not_ready)
-
-    # health() calls these off the decision thread while ingest/repair resize
-    # _not_ready under the ingestion lock: iterate a one-call C-level
-    # frozenset snapshot so a concurrent add/discard cannot raise
-    # "Set changed size during iteration".
-    def has_data_gaps_for_market(self, market: Market) -> bool:
-        return any(("/" in symbol) == (market == Market.CRYPTO) for symbol, _timeframe in frozenset(self._not_ready))
-
-    def has_data_gaps_for_symbol(self, symbol: str, market: Market | None = None) -> bool:
-        wanted = canonical_symbol(symbol, market)
-        return any(candidate == wanted for candidate, _timeframe in frozenset(self._not_ready))
-
     def ingest_closed_bars(self, bars: list[Bar]) -> IngestionResult:
         ordered = tuple(sorted(bars, key=lambda item: (item.timestamp, item.symbol)))
-        mutations: list[BarMutation] = []
-        for bar in ordered:
-            mutation = self.bars.upsert(bar)
-            mutations.append(mutation)
-            if mutation == BarMutation.GAP_DETECTED:
-                self._not_ready.add((canonical_symbol(bar.symbol, bar.market), bar.timeframe))
-        return IngestionResult(ordered, tuple(mutations))
+        mutations = tuple(self.bars.upsert(bar) for bar in ordered)
+        return IngestionResult(ordered, mutations)
 
     def ingest_corrections(self, bars: list[Bar]) -> IngestionResult:
         ordered = tuple(sorted(bars, key=lambda item: (item.timestamp, item.symbol)))

@@ -47,14 +47,12 @@
                 <svg viewBox="0 0 120 120" aria-hidden="true">
                     <circle class="track" cx="60" cy="60" r="50"/>
                     <circle id="donutEquity" class="c-equity" cx="60" cy="60" r="50"/>
-                    <circle id="donutCrypto" class="c-crypto" cx="60" cy="60" r="50"/>
                     <circle id="donutCash" class="c-cash" cx="60" cy="60" r="50"/>
                 </svg>
                 <div class="donut-center"><strong id="donutInvested">—</strong><small>yatırımda</small></div>
             </div>
             <ul class="alloc-legend">
                 <li><span class="swatch c-equity"></span><span>Hisse / ETF</span><b id="allocEquity">—</b></li>
-                <li><span class="swatch c-crypto"></span><span>Kripto</span><b id="allocCrypto">—</b></li>
                 <li><span class="swatch c-cash"></span><span>Nakit</span><b id="allocCash">—</b></li>
             </ul>
         </div>
@@ -120,7 +118,7 @@
 </section>
 
 <div class="section-title" id="strategies" data-section="strategies">
-    <h2>Stratejiler</h2><p>Her piyasada botun uyguladığı kurallar.</p>
+    <h2>Stratejiler</h2><p>Botun uyguladığı kurallar.</p>
 </div>
 <section class="two-col strategy-grid" aria-label="Strateji kartları">
     <article class="card" aria-label="Hisse stratejisi">
@@ -148,35 +146,6 @@
             <table class="table">
                 <thead><tr><th>Sembol</th><th class="r">Miktar</th><th class="r">Hedef</th><th class="r">Şu an</th><th>Neden</th></tr></thead>
                 <tbody id="equityHoldingsBody"><tr class="empty"><td colspan="5">Pozisyon yok</td></tr></tbody>
-            </table>
-        </div>
-    </article>
-
-    <article class="card" aria-label="Kripto stratejisi">
-        <div class="strategy-head">
-            <span class="strategy-icon crypto"><svg class="icon"><use href="#i-coins"/></svg></span>
-            <div>
-                <h3 id="cryptoStrategyName">Kripto stratejisi</h3>
-                <p id="cryptoStrategyDesc">—</p>
-            </div>
-            <span id="cryptoStatusBadge" class="badge">—</span>
-        </div>
-        <div class="alloc-row">
-            <div class="alloc-row-top"><span>Portföydeki payı</span><b id="cryptoAllocation">—</b></div>
-            <div class="bar lg crypto"><span id="cryptoAllocBar"></span></div>
-        </div>
-        <div class="stat-grid">
-            <div class="stat"><small>Sinyal periyodu</small><strong id="cryptoSignal">—</strong></div>
-            <div class="stat"><small>Yeniden dengeleme</small><strong id="cryptoRebalance">—</strong></div>
-            <div class="stat"><small>Aday / izlenen</small><strong id="cryptoObs">—</strong></div>
-            <div class="stat"><small>Pozisyon</small><strong id="cryptoPositions">—</strong></div>
-            <div class="stat"><small>Sıradaki karar</small><strong id="cryptoNextRebalance">—</strong></div>
-            <div class="stat"><small>Başlangıç yakalama</small><strong id="cryptoStartupCatchUp">—</strong></div>
-        </div>
-        <div class="table-wrap">
-            <table class="table">
-                <thead><tr><th>Sembol</th><th class="r">Miktar</th><th class="r">22g oynaklık</th><th class="r">Sıra</th><th class="r">Hedef</th><th class="r">Şu an</th></tr></thead>
-                <tbody id="cryptoHoldingsBody"><tr class="empty"><td colspan="6">Pozisyon yok</td></tr></tbody>
             </table>
         </div>
     </article>
@@ -208,7 +177,6 @@
         <summary><svg class="icon icon-sm"><use href="#i-chevron"/></svg>Alım kapasitesi ayrıntıları</summary>
         <div class="kv-grid">
             <div class="kv"><small>Pozisyon / dolu slot / limit</small><strong id="riskSlots">—</strong></div>
-            <div class="kv"><small>Kripto pozisyon / slot / limit</small><strong id="riskCryptoSlots">—</strong></div>
             <div class="kv"><small>Broker'da bekleyen emir</small><strong id="riskWorking">—</strong></div>
             <div class="kv"><small>Brüt alım alanı</small><strong id="riskGrossHeadroom">—</strong></div>
             <div class="kv"><small>Taahhüt edilmiş alım</small><strong id="riskCommittedBuy">—</strong></div>
@@ -267,10 +235,6 @@
             <div class="card-body status-list">
                 <div class="status-row"><span>Hisse / ETF</span><b id="eqStatus">—</b></div>
                 <div id="eqSymbols" class="chips"></div>
-                <div class="status-row"><span>Kripto tarayıcı</span><b id="crScanner">—</b></div>
-                <div class="status-row"><span>Uygun havuz / izlenen</span><b id="crObserved">—</b></div>
-                <div class="status-row"><span>Son / sıradaki tarama</span><b id="crScanTimes">—</b></div>
-                <div id="crSymbols" class="chips"></div>
             </div>
         </article>
         <article class="card">

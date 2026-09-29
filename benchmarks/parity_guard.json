@@ -65,24 +65,7 @@
     "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0"
   },
   "paper_parity": {
-    "combined_hash": "98a1d86c17b70dad805e1d375a4a152eea397533f14932e5ff0bf2a05b4b6c20",
-    "crypto": {
-      "curve_points": 2038,
-      "economics": {
-        "average_holdings_count": 2.6452404317958784,
-        "fee_total": 2553.1395968341826,
-        "max_drawdown": 0.06690524032896931,
-        "net_return": 0.14530801326691356,
-        "rebalance_count": 503,
-        "turnover": 8.82743378877944
-      },
-      "equity_curve_hash": "b6da34ebbaf68927d89801906a9ae430a72b3a82e751330e6106afb57204b036",
-      "fill_count": 812,
-      "fills_hash": "6ca9e344305703eab4b56b0a7955edc8dec9c5162f59cd90edb4fb0f41462732",
-      "strategy": "crypto_low_variance_v2",
-      "universe_history_hash": "13895176875674242ef0a4defcd1d1a80d40e64ae8ac0bdf591e8974f1a97825",
-      "weight_history_hash": "a8f772078aabdfaa66eaf09573bbcf8b698bb85680fbcf4d072b8b613e18ea96"
-    },
+    "combined_hash": "3da106fd6f7c2fb26e7b517e0770e030b909d902e864067ee9a2391261afe17d",
     "equity": {
       "curve_points": 756,
       "economics": {

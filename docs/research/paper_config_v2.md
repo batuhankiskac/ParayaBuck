@@ -5,6 +5,13 @@ config level. The equity allocation and `risk.max_position_pct` go from 0.93
 to 0.98. The BIL idle-cash sweep (S2) is implemented behind a flag but ships
 **off**: it failed its preregistered gate at 2x costs.
 
+> **Update 2026-09-30:** the crypto code and the BIL sweep flag have since been
+> deleted ([`crypto_removal_v1.md`](crypto_removal_v1.md)). The config keys,
+> `cash_sweep_symbol` and `tests/test_crypto_disabled_startup.py` named below
+> no longer exist; the S0/S1/S2 arm configs need tag
+> `archive/code/crypto-sleeve-2026-09`. The adopted S1 result reproduces
+> exactly on the equity-only code.
+
 Stage B, 2017-01-03 to 2026-07-30, $100k start. Full CAGR at 1x costs:
 
 - S0 (current main): 28.98%

@@ -28,7 +28,6 @@ from parayabuck.data.adjustment import adequate_coverage, covers_session
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
     AmbiguousOrderState,
-    CryptoPriceObservation,
     OwnershipDriftError,
     ProtectionReconciliationError,
 )
@@ -37,7 +36,6 @@ from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, Trade
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
-    PortfolioOrderSide,
     portfolio_risk_limits_from_config,
 )
 from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
@@ -74,18 +72,9 @@ from parayabuck.risk.state import RiskState
 from parayabuck.runtime_events import _Event, _EventQueue
 from parayabuck.runtime_health import RuntimeHealth, WorkerHealth, _portfolio_catch_up_health
 from parayabuck.runtime_state import RuntimeMarketState
-from parayabuck.runtime_universe import ActiveProductUniverse, load_active_product_universe
+from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.storage import SQLiteStore
-from parayabuck.universe import (
-    ensure_active_universes,
-    equity_universe_digest,
-    load_active_crypto_symbols,
-    refresh_crypto_universe,
-)
-from parayabuck.universe.crypto_scanner import (
-    crypto_scanner_config_digest,
-    validate_active_crypto_universe,
-)
+from parayabuck.universe import equity_universe_digest
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
@@ -185,18 +174,18 @@ _SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS = 300.0
 # splits fetch always spans the full required signal window (never a short
 # tail standing in for a long history).
 _SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS = 10
-# Per-market scanner-refresh backoff (seconds) after a failed scheduled
-# refresh: ~5 min, then ~15, ~30, capped at ~60 min per consecutive failure.
-_UNIVERSE_RETRY_BACKOFF_SECONDS = (300.0, 900.0, 1800.0, 3600.0)
 # Stream worker name <-> market. Single source of truth so health
 # reporting, halt tracking and worker restart handling cannot disagree.
-_STREAM_WORKER_BY_MARKET = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}
+_STREAM_WORKER_BY_MARKET = {Market.EQUITY: "pb-stocks"}
 _MARKET_BY_STREAM_WORKER = {worker: market for market, worker in _STREAM_WORKER_BY_MARKET.items()}
-
-
-def _reservation_sort_key(key: tuple[Any, str]) -> tuple[str, str]:
-    """Deterministic (market, symbol) order for reserved position keys."""
-    return (key[0].value if hasattr(key[0], "value") else str(key[0]), key[1])
+# Operator-facing text for crypto positions found in the shared brokerage
+# account at startup. ParayaBuck is equity-only: it never trades, pins,
+# streams or protects them.
+_FOREIGN_CRYPTO_MESSAGE = (
+    "Crypto support was removed from ParayaBuck, but the broker account holds crypto "
+    "positions ({symbols}); they are left untouched (no orders, no stops, no streaming) "
+    "and the operator must handle them manually"
+)
 
 
 # Runtime states that block entries outright; a transient stream-worker
@@ -264,50 +253,25 @@ class EngineRuntime:
         self.app_config = config
         self.config = config.engine
         self.mode = config.runtime.mode
-        self.universe_preflight = ensure_active_universes(config, api_key, secret_key)
         active_equities = config.universe.equity.symbols if config.universe.equity.enabled else ()
-        active_crypto = (
-            load_active_crypto_symbols(config.universe.crypto, log_rejection=False)
-            if config.universe.crypto.enabled
-            else ()
-        )
         self._product_universes_by_market: dict[Market, ActiveProductUniverse] = {}
         if active_equities:
-            self._product_universes_by_market[Market.EQUITY] = self._load_product_universe(
-                Market.EQUITY,
-                tuple(active_equities),
-            )
-        if active_crypto:
-            self._product_universes_by_market[Market.CRYPTO] = self._load_product_universe(
-                Market.CRYPTO,
-                tuple(active_crypto),
-            )
-        self._active_crypto_symbols = active_crypto if config.strategy.crypto.enabled else ()
-        # Live observation membership is driven by the enabled strategies'
-        # universe symbols plus managed-position/open-order pins. A market
-        # whose strategy is disabled streams nothing from its universe; pins
-        # are added later by _pin_managed_symbols when managed inventory
-        # exists.
+            self._product_universes_by_market[Market.EQUITY] = self._load_product_universe(tuple(active_equities))
+        # Live observation membership is driven by the enabled strategy's
+        # universe symbols plus managed-position/open-order pins, which are
+        # added later by _pin_managed_symbols when managed inventory exists.
         self._strategy_enabled: dict[Market, bool] = {
             Market.EQUITY: bool(config.strategy.equity.enabled and active_equities),
-            Market.CRYPTO: bool(config.strategy.crypto.enabled and active_crypto),
         }
         self.symbols = [
-            canonical_symbol(symbol)
-            for symbol in (
-                *(active_equities if self._strategy_enabled[Market.EQUITY] else ()),
-                *(active_crypto if self._strategy_enabled[Market.CRYPTO] else ()),
-            )
+            canonical_symbol(symbol) for symbol in (active_equities if self._strategy_enabled[Market.EQUITY] else ())
         ]
-        self._symbols_by_market = {
-            Market.EQUITY: ({symbol for symbol in self.symbols if not is_crypto(symbol)}),
-            Market.CRYPTO: {symbol for symbol in self.symbols if is_crypto(symbol)},
-        }
+        self._symbols_by_market = {Market.EQUITY: set(self.symbols)}
         self._market_enabled = dict(self._strategy_enabled)
-        self._market_entry_halts: dict[Market, str | None] = {
-            Market.EQUITY: self._initial_universe_halt(Market.EQUITY),
-            Market.CRYPTO: self._initial_universe_halt(Market.CRYPTO),
-        }
+        self._market_entry_halts: dict[Market, str | None] = {Market.EQUITY: None}
+        # Crypto positions found in the shared brokerage account at startup:
+        # classified only so the operator is alerted; never traded or pinned.
+        self._foreign_crypto_symbols: tuple[str, ...] = ()
         # Entry-risk latch: reacts to daily-loss/drawdown breaches on the
         # account-poll cadence. A latched market still runs decisions, but
         # only risk-reducing SELLs may be planned; entries are blocked.
@@ -319,27 +283,20 @@ class EngineRuntime:
         # (stops already resting at the broker) keep working regardless.
         # Ownership drift is stricter still: it halts the runtime outright
         # (a broken ownership model must not be traded against at all).
-        self._entry_risk_latch: dict[Market, str | None] = {
-            Market.EQUITY: None,
-            Market.CRYPTO: None,
-        }
+        self._entry_risk_latch: dict[Market, str | None] = {Market.EQUITY: None}
         strategy_specs = []
-        for market, selection, symbols in (
-            (Market.EQUITY, config.strategy.equity, active_equities),
-            (Market.CRYPTO, config.strategy.crypto, active_crypto),
-        ):
-            if not selection.enabled or not symbols:
-                continue
+        selection = config.strategy.equity
+        if selection.enabled and active_equities:
             strategy = product_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
-            if strategy.market != market:
-                raise ValueError(f"Configured {market.value} strategy has the wrong market")
+            if strategy.market != Market.EQUITY:
+                raise ValueError("Configured equity strategy has the wrong market")
             # The strategy owns its signal timeframe; the configured value must
             # match one of its validated timeframes (never silently
             # reinterpreted). product_strategy_from already enforces the
             # product boundary, and validate_strategy_timeframe keeps the
             # invariant explicit. Generic callers may use portfolio_strategy_from.
             validate_strategy_timeframe(strategy, selection.timeframe or strategy.timeframe)
-            strategy_specs.append((strategy, tuple(symbols), selection.maximum_allocation))
+            strategy_specs.append((strategy, tuple(active_equities), selection.maximum_allocation))
         self._strategy_specs = tuple(strategy_specs)
         if not self._strategy_specs:
             raise ValueError("At least one enabled strategy needs an active universe")
@@ -369,14 +326,12 @@ class EngineRuntime:
                 self._portfolio_repository.clear_stale_ownership(self.broker.account_id or "unknown", symbol, market)
                 or None
             ),
-            crypto_stop_cancel_timeout_seconds=self.config.crypto_stop_cancel_timeout_seconds,
-            crypto_stop_cancel_poll_interval_seconds=(self.config.crypto_stop_cancel_poll_interval_seconds),
             runtime_state_dir=runtime_state_dir,
         )
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
         self.market_state = RuntimeMarketState(
             self.config,
-            allowed_trade_symbols={*active_equities, *active_crypto},
+            allowed_trade_symbols=set(active_equities),
         )
         self._consecutive_losses = 0
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_stream_feed)
@@ -450,27 +405,8 @@ class EngineRuntime:
         self._warming_up = False
         self._not_ready_symbols: set[str] = set(self.symbols)
         self._historical: AlpacaHistoricalData | None = None
-        self._last_universe_refresh_at: datetime | None = None
-        self._next_universe_refresh_at: datetime | None = None
-        # Per-market bounded retry state for the scheduled universe refresh:
-        # monotonic deadline + consecutive-failure count, cleared on success.
-        self._universe_retry_at: dict[Market, float] = {}
-        self._universe_retry_attempt: dict[Market, int] = {}
-        self._scanner_failed: dict[Market, bool] = {}
         self._managed_pin_symbols: set[str] = set()
-        # Set when a hot-swap rollback failed and the socket membership is
-        # unknown; cleared after a successful reconnect from the authoritative
-        # desired membership.
-        self._resync_pending = False
         self._last_portfolio_status: dict[Market, str] = {}
-        self._universe_refresh_status: dict[str, str] = {
-            Market.EQUITY.value: self.universe_preflight.equity_status,
-            Market.CRYPTO.value: self.universe_preflight.crypto_status,
-        }
-        self._last_universe_refresh_error: dict[str, str | None] = {
-            Market.EQUITY.value: None,
-            Market.CRYPTO.value: None,
-        }
         # Observability state: the alert sink is configured once from the
         # config block; the runtime session row pairs with the ledger's
         # runtime_sessions table so restart counts are persisted.
@@ -503,48 +439,14 @@ class EngineRuntime:
             if config.live.hard_dollar_cap <= 0:
                 raise RuntimeError("Live runtime requires a positive live.hard_dollar_cap")
 
-    def _initial_universe_halt(self, market: Market) -> str | None:
-        if market == Market.EQUITY:
-            # The static equity universe cannot be invalid.
-            return None
-        crypto_config = self.app_config.universe.crypto
-        status = self.universe_preflight.crypto_status
-        if (
-            crypto_config.enabled
-            and crypto_config.dynamic_selection_enabled
-            and status != "success"
-            and not crypto_config.allow_static_fallback_trading
-        ):
-            return "invalid_dynamic_universe"
-        return None
+    def _load_product_universe(self, observation_symbols: tuple[str, ...]) -> ActiveProductUniverse:
+        """Bind runtime observation membership to the static equity snapshot."""
 
-    def _load_product_universe(
-        self,
-        market: Market,
-        observation_symbols: tuple[str, ...],
-    ) -> ActiveProductUniverse:
-        """Bind runtime observation membership to a concrete product snapshot."""
-
-        if market == Market.EQUITY:
-            policy_digest = equity_universe_digest(self.app_config.universe.equity)
-        else:
-            crypto_config = self.app_config.universe.crypto
-            policy_digest = crypto_scanner_config_digest(crypto_config)
-            if crypto_config.dynamic_selection_enabled and self.universe_preflight.crypto_status == "success":
-                return load_active_product_universe(
-                    crypto_config.active_universe_path,
-                    market=market,
-                    expected_observation_symbols=observation_symbols,
-                    expected_config_digest=policy_digest,
-                )
-        # The static equity universe, and a disabled/failed crypto scanner that
-        # keeps explicit fallback symbols observable for managed exits, bind a
-        # configured snapshot. Entry-halt policy remains in
-        # _initial_universe_halt.
+        policy_digest = equity_universe_digest(self.app_config.universe.equity)
         return ActiveProductUniverse.configured(
-            market,
+            Market.EQUITY,
             observation_symbols,
-            snapshot_id=f"{market.value}:configured:{policy_digest}",
+            snapshot_id=f"{Market.EQUITY.value}:configured:{policy_digest}",
             config_digest=policy_digest,
         )
 
@@ -555,12 +457,8 @@ class EngineRuntime:
             minimum_order_notional=self.app_config.execution.minimum_order_notional,
         )
         digests: list[str] = []
+        universe_version = equity_universe_digest(self.app_config.universe.equity)
         for strategy, _symbols, maximum_allocation in self._strategy_specs:
-            universe_version = (
-                equity_universe_digest(self.app_config.universe.equity)
-                if strategy.market == Market.EQUITY
-                else crypto_scanner_config_digest(self.app_config.universe.crypto)
-            )
             digests.append(
                 configuration_digest(
                     strategy,
@@ -595,42 +493,6 @@ class EngineRuntime:
             raise RuntimeError("Live startup proof does not match the verified broker account")
         return approval
 
-    def _market_operationally_relevant(
-        self, market: Market, *, strategy_enabled: dict[Market, bool] | None = None
-    ) -> bool:
-        """Whether a market's scanner/stream/protection health is critical.
-
-        A market is operationally relevant when its strategy is enabled, a
-        managed position exists for it, or an open managed order/protection
-        exists. A completely unobserved market (strategy disabled, no managed
-        positions/orders) is not: its scanner failures are informational.
-        """
-        enabled = strategy_enabled or getattr(self, "_strategy_enabled", {})
-        if enabled.get(market, False):
-            return True
-        broker = getattr(self, "broker", None)
-        account_id = (getattr(broker, "account_id", None) if broker is not None else None) or "unknown"
-        repository = getattr(self, "_portfolio_repository", None)
-        if repository is not None:
-            try:
-                if repository.owned_symbols(account_id, market):
-                    return True
-                if repository.open_orders(account_id, market):
-                    return True
-            except Exception:
-                # A repository read failure must not corrupt health; the
-                # runtime will surface it through its own fail-closed paths.
-                return True
-        ledger = getattr(self, "ledger", None)
-        if ledger is not None:
-            try:
-                for entry in ledger.managed_entries_for_account(account_id):
-                    if entry.market == market:
-                        return True
-            except Exception:
-                return True
-        return False
-
     def health(self) -> RuntimeHealth:
         now = datetime.now(UTC)
         workers, market_enabled, symbols_by_market = self._snapshot_health_state()
@@ -644,11 +506,6 @@ class EngineRuntime:
             self._last_account_at is not None
             and (now - self._last_account_at).total_seconds() <= self.config.maximum_account_age_for_entry_seconds
         )
-        scanner_status = dict(getattr(self, "_universe_refresh_status", {}))
-        scanner_degraded = any(
-            status in {"refresh_failed", "apply_failed"} and self._market_operationally_relevant(market)
-            for market, status in ((Market(key), status) for key, status in scanner_status.items())
-        )
         healthy = (
             self._running
             and self._state == "running"
@@ -656,12 +513,9 @@ class EngineRuntime:
             and queue_age <= self.config.maximum_queue_age_seconds
             and account_fresh
             and self._circuit_breaker_reason is None
-            and not scanner_degraded
         )
         state = "degraded" if self._running and not healthy and self._state == "running" else self._state
-        market_health = self._build_market_health(
-            market_enabled, symbols_by_market, workers, scanner_status, now, heartbeat_ttl
-        )
+        market_health = self._build_market_health(market_enabled, symbols_by_market, workers, now, heartbeat_ttl)
         return self._assemble_runtime_health(
             state=state,
             healthy=healthy,
@@ -684,7 +538,7 @@ class EngineRuntime:
         account = admission.account
         broker_orders = self.broker.working_orders()
         local_orders = self._portfolio_repository.open_orders(self.broker.account_id or "unknown")
-        # risk_overlay is swapped under this lock by _apply_runtime_universes.
+        # risk_overlay belongs to the portfolio runtime; read it under its lock.
         with self._portfolio_lock:
             limits = runtimes[0].risk_overlay.limits
         claims: dict[tuple[Market, str], set[str]] = {}
@@ -702,6 +556,8 @@ class EngineRuntime:
             symbol = str(self.broker._field(order, "symbol", "") or "")
             if not symbol:
                 raise ValueError("Broker OPEN order missing symbol")
+            # A foreign crypto order in the shared account still claims a
+            # slot; it is only classified here, never managed.
             market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
             key = (market, canonical_symbol(symbol, market))
             raw_side = self.broker._field(order, "side", "")
@@ -714,12 +570,7 @@ class EngineRuntime:
                 # Unknown OPEN side retains conservative capacity behavior.
                 claims.setdefault(key, set()).add("WORKING_UNKNOWN")
         global_cap = limits.maximum_positions
-        crypto_cap = limits.maximum_crypto_positions
         effective_global = len(claims)
-        effective_crypto = sum(market == Market.CRYPTO for market, _ in claims)
-        crypto_positions = sum(
-            position.market == Market.CRYPTO and not position.is_flat for position in account.positions
-        )
         open_positions = sum(not position.is_flat for position in account.positions)
         opening_keys = {
             key for key, sources in claims.items() if "WORKING_OPENING" in sources and "POSITION" not in sources
@@ -739,10 +590,6 @@ class EngineRuntime:
             "effective_global_slot_claims": effective_global,
             "global_slot_cap": global_cap,
             "global_slots_available": max(0, global_cap - effective_global),
-            "crypto_position_count": crypto_positions,
-            "effective_crypto_slot_claims": effective_crypto,
-            "crypto_slot_cap": crypto_cap,
-            "crypto_slots_available": max(0, crypto_cap - effective_crypto),
             "working_opening_order_count": len(opening_keys),
             "slot_claims": [
                 {"market": market.value, "symbol": symbol, "sources": sorted(sources)}
@@ -756,13 +603,6 @@ class EngineRuntime:
             "available_cash_buy_headroom": admission.cash_headroom,
             "equity_sleeve_pct": (
                 sum(position.market_value for position in account.positions if position.market == Market.EQUITY)
-                / equity
-                * 100
-                if has_equity
-                else None
-            ),
-            "crypto_sleeve_pct": (
-                sum(position.market_value for position in account.positions if position.market == Market.CRYPTO)
                 / equity
                 * 100
                 if has_equity
@@ -791,26 +631,10 @@ class EngineRuntime:
         state_lock = getattr(self, "_state_lock", threading.RLock())
         with state_lock:
             workers = dict(self._workers)
-            market_enabled = dict(
-                getattr(
-                    self,
-                    "_market_enabled",
-                    {
-                        Market.EQUITY: any(not is_crypto(symbol) for symbol in self.symbols),
-                        Market.CRYPTO: any(is_crypto(symbol) for symbol in self.symbols),
-                    },
-                )
-            )
+            market_enabled = dict(getattr(self, "_market_enabled", {Market.EQUITY: bool(self.symbols)}))
             symbols_by_market = {
                 market: set(symbols)
-                for market, symbols in getattr(
-                    self,
-                    "_symbols_by_market",
-                    {
-                        Market.EQUITY: {symbol for symbol in self.symbols if not is_crypto(symbol)},
-                        Market.CRYPTO: {symbol for symbol in self.symbols if is_crypto(symbol)},
-                    },
-                ).items()
+                for market, symbols in getattr(self, "_symbols_by_market", {Market.EQUITY: set(self.symbols)}).items()
             }
         return workers, market_enabled, symbols_by_market
 
@@ -821,14 +645,10 @@ class EngineRuntime:
         symbols_by_market: dict[Market, set[str]],
     ) -> set[str]:
         required = {"pb-decisions", "pb-trade-updates", "pb-account"}
-        if "pb-universe-refresh" in workers:
-            required.add("pb-universe-refresh")
         if market_enabled.get(Market.EQUITY, False) and symbols_by_market.get(Market.EQUITY):
             required.add("pb-stocks")
             if "pb-signal-adjustment" in workers:
                 required.add("pb-signal-adjustment")
-        if market_enabled.get(Market.CRYPTO, False) and symbols_by_market.get(Market.CRYPTO):
-            required.add("pb-crypto")
         return required
 
     def _is_worker_healthy(
@@ -856,7 +676,6 @@ class EngineRuntime:
         market_enabled: dict[Market, bool],
         symbols_by_market: dict[Market, set[str]],
         workers: dict[str, WorkerHealth],
-        scanner_status: dict[str, str],
         now: datetime,
         heartbeat_ttl: float,
     ) -> dict[str, dict[str, object]]:
@@ -883,10 +702,7 @@ class EngineRuntime:
                 "managed_pins": sorted(symbols & getattr(self, "_managed_pin_symbols", set())),
                 "strategy_batch_status": getattr(self, "_last_portfolio_status", {}).get(market),
                 "stream_healthy": stream_healthy,
-                "data_gap": (enabled and self._engine_has_market_gap(market)),
                 "entry_halt_reason": getattr(self, "_market_entry_halts", {}).get(market),
-                "scanner_status": scanner_status.get(market.value),
-                "scanner_critical": self._market_operationally_relevant(market, strategy_enabled=market_enabled),
                 "catch_up": _portfolio_catch_up_health(portfolio_runtime_by_market.get(market)),
             }
         return market_health
@@ -901,13 +717,6 @@ class EngineRuntime:
         market_health: dict[str, dict[str, object]],
     ) -> RuntimeHealth:
         last_reconciliation = getattr(self, "_last_reconciliation_at", None)
-        last_universe_refresh = getattr(self, "_last_universe_refresh_at", None)
-        next_universe_refresh = getattr(self, "_next_universe_refresh_at", None)
-        # The universe-refresh thread resizes these dicts without a lock and
-        # health() runs off that thread: iterate one-call C copies, not the
-        # live dicts, so a concurrent insert/pop cannot raise mid-iteration.
-        retry_at = dict(getattr(self, "_universe_retry_at", {}))
-        retry_attempt = dict(getattr(self, "_universe_retry_attempt", {}))
         return RuntimeHealth(
             state=state,
             healthy=healthy,
@@ -931,19 +740,6 @@ class EngineRuntime:
                 for strategy, _symbols, maximum_allocation in getattr(self, "_strategy_specs", ())
             ),
             last_reconciliation_at=(last_reconciliation.isoformat() if last_reconciliation is not None else None),
-            universe_refresh={
-                "last_refresh_at": (last_universe_refresh.isoformat() if last_universe_refresh is not None else None),
-                "status": dict(getattr(self, "_universe_refresh_status", {})),
-                "errors": dict(getattr(self, "_last_universe_refresh_error", {})),
-                "next_refresh_at": (next_universe_refresh.isoformat() if next_universe_refresh is not None else None),
-                "retry_at": {
-                    market.value: (
-                        datetime.now(UTC) + timedelta(seconds=max(0.0, deadline - time.monotonic()))
-                    ).isoformat()
-                    for market, deadline in retry_at.items()
-                },
-                "retry_attempt": {market.value: attempt for market, attempt in retry_attempt.items()},
-            },
             entry_risk_latch={
                 market.value: reason for market, reason in getattr(self, "_entry_risk_latch", {}).items()
             },
@@ -995,7 +791,6 @@ class EngineRuntime:
         from parayabuck.monitoring.intent_watchdog import (
             IntentWatchdogSettings,
             LatestDecision,
-            evaluate_crypto,
             evaluate_equity,
         )
 
@@ -1014,8 +809,6 @@ class EngineRuntime:
         settings = IntentWatchdogSettings(
             equity_decision_grace=timedelta(minutes=config.equity_decision_grace_minutes),
             equity_fill_grace=timedelta(minutes=config.equity_fill_grace_minutes),
-            crypto_decision_grace=timedelta(minutes=config.crypto_decision_grace_minutes),
-            crypto_fill_grace=timedelta(minutes=config.crypto_fill_grace_minutes),
             minimum_held_fraction=config.minimum_held_fraction,
         )
         account, _, _ = self._account_snapshot_cache_state()
@@ -1025,27 +818,15 @@ class EngineRuntime:
                 portfolio_runtime.account_id, portfolio_runtime.market
             )
             latest = LatestDecision(raw[0], raw[1]) if raw is not None else None
-            if portfolio_runtime.market == Market.EQUITY:
-                alarms.extend(
-                    evaluate_equity(
-                        now,
-                        latest,
-                        account,
-                        running_since=getattr(self, "_intent_watchdog_running_since", None),
-                        settings=settings,
-                    )
+            alarms.extend(
+                evaluate_equity(
+                    now,
+                    latest,
+                    account,
+                    running_since=getattr(self, "_intent_watchdog_running_since", None),
+                    settings=settings,
                 )
-            else:
-                alarms.extend(
-                    evaluate_crypto(
-                        now,
-                        latest,
-                        account,
-                        policy=portfolio_runtime.policy,
-                        timeframe=portfolio_runtime.strategy.timeframe,
-                        settings=settings,
-                    )
-                )
+            )
         codes = sorted({alarm.code for alarm in alarms})
         for alarm in alarms:
             if alarm.code not in previous_codes:
@@ -1184,7 +965,7 @@ class EngineRuntime:
             raise
         with self._state_lock:
             self._pin_managed_symbols()
-        self._warn_disabled_market_inventory()
+        self._warn_foreign_crypto_inventory()
         refreshed_specs = []
         for strategy, _symbols, maximum_allocation in self._strategy_specs:
             refreshed_specs.append(
@@ -1198,17 +979,13 @@ class EngineRuntime:
         configured_live_cap = self.app_config.live.hard_dollar_cap if not self.paper else 0.0
         portfolio_limits = portfolio_risk_limits_from_config(self.app_config.risk)
         portfolio_runtimes: list[PortfolioRuntime] = []
+        universe_version = equity_universe_digest(self.app_config.universe.equity)
         for strategy, symbols, maximum_allocation in self._strategy_specs:
             product_universe = self._product_universes_by_market.get(strategy.market)
             if product_universe is None:
                 raise RuntimeError(f"Missing product universe composition for {strategy.market.value}")
             product_universe = product_universe.with_observation_symbols(symbols)
             self._product_universes_by_market[strategy.market] = product_universe
-            universe_version = (
-                equity_universe_digest(self.app_config.universe.equity)
-                if strategy.market == Market.EQUITY
-                else crypto_scanner_config_digest(self.app_config.universe.crypto)
-            )
             portfolio_runtimes.append(
                 PortfolioRuntime(
                     strategy,
@@ -1254,10 +1031,8 @@ class EngineRuntime:
         self._last_account_at = datetime.now(UTC)
         self._state = "warming_up"
         stocks = sorted(self._symbols_by_market[Market.EQUITY])
-        crypto = sorted(self._symbols_by_market[Market.CRYPTO])
         self.stream.subscribe(
             stocks,
-            crypto,
             self._on_minute_bar,
             updated_handler=self._on_updated_minute_bar,
         )
@@ -1273,15 +1048,6 @@ class EngineRuntime:
                 daemon=True,
             ),
         ]
-        crypto_universe = self.app_config.universe.crypto
-        if crypto_universe.enabled and crypto_universe.dynamic_selection_enabled:
-            self._threads.append(
-                threading.Thread(
-                    target=self._universe_refresh_loop,
-                    name="pb-universe-refresh",
-                    daemon=True,
-                )
-            )
         if stocks:
             self._threads.append(
                 threading.Thread(
@@ -1296,15 +1062,6 @@ class EngineRuntime:
             # verification against half-seeded runtimes could pre-seed a
             # short provider tail that monotonic seed() would then never
             # backfill with the full warmup history.
-        if crypto:
-            self._threads.append(
-                threading.Thread(
-                    target=self._run_stream_worker,
-                    args=("pb-crypto", self.stream.run_crypto),
-                    name="pb-crypto",
-                    daemon=True,
-                )
-            )
         with self._state_lock:
             for thread in self._threads:
                 now = datetime.now(UTC)
@@ -1347,9 +1104,8 @@ class EngineRuntime:
                     f"Startup account fetch deferred after transient network failure: {exc}"
                 ) from exc
             raise
-        # Restart recovery shares the one fresh account snapshot with every
-        # market. The helper orders crypto first so its capped sleeve reserves
-        # slots before equity, independent of runtime construction order.
+        # Restart recovery resumes pending rebalances against the one fresh
+        # account snapshot.
         self._resume_startup_rebalances(account=account)
         # Seeded warmup history exists and the account snapshot is fresh: a
         # mid-period start must not leave a fresh account in cash until the
@@ -1425,425 +1181,6 @@ class EngineRuntime:
             ",".join(sorted(self.aggregators)),
         )
 
-    def _universe_refresh_loop(self) -> None:
-        worker = self._workers["pb-universe-refresh"]
-        worker.alive = True
-        # A fresh loop run starts with no pending retries: a bounded retry
-        # scheduled by a previous run must not fire immediately on restart.
-        self._universe_retry_at = {}
-        self._universe_retry_attempt = {}
-        interval = self.app_config.runtime.scanner_refresh_hours * 3600
-        next_interval = time.monotonic() + interval
-        self._next_universe_refresh_at = self._next_universe_deadline(next_interval)
-        try:
-            while self._running:
-                worker.last_heartbeat = datetime.now(UTC)
-                now_mono = time.monotonic()
-                interval_due = now_mono >= next_interval
-                retry_due = [market for market, deadline in self._universe_retry_at.items() if now_mono >= deadline]
-                if interval_due or retry_due:
-                    # Only crypto has a dynamic universe; it trades 24/7 on a
-                    # fixed cadence.
-                    markets_to_refresh: set[Market] = set(retry_due)
-                    if interval_due:
-                        markets_to_refresh.add(Market.CRYPTO)
-                    for market in sorted(markets_to_refresh, key=lambda m: m.value):
-                        try:
-                            self._refresh_runtime_universes(market)
-                        except Exception as exc:
-                            worker.last_error = str(exc)
-                            log.exception("Scheduled universe refresh failed: %s", market)
-                            self._mark_universe_refresh_outcome(market, False)
-                            continue
-                        worker.last_event_at = datetime.now(UTC)
-                        worker.last_error = None
-                        status = getattr(self, "_universe_refresh_status", {}).get(market.value)
-                        if status == "success":
-                            self._mark_universe_refresh_outcome(market, True)
-                        elif status in {"refresh_failed", "apply_failed"}:
-                            self._mark_universe_refresh_outcome(market, False)
-                    # Advance the deadlines even when the refresh failed:
-                    # a stuck past deadline would otherwise busy-spin the
-                    # loop and hammer Alpaca during an outage.
-                    if interval_due:
-                        next_interval = now_mono + interval
-                    self._next_universe_refresh_at = self._next_universe_deadline(next_interval)
-                remaining = next_interval - now_mono
-                # Wake for a pending per-market retry before the next slot.
-                for retry_at in self._universe_retry_at.values():
-                    remaining = min(remaining, retry_at - now_mono)
-                self._stop_event.wait(min(5.0, max(0.0, remaining)))
-        finally:
-            worker.alive = False
-
-    def _mark_universe_refresh_outcome(self, market: Market, ok: bool) -> None:
-        """Track per-market retry state for the scheduled refresh loop.
-
-        A failed refresh schedules a bounded backoff retry (first ~5 min,
-        then ~15, ~30, capped at ~60 min per consecutive failure) instead of
-        waiting for the next full schedule slot; a success clears the market's
-        retry state so a later failure restarts from the first rung.
-        """
-        if ok:
-            self._universe_retry_at.pop(market, None)
-            self._universe_retry_attempt.pop(market, None)
-            try:
-                if _observe is not None:
-                    _observe.on_universe_refresh_complete(
-                        market=market.value, session_id=getattr(self, "_runtime_session_id", None)
-                    )
-            except Exception:
-                log.warning("Scanner refresh observation failed for %s", market.value, exc_info=True)
-            # "Recovered" is a TRANSITION event: a refresh succeeding after a
-            # prior failure. A healthy first success must not count as a
-            # recovery (that would inflate scanner-recovery metrics).
-            failed = getattr(self, "_scanner_failed", {})
-            if failed.pop(market, False):
-                runtime_metrics_store.record_event("scanner_recovered")
-                alerts.emit(
-                    "scanner_recovered",
-                    message=f"Scanner refresh recovered for {market.value}",
-                    market=market.value,
-                )
-            return
-        attempt = self._universe_retry_attempt.get(market, 0)
-        getattr(self, "_scanner_failed", {})[market] = True
-        runtime_metrics_store.record_event("scanner_refresh_failure")
-        alerts.emit(
-            "scanner_refresh_failure",
-            message=f"Scanner refresh failed for {market.value}",
-            market=market.value,
-            attempt=attempt + 1,
-            error=getattr(self, "_last_universe_refresh_error", {}).get(market.value),
-        )
-        delay = _UNIVERSE_RETRY_BACKOFF_SECONDS[min(attempt, len(_UNIVERSE_RETRY_BACKOFF_SECONDS) - 1)]
-        self._universe_retry_at[market] = time.monotonic() + delay
-        self._universe_retry_attempt[market] = attempt + 1
-
-    def _next_universe_deadline(self, next_interval: float) -> datetime:
-        now_mono = time.monotonic()
-        interval_remaining = max(0.0, next_interval - now_mono)
-        deadline = datetime.now(UTC) + timedelta(seconds=interval_remaining)
-        for retry_at in getattr(self, "_universe_retry_at", {}).values():
-            retry_remaining = max(0.0, retry_at - now_mono)
-            deadline = min(deadline, datetime.now(UTC) + timedelta(seconds=retry_remaining))
-        return deadline
-
-    def _resync_stream_if_needed(self) -> None:
-        """Re-converge the live stream from the authoritative membership.
-
-        Called after a hot-swap rollback failure (socket state unknown) so the
-        stream is forced back to the desired observation membership. Clears
-        the subscription-state-unknown entry halt on success; keeps it on
-        failure so entries stay blocked.
-        """
-        if not getattr(self, "_resync_pending", False):
-            return
-        clear = getattr(self.stream, "clear_rollback_failure", None)
-        if clear is not None:
-            clear()
-        self.stream.update_subscriptions(
-            sorted(self._symbols_by_market[Market.EQUITY]),
-            sorted(self._symbols_by_market[Market.CRYPTO]),
-        )
-        self._resync_pending = False
-        with getattr(self, "_state_lock", threading.RLock()):
-            for market in list(self._market_entry_halts):
-                if self._market_entry_halts.get(market) == "subscription_state_unknown":
-                    self._market_entry_halts[market] = None
-        log.warning("Stream membership reconnected from the authoritative desired set")
-
-    def _refresh_runtime_universes(self, target: Market | None = None) -> None:
-        """Refresh the dynamic (crypto) scanner universe.
-
-        ``target=None`` refreshes every enabled dynamic universe (startup and
-        backfill paths); the scheduled loop passes a single market. The equity
-        universe is static and never refreshed.
-        """
-        if getattr(self, "_resync_pending", False):
-            try:
-                self._resync_stream_if_needed()
-            except Exception as exc:
-                log.error(
-                    "Stream resync failed; subscription state stays unknown and entries stay halted: %s",
-                    exc,
-                )
-        desired: dict[Market, tuple[str, ...]] = {}
-        product_universes: dict[Market, ActiveProductUniverse] = {}
-
-        def refresh_one(
-            market: Market,
-            operation: Callable[[], tuple[tuple[str, ...], ActiveProductUniverse]],
-        ) -> None:
-            try:
-                selected, product_universe = operation()
-                if not selected:
-                    raise RuntimeError(f"Scanner produced no valid {market.value} universe")
-                desired[market] = tuple(selected)
-                product_universes[market] = product_universe
-                self._universe_refresh_status[market.value] = "success"
-                self._last_universe_refresh_error[market.value] = None
-            except Exception as exc:
-                self._universe_refresh_status[market.value] = "refresh_failed"
-                self._last_universe_refresh_error[market.value] = str(exc)
-                log.error("%s universe refresh failed; active membership unchanged: %s", market, exc)
-                _symbols, snapshot_status = validate_active_crypto_universe(self.app_config.universe.crypto)
-                fallback_allowed = self.app_config.universe.crypto.allow_static_fallback_trading
-                if snapshot_status != "success" and not fallback_allowed:
-                    with getattr(self, "_state_lock", threading.RLock()):
-                        self._market_entry_halts[market] = "invalid_dynamic_universe"
-
-        crypto_config = self.app_config.universe.crypto
-        if target in {None, Market.CRYPTO} and crypto_config.enabled and crypto_config.dynamic_selection_enabled:
-
-            def refresh_crypto() -> tuple[tuple[str, ...], ActiveProductUniverse]:
-                refresh_crypto_universe(self.app_config, self.api_key, self.secret_key)
-                selected = load_active_crypto_symbols(crypto_config, log_rejection=False)
-                return selected, load_active_product_universe(
-                    crypto_config.active_universe_path,
-                    market=Market.CRYPTO,
-                    expected_observation_symbols=selected,
-                    expected_config_digest=crypto_scanner_config_digest(crypto_config),
-                )
-
-            refresh_one(Market.CRYPTO, refresh_crypto)
-        if desired:
-            try:
-                self._apply_runtime_universes(desired, product_universes=product_universes)
-            except Exception as exc:
-                for market in desired:
-                    self._universe_refresh_status[market.value] = "apply_failed"
-                    self._last_universe_refresh_error[market.value] = str(exc)
-                raise
-            else:
-                with getattr(self, "_state_lock", threading.RLock()):
-                    for market in desired:
-                        if self._market_entry_halts.get(market) == "invalid_dynamic_universe":
-                            self._market_entry_halts[market] = None
-        self._last_universe_refresh_at = datetime.now(UTC)
-
-    def _apply_runtime_universes(
-        self,
-        desired_by_market: dict[Market, tuple[str, ...]],
-        *,
-        product_universes: dict[Market, ActiveProductUniverse] | None = None,
-    ) -> dict[Market, dict[str, tuple[str, ...]]]:
-        """Apply scanner changes while retaining every owned/open-order symbol."""
-        product_universes = product_universes or {}
-        account = self.broker.account()
-        account_id = self.broker.account_id or "unknown"
-        manage_external = bool(getattr(getattr(self, "config", None), "manage_external_positions", False))
-        # Only bot-owned exposure is pinned: ledger lots, portfolio-owned
-        # positions (managed quantity > 0), and open portfolio orders.
-        # Manually opened external positions and manual open orders are not
-        # the runtime's inventory and must not consume stream slots unless
-        # the operator opted in.
-        protected = {
-            canonical_symbol(position.symbol, position.market)
-            for position in account.positions
-            if not position.is_flat and (position.managed_qty > 1e-12 or manage_external)
-        }
-        protected.update(self.broker.portfolio_open_order_symbols())
-        protected.update(item.canonical_symbol for item in self.ledger.managed_entries_for_account(account_id))
-        applied: dict[Market, tuple[str, ...]] = {}
-        changes: dict[Market, dict[str, tuple[str, ...]]] = {}
-        strategy_enabled = getattr(self, "_strategy_enabled", {})
-        for market, requested in desired_by_market.items():
-            current = self._symbols_by_market[market]
-            market_protected = tuple(
-                sorted(symbol for symbol in protected if is_crypto(symbol) == (market == Market.CRYPTO))
-            )
-            if market == Market.EQUITY:
-                equity_config = self.app_config.universe.equity
-                # Universe symbols are strategy inputs; with the strategy
-                # disabled observation keeps only the managed/protection pins.
-                configured_pins = equity_config.symbols if strategy_enabled.get(market, True) else ()
-                maximum_symbols = equity_config.maximum_stream_symbols
-            else:
-                crypto_config = self.app_config.universe.crypto
-                configured_pins = crypto_config.pinned_symbols if strategy_enabled.get(market, True) else ()
-                maximum_symbols = crypto_config.maximum_stream_symbols
-            if not strategy_enabled.get(market, True):
-                requested = ()
-            reserved = tuple(dict.fromkeys((*configured_pins, *market_protected)))
-            if len(reserved) > maximum_symbols:
-                raise RuntimeError(f"Protected {market.value} symbols exceed stream capacity")
-            ordered = tuple(dict.fromkeys((*reserved, *requested)))
-            selected = ordered[:maximum_symbols]
-            # A scanner-requested removal is legal only when the symbol has no
-            # position or open-order lineage. Protected symbols were reserved
-            # above and therefore replace lower-ranked ephemeral members.
-            selected_set = set(selected)
-            added = tuple(sorted(selected_set - current))
-            removed = tuple(sorted(current - selected_set))
-            applied[market] = selected
-            changes[market] = {"added": added, "removed": removed}
-
-        if not any(result["added"] or result["removed"] for result in changes.values()):
-            if product_universes:
-                state_lock = getattr(self, "_state_lock", threading.RLock())
-                portfolio_lock = getattr(self, "_portfolio_lock", threading.RLock())
-                with self._ingestion_lock, state_lock, portfolio_lock:
-                    current_snapshots = dict(getattr(self, "_product_universes_by_market", {}))
-                    for market, snapshot in product_universes.items():
-                        bound = snapshot.with_observation_symbols(applied[market])
-                        current_snapshots[market] = bound
-                        for runtime in self._portfolio_runtimes:
-                            if runtime.market == market:
-                                runtime.universe = bound
-                    self._product_universes_by_market = current_snapshots
-            log.info("Universe hot-swap produced no membership change; subscription kept")
-            return changes
-
-        # Fail-closed transactional transition: warmup the new members before
-        # the stream changes, then converge the stream, then commit runtime
-        # state. Any failure before the commit leaves the previous universe
-        # fully subscribed and stateful.
-        old_symbols = {
-            Market.EQUITY: tuple(sorted(self._symbols_by_market[Market.EQUITY])),
-            Market.CRYPTO: tuple(sorted(self._symbols_by_market[Market.CRYPTO])),
-        }
-        newly_added = sorted(symbol for result in changes.values() for symbol in result["added"])
-        removed_all = {symbol for result in changes.values() for symbol in result["removed"]}
-        state_lock = getattr(self, "_state_lock", threading.RLock())
-        with state_lock:
-            previous_not_ready = set(self._not_ready_symbols)
-            previous_allowed_trade = (
-                set(self.market_state.allowed_trade_symbols)
-                if self.market_state.allowed_trade_symbols is not None
-                else None
-            )
-        with state_lock:
-            self._not_ready_symbols.update(newly_added)
-        staged: dict[tuple[str, str], tuple[list[Bar], list[Bar]]] = {}
-        try:
-            if newly_added and self._historical is not None:
-                staged = self._warmup_symbols(self._historical, newly_added, retry=False, staged_only=True) or {}
-        except Exception:
-            with state_lock:
-                self._not_ready_symbols = previous_not_ready
-            raise
-
-        try:
-            self.stream.update_subscriptions(
-                sorted(applied.get(Market.EQUITY, old_symbols[Market.EQUITY])),
-                sorted(applied.get(Market.CRYPTO, old_symbols[Market.CRYPTO])),
-            )
-        except Exception:
-            # The stream refused the new membership: the runtime state was
-            # never committed, so drop the warming marks again.
-            with state_lock:
-                self._not_ready_symbols = previous_not_ready
-            if getattr(self.stream, "rollback_failed", False):
-                # The rollback itself failed: the socket membership is UNKNOWN.
-                # Never claim the previous subscription survived. Halt entries
-                # for every touched market and force a reconnect from the
-                # authoritative desired membership on the next refresh/reset.
-                log.critical(
-                    "Stream rollback failed after a hot-swap error; socket "
-                    "membership is unknown. Halting entries until the stream "
-                    "reconnects from the authoritative membership."
-                )
-                with state_lock:
-                    for market in applied:
-                        self._market_entry_halts[market] = "subscription_state_unknown"
-                self._resync_pending = True
-            raise
-        portfolio_lock = getattr(self, "_portfolio_lock", threading.RLock())
-        try:
-            with self._ingestion_lock, state_lock, portfolio_lock:
-                previous_by_market = {market: set(self._symbols_by_market[market]) for market in applied}
-                previous_portfolio_symbols = {
-                    runtime.market: getattr(runtime, "symbols", ()) for runtime in self._portfolio_runtimes
-                }
-                previous_portfolio_universes = [
-                    (runtime, getattr(runtime, "universe", None)) for runtime in self._portfolio_runtimes
-                ]
-                previous_product_universes = dict(getattr(self, "_product_universes_by_market", {}))
-                for market, selected in applied.items():
-                    self._symbols_by_market[market] = set(selected)
-                    bound_universe = (
-                        product_universes[market].with_observation_symbols(selected)
-                        if market in product_universes
-                        else None
-                    )
-                    for runtime in self._portfolio_runtimes:
-                        if runtime.market == market:
-                            runtime.update_symbols(selected)
-                            if bound_universe is not None:
-                                runtime.universe = bound_universe
-                    if bound_universe is not None:
-                        self._product_universes_by_market[market] = bound_universe
-                # New members were staged during warmup but could only be
-                # seeded now that the runtimes include them; seeding inside
-                # this transaction keeps the transition atomic.
-                for (symbol, timeframe), (raw_tail, signal_tail) in staged.items():
-                    # RAW bars feed the execution-side market state; the
-                    # strategy's signal history receives its own SPLITS-basis
-                    # series (crypto: the same RAW bars).
-                    self.market_state.seed(raw_tail)
-                    for runtime in self._portfolio_runtimes:
-                        if runtime.strategy.timeframe == timeframe and (
-                            is_crypto(symbol) == (runtime.market == Market.CRYPTO)
-                        ):
-                            runtime.seed(signal_tail)
-                self.symbols = sorted(self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO])
-                self._expected_all_symbols = set(self.symbols)
-                self._not_ready_symbols.difference_update(removed_all)
-                if self.market_state.allowed_trade_symbols is not None:
-                    self.market_state.allowed_trade_symbols = {
-                        *self._symbols_by_market[Market.CRYPTO],
-                        *self._symbols_by_market[Market.EQUITY],
-                    }
-        except Exception:
-            # Commit failed after the stream converged: restore both the
-            # runtime state and the stream to the previous universe so the
-            # runtime never observes a half-applied membership.
-            log.exception("Universe hot-swap commit failed; rolling back")
-            with self._ingestion_lock, state_lock, portfolio_lock:
-                self._symbols_by_market.update(previous_by_market)
-                for market, previous in previous_portfolio_symbols.items():
-                    for runtime in self._portfolio_runtimes:
-                        if runtime.market == market:
-                            try:
-                                runtime.update_symbols(previous)
-                            except Exception:
-                                # A failed restore must not abort the rest of
-                                # the rollback; the symbol set is restored
-                                # below and the stream reverts regardless.
-                                log.exception("Portfolio runtime restore failed for %s", market.value)
-                for runtime, previous_universe in previous_portfolio_universes:
-                    runtime.universe = previous_universe
-                self._product_universes_by_market = previous_product_universes
-                self.symbols = sorted(self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO])
-                self._expected_all_symbols = set(self.symbols)
-                self._not_ready_symbols = previous_not_ready
-                if self.market_state.allowed_trade_symbols is not None:
-                    self.market_state.allowed_trade_symbols = (
-                        previous_allowed_trade
-                        if previous_allowed_trade is not None
-                        else self.market_state.allowed_trade_symbols
-                    )
-            try:
-                self.stream.update_subscriptions(list(old_symbols[Market.EQUITY]), list(old_symbols[Market.CRYPTO]))
-            except Exception:
-                log.exception("Stream rollback after failed hot-swap commit also failed")
-                # The socket membership is now unknown: halt entries for the
-                # touched markets and force a reconnect from the authoritative
-                # desired membership instead of claiming the old state holds.
-                with state_lock:
-                    for market in applied:
-                        self._market_entry_halts[market] = "subscription_state_unknown"
-                self._resync_pending = True
-            raise
-
-        self._refresh_readiness()
-        log.info(
-            "Universe hot-swap applied: %s",
-            {market.value: {key: list(value) for key, value in result.items()} for market, result in changes.items()},
-        )
-        return changes
-
     def _recover_portfolio_fill(
         self,
         client_order_id: str,
@@ -1876,31 +1213,28 @@ class EngineRuntime:
         if not applied:
             raise RuntimeError(f"Recovered broker order has no durable portfolio row: {client_order_id}")
 
-    def _warn_disabled_market_inventory(self) -> None:
-        """Alert when bot-owned inventory sits in a market whose strategy is disabled.
+    def _warn_foreign_crypto_inventory(self) -> None:
+        """Alert when the shared broker account holds crypto at startup.
 
-        Such positions stay pinned and observed (``_pin_managed_symbols``) but
-        no strategy decides for them, so nothing sells them: the operator must
-        liquidate them (or re-enable the strategy). Startup is not blocked.
+        ParayaBuck is equity-only. Crypto positions found by
+        ``_pin_managed_symbols`` (broker account snapshot or managed ledger
+        rows) are never pinned, streamed, protected or traded; the operator
+        must handle them. Startup is not blocked.
         """
-        strategy_enabled = getattr(self, "_strategy_enabled", {})
-        pins = getattr(self, "_managed_pin_symbols", set())
-        for market in (Market.EQUITY, Market.CRYPTO):
-            if strategy_enabled.get(market, True):
-                continue
-            stranded = sorted(symbol for symbol in pins if is_crypto(symbol) == (market == Market.CRYPTO))
-            if not stranded:
-                continue
-            message = (
-                f"{market.value} strategy is disabled but bot-owned {market.value} inventory exists "
-                f"({', '.join(stranded)}); positions are observed but no strategy will exit them — "
-                "liquidate manually or re-enable the strategy"
-            )
-            log.warning(message)
-            alerts.emit("risk_incident", message=message, market=market.value, symbols=stranded)
+        symbols = sorted(getattr(self, "_foreign_crypto_symbols", ()))
+        if not symbols:
+            return
+        message = _FOREIGN_CRYPTO_MESSAGE.format(symbols=", ".join(symbols))
+        log.warning(message)
+        alerts.emit("risk_incident", message=message, market=Market.CRYPTO.value, symbols=symbols)
 
     def _pin_managed_symbols(self) -> None:
-        """Keep managed positions observable even after scanner/config removal."""
+        """Keep managed equity positions observable after config removal.
+
+        Crypto positions or ledger rows in the shared account are classified
+        into ``_foreign_crypto_symbols`` for the startup alert and are never
+        pinned.
+        """
         account_id = self.broker.account_id or "unknown"
         entries = self.ledger.managed_entries_for_account(account_id)
         repository = getattr(self, "_portfolio_repository", None)
@@ -1916,6 +1250,13 @@ class EngineRuntime:
             broker_positions = self.broker.account().positions
         except Exception:
             broker_positions = ()
+        foreign_crypto = {
+            canonical_symbol(position.symbol, Market.CRYPTO)
+            for position in broker_positions
+            if not position.is_flat and (position.market == Market.CRYPTO or is_crypto(position.symbol))
+        }
+        foreign_crypto.update(item.canonical_symbol for item in entries if item.market == Market.CRYPTO)
+        self._foreign_crypto_symbols = tuple(sorted(foreign_crypto))
         portfolio_pins = tuple(
             canonical_symbol(position.symbol, position.market)
             for position in broker_positions
@@ -1929,15 +1270,7 @@ class EngineRuntime:
                 )
             )
         )
-        crypto_pins = tuple(
-            dict.fromkeys(
-                (
-                    *(item.canonical_symbol for item in entries if item.market == Market.CRYPTO),
-                    *(symbol for symbol in portfolio_pins if is_crypto(symbol)),
-                )
-            )
-        )
-        self._managed_pin_symbols = {*equity_pins, *crypto_pins}
+        self._managed_pin_symbols = set(equity_pins)
         strategy_enabled = getattr(self, "_strategy_enabled", {})
         if equity_pins:
             maximum = self.app_config.universe.equity.maximum_stream_symbols
@@ -1948,42 +1281,14 @@ class EngineRuntime:
             if len({*references, *equity_pins}) > maximum:
                 raise RuntimeError("Managed equity pins and references exceed the configured IEX stream limit")
             self._symbols_by_market[Market.EQUITY] = set(ordered[:maximum])
-        if crypto_pins:
-            log.info(
-                "Managed crypto positions pinned to active universe: %s",
-                ",".join(crypto_pins),
-            )
-        crypto_config = self.app_config.universe.crypto
-        current_crypto = getattr(
-            self,
-            "_active_crypto_symbols",
-            tuple(sorted(self._symbols_by_market[Market.CRYPTO])),
-        )
-        if crypto_config.dynamic_selection_enabled:
-            # Configured crypto pins belong to the crypto strategy; with the
-            # strategy disabled only managed positions are observed.
-            configured_pins = crypto_config.pinned_symbols if strategy_enabled.get(Market.CRYPTO, True) else ()
-            reserved = tuple(dict.fromkeys((*configured_pins, *crypto_pins)))
-            if len(reserved) > crypto_config.maximum_stream_symbols:
-                raise RuntimeError("Configured and managed crypto pins exceed maximum_stream_symbols")
-            active_crypto = tuple(dict.fromkeys((*reserved, *current_crypto)))[: crypto_config.maximum_stream_symbols]
-        else:
-            active_crypto = tuple(dict.fromkeys((*current_crypto, *crypto_pins)))
-        self._active_crypto_symbols = active_crypto
-        self._symbols_by_market[Market.CRYPTO] = set(active_crypto)
-        # A market with pins is observed (and protected) even when its
-        # strategy is disabled; health reporting and worker requirements
-        # follow the actual observation membership.
+        # A market with pins is observed even when its strategy is disabled;
+        # health reporting and worker requirements follow the actual
+        # observation membership.
         self._market_enabled = getattr(self, "_market_enabled", {})
         for candidate_market, symbols in self._symbols_by_market.items():
             if symbols:
                 self._market_enabled[candidate_market] = True
-        if self.market_state.allowed_trade_symbols is not None:
-            self.market_state.allowed_trade_symbols = {
-                symbol for symbol in self.market_state.allowed_trade_symbols if not is_crypto(symbol)
-            }
-            self.market_state.allowed_trade_symbols.update(active_crypto)
-        self.symbols = sorted(self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO])
+        self.symbols = sorted(self._symbols_by_market[Market.EQUITY])
         self._expected_all_symbols = set().union(
             *(
                 symbols
@@ -1992,7 +1297,6 @@ class EngineRuntime:
             )
         )
         self._not_ready_symbols.update(equity_pins)
-        self._not_ready_symbols.update(crypto_pins)
 
     def stop(self) -> bool:
         self._startup_cleanup_attempted = True
@@ -2609,7 +1913,7 @@ class EngineRuntime:
         # re-arms those workers (restart_count starts at 0 again) and a
         # repeat failure re-raises the halt by itself, so restoring the old
         # row would halt a process whose workers are healthy. The market
-        # entry halts of the same name (pb-stocks / pb-crypto) are a
+        # entry halt of the same name (pb-stocks) is a
         # different mechanism with their own verified recovery; see
         # ``reset_safety_lock``.
         persistent_reasons = {
@@ -2709,7 +2013,6 @@ class EngineRuntime:
         market: Market,
         *,
         account: AccountSnapshot | None = None,
-        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     ) -> Any:
         """Advance the persisted two-phase rebalance for one market.
 
@@ -2725,8 +2028,6 @@ class EngineRuntime:
                     advance_kwargs: dict[str, object] = {}
                     if account is not None:
                         advance_kwargs["account"] = account
-                    if reserved_position_keys:
-                        advance_kwargs["reserved_position_keys"] = reserved_position_keys
                     result = portfolio_runtime.advance_rebalance(**advance_kwargs)
             except Exception:
                 # The bar-path twin of this handler (in _process_timestamp)
@@ -2758,9 +2059,8 @@ class EngineRuntime:
         return None
 
     def _resume_startup_rebalances(self, *, account: AccountSnapshot) -> None:
-        """Resume pending rebalances crypto-first against one account snapshot."""
-        reserved_position_keys: set[tuple[Market, str]] = set()
-        for portfolio_runtime in self._crypto_first_portfolio_order(getattr(self, "_portfolio_runtimes", ())):
+        """Resume pending rebalances against one account snapshot."""
+        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             if self._circuit_breaker_reason is not None:
                 # A restored persistent incident keeps every pending rebalance
                 # deferred until the operator verifies recovery.
@@ -2769,18 +2069,7 @@ class EngineRuntime:
                     self._circuit_breaker_reason,
                 )
                 break
-            ordered_reservations = tuple(
-                sorted(
-                    reserved_position_keys,
-                    key=_reservation_sort_key,
-                )
-            )
-            result = self._advance_portfolio_rebalance(
-                portfolio_runtime.market,
-                account=account,
-                reserved_position_keys=ordered_reservations,
-            )
-            reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, result))
+            self._advance_portfolio_rebalance(portfolio_runtime.market, account=account)
 
     async def _handle_trade_update(self, update: TradeUpdate) -> None:
         portfolio_repository = getattr(self, "_portfolio_repository", None)
@@ -2873,9 +2162,10 @@ class EngineRuntime:
             self._persist_risk_state(account)
             # A terminal SELL fill may unlock the dependent BUY phase of a
             # two-phase rebalance: advance it now, event-driven, instead of
-            # waiting for the next bar.
-            market = Market.CRYPTO if is_crypto(update.symbol) else Market.EQUITY
-            await asyncio.to_thread(self._advance_portfolio_rebalance, market)
+            # waiting for the next bar. A legacy crypto order row has no
+            # runtime to advance.
+            if not is_crypto(update.symbol):
+                await asyncio.to_thread(self._advance_portfolio_rebalance, Market.EQUITY)
             return
         # Never adopt orders from the retired signal engine. Broker/local
         # reconciliation reports them as unmanaged drift.
@@ -2990,12 +2280,12 @@ class EngineRuntime:
         )
 
     async def _on_minute_bar(self, bar: Bar) -> None:
-        await self._on_bar(bar, source="one_minute_bar", corrected=False)
+        await self._on_bar(bar, corrected=False)
 
     async def _on_updated_minute_bar(self, bar: Bar) -> None:
-        await self._on_bar(bar, source="updated_minute_bar", corrected=True)
+        await self._on_bar(bar, corrected=True)
 
-    async def _on_bar(self, bar: Bar, *, source: str, corrected: bool) -> None:
+    async def _on_bar(self, bar: Bar, *, corrected: bool) -> None:
         """Ingest a live or corrected bar into the aggregation pipeline."""
         if bar.market.value == "equity" and not is_regular_equity_time(bar.timestamp):
             return
@@ -3007,8 +2297,6 @@ class EngineRuntime:
             # Only a live bar proves the stream recovered; a corrected bar
             # does not clear a market halt on its own.
             self._mark_market_stream_recovered(bar.market)
-        if bar.market == Market.CRYPTO:
-            await self._process_crypto_protection(bar, source=source)
         with self._ingestion_lock:
             finalized = {
                 timeframe: (aggregator.update_correction(bar) if corrected else aggregator.update(bar))
@@ -3031,60 +2319,11 @@ class EngineRuntime:
         if timeframe in self._strategy_timeframes:
             self._put_event("portfolio", bar)
 
-    async def _process_crypto_protection(self, bar: Bar, source: str) -> None:
-        """Feed a crypto price observation to the protective-stop watcher.
-
-        Called for both live bars and corrected/updated bars so a corrected
-        price never leaves the watcher on a stale quote.
-        """
-        try:
-            await asyncio.to_thread(
-                self.broker.process_crypto_price,
-                CryptoPriceObservation(
-                    symbol=bar.symbol,
-                    high=bar.high,
-                    low=bar.low,
-                    source=source,
-                    timestamp=bar.timestamp,
-                ),
-            )
-            # A verified protection pass proves the watcher is healthy
-            # again: clear a TRANSIENT halt so a one-off API blip does
-            # not permanently brick crypto entries. Ambiguity is never
-            # cleared here (reconciliation decides that). The check-then-
-            # clear runs under the state lock because live and corrected
-            # price passes can run concurrently and share this dict with
-            # every other halt writer.
-            with getattr(self, "_state_lock", threading.RLock()):
-                recovered = self._market_entry_halts.get(Market.CRYPTO) == "crypto_protection_failure"
-                if recovered:
-                    self._market_entry_halts[Market.CRYPTO] = None
-            if recovered:
-                log.warning("Crypto protection watcher recovered; crypto entries unhalted")
-        except AmbiguousOrderState as exc:
-            with getattr(self, "_state_lock", threading.RLock()):
-                self._market_entry_halts[Market.CRYPTO] = "ambiguous_crypto_exit"
-            log.critical("Crypto exit state is ambiguous; crypto entries halted: %s", exc)
-            runtime_metrics_store.record_event("ambiguous_order")
-            alerts.emit(
-                "ambiguous_order",
-                message="Crypto exit state ambiguous; crypto entries halted",
-                market="crypto",
-                error=str(exc),
-            )
-        except Exception as exc:
-            with getattr(self, "_state_lock", threading.RLock()):
-                self._market_entry_halts[Market.CRYPTO] = "crypto_protection_failure"
-            log.exception(
-                "Crypto protection watcher failed (entries halted until the next verified price pass): %s",
-                exc,
-            )
-
     def _put_event(self, kind: str, bar: Bar) -> None:
         event = _Event(kind, bar, datetime.now(UTC))
         result = self._events.put_market_event(event)
-        # _put_event runs from several threads (stock stream, crypto stream,
-        # decision loop); the diagnostics counters must not be mutated
+        # _put_event runs from several threads (stock stream, decision loop);
+        # the diagnostics counters must not be mutated
         # unsynchronized.
         overflowed = False
         with getattr(self, "_event_stats_lock", threading.Lock()):
@@ -3141,8 +2380,8 @@ class EngineRuntime:
                         portfolio_first_seen.setdefault(portfolio_key, time.monotonic())
                     elif item.kind == "higher":
                         # Every market_state writer shares _ingestion_lock so
-                        # a concurrent hot-swap commit (which seeds under the
-                        # same lock) can never interleave with a BarStore
+                        # a concurrent warmup seed (which runs under
+                        # the same lock) can never interleave with a BarStore
                         # read-modify-write and lose a bar.
                         with self._ingestion_lock:
                             self.market_state.seed([item.bar])
@@ -3328,20 +2567,9 @@ class EngineRuntime:
     ) -> None:
         bars = list(bars_by_symbol.values())
         # Same shared-writer discipline as the "higher"/"correction" branches
-        # above: the hot-swap commit seeds under _ingestion_lock.
+        # above: warmup seeds under _ingestion_lock.
         with self._ingestion_lock:
-            ingestion = self.market_state.ingest_closed_bars(bars)
-        gap_bars = [
-            bar
-            for bar, mutation in zip(ingestion.bars, ingestion.mutations, strict=True)
-            if mutation.value == "gap_detected"
-        ]
-        if gap_bars:
-            # One data-gap episode per finalized batch with detected gaps
-            # (runtime_metrics() reads this counter).
-            runtime_metrics_store.record_event("data_gap")
-        for bar in gap_bars:
-            self._repair_gap(bar)
+            self.market_state.ingest_closed_bars(bars)
         if self._warming_up:
             return
         self._refresh_readiness()
@@ -3359,9 +2587,7 @@ class EngineRuntime:
                 market_reasons[candidate_market] = gate(candidate_market)
 
         if not any(
-            symbol not in self._not_ready_symbols
-            and not self._engine_has_symbol_gap(symbol, bar.market)
-            and not market_reasons[bar.market]
+            symbol not in self._not_ready_symbols and not market_reasons[bar.market]
             for symbol, bar in bars_by_symbol.items()
         ):
             return
@@ -3373,31 +2599,6 @@ class EngineRuntime:
             )
         # This cadence updates bar and readiness state only. PortfolioRuntime
         # is the sole strategy/risk/order decision path.
-
-    @staticmethod
-    def _crypto_first_portfolio_order(portfolio_runtimes: Sequence[Any]) -> tuple[Any, ...]:
-        """Order simultaneous portfolio decisions by the explicit slot policy."""
-        return tuple(
-            sorted(
-                portfolio_runtimes,
-                key=lambda runtime: 0 if runtime.market == Market.CRYPTO else 1,
-            )
-        )
-
-    @staticmethod
-    def _ordered_buy_position_keys(portfolio_runtime: Any, result: Any) -> tuple[tuple[Market, str], ...]:
-        """Reserve only positive slots represented by an actual planned BUY."""
-        keys: set[tuple[Market, str]] = set()
-        for order in getattr(result, "orders", ()) or ():
-            side = getattr(order, "side", None)
-            side_value = getattr(side, "value", side)
-            if str(side_value).lower() != PortfolioOrderSide.BUY.value:
-                continue
-            order_market = getattr(order, "market", portfolio_runtime.market)
-            if not isinstance(order_market, Market):
-                order_market = Market(str(order_market))
-            keys.add((order_market, canonical_symbol(order.symbol, order_market)))
-        return tuple(sorted(keys, key=lambda key: (key[0].value, key[1])))
 
     def _process_portfolio_timestamp(self, bars: list[Bar], *, health: RuntimeHealth | None = None) -> None:
         if self._warming_up or self._circuit_breaker_reason is not None or getattr(self, "_reconcile_failed", False):
@@ -3413,8 +2614,7 @@ class EngineRuntime:
         # is enforced against maximum_account_age_for_entry_seconds.
         account: AccountSnapshot | None = None
         account_lease: _AccountSnapshotLease | None = None
-        reserved_position_keys: set[tuple[Market, str]] = set()
-        for portfolio_runtime in self._crypto_first_portfolio_order(getattr(self, "_portfolio_runtimes", ())):
+        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             relevant = [
                 bar
                 for bar in bars
@@ -3467,8 +2667,7 @@ class EngineRuntime:
                         "runtime_state:halted": "motor durduruldu",
                     }
                     tr = msg_map.get(first_reason, first_reason)
-                    market_tr = "Kripto" if market_name.lower() == "crypto" else "Hisse"
-                    msg = f"{market_tr} alınmadı: {tr}."
+                    msg = f"Hisse alınmadı: {tr}."
                     day = _dt.now(UTC).date().isoformat()
                     evt = create_event(
                         kind="portfolio_no_trade",
@@ -3537,13 +2736,6 @@ class EngineRuntime:
                         kwargs = {"entry_latch": entry_latch}
                         if account is not None:
                             kwargs["account"] = account
-                        if reserved_position_keys:
-                            kwargs["reserved_position_keys"] = tuple(
-                                sorted(
-                                    reserved_position_keys,
-                                    key=_reservation_sort_key,
-                                )
-                            )
                         portfolio_result = portfolio_runtime.process_closed_bars(relevant, **kwargs)
                     finally:
                         if account_lease is not None:
@@ -3671,7 +2863,6 @@ class EngineRuntime:
             self._record_paper_decision_receipt(portfolio_runtime, portfolio_result, account)
             self._emit_equity_daily_summary(portfolio_runtime, portfolio_result, account)
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
-            reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, portfolio_result))
 
     def _record_paper_decision_receipt(
         self, portfolio_runtime: Any, result: Any, account: AccountSnapshot | None
@@ -3712,11 +2903,7 @@ class EngineRuntime:
                 capacity = self.capacity_health()
             except Exception:
                 capacity = {"unavailable": True, "reason": "capacity_sample_failed"}
-            metadata = target.metadata or {}
-            explanations = metadata.get("explanations", {})
-            explanations = explanations if isinstance(explanations, dict) else {}
             target_symbols = [weight.symbol for weight in target.weights]
-            retained = set(metadata.get("retained", ()))
             receipt = {
                 "schema_version": 2,
                 "receipt_id": result.decision_id,
@@ -3738,11 +2925,6 @@ class EngineRuntime:
                     "data_timestamp": target.data_timestamp.isoformat() if target.data_timestamp else None,
                     "active_universe_version": portfolio_runtime.universe_version,
                     "observation_symbols": sorted(portfolio_runtime.symbols),
-                    "observation_strategy_digest": (
-                        self.app_config.universe.crypto.observation_strategy_parameters_digest
-                        if portfolio_runtime.market == Market.CRYPTO
-                        else ""
-                    ),
                 },
                 "account_before": {
                     "equity": float(account.equity) if account is not None else None,
@@ -3792,27 +2974,6 @@ class EngineRuntime:
                     "state": "QUERY_AUTHORITATIVE_DB_AT_AUDIT_TIME",
                     "confirmed_positions_after": None,
                 },
-                "crypto_provenance": {
-                    "ranks": {
-                        symbol: detail.get("alpha_rank")
-                        for symbol, detail in explanations.items()
-                        if symbol in target_symbols
-                        and isinstance(detail, dict)
-                        and isinstance(detail.get("alpha_rank"), int)
-                    },
-                    "retained": {
-                        symbol: symbol in retained
-                        or bool(
-                            explanations.get(symbol, {}).get("retained", False)
-                            if isinstance(explanations.get(symbol), dict)
-                            else False
-                        )
-                        for symbol in target_symbols
-                    },
-                    "previous_holdings": {key: qty for key, qty in positions.items() if key.startswith("crypto:")},
-                }
-                if portfolio_runtime.market == Market.CRYPTO
-                else None,
                 "database_link": {
                     "decision_table": "portfolio_decisions",
                     "order_table": "portfolio_orders",
@@ -3880,8 +3041,7 @@ class EngineRuntime:
             or getattr(self, "_reconcile_failed", False)
         ):
             return
-        reserved_position_keys: set[tuple[Market, str]] = set()
-        for portfolio_runtime in self._crypto_first_portfolio_order(getattr(self, "_portfolio_runtimes", ())):
+        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             reasons = self._entry_readiness_reasons(portfolio_runtime.market)
             if reasons:
                 portfolio_runtime.startup_catch_up_status = "blocked:" + ",".join(reasons)
@@ -3905,17 +3065,9 @@ class EngineRuntime:
                 catch_up_kwargs = {"entry_latch": entry_latch}
                 if account is not None:
                     catch_up_kwargs["account"] = account
-                if reserved_position_keys:
-                    catch_up_kwargs["reserved_position_keys"] = tuple(
-                        sorted(
-                            reserved_position_keys,
-                            key=_reservation_sort_key,
-                        )
-                    )
                 result = portfolio_runtime.startup_catch_up(**catch_up_kwargs)
             self._record_paper_decision_receipt(portfolio_runtime, result, account)
             self._emit_equity_daily_summary(portfolio_runtime, result, account)
-            reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, result))
             log.info(
                 "Startup catch-up: market=%s status=%s decision_id=%s",
                 portfolio_runtime.market.value,
@@ -3983,66 +3135,6 @@ class EngineRuntime:
         if halt_reason:
             reasons.append(str(halt_reason))
         return tuple(reasons)
-
-    def _engine_has_market_gap(self, market: Market) -> bool:
-        return bool(self.market_state.has_data_gaps_for_market(market))
-
-    def _engine_has_symbol_gap(self, symbol: str, market: Market | None = None) -> bool:
-        try:
-            return bool(self.market_state.has_data_gaps_for_symbol(symbol, market))
-        except TypeError:
-            return bool(self.market_state.has_data_gaps_for_symbol(symbol))
-
-    def _repair_gap(self, bar: Bar) -> None:
-        history = self._historical
-        if history is None:
-            return
-        series = self.market_state.bars.get(bar.symbol, bar.timeframe, bar.market)
-        previous = next(
-            (candidate for candidate in reversed(series[:-1]) if candidate.timestamp < bar.timestamp),
-            None,
-        )
-        if previous is None:
-            return
-        try:
-            # RAW basis: this repairs the EXECUTION-side market state, whose
-            # bars are as-traded stream truth. The strategy's signal history
-            # is a separate splits-basis series bridged by
-            # data/adjustment.py and must never be fed mixed bases here.
-            backfill = history.get_bars(
-                bar.symbol,
-                bar.timeframe,
-                start=previous.timestamp,
-                end=bar.timestamp,
-                adjustment="raw",
-            )
-            # Lock only the mutation: history.get_bars above is a network
-            # fetch and must never hold _ingestion_lock against a hot-swap.
-            repaired = False
-            if backfill:
-                with self._ingestion_lock:
-                    repaired = self.market_state.repair_gap(backfill)
-            if repaired:
-                log.info(
-                    "Historical gap repaired: %s %s %s..%s",
-                    bar.symbol,
-                    bar.timeframe,
-                    previous.timestamp,
-                    bar.timestamp,
-                )
-            else:
-                log.warning(
-                    "Historical gap remains unresolved; symbol stays entry-disabled: %s %s",
-                    bar.symbol,
-                    bar.timeframe,
-                )
-        except Exception as exc:
-            log.warning(
-                "Historical gap repair failed; symbol stays entry-disabled: %s %s: %s",
-                bar.symbol,
-                bar.timeframe,
-                exc,
-            )
 
     # -- equity signal-basis authority (provider splits series) -------------
 
@@ -4396,22 +3488,19 @@ class EngineRuntime:
     def _refresh_readiness(self) -> None:
         runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
         required_symbols = {symbol for runtime in runtimes for symbol in runtime.symbols}
-        # The universe/hot-swap thread mutates the live set from
-        # ``_apply_runtime_universes`` under this same lock, and comparing or
-        # copying it while a swap resizes it raises RuntimeError inside the
-        # decision worker. So every access is serialized here and the local
-        # is an immutable snapshot; state lock only, nothing inside the loop
-        # takes another lock.
+        # Warmup-retry threads and the decision worker both resize the live
+        # not-ready set; comparing or copying it while another thread
+        # resizes it raises RuntimeError. So every access is serialized here
+        # and the local is an immutable snapshot; state lock only, nothing
+        # inside the loop takes another lock.
         state_lock = getattr(self, "_state_lock", threading.RLock())
         with state_lock:
             for symbol in required_symbols:
-                market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
-                relevant = [runtime for runtime in runtimes if runtime.market == market and symbol in runtime.history]
+                relevant = [runtime for runtime in runtimes if symbol in runtime.history]
                 ready = bool(relevant)
                 for runtime in relevant:
                     series = runtime.history[symbol]
-                    benchmark_symbol = "BTC/USD" if market == Market.CRYPTO else "SPY"
-                    benchmark_series = runtime.history.get(benchmark_symbol, ())
+                    benchmark_series = runtime.history.get("SPY", ())
                     expected_latest = (
                         benchmark_series[-1].timestamp
                         if benchmark_series
@@ -4457,8 +3546,8 @@ class EngineRuntime:
                 self._state = "running"
 
     def _schedule_warmup_retry(self) -> None:
-        # Reached from the decision loop, the universe-refresh thread and the
-        # retry thread itself: keep check-spawn-assign atomic so overlapping
+        # Reached from the decision loop, startup and the retry thread
+        # itself: keep check-spawn-assign atomic so overlapping
         # callers cannot start duplicate pb-warmup-retry threads and orphan
         # the overwritten reference (never joined by stop).
         with self._warmup_retry_spawn_lock:
@@ -4467,8 +3556,8 @@ class EngineRuntime:
                 return
             self._last_warmup_retry_at = time.monotonic()
             self._warmup_retry_attempt += 1
-            # Same lock the universe/hot-swap thread takes: a resize racing
-            # this copy would raise out of the spawn lock.
+            # Same lock _refresh_readiness takes: a resize racing this copy
+            # would raise out of the spawn lock.
             with getattr(self, "_state_lock", threading.RLock()):
                 self._warmup_retry_symbols = frozenset(self._not_ready_symbols)
             thread = threading.Thread(
@@ -4764,14 +3853,6 @@ class EngineRuntime:
         halt, but may never simply erase a halt flag. Each halt category has
         its own verified recovery condition:
 
-        * ``subscription_state_unknown`` — only a successful authoritative
-          stream resync clears it (initiated here if needed);
-        * ``invalid_dynamic_universe`` — only a valid scanner refresh (or a
-          valid permitted fallback) clears it (initiated here);
-        * ``crypto_protection_failure`` — only a verified protection pass
-          (the successful broker reconciliation above) clears it;
-        * ``ambiguous_crypto_exit`` — only authoritative broker
-          reconciliation proving terminal exit state clears it;
         * ``{worker}_restart_limit`` — only a verified stream reconnect
           (worker re-armed and delivering fresh events) clears it;
         * ``rebalance_reconciliation_required`` — only reconciled repository
@@ -4812,13 +3893,8 @@ class EngineRuntime:
             )
         if not self._events.empty():
             raise ValueError("Market event queue must drain before resetting the safety lock")
-        if self.market_state.has_data_gaps or self._not_ready_symbols:
+        if self._not_ready_symbols:
             raise ValueError("All symbol data must be ready before resetting the safety lock")
-        if getattr(self, "_resync_pending", False):
-            try:
-                self._resync_stream_if_needed()
-            except Exception as exc:
-                raise ValueError(f"Stream membership cannot be reconnected: {exc}") from exc
         with self._reconcile_lock:
             try:
                 report = ReconciliationReport.from_result(self.broker.reconcile())
@@ -4873,70 +3949,28 @@ class EngineRuntime:
         """Clear each market halt only after its specific verified recovery.
 
         Runs INSIDE the reconcile lock; the successful ``broker.reconcile()``
-        above already verified protection and exit state, so per-halt
+        above already verified protection and order state, so per-halt
         verifications may rely on it. Unverified halts stay active and are
         reported to the operator.
 
         Every dict access takes the state lock, so each individual
         read-modify-write is atomic against a concurrent halt writer (stream
-        worker, universe refresh, crypto protection): none of them can
-        overwrite an update in flight. What is NOT guaranteed is atomicity
-        across a whole verification — reading a halt and re-reading it after
-        the recovery attempt is a pair of locked accesses, so a halt raised
-        or replaced in between is left for the next reset instead of being
-        reported in ``retained`` here. The lock is never held across the
-        verifications themselves, which take the ingestion and portfolio
-        locks and would invert the established lock order.
+        worker, rebalance advance): none of them can overwrite an update in
+        flight. What is NOT guaranteed is atomicity across a whole
+        verification — reading a halt and re-reading it after the recovery
+        attempt is a pair of locked accesses, so a halt raised or replaced in
+        between is left for the next reset instead of being reported in
+        ``retained`` here. The lock is never held across the verifications
+        themselves, which take the ingestion and portfolio locks and would
+        invert the established lock order.
         """
         retained: list[str] = []
-        for market in (Market.EQUITY, Market.CRYPTO):
+        with getattr(self, "_state_lock", threading.RLock()):
+            markets = list(market_halts)
+        for market in markets:
             with getattr(self, "_state_lock", threading.RLock()):
                 halt = market_halts.get(market)
             if halt is None:
-                continue
-            if halt == "subscription_state_unknown":
-                # Only a successful authoritative stream resync clears it.
-                if not getattr(self, "_resync_pending", False):
-                    self._resync_pending = True
-                try:
-                    self._resync_stream_if_needed()
-                except Exception as exc:
-                    retained.append(f"{market.value}:{halt}:{exc}")
-                with getattr(self, "_state_lock", threading.RLock()):
-                    still_halted = market_halts.get(market) == halt
-                if still_halted:
-                    retained.append(f"{market.value}:{halt}:resync_did_not_clear")
-                continue
-            if halt == "invalid_dynamic_universe":
-                # Only a valid scanner refresh (or a valid permitted
-                # fallback) clears it; the refresh itself re-asserts the halt
-                # on failure.
-                try:
-                    self._refresh_runtime_universes(market)
-                except Exception as exc:
-                    retained.append(f"{market.value}:{halt}:{exc}")
-                with getattr(self, "_state_lock", threading.RLock()):
-                    still_halted = market_halts.get(market) == halt
-                if still_halted:
-                    retained.append(f"{market.value}:{halt}:refresh_did_not_clear")
-                continue
-            if halt == "crypto_protection_failure":
-                # The broker reconciliation above is the verified protection
-                # pass: it restores managed crypto stops and raises on
-                # failure, so a completed reconcile proves the pass.
-                with getattr(self, "_state_lock", threading.RLock()):
-                    market_halts[market] = None
-                continue
-            if halt == "ambiguous_crypto_exit":
-                # Only authoritative broker reconciliation proving terminal
-                # exit state clears it; the reconcile above runs
-                # _reconcile_crypto_exit for every in-flight exit and raises
-                # on ambiguity. Verify nothing remains unresolved.
-                if self._crypto_exits_are_terminal():
-                    with getattr(self, "_state_lock", threading.RLock()):
-                        market_halts[market] = None
-                else:
-                    retained.append(f"{market.value}:{halt}:exit_state_not_terminal")
                 continue
             if halt.endswith("_restart_limit"):
                 # Only a verified stream reconnect clears it: re-arm the
@@ -4959,18 +3993,6 @@ class EngineRuntime:
         if retained:
             log.warning("Market halts retained pending verification: %s", "; ".join(retained))
 
-    def _crypto_exits_are_terminal(self) -> bool:
-        """True when no crypto managed exit remains in an ambiguous state."""
-        account_id = self.broker.account_id or "unknown"
-        for entry in self.ledger.managed_entries_for_account(account_id):
-            if entry.market != Market.CRYPTO:
-                continue
-            if getattr(entry, "exit_client_order_id", None):
-                target_state = str(getattr(entry, "target_state", ""))
-                if target_state not in {"target_exit_filled", "emergency_exit_filled"}:
-                    return False
-        return True
-
     def _restart_stream_worker(self, market: Market) -> bool:
         """Re-arm a restart-limited stream worker and verify delivery.
 
@@ -4980,7 +4002,7 @@ class EngineRuntime:
         """
         worker_name = _STREAM_WORKER_BY_MARKET[market]
         worker = self._workers.get(worker_name)
-        target = self.stream.run_stock if market == Market.EQUITY else self.stream.run_crypto
+        target = self.stream.run_stock
         if worker is None or not worker.alive:
             if worker is not None:
                 worker.restart_count = 0
@@ -5016,8 +4038,7 @@ class EngineRuntime:
             return False
         if now is None:
             now = datetime.now(UTC)
-        event_required = market == Market.CRYPTO or is_regular_equity_time(now)
-        if not event_required:
+        if not is_regular_equity_time(now):
             return True
         last_event = worker.last_event_at
         if last_event is None:
@@ -5084,7 +4105,7 @@ class EngineRuntime:
             # The signal-history adjustment basis is part of the cache
             # identity: switching it must fail the scope closed to a full
             # refetch (rows are additionally keyed by adjustment).
-            "signal_adjustment_basis": {"EQUITY": "splits", "CRYPTO": "raw"},
+            "signal_adjustment_basis": {"EQUITY": "splits"},
             "strategies": [
                 {
                     "name": getattr(runtime.strategy, "name", ""),
@@ -5097,119 +4118,94 @@ class EngineRuntime:
         }
         return hashlib.sha256(_json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
-    def _warmup_symbols(
-        self,
-        history: AlpacaHistoricalData,
-        symbols: list[str],
-        *,
-        retry: bool,
-        staged_only: bool = False,
-    ) -> dict[tuple[str, str], tuple[list[Bar], list[Bar]]] | None:
-        """Download warmup history for ``symbols``.
+    def _warmup_symbols(self, history: AlpacaHistoricalData, symbols: list[str], *, retry: bool) -> None:
+        """Download warmup history for ``symbols`` and seed it.
 
-        EQUITY symbols are fetched on TWO explicit bases: RAW seeds the
+        Equity symbols are fetched on TWO explicit bases: RAW seeds the
         execution-side market state (as-traded stream truth), SPLITS seeds
         the portfolio runtimes' strategy signal history (the same basis as
         backtest historical data; bridged across live splits by
-        ``data/adjustment.py``). Crypto has no corporate actions: one RAW
-        fetch feeds both consumers.
-
-        With ``staged_only`` the bars are returned without seeding: the
-        caller (universe hot-swap) commits the membership first and seeds
-        afterwards so the new symbols' strategy history is never silently
-        dropped. Otherwise bars are seeded into the market state and every
-        matching portfolio runtime under the ingestion and portfolio locks.
+        ``data/adjustment.py``). Bars are seeded into the market state and
+        every matching portfolio runtime under the ingestion and portfolio
+        locks.
         """
-        staged: dict[tuple[str, str], tuple[list[Bar], list[Bar]]] = {}
         warmup_digest = self._warmup_config_digest()
-        groups = (
-            (Market.EQUITY, [symbol for symbol in symbols if not is_crypto(symbol)]),
-            (Market.CRYPTO, [symbol for symbol in symbols if is_crypto(symbol)]),
-        )
+        group = list(symbols)
         warmup_timeframes = set(self.aggregators)
         for timeframe in warmup_timeframes:
-            for market, group in groups:
-                strategy_requirements = [
-                    runtime.strategy.minimum_history_bars + 5
-                    for runtime in self._portfolio_runtimes
-                    if runtime.market == market and runtime.strategy.timeframe == timeframe
-                ]
-                operational = timeframe in {
-                    self.app_config.runtime.execution_timeframe,
-                    self.app_config.runtime.market_state_timeframe,
-                }
-                if not strategy_requirements and not operational:
-                    continue
-                # ``max(2, *[])`` would reduce to ``max(2)`` — a single
-                # argument, which Python tries to iterate. Operational
-                # timeframes with no strategy requirement still need a
-                # baseline window.
-                requested_bars = max(2, *strategy_requirements) if strategy_requirements else 2
-                for symbol_batch in _symbol_batches(group):
-                    try:
-                        start = _warmup_start(symbol_batch[0], timeframe, requested_bars)
-                        fetcher = getattr(history, "get_bars_batch_incremental", None)
+            strategy_requirements = [
+                runtime.strategy.minimum_history_bars + 5
+                for runtime in self._portfolio_runtimes
+                if runtime.market == Market.EQUITY and runtime.strategy.timeframe == timeframe
+            ]
+            operational = timeframe in {
+                self.app_config.runtime.execution_timeframe,
+                self.app_config.runtime.market_state_timeframe,
+            }
+            if not strategy_requirements and not operational:
+                continue
+            # ``max(2, *[])`` would reduce to ``max(2)`` — a single
+            # argument, which Python tries to iterate. Operational
+            # timeframes with no strategy requirement still need a
+            # baseline window.
+            requested_bars = max(2, *strategy_requirements) if strategy_requirements else 2
+            for symbol_batch in _symbol_batches(group):
+                try:
+                    start = _warmup_start(symbol_batch[0], timeframe, requested_bars)
+                    fetcher = getattr(history, "get_bars_batch_incremental", None)
 
-                        def _fetch(
-                            adjustment: str,
-                            scope: str,
-                            batch: list[str] = symbol_batch,
-                            window_start: str = start,
-                        ) -> dict[str, list[Bar]]:
-                            if fetcher is None:
-                                # Fakes/tests without the incremental fetcher
-                                # use the plain download contract unchanged.
-                                return history.get_bars_batch(
-                                    batch, timeframe, start=window_start, adjustment=adjustment
-                                )
-                            result: dict[str, list[Bar]] = fetcher(
-                                batch,
-                                timeframe,
-                                start=window_start,
-                                adjustment=adjustment,
-                                scope=scope,
-                                config_digest=warmup_digest,
-                                identity=f"{timeframe}:{requested_bars}",
-                            )
-                            return result
-
-                        execution_bars = _fetch("raw", "runtime_warmup")
-                        signal_bars = (
-                            _fetch("splits", "runtime_warmup_signal") if market == Market.EQUITY else execution_bars
-                        )
-                        for symbol in symbol_batch:
-                            raw_tail = execution_bars.get(symbol, [])[-requested_bars:]
-                            signal_tail = signal_bars.get(symbol, [])[-requested_bars:]
-                            if staged_only:
-                                staged[(symbol, timeframe)] = (raw_tail, signal_tail)
-                            else:
-                                with self._ingestion_lock, self._portfolio_lock:
-                                    self.market_state.seed(raw_tail)
-                                    for runtime in self._portfolio_runtimes:
-                                        # Only the runtime whose strategy reads
-                                        # this cadence: an operational pass
-                                        # (5m execution) would otherwise call
-                                        # seed() with an all-filtered list and
-                                        # still bump previous_timestamp.
-                                        if runtime.strategy.timeframe == timeframe and runtime.market == market:
-                                            runtime.seed(signal_tail)
-                            if len(signal_tail) < requested_bars:
-                                log.warning(
-                                    "Warmup not ready %s %s: %d/%d bars",
-                                    symbol,
-                                    timeframe,
-                                    len(signal_tail),
-                                    requested_bars,
-                                )
-                    except Exception as exc:
-                        log.warning(
-                            "Warmup%s batch skipped %s symbols=%d: %s",
-                            " retry" if retry else "",
+                    def _fetch(
+                        adjustment: str,
+                        scope: str,
+                        batch: list[str] = symbol_batch,
+                        window_start: str = start,
+                    ) -> dict[str, list[Bar]]:
+                        if fetcher is None:
+                            # Fakes/tests without the incremental fetcher
+                            # use the plain download contract unchanged.
+                            return history.get_bars_batch(batch, timeframe, start=window_start, adjustment=adjustment)
+                        result: dict[str, list[Bar]] = fetcher(
+                            batch,
                             timeframe,
-                            len(symbol_batch),
-                            exc,
+                            start=window_start,
+                            adjustment=adjustment,
+                            scope=scope,
+                            config_digest=warmup_digest,
+                            identity=f"{timeframe}:{requested_bars}",
                         )
-        return staged or None
+                        return result
+
+                    execution_bars = _fetch("raw", "runtime_warmup")
+                    signal_bars = _fetch("splits", "runtime_warmup_signal")
+                    for symbol in symbol_batch:
+                        raw_tail = execution_bars.get(symbol, [])[-requested_bars:]
+                        signal_tail = signal_bars.get(symbol, [])[-requested_bars:]
+                        with self._ingestion_lock, self._portfolio_lock:
+                            self.market_state.seed(raw_tail)
+                            for runtime in self._portfolio_runtimes:
+                                # Only the runtime whose strategy reads this
+                                # cadence: an operational pass (5m execution)
+                                # would otherwise call seed() with an
+                                # all-filtered list and still bump
+                                # previous_timestamp.
+                                if runtime.strategy.timeframe == timeframe and runtime.market == Market.EQUITY:
+                                    runtime.seed(signal_tail)
+                        if len(signal_tail) < requested_bars:
+                            log.warning(
+                                "Warmup not ready %s %s: %d/%d bars",
+                                symbol,
+                                timeframe,
+                                len(signal_tail),
+                                requested_bars,
+                            )
+                except Exception as exc:
+                    log.warning(
+                        "Warmup%s batch skipped %s symbols=%d: %s",
+                        " retry" if retry else "",
+                        timeframe,
+                        len(symbol_batch),
+                        exc,
+                    )
 
 
 def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:

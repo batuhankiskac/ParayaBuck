@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Read-only, fail-closed audit of the PAPER observation ledger.
 
-Since 2026-09-29 (paper_config_v2) PAPER is equity-only: the crypto sleeve is
-disabled, so only equity decisions are expected and a crypto decision fails S1.
+ParayaBuck is equity-only: only equity decisions are expected and any other
+market's decision fails S1. Gates S6 (crypto slots) and S11 (crypto universe
+scanner) were retired with crypto support; the remaining gate numbers are kept
+stable so reports stay comparable.
 
 Receipts are decision snapshots. SQLite portfolio tables remain authoritative for
 orders, fills and their final statuses. This program never imports a broker.
@@ -46,7 +48,7 @@ KNOWN = (
         "calculated",
     }
 )
-GATES = tuple(f"S{index}" for index in range(1, 13))
+GATES = tuple(f"S{index}" for index in range(1, 13) if index not in {6, 11})
 
 
 def _readonly(path: Path) -> sqlite3.Connection:
@@ -95,10 +97,8 @@ def audit(
         and settings["live"]["enabled"] is False
         and settings["live"]["hard_dollar_cap"] == 0
         and settings["risk"]["max_positions"] == 8
-        and settings["risk"]["max_crypto_positions"] == 2
         and settings["risk"]["max_gross_exposure_pct"] == 0.98
         and settings["risk"]["cash_buffer_pct"] == 0.02
-        and settings["strategy"]["crypto"]["enabled"] is False
         and all(
             settings["strategy"][market]["name"] == name
             and settings["strategy"][market]["maximum_allocation"] == allocation
@@ -126,7 +126,6 @@ def audit(
     else:
         flag("S2", "no operational journal supplied for warm/eligible decision-gap evidence")
         flag("S8", "no operational journal supplied for reconciliation evidence")
-        flag("S11", "no operational journal supplied for scanner recovery evidence")
 
     if start is not None or end is not None:
         if (start is not None and start.tzinfo is None) or (end is not None and end.tzinfo is None):
@@ -170,7 +169,7 @@ def audit(
 
     if not sessions or not decisions or not receipts:
         flag("S2", "no complete forward observation")
-        flag("S10", "no two-market V2 receipt coverage")
+        flag("S10", "no V2 receipt coverage")
     if any(session["mode"] != "paper" for session in sessions):
         flag("S1", "non-PAPER runtime session observed")
         flag("S12", "non-PAPER runtime session observed")
@@ -240,15 +239,10 @@ def audit(
             flag("S1", f"receipt identity mismatch at {decision_id}")
         capacity = receipt["capacity_snapshot"]
         global_claims = capacity.get("effective_global_slot_claims")
-        crypto_claims = capacity.get("effective_crypto_slot_claims")
         if not isinstance(global_claims, int):
             flag("S5", f"global slot evidence unavailable at {decision_id}")
         elif global_claims > 8 or capacity.get("global_slot_cap") != 8:
             flag("S5", f"global slot breach at {decision_id}: {global_claims}")
-        if not isinstance(crypto_claims, int):
-            flag("S6", f"crypto slot evidence unavailable at {decision_id}")
-        elif crypto_claims > 2 or capacity.get("crypto_slot_cap") != 2:
-            flag("S6", f"crypto slot breach at {decision_id}: {crypto_claims}")
         if receipt["target_state"].get("kind") != "INTENDED_POST_RISK" or any(
             order.get("kind") != "INTENDED" for order in receipt["planned_orders"]
         ):
@@ -340,20 +334,6 @@ def audit(
             for later in journal_events
         ):
             flag("S8", f"unreconciled incident {event['event_id']}")
-        if kind == "scanner_refresh_failure" and not any(
-            later.get("kind") == "scanner_recovered"
-            and later.get("market") == event.get("market")
-            and later.get("occurred_at", "") > event.get("occurred_at", "")
-            for later in journal_events
-        ):
-            flag("S11", f"unrecovered scanner refresh failure {event['event_id']}")
-        if kind == "universe_became_stale" and not any(
-            later.get("kind") in {"universe_recovered", "scanner_refresh_complete"}
-            and later.get("market") == event.get("market")
-            and later.get("occurred_at", "") > event.get("occurred_at", "")
-            for later in journal_events
-        ):
-            flag("S11", f"universe stayed stale after {event['event_id']}")
     counts = Counter((receipt.get("market"), receipt.get("origin")) for receipt in receipts)
     for market in EXPECTED:
         for origin in ("scheduled", "startup_catch_up"):
@@ -364,7 +344,7 @@ def audit(
             for receipt in receipts
             if receipt.get("market") == market and receipt.get("origin") == "scheduled"
         )
-        maximum_gap_days = 8 if market == "equity" else 5
+        maximum_gap_days = 8
         for before, after in zip(scheduled, scheduled[1:]):
             if (after - before).total_seconds() > maximum_gap_days * 86400:
                 flag("S2", f"unexplained {market} scheduled decision gap: {before} to {after}")
@@ -381,12 +361,6 @@ def audit(
                 flag("S2", f"operational decision lacks persisted row: {decision_id}")
         else:
             flag("S2", "no decision-summary journal evidence")
-        for market in EXPECTED:
-            if not any(
-                event.get("kind") == "scanner_refresh_complete" and event.get("market") == market
-                for event in journal_events
-            ):
-                flag("S11", f"no {market} successful scanner refresh evidence")
     return {
         "status": "PASS" if all(not issue for issue in issues.values()) else "FAIL",
         "gates": {gate: {"status": "PASS" if not issue else "FAIL", "issues": issue} for gate, issue in issues.items()},
@@ -416,27 +390,6 @@ def audit(
             ),
             "ambiguous_submissions": sum(event.get("kind") == "ambiguous_order" for event in journal_events),
             "drift_incidents": sum(event.get("kind") == "broker_local_drift" for event in journal_events),
-            "scanner_refresh_failures": {
-                market: sum(
-                    event.get("kind") == "scanner_refresh_failure" and event.get("market") == market
-                    for event in journal_events
-                )
-                for market in EXPECTED
-            },
-            "scanner_recoveries": {
-                market: sum(
-                    event.get("kind") in {"scanner_recovered", "universe_recovered"} and event.get("market") == market
-                    for event in journal_events
-                )
-                for market in EXPECTED
-            },
-            "scanner_refresh_completions": {
-                market: sum(
-                    event.get("kind") == "scanner_refresh_complete" and event.get("market") == market
-                    for event in journal_events
-                )
-                for market in EXPECTED
-            },
             "no_order_decisions": sum(
                 not any(order["decision_id"] == decision["decision_id"] for order in orders) for decision in decisions
             ),

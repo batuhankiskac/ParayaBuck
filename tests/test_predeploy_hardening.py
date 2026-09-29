@@ -8,7 +8,7 @@ import yaml
 from pydantic import ValidationError
 
 from parayabuck.backup import BackupVerificationError, backup_database, verify_backup
-from parayabuck.config import LiveConfig, RuntimeConfig
+from parayabuck.config import LiveConfig
 from parayabuck.execution.alpaca import AlpacaBroker, RiskStatePersistenceError
 from parayabuck.execution.risk_peak import RiskPeakService
 from parayabuck.monitoring import alerts
@@ -146,7 +146,6 @@ def test_peak_sidecar_deletion_restores_persisted(tmp_path):
         trading_blocked = False
         trade_suspended_by_user = False
         id = "acct-test"
-        crypto_status = "ACTIVE"
         non_marginable_buying_power = None
 
     class FakeClientInit:
@@ -183,7 +182,6 @@ def test_peak_sidecar_deletion_restores_persisted(tmp_path):
         trading_blocked = False
         trade_suspended_by_user = False
         id = "acct-test"
-        crypto_status = "ACTIVE"
         non_marginable_buying_power = None
 
     class FakeClient:
@@ -237,7 +235,6 @@ def test_peak_max_when_both_exist(tmp_path):
         trading_blocked = False
         trade_suspended_by_user = False
         id = "acct-test"
-        crypto_status = "ACTIVE"
         non_marginable_buying_power = None
 
     class FakeClientA:
@@ -291,7 +288,6 @@ def test_peak_epoch_reset_not_undone_by_old_history(tmp_path):
         trading_blocked = False
         trade_suspended_by_user = False
         id = "acct-test"
-        crypto_status = "ACTIVE"
         non_marginable_buying_power = None
 
     class FakeClient100:
@@ -343,7 +339,6 @@ def test_peak_epoch_reset_not_undone_by_old_history(tmp_path):
         trading_blocked = False
         trade_suspended_by_user = False
         id = "acct-test"
-        crypto_status = "ACTIVE"
         non_marginable_buying_power = None
 
     class FakeClient94:
@@ -377,7 +372,6 @@ def test_peak_preserved_when_equity_below(tmp_path, monkeypatch):
         trading_blocked = False
         trade_suspended_by_user = False
         id = "test"
-        crypto_status = "ACTIVE"
         non_marginable_buying_power = None
 
     class FakeClient:
@@ -536,13 +530,6 @@ def test_live_hard_dollar_cap_finite():
         LiveConfig(enabled=False, hard_dollar_cap=float("inf"))
 
 
-def test_runtime_scanner_refresh_finite():
-    with pytest.raises(ValueError):
-        RuntimeConfig(scanner_refresh_hours=float("nan"))
-    with pytest.raises(ValueError):
-        RuntimeConfig(scanner_refresh_hours=float("inf"))
-
-
 # --- Settings API extra forbid and patch semantics ---
 
 
@@ -574,7 +561,7 @@ def test_settings_patch_preserves_omitted(tmp_path, monkeypatch):
         result = asyncio.run(get_settings())
         assert result["daily_loss_limit_pct"] == 20.0
         assert result["max_drawdown_pct"] == 75.0
-        assert result["crypto_trading_enabled"] is False  # paper_config_v2: crypto disabled
+        assert "crypto_trading_enabled" not in result
         assert "config_digest" in result
         # PATCH with only log_level should preserve risk
         payload = SettingsPayload(log_level="DEBUG")
@@ -741,7 +728,6 @@ def _make_fake_account(account_id: str, equity: float):
     fa.trading_blocked = False
     fa.trade_suspended_by_user = False
     fa.id = account_id
-    fa.crypto_status = "ACTIVE"
     fa.non_marginable_buying_power = None
     return fa
 

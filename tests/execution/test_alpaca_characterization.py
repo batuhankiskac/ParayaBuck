@@ -1,6 +1,6 @@
 """Characterization tests for AlpacaBroker safety contract — BEFORE refactor.
 
-Pins account, ownership, peak, order, reconciliation, protection, crypto semantics.
+Pins account, ownership, peak, order, reconciliation and protection semantics.
 These must continue to pass after Mission 7 extraction without changing behavior.
 """
 
@@ -16,7 +16,6 @@ from parayabuck.core.models import Market
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
     AmbiguousOrderState,
-    CryptoPriceObservation,
     OwnershipDriftError,
     RiskStatePersistenceError,
 )
@@ -47,17 +46,9 @@ def _broker_with_fake(tmp_path: Path, fake: FakeTradingClient, *, with_ledger: b
     broker.portfolio_open_orders = lambda: []
     broker.portfolio_fill_recovered = None
     broker.portfolio_flat_reconciled = None
-    broker.crypto_stop_limit_offset_bps = 25.0
-    broker.crypto_emergency_exit_bps = 75.0
-    broker.crypto_stop_cancel_timeout_seconds = 1.0
-    broker.crypto_stop_cancel_poll_interval_seconds = 0.05
     broker._account_id = ""
     broker._snapshot_cache = None
     broker._snapshot_cached_at = None
-    broker._symbol_exit_locks = {}
-    import threading
-
-    broker._symbol_exit_locks_guard = threading.Lock()
     # Patch session timeout no-op for fake
     return broker
 
@@ -425,41 +416,39 @@ def test_protection_underprotected_triggers(tmp_path: Path) -> None:
         assert isinstance(result, dict)
 
 
-# --- Crypto ---
+# --- Foreign crypto holdings (equity-only runtime) ---
 
 
-def test_crypto_emergency_exit(tmp_path: Path) -> None:
+def test_reconcile_never_protects_a_foreign_crypto_position(tmp_path: Path) -> None:
     fake = FakeTradingClient()
     fake.set_position("BTC/USD", qty=1.0, market="crypto")
+    broker = _broker_with_fake(tmp_path, fake, with_ledger=False)
+    broker.manage_external_positions = True
+    broker.reconcile()
+    assert fake.submitted_stops == 0
+    assert fake.submitted_market_orders == 0
+
+
+def test_submit_portfolio_order_refuses_non_equity(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide
+
+    fake = FakeTradingClient()
     broker = _broker_with_fake(tmp_path, fake)
-    # Setup ledger with crypto position
-    if broker.ledger is not None:
-        broker.ledger.managed_for_account = lambda acct: {
-            "BTC/USD": SimpleNamespace(
-                canonical_symbol="BTC/USD",
-                symbol="BTC/USD",
-                quantity=1.0,
-                market=Market.CRYPTO,
-                current_stop=49000,
-                original_stop=49000,
-                original_target=55000,
-                status="open",
-                protective_stop_client_order_id="parayabuck-stop-BTC",
-                protective_stop_broker_order_id="stop-123",
-                stop_state="open",
-                target_state="watching",
-                entry_client_order_id="parayabuck-entry-BTC",
-            )
-        }  # type: ignore[assignment]
-        broker._account_id = "fake-acct-1234"
-        obs = CryptoPriceObservation(
-            symbol="BTC/USD",
-            high=51000,
-            low=48000,
-            source="test",
-            timestamp=__import__("datetime").datetime.now(__import__("datetime").UTC),
-        )
-        # Low is below emergency (49000 * 0.9925 ~ 48632), 48000 is below, should trigger failover
-        result = broker.process_crypto_price(obs)
-        # Should be target, stop, or stop_failover or None; we just ensure no duplicate exit
-        assert result in (None, "target", "stop", "stop_failover", "intrabar_stop")
+    order = PortfolioOrderRequest(
+        client_order_id="parayabuck-x-BTC/USD-buy",
+        decision_id="x",
+        symbol="BTC/USD",
+        market=Market.CRYPTO,
+        side=PortfolioOrderSide.BUY,
+        quantity=1.0,
+        reference_price=50_000.0,
+        decision_timestamp=datetime(2026, 1, 1, tzinfo=UTC),
+        strategy_name="s",
+        strategy_version="1",
+        risk_reducing=False,
+    )
+    with pytest.raises(ValueError, match="equity-only"):
+        broker.submit_portfolio_order(order)
+    assert fake.submitted_market_orders == 0

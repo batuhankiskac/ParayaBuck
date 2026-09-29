@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
-from decimal import Decimal
-
-CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
+# Bounded wait for the broker to confirm a protective-order cancellation
+# before a replacement is submitted.
+STOP_CANCEL_TIMEOUT_SECONDS = 5.0
+STOP_CANCEL_POLL_INTERVAL_SECONDS = 0.25
 
 
 class RiskStatePersistenceError(RuntimeError):
@@ -33,28 +32,11 @@ class OwnershipDriftError(ProtectionReconciliationError):
     the bot safely, so entries halt until an operator reconciles manually."""
 
 
-@dataclass(frozen=True)
-class CryptoPriceObservation:
-    symbol: str
-    high: float
-    low: float
-    source: str
-    timestamp: datetime
-
-
-@dataclass(frozen=True)
-class QuantityResolution:
-    verified: bool
-    available_qty: float
-    source: str
-
-
 __all__ = [
-    "CRYPTO_TAKER_FEE_RESERVE",
+    "STOP_CANCEL_POLL_INTERVAL_SECONDS",
+    "STOP_CANCEL_TIMEOUT_SECONDS",
     "AmbiguousOrderState",
-    "CryptoPriceObservation",
     "OwnershipDriftError",
     "ProtectionReconciliationError",
-    "QuantityResolution",
     "RiskStatePersistenceError",
 ]

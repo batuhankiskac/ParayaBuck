@@ -236,6 +236,10 @@ def _load_orders(connection: sqlite3.Connection, *, as_of: datetime | None = Non
             continue
         if timestamp is None or quantity is None or quantity <= 0:
             continue
+        if market != Market.EQUITY:
+            # Historical crypto rows still parse but are outside the
+            # equity-only execution model.
+            continue
         origin = str(row[10]) if row[10] is not None else _metadata_value(row[9], "decision_origin", "scheduled")
         role = str(row[11]) if row[11] is not None else _metadata_value(row[9], "execution_role", "immediate")
         if as_of is not None and timestamp > as_of:
@@ -369,9 +373,8 @@ def _actual_from_legacy_fills(connection: sqlite3.Connection, client_order_id: s
     return {
         "quantity": quantity,
         "vwap": notional / quantity if quantity > 0 else None,
-        # Legacy fills lack fee-observation completeness and crypto quantities
-        # can be net ownership. Never turn a NULL/zero-looking legacy fee into
-        # a total-cost claim.
+        # Legacy fills lack fee-observation completeness. Never turn a
+        # NULL/zero-looking legacy fee into a total-cost claim.
         "fee_known": False,
         "fee": None,
         "quality": "legacy_fills_fee_unknown",
@@ -389,8 +392,6 @@ def _modeled_fee(order: ShadowOrder, slice_: ScheduledSlice, config: Any) -> flo
     direction = 1.0 if order.side == OrderSide.BUY else -1.0
     price = slice_.open_price * (1.0 + direction * adverse / _BPS)
     fee = float(backtest.commission)
-    if order.market == Market.CRYPTO:
-        return fee + slice_.quantity * price * float(backtest.crypto_taker_fee_bps) / _BPS
     if bool(backtest.equity_use_effective_dated_fees):
         from parayabuck.backtest.regulatory_fees import rates_for_trade_date
 
@@ -598,7 +599,7 @@ def run_shadow_comparator(
     for record in records:
         decisions.setdefault(str(record["decision_id"]), []).append(record)
     aggregates: dict[str, dict[str, object]] = {}
-    for market in (Market.EQUITY.value, Market.CRYPTO.value):
+    for market in (Market.EQUITY.value,):
         rows = [item for item in records if item["market"] == market]
         price_values = [
             value for item in rows if (value := _float(item.get("paper_vs_zero_cost_open_bps"))) is not None

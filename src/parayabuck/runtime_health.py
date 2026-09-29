@@ -33,7 +33,6 @@ class RuntimeHealth:
     strategy_status: str = "configured"
     strategies: tuple[dict[str, object], ...] = ()
     last_reconciliation_at: str | None = None
-    universe_refresh: dict[str, object] = field(default_factory=dict)
     entry_risk_latch: dict[str, str | None] = field(default_factory=dict)
     signal_adjustment: dict[str, object] = field(default_factory=dict)
     # Intent-vs-reality watchdog: {"enabled", "evaluated_at", "alarms",

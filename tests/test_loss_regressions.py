@@ -124,7 +124,7 @@ def test_account_poll_does_not_restore_stale_consecutive_loss_count(tmp_path: Pa
     runtime.ledger = ledger
     runtime.broker = SimpleNamespace(account_id="acct")
     runtime.app_config = Config()
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._consecutive_losses = 2
     runtime._circuit_breaker_reason = None
     account = AccountSnapshot(
@@ -235,30 +235,30 @@ def test_fill_activity_recovers_entry_fill_idempotently(tmp_path: Path) -> None:
     created = datetime.now(UTC) - timedelta(minutes=5)
     order = OrderIntent(
         "signal",
-        "BTC/USD",
-        Market.CRYPTO,
+        "XLE",
+        Market.EQUITY,
         Direction.LONG,
-        0.1,
-        100_000,
-        95_000,
-        110_000,
+        10,
+        100,
+        95,
+        110,
         "test",
         created_at=created,
-        client_order_id="parayabuck-offline-crypto-entry",
+        client_order_id="parayabuck-offline-equity-entry",
     )
     ledger.register_entry_order("acct", order, "broker-entry")
     activities = [
         {
             "id": f"buy-activity-{index}",
             "order_id": "broker-entry",
-            "symbol": "BTCUSD",
+            "symbol": "XLE",
             "side": "buy",
-            "qty": "0.05",
+            "qty": "5",
             "price": str(price),
             "commission": "0",
             "transaction_time": (created + timedelta(seconds=index)).isoformat(),
         }
-        for index, price in enumerate((99_000, 101_000), 1)
+        for index, price in enumerate((99, 101), 1)
     ]
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker._account_id = "acct"
@@ -270,7 +270,7 @@ def test_fill_activity_recovers_entry_fill_idempotently(tmp_path: Path) -> None:
     broker._reconcile_fill_activity_fees()
     broker._reconcile_fill_activity_fees()
 
-    position = ledger.managed_for_account("acct")["BTC/USD"]
-    assert position.owned_qty == 0.1
-    assert position.filled_avg_price == 100_000
+    position = ledger.managed_for_account("acct")["XLE"]
+    assert position.owned_qty == 10
+    assert position.filled_avg_price == 100
     ledger.close()

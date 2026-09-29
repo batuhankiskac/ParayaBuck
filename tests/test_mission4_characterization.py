@@ -138,49 +138,51 @@ class TestEventQueue:
 # Product universe fail-closed
 # ---------------------------------------------------------------------------
 class TestProductUniverseFailClosed:
-    def test_product_strategy_without_universe_raises(self):
-        from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES
+    def test_product_strategy_without_universe_raises(self, tmp_path: Path):
+        from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES, portfolio_strategy_from
         from parayabuck.portfolio.runtime_service import PortfolioStateRepository
 
-        # Pick a known product strategy
-        assert "crypto_low_variance_hysteresis_v1" in PRODUCT_STRATEGY_NAMES
-        from parayabuck.portfolio import portfolio_strategy_from
-
-        strat = portfolio_strategy_from("crypto_low_variance_hysteresis_v1", parameters={})
+        # Pick the known product strategy
+        assert "equity_leveraged_trend_v1" in PRODUCT_STRATEGY_NAMES
+        strat = portfolio_strategy_from(
+            "equity_leveraged_trend_v1",
+            parameters={"signal_symbol": "QQQ", "hold_symbol": "QLD"},
+        )
         # Build a context without universe
         ts = datetime(2025, 1, 1, tzinfo=UTC)
         bar = Bar(
             timestamp=ts,
-            symbol="BTC/USD",
+            symbol="QQQ",
             timeframe="1d",
             open=100,
             high=101,
             low=99,
             close=100,
             volume=10,
-            market=Market.CRYPTO,
+            market=Market.EQUITY,
         )
-        ctx = PortfolioContext(
-            decision_timestamp=ts,
-            market=Market.CRYPTO,
-            timeframe="1d",
-            history={"BTC/USD": (bar,)},
-            universe=None,
-            universe_version="",
-            equity=100000,
-            holdings={},
-            prices={"BTC/USD": 100},
-            benchmark_symbol="BTC/USD",
-        )
+
+        def context() -> PortfolioContext:
+            return PortfolioContext(
+                decision_timestamp=ts,
+                market=Market.EQUITY,
+                timeframe="1d",
+                history={"QQQ": (bar,)},
+                universe=None,
+                universe_version="",
+                equity=100000,
+                holdings={},
+                prices={"QQQ": 100},
+                benchmark_symbol="SPY",
+            )
+
+        ctx = context()
         # require_product_universe must fail closed
         with pytest.raises(RuntimeError, match="fail-closed"):
             require_product_universe(ctx)
-        # Also via PortfolioRuntime guard: should raise RuntimeError when processing closed bars without universe
-        # Use allow_static_universe=False (default) and product strategy -> must require PIT universe
-        tmp = Path("/tmp/test_product_guard.sqlite3")
-        if tmp.exists():
-            tmp.unlink()
-        repo = PortfolioStateRepository(tmp)
+        # Also via PortfolioRuntime guard: a product strategy without a PIT
+        # universe (allow_static_universe=False, the default) must fail closed.
+        repo = PortfolioStateRepository(tmp_path / "test_product_guard.sqlite3")
 
         class FakeBroker:
             def account(self):
@@ -201,7 +203,7 @@ class TestProductUniverseFailClosed:
         with pytest.raises(RuntimeError, match="fail-closed"):
             PortfolioRuntime(
                 strat,
-                ("BTC/USD", "ETH/USD"),
+                ("QQQ", "QLD"),
                 broker,
                 repo,
                 mode="paper",
@@ -209,34 +211,22 @@ class TestProductUniverseFailClosed:
                 universe=None,
                 universe_version="",
             )
-        ctx2 = PortfolioContext(
-            decision_timestamp=ts,
-            market=Market.CRYPTO,
-            timeframe="1d",
-            history={"BTC/USD": (bar,)},
-            universe=None,
-            universe_version="",
-            equity=100000,
-            holdings={},
-            prices={"BTC/USD": 100},
-            benchmark_symbol="BTC/USD",
-        )
         # With allow_static_context True, should NOT raise
-        require_product_universe(ctx2, allow_static_context=True)  # no raise
+        require_product_universe(context(), allow_static_context=True)  # no raise
         # Explicit static-test opt-in via PortfolioRuntime.allow_static_universe=True
         PortfolioRuntime(
             strat,
-            ("BTC/USD",),
+            ("QQQ", "QLD"),
             broker,
-            PortfolioStateRepository(Path("/tmp/test_product_guard2.sqlite3")),
+            PortfolioStateRepository(tmp_path / "test_product_guard2.sqlite3"),
             mode="paper",
             maximum_allocation=0.5,
             universe=None,
             universe_version="",
             allow_static_universe=True,
         )
-        # Should not raise on guard (we test build_context guard with allow_static)
-        # Instead test that product strategy still fails closed when allow_static=False even if universe is None
+        # The product strategy still fails closed when allow_static=False even
+        # if universe is None
         with pytest.raises(RuntimeError):
             require_product_universe(ctx)
 

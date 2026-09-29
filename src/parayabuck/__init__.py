@@ -2,7 +2,6 @@
 
 from parayabuck.config import (
     Config,
-    CryptoUniverseConfig,
     EngineConfig,
     EquityUniverseConfig,
     RiskLimits,
@@ -12,7 +11,6 @@ from parayabuck.config import (
 
 __all__ = [
     "Config",
-    "CryptoUniverseConfig",
     "EngineConfig",
     "EquityUniverseConfig",
     "RiskLimits",

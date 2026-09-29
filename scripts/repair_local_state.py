@@ -12,11 +12,10 @@ Steps (report Phase 4):
    - optionally run broker reconciliation (if creds available)
    - clear decision_worker_crashed incident if reconciliation ok or operator confirms
    - rewrite today's risk snapshot from broker (or clear breaker)
-7-9. Re-download warmup and verify 12 crypto series have 23 bars spanning 22 days,
-   then restart engine.
+7. Restart the engine; it re-downloads the quarantined warmup cache on start.
 
-This script implements quarantine and DB repair steps 1-6; steps 7-9 require
-network and are attempted if API keys are available, otherwise left for operator.
+This script implements quarantine and DB repair steps 1-6; step 7 is left for
+the operator.
 
 Idempotent: safe to run twice; second run will find already-quarantined files.
 """
@@ -306,88 +305,6 @@ def repair_runtime_db():
     con.close()
 
 
-def attempt_warmup_refresh():
-    print("[7-8] Attempting to re-download warmup cache from Alpaca (if keys available)...")
-    api_key = os.getenv("ALPACA_API_KEY")
-    secret = os.getenv("ALPACA_SECRET_KEY")
-    if not api_key or not secret:
-        print("  No keys, skip warmup refresh — next engine start will fetch")
-        return False
-    try:
-        from datetime import timedelta
-
-        from parayabuck.config import load_config
-        from parayabuck.core.models import Market
-        from parayabuck.data.alpaca import AlpacaHistoricalData
-
-        cfg = load_config()
-        # Determine symbols: use trade_symbols from config
-        crypto_syms = list(cfg.universe.crypto.trade_symbols) if cfg.universe.crypto.enabled else []
-        # For verification we need active 12 symbols; use first 12
-        crypto_syms = crypto_syms[:12] or [
-            "BTC/USD",
-            "ETH/USD",
-            "SOL/USD",
-            "XRP/USD",
-            "ADA/USD",
-            "LINK/USD",
-            "DOGE/USD",
-            "AVAX/USD",
-            "LTC/USD",
-            "BCH/USD",
-            "DOT/USD",
-            "UNI/USD",
-        ]
-        print(f"  Fetching {len(crypto_syms)} crypto symbols for 60 days...")
-        hist = AlpacaHistoricalData(api_key, secret, stock_feed=cfg.alpaca.stock_historical_feed)
-        end = datetime.now(UTC)
-        start = end - timedelta(days=60)
-        hist.get_bars_batch(crypto_syms, "1d", start=start, end=end, adjustment="raw")
-        hist.close()
-        # Verify
-        from parayabuck.data.cache import WarmupCache
-
-        cache = WarmupCache()
-        feed = "crypto"
-        ok = True
-        for sym in crypto_syms:
-            cbars = cache.get(sym, "1d", market=Market.CRYPTO, feed=feed, start=start, end=end, adjustment="raw")
-            if len(cbars) < 23:
-                print(f"  WARN {sym}: only {len(cbars)} bars (<23)")
-                ok = False
-            else:
-                # Check span
-                span_days = (cbars[-1].timestamp - cbars[-23].timestamp).total_seconds() / 86400
-                if abs(span_days - 22) > 0.1:
-                    print(f"  WARN {sym}: span {span_days} !=22")
-                    ok = False
-                else:
-                    print(f"  OK {sym}: {len(cbars)} bars, span 22d, last {cbars[-1].timestamp.isoformat()}")
-        # Cross-symbol last timestamp spread
-        lasts = []
-        for sym in crypto_syms:
-            cbars = cache.get(sym, "1d", market=Market.CRYPTO, feed=feed, start=start, end=end, adjustment="raw")
-            if cbars:
-                lasts.append(cbars[-1].timestamp)
-        if lasts:
-            spread = (max(lasts) - min(lasts)).total_seconds()
-            print(f"  Last timestamp spread: {spread}s")
-            if spread != 0:
-                print("  WARN spread !=0")
-                ok = False
-        if ok:
-            print("  Warmup verification passed")
-        else:
-            print("  Warmup verification had warnings")
-        return ok
-    except Exception as e:
-        print(f"  Warmup refresh failed: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return False
-
-
 def main():
     if not check_engine_not_running():
         print("Abort: engine still running")
@@ -396,7 +313,6 @@ def main():
     quarantine_files(qdir)
     backup_ledger(qdir)
     repair_runtime_db()
-    attempt_warmup_refresh()
     print("\nDone. Quarantine at", qdir)
     print("Next steps:")
     print("  - Verify cache health: python scripts/check_cache_health.py")

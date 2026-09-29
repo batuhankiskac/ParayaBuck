@@ -85,8 +85,6 @@ def test_default_anchor_is_today_and_still_valid() -> None:
     """Without an end_date the helper keeps working (live warmup path)."""
     days = bars_to_calendar_days("SPY", "1d", 61)
     assert days >= 61
-    crypto_days = bars_to_calendar_days("BTC/USD", "1d", 61)
-    assert crypto_days >= 2
 
 
 def test_intraday_equity_span_scales_by_sessions() -> None:

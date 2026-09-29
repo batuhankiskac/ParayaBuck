@@ -6,7 +6,9 @@ Responsibility:
 - Fetch ``get_account`` + ``get_all_positions`` → :class:`AccountSnapshot`.
 - Fail-closed blocked checks: ``account_blocked`` / ``trading_blocked`` /
   ``trade_suspended_by_user`` → ``RuntimeError`` (never tradable).
-- Market classification via ``asset_class`` / ``is_crypto``.
+- Market classification via ``asset_class`` / ``is_crypto``: a foreign
+  crypto holding in the shared account is classified ``Market.CRYPTO`` so it
+  is recognized and left alone (the bot trades equities only).
 - Ownership: ``managed`` / ``mixed`` / ``external`` with
   ``managed_qty = min(|raw|, total_owned)``, ``external_qty``,
   ``qty_available``, dual-lineage fail-closed, shortfall with SELL
@@ -19,11 +21,10 @@ Responsibility:
 from __future__ import annotations
 
 import time
-from decimal import Decimal
 from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
-from parayabuck.execution.alpaca_models import CRYPTO_TAKER_FEE_RESERVE, OwnershipDriftError
+from parayabuck.execution.alpaca_models import OwnershipDriftError
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.utils import is_crypto
@@ -103,8 +104,7 @@ class AccountService:
         market: Market,
         orders_by_symbol: dict[str, list[object]],
     ) -> bool:
-        fee_reserve = float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
-        shortfall = max(0.0, owned_qty * fee_reserve - abs(raw_qty))
+        shortfall = max(0.0, owned_qty - abs(raw_qty))
         if shortfall <= 1e-12:
             return False
         for order in orders_by_symbol.get(canonical, ()):
@@ -179,12 +179,11 @@ class AccountService:
                     "reconciliation is required before trading resumes"
                 )
             total_owned = ledger_owned + repo_owned
-            fee_reserve = float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
             if (
                 managed is None
                 and total_owned > 1e-12
                 and abs(raw_qty) > 1e-12
-                and abs(raw_qty) + max(1e-9, total_owned * 1e-8) < total_owned * fee_reserve
+                and abs(raw_qty) + max(1e-9, total_owned * 1e-8) < total_owned
             ):
                 drift_candidates.append((canonical, total_owned, raw_qty, market))
             managed_qty = min(abs(raw_qty), total_owned)
@@ -231,8 +230,6 @@ class AccountService:
             broker._save_peak_equity()
         daily_pnl = equity - previous_equity
         cash = float(account.cash or 0)
-        crypto_buying_power_raw = getattr(account, "non_marginable_buying_power", None)
-        crypto_status = str(getattr(account, "crypto_status", "")).upper().split(".")[-1]
         snapshot = AccountSnapshot(
             cash=cash,
             equity=equity,
@@ -241,8 +238,6 @@ class AccountService:
             positions=tuple(positions),
             realized_pnl=daily_pnl - intraday_unrealized,
             unrealized_pnl=unrealized,
-            crypto_buying_power=(float(crypto_buying_power_raw) if crypto_buying_power_raw is not None else cash),
-            crypto_trading_enabled=crypto_status == "ACTIVE",
             fees=(ledger.total_fees_for_account(broker._account_id or "unknown") if ledger is not None else 0.0),
         )
         broker._snapshot_cache = snapshot

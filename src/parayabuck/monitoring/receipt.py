@@ -35,14 +35,8 @@ class PaperReceipt:
     positions_after: dict[str, float]
     actual_gross_exposure: float
     cash_ratio: float
-    # T1 hysteresis promotion: crypto receipts include per-symbol rank/retained
-    # and observation strategy provenance. Kept optional with defaults so
-    # existing equity receipts and old tests remain valid.
-    ranks: dict[str, int] = field(default_factory=dict)
-    retained: dict[str, bool] = field(default_factory=dict)
     previous_holdings: dict[str, float] = field(default_factory=dict)
     universe_version: str = ""
-    observation_strategy_digest: str = ""
     warnings: list[str] = field(default_factory=list)
     incidents: list[dict[str, Any]] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -55,9 +49,7 @@ class PaperReceipt:
         directory.mkdir(parents=True, exist_ok=True)
         # Filename: 2026-08-26_equity_v3.json  (date + market + strategy)
         date = self.decision_timestamp[:10]
-        # Market is a strategy-name convention: PaperReceipt carries no market field
-        market = "equity" if "equity" in self.strategy_name else "crypto"
-        filename = f"{date}_{market}_{self.strategy_name}.json"
+        filename = f"{date}_equity_{self.strategy_name}.json"
         path = directory / filename
         # Atomic write via temp file in same dir — avoid with_suffix collision
         tmp = path.with_name(path.name + ".tmp")
@@ -126,11 +118,8 @@ def build_receipt(
     positions_after: dict[str, float],
     actual_gross_exposure: float,
     cash_ratio: float,
-    ranks: dict[str, int] | None = None,
-    retained: dict[str, bool] | None = None,
     previous_holdings: dict[str, float] | None = None,
     universe_version: str = "",
-    observation_strategy_digest: str = "",
     warnings: list[str] | None = None,
     incidents: list[dict[str, Any]] | None = None,
 ) -> PaperReceipt:
@@ -152,11 +141,8 @@ def build_receipt(
         positions_after=positions_after,
         actual_gross_exposure=actual_gross_exposure,
         cash_ratio=cash_ratio,
-        ranks=ranks or {},
-        retained=retained or {},
         previous_holdings=previous_holdings or dict(broker_positions_before),
         universe_version=universe_version or universe_hash,
-        observation_strategy_digest=observation_strategy_digest,
         warnings=warnings or [],
         incidents=incidents or [],
     )
@@ -173,7 +159,7 @@ def write_decision_receipt_v2(payload: dict[str, Any], directory: str | Path) ->
         raise ValueError("Decision receipt v2 requires schema_version=2 and decision_id")
     market = str(payload["market"])
     origin = str(payload["origin"])
-    if market not in {"equity", "crypto"} or origin not in {"scheduled", "startup_catch_up"}:
+    if market != "equity" or origin not in {"scheduled", "startup_catch_up"}:
         raise ValueError("Invalid decision receipt market/origin")
     stamp = str(payload["decision_timestamp"]).replace(":", "").replace("-", "")
     decision_id = str(payload["decision_id"])

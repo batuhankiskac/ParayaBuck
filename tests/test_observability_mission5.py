@@ -691,13 +691,13 @@ def test_alert_throttle_distinct_incidents() -> None:
     stats = alerts.alert_stats()
     assert stats["suppressed"] == 1
 
-    # Scanner failures per market should not suppress each other
+    # Distinct provider incidents should not suppress each other
     alerts.reset_for_tests()
     alerts.configure_alerting(enabled=True, webhook_url="", throttle_seconds=60.0)
-    alerts.emit("scanner_refresh_failure", message="equity fail", market="equity")
-    alerts.emit("scanner_refresh_failure", message="crypto fail", market="crypto")
+    alerts.emit("scanner_refresh_failure", message="provider fail", incident_id="inc-1")
+    alerts.emit("scanner_refresh_failure", message="provider fail again", incident_id="inc-2")
     stats = alerts.alert_stats()
-    # With per-market throttling, both should be delivered
+    # With per-incident throttling, both should be delivered
     assert stats["delivered"].get("scanner_refresh_failure", 0) == 2
     alerts.reset_for_tests()
 
@@ -794,7 +794,6 @@ def test_chaos_failure_sequence(tmp_path: Path) -> None:
         ("observability_degraded", now + timedelta(minutes=27)),
         ("account_recovered", now + timedelta(minutes=40)),
         ("reconciliation_recovered", now + timedelta(minutes=41)),
-        ("scanner_recovered", now + timedelta(minutes=42)),
         ("runtime_health_recovered", now + timedelta(minutes=45)),
     ]
     for kind, ts in seq:

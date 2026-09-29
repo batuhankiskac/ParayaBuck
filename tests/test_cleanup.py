@@ -74,13 +74,16 @@ def test_cli_no_longer_exposes_legacy_strategy_options() -> None:
 
 def test_new_strategies_are_registered() -> None:
     registered = set(supported_portfolio_strategies())
-    # The PAPER product surface: validated selections + frozen v1 baselines.
-    assert {
-        "equity_leveraged_trend_v1",
-        "crypto_low_variance_v1",
-        "crypto_low_variance_v2",
-        "crypto_low_variance_hysteresis_v1",
-    } <= registered
+    # The PAPER product surface is equity-only.
+    assert registered == {"equity_leveraged_trend_v1"}
+
+
+@pytest.mark.parametrize(
+    "name", ("crypto_low_variance_v1", "crypto_low_variance_v2", "crypto_low_variance_hysteresis_v1")
+)
+def test_removed_crypto_strategies_are_rejected(name: str) -> None:
+    with pytest.raises(ValueError, match="Unsupported portfolio strategy"):
+        portfolio_strategy_from(name)
 
 
 # Legacy strategy names are allowed ONLY inside migration/audit documentation;

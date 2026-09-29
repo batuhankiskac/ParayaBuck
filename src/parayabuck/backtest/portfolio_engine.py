@@ -36,7 +36,7 @@ from parayabuck.portfolio.models import (
     TargetPortfolio,
     TargetWeight,
 )
-from parayabuck.portfolio.universes import CRYPTO_UNIVERSE_VERSION, EQUITY_UNIVERSE_VERSION
+from parayabuck.portfolio.universes import EQUITY_UNIVERSE_VERSION
 from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.backtest.portfolio_engine")
@@ -212,17 +212,14 @@ def _adverse_bps(slippage_bps: float, spread_bps: float) -> float:
     return slippage_bps + spread_bps / 2
 
 
-def session_date_for(timestamp: datetime, market: Market) -> date:
+def session_date_for(timestamp: datetime) -> date:
     """Trading-session date used for daily-loss risk accounting.
 
-    Equity uses the New York trading date: a regular session can run past the
-    UTC midnight boundary, and resetting daily PnL at UTC midnight would split
-    one session across two days. Crypto trades 24/7 with no session close, so
-    the UTC calendar date is the explicit daily reset boundary for crypto.
+    The New York trading date: a regular session can run past the UTC
+    midnight boundary, and resetting daily PnL at UTC midnight would split
+    one session across two days.
     """
-    if market == Market.EQUITY:
-        return timestamp.astimezone(NEW_YORK).date()
-    return timestamp.date()
+    return timestamp.astimezone(NEW_YORK).date()
 
 
 def equity_regulatory_fee(
@@ -273,7 +270,7 @@ class PortfolioBacktestEngine:
     """Portfolio-aware backtest engine with next-open fills.
 
     The engine mirrors the established backtest cost model (adverse slippage +
-    half-spread on every fill, crypto taker fees, participation caps, partial
+    half-spread on every fill, equity regulatory fees, participation caps, partial
     fills, fractional quantities) but operates on target portfolio weights
     instead of per-bar signals:
 
@@ -297,7 +294,6 @@ class PortfolioBacktestEngine:
         slippage_bps: float = 2.0,
         spread_bps: float = 0.0,
         commission: float = 0.0,
-        crypto_taker_fee_bps: float = 0.0,
         equity_taf_per_share: float = 0.0,
         equity_taf_cap: float = 0.0,
         equity_cat_per_share: float = 0.0,
@@ -323,6 +319,8 @@ class PortfolioBacktestEngine:
     ) -> None:
         if not isinstance(strategy, PortfolioStrategy):
             raise TypeError("PortfolioBacktestEngine requires a PortfolioStrategy")
+        if strategy.market != Market.EQUITY:
+            raise ValueError("PortfolioBacktestEngine supports equity strategies only")
         if starting_equity <= 0:
             raise ValueError("Starting equity must be positive")
         if not 0 < max_participation_pct <= 1:
@@ -345,7 +343,6 @@ class PortfolioBacktestEngine:
             slippage_bps,
             spread_bps,
             commission,
-            crypto_taker_fee_bps,
             equity_taf_per_share,
             equity_taf_cap,
             equity_cat_per_share,
@@ -361,7 +358,6 @@ class PortfolioBacktestEngine:
         self.slippage_bps = slippage_bps
         self.spread_bps = spread_bps
         self.commission = commission
-        self.crypto_taker_fee_bps = crypto_taker_fee_bps
         self.equity_taf_per_share = equity_taf_per_share
         self.equity_taf_cap = equity_taf_cap
         self.equity_cat_per_share = equity_cat_per_share
@@ -374,9 +370,7 @@ class PortfolioBacktestEngine:
         self.turnover_band = turnover_band
         self.minimum_order_notional = minimum_order_notional
         self.universe = universe
-        self.universe_version = universe_version or (
-            EQUITY_UNIVERSE_VERSION if strategy.market == Market.EQUITY else CRYPTO_UNIVERSE_VERSION
-        )
+        self.universe_version = universe_version or EQUITY_UNIVERSE_VERSION
         self.allow_static_universe = bool(allow_static_universe)
         self.terminal_lifecycles = self._validated_terminal_lifecycles(terminal_lifecycles)
         self.state_path = Path(state_path) if state_path else None
@@ -402,10 +396,7 @@ class PortfolioBacktestEngine:
         self._dividend_total = 0.0
         self._cash_rate_observations: tuple[CashRateObservation, ...] = ()
         self._risk_contribution_history: list[float] = []
-        self._previous_timestamp: dict[Market, datetime | None] = {
-            Market.EQUITY: None,
-            Market.CRYPTO: None,
-        }
+        self._previous_timestamp: datetime | None = None
         self._last_price: dict[str, float] = dict(self.state.last_prices)
         self._weight_history: list[tuple[datetime, dict[str, float]]] = []
         self._universe_history: list[tuple[datetime, tuple[str, ...]]] = []
@@ -434,7 +425,7 @@ class PortfolioBacktestEngine:
         if self.state.last_rebalance_at is not None:
             # Period detection resumes from the last decision so a restart in
             # the middle of a month does not fire an unscheduled rebalance.
-            self._previous_timestamp[strategy.market] = self.state.last_rebalance_at
+            self._previous_timestamp = self.state.last_rebalance_at
         # Cash is authoritative when persisted (schema v2); a v1 state without
         # cash derives it from holdings once at migration time.
         if self.state.cash is not None:
@@ -448,7 +439,7 @@ class PortfolioBacktestEngine:
                     continue
                 self._positions[symbol] = _Position(
                     symbol,
-                    Market.CRYPTO if "/" in symbol else Market.EQUITY,
+                    Market.EQUITY,
                     strategy.timeframe,
                     quantity,
                     avg_price,
@@ -945,11 +936,7 @@ class PortfolioBacktestEngine:
             fill_price = bar.open * (1 + side_multiplier * adverse / 10_000)
             slippage_cost = fillable * bar.open * self.slippage_bps / 10_000
             spread_cost = fillable * bar.open * (self.spread_bps / 2) / 10_000
-            fee = self.commission
-            if order.market == Market.CRYPTO:
-                fee += fillable * fill_price * self.crypto_taker_fee_bps / 10_000
-            else:
-                fee += self._equity_fee(side, fillable, fill_price, bar.timestamp.date())
+            fee = self.commission + self._equity_fee(side, fillable, fill_price, bar.timestamp.date())
             if side == OrderSide.BUY:
                 notional = fillable * fill_price
                 if notional + fee > self._cash:
@@ -1025,9 +1012,8 @@ class PortfolioBacktestEngine:
         self._pending = remaining
 
     def _decide(self, timestamp: datetime) -> None:
-        market = self.strategy.market
-        previous = self._previous_timestamp[market]
-        self._previous_timestamp[market] = timestamp
+        previous = self._previous_timestamp
+        self._previous_timestamp = timestamp
         scheduled = self.rebalance_policy.is_period_start(previous, timestamp)
         # A non-scheduled bar can only produce a decision through an
         # intermediate risk rebalance. The base implementation ignores the
@@ -1136,7 +1122,7 @@ class PortfolioBacktestEngine:
         current post-close equity.
         """
         equity = self._equity()
-        session = session_date_for(timestamp, self.strategy.market)
+        session = session_date_for(timestamp)
         if self._risk_session_date != session:
             self._day_start_equity = self._last_observed_equity
             self._risk_session_date = session
@@ -1190,7 +1176,7 @@ class PortfolioBacktestEngine:
         # recent data holes spans more calendar time than the benchmark's
         # trailing window, so the benchmark dict must stay full to preserve
         # every aligned pair (and therefore the exact scores).
-        benchmark_key = "BTC/USD" if self.strategy.market == Market.CRYPTO else "SPY"
+        benchmark_key = "SPY"
         visible_symbols = self._effective_observation_symbols(timestamp)
         visible = set(visible_symbols) if visible_symbols is not None else None
         history: dict[str, tuple[Bar, ...]] = {}
@@ -1448,9 +1434,8 @@ class PortfolioBacktestEngine:
         # Keep the symbol on its terminal bar (the caller may close a held
         # position after that cycle), then remove it for later cycles.
         # Equity runtime stores active membership as a set and restores it in
-        # deterministic symbol order when managed pins are applied. Crypto's
-        # observation ordering remains configuration/alpha ordered.
-        tail = tuple(sorted(base)) if self.strategy.market == Market.EQUITY and managed else base
+        # deterministic symbol order when managed pins are applied.
+        tail = tuple(sorted(base)) if managed else base
         return tuple(dict.fromkeys((*reserved, *tail)))[:capacity]
 
     def _validated_terminal_lifecycles(
@@ -1524,11 +1509,7 @@ class PortfolioBacktestEngine:
             return
         adverse = _adverse_bps(self.slippage_bps, self.spread_bps)
         exit_price = bar.close * (1 - adverse / 10_000)
-        fee = self.commission
-        if position.market == Market.CRYPTO:
-            fee += position.qty * exit_price * self.crypto_taker_fee_bps / 10_000
-        else:
-            fee += self._equity_fee(OrderSide.SELL, position.qty, exit_price, bar.timestamp.date())
+        fee = self.commission + self._equity_fee(OrderSide.SELL, position.qty, exit_price, bar.timestamp.date())
         realized_delta = (exit_price - position.avg_price) * position.qty - position.entry_fee - fee
         lifetime_realized = position.realized_pnl_accumulator + realized_delta
         self._cash += position.qty * exit_price - fee
@@ -1655,7 +1636,7 @@ class PortfolioBacktestEngine:
         per_symbol = self._symbol_contributions()
         # Excess returns are aligned BY DATE: each series is reduced to
         # close-to-previous-trading-day returns keyed by date, so intraday
-        # runs (e.g. 1h crypto) never compare hourly portfolio moves against
+        # runs (e.g. hourly bars) never compare hourly portfolio moves against
         # a return that pretends to be daily. Days missing from one series
         # drop out of the excess series instead of misaligning it.
         benchmark_closes_by_day: dict[tuple[int, int, int], float] = {}
@@ -1894,7 +1875,7 @@ class PortfolioBacktestEngine:
             contributions.append(
                 SymbolContribution(
                     symbol=symbol,
-                    market=Market.CRYPTO if "/" in symbol else Market.EQUITY,
+                    market=Market.EQUITY,
                     realized_pnl=realized_by_symbol.get(symbol, 0.0),
                     fees=fee_by_symbol.get(symbol, 0.0),
                     final_weight=final_weight,

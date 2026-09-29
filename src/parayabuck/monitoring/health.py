@@ -154,7 +154,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
 _EVENT_DRIVEN_WORKERS = frozenset({"pb-trade-updates"})
 _SIGNAL_ADJUSTMENT_WORKER = "pb-signal-adjustment"
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
-_STREAM_WORKER_MARKETS = {"pb-stocks": "equity", "pb-crypto": "crypto"}
+_STREAM_WORKER_MARKETS = {"pb-stocks": "equity"}
 
 
 def _worker_stale(
@@ -341,57 +341,6 @@ def _check_reconciliation(health_snapshot: dict[str, Any] | None, now: datetime,
     return HealthCheck(
         code="reconciliation", status=HealthStatus.OK, summary=f"{age:.0f}s ago", observed=age, threshold=threshold
     )
-
-
-def _check_universe(health_snapshot: dict[str, Any] | None, now: datetime, config: Config) -> HealthCheck:
-    if health_snapshot is None:
-        return HealthCheck(code="universe", status=HealthStatus.UNKNOWN, summary="no universe data")
-    refresh = health_snapshot.get("universe_refresh") or {}
-    status_map = refresh.get("status") if isinstance(refresh, dict) else {}
-    errors = refresh.get("errors") if isinstance(refresh, dict) else {}
-    last_refresh = refresh.get("last_refresh_at") if isinstance(refresh, dict) else None
-    # Check for any refresh_failed
-    # Like the runtime's scanner_degraded: a failure only matters for a market
-    # that is operationally relevant (the snapshot's scanner_critical).
-    markets = health_snapshot.get("markets")
-    markets = markets if isinstance(markets, dict) else {}
-    failed = [
-        k
-        for k, v in (status_map or {}).items()
-        if v in ("refresh_failed", "apply_failed")
-        and not (isinstance(markets.get(k), dict) and markets[k].get("scanner_critical") is False)
-    ]
-    if failed:
-        return HealthCheck(
-            code="universe",
-            status=HealthStatus.DEGRADED,
-            summary=f"universe refresh failed for {', '.join(failed)}: {errors}",
-            observed={"status": status_map, "errors": errors},
-            action="check scanner logs / network",
-        )
-    if isinstance(last_refresh, str) and last_refresh:
-        age = _age_seconds(last_refresh, now)
-        # The runtime stamps last_refresh_at once per scheduled refresh (even a
-        # failed one, which the status branch above reports), so it is stale
-        # only past the refresh cadence plus an hour of slack; never tighter
-        # than the artifact's own max age.
-        max_age_s = max(
-            config.universe.crypto.active_universe_max_age_hours * 3600,
-            config.runtime.scanner_refresh_hours * 3600 + 3600,
-        )
-        if age is not None and age > max_age_s:
-            return HealthCheck(
-                code="universe",
-                status=HealthStatus.DEGRADED,
-                summary=f"universe stale {age / 3600:.1f}h ago",
-                observed=age,
-                threshold=max_age_s,
-            )
-        if age is not None:
-            return HealthCheck(
-                code="universe", status=HealthStatus.OK, summary=f"refreshed {age / 3600:.1f}h ago", observed=age
-            )
-    return HealthCheck(code="universe", status=HealthStatus.OK, summary="universe OK")
 
 
 def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCheck:
@@ -686,7 +635,6 @@ def evaluate_health(
     checks.append(_check_queue(health_snapshot, config))
     checks.append(_check_account(health_snapshot, now, config))
     checks.append(_check_reconciliation(health_snapshot, now, config))
-    checks.append(_check_universe(health_snapshot, now, config))
     checks.append(_check_signal_adjustment(health_snapshot))
     checks.append(_check_market_halts(health_snapshot))
     checks.append(_check_risk(database_path, health_snapshot))

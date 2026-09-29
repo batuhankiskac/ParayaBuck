@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from parayabuck import load_config
-from parayabuck.core.models import Bar, Market, PositionSnapshot
+from parayabuck.core.models import Market, PositionSnapshot
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.portfolio import (
     BrokerWorkingBuyOrder,
@@ -20,9 +20,8 @@ from parayabuck.execution.portfolio import (
     portfolio_risk_limits_from_config,
 )
 from parayabuck.portfolio.runtime_models import OpenPortfolioOrder
-from parayabuck.portfolio.runtime_service import PortfolioRuntime, PortfolioStateRepository
 from parayabuck.runtime import EngineRuntime
-from tests.test_two_phase_rebalance import _bars, _FixedTargetStrategy, _position, _runtime, _SimBroker
+from tests.test_two_phase_rebalance import _bars, _position, _runtime, _SimBroker
 
 _NAMES = ("AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOG")
 
@@ -49,10 +48,8 @@ def _decide(tmp_path, targets: dict[str, float]):  # type: ignore[no-untyped-def
     limits = PortfolioRiskLimits(
         maximum_gross=0.60,
         maximum_equity=0.60,
-        maximum_crypto=0.10,
         minimum_cash=0.40,
         maximum_positions=8,
-        maximum_crypto_positions=2,
     )
     runtime, _repository = _runtime(tmp_path, broker, targets, limits=limits)
     runtime.maximum_allocation = 0.55
@@ -271,66 +268,13 @@ def test_pending_cancel_does_not_free_headroom_until_terminal(tmp_path) -> None:
     assert terminal.orders[0].quantity == 80
 
 
-def test_cross_market_working_buy_consumes_shared_headroom_both_directions(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_equity_and_foreign_crypto_working_buys_consume_shared_headroom(tmp_path) -> None:  # type: ignore[no-untyped-def]
     broker, runtime = _admission_runtime(tmp_path)
-    for working_market, candidate_market in ((Market.EQUITY, Market.CRYPTO), (Market.CRYPTO, Market.EQUITY)):
-        symbol = "MSFT" if working_market == Market.EQUITY else "BTC/USD"
-        candidate = "ETH/USD" if candidate_market == Market.CRYPTO else "TSLA"
+    for working_market, symbol in ((Market.EQUITY, "MSFT"), (Market.CRYPTO, "BTC/USD")):
         broker.working_buy_orders = lambda: (_working("cross", symbol, 80, working_market),)  # type: ignore[attr-defined]
-        admission = runtime._size_buys_to_safe_capacity((_buy(candidate, 50, candidate_market),))
+        admission = runtime._size_buys_to_safe_capacity((_buy("TSLA", 50),))
         assert admission.committed_buy_notional == 8000
         assert admission.orders[0].quantity == 20
-
-
-def test_sequential_equity_crypto_decisions_share_committed_headroom(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    class CryptoTarget(_FixedTargetStrategy):
-        name = "crypto_target"
-        market = Market.CRYPTO
-
-    for first_market in (Market.EQUITY, Market.CRYPTO):
-        # Invested 0.88 leaves 0.98 - 0.88 == 0.10 of shared headroom.
-        broker = _SimBroker((PositionSnapshot("MANUAL", 880, 100, 100, Market.EQUITY, managed_qty=0),))
-        broker.working_buy_orders = lambda: tuple(  # type: ignore[attr-defined]
-            _working(order.client_order_id, order.symbol, order.quantity, order.market)
-            for order in broker.submitted
-            if order.side == PortfolioOrderSide.BUY
-        )
-        repository = PortfolioStateRepository(tmp_path / f"shared-{first_market.value}.sqlite3")
-        config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
-        limits = portfolio_risk_limits_from_config(config.risk)
-        runtimes = {
-            Market.EQUITY: PortfolioRuntime(
-                _FixedTargetStrategy({"AAPL": 0.08}),
-                ("AAPL",),
-                broker,
-                repository,
-                mode="paper",
-                maximum_allocation=config.strategy.equity.maximum_allocation,
-                risk_limits=limits,
-                account_id="acct",
-            ),
-            Market.CRYPTO: PortfolioRuntime(
-                CryptoTarget({"BTC/USD": 0.08}),
-                ("BTC/USD",),
-                broker,
-                repository,
-                mode="paper",
-                maximum_allocation=config.strategy.crypto.maximum_allocation,
-                risk_limits=limits,
-                account_id="acct",
-            ),
-        }
-        for market in (first_market, Market.CRYPTO if first_market == Market.EQUITY else Market.EQUITY):
-            symbol = "AAPL" if market == Market.EQUITY else "BTC/USD"
-            bar = Bar(datetime(2026, 1, 1, tzinfo=UTC), symbol, "1d", 100, 100, 100, 100, 1_000_000, market)
-            runtimes[market].process_closed_bars([bar])
-        assert len(broker.submitted) == 2
-        assert sum(order.quantity * order.reference_price for order in broker.submitted) <= 10_000
-        assert sorted(order.quantity for order in broker.submitted) == (
-            [20, 80] if first_market == Market.EQUITY else [50, 50]
-        )
-        for runtime in runtimes.values():
-            runtime.close()
 
 
 def test_risk_reducing_sell_frees_capacity_only_after_broker_position_changes(tmp_path) -> None:  # type: ignore[no-untyped-def]

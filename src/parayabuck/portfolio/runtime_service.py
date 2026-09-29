@@ -23,7 +23,7 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import bar_is_closed, equity_day_bar_is_closed
+from parayabuck.markets.timeframes import equity_day_bar_is_closed
 from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES, rebalance_policy_for
 from parayabuck.portfolio.base import (
     PortfolioStrategy,
@@ -74,7 +74,7 @@ def _is_unfinished_signal_bar(market: Market, bar: Bar, now: datetime) -> bool:
     The provider publishes (and the split-verification merge adopts) a
     session's daily bar while that session is still trading; its close is
     the latest trade, not the session close. The signal path must never
-    decide on it. Crypto and intraday bars are untouched.
+    decide on it. Intraday bars are untouched.
     """
     return market == Market.EQUITY and bar.timeframe == "1d" and not equity_day_bar_is_closed(bar.timestamp, now)
 
@@ -259,13 +259,12 @@ def _emit_no_trade_safe(
             "entry_latch": entry_latch,
         }
         # Human readable message for dashboard top-level
-        # Example: "Kripto alınmadı: BTC/ETH/SOL günlük veri zamanları diğer sembollerle eşleşmiyor."
+        # Example: "Hisse alınmadı: QLD/QQQ günlük veri zamanları diğer sembollerle eşleşmiyor."
         reason_tr: dict[str, str] = {
             "warming_up": "veriler ısınıyor (yeterli geçmiş yok)",
             "incomplete_strategy_batch": "günlük veri zamanları diğer sembollerle eşleşmiyor",
-            "not_scheduled": "rebalance zamanı değil (96 saat döngüsü)",
+            "not_scheduled": "rebalance zamanı değil",
             "duplicate_decision": "aynı zaman damgası için zaten karar var",
-            "benchmark_not_ready": "benchmark BTC verisi hazır değil",
             "incomplete_managed_batch": "yönetilen pozisyonların verisi eksik",
             "exposure_scaled_to_limit": "sermaye limiti nedeniyle hedef küçültüldü",
             "rebalance_in_progress": "önceki rebalance henüz tamamlanmadı",
@@ -274,13 +273,7 @@ def _emit_no_trade_safe(
             "circuit_breaker": "devre kesici aktif",
         }
         tr = reason_tr.get(reason, reason)
-        market_tr = (
-            "Kripto"
-            if (market or "").lower() == "crypto"
-            else "Hisse"
-            if (market or "").lower() == "equity"
-            else (market or "Piyasa")
-        )
+        market_tr = "Hisse" if (market or "").lower() == "equity" else (market or "Piyasa")
         if missing_symbols:
             detail = "/".join(missing_symbols[:3])
             msg = f"{market_tr} alınmadı: {detail} {tr}."
@@ -457,10 +450,7 @@ class PortfolioRuntime:
             symbol = canonical_symbol(bar.symbol, bar.market)
             if bar.market != self.market or bar.timeframe != self.strategy.timeframe or symbol not in self.history:
                 continue
-            if self.market == Market.CRYPTO:
-                if not bar_is_closed(bar.timestamp, bar.timeframe, now):
-                    continue
-            elif bar.timeframe == "1d" and not equity_day_bar_is_closed(bar.timestamp, now):
+            if bar.timeframe == "1d" and not equity_day_bar_is_closed(bar.timestamp, now):
                 continue
             series = self.history[symbol]
             if not series or series[-1].timestamp < bar.timestamp:
@@ -501,7 +491,6 @@ class PortfolioRuntime:
         *,
         entry_latch: str | None = None,
         account: AccountSnapshot | None = None,
-        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     ) -> PortfolioRuntimeResult:
         """Decide immediately on the latest completed warmup bars.
 
@@ -634,7 +623,6 @@ class PortfolioRuntime:
         # SELL is working could stack risk-increasing exposure).
         advance_result = self.advance_rebalance(
             account=account,
-            reserved_position_keys=reserved_position_keys,
         )
         current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
@@ -665,7 +653,6 @@ class PortfolioRuntime:
             force_scheduled=True,
             decision_origin="startup_catch_up",
             account=account,
-            reserved_position_keys=reserved_position_keys,
         )
         self.startup_catch_up_status = result.status
         return result
@@ -698,7 +685,6 @@ class PortfolioRuntime:
         the provider's splits basis except on a split day. Scheduled
         decisions never run before EngineRuntime verified/rebuilt this
         history against a batched provider splits tail (fail closed).
-        Crypto bars pass through untouched.
 
         An equity tail on the SAME New York session (a provider bar labeled
         00:00 ET, adopted while that session was still forming) is REPLACED
@@ -743,7 +729,7 @@ class PortfolioRuntime:
 
         Returns the number of symbols whose history changed. Callers MUST
         verify per-symbol adequacy first; this method never decides whether
-        a basis is trustworthy. No-op for crypto.
+        a basis is trustworthy. No-op for a non-equity market.
         """
         from parayabuck.data.adjustment import merge_provider_authority
 
@@ -779,7 +765,6 @@ class PortfolioRuntime:
         force_scheduled: bool = False,
         decision_origin: str = "scheduled",
         account: AccountSnapshot | None = None,
-        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     ) -> PortfolioRuntimeResult:
         now = _utcnow()
         eligible = [
@@ -869,7 +854,6 @@ class PortfolioRuntime:
         # stack risk-increasing exposure on top of the not-yet-sold position.
         advance_result = self.advance_rebalance(
             account=account,
-            reserved_position_keys=reserved_position_keys,
         )
         # A terminal deferred BUY has just completed the persisted rebalance.
         # End this cycle before planning again: the caller's account snapshot
@@ -958,18 +942,6 @@ class PortfolioRuntime:
                 entry_latch=entry_latch,
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_managed_batch")
-        if self.market == Market.CRYPTO and "BTC/USD" not in ready_history:
-            _emit_no_trade_safe(
-                market=self._market_name(),
-                strategy=getattr(self.strategy, "name", None),
-                reason="benchmark_not_ready",
-                decision_timestamp=timestamp,
-                data_timestamp=timestamp,
-                missing_symbols=("BTC/USD",),
-                session_id=self.session_id,
-                account_id=self.account_id,
-            )
-            return PortfolioRuntimeResult(None, None, None, (), (), "benchmark_not_ready")
         # Non-scheduled batch fast path: when the strategy does not override
         # the intermediate-risk hook (base implementation is constant False),
         # the batch can never produce a decision, so the persisted
@@ -1103,7 +1075,7 @@ class PortfolioRuntime:
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
         self._resolve_stale_submitting_rows()
         open_orders = self.repository.open_orders(self.account_id)
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
+        reserved_slots = self._effective_reserved_position_keys(open_orders)
         open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
         risk = self.risk_overlay.apply(
             raw_target,
@@ -1116,7 +1088,7 @@ class PortfolioRuntime:
             open_order_symbols=tuple(sorted(open_order_symbols)),
         )
         # Visibility: if risk overlay scaled to limit and left no managed
-        # exposure, emit persistent no-trade (e.g., 6×10% equity blocks crypto).
+        # exposure, emit persistent no-trade.
         if "exposure_scaled_to_limit" in risk.reasons and sum(w.weight for w in risk.target.weights) < 1e-9:
             # Compute capacity for diagnostics
             gross_before = risk.gross_before
@@ -1172,7 +1144,6 @@ class PortfolioRuntime:
                 planned,
                 account,
                 maximum_positions=self.risk_overlay.limits.maximum_positions,
-                market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
                 reserved_position_keys=reserved_slots,
                 open_order_symbols=tuple(sorted(open_order_symbols)),
             )
@@ -1276,10 +1247,7 @@ class PortfolioRuntime:
             admission.orders,
             admission.account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
-            market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
-            reserved_position_keys=self._effective_reserved_position_keys(
-                reserved_position_keys, open_orders=open_orders
-            ),
+            reserved_position_keys=self._effective_reserved_position_keys(open_orders),
             open_order_symbols=tuple(sorted(self.broker.all_open_order_symbols())),
         )
         orders = buys
@@ -1320,7 +1288,6 @@ class PortfolioRuntime:
         self,
         *,
         account: AccountSnapshot | None = None,
-        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     ) -> PortfolioRuntimeResult | None:
         """Advance a persisted two-phase rebalance by one step.
 
@@ -1350,7 +1317,6 @@ class PortfolioRuntime:
             return self._submit_deferred_buys(
                 current.decision_id,
                 account=account,
-                reserved_position_keys=reserved_position_keys,
             )
         if current.phase == REBALANCE_PHASE_BUY_PENDING:
             buys = self.repository.orders_for_decision(current.decision_id, side="buy")
@@ -1381,7 +1347,6 @@ class PortfolioRuntime:
             return self._submit_deferred_buys(
                 current.decision_id,
                 account=account,
-                reserved_position_keys=reserved_position_keys,
             )
         if any(str(item["status"]) == "submitting" for item in sells):
             # A crash between repository persistence and broker acknowledgement
@@ -1406,7 +1371,6 @@ class PortfolioRuntime:
         return self._submit_deferred_buys(
             current.decision_id,
             account=account,
-            reserved_position_keys=reserved_position_keys,
         )
 
     def _close_settled_blocked_rebalance(self, decision_id: str) -> bool:
@@ -1608,7 +1572,6 @@ class PortfolioRuntime:
         decision_id: str,
         *,
         account: AccountSnapshot | None = None,
-        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     ) -> PortfolioRuntimeResult | None:
         """Re-plan and submit the BUY side of a completed SELL phase.
 
@@ -1662,7 +1625,7 @@ class PortfolioRuntime:
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
         open_orders = self.repository.open_orders(self.account_id)
         open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
+        reserved_slots = self._effective_reserved_position_keys(open_orders)
         risk = self.risk_overlay.apply(
             adjusted_target,
             account,
@@ -1719,13 +1682,12 @@ class PortfolioRuntime:
         buy_orders = admission.orders
         account = admission.account
         open_orders = self.repository.open_orders(self.account_id)
-        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys, open_orders=open_orders)
+        reserved_slots = self._effective_reserved_position_keys(open_orders)
         open_order_symbols, _open_order_sides = self._effective_open_order_constraints(open_orders)
         buy_orders = reserve_opening_order_slots(
             buy_orders,
             account,
             maximum_positions=self.risk_overlay.limits.maximum_positions,
-            market_position_limits={Market.CRYPTO: self.risk_overlay.limits.maximum_crypto_positions},
             reserved_position_keys=reserved_slots,
             open_order_symbols=tuple(sorted(open_order_symbols)),
         )
@@ -1782,11 +1744,9 @@ class PortfolioRuntime:
 
     def _effective_reserved_position_keys(
         self,
-        same_cycle_keys: tuple[tuple[Market, str], ...] = (),
-        *,
         open_orders: tuple[OpenPortfolioOrder, ...],
     ) -> tuple[tuple[Market, str], ...]:
-        """Return same-cycle plus persisted working order position slots.
+        """Return the persisted working-order position slots.
 
         A broker snapshot may remain unchanged while a submitted BUY or SELL
         is still working (or its broker outcome is ambiguous). The persisted
@@ -1802,8 +1762,7 @@ class PortfolioRuntime:
         re-reading it here would let one decision cycle resolve two different
         ledgers.
         """
-        slots = {(market, canonical_symbol(symbol, market)) for market, symbol in same_cycle_keys}
-        slots.update((order.market, canonical_symbol(order.symbol, order.market)) for order in open_orders)
+        slots = {(order.market, canonical_symbol(order.symbol, order.market)) for order in open_orders}
         return tuple(sorted(slots, key=lambda item: (item[0].value, item[1])))
 
     def _effective_open_order_constraints(

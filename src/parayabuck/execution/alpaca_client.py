@@ -245,9 +245,7 @@ class AlpacaClient:
         increment = getattr(self._asset(symbol), "price_increment", None)
         if increment is not None:
             return Decimal(str(increment))
-        if market == Market.EQUITY:
-            return Decimal("0.01") if reference_price >= 1 else Decimal("0.0001")
-        return Decimal("0.01") if reference_price >= 1 else Decimal("0.000001")
+        return Decimal("0.01") if reference_price >= 1 else Decimal("0.0001")
 
     @staticmethod
     def _round_to_step(value: float, step: Decimal) -> float:

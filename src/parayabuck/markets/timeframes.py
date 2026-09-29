@@ -34,18 +34,6 @@ def is_regular_equity_time(timestamp: datetime) -> bool:
     return local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60
 
 
-def bar_is_closed(timestamp: datetime, timeframe: str, now: datetime) -> bool:
-    """Whether a bar is fully closed at ``now`` under the 24/7 bucket rule.
-
-    Crypto trades round the clock on fixed UTC buckets: a bar for bucket
-    ``timestamp`` is closed once ``timestamp + duration`` has passed.
-    Alpaca's historical feed INCLUDES the in-progress (forming) bar for the
-    current bucket, whose close is partial data; seeding or ranking on it
-    would let a partial close masquerade as the true close.
-    """
-    return timestamp + timeframe_duration(timeframe) <= now
-
-
 def equity_day_bar_is_closed(timestamp: datetime, now: datetime) -> bool:
     """Whether an equity 1d bar is closed at ``now``.
 
@@ -83,8 +71,7 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
     Equity bars only exist on regular trading sessions: 61 daily bars do not
     fit in 61 calendar days. For equity the span is derived from the real
     NYSE session calendar (holiday-aware) via pandas-market-calendars when
-    available, falling back to a Mon-Fri session estimate otherwise. Crypto
-    trades 24/7 and scales purely by time.
+    available, falling back to a Mon-Fri session estimate otherwise.
 
     ``end_date`` anchors the session-density calculation: historical
     backtests must size their warmup around the requested evaluation start
@@ -106,10 +93,6 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
 @lru_cache(maxsize=2048)
 def _bars_to_calendar_days(symbol: str, timeframe: str, bars: int, today: date) -> int:
     minutes = TIMEFRAME_MINUTES[timeframe]
-    if "/" in symbol:
-        bars_per_day = 1440 / minutes
-        multiplier = 1.05
-        return max(2, math.ceil(bars / max(0.01, bars_per_day) * multiplier))
     bars_per_session = (390 / minutes) if minutes < 1440 else 1
     needed_sessions = max(1, math.ceil(bars / bars_per_session))
     calendar_error: Exception | None = None
@@ -155,7 +138,6 @@ def _bars_to_calendar_days(symbol: str, timeframe: str, bars: int, today: date) 
 __all__ = [
     "NEW_YORK",
     "TIMEFRAME_MINUTES",
-    "bar_is_closed",
     "bars_to_calendar_days",
     "equity_day_bar_is_closed",
     "is_regular_equity_time",

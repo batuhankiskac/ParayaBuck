@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import threading
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -12,7 +11,7 @@ from parayabuck.config import Config, RuntimeMode
 from parayabuck.core.models import Market
 from parayabuck.portfolio import product_strategy_from
 from parayabuck.runtime import EngineRuntime
-from parayabuck.runtime_universe import ActiveProductUniverse, load_active_product_universe
+from parayabuck.runtime_universe import ActiveProductUniverse
 
 _CLEAN_RECONCILIATION = {
     "MATCH": [],
@@ -25,55 +24,34 @@ _CLEAN_RECONCILIATION = {
 }
 
 
-def test_active_product_universe_uses_eligible_pool_for_membership(tmp_path) -> None:
-    path = tmp_path / "active.json"
-    payload = {
-        "status": "success",
-        "scanner_version": "test-scanner-v1",
-        "config_digest": "policy-digest",
-        "selection_timestamp": datetime(2026, 8, 29, 5, 0, tzinfo=UTC).isoformat(),
-        "data_timestamp": datetime(2026, 8, 29, 4, 0, tzinfo=UTC).isoformat(),
-        "selected_symbols": ["BTC/USD", "ETH/USD", "SOL/USD"],
-        "observation_set": ["BTC/USD", "ETH/USD"],
-    }
-    path.write_text(json.dumps(payload), encoding="utf-8")
-
-    universe = load_active_product_universe(
-        path,
-        market=Market.CRYPTO,
-        expected_observation_symbols=("BTC/USD", "ETH/USD"),
-        expected_config_digest="policy-digest",
+def test_configured_universe_uses_eligible_pool_for_membership() -> None:
+    universe = ActiveProductUniverse.configured(
+        Market.EQUITY,
+        ("SPY", "QQQ", "QLD"),
+        snapshot_id="equity:configured:digest",
+        config_digest="digest",
     )
 
-    assert universe.contains("SOLUSD", Market.CRYPTO, datetime.now(UTC))
+    assert universe.contains("QLD", Market.EQUITY, datetime.now(UTC))
     assert not universe.contains("AAPL", Market.EQUITY, datetime.now(UTC))
-    assert universe.observation_symbols == ("BTC/USD", "ETH/USD")
-    assert universe.snapshot_id
+    assert universe.observation_symbols == ("SPY", "QQQ", "QLD")
+    assert universe.snapshot_id == "equity:configured:digest"
 
 
-def test_active_product_universe_rejects_raced_or_wrong_snapshot(tmp_path) -> None:
-    path = tmp_path / "active.json"
-    path.write_text(
-        json.dumps(
-            {
-                "status": "success",
-                "scanner_version": "test-scanner-v1",
-                "config_digest": "wrong",
-                "selection_timestamp": datetime.now(UTC).isoformat(),
-                "data_timestamp": datetime.now(UTC).isoformat(),
-                "selected_symbols": ["SPY", "AAPL"],
-                "observation_set": ["SPY"],
-            }
-        ),
-        encoding="utf-8",
-    )
-    with pytest.raises(RuntimeError, match="config digest"):
-        load_active_product_universe(
-            path,
-            market=Market.EQUITY,
-            expected_observation_symbols=("SPY",),
-            expected_config_digest="expected",
-        )
+def test_managed_pins_extend_observation_but_not_eligibility() -> None:
+    universe = ActiveProductUniverse.configured(Market.EQUITY, ("SPY", "QLD"), snapshot_id="pins")
+
+    pinned = universe.with_observation_symbols(("SPY", "QLD", "AAPL"))
+
+    assert pinned.observation_symbols == ("SPY", "QLD", "AAPL")
+    assert pinned.eligible_symbols == universe.eligible_symbols
+    assert pinned.snapshot_id == universe.snapshot_id
+    assert not pinned.contains("AAPL", Market.EQUITY, datetime.now(UTC))
+
+
+def test_configured_universe_rejects_empty_membership() -> None:
+    with pytest.raises(ValueError, match="eligible symbols"):
+        ActiveProductUniverse.configured(Market.EQUITY, (), snapshot_id="empty")
 
 
 def test_start_composition_passes_product_universe_to_runtime(monkeypatch) -> None:
@@ -92,7 +70,7 @@ def test_start_composition_passes_product_universe_to_runtime(monkeypatch) -> No
     runtime._stop_event = threading.Event()
     runtime._state_lock = threading.RLock()
     runtime._portfolio_lock = threading.RLock()
-    runtime._symbols_by_market = {Market.EQUITY: {"SPY", "AAPL"}, Market.CRYPTO: set()}
+    runtime._symbols_by_market = {Market.EQUITY: {"SPY", "AAPL"}}
     runtime._strategy_specs = ((strategy, ("SPY", "AAPL"), 0.55),)
     runtime._product_universes_by_market = {Market.EQUITY: universe}
     runtime._portfolio_runtimes = ()

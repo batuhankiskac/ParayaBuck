@@ -73,8 +73,7 @@ def main() -> int:
         print(
             f"  slippage_bps={_fmt(configured.get('slippage_bps'))} "
             f"spread_bps={_fmt(configured.get('spread_bps'))} "
-            f"commission={_fmt(configured.get('commission'))} "
-            f"crypto_taker_fee_bps={_fmt(configured.get('crypto_taker_fee_bps'))}"
+            f"commission={_fmt(configured.get('commission'))}"
         )
         print(f"  equity_use_effective_dated_fees={configured.get('equity_use_effective_dated_fees')}")
         print(f"  model: {configured.get('model')}")

@@ -24,7 +24,7 @@ from parayabuck.web.state import WebState, set_web_state
 log = get_logger("parayabuck.web.server")
 
 
-# Keep config.load_config and universe validators in sync when tests patch server.*
+# Keep config.load_config in sync when tests patch server.*
 class _ServerModule(sys.modules[__name__].__class__):  # type: ignore[misc]
     def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)
@@ -33,13 +33,6 @@ class _ServerModule(sys.modules[__name__].__class__):  # type: ignore[misc]
                 import parayabuck.config as _cfg
 
                 _cfg.load_config = value
-            except Exception:
-                pass
-        if name == "validate_active_crypto_universe":
-            try:
-                import parayabuck.universe as _u
-
-                setattr(_u, name, value)
             except Exception:
                 pass
         if name == "manager":
@@ -386,10 +379,6 @@ async def dashboard_equity() -> dict[str, Any]:
     return await _dashboard_panel("equity")
 
 
-async def dashboard_crypto() -> dict[str, Any]:
-    return await _dashboard_panel("crypto")
-
-
 async def dashboard_risk() -> dict[str, Any]:
     return await _dashboard_panel("risk")
 
@@ -413,16 +402,6 @@ async def dashboard_explanations() -> dict[str, Any]:
 async def dashboard_metrics() -> dict[str, Any]:
     return await _dashboard_panel("metrics")
 
-
-# --- Universe validation shim (for tests that patch server.validate_active_crypto_universe) ---
-try:
-    from parayabuck.universe import (
-        validate_active_crypto_universe as _orig_validate_active_crypto_universe,  # noqa: F401
-    )
-
-    validate_active_crypto_universe = _orig_validate_active_crypto_universe
-except Exception:
-    validate_active_crypto_universe = None  # type: ignore[assignment]
 
 # Re-export _atomic_update_credentials for hardening tests
 try:
@@ -541,7 +520,6 @@ __all__ = [
     "backtest_status",
     "dashboard_overview",
     "dashboard_equity",
-    "dashboard_crypto",
     "dashboard_risk",
     "dashboard_execution",
     "dashboard_universe",
@@ -550,7 +528,6 @@ __all__ = [
     "dashboard_metrics",
     "_dashboard_payload",
     "_dashboard_market_decisions",
-    "validate_active_crypto_universe",
     "websocket_stream",
     "websocket_logs",
     "HTTPException",

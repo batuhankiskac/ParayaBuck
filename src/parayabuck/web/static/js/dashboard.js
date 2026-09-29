@@ -18,7 +18,7 @@
 
     // ---------- labels ----------
     const STRATEGY_STATUS = {
-      active: "Aktif", warming: "Isınıyor", halted: "Güvenlik durdurdu", scanner_issue: "Tarayıcı sorunu",
+      active: "Aktif", warming: "Isınıyor", halted: "Güvenlik durdurdu",
       disabled: "Kapalı", stopped: "Motor kapalı", starting: "Başlatılıyor", stopping: "Durduruluyor",
       error: "Hata", stop_failed: "Durdurma hatası", unknown: "Bilinmiyor", unavailable: "Yok"
     };
@@ -30,10 +30,7 @@
       not_attempted: "Henüz denenmedi"
     };
     const STRATEGY_DESC = {
-      equity_leveraged_trend_v1: "QQQ 200 günlük ortalamasının üzerindeyken QLD (2x Nasdaq-100) tutar; piyasa dalgalandıkça payı küçültür, trend bozulunca nakde geçer. Her işlem günü kontrol eder.",
-      crypto_low_variance_hysteresis_v1: "En sakin seyreden (oynaklığı en düşük) 2 kripto parayı seçer; sıralamada ilk 4'ten düşmedikçe tutmaya devam eder. 96 saatte bir gözden geçirir.",
-      crypto_low_variance_v2: "En düşük oynaklıklı 2 kripto parayı seçer ve 96 saatte bir yeniden dengeler.",
-      crypto_low_variance_v1: "En düşük oynaklıklı kripto paraları seçer."
+      equity_leveraged_trend_v1: "QQQ 200 günlük ortalamasının üzerindeyken QLD (2x Nasdaq-100) tutar; piyasa dalgalandıkça payı küçültür, trend bozulunca nakde geçer. Her işlem günü kontrol eder."
     };
     const PERIOD_LABEL = { "1D": "son 1 gün", "1W": "son 1 hafta", "1M": "son 1 ay", "3M": "son 3 ay", "1A": "son 1 yıl", "ALL": "tüm zamanlar" };
 
@@ -110,7 +107,7 @@
         const crypto = p.market === "crypto";
         const owner = p.ownership_state === "managed" ? "Bot" : p.ownership_state === "mixed" ? "Bot + harici" : "Harici";
         const sym = el("span", { className: "sym" }, [
-          el("span", { className: "sym-logo" + (crypto ? " crypto" : ""), text: symbolBase(p.symbol) }),
+          el("span", { className: "sym-logo", text: symbolBase(p.symbol) }),
           el("span", null, [p.symbol, el("small", { text: (crypto ? "Kripto" : "Hisse/ETF") + " · " + owner + (p.direction === "SHORT" ? " · açığa satış" : "") })])
         ]);
         const qty = p.managed_qty != null && p.external_qty != null && Number(p.external_qty) > 0
@@ -245,7 +242,7 @@
       else if (state === "stopped") items.push(storyItem("", "pause", "Bot kapalı.", "İşlem yapmıyor — üstteki “Başlat” ile çalıştırabilirsiniz."));
       else items.push(storyItem("bad", "alert", "Motor sorunlu:", (status.engine_error || state) + "."));
 
-      [["equity", "trend", "Hisse"], ["crypto", "coins", "Kripto"]].forEach(function (spec) {
+      [["equity", "trend", "Hisse"]].forEach(function (spec) {
         const card = ov[spec[0]];
         if (!card || card.unavailable) return;
         if (card.enabled === false) { items.push(storyItem("", spec[1], spec[2] + " stratejisi kapalı.")); return; }
@@ -270,11 +267,10 @@
     function renderAllocation(risk) {
       if (!risk || risk.unavailable) return;
       const eq = Math.max(0, Number(risk.equity_exposure_pct) || 0);
-      const cr = Math.max(0, Number(risk.crypto_exposure_pct) || 0);
-      const cash = Math.max(0, 100 - eq - cr);
+      const cash = Math.max(0, 100 - eq);
       const C = 2 * Math.PI * 50;
       let offset = 0;
-      [["donutEquity", eq], ["donutCrypto", cr], ["donutCash", cash]].forEach(function (pair) {
+      [["donutEquity", eq], ["donutCash", cash]].forEach(function (pair) {
         const circle = byId(pair[0]);
         if (!circle) return;
         const len = Math.max(0, Math.min(100, pair[1])) / 100 * C;
@@ -282,14 +278,13 @@
         circle.setAttribute("stroke-dashoffset", (-offset).toFixed(2));
         offset += len;
       });
-      setText("donutInvested", fmt.pct(eq + cr, 0));
+      setText("donutInvested", fmt.pct(eq, 0));
       setText("allocEquity", fmt.pct(eq));
-      setText("allocCrypto", fmt.pct(cr));
       setText("allocCash", fmt.pct(cash));
     }
 
     // ---------- strategies ----------
-    function renderStrategy(prefix, card, isCrypto) {
+    function renderStrategy(prefix, card) {
       if (!card || card.unavailable) { setText(prefix + "StrategyDesc", "Strateji bilgisi alınamadı."); return; }
       const strategy = card.strategy || {};
       setText(prefix + "StrategyName", strategy.display_name || card.name || "—");
@@ -297,8 +292,7 @@
       setText(prefix + "StatusBadge", STRATEGY_STATUS[card.status] || card.status || "—", PB.badgeClass(card.status === "disabled" ? "" : card.status));
       setText(prefix + "Signal", cadence(strategy.signal_timeframe));
       setText(prefix + "Rebalance", cadence(strategy.rebalance_cadence));
-      if (isCrypto) setText(prefix + "Obs", (isNum(card.eligible_pool) ? card.eligible_pool : "—") + " / " + (isNum(card.observation_set_size) ? card.observation_set_size : "—"));
-      else setText(prefix + "Obs", isNum(card.observation_set_size) ? String(card.observation_set_size) : "—");
+      setText(prefix + "Obs", isNum(card.observation_set_size) ? String(card.observation_set_size) : "—");
       setText(prefix + "Positions", String(card.positions_count || 0));
       setText(prefix + "Allocation", fmt.pct(card.current_allocation_pct) + " / en fazla " + fmt.pct(card.maximum_allocation_pct, 0));
       const bar = byId(prefix + "AllocBar");
@@ -317,17 +311,9 @@
       }
       const tbody = byId(prefix + "HoldingsBody");
       const holdings = card.holdings || [];
-      if (!holdings.length) { PB.emptyRow(tbody, isCrypto ? 6 : 5, "Pozisyon yok"); return; }
+      if (!holdings.length) { PB.emptyRow(tbody, 5, "Pozisyon yok"); return; }
       tbody.replaceChildren.apply(tbody, holdings.map(function (h) {
-        const sym = el("span", { className: "sym" }, [el("span", { className: "sym-logo" + (isCrypto ? " crypto" : ""), text: symbolBase(h.symbol) }), h.symbol]);
-        if (isCrypto) {
-          return el("tr", null, [
-            cell(sym), cell(fmt.num(h.qty, 6), "r"),
-            cell(isNum(h.realized_vol_22d) ? fmt.pct(Number(h.realized_vol_22d) * 100, 2) : "—", "r"),
-            cell(h.rank ? "#" + h.rank + " / " + (h.of_qualified || "?") : "—", "r"),
-            cell(fmt.pct(h.target_weight_pct), "r"), cell(fmt.pct(h.current_weight_pct), "r")
-          ]);
-        }
+        const sym = el("span", { className: "sym" }, [el("span", { className: "sym-logo", text: symbolBase(h.symbol) }), h.symbol]);
         return el("tr", null, [
           cell(sym), cell(fmt.num(h.qty, 4), "r"), cell(fmt.pct(h.target_weight_pct), "r"),
           cell(fmt.pct(h.current_weight_pct), "r"), cell(h.reason || h.hypothesis || "—", "wrap")
@@ -375,7 +361,6 @@
           meter("Zirveden düşüş", ddPct(a), risk.max_drawdown_pct, { note: "Bu sınır aşılırsa bot tüm yeni alımları durdurur." }),
           meter("Bugünkü kayıp", lossPct, risk.daily_loss_limit_pct, { digits: 2, note: "Günlük kayıp sınırı aşılırsa o gün yeni alım yapılmaz." }),
           meter("Yatırımdaki pay (brüt)", risk.gross_exposure_pct, risk.gross_exposure_limit_pct),
-          meter("Kripto payı", risk.crypto_exposure_pct, risk.crypto_exposure_limit_pct, { digits: 2 }),
           meter("Nakit tamponu", risk.cash_pct, risk.cash_buffer_limit_pct, { minimum: true })
         );
       }
@@ -389,7 +374,6 @@
       const reasons = Object.entries(cap.suppression_reasons || {}).concat(Object.entries(cap.halt_reasons || {})).map(function (e) { return e[0] + ": " + e[1]; }).join(", ");
       setText("riskAdmission", ready ? ({ complete: "Tamam", pending: "Bekleniyor", failed: "Başarısız" }[cap.reconciliation_status] || cap.reconciliation_status || "—") + (reasons ? " · " + reasons : "") : "—");
       setText("riskSlots", ready ? cap.positions_count + " / " + cap.effective_slots + " / " + cap.maximum_positions : "—");
-      setText("riskCryptoSlots", ready && cap.effective_crypto_slot_claims !== undefined ? cap.crypto_position_count + " / " + cap.effective_crypto_slot_claims + " / " + cap.crypto_slot_cap : "—");
       setText("riskWorking", ready ? String(cap.broker_working_order_count) : "—");
       setText("riskGrossHeadroom", ready ? fmt.money(cap.available_gross_buy_headroom) : "—");
       setText("riskCommittedBuy", ready && cap.committed_buy_notional !== null ? fmt.money(cap.committed_buy_notional) : "bilinmiyor");
@@ -444,7 +428,7 @@
       if (!h || h.unavailable) return;
       setText("healthBadge", h.healthy === true ? "Sağlıklı" : h.healthy === false ? "Sorunlu" : (h.engine_state || "—"), h.healthy === true ? "badge ok" : h.healthy === false ? "badge bad" : "badge");
       const markets = h.markets || {};
-      const dataOk = (markets.equity || {}).stream_healthy !== false && (markets.crypto || {}).stream_healthy !== false;
+      const dataOk = (markets.equity || {}).stream_healthy !== false;
       setText("healthData", dataOk ? "Güncel" : "Gecikme var", dataOk ? "pos" : "neg");
       const fresh = h.account_freshness || {};
       setText("healthAccount", (fresh.source || "—") + (isNum(fresh.age_seconds) ? " · " + fmt.duration(fresh.age_seconds) : ""));
@@ -481,12 +465,6 @@
         const status = u.equity.scanner_status === "static" ? "Sabit liste" : (u.equity.scanner_status || "—");
         setText("eqStatus", status + " · " + fmt.num(u.equity.observation_set_size, 0) + " sembol");
         chips("eqSymbols", u.equity.observation_set);
-      }
-      if (u.crypto) {
-        setText("crScanner", u.crypto.scanner_status || "—");
-        setText("crObserved", fmt.num(u.crypto.eligible_pool_size, 0) + " / " + fmt.num(u.crypto.observation_set_size, 0));
-        setText("crScanTimes", fmt.dateTime(u.crypto.last_refresh_at) + " · " + fmt.dateTime(u.crypto.next_refresh_at));
-        chips("crSymbols", u.crypto.observation_set);
       }
     }
     function renderOps(data) {
@@ -528,8 +506,7 @@
       if (!data || data.unavailable) return;
       view.overview = data;
       if (data.account) renderAccount(data.account);
-      renderStrategy("equity", data.equity, false);
-      renderStrategy("crypto", data.crypto, true);
+      renderStrategy("equity", data.equity);
       renderAllocation(data.risk);
       renderRisk(data.risk);
       renderExecution(data.execution);

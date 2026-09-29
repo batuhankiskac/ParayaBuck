@@ -55,14 +55,12 @@
         engine_state: data.state,
         strategies: (data.runtime && data.runtime.strategies) || [],
         active_universe: {
-          equity: (universe.equity && universe.equity.symbols) || [],
-          crypto: (universe.crypto && universe.crypto.symbols) || []
+          equity: (universe.equity && universe.equity.symbols) || []
         },
-        crypto_universe_scores: (universe.crypto && universe.crypto.scores) || {},
         pending_orders: operations.pending_orders || [],
         recent_fills: operations.recent_fills || [],
         last_decision: operations.last_decision || null,
-        scanner_status: { equity: scanner.equity_status || null, crypto: scanner.crypto_status || null },
+        scanner_status: { equity: scanner.equity_status || null },
         last_reconciliation: (data.runtime && data.runtime.last_reconciliation_at) || null,
         risk_status: (data.runtime && data.runtime.circuit_breaker_reason) || "ready"
       };
@@ -142,12 +140,11 @@
       }
       const days = parseInt(byId("btDays").value, 10);
       const payload = {
-        market: byId("btMarket").value,
+        market: "equity",
         strategy: byId("btStrategy").value.trim(),
         parameters: parameters,
         years: parseInt(byId("btYears").value, 10) || 3,
         days: Number.isNaN(days) ? 90 : days,
-        max_symbols: parseInt(byId("btMaxSymbols").value, 10) || 0,
         symbols: byId("btSymbols").value.trim()
       };
       const btn = byId("backtestRunBtn");

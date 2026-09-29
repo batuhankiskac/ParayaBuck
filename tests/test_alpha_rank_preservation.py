@@ -27,12 +27,9 @@ _LIMITS = PortfolioRiskLimits(
     drawdown_halt=1.0,
     maximum_gross=1.0,
     maximum_equity=1.0,
-    maximum_crypto=1.0,
     maximum_equity_asset=0.25,
-    maximum_crypto_asset=0.25,
     minimum_cash=0.0,
     maximum_positions=6,
-    maximum_crypto_positions=2,
 )
 
 _NAMES = ("AAAA", "BBBB", "CCCC", "DDDD", "EEEE", "FFFF", "GGGG", "HHHH")
@@ -114,7 +111,7 @@ def test_unranked_targets_keep_legacy_weight_and_symbol_order() -> None:
     (weight descending, then symbol ascending)."""
     weights = {symbol: 0.10 for symbol in _NAMES}
     target = TargetPortfolio(
-        strategy_name="crypto_low_variance_v2",
+        strategy_name="equity_leveraged_trend_v1",
         strategy_version="2.0.0",
         decision_timestamp=_TS,
         weights=tuple(TargetWeight(symbol, w) for symbol, w in weights.items()),

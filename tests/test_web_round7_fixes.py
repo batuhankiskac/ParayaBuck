@@ -77,22 +77,17 @@ def test_settings_save_with_empty_blocks_succeeds(tmp_path: Path) -> None:
         tmp_path,
         EMPTY_BLOCKS
         + "universe:\n  equity:\n    enabled: true\n"
-        + "strategy:\n  equity:\n    name: equity_leveraged_trend_v1\n  crypto:\n",
+        + "strategy:\n  equity:\n    name: equity_leveraged_trend_v1\n",
     )
 
     result = asyncio.run(
-        SettingsService(manager).save_settings(
-            SettingsPayload(log_level="DEBUG", equity_trading_enabled=True, crypto_trading_enabled=False)
-        )
+        SettingsService(manager).save_settings(SettingsPayload(log_level="DEBUG", equity_trading_enabled=True))
     )
 
     assert result["status"] == "success"
     saved = yaml.safe_load(manager.config_path.read_text(encoding="utf-8"))
     assert saved["app"]["log_level"] == "DEBUG"
-    assert saved["strategy"] == {
-        "equity": {"name": "equity_leveraged_trend_v1", "enabled": True},
-        "crypto": {"enabled": False},
-    }
+    assert saved["strategy"] == {"equity": {"name": "equity_leveraged_trend_v1", "enabled": True}}
     assert saved["live"] == {}
 
 
@@ -258,15 +253,18 @@ def test_stop_engine_does_not_close_runtime_owned_broker(tmp_path: Path) -> None
     assert runtime_broker.closed == 0
 
 
-# --- F5: crypto drawer default matches load_config --------------------------
+# --- Equity-only settings surface ------------------------------------------
 
 
-def test_get_settings_crypto_default_is_disabled(tmp_path: Path) -> None:
-    manager = _manager(tmp_path, yaml.safe_dump({"runtime": {"mode": "paper"}, "strategy": {"crypto": {}}}))
+def test_settings_expose_no_crypto_toggle(tmp_path: Path) -> None:
+    manager = _manager(tmp_path, yaml.safe_dump({"runtime": {"mode": "paper"}}))
 
     data = asyncio.run(SettingsService(manager).get_settings())
 
-    assert data["crypto_trading_enabled"] is False
+    assert data["equity_trading_enabled"] is True
+    assert not any("crypto" in key for key in data)
+    with pytest.raises(ValidationError):
+        SettingsPayload(crypto_trading_enabled=False)  # type: ignore[call-arg]
 
 
 # --- Live switch: paper_mode is the single PAPER/LIVE control --------------

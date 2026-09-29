@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from itertools import pairwise
 
-from parayabuck.core.models import Bar, Market
+from parayabuck.core.models import Bar
 from parayabuck.logger import get_logger
 from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES
 
@@ -30,7 +30,7 @@ class TimeframeAggregator:
     def update(self, bar: Bar) -> Bar | None:
         if self.minutes == 1:
             return Bar(**{**bar.__dict__, "timeframe": self.timeframe})
-        bucket_time = self._bucket(bar.timestamp, bar.market)
+        bucket_time = self._bucket(bar.timestamp)
         closed_through = self._closed_through.get(bar.symbol)
         if closed_through is not None and bucket_time <= closed_through:
             # A late minute of a bucket that a flush already emitted must not
@@ -74,7 +74,7 @@ class TimeframeAggregator:
     def update_correction(self, bar: Bar) -> Bar | None:
         if self.minutes == 1:
             return Bar(**{**bar.__dict__, "timeframe": self.timeframe})
-        bucket_time = self._bucket(bar.timestamp, bar.market)
+        bucket_time = self._bucket(bar.timestamp)
         current = self._current.get(bar.symbol)
         if current is not None and current.timestamp == bucket_time:
             components = self._components[bar.symbol]
@@ -89,17 +89,13 @@ class TimeframeAggregator:
         previous_components[bar.timestamp] = bar
         return self._aggregate(previous_components, bucket_time)
 
-    def _bucket(self, timestamp: datetime, market: Market) -> datetime:
-        value = timestamp
-        if market == Market.EQUITY:
-            local = value.astimezone(NEW_YORK)
-            anchor = local.replace(hour=9, minute=30, second=0, microsecond=0)
-            elapsed = max(0, int((local - anchor).total_seconds() // 60))
-            bucket_offset = elapsed - elapsed % self.minutes
-            return (anchor + timedelta(minutes=bucket_offset)).astimezone(value.tzinfo)
-        minute_of_day = value.hour * 60 + value.minute
-        bucket = minute_of_day - minute_of_day % self.minutes
-        return value.replace(hour=bucket // 60, minute=bucket % 60, second=0, microsecond=0)
+    def _bucket(self, timestamp: datetime) -> datetime:
+        """Session-anchored bucket: buckets start at the 09:30 ET open."""
+        local = timestamp.astimezone(NEW_YORK)
+        anchor = local.replace(hour=9, minute=30, second=0, microsecond=0)
+        elapsed = max(0, int((local - anchor).total_seconds() // 60))
+        bucket_offset = elapsed - elapsed % self.minutes
+        return (anchor + timedelta(minutes=bucket_offset)).astimezone(timestamp.tzinfo)
 
     def flush_until(self, now: datetime) -> list[Bar]:
         flushed: list[Bar] = []
@@ -115,7 +111,7 @@ class TimeframeAggregator:
         close_date = session_close.astimezone(NEW_YORK).date()
         flushed: list[Bar] = []
         for symbol, bar in list(self._current.items()):
-            if bar.market == Market.EQUITY and bar.timestamp.astimezone(NEW_YORK).date() == close_date:
+            if bar.timestamp.astimezone(NEW_YORK).date() == close_date:
                 flushed.append(self._current.pop(symbol))
                 self._closed_through[symbol] = bar.timestamp
                 self._last_components[symbol] = self._components.pop(symbol, {})
@@ -177,7 +173,7 @@ def aggregate_historical_bars(
     aggregator = TimeframeAggregator(target_timeframe)
     buckets: dict[tuple[str, datetime], list[Bar]] = {}
     for bar in sorted(bars, key=lambda item: (item.symbol, item.timestamp)):
-        bucket = aggregator._bucket(bar.timestamp, bar.market)
+        bucket = aggregator._bucket(bar.timestamp)
         buckets.setdefault((bar.symbol, bucket), []).append(bar)
     expected = target_minutes // source_minutes
     result: list[Bar] = []

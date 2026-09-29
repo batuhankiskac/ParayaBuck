@@ -100,12 +100,9 @@ class PortfolioRiskLimits:
     drawdown_halt: float = 0.05
     maximum_gross: float = 0.60
     maximum_equity: float = 0.50
-    maximum_crypto: float = 0.10
     maximum_equity_asset: float = 0.10
-    maximum_crypto_asset: float = 0.05
     minimum_cash: float = 0.40
     maximum_positions: int = 6
-    maximum_crypto_positions: int = 3
 
 
 def _validate_unique_account_positions(account: AccountSnapshot) -> None:
@@ -128,12 +125,9 @@ def portfolio_risk_limits_from_config(risk: RiskLimits) -> PortfolioRiskLimits:
         drawdown_halt=risk.max_drawdown_pct,
         maximum_gross=risk.max_gross_exposure_pct,
         maximum_equity=risk.max_gross_exposure_pct,
-        maximum_crypto=risk.max_crypto_exposure_pct,
         maximum_equity_asset=risk.max_position_pct,
-        maximum_crypto_asset=risk.max_crypto_position_pct,
         minimum_cash=risk.cash_buffer_pct,
         maximum_positions=risk.max_positions,
-        maximum_crypto_positions=risk.max_crypto_positions,
     )
 
 
@@ -230,7 +224,7 @@ class PortfolioRiskOverlay:
         rank_by_symbol = {canonical_symbol(weight.symbol, market): weight.rank for weight in target.weights}
         if mode not in {"backtest", "paper", "live"}:
             raise ValueError(f"Unsupported portfolio execution mode: {mode}")
-        per_asset = self.limits.maximum_crypto_asset if market == Market.CRYPTO else self.limits.maximum_equity_asset
+        per_asset = self.limits.maximum_equity_asset
         # Immutable external inventory per symbol: never sellable, never
         # scaled. The strategy's total desired weight for a mixed symbol is
         # split internally into external_floor + managed_desired; only the
@@ -274,13 +268,10 @@ class PortfolioRiskOverlay:
             # is authorized to sell; for mixed positions keep the floor.
             desired[symbol] = max(desired[symbol], external_weight)
 
-        market_position_limit = (
-            self.limits.maximum_crypto_positions if market == Market.CRYPTO else self.limits.maximum_positions
-        )
-        # ``maximum_positions`` is an account-level cap, while this overlay is
-        # intentionally called once per market. Count every distinct
-        # cross-market account slot and every positive target slot already
-        # reserved by an earlier market in this decision cycle. Current-market
+        # ``maximum_positions`` is an account-level cap. Count every distinct
+        # account slot outside this market (a foreign crypto holding in the
+        # shared account still occupies one) and every positive target slot
+        # already reserved earlier in this decision cycle. Current-market
         # external/unapproved inventory is also fixed: it cannot be sold by
         # this runtime, so it consumes a slot even when the strategy omits it.
         # Managed current-market positions omitted by the target remain
@@ -297,8 +288,8 @@ class PortfolioRiskOverlay:
             for reserved_market, symbol in reserved_position_keys
         }
         # Broker-only/manual working orders are account-wide slot claims even
-        # when the adapter exposes only symbols. Infer the market once and
-        # canonicalize before deduplication (e.g. BTCUSD == BTC/USD).
+        # when the adapter exposes only symbols. Classify the market once and
+        # canonicalize before deduplication (e.g. a foreign BTCUSD == BTC/USD).
         open_order_slots: set[tuple[Market, str]] = set()
         for symbol in open_order_symbols:
             order_market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
@@ -316,7 +307,7 @@ class PortfolioRiskOverlay:
         fixed_current_symbols = {symbol for fixed_market, symbol in fixed_slots if fixed_market == market}
         mandatory_symbols = set(desired) & fixed_current_symbols
         available_global_slots = max(0, self.limits.maximum_positions - len(fixed_slots))
-        available_market_slots = max(0, market_position_limit - len(fixed_current_symbols))
+        available_market_slots = max(0, self.limits.maximum_positions - len(fixed_current_symbols))
         optional_position_limit = min(available_global_slots, available_market_slots)
         pre_position_desired = dict(desired)
         pre_position_managed_desired = max(
@@ -348,7 +339,7 @@ class PortfolioRiskOverlay:
             desired = {symbol: weight for symbol, weight in desired.items() if symbol in kept_symbols}
             halted_reasons.append("position_count_limit")
 
-        sleeve_limit = self.limits.maximum_crypto if market == Market.CRYPTO else self.limits.maximum_equity
+        sleeve_limit = self.limits.maximum_equity
         # Internally separate the three exposure layers: immutable external
         # inventory (never sellable), managed desired exposure (mutable by the
         # planner) and the total desired account exposure (external + managed
@@ -394,8 +385,7 @@ class PortfolioRiskOverlay:
             # A position-count trim can remove every candidate before the
             # exposure scaler runs. Preserve the existing diagnostic contract
             # when the same immutable/account gross state leaves no exposure
-            # capacity at all (for example six full equity slots blocking
-            # crypto).
+            # capacity at all.
             halted_reasons.append("exposure_scaled_to_limit")
         weights = tuple(
             TargetWeight(symbol, weight, "portfolio_risk_overlay")
@@ -465,9 +455,7 @@ class TargetToOrderPlanner:
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
         # Open orders arrive broker-wide (``all_open_order_symbols``); only
         # this market's working orders must suppress order placement here. A
-        # cross-market symbol is never canonicalized under this market: an
-        # equity order like IWM must not raise ``Cannot infer crypto
-        # base/quote`` in the crypto planner (and vice versa).
+        # foreign crypto order symbol is never canonicalized as an equity.
         open_symbols = {
             canonical_symbol(symbol, market)
             for symbol in (open_order_symbols or set())
@@ -573,11 +561,10 @@ def reserve_opening_order_slots(
     account: AccountSnapshot,
     *,
     maximum_positions: int,
-    market_position_limits: Mapping[Market, int] | None = None,
     reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     open_order_symbols: tuple[str, ...] = (),
 ) -> tuple[PortfolioOrderRequest, ...]:
-    """Admit opening BUYs against occupied and working account/market slots.
+    """Admit opening BUYs against occupied and working account slots.
 
     Caller order is the existing deterministic planner priority. A requested
     exit never releases a slot; only a fresh zero-position snapshot does.
@@ -596,11 +583,7 @@ def reserve_opening_order_slots(
         key = (order.market, canonical_symbol(order.symbol, order.market))
         if order.side == PortfolioOrderSide.SELL or key in slots:
             admitted.append(order)
-        elif len(slots) < maximum_positions and (
-            market_position_limits is None
-            or order.market not in market_position_limits
-            or sum(slot_market == order.market for slot_market, _ in slots) < market_position_limits[order.market]
-        ):
+        elif len(slots) < maximum_positions:
             slots.add(key)
             admitted.append(order)
     return tuple(admitted)
@@ -659,8 +642,6 @@ def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide, sa
     ``reconciliation_required`` and require a ``reconcile()`` before retry.
     """
     canonical = canonical_symbol(symbol, Market.CRYPTO if "/" in symbol else Market.EQUITY)
-    # Use the canonical symbol in the key so ``BTC/USD`` vs ``BTCUSD`` do not
-    # create duplicate broker orders for the same logical leg.
     if salt:
         return f"parayabuck-{decision_id}-{salt}-{canonical}-{side.value}"
     return f"parayabuck-{decision_id}-{canonical}-{side.value}"

@@ -510,8 +510,8 @@ def test_oversized_fill_without_adoption_hook_stays_fail_closed() -> None:
         ReconciliationService(broker).reconcile()
 
 
-def test_fee_net_crypto_quantity_within_broker_precision_matches() -> None:
-    # Alpaca reports 0.029061298 for a fee-net ledger quantity of 0.0290612996625.
+def test_quantity_within_broker_precision_matches() -> None:
+    # Alpaca reports 0.029061298 for a ledger quantity of 0.0290612996625.
     state = _State(broker_qty=0.029061298, filled_qty=0.0290612996625)
     report = ReconciliationService(state.broker()).reconcile()
     assert report["MATCH"] == ["AAPL"]

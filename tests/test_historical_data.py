@@ -13,8 +13,8 @@ from parayabuck.data.cache import WarmupCache
 from parayabuck.markets.timeframes import is_regular_equity_time
 
 
-def _bar(timestamp: datetime, market: Market) -> Bar:
-    return Bar(timestamp, "BTC/USD" if market == Market.CRYPTO else "AAPL", "5m", 100, 101, 99, 100)
+def _bar(timestamp: datetime, timeframe: str = "5m") -> Bar:
+    return Bar(timestamp, "AAPL", timeframe, 100, 101, 99, 100)
 
 
 def test_equity_historical_filter_accepts_only_regular_session() -> None:
@@ -25,24 +25,21 @@ def test_equity_historical_filter_accepts_only_regular_session() -> None:
 
 def test_warmup_cache_requires_recent_market_data() -> None:
     now = datetime.now(UTC)
-    assert AlpacaHistoricalData._cache_is_fresh(
-        [_bar(now - timedelta(hours=2), Market.CRYPTO)],
-        Market.CRYPTO,
-        "5m",
-        now,
-    )
-    assert not AlpacaHistoricalData._cache_is_fresh(
-        [_bar(now - timedelta(hours=4), Market.CRYPTO)],
-        Market.CRYPTO,
-        "5m",
-        now,
-    )
-    assert not AlpacaHistoricalData._cache_is_fresh(
-        [_bar(now - timedelta(days=5), Market.EQUITY)],
-        Market.EQUITY,
-        "5m",
-        now,
-    )
+    assert AlpacaHistoricalData._cache_is_fresh([_bar(now - timedelta(days=3))], "5m", now)
+    assert not AlpacaHistoricalData._cache_is_fresh([_bar(now - timedelta(days=5))], "5m", now)
+    assert AlpacaHistoricalData._cache_is_fresh([_bar(now - timedelta(days=7), "1d")], "1d", now)
+    assert not AlpacaHistoricalData._cache_is_fresh([_bar(now - timedelta(days=9), "1d")], "1d", now)
+    # A bar newer than the window end is never "fresh" data for that window.
+    assert not AlpacaHistoricalData._cache_is_fresh([_bar(now + timedelta(days=1), "1d")], "1d", now)
+
+
+def test_crypto_symbols_are_rejected_before_any_provider_call() -> None:
+    history = AlpacaHistoricalData.__new__(AlpacaHistoricalData)
+    history._stock_client = None
+    history._cache = None
+    end = datetime(2026, 6, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="equity symbols only"):
+        history.get_bars_batch(["SPY", "BTC/USD"], "1d", start=end - timedelta(days=10), end=end)
 
 
 def test_splits_adjustment_maps_to_sdk_split(monkeypatch: Any) -> None:
@@ -60,7 +57,6 @@ def test_splits_adjustment_maps_to_sdk_split(monkeypatch: Any) -> None:
     history._stock_client = SimpleNamespace(
         get_stock_bars=lambda request: SimpleNamespace(df=__import__("pandas").DataFrame())
     )
-    history._crypto_client = None
     history._cache = SimpleNamespace(
         get=lambda *args, **kwargs: [],
         upsert=lambda *args, **kwargs: None,
@@ -72,39 +68,30 @@ def test_splits_adjustment_maps_to_sdk_split(monkeypatch: Any) -> None:
     assert recorded["adjustment"] == "split"
 
 
-def _crypto_bars(
-    end: datetime,
-    count: int,
-    *,
-    minutes_per_bar: int = 5,
-    last_bar_offset_minutes: int = 60,
-) -> list[Bar]:
-    return [
-        Bar(
-            end - timedelta(minutes=last_bar_offset_minutes) - timedelta(minutes=minutes_per_bar * (count - 1 - index)),
-            "BTC/USD",
-            "5m",
-            100.0,
-            101.0,
-            99.0,
-            100.0,
-            1000.0,
-            Market.CRYPTO,
-        )
-        for index in range(count)
-    ]
+# Fixed past window: deterministic regardless of the wall clock.
+_FALLBACK_END = datetime(2026, 6, 1, 20, 0, tzinfo=UTC)
 
 
-def _crypto_history(cache_bars: list[Bar]) -> Any:
+def _daily_bars(end: datetime, days: int) -> list[Bar]:
+    """One equity daily bar per weekday on ``(end - days, end)``."""
+    bars: list[Bar] = []
+    cursor = (end - timedelta(days=days - 1)).replace(hour=4, minute=0, second=0, microsecond=0)
+    while cursor < end:
+        if cursor.weekday() < 5:
+            bars.append(Bar(cursor, "AAPL", "1d", 100.0, 101.0, 99.0, 100.0, 1000.0, Market.EQUITY))
+        cursor += timedelta(days=1)
+    return bars
+
+
+def _cache_backed_history(cache_bars: list[Bar], get_stock_bars: Any) -> Any:
     import parayabuck.data.alpaca as alpaca_module
-
-    def _boom(_request: Any) -> Any:
-        raise RuntimeError("api down")
 
     history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
     history._stock_feed = "iex"
-    history._stock_client = None
-    history._crypto_client = SimpleNamespace(get_crypto_bars=_boom)
+    history._configured_stock_feed = "iex"
+    history._sip_fallback_active = False
+    history._sip_quote_fallback_active = False
+    history._stock_client = SimpleNamespace(get_stock_bars=get_stock_bars)
     history._cache = SimpleNamespace(
         get=lambda *args, **kwargs: cache_bars,
         upsert=lambda *args, **kwargs: None,
@@ -112,54 +99,75 @@ def _crypto_history(cache_bars: list[Bar]) -> Any:
     return history
 
 
-def test_long_window_is_split_into_row_bounded_requests(monkeypatch: Any) -> None:
-    """A window spanning more than 10k bars must be split into multiple
-    time-bounded requests instead of being rejected or silently truncated."""
+def _failing_history(cache_bars: list[Bar]) -> Any:
+    def _boom(_request: Any) -> Any:
+        raise RuntimeError("api down")
+
+    return _cache_backed_history(cache_bars, _boom)
+
+
+def _hourly_frame(start: datetime, end: datetime, symbols: list[str]) -> Any:
     import pandas as pd
 
+    frames = []
+    timestamp = start
+    while timestamp < end:
+        for symbol in symbols:
+            frames.append(
+                {
+                    "timestamp": timestamp,
+                    "symbol": symbol,
+                    "open": 100.0,
+                    "high": 101.0,
+                    "low": 99.0,
+                    "close": 100.0,
+                    "volume": 1000.0,
+                }
+            )
+        timestamp += timedelta(hours=1)
+    return pd.DataFrame(frames)
+
+
+def _regular_hours(start: datetime, end: datetime) -> int:
+    count = 0
+    timestamp = start
+    while timestamp < end:
+        count += is_regular_equity_time(timestamp)
+        timestamp += timedelta(hours=1)
+    return count
+
+
+def test_long_window_is_split_into_row_bounded_requests() -> None:
+    """A window spanning more than 10k bars must be split into multiple
+    time-bounded requests instead of being rejected or silently truncated."""
     import parayabuck.data.alpaca as alpaca_module
 
     end = datetime(2026, 1, 1, tzinfo=UTC)
     start = end - timedelta(days=730)  # 2 years of hourly bars: >10k rows
     requests: list[tuple[datetime, datetime]] = []
 
-    class FakeCryptoClient:
-        def get_crypto_bars(self, request: Any) -> Any:
+    class FakeStockClient:
+        def get_stock_bars(self, request: Any) -> Any:
             requests.append((request.start, request.end))
-            frames = []
-            timestamp = request.start
-            while timestamp < request.end:
-                frames.append(
-                    {
-                        "timestamp": timestamp,
-                        "symbol": "BTC/USD",
-                        "open": 100.0,
-                        "high": 101.0,
-                        "low": 99.0,
-                        "close": 100.0,
-                        "volume": 1000.0,
-                    }
-                )
-                timestamp += timedelta(hours=1)
-            return SimpleNamespace(df=pd.DataFrame(frames))
+            return SimpleNamespace(df=_hourly_frame(request.start, request.end, ["AAPL"]))
 
     history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
     history._stock_feed = "iex"
-    history._stock_client = None
-    history._crypto_client = FakeCryptoClient()
+    history._stock_client = FakeStockClient()
     history._cache = SimpleNamespace(
         get=lambda *args, **kwargs: [],
         upsert=lambda *args, **kwargs: None,
     )
 
-    bars = history.get_bars_batch(["BTC/USD"], "1h", start=start, end=end)
+    bars = history.get_bars_batch(["AAPL"], "1h", start=start, end=end)
 
     assert len(requests) > 1, "long window must be chunked"
     for request_start, request_end in requests:
         rows = (request_end - request_start).total_seconds() / 3600
         assert rows <= 10_000 + 1, "every chunk must stay row-bounded"
-    expected = int((end - start).total_seconds() // 3600)
-    result = bars["BTC/USD"]
+    # Only regular-session bars survive; none may be lost or duplicated.
+    expected = _regular_hours(start, end)
+    result = bars["AAPL"]
     assert len(result) == expected, "no bars may be lost or duplicated by chunking"
     assert len({bar.timestamp for bar in result}) == expected
 
@@ -167,46 +175,21 @@ def test_long_window_is_split_into_row_bounded_requests(monkeypatch: Any) -> Non
 def test_long_window_split_covers_every_symbol_in_a_multi_symbol_batch() -> None:
     """The row-bounded window split must not truncate any symbol in a
     multi-symbol batch: every symbol receives its full date range."""
-    import pandas as pd
-
     import parayabuck.data.alpaca as alpaca_module
 
     end = datetime(2026, 1, 1, tzinfo=UTC)
     start = end - timedelta(days=730)
-    symbols = [f"SYM{i:02d}/USD" for i in range(20)]
+    symbols = [f"SYM{i:02d}" for i in range(20)]
     requests: list[tuple[datetime, datetime]] = []
 
-    class FakeCryptoClient:
-        def _bars(self, request: Any) -> Any:
-            requests.append((request.start, request.end))
-            frames = []
-            timestamp = request.start
-            while timestamp < request.end:
-                for symbol in symbols:
-                    frames.append(
-                        {
-                            "timestamp": timestamp,
-                            "symbol": symbol,
-                            "open": 100.0,
-                            "high": 101.0,
-                            "low": 99.0,
-                            "close": 100.0,
-                            "volume": 1000.0,
-                        }
-                    )
-                timestamp += timedelta(hours=1)
-            return SimpleNamespace(df=pd.DataFrame(frames))
-
-        def get_crypto_bars(self, request: Any) -> Any:
-            return self._bars(request)
-
+    class FakeStockClient:
         def get_stock_bars(self, request: Any) -> Any:
-            return self._bars(request)
+            requests.append((request.start, request.end))
+            return SimpleNamespace(df=_hourly_frame(request.start, request.end, symbols))
 
     history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
     history._stock_feed = "iex"
-    history._stock_client = FakeCryptoClient()
-    history._crypto_client = FakeCryptoClient()
+    history._stock_client = FakeStockClient()
     history._cache = SimpleNamespace(
         get=lambda *args, **kwargs: [],
         upsert=lambda *args, **kwargs: None,
@@ -215,7 +198,7 @@ def test_long_window_split_covers_every_symbol_in_a_multi_symbol_batch() -> None
     bars = history.get_bars_batch(symbols, "1h", start=start, end=end)
 
     assert len(requests) > 1
-    expected = int((end - start).total_seconds() // 3600)
+    expected = _regular_hours(start, end)
     for symbol in symbols:
         series = bars[symbol]
         assert len(series) == expected, f"{symbol} lost bars to chunking"
@@ -223,57 +206,47 @@ def test_long_window_split_covers_every_symbol_in_a_multi_symbol_batch() -> None
 
 
 def test_incomplete_cache_is_not_used_as_api_fallback() -> None:
-    end = datetime.now(UTC)
+    end = _FALLBACK_END
     start = end - timedelta(days=30)
-    # A fresh tail (last bar 1h before end) but only ~2 days of a 30-day
+    # A fresh tail (last bar the same day) but only ~2 sessions of a 30-day
     # window: recency alone must not make this acceptable as fallback data.
-    history = _crypto_history(_crypto_bars(end, count=2 * 24 * 12))
+    history = _failing_history(_daily_bars(end, days=2))
     with pytest.raises(RuntimeError, match="api down"):
-        history.get_bars_batch(["BTC/USD"], "5m", start=start, end=end)
+        history.get_bars_batch(["AAPL"], "1d", start=start, end=end)
 
 
 def test_complete_cache_is_used_as_api_fallback() -> None:
-    end = datetime.now(UTC)
+    end = _FALLBACK_END
     start = end - timedelta(days=10)
-    full = _crypto_bars(end, count=10 * 24 * 12)  # 10 days of 5m bars
-    history = _crypto_history(full)
-    result = history.get_bars_batch(["BTC/USD"], "5m", start=start, end=end)
-    assert result == {"BTC/USD": full}
+    full = _daily_bars(end, days=10)
+    history = _failing_history(full)
+    result = history.get_bars_batch(["AAPL"], "1d", start=start, end=end)
+    assert result == {"AAPL": full}
 
 
-def _empty_crypto_history(cache_bars: list[Bar]) -> Any:
+def _empty_history(cache_bars: list[Bar]) -> Any:
     import pandas as pd
 
-    import parayabuck.data.alpaca as alpaca_module
-
-    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
-    history._stock_feed = "iex"
-    history._stock_client = None
-    history._crypto_client = SimpleNamespace(get_crypto_bars=lambda request: SimpleNamespace(df=pd.DataFrame()))
-    history._cache = SimpleNamespace(
-        get=lambda *args, **kwargs: cache_bars,
-        upsert=lambda *args, **kwargs: None,
-    )
-    return history
+    return _cache_backed_history(cache_bars, lambda request: SimpleNamespace(df=pd.DataFrame()))
 
 
 def test_fresh_tail_cache_not_used_when_api_returns_empty() -> None:
-    end = datetime.now(UTC)
+    end = _FALLBACK_END
     start = end - timedelta(days=30)
-    # A fresh 2-day tail must not stand in for a 30-day window when the API
-    # returns no rows: the response is empty, not the cache tail.
-    history = _empty_crypto_history(_crypto_bars(end, count=2 * 24 * 12))
-    result = history.get_bars_batch(["BTC/USD"], "5m", start=start, end=end)
-    assert result == {"BTC/USD": []}
+    # A fresh 2-session tail must not stand in for a 30-day window when the
+    # API returns no rows: the response is empty, not the cache tail.
+    history = _empty_history(_daily_bars(end, days=2))
+    result = history.get_bars_batch(["AAPL"], "1d", start=start, end=end)
+    assert result == {"AAPL": []}
 
 
 def test_full_cache_is_used_when_api_returns_empty() -> None:
-    end = datetime.now(UTC)
+    end = _FALLBACK_END
     start = end - timedelta(days=10)
-    full = _crypto_bars(end, count=10 * 24 * 12)
-    history = _empty_crypto_history(full)
-    result = history.get_bars_batch(["BTC/USD"], "5m", start=start, end=end)
-    assert result == {"BTC/USD": full}
+    full = _daily_bars(end, days=10)
+    history = _empty_history(full)
+    result = history.get_bars_batch(["AAPL"], "1d", start=start, end=end)
+    assert result == {"AAPL": full}
 
 
 def test_sip_entitlement_failure_falls_back_to_iex(monkeypatch: Any) -> None:
@@ -293,7 +266,6 @@ def test_sip_entitlement_failure_falls_back_to_iex(monkeypatch: Any) -> None:
             or (_ for _ in ()).throw(RuntimeError("Insufficient data privileges: feed=sip is not entitled"))
         )
     )
-    history._crypto_client = None
     history._cache = SimpleNamespace(
         get=lambda *args, **kwargs: [],
         upsert=lambda *args, **kwargs: None,
@@ -349,7 +321,6 @@ def test_batch_download_chunks_by_total_rows_not_per_symbol(monkeypatch: Any) ->
     history._sip_fallback_active = False
     history._sip_quote_fallback_active = False
     history._stock_client = CappedClient()
-    history._crypto_client = None
     history._cache = SimpleNamespace(
         get=lambda *args, **kwargs: [],
         upsert=lambda *args, **kwargs: None,
@@ -371,7 +342,9 @@ def test_batch_download_chunks_by_total_rows_not_per_symbol(monkeypatch: Any) ->
 
 _INCREMENTAL_SCOPE = "warmup/unit-test"
 _INCREMENTAL_DIGEST = "digest-a"
-_INCREMENTAL_SYMBOLS = ("BTC/USD", "ETH/USD")
+_INCREMENTAL_SYMBOLS = ("QQQ", "SPY")
+# SIP: no 15-minute IEX end clamp, so request bounds are exactly the test's.
+_INCREMENTAL_FEED = "sip"
 
 
 @pytest.fixture
@@ -384,20 +357,28 @@ def warmup_cache(tmp_path: Path) -> Any:
         cache.close()
 
 
-def _hour_grid(start: datetime, end: datetime) -> list[datetime]:
-    """Hourly bar timestamps on ``[start, end]``; crypto trades 24/7."""
-    cursor = start.replace(minute=0, second=0, microsecond=0)
+def _day_grid(start: datetime, end: datetime) -> list[datetime]:
+    """Daily bar timestamps on ``[start, end]`` at 00:00 UTC.
+
+    The merge mechanics under test do not depend on the session calendar,
+    so every calendar day carries a bar.
+    """
+    cursor = start.replace(hour=0, minute=0, second=0, microsecond=0)
     if cursor < start:
-        cursor += timedelta(hours=1)
+        cursor += timedelta(days=1)
     stamps: list[datetime] = []
     while cursor <= end:
         stamps.append(cursor)
-        cursor += timedelta(hours=1)
+        cursor += timedelta(days=1)
     return stamps
 
 
-class _FakeCryptoBars:
-    """Deterministic 1h crypto provider: synthetic rows, no network, no credentials."""
+def _today() -> datetime:
+    return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+class _FakeStockBars:
+    """Deterministic 1d equity provider: synthetic rows, no network, no credentials."""
 
     def __init__(
         self,
@@ -411,7 +392,7 @@ class _FakeCryptoBars:
         self._close_overrides = close_overrides or {}
         self._reverse = reverse
 
-    def get_crypto_bars(self, request: Any) -> Any:
+    def get_stock_bars(self, request: Any) -> Any:
         import pandas as pd
 
         # The SDK hands the request bounds back naive; the production client
@@ -430,7 +411,7 @@ class _FakeCryptoBars:
                 "close": self._close_overrides.get(stamp, 100.0),
                 "volume": 1000.0,
             }
-            for stamp in _hour_grid(start, end)
+            for stamp in _day_grid(start, end)
             for symbol in symbols
             if symbol not in self._omit
         ]
@@ -444,17 +425,16 @@ def _incremental_history(cache: Any, provider: Any) -> Any:
     import parayabuck.data.alpaca as alpaca_module
 
     history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
-    history._stock_feed = "iex"
-    history._configured_stock_feed = "iex"
+    history._stock_feed = _INCREMENTAL_FEED
+    history._configured_stock_feed = _INCREMENTAL_FEED
     history._sip_fallback_active = False
     history._sip_quote_fallback_active = False
-    history._stock_client = None
-    history._crypto_client = provider
+    history._stock_client = provider
     history._cache = cache
     return history
 
 
-def _seed_crypto_cache(cache: Any, stamps: list[datetime]) -> None:
+def _seed_cache(cache: Any, stamps: list[datetime]) -> None:
     """Write a scope-valid cache holding exactly ``stamps`` for every symbol."""
     for symbol in _INCREMENTAL_SYMBOLS:
         cache.upsert(
@@ -462,17 +442,17 @@ def _seed_crypto_cache(cache: Any, stamps: list[datetime]) -> None:
                 Bar(
                     timestamp=stamp,
                     symbol=symbol,
-                    timeframe="1h",
+                    timeframe="1d",
                     open=100.0,
                     high=101.0,
                     low=99.0,
                     close=100.0,
                     volume=1000.0,
-                    market=Market.CRYPTO,
+                    market=Market.EQUITY,
                 )
                 for stamp in stamps
             ],
-            feed="crypto",
+            feed=_INCREMENTAL_FEED,
             adjustment="raw",
         )
     cache.scope_set(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST, "unit-test")
@@ -487,7 +467,7 @@ def _expected_window(
     """The (timestamp, close) pairs a complete download of the window returns."""
     overrides = close_overrides or {}
     return {
-        symbol: [(stamp, overrides.get(stamp, 100.0)) for stamp in _hour_grid(start, end)]
+        symbol: [(stamp, overrides.get(stamp, 100.0)) for stamp in _day_grid(start, end)]
         for symbol in _INCREMENTAL_SYMBOLS
     }
 
@@ -499,7 +479,7 @@ def _window_pairs(result: dict[str, list[Bar]]) -> dict[str, list[tuple[datetime
 def _fetch_incremental(history: Any, start: datetime, end: datetime, **kwargs: Any) -> dict[str, list[Bar]]:
     return history.get_bars_batch_incremental(
         list(_INCREMENTAL_SYMBOLS),
-        "1h",
+        "1d",
         start=start,
         end=end,
         scope=_INCREMENTAL_SCOPE,
@@ -511,23 +491,23 @@ def _fetch_incremental(history: Any, start: datetime, end: datetime, **kwargs: A
 def test_incremental_fetch_extends_a_valid_cache_with_a_tail_download_only(warmup_cache: Any) -> None:
     """A scope-valid, head-covered, fresh cache must download only the tail
     (plus the overlap bars) and still return the complete window."""
-    provider = _FakeCryptoBars()
+    provider = _FakeStockBars()
     history = _incremental_history(warmup_cache, provider)
-    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-    start = end - timedelta(hours=8)
+    end = _today()
+    start = end - timedelta(days=8)
 
     first = _fetch_incremental(history, start, end)
     assert len(provider.requests) == 1, "a cache with no scope row must be fully downloaded"
     assert provider.requests[0][1] == start
     assert _window_pairs(first) == _expected_window(start, end)
 
-    later = end + timedelta(hours=1)
+    later = end + timedelta(days=1)
     second = _fetch_incremental(history, start, later)
     assert len(provider.requests) == 2
     symbols, tail_start, tail_end = provider.requests[-1]
     assert symbols == sorted(_INCREMENTAL_SYMBOLS)
     # The overlap re-downloads the two bars before the newest cached bar.
-    assert tail_start == end - timedelta(hours=2)
+    assert tail_start == end - timedelta(days=2)
     assert tail_end == later
     assert _window_pairs(second) == _expected_window(start, later)
 
@@ -535,11 +515,11 @@ def test_incremental_fetch_extends_a_valid_cache_with_a_tail_download_only(warmu
 def test_incremental_fetch_serves_a_full_cache_hit_without_calling_the_provider(warmup_cache: Any) -> None:
     """When the cache already reaches the request end there is nothing to
     download, so the provider must not be called at all."""
-    provider = _FakeCryptoBars()
+    provider = _FakeStockBars()
     history = _incremental_history(warmup_cache, provider)
-    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-    start = end - timedelta(hours=6)
-    _seed_crypto_cache(warmup_cache, _hour_grid(start, end))
+    end = _today()
+    start = end - timedelta(days=6)
+    _seed_cache(warmup_cache, _day_grid(start, end))
 
     result = _fetch_incremental(history, start, end, overlap_timeframes=0)
 
@@ -552,11 +532,11 @@ def test_incremental_merge_dedups_the_overlap_and_keeps_every_cached_bar(warmup_
     the cached window extended by the tail — no gaps, no duplicate timestamps
     (even when the provider answers out of order), the provider wins on a
     corrected bar, and a symbol the provider omits keeps its cached bars."""
-    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-    start = end - timedelta(hours=6)
-    correction = end - timedelta(hours=2)  # first bar of the overlap tail
-    provider = _FakeCryptoBars(omit=("ETH/USD",), close_overrides={correction: 100.5}, reverse=True)
-    _seed_crypto_cache(warmup_cache, _hour_grid(start, end))
+    end = _today()
+    start = end - timedelta(days=6)
+    correction = end - timedelta(days=2)  # first bar of the overlap tail
+    provider = _FakeStockBars(omit=("SPY",), close_overrides={correction: 100.5}, reverse=True)
+    _seed_cache(warmup_cache, _day_grid(start, end))
     history = _incremental_history(warmup_cache, provider)
 
     result = _fetch_incremental(history, start, end)
@@ -564,29 +544,29 @@ def test_incremental_merge_dedups_the_overlap_and_keeps_every_cached_bar(warmup_
     assert len(provider.requests) == 1
     assert provider.requests[0][1] == correction
     expected = _expected_window(start, end, close_overrides={correction: 100.5})
-    # ETH/USD had no provider rows in the tail: its cached window must survive.
-    expected["ETH/USD"] = _expected_window(start, end)["ETH/USD"]
+    # SPY had no provider rows in the tail: its cached window must survive.
+    expected["SPY"] = _expected_window(start, end)["SPY"]
     assert _window_pairs(result) == expected
-    btc = result["BTC/USD"]
-    assert [bar.timestamp for bar in btc] == sorted({bar.timestamp for bar in btc})
-    assert next(bar.close for bar in btc if bar.timestamp == correction) == 100.5
+    qqq = result["QQQ"]
+    assert [bar.timestamp for bar in qqq] == sorted({bar.timestamp for bar in qqq})
+    assert next(bar.close for bar in qqq if bar.timestamp == correction) == 100.5
 
 
-class _FailingCryptoBars:
+class _FailingStockBars:
     """Provider outage: every request raises."""
 
     def __init__(self) -> None:
         self.calls = 0
 
-    def get_crypto_bars(self, request: Any) -> Any:
+    def get_stock_bars(self, request: Any) -> Any:
         self.calls += 1
         raise RuntimeError("provider down")
 
 
-class _EmptyCryptoBars:
+class _EmptyStockBars:
     """Provider answers with no rows at all."""
 
-    def get_crypto_bars(self, request: Any) -> Any:
+    def get_stock_bars(self, request: Any) -> Any:
         import pandas as pd
 
         return SimpleNamespace(df=pd.DataFrame())
@@ -594,24 +574,24 @@ class _EmptyCryptoBars:
 
 def _seed_old_scope_cache(cache: Any, start: datetime, end: datetime) -> None:
     """Fresh, window-covering rows recorded under a PREVIOUS config digest."""
-    _seed_crypto_cache(cache, _hour_grid(start, end))
+    _seed_cache(cache, _day_grid(start, end))
     cache.scope_set(_INCREMENTAL_SCOPE, "digest-old", "unit-test")
 
 
 def test_normal_incremental_fetch_stamps_the_scope(warmup_cache: Any) -> None:
-    history = _incremental_history(warmup_cache, _FakeCryptoBars())
-    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    history = _incremental_history(warmup_cache, _FakeStockBars())
+    end = _today()
 
-    _fetch_incremental(history, end - timedelta(hours=6), end)
+    _fetch_incremental(history, end - timedelta(days=6), end)
 
     assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
 
 
 def test_outage_served_cache_rows_are_not_stamped_into_the_new_scope(warmup_cache: Any) -> None:
-    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-    start = end - timedelta(hours=6)
+    end = _today()
+    start = end - timedelta(days=6)
     _seed_old_scope_cache(warmup_cache, start, end)
-    provider = _FailingCryptoBars()
+    provider = _FailingStockBars()
     history = _incremental_history(warmup_cache, provider)
 
     result = _fetch_incremental(history, start, end)
@@ -622,25 +602,25 @@ def test_outage_served_cache_rows_are_not_stamped_into_the_new_scope(warmup_cach
 
 
 def test_empty_provider_response_does_not_stamp_the_scope(warmup_cache: Any) -> None:
-    history = _incremental_history(warmup_cache, _EmptyCryptoBars())
-    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    history = _incremental_history(warmup_cache, _EmptyStockBars())
+    end = _today()
 
-    result = _fetch_incremental(history, end - timedelta(hours=6), end)
+    result = _fetch_incremental(history, end - timedelta(days=6), end)
 
     assert result == {symbol: [] for symbol in _INCREMENTAL_SYMBOLS}
     assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
 
 
 def test_dedup_replay_of_an_outage_served_batch_does_not_stamp_the_scope(warmup_cache: Any) -> None:
-    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-    start = end - timedelta(hours=6)
+    end = _today()
+    start = end - timedelta(days=6)
     _seed_old_scope_cache(warmup_cache, start, end)
-    history = _incremental_history(warmup_cache, _FailingCryptoBars())
-    history.get_bars_batch(list(_INCREMENTAL_SYMBOLS), "1h", start, end)
+    history = _incremental_history(warmup_cache, _FailingStockBars())
+    history.get_bars_batch(list(_INCREMENTAL_SYMBOLS), "1d", start, end)
     # The provider recovers, but the identical request inside the dedup TTL
     # replays the outage-served result instead of calling it.
-    healthy = _FakeCryptoBars()
-    history._crypto_client = healthy
+    healthy = _FakeStockBars()
+    history._stock_client = healthy
 
     _fetch_incremental(history, start, end)
 
@@ -665,8 +645,9 @@ def test_empty_equity_tail_keeps_a_valid_scope_and_the_next_refresh_stays_increm
         requests.append(request)
         return SimpleNamespace(df=pd.DataFrame())
 
-    history = _incremental_history(warmup_cache, None)
-    history._stock_client = SimpleNamespace(get_stock_bars=empty_stock_bars)
+    history = _incremental_history(warmup_cache, SimpleNamespace(get_stock_bars=empty_stock_bars))
+    history._stock_feed = "iex"
+    history._configured_stock_feed = "iex"
     symbols = ["SPY", "QQQ", "QLD"]
     end = datetime.now(UTC)
     start = end - timedelta(days=30)

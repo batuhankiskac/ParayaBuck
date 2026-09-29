@@ -36,7 +36,6 @@ from parayabuck.config import DEFAULT_DECISION_DB_PATH, load_config
 from parayabuck.core.models import Market
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
-from parayabuck.universe import validate_active_crypto_universe
 from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.web.server")
@@ -123,9 +122,6 @@ class BacktestManager:
         days = int(payload.get("days") or 0)
         start = end - timedelta(days=days or int(payload.get("years") or 5) * 365)
         argv += ["--start", start.date().isoformat(), "--end", end.date().isoformat()]
-        max_symbols = payload.get("max_symbols") or 0
-        if max_symbols > 0:
-            argv += ["--candidate-limit", str(int(max_symbols))]
         strategy = (payload.get("strategy") or "").strip()
         if strategy:
             argv += ["--strategy", strategy]
@@ -485,8 +481,6 @@ class EngineManager:
             risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
         if "equity_trading_enabled" in fields_set:
             strategy.setdefault("equity", {})["enabled"] = payload.equity_trading_enabled
-        if "crypto_trading_enabled" in fields_set:
-            strategy.setdefault("crypto", {})["enabled"] = payload.crypto_trading_enabled
         # App PATCH semantics
         app_patch: dict[str, Any] = {}
         if "host" in fields_set:
@@ -1158,8 +1152,7 @@ class EngineManager:
             from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
             from parayabuck.portfolio import product_strategy_from
             from parayabuck.portfolio.runtime_service import configuration_digest
-            from parayabuck.universe import equity_universe_digest, load_active_crypto_symbols
-            from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
+            from parayabuck.universe import equity_universe_digest
 
             equity_universe = cfg.universe.equity
             digests: list[str] = []
@@ -1168,11 +1161,6 @@ class EngineManager:
                     cfg.strategy.equity,
                     equity_universe.symbols if equity_universe.enabled else (),
                     equity_universe_digest(equity_universe),
-                ),
-                (
-                    cfg.strategy.crypto,
-                    load_active_crypto_symbols(cfg.universe.crypto, log_rejection=False),
-                    crypto_scanner_config_digest(cfg.universe.crypto),
                 ),
             ):
                 if not selection.enabled or not symbols:
@@ -1425,7 +1413,7 @@ async def app_lifespan(_app: FastAPI) -> Any:
             manager._cancel_pending_retry()
             with suppress(asyncio.CancelledError):
                 await auto_start_task
-        # Uvicorn shutting down must also release Alpaca's stock and crypto
+        # Uvicorn shutting down must also release Alpaca's stock
         # sockets. Daemon threads alone remain active long enough to collide
         # with a newly launched process and trigger the connection limit.
         await asyncio.to_thread(manager.stop_engine)
@@ -1541,7 +1529,6 @@ class SettingsPayload(BaseModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     restart_engine: bool = True
     equity_trading_enabled: bool = True
-    crypto_trading_enabled: bool = True
     live_trading_enabled: bool = False
     live_dollar_cap: float = Field(0.0, ge=0)
     live_operator_approval_path: str = ""
@@ -1565,15 +1552,12 @@ class WebSocketTicketPayload(BaseModel):
 
 class BacktestPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    market: Literal["equity", "crypto"] = "equity"
+    market: Literal["equity"] = "equity"
     strategy: str = ""
     parameters: dict[str, object] = Field(default_factory=dict)
     years: int = Field(5, ge=1, le=30)
     days: int = Field(0, ge=0)
     symbols: str = ""
-    # 0 (default) means the broad eligible universe; an explicit positive
-    # value caps the download set for resource-limited runs.
-    max_symbols: int = Field(0, ge=0, le=2000)
 
 
 def _asset_version() -> str:
@@ -1705,12 +1689,11 @@ def _strategy_metadata(cfg: Any) -> dict[str, Any]:
     """Declared strategy contracts plus live universe sizes for the Web UI.
 
     Delegates to the /api/status builder so both views share one
-    implementation; only the (mtime-cached) active-crypto read is local.
+    implementation.
     """
     from parayabuck.web.services.status import strategy_metadata
 
-    active_crypto_payload = dict(_dashboard_load_json(cfg.universe.crypto.active_universe_path))
-    return strategy_metadata(cfg, active_crypto_payload=active_crypto_payload)
+    return strategy_metadata(cfg)
 
 
 @app.get("/api/status")
@@ -1723,7 +1706,6 @@ async def get_status() -> dict[str, Any]:
         "has_credentials": bool(key),
         "security_warning": getattr(manager, "security_warning", None),
         "active_equity_symbol_count": 0,
-        "active_crypto_symbol_count": 0,
     }
     # One config load per status poll: strategy and universe state share it.
     cfg: Any = None
@@ -1732,15 +1714,13 @@ async def get_status() -> dict[str, Any]:
         configured = []
         if cfg.strategy.equity.enabled:
             configured.append(f"equity/{cfg.strategy.equity.name}")
-        if cfg.strategy.crypto.enabled:
-            configured.append(f"crypto/{cfg.strategy.crypto.name}")
         result["strategy_status"] = "configured:" + ",".join(configured)
         result["strategy_metadata"] = _strategy_metadata(cfg)
     except Exception:
         result["strategy_status"] = "configuration_error"
         # Mirror the universe-section failure state so consumers never see a
         # missing scanner key when the config cannot be loaded.
-        result["scanner"] = {"equity_status": "error", "crypto_status": "error"}
+        result["scanner"] = {"equity_status": "error"}
     # Bounded auto-start retry state (cheap reads; present only while a retry
     # cycle is active, so a settled engine exposes no retry noise).
     retry_attempt = getattr(manager, "_retry_attempt", 0)
@@ -1755,7 +1735,6 @@ async def get_status() -> dict[str, Any]:
             }
         }
     runtime = getattr(manager, "runtime", None)
-    runtime_refresh: dict[str, Any] = {}
     if runtime is not None and hasattr(runtime, "health"):
         try:
             health = runtime.health()
@@ -1766,7 +1745,6 @@ async def get_status() -> dict[str, Any]:
             health = None
         if health is not None:
             result["runtime"] = asdict(health)
-            runtime_refresh = health.universe_refresh
             result["strategy_status"] = health.strategy_status
             repository = getattr(runtime, "_portfolio_repository", None)
             if repository is not None:
@@ -1777,48 +1755,18 @@ async def get_status() -> dict[str, Any]:
             result["active_equity_symbol_count"] = len(
                 getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
             )
-            result["active_crypto_symbol_count"] = len(
-                getattr(runtime, "_symbols_by_market", {}).get(Market.CRYPTO, ())
-            )
     if cfg is not None:
-        try:
-            equity_universe = cfg.universe.equity
-            equity_symbols = tuple(equity_universe.symbols) if equity_universe.enabled else ()
-            active_crypto_path = Path(cfg.universe.crypto.active_universe_path)
-            active_crypto_payload = (
-                json.loads(active_crypto_path.read_text(encoding="utf-8")) if active_crypto_path.exists() else {}
-            )
-            crypto_symbols, validated_crypto_scanner_status = validate_active_crypto_universe(cfg.universe.crypto)
-            if runtime is None:
-                result["active_equity_symbol_count"] = len(equity_symbols)
-                result["active_crypto_symbol_count"] = len(crypto_symbols)
-            result["scanner"] = {
-                "equity_status": runtime_refresh.get("status", {}).get("equity")
-                or ("static" if equity_universe.enabled else "disabled"),
-                "crypto_status": runtime_refresh.get("status", {}).get("crypto", validated_crypto_scanner_status),
-                "crypto_snapshot_status": validated_crypto_scanner_status,
-                "crypto_last_run_at": active_crypto_payload.get("selection_timestamp"),
-                "crypto_scanner_version": active_crypto_payload.get("scanner_version"),
-                "next_refresh_at": runtime_refresh.get("next_refresh_at"),
-                "refresh_errors": runtime_refresh.get("errors", {}),
-                "crypto_candidate_count": len(active_crypto_payload.get("candidate_symbols", ())),
-            }
-            result["universe"] = {
-                "equity": {
-                    "symbols": list(equity_symbols),
-                    "pool_size": len(equity_symbols),
-                },
-                "crypto": {
-                    "symbols": list(
-                        active_crypto_payload.get("observation_set", active_crypto_payload.get("selected_symbols", ()))
-                    ),
-                    "pool_size": len(active_crypto_payload.get("selected_symbols", ())),
-                    "scores": active_crypto_payload.get("score_breakdown", {}),
-                    "eliminated": active_crypto_payload.get("eliminated", {}),
-                },
-            }
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            result["scanner"] = {"equity_status": "error", "crypto_status": "error"}
+        equity_universe = cfg.universe.equity
+        equity_symbols = tuple(equity_universe.symbols) if equity_universe.enabled else ()
+        if runtime is None:
+            result["active_equity_symbol_count"] = len(equity_symbols)
+        result["scanner"] = {"equity_status": "static" if equity_universe.enabled else "disabled"}
+        result["universe"] = {
+            "equity": {
+                "symbols": list(equity_symbols),
+                "pool_size": len(equity_symbols),
+            },
+        }
     return result
 
 
@@ -2029,7 +1977,6 @@ async def get_settings() -> dict[str, Any]:
         "open_browser": app_cfg.get("open_browser", True),
         "log_level": app_cfg.get("log_level", "INFO"),
         "equity_trading_enabled": (strategy_cfg.get("equity") or {}).get("enabled", True),
-        "crypto_trading_enabled": (strategy_cfg.get("crypto") or {}).get("enabled", True),
         "live_trading_enabled": live_cfg.get("enabled", False),
         "live_dollar_cap": live_cfg.get("hard_dollar_cap", 0.0),
         "live_operator_approval_path": live_cfg.get("operator_approval_path", ""),
@@ -2134,18 +2081,6 @@ async def _handle_save_settings(payload: SettingsPayload) -> dict[str, Any]:
             except Exception:
                 old_eq_enabled = True
             if bool(payload.equity_trading_enabled) != bool(old_eq_enabled):
-                has_runtime_change = True
-        if "crypto_trading_enabled" in config_fields_set:
-            try:
-                _cr = (
-                    raw_before.get("strategy", {}).get("crypto")
-                    if isinstance(raw_before.get("strategy"), dict)
-                    else None
-                )
-                old_cr_enabled = _cr.get("enabled", False) if isinstance(_cr, dict) else False
-            except Exception:
-                old_cr_enabled = False
-            if bool(payload.crypto_trading_enabled) != bool(old_cr_enabled):
                 has_runtime_change = True
         if "live_dollar_cap" in config_fields_set:
             try:
@@ -2395,39 +2330,6 @@ def _manager_engine_state() -> str:
 # static/display inputs (the settings file) and short-lived payload slices.
 _dashboard_config_cache: dict[tuple[str, int], Any] = {}
 _dashboard_config_cache_lock = threading.Lock()
-
-# Parsed universe JSON files (active/candidate scans). The candidate file can
-# be tens of MB and is re-parsed by BOTH _dashboard_universe and
-# _strategy_metadata on every payload build. Keyed by (path, mtime_ns) so the
-# scanner rewriting a file invalidates it on the next build; bounded FIFO so
-# repeated scanner rewrites cannot grow the cache without limit.
-_dashboard_json_cache: dict[tuple[str, int], dict[str, Any]] = {}
-_dashboard_json_cache_lock = threading.Lock()
-_DASHBOARD_JSON_CACHE_MAX_ENTRIES = 8
-
-
-def _dashboard_load_json(path: str | Path) -> dict[str, Any]:
-    """Read + parse one JSON file, cached per (path, mtime); {} on any error."""
-    target = Path(path)
-    try:
-        key = (str(target), target.stat().st_mtime_ns)
-    except OSError:
-        return {}
-    with _dashboard_json_cache_lock:
-        cached = _dashboard_json_cache.get(key)
-        if cached is not None or key in _dashboard_json_cache:
-            assert cached is not None
-            return cached
-    try:
-        data: dict[str, Any] = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        data = {}
-    with _dashboard_json_cache_lock:
-        if len(_dashboard_json_cache) >= _DASHBOARD_JSON_CACHE_MAX_ENTRIES:
-            # FIFO eviction of the oldest entry.
-            _dashboard_json_cache.pop(next(iter(_dashboard_json_cache)), None)
-        _dashboard_json_cache[key] = data
-    return data
 
 
 def _dashboard_config_key() -> tuple[str, int] | None:
@@ -2753,7 +2655,7 @@ def _dashboard_market_status(
     market_health: dict[str, Any],
     health: dict[str, Any] | None,
 ) -> str:
-    """active | warming | halted | scanner_issue | disabled | engine states."""
+    """active | warming | halted | disabled | engine states."""
     if not enabled:
         return "disabled"
     if engine_state in {"stopped", "error", "stop_failed", "stopping", "starting"}:
@@ -2764,8 +2666,6 @@ def _dashboard_market_status(
         return "halted"
     if market_health.get("warming_symbols"):
         return "warming"
-    if market_health.get("scanner_status") in {"refresh_failed", "apply_failed"}:
-        return "scanner_issue"
     if health is None:
         return "unknown"
     return "active"
@@ -2781,7 +2681,7 @@ def _dashboard_market_card(
     decision: dict[str, Any] | None,
     engine_state: str,
 ) -> dict[str, Any]:
-    """One strategy card (equity or crypto): contract, pools, holdings."""
+    """One strategy card: contract, pools, holdings."""
     strategy_cfg = getattr(cfg, "strategy", None) if cfg is not None else None
     selection = getattr(strategy_cfg, market_key, None)
     if selection is None:
@@ -2862,95 +2762,6 @@ def _dashboard_market_card(
         },
         "holdings": holdings,
     }
-
-
-# Trailing 22d realized vol per crypto holding, computed from the warmup cache
-# with the strategy's own realized_volatility math. Minute-bucketed TTL so the
-# ~2 GB cache file is only queried at most once per minute per symbol set.
-# Payload builds run concurrently in worker threads, so every access to the
-# dict is under the lock (the computation itself is not).
-_crypto_vol_cache: dict[tuple[tuple[str, ...], int], dict[str, float | None]] = {}
-_crypto_vol_cache_lock = threading.Lock()
-
-
-def _crypto_realized_vols(symbols: list[str]) -> dict[str, float | None]:
-    """Trailing 22d realized vol for crypto symbols (None when unavailable)."""
-    if not symbols:
-        return {}
-    bucket = int(time.monotonic() // 60)
-    cache_key = (tuple(sorted(symbols)), bucket)
-    # Keep only the current bucket per symbol set: one stale entry per key
-    # instead of one per minute the dashboard keeps polling.
-    with _crypto_vol_cache_lock:
-        for stale_key in [key for key in _crypto_vol_cache if key[0] == cache_key[0] and key != cache_key]:
-            _crypto_vol_cache.pop(stale_key, None)
-        cached = _crypto_vol_cache.get(cache_key)
-    if cached is not None:
-        return cached
-    result: dict[str, float | None] = {}
-    try:
-        from parayabuck.data.cache import WarmupCache
-        from parayabuck.portfolio.crypto_low_variance import realized_volatility
-    except Exception:
-        return dict.fromkeys(symbols)
-    try:
-        cache = WarmupCache()
-        try:
-            end = datetime.now(UTC)
-            start = end - timedelta(days=90)
-            for symbol in symbols:
-                try:
-                    bars = cache.get(
-                        symbol,
-                        "1d",
-                        market=Market.CRYPTO,
-                        feed="crypto",
-                        start=start,
-                        end=end,
-                    )
-                except Exception:
-                    result[symbol] = None
-                    continue
-                closes = [float(bar.close) for bar in bars if bar.close > 0]
-                if len(closes) < 23:
-                    result[symbol] = None
-                    continue
-                try:
-                    result[symbol] = float(realized_volatility(closes[-23:], 22))
-                except Exception:
-                    result[symbol] = None
-        finally:
-            cache.close()
-    except Exception:
-        return dict.fromkeys(symbols)
-    with _crypto_vol_cache_lock:
-        _crypto_vol_cache[cache_key] = result
-    return result
-
-
-def _dashboard_crypto_card(
-    *,
-    cfg: Any,
-    health: dict[str, Any] | None,
-    account: dict[str, Any],
-    meta: dict[str, Any],
-    decision: dict[str, Any] | None,
-    engine_state: str,
-) -> dict[str, Any]:
-    card = _dashboard_market_card(
-        "crypto",
-        cfg=cfg,
-        health=health,
-        account=account,
-        meta=meta,
-        decision=decision,
-        engine_state=engine_state,
-    )
-    held = [str(holding.get("symbol", "")) for holding in card.get("holdings", [])]
-    vols = _crypto_realized_vols(held)
-    for holding in card.get("holdings", []):
-        holding["realized_vol_22d"] = vols.get(str(holding.get("symbol", "")))
-    return card
 
 
 def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
@@ -3037,7 +2848,6 @@ def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, 
     gross = float(account.get("gross_exposure") or 0.0)
     positions = account.get("positions", [])
     equity_value = sum(float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "equity")
-    crypto_value = sum(float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "crypto")
     daily_pnl = float(account.get("daily_pnl") or 0.0)
     drawdown = float(account.get("drawdown") or 0.0)
     limits = getattr(cfg, "risk", None) if cfg is not None else None
@@ -3049,12 +2859,8 @@ def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, 
         "cash_pct": (cash / equity) * 100,
         "cash_buffer_limit_pct": (float(getattr(limits, "cash_buffer_pct", 0.40) or 0.0) * 100),
         "equity_exposure_pct": (equity_value / equity) * 100,
-        "crypto_exposure_pct": (crypto_value / equity) * 100,
-        "crypto_exposure_limit_pct": (float(getattr(limits, "max_crypto_exposure_pct", 0.10) or 0.0) * 100),
         "max_position_pct": (float(getattr(limits, "max_position_pct", 0.10) or 0.0) * 100),
         "max_positions": int(getattr(limits, "max_positions", 0) or 0),
-        "crypto_positions": sum(1 for p in positions if p.get("market") == "crypto"),
-        "max_crypto_positions": int(getattr(limits, "max_crypto_positions", 0) or 0),
         "daily_pnl": daily_pnl,
         "daily_loss_limit_pct": (float(getattr(limits, "daily_loss_limit_pct", 0.005) or 0.0) * 100),
         "drawdown": drawdown,
@@ -3138,7 +2944,7 @@ def _dashboard_execution() -> dict[str, Any]:
             SELECT symbol, market, quantity, kind, note, created_at
             FROM portfolio_ownership_adjustments
             WHERE account_id = ?
-              -- crypto dust clear/credit rows are bookkeeping, not anomalies
+              -- historical crypto dust clear/credit rows are bookkeeping, not anomalies
               AND kind NOT IN ('crypto_dust_clear', 'crypto_dust_credit')
             ORDER BY created_at DESC LIMIT 10
             """,
@@ -3230,41 +3036,18 @@ def _dashboard_execution() -> dict[str, Any]:
 
 
 def _dashboard_universe(cfg: Any, health: dict[str, Any] | None) -> dict[str, Any]:
-    """Universe panel: static equity symbols, crypto scan freshness, pins."""
+    """Universe panel: static equity symbols and pins."""
     if cfg is None:
         return {"unavailable": True, "reason": "config unavailable"}
-    refresh = dict((health or {}).get("universe_refresh") or {})
-    status_map = dict(refresh.get("status") or {})
-    errors = dict(refresh.get("errors") or {})
     market_health = dict((health or {}).get("markets") or {})
     equity_universe = cfg.universe.equity
     equity_symbols = tuple(equity_universe.symbols) if equity_universe.enabled else ()
-    active: dict[str, Any] = {}
-    active.update(_dashboard_load_json(cfg.universe.crypto.active_universe_path))
-    candidate_symbols = active.get("candidate_symbols", ())
-    selected = active.get("observation_set", active.get("selected_symbols", ()))
-    crypto_pinned = list(dict(market_health.get("crypto") or {}).get("managed_pins") or ()) or list(
-        getattr(cfg.universe.crypto, "pinned_symbols", ()) or ()
-    )
     return {
         "equity": {
             "observation_set": list(equity_symbols),
             "observation_set_size": len(equity_symbols),
             "pinned_symbols": list(dict(market_health.get("equity") or {}).get("managed_pins") or ()),
-            "scanner_status": status_map.get("equity") or ("static" if equity_universe.enabled else "disabled"),
-        },
-        "crypto": {
-            "eligible_pool_size": len(candidate_symbols) if isinstance(candidate_symbols, (list, tuple)) else 0,
-            "observation_set_size": len(selected),
-            "observation_set": list(selected),
-            "pinned_symbols": crypto_pinned,
-            "last_refresh_at": active.get("selection_timestamp"),
-            "data_timestamp": active.get("data_timestamp"),
-            "scanner_status": status_map.get("crypto") or active.get("status"),
-            "scanner_version": active.get("scanner_version"),
-            "refresh_errors": dict(errors.get("crypto") or {}),
-            "next_refresh_at": refresh.get("next_refresh_at"),
-            "eliminated_count": len(active.get("eliminated", {})),
+            "scanner_status": "static" if equity_universe.enabled else "disabled",
         },
     }
 
@@ -3313,7 +3096,6 @@ def _dashboard_health(
     """System health panel: workers, queue, freshness, reconciliation, DB."""
     workers = dict((health or {}).get("workers") or {})
     heartbeats = [str(worker.get("last_heartbeat")) for worker in workers.values() if worker.get("last_heartbeat")]
-    refresh = dict((health or {}).get("universe_refresh") or {})
     engine_cfg = getattr(cfg, "engine", None) if cfg is not None else None
     if runtime_metrics_payload is None:
         runtime_metrics_payload = _runtime_metrics_payload(_dashboard_account_id())
@@ -3342,14 +3124,6 @@ def _dashboard_health(
             "last_at": (health or {}).get("last_reconciliation_at"),
             "failed": (health or {}).get("circuit_breaker_reason") == "reconciliation_failed",
         },
-        "scanner": {
-            "last_refresh_at": refresh.get("last_refresh_at"),
-            "next_refresh_at": refresh.get("next_refresh_at"),
-            "status": dict(refresh.get("status") or {}),
-            "errors": dict(refresh.get("errors") or {}),
-            "retry_at": dict(refresh.get("retry_at") or {}),
-            "retry_attempt": dict(refresh.get("retry_attempt") or {}),
-        },
         "database": _dashboard_database_state(),
         "last_heartbeat": max(heartbeats) if heartbeats else None,
         "entry_risk_latch": dict((health or {}).get("entry_risk_latch") or {}),
@@ -3359,7 +3133,7 @@ def _dashboard_health(
 def _dashboard_explanations(decisions: dict[str, dict[str, Any]], account: dict[str, Any]) -> dict[str, Any]:
     """Per-holding structured reasons from persisted decision metadata."""
     result: dict[str, Any] = {}
-    for market_key in ("equity", "crypto"):
+    for market_key in ("equity",):
         decision = decisions.get(market_key)
         target = dict((decision or {}).get("target") or {})
         metadata = dict(target.get("metadata") or {})
@@ -3549,7 +3323,6 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
         except Exception:
             meta = {}
     equity_meta = dict(meta.get("equity") or {})
-    crypto_meta = dict(meta.get("crypto") or {})
     return {
         "as_of": datetime.now(UTC).isoformat(),
         "engine_state": engine_state,
@@ -3583,17 +3356,6 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
                 account=account,
                 meta=equity_meta,
                 decision=decisions.get("equity"),
-                engine_state=engine_state,
-            ),
-        ),
-        "crypto": _dashboard_safe_panel(
-            "crypto",
-            lambda: _dashboard_crypto_card(
-                cfg=cfg,
-                health=health,
-                account=account,
-                meta=crypto_meta,
-                decision=decisions.get("crypto"),
                 engine_state=engine_state,
             ),
         ),
@@ -3663,11 +3425,6 @@ async def _dashboard_panel(key: str) -> dict[str, Any]:
 @app.get("/api/equity")
 async def dashboard_equity() -> dict[str, Any]:
     return await _dashboard_panel("equity")
-
-
-@app.get("/api/crypto")
-async def dashboard_crypto() -> dict[str, Any]:
-    return await _dashboard_panel("crypto")
 
 
 @app.get("/api/risk")

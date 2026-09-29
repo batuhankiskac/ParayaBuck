@@ -151,7 +151,6 @@ def test_differential_golden_real_engine_matches_shadow_tranches() -> None:
         slippage_bps=config.backtest.slippage_bps,
         spread_bps=config.backtest.spread_bps,
         commission=config.backtest.commission,
-        crypto_taker_fee_bps=config.backtest.crypto_taker_fee_bps,
         equity_taf_per_share=config.backtest.equity_taf_per_share,
         equity_taf_cap=config.backtest.equity_taf_cap,
         equity_cat_per_share=config.backtest.equity_cat_per_share,
@@ -242,7 +241,7 @@ def _seed_db(path: Path) -> None:
         connection.close()
 
 
-def test_golden_e_f_separate_markets_and_unknown_fee_is_price_only(tmp_path: Path) -> None:
+def test_golden_e_f_equity_only_and_unknown_fee_is_price_only(tmp_path: Path) -> None:
     database = tmp_path / "runtime.sqlite3"
     _seed_db(database)
     bars = [
@@ -252,12 +251,13 @@ def test_golden_e_f_separate_markets_and_unknown_fee_is_price_only(tmp_path: Pat
         _bar(1, symbol="BTC/USD", market=Market.CRYPTO),
     ]
     report = run_shadow_comparator(database, bars, Config(), dataset={"path": "fixture"})
-    assert set(report["aggregates_by_market"]) == {"equity", "crypto"}
+    # Historical crypto rows still load but are outside the equity-only model.
+    assert set(report["aggregates_by_market"]) == {"equity"}
     orders = {item["client_order_id"]: item for item in report["orders"]}
+    assert set(orders) == {"oe"}
     assert orders["oe"]["paper_vs_zero_cost_open_bps"] is not None
     assert orders["oe"]["actual_fee_known"] is False
     assert orders["oe"]["actual_total_cost"] is None
-    assert orders["oc"]["modeled_fee"] > orders["oe"]["modeled_fee"]
     assert report["transferability_verdict"] == "UNKNOWN_COST_TRANSFERABILITY"
 
 

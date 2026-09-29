@@ -43,7 +43,7 @@ def _runtime_with_ledger(ledger: ExecutionLedger) -> EngineRuntime:
     runtime._state_lock = threading.RLock()
     runtime._consecutive_losses = 0
     runtime._circuit_breaker_reason = None
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     return runtime
 
 
@@ -116,7 +116,7 @@ def test_persistent_ownership_drift_alerts_only_on_transition(tmp_path: Path, mo
     for _ in range(3):
         runtime._halt_for_ownership_drift()
         runtime._state = "running"
-        runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+        runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._halt_for_ownership_drift()
 
     assert emitted == ["circuit_breaker"]
@@ -212,7 +212,7 @@ def test_operator_reset_refuses_while_a_shared_worker_is_stopped(tmp_path: Path)
     runtime._events = SimpleNamespace(empty=lambda: True)
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime.market_state = SimpleNamespace()
     runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
     runtime.ledger = ledger
 
@@ -561,8 +561,8 @@ def test_operator_reset_clears_only_the_verified_incident(tmp_path: Path) -> Non
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime.market_state = SimpleNamespace()
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
@@ -571,7 +571,7 @@ def test_operator_reset_clears_only_the_verified_incident(tmp_path: Path) -> Non
     )
     runtime.ledger = ledger
     runtime._persist_risk_state = lambda _account: None
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
 
     runtime.reset_safety_lock()
 
@@ -822,7 +822,6 @@ def test_restart_restores_drawdown_latch_from_incident(tmp_path: Path) -> None:
     restarted._restore_persistent_state()
 
     assert restarted._entry_risk_latch[Market.EQUITY] == "portfolio_drawdown_halt"
-    assert restarted._entry_risk_latch[Market.CRYPTO] == "portfolio_drawdown_halt"
     assert restarted._circuit_breaker_reason is None
     ledger.close()
 
@@ -1065,8 +1064,8 @@ def test_operator_reset_keeps_a_halt_raised_during_verification(tmp_path: Path) 
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime.market_state = SimpleNamespace()
     runtime._persist_risk_state = lambda _account: None  # type: ignore[method-assign]
 
     def concurrent_halt(_halts: object) -> None:
@@ -1109,8 +1108,8 @@ def test_operator_reset_keeps_a_halt_raised_during_broker_reconcile(tmp_path: Pa
     runtime._state_lock = threading.RLock()
     runtime._running = True
     runtime._state = "halted"
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime.market_state = SimpleNamespace()
     runtime._persist_risk_state = lambda _account: None  # type: ignore[method-assign]
 
     runtime.reset_safety_lock()
@@ -1148,8 +1147,8 @@ def test_operator_reset_restores_a_blip_degraded_runtime(tmp_path: Path, alive: 
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "degraded"
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime.market_state = SimpleNamespace()
 
     def persist(_account: AccountSnapshot) -> None:
         worker.alive = alive

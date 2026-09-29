@@ -41,10 +41,7 @@ def _reset_alert_state() -> None:
 
 def _shell() -> EngineRuntime:
     runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime._universe_retry_at = {}
-    runtime._universe_retry_attempt = {}
-    runtime._scanner_failed = {}
-    runtime._entry_risk_latch = {Market.EQUITY.value: None, Market.CRYPTO.value: None}
+    runtime._entry_risk_latch = {Market.EQUITY.value: None}
     runtime._state_lock = threading.RLock()
     runtime._portfolio_lock = threading.RLock()
     runtime._ingestion_lock = threading.Lock()
@@ -52,34 +49,11 @@ def _shell() -> EngineRuntime:
     return runtime
 
 
-def test_scanner_recovered_is_transition_only() -> None:
-    runtime = _shell()
-
-    # A first healthy success is NOT a recovery.
-    runtime._mark_universe_refresh_outcome(Market.CRYPTO, ok=True)
+def test_scanner_recovered_kind_was_removed() -> None:
+    # The universe refresh loop (its only producer) is gone with crypto support.
+    assert "scanner_recovered" not in alerts.ALERT_KINDS
+    alerts.emit("scanner_recovered", message="x")
     assert _delivered("scanner_recovered") == 0
-    assert _delivered("scanner_refresh_failure") == 0
-
-    # A failure emits scanner_refresh_failure.
-    runtime._mark_universe_refresh_outcome(Market.CRYPTO, ok=False)
-    assert _delivered("scanner_refresh_failure") == 1
-
-    # The next success IS the recovery.
-    runtime._mark_universe_refresh_outcome(Market.CRYPTO, ok=True)
-    assert _delivered("scanner_recovered") == 1
-
-    # A second consecutive success is NOT another recovery.
-    runtime._mark_universe_refresh_outcome(Market.CRYPTO, ok=True)
-    assert _delivered("scanner_recovered") == 1
-
-
-def test_scanner_failure_flag_is_per_market() -> None:
-    runtime = _shell()
-    runtime._mark_universe_refresh_outcome(Market.CRYPTO, ok=False)
-    # Equity was never failed: its next success is not a recovery.
-    runtime._mark_universe_refresh_outcome(Market.EQUITY, ok=True)
-    assert _delivered("scanner_recovered") == 0
-    assert _delivered("scanner_refresh_failure") == 1
 
 
 def test_stop_unexpected_requires_completed_start() -> None:

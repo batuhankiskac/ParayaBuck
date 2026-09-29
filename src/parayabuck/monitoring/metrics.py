@@ -5,7 +5,7 @@
 * persisted state — read-only queries against the runtime SQLite ledger
   (``safety_incidents``, ``risk_state``, ``runtime_sessions``; no new tables);
 * process-local runtime counters — incremented by the engine via
-  ``record_event`` as state transitions happen (scanner/reconciliation
+  ``record_event`` as state transitions happen (provider/reconciliation
   failures, data gaps, risk incidents, circuit-breaker engagements, ...);
 * derived convenience fields (restart count, entry-block duration) computed
   from the persisted rows above.
@@ -46,7 +46,6 @@ RUNTIME_COUNTER_KEYS: frozenset[str] = frozenset(
         "runtime_started",
         "runtime_stopped_unexpected",
         "scanner_refresh_failure",
-        "scanner_recovered",
         "reconciliation_failure",
         "reconciliation_recovered",
         "risk_incident",
@@ -55,7 +54,6 @@ RUNTIME_COUNTER_KEYS: frozenset[str] = frozenset(
         "circuit_breaker",
         "signal_adjustment_failure",
         "signal_adjustment_recovery",
-        "data_gap",
         "order_rejected",
         "ambiguous_order",
         "paper_cycle",
@@ -385,10 +383,8 @@ def runtime_metrics(
         # Derived convenience fields.
         "restart_count": int(sessions["restart_count"]),
         "scanner_failures": int(counters["scanner_refresh_failure"]),
-        "scanner_recoveries": int(counters["scanner_recovered"]),
         "reconciliation_failures": int(counters["reconciliation_failure"]),
         "reconciliation_recoveries": int(counters["reconciliation_recovered"]),
-        "data_gap_events": int(counters["data_gap"]),
         "daily_loss_incidents": int(counters["risk_incident"]),
         "drawdown_incidents": int(counters["drawdown_halt"]),
         "circuit_breaker_events": int(counters["circuit_breaker"]),

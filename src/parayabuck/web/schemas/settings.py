@@ -33,7 +33,6 @@ class SettingsPayload(BaseModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     restart_engine: bool = True
     equity_trading_enabled: bool = True
-    crypto_trading_enabled: bool = True
     live_trading_enabled: bool = False
     live_dollar_cap: float = Field(0.0, ge=0)
     live_operator_approval_path: str = ""
@@ -57,10 +56,9 @@ class WebSocketTicketPayload(BaseModel):
 
 class BacktestPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    market: Literal["equity", "crypto"] = "equity"
+    market: Literal["equity"] = "equity"
     strategy: str = ""
     parameters: dict[str, object] = Field(default_factory=dict)
     years: int = Field(5, ge=1, le=30)
     days: int = Field(0, ge=0)
     symbols: str = ""
-    max_symbols: int = Field(0, ge=0, le=2000)

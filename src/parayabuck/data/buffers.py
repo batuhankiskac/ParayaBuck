@@ -4,11 +4,9 @@ from collections import defaultdict, deque
 from dataclasses import replace
 from datetime import datetime
 from enum import StrEnum
-from itertools import pairwise
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import timeframe_duration
 
 
 class BarRevision(StrEnum):
@@ -21,7 +19,6 @@ class BarMutation(StrEnum):
     UPDATED = "updated"
     DUPLICATE = "duplicate"
     STALE_REJECTED = "stale_rejected"
-    GAP_DETECTED = "gap_detected"
 
 
 class BarStore:
@@ -55,19 +52,12 @@ class BarStore:
                         series[index] = normalized
                         return BarMutation.UPDATED
             return BarMutation.STALE_REJECTED
-        mutation = BarMutation.INSERTED
-        if series:
-            delta = normalized.timestamp - series[-1].timestamp
-            expected_seconds = timeframe_duration(bar.timeframe).total_seconds()
-            # Alpaca equity bars are trade-based. A quiet IEX/SIP interval is
-            # omitted rather than emitted as a zero-volume candle, so a
-            # timestamp jump alone cannot distinguish normal market silence
-            # from a transport gap. Crypto trades continuously and remains
-            # suitable for this continuity check.
-            if delta.total_seconds() > expected_seconds and bar.market != Market.EQUITY and bar.timeframe != "1d":
-                mutation = BarMutation.GAP_DETECTED
+        # Alpaca equity bars are trade-based. A quiet IEX/SIP interval is
+        # omitted rather than emitted as a zero-volume candle, so a timestamp
+        # jump alone cannot distinguish normal market silence from a
+        # transport gap; a newer bar is always a plain insert.
         series.append(normalized)
-        return mutation
+        return BarMutation.INSERTED
 
     def get(self, symbol: str, timeframe: str, market: Market | None = None) -> list[Bar]:
         key = (canonical_symbol(symbol, market), timeframe)
@@ -90,13 +80,3 @@ class BarStore:
                 sorted(by_timestamp.values(), key=lambda item: item.timestamp)[-self.capacity :],
                 maxlen=self.capacity,
             )
-
-    def is_contiguous(self, symbol: str, timeframe: str, market: Market | None = None) -> bool:
-        series = self.get(symbol, timeframe, market)
-        expected_seconds = timeframe_duration(timeframe).total_seconds()
-        for previous, current in pairwise(series):
-            if current.market == Market.EQUITY:
-                continue
-            if (current.timestamp - previous.timestamp).total_seconds() > expected_seconds:
-                return False
-        return True

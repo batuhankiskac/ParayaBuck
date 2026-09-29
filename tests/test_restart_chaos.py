@@ -14,12 +14,10 @@ Levels used:
   the exact restart hook (``_restore_persistent_state``, ``_pin_managed_symbols``)
   like the existing hardening tests.
 - ``AlpacaBroker`` unit: the ownership-drift exemption predicate.
-- universe module: crypto scanner persist -> validate/load round trip.
 """
 
 import threading
 import time
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,7 +26,7 @@ from typing import Any
 import pytest
 
 from parayabuck import runtime as runtime_module
-from parayabuck.config import Config, CryptoScannerConfig, CryptoUniverseConfig
+from parayabuck.config import Config
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -52,8 +50,6 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioStateRepository,
 )
 from parayabuck.runtime import EngineRuntime, WorkerHealth
-from parayabuck.universe import load_active_crypto_symbols, validate_active_crypto_universe
-from parayabuck.universe.crypto_scanner import CryptoUniverseScanner, crypto_candidate_from_bars
 from tests.helpers import apply_entry_fill
 
 pytestmark = pytest.mark.paper_chaos
@@ -342,30 +338,29 @@ def test_open_managed_sell_exempts_drift_after_restart() -> None:
             last_equity="100000",
             cash="50000",
             non_marginable_buying_power="50000",
-            crypto_status="ACTIVE",
         ),
         get_all_positions=lambda: [
             SimpleNamespace(
-                symbol="BTC/USD",
-                qty="0.2",
-                current_price="100000",
+                symbol="QLD",
+                qty="20",
+                current_price="100",
                 unrealized_pl="0",
                 unrealized_intraday_pl="0",
-                asset_class="crypto",
-                avg_entry_price="100000",
-                qty_available="0.0",
+                asset_class="us_equity",
+                avg_entry_price="100",
+                qty_available="0",
             )
         ],
     )
     broker.ledger = None
-    broker.portfolio_owned_quantities = lambda: {"BTC/USD": 0.5}
+    broker.portfolio_owned_quantities = lambda: {"QLD": 50.0}
     broker._peak_equity = 0.0
     broker._save_peak_equity = lambda: None
     working_sell = SimpleNamespace(
-        symbol="BTC/USD",
+        symbol="QLD",
         side="sell",
-        market=Market.CRYPTO,
-        quantity=0.3,
+        market=Market.EQUITY,
+        quantity=30.0,
         cumulative_filled_quantity=0.0,
     )
     broker.portfolio_open_orders = lambda: (working_sell,)
@@ -710,120 +705,66 @@ def test_cleared_incident_does_not_restore_halt(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 11. Restart after the universe state was persisted
+# 11. Managed symbol no longer in the configured universe stays pinned
 # ---------------------------------------------------------------------------
 
 
-def test_restart_after_universe_persisted_loads_validates_and_keeps_pins(
-    tmp_path: Path,
-) -> None:
-    """Level: universe module. A persisted scanner snapshot survives a
-    restart: the load path validates it (fresh, digest-matched, canonical)
-    and the configured + managed pins are preserved."""
-    config = CryptoUniverseConfig(
-        enabled=True,
-        dynamic_selection_enabled=True,
-        maximum_stream_symbols=6,
-        trade_symbols=("BTC/USD", "ETH/USD", "SOL/USD"),
-        pinned_symbols=("BTC/USD",),
-        active_universe_path=str(tmp_path / "active_crypto.json"),
-        active_universe_max_age_hours=48,
-        require_scanner_config_digest_match=True,
-        scanner=CryptoScannerConfig(lookback_days=2, minimum_data_completeness=0.5, minimum_atr_pct=0.0001),
-    )
-    scanner = CryptoUniverseScanner(config)
-    now = datetime.now(UTC)
-    start = now - timedelta(hours=30)
-    series = [
-        SimpleNamespace(
-            timestamp=start + timedelta(hours=index),
-            open=100.0,
-            high=101.0,
-            low=99.0,
-            close=100.0 + index,
-            volume=1_000_000.0,
-        )
-        for index in range(30)
-    ]
-    candidates = [
-        crypto_candidate_from_bars(
-            symbol,
-            series,
-            expected_bar_count=len(series),
-            tradable=True,
-            status="active",
-        )
-        for symbol in ("BTC/USD", "ETH/USD", "SOL/USD")
-    ]
-    result = scanner.scan(candidates, data_timestamp=now, selection_timestamp=now)
-    scanner.persist(result)
-    # ---- restart: load the persisted snapshot through the validated path ----
-    selected, status = validate_active_crypto_universe(config)
-    assert status == "success"
-    assert "BTC/USD" in selected  # configured pin preserved
-    assert set(selected) == {"BTC/USD", "ETH/USD", "SOL/USD"}
-    loaded = load_active_crypto_symbols(config)
-    assert "BTC/USD" in loaded
-    assert set(selected).issubset(loaded)
-    # A managed symbol absent from the last scan is re-pinned at load time.
-    loaded_with_pin = load_active_crypto_symbols(config, pinned_symbols=("XRP/USD",))
-    assert "XRP/USD" in loaded_with_pin
-
-
-# ---------------------------------------------------------------------------
-# 12. Managed symbol no longer in the scanner universe stays protected
-# ---------------------------------------------------------------------------
-
-
-def test_restart_with_managed_symbol_outside_scanner_universe_stays_pinned(
-    tmp_path: Path,
-) -> None:
-    """Level: EngineRuntime unit. A managed crypto position persisted in the
-    ledger is re-pinned on restart even when the scanner universe no longer
-    contains the symbol: the pin keeps the symbol observable and protected."""
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    intent = OrderIntent(
-        symbol="BTC/USD",
-        market=Market.CRYPTO,
-        direction=Direction.LONG,
-        qty=0.5,
-        entry_price=100_000.0,
-        stop_price=90_000.0,
-        target_price=120_000.0,
-        strategy="crypto",
-        signal_id="chaos-crypto-entry",
-    )
-    ledger.register_entry_order("acct", intent, "broker-entry")
+def _register_filled_entry(ledger: ExecutionLedger, intent: OrderIntent, price: float) -> None:
+    ledger.register_entry_order("acct", intent, f"broker-{intent.signal_id}")
     apply_entry_fill(
         ledger,
         "acct",
         intent,
-        Fill(
-            intent.client_order_id,
-            "BTC/USD",
-            0.5,
-            100_000.0,
-            Direction.LONG,
-            datetime.now(UTC),
-            0.0,
-        ),
-        "broker-entry",
+        Fill(intent.client_order_id, intent.symbol, intent.qty, price, Direction.LONG, datetime.now(UTC), 0.0),
+        f"broker-{intent.signal_id}",
     )
-    assert [entry.canonical_symbol for entry in ledger.managed_entries_for_account("acct")] == ["BTC/USD"]
 
-    base = Config()
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime.app_config = replace(
-        base,
-        universe=replace(
-            base.universe,
-            crypto=replace(
-                base.universe.crypto,
-                enabled=True,
-                dynamic_selection_enabled=True,
-            ),
+
+def test_restart_with_managed_symbol_outside_configured_universe_stays_pinned(
+    tmp_path: Path,
+) -> None:
+    """Level: EngineRuntime unit. A managed equity position persisted in the
+    ledger is re-pinned on restart even when the configured universe no
+    longer contains the symbol: the pin keeps the symbol observable. A legacy
+    crypto ledger row is only classified as foreign, never pinned."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    _register_filled_entry(
+        ledger,
+        OrderIntent(
+            symbol="MSFT",
+            market=Market.EQUITY,
+            direction=Direction.LONG,
+            qty=5.0,
+            entry_price=400.0,
+            stop_price=360.0,
+            target_price=480.0,
+            strategy="equity",
+            signal_id="chaos-equity-entry",
         ),
+        400.0,
     )
+    _register_filled_entry(
+        ledger,
+        OrderIntent(
+            symbol="BTC/USD",
+            market=Market.CRYPTO,
+            direction=Direction.LONG,
+            qty=0.5,
+            entry_price=100_000.0,
+            stop_price=90_000.0,
+            target_price=120_000.0,
+            strategy="legacy",
+            signal_id="chaos-legacy-entry",
+        ),
+        100_000.0,
+    )
+    assert sorted(entry.canonical_symbol for entry in ledger.managed_entries_for_account("acct")) == [
+        "BTC/USD",
+        "MSFT",
+    ]
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.app_config = Config()
     runtime.broker = SimpleNamespace(
         account_id="acct",
         account=lambda: AccountSnapshot(100_000, 100_000, 100_000, 0.0, positions=()),
@@ -831,18 +772,18 @@ def test_restart_with_managed_symbol_outside_scanner_universe_stays_pinned(
     )
     runtime.ledger = ledger
     runtime._portfolio_repository = None
-    # Scanner universe (e.g. persisted snapshot) no longer includes BTC/USD.
-    runtime._symbols_by_market = {
-        Market.EQUITY: {"SPY", "AAPL"},
-        Market.CRYPTO: set(),
-    }
-    runtime._strategy_enabled = {Market.EQUITY: True, Market.CRYPTO: True}
+    # The configured universe no longer includes MSFT.
+    runtime._symbols_by_market = {Market.EQUITY: {"SPY", "QQQ", "QLD"}}
+    runtime._strategy_enabled = {Market.EQUITY: True}
     runtime.market_state = SimpleNamespace(allowed_trade_symbols=set())
     runtime._not_ready_symbols = set()
     runtime.symbols = sorted(runtime._symbols_by_market[Market.EQUITY])
     runtime._pin_managed_symbols()
-    assert "BTC/USD" in runtime._managed_pin_symbols
-    assert "BTC/USD" in runtime._symbols_by_market[Market.CRYPTO]
+    assert runtime._managed_pin_symbols == {"MSFT"}
+    assert "MSFT" in runtime._symbols_by_market[Market.EQUITY]
+    assert set(runtime._symbols_by_market) == {Market.EQUITY}
+    assert runtime._foreign_crypto_symbols == ("BTC/USD",)
+    assert "BTC/USD" not in runtime.symbols
     ledger.close()
 
 

@@ -72,7 +72,7 @@ def test_warmup_with_operational_timeframe_no_strategy_does_not_crash() -> None:
                 for symbol in symbols
             }
 
-    runtime._warmup_symbols(_History(), ["AAPL", "MSFT"], retry=False, staged_only=True)
+    runtime._warmup_symbols(_History(), ["AAPL", "MSFT"], retry=False)
     # Both timeframes were fetched (no crash), including the operational-only
     # 5m window that no portfolio strategy declares.
     assert any(timeframe == "5m" for timeframe, _symbol in fetched)

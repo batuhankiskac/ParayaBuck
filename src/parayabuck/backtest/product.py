@@ -22,7 +22,6 @@ from parayabuck.backtest.portfolio_report import PortfolioReport, build_portfoli
 from parayabuck.backtest.universe import (
     PointInTimeUniverse,
     build_static_equity_point_in_time_universe,
-    build_trailing_point_in_time_universe,
     hash_point_in_time_universe,
 )
 from parayabuck.config import Config
@@ -67,6 +66,11 @@ class ProductBacktestResult:
     score: float
 
 
+def _require_equity(market: Market) -> None:
+    if market != Market.EQUITY:
+        raise ValueError(f"Product backtests support equity only; got market {market.value!r}")
+
+
 def _canonical_csv_timeframe(raw_timeframe: object) -> str:
     timeframe = str(raw_timeframe)
     if timeframe in _CSV_TIMEFRAME_ALIASES:
@@ -90,12 +94,12 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
             market = Market(str(raw.get("market") or default_market.value).lower())
-            timeframe = _canonical_csv_timeframe(raw.get("timeframe") or ("1h" if market == Market.CRYPTO else "1d"))
-            if market == Market.EQUITY:
-                if timestamp.weekday() >= 5:
-                    raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
-                if timeframe != "1d" and not is_regular_equity_time(timestamp):
-                    raise ValueError(f"Equity CSV contains an out-of-session bar: {timestamp.isoformat()}")
+            _require_equity(market)
+            timeframe = _canonical_csv_timeframe(raw.get("timeframe") or "1d")
+            if timestamp.weekday() >= 5:
+                raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
+            if timeframe != "1d" and not is_regular_equity_time(timestamp):
+                raise ValueError(f"Equity CSV contains an out-of-session bar: {timestamp.isoformat()}")
             rows.append(
                 Bar(
                     timestamp=timestamp,
@@ -256,20 +260,16 @@ def build_product_universe(
 ) -> PointInTimeUniverse:
     """Build the point-in-time universe for a product backtest.
 
-    Equity uses the static configured universe. Crypto eligible-pool
-    membership depends on the bar set and scanner policy; its streamed
-    observation membership is ranked by the configured product strategy,
-    matching the product runtime. Optimizer trials deliberately
-    reuse that configured observation basis rather than letting each parameter
-    arm redefine the streamed universe.
+    The static configured equity universe: each configured symbol joins at
+    its first bar.
 
     ``timeframe`` defaults to the configured strategy's timeframe and must be
     passed when a run overrides the strategy. ``observation_strategy`` may
-    supply that already-resolved requested strategy; it changes only the
-    observation-set ranker. Scanner eligibility, pins, capacity, costs, risk
-    and execution remain owned by the configured product policy.
+    supply that already-resolved requested strategy; it is validated against
+    the requested market and timeframe.
     """
-    selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
+    _require_equity(market)
+    selection = config.strategy.equity
     strategy = portfolio_strategy_from(
         selection.name,
         selection.parameters,
@@ -288,27 +288,12 @@ def build_product_universe(
             raise ValueError(
                 f"observation_strategy timeframe must match the selected backtest timeframe ({selected_timeframe})"
             )
-    else:
-        observation_strategy = strategy
     available = [
         bar
         for bar in bars
         if bar.market == market and bar.timeframe == selected_timeframe and (end is None or bar.timestamp <= end)
     ]
-    if market == Market.EQUITY:
-        return build_static_equity_point_in_time_universe(available, config.universe.equity)
-    crypto_universe = config.universe.crypto
-    return build_trailing_point_in_time_universe(
-        available,
-        maximum_symbols=crypto_universe.maximum_stream_symbols,
-        rebalance_frequency=config.backtest.scanner_rebalance,
-        lookback_days=crypto_universe.scanner.lookback_days,
-        minimum_history_ratio=crypto_universe.scanner.minimum_data_completeness,
-        minimum_dollar_volume=crypto_universe.scanner.minimum_median_dollar_volume,
-        pinned_symbols=crypto_universe.pinned_symbols,
-        crypto_config=crypto_universe,
-        observation_strategy=observation_strategy,
-    )
+    return build_static_equity_point_in_time_universe(available, config.universe.equity)
 
 
 def run_product_backtest(
@@ -334,7 +319,8 @@ def run_product_backtest(
 ) -> ProductBacktestResult:
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
-    selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
+    _require_equity(market)
+    selection = config.strategy.equity
     # Explicit None-check: {} means "use requested strategy defaults", None means "use configured selection"
     # This keeps an explicitly requested strategy's defaults from inheriting
     # the configured selection parameters.
@@ -371,7 +357,7 @@ def run_product_backtest(
             raise ValueError("prepared_inputs requires an explicit universe")
         prepared = (ordered, decision_bars)
     risk = portfolio_risk_limits_from_config(config.risk)
-    benchmark = "SPY" if market == Market.EQUITY else "BTC/USD"
+    benchmark = "SPY"
 
     universe_hash = hash_point_in_time_universe(universe)
     engine = PortfolioBacktestEngine(
@@ -381,7 +367,6 @@ def run_product_backtest(
         slippage_bps=config.backtest.slippage_bps * cost_multiplier,
         spread_bps=config.backtest.spread_bps * cost_multiplier,
         commission=config.backtest.commission,
-        crypto_taker_fee_bps=config.backtest.crypto_taker_fee_bps * cost_multiplier,
         equity_taf_per_share=config.backtest.equity_taf_per_share,
         equity_taf_cap=config.backtest.equity_taf_cap,
         equity_cat_per_share=config.backtest.equity_cat_per_share,
@@ -418,8 +403,6 @@ def run_product_backtest(
             "price_adjustment_model": (
                 "split-adjusted execution/signal prices with explicit dividend cash flows; "
                 "callers must not supply split actions for already split-adjusted bars"
-                if market == Market.EQUITY
-                else "raw crypto prices; no corporate actions"
             ),
             "cost_multiplier": cost_multiplier,
             "universe_hash": universe_hash,
@@ -511,7 +494,8 @@ def optimize_grid(
         raise ValueError(
             f"Optimization grid has {combination_count} combinations; maximum is {_MAX_OPTIMIZATION_COMBINATIONS}"
         )
-    selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
+    _require_equity(market)
+    selection = config.strategy.equity
     baseline = dict(base_parameters or selection.parameters)
     keys = tuple(sorted(grid))
     observation_strategy = portfolio_strategy_from(
@@ -648,6 +632,7 @@ def _prepared_window(
     reuse one preparation. Returns ``(filtered, warmup, (ordered,
     decision_bars))`` exactly as ``engine.run(prepared_inputs=...)`` expects.
     """
+    _require_equity(market)
     available = [
         bar
         for bar in bars

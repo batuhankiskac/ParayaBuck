@@ -32,13 +32,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
-from parayabuck.universe import (
-    ensure_active_universes,
-    equity_universe_digest,
-    load_active_crypto_symbols,
-    validate_active_crypto_universe,
-)
-from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
+from parayabuck.universe import equity_universe_digest
 from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.cli")
@@ -139,7 +133,7 @@ def _add_backtest_arguments(
     *,
     include_cost_stress: bool,
 ) -> None:
-    parser.add_argument("--market", choices=("equity", "crypto"), default="equity")
+    parser.add_argument("--market", choices=("equity",), default="equity")
     parser.add_argument("--strategy", default=None)
     parser.add_argument("--data", help="offline CSV containing OHLCV bars")
     parser.add_argument(
@@ -147,7 +141,6 @@ def _add_backtest_arguments(
         help="optional CSV of explicit equity dividends (split-adjusted prices are expected)",
     )
     parser.add_argument("--symbols", help="comma-separated download candidates")
-    parser.add_argument("--candidate-limit", type=int, default=None)
     parser.add_argument("--start")
     parser.add_argument("--end")
     parser.add_argument("--initial-cash", type=float, default=None)
@@ -157,7 +150,7 @@ def _add_backtest_arguments(
         parser.add_argument(
             "--cost-stress",
             action="store_true",
-            help="also run 2x and 3x slippage/spread/crypto-fee/equity-regulatory-fee assumptions",
+            help="also run 2x and 3x slippage/spread/equity-regulatory-fee assumptions",
         )
 
 
@@ -252,11 +245,6 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         # LiveOperatorApproval.calculated_signature would only raise a raw
         # ValueError at signing time.
         raise SystemExit(f"{config.live.operator_approval_key_env} must be set to a key of at least 32 characters")
-    crypto_universe = config.universe.crypto
-    if config.strategy.crypto.enabled and crypto_universe.enabled and crypto_universe.dynamic_selection_enabled:
-        _symbols, status = validate_active_crypto_universe(crypto_universe)
-        if status != "success" and not crypto_universe.allow_static_fallback_trading:
-            raise SystemExit(f"Live authorization requires a valid dynamic crypto universe; status={status}")
     broker = AlpacaBroker(key, secret, paper=False)
     try:
         broker.account()  # Read-only identity verification against the live endpoint.
@@ -272,12 +260,6 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
             config.strategy.equity,
             config.universe.equity.symbols if config.universe.equity.enabled else (),
             equity_universe_digest(config.universe.equity),
-        ),
-        (
-            Market.CRYPTO,
-            config.strategy.crypto,
-            load_active_crypto_symbols(config.universe.crypto, log_rejection=False),
-            crypto_scanner_config_digest(config.universe.crypto),
         ),
     ):
         if not selection.enabled:
@@ -373,20 +355,19 @@ def _run_doctor(args: argparse.Namespace) -> int:
     try:
         config = load_config(config_path)
         add("config parses", True, str(config_path or "config/settings.yaml"))
-        for market_name in ("equity", "crypto"):
-            sel = config.strategy.equity if market_name == "equity" else config.strategy.crypto
-            if sel.enabled:
-                try:
-                    strat = product_strategy_from(sel.name, sel.parameters, timeframe=sel.timeframe)
-                    add(
-                        f"strategy {market_name} {sel.name}",
-                        True,
-                        f"{strat.spec().version} {strat.timeframe} alloc {sel.maximum_allocation}",
-                    )
-                except Exception as exc:
-                    add(f"strategy {market_name} {sel.name}", False, str(exc))
-            else:
-                add(f"strategy {market_name} disabled", True, "skipped")
+        sel = config.strategy.equity
+        if sel.enabled:
+            try:
+                strat = product_strategy_from(sel.name, sel.parameters, timeframe=sel.timeframe)
+                add(
+                    f"strategy equity {sel.name}",
+                    True,
+                    f"{strat.spec().version} {strat.timeframe} alloc {sel.maximum_allocation}",
+                )
+            except Exception as exc:
+                add(f"strategy equity {sel.name}", False, str(exc))
+        else:
+            add("strategy equity disabled", True, "skipped")
         if args.paper:
             add("runtime.mode paper", config.runtime.mode == RuntimeMode.PAPER, str(config.runtime.mode))
             add("live.enabled false", not config.live.enabled, str(config.live.enabled))
@@ -474,51 +455,6 @@ def _run_doctor(args: argparse.Namespace) -> int:
             add("universe equity static", True, ",".join(config.universe.equity.symbols))
         else:
             add("universe equity disabled", True, "skipped")
-        uni_cfg = config.universe.crypto
-        strat_sel = config.strategy.crypto
-        if not uni_cfg.enabled:
-            add("universe crypto disabled", True, "skipped")
-        elif not uni_cfg.dynamic_selection_enabled:
-            # Static universe - no snapshot validation required.
-            add("universe crypto static", True, "dynamic_selection disabled")
-        else:
-            # Enabled dynamic universe: the canonical validator evaluates
-            # snapshot existence, JSON parse, freshness vs
-            # active_universe_max_age_hours, scanner config digest match,
-            # observation strategy identity (name/version/timeframe/params
-            # digest), and scanner version.
-            symbols, status = validate_active_crypto_universe(uni_cfg)
-            cfg_digest = crypto_scanner_config_digest(uni_cfg)[:12]
-            obs = f"{uni_cfg.observation_strategy_name}/{uni_cfg.observation_strategy_version}/{uni_cfg.observation_strategy_timeframe}"
-            detail = (
-                f"status={status} symbols={len(symbols)} cfg={cfg_digest} obs={obs} path={uni_cfg.active_universe_path}"
-            )
-            if status == "success":
-                add("universe crypto active", True, detail)
-            else:
-                requires = (
-                    config.runtime.mode == RuntimeMode.PAPER
-                    and strat_sel.enabled
-                    and uni_cfg.enabled
-                    and uni_cfg.dynamic_selection_enabled
-                )
-                fallback_allowed = uni_cfg.allow_static_fallback_trading
-                if requires and not fallback_allowed:
-                    if args.offline:
-                        # Offline preflight (ExecStartPre): snapshot stale/missing but runtime
-                        # can refresh after network startup. Classify as REFRESH_NEEDED
-                        # explicitly, not PASS. Non-blocking even with --strict so first
-                        # boot / ExecStartPre does not fail when network is still down.
-                        checks.append(("universe crypto active", "REFRESH_NEEDED", detail))
-                    else:
-                        # Strict paper online (no --offline): fail-closed, runtime would halt.
-                        add("universe crypto active", False, detail)
-                else:
-                    # Degraded: fallback allowed or non-PAPER runtime; emit WARN, not FAIL.
-                    # WARN means strict failure (warning=True) except for transient network
-                    # below which is explicitly non-blocking.
-                    checks.append(("universe crypto active", "WARN", detail))
-                    warning = True
         try:
             result = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True, timeout=5)
             tracked = result.stdout.decode(errors="ignore").split("\0")
@@ -1165,17 +1101,16 @@ def _load_bars(
     secret = os.getenv("ALPACA_SECRET_KEY", "")
     if not key or not secret:
         raise SystemExit("ALPACA_API_KEY and ALPACA_SECRET_KEY are required for downloads")
-    ensure_active_universes(config, key, secret)
-    symbols = _candidate_symbols(config, market, args.symbols, args.candidate_limit)
+    symbols = _candidate_symbols(config, market, args.symbols)
     if not symbols:
         raise SystemExit("No candidate symbols are available")
-    selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
+    selection = config.strategy.equity
     end_at = end or datetime.now(UTC)
     if start is None:
-        start_at = end_at - timedelta(days=5 * 365 if market == Market.EQUITY else 2 * 365)
+        start_at = end_at - timedelta(days=5 * 365)
     else:
         # Download enough history before the requested evaluation start so the
-        # strategy warmup and the trailing scanner lookback have real bars.
+        # strategy warmup has real bars.
         # run_product_backtest splits warmup from the evaluation window. The
         # session density is anchored at the evaluation start (a 2020 backtest
         # must size its warmup with the 2020 holiday calendar, not today's).
@@ -1211,7 +1146,7 @@ def _load_bars(
                     strategy.timeframe,
                     start=start_at,
                     end=end_at,
-                    adjustment="splits" if market == Market.EQUITY else "raw",
+                    adjustment="splits",
                 )
                 for symbol in batch:
                     by_symbol[symbol] = [bar for bar in downloaded.get(symbol, ()) if bar.timestamp >= start_at]
@@ -1227,7 +1162,7 @@ def _load_bars(
             from parayabuck.markets.timeframes import bars_to_calendar_days
 
             extra_days = bars_to_calendar_days(
-                "SPY" if market == Market.EQUITY else "BTC/USD",
+                "SPY",
                 strategy.timeframe,
                 minimum_bars,
                 end_date=start,
@@ -1254,56 +1189,39 @@ def _load_bars(
 
 
 def _warmup_window_days(config: Config, market: Market, end_date: datetime | None = None) -> int:
-    """Calendar days of pre-start history for strategy and scanner warmup.
+    """Calendar days of pre-start history for strategy warmup.
 
     ``end_date`` anchors the strategy-warmup span at the evaluation start so
     a historical backtest sizes its warmup with that era's session density.
     """
-    selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
+    selection = config.strategy.equity
     strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
-    # The static equity universe has no scanner lookback.
-    lookback_days = 0 if market == Market.EQUITY else config.universe.crypto.scanner.lookback_days
     from parayabuck.markets.timeframes import bars_to_calendar_days
 
     # Strategy warmup is expressed in bars of the strategy timeframe (e.g. 150
-    # daily bars); the scanner lookback is already calendar days and must not
-    # be scaled by the bar duration. Bars are converted to a calendar span
-    # through the number of trading sessions, not 1 bar == 1 calendar day.
-    strategy_days = bars_to_calendar_days(
-        "SPY" if market == Market.EQUITY else "BTC/USD",
+    # daily bars). Bars are converted to a calendar span through the number of
+    # trading sessions, not 1 bar == 1 calendar day.
+    return bars_to_calendar_days(
+        "SPY",
         strategy.timeframe,
         strategy.minimum_history_bars,
         end_date=end_date,
     )
-    return max(strategy_days, lookback_days)
 
 
 def _candidate_symbols(
     config: Config,
     market: Market,
     explicit: str | None,
-    limit: int | None,
 ) -> list[str]:
     if explicit:
-        # Canonical keys: the download batch is keyed by canonical symbols, so a
-        # legacy form such as ``BTCUSD`` must resolve to ``BTC/USD`` here too.
+        # Canonical keys: the download batch is keyed by canonical symbols.
         return list(dict.fromkeys(canonical_symbol(item, market) for item in explicit.split(",") if item.strip()))
-    if market == Market.EQUITY:
-        return list(config.universe.equity.symbols)
-    source = Path(config.universe.crypto.active_universe_path)
-    payload = json.loads(source.read_text(encoding="utf-8")) if source.exists() else {}
-    candidates = [str(symbol) for symbol in payload.get("candidate_symbols", ())]
-    symbols = candidates or list(config.universe.crypto.trade_symbols)
-    required = config.universe.crypto.pinned_symbols
-    required_order = list(dict.fromkeys(required))
-    required_set = set(required_order)
-    candidates = [symbol for symbol in dict.fromkeys(symbols) if symbol not in required_set]
-    cap = len(candidates) if limit is None else max(0, limit)
-    return [*required_order, *candidates[:cap]]
+    return list(config.universe.equity.symbols)
 
 
 def _strategy_parameters(config: Config, market: Market, raw_overrides: list[str]) -> dict[str, object]:
-    selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
+    selection = config.strategy.equity
     parameters = dict(selection.parameters)
     for item in raw_overrides:
         if "=" not in item:

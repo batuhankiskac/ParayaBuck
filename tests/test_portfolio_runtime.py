@@ -301,15 +301,13 @@ class _FakeAlpacaClient:
             last_equity="100000",
             cash="90000",
             non_marginable_buying_power="100000",
-            crypto_status="ACTIVE",
         )
 
     def get_all_positions(self) -> list[SimpleNamespace]:
         return self.positions
 
     def get_open_position(self, symbol: str) -> SimpleNamespace:
-        # Alpaca resolves both the canonical and legacy crypto forms to the
-        # same position; the broker queries by the legacy asset symbol.
+        # Alpaca resolves a position regardless of symbol spelling.
         wanted = canonical_symbol(symbol)
         for position in self.positions:
             if canonical_symbol(position.symbol) == wanted:
@@ -391,10 +389,6 @@ def _portfolio_broker(
     broker._client = client
     broker._asset_cache = {}
     broker._symbol_exit_locks = {}
-    broker.crypto_emergency_exit_bps = 75.0
-    broker.crypto_stop_limit_offset_bps = 25.0
-    broker.crypto_stop_cancel_timeout_seconds = 5.0
-    broker.crypto_stop_cancel_poll_interval_seconds = 0.25
     broker.manage_external_positions = False
     broker._peak_equity = 0.0
     broker._peak_state_path = Path(tmp_path) / "peak.json" if tmp_path is not None else Path("/tmp/peak.json")
@@ -676,51 +670,12 @@ def test_duplicate_canonical_broker_positions_fail_closed(tmp_path) -> None:
         broker.account()
 
 
-def _owned_crypto_entry(repo: PortfolioStateRepository, *, quantity: float) -> None:
-    session_id = repo.begin_session("acct", "digest", "paper")
-    decision_timestamp = datetime(2025, 1, 1, tzinfo=UTC)
-    decision_id = repo.record_decision(
-        session_id,
-        "acct",
-        "digest",
-        _decision_target(decision_timestamp),
-        _risk_decision(decision_timestamp),
-        Market.CRYPTO,
-    )
-    entry = PortfolioOrderRequest(
-        client_order_id="pbp-entry",
-        decision_id=decision_id,
-        symbol="BTC/USD",
-        market=Market.CRYPTO,
-        side=PortfolioOrderSide.BUY,
-        quantity=quantity,
-        reference_price=100000.0,
-        decision_timestamp=decision_timestamp,
-        strategy_name="crypto",
-        strategy_version="1",
-        risk_reducing=False,
-    )
-    repo.record_order(entry, "submitting")
-    repo.apply_trade_update(
-        client_order_id="pbp-entry",
-        broker_order_id="broker-entry",
-        status="fill",
-        cumulative_filled_quantity=quantity,
-        average_fill_price=100000.0,
-        occurred_at=decision_timestamp,
-        activity_id="activity-entry",
-        fee=0.0,
-        realized_pnl=0.0,
-        unrealized_pnl=0.0,
-    )
-
-
 def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
     """A missed stop fill or a manual sell leaves the repository claiming a
     managed position the broker no longer holds; reconcile must clear it."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
-    assert repo.owned_quantities("acct") == {"BTC/USD": 0.49875}
+    _owned_equity_entry(repo, quantity=0.5)
+    assert repo.owned_quantities("acct") == {"QLD": 0.5}
 
     client = _FakeAlpacaClient()  # no positions, no open orders
     broker = _portfolio_broker(client, repo, tmp_path)
@@ -734,18 +689,18 @@ def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
 
 def test_reconcile_keeps_ownership_when_broker_still_holds_the_position(tmp_path) -> None:
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
-            symbol="BTC/USD",
+            symbol="QLD",
             qty="0.5",
-            avg_entry_price="100000",
-            current_price="100000",
+            avg_entry_price="100",
+            current_price="100",
             qty_available="0.5",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
@@ -753,81 +708,40 @@ def test_reconcile_keeps_ownership_when_broker_still_holds_the_position(tmp_path
 
     broker.reconcile()
 
-    assert repo.owned_quantities("acct") == {"BTC/USD": 0.49875}
+    assert repo.owned_quantities("acct") == {"QLD": 0.5}
 
 
-def test_reconcile_submits_no_stop_for_portfolio_owned_crypto(tmp_path) -> None:
-    """Portfolio crypto exits only through strategy SELL legs, as in the
+def test_reconcile_submits_no_stop_for_portfolio_owned_position(tmp_path) -> None:
+    """Portfolio positions exit only through strategy SELL legs, as in the
     validated replay: reconciliation must not add a broker stop, and an
     unprotected position is a clean MATCH on every cycle, not an incident."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
-            symbol="BTC/USD",
-            qty="0.49875",
-            avg_entry_price="100000",
-            current_price="100000",
-            qty_available="0.49875",
+            symbol="QLD",
+            qty="0.5",
+            avg_entry_price="100",
+            current_price="100",
+            qty_available="0.5",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
 
     for _cycle in range(2):
         report = broker.reconcile()
-        assert report["MATCH"] == ["BTC/USD"]
+        assert report["MATCH"] == ["QLD"]
         assert all(not symbols for bucket, symbols in report.items() if bucket != "MATCH")
 
     assert client.submitted == []
     assert client.open_orders == []
-    assert repo.owned_quantities("acct") == {"BTC/USD": 0.49875}
+    assert repo.owned_quantities("acct") == {"QLD": 0.5}
     assert broker.ledger is not None
     assert broker.ledger.load_safety_incidents("acct") == ()
-
-
-def test_reconcile_keeps_full_size_crypto_stop_in_fee_reserve_band(tmp_path) -> None:
-    """Regression: with qty_available == 0 the required quantity is
-    fee-adjusted, so the engine's own full-size protective stop reads
-    "over". It must be kept — not cancelled and re-submitted every cycle
-    (which raised "No available quantity to protect" on the stale
-    pre-cancel snapshot and left the position unprotected)."""
-    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    client = _FakeAlpacaClient()
-    client.positions = [
-        SimpleNamespace(
-            symbol="BTC/USD",
-            qty="0.5",
-            avg_entry_price="100000",
-            current_price="100000",
-            qty_available="0",  # fully locked by the working stop
-            unrealized_pl="0",
-            unrealized_intraday_pl="0",
-            asset_class="crypto",
-        )
-    ]
-    client.open_orders = [
-        SimpleNamespace(
-            id="stop-1",
-            client_order_id="parayabuck-stop-aaaa",
-            symbol="BTC/USD",
-            side="sell",
-            type="stop",
-            qty="0.5",
-            stop_price="99000",
-            status="accepted",
-        )
-    ]
-    broker = _portfolio_broker(client, repo, tmp_path)
-    broker.portfolio_owned_quantities = lambda: {"BTC/USD": 0.5}
-
-    broker.reconcile()
-
-    assert client.submitted == []  # no cancel/resubmit churn
-    assert client.open_orders  # the healthy stop is still in place
 
 
 def test_reconcile_counts_only_remaining_qty_of_partially_filled_stop(tmp_path) -> None:
@@ -838,31 +752,31 @@ def test_reconcile_counts_only_remaining_qty_of_partially_filled_stop(tmp_path) 
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
-            symbol="PAXG/USD",
-            qty="0.862154915",  # position after the stop sold 0.2608
-            avg_entry_price="4364.597",
-            current_price="4330",
+            symbol="QQQ",
+            qty="8",  # position after the stop sold 2 of 10 shares
+            avg_entry_price="500",
+            current_price="490",
             qty_available="0",  # fully locked by the working stop
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
     client.open_orders = [
         SimpleNamespace(
             id="stop-1",
             client_order_id="parayabuck-stop-bbbb",
-            symbol="PAXG/USD",
+            symbol="QQQ",
             side="sell",
             type="stop_limit",
-            qty="1.122930907",
-            filled_qty="0.260775992",
-            stop_price="4331.86",
+            qty="10",
+            filled_qty="2",
+            stop_price="480",
             status="accepted",
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
-    broker.portfolio_owned_quantities = lambda: {"PAXG/USD": 0.862154915}
+    broker.manage_external_positions = True
 
     broker.reconcile()
 
@@ -983,23 +897,23 @@ def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None
     from parayabuck.runtime import EngineRuntime
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     with repo.store.lock, repo.store.connection:
         entry_decision_id = repo.store.connection.execute(
-            "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry'"
+            "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry-QLD'"
         ).fetchone()[0]
     # A SELL exit order for the full quantity.
     repo.record_order(
         PortfolioOrderRequest(
             client_order_id="pbp-sell",
             decision_id=str(entry_decision_id),
-            symbol="BTC/USD",
-            market=Market.CRYPTO,
+            symbol="QLD",
+            market=Market.EQUITY,
             side=PortfolioOrderSide.SELL,
             quantity=0.5,
-            reference_price=100000.0,
+            reference_price=100.0,
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
-            strategy_name="crypto",
+            strategy_name="eq",
             strategy_version="1",
             risk_reducing=True,
         ),
@@ -1009,14 +923,14 @@ def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None
     # The broker already reflects the partial fill.
     client.positions = [
         SimpleNamespace(
-            symbol="BTC/USD",
+            symbol="QLD",
             qty="0.2",
-            avg_entry_price="100000",
-            current_price="100000",
+            avg_entry_price="100",
+            current_price="100",
             qty_available="0.2",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
@@ -1032,18 +946,18 @@ def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None
         broker_order_id="broker-sell",
         parent_order_id=None,
         role=OrderRole.MANUAL_EXIT,
-        symbol="BTC/USD",
-        market=Market.CRYPTO,
+        symbol="QLD",
+        market=Market.EQUITY,
         requested_qty=0.5,
         filled_qty=0.3,
-        average_fill_price=99000.0,
+        average_fill_price=99.0,
         timestamp=datetime(2025, 1, 1, tzinfo=UTC),
         fee=0.0,
         activity_id="activity-sell-1",
     )
     asyncio.run(runtime._handle_trade_update(update))
 
-    assert repo.owned_quantities("acct") == pytest.approx({"BTC/USD": 0.19875})
+    assert repo.owned_quantities("acct") == pytest.approx({"QLD": 0.2})
 
 
 def test_terminal_fill_invalidates_cached_account_snapshot(tmp_path) -> None:
@@ -1271,22 +1185,22 @@ def test_ownership_drift_is_exempt_while_an_open_order_is_working(tmp_path) -> N
     from parayabuck.execution.alpaca import OwnershipDriftError
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     entry_decision_id = repo.store.connection.execute(
-        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry'"
+        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry-QLD'"
     ).fetchone()[0]
     # The portfolio path has a working closing SELL for the missing quantity.
     repo.record_order(
         PortfolioOrderRequest(
             client_order_id="pbp-exit-sell",
             decision_id=str(entry_decision_id),
-            symbol="BTC/USD",
-            market=Market.CRYPTO,
+            symbol="QLD",
+            market=Market.EQUITY,
             side=PortfolioOrderSide.SELL,
             quantity=0.3,
-            reference_price=100000.0,
+            reference_price=100.0,
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
-            strategy_name="crypto",
+            strategy_name="eq",
             strategy_version="1",
             risk_reducing=True,
         ),
@@ -1295,14 +1209,14 @@ def test_ownership_drift_is_exempt_while_an_open_order_is_working(tmp_path) -> N
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
-            symbol="BTC/USD",
+            symbol="QLD",
             qty="0.2",
-            avg_entry_price="100000",
-            current_price="100000",
+            avg_entry_price="100",
+            current_price="100",
             qty_available="0.0",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
@@ -1319,21 +1233,21 @@ def test_manual_open_buy_does_not_exempt_ownership_drift(tmp_path) -> None:
     from parayabuck.execution.alpaca import OwnershipDriftError
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
-            symbol="BTC/USD",
+            symbol="QLD",
             qty="0.2",
-            avg_entry_price="100000",
-            current_price="100000",
+            avg_entry_price="100",
+            current_price="100",
             qty_available="0.0",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
-    client.open_orders = [SimpleNamespace(symbol="BTC/USD", qty="0.3", side="buy", status="new", type="market")]
+    client.open_orders = [SimpleNamespace(symbol="QLD", qty="0.3", side="buy", status="new", type="market")]
     broker = _portfolio_broker(client, repo, tmp_path)
     with pytest.raises(OwnershipDriftError, match="Ownership drift"):
         broker.account()
@@ -1345,21 +1259,21 @@ def test_manual_open_sell_does_not_exempt_ownership_drift(tmp_path) -> None:
     from parayabuck.execution.alpaca import OwnershipDriftError
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
-            symbol="BTC/USD",
+            symbol="QLD",
             qty="0.2",
-            avg_entry_price="100000",
-            current_price="100000",
+            avg_entry_price="100",
+            current_price="100",
             qty_available="0.0",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
-    client.open_orders = [SimpleNamespace(symbol="BTC/USD", qty="0.3", side="sell", status="new", type="limit")]
+    client.open_orders = [SimpleNamespace(symbol="QLD", qty="0.3", side="sell", status="new", type="limit")]
     broker = _portfolio_broker(client, repo, tmp_path)
     with pytest.raises(OwnershipDriftError, match="Ownership drift"):
         broker.account()
@@ -1370,21 +1284,21 @@ def test_portfolio_open_buy_does_not_exempt_ownership_drift(tmp_path) -> None:
     from parayabuck.execution.alpaca import OwnershipDriftError
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     entry_decision_id = repo.store.connection.execute(
-        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry'"
+        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry-QLD'"
     ).fetchone()[0]
     repo.record_order(
         PortfolioOrderRequest(
             client_order_id="pbp-extra-buy",
             decision_id=str(entry_decision_id),
-            symbol="BTC/USD",
-            market=Market.CRYPTO,
+            symbol="QLD",
+            market=Market.EQUITY,
             side=PortfolioOrderSide.BUY,
             quantity=0.3,
-            reference_price=100000.0,
+            reference_price=100.0,
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
-            strategy_name="crypto",
+            strategy_name="eq",
             strategy_version="1",
             risk_reducing=False,
         ),
@@ -1393,14 +1307,14 @@ def test_portfolio_open_buy_does_not_exempt_ownership_drift(tmp_path) -> None:
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
-            symbol="BTC/USD",
+            symbol="QLD",
             qty="0.2",
-            avg_entry_price="100000",
-            current_price="100000",
+            avg_entry_price="100",
+            current_price="100",
             qty_available="0.0",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
@@ -1413,9 +1327,9 @@ def test_portfolio_open_sell_only_exempts_the_explained_quantity(tmp_path) -> No
     from parayabuck.execution.alpaca import OwnershipDriftError
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     entry_decision_id = repo.store.connection.execute(
-        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry'"
+        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry-QLD'"
     ).fetchone()[0]
     # The closing SELL is partially filled: 0.15 sold, 0.05 still working.
     # Owned quantity after the fill is 0.35; the working remainder is 0.05.
@@ -1423,13 +1337,13 @@ def test_portfolio_open_sell_only_exempts_the_explained_quantity(tmp_path) -> No
         PortfolioOrderRequest(
             client_order_id="pbp-exit-sell",
             decision_id=str(entry_decision_id),
-            symbol="BTC/USD",
-            market=Market.CRYPTO,
+            symbol="QLD",
+            market=Market.EQUITY,
             side=PortfolioOrderSide.SELL,
             quantity=0.2,
-            reference_price=100000.0,
+            reference_price=100.0,
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
-            strategy_name="crypto",
+            strategy_name="eq",
             strategy_version="1",
             risk_reducing=True,
         ),
@@ -1440,7 +1354,7 @@ def test_portfolio_open_sell_only_exempts_the_explained_quantity(tmp_path) -> No
         broker_order_id="broker-exit",
         status="partially_filled",
         cumulative_filled_quantity=0.15,
-        average_fill_price=99000.0,
+        average_fill_price=99.0,
         occurred_at=datetime(2025, 1, 1, 12, 0, tzinfo=UTC),
         activity_id="activity-partial",
         fee=0.0,
@@ -1452,14 +1366,14 @@ def test_portfolio_open_sell_only_exempts_the_explained_quantity(tmp_path) -> No
     # which cannot explain the discrepancy: drift stays fail-closed.
     client.positions = [
         SimpleNamespace(
-            symbol="BTC/USD",
+            symbol="QLD",
             qty="0.25",
-            avg_entry_price="100000",
-            current_price="100000",
+            avg_entry_price="100",
+            current_price="100",
             qty_available="0.0",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
@@ -1485,12 +1399,12 @@ def test_decision_path_drift_halts_with_resettable_reason() -> None:
     runtime._portfolio_lock = threading.RLock()
 
     def process_closed_bars(_bars, *, entry_latch=None):
-        raise OwnershipDriftError("Ownership drift for BTC/USD")
+        raise OwnershipDriftError("Ownership drift for QLD")
 
     drift_runtime = SimpleNamespace(
-        market=Market.CRYPTO,
-        strategy=SimpleNamespace(timeframe="1h"),
-        symbols=("BTC/USD",),
+        market=Market.EQUITY,
+        strategy=SimpleNamespace(timeframe="1d"),
+        symbols=("QLD",),
         process_closed_bars=process_closed_bars,
     )
     runtime._portfolio_runtimes = (drift_runtime,)
@@ -1500,14 +1414,14 @@ def test_decision_path_drift_halts_with_resettable_reason() -> None:
         [
             Bar(
                 datetime(2025, 1, 1, tzinfo=UTC),
-                "BTC/USD",
-                "1h",
+                "QLD",
+                "1d",
                 100.0,
                 101.0,
                 99.0,
                 100.0,
                 1000.0,
-                Market.CRYPTO,
+                Market.EQUITY,
             )
         ]
     )
@@ -1568,18 +1482,18 @@ def test_ownership_drift_below_repository_quantity_is_fail_closed(tmp_path) -> N
     from parayabuck.execution.alpaca import OwnershipDriftError
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
-            symbol="BTC/USD",
+            symbol="QLD",
             qty="0.3",
-            avg_entry_price="100000",
-            current_price="100000",
+            avg_entry_price="100",
+            current_price="100",
             qty_available="0.3",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
-            asset_class="crypto",
+            asset_class="us_equity",
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
@@ -1591,7 +1505,7 @@ def test_flat_position_with_stale_ownership_does_not_raise_drift(tmp_path) -> No
     """A fully flat stale position is the reconcile-heal path, not a drift
     halt: the heal books the missing exit leg and clears ownership."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     broker = _portfolio_broker(_FakeAlpacaClient(), repo, tmp_path)
     snapshot = broker.account()
     assert snapshot.positions == ()
@@ -1686,7 +1600,7 @@ def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) ->
     ledger.close()
 
 
-def _owned_equity_entry(repo: PortfolioStateRepository, *, quantity: float, symbol: str) -> None:
+def _owned_equity_entry(repo: PortfolioStateRepository, *, quantity: float, symbol: str = "QLD") -> None:
     session_id = repo.begin_session("acct", "digest", "paper")
     decision_timestamp = datetime(2025, 1, 1, tzinfo=UTC)
     decision_id = repo.record_decision(
@@ -1923,7 +1837,7 @@ def test_operations_snapshot_is_isolated_between_two_accounts(tmp_path) -> None:
 def test_negative_net_ownership_is_an_invariant_violation(tmp_path) -> None:
     """owned_quantities must never silently hide negative net ownership."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     session = repo.begin_session("acct", "digest", "paper")
     decision_id = repo.record_decision(
         session,
@@ -1931,19 +1845,19 @@ def test_negative_net_ownership_is_an_invariant_violation(tmp_path) -> None:
         "digest",
         _decision_target(datetime(2025, 1, 2, tzinfo=UTC)),
         _risk_decision(datetime(2025, 1, 2, tzinfo=UTC)),
-        Market.CRYPTO,
+        Market.EQUITY,
     )
     repo.record_order(
         PortfolioOrderRequest(
             client_order_id="pbp-over-sell",
             decision_id=decision_id,
-            symbol="BTC/USD",
-            market=Market.CRYPTO,
+            symbol="QLD",
+            market=Market.EQUITY,
             side=PortfolioOrderSide.SELL,
             quantity=0.8,
-            reference_price=100000.0,
+            reference_price=100.0,
             decision_timestamp=datetime(2025, 1, 2, tzinfo=UTC),
-            strategy_name="crypto",
+            strategy_name="eq",
             strategy_version="1",
             risk_reducing=True,
         ),
@@ -1954,7 +1868,7 @@ def test_negative_net_ownership_is_an_invariant_violation(tmp_path) -> None:
         broker_order_id="broker-over-sell",
         status="fill",
         cumulative_filled_quantity=0.8,
-        average_fill_price=99000.0,
+        average_fill_price=99.0,
         occurred_at=datetime(2025, 1, 2, tzinfo=UTC),
         activity_id="activity-over-sell",
         fee=0.0,
@@ -1970,7 +1884,7 @@ def test_stale_flat_position_records_adjustment_not_fake_fill(tmp_path) -> None:
     """No real fill in broker history: reconcile records an explicit
     ownership adjustment instead of a synthetic precise SELL fill."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     client = _FakeAlpacaClient()  # flat, no filled orders
     broker = _portfolio_broker(client, repo, tmp_path)
     broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
@@ -1985,7 +1899,7 @@ def test_stale_flat_position_records_adjustment_not_fake_fill(tmp_path) -> None:
         synthetic_sells = repo.store.connection.execute(
             "SELECT COUNT(*) FROM portfolio_orders WHERE client_order_id LIKE 'pbp-reconcile-%'"
         ).fetchone()[0]
-    assert adjustments == [("stale_ownership_clear", 0.49875, 0.0)]
+    assert adjustments == [("stale_ownership_clear", 0.5, 0.0)]
     assert synthetic_sells == 0
 
 
@@ -1993,36 +1907,36 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
     """A real missing fill in Alpaca history is recovered at its real price
     instead of being replaced by an adjustment."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     entry_decision_id = repo.store.connection.execute(
-        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry'"
+        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry-QLD'"
     ).fetchone()[0]
     repo.record_order(
         PortfolioOrderRequest(
             client_order_id="pbp-exit-sell",
             decision_id=str(entry_decision_id),
-            symbol="BTC/USD",
-            market=Market.CRYPTO,
+            symbol="QLD",
+            market=Market.EQUITY,
             side=PortfolioOrderSide.SELL,
-            quantity=0.49875,
-            reference_price=100000.0,
+            quantity=0.5,
+            reference_price=100.0,
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
-            strategy_name="crypto",
+            strategy_name="eq",
             strategy_version="1",
             risk_reducing=True,
         ),
         "submitted",
     )
     client = _FakeAlpacaClient()
-    # Alpaca confirms the exit order filled at 97_500 while the stream was down.
+    # Alpaca confirms the exit order filled at 97.50 while the stream was down.
     client.filled_orders["pbp-exit-sell"] = SimpleNamespace(
         id="broker-exit",
         client_order_id="pbp-exit-sell",
-        symbol="BTC/USD",
+        symbol="QLD",
         side="sell",
         status="filled",
-        filled_qty="0.49875",
-        filled_avg_price="97500",
+        filled_qty="0.5",
+        filled_avg_price="97.5",
         filled_at="2025-01-01T15:00:00+00:00",
     )
     broker = _portfolio_broker(client, repo, tmp_path)
@@ -2066,7 +1980,7 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
         ).fetchone()
     assert adjustments == 0
     # The recovered fill carries the real exit price, not an invented one.
-    assert fill == (97500.0, 0.49875)
+    assert fill == (97.5, 0.5)
 
 
 def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> None:
@@ -2077,21 +1991,21 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
     from parayabuck.runtime import EngineRuntime
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
+    _owned_equity_entry(repo, quantity=0.5)
     entry_decision_id = repo.store.connection.execute(
-        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry'"
+        "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry-QLD'"
     ).fetchone()[0]
     repo.record_order(
         PortfolioOrderRequest(
             client_order_id="pbp-exit-sell",
             decision_id=str(entry_decision_id),
-            symbol="BTC/USD",
-            market=Market.CRYPTO,
+            symbol="QLD",
+            market=Market.EQUITY,
             side=PortfolioOrderSide.SELL,
-            quantity=0.49875,
-            reference_price=100000.0,
+            quantity=0.5,
+            reference_price=100.0,
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
-            strategy_name="crypto",
+            strategy_name="eq",
             strategy_version="1",
             risk_reducing=True,
         ),
@@ -2116,11 +2030,11 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
         broker_order_id="broker-exit",
         parent_order_id=None,
         role=OrderRole.MANUAL_EXIT,
-        symbol="BTC/USD",
-        market=Market.CRYPTO,
-        requested_qty=0.49875,
-        filled_qty=0.49875,
-        average_fill_price=97500.0,
+        symbol="QLD",
+        market=Market.EQUITY,
+        requested_qty=0.5,
+        filled_qty=0.5,
+        average_fill_price=97.5,
         timestamp=datetime(2025, 1, 1, 15, 0, tzinfo=UTC),
         fee=0.0,
         activity_id="activity-late-exit",
@@ -2139,9 +2053,9 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
         fills = repo.store.connection.execute(
             "SELECT price, quantity FROM portfolio_fills WHERE client_order_id = 'pbp-exit-sell'"
         ).fetchall()
-    assert adjustments == [(0.49875, 0.49875)]
+    assert adjustments == [(0.5, 0.5)]
     # The real fill was booked at the real price.
-    assert fills == [(97500.0, 0.49875)]
+    assert fills == [(97.5, 0.5)]
 
 
 def test_old_database_with_child_rows_migrates_cleanly(tmp_path) -> None:
@@ -2487,7 +2401,7 @@ def test_entry_risk_latch_evaluates_from_account_poll(tmp_path) -> None:
     runtime.app_config = Config()
     runtime.broker = SimpleNamespace(account_id="acct")
     runtime.ledger = SimpleNamespace(save_safety_incident=_save, clear_safety_incident=_clear)
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     # 1% daily loss on a $100k account trips the 0.5% daily-loss limit.
     runtime._evaluate_entry_risk_latch(AccountSnapshot(99_000, 99_000, 100_000, -1_000))
     assert runtime._entry_risk_latch[Market.EQUITY] == "daily_loss_limit"
@@ -2509,7 +2423,7 @@ def test_health_exposes_entry_risk_latch() -> None:
     from parayabuck.runtime import EngineRuntime
 
     runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime._entry_risk_latch = {Market.EQUITY: "daily_loss_limit", Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: "daily_loss_limit"}
     runtime._state = "running"
     runtime._running = True
     runtime._workers = {}
@@ -2519,8 +2433,8 @@ def test_health_exposes_entry_risk_latch() -> None:
     runtime._dropped_events = 0
     runtime._coalesced_events = 0
     runtime.symbols = []
-    runtime._symbols_by_market = {Market.EQUITY: set(), Market.CRYPTO: set()}
-    runtime._market_enabled = {Market.EQUITY: False, Market.CRYPTO: False}
+    runtime._symbols_by_market = {Market.EQUITY: set()}
+    runtime._market_enabled = {Market.EQUITY: False}
     runtime._not_ready_symbols = set()
     runtime._circuit_breaker_reason = None
     runtime.config = SimpleNamespace(
@@ -2528,26 +2442,23 @@ def test_health_exposes_entry_risk_latch() -> None:
         maximum_account_age_for_entry_seconds=30.0,
         maximum_queue_age_seconds=30.0,
     )
-    runtime._universe_refresh_status = {}
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._market_entry_halts = {Market.EQUITY: None}
     runtime._last_reconciliation_at = None
-    runtime._last_universe_refresh_at = None
-    runtime._next_universe_refresh_at = None
     runtime.strategy_status = "configured"
     runtime._strategy_specs = ()
     runtime._portfolio_repository = None
     runtime.ledger = None
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime.market_state = SimpleNamespace()
     runtime.broker = SimpleNamespace(account_id="acct")
     health = runtime.health()
-    assert health.entry_risk_latch == {"equity": "daily_loss_limit", "crypto": None}
+    assert health.entry_risk_latch == {"equity": "daily_loss_limit"}
 
 
 def _health_runtime() -> object:
     from parayabuck.runtime import EngineRuntime, WorkerHealth
 
     runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._state = "running"
     runtime._running = True
     now = datetime.now(UTC)
@@ -2563,9 +2474,9 @@ def _health_runtime() -> object:
     runtime._dropped_events = 0
     runtime._coalesced_events = 0
     runtime.symbols = ["SPY"]
-    runtime._symbols_by_market = {Market.EQUITY: {"SPY"}, Market.CRYPTO: set()}
-    runtime._market_enabled = {Market.EQUITY: True, Market.CRYPTO: False}
-    runtime._strategy_enabled = {Market.EQUITY: True, Market.CRYPTO: False}
+    runtime._symbols_by_market = {Market.EQUITY: {"SPY"}}
+    runtime._market_enabled = {Market.EQUITY: True}
+    runtime._strategy_enabled = {Market.EQUITY: True}
     runtime._not_ready_symbols = set()
     runtime._circuit_breaker_reason = None
     runtime.config = SimpleNamespace(
@@ -2573,57 +2484,15 @@ def _health_runtime() -> object:
         maximum_account_age_for_entry_seconds=30.0,
         maximum_queue_age_seconds=30.0,
     )
-    runtime._universe_refresh_status = {"equity": "success", "crypto": "refresh_failed"}
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._market_entry_halts = {Market.EQUITY: None}
     runtime._last_reconciliation_at = None
-    runtime._last_universe_refresh_at = None
-    runtime._next_universe_refresh_at = None
     runtime.strategy_status = "configured"
     runtime._strategy_specs = ()
     runtime._portfolio_repository = None
     runtime.ledger = None
     runtime.broker = SimpleNamespace(account_id="acct")
-    runtime.market_state = SimpleNamespace(has_data_gaps=False, has_data_gaps_for_market=lambda market: False)
+    runtime.market_state = SimpleNamespace()
     return runtime
-
-
-def test_disabled_market_scanner_failure_is_not_critical() -> None:
-    """Equity enabled, crypto disabled, no crypto positions: a crypto
-    discovery failure is informational and the trading runtime stays
-    healthy."""
-    runtime = _health_runtime()
-    health = runtime.health()
-    assert health.healthy is True
-    crypto_health = health.markets["crypto"]
-    assert crypto_health["scanner_status"] == "refresh_failed"
-    assert crypto_health["scanner_critical"] is False
-    equity_health = health.markets["equity"]
-    assert equity_health["scanner_status"] == "success"
-
-
-def test_enabled_market_scanner_failure_is_critical() -> None:
-    """The enabled equity strategy makes an equity scanner failure critical:
-    the runtime is degraded."""
-    runtime = _health_runtime()
-    runtime._universe_refresh_status = {"equity": "refresh_failed", "crypto": "success"}
-    health = runtime.health()
-    assert health.healthy is False
-    assert health.state == "degraded"
-    assert health.markets["equity"]["scanner_critical"] is True
-
-
-def test_managed_position_makes_disabled_market_scanner_critical() -> None:
-    """A managed crypto position keeps crypto scanner/stream/protection health
-    operationally relevant even with the strategy disabled."""
-    runtime = _health_runtime()
-    runtime._portfolio_repository = SimpleNamespace(
-        owned_symbols=lambda account_id, market: {"BTC/USD"} if market == Market.CRYPTO else set(),
-        open_orders=lambda account_id, market: (),
-    )
-    health = runtime.health()
-    assert health.healthy is False
-    assert health.state == "degraded"
-    assert health.markets["crypto"]["scanner_critical"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -2656,7 +2525,7 @@ def test_rebalance_policy_next_boundary_after() -> None:
     # Sunday: the next day.
     assert weekly.next_boundary_after(datetime(2025, 1, 12, tzinfo=UTC)) == datetime(2025, 1, 13, tzinfo=UTC)
 
-    hours = RebalancePolicy(Market.CRYPTO, "hours:24")
+    hours = RebalancePolicy(Market.EQUITY, "hours:24")
     # Mid-block: the start of the next 24h UTC block.
     assert hours.next_boundary_after(datetime(2025, 1, 1, 5, 0, tzinfo=UTC)) == datetime(2025, 1, 2, 0, 0, tzinfo=UTC)
     # Exactly on a block boundary: previous + N hours.
@@ -3053,7 +2922,7 @@ def test_engine_run_startup_catch_up_propagates_entry_latch() -> None:
     runtime = _catch_up_engine()
     fake = _CatchUpRecorder()
     runtime._portfolio_runtimes = (fake,)
-    runtime._entry_risk_latch = {Market.EQUITY: "daily_loss_limit", Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: "daily_loss_limit"}
     runtime._run_startup_catch_up()
     assert fake.calls == ["daily_loss_limit"]
     # A success status is owned by the portfolio runtime itself.
@@ -3097,7 +2966,8 @@ def test_health_exposes_startup_catch_up_fields() -> None:
         "next_boundary_after": "2025-02-01T00:00:00+00:00",
     }
     # A market without a portfolio runtime reports an empty catch-up snapshot.
-    assert health.markets["crypto"]["catch_up"] == {
+    runtime._portfolio_runtimes = ()
+    assert runtime.health().markets["equity"]["catch_up"] == {
         "status": None,
         "at": None,
         "next_boundary_after": None,
@@ -3138,7 +3008,7 @@ def _catch_up_engine() -> object:
     runtime._reconcile_failed = False
     runtime._state = "warming_up"
     runtime._portfolio_lock = threading.RLock()
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._portfolio_runtimes = ()
     runtime._entry_readiness_reasons = lambda _market: []
     return runtime

@@ -12,29 +12,6 @@ from parayabuck.markets.symbols import canonical_symbol
 log = get_logger("parayabuck.data.cache")
 
 
-def is_crypto_daily_grid(timestamp: datetime) -> bool:
-    """Whether a crypto 1d bar sits exactly on the UTC midnight grid.
-
-    Alpaca crypto daily bars are calendar-day bars at 00:00 UTC. Test fakes
-    that create 10:00/13:00/23:00 bars must be rejected at the cache boundary
-    so they cannot pollute production.
-    """
-    ts = timestamp.astimezone(UTC) if timestamp.tzinfo is not None else timestamp.replace(tzinfo=UTC)
-    return ts.hour == 0 and ts.minute == 0 and ts.second == 0 and ts.microsecond == 0
-
-
-def _filter_off_grid_bars(bars: list[Bar]) -> tuple[list[Bar], int]:
-    """Split into (valid, off_grid_count) for crypto 1d bars."""
-    valid: list[Bar] = []
-    off = 0
-    for bar in bars:
-        if bar.market == Market.CRYPTO and bar.timeframe == "1d" and not is_crypto_daily_grid(bar.timestamp):
-            off += 1
-            continue
-        valid.append(bar)
-    return valid, off
-
-
 class WarmupCache:
     _SCHEMA = """
         CREATE TABLE IF NOT EXISTS bars (
@@ -254,22 +231,7 @@ class WarmupCache:
                 log.warning("Warmup cache close warning: %s", exc)
 
     def upsert(self, bars: list[Bar], *, feed: str, adjustment: str = "all") -> None:
-        valid, off = _filter_off_grid_bars(bars)
-        if off:
-            log.warning("WarmupCache.upsert rejected %d off-grid crypto 1d bars (feed=%s)", off, feed)
-            try:
-                from parayabuck.monitoring.journal import emit_journal
-                from parayabuck.monitoring.operational_event import create_event
-
-                evt = create_event(
-                    kind="cache_integrity",
-                    message=f"upsert rejected {off} off-grid crypto daily bars",
-                    fields={"off_grid_bars": off, "feed": feed, "adjustment": adjustment},
-                )
-                emit_journal(evt)
-            except Exception:
-                pass
-        if not valid:
+        if not bars:
             return
         retrieved_at = datetime.now(UTC).isoformat()
         rows = [
@@ -287,10 +249,8 @@ class WarmupCache:
                 bar.volume,
                 retrieved_at,
             )
-            for bar in valid
+            for bar in bars
         ]
-        if not rows:
-            return
         with self._lock:
             self.connection.executemany(
                 """
@@ -337,7 +297,7 @@ class WarmupCache:
                     end.isoformat(),
                 ),
             ).fetchall()
-        bars = [
+        return [
             Bar(
                 timestamp=datetime.fromisoformat(row[0]),
                 symbol=canonical,
@@ -351,29 +311,6 @@ class WarmupCache:
             )
             for row in rows
         ]
-        if market == Market.CRYPTO and timeframe == "1d":
-            valid, off = _filter_off_grid_bars(bars)
-            if off:
-                log.warning(
-                    "WarmupCache.get filtered %d off-grid crypto 1d bars symbol=%s feed=%s",
-                    off,
-                    canonical,
-                    feed,
-                )
-                try:
-                    from parayabuck.monitoring.journal import emit_journal
-                    from parayabuck.monitoring.operational_event import create_event
-
-                    evt = create_event(
-                        kind="cache_integrity",
-                        message=f"filtered {off} off-grid crypto daily bars on read",
-                        fields={"off_grid_bars": off, "symbol": canonical, "feed": feed, "market": market.value},
-                    )
-                    emit_journal(evt)
-                except Exception:
-                    pass
-                return valid
-        return bars
 
     def replace_window(
         self,
@@ -386,29 +323,21 @@ class WarmupCache:
     ) -> bool:
         """Atomically replace the cache window for the symbols in ``bars``.
 
-        Validates ``bars`` in memory first; an empty or off-grid-only payload
-        leaves the cache untouched. Only the window ``[start,end]`` for the
-        affected feed/symbol/market/timeframe/adjustment is deleted and
+        An empty payload leaves the cache untouched. Only the window
+        ``[start,end]`` for the affected feed/symbol/market/timeframe/adjustment is deleted and
         rewritten inside one transaction. On any error the transaction rolls
         back and the old cache is preserved.
         """
         if not bars:
             log.warning("WarmupCache.replace_window called with empty bars; cache preserved")
             return False
-        # In-memory validation: filter off-grid crypto 1d bars, reject if all off-grid
-        valid, off = _filter_off_grid_bars(bars)
-        if off:
-            log.warning("WarmupCache.replace_window filtered %d off-grid bars", off)
-        if not valid:
-            log.warning("WarmupCache.replace_window has no valid bars after filtering; cache preserved")
-            return False
         # Determine window bounds from bars if not supplied
         if start is None:
-            start = min(b.timestamp for b in valid)
+            start = min(b.timestamp for b in bars)
         if end is None:
-            end = max(b.timestamp for b in valid)
+            end = max(b.timestamp for b in bars)
         grouped: dict[tuple[str, str, str, str], list[Bar]] = {}
-        for bar in valid:
+        for bar in bars:
             key = (feed, canonical_symbol(bar.symbol, bar.market), bar.market.value, bar.timeframe)
             grouped.setdefault(key, []).append(bar)
         # Prepare rows for insertion before touching DB
@@ -459,7 +388,7 @@ class WarmupCache:
                 self.connection.commit()
                 log.info(
                     "WarmupCache.replace_window committed %d bars feed=%s adjustment=%s window=[%s,%s]",
-                    len(valid),
+                    len(bars),
                     feed,
                     adjustment,
                     start.isoformat(),

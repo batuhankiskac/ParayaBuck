@@ -14,8 +14,8 @@ from parayabuck.config import Config
 from parayabuck.monitoring.health import HealthStatus, _check_workers
 from parayabuck.runtime_health import WorkerHealth
 
-# A Saturday: equity is outside regular hours, crypto must still deliver bars
-_NOW = datetime(2026, 9, 26, 15, 0, tzinfo=UTC)
+# A Monday 11:00 ET: regular equity hours, the equity stream must deliver bars
+_NOW = datetime(2026, 9, 28, 15, 0, tzinfo=UTC)
 
 
 def _worker(heartbeat: datetime, last_event: datetime | None = None) -> dict[str, object]:
@@ -44,13 +44,13 @@ def test_worker_ages_are_judged_as_of_the_snapshot() -> None:
 
 def test_stream_worker_of_market_without_symbols_is_not_stale() -> None:
     # The runtime requires a market stream only while the market is enabled
-    # and has symbols (_required_workers); an empty crypto universe owes no bars.
+    # and has symbols (_required_workers); an empty equity universe owes no bars.
     snapshot = {
         "written_at": _NOW.isoformat(),
-        "workers": {"pb-crypto": _worker(_NOW, _NOW - timedelta(hours=2))},
-        "markets": {"crypto": {"enabled": True, "symbol_count": 0}},
+        "workers": {"pb-stocks": _worker(_NOW, _NOW - timedelta(hours=2))},
+        "markets": {"equity": {"enabled": True, "symbol_count": 0}},
     }
 
     assert _check_workers(snapshot, _NOW, Config()).status == HealthStatus.OK
-    snapshot["markets"] = {"crypto": {"enabled": True, "symbol_count": 2}}
+    snapshot["markets"] = {"equity": {"enabled": True, "symbol_count": 2}}
     assert _check_workers(snapshot, _NOW, Config()).status == HealthStatus.DEGRADED

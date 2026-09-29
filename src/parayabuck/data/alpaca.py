@@ -6,16 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from alpaca.data.enums import Adjustment, DataFeed
-from alpaca.data.historical import CryptoHistoricalDataClient, StockHistoricalDataClient
-from alpaca.data.requests import (
-    CryptoBarsRequest,
-    CryptoLatestQuoteRequest,
-    StockBarsRequest,
-)
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from parayabuck.core.models import Bar, Market
-from parayabuck.data.cache import WarmupCache, is_crypto_daily_grid
+from parayabuck.data.cache import WarmupCache
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
@@ -61,24 +57,20 @@ def _floor_to_grid(value: datetime, minutes: int) -> datetime:
     return datetime.fromtimestamp((epoch_minutes - epoch_minutes % minutes) * 60, tz=UTC)
 
 
-def _first_expected_bar(market: Market, timeframe: str, start: datetime) -> datetime:
+def _first_expected_bar(timeframe: str, start: datetime) -> datetime:
     """The earliest bar timestamp a full fetch could return for ``start``.
 
-    Crypto trades 24/7: the first bar sits on the floored grid boundary.
     Daily bars keep the window's original bucket hour (they are not aligned
-    to the UTC midnight grid), so their head reference gets a one-day
-    allowance; equity daily bars additionally sit on regular sessions, so a
-    three-day allowance absorbs weekend/holiday gaps. Equity intraday bars
-    only exist on regular sessions: for a mid-session start the first bar is
-    the next grid point at/after start; for a pre-market/after-close/weekend
-    start it is the next session's 09:30 ET bar. This is the head-coverage
-    reference for incremental reuse: a cache whose oldest bar is NEWER than
-    this cannot cover the requested window head and must be fully refetched.
+    to the UTC midnight grid) and sit on regular sessions, so a three-day
+    allowance absorbs weekend/holiday gaps. Intraday bars only exist on
+    regular sessions: for a mid-session start the first bar is the next grid
+    point at/after start; for a pre-market/after-close/weekend start it is
+    the next session's 09:30 ET bar. This is the head-coverage reference for
+    incremental reuse: a cache whose oldest bar is NEWER than this cannot
+    cover the requested window head and must be fully refetched.
     """
-    if market == Market.CRYPTO and timeframe != "1d":
-        return start
     if timeframe == "1d":
-        return start + timedelta(days=3 if market == Market.EQUITY else 1)
+        return start + timedelta(days=3)
     local = start.astimezone(NEW_YORK)
     minute = local.hour * 60 + local.minute
     if local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60:
@@ -92,7 +84,7 @@ def _first_expected_bar(market: Market, timeframe: str, start: datetime) -> date
 
 
 class AlpacaHistoricalData:
-    """Bounded Alpaca REST client used to warm up the streaming engine.
+    """Bounded Alpaca equity REST client used to warm up the streaming engine.
 
     Dedup & measurement: ``get_bars_batch`` deduplicates identical consecutive
     provider calls (same sorted symbols, timeframe, start, end, adjustment)
@@ -114,9 +106,7 @@ class AlpacaHistoricalData:
         cache: WarmupCache | str | Path | None = None,
     ) -> None:
         self._stock_client = StockHistoricalDataClient(api_key, secret_key)
-        self._crypto_client = CryptoHistoricalDataClient(api_key, secret_key)
         patch_session_timeout(self._stock_client._session, timeout=30.0)
-        patch_session_timeout(self._crypto_client._session, timeout=30.0)
         feed = "delayed_sip" if data_delayed else stock_feed
         try:
             self._stock_feed = DataFeed(feed)
@@ -175,10 +165,8 @@ class AlpacaHistoricalData:
 
     def close(self) -> None:
         """Release HTTP session pools and the local cache connection."""
-        for client in (self._stock_client, self._crypto_client):
-            session = getattr(client, "_session", None)
-            if session is None:
-                continue
+        session = getattr(self._stock_client, "_session", None)
+        if session is not None:
             try:
                 session.close()
             except Exception as exc:
@@ -196,7 +184,7 @@ class AlpacaHistoricalData:
         end: datetime | str | None = None,
         adjustment: str = "raw",
     ) -> list[Bar]:
-        canonical = canonical_symbol(symbol)
+        canonical = canonical_symbol(symbol, Market.EQUITY)
         return self.get_bars_batch([canonical], timeframe, start, end, adjustment=adjustment).get(canonical, [])
 
     def get_bars_batch(
@@ -209,7 +197,7 @@ class AlpacaHistoricalData:
     ) -> dict[str, list[Bar]]:
         if not symbols:
             return {}
-        symbols, market, start_at, end_at = self._resolve_batch_request(symbols, timeframe, start, end, adjustment)
+        symbols, start_at, end_at = self._resolve_batch_request(symbols, timeframe, start, end, adjustment)
         # Dedup identical consecutive provider calls (bounded, fail-closed):
         # same sorted symbols + window + adjustment within TTL returns cached
         # bars without hitting Alpaca. This prevents repeated identical
@@ -242,7 +230,7 @@ class AlpacaHistoricalData:
             if expected_rows > _MAX_ROWS_PER_REQUEST:
                 # Alpaca caps responses at 10,000 rows and silently truncates
                 # beyond it. Split the date window into row-bounded chunks so
-                # long crypto/equity histories download completely.
+                # long histories download completely.
                 result = self._fetch_chunked_windows(
                     symbols,
                     timeframe,
@@ -250,7 +238,6 @@ class AlpacaHistoricalData:
                     end_at,
                     minutes,
                     adjustment,
-                    market,
                 )
                 self._last_batch_key = dedup_key
                 self._last_batch_result = {s: list(b) for s, b in result.items()}
@@ -263,7 +250,6 @@ class AlpacaHistoricalData:
             start_at,
             end_at,
             adjustment,
-            market,
         )
         self._last_batch_key = dedup_key
         self._last_batch_result = {s: list(b) for s, b in result.items()}
@@ -278,24 +264,24 @@ class AlpacaHistoricalData:
         start: datetime | str | None,
         end: datetime | str | None,
         adjustment: str,
-    ) -> tuple[list[str], Market, datetime, datetime]:
+    ) -> tuple[list[str], datetime, datetime]:
         """Validate and normalize one batch request; shared by the plain and
         incremental fetch paths so both enforce identical contracts."""
         if not symbols:
-            return [], Market.EQUITY, datetime.now(UTC), datetime.now(UTC)
+            return [], datetime.now(UTC), datetime.now(UTC)
         if timeframe not in _TIMEFRAMES:
             raise ValueError(f"Unsupported timeframe: {timeframe}")
         if adjustment not in {"raw", "splits", "all"}:
             raise ValueError("adjustment must be one of raw, splits, all")
-        symbols = [canonical_symbol(symbol) for symbol in symbols]
-        markets = {Market.CRYPTO if is_crypto(symbol) else Market.EQUITY for symbol in symbols}
-        if len(markets) != 1:
-            raise ValueError("Batch requests must not mix equity and crypto symbols")
+        unsupported = sorted(symbol for symbol in symbols if is_crypto(symbol))
+        if unsupported:
+            raise ValueError(f"Historical data supports equity symbols only: {', '.join(unsupported)}")
+        symbols = [canonical_symbol(symbol, Market.EQUITY) for symbol in symbols]
         end_at = self._parse_datetime(end) or datetime.now(UTC)
         start_at = self._parse_datetime(start) or end_at - timedelta(days=180)
         if start_at >= end_at:
             raise ValueError("Request window must end after it starts")
-        return symbols, markets.pop(), start_at, end_at
+        return symbols, start_at, end_at
 
     def get_bars_batch_incremental(
         self,
@@ -337,14 +323,14 @@ class AlpacaHistoricalData:
             return {}
         if not scope or not config_digest:
             raise ValueError("Incremental fetch requires scope and config_digest")
-        symbols, market, start_at, end_at = self._resolve_batch_request(symbols, timeframe, start, end, adjustment)
+        symbols, start_at, end_at = self._resolve_batch_request(symbols, timeframe, start, end, adjustment)
         cache = self._cache
         if not isinstance(cache, WarmupCache):
             # Fakes/tests without the real cache degrade to the plain fetch.
             return self.get_bars_batch(symbols, timeframe, start, end, adjustment=adjustment)
-        if market == Market.EQUITY and self._effective_stock_feed_name == "iex":
+        if self._effective_stock_feed_name == "iex":
             end_at = min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
-        feed_name = "crypto" if market == Market.CRYPTO else self._effective_stock_feed_name
+        feed_name = self._effective_stock_feed_name
         minutes = TIMEFRAME_MINUTES[timeframe]
         step = timedelta(minutes=minutes)
         fallbacks_before = getattr(self, "_provider_fallbacks", 0)
@@ -358,14 +344,14 @@ class AlpacaHistoricalData:
         full: list[str] = []
         tail: list[str] = []
         tail_starts: dict[str, datetime] = {}
-        head_reference = _first_expected_bar(market, timeframe, grid_start)
+        head_reference = _first_expected_bar(timeframe, grid_start)
         # The scope checks and the merge below need the same cached window, so
         # each symbol's bars are materialised once and reused.
         windows: dict[str, list[Bar]] = {}
         if cache.scope_is_valid(scope, config_digest):
             for symbol in symbols:
                 cached = windows[symbol] = self._cached_window(
-                    cache, symbol, timeframe, market, feed_name, adjustment, grid_start, end_at
+                    cache, symbol, timeframe, feed_name, adjustment, grid_start, end_at
                 )
                 if not cached:
                     full.append(symbol)
@@ -374,7 +360,7 @@ class AlpacaHistoricalData:
                     full.append(symbol)
                     continue
                 latest = cached[-1].timestamp
-                if self._cache_tail_is_stale(market, timeframe, latest):
+                if self._cache_tail_is_stale(timeframe, latest):
                     full.append(symbol)
                     continue
                 tail.append(symbol)
@@ -394,7 +380,7 @@ class AlpacaHistoricalData:
                 # full window so truncation can never occur.
                 fetched.update(self.get_bars_batch(tail, timeframe, start_at, end_at, adjustment=adjustment))
             elif tail_start < end_at:
-                fetched.update(self._fetch_window(tail, timeframe, tail_start, end_at, adjustment, market))
+                fetched.update(self._fetch_window(tail, timeframe, tail_start, end_at, adjustment))
             else:
                 # Cache already extends to the request end; nothing to fetch.
                 for symbol in tail:
@@ -406,7 +392,7 @@ class AlpacaHistoricalData:
                 # An invalid scope reaches the cache for the first time here,
                 # after the refetch has refreshed it.
                 window = windows[symbol] = self._cached_window(
-                    cache, symbol, timeframe, market, feed_name, adjustment, grid_start, end_at
+                    cache, symbol, timeframe, feed_name, adjustment, grid_start, end_at
                 )
             merged = {bar.timestamp: bar for bar in window}
             merged.update({bar.timestamp: bar for bar in fetched.get(symbol, [])})
@@ -422,7 +408,6 @@ class AlpacaHistoricalData:
         cache: WarmupCache,
         symbol: str,
         timeframe: str,
-        market: Market,
         feed_name: str,
         adjustment: str,
         start_at: datetime,
@@ -431,19 +416,18 @@ class AlpacaHistoricalData:
         bars = cache.get(
             symbol,
             timeframe,
-            market=market,
+            market=Market.EQUITY,
             feed=feed_name,
             start=start_at,
             end=end_at,
             adjustment=adjustment,
         )
-        if market == Market.EQUITY and timeframe != "1d":
+        if timeframe != "1d":
             return [bar for bar in bars if is_regular_equity_time(bar.timestamp)]
         return bars
 
     @staticmethod
     def _cache_tail_is_stale(
-        market: Market,
         timeframe: str,
         latest: datetime,
         now: datetime | None = None,
@@ -457,8 +441,6 @@ class AlpacaHistoricalData:
         cache reuse.
         """
         now = now or datetime.now(UTC)
-        if market == Market.CRYPTO:
-            return now - latest > timedelta(days=2)
         if timeframe == "1d":
             return now - latest > timedelta(days=45)
         return now - latest > timedelta(days=7)
@@ -471,7 +453,6 @@ class AlpacaHistoricalData:
         end_at: datetime,
         minutes: int,
         adjustment: str,
-        market: Market,
     ) -> dict[str, list[Bar]]:
         span = (end_at - start_at).total_seconds()
         step_seconds = minutes * 60
@@ -516,7 +497,6 @@ class AlpacaHistoricalData:
                 chunk_start,
                 chunk_end,
                 adjustment,
-                market,
             ).items():
                 merged[symbol].extend(bars)
         for symbol in symbols:
@@ -561,23 +541,22 @@ class AlpacaHistoricalData:
         start_at: datetime,
         end_at: datetime,
         adjustment: str,
-        market: Market,
     ) -> dict[str, list[Bar]]:
-        if market == Market.EQUITY and self._effective_stock_feed_name == "iex":
+        if self._effective_stock_feed_name == "iex":
             end_at = min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
-        feed_name = "crypto" if market == Market.CRYPTO else self._effective_stock_feed_name
+        feed_name = self._effective_stock_feed_name
         cached = {
-            symbol: self._cached_window(self._cache, symbol, timeframe, market, feed_name, adjustment, start_at, end_at)
+            symbol: self._cached_window(self._cache, symbol, timeframe, feed_name, adjustment, start_at, end_at)
             for symbol in symbols
         }
         fresh_cached = {
-            symbol: bars for symbol, bars in cached.items() if self._cache_is_fresh(bars, market, timeframe, end_at)
+            symbol: bars for symbol, bars in cached.items() if self._cache_is_fresh(bars, timeframe, end_at)
         }
 
         def _fallback(message: str) -> dict[str, list[Bar]] | None:
             """Serve the local cache when the provider failed or returned nothing."""
             if len(fresh_cached) == len(symbols) and all(
-                self._cache_covers_window(bars, market, timeframe, start_at, end_at) for bars in fresh_cached.values()
+                self._cache_covers_window(bars, timeframe, start_at, end_at) for bars in fresh_cached.values()
             ):
                 log.warning(message)
                 self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
@@ -586,28 +565,17 @@ class AlpacaHistoricalData:
 
         response: Any
         try:
-            if market == Market.CRYPTO:
-                response = self._crypto_client.get_crypto_bars(
-                    CryptoBarsRequest(
-                        symbol_or_symbols=symbols,
-                        timeframe=_TIMEFRAMES[timeframe],
-                        start=start_at,
-                        end=end_at,
-                        limit=_MAX_ROWS_PER_REQUEST,
-                    )
+            response = self._stock_client.get_stock_bars(
+                StockBarsRequest(
+                    symbol_or_symbols=symbols,
+                    timeframe=_TIMEFRAMES[timeframe],
+                    start=start_at,
+                    end=end_at,
+                    limit=_MAX_ROWS_PER_REQUEST,
+                    feed=self._stock_feed,
+                    adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
                 )
-            else:
-                response = self._stock_client.get_stock_bars(
-                    StockBarsRequest(
-                        symbol_or_symbols=symbols,
-                        timeframe=_TIMEFRAMES[timeframe],
-                        start=start_at,
-                        end=end_at,
-                        limit=_MAX_ROWS_PER_REQUEST,
-                        feed=self._stock_feed,
-                        adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
-                    )
-                )
+            )
         except Exception as exc:
             # A configured SIP entitlement that the account does not have is a
             # common paper-account situation: degrade to the IEX historical
@@ -615,8 +583,7 @@ class AlpacaHistoricalData:
             # fallback is sticky for the process and surfaced via feed_status()
             # so reports can label the data coverage honestly.
             if (
-                market == Market.EQUITY
-                and not self._sip_fallback_active
+                not self._sip_fallback_active
                 and self._configured_stock_feed == "sip"
                 and self._is_entitlement_error(exc)
             ):
@@ -633,7 +600,6 @@ class AlpacaHistoricalData:
                     start_at,
                     end_at,
                     adjustment,
-                    market,
                 )
             served = _fallback(f"Historical API failed ({exc}); using feed-matched local warmup cache")
             if served is not None:
@@ -647,7 +613,6 @@ class AlpacaHistoricalData:
             self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
             return {symbol: [] for symbol in symbols}
         bars: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
-        off_grid_dropped = 0
         for row in frame.reset_index().sort_values("timestamp").itertuples(index=False):
             timestamp = row.timestamp
             if hasattr(timestamp, "to_pydatetime"):
@@ -655,10 +620,7 @@ class AlpacaHistoricalData:
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
             timestamp = timestamp.astimezone(UTC)
-            if market == Market.EQUITY and timeframe != "1d" and not is_regular_equity_time(timestamp):
-                continue
-            if market == Market.CRYPTO and timeframe == "1d" and not is_crypto_daily_grid(timestamp):
-                off_grid_dropped += 1
+            if timeframe != "1d" and not is_regular_equity_time(timestamp):
                 continue
             row_symbol = str(getattr(row, "symbol", symbols[0]))
             item = Bar(
@@ -670,16 +632,14 @@ class AlpacaHistoricalData:
                 low=float(row.low),
                 close=float(row.close),
                 volume=float(row.volume),
-                market=market,
+                market=Market.EQUITY,
             )
             bars.setdefault(row_symbol, []).append(item)
-        if off_grid_dropped:
-            log.warning("Alpaca provider returned %d off-grid crypto 1d bars; dropped", off_grid_dropped)
         total = sum(len(items) for items in bars.values())
         fetched = [bar for items in bars.values() for bar in items]
-        # Use atomic replace_window for full fetches so stale off-grid rows
-        # already in the cache are removed. Fall back to upsert if replace
-        # reports failure (empty payload or error).
+        # Use atomic replace_window for full fetches so stale rows already in
+        # the cache are removed. Fall back to upsert if replace reports
+        # failure (empty payload or error).
         replaced = False
         if fetched:
             try:
@@ -694,13 +654,7 @@ class AlpacaHistoricalData:
         for symbol in symbols:
             merged = {bar.timestamp: bar for bar in cached.get(symbol, [])}
             merged.update({bar.timestamp: bar for bar in bars.get(symbol, [])})
-            # Filter any stale off-grid entries that survived in cached (from pre-fix cache)
-            filtered = {}
-            for ts, bar in merged.items():
-                if bar.market == Market.CRYPTO and bar.timeframe == "1d" and not is_crypto_daily_grid(bar.timestamp):
-                    continue
-                filtered[ts] = bar
-            bars[symbol] = [filtered[key] for key in sorted(filtered)]
+            bars[symbol] = [merged[key] for key in sorted(merged)]
         log.info("Fetched %d %s bars for %d symbols", total, timeframe, len(symbols))
         # Measured provider-call observability (for signal/universe hardening).
         try:
@@ -714,7 +668,6 @@ class AlpacaHistoricalData:
     @staticmethod
     def _cache_is_fresh(
         bars: list[Bar],
-        market: Market,
         timeframe: str,
         end_at: datetime,
     ) -> bool:
@@ -724,17 +677,12 @@ class AlpacaHistoricalData:
         age = end_at - latest
         if age.total_seconds() < 0:
             return False
-        if market == Market.EQUITY:
-            maximum_age = timedelta(days=4 if timeframe != "1d" else 8)
-        else:
-            minutes = TIMEFRAME_MINUTES[timeframe]
-            maximum_age = timedelta(minutes=max(180, minutes * 3))
+        maximum_age = timedelta(days=4 if timeframe != "1d" else 8)
         return bool(age <= maximum_age)
 
     @staticmethod
     def _cache_covers_window(
         bars: list[Bar],
-        market: Market,
         timeframe: str,
         start_at: datetime,
         end_at: datetime,
@@ -752,19 +700,10 @@ class AlpacaHistoricalData:
         if minutes <= 0:
             return True
         unique = len({bar.timestamp for bar in bars})
-        if market == Market.CRYPTO:
-            expected = max(0, int((end_at - start_at).total_seconds() / 60 / minutes))
-        else:
-            trading_days = weekday_count(start_at, end_at)
-            bars_per_day = max(1, 390 // minutes)
-            expected = trading_days * bars_per_day
+        trading_days = weekday_count(start_at, end_at)
+        bars_per_day = max(1, 390 // minutes)
+        expected = trading_days * bars_per_day
         return bool(expected <= 0 or unique / expected >= min_pct)
-
-    def get_latest_crypto_quotes(self, symbols: list[str]) -> dict[str, Any]:
-        canonical = [canonical_symbol(symbol, Market.CRYPTO) for symbol in symbols]
-        if not canonical:
-            return {}
-        return dict(self._crypto_client.get_crypto_latest_quote(CryptoLatestQuoteRequest(symbol_or_symbols=canonical)))
 
     @staticmethod
     def _parse_datetime(value: datetime | str | None) -> datetime | None:

@@ -156,7 +156,6 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_
                     "execution_timeframe": "5m",
                     "market_state_timeframe": "5m",
                     "decision_db_path": "data/runtime/parayabuck.sqlite3",
-                    "scanner_refresh_hours": 24,
                 },
                 "risk": {
                     "daily_loss_limit_pct": 0.015,
@@ -593,9 +592,6 @@ def test_websocket_logs_detects_dead_browser_and_cleans_queue(monkeypatch: Any) 
 
 
 def test_status_reports_universe_counts_while_runtime_is_starting(tmp_path: Path, monkeypatch: Any) -> None:
-    crypto_path = tmp_path / "active-crypto.json"
-    crypto_path.write_text(json.dumps({"selection_timestamp": "crypto-time"}))
-
     class StartingManager:
         config_path = tmp_path / "settings.yaml"
         runtime = None
@@ -616,35 +612,22 @@ def test_status_reports_universe_counts_while_runtime_is_starting(tmp_path: Path
         (),
         {"enabled": True, "symbols": ("AAPL", "MSFT")},
     )()
-    crypto_config = type("CryptoConfig", (), {"active_universe_path": str(crypto_path)})()
     config = type(
         "Config",
         (),
-        {
-            "universe": type(
-                "Universe",
-                (),
-                {"equity": equity_config, "crypto": crypto_config},
-            )()
-        },
+        {"universe": type("Universe", (), {"equity": equity_config})()},
     )()
 
     monkeypatch.setattr(server, "manager", StartingManager())
     monkeypatch.setattr(server, "load_config", lambda _path: config)
-    monkeypatch.setattr(
-        server,
-        "validate_active_crypto_universe",
-        lambda _config: (("BTC/USD", "ETH/USD"), "success"),
-    )
 
     status = asyncio.run(server.get_status())
 
     assert status["state"] == "starting"
     assert status["active_equity_symbol_count"] == 2
-    assert status["active_crypto_symbol_count"] == 2
-    assert status["universe"]["equity"]["symbols"] == ["AAPL", "MSFT"]
-    assert status["scanner"]["equity_status"] == "static"
-    assert status["scanner"]["crypto_status"] == "success"
+    assert "active_crypto_symbol_count" not in status
+    assert status["universe"] == {"equity": {"symbols": ["AAPL", "MSFT"], "pool_size": 2}}
+    assert status["scanner"] == {"equity_status": "static"}
 
 
 def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
@@ -667,15 +650,11 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
 
     def make_config(enabled: bool) -> object:
         selection = type("Selection", (), {"enabled": enabled, "name": "equity_leveraged_trend_v1"})()
-        disabled = type("Selection", (), {"enabled": False, "name": "crypto"})()
-        strategy = type("Strategy", (), {"equity": selection, "crypto": disabled})()
+        strategy = type("Strategy", (), {"equity": selection})()
         universe = type(
             "Universe",
             (),
-            {
-                "equity": type("Equity", (), {"enabled": True, "symbols": ("SPY", "QQQ")})(),
-                "crypto": type("Crypto", (), {"active_universe_path": "crypto.json"})(),
-            },
+            {"equity": type("Equity", (), {"enabled": True, "symbols": ("SPY", "QQQ")})()},
         )()
         return type("Config", (), {"strategy": strategy, "universe": universe})()
 
@@ -689,10 +668,7 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
     assert disabled["strategy_status"] == "configured:"
 
 
-def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
-    monkeypatch: Any,
-    tmp_path: Path,
-) -> None:
+def test_status_exposes_strategy_metadata_instead_of_global_timeframe(monkeypatch: Any) -> None:
     """The status payload surfaces each strategy's OWN signal timeframe and
     rebalance cadence (no global strategy-timeframe selector exists)."""
     from parayabuck.web import server
@@ -722,25 +698,13 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
             "parameters": {},
         },
     )()
-    disabled = type("Selection", (), {"enabled": False, "name": "crypto"})()
-    strategy = type("Strategy", (), {"equity": selection, "crypto": disabled})()
+    strategy = type("Strategy", (), {"equity": selection})()
     universe = type(
         "Universe",
         (),
-        {
-            "equity": type("Equity", (), {"enabled": True, "symbols": ("A", "B", "C")})(),
-            "crypto": type(
-                "Crypto",
-                (),
-                {
-                    "active_universe_path": str(tmp_path / "crypto.json"),
-                    "dynamic_selection_enabled": True,
-                },
-            )(),
-        },
+        {"equity": type("Equity", (), {"enabled": True, "symbols": ("A", "B", "C")})()},
     )()
     config = type("Config", (), {"strategy": strategy, "universe": universe})()
-    (tmp_path / "crypto.json").write_text(json.dumps({"selected_symbols": []}))
 
     monkeypatch.setattr(server, "manager", StaticManager())
     monkeypatch.setattr(server, "load_config", lambda _path: config)
@@ -754,61 +718,7 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
     assert meta["equity"]["dynamic_universe_enabled"] is False
     assert meta["equity"]["candidate_pool_size"] == 3
     assert meta["equity"]["observation_set_size"] == 3
-    assert meta["crypto"] is None  # disabled strategy exposes no metadata
-
-
-def test_status_tolerates_non_object_crypto_universe_json(monkeypatch: Any, tmp_path: Path) -> None:
-    """A crypto universe file holding a JSON array is an empty universe, not a crash."""
-    from parayabuck.web.services import status as status_service
-
-    class StaticManager:
-        config_path = "config/settings.yaml"
-        runtime = None
-        last_engine_error = None
-        security_warning = None
-
-        def get_credentials(self) -> tuple[str, str]:
-            return "", ""
-
-        def current_engine_state(self) -> str:
-            return "stopped"
-
-        def is_paper_mode(self) -> bool:
-            return True
-
-    selection = type(
-        "Selection",
-        (),
-        {"enabled": True, "name": "equity_leveraged_trend_v1", "timeframe": "1d", "parameters": {}},
-    )()
-    universe = type(
-        "Universe",
-        (),
-        {
-            "equity": type("Equity", (), {"enabled": True, "symbols": ("A", "B")})(),
-            "crypto": type(
-                "Crypto",
-                (),
-                {
-                    "active_universe_path": str(tmp_path / "crypto.json"),
-                    "dynamic_selection_enabled": True,
-                },
-            )(),
-        },
-    )()
-    config = type(
-        "Config",
-        (),
-        {"strategy": type("Strategy", (), {"equity": selection, "crypto": selection})(), "universe": universe},
-    )()
-    (tmp_path / "crypto.json").write_text("[]", encoding="utf-8")
-
-    monkeypatch.setattr(status_service, "_load_config", lambda _path: config)
-    monkeypatch.setattr(status_service, "_validate_active_crypto_universe", lambda _cfg: ((), "ok"))
-
-    snapshot = status_service.build_status_snapshot(StaticManager())
-    assert snapshot["scanner"]["crypto_candidate_count"] == 0
-    assert snapshot["universe"]["crypto"]["pool_size"] == 0
+    assert set(meta) == {"equity"}
 
 
 def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
@@ -837,58 +747,8 @@ def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
     monkeypatch.setattr(server, "load_config", _raise)
     status = asyncio.run(server.get_status())
     assert status["strategy_status"] == "configuration_error"
-    assert status["scanner"] == {"equity_status": "error", "crypto_status": "error"}
+    assert status["scanner"] == {"equity_status": "error"}
 
-
-
-def test_status_reports_scanner_error_when_active_crypto_json_is_invalid(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
-    """A corrupt active-crypto snapshot is a scanner error, never a silent empty universe."""
-    from parayabuck.web import server
-
-    class StaticManager:
-        config_path = tmp_path / "settings.yaml"
-        runtime = None
-        last_engine_error = None
-        security_warning = None
-
-        def get_credentials(self) -> tuple[str, str]:
-            return "", ""
-
-        def current_engine_state(self) -> str:
-            return "stopped"
-
-        def is_paper_mode(self) -> bool:
-            return True
-
-    crypto_path = tmp_path / "active-crypto.json"
-    crypto_path.write_text("{not json", encoding="utf-8")
-    selection = type("Selection", (), {"enabled": True, "name": "crypto", "timeframe": "5m", "parameters": {}})()
-    disabled = type("Selection", (), {"enabled": False, "name": "equity_leveraged_trend_v1"})()
-    config = type(
-        "Config",
-        (),
-        {
-            "strategy": type("Strategy", (), {"equity": disabled, "crypto": selection})(),
-            "universe": type(
-                "Universe",
-                (),
-                {
-                    "equity": type("Equity", (), {"enabled": False, "symbols": ()})(),
-                    "crypto": type("Crypto", (), {"active_universe_path": str(crypto_path)})(),
-                },
-            )(),
-        },
-    )()
-
-    monkeypatch.setattr(server, "manager", StaticManager())
-    monkeypatch.setattr(server, "load_config", lambda _path: config)
-
-    status = asyncio.run(server.get_status())
-
-    assert status["strategy_status"] == "configured:crypto/crypto"
-    assert status["scanner"] == {"equity_status": "error", "crypto_status": "error"}
 
 def test_readyz_rejects_degraded_or_halted_runtime(monkeypatch: Any) -> None:
     from types import SimpleNamespace
@@ -1135,8 +995,8 @@ def test_operations_snapshot_surfaces_reconciliation_anomalies(tmp_path: Path) -
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     repo.record_ownership_adjustment(
         "acct",
-        "BTC/USD",
-        Market.CRYPTO,
+        "QLD",
+        Market.EQUITY,
         0.5,
         kind="stale_ownership_clear",
         note="broker flat, no real fill found",
@@ -1144,7 +1004,7 @@ def test_operations_snapshot_surfaces_reconciliation_anomalies(tmp_path: Path) -
     snapshot = repo.operations_snapshot("acct")
     anomalies = snapshot["reconciliation_anomalies"]
     assert len(anomalies) == 1
-    assert anomalies[0]["symbol"] == "BTC/USD"
+    assert anomalies[0]["symbol"] == "QLD"
     assert anomalies[0]["outstanding_quantity"] == pytest.approx(0.5)
     assert anomalies[0]["kind"] == "stale_ownership_clear"
     # A different account never sees the anomaly.

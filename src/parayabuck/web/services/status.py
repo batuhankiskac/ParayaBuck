@@ -1,16 +1,14 @@
 """Read-only status aggregation — extracted from web/server.py /api/status.
 
-Aggregates engine state + runtime health + config + universe snapshots
+Aggregates engine state + runtime health + config + the static universe
 without mutating any runtime state. No secrets are returned.
 """
 
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 from parayabuck.core.models import Market
@@ -25,12 +23,6 @@ def _load_config(path: str) -> Any:
     return _cfg.load_config(path)
 
 
-def _validate_active_crypto_universe(cfg: Any) -> Any:
-    import parayabuck.universe as _u
-
-    return _u.validate_active_crypto_universe(cfg)
-
-
 def _equity_symbols(cfg: Any) -> tuple[str, ...]:
     """Static equity universe: configured symbols, empty while disabled."""
     universe = cfg.universe.equity
@@ -42,13 +34,7 @@ def _equity_status(cfg: Any) -> str:
     return "static" if cfg.universe.equity.enabled else "disabled"
 
 
-def _read_active_crypto_universe(cfg: Any) -> Any:
-    """Strict read + parse of the active crypto universe snapshot."""
-    path = Path(cfg.universe.crypto.active_universe_path)
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-
-
-def strategy_metadata(cfg: Any, active_crypto_payload: dict[str, Any]) -> dict[str, Any]:
+def strategy_metadata(cfg: Any) -> dict[str, Any]:
     """Declared strategy contracts plus live universe sizes for the Web UI.
 
     Shared by /api/status and the dashboard. There is deliberately NO global
@@ -57,45 +43,28 @@ def strategy_metadata(cfg: Any, active_crypto_payload: dict[str, Any]) -> dict[s
     """
     from parayabuck.portfolio import portfolio_strategy_from
 
-    result: dict[str, Any] = {"equity": None, "crypto": None}
+    result: dict[str, Any] = {"equity": None}
     equity_symbols = _equity_symbols(cfg)
-    crypto_candidates = active_crypto_payload.get("candidate_symbols")
-    for market_key, selection, pool_size in (
-        ("equity", cfg.strategy.equity, len(equity_symbols)),
-        (
-            "crypto",
-            cfg.strategy.crypto,
-            len(crypto_candidates) if isinstance(crypto_candidates, list) else None,
-        ),
-    ):
-        if not selection.enabled:
-            continue
-        try:
-            strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
-            spec = strategy.spec()
-            observation_size = (
-                len(equity_symbols)
-                if market_key == "equity"
-                else len(
-                    active_crypto_payload.get("observation_set", active_crypto_payload.get("selected_symbols", ()))
-                )
-            )
-            result[market_key] = {
-                "name": spec.name,
-                "display_name": spec.display_name,
-                "version": spec.version,
-                "signal_timeframe": spec.primary_timeframe,
-                "supported_timeframes": list(spec.supported_timeframes),
-                "rebalance_cadence": spec.rebalance_policy,
-                "minimum_history_bars": spec.minimum_history_bars,
-                "dynamic_universe_enabled": (
-                    False if market_key == "equity" else cfg.universe.crypto.dynamic_selection_enabled
-                ),
-                "candidate_pool_size": pool_size,
-                "observation_set_size": observation_size,
-            }
-        except Exception:
-            result[market_key] = {"name": selection.name, "configuration_error": True}
+    selection = cfg.strategy.equity
+    if not selection.enabled:
+        return result
+    try:
+        strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
+        spec = strategy.spec()
+        result["equity"] = {
+            "name": spec.name,
+            "display_name": spec.display_name,
+            "version": spec.version,
+            "signal_timeframe": spec.primary_timeframe,
+            "supported_timeframes": list(spec.supported_timeframes),
+            "rebalance_cadence": spec.rebalance_policy,
+            "minimum_history_bars": spec.minimum_history_bars,
+            "dynamic_universe_enabled": False,
+            "candidate_pool_size": len(equity_symbols),
+            "observation_set_size": len(equity_symbols),
+        }
+    except Exception:
+        result["equity"] = {"name": selection.name, "configuration_error": True}
     return result
 
 
@@ -109,33 +78,18 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
         "has_credentials": bool(key),
         "security_warning": getattr(manager, "security_warning", None),
         "active_equity_symbol_count": 0,
-        "active_crypto_symbol_count": 0,
     }
     cfg: Any = None
-    # The active crypto universe is read once here and shared by the strategy
-    # metadata and the scanner/universe blocks below.  A failed read is
-    # remembered so its strict parse error still surfaces there, and any
-    # non-object JSON is normalized once to an empty payload.
-    active_crypto: dict[str, Any] = {}
-    active_crypto_error: Exception | None = None
     try:
         cfg = _load_config(str(manager.config_path))
-        try:
-            payload = _read_active_crypto_universe(cfg)
-            if isinstance(payload, dict):
-                active_crypto = payload
-        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
-            active_crypto_error = exc
         configured: list[str] = []
         if cfg.strategy.equity.enabled:
             configured.append(f"equity/{cfg.strategy.equity.name}")
-        if cfg.strategy.crypto.enabled:
-            configured.append(f"crypto/{cfg.strategy.crypto.name}")
         result["strategy_status"] = "configured:" + ",".join(configured)
-        result["strategy_metadata"] = strategy_metadata(cfg, active_crypto_payload=active_crypto)
+        result["strategy_metadata"] = strategy_metadata(cfg)
     except Exception:
         result["strategy_status"] = "configuration_error"
-        result["scanner"] = {"equity_status": "error", "crypto_status": "error"}
+        result["scanner"] = {"equity_status": "error"}
     retry_attempt = getattr(manager, "_retry_attempt", 0)
     retry_next_at = getattr(manager, "_retry_next_at", None)
     if retry_attempt > 0 and retry_next_at is not None:
@@ -149,7 +103,6 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
         }
 
     runtime = getattr(manager, "runtime", None)
-    runtime_refresh: dict[str, Any] = {}
     if runtime is not None and hasattr(runtime, "health"):
         try:
             health = runtime.health()
@@ -158,7 +111,6 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
             health = None
         if health is not None:
             result["runtime"] = asdict(health)
-            runtime_refresh = health.universe_refresh
             result["strategy_status"] = health.strategy_status
             repository = getattr(runtime, "_portfolio_repository", None)
             if repository is not None:
@@ -175,43 +127,16 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
             result["active_equity_symbol_count"] = len(
                 getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
             )
-            result["active_crypto_symbol_count"] = len(
-                getattr(runtime, "_symbols_by_market", {}).get(Market.CRYPTO, ())
-            )
 
     if cfg is not None:
-        try:
-            equity_symbols = _equity_symbols(cfg)
-            if active_crypto_error is not None:
-                raise active_crypto_error
-            crypto_symbols, validated_crypto_scanner_status = _validate_active_crypto_universe(cfg.universe.crypto)
-            if runtime is None:
-                result["active_equity_symbol_count"] = len(equity_symbols)
-                result["active_crypto_symbol_count"] = len(crypto_symbols)
-            result["scanner"] = {
-                "equity_status": runtime_refresh.get("status", {}).get("equity") or _equity_status(cfg),
-                "crypto_status": runtime_refresh.get("status", {}).get("crypto", validated_crypto_scanner_status),
-                "crypto_snapshot_status": validated_crypto_scanner_status,
-                "crypto_last_run_at": active_crypto.get("selection_timestamp"),
-                "crypto_scanner_version": active_crypto.get("scanner_version"),
-                "next_refresh_at": runtime_refresh.get("next_refresh_at"),
-                "refresh_errors": runtime_refresh.get("errors", {}),
-                "crypto_candidate_count": len(active_crypto.get("candidate_symbols", ())),
-            }
-            result["universe"] = {
-                "equity": {
-                    "symbols": list(equity_symbols),
-                    "pool_size": len(equity_symbols),
-                },
-                "crypto": {
-                    "symbols": list(
-                        active_crypto.get("observation_set", active_crypto.get("selected_symbols", ()))
-                    ),
-                    "pool_size": len(active_crypto.get("selected_symbols", ())),
-                    "scores": active_crypto.get("score_breakdown", {}),
-                    "eliminated": active_crypto.get("eliminated", {}),
-                },
-            }
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            result["scanner"] = {"equity_status": "error", "crypto_status": "error"}
+        equity_symbols = _equity_symbols(cfg)
+        if runtime is None:
+            result["active_equity_symbol_count"] = len(equity_symbols)
+        result["scanner"] = {"equity_status": _equity_status(cfg)}
+        result["universe"] = {
+            "equity": {
+                "symbols": list(equity_symbols),
+                "pool_size": len(equity_symbols),
+            },
+        }
     return result

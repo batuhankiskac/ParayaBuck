@@ -60,7 +60,6 @@ _CRITICAL_KINDS: frozenset[str] = frozenset(
 _WARNING_KINDS: frozenset[str] = frozenset(
     {
         "account_became_stale",
-        "universe_became_stale",
         "reconciliation_failure",
         "runtime_health_degraded",
     }
@@ -81,10 +80,6 @@ LIFECYCLE_KINDS: tuple[str, ...] = (
     # account freshness transitions
     "account_became_stale",
     "account_recovered",
-    # universe transitions
-    "universe_became_stale",
-    "universe_recovered",
-    "scanner_refresh_complete",
     # health
     "runtime_health_degraded",
     "runtime_health_recovered",
@@ -92,7 +87,7 @@ LIFECYCLE_KINDS: tuple[str, ...] = (
     "rebalance_phase_changed",
     # decision summary
     "decision_summary",
-    # portfolio no-trade visibility (kripto alım arızası fix)
+    # portfolio no-trade visibility
     "portfolio_no_trade",
     # observability self
     "observability_degraded",

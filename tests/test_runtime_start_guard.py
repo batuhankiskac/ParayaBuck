@@ -59,7 +59,7 @@ def test_disabled_runtime_is_rejected_before_universe_or_broker(monkeypatch) -> 
         nonlocal called
         called = True
 
-    monkeypatch.setattr("parayabuck.runtime.ensure_active_universes", forbidden)
+    monkeypatch.setattr("parayabuck.runtime.AlpacaBroker", forbidden)
     with pytest.raises(RuntimeError, match="does not support runtime.mode=disabled"):
         EngineRuntime("key", "secret", Config(runtime=RuntimeConfig(mode=RuntimeMode.DISABLED)))
     assert not called

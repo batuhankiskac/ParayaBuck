@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -22,11 +21,9 @@ import pytest
 from parayabuck import runtime as runtime_module
 from parayabuck.config import (
     Config,
-    CryptoUniverseConfig,
     EngineConfig,
     EquityUniverseConfig,
     RuntimeConfig,
-    StrategyConfig,
     UniverseConfig,
 )
 from parayabuck.core.models import AccountSnapshot
@@ -75,7 +72,6 @@ class _BlockingStream:
         self._stopped.wait(5)
 
     run_stock = run
-    run_crypto = run
 
     def stop(self) -> None:
         self._stopped.set()
@@ -83,13 +79,9 @@ class _BlockingStream:
 
 def _config(tmp_path: Path) -> Config:
     return Config(
-        universe=UniverseConfig(
-            equity=EquityUniverseConfig(symbols=("SPY",)),
-            crypto=CryptoUniverseConfig(enabled=False),
-        ),
+        universe=UniverseConfig(equity=EquityUniverseConfig(symbols=("SPY",))),
         engine=EngineConfig(),
         runtime=RuntimeConfig(decision_db_path=str(tmp_path / "runtime.sqlite3")),
-        strategy=StrategyConfig(crypto=replace(StrategyConfig().crypto, enabled=False)),
     )
 
 

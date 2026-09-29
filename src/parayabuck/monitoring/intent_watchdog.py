@@ -6,14 +6,13 @@ every health check was green). This module compares what SHOULD have
 happened by now against what the decision database and the broker account
 show:
 
-* ``*_decision_missing`` — the schedule says a decision is due (equity: the
-  last NYSE session's close plus a grace window; crypto: the next cadence
-  boundary bar's close plus a grace window) and no persisted decision
+* ``equity_decision_missing`` — the schedule says a decision is due (the
+  last NYSE session's close plus a grace window) and no persisted decision
   covers it;
-* ``*_position_under_target`` — the latest decision targets a positive
-  weight but, after the expected fill window (equity: the next session open
-  plus grace; crypto: the decision plus grace), the account holds less than
-  ``minimum_held_fraction`` of that weight.
+* ``equity_position_under_target`` — the latest decision targets a positive
+  weight but, after the expected fill window (the next session open plus
+  grace), the account holds less than ``minimum_held_fraction`` of that
+  weight.
 
 Everything here is pure and deterministic given ``now``; the exchange
 schedule comes from pandas-market-calendars (the calendar the warmup and
@@ -27,11 +26,10 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta
 from functools import lru_cache
-from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import NEW_YORK, timeframe_duration
+from parayabuck.markets.timeframes import NEW_YORK
 
 # The runtime flushes the session-close daily bar no earlier than 16:00 ET
 # (EngineRuntime._flush_aggregators), including on early-close days.
@@ -43,8 +41,6 @@ _CALENDAR_LOOKBACK_DAYS = 14
 class IntentWatchdogSettings:
     equity_decision_grace: timedelta = timedelta(minutes=45)
     equity_fill_grace: timedelta = timedelta(minutes=30)
-    crypto_decision_grace: timedelta = timedelta(minutes=120)
-    crypto_fill_grace: timedelta = timedelta(minutes=60)
     minimum_held_fraction: float = 0.5
 
 
@@ -200,39 +196,6 @@ def evaluate_equity(
     return alarms
 
 
-def evaluate_crypto(
-    now: datetime,
-    latest: LatestDecision | None,
-    account: AccountSnapshot | None,
-    *,
-    policy: Any,
-    timeframe: str,
-    settings: IntentWatchdogSettings,
-) -> list[IntentAlarm]:
-    if latest is None:
-        return []
-    alarms: list[IntentAlarm] = []
-    duration = timeframe_duration(timeframe)
-    next_boundary = policy.next_boundary_after(latest.decision_timestamp)
-    deadline = next_boundary + duration + settings.crypto_decision_grace
-    if now >= deadline:
-        alarms.append(
-            IntentAlarm(
-                code="crypto_decision_missing",
-                market=Market.CRYPTO.value,
-                message=(
-                    f"no crypto decision for the {next_boundary.isoformat()} cadence boundary "
-                    f"(due by {deadline.isoformat()}); last decision {latest.decision_timestamp.isoformat()}"
-                ),
-                due_at=deadline.isoformat(),
-            )
-        )
-    fill_deadline = latest.decision_timestamp + duration + settings.crypto_fill_grace
-    if now >= fill_deadline and any(weight > 1e-9 for weight in latest.weights.values()):
-        alarms.extend(_under_target(Market.CRYPTO, latest, account, settings, fill_deadline))
-    return alarms
-
-
 def alarm_codes(alarms: Iterable[IntentAlarm]) -> list[str]:
     return sorted({alarm.code for alarm in alarms})
 
@@ -243,7 +206,6 @@ __all__ = [
     "LatestDecision",
     "alarm_codes",
     "equity_decision_time",
-    "evaluate_crypto",
     "evaluate_equity",
     "held_weights",
     "last_due_equity_session",

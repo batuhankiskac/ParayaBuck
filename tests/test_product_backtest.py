@@ -10,7 +10,13 @@ import pytest
 
 import parayabuck.cli as cli_module
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine, TerminalLifecycle
-from parayabuck.backtest.product import build_product_universe, optimize_grid, ranking_score, run_product_backtest
+from parayabuck.backtest.product import (
+    build_product_universe,
+    load_csv_bars,
+    optimize_grid,
+    ranking_score,
+    run_product_backtest,
+)
 from parayabuck.backtest.universe import PointInTimeUniverse, UniverseSnapshot
 from parayabuck.config import Config, StrategyConfig
 from parayabuck.core.models import Bar, Market
@@ -68,7 +74,6 @@ def _config(tmp_path) -> Config:
         backtest=replace(base.backtest, output_dir=str(tmp_path / "reports")),
         strategy=StrategyConfig(
             equity=replace(base.strategy.equity, parameters=parameters),
-            crypto=base.strategy.crypto,
         ),
     )
 
@@ -444,41 +449,32 @@ def test_equity_csv_rejects_weekend_execution_bars(tmp_path) -> None:
         cli_module.load_csv_bars(csv_path, default_market=Market.EQUITY)
 
 
+def test_product_backtest_is_equity_only(tmp_path) -> None:
+    csv_path = tmp_path / "crypto.csv"
+    csv_path.write_text(
+        "timestamp,symbol,timeframe,open,high,low,close,volume,market\n"
+        "2025-01-06T00:00:00+00:00,BTC/USD,1d,100,101,99,100,1000,crypto\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="equity only"):
+        load_csv_bars(csv_path, default_market=Market.EQUITY)
+    config = _config(tmp_path)
+    with pytest.raises(ValueError, match="equity only"):
+        run_product_backtest(config, _bars(), market=Market.CRYPTO, persist=False, persist_artifacts=False)
+    with pytest.raises(ValueError, match="equity only"):
+        build_product_universe(config, _bars(), market=Market.CRYPTO)
+
+
 def test_equity_candidate_symbols_are_the_configured_static_universe(tmp_path) -> None:
     # Equity downloads are configuration, not discovery: no eligibility probe,
     # no shortlist file and no candidate cap narrow the configured symbols.
     config = _config(tmp_path)
-    assert cli_module._candidate_symbols(config, Market.EQUITY, None, None) == list(config.universe.equity.symbols)
-    assert cli_module._candidate_symbols(config, Market.EQUITY, None, 1) == list(config.universe.equity.symbols)
+    assert cli_module._candidate_symbols(config, Market.EQUITY, None) == list(config.universe.equity.symbols)
     # An explicit --symbols override still wins over configuration.
-    assert cli_module._candidate_symbols(config, Market.EQUITY, "AAPL,MSFT", None) == [
+    assert cli_module._candidate_symbols(config, Market.EQUITY, "AAPL,MSFT") == [
         "AAPL",
         "MSFT",
     ]
-
-
-def test_explicit_crypto_symbols_are_canonicalized_to_download_keys(tmp_path) -> None:
-    # get_bars_batch keys its result by canonical symbol; a legacy
-    # ``BTCUSD`` must not become a key the download never returns.
-    config = _config(tmp_path)
-    assert cli_module._candidate_symbols(config, Market.CRYPTO, "btcusd, PAXGUSD,BTC/USD", None) == [
-        "BTC/USD",
-        "PAXG/USD",
-    ]
-
-
-def test_zero_candidate_limit_keeps_no_crypto_candidates(tmp_path) -> None:
-    config = _config(tmp_path)
-    crypto = replace(
-        config.universe.crypto,
-        active_universe_path=str(tmp_path / "missing_active.json"),
-        trade_symbols=("BTC/USD", "ETH/USD", "SOL/USD"),
-        pinned_symbols=("BTC/USD",),
-    )
-    config = replace(config, universe=replace(config.universe, crypto=crypto))
-    assert cli_module._candidate_symbols(config, Market.CRYPTO, None, None) == ["BTC/USD", "ETH/USD", "SOL/USD"]
-    assert cli_module._candidate_symbols(config, Market.CRYPTO, None, 1) == ["BTC/USD", "ETH/USD"]
-    assert cli_module._candidate_symbols(config, Market.CRYPTO, None, 0) == ["BTC/USD"]
 
 
 def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, monkeypatch) -> None:
@@ -488,7 +484,6 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
     monkeypatch.setenv("ALPACA_API_KEY", "unit-test-api-key")
     monkeypatch.setenv("ALPACA_SECRET_KEY", "unit-test-secret-key")
     config = _config(tmp_path)
-    monkeypatch.setattr(cli_module, "ensure_active_universes", lambda *args, **kwargs: None)
     captured_requests: list[dict[str, object]] = []
 
     class FakeProvider:
@@ -516,7 +511,7 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
             pass
 
     monkeypatch.setattr(cli_module, "AlpacaHistoricalData", lambda *a, **k: FakeProvider())
-    args = SimpleNamespace(data=None, symbols=None, candidate_limit=None)
+    args = SimpleNamespace(data=None, symbols=None)
     start = datetime(2022, 1, 1, tzinfo=UTC)
     end = datetime(2022, 6, 1, tzinfo=UTC)
 
@@ -545,7 +540,6 @@ def test_load_bars_returns_the_single_window_download_for_a_deficient_symbol(tmp
     monkeypatch.setenv("ALPACA_API_KEY", "unit-test-api-key")
     monkeypatch.setenv("ALPACA_SECRET_KEY", "unit-test-secret-key")
     config = _config(tmp_path)
-    monkeypatch.setattr(cli_module, "ensure_active_universes", lambda *args, **kwargs: None)
     start = datetime(2022, 1, 1, tzinfo=UTC)
     end = datetime(2022, 3, 1, tzinfo=UTC)
     requests: list[tuple[datetime, datetime]] = []
@@ -570,7 +564,7 @@ def test_load_bars_returns_the_single_window_download_for_a_deficient_symbol(tmp
             pass
 
     monkeypatch.setattr(cli_module, "AlpacaHistoricalData", lambda *a, **k: FakeProvider())
-    args = SimpleNamespace(data=None, symbols=None, candidate_limit=None)
+    args = SimpleNamespace(data=None, symbols=None)
 
     bars = cli_module._load_bars(config, args, Market.EQUITY, start, end)
 
@@ -604,35 +598,6 @@ def test_warmup_window_covers_strategy_minimum_history_for_equity(
     )
 
 
-def test_warmup_window_never_shrinks_below_scanner_lookback_for_intraday(
-    tmp_path,
-) -> None:
-    config = _config(tmp_path)
-    # For an intraday strategy the strategy-warmup term is measured in bars of
-    # that timeframe; the scanner lookback is calendar days and must still be
-    # covered in full.
-    from dataclasses import replace as _replace
-
-    from parayabuck.config import StrategyConfig
-
-    intraday = _replace(
-        config,
-        strategy=StrategyConfig(
-            equity=config.strategy.equity,
-            crypto=_replace(
-                config.strategy.crypto,
-                parameters={
-                    **config.strategy.crypto.parameters,
-                    "momentum_scheme": "7d",
-                    "rebalance_hours": 24,
-                },
-            ),
-        ),
-    )
-    lookback = intraday.universe.crypto.scanner.lookback_days
-    assert cli_module._warmup_window_days(intraday, Market.CRYPTO) >= lookback
-
-
 def test_bars_to_calendar_days_scales_by_session_density() -> None:
     from datetime import date
 
@@ -653,9 +618,6 @@ def test_bars_to_calendar_days_scales_by_session_density() -> None:
         assert bars_to_calendar_days("SPY", "1d", 150, end_date=anchor) > 150
         # Intraday equity fits several sessions per calendar day.
         assert bars_to_calendar_days("SPY", "1h", 150, end_date=anchor) < 60
-    # Crypto trades 24/7: the span is close to bars / 24.
-    assert bars_to_calendar_days("BTC/USD", "1h", 150) == 7
-    assert bars_to_calendar_days("BTC/USD", "1d", 61) == 65
 
 
 def test_configured_symbol_without_bars_never_blocks_periods(tmp_path) -> None:

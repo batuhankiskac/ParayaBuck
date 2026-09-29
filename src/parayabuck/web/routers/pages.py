@@ -23,7 +23,7 @@ from fastapi.templating import Jinja2Templates
 router = APIRouter(tags=["pages"])
 
 # Cache-busting query for /static assets; bump when the UI bundle changes.
-ASSET_VERSION = "20260928-1"
+ASSET_VERSION = "20260930-1"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))

@@ -13,10 +13,10 @@ _CRYPTO_QUOTES = (
     "EUR",
     "GBP",
 )
-# Bases the crypto universe can actually select (pinned + scanner
-# candidates). Kept in sync with the trading universe so legacy no-slash
-# forms from the broker (e.g. Alpaca position symbols like ``PAXGUSD``)
-# infer to CRYPTO instead of being misread as equity tickers.
+# Crypto bases the bot has held or may meet in the shared brokerage account.
+# Legacy no-slash forms from the broker (e.g. Alpaca position symbols like
+# ``PAXGUSD``) infer to CRYPTO, so a foreign crypto holding is classified and
+# left alone instead of being misread as an equity ticker.
 _KNOWN_CRYPTO_BASES = {
     "AAVE",
     "ADA",
@@ -55,22 +55,6 @@ _KNOWN_CRYPTO_BASES = {
     "XTZ",
     "YFI",
 }
-
-STABLECOIN_BASES = frozenset(
-    {
-        "USD",
-        "USDT",
-        "USDC",
-        "DAI",
-        "FDUSD",
-        "TUSD",
-        "USDP",
-        "PYUSD",
-        "GUSD",
-        "BUSD",
-        "EURC",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -147,17 +131,6 @@ def canonical_symbol(symbol: str, market: Market | None = None) -> str:
     return canonical
 
 
-def split_crypto_pair(symbol: str) -> tuple[str, str]:
-    canonical = canonical_symbol(symbol, Market.CRYPTO)
-    base, quote = canonical.split("/", 1)
-    return base, quote
-
-
-def is_stablecoin_pair(symbol: str) -> bool:
-    base, _quote = split_crypto_pair(symbol)
-    return base in STABLECOIN_BASES
-
-
 def same_symbol(left: str, right: str, market: Market | None = None) -> bool:
     try:
         if market is not None:
@@ -181,11 +154,8 @@ def _split_legacy_pair(value: str, *, strict: bool = True) -> tuple[str, str] | 
 
 
 __all__ = [
-    "STABLECOIN_BASES",
     "SymbolIdentity",
     "canonical_symbol",
-    "is_stablecoin_pair",
     "normalize_symbol",
     "same_symbol",
-    "split_crypto_pair",
 ]

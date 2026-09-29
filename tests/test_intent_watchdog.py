@@ -17,7 +17,6 @@ from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.monitoring.intent_watchdog import (
     IntentWatchdogSettings,
     LatestDecision,
-    evaluate_crypto,
     evaluate_equity,
     last_due_equity_session,
 )
@@ -130,41 +129,6 @@ def test_equity_cash_target_or_unknown_account_never_under_target() -> None:
     assert evaluate_equity(now, cash, _account(), running_since=None, settings=_SETTINGS) == []
     invested = _decision(_utc(2026, 9, 28, 13, 30), {"QLD": 0.8})
     assert evaluate_equity(now, invested, None, running_since=None, settings=_SETTINGS) == []
-
-
-# --------------------------------------------------------------------------- #
-# (c) crypto schedule
-# --------------------------------------------------------------------------- #
-
-_POLICY = RebalancePolicy(Market.CRYPTO, "hours:96")
-
-
-def test_crypto_decision_missing_after_next_boundary_bar_plus_grace() -> None:
-    last = _POLICY.next_boundary_after(_utc(2026, 9, 20))  # a real boundary label
-    boundary = _POLICY.next_boundary_after(last)
-    latest = _decision(last, {})
-    on_time = boundary + timedelta(days=1, minutes=119)
-    late = boundary + timedelta(days=1, minutes=121)
-    kwargs = {"policy": _POLICY, "timeframe": "1d", "settings": _SETTINGS}
-    assert evaluate_crypto(on_time, latest, _account(), **kwargs) == []
-    assert _codes(evaluate_crypto(late, latest, _account(), **kwargs)) == ["crypto_decision_missing"]
-
-
-def test_crypto_under_target_after_fill_grace() -> None:
-    last = _POLICY.next_boundary_after(_utc(2026, 9, 20))
-    latest = _decision(last, {"BTC/USD": 0.03})
-    kwargs = {"policy": _POLICY, "timeframe": "1d", "settings": _SETTINGS}
-    assert evaluate_crypto(last + timedelta(days=1, minutes=30), latest, _account(), **kwargs) == []
-    alarms = evaluate_crypto(last + timedelta(days=1, minutes=61), latest, _account(), **kwargs)
-    assert _codes(alarms) == ["crypto_position_under_target"]
-    btc = PositionSnapshot("BTCUSD", 0.05, 60_000.0, 60_000.0, Market.CRYPTO, managed_qty=0.05)
-    assert evaluate_crypto(last + timedelta(days=1, minutes=61), latest, _account((btc,)), **kwargs) == []
-
-
-def test_crypto_without_history_is_left_to_startup_catch_up() -> None:
-    assert (
-        evaluate_crypto(_utc(2026, 9, 29), None, _account(), policy=_POLICY, timeframe="1d", settings=_SETTINGS) == []
-    )
 
 
 # --------------------------------------------------------------------------- #

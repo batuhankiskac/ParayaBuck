@@ -5,9 +5,9 @@ Extracted from :mod:`parayabuck.execution.alpaca` (Mission 8).
 Responsibility:
 - ``PortfolioOrderRequest`` → validated broker request → ``submit`` →
   ``broker_order_id`` or :class:`AmbiguousOrderState`.
-- Quantity flooring to ``quantity_increment``, notional guard,
-  open-order guard (``_has_open_order``), ``MarketOrderRequest``
-  (``GTC`` crypto else ``DAY``), ``client_order_id`` as recovery key.
+- Equity-only guard, quantity flooring to ``quantity_increment``, notional
+  guard, open-order guard (``_has_open_order``), ``DAY``
+  ``MarketOrderRequest``, ``client_order_id`` as recovery key.
 - ``_submit_with_recovery`` delegates to the broker facade, which owns the
   single recovery decision: on submit raise, try ``get_order_by_client_id``
   → terminal re-raise, working recover, 404 re-raise, lookup fail →
@@ -77,6 +77,8 @@ class OrderService:
     # -- public ----------------------------------------------------------
 
     def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str:
+        if order.market != Market.EQUITY:
+            raise ValueError(f"Portfolio orders are equity-only; refusing {order.market.value} order {order.symbol}")
         rules = self.asset_trading_rules(order.symbol, order.market)
         quantity = Decimal(str(order.quantity))
         increment = Decimal(str(rules.quantity_increment))
@@ -120,7 +122,7 @@ class OrderService:
             symbol=order.symbol,
             qty=float(quantity),
             side=(OrderSide.BUY if order.side == PortfolioOrderSide.BUY else OrderSide.SELL),
-            time_in_force=(TimeInForce.GTC if order.market == Market.CRYPTO else TimeInForce.DAY),
+            time_in_force=TimeInForce.DAY,
             client_order_id=order.client_order_id,
         )
         result = self._submit_with_recovery(request, order.client_order_id)

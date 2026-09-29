@@ -122,8 +122,8 @@ def test_expected_vs_actual_full_fill() -> None:
 def test_expected_vs_actual_partial_and_unfilled() -> None:
     order = {
         "client_order_id": "o2",
-        "symbol": "ETH/USD",
-        "market": "crypto",
+        "symbol": "MSFT",
+        "market": "equity",
         "side": "buy",
         "quantity": 2.0,
         "reference_price": 3000.0,

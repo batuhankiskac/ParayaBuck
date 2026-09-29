@@ -139,7 +139,6 @@ class FakeTradingClient:
             initial_margin="0",
             last_maintenance_margin="0",
             daytrade_count=0,
-            crypto_status="ACTIVE",
         )
 
     def set_account(self, *, blocked: bool = False, equity: str = "100000") -> None:
@@ -157,7 +156,6 @@ class FakeTradingClient:
             initial_margin="0",
             last_maintenance_margin="0",
             daytrade_count=0,
-            crypto_status="ACTIVE",
         )
 
     def get_all_positions(self) -> Any:

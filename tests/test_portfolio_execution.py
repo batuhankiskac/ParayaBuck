@@ -189,12 +189,9 @@ def test_overlay_counts_deduplicated_broker_open_slots_across_markets() -> None:
     limits = PortfolioRiskLimits(
         maximum_gross=1.0,
         maximum_equity=1.0,
-        maximum_crypto=1.0,
         maximum_equity_asset=1.0,
-        maximum_crypto_asset=1.0,
         minimum_cash=0.0,
         maximum_positions=7,
-        maximum_crypto_positions=3,
     )
 
     decision = PortfolioRiskOverlay(limits).apply(
@@ -218,12 +215,9 @@ def test_overlay_broker_only_order_consumes_last_account_slot() -> None:
     limits = PortfolioRiskLimits(
         maximum_gross=1.0,
         maximum_equity=1.0,
-        maximum_crypto=1.0,
         maximum_equity_asset=1.0,
-        maximum_crypto_asset=1.0,
         minimum_cash=0.0,
         maximum_positions=6,
-        maximum_crypto_positions=3,
     )
 
     decision = PortfolioRiskOverlay(limits).apply(
@@ -234,32 +228,6 @@ def test_overlay_broker_only_order_consumes_last_account_slot() -> None:
         maximum_allocation=1.0,
         mode="paper",
         open_order_symbols=("MANUAL",),
-    )
-
-    assert decision.target.weights == ()
-    assert "position_count_limit" in decision.reasons
-
-
-def test_overlay_infers_crypto_open_order_for_crypto_market_capacity() -> None:
-    limits = PortfolioRiskLimits(
-        maximum_gross=1.0,
-        maximum_equity=1.0,
-        maximum_crypto=1.0,
-        maximum_equity_asset=1.0,
-        maximum_crypto_asset=1.0,
-        minimum_cash=0.0,
-        maximum_positions=6,
-        maximum_crypto_positions=1,
-    )
-
-    decision = PortfolioRiskOverlay(limits).apply(
-        _target({"ETH/USD": 0.10}),
-        _account(),
-        market=Market.CRYPTO,
-        approved_symbols=("ETH/USD",),
-        maximum_allocation=1.0,
-        mode="paper",
-        open_order_symbols=("BTCUSD",),
     )
 
     assert decision.target.weights == ()

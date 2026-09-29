@@ -30,8 +30,8 @@ def test_stream_preserves_missing_fee_as_unknown_with_separate_receive_time() ->
                 "order": {
                     "client_order_id": "measurement-buy",
                     "id": "broker-1",
-                    "symbol": "BTC/USD",
-                    "asset_class": "crypto",
+                    "symbol": "AAPL",
+                    "asset_class": "us_equity",
                     "qty": "0.5",
                     "filled_qty": "0.5",
                     "filled_avg_price": "100",
@@ -51,12 +51,12 @@ def _order(repo: PortfolioStateRepository) -> tuple[str, PortfolioOrderRequest]:
     target = TargetPortfolio("measurement", "1", timestamp, (), 1.0)
     risk = RiskOverlayDecision(target, False, (), 0.0, 0.0)
     session = repo.begin_session("acct", "digest", "paper")
-    decision_id = repo.record_decision(session, "acct", "digest", target, risk, Market.CRYPTO)
+    decision_id = repo.record_decision(session, "acct", "digest", target, risk, Market.EQUITY)
     order = PortfolioOrderRequest(
         client_order_id="measurement-buy",
         decision_id=decision_id,
-        symbol="BTC/USD",
-        market=Market.CRYPTO,
+        symbol="AAPL",
+        market=Market.EQUITY,
         side=PortfolioOrderSide.BUY,
         quantity=0.5,
         reference_price=100.0,
@@ -69,7 +69,7 @@ def _order(repo: PortfolioStateRepository) -> tuple[str, PortfolioOrderRequest]:
     return decision_id, order
 
 
-def test_raw_gross_execution_is_separate_from_crypto_net_ownership_and_reconstructs_vwap(tmp_path) -> None:
+def test_raw_gross_execution_matches_ownership_and_reconstructs_vwap(tmp_path) -> None:
     path = tmp_path / "runtime.sqlite3"
     repo = PortfolioStateRepository(path)
     _, order = _order(repo)
@@ -110,13 +110,13 @@ def test_raw_gross_execution_is_separate_from_crypto_net_ownership_and_reconstru
         "SELECT cumulative_filled_quantity FROM portfolio_orders WHERE client_order_id=?",
         (order.client_order_id,),
     ).fetchone()
-    assert row == (0.49875,)  # ownership behavior remains authoritative and unchanged
+    assert row == (0.5,)  # ownership behavior remains authoritative and unchanged
     measurement = telemetry.execution_measurement(path)
     observed = measurement["orders"][0]
     assert observed["gross_cumulative_executed_quantity"] == 0.5
     assert observed["gross_fill_ratio"] == 1.0
-    assert observed["net_owned_quantity"] == 0.49875
-    assert observed["net_ownership_ratio"] == 0.9975
+    assert observed["net_owned_quantity"] == 0.5
+    assert observed["net_ownership_ratio"] == 1.0
     assert observed["fee_status"] == "unknown"
     assert observed["comparison_eligibility"] == {
         "final_gross_execution_quantity": True,
@@ -161,7 +161,7 @@ def test_raw_event_source_identity_is_idempotent_and_invalid_sequence_is_retaine
         "SELECT cumulative_filled_quantity FROM portfolio_orders WHERE client_order_id=?",
         (order.client_order_id,),
     ).fetchone()
-    assert row == (0.49875,)
+    assert row == (0.5,)
     measurement = telemetry.execution_measurement(path)["orders"][0]
     assert measurement["comparison_eligibility"] == {
         "final_gross_execution_quantity": False,

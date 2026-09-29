@@ -6,9 +6,9 @@ Responsibility:
 - Orchestrate ``account()`` → fee/fill activity backfill (watermarked
   24 h, paginated, deduped by ``activity.id``) → ``managed =
   ledger.managed_for_account`` → holdings 7-bucket (``MATCH`` etc.) →
-  ``_reconcile_stale_portfolio_ownership`` → ``_reconcile_crypto_exit_state``
-  → ``_reconcile_stale_ledger_entries`` → protective-stop (re)submission
-  (ledger-managed/external positions only; portfolio-owned crypto has none).
+  ``_reconcile_stale_portfolio_ownership`` → ``_reconcile_stale_ledger_entries``
+  → protective-stop (re)submission (equity ledger-managed/external positions
+  only; foreign crypto positions in the shared account are left alone).
 - Idempotent: second call with same broker truth yields same buckets, no
   duplicate fills/stops.
 - Emits observability but never controls trading; monitoring failure does
@@ -20,7 +20,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from math import isfinite
 from typing import Any
 
@@ -521,91 +520,12 @@ class ReconciliationService:
         )
         return ordered
 
-    def _reconcile_crypto_exit(self, position: Any) -> None:
-        broker = self._broker
-        ledger = getattr(broker, "ledger", None)
-        if ledger is None:
-            raise ProtectionReconciliationError(
-                f"Cannot recover crypto exit for {position.canonical_symbol}: no ledger"
-            )
-        get_by_client_id = getattr(broker._client, "get_order_by_client_id", None)
-        if get_by_client_id is None or not getattr(position, "exit_client_order_id", None):
-            ledger.mark_manual_intervention(broker._account_id, position.entry_client_order_id)
-            raise ProtectionReconciliationError(f"Cannot recover crypto exit for {position.canonical_symbol}")
-        try:
-            order = get_by_client_id(position.exit_client_order_id)
-        except Exception as exc:
-            ledger.mark_manual_intervention(broker._account_id, position.entry_client_order_id)
-            raise ProtectionReconciliationError(
-                f"Crypto exit lookup is ambiguous for {position.canonical_symbol}"
-            ) from exc
-        status_name = self._normalized_field(order, "status")
-        state = {
-            "filled": OrderState.FILLED,
-            "partially_filled": OrderState.PARTIALLY_FILLED,
-            "canceled": OrderState.CANCELLED,
-            "cancelled": OrderState.CANCELLED,
-            "rejected": OrderState.REJECTED,
-            "expired": OrderState.EXPIRED,
-        }.get(status_name, OrderState.ACCEPTED)
-        qty = float(self._field(order, "qty", position.owned_qty) or position.owned_qty)
-        filled_qty = float(self._field(order, "filled_qty", 0) or 0)
-        average = self._field(order, "filled_avg_price")
-        role = OrderRole.TAKE_PROFIT if "-target-exit" in position.exit_client_order_id else OrderRole.EMERGENCY_EXIT
-        if filled_qty > 0 and average is not None:
-            ledger.apply_execution_event(
-                ExecutionEvent(
-                    broker._account_id,
-                    position.exit_client_order_id,
-                    str(self._field(order, "id", "") or ""),
-                    None,
-                    role,
-                    position.canonical_symbol,
-                    Market.CRYPTO,
-                    state,
-                    qty,
-                    filled_qty,
-                    float(average),
-                    datetime.now(UTC),
-                )
-            )
-        if state == OrderState.FILLED:
-            ledger.set_exit_state(
-                broker._account_id,
-                position.entry_client_order_id,
-                target_state=("target_exit_filled" if role == OrderRole.TAKE_PROFIT else "emergency_exit_filled"),
-            )
-            return
-        if state in {OrderState.CANCELLED, OrderState.REJECTED, OrderState.EXPIRED}:
-            broker._reprotect_after_terminal_exit(position)
-            return
-        ledger.mark_manual_intervention(broker._account_id, position.entry_client_order_id)
-        raise ProtectionReconciliationError(f"Crypto exit remains {state.value} for {position.canonical_symbol}")
-
-    def _reconcile_crypto_exit_state(self, ledger: Any) -> None:
-        broker = self._broker
-        for entry in ledger.managed_entries_for_account(broker._account_id or "unknown"):
-            if entry.market != Market.CRYPTO:
-                continue
-            if entry.exit_client_order_id:
-                self._reconcile_crypto_exit(entry)
-            elif entry.stop_state == "cancel_requested" and entry.target_state in {
-                "target_triggered",
-                "stop_failover_triggered",
-            }:
-                broker._cancel_stop_then_exit(
-                    entry, "target" if entry.target_state == "target_triggered" else "stop_failover"
-                )
-
     def _reconcile_stale_ledger_entries(
         self, ledger: Any, broker_symbols: set[str], fill_activities_reconciled: bool
     ) -> None:
         broker = self._broker
         for entry in ledger.managed_entries_for_account(broker._account_id or "unknown"):
             if entry.owned_qty <= 0 or entry.canonical_symbol in broker_symbols:
-                continue
-            if entry.exit_client_order_id:
-                self._reconcile_crypto_exit(entry)
                 continue
             if entry.market == Market.EQUITY and not fill_activities_reconciled:
                 ledger.mark_manual_intervention(broker._account_id or "unknown", entry.entry_client_order_id)
@@ -696,9 +616,8 @@ class ReconciliationService:
                 _local_qty = 0.0
             _broker_qty = float(_broker_quantities.get(_sym, 0.0))
             if _local_qty > 1e-12 and _broker_qty > 1e-12:
-                # Alpaca reports quantities at 9 decimals and nets crypto fees
-                # out of the coin, so fee-net ledger quantities can differ from
-                # the broker by a few units of the 9th decimal.
+                # Alpaca reports quantities at 9 decimals, so ledger quantities
+                # can differ from the broker by a few units of the 9th decimal.
                 _tol = max(QUANTITY_MATCH_FLOOR, _local_qty * 1e-8)
                 if abs(_local_qty - _broker_qty) <= _tol:
                     categories["MATCH"].append(_sym)
@@ -719,7 +638,6 @@ class ReconciliationService:
                     continue
                 flat_reconciler(symbol, market)
         if ledger is not None:
-            self._reconcile_crypto_exit_state(ledger)
             self._reconcile_stale_ledger_entries(ledger, broker_symbols, fill_activities_reconciled)
         # protection reconciliation — delegated
         open_orders: Any = broker_orders
@@ -728,52 +646,23 @@ class ReconciliationService:
             if position.is_flat:
                 continue
             symbol = canonical_symbol(position.symbol, position.market)
-            ownership = managed.get(symbol)
-            portfolio_owned_position = position.market == Market.CRYPTO and symbol in portfolio_owned
-            if ownership is None and portfolio_owned_position:
-                # Portfolio crypto exits only through the strategy's own SELL
-                # legs, exactly like the validated replay: no broker stop.
+            if position.market != Market.EQUITY:
+                # Crypto support was removed: a crypto holding in the shared
+                # account is never protected or traded by this runtime.
+                log.info("Non-equity position left unchanged during reconciliation: %s", symbol)
                 continue
+            ownership = managed.get(symbol)
             if ownership is None and not manage_external:
                 log.info("External position left unchanged during reconciliation: %s", symbol)
                 continue
-            broker_qty_is_fee_adjusted = False
             if ownership is not None:
-                tolerance = max(1e-9, ownership.owned_qty * 1e-8)
-                minimum_fee_adjusted_qty = ownership.owned_qty
-                if position.market == Market.CRYPTO:
-                    from parayabuck.execution.alpaca_models import CRYPTO_TAKER_FEE_RESERVE
-
-                    minimum_fee_adjusted_qty *= float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
-                if position.market == Market.CRYPTO and abs(position.qty) + tolerance < minimum_fee_adjusted_qty:
-                    if ledger is not None:
-                        ledger.mark_manual_intervention(
-                            broker._account_id or "unknown", ownership.entry_client_order_id
-                        )
-                    raise ProtectionReconciliationError(
-                        f"Broker quantity is below managed ledger quantity for {symbol}"
-                    )
-                if position.market == Market.CRYPTO and abs(position.qty) + tolerance < ownership.owned_qty:
-                    broker_qty_is_fee_adjusted = True
-                    log.info(
-                        "Accepted fee-adjusted crypto ownership: symbol=%s ledger_qty=%s broker_qty=%s",
-                        symbol,
-                        ownership.owned_qty,
-                        abs(position.qty),
-                    )
                 stop_price = getattr(ownership, "current_stop", None) or ownership.original_stop
                 total_qty = min(abs(position.qty), ownership.owned_qty)
             else:
-                stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
                 total_qty = abs(position.qty)
-                stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
+                stop_price = position.avg_price * (1 - 0.04 if is_long else 1 + 0.04)
             available_qty = abs(position.qty_available) if position.qty_available is not None else total_qty
             required_qty = total_qty
-            if position.market == Market.CRYPTO and position.qty_available == 0 and not broker_qty_is_fee_adjusted:
-                from parayabuck.execution.alpaca_models import CRYPTO_TAKER_FEE_RESERVE
-
-                required_qty = total_qty * float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
-                required_qty = broker._round_qty_down(position.symbol, required_qty)
             # use broker's has_protective check (delegates to ProtectionService when wired)
             has_protection = broker._has_protective_order(position.symbol, is_long, required_qty, open_orders)
             if not has_protection and ownership is not None and ownership.broker_order_id and available_qty <= 0:
@@ -796,23 +685,12 @@ class ReconciliationService:
                         broker._account_id or "unknown", ownership.entry_client_order_id, ProtectionState.REQUESTED
                     )
                 if mismatch == "over":
-                    protected_qty = float(getattr(broker, "_last_protected_qty", 0.0))
-                    if position.market == Market.CRYPTO and protected_qty <= total_qty + max(1e-9, total_qty * 1e-8):
-                        if ownership is not None and ledger is not None:
-                            ledger.set_protection_state(
-                                broker._account_id or "unknown", ownership.entry_client_order_id, ProtectionState.ACTIVE
-                            )
-                        continue
                     broker._cancel_protective_orders(position.symbol, is_long)
             qty = min(total_qty, available_qty)
             if mismatch == "under":
                 protected_qty = float(getattr(broker, "_last_protected_qty", 0.0))
                 qty = min(qty, max(0.0, required_qty - protected_qty))
-            if position.market == Market.CRYPTO:
-                qty = broker._available_position_qty(position.symbol, qty, reserve_fee_on_lookup_failure=False)
-                if qty <= 0:
-                    raise RuntimeError(f"No available quantity to protect for {position.symbol}")
-            elif qty <= 0:
+            if qty <= 0:
                 raise RuntimeError(f"No available quantity to protect for {position.symbol}")
             # unique stop id
             from uuid import uuid4

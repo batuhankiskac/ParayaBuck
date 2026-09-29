@@ -725,12 +725,8 @@ def configured_cost_assumptions(config: object | None = None) -> dict[str, objec
         "slippage_bps": float(backtest.slippage_bps),
         "spread_bps": float(backtest.spread_bps),
         "commission": float(backtest.commission),
-        "crypto_taker_fee_bps": float(backtest.crypto_taker_fee_bps),
         "equity_use_effective_dated_fees": bool(backtest.equity_use_effective_dated_fees),
-        "model": (
-            "adverse slippage = slippage_bps + spread_bps/2 per fill; "
-            "crypto taker fee on crypto fills; equity regulatory fees by trade date"
-        ),
+        "model": ("adverse slippage = slippage_bps + spread_bps/2 per fill; equity regulatory fees by trade date"),
     }
 
 

@@ -530,5 +530,5 @@ def test_incident_automation_failure_emits_fail_closed_record(monkeypatch: pytes
     assert record.attempted_recovery == "automation_error_fail_closed"
     # The most severe path is the one that used to stay silent
     assert len(emitted) == 1
-    assert emitted[0][0] == "scanner_refresh_failure"
+    assert emitted[0][0] == "data_provider_unavailable"
     assert emitted[0][1]["incident_id"] == record.incident_id

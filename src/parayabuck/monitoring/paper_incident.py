@@ -356,12 +356,11 @@ def emit_incident_record(record: IncidentRecord) -> None:
 
         spec = INCIDENT_TAXONOMY[record.category]
         # Map severity to alert kind: critical->circuit_breaker/reconciliation_failure,
-        # a warning-level provider outage->scanner_refresh_failure (kept: it is the
-        # webhook-enabled WARNING kind operators already receive for it), and a
+        # a warning-level provider outage->data_provider_unavailable, and a
         # generic incident uses reconciliation_failure as safe fallback; specific
         # callers may emit more precise kinds.
         if record.category == IncidentCategory.PROVIDER_UNAVAILABLE:
-            kind = "scanner_refresh_failure" if spec.severity.value != "critical" else "reconciliation_failure"
+            kind = "data_provider_unavailable" if spec.severity.value != "critical" else "reconciliation_failure"
         elif record.category in _BROKER_UNCERTAINTY_CATEGORIES:
             kind = (
                 "reconciliation_failure"

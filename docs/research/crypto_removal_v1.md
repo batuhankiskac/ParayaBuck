@@ -50,7 +50,8 @@ them from the tag, e.g.
 
 `scanner_refresh_failure` stays as an alert kind: `monitoring/paper_incident.py`
 still emits it for provider-unavailable warnings, and it is in the shipped
-`alerting.events`.
+`alerting.events`. (Later renamed to `data_provider_unavailable`; config
+load rejects the old name.)
 
 ## What was kept on purpose
 

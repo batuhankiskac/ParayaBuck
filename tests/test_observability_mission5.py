@@ -64,12 +64,12 @@ def test_operational_event_serialization_and_correlation() -> None:
 
 def test_event_ids_deterministic_and_random() -> None:
     ts = datetime(2025, 1, 1, tzinfo=UTC)
-    id1 = deterministic_event_id(kind="scanner_refresh_failure", occurred_at=ts, session_id="s1", extra="x")
-    id2 = deterministic_event_id(kind="scanner_refresh_failure", occurred_at=ts, session_id="s1", extra="x")
+    id1 = deterministic_event_id(kind="data_provider_unavailable", occurred_at=ts, session_id="s1", extra="x")
+    id2 = deterministic_event_id(kind="data_provider_unavailable", occurred_at=ts, session_id="s1", extra="x")
     assert id1 == id2
     assert len(id1) == 32
     # different extra -> different
-    id3 = deterministic_event_id(kind="scanner_refresh_failure", occurred_at=ts, session_id="s1", extra="y")
+    id3 = deterministic_event_id(kind="data_provider_unavailable", occurred_at=ts, session_id="s1", extra="y")
     assert id1 != id3
     # random is collision-resistant
     r1 = random_event_id()
@@ -413,7 +413,7 @@ def test_cli_ops_events_filters(tmp_path: Path) -> None:
     j = EventJournal(str(jp))
     now = datetime.now(UTC)
     ev1 = create_event(kind="reconciliation_failure", message="fail1", occurred_at=now - timedelta(minutes=10))
-    ev2 = create_event(kind="scanner_refresh_failure", message="fail2", occurred_at=now - timedelta(minutes=5))
+    ev2 = create_event(kind="data_provider_unavailable", message="fail2", occurred_at=now - timedelta(minutes=5))
     j.emit_sync(ev1)
     j.emit_sync(ev2)
     # query via CLI with custom journal
@@ -694,11 +694,11 @@ def test_alert_throttle_distinct_incidents() -> None:
     # Distinct provider incidents should not suppress each other
     alerts.reset_for_tests()
     alerts.configure_alerting(enabled=True, webhook_url="", throttle_seconds=60.0)
-    alerts.emit("scanner_refresh_failure", message="provider fail", incident_id="inc-1")
-    alerts.emit("scanner_refresh_failure", message="provider fail again", incident_id="inc-2")
+    alerts.emit("data_provider_unavailable", message="provider fail", incident_id="inc-1")
+    alerts.emit("data_provider_unavailable", message="provider fail again", incident_id="inc-2")
     stats = alerts.alert_stats()
     # With per-incident throttling, both should be delivered
-    assert stats["delivered"].get("scanner_refresh_failure", 0) == 2
+    assert stats["delivered"].get("data_provider_unavailable", 0) == 2
     alerts.reset_for_tests()
 
 
@@ -786,8 +786,8 @@ def test_chaos_failure_sequence(tmp_path: Path) -> None:
     now = datetime.now(UTC)
     seq = [
         ("runtime_started", now),
-        ("scanner_refresh_failure", now + timedelta(minutes=11)),
-        ("scanner_refresh_failure", now + timedelta(minutes=16)),
+        ("data_provider_unavailable", now + timedelta(minutes=11)),
+        ("data_provider_unavailable", now + timedelta(minutes=16)),
         ("reconciliation_failure", now + timedelta(minutes=20)),
         ("account_became_stale", now + timedelta(minutes=22)),
         ("decision_summary", now + timedelta(minutes=25)),

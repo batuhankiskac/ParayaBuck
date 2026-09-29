@@ -127,7 +127,7 @@ alerting:
   events:
   - runtime_started
   - runtime_stopped_unexpected
-  - scanner_refresh_failure
+  - data_provider_unavailable
   - order_rejected
   - ambiguous_order
   - reconciliation_failure

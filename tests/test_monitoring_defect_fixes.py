@@ -274,7 +274,7 @@ def test_no_trade_reason_maps_canonical_vocabulary(canonical: str) -> None:
 
 def test_event_redaction_reaches_nested_and_decoded_values() -> None:
     ev = create_event(
-        kind="scanner_refresh_failure",
+        kind="data_provider_unavailable",
         message="refresh failed",
         fields={"order_counts": {"filled": 1}, "delivery": {"webhook_token": "cleartext"}, "tradingview_secret": "x"},
     )

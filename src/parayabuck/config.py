@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 from parayabuck.core.models import Market
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
-from parayabuck.monitoring.events import ALERT_KINDS, ALERT_KINDS_ORDERED, DEFAULT_ALERT_EVENTS
+from parayabuck.monitoring.events import ALERT_KINDS, ALERT_KINDS_ORDERED, DEFAULT_ALERT_EVENTS, RENAMED_ALERT_KINDS
 
 # Single source of truth for the default ledger location: monitoring/metrics
 # and the web dashboard fall back to this path when config resolution fails,
@@ -115,6 +115,12 @@ class AlertingConfig:
     daily_summary: bool = True
 
     def __post_init__(self) -> None:
+        renamed = sorted(kind for kind in self.events if kind in RENAMED_ALERT_KINDS)
+        if renamed:
+            raise ValueError(
+                "alerting.events uses renamed kinds; replace "
+                + ", ".join(f"{old} with {RENAMED_ALERT_KINDS[old]}" for old in renamed)
+            )
         known = set(ALERT_KINDS)
         unknown = set(self.events) - known
         if unknown:

@@ -59,7 +59,7 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 | `drawdown_halt` | Drawdown limit breached (or restored at startup) | yes |
 | `risk_epoch_reset` | Operator reset the drawdown baseline | yes |
 | `circuit_breaker` | Breaker engaged (ownership drift, worker restart limit, queue overflow, persisted incident restored) | yes |
-| `scanner_refresh_failure` | Warning-level provider outage (legacy name) | yes |
+| `data_provider_unavailable` | Warning-level data-provider outage (renamed from `scanner_refresh_failure`, which config load now rejects) | yes |
 | `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed / recovered (equity entries halted meanwhile) | yes |
 | `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | yes |
 | `signal_source_mismatch` | IEX and SIP daily bars disagree on the trend (position held), their closes diverge, or the SIP bar is missing | yes |

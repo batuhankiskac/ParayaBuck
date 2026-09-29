@@ -65,13 +65,13 @@ def test_alerts_webhook_delivery() -> None:
             throttle_seconds=0.0,
         )
         alerts.emit(
-            "scanner_refresh_failure",
+            "data_provider_unavailable",
             message="scanner down",
             market="equity",
             attempt=1,
         )
         payload = received.get(timeout=5.0)
-        assert payload["kind"] == "scanner_refresh_failure"
+        assert payload["kind"] == "data_provider_unavailable"
         assert payload["message"] == "scanner down"
         assert payload["fields"] == {"market": "equity", "attempt": 1}
         assert payload["occurred_at"]
@@ -114,8 +114,8 @@ def test_alerts_throttle_coalesces_repeat_failures() -> None:
         assert alerts.alert_stats()["suppressed"] == 1
         assert alerts.alert_stats()["webhook_sent"] == 1
         # A different kind is NOT throttled by the same window.
-        alerts.emit("scanner_refresh_failure", message="other kind")
-        assert sent.get(timeout=5.0)["kind"] == "scanner_refresh_failure"
+        alerts.emit("data_provider_unavailable", message="other kind")
+        assert sent.get(timeout=5.0)["kind"] == "data_provider_unavailable"
     finally:
         server.shutdown()
         server.server_close()
@@ -151,7 +151,7 @@ def test_alerts_webhook_event_filtering_and_disable() -> None:
         assert hits == ["runtime_started"]
         # Restrict the webhook event set; console/log sink still receives all.
         alerts.configure_alerting(webhook_url=url, throttle_seconds=0.0, events=("runtime_started",))
-        alerts.emit("scanner_refresh_failure", message="not delivered to webhook")
+        alerts.emit("data_provider_unavailable", message="not delivered to webhook")
         assert hits == ["runtime_started"]
         # Disable the webhook entirely.
         alerts.configure_alerting(webhook_url=url, throttle_seconds=0.0, enabled=False)
@@ -175,7 +175,7 @@ def test_runtime_metrics_empty_state_is_safe(tmp_path) -> None:
     assert snapshot["incidents"]["count"] == 0
     assert snapshot["risk_state"]["latest"] == []
     for key in (
-        "scanner_failures",
+        "data_provider_failures",
         "reconciliation_failures",
         "daily_loss_incidents",
         "drawdown_incidents",
@@ -231,14 +231,14 @@ def test_runtime_metrics_reads_persisted_state(tmp_path) -> None:
 
 
 def test_runtime_metrics_merges_process_local_counters(tmp_path) -> None:
-    metrics.record_event("scanner_refresh_failure")
-    metrics.record_event("scanner_refresh_failure")
+    metrics.record_event("data_provider_unavailable")
+    metrics.record_event("data_provider_unavailable")
     metrics.record_event("circuit_breaker")
     metrics.record_event("not_a_counter")  # ignored
     snapshot = metrics.runtime_metrics(tmp_path / "empty.sqlite3")
     counters = snapshot["counters"]
-    assert counters["scanner_refresh_failure"] == 2
+    assert counters["data_provider_unavailable"] == 2
     assert counters["circuit_breaker"] == 1
     assert counters["runtime_started"] == 0  # zero-filled, never missing
-    assert snapshot["scanner_failures"] == 2
+    assert snapshot["data_provider_failures"] == 2
     assert snapshot["circuit_breaker_events"] == 1

@@ -566,6 +566,14 @@ class Config:
             raise ValueError("Enabled equity strategy requires universe.equity.enabled")
         if self.strategy.crypto.enabled and not self.universe.crypto.enabled:
             raise ValueError("Enabled crypto strategy requires universe.crypto.enabled")
+        # An equity idle-cash sweep ETF (e.g. BIL) is traded, so it must be part
+        # of the static equity universe; without the sweep it is not listed.
+        sweep = self.strategy.equity.parameters.get("cash_sweep_symbol")
+        if self.strategy.equity.enabled and isinstance(sweep, str) and sweep.strip():
+            from parayabuck.markets.symbols import canonical_symbol
+
+            if canonical_symbol(sweep, Market.EQUITY) not in self.universe.equity.symbols:
+                raise ValueError("strategy.equity.parameters.cash_sweep_symbol must be in universe.equity.symbols")
         if self.runtime.mode == RuntimeMode.LIVE and not self.live.enabled:
             raise ValueError("runtime.mode=live requires live.enabled=true")
         if self.runtime.mode != RuntimeMode.LIVE and self.live.enabled:

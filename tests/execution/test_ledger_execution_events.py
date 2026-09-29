@@ -350,9 +350,9 @@ def test_existing_empty_side_rows_heal_on_conflict(tmp_path: Path) -> None:
         )
     )
 
-    assert ledger.connection.execute(
-        "SELECT side FROM orders WHERE client_order_id='exit-client-1'"
-    ).fetchone() == ("sell",)
+    assert ledger.connection.execute("SELECT side FROM orders WHERE client_order_id='exit-client-1'").fetchone() == (
+        "sell",
+    )
     ledger.close()
 
 
@@ -393,7 +393,7 @@ def test_slippage_is_omitted_for_an_unknown_side(tmp_path: Path) -> None:
         )
     )
 
-    assert ledger.connection.execute(
-        "SELECT slippage_bps FROM orders WHERE client_order_id='entry-1'"
-    ).fetchone() == (None,)
+    assert ledger.connection.execute("SELECT slippage_bps FROM orders WHERE client_order_id='entry-1'").fetchone() == (
+        None,
+    )
     ledger.close()

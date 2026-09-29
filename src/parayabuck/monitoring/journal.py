@@ -476,6 +476,7 @@ class EventJournal:
                 "event_journal_last_success_at": self._stats.last_success_at,
             }
 
+
 # ----------------------------------------------------------------------
 # Global singleton (process-local)
 # ----------------------------------------------------------------------

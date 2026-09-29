@@ -171,9 +171,7 @@ def test_capacity_sample_does_not_hold_portfolio_lock_across_broker_io() -> None
     engine._portfolio_runtimes = (
         SimpleNamespace(
             current_buy_capacity=capacity,
-            risk_overlay=SimpleNamespace(
-                limits=SimpleNamespace(maximum_positions=8, maximum_gross=0.6)
-            ),
+            risk_overlay=SimpleNamespace(limits=SimpleNamespace(maximum_positions=8, maximum_gross=0.6)),
             last_buy_admission=None,
             market=Market.EQUITY,
         ),

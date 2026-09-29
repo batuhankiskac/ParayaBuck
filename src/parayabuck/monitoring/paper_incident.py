@@ -134,9 +134,7 @@ class PaperIncidentReconciler:
                 and order.get("client_order_id") not in broker_client_id_set
             )
         )
-        duplicates = tuple(
-            sorted(value for value, count in Counter(broker_client_ids).items() if value and count > 1)
-        )
+        duplicates = tuple(sorted(value for value, count in Counter(broker_client_ids).items() if value and count > 1))
         realized, slippage = _fill_accounting(snapshot.fills, by_broker_id, by_client_id, snapshot.orders)
         unrealized = sum(
             (position.current_price - position.average_entry_price) * position.quantity

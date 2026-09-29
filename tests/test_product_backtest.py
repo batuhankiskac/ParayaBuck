@@ -556,9 +556,7 @@ def test_load_bars_returns_the_single_window_download_for_a_deficient_symbol(tmp
         def get_bars_batch(self, symbols, timeframe, *, start, end, adjustment):  # type: ignore[no-untyped-def]
             requests.append((start, end))
             late_listing = datetime(2022, 2, 1, tzinfo=UTC)
-            return {
-                symbol: series(symbol, late_listing if symbol == "QLD" else start, end) for symbol in symbols
-            }
+            return {symbol: series(symbol, late_listing if symbol == "QLD" else start, end) for symbol in symbols}
 
         def close(self) -> None:
             pass

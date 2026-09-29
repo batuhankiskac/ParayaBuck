@@ -54,10 +54,31 @@ def main() -> None:
             if None in (q["open"][i], q["close"][i]):
                 continue
             d = ny_date(ts, off)
-            rows.append([sym, d, q["open"][i], q["high"][i], q["low"][i], q["close"][i], adj[i], q["volume"][i], divs.get(d, 0.0)])
+            rows.append(
+                [
+                    sym,
+                    d,
+                    q["open"][i],
+                    q["high"][i],
+                    q["low"][i],
+                    q["close"][i],
+                    adj[i],
+                    q["volume"][i],
+                    divs.get(d, 0.0),
+                ]
+            )
             n += 1
-        splits = [(ny_date(v["date"], off), v["splitRatio"]) for v in (res.get("events") or {}).get("splits", {}).values()]
-        meta[sym] = {"url": url, "rows": n, "first": rows[-n][1], "last": rows[-1][1], "dividend_events": len(divs), "splits": sorted(splits)}
+        splits = [
+            (ny_date(v["date"], off), v["splitRatio"]) for v in (res.get("events") or {}).get("splits", {}).values()
+        ]
+        meta[sym] = {
+            "url": url,
+            "rows": n,
+            "first": rows[-n][1],
+            "last": rows[-1][1],
+            "dividend_events": len(divs),
+            "splits": sorted(splits),
+        }
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\n")
     w.writerow(["symbol", "date", "open", "high", "low", "close", "adjclose", "volume", "dividend"])

@@ -126,8 +126,6 @@ def _get_halt(runtime: EngineRuntime, market: Market) -> str | None:
         return runtime._market_entry_halts.get(market)  # type: ignore[union-attr]
 
 
-
-
 def test_verified_stream_reconnect_clears_only_its_own_halt_under_the_state_lock() -> None:
     """The check-then-clear in ``_mark_market_stream_recovered`` is atomic:
     a halt raised by another thread between the read and the write can no
@@ -389,7 +387,6 @@ def test_portfolio_provider_timeout_records_incident_without_a_doomed_retry(monk
 # --- V17: warmup retries back off instead of running every 10 minutes ---
 
 
-
 def _daily_bars(symbol: str) -> list[Bar]:
     return [
         Bar(datetime(2025, 1, day, tzinfo=UTC), symbol, "1d", 1.0, 1.0, 1.0, 1.0, 1.0, Market.EQUITY)
@@ -427,7 +424,6 @@ def _elapse(runtime: EngineRuntime, seconds: float) -> None:
     thread = getattr(runtime, "_warmup_retry_thread", None)
     if thread is not None:
         thread.join(timeout=5)
-
 
 
 def test_warmup_retry_delay_doubles_per_consecutive_attempt() -> None:

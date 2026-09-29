@@ -111,9 +111,7 @@ def test_forensic_readers_split_unresolved_orders(tmp_path: Path) -> None:
     ("reader", "statuses"),
     [(ambiguous_orders, ["Ambiguous", "AmbigUOUS"]), (submitting_orders, ["SUBMITTING", "SubmITTing"])],
 )
-def test_status_readers_keep_rows_written_in_any_casing(
-    tmp_path: Path, reader: Any, statuses: list[str]
-) -> None:
+def test_status_readers_keep_rows_written_in_any_casing(tmp_path: Path, reader: Any, statuses: list[str]) -> None:
     db = tmp_path / "casing.sqlite3"
     _order_ledger(db, [(f"ord-{index}", status, datetime.now(UTC)) for index, status in enumerate(statuses)])
 

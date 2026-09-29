@@ -26,10 +26,16 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 ARCHIVE_DIR = ROOT / "data/research/rule_variants_v1"
 SOURCES = (
-    (ARCHIVE_DIR / "profit_max_v1_daily_split_sip.csv", ARCHIVE_DIR / "profit_max_v1_corporate_actions.csv",
-     ("SPY", "QQQ", "QLD", "VOO")),
-    (HERE / "data/rule_variants_v1_daily_split_sip.csv", HERE / "data/rule_variants_v1_corporate_actions.csv",
-     ("GLD", "TLT", "IEF", "BIL", "SGOV")),
+    (
+        ARCHIVE_DIR / "profit_max_v1_daily_split_sip.csv",
+        ARCHIVE_DIR / "profit_max_v1_corporate_actions.csv",
+        ("SPY", "QQQ", "QLD", "VOO"),
+    ),
+    (
+        HERE / "data/rule_variants_v1_daily_split_sip.csv",
+        HERE / "data/rule_variants_v1_corporate_actions.csv",
+        ("GLD", "TLT", "IEF", "BIL", "SGOV"),
+    ),
 )
 START, END = "2017-01-03", "2026-07-30"
 WINDOWS = {"full": (START, END), "2017_2021": (START, "2021-12-31"), "2022_2026": ("2022-01-01", END)}
@@ -40,6 +46,7 @@ Targets = dict[str, float]
 
 
 # ---------------------------------------------------------------- data
+
 
 def load(sources=SOURCES):
     bars: dict[str, dict[str, tuple[float, float]]] = defaultdict(dict)
@@ -58,6 +65,7 @@ def load(sources=SOURCES):
 
 
 # ---------------------------------------------------------------- signals (pure, testable)
+
 
 def sma(closes: list[float], k: int, n: int = SMA) -> float | None:
     """Mean of closes[k-n+1 .. k] or None when history is short."""
@@ -97,6 +105,7 @@ def trend_strength_level(close: float, avg: float, threshold: float = 0.05) -> i
 
 
 # ---------------------------------------------------------------- arms
+
 
 class Market:
     def __init__(self, bars, divs):
@@ -178,8 +187,11 @@ ARMS: dict[str, dict] = {
     "B10": {"kind": "min_hold", "n": 10},
     "C3": {"kind": "staged"},
     "D5": {"kind": "strength"},
-    **{f"E-{x}-{int(s * 100)}": {"kind": "second", "x": x, "split": s}
-       for x in ("GLD", "TLT", "IEF") for s in (0.8, 0.7)},
+    **{
+        f"E-{x}-{int(s * 100)}": {"kind": "second", "x": x, "split": s}
+        for x in ("GLD", "TLT", "IEF")
+        for s in (0.8, 0.7)
+    },
     "F-BIL": {"kind": "tbill", "etf": "BIL"},
     "F-SGOV": {"kind": "tbill", "etf": "SGOV"},
 }
@@ -187,6 +199,7 @@ REFERENCE = {"VOO_hold_100", "VOO_hold_93", "VT35_100", "VT35"}
 
 
 # ---------------------------------------------------------------- simulator
+
 
 def simulate(m: Market, target_fn, mult: float):
     cost = SIDE_BPS * mult / 10_000
@@ -236,7 +249,11 @@ def metrics(curve, a, b):
     rets = [seg[i] / seg[i - 1] - 1 for i in range(1, len(seg))]
     mu = sum(rets) / len(rets)
     sd = math.sqrt(sum((r - mu) ** 2 for r in rets) / len(rets))
-    return {"cagr": (seg[-1] / seg[0]) ** (1 / years) - 1, "max_dd": dd, "sharpe": mu / sd * math.sqrt(252) if sd else 0.0}
+    return {
+        "cagr": (seg[-1] / seg[0]) ** (1 / years) - 1,
+        "max_dd": dd,
+        "sharpe": mu / sd * math.sqrt(252) if sd else 0.0,
+    }
 
 
 def gate(res: dict, base: dict) -> dict:
@@ -264,11 +281,15 @@ def run(m: Market) -> dict:
             if arm not in REFERENCE:
                 table[arm]["gate"] = gate(table[arm], table["VT35"])
         out["costs"][str(mult)] = table
-    out["promoted"] = [a for a in ARMS if a not in REFERENCE
-                       and all(all(out["costs"][c][a]["gate"].values()) for c in ("1", "2"))]
+    out["promoted"] = [
+        a for a in ARMS if a not in REFERENCE and all(all(out["costs"][c][a]["gate"].values()) for c in ("1", "2"))
+    ]
     vt = out["costs"]["1"]["VT35"]["full"]
-    out["reproduction_vs_stage_b"] = {"stage_b": STAGE_B_VT35, "screen_budget_093_1x": vt,
-                                      "screen_budget_100_1x": out["costs"]["1"]["VT35_100"]["full"]}
+    out["reproduction_vs_stage_b"] = {
+        "stage_b": STAGE_B_VT35,
+        "screen_budget_093_1x": vt,
+        "screen_budget_100_1x": out["costs"]["1"]["VT35_100"]["full"],
+    }
     return out
 
 
@@ -279,10 +300,12 @@ def main() -> None:
         print(f"--- costs {mult}x")
         for arm, r in out["costs"][mult].items():
             g = r.get("gate")
-            print(f"{arm:13s} CAGR {r['full']['cagr']*100:6.2f}%  Sh {r['full']['sharpe']:.3f}  DD {r['full']['max_dd']*100:5.1f}%  "
-                  f"17-21 {r['2017_2021']['cagr']*100:6.2f}%  22-26 {r['2022_2026']['cagr']*100:6.2f}%  "
-                  f"sw {r['switches']}  to {r['annual_turnover']:.2f}"
-                  + ("" if g is None else "  " + "".join("Y" if v else "n" for v in g.values())))
+            print(
+                f"{arm:13s} CAGR {r['full']['cagr'] * 100:6.2f}%  Sh {r['full']['sharpe']:.3f}  DD {r['full']['max_dd'] * 100:5.1f}%  "
+                f"17-21 {r['2017_2021']['cagr'] * 100:6.2f}%  22-26 {r['2022_2026']['cagr'] * 100:6.2f}%  "
+                f"sw {r['switches']}  to {r['annual_turnover']:.2f}"
+                + ("" if g is None else "  " + "".join("Y" if v else "n" for v in g.values()))
+            )
     print("promoted:", out["promoted"])
 
 

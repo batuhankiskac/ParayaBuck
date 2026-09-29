@@ -360,7 +360,6 @@ def test_live_mode_is_never_eligible_for_auto_start(tmp_path: Path, monkeypatch:
     assert manager.should_auto_start() is True
 
 
-
 @pytest.mark.parametrize(
     ("config_text", "expected_paper"),
     [
@@ -369,9 +368,7 @@ def test_live_mode_is_never_eligible_for_auto_start(tmp_path: Path, monkeypatch:
         ("alpaca:\n  paper: false\nruntime:\n", False),
     ],
 )
-def test_paper_mode_tolerates_an_empty_runtime_section(
-    tmp_path: Path, config_text: str, expected_paper: bool
-) -> None:
+def test_paper_mode_tolerates_an_empty_runtime_section(tmp_path: Path, config_text: str, expected_paper: bool) -> None:
     """`runtime:` with no value parses to None — the paper badge must still resolve."""
     manager = server.EngineManager()
     manager.config_path = tmp_path / "settings.yaml"

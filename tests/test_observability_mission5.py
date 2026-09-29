@@ -536,9 +536,7 @@ def test_doctor_wal_probe_closes_the_store_through_the_ownership_api(
         f"  path: {tmp_path / 'backups'}\n"
     )
 
-    cli_module._run_doctor(
-        argparse.Namespace(config=str(config), paper=False, offline=True, strict=False, json=False)
-    )
+    cli_module._run_doctor(argparse.Namespace(config=str(config), paper=False, offline=True, strict=False, json=False))
 
     assert len(probe_stores) == 1
     assert probe_stores[0]._closed is True

@@ -32,6 +32,7 @@ def _fill(repo: PortfolioStateRepository, client_order_id: str, quantity: float)
             (quantity, client_order_id),
         )
 
+
 # ---------------------------------------------------------------------------
 # PB-01: legacy crypto ledger rows never leak into equity ownership
 # ---------------------------------------------------------------------------
@@ -99,9 +100,7 @@ def test_owned_quantities_ignores_legacy_crypto_rows(tmp_path):
 
     repo.record_order(_order(crypto_decision, Market.CRYPTO, "ETH/USD", 2.0), "filled")
     _fill(repo, "cid-ETH/USD", 2.0)
-    repo.record_ownership_adjustment(
-        "acct", "BTC/USD", Market.CRYPTO, 0.9, kind="stale_ownership_clear", note="legacy"
-    )
+    repo.record_ownership_adjustment("acct", "BTC/USD", Market.CRYPTO, 0.9, kind="stale_ownership_clear", note="legacy")
 
     assert repo.owned_quantities("acct", Market.EQUITY) == {"QLD": 5.0}
     assert repo.owned_symbols("acct", Market.EQUITY) == {"QLD"}
@@ -122,9 +121,7 @@ def _no_trade_rows(journal, expected: int) -> list[tuple[str, str, str]]:
     while True:
         rows = journal.query(kind="portfolio_no_trade", order="asc")
         if len(rows) >= expected or time.monotonic() >= deadline:
-            return [
-                (row.event_id, str(row.fields["decision_timestamp"])[:10], row.fields["reason"]) for row in rows
-            ]
+            return [(row.event_id, str(row.fields["decision_timestamp"])[:10], row.fields["reason"]) for row in rows]
         time.sleep(0.02)
 
 
@@ -145,9 +142,9 @@ def test_no_trade_event_re_emits_on_the_next_decision_day(monkeypatch):
 
     runtime_service._emit_no_trade_safe(decision_timestamp=day_one, **common)
     runtime_service._emit_no_trade_safe(decision_timestamp=day_one + timedelta(hours=1), **common)
-    assert [(day, reason) for _, day, reason in _no_trade_rows(journal, 1)] == [
-        ("2025-01-01", "warming_up")
-    ], "repeat of the same reason on the same day stays suppressed"
+    assert [(day, reason) for _, day, reason in _no_trade_rows(journal, 1)] == [("2025-01-01", "warming_up")], (
+        "repeat of the same reason on the same day stays suppressed"
+    )
 
     runtime_service._emit_no_trade_safe(decision_timestamp=day_two, **common)
     rows = _no_trade_rows(journal, 2)
@@ -158,9 +155,7 @@ def test_no_trade_event_re_emits_on_the_next_decision_day(monkeypatch):
     assert len({event_id for event_id, _, _ in rows}) == 2, "one row per day means one id per day"
 
     # A changed reason is a different key and emits immediately.
-    runtime_service._emit_no_trade_safe(
-        decision_timestamp=day_two, **{**common, "reason": "not_scheduled"}
-    )
+    runtime_service._emit_no_trade_safe(decision_timestamp=day_two, **{**common, "reason": "not_scheduled"})
     rows = _no_trade_rows(journal, 3)
     assert [(day, reason) for _, day, reason in rows] == [
         ("2025-01-01", "warming_up"),
@@ -221,8 +216,10 @@ def test_equity_volatility_treats_zero_close_as_insufficient_history():
         decision_timestamp=datetime(2025, 1, 4, tzinfo=UTC),
         market=Market.EQUITY,
         timeframe="1d",
-        history={"QQQ": _bars("QQQ", closes, datetime(2025, 1, 1, tzinfo=UTC)),
-                 "QLD": _bars("QLD", closes, datetime(2025, 1, 1, tzinfo=UTC))},
+        history={
+            "QQQ": _bars("QQQ", closes, datetime(2025, 1, 1, tzinfo=UTC)),
+            "QLD": _bars("QLD", closes, datetime(2025, 1, 1, tzinfo=UTC)),
+        },
         universe=None,
         universe_version="digest",
         equity=1000.0,

@@ -136,6 +136,9 @@ alerting:
   - drawdown_halt
   - risk_epoch_reset
   - circuit_breaker
+  - signal_adjustment_failure
+  - signal_adjustment_recovery
+  - paper_incident
   - daily_summary
   - intent_alarm
   - intent_recovered

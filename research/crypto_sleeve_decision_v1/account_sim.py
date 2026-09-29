@@ -50,17 +50,27 @@ EQ_COST = 3e-4
 CR_COST = 28e-4
 BAND = 0.005
 # Approximate annual-average 3-month T-bill yields (sensitivity only, not downloaded).
-TBILL_APPROX = {2017: 0.0093, 2018: 0.0194, 2019: 0.0206, 2020: 0.0036, 2021: 0.0004,
-                2022: 0.0202, 2023: 0.0507, 2024: 0.0497, 2025: 0.0410, 2026: 0.0365}
+TBILL_APPROX = {
+    2017: 0.0093,
+    2018: 0.0194,
+    2019: 0.0206,
+    2020: 0.0036,
+    2021: 0.0004,
+    2022: 0.0202,
+    2023: 0.0507,
+    2024: 0.0497,
+    2025: 0.0410,
+    2026: 0.0365,
+}
 
 
 def git_blob(tag: str, path: str) -> bytes:
-    return subprocess.run(["git", "-C", str(REPO), "show", f"{tag}:{path}"],
-                          check=True, capture_output=True).stdout
+    return subprocess.run(["git", "-C", str(REPO), "show", f"{tag}:{path}"], check=True, capture_output=True).stdout
 
 
 def sha(tag: str, path: str) -> str:
     import hashlib
+
     return hashlib.sha256(git_blob(tag, path)).hexdigest()
 
 
@@ -101,7 +111,7 @@ def vt35_weights(closes):
     for i, d in enumerate(days):
         if i < 200:
             continue
-        sma = sum(qqq[x] for x in days[i - 199:i + 1]) / 200
+        sma = sum(qqq[x] for x in days[i - 199 : i + 1]) / 200
         rets = [qld[days[j]] / qld[days[j - 1]] - 1 for j in range(i - 19, i + 1)]
         vol = statistics.stdev(rets) * math.sqrt(252)
         out[d] = min(1.0, 0.35 / vol) if qqq[d] > sma else 0.0
@@ -123,15 +133,34 @@ def metrics(series: list[tuple[date, float]]):
     mr = [mv[i] / mv[i - 1] - 1 for i in range(1, len(mv))]
     sharpe = statistics.mean(mr) / statistics.stdev(mr) * math.sqrt(12)
     cagr = (v1 / v0) ** (1 / years) - 1
-    return {"start": d0.isoformat(), "end": d1.isoformat(), "total_return": v1 / v0 - 1,
-            "cagr": cagr, "max_drawdown": mdd, "sharpe_monthly_rf0": sharpe,
-            "vol_monthly_ann": statistics.stdev(mr) * math.sqrt(12),
-            "calmar": cagr / mdd if mdd else None}
+    return {
+        "start": d0.isoformat(),
+        "end": d1.isoformat(),
+        "total_return": v1 / v0 - 1,
+        "cagr": cagr,
+        "max_drawdown": mdd,
+        "sharpe_monthly_rf0": sharpe,
+        "vol_monthly_ann": statistics.stdev(mr) * math.sqrt(12),
+        "calmar": cagr / mdd if mdd else None,
+    }
 
 
-def simulate(start: date, end: date, closes, divs, weights, eq_days, cr_nav, cr_expo, btc,
-             eq_cap: float, crypto: str, cash_yield: bool, btc_sma: dict | None = None,
-             fill: str = "next_open"):
+def simulate(
+    start: date,
+    end: date,
+    closes,
+    divs,
+    weights,
+    eq_days,
+    cr_nav,
+    cr_expo,
+    btc,
+    eq_cap: float,
+    crypto: str,
+    cash_yield: bool,
+    btc_sma: dict | None = None,
+    fill: str = "next_open",
+):
     qld = closes["QLD"]
     qld_open = closes["QLD_OPEN"]
     session = set(eq_days)
@@ -225,17 +254,21 @@ def main() -> int:
     btc_sma = {}
     for i, d in enumerate(bdays):
         if i >= 199:
-            btc_sma[d] = btc[d] > sum(btc[x] for x in bdays[i - 199:i + 1]) / 200
+            btc_sma[d] = btc[d] > sum(btc[x] for x in bdays[i - 199 : i + 1]) / 200
     start = min(cr_nav)  # 2021-04-01 label (replay first NAV point)
     end = date(2026, 7, 30)  # last common equity session with a crypto NAV
     results: dict = {
         "inputs": {
             "equity_bars": {"tag": EQ_TAG, "path": BARS, "sha256": sha(EQ_TAG, BARS)},
             "equity_actions": {"tag": EQ_TAG, "path": ACTIONS, "sha256": sha(EQ_TAG, ACTIONS)},
-            "crypto_replay": {"tag": CR_TAG, "path": REPLAY, "sha256": sha(CR_TAG, REPLAY),
-                              "replay_metrics": rep["metrics"]},
+            "crypto_replay": {
+                "tag": CR_TAG,
+                "path": REPLAY,
+                "sha256": sha(CR_TAG, REPLAY),
+                "replay_metrics": rep["metrics"],
+            },
             "btc_daily_source": "CORRECTED_REPLAY_A daily_bars BTC/USD (pinned hourly input "
-                                "aggregated to complete UTC days)",
+            "aggregated to complete UTC days)",
             "btc_first_day": bdays[0].isoformat(),
             "btc_sma200_first_day": min(btc_sma).isoformat(),
             "tbill_approx_annual": TBILL_APPROX,
@@ -243,11 +276,37 @@ def main() -> int:
     }
     # Calibration: VT35 alone at 0.93 over the Stage B window (engine: 28.98% CAGR, 29.16% DD)
     for fill in ("next_open", "next_close"):
-        cal, _ = simulate(date(2017, 1, 3), date(2026, 7, 30), closes, divs, weights, eq_days,
-                          cr_nav, cr_expo, btc, 0.93, "none", False, fill=fill)
+        cal, _ = simulate(
+            date(2017, 1, 3),
+            date(2026, 7, 30),
+            closes,
+            divs,
+            weights,
+            eq_days,
+            cr_nav,
+            cr_expo,
+            btc,
+            0.93,
+            "none",
+            False,
+            fill=fill,
+        )
         results[f"calibration_vt35_0.93_2017_2026_no_crypto_{fill}"] = cal
-        cal, _ = simulate(start, date(2026, 7, 30), closes, divs, weights, eq_days,
-                          cr_nav, cr_expo, btc, 0.93, "strategy", False, fill=fill)
+        cal, _ = simulate(
+            start,
+            date(2026, 7, 30),
+            closes,
+            divs,
+            weights,
+            eq_days,
+            cr_nav,
+            cr_expo,
+            btc,
+            0.93,
+            "strategy",
+            False,
+            fill=fill,
+        )
         results[f"calibration_A_overlap_{fill}"] = cal
     variants = {
         "A_eq0.93_strategy_crypto0.05": (0.93, "strategy"),
@@ -256,16 +315,14 @@ def main() -> int:
         "R1_eq0.93_btc_buyhold0.05": (0.93, "btc_bh"),
         "R2_eq0.93_btc_sma200_0.05": (0.93, "btc_trend"),
     }
-    windows = {"full_2021-04-01_2026-07-30": (start, end),
-               "sub_2021-07-20_2026-07-30": (date(2021, 7, 20), end)}
+    windows = {"full_2021-04-01_2026-07-30": (start, end), "sub_2021-07-20_2026-07-30": (date(2021, 7, 20), end)}
     series_store = {}
     for cy in (False, True):
         for wname, (s, e) in windows.items():
             key = f"{wname}|cash_{'tbill_approx' if cy else 'zero'}"
             results[key] = {}
             for name, (cap, cr) in variants.items():
-                m, ser = simulate(s, e, closes, divs, weights, eq_days, cr_nav, cr_expo, btc,
-                                  cap, cr, cy, btc_sma)
+                m, ser = simulate(s, e, closes, divs, weights, eq_days, cr_nav, cr_expo, btc, cap, cr, cy, btc_sma)
                 results[key][name] = m
                 if not cy and wname.startswith("full"):
                     series_store[name] = dict(ser)
@@ -330,8 +387,9 @@ def main() -> int:
         k0 = max(prev) if prev else min(ks)
         k1 = max(ks)
         years[str(y)] = {n: s[k1] / s[k0] - 1 for n, s in (("A", a), ("B", b), ("C", c))}
-        years[str(y)]["crypto_replay"] = cr_nav[k1] / cr_nav[k0] - 1 if k0 in cr_nav else \
-            cr_nav[k1] / cr_nav[min(cr_nav)] - 1
+        years[str(y)]["crypto_replay"] = (
+            cr_nav[k1] / cr_nav[k0] - 1 if k0 in cr_nav else cr_nav[k1] / cr_nav[min(cr_nav)] - 1
+        )
     results["calendar_year_returns"] = years
     # Is the sleeve's contribution distinguishable from zero? monthly A-B and A-C differences
 
@@ -347,8 +405,11 @@ def main() -> int:
     for label, other in (("A_minus_B", mb), ("A_minus_C", mc)):
         diff = [x - y for x, y in zip(ma, other)]
         se = statistics.stdev(diff) / math.sqrt(len(diff))
-        tstats[label] = {"mean_monthly": statistics.mean(diff),
-                         "t_stat": statistics.mean(diff) / se, "n_months": len(diff)}
+        tstats[label] = {
+            "mean_monthly": statistics.mean(diff),
+            "t_stat": statistics.mean(diff) / se,
+            "n_months": len(diff),
+        }
     results["contribution_t_stats"] = tstats
     OUT.write_text(json.dumps(results, indent=2, sort_keys=True, default=str) + "\n")
     print(json.dumps(results, indent=2, sort_keys=True, default=str))

@@ -1071,7 +1071,9 @@ def test_peak_db_persisted_100k_injected_failure_not_rebase(tmp_path):
     peak = tmp_path / "paper_equity_peak.json"
     assert not peak.exists()
     broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 94000.0)
-    with patch.object(RiskPeakService, "query_persisted_peak", side_effect=RiskStatePersistenceError("injected failure")):
+    with patch.object(
+        RiskPeakService, "query_persisted_peak", side_effect=RiskStatePersistenceError("injected failure")
+    ):
         with pytest.raises(RiskStatePersistenceError):
             broker.account()
     # Must not have rebased to 94000

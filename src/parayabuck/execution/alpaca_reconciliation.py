@@ -735,6 +735,7 @@ class ReconciliationService:
             categories["MISSING_BROKER_ORDER"].append(_cid)
             # Documented compatibility contract: a local open id the broker no
             # longer lists is reported under both keys (see
-            # docs/disaster_recovery.md and docs/alpaca_broker_truth_matrix.md).
+            # the reconciliation buckets in docs/execution_architecture.md and
+            # the recovery steps in docs/operations.md).
             categories["MISSING_LOCAL_ORDER"].append(_cid)
         return categories

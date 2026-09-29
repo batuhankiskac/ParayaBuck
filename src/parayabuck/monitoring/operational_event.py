@@ -33,7 +33,6 @@ class Severity(StrEnum):
     CRITICAL = "CRITICAL"
 
 
-
 def severity_for_kind(kind: str) -> Severity:
     """Centralized severity classification.
 
@@ -130,7 +129,9 @@ def _is_sensitive(key: str) -> bool:
 def _redact_value(value: object) -> object:
     """Recursively redact sensitive keys inside nested mappings and lists."""
     if isinstance(value, Mapping):
-        return {key: ("***REDACTED***" if _is_sensitive(str(key)) else _redact_value(item)) for key, item in value.items()}
+        return {
+            key: ("***REDACTED***" if _is_sensitive(str(key)) else _redact_value(item)) for key, item in value.items()
+        }
     if isinstance(value, (list, tuple)):
         return [_redact_value(item) for item in value]
     return value
@@ -271,7 +272,6 @@ class OperationalEvent:
             correlation_id=data.get("correlation_id"),
             fields=redact_fields(dict(data.get("fields") or {})),
         )
-
 
 
 def create_event(

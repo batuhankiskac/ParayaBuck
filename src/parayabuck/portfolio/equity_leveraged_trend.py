@@ -96,9 +96,7 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
             return None
         # A degenerate bar with a non-positive close has no defined return;
         # skip it (as the crypto twin does) instead of raising out of decide().
-        returns = [
-            closes[index] / closes[index - 1] - 1.0 for index in range(1, len(closes)) if closes[index - 1] > 0
-        ]
+        returns = [closes[index] / closes[index - 1] - 1.0 for index in range(1, len(closes)) if closes[index - 1] > 0]
         if len(returns) < 2:
             return None
         mean = sum(returns) / len(returns)

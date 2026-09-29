@@ -104,6 +104,8 @@ class AlpacaHistoricalData:
         stock_feed: str = "iex",
         data_delayed: bool = False,
         cache: WarmupCache | str | Path | None = None,
+        *,
+        sip_embargo_minutes: float = 15.0,
     ) -> None:
         self._stock_client = StockHistoricalDataClient(api_key, secret_key)
         patch_session_timeout(self._stock_client._session, timeout=30.0)
@@ -120,6 +122,14 @@ class AlpacaHistoricalData:
         # coverage.
         self._sip_fallback_active = False
         self._sip_quote_fallback_active = False
+        # Alpaca's Basic data plan rejects SIP bar queries whose end reaches
+        # into the most recent 15 minutes. Callers wire this from
+        # ``signal_cross_check.sip_embargo_minutes`` (the single setting for
+        # this data-plan property); 0 disables the clamp for accounts with a
+        # real-time SIP subscription.
+        if not math.isfinite(sip_embargo_minutes) or sip_embargo_minutes < 0:
+            raise ValueError("sip_embargo_minutes must be non-negative")
+        self._sip_embargo = timedelta(minutes=sip_embargo_minutes)
         if cache is None:
             self._cache = WarmupCache()
         elif isinstance(cache, WarmupCache):
@@ -386,8 +396,7 @@ class AlpacaHistoricalData:
         if not isinstance(cache, WarmupCache):
             # Fakes/tests without the real cache degrade to the plain fetch.
             return self.get_bars_batch(symbols, timeframe, start, end, adjustment=adjustment)
-        if self._effective_stock_feed_name == "iex":
-            end_at = min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
+        end_at = self._clamp_recent_end(end_at)
         feed_name = self._effective_stock_feed_name
         minutes = TIMEFRAME_MINUTES[timeframe]
         step = timedelta(minutes=minutes)
@@ -571,6 +580,24 @@ class AlpacaHistoricalData:
             return "iex"
         return configured
 
+    def _clamp_recent_end(self, end_at: datetime) -> datetime:
+        """Keep a bar request out of the feed's unavailable recent window.
+
+        IEX keeps its historical 15-minute clamp. SIP is clamped to
+        ``now - sip_embargo``: Alpaca's Basic plan rejects SIP queries that
+        reach into the last 15 minutes ("subscription does not permit querying
+        recent SIP data"), which would otherwise fail every ``end=now``
+        request (warmup, hourly split-basis verifier).
+        """
+        feed_name = self._effective_stock_feed_name
+        if feed_name == "iex":
+            return min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
+        if feed_name == "sip":
+            embargo = getattr(self, "_sip_embargo", timedelta(minutes=15))
+            if embargo > timedelta(0):
+                return min(end_at, datetime.now(UTC) - embargo)
+        return end_at
+
     @staticmethod
     def _is_entitlement_error(exc: Exception) -> bool:
         """Best-effort detection of an Alpaca market-data entitlement error.
@@ -582,6 +609,12 @@ class AlpacaHistoricalData:
         import re
 
         message = f"{exc}".lower()
+        # "subscription does not permit querying recent SIP data" is the
+        # Basic plan's 15-minute recent-data restriction, NOT a missing SIP
+        # entitlement: the account can read SIP history, just not its newest
+        # minutes. Downgrading the whole process to IEX on it would be wrong.
+        if re.search(r"\brecent\b[^.]*\bdata\b", message):
+            return False
         patterns = (
             r"\bentitlement\b",
             r"not entitled",
@@ -600,8 +633,7 @@ class AlpacaHistoricalData:
         end_at: datetime,
         adjustment: str,
     ) -> dict[str, list[Bar]]:
-        if self._effective_stock_feed_name == "iex":
-            end_at = min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
+        end_at = self._clamp_recent_end(end_at)
         feed_name = self._effective_stock_feed_name
         cached = {
             symbol: self._cached_window(self._cache, symbol, timeframe, feed_name, adjustment, start_at, end_at)

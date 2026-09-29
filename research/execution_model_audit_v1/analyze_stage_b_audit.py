@@ -1,6 +1,6 @@
 """Summarize the instrumented Stage B audit dump (execution model audit v1).
 
-    python3 analyze_stage_b_audit.py <dir-with-out/VT35_1.0*.json.gz-and-pm/data/historical>/
+python3 analyze_stage_b_audit.py <dir-with-out/VT35_1.0*.json.gz-and-pm/data/historical>/
 """
 
 import csv
@@ -43,7 +43,12 @@ for f in fills:
 print("fill session lag (sessions after decision)", lag)
 print("reference_price == session open max abs dev", max(abs(x) for x in refdev))
 print("fill hour UTC", Counter(f["timestamp"][11:16] for f in fills).most_common(4))
-print("adverse bps", Counter(round((f["fill_price"] / f["reference_price"] - 1) * 1e4 * (1 if f["side"] == "buy" else -1), 3) for f in fills))
+print(
+    "adverse bps",
+    Counter(
+        round((f["fill_price"] / f["reference_price"] - 1) * 1e4 * (1 if f["side"] == "buy" else -1), 3) for f in fills
+    ),
+)
 # partial fills: multiple fills per decision
 per = Counter((f["decision_timestamp"], f["side"]) for f in fills)
 print("decisions with >1 fill same side", sum(1 for v in per.values() if v > 1))
@@ -51,7 +56,9 @@ dec = [e for e in ev if e["event"] == "decision"]
 print("equity decision events", len(dec), dec[0]["timestamp"], dec[0]["label_time"])
 print("decision time-of-day UTC", Counter(e["timestamp"][11:16] for e in dec).most_common(4))
 # how many fills where created_at vs decision
-print("order_created_at sample", fills[0].get("order_created_at"), fills[0]["timestamp"], fills[0]["decision_timestamp"])
+print(
+    "order_created_at sample", fills[0].get("order_created_at"), fills[0]["timestamp"], fills[0]["decision_timestamp"]
+)
 # compare decide_log to my own recomputation from campaign/v5 bars (qqq identical)
 q = {}
 for r in csv.DictReader(open(S + "pm/data/historical/profit_max_v1_daily_split_sip.csv")):

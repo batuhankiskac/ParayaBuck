@@ -59,11 +59,11 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 | `drawdown_halt` | Drawdown limit breached (or restored at startup) | yes |
 | `risk_epoch_reset` | Operator reset the drawdown baseline | yes |
 | `circuit_breaker` | Breaker engaged (ownership drift, worker restart limit, queue overflow, persisted incident restored) | yes |
-| `scanner_refresh_failure` | Warning-level provider outage (legacy name) | yes |
-| `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed / recovered (equity entries halted meanwhile) | no |
-| `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | no |
+| `data_provider_unavailable` | Warning-level data-provider outage (renamed from `scanner_refresh_failure`, which config load now rejects) | yes |
+| `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed / recovered (equity entries halted meanwhile) | yes |
+| `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | yes |
+| `signal_source_mismatch` | IEX and SIP daily bars disagree on the trend (position held), their closes diverge, or the SIP bar is missing | yes |
 | `paper_receipt` | Per-decision receipt (high volume) | no |
-| `order_recovered` | Valid kind, currently never emitted | no |
 
 To forward a "no" kind, add it to `alerting.events` (unknown kinds fail config
 load).
@@ -120,9 +120,12 @@ success), `signal_adjustment`, `market_halts`, `risk` (active safety incident
 `UNKNOWN` means no evidence, not OK. Overall: CRITICAL > BLOCKED > DEGRADED >
 UNKNOWN > OK. Trading state is separate: `ACTIVE`, `ENTRY_BLOCKED`,
 `REBALANCE_BLOCKED`, `MARKET_HALTED`, `CIRCUIT_BREAKER`, `STOPPED`, `UNKNOWN`.
-The watchdog is not an `ops status` check; read it from `/readyz` or
-`ops events --kind intent_alarm`. (`ops status` still prints a `Universe` line;
-there is no universe check any more, so it always reads `UNKNOWN`.)
+The watchdog and the signal cross-check are not health checks (they do not
+change the overall status), but the `ops status` text view prints them from the
+health snapshot: `Watchdog` (`OK`, `ALARM` with the active codes, `PENDING`
+before the first pass, `DISABLED`) and `Cross-check` (last session's status,
+`PENDING` while waiting for the SIP bar, `NONE` before the first session).
+`/readyz` and `ops events --kind intent_alarm` carry the same information.
 
 `parayabuck doctor [--strict] [--paper] [--offline]` is the deployment
 preflight (config, mode, live off, credentials, writability, SQLite

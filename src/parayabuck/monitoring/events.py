@@ -33,12 +33,11 @@ from __future__ import annotations
 ALERT_KINDS_ORDERED: tuple[str, ...] = (
     "runtime_started",
     "runtime_stopped_unexpected",
-    # Warning-level provider incidents (paper_incident.emit_incident_record
-    # maps PROVIDER_UNAVAILABLE here); the name predates the equity-only runtime.
-    "scanner_refresh_failure",
+    # Warning-level data-provider outage (paper_incident.emit_incident_record
+    # maps a non-critical PROVIDER_UNAVAILABLE incident here).
+    "data_provider_unavailable",
     "order_rejected",
     "ambiguous_order",
-    "order_recovered",
     "reconciliation_failure",
     "reconciliation_recovered",
     "risk_incident",
@@ -61,13 +60,21 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
 
 ALERT_KINDS: frozenset[str] = frozenset(ALERT_KINDS_ORDERED)
 
+# Kinds that were renamed; a configuration still naming the old kind is
+# rejected with a pointer to the new one instead of a bare "unknown kind".
+RENAMED_ALERT_KINDS: dict[str, str] = {
+    # The crypto universe scanner is gone; the kind only ever carried
+    # data-provider outages in the equity-only runtime.
+    "scanner_refresh_failure": "data_provider_unavailable",
+}
+
 # Kinds that describe a failure/incident are logged at WARNING; routine
 # lifecycle/recovery events at INFO. Kept next to the kinds so the severity
 # table cannot drift from the event vocabulary.
 WARNING_KINDS: frozenset[str] = frozenset(
     {
         "runtime_stopped_unexpected",
-        "scanner_refresh_failure",
+        "data_provider_unavailable",
         "order_rejected",
         "ambiguous_order",
         "reconciliation_failure",
@@ -87,5 +94,6 @@ __all__ = [
     "ALERT_KINDS",
     "ALERT_KINDS_ORDERED",
     "DEFAULT_ALERT_EVENTS",
+    "RENAMED_ALERT_KINDS",
     "WARNING_KINDS",
 ]

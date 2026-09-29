@@ -46,9 +46,17 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
+from research.physical_availability_clock_v2 import run_historical as rh  # noqa: E402
+from research.physical_availability_clock_v2 import shared_replay as shared  # noqa: E402
+from research.physical_availability_clock_v2.timing import (  # noqa: E402
+    equity_action_effective_open,
+    equity_daily_available_at,
+    equity_session_open,
+)
+from research.sleeve_candidates_v2.stage_b import composite as sleeve  # noqa: E402
+from research.sleeve_candidates_v2.stage_b import run_stage_b as stage_b  # noqa: E402
+
 from parayabuck.backtest.lifetimes import load_entity_lifetimes  # noqa: E402
-def build_numeric_history(*a, **k):  # removed from main in da6190b; engine no longer reads it
-    return None
 from parayabuck.backtest.product import (  # noqa: E402
     _prepared_window,
     build_product_universe,
@@ -60,15 +68,11 @@ from parayabuck.config import load_config  # noqa: E402
 from parayabuck.core.models import Market  # noqa: E402
 from parayabuck.execution.portfolio import reserve_opening_order_slots  # noqa: E402
 from parayabuck.portfolio import portfolio_strategy_from  # noqa: E402
-from research.physical_availability_clock_v2 import run_historical as rh  # noqa: E402
-from research.physical_availability_clock_v2 import shared_replay as shared  # noqa: E402
-from research.physical_availability_clock_v2.timing import (  # noqa: E402
-    equity_action_effective_open,
-    equity_daily_available_at,
-    equity_session_open,
-)
-from research.sleeve_candidates_v2.stage_b import composite as sleeve  # noqa: E402
-from research.sleeve_candidates_v2.stage_b import run_stage_b as stage_b  # noqa: E402
+
+
+def build_numeric_history(*a, **k):  # removed from main in da6190b; engine no longer reads it
+    return None
+
 
 # Campaign ETF file: split-adjusted bars with dividend rates restated to
 # post-split shares (see download_data.py).
@@ -277,7 +281,10 @@ def main() -> int:
         "decide_log": _decide_log,
         "skips": _skips,
         "equity_events": [
-            e for e in result.events if e.get("market") == "equity" and e["event"] in ("decision", "fill", "final_liquidation", "corporate_action")
+            e
+            for e in result.events
+            if e.get("market") == "equity"
+            and e["event"] in ("decision", "fill", "final_liquidation", "corporate_action")
         ],
         "deferred": [e for e in result.events if e["event"] == "buy_fill_deferred"][:2000],
     }

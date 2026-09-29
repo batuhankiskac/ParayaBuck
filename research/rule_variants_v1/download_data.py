@@ -37,8 +37,19 @@ SYMBOLS = ("GLD", "TLT", "IEF", "BIL", "SGOV")
 START = datetime(2015, 1, 1, tzinfo=UTC)
 END = datetime(2026, 7, 31, 23, 59, 59, tzinfo=UTC)
 BAR_HEADER = ("timestamp", "symbol", "timeframe", "open", "high", "low", "close", "volume", "market")
-ACTION_HEADER = ("action_type", "symbol", "ex_date", "record_date", "payable_date", "rate", "old_rate",
-                 "new_rate", "source_symbol", "target_symbol", "raw_id")
+ACTION_HEADER = (
+    "action_type",
+    "symbol",
+    "ex_date",
+    "record_date",
+    "payable_date",
+    "rate",
+    "old_rate",
+    "new_rate",
+    "source_symbol",
+    "target_symbol",
+    "raw_id",
+)
 
 
 def sha256(path: Path) -> str:
@@ -97,18 +108,35 @@ def main() -> int:
         return 2
     DATA.mkdir(parents=True, exist_ok=True)
 
-    bar_set = StockHistoricalDataClient(key, secret).get_stock_bars(StockBarsRequest(
-        symbol_or_symbols=list(SYMBOLS), timeframe=TimeFrame.Day, start=START, end=END,
-        adjustment=Adjustment.SPLIT, feed=DataFeed.SIP))
+    bar_set = StockHistoricalDataClient(key, secret).get_stock_bars(
+        StockBarsRequest(
+            symbol_or_symbols=list(SYMBOLS),
+            timeframe=TimeFrame.Day,
+            start=START,
+            end=END,
+            adjustment=Adjustment.SPLIT,
+            feed=DataFeed.SIP,
+        )
+    )
     rows = []
     for symbol in SYMBOLS:
         bars = bar_set.data.get(symbol, [])
         if not bars:
             raise RuntimeError(f"No bars returned for {symbol}")
         for bar in bars:
-            rows.append((bar.timestamp.astimezone(UTC).isoformat(), symbol, "1d", repr(float(bar.open)),
-                         repr(float(bar.high)), repr(float(bar.low)), repr(float(bar.close)),
-                         repr(float(bar.volume)), "equity"))
+            rows.append(
+                (
+                    bar.timestamp.astimezone(UTC).isoformat(),
+                    symbol,
+                    "1d",
+                    repr(float(bar.open)),
+                    repr(float(bar.high)),
+                    repr(float(bar.low)),
+                    repr(float(bar.close)),
+                    repr(float(bar.volume)),
+                    "equity",
+                )
+            )
     rows.sort(key=lambda r: (r[0], r[1]))
     with BARS_PATH.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle, lineterminator="\n")
@@ -119,22 +147,43 @@ def main() -> int:
     raw, splits = [], []
     for year in range(START.year, END.year + 1):
         window = dict(start=date(year, 1, 1), end=min(date(year, 12, 31), END.date()))
-        divs = client.get_corporate_actions(CorporateActionsRequest(
-            symbols=list(SYMBOLS), types=[CorporateActionsType.CASH_DIVIDEND], **window))
+        divs = client.get_corporate_actions(
+            CorporateActionsRequest(symbols=list(SYMBOLS), types=[CorporateActionsType.CASH_DIVIDEND], **window)
+        )
         for a in divs.data.get("cash_dividends", []):
             if a.symbol in SYMBOLS and a.ex_date <= END.date():
                 raw.append(a)
-        sp = client.get_corporate_actions(CorporateActionsRequest(
-            symbols=list(SYMBOLS),
-            types=[CorporateActionsType.FORWARD_SPLIT, CorporateActionsType.REVERSE_SPLIT], **window))
+        sp = client.get_corporate_actions(
+            CorporateActionsRequest(
+                symbols=list(SYMBOLS),
+                types=[CorporateActionsType.FORWARD_SPLIT, CorporateActionsType.REVERSE_SPLIT],
+                **window,
+            )
+        )
         for kind in ("forward_splits", "reverse_splits"):
             for a in sp.data.get(kind, []):
                 if a.symbol in SYMBOLS and a.ex_date <= END.date():
                     splits.append((a.symbol, a.ex_date, float(a.new_rate) / float(a.old_rate)))
     splits = sorted(set(splits))
-    actions = sorted({("cash_dividends", a.symbol, _iso(a.ex_date), _iso(a.record_date), _iso(a.payable_date),
-                       repr(restate_to_split_basis(float(a.rate), a.symbol, a.ex_date, splits)), "", "",
-                       a.symbol, a.symbol, str(a.id)) for a in raw}, key=lambda r: (r[2], r[1], r[10]))
+    actions = sorted(
+        {
+            (
+                "cash_dividends",
+                a.symbol,
+                _iso(a.ex_date),
+                _iso(a.record_date),
+                _iso(a.payable_date),
+                repr(restate_to_split_basis(float(a.rate), a.symbol, a.ex_date, splits)),
+                "",
+                "",
+                a.symbol,
+                a.symbol,
+                str(a.id),
+            )
+            for a in raw
+        },
+        key=lambda r: (r[2], r[1], r[10]),
+    )
     with ACTIONS_PATH.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(ACTION_HEADER)
@@ -144,21 +193,38 @@ def main() -> int:
     manifest = {
         "campaign": "rule_variants_v1",
         "downloaded_at": datetime.now(UTC).isoformat(),
-        "provider": "alpaca", "feed": "sip", "adjustment": "split",
+        "provider": "alpaca",
+        "feed": "sip",
+        "adjustment": "split",
         "dividend_rates": "restated to post-split shares (rate / product of later split ratios)",
         "splits_applied": [[s, d.isoformat(), r] for s, d, r in splits],
-        "symbols": list(SYMBOLS), "first_bar": first_bar,
-        "start": START.isoformat(), "end": END.isoformat(),
+        "symbols": list(SYMBOLS),
+        "first_bar": first_bar,
+        "start": START.isoformat(),
+        "end": END.isoformat(),
         "bars": {"path": str(BARS_PATH.relative_to(ROOT)), "rows": len(rows), "sha256": sha256(BARS_PATH)},
-        "corporate_actions": {"path": str(ACTIONS_PATH.relative_to(ROOT)), "rows": len(actions),
-                              "sha256": sha256(ACTIONS_PATH)},
+        "corporate_actions": {
+            "path": str(ACTIONS_PATH.relative_to(ROOT)),
+            "rows": len(actions),
+            "sha256": sha256(ACTIONS_PATH),
+        },
         "annual_dividend_yield_check": yield_check(BARS_PATH, ACTIONS_PATH),
-        "archived_inputs": {"tag": ARCHIVE_TAG, "local_copy_dir": "data/research/rule_variants_v1/",
-                            "files": ARCHIVE_FILES},
+        "archived_inputs": {
+            "tag": ARCHIVE_TAG,
+            "local_copy_dir": "data/research/rule_variants_v1/",
+            "files": ARCHIVE_FILES,
+        },
     }
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({k: manifest[k] for k in ("splits_applied", "first_bar", "bars", "corporate_actions",
-                                               "annual_dividend_yield_check")}, indent=1))
+    print(
+        json.dumps(
+            {
+                k: manifest[k]
+                for k in ("splits_applied", "first_bar", "bars", "corporate_actions", "annual_dividend_yield_check")
+            },
+            indent=1,
+        )
+    )
     return 0
 
 

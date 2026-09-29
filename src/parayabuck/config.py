@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 from parayabuck.core.models import Market
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
-from parayabuck.monitoring.events import ALERT_KINDS, ALERT_KINDS_ORDERED, DEFAULT_ALERT_EVENTS
+from parayabuck.monitoring.events import ALERT_KINDS, ALERT_KINDS_ORDERED, DEFAULT_ALERT_EVENTS, RENAMED_ALERT_KINDS
 
 # Single source of truth for the default ledger location: monitoring/metrics
 # and the web dashboard fall back to this path when config resolution fails,
@@ -115,6 +115,12 @@ class AlertingConfig:
     daily_summary: bool = True
 
     def __post_init__(self) -> None:
+        renamed = sorted(kind for kind in self.events if kind in RENAMED_ALERT_KINDS)
+        if renamed:
+            raise ValueError(
+                "alerting.events uses renamed kinds; replace "
+                + ", ".join(f"{old} with {RENAMED_ALERT_KINDS[old]}" for old in renamed)
+            )
         known = set(ALERT_KINDS)
         unknown = set(self.events) - known
         if unknown:
@@ -412,6 +418,8 @@ class SignalCrossCheckConfig:
     # Minutes after the NYSE close before the SIP daily bar is requested.
     # Alpaca's Basic data plan rejects SIP queries that reach into the last
     # 15 minutes; an account with a real-time SIP subscription can use 0.
+    # The historical data client clamps every SIP bar request end to
+    # now - embargo with this same value (warmup, split-basis verifier).
     sip_embargo_minutes: float = 15.0
     # Minutes the second source is retried (from the first allowed attempt)
     # before the decision proceeds on the primary source alone.

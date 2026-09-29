@@ -64,12 +64,12 @@ def test_operational_event_serialization_and_correlation() -> None:
 
 def test_event_ids_deterministic_and_random() -> None:
     ts = datetime(2025, 1, 1, tzinfo=UTC)
-    id1 = deterministic_event_id(kind="scanner_refresh_failure", occurred_at=ts, session_id="s1", extra="x")
-    id2 = deterministic_event_id(kind="scanner_refresh_failure", occurred_at=ts, session_id="s1", extra="x")
+    id1 = deterministic_event_id(kind="data_provider_unavailable", occurred_at=ts, session_id="s1", extra="x")
+    id2 = deterministic_event_id(kind="data_provider_unavailable", occurred_at=ts, session_id="s1", extra="x")
     assert id1 == id2
     assert len(id1) == 32
     # different extra -> different
-    id3 = deterministic_event_id(kind="scanner_refresh_failure", occurred_at=ts, session_id="s1", extra="y")
+    id3 = deterministic_event_id(kind="data_provider_unavailable", occurred_at=ts, session_id="s1", extra="y")
     assert id1 != id3
     # random is collision-resistant
     r1 = random_event_id()
@@ -413,7 +413,7 @@ def test_cli_ops_events_filters(tmp_path: Path) -> None:
     j = EventJournal(str(jp))
     now = datetime.now(UTC)
     ev1 = create_event(kind="reconciliation_failure", message="fail1", occurred_at=now - timedelta(minutes=10))
-    ev2 = create_event(kind="scanner_refresh_failure", message="fail2", occurred_at=now - timedelta(minutes=5))
+    ev2 = create_event(kind="data_provider_unavailable", message="fail2", occurred_at=now - timedelta(minutes=5))
     j.emit_sync(ev1)
     j.emit_sync(ev2)
     # query via CLI with custom journal
@@ -536,9 +536,7 @@ def test_doctor_wal_probe_closes_the_store_through_the_ownership_api(
         f"  path: {tmp_path / 'backups'}\n"
     )
 
-    cli_module._run_doctor(
-        argparse.Namespace(config=str(config), paper=False, offline=True, strict=False, json=False)
-    )
+    cli_module._run_doctor(argparse.Namespace(config=str(config), paper=False, offline=True, strict=False, json=False))
 
     assert len(probe_stores) == 1
     assert probe_stores[0]._closed is True
@@ -694,11 +692,11 @@ def test_alert_throttle_distinct_incidents() -> None:
     # Distinct provider incidents should not suppress each other
     alerts.reset_for_tests()
     alerts.configure_alerting(enabled=True, webhook_url="", throttle_seconds=60.0)
-    alerts.emit("scanner_refresh_failure", message="provider fail", incident_id="inc-1")
-    alerts.emit("scanner_refresh_failure", message="provider fail again", incident_id="inc-2")
+    alerts.emit("data_provider_unavailable", message="provider fail", incident_id="inc-1")
+    alerts.emit("data_provider_unavailable", message="provider fail again", incident_id="inc-2")
     stats = alerts.alert_stats()
     # With per-incident throttling, both should be delivered
-    assert stats["delivered"].get("scanner_refresh_failure", 0) == 2
+    assert stats["delivered"].get("data_provider_unavailable", 0) == 2
     alerts.reset_for_tests()
 
 
@@ -786,8 +784,8 @@ def test_chaos_failure_sequence(tmp_path: Path) -> None:
     now = datetime.now(UTC)
     seq = [
         ("runtime_started", now),
-        ("scanner_refresh_failure", now + timedelta(minutes=11)),
-        ("scanner_refresh_failure", now + timedelta(minutes=16)),
+        ("data_provider_unavailable", now + timedelta(minutes=11)),
+        ("data_provider_unavailable", now + timedelta(minutes=16)),
         ("reconciliation_failure", now + timedelta(minutes=20)),
         ("account_became_stale", now + timedelta(minutes=22)),
         ("decision_summary", now + timedelta(minutes=25)),
@@ -1148,3 +1146,57 @@ def test_ops_explain_json_without_decisions_prints_one_json_object(tmp_path: Pat
     code, out, _ = _run_cli("--config", str(tmp_path / "missing.yaml"), "ops", "explain", "--db", str(db))
     assert code == 0
     assert out.strip() == message
+
+
+def test_ops_status_text_prints_watchdog_and_cross_check_from_the_snapshot(tmp_path: Path) -> None:
+    """The text view shows the intent watchdog and signal cross-check from the
+    health snapshot instead of the removed, always-UNKNOWN Universe line."""
+    snapshot = tmp_path / "snapshot.json"
+    snapshot.write_text(
+        json.dumps(
+            {
+                "written_at": datetime.now(UTC).isoformat(),
+                "runtime_health": {
+                    "intent_watchdog": {
+                        "enabled": True,
+                        "evaluated_at": "2026-09-30T21:00:00+00:00",
+                        "alarms": [
+                            {
+                                "code": "equity_decision_missing",
+                                "market": "EQUITY",
+                                "message": "no decision for 2026-09-30",
+                                "due_at": "2026-09-30T20:45:00+00:00",
+                            }
+                        ],
+                        "degraded_reasons": ["equity_decision_missing"],
+                    },
+                    "signal_cross_check": {
+                        "enabled": True,
+                        "last": {"status": "trend_mismatch", "session_date": "2026-09-29", "hold": True},
+                        "pending": {},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    code, out, _ = _run_cli("ops", "status", "--snapshot", str(snapshot), "--db", str(tmp_path / "absent.sqlite3"))
+
+    assert code == 0
+    assert "Universe" not in out
+    assert "Watchdog       ALARM    — equity_decision_missing: no decision for 2026-09-30" in out
+    assert "Cross-check    TREND_MISMATCH — session 2026-09-29, position held" in out
+
+
+def test_ops_status_watchdog_lines_without_runtime_data(tmp_path: Path) -> None:
+    from parayabuck.cli import _intent_watchdog_status_line, _signal_cross_check_status_line
+
+    assert "UNKNOWN" in _intent_watchdog_status_line({})
+    assert "UNKNOWN" in _signal_cross_check_status_line({})
+    assert "PENDING" in _intent_watchdog_status_line({"intent_watchdog": {"enabled": True, "evaluated_at": None}})
+    assert "OK" in _intent_watchdog_status_line(
+        {"intent_watchdog": {"enabled": True, "evaluated_at": "2026-09-30T21:00:00+00:00", "alarms": []}}
+    )
+    assert "NONE" in _signal_cross_check_status_line({"signal_cross_check": {"enabled": True, "last": None}})
+    pending = {"signal_cross_check": {"enabled": True, "last": None, "pending": {"2026-09-30": {"attempts": 1}}}}
+    assert "PENDING  — waiting for the SIP daily bar: 2026-09-30" in _signal_cross_check_status_line(pending)

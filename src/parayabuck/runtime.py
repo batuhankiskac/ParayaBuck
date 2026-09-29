@@ -4212,6 +4212,7 @@ class EngineRuntime:
             self.secret_key,
             stock_feed=self.app_config.alpaca.stock_historical_feed,
             data_delayed=self.app_config.alpaca.data_delayed,
+            sip_embargo_minutes=self.app_config.signal_cross_check.sip_embargo_minutes,
         )
         self._historical = history
         log.info("Warmup starting for %d symbols", len(self.symbols))

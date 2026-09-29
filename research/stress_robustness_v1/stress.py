@@ -140,7 +140,8 @@ def curve_stats(dates, nav):
     """dates[k] is the date of nav[k] (nav[0] = close before the first simulated session)."""
     nav = np.asarray(nav)
     res = {
-        "start": dates[0], "end": dates[-1],
+        "start": dates[0],
+        "end": dates[-1],
         "cagr": cagr(nav[0], nav[-1], calendar_years(dates[0], dates[-1])),
         "max_dd": float(max_dd(nav)[0]),
         "ending_multiple": float(nav[-1] / nav[0]),
@@ -162,23 +163,33 @@ def curve_stats(dates, nav):
     worst = min(full_years, key=full_years.get)
     res["worst_year"] = {"year": worst, "return": full_years[worst]}
     # sub-periods: from last close before a to last close <= b
-    for name, a, b in (("2000_2002", "2000-01-01", "2002-12-31"), ("2007_2009", "2007-01-01", "2009-12-31"),
-                       ("2017_end", "2017-01-01", dates[-1])):
+    for name, a, b in (
+        ("2000_2002", "2000-01-01", "2002-12-31"),
+        ("2007_2009", "2007-01-01", "2009-12-31"),
+        ("2017_end", "2017-01-01", dates[-1]),
+    ):
         if b <= dates[0]:
             continue
         ia = max(k for k, d in enumerate(dates) if d < a) if dates[0] < a else 0
         ib = max(k for k, d in enumerate(dates) if d <= b)
         seg = nav[ia : ib + 1]
-        res[name] = {"total_return": float(seg[-1] / seg[0] - 1), "max_dd": float(max_dd(seg)[0]),
-                     "cagr": cagr(seg[0], seg[-1], calendar_years(dates[ia], dates[ib]))}
+        res[name] = {
+            "total_return": float(seg[-1] / seg[0] - 1),
+            "max_dd": float(max_dd(seg)[0]),
+            "cagr": cagr(seg[0], seg[-1], calendar_years(dates[ia], dates[ib])),
+        }
     # recovery of the max drawdown and longest underwater spell
     peak = np.maximum.accumulate(nav)
     trough = int(np.argmin(nav / peak))
     pk = int(np.argmax(nav[: trough + 1]))
     rec = next((k for k in range(trough, len(nav)) if nav[k] >= nav[pk]), None)
-    res["max_dd_episode"] = {"peak": dates[pk], "trough": dates[trough], "recovered": dates[rec] if rec is not None else None,
-                             "years_peak_to_recovery": calendar_years(dates[pk], dates[rec]) if rec is not None else None,
-                             "years_underwater_so_far": None if rec is not None else calendar_years(dates[pk], dates[-1])}
+    res["max_dd_episode"] = {
+        "peak": dates[pk],
+        "trough": dates[trough],
+        "recovered": dates[rec] if rec is not None else None,
+        "years_peak_to_recovery": calendar_years(dates[pk], dates[rec]) if rec is not None else None,
+        "years_underwater_so_far": None if rec is not None else calendar_years(dates[pk], dates[-1]),
+    }
     longest, s = (0.0, None, None), None
     for k in range(len(nav)):
         if nav[k] >= peak[k]:
@@ -202,8 +213,11 @@ def monte_carlo(days, arr, y, block):
     pool = np.arange(1, T)  # sessions with a previous close
     npool = len(pool)
     L = SMA + YEARS_MC * 252  # sampled sessions per path
-    mc = {"VT35": {"cagr": [], "dd": [], "worst_year": []}, "SPY": {"cagr": [], "dd": [], "worst_year": []},
-          "QQQ": {"cagr": [], "dd": [], "worst_year": []}}
+    mc = {
+        "VT35": {"cagr": [], "dd": [], "worst_year": []},
+        "SPY": {"cagr": [], "dd": [], "worst_year": []},
+        "QQQ": {"cagr": [], "dd": [], "worst_year": []},
+    }
     qp = lambda row, idx: arr["QQQ"][row][pool[idx]]  # noqa: E731
     for chunk in range(0, PATHS, 1000):
         P = min(1000, PATHS - chunk)
@@ -225,8 +239,10 @@ def monte_carlo(days, arr, y, block):
         yyp = np.concatenate([yy, yy[:, -1:]], axis=1)  # column t-1 holds the rate before session t
         so, sc_ = synthetic_2x(qo, qc, qd, yyp)
         upm, volm = indicators(qc, sc_)
-        navs = {"VT35": simulate(so, sc_, np.zeros_like(sc_), upm, volm, yyp, SMA + 1, "vt", SCALE),
-                "QQQ": simulate(qo, qc, qd, upm, volm, yyp, SMA + 1, "hold", 1.0)}
+        navs = {
+            "VT35": simulate(so, sc_, np.zeros_like(sc_), upm, volm, yyp, SMA + 1, "vt", SCALE),
+            "QQQ": simulate(qo, qc, qd, upm, volm, yyp, SMA + 1, "hold", 1.0),
+        }
         sprev = arr["SPY"][1][pool[pos] - 1]
         s_on = (arr["SPY"][0][pool[pos]] + arr["SPY"][2][pool[pos]]) / sprev
         s_id = arr["SPY"][1][pool[pos]] / arr["SPY"][0][pool[pos]]
@@ -242,8 +258,13 @@ def monte_carlo(days, arr, y, block):
     mco = {"paths": PATHS, "years": YEARS_MC, "mean_block": block, "seed": SEED, "pool": [days[1], days[-1]]}
     cat = {arm: {k: np.concatenate(v) for k, v in d.items()} for arm, d in mc.items()}
     for arm, d in cat.items():
-        mco[arm] = {"cagr": pct(d["cagr"]), "max_dd": pct(d["dd"]), "worst_252d_year": pct(d["worst_year"]),
-                    "p_max_dd_gt_50": float(np.mean(d["dd"] > 0.5)), "mean_cagr": float(d["cagr"].mean())}
+        mco[arm] = {
+            "cagr": pct(d["cagr"]),
+            "max_dd": pct(d["dd"]),
+            "worst_252d_year": pct(d["worst_year"]),
+            "p_max_dd_gt_50": float(np.mean(d["dd"] > 0.5)),
+            "mean_cagr": float(d["cagr"].mean()),
+        }
     mco["share_vt35_beats_spy"] = float(np.mean(cat["VT35"]["cagr"] > cat["SPY"]["cagr"]))
     mco["share_vt35_dd_le_1.3x_spy"] = float(np.mean(cat["VT35"]["dd"] <= 1.3 * cat["SPY"]["dd"]))
     mco["share_vt35_negative_10y"] = float(np.mean(cat["VT35"]["cagr"] < 0))
@@ -257,10 +278,23 @@ def main() -> None:
     q, s, lq = arr["QQQ"], arr["SPY"], arr["QLD"]
     syn_open, syn_close = synthetic_2x(q[0], q[1], q[2], y)
     zero = np.zeros(T)
-    out: dict = {"params": {"sma": SMA, "vol_window": VOL_N, "vol_target": VOL_TARGET, "band": BAND, "scale": SCALE,
-                            "cost_per_side": COST, "expense": EXPENSE, "bill_fee": BILL_FEE,
-                            "cagr_basis": "calendar days / 365.25", "execution": "decide at completed close, fill at next open (Yahoo opens)"}}
-    open_eq_close = {sym: float(np.mean(arr[sym][0][~np.isnan(arr[sym][0])] == arr[sym][1][~np.isnan(arr[sym][0])])) for sym in arr}
+    out: dict = {
+        "params": {
+            "sma": SMA,
+            "vol_window": VOL_N,
+            "vol_target": VOL_TARGET,
+            "band": BAND,
+            "scale": SCALE,
+            "cost_per_side": COST,
+            "expense": EXPENSE,
+            "bill_fee": BILL_FEE,
+            "cagr_basis": "calendar days / 365.25",
+            "execution": "decide at completed close, fill at next open (Yahoo opens)",
+        }
+    }
+    open_eq_close = {
+        sym: float(np.mean(arr[sym][0][~np.isnan(arr[sym][0])] == arr[sym][1][~np.isnan(arr[sym][0])])) for sym in arr
+    }
     out["data_checks"] = {"sessions": T, "first": days[0], "last": days[-1], "open_equals_close_share": open_eq_close}
 
     # --- 2. synthetic QLD validation vs real QLD (total return, close-to-close)
@@ -269,9 +303,14 @@ def main() -> None:
     syn_tr = syn_close[k0 + 1 :] / syn_close[k0:-1]
     diff = syn_tr - real_tr
     yrs = calendar_years(days[k0], days[-1])
-    val = {"window": [days[k0], days[-1]], "tracking_error_ann": float(diff.std(ddof=1) * math.sqrt(252)),
-           "mean_daily_diff_ann": float(diff.mean() * 252), "corr": float(np.corrcoef(syn_tr, real_tr)[0, 1]),
-           "cagr_real": cagr(1, real_tr.prod(), yrs), "cagr_synthetic": cagr(1, syn_tr.prod(), yrs)}
+    val = {
+        "window": [days[k0], days[-1]],
+        "tracking_error_ann": float(diff.std(ddof=1) * math.sqrt(252)),
+        "mean_daily_diff_ann": float(diff.mean() * 252),
+        "corr": float(np.corrcoef(syn_tr, real_tr)[0, 1]),
+        "cagr_real": cagr(1, real_tr.prod(), yrs),
+        "cagr_synthetic": cagr(1, syn_tr.prod(), yrs),
+    }
     val["cagr_diff_syn_minus_real"] = val["cagr_synthetic"] - val["cagr_real"]
     by_year = {}
     for yv in sorted({d[:4] for d in days[k0 + 1 :]}):
@@ -301,25 +340,35 @@ def main() -> None:
     hist["VT35"]["trend_flips"] = int(np.sum(up[0, start:-1] != up[0, start - 1 : -2]))
     out["historical"] = hist
     b, a = hist["VT35_bil"], hist["VT35"]
-    out["bil_overlay"] = {"incremental_cagr_full": b["cagr"] - a["cagr"],
-                          "incremental_cagr_2017_end": b["2017_end"]["cagr"] - a["2017_end"]["cagr"],
-                          "max_dd_vt35": a["max_dd"], "max_dd_vt35_bil": b["max_dd"],
-                          "adopted": bool(b["cagr"] > a["cagr"] and b["max_dd"] <= a["max_dd"] + 1e-12)}
+    out["bil_overlay"] = {
+        "incremental_cagr_full": b["cagr"] - a["cagr"],
+        "incremental_cagr_2017_end": b["2017_end"]["cagr"] - a["2017_end"]["cagr"],
+        "max_dd_vt35": a["max_dd"],
+        "max_dd_vt35_bil": b["max_dd"],
+        "adopted": bool(b["cagr"] > a["cagr"] and b["max_dd"] <= a["max_dd"] + 1e-12),
+    }
 
     # cross-check on real QLD (window where real QLD has 21 closes)
     ks = k0 + VOL_N + 1
     upr, volr = indicators(q[1], np.where(np.isnan(lq[1]), 1.0, lq[1]))
     real_vt = simulate(lq[0], lq[1], np.nan_to_num(lq[2]), upr, volr, y, ks, "vt", SCALE)[0]
     syn_vt = simulate(syn_open, syn_close, zero, up, vol, y, ks, "vt", SCALE)[0]
-    out["vt35_real_vs_synthetic"] = {"window": [days[ks - 1], days[-1]],
-                                     "real": {k: v for k, v in curve_stats(days[ks - 1 :], real_vt).items() if k in ("cagr", "max_dd")},
-                                     "synthetic": {k: v for k, v in curve_stats(days[ks - 1 :], syn_vt).items() if k in ("cagr", "max_dd")}}
+    out["vt35_real_vs_synthetic"] = {
+        "window": [days[ks - 1], days[-1]],
+        "real": {k: v for k, v in curve_stats(days[ks - 1 :], real_vt).items() if k in ("cagr", "max_dd")},
+        "synthetic": {k: v for k, v in curve_stats(days[ks - 1 :], syn_vt).items() if k in ("cagr", "max_dd")},
+    }
 
     # decision rule
     spy = hist["SPY"]
-    out["decision"] = {"vt35_max_dd": a["max_dd"], "spy_max_dd": spy["max_dd"], "dd_ratio": a["max_dd"] / spy["max_dd"],
-                       "vt35_cagr": a["cagr"], "spy_cagr": spy["cagr"],
-                       "acceptable_for_small_live": bool(a["max_dd"] <= 1.3 * spy["max_dd"] and a["cagr"] > spy["cagr"])}
+    out["decision"] = {
+        "vt35_max_dd": a["max_dd"],
+        "spy_max_dd": spy["max_dd"],
+        "dd_ratio": a["max_dd"] / spy["max_dd"],
+        "vt35_cagr": a["cagr"],
+        "spy_cagr": spy["cagr"],
+        "acceptable_for_small_live": bool(a["max_dd"] <= 1.3 * spy["max_dd"] and a["cagr"] > spy["cagr"]),
+    }
 
     # --- 5. random monthly start dates (sliced from the continuous runs)
     starts = [k for k in range(1, len(dates)) if dates[k][:7] != dates[k - 1][:7]]
@@ -337,13 +386,20 @@ def main() -> None:
                 rows[arm]["dd"].append(float(max_dd(seg)[0]))
         vc, sc = np.array(rows["VT35"]["cagr"]), np.array(rows["SPY"]["cagr"])
         vd, sd = np.array(rows["VT35"]["dd"]), np.array(rows["SPY"]["dd"])
-        rs[label] = {"windows": len(vc), "first_start": win_dates[0], "last_start": win_dates[-1],
-                     "vt35_cagr": pct(vc), "spy_cagr": pct(sc), "excess_cagr": pct(vc - sc),
-                     "vt35_max_dd": pct(vd), "spy_max_dd": pct(sd),
-                     "share_vt35_beats_spy": float(np.mean(vc > sc)),
-                     "share_vt35_dd_le_spy": float(np.mean(vd <= sd)),
-                     "worst_vt35": {"start": win_dates[int(np.argmin(vc))], "cagr": float(vc.min())},
-                     "worst_excess": {"start": win_dates[int(np.argmin(vc - sc))], "excess": float((vc - sc).min())}}
+        rs[label] = {
+            "windows": len(vc),
+            "first_start": win_dates[0],
+            "last_start": win_dates[-1],
+            "vt35_cagr": pct(vc),
+            "spy_cagr": pct(sc),
+            "excess_cagr": pct(vc - sc),
+            "vt35_max_dd": pct(vd),
+            "spy_max_dd": pct(sd),
+            "share_vt35_beats_spy": float(np.mean(vc > sc)),
+            "share_vt35_dd_le_spy": float(np.mean(vd <= sd)),
+            "worst_vt35": {"start": win_dates[int(np.argmin(vc))], "cagr": float(vc.min())},
+            "worst_excess": {"start": win_dates[int(np.argmin(vc - sc))], "excess": float((vc - sc).min())},
+        }
     out["random_start"] = rs
 
     # --- 6. Monte Carlo stationary block bootstrap
@@ -358,11 +414,15 @@ def main() -> None:
 def summarize(o):
     f = lambda x: f"{x * 100:6.1f}%"  # noqa: E731
     v = o["synthetic_qld_validation"]
-    print(f"synthetic QLD: TE {f(v['tracking_error_ann'])}  CAGR syn {f(v['cagr_synthetic'])} real {f(v['cagr_real'])} diff {f(v['cagr_diff_syn_minus_real'])}")
+    print(
+        f"synthetic QLD: TE {f(v['tracking_error_ann'])}  CAGR syn {f(v['cagr_synthetic'])} real {f(v['cagr_real'])} diff {f(v['cagr_diff_syn_minus_real'])}"
+    )
     for k, h in o["historical"].items():
-        print(f"{k:12s} CAGR {f(h['cagr'])} DD {f(h['max_dd'])} worst {h['worst_year']['year']} {f(h['worst_year']['return'])} "
-              f"00-02 {f(h['2000_2002']['total_return'])}/{f(h['2000_2002']['max_dd'])} 07-09 {f(h['2007_2009']['total_return'])}/{f(h['2007_2009']['max_dd'])} "
-              f"17+ {f(h['2017_end']['cagr'])} rec {h['max_dd_episode']} long {h['longest_underwater']}")
+        print(
+            f"{k:12s} CAGR {f(h['cagr'])} DD {f(h['max_dd'])} worst {h['worst_year']['year']} {f(h['worst_year']['return'])} "
+            f"00-02 {f(h['2000_2002']['total_return'])}/{f(h['2000_2002']['max_dd'])} 07-09 {f(h['2007_2009']['total_return'])}/{f(h['2007_2009']['max_dd'])} "
+            f"17+ {f(h['2017_end']['cagr'])} rec {h['max_dd_episode']} long {h['longest_underwater']}"
+        )
     print("real vs syn", o["vt35_real_vs_synthetic"])
     print("bil", o["bil_overlay"])
     print("decision", o["decision"])

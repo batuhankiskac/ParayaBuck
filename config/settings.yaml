@@ -127,7 +127,7 @@ alerting:
   events:
   - runtime_started
   - runtime_stopped_unexpected
-  - scanner_refresh_failure
+  - data_provider_unavailable
   - order_rejected
   - ambiguous_order
   - reconciliation_failure
@@ -136,6 +136,9 @@ alerting:
   - drawdown_halt
   - risk_epoch_reset
   - circuit_breaker
+  - signal_adjustment_failure
+  - signal_adjustment_recovery
+  - paper_incident
   - daily_summary
   - intent_alarm
   - intent_recovered
@@ -171,7 +174,9 @@ signal_cross_check:
   # docs/research/signal_cross_check_v1.md
   enabled: true
   # Alpaca Basic rejects SIP queries reaching into the last 15 minutes; use
-  # 0 only with a real-time SIP data subscription.
+  # 0 only with a real-time SIP data subscription. Also clamps the end of
+  # every historical SIP bar request (warmup, hourly split-basis verifier),
+  # whether or not the cross-check is enabled.
   sip_embargo_minutes: 15
   retry_window_minutes: 10
   retry_interval_seconds: 60

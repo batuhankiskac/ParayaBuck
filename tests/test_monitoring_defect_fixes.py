@@ -111,9 +111,7 @@ def test_forensic_readers_split_unresolved_orders(tmp_path: Path) -> None:
     ("reader", "statuses"),
     [(ambiguous_orders, ["Ambiguous", "AmbigUOUS"]), (submitting_orders, ["SUBMITTING", "SubmITTing"])],
 )
-def test_status_readers_keep_rows_written_in_any_casing(
-    tmp_path: Path, reader: Any, statuses: list[str]
-) -> None:
+def test_status_readers_keep_rows_written_in_any_casing(tmp_path: Path, reader: Any, statuses: list[str]) -> None:
     db = tmp_path / "casing.sqlite3"
     _order_ledger(db, [(f"ord-{index}", status, datetime.now(UTC)) for index, status in enumerate(statuses)])
 
@@ -274,7 +272,7 @@ def test_no_trade_reason_maps_canonical_vocabulary(canonical: str) -> None:
 
 def test_event_redaction_reaches_nested_and_decoded_values() -> None:
     ev = create_event(
-        kind="scanner_refresh_failure",
+        kind="data_provider_unavailable",
         message="refresh failed",
         fields={"order_counts": {"filled": 1}, "delivery": {"webhook_token": "cleartext"}, "tradingview_secret": "x"},
     )

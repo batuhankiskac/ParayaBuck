@@ -45,7 +45,7 @@ RUNTIME_COUNTER_KEYS: frozenset[str] = frozenset(
     {
         "runtime_started",
         "runtime_stopped_unexpected",
-        "scanner_refresh_failure",
+        "data_provider_unavailable",
         "reconciliation_failure",
         "reconciliation_recovered",
         "risk_incident",
@@ -382,7 +382,7 @@ def runtime_metrics(
         "paper_cycles": paper_cycle_summary,
         # Derived convenience fields.
         "restart_count": int(sessions["restart_count"]),
-        "scanner_failures": int(counters["scanner_refresh_failure"]),
+        "data_provider_failures": int(counters["data_provider_unavailable"]),
         "reconciliation_failures": int(counters["reconciliation_failure"]),
         "reconciliation_recoveries": int(counters["reconciliation_recovered"]),
         "daily_loss_incidents": int(counters["risk_incident"]),

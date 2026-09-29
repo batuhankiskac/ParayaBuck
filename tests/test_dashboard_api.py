@@ -112,7 +112,7 @@ def _install_fake_metrics_module(monkeypatch: pytest.MonkeyPatch, *, metrics: bo
             return {
                 "available": True,
                 "restart_count": 2,
-                "scanner_failures": 1,
+                "data_provider_failures": 1,
                 "reconciliation_failures": 0,
                 "daily_loss_incidents": 0,
                 "drawdown_incidents": 1,

@@ -291,3 +291,21 @@ def test_equity_allocation_above_gross_limit_is_rejected(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="Capital invariant violated"):
         load_config(str(path))
+
+
+def test_shipped_settings_forward_every_default_webhook_kind() -> None:
+    """config/settings.yaml must not silently drop an operator-actionable kind:
+    it forwards exactly the default webhook set (everything but paper_receipt)."""
+    from parayabuck.monitoring.events import DEFAULT_ALERT_EVENTS
+
+    settings = Path(__file__).resolve().parents[1] / "config" / "settings.yaml"
+    events = yaml.safe_load(settings.read_text(encoding="utf-8"))["alerting"]["events"]
+    assert set(events) == set(DEFAULT_ALERT_EVENTS)
+
+
+def test_renamed_alert_kind_is_rejected_with_its_replacement() -> None:
+    from parayabuck.config import AlertingConfig
+
+    with pytest.raises(ValueError, match="scanner_refresh_failure with data_provider_unavailable"):
+        AlertingConfig(events=("runtime_started", "scanner_refresh_failure"))
+    assert "data_provider_unavailable" in AlertingConfig(events=("data_provider_unavailable",)).events

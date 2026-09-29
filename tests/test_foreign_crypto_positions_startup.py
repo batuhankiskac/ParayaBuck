@@ -183,7 +183,9 @@ def _startable_runtime(account: AccountSnapshot, subscribed: list[tuple[Any, ...
         runtime=SimpleNamespace(execution_timeframe="5m", market_state_timeframe="5m"),
         universe=runtime.app_config.universe,
         risk=RiskLimits(),
-        live=SimpleNamespace(enabled=False, hard_dollar_cap=1000, operator_approval_key_env="", operator_approval_path=""),
+        live=SimpleNamespace(
+            enabled=False, hard_dollar_cap=1000, operator_approval_key_env="", operator_approval_path=""
+        ),
         alpaca=SimpleNamespace(stock_historical_feed="iex", data_delayed=False),
         execution=SimpleNamespace(rebalance_band_pct=0.02, minimum_order_notional=10.0),
     )

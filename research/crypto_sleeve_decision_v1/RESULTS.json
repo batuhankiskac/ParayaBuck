@@ -1,0 +1,412 @@
+{
+  "calendar_year_returns": {
+    "2021": {
+      "A": 0.3669787062430496,
+      "B": 0.36295809576624727,
+      "C": 0.38273759897285986,
+      "crypto_replay": 0.007068751310623345
+    },
+    "2022": {
+      "A": -0.206117236771429,
+      "B": -0.18531503994907406,
+      "C": -0.1945108745520696,
+      "crypto_replay": -0.024859953698983972
+    },
+    "2023": {
+      "A": 0.6514666976007601,
+      "B": 0.5799325044961852,
+      "C": 0.616042419590231,
+      "crypto_replay": 0.04461435771860134
+    },
+    "2024": {
+      "A": 0.4117529475405446,
+      "B": 0.35723922649623496,
+      "C": 0.3776439644198444,
+      "crypto_replay": 0.04266470160696212
+    },
+    "2025": {
+      "A": 0.19078604975727487,
+      "B": 0.18436308549501867,
+      "C": 0.19345818779815516,
+      "crypto_replay": 0.00817273160312415
+    },
+    "2026": {
+      "A": 0.09284790455648184,
+      "B": 0.12002260402637055,
+      "C": 0.12543318994604458,
+      "crypto_replay": -0.022370721907942093
+    }
+  },
+  "calibration_A_overlap_next_close": {
+    "cagr": 0.23101492260534084,
+    "calmar": 0.7325880734941992,
+    "cost_drag_total_frac_of_start": 0.01163926192217458,
+    "end": "2026-07-30",
+    "max_drawdown": 0.31534081834485406,
+    "sharpe_monthly_rf0": 0.9242599111348316,
+    "start": "2021-04-01",
+    "total_return": 2.026286951985381,
+    "vol_monthly_ann": 0.2623648573658681
+  },
+  "calibration_A_overlap_next_open": {
+    "cagr": 0.2506578164418021,
+    "calmar": 0.9099176061802164,
+    "cost_drag_total_frac_of_start": 0.012383341579205126,
+    "end": "2026-07-30",
+    "max_drawdown": 0.2754730920023074,
+    "sharpe_monthly_rf0": 0.9937145792086233,
+    "start": "2021-04-01",
+    "total_return": 2.292608596987152,
+    "vol_monthly_ann": 0.25927795806925164
+  },
+  "calibration_vt35_0.93_2017_2026_no_crypto_next_close": {
+    "cagr": 0.2659418266060918,
+    "calmar": 0.9019306738145844,
+    "cost_drag_total_frac_of_start": 0.04852875142983784,
+    "end": "2026-07-30",
+    "max_drawdown": 0.29485839025889826,
+    "sharpe_monthly_rf0": 1.0787161809956198,
+    "start": "2017-01-03",
+    "total_return": 8.549387247585576,
+    "vol_monthly_ann": 0.24828484822158153
+  },
+  "calibration_vt35_0.93_2017_2026_no_crypto_next_open": {
+    "cagr": 0.2764748769283827,
+    "calmar": 1.0484954063130811,
+    "cost_drag_total_frac_of_start": 0.05056179355675145,
+    "end": "2026-07-30",
+    "max_drawdown": 0.2636872562947855,
+    "sharpe_monthly_rf0": 1.1145232638394487,
+    "start": "2017-01-03",
+    "total_return": 9.337344877572239,
+    "vol_monthly_ann": 0.24773779610689073
+  },
+  "contribution_t_stats": {
+    "A_minus_B": {
+      "mean_monthly": 0.000913479792800374,
+      "n_months": 64,
+      "t_stat": 0.7958975588381306
+    },
+    "A_minus_C": {
+      "mean_monthly": -0.00020397059383546468,
+      "n_months": 64,
+      "t_stat": -0.1879285222601983
+    }
+  },
+  "correlations": {
+    "monthly": {
+      "btc_vs_qqq": 0.48006476822031396,
+      "btc_vs_vt35_account": 0.35625107462321226,
+      "crypto_sleeve_vs_btc": 0.8738250077548054,
+      "crypto_sleeve_vs_qqq": 0.47563818417385473,
+      "crypto_sleeve_vs_vt35_account": 0.33316900639003305,
+      "n": 63
+    },
+    "weekly": {
+      "btc_vs_qqq": 0.2807070919828071,
+      "btc_vs_vt35_account": 0.15919665318395917,
+      "crypto_sleeve_vs_btc": 0.8842494190256937,
+      "crypto_sleeve_vs_qqq": 0.2623667105938547,
+      "crypto_sleeve_vs_vt35_account": 0.17800817302981406,
+      "n": 277
+    }
+  },
+  "crypto_replay_as_isolated_account": {
+    "cagr": 0.00996170049093803,
+    "calmar": 0.15975263713725169,
+    "end": "2026-07-30",
+    "max_drawdown": 0.06235703315732699,
+    "sharpe_monthly_rf0": 0.33865455516040865,
+    "start": "2021-04-01",
+    "total_return": 0.05423133436075345,
+    "vol_monthly_ann": 0.030610931943658364
+  },
+  "crypto_sleeve_invested_day_share": 0.987146529562982,
+  "crypto_sleeve_mean_exposure_of_nav": 0.048384007979692514,
+  "crypto_sleeve_standalone_per_0.05_allocated_capital": {
+    "cagr": 0.026610498725800902,
+    "calmar": 0.03484208260098081,
+    "end": "2026-07-30",
+    "max_drawdown": 0.7637459284667389,
+    "sharpe_monthly_rf0": 0.3389094236265661,
+    "start": "2021-04-01",
+    "total_return": 0.15018567061501908,
+    "vol_monthly_ann": 0.6405332765099574
+  },
+  "full_2021-04-01_2026-07-30|cash_tbill_approx": {
+    "A_eq0.93_strategy_crypto0.05": {
+      "cagr": 0.260971712782921,
+      "calmar": 1.011280078243035,
+      "cost_drag_total_frac_of_start": 0.012709451692136487,
+      "end": "2026-07-30",
+      "max_drawdown": 0.2580607671381451,
+      "sharpe_monthly_rf0": 1.0279242173669376,
+      "start": "2021-04-01",
+      "total_return": 2.4398835183983385,
+      "vol_monthly_ann": 0.25861736748516373
+    },
+    "B_eq0.93_crypto_removed_cash": {
+      "cagr": 0.2532315708541333,
+      "calmar": 1.047351183367461,
+      "cost_drag_total_frac_of_start": 0.012279761811409027,
+      "end": "2026-07-30",
+      "max_drawdown": 0.24178286602965293,
+      "sharpe_monthly_rf0": 1.0413679488825465,
+      "start": "2021-04-01",
+      "total_return": 2.3288709036310213,
+      "vol_monthly_ann": 0.24636676630985535
+    },
+    "C_eq0.98_crypto_removed": {
+      "cagr": 0.26417507603940904,
+      "calmar": 1.0358410540437564,
+      "cost_drag_total_frac_of_start": 0.013191452493763805,
+      "end": "2026-07-30",
+      "max_drawdown": 0.25503437521433636,
+      "sharpe_monthly_rf0": 1.033092427584081,
+      "start": "2021-04-01",
+      "total_return": 2.4866984908841423,
+      "vol_monthly_ann": 0.260059058862201
+    },
+    "R1_eq0.93_btc_buyhold0.05": {
+      "cagr": 0.2573720124947252,
+      "calmar": 0.9536721593126123,
+      "cost_drag_total_frac_of_start": 0.015223211076437846,
+      "end": "2026-07-30",
+      "max_drawdown": 0.2698747257970011,
+      "sharpe_monthly_rf0": 1.0179477276060018,
+      "start": "2021-04-01",
+      "total_return": 2.387886940701332,
+      "vol_monthly_ann": 0.2581074915946672
+    },
+    "R2_eq0.93_btc_sma200_0.05": {
+      "cagr": 0.2608409655561226,
+      "calmar": 1.0561041599782859,
+      "cost_drag_total_frac_of_start": 0.02787139585410895,
+      "end": "2026-07-30",
+      "max_drawdown": 0.2469841284987322,
+      "sharpe_monthly_rf0": 1.0401327646016545,
+      "start": "2021-04-01",
+      "total_return": 2.437983638943566,
+      "vol_monthly_ann": 0.2544257187268961
+    }
+  },
+  "full_2021-04-01_2026-07-30|cash_zero": {
+    "A_eq0.93_strategy_crypto0.05": {
+      "cagr": 0.2506578164418021,
+      "calmar": 0.9099176061802164,
+      "cost_drag_total_frac_of_start": 0.012383341579205126,
+      "end": "2026-07-30",
+      "max_drawdown": 0.2754730920023074,
+      "sharpe_monthly_rf0": 0.9937145792086233,
+      "start": "2021-04-01",
+      "total_return": 2.292608596987152,
+      "vol_monthly_ann": 0.25927795806925164
+    },
+    "B_eq0.93_crypto_removed_cash": {
+      "cagr": 0.24093354372150966,
+      "calmar": 0.9241609572674221,
+      "cost_drag_total_frac_of_start": 0.011907653415014027,
+      "end": "2026-07-30",
+      "max_drawdown": 0.26070517459848863,
+      "sharpe_monthly_rf0": 0.9986944167292675,
+      "start": "2021-04-01",
+      "total_return": 2.1584847901468787,
+      "vol_monthly_ann": 0.24700902033191835
+    },
+    "C_eq0.98_crypto_removed": {
+      "cagr": 0.2533502875338822,
+      "calmar": 0.926552959265462,
+      "cost_drag_total_frac_of_start": 0.012828013094348487,
+      "end": "2026-07-30",
+      "max_drawdown": 0.27343314270425434,
+      "sharpe_monthly_rf0": 0.9973636140423859,
+      "start": "2021-04-01",
+      "total_return": 2.330551328127173,
+      "vol_monthly_ann": 0.260783459978749
+    },
+    "R1_eq0.93_btc_buyhold0.05": {
+      "cagr": 0.2471867834434549,
+      "calmar": 0.8612551718826343,
+      "cost_drag_total_frac_of_start": 0.01487882740438478,
+      "end": "2026-07-30",
+      "max_drawdown": 0.28700760414956294,
+      "sharpe_monthly_rf0": 0.9839285995552774,
+      "start": "2021-04-01",
+      "total_return": 2.2442131036149853,
+      "vol_monthly_ann": 0.25879823604287827
+    },
+    "R2_eq0.93_btc_sma200_0.05": {
+      "cagr": 0.2496972715653858,
+      "calmar": 0.9406147219782163,
+      "cost_drag_total_frac_of_start": 0.027121745595542972,
+      "end": "2026-07-30",
+      "max_drawdown": 0.26546179400663106,
+      "sharpe_monthly_rf0": 1.0024297635808075,
+      "start": "2021-04-01",
+      "total_return": 2.2791577352125234,
+      "vol_monthly_ann": 0.25516845504926877
+    }
+  },
+  "inputs": {
+    "btc_daily_source": "CORRECTED_REPLAY_A daily_bars BTC/USD (pinned hourly input aggregated to complete UTC days)",
+    "btc_first_day": "2021-01-02",
+    "btc_sma200_first_day": "2021-07-22",
+    "crypto_replay": {
+      "path": "maintenance/crypto_canonical_causal_execution_v1/CORRECTED_REPLAY_A.json.gz",
+      "replay_metrics": {
+        "annualized_volatility": 0.030034998733246734,
+        "cagr": 0.009954848252522686,
+        "calmar": 0.15964274995903935,
+        "ending_equity": 105423.13343607534,
+        "fee_total": 919.6540303282909,
+        "max_drawdown": 0.06235703315732703,
+        "rebalance_count": 454,
+        "sharpe": 0.344817179770205,
+        "slippage_cost_total": 73.57270961505512,
+        "sortino": 0.48295649466040963,
+        "spread_cost_total": 36.78635480752756,
+        "starting_equity": 100000,
+        "total_return": 0.05423133436075345,
+        "turnover": 3.5235296449018483
+      },
+      "sha256": "8ec31d0aa7fd350bf011c5a00ac25cd64fb9be20240a001496bb6e8353792cae",
+      "tag": "archive/maintenance/crypto-canonical-causal-execution-v1-2026-09"
+    },
+    "equity_actions": {
+      "path": "data/historical/profit_max_v1_corporate_actions.csv",
+      "sha256": "c0efd11fa4492d89a1ff997b8cc86ba600f98204197e177b63b82a9cc485fdcd",
+      "tag": "archive/research/profit-max-v1-2026-09"
+    },
+    "equity_bars": {
+      "path": "data/historical/profit_max_v1_daily_split_sip.csv",
+      "sha256": "87e20c9e32f0e42f67f6e9bd4c4e51b5e06003277bd9b3a875e25df3cbf24b0e",
+      "tag": "archive/research/profit-max-v1-2026-09"
+    },
+    "tbill_approx_annual": {
+      "2017": 0.0093,
+      "2018": 0.0194,
+      "2019": 0.0206,
+      "2020": 0.0036,
+      "2021": 0.0004,
+      "2022": 0.0202,
+      "2023": 0.0507,
+      "2024": 0.0497,
+      "2025": 0.041,
+      "2026": 0.0365
+    }
+  },
+  "sub_2021-07-20_2026-07-30|cash_tbill_approx": {
+    "A_eq0.93_strategy_crypto0.05": {
+      "cagr": 0.24786951102193688,
+      "calmar": 0.9605083088404801,
+      "cost_drag_total_frac_of_start": 0.011070084897559772,
+      "end": "2026-07-30",
+      "max_drawdown": 0.2580607671381453,
+      "sharpe_monthly_rf0": 0.9725754604119442,
+      "start": "2021-07-20",
+      "total_return": 2.0437782774871414,
+      "vol_monthly_ann": 0.26048491655332756
+    },
+    "B_eq0.93_crypto_removed_cash": {
+      "cagr": 0.2356993231114577,
+      "calmar": 0.9748388170837152,
+      "cost_drag_total_frac_of_start": 0.010540895754330195,
+      "end": "2026-07-30",
+      "max_drawdown": 0.24178286602965338,
+      "sharpe_monthly_rf0": 0.971317074555341,
+      "start": "2021-07-20",
+      "total_return": 1.8974607966560662,
+      "vol_monthly_ann": 0.247338735213012
+    },
+    "C_eq0.98_crypto_removed": {
+      "cagr": 0.24548914725908877,
+      "calmar": 0.9625727788764777,
+      "cost_drag_total_frac_of_start": 0.011258496659454857,
+      "end": "2026-07-30",
+      "max_drawdown": 0.25503437521433503,
+      "sharpe_monthly_rf0": 0.963287358591331,
+      "start": "2021-07-20",
+      "total_return": 2.0147044838983663,
+      "vol_monthly_ann": 0.261031694988211
+    },
+    "R1_eq0.93_btc_buyhold0.05": {
+      "cagr": 0.2486692783112583,
+      "calmar": 0.9214248484250637,
+      "cost_drag_total_frac_of_start": 0.013433233188253561,
+      "end": "2026-07-30",
+      "max_drawdown": 0.2698747257970021,
+      "sharpe_monthly_rf0": 0.9787017300715197,
+      "start": "2021-07-20",
+      "total_return": 2.053596894699336,
+      "vol_monthly_ann": 0.25910203182056984
+    },
+    "R2_eq0.93_btc_sma200_0.05": {
+      "cagr": 0.2436359942425943,
+      "calmar": 0.9864439295087922,
+      "cost_drag_total_frac_of_start": 0.02411032968956812,
+      "end": "2026-07-30",
+      "max_drawdown": 0.24698412849873264,
+      "sharpe_monthly_rf0": 0.972248398418994,
+      "start": "2021-07-20",
+      "total_return": 1.9922244197466727,
+      "vol_monthly_ann": 0.2558039173467315
+    }
+  },
+  "sub_2021-07-20_2026-07-30|cash_zero": {
+    "A_eq0.93_strategy_crypto0.05": {
+      "cagr": 0.23705701323571904,
+      "calmar": 0.8605450772438191,
+      "cost_drag_total_frac_of_start": 0.010782248374885091,
+      "end": "2026-07-30",
+      "max_drawdown": 0.2754730920023071,
+      "sharpe_monthly_rf0": 0.9372434684064562,
+      "start": "2021-07-20",
+      "total_return": 1.9134987364879241,
+      "vol_monthly_ann": 0.2611383505968737
+    },
+    "B_eq0.93_crypto_removed_cash": {
+      "cagr": 0.22285476934242854,
+      "calmar": 0.8548152896682857,
+      "cost_drag_total_frac_of_start": 0.010217184099068945,
+      "end": "2026-07-30",
+      "max_drawdown": 0.2607051745984892,
+      "sharpe_monthly_rf0": 0.9271563617547083,
+      "start": "2021-07-20",
+      "total_return": 1.7492029269624965,
+      "vol_monthly_ann": 0.24795211412048807
+    },
+    "C_eq0.98_crypto_removed": {
+      "cagr": 0.23419111760410716,
+      "calmar": 0.8564840212417417,
+      "cost_drag_total_frac_of_start": 0.010944380900077256,
+      "end": "2026-07-30",
+      "max_drawdown": 0.2734331427042548,
+      "sharpe_monthly_rf0": 0.9263442951011518,
+      "start": "2021-07-20",
+      "total_return": 1.8797278655979306,
+      "vol_monthly_ann": 0.2617388787701738
+    },
+    "R1_eq0.93_btc_buyhold0.05": {
+      "cagr": 0.23795390739896738,
+      "calmar": 0.8290857244150497,
+      "cost_drag_total_frac_of_start": 0.013122978078061145,
+      "end": "2026-07-30",
+      "max_drawdown": 0.28700760414956195,
+      "sharpe_monthly_rf0": 0.9433709948835313,
+      "start": "2021-07-20",
+      "total_return": 1.9241323952234053,
+      "vol_monthly_ann": 0.25979865564161914
+    },
+    "R2_eq0.93_btc_sma200_0.05": {
+      "cagr": 0.23199309966307635,
+      "calmar": 0.8739227448198493,
+      "cost_drag_total_frac_of_start": 0.023458276236478608,
+      "end": "2026-07-30",
+      "max_drawdown": 0.26546179400663095,
+      "sharpe_monthly_rf0": 0.9333213331421693,
+      "start": "2021-07-20",
+      "total_return": 1.8540401491790424,
+      "vol_monthly_ann": 0.25653030735756893
+    }
+  }
+}

@@ -1148,3 +1148,57 @@ def test_ops_explain_json_without_decisions_prints_one_json_object(tmp_path: Pat
     code, out, _ = _run_cli("--config", str(tmp_path / "missing.yaml"), "ops", "explain", "--db", str(db))
     assert code == 0
     assert out.strip() == message
+
+
+def test_ops_status_text_prints_watchdog_and_cross_check_from_the_snapshot(tmp_path: Path) -> None:
+    """The text view shows the intent watchdog and signal cross-check from the
+    health snapshot instead of the removed, always-UNKNOWN Universe line."""
+    snapshot = tmp_path / "snapshot.json"
+    snapshot.write_text(
+        json.dumps(
+            {
+                "written_at": datetime.now(UTC).isoformat(),
+                "runtime_health": {
+                    "intent_watchdog": {
+                        "enabled": True,
+                        "evaluated_at": "2026-09-30T21:00:00+00:00",
+                        "alarms": [
+                            {
+                                "code": "equity_decision_missing",
+                                "market": "EQUITY",
+                                "message": "no decision for 2026-09-30",
+                                "due_at": "2026-09-30T20:45:00+00:00",
+                            }
+                        ],
+                        "degraded_reasons": ["equity_decision_missing"],
+                    },
+                    "signal_cross_check": {
+                        "enabled": True,
+                        "last": {"status": "trend_mismatch", "session_date": "2026-09-29", "hold": True},
+                        "pending": {},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    code, out, _ = _run_cli("ops", "status", "--snapshot", str(snapshot), "--db", str(tmp_path / "absent.sqlite3"))
+
+    assert code == 0
+    assert "Universe" not in out
+    assert "Watchdog       ALARM    — equity_decision_missing: no decision for 2026-09-30" in out
+    assert "Cross-check    TREND_MISMATCH — session 2026-09-29, position held" in out
+
+
+def test_ops_status_watchdog_lines_without_runtime_data(tmp_path: Path) -> None:
+    from parayabuck.cli import _intent_watchdog_status_line, _signal_cross_check_status_line
+
+    assert "UNKNOWN" in _intent_watchdog_status_line({})
+    assert "UNKNOWN" in _signal_cross_check_status_line({})
+    assert "PENDING" in _intent_watchdog_status_line({"intent_watchdog": {"enabled": True, "evaluated_at": None}})
+    assert "OK" in _intent_watchdog_status_line(
+        {"intent_watchdog": {"enabled": True, "evaluated_at": "2026-09-30T21:00:00+00:00", "alarms": []}}
+    )
+    assert "NONE" in _signal_cross_check_status_line({"signal_cross_check": {"enabled": True, "last": None}})
+    pending = {"signal_cross_check": {"enabled": True, "last": None, "pending": {"2026-09-30": {"attempts": 1}}}}
+    assert "PENDING  — waiting for the SIP daily bar: 2026-09-30" in _signal_cross_check_status_line(pending)

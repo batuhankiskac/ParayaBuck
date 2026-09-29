@@ -572,6 +572,57 @@ def _run_ops(args: argparse.Namespace) -> int:
     return 2
 
 
+def _snapshot_runtime_health(snapshot: object) -> dict[str, Any]:
+    """The RuntimeHealth block of a health snapshot (wrapped or flat)."""
+    if not isinstance(snapshot, dict):
+        return {}
+    inner = snapshot.get("runtime_health")
+    return inner if isinstance(inner, dict) else snapshot
+
+
+def _intent_watchdog_status_line(runtime_health: dict[str, Any]) -> str:
+    """``ops status`` line for the intent watchdog (as in /readyz)."""
+    label = f"{'Watchdog':<14}"
+    watchdog = runtime_health.get("intent_watchdog")
+    if not isinstance(watchdog, dict) or not watchdog:
+        return f"{label} UNKNOWN  — no intent watchdog data in snapshot"
+    if watchdog.get("enabled") is False:
+        return f"{label} DISABLED"
+    if not watchdog.get("evaluated_at"):
+        return f"{label} PENDING  — not evaluated yet"
+    alarms = [alarm for alarm in watchdog.get("alarms") or () if isinstance(alarm, dict)]
+    if alarms:
+        detail = "; ".join(f"{alarm.get('code')}: {alarm.get('message')}" for alarm in alarms)
+        return f"{label} ALARM    — {detail}"
+    return f"{label} OK       — no alarms (evaluated {watchdog.get('evaluated_at')})"
+
+
+def _signal_cross_check_status_line(runtime_health: dict[str, Any]) -> str:
+    """``ops status`` line for the IEX-vs-SIP signal cross-check."""
+    label = f"{'Cross-check':<14}"
+    cross_check = runtime_health.get("signal_cross_check")
+    if not isinstance(cross_check, dict) or not cross_check:
+        return f"{label} UNKNOWN  — no signal cross-check data in snapshot"
+    if cross_check.get("enabled") is False:
+        return f"{label} DISABLED"
+    pending = cross_check.get("pending")
+    if isinstance(pending, dict) and pending:
+        sessions = ", ".join(sorted(str(session) for session in pending))
+        return f"{label} PENDING  — waiting for the SIP daily bar: {sessions}"
+    last = cross_check.get("last")
+    if not isinstance(last, dict):
+        return f"{label} NONE     — no session checked since start"
+    status = str(last.get("status") or "unknown")
+    detail = f"session {last.get('session_date')}"
+    if last.get("hold"):
+        detail += ", position held"
+    if last.get("close_divergence"):
+        detail += ", close divergence"
+    if last.get("reason") and status != "agree":
+        detail += f" ({last.get('reason')})"
+    return f"{label} {status.upper():<8} — {detail}"
+
+
 def _ops_status(args: argparse.Namespace) -> int:
     # Load config optionally
     try:
@@ -632,8 +683,10 @@ def _ops_status(args: argparse.Namespace) -> int:
     print(_check_line("workers", "Workers"))
     print(_check_line("reconciliation", "Reconcile"))
     print(_check_line("account", "Account"))
-    print(_check_line("universe", "Universe"))
     print(_check_line("signal_adjustment", "Adjustment"))
+    runtime_health = _snapshot_runtime_health(snap_data)
+    print(_intent_watchdog_status_line(runtime_health))
+    print(_signal_cross_check_status_line(runtime_health))
     print(_check_line("market_halts", "Market halts"))
     print("")
     # Queue

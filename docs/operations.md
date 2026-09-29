@@ -120,9 +120,12 @@ success), `signal_adjustment`, `market_halts`, `risk` (active safety incident
 `UNKNOWN` means no evidence, not OK. Overall: CRITICAL > BLOCKED > DEGRADED >
 UNKNOWN > OK. Trading state is separate: `ACTIVE`, `ENTRY_BLOCKED`,
 `REBALANCE_BLOCKED`, `MARKET_HALTED`, `CIRCUIT_BREAKER`, `STOPPED`, `UNKNOWN`.
-The watchdog is not an `ops status` check; read it from `/readyz` or
-`ops events --kind intent_alarm`. (`ops status` still prints a `Universe` line;
-there is no universe check any more, so it always reads `UNKNOWN`.)
+The watchdog and the signal cross-check are not health checks (they do not
+change the overall status), but the `ops status` text view prints them from the
+health snapshot: `Watchdog` (`OK`, `ALARM` with the active codes, `PENDING`
+before the first pass, `DISABLED`) and `Cross-check` (last session's status,
+`PENDING` while waiting for the SIP bar, `NONE` before the first session).
+`/readyz` and `ops events --kind intent_alarm` carry the same information.
 
 `parayabuck doctor [--strict] [--paper] [--offline]` is the deployment
 preflight (config, mode, live off, credentials, writability, SQLite

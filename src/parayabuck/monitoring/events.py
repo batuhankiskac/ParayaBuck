@@ -38,7 +38,6 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     "scanner_refresh_failure",
     "order_rejected",
     "ambiguous_order",
-    "order_recovered",
     "reconciliation_failure",
     "reconciliation_recovered",
     "risk_incident",

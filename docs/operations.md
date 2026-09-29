@@ -63,7 +63,6 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 | `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed / recovered (equity entries halted meanwhile) | no |
 | `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | no |
 | `paper_receipt` | Per-decision receipt (high volume) | no |
-| `order_recovered` | Valid kind, currently never emitted | no |
 
 To forward a "no" kind, add it to `alerting.events` (unknown kinds fail config
 load).

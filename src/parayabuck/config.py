@@ -196,11 +196,7 @@ class RiskLimits:
         )
         if any(not math.isfinite(value) or value <= 0 or value > 1 for value in ratios):
             raise ValueError("Risk ratios must be in (0, 1]")
-        if (
-            self.max_positions <= 0
-            or not math.isfinite(self.cash_buffer_pct)
-            or not 0 <= self.cash_buffer_pct < 1
-        ):
+        if self.max_positions <= 0 or not math.isfinite(self.cash_buffer_pct) or not 0 <= self.cash_buffer_pct < 1:
             raise ValueError("Invalid risk limits")
 
 
@@ -400,6 +396,41 @@ class IntentWatchdogConfig:
 
 
 @dataclass(frozen=True)
+class SignalCrossCheckConfig:
+    """Second-source cross-check of the equity decision (``signal_cross_check:``).
+
+    At each scheduled equity session-close decision the runtime recomputes
+    the strategy's trend state and target weight on the Alpaca consolidated
+    SIP daily bar of the same session and compares it with the decision on
+    the IEX stream-built bar. Disagreement on the trend state holds the
+    current position for that session; an unavailable second source never
+    blocks the decision. Runtime-only: the offline backtest has one source.
+    See docs/research/signal_cross_check_v1.md.
+    """
+
+    enabled: bool = True
+    # Minutes after the NYSE close before the SIP daily bar is requested.
+    # Alpaca's Basic data plan rejects SIP queries that reach into the last
+    # 15 minutes; an account with a real-time SIP subscription can use 0.
+    sip_embargo_minutes: float = 15.0
+    # Minutes the second source is retried (from the first allowed attempt)
+    # before the decision proceeds on the primary source alone.
+    retry_window_minutes: float = 10.0
+    retry_interval_seconds: float = 60.0
+    # Flag a session whose two closes differ by more than this (either
+    # symbol), even when both sources agree on the trend.
+    close_divergence_bps: float = 50.0
+
+    def __post_init__(self) -> None:
+        for name in ("sip_embargo_minutes", "retry_window_minutes", "close_divergence_bps"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"signal_cross_check.{name} must be non-negative")
+        if not math.isfinite(self.retry_interval_seconds) or self.retry_interval_seconds <= 0:
+            raise ValueError("signal_cross_check.retry_interval_seconds must be positive")
+
+
+@dataclass(frozen=True)
 class Config:
     app: AppConfig = field(default_factory=AppConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
@@ -416,6 +447,7 @@ class Config:
     backup: BackupConfig = field(default_factory=BackupConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     intent_watchdog: IntentWatchdogConfig = field(default_factory=IntentWatchdogConfig)
+    signal_cross_check: SignalCrossCheckConfig = field(default_factory=SignalCrossCheckConfig)
 
     def __post_init__(self) -> None:
         if not self.symbols:
@@ -430,6 +462,21 @@ class Config:
             raise ValueError("runtime.mode=live requires live.enabled=true")
         if self.runtime.mode != RuntimeMode.LIVE and self.live.enabled:
             raise ValueError("live.enabled=true requires runtime.mode=live")
+        # A decision waiting for the second source must still land before
+        # the intent watchdog would call it missing.
+        cross_check = self.signal_cross_check
+        if (
+            cross_check.enabled
+            and self.intent_watchdog.enabled
+            and (
+                cross_check.sip_embargo_minutes + cross_check.retry_window_minutes
+                >= self.intent_watchdog.equity_decision_grace_minutes
+            )
+        ):
+            raise ValueError(
+                "signal_cross_check.sip_embargo_minutes + retry_window_minutes must be below "
+                "intent_watchdog.equity_decision_grace_minutes"
+            )
         # Capital invariant: the equity allocation stays inside the gross limit
         # and the cash buffer, so a stale account snapshot cannot plan above
         # the gross cap.
@@ -491,8 +538,7 @@ def _block(value: Any) -> dict[str, Any]:
 
 
 _CRYPTO_REMOVED = (
-    "Crypto support was removed from ParayaBuck (equity-only since 2026-09-30; "
-    "docs/research/crypto_removal_v1.md)"
+    "Crypto support was removed from ParayaBuck (equity-only since 2026-09-30; docs/research/crypto_removal_v1.md)"
 )
 
 
@@ -649,6 +695,7 @@ def load_config(config_path: str | None = None) -> Config:
         alerting=AlertingConfig(**_block(raw.get("alerting"))),
         observability=ObservabilityConfig(**_block(raw.get("observability"))),
         intent_watchdog=IntentWatchdogConfig(**_block(raw.get("intent_watchdog"))),
+        signal_cross_check=SignalCrossCheckConfig(**_block(raw.get("signal_cross_check"))),
     )
 
 
@@ -670,6 +717,7 @@ __all__ = [
     "RiskLimits",
     "RuntimeConfig",
     "RuntimeMode",
+    "SignalCrossCheckConfig",
     "StrategyConfig",
     "UniverseConfig",
     "load_config",

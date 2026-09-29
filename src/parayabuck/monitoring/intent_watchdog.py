@@ -12,7 +12,12 @@ show:
 * ``equity_position_under_target`` — the latest decision targets a positive
   weight but, after the expected fill window (the next session open plus
   grace), the account holds less than ``minimum_held_fraction`` of that
-  weight.
+  weight;
+* ``equity_signal_source_hold`` — the latest decision deliberately kept the
+  current position because the stream-built and SIP daily bars disagreed on
+  the trend (signal cross-check). This is the true reason the account may
+  not follow the strategy's primary target, so it replaces the
+  under-target check for that decision.
 
 Everything here is pure and deterministic given ``now``; the exchange
 schedule comes from pandas-market-calendars (the calendar the warmup and
@@ -48,6 +53,12 @@ class IntentWatchdogSettings:
 class LatestDecision:
     decision_timestamp: datetime
     weights: dict[str, float]
+    # ``signal_cross_check`` metadata of the decision (None when absent).
+    signal_cross_check: dict[str, object] | None = None
+
+    @property
+    def signal_source_hold(self) -> bool:
+        return isinstance(self.signal_cross_check, dict) and self.signal_cross_check.get("hold") is True
 
 
 @dataclass(frozen=True)
@@ -184,7 +195,26 @@ def evaluate_equity(
                     due_at=deadline.isoformat(),
                 )
             )
-    if latest is not None and any(weight > 1e-9 for weight in latest.weights.values()):
+    if latest is not None and latest.signal_source_hold:
+        check = latest.signal_cross_check or {}
+        primary = check.get("primary")
+        secondary = check.get("secondary")
+        primary_trend = primary.get("trend_state") if isinstance(primary, dict) else None
+        secondary_trend = secondary.get("trend_state") if isinstance(secondary, dict) else None
+        hold_session = latest.decision_timestamp.astimezone(NEW_YORK).date().isoformat()
+        alarms.append(
+            IntentAlarm(
+                code="equity_signal_source_hold",
+                market=Market.EQUITY.value,
+                message=(
+                    f"equity decision for session {hold_session} held the current position: the IEX stream bar "
+                    f"({primary_trend}) and the SIP daily bar ({secondary_trend}) "
+                    f"disagree on the trend; close gaps bps {check.get('close_gap_bps')}"
+                ),
+                due_at=latest.decision_timestamp.isoformat(),
+            )
+        )
+    elif latest is not None and any(weight > 1e-9 for weight in latest.weights.values()):
         session = latest.decision_timestamp.astimezone(NEW_YORK).date()
         close = next((c for s, _o, c in _sessions_around(now) if s == session), None)
         decided_at = equity_decision_time(session, close) if close is not None else latest.decision_timestamp

@@ -11,6 +11,7 @@ import math
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from parayabuck.core.models import Market
@@ -429,6 +430,29 @@ class PortfolioStateRepository:
         except (TypeError, ValueError, KeyError):
             weights = {}
         return datetime.fromisoformat(str(row[0])), weights
+
+    def latest_decision_cross_check(self, account_id: str, market: Market) -> dict[str, Any] | None:
+        """``signal_cross_check`` metadata of the newest decision for ``market``.
+
+        Read-only observability for the intent watchdog; None when the
+        newest decision carries no cross-check record.
+        """
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT target_json FROM portfolio_decisions
+                   WHERE account_id = ? AND market = ?
+                   ORDER BY decision_timestamp DESC LIMIT 1""",
+                (account_id, market.value),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            raw = json.loads(str(row[0]))
+        except (TypeError, ValueError):
+            return None
+        metadata = raw.get("metadata") if isinstance(raw, dict) else None
+        check = metadata.get("signal_cross_check") if isinstance(metadata, dict) else None
+        return dict(check) if isinstance(check, dict) else None
 
     def record_decision(
         self,

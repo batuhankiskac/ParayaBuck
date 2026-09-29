@@ -257,6 +257,64 @@ class AlpacaHistoricalData:
         self._last_batch_degraded = getattr(self, "_provider_fallbacks", 0) != fallbacks_before
         return result
 
+    def get_session_daily_bars(
+        self,
+        symbols: list[str],
+        start: datetime,
+        end: datetime,
+        *,
+        feed: str = "sip",
+        adjustment: str = "splits",
+    ) -> dict[str, Bar]:
+        """One uncached daily-bar request on an explicit feed (signal cross-check).
+
+        Returns at most one bar per symbol: the newest daily bar in
+        ``[start, end]``. Deliberately bypasses the warmup cache, the dedup
+        and the sticky SIP->IEX entitlement fallback of ``get_bars_batch``:
+        the caller wants THIS feed or nothing, and a failure here must not
+        change the feed the signal history is fetched from. Errors propagate.
+        """
+        if not symbols:
+            return {}
+        response = self._stock_client.get_stock_bars(
+            StockBarsRequest(
+                symbol_or_symbols=list(symbols),
+                timeframe=_TIMEFRAMES["1d"],
+                start=start,
+                end=end,
+                feed=DataFeed(feed),
+                adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
+            )
+        )
+        try:
+            self.provider_calls += 1
+            self.provider_symbols_requested += len(symbols)
+        except Exception:
+            pass
+        frame = response.df
+        result: dict[str, Bar] = {}
+        if frame.empty:
+            return result
+        for row in frame.reset_index().sort_values("timestamp").itertuples(index=False):
+            timestamp = row.timestamp
+            if hasattr(timestamp, "to_pydatetime"):
+                timestamp = timestamp.to_pydatetime()
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
+            symbol = canonical_symbol(str(getattr(row, "symbol", symbols[0])), Market.EQUITY)
+            result[symbol] = Bar(
+                timestamp=timestamp.astimezone(UTC),
+                symbol=symbol,
+                timeframe="1d",
+                open=float(row.open),
+                high=float(row.high),
+                low=float(row.low),
+                close=float(row.close),
+                volume=float(row.volume),
+                market=Market.EQUITY,
+            )
+        return result
+
     def _resolve_batch_request(
         self,
         symbols: list[str],

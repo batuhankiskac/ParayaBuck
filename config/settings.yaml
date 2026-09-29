@@ -139,6 +139,7 @@ alerting:
   - daily_summary
   - intent_alarm
   - intent_recovered
+  - signal_source_mismatch
 intent_watchdog:
   # Intent-vs-reality watchdog (observability only; never gates trading).
   # Alarms (alert kind intent_alarm) when, on the NYSE calendar, no equity
@@ -152,3 +153,26 @@ intent_watchdog:
   minimum_held_fraction: 0.5
   fail_readiness: true
   evaluation_interval_seconds: 60
+signal_cross_check:
+  # Second-source check of the equity session-close signal (runtime only;
+  # the offline backtest has one source and is unaffected). The decision bar
+  # is built from IEX 1-minute stream bars; the check recomputes the trend
+  # state and target weight on the Alpaca consolidated SIP daily bar of the
+  # same session (split-adjusted, uncached, explicit sip feed):
+  # - sources agree on the trend: trade as usual;
+  # - they disagree: hold the current position this session (no orders),
+  #   flag the decision, alert signal_source_mismatch, and the intent
+  #   watchdog reports equity_signal_source_hold;
+  # - no SIP bar within the retry window: decide on the IEX bar and alert;
+  # - closes differ by more than close_divergence_bps: alert (trend agrees).
+  # The decision waits (deferred, not blocking) for the SIP bar; orders
+  # queue for the next open either way. embargo + window must stay below
+  # intent_watchdog.equity_decision_grace_minutes.
+  # docs/research/signal_cross_check_v1.md
+  enabled: true
+  # Alpaca Basic rejects SIP queries reaching into the last 15 minutes; use
+  # 0 only with a real-time SIP data subscription.
+  sip_embargo_minutes: 15
+  retry_window_minutes: 10
+  retry_interval_seconds: 60
+  close_divergence_bps: 50

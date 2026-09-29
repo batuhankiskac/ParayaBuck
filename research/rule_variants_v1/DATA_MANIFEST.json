@@ -1,0 +1,98 @@
+{
+  "adjustment": "split",
+  "annual_dividend_yield_check": {
+    "BIL": {
+      "2016": 0.00067,
+      "2017": 0.00684,
+      "2018": 0.01659,
+      "2019": 0.02046,
+      "2020": 0.00301,
+      "2022": 0.01327,
+      "2023": 0.04925,
+      "2024": 0.05027,
+      "2025": 0.04129,
+      "2026": 0.01731
+    },
+    "IEF": {
+      "2016": 0.0166,
+      "2017": 0.01819,
+      "2018": 0.02242,
+      "2019": 0.0208,
+      "2020": 0.01078,
+      "2021": 0.00834,
+      "2022": 0.01961,
+      "2023": 0.02913,
+      "2024": 0.03621,
+      "2025": 0.03769,
+      "2026": 0.01993
+    },
+    "SGOV": {
+      "2020": 0.00045,
+      "2021": 0.00031,
+      "2022": 0.01453,
+      "2023": 0.04869,
+      "2024": 0.05099,
+      "2025": 0.041,
+      "2026": 0.01755
+    },
+    "TLT": {
+      "2016": 0.02388,
+      "2017": 0.02433,
+      "2018": 0.0263,
+      "2019": 0.02268,
+      "2020": 0.015,
+      "2021": 0.01496,
+      "2022": 0.02668,
+      "2023": 0.0338,
+      "2024": 0.043,
+      "2025": 0.04429,
+      "2026": 0.02367
+    }
+  },
+  "archived_inputs": {
+    "files": {
+      "data/historical/profit_max_v1_corporate_actions.csv": "c0efd11fa4492d89a1ff997b8cc86ba600f98204197e177b63b82a9cc485fdcd",
+      "data/historical/profit_max_v1_daily_split_sip.csv": "87e20c9e32f0e42f67f6e9bd4c4e51b5e06003277bd9b3a875e25df3cbf24b0e"
+    },
+    "local_copy_dir": "data/research/rule_variants_v1/",
+    "tag": "archive/research/profit-max-v1-2026-09"
+  },
+  "bars": {
+    "path": "research/rule_variants_v1/data/rule_variants_v1_daily_split_sip.csv",
+    "rows": 12188,
+    "sha256": "000f11004c913e435e080fc03df650db1d133848d2b839d9361a416475b55f78"
+  },
+  "campaign": "rule_variants_v1",
+  "corporate_actions": {
+    "path": "research/rule_variants_v1/data/rule_variants_v1_corporate_actions.csv",
+    "rows": 415,
+    "sha256": "762b99ea9147359f0277b27d06040bfc02c66481cb381752da42e569008da993"
+  },
+  "dividend_rates": "restated to post-split shares (rate / product of later split ratios)",
+  "downloaded_at": "2026-09-29T20:30:39.524287+00:00",
+  "end": "2026-07-31T23:59:59+00:00",
+  "feed": "sip",
+  "first_bar": {
+    "BIL": "2016-01-04",
+    "GLD": "2016-01-04",
+    "IEF": "2016-01-04",
+    "SGOV": "2020-05-28",
+    "TLT": "2016-01-04"
+  },
+  "provider": "alpaca",
+  "splits_applied": [
+    [
+      "BIL",
+      "2017-11-30",
+      0.5
+    ]
+  ],
+  "start": "2015-01-01T00:00:00+00:00",
+  "symbols": [
+    "GLD",
+    "TLT",
+    "IEF",
+    "BIL",
+    "SGOV"
+  ]
+}

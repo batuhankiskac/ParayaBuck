@@ -18,21 +18,13 @@ import sqlite3
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from parayabuck.backup import backup_database, verify_backup
-from parayabuck.config import CryptoScannerConfig, CryptoUniverseConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.portfolio.runtime_service import PortfolioRuntime, PortfolioStateRepository
 from parayabuck.storage import SQLiteStore
-from parayabuck.universe import validate_active_crypto_universe
-from parayabuck.universe.crypto_scanner import (
-    CryptoCandidate,
-    CryptoUniverseScanner,
-    crypto_candidate_from_bars,
-)
 
 # ---------------------------------------------------------------------------
 # SQLite durability
@@ -369,7 +361,7 @@ def _engine_with_symbols(symbols: tuple[str, ...]):
 
     engine = EngineRuntime.__new__(EngineRuntime)
     engine._portfolio_runtimes = (single,)
-    engine._symbols_by_market = {Market.EQUITY: set(symbols), Market.CRYPTO: set()}
+    engine._symbols_by_market = {Market.EQUITY: set(symbols)}
     engine._signal_adjustment = {
         "healthy": None,
         "last_success_at": None,
@@ -554,7 +546,7 @@ def test_alpaca_dedup_measures_provider_calls() -> None:
         with patch.object(
             data,
             "_resolve_batch_request",
-            return_value=(["AAPL"], Market.EQUITY, datetime.now(UTC) - timedelta(days=1), datetime.now(UTC)),
+            return_value=(["AAPL"], datetime.now(UTC) - timedelta(days=1), datetime.now(UTC)),
         ):
             data.get_bars_batch(["AAPL"], "1d", adjustment="raw")
             assert mock_fetch.call_count == 1
@@ -570,7 +562,7 @@ def test_alpaca_dedup_measures_provider_calls() -> None:
     data._last_batch_at = None
     call_count = 0
 
-    def fake_fetch(symbols, timeframe, start_at, end_at, adjustment, market):  # noqa: ANN001
+    def fake_fetch(symbols, timeframe, start_at, end_at, adjustment):  # noqa: ANN001
         nonlocal call_count
         call_count += 1
         return {s: bars for s in symbols}
@@ -579,7 +571,7 @@ def test_alpaca_dedup_measures_provider_calls() -> None:
     # Patch resolve to return fixed window
 
     def fixed_resolve(self, symbols, timeframe, start, end, adjustment):  # noqa: ANN001
-        return (symbols, Market.EQUITY, fixed_start, fixed_end)
+        return (symbols, fixed_start, fixed_end)
 
     with patch.object(AlpacaHistoricalData, "_resolve_batch_request", fixed_resolve):
         data.get_bars_batch(["AAPL"], "1d", start=fixed_start, end=fixed_end, adjustment="raw")
@@ -589,100 +581,3 @@ def test_alpaca_dedup_measures_provider_calls() -> None:
         # Different symbols should not dedup
         data.get_bars_batch(["MSFT"], "1d", start=fixed_start, end=fixed_end, adjustment="raw")
         assert call_count == 2
-
-
-# ---------------------------------------------------------------------------
-# Universe hardening
-# ---------------------------------------------------------------------------
-
-
-def _crypto_candidates(history_bars: int = 30) -> list[CryptoCandidate]:
-    start = datetime(2025, 1, 1, tzinfo=UTC)
-    series = [
-        SimpleNamespace(
-            timestamp=start + timedelta(hours=index),
-            open=100.0,
-            high=101.0,
-            low=99.0,
-            close=100.0 + index,
-            volume=1_000_000.0,
-        )
-        for index in range(history_bars)
-    ]
-    return [
-        crypto_candidate_from_bars(symbol, series, expected_bar_count=history_bars, tradable=True, status="active")
-        for symbol in ("BTC/USD", "ETH/USD")
-    ]
-
-
-def test_universe_stale_snapshot_explicit_age(tmp_path: Path) -> None:
-    config = CryptoUniverseConfig(
-        enabled=True,
-        dynamic_selection_enabled=True,
-        active_universe_path=str(tmp_path / "active.json"),
-        active_universe_max_age_hours=24,
-        maximum_stream_symbols=2,
-        scanner=CryptoScannerConfig(lookback_days=2, minimum_data_completeness=0.5, minimum_atr_pct=0.0001),
-    )
-    # A valid but stale snapshot: 30 hours old against a 24 hour budget.
-    scanner = CryptoUniverseScanner(config)
-    stale_at = datetime.now(UTC) - timedelta(hours=30)
-    scanner.persist(
-        scanner.scan(
-            _crypto_candidates(),
-            data_timestamp=stale_at,
-            selection_timestamp=stale_at,
-        )
-    )
-    # Age is the only thing wrong with the snapshot: it stays digest-valid
-    # and is rejected as stale rather than silently accepted.
-    symbols, status = validate_active_crypto_universe(config)
-    assert status == "stale"
-    assert symbols == ()
-
-
-def test_universe_no_partial_on_refresh_failure(tmp_path: Path) -> None:
-    import parayabuck.universe.preflight as preflight
-
-    # An existing verified snapshot must survive a failed refresh: the
-    # refresh path never truncates the persisted universe.
-    active_path = tmp_path / "active_crypto.json"
-    original = {"status": "success", "selected_symbols": ["BTC/USD"]}
-    active_path.write_text(json.dumps(original))
-
-    class DummyConfig:
-        universe = SimpleNamespace(
-            equity=SimpleNamespace(enabled=False, symbols=()),
-            crypto=SimpleNamespace(
-                enabled=True,
-                dynamic_selection_enabled=True,
-                active_universe_path=str(active_path),
-            ),
-        )
-
-    with (
-        patch("parayabuck.universe.preflight.refresh_crypto_universe", side_effect=RuntimeError("fail")),
-        patch("parayabuck.universe.preflight.validate_active_crypto_universe", return_value=((), "missing")),
-    ):
-        result = preflight.ensure_active_universes(DummyConfig(), "key", "secret")  # type: ignore[arg-type]
-    assert result.equity_status == "disabled"
-    assert result.crypto_status == "refresh_failed"
-    # The file is still the previous snapshot, not partial/empty.
-    assert json.loads(active_path.read_text()) == original
-
-
-def test_universe_refresh_atomic_write(tmp_path: Path) -> None:
-    config = CryptoUniverseConfig(
-        enabled=True,
-        dynamic_selection_enabled=True,
-        active_universe_path=str(tmp_path / "active.json"),
-        maximum_stream_symbols=2,
-        scanner=CryptoScannerConfig(lookback_days=2, minimum_data_completeness=0.5, minimum_atr_pct=0.0001),
-    )
-    scanner = CryptoUniverseScanner(config)
-    now = datetime.now(UTC)
-    scanner.persist(scanner.scan(_crypto_candidates(), data_timestamp=now, selection_timestamp=now))
-    # The replace is atomic: the target holds the whole snapshot and the
-    # write left no temporary sibling behind.
-    assert json.loads((tmp_path / "active.json").read_text())["selected_symbols"]
-    assert [item.name for item in tmp_path.iterdir() if item.name.startswith(".active.json")] == []

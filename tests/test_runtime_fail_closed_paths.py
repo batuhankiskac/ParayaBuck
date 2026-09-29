@@ -73,8 +73,8 @@ class _TrackedRLock:
 class _LockCheckedHalts(dict):  # type: ignore[type-arg]
     """``_market_entry_halts`` that refuses access outside the state lock.
 
-    The dict is mutated from the stream workers, the universe-refresh
-    thread, the crypto-protection path and the operator reset. An unguarded
+    The dict is mutated from the stream workers, the rebalance advance path
+    and the operator reset. An unguarded
     read-modify-write silently loses a halt, so the container itself
     enforces the invariant instead of the test trusting a comment.
     """
@@ -109,7 +109,7 @@ def _halt_runtime() -> tuple[EngineRuntime, _TrackedRLock]:
     runtime._state_lock = state_lock  # type: ignore[assignment]
     runtime._event_stats_lock = threading.Lock()
     runtime._market_entry_halts = _LockCheckedHalts(  # type: ignore[assignment]
-        {Market.EQUITY: None, Market.CRYPTO: None},
+        {Market.EQUITY: None},
         lock=state_lock,
     )
     return runtime, state_lock
@@ -137,31 +137,19 @@ def test_verified_stream_reconnect_clears_only_its_own_halt_under_the_state_lock
     runtime._workers = {"pb-stocks": runtime_module.WorkerHealth(started_at=now, last_heartbeat=now)}
     runtime._workers["pb-stocks"].last_error = "stream closed"
     runtime._workers["pb-stocks"].restart_count = 6
+    _set_halt(runtime, Market.EQUITY, "rebalance_reconciliation_required")
+
+    runtime._mark_market_stream_recovered(Market.EQUITY)
+
+    # Another writer's halt is not the stream worker's to clear.
+    assert _get_halt(runtime, Market.EQUITY) == "rebalance_reconciliation_required"
+
+    runtime._workers["pb-stocks"].last_error = "stream closed"
     _set_halt(runtime, Market.EQUITY, "pb-stocks_restart_limit")
-    _set_halt(runtime, Market.CRYPTO, "pb-crypto_restart_limit")
 
     runtime._mark_market_stream_recovered(Market.EQUITY)
 
     assert _get_halt(runtime, Market.EQUITY) is None
-    assert _get_halt(runtime, Market.CRYPTO) == "pb-crypto_restart_limit"
-
-
-def test_crypto_protection_halt_and_recovery_share_the_state_lock() -> None:
-    """A protection failure halts crypto and a later verified price pass
-    clears exactly that halt. Both writes go through the state lock the
-    stream worker also uses to raise ``pb-crypto_restart_limit``, so the
-    two paths can no longer interleave into a lost halt."""
-    runtime, _ = _halt_runtime()
-    failing = SimpleNamespace(process_crypto_price=lambda _observation: (_ for _ in ()).throw(RuntimeError("nope")))
-    runtime.broker = failing
-
-    bar = Bar(datetime(2025, 1, 2, tzinfo=UTC), "BTC/USD", "1h", 1.0, 1.0, 1.0, 1.0, 1.0, Market.CRYPTO)
-    asyncio.run(runtime._process_crypto_protection(bar, source="test"))
-    assert _get_halt(runtime, Market.CRYPTO) == "crypto_protection_failure"
-
-    runtime.broker = SimpleNamespace(process_crypto_price=lambda _observation: None)
-    asyncio.run(runtime._process_crypto_protection(bar, source="test"))
-    assert _get_halt(runtime, Market.CRYPTO) is None
 
 
 def test_operator_reset_verifies_market_halts_under_the_state_lock() -> None:
@@ -169,22 +157,23 @@ def test_operator_reset_verifies_market_halts_under_the_state_lock() -> None:
     recovery path, and every dict access in that path is state-locked so a
     concurrent halt raise is never overwritten by the verification."""
     runtime, _ = _halt_runtime()
-    _set_halt(runtime, Market.CRYPTO, "crypto_protection_failure")
+    _set_halt(runtime, Market.EQUITY, "rebalance_reconciliation_required")
     runtime._circuit_breaker_reason = "protection_failure"
     runtime._events = SimpleNamespace(empty=lambda: True)
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime.market_state = SimpleNamespace()
     runtime._risk_state_lock = threading.Lock()
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime.ledger = SimpleNamespace(
         managed_entries_for_account=lambda _account_id: (),
         clear_safety_incident=lambda *_args, **_kwargs: None,
     )
     runtime._persist_risk_state = lambda _account: None
-    runtime._crypto_exits_are_terminal = lambda: True
+    reconciled: list[Market] = []
+    runtime._rebalance_state_reconciled = lambda market: reconciled.append(market) or True
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
@@ -194,7 +183,8 @@ def test_operator_reset_verifies_market_halts_under_the_state_lock() -> None:
 
     runtime.reset_safety_lock()
 
-    assert _get_halt(runtime, Market.CRYPTO) is None
+    assert reconciled == [Market.EQUITY]
+    assert _get_halt(runtime, Market.EQUITY) is None
 
 
 # --- V4: provider-authority adoption is serialized against bar appends ---
@@ -225,7 +215,7 @@ def test_signal_history_adoption_runs_under_the_portfolio_lock() -> None:
             adopt_authoritative_signal_history=adopt,
         ),
     )
-    runtime._symbols_by_market = {Market.EQUITY: {"AAA"}, Market.CRYPTO: set()}
+    runtime._symbols_by_market = {Market.EQUITY: {"AAA"}}
     now = datetime.now(UTC)
     provider = {
         "AAA": [
@@ -315,7 +305,7 @@ def test_portfolio_failure_classifies_the_same_sqlite_error_identically(monkeypa
     runtime._circuit_breaker_reason = None
     runtime._reconcile_failed = False
     runtime._portfolio_lock = threading.RLock()
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._last_portfolio_status = {}
     runtime._entry_readiness_reasons = lambda _market: ()
     runtime._equity_signal_basis_latch = lambda _timestamp: None
@@ -359,7 +349,7 @@ def test_portfolio_provider_timeout_records_incident_without_a_doomed_retry(monk
     runtime._circuit_breaker_reason = None
     runtime._reconcile_failed = False
     runtime._portfolio_lock = threading.RLock()
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._last_portfolio_status = {}
     runtime._entry_readiness_reasons = lambda _market: ()
     runtime._equity_signal_basis_latch = lambda _timestamp: None
@@ -516,7 +506,7 @@ def _ledger_shell(
     runtime._state_lock = threading.RLock()
     runtime._consecutive_losses = 0
     runtime._circuit_breaker_reason = None
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._portfolio_runtimes = ()
     return runtime
 
@@ -563,8 +553,8 @@ def test_assigned_circuit_breaker_reasons_are_operator_resettable(tmp_path: Path
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime.market_state = SimpleNamespace()
 
     runtime.reset_safety_lock()
 
@@ -631,14 +621,14 @@ def test_operator_latch_clear_takes_the_risk_state_lock(tmp_path: Path) -> None:
         _peak_epoch=0,
     )
     runtime._circuit_breaker_reason = "protection_failure"
-    runtime._entry_risk_latch = {Market.EQUITY: "daily_loss_limit", Market.CRYPTO: "daily_loss_limit"}
+    runtime._entry_risk_latch = {Market.EQUITY: "daily_loss_limit"}
     runtime._events = SimpleNamespace(empty=lambda: True)
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime.market_state = SimpleNamespace()
     risk_state_lock = _TrackedRLock()
     runtime._risk_state_lock = risk_state_lock  # type: ignore[assignment]
     runtime.latch_write_lock_states().clear()  # drop the seeding write

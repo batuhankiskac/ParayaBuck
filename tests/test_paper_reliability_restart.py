@@ -1,6 +1,6 @@
-"""Paper reliability: restart idempotency A-G, reconciliation categories, order idempotency.
+"""Paper reliability: restart idempotency A-F, reconciliation categories, order idempotency.
 
-Hardening regression for restart idempotency (A-G) and broker reconciliation +
+Hardening regression for restart idempotency (A-F) and broker reconciliation +
 order idempotency. Uses deterministic restarts via two PortfolioRuntime /
 EngineRuntime instances sharing the same SQLite file and a broker stub — no
 network, no flake.
@@ -185,7 +185,7 @@ def _bare_engine(tmp_path: Path) -> EngineRuntime:
     )  # type: ignore[attr-defined]
     eng._consecutive_losses = 2  # type: ignore[attr-defined]
     eng._circuit_breaker_reason = None  # type: ignore[attr-defined]
-    eng._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}  # type: ignore[attr-defined]
+    eng._entry_risk_latch = {Market.EQUITY: None}  # type: ignore[attr-defined]
     eng._portfolio_runtimes = ()  # type: ignore[attr-defined]
     eng._state = "running"  # type: ignore[attr-defined]
     return eng  # type: ignore[return-value]
@@ -377,52 +377,6 @@ def test_restart_scenario_F_verification_watermark_restored(tmp_path: Path) -> N
     assert eng._series_watermarks[("AAPL", "1d")] == day
     rt_a.close()
     eng.ledger.close()
-
-
-# ---------------------------------------------------------------------------
-# G: while universe refresh running (managed pins survive restart)
-# ---------------------------------------------------------------------------
-
-
-def test_restart_scenario_G_universe_refresh_managed_pins_survive(tmp_path: Path) -> None:
-    broker = _SimBroker(
-        (
-            PositionSnapshot(
-                symbol="BTC/USD", market=Market.CRYPTO, qty=0.5, avg_price=100, current_price=100, managed_qty=0.5
-            ),
-        )
-    )
-
-    # Use crypto market runtime for BTC/USD (equity validation rejects '/')
-    class _CryptoFixed(_FixedTargetStrategy):
-        market = Market.CRYPTO
-
-    repo_a = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    strat_a = _CryptoFixed({"BTC/USD": 0.10})
-    rt_a = PortfolioRuntime(
-        strategy=strat_a,
-        symbols=("BTC/USD",),
-        broker=broker,
-        repository=repo_a,
-        mode="paper",
-        maximum_allocation=1.0,
-        account_id="acct",
-    )  # type: ignore[arg-type]
-    for b in _bars(("BTC/USD",), day=datetime(2025, 1, 1, tzinfo=UTC)):
-        rt_a.history["BTC/USD"].append(
-            Bar(datetime(2025, 1, 1, tzinfo=UTC), "BTC/USD", "1d", 100, 100, 100, 100, 1000, Market.CRYPTO)
-        )
-    for b in _bars(("BTC/USD",), day=datetime(2025, 1, 2, tzinfo=UTC)):
-        rt_a.history["BTC/USD"].append(
-            Bar(datetime(2025, 1, 2, tzinfo=UTC), "BTC/USD", "1d", 100, 100, 100, 100, 1000, Market.CRYPTO)
-        )
-    # After restart, repository still intact and broker snapshot still holds the pin
-    repo_b = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    rt_b = None  # placeholder for close check
-    assert isinstance(repo_b, PortfolioStateRepository)
-    rt_a.close()
-    if rt_b is not None:
-        rt_b.close()
 
 
 # ---------------------------------------------------------------------------

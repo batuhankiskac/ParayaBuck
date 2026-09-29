@@ -36,7 +36,6 @@ from parayabuck.markets.symbols import (
     canonical_symbol,
     normalize_symbol,
     same_symbol,
-    split_crypto_pair,
 )
 from parayabuck.runtime import EngineRuntime, WorkerHealth, _Event, _EventQueue, _symbol_batches
 from parayabuck.runtime_state import RuntimeMarketState
@@ -159,7 +158,6 @@ def test_legacy_crypto_symbols_outside_the_allowlist_canonicalize() -> None:
     assert canonical_symbol("PAXGUSD", Market.CRYPTO) == "PAXG/USD"
     assert canonical_symbol("USDGUSD", Market.CRYPTO) == "USDG/USD"
     assert canonical_symbol("BTCUSDT", Market.CRYPTO) == "BTC/USDT"
-    assert split_crypto_pair("PAXGUSD") == ("PAXG", "USD")
     # Universe bases now infer to CRYPTO in no-slash legacy form too.
     assert is_crypto("PAXGUSD")
     assert normalize_symbol("PAXGUSD").market == Market.CRYPTO
@@ -168,43 +166,6 @@ def test_legacy_crypto_symbols_outside_the_allowlist_canonicalize() -> None:
         canonical_symbol("USD", Market.CRYPTO)
     with pytest.raises(ValueError):
         canonical_symbol("PAXG", Market.CRYPTO)
-
-
-def test_crypto_asset_lookup_uses_legacy_adapter() -> None:
-    looked_up: list[str] = []
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker.ledger = None
-    broker._asset_cache = {}
-    broker._client = SimpleNamespace(get_asset=lambda symbol: looked_up.append(symbol) or SimpleNamespace())
-    broker._asset("BTC/USD")
-    assert looked_up == ["BTCUSD"]
-
-
-def test_crypto_position_lookup_uses_legacy_symbol() -> None:
-    """Regression: the protective-stop and flatten paths looked up positions
-    with the canonical slash form, which Alpaca's position endpoint 404s for
-    crypto ('Not Found'); startup reconciliation then failed with 'No
-    available quantity to protect'. Both lookup helpers must use the legacy
-    asset-lookup symbol."""
-    looked_up: list[str] = []
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker.ledger = None
-    broker._asset_cache = {}
-    broker._client = SimpleNamespace(
-        get_asset=lambda symbol: SimpleNamespace(min_trade_increment=None),
-        get_open_position=lambda symbol: looked_up.append(symbol) or SimpleNamespace(qty="0.5", qty_available="0.5"),
-    )
-    resolved = broker.resolve_available_position_qty("BTC/USD", 1.0)
-    assert resolved.available_qty == pytest.approx(0.5)
-    assert looked_up == ["BTCUSD"]
-    assert broker._position_qty("BTC/USD") == 0.5
-    assert looked_up == ["BTCUSD", "BTCUSD"]
-    # Equity symbols still look themselves up verbatim.
-    broker._client.get_open_position = lambda symbol: (
-        looked_up.append(symbol) or SimpleNamespace(qty="2.0", qty_available="2.0")
-    )
-    assert broker._position_qty("IWM") == 2.0
-    assert looked_up == ["BTCUSD", "BTCUSD", "IWM"]
 
 
 def test_bar_store_correction_updates_without_retriggering() -> None:
@@ -221,16 +182,9 @@ def test_bar_store_correction_updates_without_retriggering() -> None:
 def test_sparse_equity_bars_are_not_mistaken_for_transport_gaps() -> None:
     start = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
     equities = BarStore()
-    crypto = BarStore()
 
     assert equities.upsert(_bar(start)) == BarMutation.INSERTED
     assert equities.upsert(_bar(start + timedelta(minutes=10))) == BarMutation.INSERTED
-
-    assert crypto.upsert(_bar(start, symbol="BTC/USD", market=Market.CRYPTO)) == (BarMutation.INSERTED)
-    assert (
-        crypto.upsert(_bar(start + timedelta(minutes=10), symbol="BTC/USD", market=Market.CRYPTO))
-        == BarMutation.GAP_DETECTED
-    )
 
 
 def test_warmup_symbol_batches_stay_below_alpaca_row_limit() -> None:
@@ -251,7 +205,6 @@ def test_partial_primary_batch_updates_market_state_without_legacy_decision(
 
     class Engine:
         entry_halt_reason = None
-        has_data_gaps = False
 
         def ingest_closed_bars(self, bars: list[Bar]) -> Any:
             ingested.append(tuple(bar.symbol for bar in bars))
@@ -270,7 +223,6 @@ def test_partial_primary_batch_updates_market_state_without_legacy_decision(
     runtime._refresh_readiness = lambda: None
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_readiness_reasons = lambda _market=None: ()
-    runtime._engine_has_symbol_gap = lambda _symbol, _market=None: False
 
     runtime._process_timestamp({"AAPL": bar}, {"AAPL", "MSFT"})
 
@@ -287,7 +239,6 @@ def test_late_primary_bar_is_ingested_and_duplicate_is_correction() -> None:
 
     class Engine:
         entry_halt_reason = None
-        has_data_gaps = False
 
         def ingest_closed_bars(self, bars: list[Bar]) -> Any:
             ingested.append(tuple(bar.symbol for bar in bars))
@@ -315,7 +266,6 @@ def test_late_primary_bar_is_ingested_and_duplicate_is_correction() -> None:
     runtime._refresh_readiness = lambda: None
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_readiness_reasons = lambda _market=None: ()
-    runtime._engine_has_symbol_gap = lambda _symbol, _market=None: False
     runtime._expected_all_symbols = {"AAPL", "MSFT"}
     runtime._workers = {"pb-decisions": WorkerHealth(datetime.now(UTC), datetime.now(UTC))}
     runtime._events = _EventQueue(4096)
@@ -401,70 +351,6 @@ def test_runtime_stays_in_warmup_when_no_symbol_is_ready() -> None:
     assert runtime._state == "warming_up"
 
 
-def test_crypto_gap_quarantines_only_affected_symbol_in_operational_state() -> None:
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    timestamp = datetime(2025, 1, 2, 6, 0, tzinfo=UTC)
-    btc = Bar(timestamp, "BTC/USD", "5m", 100, 101, 99, 100, 10, Market.CRYPTO)
-    avax = Bar(timestamp, "AVAX/USD", "5m", 40, 41, 39, 40, 10, Market.CRYPTO)
-    ingested: list[tuple[str, ...]] = []
-
-    class Engine:
-        entry_halt_reason = None
-        has_data_gaps = True
-
-        def __init__(self) -> None:
-            self._not_ready = {("AVAX/USD", "5m"), ("AVAX/USD", "1h")}
-            self.orders = SimpleNamespace(orders={})
-
-        def has_data_gaps_for_market(self, market: Market) -> bool:
-            return market == Market.CRYPTO
-
-        def has_data_gaps_for_symbol(self, symbol: str) -> bool:
-            return any(candidate == symbol for candidate, _timeframe in self._not_ready)
-
-        def ingest_closed_bars(self, bars: list[Bar]) -> Any:
-            ingested.append(tuple(sorted(bar.symbol for bar in bars)))
-            return SimpleNamespace(
-                bars=tuple(sorted(bars, key=lambda bar: bar.symbol)),
-                mutations=tuple(SimpleNamespace(value="inserted") for _bar in bars),
-            )
-
-    runtime.market_state = Engine()
-    runtime.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0))
-    runtime.config = SimpleNamespace(
-        maximum_queue_age_seconds=30,
-        maximum_account_age_for_entry_seconds=300,
-    )
-    runtime._historical = None
-    runtime._warming_up = False
-    runtime._not_ready_symbols = set()
-    runtime._last_account_at = datetime.now(UTC)
-    runtime._circuit_breaker_reason = None
-    runtime._state = "running"
-    runtime._workers = {}
-    runtime._market_entry_halts = {Market.CRYPTO: None}
-    runtime._running = True
-    runtime._refresh_readiness = lambda: None
-    runtime._persist_risk_state = lambda _account: None
-    runtime.health = lambda: SimpleNamespace(queue_age_seconds=0)
-
-    runtime._process_timestamp(
-        {"BTC/USD": btc, "AVAX/USD": avax},
-        {"BTC/USD", "AVAX/USD"},
-    )
-
-    assert runtime._entry_readiness_reasons(Market.CRYPTO) == ()
-    assert ingested == [("AVAX/USD", "BTC/USD")]
-
-
-def test_symbol_gap_check_covers_all_operational_timeframes() -> None:
-    state = RuntimeMarketState(EngineConfig())
-    state._not_ready.update({("AVAX/USD", "5m"), ("AVAX/USD", "1h")})
-
-    assert state.has_data_gaps_for_symbol("AVAX/USD")
-    assert not state.has_data_gaps_for_symbol("BTC/USD")
-
-
 def test_blocking_trade_update_worker_stays_healthy_while_thread_is_alive() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
@@ -489,20 +375,19 @@ def test_blocking_trade_update_worker_stays_healthy_while_thread_is_alive() -> N
     runtime._events = SimpleNamespace(qsize=lambda: 0)
     runtime._dropped_events = 0
     runtime._coalesced_events = 0
-    runtime.market_state = SimpleNamespace(
-        has_data_gaps_for_market=lambda _market: False,
-        has_data_gaps_for_symbol=lambda _symbol: False,
-    )
 
     assert runtime.health().healthy is True
     assert runtime.health().state == "running"
 
 
-def test_stale_crypto_stream_event_degrades_runtime() -> None:
+def test_stale_stock_stream_event_during_the_session_degrades_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    import parayabuck.runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "is_regular_equity_time", lambda _now: True)
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
     stale = now - timedelta(minutes=10)
-    runtime.symbols = ["BTC/USD"]
+    runtime.symbols = ["AAPL"]
     runtime.config = SimpleNamespace(
         account_poll_interval_seconds=15,
         maximum_account_age_for_entry_seconds=30,
@@ -512,7 +397,7 @@ def test_stale_crypto_stream_event_degrades_runtime() -> None:
         "pb-decisions": WorkerHealth(now, now, alive=True),
         "pb-account": WorkerHealth(now, now, alive=True),
         "pb-trade-updates": WorkerHealth(now, now, alive=True),
-        "pb-crypto": WorkerHealth(stale, stale, last_event_at=stale, alive=True),
+        "pb-stocks": WorkerHealth(stale, stale, last_event_at=stale, alive=True),
     }
     runtime._running = True
     runtime._state = "running"
@@ -522,16 +407,12 @@ def test_stale_crypto_stream_event_degrades_runtime() -> None:
     runtime._events = SimpleNamespace(qsize=lambda: 0)
     runtime._dropped_events = 0
     runtime._coalesced_events = 0
-    runtime.market_state = SimpleNamespace(
-        has_data_gaps_for_market=lambda _market: False,
-        has_data_gaps_for_symbol=lambda _symbol: False,
-    )
 
     health = runtime.health()
 
     assert health.healthy is False
     assert health.state == "degraded"
-    assert health.markets["crypto"]["stream_healthy"] is False
+    assert health.markets["equity"]["stream_healthy"] is False
 
 
 def test_queue_overflow_never_evicts_final_primary_bar() -> None:
@@ -580,52 +461,6 @@ def test_queue_overflow_breaker_marks_runtime_halted() -> None:
     assert runtime._state == "halted"
 
 
-class _ResizingDict(dict):  # type: ignore[type-arg]
-    """Simulates the universe-refresh thread resizing the dict while a
-    reader iterates its live view."""
-
-    def items(self):  # type: ignore[no-untyped-def]
-        for index, item in enumerate(super().items()):
-            self[f"late-{index}"] = 0
-            yield item
-
-
-def test_health_survives_concurrent_universe_retry_dict_resize() -> None:
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    now = datetime.now(UTC)
-    runtime.symbols = ["BTC/USD"]
-    runtime.config = SimpleNamespace(
-        account_poll_interval_seconds=15,
-        maximum_account_age_for_entry_seconds=30,
-        maximum_queue_age_seconds=30,
-    )
-    runtime._workers = {
-        "pb-decisions": WorkerHealth(now, now, alive=True),
-        "pb-account": WorkerHealth(now, now, alive=True),
-        "pb-trade-updates": WorkerHealth(now, now, alive=True),
-        "pb-crypto": WorkerHealth(now, now, last_event_at=now, alive=True),
-    }
-    runtime._running = True
-    runtime._state = "running"
-    runtime._last_account_at = now
-    runtime._oldest_received_at = None
-    runtime._circuit_breaker_reason = None
-    runtime._events = SimpleNamespace(qsize=lambda: 0)
-    runtime._dropped_events = 0
-    runtime._coalesced_events = 0
-    runtime.market_state = SimpleNamespace(
-        has_data_gaps_for_market=lambda _market: False,
-        has_data_gaps_for_symbol=lambda _symbol: False,
-    )
-    runtime._universe_retry_at = _ResizingDict({Market.CRYPTO: time.monotonic() + 60.0})
-    runtime._universe_retry_attempt = _ResizingDict({Market.CRYPTO: 2})
-
-    health = runtime.health()
-
-    assert health.universe_refresh["retry_attempt"] == {"crypto": 2}
-    assert set(health.universe_refresh["retry_at"]) == {"crypto"}
-
-
 class _ClearingHalts(dict):  # type: ignore[type-arg]
     """Simulates another thread clearing the halt right after it is read."""
 
@@ -642,12 +477,12 @@ def test_entry_readiness_never_reports_a_concurrently_cleared_halt_as_none() -> 
     runtime._circuit_breaker_reason = None
     runtime._workers = {}
     runtime._state = "running"
-    runtime._market_entry_halts = _ClearingHalts({Market.CRYPTO: "crypto_protection_failure"})
+    runtime._market_entry_halts = _ClearingHalts({Market.EQUITY: "rebalance_reconciliation_required"})
 
-    reasons = runtime._entry_readiness_reasons(Market.CRYPTO, health=SimpleNamespace(queue_age_seconds=0))
+    reasons = runtime._entry_readiness_reasons(Market.EQUITY, health=SimpleNamespace(queue_age_seconds=0))
 
-    assert reasons == ("crypto_protection_failure",)
-    assert runtime._entry_readiness_reasons(Market.CRYPTO, health=SimpleNamespace(queue_age_seconds=0)) == ()
+    assert reasons == ("rebalance_reconciliation_required",)
+    assert runtime._entry_readiness_reasons(Market.EQUITY, health=SimpleNamespace(queue_age_seconds=0)) == ()
 
 
 def test_failed_no_trade_journal_emit_is_logged(
@@ -667,44 +502,25 @@ def test_failed_no_trade_journal_emit_is_logged(
     runtime._reconcile_failed = False
     runtime._portfolio_runtimes = (
         SimpleNamespace(
-            market=Market.CRYPTO,
+            market=Market.EQUITY,
             strategy=SimpleNamespace(timeframe="1d", name="synthetic"),
-            symbols=("BTC/USD",),
+            symbols=("AAPL",),
         ),
     )
     runtime._entry_readiness_reasons = lambda _market: ("account_snapshot_stale",)
-    bar = Bar(datetime(2025, 1, 2, tzinfo=UTC), "BTC/USD", "1d", 100, 101, 99, 100, 1_000, Market.CRYPTO)
+    bar = Bar(datetime(2025, 1, 2, tzinfo=UTC), "AAPL", "1d", 100, 101, 99, 100, 1_000, Market.EQUITY)
 
     runtime._process_portfolio_timestamp([bar])
 
-    assert "No-trade journal emit failed for market=crypto" in caplog.text
-
-
-class _ResizingSet(set):  # type: ignore[type-arg]
-    """Simulates the decision thread adding a gap while health() iterates
-    the live set."""
-
-    def __iter__(self):  # type: ignore[no-untyped-def]
-        for index, item in enumerate(super().__iter__()):
-            self.add((f"LATE{index}", "5m"))
-            yield item
-
-
-def test_market_state_gap_queries_survive_concurrent_not_ready_resize() -> None:
-    state = RuntimeMarketState(EngineConfig())
-    state._not_ready = _ResizingSet({("AAPL", "5m"), ("BTC/USD", "1h")})
-
-    assert state.has_data_gaps_for_market(Market.CRYPTO) is True
-    assert state.has_data_gaps_for_symbol("MSFT", Market.EQUITY) is False
-    assert state.has_data_gaps_for_symbol("AAPL", Market.EQUITY) is True
+    assert "No-trade journal emit failed for market=equity" in caplog.text
 
 
 def test_equity_hour_buckets_anchor_at_0930_new_york_across_dst() -> None:
     aggregator = TimeframeAggregator("1h")
     winter = datetime(2025, 1, 2, 15, 31, tzinfo=UTC)  # 10:31 ET
     summer = datetime(2025, 7, 2, 14, 31, tzinfo=UTC)  # 10:31 ET
-    assert aggregator._bucket(winter, Market.EQUITY) == datetime(2025, 1, 2, 15, 30, tzinfo=UTC)
-    assert aggregator._bucket(summer, Market.EQUITY) == datetime(2025, 7, 2, 14, 30, tzinfo=UTC)
+    assert aggregator._bucket(winter) == datetime(2025, 1, 2, 15, 30, tzinfo=UTC)
+    assert aggregator._bucket(summer) == datetime(2025, 7, 2, 14, 30, tzinfo=UTC)
 
 
 def test_account_failure_does_not_drop_ingested_bar() -> None:
@@ -786,13 +602,13 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
     submitted: list[float] = []
     closed: list[str] = []
     owned = ManagedPosition(
-        "BTC/USD",
-        Market.CRYPTO,
+        "XLE",
+        Market.EQUITY,
         "test",
         "signal",
         "parayabuck-entry",
         "broker-order",
-        0.01,
+        10,
         100,
         95,
         110,
@@ -803,7 +619,7 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
     broker.ledger = None
     broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(
-        managed_for_account=lambda _account: {"BTC/USD": owned},
+        managed_for_account=lambda _account: {"XLE": owned},
         managed_entries_for_account=lambda _account: [owned],
         mark_position_closed=lambda _account, entry: closed.append(entry),
         mark_manual_intervention=lambda *_args: None,
@@ -819,12 +635,12 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
         0,
         positions=(
             PositionSnapshot(
-                "BTC/USD",
-                0.51,
+                "XLE",
+                51,
                 100,
                 101,
-                Market.CRYPTO,
-                qty_available=0.51,
+                Market.EQUITY,
+                qty_available=51,
             ),
         ),
     )
@@ -832,7 +648,7 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
     broker._available_position_qty = lambda _symbol, qty, **_kwargs: qty
     broker._submit_stop = lambda _symbol, _market, qty, *_args, **_kwargs: submitted.append(qty) or True
     broker.reconcile()
-    assert submitted == [pytest.approx(0.01)]
+    assert submitted == [pytest.approx(10)]
 
 
 def test_atomic_credentials_preserve_unmanaged_fields_and_never_touch_example(
@@ -1065,10 +881,10 @@ def test_aggregator_waits_for_finalization_grace() -> None:
 
 def test_aggregator_late_minute_does_not_close_the_forming_bucket_early() -> None:
     aggregator = TimeframeAggregator("5m")
-    start = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+    start = datetime(2026, 1, 5, 15, 0, tzinfo=UTC)  # 10:00 New York
 
     def minute(offset: int, price: float) -> Bar:
-        return Bar(start + timedelta(minutes=offset), "BTC/USD", "1m", price, price, price, price, 1, Market.CRYPTO)
+        return Bar(start + timedelta(minutes=offset), "SPY", "1m", price, price, price, price, 1, Market.EQUITY)
 
     emitted = [aggregator.update(minute(offset, 100 + offset)) for offset in range(7)]
     assert [bar.timestamp for bar in emitted if bar is not None] == [start]
@@ -1104,10 +920,10 @@ def test_aggregator_late_minute_after_a_flush_does_not_emit_a_second_final_candl
 
 def test_aggregator_late_minute_after_a_grace_flush_does_not_emit_a_stub_candle() -> None:
     aggregator = TimeframeAggregator("5m", finalization_grace_seconds=2.0)
-    start = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+    start = datetime(2026, 1, 5, 15, 0, tzinfo=UTC)  # 10:00 New York
 
     def minute(offset: int, price: float) -> Bar:
-        return Bar(start + timedelta(minutes=offset), "BTC/USD", "1m", price, price, price, price, 1, Market.CRYPTO)
+        return Bar(start + timedelta(minutes=offset), "SPY", "1m", price, price, price, price, 1, Market.EQUITY)
 
     for offset in range(4):
         assert aggregator.update(minute(offset, 100 + offset)) is None
@@ -1134,10 +950,10 @@ def test_aggregator_logs_a_dropped_late_minute(monkeypatch: pytest.MonkeyPatch) 
         SimpleNamespace(warning=lambda message, *args: warnings.append(message % args)),
     )
     aggregator = TimeframeAggregator("5m", finalization_grace_seconds=2.0)
-    start = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+    start = datetime(2026, 1, 5, 15, 0, tzinfo=UTC)  # 10:00 New York
 
     def minute(offset: int) -> Bar:
-        return Bar(start + timedelta(minutes=offset), "BTC/USD", "1m", 100, 100, 100, 100, 1, Market.CRYPTO)
+        return Bar(start + timedelta(minutes=offset), "SPY", "1m", 100, 100, 100, 100, 1, Market.EQUITY)
 
     for offset in range(4):
         aggregator.update(minute(offset))
@@ -1145,7 +961,7 @@ def test_aggregator_logs_a_dropped_late_minute(monkeypatch: pytest.MonkeyPatch) 
     assert warnings == []
     assert aggregator.update(minute(4)) is None
     assert len(warnings) == 1
-    assert "symbol=BTC/USD timeframe=5m" in warnings[0]
+    assert "symbol=SPY timeframe=5m" in warnings[0]
 
 
 def test_safety_lock_reset_requires_clean_reconciliation() -> None:
@@ -1156,11 +972,8 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime._market_entry_halts = {
-        Market.EQUITY: None,
-        Market.CRYPTO: "crypto_protection_failure",
-    }
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime.market_state = SimpleNamespace()
     reconciled: list[bool] = []
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
@@ -1174,7 +987,7 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     )
     persisted: list[AccountSnapshot] = []
     runtime._persist_risk_state = persisted.append
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
 
     runtime.reset_safety_lock()
 
@@ -1182,14 +995,12 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     assert runtime._circuit_breaker_reason is None
     assert runtime._state == "running"
     assert persisted == [account]
-    # A verified protection pass (the successful broker reconciliation) clears
-    # the crypto protection-failure halt; nothing is erased blindly.
-    assert runtime._market_entry_halts == {Market.EQUITY: None, Market.CRYPTO: None}
+    assert runtime._market_entry_halts == {Market.EQUITY: None}
 
 
 def test_safety_lock_reset_is_granular_per_market_halt() -> None:
-    """Global ownership drift + crypto ambiguous exit: resolving ownership
-    must NOT clear the crypto halt whose exit state is still unresolved."""
+    """Global ownership drift + a blocked rebalance: resolving ownership
+    must NOT clear the market halt whose rebalance state is unresolved."""
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime._circuit_breaker_reason = "ownership_drift"
     runtime._events = SimpleNamespace(empty=lambda: True)
@@ -1197,55 +1008,34 @@ def test_safety_lock_reset_is_granular_per_market_halt() -> None:
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime._market_entry_halts = {
-        Market.EQUITY: None,
-        Market.CRYPTO: "ambiguous_crypto_exit",
-    }
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._market_entry_halts = {Market.EQUITY: "rebalance_reconciliation_required"}
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
         reconcile=lambda: dict(_CLEAN_RECONCILIATION),  # ownership reconciliation succeeds
         account=lambda: account,
     )
-    # A crypto managed exit is still in flight (not provably terminal).
     runtime.ledger = SimpleNamespace(
-        managed_entries_for_account=lambda _account: (
-            SimpleNamespace(
-                market=Market.CRYPTO,
-                exit_client_order_id="exit-1",
-                target_state="target_exit_submitted",
-                status="open",
-            ),
-        ),
+        managed_entries_for_account=lambda _account: (),
         clear_safety_incident=lambda _account, _reason=None: None,
     )
     runtime._persist_risk_state = lambda _account: None
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
+    # The blocked rebalance still has working orders (not provably terminal).
+    runtime._rebalance_state_reconciled = lambda _market: False
 
     runtime.reset_safety_lock()
 
     assert runtime._circuit_breaker_reason is None  # ownership resolved
-    assert runtime._market_entry_halts[Market.EQUITY] is None
-    # The ambiguous crypto exit was NOT erased: no terminal-state proof.
-    assert runtime._market_entry_halts[Market.CRYPTO] == "ambiguous_crypto_exit"
+    # The blocked rebalance halt was NOT erased: no terminal-state proof.
+    assert runtime._market_entry_halts[Market.EQUITY] == "rebalance_reconciliation_required"
 
-    # Once the exit is provably terminal (verified reconciliation), a later
-    # reset clears the crypto halt too.
-    runtime.ledger = SimpleNamespace(
-        managed_entries_for_account=lambda _account: (
-            SimpleNamespace(
-                market=Market.CRYPTO,
-                exit_client_order_id="exit-1",
-                target_state="target_exit_filled",
-                status="open",
-            ),
-        ),
-        clear_safety_incident=lambda _account, _reason=None: None,
-    )
+    # Once the rebalance orders are provably terminal (verified
+    # reconciliation), a later reset clears the market halt too.
+    runtime._rebalance_state_reconciled = lambda _market: True
     runtime._circuit_breaker_reason = "reconciliation_failed"
     runtime.reset_safety_lock()
-    assert runtime._market_entry_halts[Market.CRYPTO] is None
+    assert runtime._market_entry_halts[Market.EQUITY] is None
 
 
 def test_safety_lock_reset_retains_unrecognized_halt() -> None:
@@ -1257,11 +1047,8 @@ def test_safety_lock_reset_retains_unrecognized_halt() -> None:
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime._market_entry_halts = {
-        Market.EQUITY: "unknown_halt_reason",
-        Market.CRYPTO: None,
-    }
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime._market_entry_halts = {Market.EQUITY: "unknown_halt_reason"}
+    runtime.market_state = SimpleNamespace()
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
@@ -1273,124 +1060,12 @@ def test_safety_lock_reset_retains_unrecognized_halt() -> None:
         clear_safety_incident=lambda _account, _reason=None: None,
     )
     runtime._persist_risk_state = lambda _account: None
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
 
     runtime.reset_safety_lock()
 
     assert runtime._circuit_breaker_reason is None
     assert runtime._market_entry_halts[Market.EQUITY] == "unknown_halt_reason"
-
-
-def test_safety_lock_reset_subscription_halt_needs_resync() -> None:
-    """subscription_state_unknown clears only after a successful authoritative
-    stream resync; a failing resync keeps the halt active."""
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime._circuit_breaker_reason = "ownership_drift"
-    runtime._events = SimpleNamespace(empty=lambda: True)
-    runtime._not_ready_symbols = set()
-    runtime._reconcile_lock = threading.Lock()
-    runtime._running = True
-    runtime._state = "halted"
-    runtime._market_entry_halts = {
-        Market.EQUITY: "subscription_state_unknown",
-        Market.CRYPTO: None,
-    }
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
-    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
-    runtime.broker = SimpleNamespace(
-        account_id="acct",
-        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
-        account=lambda: account,
-    )
-    runtime.ledger = SimpleNamespace(
-        managed_entries_for_account=lambda _account: (),
-        clear_safety_incident=lambda _account, _reason=None: None,
-    )
-    runtime._persist_risk_state = lambda _account: None
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
-    runtime._resync_pending = True
-    runtime._symbols_by_market = {Market.EQUITY: {"SPY"}, Market.CRYPTO: set()}
-    resynced: list[bool] = []
-    runtime.stream = SimpleNamespace(
-        clear_rollback_failure=lambda: None,
-        update_subscriptions=lambda stocks, crypto: resynced.append(True),
-    )
-
-    runtime.reset_safety_lock()
-
-    assert resynced == [True]
-    assert runtime._circuit_breaker_reason is None
-    assert runtime._market_entry_halts[Market.EQUITY] is None
-
-    # A resync failure must retain the halt.
-    runtime._market_entry_halts = {
-        Market.EQUITY: "subscription_state_unknown",
-        Market.CRYPTO: None,
-    }
-    runtime._resync_pending = False
-
-    def failing_resync() -> None:
-        raise RuntimeError("socket broken")
-
-    runtime._resync_stream_if_needed = failing_resync
-    runtime._circuit_breaker_reason = "reconciliation_failed"
-    runtime.reset_safety_lock()
-    assert runtime._market_entry_halts[Market.EQUITY] == "subscription_state_unknown"
-
-
-def test_safety_lock_reset_universe_halt_needs_valid_refresh() -> None:
-    """invalid_dynamic_universe clears only when a scanner refresh produces a
-    valid snapshot; a failing refresh keeps the halt active. Only the dynamic
-    crypto universe can halt this way; equity is static."""
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime._circuit_breaker_reason = "ownership_drift"
-    runtime._events = SimpleNamespace(empty=lambda: True)
-    runtime._not_ready_symbols = set()
-    runtime._reconcile_lock = threading.Lock()
-    runtime._running = True
-    runtime._state = "halted"
-    runtime._market_entry_halts = {
-        Market.EQUITY: None,
-        Market.CRYPTO: "invalid_dynamic_universe",
-    }
-    runtime.market_state = SimpleNamespace(has_data_gaps=False)
-    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
-    runtime.broker = SimpleNamespace(
-        account_id="acct",
-        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
-        account=lambda: account,
-    )
-    runtime.ledger = SimpleNamespace(
-        managed_entries_for_account=lambda _account: (),
-        clear_safety_incident=lambda _account, _reason=None: None,
-    )
-    runtime._persist_risk_state = lambda _account: None
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
-    runtime._resync_pending = False
-    cleared: list[Market] = []
-
-    def successful_refresh(market: Market) -> None:
-        runtime._market_entry_halts[market] = None
-        cleared.append(market)
-
-    runtime._refresh_runtime_universes = successful_refresh
-    runtime.reset_safety_lock()
-    assert cleared == [Market.CRYPTO]
-    assert runtime._market_entry_halts[Market.CRYPTO] is None
-
-    # A failing refresh leaves the halt in place.
-    runtime._market_entry_halts = {
-        Market.EQUITY: None,
-        Market.CRYPTO: "invalid_dynamic_universe",
-    }
-
-    def failing_refresh(market: Market) -> None:
-        raise RuntimeError("scanner down")
-
-    runtime._refresh_runtime_universes = failing_refresh
-    runtime._circuit_breaker_reason = "reconciliation_failed"
-    runtime.reset_safety_lock()
-    assert runtime._market_entry_halts[Market.CRYPTO] == "invalid_dynamic_universe"
 
 
 def test_safety_lock_reset_refuses_manual_intervention() -> None:
@@ -1399,7 +1074,7 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
     runtime._events = SimpleNamespace(empty=lambda: True)
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
-    runtime.market_state = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
+    runtime.market_state = SimpleNamespace(entry_halt_reason="locked")
     runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
     runtime.ledger = SimpleNamespace(
         managed_entries_for_account=lambda _account: (SimpleNamespace(status="manual_intervention_required"),),

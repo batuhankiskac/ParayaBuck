@@ -65,7 +65,7 @@ def _bars(start: datetime, count: int) -> list[Bar]:
 
 def _engine(tmp_path: Path, broker: _CountingBroker) -> EngineRuntime:
     runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._state = "running"
     runtime._running = True
     now = datetime.now(UTC)
@@ -74,7 +74,6 @@ def _engine(tmp_path: Path, broker: _CountingBroker) -> EngineRuntime:
         "pb-trade-updates": WorkerHealth(now, now, alive=True),
         "pb-account": WorkerHealth(now, now, alive=True),
         "pb-stocks": WorkerHealth(now, now, alive=True),
-        "pb-crypto": WorkerHealth(now, now, alive=True),
     }
     runtime._events = SimpleNamespace(qsize=lambda: 0, empty=lambda: True)
     runtime._last_account_at = datetime.now(UTC)
@@ -84,9 +83,9 @@ def _engine(tmp_path: Path, broker: _CountingBroker) -> EngineRuntime:
     runtime._dropped_events = 0
     runtime._coalesced_events = 0
     runtime.symbols = list(_UNIVERSE)
-    runtime._symbols_by_market = {Market.EQUITY: set(_UNIVERSE), Market.CRYPTO: set()}
-    runtime._market_enabled = {Market.EQUITY: True, Market.CRYPTO: False}
-    runtime._strategy_enabled = {Market.EQUITY: True, Market.CRYPTO: False}
+    runtime._symbols_by_market = {Market.EQUITY: set(_UNIVERSE)}
+    runtime._market_enabled = {Market.EQUITY: True}
+    runtime._strategy_enabled = {Market.EQUITY: True}
     runtime._not_ready_symbols = set()
     runtime._circuit_breaker_reason = None
     runtime.config = SimpleNamespace(
@@ -94,22 +93,15 @@ def _engine(tmp_path: Path, broker: _CountingBroker) -> EngineRuntime:
         maximum_account_age_for_entry_seconds=30.0,
         maximum_queue_age_seconds=30.0,
     )
-    runtime._universe_refresh_status = {"equity": "success", "crypto": "success"}
-    runtime._last_universe_refresh_error = {}
-    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._market_entry_halts = {Market.EQUITY: None}
     runtime._last_reconciliation_at = None
-    runtime._last_universe_refresh_at = None
-    runtime._next_universe_refresh_at = None
     runtime.strategy_status = "configured"
     runtime._strategy_specs = ()
     runtime._portfolio_repository = None
     runtime.ledger = None
     runtime.broker = SimpleNamespace(account_id="acct", account=broker.account)
-    runtime.market_state = SimpleNamespace(has_data_gaps=False, has_data_gaps_for_market=lambda market: False)
     runtime._managed_pin_symbols = set()
     runtime._last_portfolio_status = {}
-    runtime._universe_retry_at = {}
-    runtime._universe_retry_attempt = {}
     runtime._portfolio_lock = threading.RLock()
     runtime._state_lock = threading.RLock()
     runtime._warming_up = False

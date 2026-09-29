@@ -6,6 +6,7 @@ results for each doc live in `research/<name>/` unless noted.
 
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|
+| [`signal_cross_check_v1.md`](signal_cross_check_v1.md) | 2026-09-30 | Runtime guard: the decision is recomputed on the Alpaca SIP daily bar and a trend disagreement with the IEX stream bar holds the position; historically 0 disagreements in 2,406 sessions (SIP vs Yahoo), ~0.1–0.4 holds/yr under modelled IEX close noise; Stage B unchanged. | current evidence |
 | [`crypto_removal_v1.md`](crypto_removal_v1.md) | 2026-09-30 | Crypto code, config and tests deleted (equity-only); Stage B reproduces S1 exactly (NAV 1,173,537.61, identical hashes); config digest changes. | current evidence |
 | [`paper_config_v2.md`](paper_config_v2.md) | 2026-09-29 | Adopt S1: crypto sleeve disabled, equity 0.93 → 0.98; BIL idle-cash sweep fails its 2x-cost gate and ships off. | current evidence |
 | [`crypto_sleeve_decision_v1.md`](crypto_sleeve_decision_v1.md) | 2026-09-29 | Crypto 0.05 sleeve adds ~+1 pp/yr (t ≈ 0.8) with more drawdown and large ops burden; remove (config-disable first). | current evidence |

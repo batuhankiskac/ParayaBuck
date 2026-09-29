@@ -8,7 +8,7 @@ Documentation only. Nothing at runtime reads this file.
 
 ## Frozen principles
 
-ParayaBuck is an automated trading bot. The product foundation is complete
+ParayaBuck is an automated equity trading bot (equity-only since 2026-09-30). The product foundation is complete
 and must not be redesigned. Future missions may only address: trading
 strategy selection, systematic portfolio/risk logic where economically
 necessary, PAPER forward validation, small operator polish, and genuine
@@ -16,9 +16,8 @@ correctness or safety defects.
 
 1. **Autonomous operation.** Configure (PAPER mode default), supply Alpaca
    PAPER credentials, start (`parayabuck`), leave running. The engine
-   maintains its universe (static equity symbols, scanner-refreshed crypto),
-   ingests market data, runs enabled
-   strategy logic on schedule, constructs portfolio targets, enforces risk,
+   maintains its static equity universe, ingests market data, runs the
+   strategy on schedule, constructs portfolio targets, enforces risk,
    submits and reconciles orders, monitors positions, and recovers from
    restart — including across the session-day boundary — without operator
    intervention.
@@ -39,8 +38,8 @@ correctness or safety defects.
    protection failure, ambiguous execution, …) persist across
    restart/midnight/reboot until a verified recovery (successful
    reconciliation or a granular operator reset). Transient failures
-   (network, crypto scanner, startup) retry with bounded backoff; entries stay
-   blocked while the crypto universe is not verified.
+   (network, provider, startup) retry with bounded backoff; equity entries stay
+   blocked while split-adjusted signal history is not verified.
 6. **Drawdown has an explicit recovery.** A drawdown breach is an
    operational incident with a monotonic peak; recovery is a verified
    risk-epoch reset (operator action rebasing the peak baseline to the
@@ -56,8 +55,8 @@ correctness or safety defects.
 | G1 crash-window rebalance wedge | CLOSED (previous audit; now in chaos gate) |
 | G2 cross-day persisted safety state | CLOSED (`safety_incidents`, date-independent) |
 | G3 bounded autonomous startup recovery | CLOSED (`TransientStartupError` + [5,15,30,60]s retry) |
-| G4 disabled-crypto scanner load | DEFERRED (optional optimization) |
-| G5 scanner refresh self-healing | CLOSED (bounded retries; crypto only — the equity universe is static) |
+| G4 disabled-market scanner load | OBSOLETE (scanners removed) |
+| G5 scanner refresh self-healing | OBSOLETE (the universe is static) |
 | G6 accounting/legacy | CLASSIFIED (reporting-only; no change) |
 | G7 live-arming prerequisites UI | CLOSED (`/api/live/prerequisites`, no secrets) |
 | G8 restart scenarios in chaos gate | CLOSED (16 scenarios, `paper_chaos` marker) |

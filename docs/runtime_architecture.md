@@ -1,15 +1,14 @@
-# Runtime Architecture — Mission 4
+# Runtime architecture
 
-> EngineRuntime and PortfolioRuntime as simple orchestration facades; persistence, decision, and execution lifecycle are isolated.
+> EngineRuntime and PortfolioRuntime are thin orchestration facades; persistence, decision and execution lifecycle are isolated. One equity `PortfolioRuntime` runs today.
 
 ```
 EngineRuntime
   ├─ event / stream layer          runtime_events.py      (RuntimeEvent, EventQueue)
   ├─ health / snapshot assembly    runtime_health.py      (WorkerHealth, RuntimeHealth, _portfolio_catch_up_health)
-  ├─ product universe              runtime_universe.py    (ActiveProductUniverse, load_active_product_universe)
-  │     ├─ active symbol sets (static equity config / crypto observation set)
-  │     └─ validation (ensure_active_universes, validate_active_crypto_universe)
-  ├─ portfolio runtimes (per-market)
+  ├─ product universe              runtime_universe.py    (ActiveProductUniverse: static equity symbols + managed pins)
+  ├─ intent watchdog               monitoring/intent_watchdog.py (decision/fill expectations vs reality)
+  ├─ portfolio runtime (equity)
   │     ├─ decision                portfolio/runtime_models.py       (PortfolioDecisionService, PortfolioContext)
   │     ├─ risk / planning         execution/portfolio.py            (PortfolioRiskOverlay, TargetToOrderPlanner)
   │     ├─ rebalance execution     portfolio/runtime_rebalance.py    (sell_pending → buy_ready → buy_pending → complete/blocked)
@@ -30,8 +29,9 @@ EngineRuntime
 | `portfolio/runtime_service.py` | Orchestration facade: `PortfolioRuntime` — builds context, applies risk, plans orders, drives two-phase submit, advances rebalance. Thin, delegates to models/repository/rebalance/ownership | Direct SQL, migration SQL |
 | `runtime_events.py` | `RuntimeEvent` / `EventQueue` with coalescing, replacement, overflow, ordering, thread Condition | Business logic |
 | `runtime_health.py` | `WorkerHealth`, `RuntimeHealth`, `_portfolio_catch_up_health` assembly | Threading, queue mechanics |
-| `runtime_universe.py` | Immutable `ActiveProductUniverse` membership snapshot and its fail-closed loader | Strategy, broker, refresh scheduling |
-| `runtime.py` | `EngineRuntime` facade: startup, strategy init, worker lifecycle, account polling, reconciliation scheduling, warmup retry, universe refresh scheduling, signal-adjustment verification, entry-risk latch, circuit breaking, shutdown | Direct queue/health/universe internals (delegates) |
+| `runtime_universe.py` | Immutable `ActiveProductUniverse` membership snapshot (configured symbols + observation pins) | Strategy, broker |
+| `monitoring/intent_watchdog.py` | Pure evaluation of `equity_decision_missing` / `equity_position_under_target` on the NYSE calendar | Trading decisions (observability only) |
+| `runtime.py` | `EngineRuntime` facade: startup, strategy init, worker lifecycle, account polling, reconciliation scheduling, warmup retry, signal-adjustment verification, intent-watchdog scheduling, daily summary alert, entry-risk latch, circuit breaking, shutdown | Direct queue/health/universe internals (delegates) |
 
 ## Dependency Direction
 
@@ -77,8 +77,8 @@ No circular imports. `repository` does not import `PortfolioRuntime`. `rebalance
 
 ## PAPER / LIVE Shared Path
 
-- `PortfolioRuntime` is mode-agnostic; `mode` param (`paper` vs `live`) selects `maximum_allocation` vs `min(allocation, live_dollar_cap/equity)` and `broker.paper` flag. Rebalance, ownership, reconciliation, risk latch, and repository are identical.
-- `EngineRuntime` constructs `AlpacaBroker(paper=self.paper)` and passes `mode` through to each `PortfolioRuntime`. No separate PAPRE/LIVE branches.
+- `PortfolioRuntime` is mode-agnostic; `mode` (`paper` vs `live`) selects `maximum_allocation` vs `min(allocation, live_dollar_cap/equity)` and the `broker.paper` flag. Rebalance, ownership, reconciliation, risk latch and repository are identical.
+- `EngineRuntime` constructs `AlpacaBroker(paper=self.paper)` and passes `mode` through. No separate PAPER/LIVE branches.
 
 ## Where State Is Persisted
 
@@ -100,7 +100,7 @@ All SQLite DBs use WAL + `busy_timeout=5000`; repository uses `store.lock` + `wi
 ## Concurrency
 
 - **Event queue**: `threading.Condition`, bounded `maxsize`, coalescing by `(kind, symbol, timeframe, timestamp)`, overflow policy: `coalesced` → `replaced` (victim non-primary) → `overflow`. Primary never replaced by non-primary.
-- **EngineRuntime locks**: ` _reconcile_spawn_lock` and `_warmup_retry_spawn_lock` are class-level to protect check-then-spawn; per-instance `_ingestion_lock` shadows class-level fallback for partially constructed test instances. Daemon threads for warmup-retry, reconcile, universe refresh; stop via `Event` + `join`.
+- **EngineRuntime locks**: ` _reconcile_spawn_lock` and `_warmup_retry_spawn_lock` are class-level to protect check-then-spawn; per-instance `_ingestion_lock` shadows class-level fallback for partially constructed test instances. Worker threads: `pb-decisions`, `pb-account`, `pb-trade-updates`, `pb-stocks` (bar stream), `pb-signal-adjustment`, plus on-demand `pb-reconcile` and `pb-warmup-retry`; stop via `Event` + `join`.
 - **Portfolio repository**: `threading.RLock` per `store.lock`, one connection per store, WAL.
 
 No `asyncio.Queue` replacement; no change to lock scope/thread ownership/daemon/stop signaling.
@@ -108,19 +108,25 @@ No `asyncio.Queue` replacement; no change to lock scope/thread ownership/daemon/
 ## Startup Lifecycle (private phases)
 
 ```
-validate config → resolve universe (ensure_active_universes) → create strategies (product_strategy_from)
+validate config + execution mode (live only when every live gate agrees) → resolve static universe + managed pins (crypto found → risk_incident alert) → create strategies (product_strategy_from)
 → initialize broker/store/repository/ledger → reconcile (broker vs ledger) → warm history (WarmupCache)
 → start streams/workers (AlpacaBarStream, AlpacaTradingUpdateStream, TimeframeAggregator)
 → signal-adjustment verification (hourly batched provider splits tail)
+→ startup catch-up decision (once, only if no prior decision and not already invested)
 → become healthy (RuntimeHealth.state = "running")
 ```
+
+- Warmup: completed bars until every decision symbol has `minimum_history_bars` (200) and timestamps align; unfinished equity daily bars are pruned. A gap is retried by `pb-warmup-retry` from 600 s, doubling to a ~10.7 h ceiling.
+- Web auto-start retries a transient startup failure after 5/15/30/60 s (capped at 60 s).
+- Persisted halts (`safety_incidents`: ownership drift, protection failure, ambiguous order, drawdown halt) are restored as the circuit-breaker reason and survive restarts until a verified reconcile or operator reset.
+- Shutdown joins workers, closes the runtime session row and emits `runtime_stopped_unexpected` if halted.
 
 Transient network errors (`RequestException`, `ConnectionError`, `TimeoutError`, `__cause__/__context__` wrapped) → `TransientStartupError` (retryable). Domain safety (`OwnershipDriftError`, `ProtectionReconciliationError`, `AmbiguousOrderState`, reconciliation `reconciliation_required`) → fail-closed, permanent.
 
 ## Entry-Risk Latch vs Stale Account
 
 - **Entry-risk latch** (`_entry_risk_latch` per market): decisions continue but `risk_overlay` target is capped to current weights (`min(weight, current_weight)`) → only SELLs emitted. Triggered by daily-loss / drawdown breach (risk state).
-- **Stale account**: `account` snapshot `is_stale` (position/cash/exposure untrusted) → `PortfolioRuntime.process_closed_bars` returns `status="stale_account"` and emits no orders (buys AND target sells blocked). Protective stops at broker still work.
+- **Stale account**: `account` snapshot `is_stale` (position/cash/exposure untrusted) → `PortfolioRuntime.process_closed_bars` returns `status="stale_account"` and emits no orders (buys AND target sells blocked).
 
 Distinct, not collapsed.
 
@@ -136,7 +142,7 @@ on generated reports or benchmark output.
 
 ## Rejected Abstractions
 
-- Generic `TaskManager` collapsing warmup-retry / reconciliation / universe refresh → rejected (independent backoff/state, domain-specific names).
+- Generic `TaskManager` collapsing warmup-retry / reconciliation / signal-adjustment → rejected (independent backoff/state, domain-specific names).
 - `asyncio.Queue` for `_EventQueue` → rejected (thread semantics must not change this mission).
 - Mediator / DI framework / service locator → rejected (plain composition).
 - Generalized migration framework → rejected (small coherent `PortfolioStateRepository._migrate` + `WarmupCache._migrate_legacy_schema` sufficient).

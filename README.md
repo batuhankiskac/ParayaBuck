@@ -175,7 +175,8 @@ live.
 - `docs/product_foundation.md` — frozen product principles
 - `docs/validated_strategies.md` — frozen baselines and current validated identities
 - `docs/research/profit_max_v1.md` — current equity identity evidence
-- `docs/research/dividend_sleeve_production_v1.md` / `docs/research/gold_sleeve_production_v1.md` — removed sleeve evidence (historical)
+- `docs/research/INDEX.md` — index of research evidence (pre-VT35 research pruned 2026-09-30, tag `archive/research/pre-prune-2026-09-30`)
+- `docs/OPERATIONS_LOG.md` — operations journal: every deploy and config change
 - `docs/strategy_architecture.md` — universe/strategy/risk contract
 - `docs/paper_operations.md` — PAPER runtime contract and forward rules
 - `docs/operations.md` — state, backup/restore, Docker, incident reconciliation

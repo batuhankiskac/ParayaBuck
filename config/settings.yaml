@@ -194,8 +194,13 @@ alerting:
   # always attached; webhook_url enables an additional generic POST sink
   # (also overridable via PARAYABUCK_ALERT_WEBHOOK_URL). Failure events are
   # throttled per kind so a broken scanner/broker cannot spam the webhook.
+  # Keep the URL (it is a credential) out of this file: leave webhook_url
+  # empty and set PARAYABUCK_ALERT_WEBHOOK_URL in the service EnvironmentFile.
   enabled: true
   webhook_url: ""
+  # One-line summary after each equity session-close decision (event
+  # daily_summary; log/journal always, webhook when a URL is configured).
+  daily_summary: true
   events:
   - runtime_started
   - runtime_stopped_unexpected
@@ -209,3 +214,4 @@ alerting:
   - drawdown_halt
   - risk_epoch_reset
   - circuit_breaker
+  - daily_summary

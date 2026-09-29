@@ -75,6 +75,9 @@ def _restore_web_state():
 @pytest.fixture(autouse=True)
 def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
     before = {p: _file_signature(p) for p in _PROTECTED_PATHS}
+    # An operator's real alert webhook in the developer shell must never
+    # receive test traffic (the runtime falls back to this variable).
+    monkeypatch.delenv("PARAYABUCK_ALERT_WEBHOOK_URL", raising=False)
     iso_cache = tmp_path / "warmup_isolated.sqlite3"
     iso_journal = tmp_path / "observability_isolated.sqlite3"
     iso_snapshot = tmp_path / "health_snapshot_isolated.json"

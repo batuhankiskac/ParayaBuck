@@ -9,8 +9,8 @@ short timeout; any failure is logged, never raised into the caller.
 Failure events are throttled per kind so a broken scanner or broker does not
 spam the webhook: within the throttle window a repeat of the same kind is
 suppressed (counted, logged at DEBUG) while the first occurrence is still
-delivered. The 16 event kinds are the only ones emitted; unknown kinds are
-rejected with a logged error. For incident-style kinds throttling is per
+delivered. The kinds in ``monitoring.events.ALERT_KINDS`` are the only ones
+emitted; unknown kinds are rejected with a logged error. For incident-style kinds throttling is per
 distinct incident/market/order to avoid suppressing actionable incidents.
 
 Configuration precedence (first match wins):
@@ -370,6 +370,10 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
             "kind": kind,
             "severity": _severity_str(kind),
             "message": message,
+            # Chat-webhook compatibility: Slack/Mattermost render ``text``,
+            # Discord renders ``content``; generic receivers use ``message``.
+            "text": message,
+            "content": message,
             "occurred_at": _now_iso(),
             "fields": safe_fields,
         }

@@ -474,9 +474,12 @@ class EngineRuntime:
         # Observability state: the alert sink is configured once from the
         # config block; the runtime session row pairs with the ledger's
         # runtime_sessions table so restart counts are persisted.
+        # An empty ``alerting.webhook_url`` falls back to the documented
+        # PARAYABUCK_ALERT_WEBHOOK_URL environment override, so the secret
+        # URL can live in the service EnvironmentFile instead of the YAML.
         alerts.configure_alerting(
             enabled=config.alerting.enabled,
-            webhook_url=config.alerting.webhook_url,
+            webhook_url=config.alerting.webhook_url or os.getenv("PARAYABUCK_ALERT_WEBHOOK_URL", "").strip(),
             events=config.alerting.events,
         )
         self._runtime_session_id: str | None = None
@@ -3521,6 +3524,7 @@ class EngineRuntime:
                     observability.get("blocked_or_skipped_reason"),
                 )
             self._record_paper_decision_receipt(portfolio_runtime, portfolio_result, account)
+            self._emit_equity_daily_summary(portfolio_runtime, portfolio_result, account)
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
             reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, portfolio_result))
 
@@ -3686,6 +3690,34 @@ class EngineRuntime:
             except Exception:
                 log.warning("Could not emit PAPER receipt incident for %s", result.decision_id, exc_info=True)
 
+    def _emit_equity_daily_summary(self, portfolio_runtime: Any, result: Any, account: AccountSnapshot | None) -> None:
+        """One-line operator summary of a persisted equity decision. Never raises."""
+        try:
+            if (
+                getattr(portfolio_runtime, "market", None) != Market.EQUITY
+                or result is None
+                or getattr(result, "decision_id", None) is None
+                or getattr(result, "target", None) is None
+            ):
+                return
+            app_config = getattr(self, "app_config", None)
+            alerting_config = getattr(app_config, "alerting", None)
+            if alerting_config is not None and not getattr(alerting_config, "daily_summary", True):
+                return
+            from parayabuck.monitoring.daily_summary import build_equity_daily_summary
+
+            message, fields = build_equity_daily_summary(
+                result.target,
+                account,
+                status=str(result.status),
+                decision_id=result.decision_id,
+                orders=len(result.orders),
+                submitted=len(result.submitted_order_ids),
+            )
+            alerts.emit("daily_summary", message=message, **fields)
+        except Exception:
+            log.warning("Equity daily summary failed", exc_info=True)
+
     def _run_startup_catch_up(self, *, account: AccountSnapshot | None = None) -> None:
         """Force an immediate full-target decision on the latest warmup bars.
 
@@ -3737,6 +3769,7 @@ class EngineRuntime:
                     )
                 result = portfolio_runtime.startup_catch_up(**catch_up_kwargs)
             self._record_paper_decision_receipt(portfolio_runtime, result, account)
+            self._emit_equity_daily_summary(portfolio_runtime, result, account)
             reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, result))
             log.info(
                 "Startup catch-up: market=%s status=%s decision_id=%s",

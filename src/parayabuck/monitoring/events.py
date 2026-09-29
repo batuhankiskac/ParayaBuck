@@ -6,8 +6,8 @@ import from here so the vocabulary cannot drift.
 
 Webhook default choice
 ----------------------
-``ALERT_KINDS`` is the full vocabulary (16 kinds, including ``paper_incident``
-and ``paper_receipt``). Any kind in this set is valid in
+``ALERT_KINDS`` is the full vocabulary (including ``paper_incident``,
+``paper_receipt`` and ``daily_summary``). Any kind in this set is valid in
 ``alerting.events`` and will pass ``AlertingConfig`` validation.
 
 ``DEFAULT_ALERT_EVENTS`` is the webhook-enabled default. It equals
@@ -48,6 +48,8 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     "signal_adjustment_recovery",
     "paper_incident",
     "paper_receipt",
+    # One-line operator summary after each equity session-close decision.
+    "daily_summary",
 )
 
 ALERT_KINDS: frozenset[str] = frozenset(ALERT_KINDS_ORDERED)

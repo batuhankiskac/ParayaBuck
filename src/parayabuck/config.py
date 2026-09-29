@@ -126,6 +126,11 @@ class AlertingConfig:
     # Default webhook-enabled events exclude high-volume paper_receipt (see events.py).
     # Paper_incident remains enabled; operators may add paper_receipt explicitly.
     events: tuple[str, ...] = DEFAULT_ALERT_EVENTS
+    # One-line summary (trend vs SMA, target vs held weight, positions,
+    # equity, daily change) after each equity session-close decision. It is
+    # always logged/journaled; it reaches the webhook only when a webhook URL
+    # is configured and ``daily_summary`` is in ``events``.
+    daily_summary: bool = True
 
     def __post_init__(self) -> None:
         known = set(ALERT_KINDS)

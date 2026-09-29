@@ -2,11 +2,6 @@ from __future__ import annotations
 
 from parayabuck.core.models import Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy, StrategySpec
-from parayabuck.portfolio.crypto_low_variance import (
-    CryptoLowVariance1dV1,
-    CryptoLowVariance1dV2,
-)
-from parayabuck.portfolio.crypto_low_variance_hysteresis import CryptoLowVarianceHysteresis1dV1
 from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1
 from parayabuck.portfolio.models import (
     PortfolioState,
@@ -20,19 +15,11 @@ _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
     # PAPER equity identity (2026-09-25): QLD while QQQ is above its
     # 200-session SMA, sized to a volatility target, else cash (profit_max_v1).
     EquityLeveragedTrendV1.name: EquityLeveragedTrendV1,
-    CryptoLowVariance1dV1.name: CryptoLowVariance1dV1,
-    CryptoLowVariance1dV2.name: CryptoLowVariance1dV2,
-    CryptoLowVarianceHysteresis1dV1.name: CryptoLowVarianceHysteresis1dV1,
 }
 
-# The PRODUCT strategy surface: current selections plus frozen historical
-# baselines. Unknown strategy names are not constructible at runtime.
-PRODUCT_STRATEGY_NAMES: tuple[str, ...] = (
-    "equity_leveraged_trend_v1",
-    "crypto_low_variance_v1",
-    "crypto_low_variance_v2",
-    "crypto_low_variance_hysteresis_v1",
-)
+# The PRODUCT strategy surface. Unknown strategy names are not constructible
+# at runtime.
+PRODUCT_STRATEGY_NAMES: tuple[str, ...] = ("equity_leveraged_trend_v1",)
 
 
 def portfolio_strategy_from(
@@ -101,24 +88,16 @@ def validate_strategy_timeframe(strategy: PortfolioStrategy, configured: str) ->
 
 
 def supported_portfolio_strategies() -> tuple[str, ...]:
-    """Names the PAPER product supports: validated selections + frozen v1 baselines."""
+    """Names the PAPER product supports."""
     return tuple(sorted(PRODUCT_STRATEGY_NAMES))
 
 
 def rebalance_policy_for(strategy: PortfolioStrategy, parameters: dict[str, object] | None = None) -> RebalancePolicy:
     """Map a portfolio strategy to its rebalance policy.
 
-    Crypto strategies encode their rebalance cadence in the ``rebalance_hours``
-    parameter; equity strategies default to monthly unless the parameters ask
-    for weekly.
+    Equity strategies default to monthly unless the ``rebalance_frequency``
+    parameter asks for another supported frequency.
     """
-    if strategy.market == Market.CRYPTO:
-        merged = dict(parameters or strategy.parameters)
-        hours_value = merged.get("rebalance_hours", getattr(strategy, "default_rebalance_hours", 24))
-        if not isinstance(hours_value, (int, float)):
-            raise ValueError("rebalance_hours must be numeric")
-        hours = int(hours_value)
-        return RebalancePolicy(Market.CRYPTO, f"hours:{hours}")
     frequency_value = dict(parameters or strategy.parameters).get("rebalance_frequency", "monthly")
     if not isinstance(frequency_value, str):
         raise ValueError("rebalance_frequency must be a string")
@@ -127,9 +106,6 @@ def rebalance_policy_for(strategy: PortfolioStrategy, parameters: dict[str, obje
 
 
 __all__ = [
-    "CryptoLowVariance1dV1",
-    "CryptoLowVariance1dV2",
-    "CryptoLowVarianceHysteresis1dV1",
     "EquityLeveragedTrendV1",
     "PortfolioContext",
     "PortfolioState",

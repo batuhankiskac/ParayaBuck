@@ -15,12 +15,11 @@ def _settings() -> dict[str, object]:
         "app": {"host": "127.0.0.1", "port": 8000, "log_level": "INFO"},
         "runtime": {"mode": "paper"},
         "alpaca": {"stock_stream_feed": "iex", "stock_historical_feed": "sip"},
-        "symbols": ["AAPL", "BTC/USD"],
+        "symbols": ["AAPL", "SPY"],
         "engine": {},
         "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
         "strategy": {
             "equity": {"enabled": True, "name": "equity_leveraged_trend_v1", "maximum_allocation": 0.55},
-            "crypto": {"enabled": True, "name": "crypto_low_variance_v2", "maximum_allocation": 0.05},
         },
     }
 
@@ -34,7 +33,7 @@ def test_loads_single_application_config(tmp_path: Path) -> None:
     assert isinstance(config, Config)
     assert isinstance(config.engine, EngineConfig)
     assert isinstance(config.risk, RiskLimits)
-    assert config.symbols == ("AAPL", "BTC/USD")
+    assert config.symbols == ("AAPL", "SPY")
     assert config.risk.daily_loss_limit_pct == 0.02
     assert config.risk.max_drawdown_pct == 0.12
     assert config.runtime.mode == RuntimeMode.PAPER
@@ -67,11 +66,6 @@ def test_strategy_and_operational_timeframes_have_explicit_roles(tmp_path: Path)
             "timeframe": "1d",
             "maximum_allocation": 0.5,
         },
-        "crypto": {
-            "enabled": True,
-            "name": "crypto_low_variance_v2",
-            "maximum_allocation": 0.05,
-        },
     }
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -102,16 +96,6 @@ def test_non_finite_config_values_are_rejected() -> None:
         RiskLimits(max_position_pct=math.nan)
     with pytest.raises(ValueError, match="timing"):
         EngineConfig(event_grace_seconds=math.nan)
-
-
-@pytest.mark.parametrize("value", [math.nan, math.inf])
-def test_non_finite_active_universe_max_age_is_rejected(value: float) -> None:
-    # A NaN limit never compares greater than an age, so a stale persisted
-    # crypto universe would validate forever.
-    from parayabuck.config import CryptoUniverseConfig
-
-    with pytest.raises(ValueError, match="active_universe_max_age_hours"):
-        CryptoUniverseConfig(active_universe_max_age_hours=value)
 
 
 def test_obsolete_timeframe_and_placebo_risk_fields_get_migration_error(tmp_path: Path) -> None:
@@ -148,13 +132,10 @@ def test_shipped_paper_config_has_integrated_cap8_with_other_limits_unchanged() 
     assert config.runtime.mode == RuntimeMode.PAPER
     assert config.live.enabled is False
     assert config.risk.max_positions == 8
-    assert config.risk.max_crypto_positions == 2
     assert config.risk.max_gross_exposure_pct == 0.98
     assert config.risk.cash_buffer_pct == 0.02
-    # 2026-09-29 (paper_config_v2): crypto disabled, equity 0.98.
+    # 2026-09-29 (paper_config_v2): equity 0.98.
     assert config.risk.max_position_pct == 0.98
-    assert config.risk.max_crypto_position_pct == 0.05
-    assert config.risk.max_crypto_exposure_pct == 0.10
     assert config.risk.daily_loss_limit_pct == 0.20
     assert config.risk.max_drawdown_pct == 0.75
     assert config.strategy.equity.name == "equity_leveraged_trend_v1"
@@ -166,10 +147,7 @@ def test_shipped_paper_config_has_integrated_cap8_with_other_limits_unchanged() 
     assert config.strategy.equity.parameters["sma_bars"] == 200
     assert config.strategy.equity.parameters["vol_target"] == 0.35
     assert config.strategy.equity.parameters["vol_window"] == 20
-    assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
-    assert config.strategy.crypto.enabled is False
-    assert config.universe.crypto.enabled is False
-    assert config.strategy.crypto.maximum_allocation == 0.05
+    assert config.symbols == ("SPY", "QQQ", "QLD")
     assert config.execution.rebalance_band_pct == 0.005
 
 
@@ -190,41 +168,31 @@ def test_deprecated_risk_monitor_timeframe_still_loads_and_maps(tmp_path) -> Non
     assert config.runtime.execution_timeframe == "5m"
 
 
-def test_strategy_supplies_default_timeframe_not_market_default(tmp_path: Path) -> None:
-    """The strategy owns its signal timeframe: selecting crypto low-variance
-    without a timeframe must resolve to the strategy's PRIMARY (1d), never to
-    the old crypto default (1h)."""
+def test_strategy_supplies_default_timeframe(tmp_path: Path) -> None:
+    """The strategy owns its signal timeframe: without a configured timeframe
+    it resolves to the strategy's PRIMARY (1d)."""
     raw = _settings()
-    raw["strategy"] = {
-        "equity": {"enabled": True, "name": "equity_leveraged_trend_v1"},
-        "crypto": {
-            "enabled": True,
-            "name": "crypto_low_variance_v1",
-            "maximum_allocation": 0.1,
-        },
-    }
+    raw["strategy"] = {"equity": {"enabled": True, "name": "equity_leveraged_trend_v1"}}
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
     config = load_config(str(path))
-    assert config.strategy.crypto.timeframe == "1d"
     assert config.strategy.equity.timeframe == "1d"
 
 
 def test_unsupported_strategy_timeframe_is_rejected_at_load(tmp_path: Path) -> None:
     raw = _settings()
     raw["strategy"] = {
-        "equity": {"enabled": True, "name": "equity_leveraged_trend_v1"},
-        "crypto": {
+        "equity": {
             "enabled": True,
-            "name": "crypto_low_variance_v1",
-            "timeframe": "4h",  # low-variance validates only 1d
-            "maximum_allocation": 0.1,
+            "name": "equity_leveraged_trend_v1",
+            "timeframe": "4h",  # the leveraged trend validates only 1d
         },
     }
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
-    with pytest.raises(ValueError, match="cannot run on timeframe 4h"):
-        load_config(str(path))
+    with pytest.warns(DeprecationWarning, match="strategy.equity.timeframe"):
+        with pytest.raises(ValueError, match="cannot run on timeframe 4h"):
+            load_config(str(path))
 
 
 def test_present_but_empty_app_and_data_blocks_load_with_defaults(tmp_path: Path) -> None:
@@ -261,18 +229,18 @@ def test_present_but_empty_top_level_block_loads_with_defaults(tmp_path: Path, b
 def test_present_but_empty_universe_sub_blocks_load_with_defaults(tmp_path: Path) -> None:
     raw = _settings()
     del raw["symbols"]
-    raw["universe"] = {"equity": None, "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"], "scanner": None}}
+    raw["universe"] = {"equity": None}
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
 
     config = load_config(str(path))
 
-    assert config.universe.crypto.trade_symbols == ("BTC/USD",)
+    assert config.universe.equity.symbols == ("SPY", "QQQ", "QLD")
 
 
 def test_present_but_empty_enabled_strategy_block_fails_closed_with_message(tmp_path: Path) -> None:
     raw = _settings()
-    raw["strategy"] = {"equity": None, "crypto": {"enabled": True, "name": "crypto_low_variance_v2"}}
+    raw["strategy"] = {"equity": None}
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
 
@@ -280,34 +248,46 @@ def test_present_but_empty_enabled_strategy_block_fails_closed_with_message(tmp_
         load_config(str(path))
 
 
-def _sweep_config_file(tmp_path: Path, *, sweep: str | None, universe: list[str]) -> Path:
+@pytest.mark.parametrize(
+    ("section", "key", "value"),
+    [
+        ("strategy", "crypto", {"enabled": False, "name": "crypto_low_variance_hysteresis_v1"}),
+        ("universe", "crypto", {"enabled": False}),
+        ("risk", "max_crypto_positions", 2),
+        ("engine", "crypto_emergency_exit_bps", 75),
+        ("backtest", "crypto_taker_fee_bps", 25),
+        ("intent_watchdog", "crypto_fill_grace_minutes", 60),
+        ("runtime", "scanner_refresh_hours", 24),
+        ("backtest", "scanner_rebalance", "daily"),
+    ],
+)
+def test_removed_crypto_settings_fail_loudly(tmp_path: Path, section: str, key: str, value: object) -> None:
+    """Crypto support was removed: a stale configuration naming it must not load
+    with its crypto intent silently dropped."""
     raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text())
-    raw["universe"]["equity"]["symbols"] = universe
-    if sweep is not None:
-        raw["strategy"]["equity"]["parameters"]["cash_sweep_symbol"] = sweep
+    raw[section][key] = value
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
-    return path
 
-
-def test_cash_sweep_symbol_must_be_in_the_static_equity_universe(tmp_path) -> None:
-    path = _sweep_config_file(tmp_path, sweep="BIL", universe=["SPY", "QQQ", "QLD"])
-    with pytest.raises(ValueError, match="cash_sweep_symbol must be in universe.equity.symbols"):
+    with pytest.raises(ValueError, match=f"Crypto support was removed.*{section}.{key}"):
         load_config(str(path))
 
 
-def test_cash_sweep_flag_enters_the_configuration_digest(tmp_path) -> None:
-    from parayabuck.portfolio import product_strategy_from
-    from parayabuck.portfolio.runtime_service import configuration_digest
+def test_legacy_symbol_list_with_a_crypto_pair_is_rejected(tmp_path: Path) -> None:
+    raw = _settings()
+    raw["symbols"] = ["AAPL", "BTC/USD"]
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
 
-    def digest(config: Config) -> str:
-        selection = config.strategy.equity
-        strategy = product_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
-        return configuration_digest(strategy, "paper", selection.maximum_allocation, "universe")
+    with pytest.raises(ValueError, match="Crypto support was removed.*BTC/USD"):
+        load_config(str(path))
 
-    (tmp_path / "off").mkdir()
-    (tmp_path / "on").mkdir()
-    off = load_config(str(_sweep_config_file(tmp_path / "off", sweep=None, universe=["SPY", "QQQ", "QLD"])))
-    on = load_config(str(_sweep_config_file(tmp_path / "on", sweep="BIL", universe=["SPY", "QQQ", "QLD", "BIL"])))
-    assert "BIL" in on.universe.equity.symbols and "BIL" not in off.universe.equity.symbols
-    assert digest(on) != digest(off)
+
+def test_equity_allocation_above_gross_limit_is_rejected(tmp_path: Path) -> None:
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text())
+    raw["strategy"]["equity"]["maximum_allocation"] = 0.99
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match="Capital invariant violated"):
+        load_config(str(path))

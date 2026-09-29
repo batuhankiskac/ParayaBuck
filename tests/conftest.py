@@ -201,28 +201,7 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
                     "Network blocked in tests: Alpaca StockHistoricalDataClient.get_stock_latest_quote called without fake"
                 )
 
-        class _BlockedCrypto:
-            def __init__(self, *a, **kw):
-                try:
-                    self._session = MagicMock()
-                    self._session.close = lambda: None
-                except Exception:
-                    self._session = SimpleNamespace(
-                        close=lambda: None, request=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("blocked"))
-                    )
-
-            def get_crypto_bars(self, *a, **kw):
-                raise RuntimeError(
-                    "Network blocked in tests: Alpaca CryptoHistoricalDataClient.get_crypto_bars called without fake"
-                )
-
-            def get_crypto_latest_quote(self, *a, **kw):
-                raise RuntimeError(
-                    "Network blocked in tests: Alpaca CryptoHistoricalDataClient.get_crypto_latest_quote called without fake"
-                )
-
         monkeypatch.setattr(alpaca_module, "StockHistoricalDataClient", _BlockedStock)
-        monkeypatch.setattr(alpaca_module, "CryptoHistoricalDataClient", _BlockedCrypto)
     except Exception:
         pass
 

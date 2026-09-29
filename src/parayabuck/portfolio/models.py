@@ -184,8 +184,6 @@ class RebalancePolicy:
             hours = self.frequency.removeprefix("hours:")
             if not hours.isdigit() or int(hours) <= 0:
                 raise ValueError("hours:N rebalance requires a positive N")
-        elif self.market == Market.CRYPTO:
-            raise ValueError("Crypto rebalancing requires an hours:N frequency")
 
     @property
     def hours(self) -> int | None:

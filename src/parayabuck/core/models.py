@@ -8,6 +8,14 @@ from uuid import uuid4
 
 
 class Market(StrEnum):
+    """Asset class of a symbol.
+
+    ParayaBuck trades equities only. ``CRYPTO`` classifies foreign crypto
+    holdings, orders and historical ledger rows (the brokerage account is
+    shared) so they are recognized and left alone; no code path trades,
+    sizes, streams, protects or backtests crypto.
+    """
+
     EQUITY = "equity"
     CRYPTO = "crypto"
 
@@ -164,8 +172,6 @@ class AccountSnapshot:
     positions: tuple[PositionSnapshot, ...] = ()
     realized_pnl: float = 0.0
     unrealized_pnl: float = 0.0
-    crypto_buying_power: float | None = None
-    crypto_trading_enabled: bool = True
     fees: float = 0.0
 
     @property

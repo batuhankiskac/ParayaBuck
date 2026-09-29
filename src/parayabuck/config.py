@@ -33,15 +33,12 @@ class RuntimeConfig:
     execution_timeframe: str = "5m"
     market_state_timeframe: str = "5m"
     decision_db_path: str = DEFAULT_DECISION_DB_PATH
-    scanner_refresh_hours: float = 24.0
 
     def __post_init__(self) -> None:
         if self.execution_timeframe not in TIMEFRAME_MINUTES:
             raise ValueError("runtime.execution_timeframe is unsupported")
         if self.market_state_timeframe not in TIMEFRAME_MINUTES:
             raise ValueError("runtime.market_state_timeframe is unsupported")
-        if not math.isfinite(self.scanner_refresh_hours) or self.scanner_refresh_hours <= 0:
-            raise ValueError("runtime.scanner_refresh_hours must be positive")
 
 
 @dataclass(frozen=True)
@@ -81,24 +78,9 @@ def _default_equity_strategy() -> MarketStrategyConfig:
     )
 
 
-def _default_crypto_strategy() -> MarketStrategyConfig:
-    return MarketStrategyConfig(
-        enabled=False,
-        name="crypto_low_variance_v1",
-        timeframe="1d",
-        maximum_allocation=0.10,
-        parameters={
-            "variance_lookback_days": 22,
-            "top_n": 2,
-            "rebalance_hours": 168,
-        },
-    )
-
-
 @dataclass(frozen=True)
 class StrategyConfig:
     equity: MarketStrategyConfig = field(default_factory=_default_equity_strategy)
-    crypto: MarketStrategyConfig = field(default_factory=_default_crypto_strategy)
 
 
 @dataclass(frozen=True)
@@ -150,9 +132,6 @@ class BacktestConfig:
     slippage_bps: float = 2.0
     spread_bps: float = 2.0
     commission: float = 0.0
-    # Crypto execution uses market orders: a low-volume account pays Alpaca's
-    # tier-1 taker rate of 0.25% (25 bps), not a 5 bps limit-order cost.
-    crypto_taker_fee_bps: float = 25.0
     # 2026 regulatory rates (SEC Section 31 $20.60/$1M from 2026-04-04, FINRA
     # TAF $0.000195/share cap $9.79 from 2026-01-01, CAT 2026-1 + Historical
     # Assessment 1A $0.000003/share). These are fallbacks for fixed-rate mode;
@@ -163,7 +142,6 @@ class BacktestConfig:
     equity_cat_per_share: float = 0.000003
     equity_sec_fee_rate: float = 0.0000206
     equity_use_effective_dated_fees: bool = True
-    scanner_rebalance: str = "daily"
     output_dir: str = "reports"
     ranking_metric: str = "risk_adjusted"
 
@@ -173,7 +151,6 @@ class BacktestConfig:
             self.slippage_bps,
             self.spread_bps,
             self.commission,
-            self.crypto_taker_fee_bps,
             self.equity_taf_per_share,
             self.equity_taf_cap,
             self.equity_cat_per_share,
@@ -181,8 +158,6 @@ class BacktestConfig:
         )
         if self.initial_cash <= 0 or any(not math.isfinite(value) or value < 0 for value in costs):
             raise ValueError("Invalid backtest cash or cost configuration")
-        if self.scanner_rebalance not in {"daily", "weekly", "monthly"}:
-            raise ValueError("backtest.scanner_rebalance must be daily, weekly, or monthly")
         if self.ranking_metric not in {"risk_adjusted", "sharpe", "sortino", "calmar"}:
             raise ValueError("Unsupported backtest ranking metric")
 
@@ -206,9 +181,6 @@ class ExecutionConfig:
 @dataclass(frozen=True)
 class RiskLimits:
     max_position_pct: float = 0.10
-    max_crypto_exposure_pct: float = 0.10
-    max_crypto_position_pct: float = 0.05
-    max_crypto_positions: int = 2
     cash_buffer_pct: float = 0.40
     max_gross_exposure_pct: float = 0.60
     max_positions: int = 5
@@ -218,8 +190,6 @@ class RiskLimits:
     def __post_init__(self) -> None:
         ratios = (
             self.max_position_pct,
-            self.max_crypto_exposure_pct,
-            self.max_crypto_position_pct,
             self.max_gross_exposure_pct,
             self.daily_loss_limit_pct,
             self.max_drawdown_pct,
@@ -228,8 +198,6 @@ class RiskLimits:
             raise ValueError("Risk ratios must be in (0, 1]")
         if (
             self.max_positions <= 0
-            or self.max_crypto_positions <= 0
-            or self.max_crypto_positions > self.max_positions
             or not math.isfinite(self.cash_buffer_pct)
             or not 0 <= self.cash_buffer_pct < 1
         ):
@@ -245,10 +213,6 @@ class EngineConfig:
     account_poll_interval_seconds: float = 15.0
     maximum_account_age_for_entry_seconds: float = 30.0
     event_queue_capacity: int = 1024
-    crypto_stop_limit_offset_bps: float = 25.0
-    crypto_emergency_exit_bps: float = 75.0
-    crypto_stop_cancel_timeout_seconds: float = 5.0
-    crypto_stop_cancel_poll_interval_seconds: float = 0.25
 
     def __post_init__(self) -> None:
         if self.timing_capacity_values_invalid:
@@ -262,10 +226,6 @@ class EngineConfig:
             self.maximum_queue_age_seconds,
             self.account_poll_interval_seconds,
             self.maximum_account_age_for_entry_seconds,
-            self.crypto_stop_limit_offset_bps,
-            self.crypto_emergency_exit_bps,
-            self.crypto_stop_cancel_timeout_seconds,
-            self.crypto_stop_cancel_poll_interval_seconds,
         )
         return (
             any(not math.isfinite(value) for value in float_values)
@@ -275,11 +235,6 @@ class EngineConfig:
             or self.account_poll_interval_seconds <= 0
             or self.maximum_account_age_for_entry_seconds <= 0
             or self.event_queue_capacity <= 0
-            or self.crypto_stop_limit_offset_bps <= 0
-            or self.crypto_emergency_exit_bps <= self.crypto_stop_limit_offset_bps
-            or self.crypto_stop_cancel_timeout_seconds <= 0
-            or self.crypto_stop_cancel_poll_interval_seconds <= 0
-            or self.crypto_stop_cancel_poll_interval_seconds > self.crypto_stop_cancel_timeout_seconds
         )
 
 
@@ -360,142 +315,8 @@ class EquityUniverseConfig:
 
 
 @dataclass(frozen=True)
-class CryptoScannerConfig:
-    historical_timeframe: str = "1h"
-    lookback_days: int = 14
-    minimum_data_completeness: float = 0.90
-    minimum_median_dollar_volume: float = 1_000.0
-    minimum_atr_pct: float = 0.004
-    maximum_atr_pct: float = 0.20
-    maximum_spread_bps: float = 200.0
-    maximum_btc_correlation: float = 0.97
-    maximum_per_category: int = 3
-    maximum_meme_symbols: int = 1
-    maximum_high_beta_symbols: int = 2
-    volatility_optimum_pct: float = 0.045
-    unknown_category_penalty: float = 2.0
-    high_correlation_penalty: float = 8.0
-
-    def __post_init__(self) -> None:
-        if self.historical_timeframe != "1h":
-            raise ValueError("universe.crypto.scanner.historical_timeframe must be 1h")
-        if self.lookback_days <= 0:
-            raise ValueError("universe.crypto.scanner.lookback_days must be positive")
-        ratios = (
-            self.minimum_data_completeness,
-            self.minimum_atr_pct,
-            self.maximum_atr_pct,
-            self.maximum_btc_correlation,
-            self.volatility_optimum_pct,
-        )
-        if any(not math.isfinite(value) or not 0 < value <= 1 for value in ratios):
-            raise ValueError("Crypto scanner ratios must be in (0, 1]")
-        if (
-            not math.isfinite(self.minimum_atr_pct)
-            or not math.isfinite(self.maximum_atr_pct)
-            or self.minimum_atr_pct >= self.maximum_atr_pct
-        ):
-            raise ValueError("Crypto scanner ATR range is invalid")
-        if (
-            not math.isfinite(self.volatility_optimum_pct)
-            or not self.minimum_atr_pct <= self.volatility_optimum_pct <= self.maximum_atr_pct
-        ):
-            raise ValueError("Crypto scanner volatility optimum must be inside the ATR range")
-        if (
-            not math.isfinite(self.minimum_median_dollar_volume)
-            or self.minimum_median_dollar_volume <= 0
-            or not math.isfinite(self.maximum_spread_bps)
-            or self.maximum_spread_bps <= 0
-        ):
-            raise ValueError("Crypto scanner liquidity and spread thresholds must be positive")
-        if self.maximum_per_category <= 0 or self.maximum_meme_symbols < 0 or self.maximum_high_beta_symbols < 0:
-            raise ValueError("Crypto scanner category limits are invalid")
-        if (
-            not math.isfinite(self.unknown_category_penalty)
-            or self.unknown_category_penalty < 0
-            or not math.isfinite(self.high_correlation_penalty)
-            or self.high_correlation_penalty < 0
-        ):
-            raise ValueError("Crypto scanner score penalties must not be negative")
-
-
-@dataclass(frozen=True)
-class CryptoUniverseConfig:
-    enabled: bool = False
-    dynamic_selection_enabled: bool = False
-    allow_static_fallback_trading: bool = False
-    maximum_stream_symbols: int = 12
-    pinned_symbols: tuple[str, ...] = ()
-    trade_symbols: tuple[str, ...] = ()
-    allowlist_symbols: tuple[str, ...] = ()
-    denylist_symbols: tuple[str, ...] = ()
-    active_universe_path: str = "data/runtime/active_crypto_universe.json"
-    active_universe_max_age_hours: float = 12.0
-    require_scanner_config_digest_match: bool = True
-    # Runtime-only identity of the strategy that produced the persisted
-    # strategy-alpha observation set. Excluded from scanner digest: changing
-    # alpha must invalidate observation without pretending scanner economics
-    # changed.
-    observation_strategy_name: str = ""
-    observation_strategy_version: str = ""
-    observation_strategy_timeframe: str | None = None
-    observation_strategy_parameters_digest: str = ""
-    scanner: CryptoScannerConfig = field(default_factory=CryptoScannerConfig)
-
-    def __post_init__(self) -> None:
-        from parayabuck.markets.symbols import canonical_symbol, is_stablecoin_pair
-
-        symbols = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.trade_symbols)
-        pinned = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.pinned_symbols)
-        allowlist = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.allowlist_symbols)
-        denylist = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.denylist_symbols)
-        if len(set(symbols)) != len(symbols):
-            raise ValueError("universe.crypto.trade_symbols must be canonical and unique")
-        if len(set(pinned)) != len(pinned):
-            raise ValueError("universe.crypto.pinned_symbols must be canonical and unique")
-        if len(set(allowlist)) != len(allowlist) or len(set(denylist)) != len(denylist):
-            raise ValueError("Crypto allowlist and denylist symbols must be unique")
-        if set(allowlist) & set(denylist):
-            raise ValueError("Crypto allowlist and denylist must not overlap")
-        if any(symbol.split("/", 1)[1] != "USD" for symbol in (*symbols, *pinned)):
-            raise ValueError("Crypto universe symbols must use USD quote pairs")
-        if any(is_stablecoin_pair(symbol) for symbol in (*symbols, *pinned)):
-            raise ValueError("Stablecoin base pairs are not allowed in the crypto universe")
-        if not set(pinned).issubset(symbols):
-            raise ValueError("universe.crypto.pinned_symbols must be included in trade_symbols")
-        if self.maximum_stream_symbols <= 0:
-            raise ValueError("universe.crypto.maximum_stream_symbols must be positive")
-        if len(pinned) > self.maximum_stream_symbols:
-            raise ValueError("Pinned crypto symbols exceed maximum_stream_symbols")
-        # NaN compares False against every age, so a non-finite limit would
-        # never report the persisted universe as stale.
-        if not math.isfinite(self.active_universe_max_age_hours) or self.active_universe_max_age_hours <= 0:
-            raise ValueError("universe.crypto.active_universe_max_age_hours must be positive")
-        object.__setattr__(self, "trade_symbols", symbols)
-        object.__setattr__(self, "pinned_symbols", pinned)
-        object.__setattr__(self, "allowlist_symbols", allowlist)
-        object.__setattr__(self, "denylist_symbols", denylist)
-        # Category metadata integrity: every configured production symbol must
-        # have an explicit category; silent unknown_category_penalty is not
-        # acceptable for the frozen PAPER pool. 22/22 completeness is mandatory
-        # (no ImportError bypass, no enabled-guard).
-        if symbols:
-            from parayabuck.universe.crypto_metadata import CRYPTO_CATEGORIES
-
-            if len(CRYPTO_CATEGORIES) != 22:
-                raise ValueError(f"CRYPTO_CATEGORIES must contain 22 entries, found {len(CRYPTO_CATEGORIES)}")
-            missing = [s for s in symbols if s not in CRYPTO_CATEGORIES]
-            if missing:
-                raise ValueError(
-                    f"Missing crypto category metadata for configured trade_symbols: {','.join(missing)}; "
-                    "add them to CRYPTO_CATEGORIES"
-                )
-
-
-@dataclass(frozen=True)
 class UniverseConfig:
     equity: EquityUniverseConfig = field(default_factory=EquityUniverseConfig)
-    crypto: CryptoUniverseConfig = field(default_factory=CryptoUniverseConfig)
 
 
 @dataclass(frozen=True)
@@ -559,11 +380,6 @@ class IntentWatchdogConfig:
     # Minutes after the next NYSE open following a decision before a
     # missing/under-target position alarms.
     equity_fill_grace_minutes: float = 30.0
-    # Minutes after the next crypto cadence-boundary bar closes before a
-    # missing crypto decision alarms.
-    crypto_decision_grace_minutes: float = 120.0
-    # Minutes after a crypto decision before an under-target position alarms.
-    crypto_fill_grace_minutes: float = 60.0
     # Held weight below this fraction of the decided target weight counts as
     # "under target" (drift alone rarely halves a position in one session).
     minimum_held_fraction: float = 0.5
@@ -573,12 +389,7 @@ class IntentWatchdogConfig:
     evaluation_interval_seconds: float = 60.0
 
     def __post_init__(self) -> None:
-        for name in (
-            "equity_decision_grace_minutes",
-            "equity_fill_grace_minutes",
-            "crypto_decision_grace_minutes",
-            "crypto_fill_grace_minutes",
-        ):
+        for name in ("equity_decision_grace_minutes", "equity_fill_grace_minutes"):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0:
                 raise ValueError(f"intent_watchdog.{name} must be non-negative")
@@ -615,37 +426,24 @@ class Config:
             raise ValueError("Alpaca Basic IEX equity stream symbols must not exceed 30")
         if self.strategy.equity.enabled and not self.universe.equity.enabled:
             raise ValueError("Enabled equity strategy requires universe.equity.enabled")
-        if self.strategy.crypto.enabled and not self.universe.crypto.enabled:
-            raise ValueError("Enabled crypto strategy requires universe.crypto.enabled")
-        # An equity idle-cash sweep ETF (e.g. BIL) is traded, so it must be part
-        # of the static equity universe; without the sweep it is not listed.
-        sweep = self.strategy.equity.parameters.get("cash_sweep_symbol")
-        if self.strategy.equity.enabled and isinstance(sweep, str) and sweep.strip():
-            from parayabuck.markets.symbols import canonical_symbol
-
-            if canonical_symbol(sweep, Market.EQUITY) not in self.universe.equity.symbols:
-                raise ValueError("strategy.equity.parameters.cash_sweep_symbol must be in universe.equity.symbols")
         if self.runtime.mode == RuntimeMode.LIVE and not self.live.enabled:
             raise ValueError("runtime.mode=live requires live.enabled=true")
         if self.runtime.mode != RuntimeMode.LIVE and self.live.enabled:
             raise ValueError("live.enabled=true requires runtime.mode=live")
-        # 2026-08-29 fix: capital invariant — sum of enabled sleeve caps must
-        # stay inside gross limit and cash buffer. This guarantees order
-        # existence is deterministic regardless of market processing order and
-        # that a stale account snapshot cannot temporarily plan above the gross cap.
-        # invariant: sum(effective allocations) <= max_gross <= 1 - cash_buffer
+        # Capital invariant: the equity allocation stays inside the gross limit
+        # and the cash buffer, so a stale account snapshot cannot plan above
+        # the gross cap.
+        # invariant: equity allocation <= max_gross <= 1 - cash_buffer
         effective_alloc = 0.0
         if self.strategy.equity.enabled:
             effective_alloc += float(self.strategy.equity.maximum_allocation)
-        if self.strategy.crypto.enabled:
-            effective_alloc += float(self.strategy.crypto.maximum_allocation)
         max_gross = float(self.risk.max_gross_exposure_pct)
         cash_buf = float(self.risk.cash_buffer_pct)
         # allow tiny epsilon for floating point
         eps = 1e-9
         if effective_alloc - max_gross > eps:
             raise ValueError(
-                f"Capital invariant violated: sum allocations {effective_alloc:.4f} > max_gross {max_gross:.4f} — lower a sleeve cap"
+                f"Capital invariant violated: equity allocation {effective_alloc:.4f} > max_gross {max_gross:.4f}"
             )
         if max_gross + cash_buf - 1.0 > eps:
             raise ValueError(
@@ -654,9 +452,7 @@ class Config:
 
     @property
     def symbols(self) -> tuple[str, ...]:
-        equity = self.universe.equity.symbols if self.universe.equity.enabled else ()
-        crypto = self.universe.crypto.trade_symbols if self.universe.crypto.enabled else ()
-        return (*equity, *crypto)
+        return self.universe.equity.symbols if self.universe.equity.enabled else ()
 
 
 def _strategy_from_raw(
@@ -694,12 +490,49 @@ def _block(value: Any) -> dict[str, Any]:
     return {} if value is None else dict(value)
 
 
+_CRYPTO_REMOVED = (
+    "Crypto support was removed from ParayaBuck (equity-only since 2026-09-30; "
+    "docs/research/crypto_removal_v1.md)"
+)
+
+
+def _reject_removed_crypto_settings(raw: dict[str, Any]) -> None:
+    """Fail loudly on configuration keys of the removed crypto sleeve.
+
+    A stale operator configuration must not load with its crypto intent
+    silently dropped; the operator removes the keys explicitly.
+    """
+    found: list[str] = []
+    for section in ("universe", "strategy"):
+        block = raw.get(section)
+        if isinstance(block, dict) and "crypto" in block:
+            found.append(f"{section}.crypto")
+    prefixes = {
+        "risk": "max_crypto_",
+        "engine": "crypto_",
+        "backtest": "crypto_",
+        "intent_watchdog": "crypto_",
+    }
+    for section, prefix in prefixes.items():
+        block = raw.get(section)
+        if isinstance(block, dict):
+            found.extend(f"{section}.{key}" for key in block if str(key).startswith(prefix))
+    # The crypto universe scanner was the only user of these two keys.
+    for section, key in (("runtime", "scanner_refresh_hours"), ("backtest", "scanner_rebalance")):
+        block = raw.get(section)
+        if isinstance(block, dict) and key in block:
+            found.append(f"{section}.{key}")
+    if found:
+        raise ValueError(f"{_CRYPTO_REMOVED}; remove these settings: {', '.join(sorted(found))}")
+
+
 def load_config(config_path: str | None = None) -> Config:
     load_dotenv()
     path = Path(config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml")
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    _reject_removed_crypto_settings(raw)
     runtime_raw = _block(raw.get("runtime"))
     # The pre-v1 ``risk_monitor_timeframe`` key was renamed to
     # ``market_state_timeframe`` (the cadence observes market state; risk
@@ -756,87 +589,43 @@ def load_config(config_path: str | None = None) -> Config:
         legacy = tuple(raw.get("symbols", ()))
         from parayabuck.markets.symbols import normalize_symbol
 
-        equities: list[str] = []
-        crypto: list[str] = []
-        for symbol in legacy:
-            identity = normalize_symbol(str(symbol))
-            (crypto if identity.market == Market.CRYPTO else equities).append(identity.canonical)
-        equity = EquityUniverseConfig(enabled=bool(equities), symbols=tuple(equities))
-        crypto_universe = CryptoUniverseConfig(
-            enabled=bool(crypto),
-            trade_symbols=tuple(crypto),
+        identities = [normalize_symbol(str(symbol)) for symbol in legacy]
+        unsupported = [identity.canonical for identity in identities if identity.market != Market.EQUITY]
+        if unsupported:
+            raise ValueError(f"{_CRYPTO_REMOVED}; remove the crypto symbols: {', '.join(unsupported)}")
+        equity = EquityUniverseConfig(
+            enabled=bool(identities), symbols=tuple(identity.canonical for identity in identities)
         )
     else:
-        universe_dict = dict(universe_raw)
-        equity_raw = _block(universe_dict.get("equity"))
-        equity = EquityUniverseConfig(**equity_raw)
-        crypto_raw = _block(universe_dict.get("crypto"))
-        scanner = CryptoScannerConfig(**_block(crypto_raw.pop("scanner", None)))
-        crypto_universe = CryptoUniverseConfig(scanner=scanner, **crypto_raw)
+        equity = EquityUniverseConfig(**_block(dict(universe_raw).get("equity")))
     strategy_raw = _block(raw.get("strategy"))
-    for _market_key in ("equity", "crypto"):
-        if isinstance(strategy_raw.get(_market_key), dict) and "timeframe" in strategy_raw[_market_key]:
-            warnings.warn(
-                f"strategy.{_market_key}.timeframe is deprecated: the strategy "
-                "owns its signal timeframe. The value is still validated "
-                "against the selected strategy's supported timeframes and "
-                "rejected on mismatch, never silently reinterpreted.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-    # Fail-closed: when a market universe is enabled the corresponding
-    # strategy.<market> block MUST be present with an explicit name **if that
-    # market's strategy is intended to trade**.  A disabled strategy
-    # (explicit ``enabled: false``) may omit the name — the loader will fill
-    # the packaged default name but keep it disabled, so no silent v1
-    # selection can produce orders.  Dataclass defaults remain for direct
-    # construction, but YAML loading is strict for enabled markets.
+    if isinstance(strategy_raw.get("equity"), dict) and "timeframe" in strategy_raw["equity"]:
+        warnings.warn(
+            "strategy.equity.timeframe is deprecated: the strategy "
+            "owns its signal timeframe. The value is still validated "
+            "against the selected strategy's supported timeframes and "
+            "rejected on mismatch, never silently reinterpreted.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    # Fail-closed: when the equity universe is enabled the strategy.equity
+    # block MUST be present with an explicit name if the strategy is intended
+    # to trade. A disabled strategy (explicit ``enabled: false``) may omit the
+    # name. Dataclass defaults remain for direct construction, but YAML
+    # loading is strict for an enabled market.
     if equity.enabled:
         _eq_block = strategy_raw.get("equity")
         _eq_enabled = True if not isinstance(_eq_block, dict) else bool(_eq_block.get("enabled", True))
         if _eq_enabled:
             if not isinstance(_eq_block, dict) or not str(_eq_block.get("name", "")).strip():
                 raise ValueError("strategy.equity block with name is required when universe.equity.enabled is true")
-    if crypto_universe.enabled:
-        _cr_block = strategy_raw.get("crypto")
-        _cr_enabled = True if not isinstance(_cr_block, dict) else bool(_cr_block.get("enabled", True))
-        if _cr_enabled:
-            if not isinstance(_cr_block, dict) or not str(_cr_block.get("name", "")).strip():
-                raise ValueError("strategy.crypto block with name is required when universe.crypto.enabled is true")
     default_strategy = StrategyConfig()
     equity_strategy = _strategy_from_raw(
         default_strategy.equity,
         default_strategy.equity.enabled if "equity" in strategy_raw else equity.enabled,
         _block(strategy_raw.get("equity")),
     )
-    crypto_strategy = _strategy_from_raw(
-        default_strategy.crypto,
-        default_strategy.crypto.enabled if "crypto" in strategy_raw else crypto_universe.enabled,
-        _block(strategy_raw.get("crypto")),
-    )
     equity_strategy = _resolved_timeframe(equity_strategy)
-    crypto_strategy = _resolved_timeframe(crypto_strategy)
-    if crypto_strategy.enabled and crypto_universe.dynamic_selection_enabled:
-        from parayabuck.portfolio import product_strategy_from
-
-        resolved_crypto = product_strategy_from(
-            crypto_strategy.name,
-            crypto_strategy.parameters,
-            timeframe=crypto_strategy.timeframe,
-        )
-        import hashlib
-        import json as _json
-
-        params_digest = hashlib.sha256(
-            _json.dumps(crypto_strategy.parameters, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
-        crypto_universe = replace(
-            crypto_universe,
-            observation_strategy_name=resolved_crypto.name,
-            observation_strategy_version=resolved_crypto.version,
-            observation_strategy_timeframe=resolved_crypto.timeframe,
-            observation_strategy_parameters_digest=params_digest,
-        )
     alpaca_raw = _block(raw.get("alpaca"))
     legacy_paper = alpaca_raw.pop("paper", None)
     if legacy_paper is False:
@@ -849,8 +638,8 @@ def load_config(config_path: str | None = None) -> Config:
         runtime=RuntimeConfig(**runtime_raw),
         alpaca=AlpacaConfig(**alpaca_raw),
         data=DataConfig(**dict(raw.get("data") or {})),
-        universe=UniverseConfig(equity=equity, crypto=crypto_universe),
-        strategy=StrategyConfig(equity_strategy, crypto_strategy),
+        universe=UniverseConfig(equity=equity),
+        strategy=StrategyConfig(equity_strategy),
         risk=risk,
         backtest=BacktestConfig(**_block(raw.get("backtest"))),
         live=LiveConfig(**_block(raw.get("live"))),
@@ -870,8 +659,6 @@ __all__ = [
     "BacktestConfig",
     "BackupConfig",
     "Config",
-    "CryptoScannerConfig",
-    "CryptoUniverseConfig",
     "DataConfig",
     "EngineConfig",
     "EquityUniverseConfig",

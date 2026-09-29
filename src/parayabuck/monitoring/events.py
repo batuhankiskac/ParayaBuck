@@ -54,6 +54,9 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # Intent watchdog: a scheduled decision or its fills did not happen.
     "intent_alarm",
     "intent_recovered",
+    # Signal cross-check: the IEX stream-built and SIP daily bars disagree on
+    # the trend (position held), diverge in close, or the SIP bar was missing.
+    "signal_source_mismatch",
 )
 
 ALERT_KINDS: frozenset[str] = frozenset(ALERT_KINDS_ORDERED)
@@ -73,6 +76,7 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "circuit_breaker",
         "paper_incident",
         "intent_alarm",
+        "signal_source_mismatch",
     }
 )
 

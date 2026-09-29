@@ -38,6 +38,7 @@ class RuntimeHealth:
     # Intent-vs-reality watchdog: {"enabled", "evaluated_at", "alarms",
     # "degraded_reasons"}. Observability only; never part of ``healthy``.
     intent_watchdog: dict[str, object] = field(default_factory=dict)
+    signal_cross_check: dict[str, object] = field(default_factory=dict)
 
 
 def _portfolio_catch_up_health(runtime: object) -> dict[str, str | None]:

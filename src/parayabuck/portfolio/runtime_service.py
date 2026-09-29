@@ -54,6 +54,7 @@ from parayabuck.portfolio.runtime_rebalance import (
     requires_ambiguous_block,
 )
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
+from parayabuck.portfolio.signal_cross_check import CrossCheckOutcome
 
 log = get_logger("parayabuck.portfolio.runtime_service")
 
@@ -765,7 +766,16 @@ class PortfolioRuntime:
         force_scheduled: bool = False,
         decision_origin: str = "scheduled",
         account: AccountSnapshot | None = None,
+        signal_cross_check: CrossCheckOutcome | None = None,
     ) -> PortfolioRuntimeResult:
+        """Decide on a closed batch and plan/submit its orders.
+
+        ``signal_cross_check`` is the runtime's second-source comparison for
+        this session (None when not run, e.g. offline or disabled). It is
+        recorded on the decision; when it says the sources disagree on the
+        trend (``hold``), a scheduled decision keeps the current position:
+        the target is the current weights and no order is planned.
+        """
         now = _utcnow()
         eligible = [
             bar
@@ -1068,6 +1078,32 @@ class PortfolioRuntime:
                 raw_target,
                 metadata={**raw_target.metadata, "decision_origin": decision_origin},
             )
+        signal_hold = signal_cross_check is not None and signal_cross_check.hold and scheduled
+        if signal_cross_check is not None:
+            raw_target = replace(
+                raw_target,
+                metadata={**raw_target.metadata, "signal_cross_check": signal_cross_check.to_metadata()},
+            )
+        if signal_hold:
+            # The two data sources disagree on the trend: keep exactly what is
+            # held this session. The strategy's own (primary-source) metadata
+            # stays on the decision for the record.
+            held_weights = {
+                canonical_symbol(position.symbol, position.market): (position.market_value / account.equity)
+                for position in account.positions
+                if position.market == self.market and not position.is_flat
+            }
+            held_targets = tuple(
+                TargetWeight(symbol, weight, "signal_source_hold", rank=1)
+                for symbol, weight in sorted(held_weights.items())
+                if weight > 0 and symbol in self.symbols
+            )
+            raw_target = replace(
+                raw_target,
+                weights=held_targets,
+                cash_weight=1.0 - sum(weight.weight for weight in held_targets),
+                metadata={**raw_target.metadata, "signal_source_hold": True},
+            )
         if any(canonical_symbol(weight.symbol, self.market) not in self.symbols for weight in raw_target.weights):
             raise ValueError("Strategy emitted a symbol outside the active universe")
         maximum_allocation = self.maximum_allocation
@@ -1147,12 +1183,28 @@ class PortfolioRuntime:
                 reserved_position_keys=reserved_slots,
                 open_order_symbols=tuple(sorted(open_order_symbols)),
             )
+        if signal_hold:
+            # A hold never trades, not even a sub-cap trim the risk overlay
+            # may have produced from drifted current weights.
+            planned = ()
+            _emit_no_trade_safe(
+                market=self._market_name(),
+                strategy=getattr(self.strategy, "name", None),
+                reason="signal_source_mismatch",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                target_weights=tuple(risk.target.weights),
+                risk_reasons=risk.reasons,
+                session_id=self.session_id,
+                account_id=self.account_id,
+                entry_latch=entry_latch,
+            )
         observed_target = self._with_paper_observability(
             risk.target,
             risk,
             account,
             planned,
-            entry_latch=entry_latch,
+            entry_latch=entry_latch or ("signal_source_mismatch" if signal_hold else None),
         )
         if observed_target is not risk.target:
             risk = replace(risk, target=observed_target)
@@ -1185,6 +1237,7 @@ class PortfolioRuntime:
                 universe_version=self.universe_version,
                 planned=orders,
                 submitted=submitted,
+                no_trade_reason="SIGNAL_SOURCE_MISMATCH" if signal_hold else None,
             )
             return PortfolioRuntimeResult(
                 decision_id,
@@ -1192,7 +1245,7 @@ class PortfolioRuntime:
                 risk,
                 orders,
                 submitted,
-                "submitted",
+                "signal_source_hold" if signal_hold else "submitted",
             )
         if sells:
             # Two-phase rebalance. Submit the risk-reducing sells now and

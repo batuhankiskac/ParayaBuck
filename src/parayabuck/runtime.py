@@ -17,7 +17,7 @@ from typing import Any, Protocol
 
 from requests.exceptions import RequestException
 
-from parayabuck.config import Config, IntentWatchdogConfig, RuntimeMode
+from parayabuck.config import Config, IntentWatchdogConfig, RuntimeMode, SignalCrossCheckConfig
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -67,6 +67,12 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioStateRepository,
     configuration_digest,
     is_terminal_order_status,
+)
+from parayabuck.portfolio.signal_cross_check import (
+    STATUS_SECONDARY_UNAVAILABLE,
+    STATUS_TREND_MISMATCH,
+    CrossCheckOutcome,
+    SignalCrossCheckCoordinator,
 )
 from parayabuck.risk.state import RiskState
 from parayabuck.runtime_events import _Event, _EventQueue
@@ -745,6 +751,7 @@ class EngineRuntime:
             },
             signal_adjustment=self.signal_adjustment_status(),
             intent_watchdog=self.intent_watchdog_status(),
+            signal_cross_check=self.signal_cross_check_status(),
         )
 
     def _intent_watchdog_config(self) -> IntentWatchdogConfig:
@@ -817,7 +824,17 @@ class EngineRuntime:
             raw = portfolio_runtime.repository.latest_decision_target(
                 portfolio_runtime.account_id, portfolio_runtime.market
             )
-            latest = LatestDecision(raw[0], raw[1]) if raw is not None else None
+            cross_check_reader = getattr(portfolio_runtime.repository, "latest_decision_cross_check", None)
+            cross_check = (
+                cross_check_reader(portfolio_runtime.account_id, portfolio_runtime.market)
+                if raw is not None and callable(cross_check_reader)
+                else None
+            )
+            latest = (
+                LatestDecision(raw[0], raw[1], cross_check if isinstance(cross_check, dict) else None)
+                if raw is not None
+                else None
+            )
             alarms.extend(
                 evaluate_equity(
                     now,
@@ -1872,11 +1889,7 @@ class EngineRuntime:
                 # Same running/warming_up rule as that restore, and only
                 # while the trade-update worker is alive.
                 trade_updates = dict(getattr(self, "_workers", {})).get("pb-trade-updates")
-                if (
-                    getattr(self, "_state", None) == "degraded"
-                    and trade_updates is not None
-                    and trade_updates.alive
-                ):
+                if getattr(self, "_state", None) == "degraded" and trade_updates is not None and trade_updates.alive:
                     self._state = "running" if self._has_ready_symbols() else "warming_up"
 
     def _restore_persistent_state(self) -> None:
@@ -2487,6 +2500,7 @@ class EngineRuntime:
                     if batch_health is None and real_gate:
                         batch_health = self.health()
                     self._process_portfolio_timestamp(list(candidate_bars.values()), health=batch_health)
+                self._run_due_deferred_portfolio_batches()
                 if len(processed_batches) > 256:
                     cutoff = max(processed_batches) - timedelta(hours=6)
                     for stale in [ts for ts in processed_batches if ts < cutoff]:
@@ -2707,6 +2721,16 @@ class EngineRuntime:
                 basis_reason = self._equity_signal_basis_latch(decision_timestamp)
                 if basis_reason is not None:
                     entry_latch = basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
+            cross_check: CrossCheckOutcome | None = None
+            if portfolio_runtime.market == Market.EQUITY:
+                # Second-source check of the session-close signal. Waiting for
+                # the SIP bar defers this batch (the decision loop retries it)
+                # instead of blocking the worker; orders queue for the next
+                # open either way.
+                step = self._signal_cross_check_step(portfolio_runtime, relevant)
+                if step is None:
+                    continue
+                cross_check = step if isinstance(step, CrossCheckOutcome) else None
             try:
                 if account is None and getattr(self, "broker", None) is not None:
                     # Broker I/O happens before the portfolio lock. The lease
@@ -2733,9 +2757,11 @@ class EngineRuntime:
                         )
                         continue
                     try:
-                        kwargs = {"entry_latch": entry_latch}
+                        kwargs: dict[str, Any] = {"entry_latch": entry_latch}
                         if account is not None:
                             kwargs["account"] = account
+                        if cross_check is not None:
+                            kwargs["signal_cross_check"] = cross_check
                         portfolio_result = portfolio_runtime.process_closed_bars(relevant, **kwargs)
                     finally:
                         if account_lease is not None:
@@ -3419,6 +3445,120 @@ class EngineRuntime:
                 changed_total,
             )
         return True
+
+    def _signal_cross_check_coordinator(self) -> SignalCrossCheckCoordinator:
+        coordinator = getattr(self, "_signal_cross_check", None)
+        if isinstance(coordinator, SignalCrossCheckCoordinator):
+            return coordinator
+        configured = getattr(getattr(self, "app_config", None), "signal_cross_check", None)
+        config = configured if isinstance(configured, SignalCrossCheckConfig) else SignalCrossCheckConfig()
+        coordinator = SignalCrossCheckCoordinator(
+            enabled=config.enabled,
+            sip_embargo=timedelta(minutes=config.sip_embargo_minutes),
+            retry_window=timedelta(minutes=config.retry_window_minutes),
+            retry_interval=timedelta(seconds=config.retry_interval_seconds),
+            close_divergence_bps=config.close_divergence_bps,
+        )
+        self._signal_cross_check = coordinator
+        return coordinator
+
+    def _signal_cross_check_step(self, portfolio_runtime: Any, relevant: list[Bar]) -> CrossCheckOutcome | bool | None:
+        """Run one cross-check step for an equity decision batch.
+
+        Returns None when the batch was deferred (retry pending), the
+        outcome when the check finished, and False when no check applies
+        (disabled, no second-source client, strategy without a trend input).
+        Never raises: a checker failure must not cost a session.
+        """
+        try:
+            client = getattr(self, "_historical", None)
+            method = getattr(client, "get_session_daily_bars", None)
+            fetch = (
+                (lambda symbols, start, end: method(symbols, start, end, feed="sip", adjustment="splits"))
+                if callable(method)
+                else None
+            )
+            with getattr(self, "_portfolio_lock", threading.RLock()):
+                history = {symbol: tuple(series) for symbol, series in portfolio_runtime.history.items()}
+            step = self._signal_cross_check_coordinator().step(
+                portfolio_runtime.strategy, history, relevant, fetch, datetime.now(UTC)
+            )
+        except Exception:
+            log.warning("Signal cross-check failed; deciding on the primary source", exc_info=True)
+            return False
+        if step.action == "defer":
+            decision_timestamp = max(bar.timestamp for bar in relevant)
+            deferred = getattr(self, "_deferred_portfolio_batches", None)
+            if not isinstance(deferred, dict):
+                deferred = {}
+                self._deferred_portfolio_batches = deferred
+            deferred[(portfolio_runtime.market, decision_timestamp)] = (list(relevant), step.retry_at)
+            log.info(
+                "Equity decision %s waits for the SIP daily bar (signal cross-check), retry at %s",
+                decision_timestamp.isoformat(),
+                step.retry_at.isoformat() if step.retry_at is not None else "n/a",
+            )
+            return None
+        if step.outcome is None:
+            return False
+        self._record_signal_cross_check(step.outcome)
+        return step.outcome
+
+    def _record_signal_cross_check(self, outcome: CrossCheckOutcome) -> None:
+        """Log and alert one finished cross-check. Never raises."""
+        try:
+            fields: dict[str, Any] = {
+                "market": Market.EQUITY.value,
+                "session_date": outcome.session_date.isoformat(),
+                "status": outcome.status,
+                "close_gap_bps": dict(outcome.close_gap_bps),
+                "attempts": outcome.attempts,
+            }
+            if outcome.status == STATUS_TREND_MISMATCH:
+                category = "trend_mismatch"
+            elif outcome.status == STATUS_SECONDARY_UNAVAILABLE:
+                category = "secondary_unavailable"
+                fields["reason"] = outcome.reason
+            elif outcome.close_divergence:
+                category = "close_divergence"
+            else:
+                log.info(
+                    "Signal cross-check %s: sources agree (close gaps bps %s)",
+                    outcome.session_date.isoformat(),
+                    outcome.close_gap_bps,
+                )
+                return
+            fields["close_divergence"] = outcome.close_divergence
+            log.warning("%s", outcome.summary())
+            alerts.emit("signal_source_mismatch", message=outcome.summary(), category=category, **fields)
+        except Exception:
+            log.warning("Signal cross-check alert failed", exc_info=True)
+
+    def _run_due_deferred_portfolio_batches(self, now: datetime | None = None) -> None:
+        """Re-run decision batches deferred by the signal cross-check."""
+        deferred = getattr(self, "_deferred_portfolio_batches", None)
+        if not deferred:
+            return
+        now = now or datetime.now(UTC)
+        for key, (bars, retry_at) in sorted(deferred.items(), key=lambda item: item[0][1]):
+            if retry_at is not None and retry_at > now:
+                continue
+            deferred.pop(key, None)
+            self._process_portfolio_timestamp(bars)
+
+    def signal_cross_check_status(self) -> dict[str, object]:
+        """Last finished cross-check and any decision waiting for it."""
+        coordinator = getattr(self, "_signal_cross_check", None)
+        if not isinstance(coordinator, SignalCrossCheckCoordinator):
+            configured = getattr(getattr(self, "app_config", None), "signal_cross_check", None)
+            enabled = configured.enabled if isinstance(configured, SignalCrossCheckConfig) else True
+            return {"enabled": enabled, "last": None, "pending": {}}
+        last = coordinator.last_outcome
+        return {
+            "enabled": coordinator.enabled,
+            "last": last.to_metadata() if last is not None else None,
+            "pending": coordinator.pending_status(),
+        }
 
     def _equity_signal_basis_latch(self, decision_timestamp: datetime | None = None) -> str | None:
         """Latch reason when equity signals are unverified/stale, else None.

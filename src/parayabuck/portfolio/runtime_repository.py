@@ -831,53 +831,6 @@ class PortfolioStateRepository:
                 (status, status, broker_order_id, client_order_id),
             )
 
-    def record_protective_order(
-        self,
-        account_id: str,
-        client_order_id: str,
-        symbol: str,
-        market: Market,
-        quantity: float,
-        reference_price: float,
-    ) -> None:
-        """Record a protective/emergency stop for a portfolio-owned position.
-
-        The stop is inserted as a SELL leg under the owning entry's decision,
-        so a later fill flows through ``apply_trade_update`` and decrements
-        the net owned quantity exactly like a planned exit. Without this, a
-        stop fill would leave the repository claiming ownership of a flat
-        broker position forever. ``reference_price`` is the stop trigger price
-        so slippage is measured against the stop, not the entry.
-        """
-        with self.store.lock, self.store.connection:
-            lineage = self._latest_entry_lineage(account_id, symbol, market)
-            if lineage is None:
-                # No portfolio entry lineage: booking a SELL leg would violate
-                # the decision foreign key and could grant managed ownership
-                # without a matching buy. The stop itself is already accepted
-                # broker-side; ownership release for it is a reconcile concern.
-                log.error(
-                    "Protective stop for %s has no portfolio entry lineage; ownership bookkeeping skipped",
-                    symbol,
-                )
-                return
-            decision_id, _entry_reference = lineage
-            self.store.connection.execute(
-                """INSERT OR IGNORE INTO portfolio_orders(
-                    client_order_id, decision_id, symbol, market, side, quantity,
-                    reference_price, status, created_at
-                ) VALUES (?, ?, ?, ?, 'sell', ?, ?, 'submitted', ?)""",
-                (
-                    client_order_id,
-                    decision_id,
-                    symbol,
-                    market.value,
-                    quantity,
-                    reference_price,
-                    datetime.now(UTC).isoformat(),
-                ),
-            )
-
     def clear_stale_ownership(self, account_id: str, symbol: str, market: Market) -> float:
         """Record an explicit ownership reconciliation adjustment when the
         broker holds no position and no real fill could be recovered.
@@ -1074,23 +1027,6 @@ class PortfolioStateRepository:
                 (consume, str(adjustment_id)),
             )
             remaining -= consume
-
-    def _latest_entry_lineage(self, account_id: str, symbol: str, market: Market) -> tuple[str, float] | None:
-        """Decision id and reference price of the most recent BUY entry row."""
-        row = self.store.connection.execute(
-            """
-            SELECT o.decision_id, o.reference_price FROM portfolio_orders o
-            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
-            JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
-            WHERE o.symbol = ? AND o.market = ? AND o.side = 'buy'
-              AND s.account_id = ?
-            ORDER BY o.created_at DESC LIMIT 1
-            """,
-            (symbol, market.value, account_id),
-        ).fetchone()
-        if row is None:
-            return None
-        return str(row[0]), float(row[1] or 0.0)
 
     def has_order(self, client_order_id: str) -> bool:
         with self.store.lock:

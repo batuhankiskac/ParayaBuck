@@ -65,7 +65,7 @@ AlpacaBroker facade (src/parayabuck/execution/alpaca.py ~800 lines after)
 - `order_state` normalization to `OrderState` vocabulary, `filled_qty`/`avg_price`/`fees` centralization, unknown status → `UNKNOWN`/ambiguous
 
 ### 2.6 `alpaca_reconciliation.py`
-- `ReconciliationService`: orchestrates `account()` → `fill-activity fee backfill` (watermarked 24h, paginated, idempotent) → `managed = ledger.managed_for_account` → 7-bucket holdings (`MATCH` etc.) → `_reconcile_stale_portfolio_ownership` → `_reconcile_crypto_exit_state` → `_reconcile_stale_ledger_entries` → protective-stop (re)submission (batch open-orders once, fee-reserve tolerance, nested bracket)
+- `ReconciliationService`: orchestrates `account()` → `fill-activity fee backfill` (watermarked 24h, paginated, idempotent) → `managed = ledger.managed_for_account` → 7-bucket holdings (`MATCH` etc.) → `_reconcile_stale_portfolio_ownership` → `_reconcile_crypto_exit_state` → `_reconcile_stale_ledger_entries` → protective-stop (re)submission for ledger-managed/external positions only (batch open-orders once, fee-reserve tolerance, nested bracket); portfolio-owned crypto gets no broker stop and exits only via strategy SELLs
 - Returns `dict[str, list[str]]` 7 buckets, sorted, never silently overwrites
 - Idempotent: second call with same broker truth yields same buckets, no duplicate fills/stops
 

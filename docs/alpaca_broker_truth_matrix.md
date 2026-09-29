@@ -110,7 +110,7 @@ Fail-closed default (`verified=False, 0`) halts crypto exits (`_cancel_stop_then
 |P9|Crypto stop: `limit_price = stop ± distance_steps*step` where `distance_steps = max(1, ceil(stop*offset/step))`, offset 25bps|Stop-limit with guarantee|Build `StopLimitOrderRequest(GTC)`|Use stop-market for crypto|
 |P10|Equity stop: fractional qty → `quantize(1e-9, ROUND_DOWN)` + `DAY`; integral → `int` + `GTC`|Fractional equity requires DAY|Build `StopOrderRequest` with correct TIF|Use GTC for fractional|
 |P11|Submit oversize crypto stop raises with `available: Y` where `0<Y<qty`|Broker reports available < requested|Round Y down to step, retry with new `parayabuck-stop-{uuid}` via `_submit_with_recovery`|Retry same client id|
-|P12|Retry accepted with different client id|New id is authoritative|Return new client id; caller must record accepted id via `portfolio_stop_recorded`|Keep old id|
+|P12|Retry accepted with different client id|New id is authoritative|Return new client id; caller must record accepted id (ledger `register_protective_stop`); portfolio-owned crypto gets no broker stop|Keep old id|
 
 ---
 

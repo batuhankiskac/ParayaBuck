@@ -98,7 +98,6 @@ class AlpacaBroker:
         portfolio_open_orders: Callable[[], object] | None = None,
         portfolio_fill_recovered: (Callable[..., None] | None) = None,
         portfolio_order_quantity_adopted: (Callable[[str, float], None] | None) = None,
-        portfolio_stop_recorded: (Callable[[str, Market, float, str, float], None] | None) = None,
         portfolio_flat_reconciled: (Callable[[str, Market], object] | None) = None,
         crypto_stop_limit_offset_bps: float = 25.0,
         crypto_emergency_exit_bps: float = 75.0,
@@ -136,7 +135,6 @@ class AlpacaBroker:
         self.portfolio_open_orders = portfolio_open_orders
         self.portfolio_fill_recovered = portfolio_fill_recovered
         self.portfolio_order_quantity_adopted = portfolio_order_quantity_adopted
-        self.portfolio_stop_recorded = portfolio_stop_recorded
         self.portfolio_flat_reconciled = portfolio_flat_reconciled
         self._account_id = ""
         # Immutable snapshot cache: every fresh account() seeds it; callers

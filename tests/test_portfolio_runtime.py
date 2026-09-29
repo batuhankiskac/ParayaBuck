@@ -676,101 +676,6 @@ def test_duplicate_canonical_broker_positions_fail_closed(tmp_path) -> None:
         broker.account()
 
 
-def test_emergency_stop_fill_releases_portfolio_ownership(tmp_path) -> None:
-    """Stop submit -> fill -> repository net quantity zero -> external/flat:
-    the full protective-stop lifecycle must be visible to the portfolio
-    repository, otherwise a fill leaves stale managed ownership behind."""
-    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    session_id = repo.begin_session("acct", "digest", "paper")
-    decision_timestamp = datetime(2025, 1, 1, tzinfo=UTC)
-    decision_id = repo.record_decision(
-        session_id,
-        "acct",
-        "digest",
-        _decision_target(decision_timestamp),
-        _risk_decision(decision_timestamp),
-        Market.CRYPTO,
-    )
-    entry = PortfolioOrderRequest(
-        client_order_id="pbp-entry",
-        decision_id=decision_id,
-        symbol="BTC/USD",
-        market=Market.CRYPTO,
-        side=PortfolioOrderSide.BUY,
-        quantity=0.5,
-        reference_price=100000.0,
-        decision_timestamp=decision_timestamp,
-        strategy_name="crypto",
-        strategy_version="1",
-        risk_reducing=False,
-    )
-    repo.record_order(entry, "submitting")
-    repo.apply_trade_update(
-        client_order_id="pbp-entry",
-        broker_order_id="broker-entry",
-        status="fill",
-        cumulative_filled_quantity=0.5,
-        average_fill_price=100000.0,
-        occurred_at=decision_timestamp,
-        activity_id="activity-entry",
-        fee=0.0,
-        realized_pnl=0.0,
-        unrealized_pnl=0.0,
-    )
-    # The buy fill is booked net of the crypto taker fee (the acquired
-    # position is 0.25% smaller than the reported fill).
-    assert repo.owned_quantities("acct") == {"BTC/USD": 0.49875}
-
-    client = _FakeAlpacaClient()
-    client.positions = [
-        SimpleNamespace(
-            symbol="BTC/USD",
-            qty="0.49875",
-            avg_entry_price="100000",
-            current_price="100000",
-            qty_available="0.49875",
-            unrealized_pl="0",
-            unrealized_intraday_pl="0",
-            asset_class="crypto",
-        )
-    ]
-    broker = _portfolio_broker(client, repo, tmp_path)
-    recorded: dict[str, str] = {}
-
-    def record_stop(symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float) -> None:
-        recorded["id"] = client_order_id
-        repo.record_protective_order("acct", client_order_id, symbol, market, qty, reference_price)
-
-    broker.portfolio_stop_recorded = record_stop
-
-    broker.reconcile()
-
-    assert recorded["id"]
-    assert repo.has_order(recorded["id"])
-
-    # The protective stop fills: the SELL leg decrements net ownership even
-    # though the broker position may still be open in the snapshot. The stop
-    # can only ever sell the acquired (net) quantity.
-    repo.apply_trade_update(
-        client_order_id=recorded["id"],
-        broker_order_id="broker-stop",
-        status="fill",
-        cumulative_filled_quantity=0.49875,
-        average_fill_price=99000.0,
-        occurred_at=decision_timestamp,
-        activity_id="activity-stop",
-        fee=0.0,
-        realized_pnl=0.0,
-        unrealized_pnl=0.0,
-    )
-    assert repo.owned_quantities("acct") == {}
-    assert repo.owned_symbols("acct") == set()
-
-    snapshot = broker.account()
-    assert snapshot.positions[0].ownership == "external"
-    assert snapshot.positions[0].managed_qty == 0.0
-
-
 def _owned_crypto_entry(repo: PortfolioStateRepository, *, quantity: float) -> None:
     session_id = repo.begin_session("acct", "digest", "paper")
     decision_timestamp = datetime(2025, 1, 1, tzinfo=UTC)
@@ -808,75 +713,6 @@ def _owned_crypto_entry(repo: PortfolioStateRepository, *, quantity: float) -> N
         realized_pnl=0.0,
         unrealized_pnl=0.0,
     )
-
-
-class _RetryStopClient(_FakeAlpacaClient):
-    """Fake whose first stop submission is rejected with an available-qty
-    error, forcing the broker's internal retry to use a fresh order id."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.fail_first_stop = True
-
-    def submit_order(self, request: object) -> SimpleNamespace:
-        if self.fail_first_stop:
-            self.fail_first_stop = False
-            import json
-
-            raise RuntimeError(json.dumps({"available": 0.4}))
-        self.submitted.append(request)
-        return SimpleNamespace(id=f"broker-{getattr(request, 'client_order_id', '')}")
-
-
-def test_emergency_stop_retry_fill_is_attributed_to_accepted_order_id(tmp_path) -> None:
-    """When the first stop submission is rejected and the broker retries with
-    a fresh client order id, the recorded stop must use the accepted id so the
-    eventual fill decrements the repository-owned quantity."""
-    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
-    client = _RetryStopClient()
-    client.positions = [
-        SimpleNamespace(
-            symbol="BTC/USD",
-            qty="0.5",
-            avg_entry_price="100000",
-            current_price="100000",
-            qty_available="0.5",
-            unrealized_pl="0",
-            unrealized_intraday_pl="0",
-            asset_class="crypto",
-        )
-    ]
-    broker = _portfolio_broker(client, repo, tmp_path)
-    recorded: dict[str, str] = {}
-
-    def record_stop(symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float) -> None:
-        recorded["id"] = client_order_id
-        repo.record_protective_order("acct", client_order_id, symbol, market, qty, reference_price)
-
-    broker.portfolio_stop_recorded = record_stop
-
-    broker.reconcile()
-
-    assert recorded["id"], "the accepted (retried) stop id must be recorded"
-    assert repo.has_order(recorded["id"])
-    assert len(client.submitted) == 1, "first submission rejected, retry accepted"
-
-    # The retry accepted only 0.4 of the 0.5 position; its fill decrements the
-    # owned quantity by exactly that amount.
-    repo.apply_trade_update(
-        client_order_id=recorded["id"],
-        broker_order_id="broker-stop",
-        status="fill",
-        cumulative_filled_quantity=0.4,
-        average_fill_price=99000.0,
-        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
-        activity_id="activity-stop",
-        fee=0.0,
-        realized_pnl=0.0,
-        unrealized_pnl=0.0,
-    )
-    assert repo.owned_quantities("acct") == pytest.approx({"BTC/USD": 0.09875})
 
 
 def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
@@ -920,33 +756,37 @@ def test_reconcile_keeps_ownership_when_broker_still_holds_the_position(tmp_path
     assert repo.owned_quantities("acct") == {"BTC/USD": 0.49875}
 
 
-def test_reconcile_protects_portfolio_owned_crypto_with_emergency_stop(
-    tmp_path,
-) -> None:
-    """P0-4: portfolio crypto positions without a ledger lot still get a stop."""
+def test_reconcile_submits_no_stop_for_portfolio_owned_crypto(tmp_path) -> None:
+    """Portfolio crypto exits only through strategy SELL legs, as in the
+    validated replay: reconciliation must not add a broker stop, and an
+    unprotected position is a clean MATCH on every cycle, not an incident."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _owned_crypto_entry(repo, quantity=0.5)
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
             symbol="BTC/USD",
-            qty="0.5",
+            qty="0.49875",
             avg_entry_price="100000",
             current_price="100000",
-            qty_available="0.5",
+            qty_available="0.49875",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
             asset_class="crypto",
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
-    broker.portfolio_owned_quantities = lambda: {"BTC/USD": 0.5}
 
-    broker.reconcile()
+    for _cycle in range(2):
+        report = broker.reconcile()
+        assert report["MATCH"] == ["BTC/USD"]
+        assert all(not symbols for bucket, symbols in report.items() if bucket != "MATCH")
 
-    stops = [order for order in client.submitted if getattr(order, "side", None) == "sell"]
-    assert len(stops) == 1
-    expected_stop = 100_000 * (1 - 75.0 / 10_000)
-    assert float(stops[0].stop_price) == pytest.approx(expected_stop)
+    assert client.submitted == []
+    assert client.open_orders == []
+    assert repo.owned_quantities("acct") == {"BTC/USD": 0.49875}
+    assert broker.ledger is not None
+    assert broker.ledger.load_safety_incidents("acct") == ()
 
 
 def test_reconcile_keeps_full_size_crypto_stop_in_fee_reserve_band(tmp_path) -> None:
@@ -1755,58 +1595,6 @@ def test_flat_position_with_stale_ownership_does_not_raise_drift(tmp_path) -> No
     broker = _portfolio_broker(_FakeAlpacaClient(), repo, tmp_path)
     snapshot = broker.account()
     assert snapshot.positions == ()
-
-
-def test_protective_stop_slippage_references_stop_price_not_entry(tmp_path) -> None:
-    """The protective-stop SELL leg must carry the stop trigger as its
-    reference price; entry-to-stop loss is not execution slippage."""
-    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_crypto_entry(repo, quantity=0.5)
-    client = _FakeAlpacaClient()
-    client.positions = [
-        SimpleNamespace(
-            symbol="BTC/USD",
-            qty="0.5",
-            avg_entry_price="100000",
-            current_price="100000",
-            qty_available="0.5",
-            unrealized_pl="0",
-            unrealized_intraday_pl="0",
-            asset_class="crypto",
-        )
-    ]
-    broker = _portfolio_broker(client, repo, tmp_path)
-    recorded: dict[str, object] = {}
-
-    def record_stop(symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float) -> None:
-        recorded["id"] = client_order_id
-        recorded["reference_price"] = reference_price
-        repo.record_protective_order("acct", client_order_id, symbol, market, qty, reference_price)
-
-    broker.portfolio_stop_recorded = record_stop
-    broker.reconcile()
-
-    expected_stop = 100_000 * (1 - 75.0 / 10_000)
-    assert recorded["reference_price"] == pytest.approx(expected_stop)
-    repo.apply_trade_update(
-        client_order_id=str(recorded["id"]),
-        broker_order_id="broker-stop",
-        status="fill",
-        cumulative_filled_quantity=0.5,
-        average_fill_price=99_000.0,
-        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
-        activity_id="activity-stop",
-        fee=0.0,
-        realized_pnl=0.0,
-        unrealized_pnl=0.0,
-    )
-    with sqlite3.connect(tmp_path / "runtime.sqlite3") as connection:
-        slippage = connection.execute(
-            "SELECT slippage FROM portfolio_fills WHERE activity_id = 'activity-stop'"
-        ).fetchone()[0]
-    # (stop - fill) * qty * -1 for a SELL leg: fill below the stop is
-    # positive slippage measured against the stop trigger.
-    assert slippage == pytest.approx((expected_stop - 99_000.0) * 0.5)
 
 
 def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) -> None:

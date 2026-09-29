@@ -49,6 +49,34 @@ def _fill(repository: PortfolioStateRepository, client_order_id: str, quantity: 
     )
 
 
+def _exit(
+    repository: PortfolioStateRepository,
+    session: str,
+    target: TargetPortfolio,
+    client_order_id: str,
+    symbol: str,
+    market: Market,
+    quantity: float,
+) -> None:
+    """Book and fill one SELL exit leg under the entry's decision."""
+    sell = PortfolioOrderRequest(
+        client_order_id=client_order_id,
+        decision_id="",
+        symbol=symbol,
+        market=market,
+        side=PortfolioOrderSide.SELL,
+        quantity=quantity,
+        reference_price=95.0,
+        decision_timestamp=target.decision_timestamp,
+        strategy_name="fixed",
+        strategy_version="1",
+        risk_reducing=True,
+    )
+    risk = RiskOverlayDecision(target, False, (), 0.2, 0.2)
+    repository.record_decision_with_orders(session, "acct", "digest", target, risk, market, (sell,))
+    _fill(repository, client_order_id, quantity)
+
+
 def _crypto_round_trip(tmp_path: Any, exits: dict[str, float]) -> PortfolioStateRepository:
     repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     session = repository.begin_session("acct", "digest", "paper")
@@ -83,9 +111,7 @@ def _crypto_round_trip(tmp_path: Any, exits: dict[str, float]) -> PortfolioState
         # The repository books a crypto BUY net of the taker-fee reserve.
         assert abs(repository.owned_quantities("acct")[symbol] - booked) < 1e-15
     for symbol, quantity in exits.items():
-        stop_id = f"parayabuck-stop-{symbol}"
-        repository.record_protective_order("acct", stop_id, symbol, Market.CRYPTO, quantity, 95.0)
-        _fill(repository, stop_id, quantity)
+        _exit(repository, session, target, f"parayabuck-stop-{symbol}", symbol, Market.CRYPTO, quantity)
     return repository
 
 
@@ -175,9 +201,7 @@ def _cycle(
         ordered, _booked, stop = _FILLS[symbol]
         stop = (stops or {}).get(symbol, stop)
         _fill(repository, f"buy-{cycle}-{symbol}", ordered)
-        stop_id = f"parayabuck-stop-{cycle}-{symbol}"
-        repository.record_protective_order("acct", stop_id, symbol, Market.CRYPTO, stop, 95.0)
-        _fill(repository, stop_id, stop)
+        _exit(repository, session, target, f"parayabuck-stop-{cycle}-{symbol}", symbol, Market.CRYPTO, stop)
 
 
 def _stale_after_each_cycle(
@@ -290,8 +314,7 @@ def test_equity_residue_keeps_existing_ownership_semantics(tmp_path) -> None:
         session, "acct", "digest", target, RiskOverlayDecision(target, False, (), 0.2, 0.2), Market.EQUITY, (buy,)
     )
     _fill(repository, "buy-SPY", 1.5)
-    repository.record_protective_order("acct", "parayabuck-stop-SPY", "SPY", Market.EQUITY, 1.5 - 5e-9, 95.0)
-    _fill(repository, "parayabuck-stop-SPY", 1.5 - 5e-9)
+    _exit(repository, session, target, "parayabuck-stop-SPY", "SPY", Market.EQUITY, 1.5 - 5e-9)
 
     assert _dust_clears(repository) == 0
     assert set(repository.owned_quantities("acct")) == {"SPY"}
@@ -471,8 +494,7 @@ def test_equity_oversell_books_no_dust_credit(tmp_path) -> None:
         session, "acct", "digest", target, RiskOverlayDecision(target, False, (), 0.2, 0.2), Market.EQUITY, (buy,)
     )
     _fill(repository, "buy-SPY", 1.5)
-    repository.record_protective_order("acct", "parayabuck-stop-SPY", "SPY", Market.EQUITY, 1.5 + 5e-9, 95.0)
-    _fill(repository, "parayabuck-stop-SPY", 1.5 + 5e-9)
+    _exit(repository, session, target, "parayabuck-stop-SPY", "SPY", Market.EQUITY, 1.5 + 5e-9)
 
     assert _dust_clears(repository, CRYPTO_DUST_CREDIT_KIND) == 0
     with pytest.raises(RuntimeError, match="Negative net portfolio ownership"):

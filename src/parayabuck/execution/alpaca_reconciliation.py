@@ -7,7 +7,8 @@ Responsibility:
   24 h, paginated, deduped by ``activity.id``) → ``managed =
   ledger.managed_for_account`` → holdings 7-bucket (``MATCH`` etc.) →
   ``_reconcile_stale_portfolio_ownership`` → ``_reconcile_crypto_exit_state``
-  → ``_reconcile_stale_ledger_entries`` → protective-stop (re)submission.
+  → ``_reconcile_stale_ledger_entries`` → protective-stop (re)submission
+  (ledger-managed/external positions only; portfolio-owned crypto has none).
 - Idempotent: second call with same broker truth yields same buckets, no
   duplicate fills/stops.
 - Emits observability but never controls trading; monitoring failure does
@@ -729,7 +730,11 @@ class ReconciliationService:
             symbol = canonical_symbol(position.symbol, position.market)
             ownership = managed.get(symbol)
             portfolio_owned_position = position.market == Market.CRYPTO and symbol in portfolio_owned
-            if ownership is None and not portfolio_owned_position and not manage_external:
+            if ownership is None and portfolio_owned_position:
+                # Portfolio crypto exits only through the strategy's own SELL
+                # legs, exactly like the validated replay: no broker stop.
+                continue
+            if ownership is None and not manage_external:
                 log.info("External position left unchanged during reconciliation: %s", symbol)
                 continue
             broker_qty_is_fee_adjusted = False
@@ -759,12 +764,8 @@ class ReconciliationService:
                 stop_price = getattr(ownership, "current_stop", None) or ownership.original_stop
                 total_qty = min(abs(position.qty), ownership.owned_qty)
             else:
-                if portfolio_owned_position:
-                    stop_pct = broker.crypto_emergency_exit_bps / 10_000
-                    total_qty = min(abs(position.qty), position.managed_qty)
-                else:
-                    stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
-                    total_qty = abs(position.qty)
+                stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
+                total_qty = abs(position.qty)
                 stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
             available_qty = abs(position.qty_available) if position.qty_available is not None else total_qty
             required_qty = total_qty
@@ -817,21 +818,11 @@ class ReconciliationService:
             from uuid import uuid4
 
             protective_client_id = (
-                f"{ownership.entry_client_order_id}-stop-{uuid4().hex[:8]}"
-                if ownership is not None
-                else f"parayabuck-stop-{uuid4().hex}"
-                if portfolio_owned_position
-                else None
+                f"{ownership.entry_client_order_id}-stop-{uuid4().hex[:8]}" if ownership is not None else None
             )
             accepted_id = broker._submit_stop(
                 position.symbol, position.market, qty, stop_price, is_long, client_order_id=protective_client_id
             )
-            if (
-                accepted_id is not None
-                and portfolio_owned_position
-                and (stop_recorder := getattr(broker, "portfolio_stop_recorded", None)) is not None
-            ):
-                stop_recorder(position.symbol, position.market, qty, accepted_id, stop_price)
             if accepted_id is None:
                 if ownership is not None and ledger is not None:
                     ledger.set_protection_state(

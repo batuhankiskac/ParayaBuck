@@ -320,7 +320,7 @@ Failure modes during drill:
 
 ### 3.7 Broker / local mismatch — reconciliation (7 buckets)
 
-Evidence: `src/parayabuck/execution/alpaca_reconciliation.py:1-15, 327-564` — 7-bucket, idempotent, fail-closed. `ReconciliationService.reconcile()` returns `dict[str, list[str]]` with keys `MATCH, LOCAL_STALE, BROKER_STALE, QUANTITY_MISMATCH, UNKNOWN_ORDER, MISSING_BROKER_ORDER, MISSING_LOCAL_ORDER`. Flow: `account() → _reconcile_fill_activity_fees() (watermarked 24h, paginated, deduped by activity.id, watermark only on success) → ledger.managed_for_account → holdings 7-bucket → _reconcile_stale_portfolio_ownership → _reconcile_crypto_exit_state → _reconcile_stale_ledger_entries → protective-stop (re)submission`.
+Evidence: `src/parayabuck/execution/alpaca_reconciliation.py:1-15, 327-564` — 7-bucket, idempotent, fail-closed. `ReconciliationService.reconcile()` returns `dict[str, list[str]]` with keys `MATCH, LOCAL_STALE, BROKER_STALE, QUANTITY_MISMATCH, UNKNOWN_ORDER, MISSING_BROKER_ORDER, MISSING_LOCAL_ORDER`. Flow: `account() → _reconcile_fill_activity_fees() (watermarked 24h, paginated, deduped by activity.id, watermark only on success) → ledger.managed_for_account → holdings 7-bucket → _reconcile_stale_portfolio_ownership → _reconcile_crypto_exit_state → _reconcile_stale_ledger_entries → protective-stop (re)submission` (ledger-managed/external positions only; portfolio-owned crypto gets no broker stop).
 
 Buckets (holdings layer):
 - `MATCH` — `|local_qty - broker_qty| <= tol` (where `tol = max(1e-9, local*1e-8)`) and both `>1e-12`.

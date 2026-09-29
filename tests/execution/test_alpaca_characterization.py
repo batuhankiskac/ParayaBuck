@@ -46,7 +46,6 @@ def _broker_with_fake(tmp_path: Path, fake: FakeTradingClient, *, with_ledger: b
     broker.portfolio_owned_quantities = lambda: {}
     broker.portfolio_open_orders = lambda: []
     broker.portfolio_fill_recovered = None
-    broker.portfolio_stop_recorded = None
     broker.portfolio_flat_reconciled = None
     broker.crypto_stop_limit_offset_bps = 25.0
     broker.crypto_emergency_exit_bps = 75.0

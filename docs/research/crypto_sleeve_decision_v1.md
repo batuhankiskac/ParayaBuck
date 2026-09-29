@@ -138,7 +138,18 @@ In the later-start check, A leads C by 0.3 pp. Over the full window, C leads A b
 - **Structural surface:** 24/7 scheduling (the sleeve decides on weekends and at 00:00 UTC), a
   scanner refresh with an active-universe file and digest match, crypto stop and emergency-exit
   config, and fractional-quantity dust.
-- **Live evidence:** there is no clean live track record yet. The stop bug contaminated it.
+- **Live evidence:** there is no clean live track record yet. The stop hook dates from about
+  `51b661c`/`4ec1a7d` (2026-08-09/10). It therefore covered the whole T1 PAPER period from
+  2026-08-27 to 2026-09-29.
+- **Earlier incidents:**
+  - `bc0a520`: gross-fill ownership drift halt.
+  - `e09e89c`: stops cancelled every 60 seconds.
+  - `93ab8a9`: BTC/USD vs BTCUSD lookup broke startup reconciliation.
+  - `1abc678`: quantity mismatch blocked startup.
+  - `930125a` and `a0c2fc5`: candidate-pool and metadata drift.
+- **Config keys that do nothing:** `engine.crypto_stop_limit_offset_bps` and
+  `crypto_emergency_exit_bps` are validated but never passed to the broker. Only the
+  cancel-timeout and poll keys are wired (`runtime.py:372-373`).
 
 ## 5. Recommendation: remove
 
@@ -171,10 +182,13 @@ drawdown and is a far simpler rule. It is not validated in the engine.
 - `universe.crypto.enabled: false`
 - `strategy.equity.maximum_allocation: 0.93 → 0.98`. The capital invariant in
   `config.py:577-593` then holds: 0.98 ≤ `max_gross` 0.98 ≤ 1 − 0.02.
-- Optional clean-up, once disabled:
-  - `risk.max_crypto_*`
-  - `engine.crypto_*`
-  - `backtest.crypto_taker_fee_bps`
+- Keep the `strategy.crypto` block and its registered name, with `enabled: false`. The config
+  loader still resolves it.
+- Leave `risk.max_crypto_*` unchanged. These keys are in the equity runtime's configuration
+  digest (`portfolio/runtime_models.py:174-196`) and cannot be set to 0.
+- Leave `engine.crypto_*` and `backtest.crypto_taker_fee_bps` alone until full deletion.
+- `scripts/audit_paper_soak.py` (`EXPECTED` and gates S2/S9/S11) hardcodes crypto evidence. It
+  must be updated or it will fail.
 
 Before the switch:
 
@@ -203,7 +217,18 @@ Before the switch:
 
 **Tests:**
 
-- **Crypto-specific:**
+- **Break under a config-only disable:**
+  - `tests/test_strategy_spec_freeze.py:101`
+  - `tests/test_dual_market_startup.py:134-135`, the frozen-config assertion
+  - `tests/test_config.py:146-167`, if the allocation changes
+  - `tests/test_combined_account_risk.py:106-149`, which asserts 0.93 + 0.05 = 0.98
+  - `tests/test_paper_soak_auditor.py`
+- **Build a runtime from the shipped config (review needed):**
+  - `test_buy_admission_correctness.py`
+  - `test_crypto_foundation_parity.py`
+  - `test_t1_promotion_transition.py`
+  - `test_web_g9_g7.py`
+- **Crypto-specific, deleted only in the full code deletion:**
   - `tests/test_crypto_scanner.py`
   - `tests/test_crypto_low_variance.py`
   - `tests/test_crypto_universe.py`

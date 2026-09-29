@@ -6,7 +6,6 @@ fixtures, ``tmp_path`` state, no network and no production paths.
 
 from __future__ import annotations
 
-import json
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -21,11 +20,9 @@ from parayabuck.execution.portfolio import (
 from parayabuck.monitoring import journal as journal_module
 from parayabuck.portfolio import runtime_service
 from parayabuck.portfolio.base import PortfolioContext
-from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV1
 from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
-from parayabuck.runtime_universe import load_active_product_universe
 
 
 def _fill(repo: PortfolioStateRepository, client_order_id: str, quantity: float) -> None:
@@ -36,7 +33,7 @@ def _fill(repo: PortfolioStateRepository, client_order_id: str, quantity: float)
         )
 
 # ---------------------------------------------------------------------------
-# PB-01: owned_quantities must not leak one market's stale-clear into another
+# PB-01: legacy crypto ledger rows never leak into equity ownership
 # ---------------------------------------------------------------------------
 
 
@@ -77,8 +74,11 @@ def _order(decision_id: str, market: Market, symbol: str, quantity: float) -> Po
     )
 
 
-def test_owned_quantities_scopes_stale_clear_to_its_own_market(tmp_path):
-    """A crypto stale-clear must not be subtracted from the equity net."""
+def test_owned_quantities_ignores_legacy_crypto_rows(tmp_path):
+    """Legacy crypto-sleeve ledger rows load but never count as ownership.
+
+    The crypto adjustment exceeds the crypto fill: were those rows netted,
+    the ownership invariant would trip and the equity runtime would crash."""
     repo = PortfolioStateRepository(tmp_path / "ownership.sqlite3")
     equity_ts = datetime(2025, 1, 1, tzinfo=UTC)
     crypto_ts = datetime(2025, 1, 2, tzinfo=UTC)
@@ -97,17 +97,18 @@ def test_owned_quantities_scopes_stale_clear_to_its_own_market(tmp_path):
     repo.record_order(_order(crypto_decision, Market.CRYPTO, "BTC/USD", 0.5), "filled")
     _fill(repo, "cid-BTC/USD", 0.5)
 
-    # Stale-clear adjustment raised for crypto only.
+    repo.record_order(_order(crypto_decision, Market.CRYPTO, "ETH/USD", 2.0), "filled")
+    _fill(repo, "cid-ETH/USD", 2.0)
     repo.record_ownership_adjustment(
-        "acct", "BTC/USD", Market.CRYPTO, 0.5, kind="stale_ownership_clear", note="test"
+        "acct", "BTC/USD", Market.CRYPTO, 0.9, kind="stale_ownership_clear", note="legacy"
     )
 
     assert repo.owned_quantities("acct", Market.EQUITY) == {"QLD": 5.0}
     assert repo.owned_symbols("acct", Market.EQUITY) == {"QLD"}
-    # The crypto net is still cleared to zero by its own market's adjustment.
     assert repo.owned_quantities("acct", Market.CRYPTO) == {}
-    # The account-wide view still nets every market together.
     assert repo.owned_quantities("acct") == {"QLD": 5.0}
+    assert repo.owned_symbols("acct") == {"QLD"}
+    assert repo.ownership_adjustments("acct") == ()
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +141,7 @@ def test_no_trade_event_re_emits_on_the_next_decision_day(monkeypatch):
 
     day_one = datetime(2025, 1, 1, 12, tzinfo=UTC)
     day_two = day_one + timedelta(days=1)
-    common = {"market": "crypto", "strategy": "crypto_low_variance_v1", "reason": "warming_up"}
+    common = {"market": "equity", "strategy": "equity_leveraged_trend_v1", "reason": "warming_up"}
 
     runtime_service._emit_no_trade_safe(decision_timestamp=day_one, **common)
     runtime_service._emit_no_trade_safe(decision_timestamp=day_one + timedelta(hours=1), **common)
@@ -170,42 +171,23 @@ def test_no_trade_event_re_emits_on_the_next_decision_day(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# D1-13: a non-object universe payload must fail closed as RuntimeError
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("payload", [[], "nope", None, 5])
-def test_universe_loader_rejects_non_object_payload(tmp_path, payload):
-    artifact = tmp_path / "universe.json"
-    artifact.write_text(json.dumps(payload), encoding="utf-8")
-
-    with pytest.raises(RuntimeError, match="payload must be an object"):
-        load_active_product_universe(
-            artifact,
-            market=Market.CRYPTO,
-            expected_observation_symbols=("BTC/USD",),
-            expected_config_digest="digest",
-        )
-
-
-# ---------------------------------------------------------------------------
 # PB-10: bool is not an acceptable numeric strategy parameter
 # ---------------------------------------------------------------------------
 
 
 def test_param_helpers_reject_boolean_parameters():
-    # A YAML ``top_n: true`` must fail closed at construction instead of
+    # A YAML ``sma_bars: true`` must fail closed at construction instead of
     # silently becoming 1 through ``isinstance(True, int)``.
-    with pytest.raises(ValueError, match="top_n must be numeric"):
-        CryptoLowVariance1dV1({"top_n": True})
+    with pytest.raises(ValueError, match="sma_bars must be a non-negative integer"):
+        EquityLeveragedTrendV1({"sma_bars": True})
 
-    strategy = CryptoLowVariance1dV1()
-    strategy.parameters["top_n"] = True
-    with pytest.raises(ValueError, match="top_n must be numeric"):
-        strategy.param_int("top_n", 2)
-    strategy.parameters["variance_lookback_days"] = True
-    with pytest.raises(ValueError, match="variance_lookback_days must be numeric"):
-        strategy.param_float("variance_lookback_days", 22.0)
+    strategy = EquityLeveragedTrendV1()
+    strategy.parameters["sma_bars"] = True
+    with pytest.raises(ValueError, match="sma_bars must be numeric"):
+        strategy.param_int("sma_bars", 200)
+    strategy.parameters["vol_target"] = True
+    with pytest.raises(ValueError, match="vol_target must be numeric"):
+        strategy.param_float("vol_target", 0.0)
 
 
 # ---------------------------------------------------------------------------

@@ -22,15 +22,15 @@ from parayabuck.portfolio.base import PortfolioContext, require_product_universe
 def _ctx(*, universe, version: str) -> PortfolioContext:
     return PortfolioContext(
         decision_timestamp=datetime(2025, 6, 15, tzinfo=UTC),
-        market=Market.CRYPTO,
+        market=Market.EQUITY,
         timeframe="1d",
-        history={"BTC/USD": ()},
+        history={"QLD": ()},
         universe=universe,
         universe_version=version,
         equity=100_000,
         holdings={},
-        prices={"BTC/USD": 50_000},
-        benchmark_symbol="BTC/USD",
+        prices={"QLD": 100},
+        benchmark_symbol="SPY",
     )
 
 
@@ -45,14 +45,14 @@ class _NoContains:
 
 def test_product_guard_rejects_none_universe() -> None:
     ctx = _ctx(universe=None, version="v1")
-    assert ctx.in_universe("BTC/USD") is True
+    assert ctx.in_universe("QLD") is True
     with pytest.raises(RuntimeError, match="universe is None"):
         require_product_universe(ctx)
 
 
 def test_product_guard_rejects_missing_contains() -> None:
     ctx = _ctx(universe=_NoContains(), version="v1")
-    assert ctx.in_universe("BTC/USD") is True
+    assert ctx.in_universe("QLD") is True
     with pytest.raises(RuntimeError, match="must expose a callable contains"):
         require_product_universe(ctx)
 
@@ -75,7 +75,7 @@ def test_product_guard_rejects_empty_version() -> None:
 def test_product_guard_accepts_valid_universe() -> None:
     ctx = _ctx(universe=_ValidUniverse(), version="abc123")
     require_product_universe(ctx)
-    assert ctx.in_universe("BTC/USD") is True
+    assert ctx.in_universe("QLD") is True
 
 
 def test_static_context_opt_in_retains_permissive_behavior() -> None:
@@ -92,21 +92,21 @@ def test_backtest_engine_fail_closes_on_missing_universe() -> None:
     from parayabuck.portfolio import portfolio_strategy_from
     from parayabuck.portfolio.models import RebalancePolicy
 
-    strat = portfolio_strategy_from("crypto_low_variance_v2", {"top_n": 2, "rebalance_hours": 96})
+    strat = portfolio_strategy_from("equity_leveraged_trend_v1", {})
     engine = PortfolioBacktestEngine(
         strategy=strat,
-        rebalance_policy=RebalancePolicy(Market.CRYPTO, "hours:96"),
+        rebalance_policy=RebalancePolicy(Market.EQUITY, "hours:24"),
         universe=None,
         universe_version="",
         starting_equity=100_000,
     )
     start = datetime(2025, 1, 1, tzinfo=UTC)
     bars: list[Bar] = []
-    symbols = ["BTC/USD", "ETH/USD", "SOL/USD"]
+    symbols = ["QLD", "QQQ"]
     for i in range(30):
         ts = start + timedelta(days=i)
         for sym in symbols:
-            bars.append(Bar(ts, sym, "1d", 100 + i, 100 + i, 100 + i, 100 + i, 1_000_000, Market.CRYPTO))
+            bars.append(Bar(ts, sym, "1d", 100 + i, 100 + i, 100 + i, 100 + i, 1_000_000, Market.EQUITY))
     with pytest.raises(RuntimeError, match="Product universe guard"):
         engine.run(bars, liquidate_at_end=False)
 
@@ -117,10 +117,7 @@ def test_runtime_service_rejects_missing_universe_before_opening_session(tmp_pat
     from parayabuck.portfolio import portfolio_strategy_from
     from parayabuck.portfolio.runtime_service import PortfolioRuntime, PortfolioStateRepository
 
-    strat = portfolio_strategy_from(
-        "crypto_low_variance_v2",
-        {"top_n": 2, "rebalance_hours": 96, "variance_lookback_days": 22},
-    )
+    strat = portfolio_strategy_from("equity_leveraged_trend_v1", {})
 
     class _Broker:
         def account(self) -> AccountSnapshot:
@@ -139,7 +136,7 @@ def test_runtime_service_rejects_missing_universe_before_opening_session(tmp_pat
     with pytest.raises(RuntimeError, match="Product universe guard"):
         PortfolioRuntime(
             strategy=strat,
-            symbols=("BTC/USD", "ETH/USD", "SOL/USD"),
+            symbols=("QLD", "QQQ"),
             broker=_Broker(),  # type: ignore[arg-type]
             repository=repo,
             mode="paper",

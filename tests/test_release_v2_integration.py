@@ -1,22 +1,15 @@
 """Release integration: strategy-identity migration on one account.
 
-PAPER promotion changes ``configuration_digest`` (strategy name + cadence
-parameters). The migration contract:
+PAPER promotion changes ``configuration_digest`` (strategy parameters). The
+migration contract, exercised on ``equity_leveraged_trend_v1``:
 
-- existing v1-managed positions MUST stay managed under the v2 runtime
+- existing managed positions MUST stay managed under the promoted runtime
   (ownership is ledger/repository based, never digest-scoped);
-- the v2 startup catch-up MUST NOT fire over managed positions
-  (``already_invested``) and MUST NOT be tripped by v1 decisions
+- the promoted startup catch-up MUST NOT fire over managed positions
+  (``already_invested``) and MUST NOT be tripped by the previous decisions
   (digest-scoped duplicate/superseded guards);
-- v2's first scheduled boundary decision rebalances the v1 holdings exactly
-  once, within the frozen risk caps, without layering (no double buy);
-- the runtime-path rebalance policy for the v2 identity is 96h.
-
-The equity residual-momentum identities that used to play the v1/v2/v3 equity
-roles were removed from the codebase; the migration and promotion contracts
-are strategy-agnostic, so they are exercised on the crypto identities that
-still exist. The equity market keeps its own generic runtime coverage through
-``equity_leveraged_trend_v1`` (entry latch).
+- the promoted runtime rebalances through the normal planner within the
+  shipped risk caps, and a restart does not duplicate the decision.
 
 Offline: fake Alpaca client + local SQLite, same seam as the paper-chaos
 gate. No real PAPER orders are ever placed.
@@ -24,7 +17,6 @@ gate. No real PAPER orders are ever placed.
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,8 +33,7 @@ from parayabuck.execution.portfolio import (
     portfolio_risk_limits_from_config,
 )
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
-from parayabuck.portfolio.models import TargetPortfolio
+from parayabuck.portfolio import portfolio_strategy_from
 from parayabuck.portfolio.runtime_service import (
     PortfolioRuntime,
     PortfolioRuntimeResult,
@@ -52,10 +43,7 @@ from parayabuck.portfolio.runtime_service import (
 pytestmark = pytest.mark.paper_chaos
 
 EQUITY_SYMBOLS = ("QQQ", "QLD")
-CRYPTO_SYMBOLS = ("BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD")
 
-V1_CRYPTO = {"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 168}
-V2_CRYPTO = {**V1_CRYPTO, "rebalance_hours": 96}
 TREND_EQUITY = {
     "signal_symbol": "QQQ",
     "hold_symbol": "QLD",
@@ -73,22 +61,14 @@ def _daily_bars(
     *,
     start: datetime | None = None,
 ) -> list[Bar]:
-    """Deterministic daily bars: higher-index symbols drift faster/noisier and
-    a separate volatility schedule for crypto (BTC/ETH low-variance,
-    SOL/XRP high-variance)."""
+    """Deterministic daily bars: higher-index symbols drift faster/noisier."""
     start = start or datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
     bars: list[Bar] = []
     for index in range(days):
         timestamp = start + timedelta(days=index)
         for offset, symbol in enumerate(symbols):
-            if market == Market.CRYPTO:
-                # BTC/ETH: slow steady drift; SOL/XRP: choppy.
-                high_vol = symbol in ("SOL/USD", "XRP/USD")
-                amplitude = 2.0 if high_vol else 0.2
-                drift = 1.0004 + (0.0 if high_vol else 0.0002 * (2 - offset))
-            else:
-                amplitude = 1.0 + offset * 0.02
-                drift = 1.0015 + offset * 0.00003
+            amplitude = 1.0 + offset * 0.02
+            drift = 1.0015 + offset * 0.00003
             noise = (index % 7) * amplitude * 0.001
             close = 100.0 * (drift**index) * (1.0 + noise)
             bars.append(
@@ -105,13 +85,6 @@ def _daily_bars(
                 )
             )
     return bars
-
-
-def _by_day(bars: list[Bar]) -> dict[datetime, list[Bar]]:
-    return {
-        timestamp: [bar for bar in bars if bar.timestamp == timestamp]
-        for timestamp in sorted({bar.timestamp for bar in bars})
-    }
 
 
 class _FakeAlpacaClient:
@@ -133,15 +106,12 @@ class _FakeAlpacaClient:
             last_equity="100000",
             cash="90000",
             non_marginable_buying_power="100000",
-            crypto_status="ACTIVE",
         )
 
     def get_all_positions(self) -> list[SimpleNamespace]:
         return self.positions
 
     def get_open_position(self, symbol: str) -> SimpleNamespace:
-        # Alpaca resolves both the canonical and legacy crypto forms to the
-        # same position; the broker queries by the legacy asset symbol.
         wanted = canonical_symbol(symbol)
         for position in self.positions:
             if canonical_symbol(position.symbol) == wanted:
@@ -182,10 +152,6 @@ def _broker(client: _FakeAlpacaClient, repo: PortfolioStateRepository, tmp_path:
     broker._client = client
     broker._asset_cache = {}
     broker._symbol_exit_locks = {}
-    broker.crypto_emergency_exit_bps = 75.0
-    broker.crypto_stop_limit_offset_bps = 25.0
-    broker.crypto_stop_cancel_timeout_seconds = 5.0
-    broker.crypto_stop_cancel_poll_interval_seconds = 0.25
     broker.manage_external_positions = False
     broker._peak_equity = 0.0
     broker._peak_state_path = Path(tmp_path) / "peak.json"
@@ -253,7 +219,7 @@ def _fill_orders(result: PortfolioRuntimeResult, repo: PortfolioStateRepository,
                 qty_available=str(order.quantity),
                 unrealized_pl="0",
                 unrealized_intraday_pl="0",
-                asset_class="us_equity" if order.market == Market.EQUITY else "crypto",
+                asset_class="us_equity",
             )
         )
 
@@ -265,127 +231,6 @@ def _decision_count(repo: PortfolioStateRepository, market: Market, digest: str)
             (market.value, digest),
         ).fetchone()
     return int(row[0])
-
-
-def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
-    tmp_path: Path,
-) -> None:
-    """G1/G2: v1-managed positions survive the digest switch; the v2 catch-up
-    is blocked; the first v2 boundary rebalances exactly once without a
-    double buy."""
-    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    client = _FakeAlpacaClient()
-    broker = _broker(client, repo, tmp_path)
-
-    total_days = 360
-    crypto_bars = _daily_bars(CRYPTO_SYMBOLS, total_days, Market.CRYPTO)
-    crypto_days = sorted({bar.timestamp for bar in crypto_bars})
-
-    # --- Phase 1: the account runs v1 and owns managed positions -------------
-    v1_crypto = _runtime(
-        "crypto_low_variance_v1",
-        V1_CRYPTO,
-        CRYPTO_SYMBOLS,
-        repo,
-        broker,
-        Market.CRYPTO,
-        maximum_allocation=0.10,
-    )
-    assert rebalance_policy_for(v1_crypto.strategy).hours == 168
-    v1_crypto.seed([bar for bar in crypto_bars if bar.timestamp <= crypto_days[299]])
-    v1_crypto_decided = v1_crypto.process_closed_bars(
-        [bar for bar in crypto_bars if bar.timestamp == crypto_days[299]],
-        force_scheduled=True,
-        decision_origin="v1_weekly",
-    )
-    assert v1_crypto_decided.status == "submitted", v1_crypto_decided.status
-    v1_crypto_orders = list(v1_crypto_decided.orders)
-    assert v1_crypto_orders and any(o.side == PortfolioOrderSide.BUY for o in v1_crypto_orders)
-
-    _fill_orders(v1_crypto_decided, repo, client)
-    v1_crypto.close()
-
-    held_crypto = {p.symbol for p in client.positions if p.asset_class == "crypto"}
-    assert held_crypto
-
-    # --- Phase 2: promote to v2 on the SAME account/repository --------------
-    v2_crypto = _runtime(
-        "crypto_low_variance_v2",
-        V2_CRYPTO,
-        CRYPTO_SYMBOLS,
-        repo,
-        broker,
-        Market.CRYPTO,
-        maximum_allocation=0.10,
-    )
-    assert rebalance_policy_for(v2_crypto.strategy).hours == 96  # G4 runtime-path
-    v2_crypto_digest = v2_crypto.configuration_digest
-    assert v2_crypto_digest != v1_crypto.configuration_digest
-
-    v2_crypto.seed([bar for bar in crypto_bars if bar.timestamp <= crypto_days[299]])
-
-    # v1 positions stay managed under v2 (ledger ownership, not digest).
-    snapshot = broker.account()
-    for symbol in held_crypto:
-        position = next(p for p in snapshot.positions if p.symbol == symbol)
-        assert position.managed_qty > 1e-12, f"{symbol} lost managed ownership under v2"
-        assert position.ownership in {"managed", "mixed"}
-
-    # v2 catch-up must NOT fire over managed positions and must not be
-    # confused by the v1 decisions (digest-scoped guards).
-    assert v2_crypto.startup_catch_up().status == "already_invested"
-    assert _decision_count(repo, Market.CRYPTO, v2_crypto_digest) == 0
-
-    # --- Phase 3: v2's first boundary rebalances exactly once ---------------
-    # Crypto: first 96h block boundary after day 300.
-    crypto_decisions: list[datetime] = []
-    for day in crypto_days[300:]:
-        crypto_result = v2_crypto.process_closed_bars([bar for bar in crypto_bars if bar.timestamp == day])
-        if crypto_result.status in {"submitted", "sell_phase_submitted", "buy_phase_submitted"}:
-            assert crypto_result.target is not None
-            assert crypto_result.target.metadata.get("decision_origin") is None
-            crypto_decisions.append(day)
-    # The takeover fires at the FIRST v2 boundary, exactly once; the rest of
-    # the window then follows the normal cadence (no gap, no duplicate).
-    assert crypto_decisions and len(crypto_decisions) == len(set(crypto_decisions)) >= 2
-    for previous, current in zip(crypto_decisions, crypto_decisions[1:], strict=False):
-        epoch_delta = int(current.timestamp()) // (96 * 3600) - int(previous.timestamp()) // (96 * 3600)
-        assert epoch_delta >= 1, "crypto decisions off the 96h cadence"
-    assert _decision_count(repo, Market.CRYPTO, v2_crypto_digest) == len(crypto_decisions)
-
-    # No double buy: every BUY is a gap-close toward the target, never a layering
-    # on top of the full target. Sells never exceed the managed quantity.
-    with repo.store.lock:
-        rows = repo.store.connection.execute(
-            "SELECT decision_id, market, target_json FROM portfolio_decisions WHERE configuration_digest=?",
-            (v2_crypto_digest,),
-        ).fetchall()
-    for _decision_id, _market_value, target_json in rows:
-        target = TargetPortfolio.from_dict(json.loads(str(target_json)))
-        target_by_symbol = {w.symbol: w.weight for w in target.weights}
-        order_rows = repo.store.connection.execute(
-            "SELECT symbol, side, quantity, reference_price FROM portfolio_orders WHERE decision_id=?",
-            (_decision_id,),
-        ).fetchall()
-        for symbol, side, qty, price in order_rows:
-            held = next((float(p.qty) for p in client.positions if p.symbol == symbol), 0.0)
-            if side == "buy":
-                target_qty = target_by_symbol.get(symbol, 0.0) * 100_000.0 / float(price)
-                assert float(qty) <= target_qty + 1.0, f"double-buy layering on {symbol}"
-            else:
-                assert float(qty) <= held + 1e-9, f"SELL exceeds managed qty on {symbol}"
-
-    # Risk caps still hold on the takeover targets.
-    row = repo.store.connection.execute(
-        "SELECT target_json FROM portfolio_decisions WHERE market=? AND configuration_digest=? "
-        "ORDER BY decision_timestamp DESC LIMIT 1",
-        (Market.CRYPTO.value, v2_crypto_digest),
-    ).fetchone()
-    target = TargetPortfolio.from_dict(json.loads(str(row[0])))
-    assert target.invested_weight <= 0.10 + 1e-9
-    assert len(target.weights) <= 2
-
-    v2_crypto.close()
 
 
 def test_equity_parameter_promotion_uses_normal_delta_and_restart_idempotency(
@@ -438,7 +283,19 @@ def test_equity_parameter_promotion_uses_normal_delta_and_restart_idempotency(
     )
     assert runtime.configuration_digest != baseline.configuration_digest
     runtime.seed([bar for bar in bars if bar.timestamp <= days[299]])
+
+    # Baseline positions stay managed under the promoted digest (ledger
+    # ownership, not digest-scoped).
+    snapshot = broker.account()
+    for symbol in held:
+        position = next(p for p in snapshot.positions if p.symbol == symbol)
+        assert position.managed_qty > 1e-12, f"{symbol} lost managed ownership after promotion"
+        assert position.ownership in {"managed", "mixed"}
+
+    # The promoted catch-up must not fire over managed positions nor be
+    # confused by the baseline decision (digest-scoped guards).
     assert runtime.startup_catch_up().status == "already_invested"
+    assert _decision_count(repo, Market.EQUITY, runtime.configuration_digest) == 0
     first = runtime.process_closed_bars(
         [bar for bar in bars if bar.timestamp == days[300]],
         force_scheduled=True,

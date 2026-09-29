@@ -10,12 +10,10 @@ import json
 import math
 from dataclasses import asdict
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
 from parayabuck.core.models import Market
-from parayabuck.execution.alpaca import CRYPTO_TAKER_FEE_RESERVE
 from parayabuck.execution.portfolio import (
     PortfolioOrderRequest,
     PortfolioOrderSide,
@@ -31,23 +29,15 @@ from parayabuck.portfolio.runtime_models import (
     RebalanceExecutionState,
     _decision_id,
 )
-from parayabuck.portfolio.runtime_ownership import (
-    CRYPTO_DUST_CLEAR_KIND,
-    CRYPTO_DUST_CREDIT_KIND,
-    CRYPTO_OWNERSHIP_DUST,
-    CRYPTO_STALE_DUST_BAND,
-    net_owned_quantities,
-)
+from parayabuck.portfolio.runtime_ownership import net_owned_quantities
 from parayabuck.storage import SQLiteStore
 
 log = get_logger("parayabuck.portfolio.runtime_repository")
 
-# Outstanding adjustment quantity as subtracted from net ownership: every kind
-# reduces the net except a crypto dust credit, which adds to it.
-_SIGNED_OUTSTANDING_SQL = (
-    f"CASE WHEN kind = '{CRYPTO_DUST_CREDIT_KIND}' THEN consumed_quantity - quantity"
-    " ELSE quantity - consumed_quantity END"
-)
+# Historical ledger rows of the removed crypto sleeve (orders and ownership
+# adjustments with market='crypto') still load, but ownership reads skip them:
+# the runtime is equity-only and leaves any crypto holding alone.
+_LEGACY_CRYPTO_MARKET = Market.CRYPTO.value
 
 # A late or racing observation (a stream event applied before the submit
 # path records ``submitted``, a reconciliation snapshot taken before the
@@ -866,11 +856,6 @@ class PortfolioStateRepository:
         fill arriving after reconciliation (stream downtime race). Idempotent:
         returns the adjusted quantity (0.0 when nothing is owned anymore).
 
-        A crypto remainder below ``CRYPTO_STALE_DUST_BAND`` is accumulated
-        fee-net residue, not a missed exit: it is booked with the
-        non-consumable dust kind, so the next real SELL cannot consume it
-        and resurrect the residue.
-
         The read and the insert share one lock hold: a late SELL fill applied
         by the trade-update thread between them would already have removed
         the quantity, and the clear would then drive the net negative."""
@@ -878,16 +863,6 @@ class PortfolioStateRepository:
             owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
             if owned <= 1e-12:
                 return 0.0
-            if market == Market.CRYPTO and owned < CRYPTO_STALE_DUST_BAND:
-                self.record_ownership_adjustment(
-                    account_id,
-                    symbol,
-                    market,
-                    owned,
-                    kind=CRYPTO_DUST_CLEAR_KIND,
-                    note="broker position absent; accumulated sub-precision crypto residue",
-                )
-                return owned
             self.record_ownership_adjustment(
                 account_id,
                 symbol,
@@ -941,84 +916,6 @@ class PortfolioStateRepository:
                 datetime.now(UTC).isoformat(),
             ),
         )
-
-    def _clear_crypto_exit_dust_tx(self, account_id: str, symbol: str, market: Market) -> None:
-        """Zero a crypto SELL's sub-precision remainder inside its fill transaction.
-
-        Crypto BUYs are booked fee-net at full float precision while exits
-        sell the broker's 9-decimal position, so every round trip leaves a
-        residue of about 1e-9. Only hiding it (``net_owned_quantities``) lets
-        it accumulate past ``CRYPTO_OWNERSHIP_DUST`` and drift again. A net in
-        (0, CRYPTO_OWNERSHIP_DUST] after this fill is booked away with the
-        non-consumable dust kind. Idempotent: once cleared the net is 0, and
-        a redelivered fill has no delta and never reaches this call.
-
-        A real SELL delta arriving after a dust clear (a trailing tiny partial
-        fill, or a late fill after a band stale-clear) would push the net
-        below zero and trip the ownership invariant. Dust clears are then
-        consumed by exactly the shortfall, never more, so no residue is
-        resurrected. A shortfall still left within CRYPTO_OWNERSHIP_DUST (an
-        exit that sold a few 9th-decimal units above the fee-net booking) is
-        booked as a never-consumed dust credit that returns the net to 0; a
-        larger one is a real oversell and is left to trip the invariant.
-        Nothing in this transaction evaluates the invariant before then."""
-        rows = self.store.connection.execute(
-            """SELECT o.side, o.cumulative_filled_quantity
-               FROM portfolio_orders o
-               JOIN portfolio_decisions d ON d.decision_id = o.decision_id
-               JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
-               WHERE s.account_id = ? AND o.market = ? AND o.symbol = ?""",
-            (account_id, market.value, symbol),
-        ).fetchall()
-        adjusted = self.store.connection.execute(
-            f"""SELECT COALESCE(SUM({_SIGNED_OUTSTANDING_SQL}), 0)
-               FROM portfolio_ownership_adjustments
-               WHERE account_id = ? AND market = ? AND symbol = ? AND consumed_quantity < quantity""",
-            (account_id, market.value, symbol),
-        ).fetchone()
-        net = -float(adjusted[0] or 0.0)
-        for side, filled in rows:
-            quantity = float(filled or 0.0)
-            if quantity > 0:
-                net += quantity if str(side) == "buy" else -quantity
-        if net < 0:
-            dust_rows = self.store.connection.execute(
-                """SELECT adjustment_id, quantity - consumed_quantity
-                   FROM portfolio_ownership_adjustments
-                   WHERE account_id = ? AND market = ? AND symbol = ? AND kind = ?
-                     AND consumed_quantity < quantity
-                   ORDER BY created_at""",
-                (account_id, market.value, symbol, CRYPTO_DUST_CLEAR_KIND),
-            ).fetchall()
-            for adjustment_id, outstanding in dust_rows:
-                if net >= 0:
-                    break
-                consume = min(float(outstanding), -net)
-                self.store.connection.execute(
-                    """UPDATE portfolio_ownership_adjustments
-                       SET consumed_quantity = consumed_quantity + ?
-                       WHERE adjustment_id = ?""",
-                    (consume, str(adjustment_id)),
-                )
-                net += consume
-        if 0 < net <= CRYPTO_OWNERSHIP_DUST:
-            self._insert_ownership_adjustment_tx(
-                account_id,
-                symbol,
-                market,
-                net,
-                CRYPTO_DUST_CLEAR_KIND,
-                "sub-precision crypto residue left by a SELL fill",
-            )
-        elif -CRYPTO_OWNERSHIP_DUST <= net < 0:
-            self._insert_ownership_adjustment_tx(
-                account_id,
-                symbol,
-                market,
-                -net,
-                CRYPTO_DUST_CREDIT_KIND,
-                "sub-precision crypto oversell left by a SELL fill",
-            )
 
     def _consume_ownership_adjustments_tx(
         self, account_id: str, symbol: str, market: Market, sell_delta: float
@@ -1129,8 +1026,8 @@ class PortfolioStateRepository:
             ).fetchone()
             if row is None:
                 return False
-            # Append raw broker facts before the crypto ownership conversion
-            # below.  ``portfolio_orders.cumulative_filled_quantity`` remains
+            # Append raw broker facts first.
+            # ``portfolio_orders.cumulative_filled_quantity`` remains
             # the authoritative *net owned* quantity; this journal is solely
             # execution measurement and never drives execution behavior.
             raw_cumulative = float(cumulative_filled_quantity)
@@ -1179,17 +1076,6 @@ class PortfolioStateRepository:
             account_id = str(row[4])
             created_at = str(row[5]) if row[5] is not None else None
             symbol = str(row[6])
-            # Alpaca deducts the taker fee from the acquired units on crypto
-            # buys (position = fill qty * (1 - fee)); the gross fill would
-            # overstate ownership by exactly the fee, and after a partial
-            # exit that constant offset grows beyond the fee-reserve band and
-            # halts the runtime on ownership drift. Book the NET quantity so
-            # repository ownership tracks broker positions exactly. Sells are
-            # left gross: the position drops by the full sold quantity.
-            if side == "buy" and market == "crypto":
-                cumulative_filled_quantity = float(
-                    Decimal(str(cumulative_filled_quantity)) * (Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
-                )
             fill_delta = max(0.0, cumulative_filled_quantity - previous)
             delay_seconds: float | None = None
             if created_at:
@@ -1244,8 +1130,6 @@ class PortfolioStateRepository:
                         Market(market),
                         fill_delta,
                     )
-                    if market == Market.CRYPTO.value:
-                        self._clear_crypto_exit_dust_tx(account_id, symbol, Market.CRYPTO)
         return True
 
     @staticmethod
@@ -1341,42 +1225,42 @@ class PortfolioStateRepository:
 
         Orders are attributed to an account through the persisted
         decision/session lineage, so a stale paper session can never mark
-        symbols as owned for a different (live) account.
+        symbols as owned for a different (live) account. Legacy crypto rows
+        are skipped: the equity-only runtime never owns a crypto holding.
         Delegates pure net calculation to ``runtime_ownership`` for testability.
         """
         query = """
-            SELECT o.symbol, o.market, o.side, o.cumulative_filled_quantity
+            SELECT o.symbol, o.side, o.cumulative_filled_quantity
             FROM portfolio_orders o
             JOIN portfolio_decisions d ON d.decision_id = o.decision_id
             JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
-            WHERE s.account_id = ?
+            WHERE s.account_id = ? AND o.market != ?
         """
-        params: tuple[object, ...] = (account_id,)
+        params: tuple[object, ...] = (account_id, _LEGACY_CRYPTO_MARKET)
         if market is not None:
             query += " AND o.market = ?"
-            params = (account_id, market.value)
+            params = (*params, market.value)
         with self.store.lock:
             rows = self.store.connection.execute(query, params).fetchall()
             # A stale-clear adjustment belongs to the market it was raised
             # for; without the same market filter it is subtracted from the
             # other market's net and the ownership invariant trips.
-            adjustments_query = f"""SELECT symbol, SUM({_SIGNED_OUTSTANDING_SQL})
+            adjustments_query = """SELECT symbol, SUM(quantity - consumed_quantity)
                    FROM portfolio_ownership_adjustments
-                   WHERE account_id = ? AND consumed_quantity < quantity"""
-            adjustments_params: tuple[object, ...] = (account_id,)
+                   WHERE account_id = ? AND consumed_quantity < quantity AND market != ?"""
+            adjustments_params: tuple[object, ...] = (account_id, _LEGACY_CRYPTO_MARKET)
             if market is not None:
                 adjustments_query += " AND market = ?"
-                adjustments_params = (account_id, market.value)
+                adjustments_params = (*adjustments_params, market.value)
             adjustments_query += " GROUP BY symbol"
             adjustments = self.store.connection.execute(
                 adjustments_query,
                 adjustments_params,
             ).fetchall()
         # Pure computation delegated
-        order_tuples = [(str(r[0]), str(r[2]), float(r[3] or 0.0)) for r in rows]
+        order_tuples = [(str(r[0]), str(r[1]), float(r[2] or 0.0)) for r in rows]
         adj_tuples = [(str(r[0]), float(r[1] or 0.0)) for r in adjustments]
-        crypto_symbols = {str(r[0]) for r in rows if str(r[1]) == Market.CRYPTO.value}
-        return net_owned_quantities(order_tuples, adj_tuples, crypto_symbols)
+        return net_owned_quantities(order_tuples, adj_tuples)
 
     def owned_symbols(self, account_id: str = "unknown", market: Market | None = None) -> set[str]:
         """Symbols the portfolio path still owns: net filled quantity > 0.
@@ -1391,16 +1275,15 @@ class PortfolioStateRepository:
     def ownership_adjustments(self, account_id: str = "unknown") -> tuple[dict[str, object], ...]:
         """Outstanding ownership reconciliation adjustments/anomalies.
 
-        Crypto dust clears and credits are routine bookkeeping, not
-        anomalies, and are left out."""
+        Legacy crypto rows are left out: the equity-only runtime ignores them."""
         with self.store.lock:
             rows = self.store.connection.execute(
                 """SELECT adjustment_id, symbol, market, quantity, consumed_quantity,
                           kind, note, created_at
                    FROM portfolio_ownership_adjustments
-                   WHERE account_id = ? AND consumed_quantity < quantity AND kind NOT IN (?, ?)
+                   WHERE account_id = ? AND consumed_quantity < quantity AND market != ?
                    ORDER BY created_at""",
-                (account_id, CRYPTO_DUST_CLEAR_KIND, CRYPTO_DUST_CREDIT_KIND),
+                (account_id, _LEGACY_CRYPTO_MARKET),
             ).fetchall()
         return tuple(
             {

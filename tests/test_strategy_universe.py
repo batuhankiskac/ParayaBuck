@@ -1,10 +1,8 @@
 """Universe contract tests.
 
 Equity is a static universe: the configured symbols are the only members and
-each one joins the point-in-time universe at its first bar. Crypto keeps the
-scanner policy, whose eligible pool is deliberately larger than the streamed
-observation set. A missing crypto snapshot is fail-closed, and the two
-markets' universes stay isolated.
+each one joins the point-in-time universe at its first bar. Bars and symbols
+of any other market are never members.
 """
 
 from __future__ import annotations
@@ -15,11 +13,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
-from parayabuck.backtest.universe import (
-    build_static_equity_point_in_time_universe,
-    build_trailing_point_in_time_universe,
-)
-from parayabuck.config import CryptoUniverseConfig, EquityUniverseConfig
+from parayabuck.backtest.universe import build_static_equity_point_in_time_universe
+from parayabuck.config import EquityUniverseConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
 from parayabuck.portfolio.models import PortfolioState
@@ -131,21 +126,6 @@ def test_open_managed_orders_stay_pinned_across_restart() -> None:
     assert restored_fills[0].timestamp > restored_fills[0].decision_timestamp
 
 
-def test_missing_crypto_snapshot_is_fail_closed() -> None:
-    from parayabuck.universe import validate_active_crypto_universe
-
-    config = CryptoUniverseConfig(
-        enabled=True,
-        dynamic_selection_enabled=True,
-        maximum_stream_symbols=2,
-        trade_symbols=("BTC/USD", "ETH/USD"),
-        active_universe_path="/nonexistent/active_crypto_universe.json",
-    )
-    symbols, status = validate_active_crypto_universe(config)
-    assert status != "success"
-    assert symbols == ()
-
-
 def test_disabled_strategy_creates_no_orders(tmp_path) -> None:
     from parayabuck.execution.portfolio import PortfolioOrderRequest
     from parayabuck.portfolio.runtime_service import (
@@ -175,8 +155,8 @@ def test_disabled_strategy_creates_no_orders(tmp_path) -> None:
             return "broker-" + order.client_order_id
 
     broker = _Broker()
-    # Only the equity strategy is enabled: a crypto runtime is never built,
-    # so crypto bars can never produce crypto orders.
+    # The runtime is equity-only: foreign crypto bars are never seeded into
+    # its history and can never produce orders.
     equity = portfolio_strategy_from("equity_leveraged_trend_v1", {"sma_bars": 5})
     runtime = PortfolioRuntime(
         equity,
@@ -208,51 +188,21 @@ def test_disabled_strategy_creates_no_orders(tmp_path) -> None:
     runtime.close()
 
 
-def test_static_equity_and_crypto_universes_are_isolated() -> None:
+def test_static_equity_universe_excludes_foreign_symbols() -> None:
     equity_bars = _panel([f"S{i:02d}" for i in range(6)])
     start = datetime(2024, 1, 1, tzinfo=UTC)
-    import math
-
-    crypto_bars = [
-        Bar(
-            start + timedelta(hours=index),
-            symbol,
-            "1h",
-            100.0 + index / 24.0 + 5.0 * math.sin(index * 0.3 + offset),
-            100.0 + index / 24.0 + 5.0 * math.sin(index * 0.3 + offset),
-            100.0 + index / 24.0 + 5.0 * math.sin(index * 0.3 + offset),
-            100.0 + index / 24.0 + 5.0 * math.sin(index * 0.3 + offset),
-            1_000_000.0,
-            Market.CRYPTO,
-        )
-        for offset, symbol in enumerate(("BTC/USD", "ETH/USD"))
-        for index in range(2400)
-    ]
     equity_universe = build_static_equity_point_in_time_universe(
         equity_bars,
         _static_equity_config(tuple(f"S{i:02d}" for i in range(6)), maximum_stream_symbols=6),
     )
-    crypto_universe = build_trailing_point_in_time_universe(
-        crypto_bars,
-        maximum_symbols=2,
-        rebalance_frequency="daily",
-        lookback_days=7,
-        minimum_history_ratio=0.8,
-    )
     for snapshot in equity_universe.snapshots:
         assert all("/" not in symbol for symbol in snapshot.symbols)
-    for snapshot in crypto_universe.snapshots:
-        assert all("/" in symbol for symbol in snapshot.symbols)
     equity_member = next(
         iter(next(snapshot for snapshot in reversed(equity_universe.snapshots) if snapshot.symbols).symbols)
     )
-    crypto_member = next(
-        iter(next(snapshot for snapshot in reversed(crypto_universe.snapshots) if snapshot.symbols).symbols)
-    )
     assert equity_universe.contains(equity_member, Market.EQUITY, start + timedelta(days=100))
     assert not equity_universe.contains("S99", Market.EQUITY, start + timedelta(days=100))
-    assert crypto_universe.contains(crypto_member, Market.CRYPTO, start + timedelta(days=100))
-    assert not crypto_universe.contains("DOGE/USD", Market.CRYPTO, start + timedelta(days=100))
+    assert not equity_universe.contains("BTC/USD", Market.CRYPTO, start + timedelta(days=100))
 
 
 def test_point_in_time_universe_round_trip() -> None:

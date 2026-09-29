@@ -24,7 +24,7 @@ from parayabuck.core.models import (
     Market,
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
-from parayabuck.data.adjustment import adequate_coverage
+from parayabuck.data.adjustment import adequate_coverage, covers_session
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
     AmbiguousOrderState,
@@ -3926,8 +3926,10 @@ class EngineRuntime:
 
     def _equity_signal_basis_verified(self, decision_timestamp: datetime | None = None) -> bool:
         """Fresh verification (last hour) AND — when a decision timestamp is
-        given — PER-SYMBOL watermarks at/after that timestamp. A healthy
-        check from an earlier day never authorizes today's decision bar."""
+        given — PER-SYMBOL watermarks covering that timestamp's New York
+        session (``covers_session``: the provider labels a session at 00:00
+        ET, the stream decision bar at 09:30 ET). A healthy check from an
+        earlier session never authorizes today's decision bar."""
         if not getattr(self, "_symbols_by_market", {}).get(Market.EQUITY):
             return True  # no equity universe: nothing to verify
         state = self._signal_adjustment_state()
@@ -3950,7 +3952,7 @@ class EngineRuntime:
             return False
         for symbol in self._symbols_by_market.get(Market.EQUITY, ()):
             verified = watermarks.get(symbol)
-            if not isinstance(verified, datetime) or verified < decision_timestamp:
+            if not isinstance(verified, datetime) or not covers_session(verified, decision_timestamp):
                 return False
         return True
 
@@ -3964,8 +3966,9 @@ class EngineRuntime:
 
         * non-empty coverage reaching back to the required window start;
         * when ``required_through`` (a decision-day timestamp) is given, the
-          symbol's provider series must reach it — a provider that has not
-          yet published the decision-day bar leaves that day UNVERIFIED.
+          symbol's provider series must reach its New York session — a
+          provider that has not yet published the decision-day bar leaves
+          that day UNVERIFIED.
 
         Any inadequate symbol fails the WHOLE check closed (no partial
         adoption, no cross-symbol watermark). Returns True only when every
@@ -4082,7 +4085,8 @@ class EngineRuntime:
                 # provider call, but re-validate per-symbol through-gate.
                 if required_through is not None:
                     if all(
-                        isinstance(last_verified.get(symbol), datetime) and last_verified[symbol] >= required_through
+                        isinstance(last_verified.get(symbol), datetime)
+                        and covers_session(last_verified[symbol], required_through)
                         for symbol in symbols
                     ):
                         return True
@@ -4156,10 +4160,11 @@ class EngineRuntime:
         Verification runs when the last success is stale OR — always — when
         any required symbol's watermark predates the decision timestamp. The
         invariant: a new-equity-entry decision may only pass when
-        ``signal_verified_through_by_symbol[s] >= decision_timestamp`` for
-        EVERY required equity signal symbol. Unverifiable basis FAILS CLOSED
-        for entries; risk-reducing exits keep flowing because callers only
-        cap targets at current weights.
+        ``signal_verified_through_by_symbol[s]`` covers the decision
+        timestamp's New York session for EVERY required equity signal
+        symbol. Unverifiable basis FAILS CLOSED for entries; risk-reducing
+        exits keep flowing because callers only cap targets at current
+        weights.
         """
         if not getattr(self, "_symbols_by_market", {}).get(Market.EQUITY):
             return None

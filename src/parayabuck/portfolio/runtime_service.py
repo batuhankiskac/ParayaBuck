@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
-from parayabuck.data.adjustment import verify_against_provider
+from parayabuck.data.adjustment import signal_session_date, verify_against_provider
 from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
     PortfolioOrderRequest,
@@ -655,10 +655,23 @@ class PortfolioRuntime:
         decisions never run before EngineRuntime verified/rebuilt this
         history against a batched provider splits tail (fail closed).
         Crypto bars pass through untouched.
+
+        An equity tail on the SAME New York session (a provider bar labeled
+        00:00 ET, adopted while that session was still forming) is REPLACED
+        by the completed stream bar labeled 09:30 ET: one session is one
+        signal bar, and the decision bar must be the history tail.
         """
         symbol = canonical_symbol(bar.symbol, bar.market)
         series = self.history[symbol]
         if series and series[-1].timestamp >= bar.timestamp:
+            return
+        if (
+            self.market == Market.EQUITY
+            and bar.timeframe == "1d"
+            and series
+            and signal_session_date(series[-1].timestamp) == signal_session_date(bar.timestamp)
+        ):
+            series[-1] = bar
             return
         series.append(bar)
 

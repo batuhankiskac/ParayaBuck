@@ -16,6 +16,8 @@ import pytest
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.data.adjustment import (
     SPLIT_RATIO_TOLERANCE,
+    adequate_coverage,
+    covers_session,
     detect_basis_break,
     merge_provider_authority,
 )
@@ -563,6 +565,108 @@ def test_decision_requires_verified_through_decision_timestamp(monkeypatch) -> N
     equity_ns2.history["AAA"].append(decision_bar)
     engine2._process_portfolio_timestamp([decision_bar])
     assert captured2["entry_latch"] == "signal_adjustment_unverified"
+
+
+# --------------------------------------------------------------------------- #
+# Session alignment: stream decision bar (09:30 ET label) vs provider (00:00 ET)
+# --------------------------------------------------------------------------- #
+
+_PROD_DECISION_TS = datetime(2026, 9, 28, 13, 30, tzinfo=UTC)  # stream 1d label
+
+
+def _provider_sessions(newest: datetime, count: int) -> list[datetime]:
+    """Weekday provider labels at 00:00 ET (04:00 UTC in EDT) ending at ``newest``."""
+    sessions: list[datetime] = []
+    day = newest
+    while len(sessions) < count:
+        if day.weekday() < 5:
+            sessions.append(day)
+        day -= timedelta(days=1)
+    return sessions[::-1]
+
+
+@pytest.mark.parametrize(
+    ("provider_newest", "expected_latch"),
+    [
+        (datetime(2026, 9, 28, 4, 0, tzinfo=UTC), None),
+        (datetime(2026, 9, 25, 4, 0, tzinfo=UTC), "signal_adjustment_unverified"),
+    ],
+)
+def test_production_scheduled_decision_verifies_on_same_session_provider_bar(
+    monkeypatch, provider_newest: datetime, expected_latch: str | None
+) -> None:
+    """Regression (2026-09-28 20:00 UTC): the scheduled decision bar is
+    labeled 13:30 UTC while the provider labels the same session 04:00 UTC.
+    A provider series covering 2026-09-28 verifies that decision; one that
+    has not published 2026-09-28 still fails closed."""
+    monkeypatch.setattr(
+        "parayabuck.runtime.alerts",
+        type("A", (), {"emit": staticmethod(lambda kind, **kw: None)}),
+    )
+    sessions = _provider_sessions(provider_newest, 300)
+    provider = {"AAA": [_bar("AAA", d, 40.0 + 0.01 * i) for i, d in enumerate(sessions)]}
+    engine, captured = _process_engine(provider, sessions)
+    engine._process_portfolio_timestamp([_bar("AAA", _PROD_DECISION_TS, 43.0)])
+    assert captured["entry_latch"] == expected_latch
+
+
+@pytest.mark.parametrize(
+    ("verified_through", "required", "covered"),
+    [
+        # EDT: provider 04:00 UTC vs stream 13:30 UTC on the same session.
+        (datetime(2026, 9, 28, 4, 0, tzinfo=UTC), datetime(2026, 9, 28, 13, 30, tzinfo=UTC), True),
+        (datetime(2026, 9, 25, 4, 0, tzinfo=UTC), datetime(2026, 9, 28, 13, 30, tzinfo=UTC), False),
+        # EST: provider 05:00 UTC vs stream 14:30 UTC on the same session.
+        (datetime(2026, 1, 5, 5, 0, tzinfo=UTC), datetime(2026, 1, 5, 14, 30, tzinfo=UTC), True),
+        (datetime(2026, 1, 2, 5, 0, tzinfo=UTC), datetime(2026, 1, 5, 14, 30, tzinfo=UTC), False),
+    ],
+)
+def test_coverage_compares_new_york_sessions_not_label_instants(
+    verified_through: datetime, required: datetime, covered: bool
+) -> None:
+    provider = [_bar("AAA", verified_through - timedelta(days=10), 10.0), _bar("AAA", verified_through, 10.0)]
+    assert covers_session(verified_through, required) is covered
+    assert adequate_coverage(provider, required_oldest=provider[0].timestamp, required_newest=required) is covered
+
+
+def test_merge_keeps_one_bar_per_session_across_label_conventions() -> None:
+    """A stored stream bar (13:30 UTC) and the provider bar (04:00 UTC) for
+    the SAME session are one bar: the provider wins, no duplicate session."""
+    provider_days = _provider_sessions(datetime(2026, 9, 28, 4, 0, tzinfo=UTC), 5)
+    stream_labels = [day.replace(hour=13, minute=30) for day in provider_days]
+    provider = [_bar("AAA", d, 50.0 + i) for i, d in enumerate(provider_days)]
+    stored = [_bar("AAA", d, 50.0 + i) for i, d in enumerate(stream_labels)]
+    merged, changed = merge_provider_authority(tuple(stored), provider)
+    assert changed
+    assert [bar.timestamp for bar in merged] == provider_days
+
+    # A stream bar for a session the provider has NOT published survives as
+    # the provisional tail, after the provider's newest session.
+    merged_tail, _ = merge_provider_authority(tuple(stored), provider[:-1])
+    assert [bar.timestamp for bar in merged_tail] == [*provider_days[:-1], stream_labels[-1]]
+
+
+def test_decision_bar_replaces_same_session_provider_tail_after_latch(monkeypatch) -> None:
+    """Latch adoption lands the provider's (04:00 UTC) bar for the decision
+    session BEFORE the stream decision bar (13:30 UTC) is appended; the
+    append must replace it so the session appears once and the decision bar
+    is the history tail."""
+    monkeypatch.setattr(
+        "parayabuck.runtime.alerts",
+        type("A", (), {"emit": staticmethod(lambda kind, **kw: None)}),
+    )
+    engine, equity = _engine_with_equity_runtime(("AAA",))
+    sessions = _provider_sessions(datetime(2026, 9, 28, 4, 0, tzinfo=UTC), 20)
+    equity.history["AAA"] = [_bar("AAA", d.replace(hour=13, minute=30), 40.0) for d in sessions[:-1]]
+    engine._historical = FakeHistory(raw={}, splits={"AAA": [_bar("AAA", d, 40.0) for d in sessions]})
+
+    assert engine._equity_signal_basis_latch(_PROD_DECISION_TS) is None
+    assert equity.history["AAA"][-1].timestamp == sessions[-1]
+
+    equity._append_signal_bar(_bar("AAA", _PROD_DECISION_TS, 41.0))
+    history = equity.history["AAA"]
+    assert [bar.timestamp for bar in history] == [*sessions[:-1], _PROD_DECISION_TS]
+    assert history[-1].close == 41.0
 
 
 # --------------------------------------------------------------------------- #

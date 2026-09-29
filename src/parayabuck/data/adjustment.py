@@ -22,6 +22,12 @@ Design v3:
   therefore never shorten a healthy 274+ bar history.
 * Adequacy is checked per symbol BEFORE anything is adopted: a partial or
   empty provider response fails closed instead of marking global success.
+* Daily bars are identified by their New York SESSION DATE, never by the
+  raw label instant: the runtime's stream aggregator labels a session at its
+  09:30 ET open (13:30/14:30 UTC) while the provider labels the same session
+  at 00:00 ET (04:00/05:00 UTC). Comparing instants would make a same-day
+  provider bar never "cover" the stream decision bar and would keep both
+  labels of one session side by side in the signal history.
 
 All functions here are pure and deterministic.
 """
@@ -29,9 +35,10 @@ All functions here are pure and deterministic.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 
 from parayabuck.core.models import Bar
+from parayabuck.markets.timeframes import NEW_YORK
 
 # A raw vs split-adjusted close difference within this relative band is
 # provider rounding noise, not a corporate action.
@@ -42,6 +49,24 @@ def close_matches(left: float, right: float, tolerance: float = SPLIT_RATIO_TOLE
     if left <= 0 or right <= 0:
         return False
     return abs(left - right) / right <= tolerance
+
+
+def signal_session_date(timestamp: datetime) -> date:
+    """New York session date of an equity daily signal bar (label-agnostic)."""
+    return timestamp.astimezone(NEW_YORK).date()
+
+
+def covers_session(verified_through: datetime, required: datetime) -> bool:
+    """Whether a provider watermark covers the session of ``required``.
+
+    A provider bar for session D (labeled 00:00 ET) covers a decision bar for
+    the same session D (labeled 09:30 ET). The provider publishes D's bar
+    while D is still forming; that is sufficient here because this check
+    guards the corporate-action BASIS of the signal (a split is effective
+    from D's open), not the finality of D's close. A provider that has not
+    published D at all still leaves D uncovered.
+    """
+    return signal_session_date(verified_through) >= signal_session_date(required)
 
 
 def coverage_span(provider: Sequence[Bar]) -> tuple[datetime, datetime] | None:
@@ -61,8 +86,9 @@ def adequate_coverage(
     """Whether one symbol's provider series covers the REQUIRED window.
 
     ``required_oldest`` bounds the strategy's full history window;
-    ``required_newest`` (a decision-day timestamp) must be present-or-exceeded
-    before that day may be traded on this basis.
+    ``required_newest`` (a decision-day timestamp) must have its New York
+    session present-or-exceeded (see ``covers_session``) before that day may
+    be traded on this basis.
     """
     span = coverage_span(provider)
     if span is None:
@@ -70,7 +96,7 @@ def adequate_coverage(
     oldest, newest = span
     if oldest > required_oldest:
         return False
-    if required_newest is not None and newest < required_newest:
+    if required_newest is not None and not covers_session(newest, required_newest):
         return False
     return True
 
@@ -98,13 +124,16 @@ def merge_provider_authority(
     """Merge stored signal history with provider authority WITHOUT shrinking
     a long healthy history.
 
-    Rules, in priority order:
+    Bars are matched by New York session date (``signal_session_date``), so a
+    stream bar labeled at the 09:30 ET open and a provider bar labeled at
+    00:00 ET for the same session are ONE bar, never two. Rules, in priority
+    order:
 
-    1. Provider-covered timestamps take the PROVIDER bar verbatim (the
+    1. Provider-covered sessions take the PROVIDER bar verbatim (the
        retroactively rebased authority).
-    2. Stored bars strictly NEWER than the provider's newest survive as the
-       provisional stream tail (their basis is post-action once every covered
-       timestamp was rebased).
+    2. Stored bars on sessions strictly NEWER than the provider's newest
+       survive as the provisional stream tail (their basis is post-action
+       once every covered session was rebased).
     3. Stored bars strictly OLDER than the provider's oldest are RETAINED
        verbatim — they are outside the verified window. Retention is sound
        only when no basis break exists anywhere (callers verify first); the
@@ -119,14 +148,16 @@ def merge_provider_authority(
     provider_by_ts = {bar.timestamp: bar for bar in provider_splits}
     if not provider_by_ts:
         return tuple(stored), False
-    newest_provider = max(provider_by_ts)
-    oldest_provider = min(provider_by_ts)
+    provider_sessions = {signal_session_date(timestamp) for timestamp in provider_by_ts}
+    newest_provider = max(provider_sessions)
+    oldest_provider = min(provider_sessions)
 
     merged: dict[datetime, Bar] = {}
     for bar in stored:
-        if bar.timestamp in provider_by_ts:
-            continue  # provider wins
-        if bar.timestamp > newest_provider or bar.timestamp < oldest_provider:
+        session = signal_session_date(bar.timestamp)
+        if session in provider_sessions:
+            continue  # provider wins, whatever the stored bar's label
+        if session > newest_provider or session < oldest_provider:
             merged[bar.timestamp] = bar
     merged.update(provider_by_ts)
     ordered = tuple(merged[key] for key in sorted(merged))
@@ -159,7 +190,9 @@ __all__ = [
     "adequate_coverage",
     "close_matches",
     "coverage_span",
+    "covers_session",
     "detect_basis_break",
     "merge_provider_authority",
+    "signal_session_date",
     "verify_against_provider",
 ]

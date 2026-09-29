@@ -1121,6 +1121,7 @@ def _load_bars(
         secret,
         stock_feed=config.alpaca.stock_historical_feed,
         data_delayed=config.alpaca.data_delayed,
+        sip_embargo_minutes=config.signal_cross_check.sip_embargo_minutes,
     )
     strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
     minimum_bars = strategy.minimum_history_bars

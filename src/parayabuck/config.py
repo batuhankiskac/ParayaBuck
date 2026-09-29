@@ -412,6 +412,8 @@ class SignalCrossCheckConfig:
     # Minutes after the NYSE close before the SIP daily bar is requested.
     # Alpaca's Basic data plan rejects SIP queries that reach into the last
     # 15 minutes; an account with a real-time SIP subscription can use 0.
+    # The historical data client clamps every SIP bar request end to
+    # now - embargo with this same value (warmup, split-basis verifier).
     sip_embargo_minutes: float = 15.0
     # Minutes the second source is retried (from the first allowed attempt)
     # before the decision proceeds on the primary source alone.

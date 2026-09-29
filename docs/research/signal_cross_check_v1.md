@@ -215,7 +215,9 @@ webhook events and in `alerting.events` of `config/settings.yaml`.
 
 - The first live sessions must confirm that the SIP request succeeds at
   close + 15 min on this account's data plan (see §2).
-- Related finding, not changed here: the hourly basis verifier requests
+- Related finding, fixed in `sip_recent_data_clamp_v1.md` (SIP requests are
+  now clamped to now − embargo and the recent-data error no longer counts as
+  a missing entitlement). Original note: the hourly basis verifier requests
   splits-adjusted daily bars with `end = now` on the configured SIP feed. On
   a Basic plan, a request that reaches into the last 15 minutes raises an
   error. That error matches `_is_entitlement_error` (`\bsip\b`), which

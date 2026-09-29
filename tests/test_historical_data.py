@@ -288,6 +288,68 @@ def test_sip_entitlement_failure_falls_back_to_iex(monkeypatch: Any) -> None:
     assert history._sip_fallback_active is False
 
 
+def _sip_history(get_stock_bars: Any, embargo_minutes: float = 15.0) -> Any:
+    import parayabuck.data.alpaca as alpaca_module
+
+    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
+    history._stock_feed = "sip"
+    history._configured_stock_feed = "sip"
+    history._sip_fallback_active = False
+    history._sip_quote_fallback_active = False
+    history._sip_embargo = timedelta(minutes=embargo_minutes)
+    history._stock_client = SimpleNamespace(get_stock_bars=get_stock_bars)
+    history._cache = SimpleNamespace(
+        get=lambda *args, **kwargs: [],
+        upsert=lambda *args, **kwargs: None,
+    )
+    return history
+
+
+def test_recent_sip_data_restriction_is_not_an_entitlement_error() -> None:
+    """Alpaca Basic's 15-minute recent-SIP restriction must not downgrade the
+    process to IEX: the error propagates and the SIP feed stays in use."""
+    import parayabuck.data.alpaca as alpaca_module
+
+    error = RuntimeError('{"message":"subscription does not permit querying recent SIP data"}')
+    assert alpaca_module.AlpacaHistoricalData._is_entitlement_error(error) is False
+    history = _sip_history(lambda request: (_ for _ in ()).throw(error))
+    now = datetime.now(UTC)
+    with pytest.raises(RuntimeError, match="recent SIP data"):
+        history.get_bars_batch(["AAPL"], "1d", start=now - timedelta(days=30), end=now)
+    assert history._sip_fallback_active is False
+    assert history.feed_status()["effective"] == "sip"
+
+
+def test_sip_request_end_is_clamped_to_now_minus_embargo() -> None:
+    """A SIP bar request ending at now (the hourly split-basis verifier and
+    warmup) is clamped to now - embargo so it never reaches the recent window."""
+    ends: list[datetime] = []
+
+    def _record(request: Any) -> Any:
+        end = request.end
+        ends.append(end if end.tzinfo is not None else end.replace(tzinfo=UTC))
+        return SimpleNamespace(df=__import__("pandas").DataFrame())
+
+    history = _sip_history(_record, embargo_minutes=15.0)
+    before = datetime.now(UTC)
+    history.get_bars_batch(["AAPL"], "1d", start=before - timedelta(days=30), end=before)
+    after = datetime.now(UTC)
+    assert len(ends) == 1
+    assert before - timedelta(minutes=15) <= ends[0] <= after - timedelta(minutes=15)
+
+    # An end already older than the embargo is left untouched.
+    ends.clear()
+    old_end = before - timedelta(days=1)
+    history.get_bars_batch(["AAPL"], "1d", start=old_end - timedelta(days=30), end=old_end)
+    assert ends == [old_end]
+
+    # A zero embargo (real-time SIP subscription) disables the clamp.
+    ends.clear()
+    history = _sip_history(_record, embargo_minutes=0.0)
+    history.get_bars_batch(["AAPL"], "1d", start=before - timedelta(days=30), end=before)
+    assert ends == [before]
+
+
 def test_feed_status_labels_iex_coverage_honestly() -> None:
     import parayabuck.data.alpaca as alpaca_module
 
@@ -429,6 +491,8 @@ def _incremental_history(cache: Any, provider: Any) -> Any:
     history._configured_stock_feed = _INCREMENTAL_FEED
     history._sip_fallback_active = False
     history._sip_quote_fallback_active = False
+    # No recent-SIP embargo: these tests pin exact request windows.
+    history._sip_embargo = timedelta(0)
     history._stock_client = provider
     history._cache = cache
     return history

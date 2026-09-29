@@ -13,13 +13,11 @@ from fastapi import HTTPException
 
 import parayabuck.execution.alpaca as alpaca_module
 from parayabuck.config import load_config
-from parayabuck.core.models import Market
 from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.portfolio import product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
-from parayabuck.universe import equity_universe_digest, load_active_crypto_symbols
-from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
+from parayabuck.universe import equity_universe_digest
 from parayabuck.utils.io import atomic_write
 from parayabuck.web import app as web_app
 from parayabuck.web import server
@@ -30,7 +28,6 @@ def _live_config(root: Path) -> Path:
     raw = yaml.safe_load(Path("config/settings.yaml").read_text(encoding="utf-8"))
     raw["runtime"]["mode"] = "live"
     raw["runtime"]["decision_db_path"] = str(root / "runtime.sqlite3")
-    raw["runtime"]["scanner_refresh_hours"] = 8760
     raw["live"]["enabled"] = True
     raw["live"]["hard_dollar_cap"] = 1000
     raw["live"]["operator_approval_path"] = str(root / "approval.json")
@@ -41,42 +38,28 @@ def _live_config(root: Path) -> Path:
 
 def _expected_digests(config_path: Path) -> tuple[str, ...]:
     cfg = load_config(str(config_path))
-    digests: list[str] = []
-    for market, selection, symbols, universe_version in (
-        (
-            Market.EQUITY,
-            cfg.strategy.equity,
-            cfg.universe.equity.symbols if cfg.universe.equity.enabled else (),
+    selection = cfg.strategy.equity
+    symbols = cfg.universe.equity.symbols if cfg.universe.equity.enabled else ()
+    if not selection.enabled or not symbols:
+        return ()
+    strategy = product_strategy_from(
+        selection.name,
+        selection.parameters,
+        timeframe=selection.timeframe,
+    )
+    return (
+        configuration_digest(
+            strategy,
+            "live",
+            selection.maximum_allocation,
             equity_universe_digest(cfg.universe.equity),
+            portfolio_risk_limits_from_config(cfg.risk),
+            PortfolioExecutionPolicy(
+                rebalance_band_pct=cfg.execution.rebalance_band_pct,
+                minimum_order_notional=cfg.execution.minimum_order_notional,
+            ),
         ),
-        (
-            Market.CRYPTO,
-            cfg.strategy.crypto,
-            load_active_crypto_symbols(cfg.universe.crypto, log_rejection=False),
-            crypto_scanner_config_digest(cfg.universe.crypto),
-        ),
-    ):
-        if not selection.enabled or not symbols:
-            continue
-        strategy = product_strategy_from(
-            selection.name,
-            selection.parameters,
-            timeframe=selection.timeframe,
-        )
-        digests.append(
-            configuration_digest(
-                strategy,
-                "live",
-                selection.maximum_allocation,
-                universe_version,
-                portfolio_risk_limits_from_config(cfg.risk),
-                PortfolioExecutionPolicy(
-                    rebalance_band_pct=cfg.execution.rebalance_band_pct,
-                    minimum_order_notional=cfg.execution.minimum_order_notional,
-                ),
-            )
-        )
-    return tuple(digests)
+    )
 
 
 def _write_approval(

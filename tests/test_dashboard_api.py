@@ -14,17 +14,9 @@ import yaml
 from parayabuck.web import server
 
 
-def _repo_config(root: Path, *, mode: str = "paper", live_enabled: bool = False, crypto_enabled: bool = False) -> Path:
-    """Base a settings file on the repo config, flipping mode/live as asked.
-
-    ``crypto_enabled`` re-enables the (shipped-disabled) crypto sleeve with the
-    pre-2026-09-29 allocation split, for tests of the crypto card itself.
-    """
+def _repo_config(root: Path, *, mode: str = "paper", live_enabled: bool = False) -> Path:
+    """Base a settings file on the repo config, flipping mode/live as asked."""
     raw = yaml.safe_load(Path("config/settings.yaml").read_text(encoding="utf-8"))
-    if crypto_enabled:
-        raw["strategy"]["crypto"]["enabled"] = True
-        raw["universe"]["crypto"]["enabled"] = True
-        raw["strategy"]["equity"]["maximum_allocation"] = 0.93
     raw["runtime"]["mode"] = mode
     raw["runtime"]["decision_db_path"] = str(root / "runtime.sqlite3")
     raw["live"]["enabled"] = live_enabled
@@ -122,7 +114,6 @@ def _install_fake_metrics_module(monkeypatch: pytest.MonkeyPatch, *, metrics: bo
                 "restart_count": 2,
                 "scanner_failures": 1,
                 "reconciliation_failures": 0,
-                "data_gap_events": 3,
                 "daily_loss_incidents": 0,
                 "drawdown_incidents": 1,
                 "circuit_breaker_events": 1,
@@ -150,7 +141,6 @@ def test_dashboard_overview_returns_all_panels(tmp_path: Path, monkeypatch: pyte
         "mode",
         "account",
         "equity",
-        "crypto",
         "risk",
         "execution",
         "universe",
@@ -159,6 +149,7 @@ def test_dashboard_overview_returns_all_panels(tmp_path: Path, monkeypatch: pyte
         "metrics",
     ):
         assert panel in overview, panel
+    assert "crypto" not in overview
     assert overview["engine_state"] == "stopped"
 
     # Account top line carries every headline number.
@@ -226,7 +217,6 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkey
 
     overview = asyncio.run(server.dashboard_overview())
     equity = overview["equity"]
-    crypto = overview["crypto"]
 
     assert equity["name"] == "equity_leveraged_trend_v1"
     assert equity["status"] == "stopped"
@@ -236,18 +226,6 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkey
     assert equity["maximum_allocation_pct"] == pytest.approx(98.0)
     assert equity["observation_set_size"] is not None
     assert isinstance(equity["holdings"], list)
-    assert crypto["name"] == "crypto_low_variance_hysteresis_v1"
-
-    # The shipped config disables crypto (paper_config_v2); the crypto card
-    # contract is checked with the sleeve re-enabled.
-    enabled_root = tmp_path / "crypto"
-    enabled_root.mkdir()
-    monkeypatch.setattr(server, "manager", _stub_manager(_repo_config(enabled_root, crypto_enabled=True)))
-    crypto = asyncio.run(server.dashboard_overview())["crypto"]
-    assert crypto["name"] == "crypto_low_variance_hysteresis_v1"
-    assert crypto["strategy"]["display_name"] == "Low Variance Hysteresis v1 (T1)"
-    assert crypto["strategy"]["rebalance_cadence"] == "hours:96"
-    assert crypto["maximum_allocation_pct"] == 5.0
 
 
 def test_dashboard_risk_panel_exposes_policies_and_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -259,7 +237,7 @@ def test_dashboard_risk_panel_exposes_policies_and_state(tmp_path: Path, monkeyp
     assert risk["gross_exposure_limit_pct"] == 98.0
     assert risk["cash_pct"] == 60.0
     assert risk["cash_buffer_limit_pct"] == 2.0
-    assert risk["crypto_exposure_limit_pct"] == 10.0
+    assert not any("crypto" in key for key in risk)
     assert risk["max_drawdown_pct"] == 75.0
     assert risk["daily_loss_limit_pct"] == 20.0
     assert risk["entry_risk_latch"] == {}
@@ -309,21 +287,14 @@ def test_dashboard_universe_and_health_panels(tmp_path: Path, monkeypatch: pytes
     assert equity["scanner_status"] == "static"
     assert "pinned_symbols" in equity
 
-    crypto = overview["universe"]["crypto"]
-    assert "eligible_pool_size" in crypto
-    assert "observation_set_size" in crypto
-    assert "observation_set" in crypto
-    assert "pinned_symbols" in crypto
-    assert "last_refresh_at" in crypto
-    assert "scanner_status" in crypto
-    assert "next_refresh_at" in crypto
+    assert set(overview["universe"]) == {"equity"}
 
     health = overview["health"]
     assert "workers" in health
     assert "queue" in health
     assert "account_freshness" in health
     assert "reconciliation" in health
-    assert "scanner" in health
+    assert "scanner" not in health  # the universe refresh loop was removed
     assert "database" in health
     assert "last_heartbeat" in health
     assert "restart_count" in health
@@ -335,23 +306,22 @@ def test_dashboard_universe_and_health_panels(tmp_path: Path, monkeypatch: pytes
 # ---------------------------------------------------------------------------
 
 
-def _crypto_decision() -> dict[str, Any]:
+def _equity_decision() -> dict[str, Any]:
     return {
         "timestamp": "2026-08-10T00:00:00+00:00",
-        "strategy_name": "crypto_low_variance_v1",
+        "strategy_name": "equity_leveraged_trend_v1",
         "target": {
-            "strategy_name": "crypto_low_variance_v1",
+            "strategy_name": "equity_leveraged_trend_v1",
             "weights": [
-                {"symbol": "BTC/USD", "weight": 0.5, "reason": "low_realized_variance"},
-                {"symbol": "ETH/USD", "weight": 0.5, "reason": "low_realized_variance"},
+                {"symbol": "QLD", "weight": 0.5, "reason": "trend_on_vol_target"},
             ],
-            "cash_weight": 0.0,
+            "cash_weight": 0.5,
             "rebalance_reason": "scheduled",
-            "universe_version": "crypto-universe-v1",
+            "universe_version": "equity-universe-v1",
             "metadata": {
-                "qualified_symbols": 4,
-                "selected_symbols": ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD"],
-                "hypothesis": "low realized variance: buy the 2 lowest-variance assets",
+                "qualified_symbols": 2,
+                "selected_symbols": ["QLD", "QQQ"],
+                "hypothesis": "leveraged index trend: hold QLD above the 200d average",
             },
         },
         "risk": {},
@@ -359,67 +329,68 @@ def _crypto_decision() -> dict[str, Any]:
 
 
 def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = _repo_config(tmp_path, crypto_enabled=True)
+    config_path = _repo_config(tmp_path)
     positions = [
         {
-            "symbol": "BTC/USD",
-            "market": "crypto",
+            "symbol": "QLD",
+            "market": "equity",
             "direction": "LONG",
-            "total_qty": 0.5,
-            "qty": 0.5,
+            "total_qty": 350,
+            "qty": 350,
             "market_value": 35050.0,
             "unrealized_pnl": 50.0,
             "protection_state": "protected",
         }
     ]
     monkeypatch.setattr(server, "manager", _stub_manager(config_path, positions=positions))
-    monkeypatch.setattr(server, "_dashboard_market_decisions", lambda _account_id: {"crypto": _crypto_decision()})
+    monkeypatch.setattr(server, "_dashboard_market_decisions", lambda _account_id: {"equity": _equity_decision()})
 
-    crypto = asyncio.run(server.dashboard_overview())["crypto"]
-    holding = crypto["holdings"][0]
-    assert holding["symbol"] == "BTC/USD"
-    assert holding["reason"] == "low_realized_variance"
+    equity = asyncio.run(server.dashboard_overview())["equity"]
+    holding = equity["holdings"][0]
+    assert holding["symbol"] == "QLD"
+    assert holding["reason"] == "trend_on_vol_target"
     assert holding["rank"] == 1
-    assert holding["of_qualified"] == 4
+    assert holding["of_qualified"] == 2
     assert holding["target_weight_pct"] == 50.0
     assert holding["current_weight_pct"] == pytest.approx(35.05)
-    assert "realized_vol_22d" in holding
-    assert crypto["last_decision_at"] == "2026-08-10T00:00:00+00:00"
-    # 96h cadence: next boundary = decision + 96 hours
-    assert crypto["next_rebalance_at"] == "2026-08-14T00:00:00+00:00"
+    assert "realized_vol_22d" not in holding
+    assert equity["last_decision_at"] == "2026-08-10T00:00:00+00:00"
+    # hours:24 cadence: next boundary = decision + 24 hours
+    assert equity["next_rebalance_at"] == "2026-08-11T00:00:00+00:00"
 
 
 def test_dashboard_explanations_derive_structured_reasons(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
     positions = [
         {
-            "symbol": "BTC/USD",
-            "market": "crypto",
+            "symbol": "QLD",
+            "market": "equity",
             "direction": "LONG",
-            "total_qty": 0.5,
-            "qty": 0.5,
+            "total_qty": 350,
+            "qty": 350,
             "market_value": 35050.0,
             "unrealized_pnl": 50.0,
         }
     ]
     monkeypatch.setattr(server, "manager", _stub_manager(config_path, positions=positions))
-    monkeypatch.setattr(server, "_dashboard_market_decisions", lambda _account_id: {"crypto": _crypto_decision()})
+    monkeypatch.setattr(server, "_dashboard_market_decisions", lambda _account_id: {"equity": _equity_decision()})
 
     explanations = asyncio.run(server.dashboard_overview())["explanations"]
-    crypto = explanations["crypto"]
-    assert crypto["strategy_name"] == "crypto_low_variance_v1"
-    assert crypto["qualified_symbols"] == 4
-    assert crypto["selected_symbols"] == ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD"]
-    assert crypto["hypothesis"].startswith("low realized variance")
-    holding = crypto["holdings"][0]
-    assert holding["symbol"] == "BTC/USD"
-    assert holding["reason"] == "low_realized_variance"
+    assert set(explanations) == {"equity"}
+    equity = explanations["equity"]
+    assert equity["strategy_name"] == "equity_leveraged_trend_v1"
+    assert equity["qualified_symbols"] == 2
+    assert equity["selected_symbols"] == ["QLD", "QQQ"]
+    assert equity["hypothesis"].startswith("leveraged index trend")
+    holding = equity["holdings"][0]
+    assert holding["symbol"] == "QLD"
+    assert holding["reason"] == "trend_on_vol_target"
     assert holding["rank"] == 1
-    assert holding["decision_strategy"] == "crypto_low_variance_v1"
+    assert holding["decision_strategy"] == "equity_leveraged_trend_v1"
     # No debug dumps: every payload must stay JSON-serializable and small.
     payload = json.dumps(explanations)
     assert len(payload) < 4000
-    assert "BTC/USD" in payload
+    assert "QLD" in payload
 
 
 # ---------------------------------------------------------------------------
@@ -467,7 +438,6 @@ def test_dashboard_metrics_consume_batch_modules(tmp_path: Path, monkeypatch: py
     ("endpoint", "panel"),
     [
         ("dashboard_equity", "equity"),
-        ("dashboard_crypto", "crypto"),
         ("dashboard_risk", "risk"),
         ("dashboard_execution", "execution"),
         ("dashboard_universe", "universe"),

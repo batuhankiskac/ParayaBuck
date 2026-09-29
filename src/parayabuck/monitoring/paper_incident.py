@@ -329,7 +329,6 @@ __all__ = [
 _PROVIDER_TEMPORARY_CATEGORIES = frozenset(
     {
         IncidentCategory.PROVIDER_UNAVAILABLE,
-        IncidentCategory.UNIVERSE_REFRESH_FAILED,
         IncidentCategory.SIGNAL_HISTORY_UNVERIFIED,
     }
 )
@@ -357,8 +356,10 @@ def emit_incident_record(record: IncidentRecord) -> None:
 
         spec = INCIDENT_TAXONOMY[record.category]
         # Map severity to alert kind: critical->circuit_breaker/reconciliation_failure,
-        # warning->scanner_refresh_failure etc, but generic incident uses reconciliation_failure
-        # as safe fallback; specific callers may emit more precise kinds.
+        # a warning-level provider outage->scanner_refresh_failure (kept: it is the
+        # webhook-enabled WARNING kind operators already receive for it), and a
+        # generic incident uses reconciliation_failure as safe fallback; specific
+        # callers may emit more precise kinds.
         if record.category == IncidentCategory.PROVIDER_UNAVAILABLE:
             kind = "scanner_refresh_failure" if spec.severity.value != "critical" else "reconciliation_failure"
         elif record.category in _BROKER_UNCERTAINTY_CATEGORIES:

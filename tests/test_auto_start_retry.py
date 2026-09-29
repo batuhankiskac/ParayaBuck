@@ -201,7 +201,7 @@ def _full_paper_runtime(**overrides: Any) -> EngineRuntime:
     runtime._state = "stopped"  # type: ignore[attr-defined]
     runtime._stop_event = threading.Event()  # type: ignore[attr-defined]
     runtime._state_lock = threading.RLock()  # type: ignore[attr-defined]
-    runtime._symbols_by_market = {Market.EQUITY: set(), Market.CRYPTO: set()}  # type: ignore[attr-defined]
+    runtime._symbols_by_market = {Market.EQUITY: set()}  # type: ignore[attr-defined]
     runtime._strategy_specs = ()  # type: ignore[attr-defined]
     runtime._portfolio_runtimes = ()  # type: ignore[attr-defined]
     runtime._managed_pin_symbols = set()  # type: ignore[attr-defined]
@@ -222,19 +222,12 @@ def _full_paper_runtime(**overrides: Any) -> EngineRuntime:
         runtime=SimpleNamespace(
             execution_timeframe="5m",
             market_state_timeframe="5m",
-            scanner_refresh_hours=4,
         ),
         universe=SimpleNamespace(
             equity=SimpleNamespace(
                 enabled=False,
                 maximum_stream_symbols=100,
                 symbols=(),
-            ),
-            crypto=SimpleNamespace(
-                enabled=False,
-                dynamic_selection_enabled=False,
-                maximum_stream_symbols=100,
-                pinned_symbols=(),
             ),
         ),
         risk=RiskLimits(),
@@ -295,7 +288,6 @@ def _tail_capable_runtime(**overrides: Any) -> EngineRuntime:
     runtime._circuit_breaker_reason: str | None = None  # type: ignore[attr-defined]
     runtime._entry_risk_latch = {  # type: ignore[attr-defined]
         Market.EQUITY: None,
-        Market.CRYPTO: None,
     }
     runtime.broker = SimpleNamespace(  # type: ignore[attr-defined]
         account_id="acct",
@@ -366,10 +358,7 @@ def test_restart_rebalance_resume_deferred_while_breaker_active() -> None:
     advanced: list[Market] = []
     runtime = _tail_capable_runtime()
     runtime._circuit_breaker_reason = "ownership_drift"  # type: ignore[attr-defined]
-    runtime._portfolio_runtimes = (  # type: ignore[attr-defined]
-        SimpleNamespace(market=Market.EQUITY),
-        SimpleNamespace(market=Market.CRYPTO),
-    )
+    runtime._portfolio_runtimes = (SimpleNamespace(market=Market.EQUITY),)  # type: ignore[attr-defined]
     runtime._advance_portfolio_rebalance = advanced.append  # type: ignore[attr-defined]
     runtime.start()
     assert advanced == []
@@ -655,24 +644,16 @@ def test_status_exposes_retry_info_only_while_retrying(monkeypatch: Any) -> None
     flaky = _FlakyRuntime(failures=999)
     manager = _manager_with(monkeypatch, flaky)
     monkeypatch.setattr(server, "manager", manager)
-    # get_status needs a parseable-but-harmless config in this test: the
-    # universe payloads are missing files, the validators are stubbed.
+    # get_status needs a parseable-but-harmless config in this test.
     monkeypatch.setattr(
         server,
         "load_config",
         lambda _path: SimpleNamespace(
             runtime=SimpleNamespace(mode=SimpleNamespace(value="paper")),
-            strategy=SimpleNamespace(
-                equity=SimpleNamespace(enabled=False),
-                crypto=SimpleNamespace(enabled=False),
-            ),
-            universe=SimpleNamespace(
-                equity=SimpleNamespace(enabled=False, symbols=()),
-                crypto=SimpleNamespace(active_universe_path="no/such/crypto.json"),
-            ),
+            strategy=SimpleNamespace(equity=SimpleNamespace(enabled=False)),
+            universe=SimpleNamespace(equity=SimpleNamespace(enabled=False, symbols=())),
         ),
     )
-    monkeypatch.setattr(server, "validate_active_crypto_universe", lambda crypto: ([], "ok"))
 
     async def scenario() -> None:
         task = asyncio.create_task(manager.auto_start_engine())

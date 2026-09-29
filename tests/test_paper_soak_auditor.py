@@ -1,7 +1,7 @@
 """The account auditor fails closed on synthetic equity-only PAPER evidence.
 
-Since paper_config_v2 (2026-09-29) the crypto sleeve is disabled, so the
-clean fixture carries equity decisions only and a crypto decision fails S1.
+ParayaBuck is equity-only, so the clean fixture carries equity decisions only
+and a decision for any other market (e.g. a historical crypto row) fails S1.
 """
 
 from __future__ import annotations
@@ -103,8 +103,6 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "capacity_snapshot": {
                     "effective_global_slot_claims": 7,
                     "global_slot_cap": 8,
-                    "effective_crypto_slot_claims": 0,
-                    "crypto_slot_cap": 2,
                 },
                 "target_state": {"kind": "INTENDED_POST_RISK", "weights": {}},
                 "planned_orders": [{"kind": "INTENDED", "client_order_id": order_id}] if status else [],
@@ -124,8 +122,6 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             [
                 ("reconcile", "reconciliation_recovered", None, "paper", "2026-09-01T00:00:00+00:00", None),
                 ("reconcile-complete", "reconciliation_succeeded", None, "paper", "2026-09-01T00:00:00+00:00", None),
-                ("eq-recover", "scanner_recovered", "equity", "paper", "2026-09-02T00:00:00+00:00", None),
-                ("eq-complete", "scanner_refresh_complete", "equity", "paper", "2026-09-02T00:00:00+00:00", None),
                 *[
                     (
                         f"summary-{decision_id}",
@@ -156,6 +152,7 @@ def test_clean_equity_only_fixture_passes(tmp_path: Path) -> None:
     }
     assert report["counts"]["reconciliation_runs_observed"] == 1  # type: ignore[index]
     assert report["counts"]["restarts_observed"] == 1  # type: ignore[index]
+    assert set(report["gates"]) == {f"S{index}" for index in (1, 2, 3, 4, 5, 7, 8, 9, 10, 12)}  # type: ignore[arg-type]
 
 
 def test_v2_start_boundary_excludes_historical_v1_decision(tmp_path: Path) -> None:
@@ -181,28 +178,24 @@ def test_v2_start_boundary_excludes_historical_v1_decision(tmp_path: Path) -> No
     ("mutation", "gate"),
     [
         ("global_nine", "S5"),
-        ("crypto_three", "S6"),
         ("duplicate_order", "S4"),
         ("orphan_fill", "S3"),
         ("wrong_strategy", "S1"),
-        ("crypto_decision", "S1"),
+        ("non_equity_decision", "S1"),
         ("live", "S12"),
         ("ambiguous", "S3"),
         ("buy_headroom", "S7"),
         ("forged_cash_headroom", "S7"),
         ("missing_receipt", "S10"),
-        ("stale_universe", "S11"),
         ("missing_reconciliation", "S8"),
     ],
 )
 def test_independent_invalid_states_fail(tmp_path: Path, mutation: str, gate: str) -> None:
     db, receipts, journal = _fixture(tmp_path)
-    if mutation in {"global_nine", "crypto_three"}:
+    if mutation == "global_nine":
         path = receipts / "eq-scheduled-3.v2.json"
         payload = json.loads(path.read_text(encoding="utf-8"))
-        payload["capacity_snapshot"][
-            "effective_global_slot_claims" if mutation == "global_nine" else "effective_crypto_slot_claims"
-        ] = 9 if mutation == "global_nine" else 3
+        payload["capacity_snapshot"]["effective_global_slot_claims"] = 9
         path.write_text(json.dumps(payload), encoding="utf-8")
     elif mutation == "duplicate_order":
         with sqlite3.connect(db) as con:
@@ -215,7 +208,7 @@ def test_independent_invalid_states_fail(tmp_path: Path, mutation: str, gate: st
     elif mutation == "wrong_strategy":
         with sqlite3.connect(db) as con:
             con.execute("UPDATE portfolio_decisions SET strategy_name='wrong' WHERE decision_id='eq-scheduled-3'")
-    elif mutation == "crypto_decision":
+    elif mutation == "non_equity_decision":
         with sqlite3.connect(db) as con:
             con.execute(
                 "UPDATE portfolio_decisions SET market='crypto', strategy_name='crypto_low_variance_hysteresis_v1' "
@@ -241,11 +234,6 @@ def test_independent_invalid_states_fail(tmp_path: Path, mutation: str, gate: st
             )
     elif mutation == "missing_receipt":
         (receipts / "eq-scheduled-3.v2.json").unlink()
-    elif mutation == "stale_universe":
-        with sqlite3.connect(journal) as con:
-            con.execute(
-                "INSERT INTO operational_events VALUES ('stale','universe_became_stale','equity','paper','2026-09-04T00:00:00+00:00',NULL)"
-            )
     elif mutation == "missing_reconciliation":
         with sqlite3.connect(journal) as con:
             con.execute("DELETE FROM operational_events WHERE kind='reconciliation_succeeded'")

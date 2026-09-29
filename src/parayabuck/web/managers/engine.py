@@ -346,8 +346,6 @@ class EngineManager:
             risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
         if "equity_trading_enabled" in fields_set:
             _yaml_block(strategy, "equity")["enabled"] = payload.equity_trading_enabled
-        if "crypto_trading_enabled" in fields_set:
-            _yaml_block(strategy, "crypto")["enabled"] = payload.crypto_trading_enabled
         # App PATCH semantics
         app_patch: dict[str, Any] = {}
         if "host" in fields_set:
@@ -1057,8 +1055,7 @@ class EngineManager:
             from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
             from parayabuck.portfolio import product_strategy_from
             from parayabuck.portfolio.runtime_service import configuration_digest
-            from parayabuck.universe import equity_universe_digest, load_active_crypto_symbols
-            from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
+            from parayabuck.universe import equity_universe_digest
 
             equity_universe = cfg.universe.equity
             digests: list[str] = []
@@ -1067,11 +1064,6 @@ class EngineManager:
                     cfg.strategy.equity,
                     equity_universe.symbols if equity_universe.enabled else (),
                     equity_universe_digest(equity_universe),
-                ),
-                (
-                    cfg.strategy.crypto,
-                    load_active_crypto_symbols(cfg.universe.crypto, log_rejection=False),
-                    crypto_scanner_config_digest(cfg.universe.crypto),
                 ),
             ):
                 if not selection.enabled or not symbols:

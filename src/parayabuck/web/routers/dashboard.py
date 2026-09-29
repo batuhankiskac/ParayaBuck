@@ -30,11 +30,6 @@ async def dashboard_equity(request: Request) -> dict[str, Any]:
     return await asyncio.to_thread(svc.get_panel, "equity", _require_state(request))
 
 
-@router.get("/api/crypto")
-async def dashboard_crypto(request: Request) -> dict[str, Any]:
-    return await asyncio.to_thread(svc.get_panel, "crypto", _require_state(request))
-
-
 @router.get("/api/risk")
 async def dashboard_risk(request: Request) -> dict[str, Any]:
     return await asyncio.to_thread(svc.get_panel, "risk", _require_state(request))

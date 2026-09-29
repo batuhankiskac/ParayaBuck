@@ -6,7 +6,7 @@ is always attached), and — when configured — POSTed as JSON to a generic
 webhook URL. The webhook POST runs via a bounded single-worker queue with a
 short timeout; any failure is logged, never raised into the caller.
 
-Failure events are throttled per kind so a broken scanner or broker does not
+Failure events are throttled per kind so a broken data provider or broker does not
 spam the webhook: within the throttle window a repeat of the same kind is
 suppressed (counted, logged at DEBUG) while the first occurrence is still
 delivered. The kinds in ``monitoring.events.ALERT_KINDS`` are the only ones
@@ -154,7 +154,7 @@ def _throttle_key(kind: str, fields: dict[str, object]) -> str:
     """Throttle per distinct actionable incident, not merely per kind.
 
     For paper_incident — per (category, incident_id) or message hash.
-    For scanner/reconciliation/order kinds — include market/order/decision dimensions
+    For provider/reconciliation/order kinds — include market/order/decision dimensions
     so distinct actionable incidents are not collapsed.
     """
     if kind == "paper_incident":

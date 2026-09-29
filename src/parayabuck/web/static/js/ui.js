@@ -114,7 +114,7 @@
     const s = String(status || "").toLowerCase();
     if (["ok", "active", "running", "healthy"].indexOf(s) !== -1) return "badge ok";
     if (["blocked", "degraded", "warming", "warming_up", "starting", "stopping"].indexOf(s) !== -1) return "badge warn";
-    if (["critical", "crashed", "halted", "error", "stop_failed", "scanner_issue"].indexOf(s) !== -1) return "badge bad";
+    if (["critical", "crashed", "halted", "error", "stop_failed"].indexOf(s) !== -1) return "badge bad";
     return "badge";
   }
 
@@ -288,7 +288,6 @@
     const markets = (status.runtime && status.runtime.markets) || {};
     setText("marketStatusText",
       "Hisse: " + marketLabel(status, markets.equity) +
-      " · Kripto: " + marketLabel(status, markets.crypto) +
       " · " + fmt.time() + " güncellendi");
 
     const messages = [];
@@ -449,7 +448,6 @@
         }
         byId("paperModeCheck").checked = !!data.paper_mode;
         byId("equityTradingCheck").checked = data.equity_trading_enabled !== false;
-        byId("cryptoTradingCheck").checked = data.crypto_trading_enabled === true;
         byId("maxDailyLoss").value = data.daily_loss_limit_pct || 1.5;
         byId("maxDrawdown").value = data.max_drawdown_pct || 10;
         byId("timeframe").value = data.timeframe || "5m";
@@ -478,7 +476,6 @@
         secret_key: byId("secretKey").value.trim(),
         paper_mode: byId("paperModeCheck").checked,
         equity_trading_enabled: byId("equityTradingCheck").checked,
-        crypto_trading_enabled: byId("cryptoTradingCheck").checked,
         daily_loss_limit_pct: parseFloat(byId("maxDailyLoss").value),
         max_drawdown_pct: parseFloat(byId("maxDrawdown").value),
         execution_timeframe: byId("timeframe").value,

@@ -9,7 +9,7 @@ PAPER endpoint:
 
 SCOPE: this validates the broker + repository execution lifecycle (order
 submission, idempotency, ownership bookkeeping, restart persistence, exit and
-reconciliation). It does NOT route through the scanner, strategy, risk
+reconciliation). It does NOT route through the strategy, risk
 overlay or planner, so it is NOT a full strategy end-to-end test.
 
 CLEANUP: failures are cleanup-safe. Smoke-created order ids and the

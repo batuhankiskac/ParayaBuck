@@ -117,9 +117,6 @@ class BacktestManager:
         days = int(payload.get("days") or 0)
         start = end - timedelta(days=days or int(payload.get("years") or 5) * 365)
         argv += ["--start", start.date().isoformat(), "--end", end.date().isoformat()]
-        max_symbols = payload.get("max_symbols") or 0
-        if max_symbols > 0:
-            argv += ["--candidate-limit", str(int(max_symbols))]
         strategy = (payload.get("strategy") or "").strip()
         if strategy:
             argv += ["--strategy", strategy]

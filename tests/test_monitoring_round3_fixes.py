@@ -29,8 +29,10 @@ from parayabuck.monitoring.snapshot import build_snapshot, write_snapshot_atomic
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 from parayabuck.runtime_health import WorkerHealth
 
-# A Saturday: equity is outside regular hours, crypto must still deliver bars
+# A Saturday: equity is outside regular hours, its stream owes no bars
 _NOW = datetime(2026, 9, 26, 15, 0, tzinfo=UTC)
+# A Monday 11:00 ET: regular equity hours, the stream must deliver bars
+_OPEN = datetime(2026, 9, 28, 15, 0, tzinfo=UTC)
 
 
 def _worker(heartbeat: datetime, last_event: datetime | None = None) -> dict[str, object]:
@@ -42,10 +44,10 @@ def _worker(heartbeat: datetime, last_event: datetime | None = None) -> dict[str
 
 def test_risk_check_ignores_unlatched_markets() -> None:
     # The runtime always reports every market; None means "not latched"
-    check = _check_risk(None, {"entry_risk_latch": {"equity": None, "crypto": None}})
+    check = _check_risk(None, {"entry_risk_latch": {"equity": None}})
 
     assert check.status != HealthStatus.BLOCKED
-    latched = _check_risk(None, {"entry_risk_latch": {"equity": None, "crypto": "daily_loss_limit"}})
+    latched = _check_risk(None, {"entry_risk_latch": {"equity": "daily_loss_limit"}})
     assert latched.status == HealthStatus.BLOCKED
 
 
@@ -56,8 +58,6 @@ def test_workers_check_follows_runtime_liveness_rules() -> None:
         "pb-trade-updates": _worker(_NOW - timedelta(hours=3)),
         # hourly monitor pass
         "pb-signal-adjustment": _worker(_NOW - timedelta(minutes=40)),
-        # 1-minute bars: 70 s since the last bar is within the stream window
-        "pb-crypto": _worker(_NOW - timedelta(seconds=70), _NOW - timedelta(seconds=70)),
         # weekend: equity stream owes no bars
         "pb-stocks": _worker(_NOW - timedelta(hours=20), _NOW - timedelta(hours=20)),
     }
@@ -65,10 +65,16 @@ def test_workers_check_follows_runtime_liveness_rules() -> None:
     check = _check_workers({"workers": workers}, _NOW, Config())
 
     assert check.status == HealthStatus.OK, check.summary
-    workers["pb-crypto"] = _worker(_NOW, _NOW - timedelta(minutes=10))
-    stale = _check_workers({"workers": workers}, _NOW, Config())
+    # Regular hours, 1-minute bars: 70 s since the last bar is within the stream window
+    workers = {
+        "pb-decisions": _worker(_OPEN),
+        "pb-stocks": _worker(_OPEN - timedelta(seconds=70), _OPEN - timedelta(seconds=70)),
+    }
+    assert _check_workers({"workers": workers}, _OPEN, Config()).status == HealthStatus.OK
+    workers["pb-stocks"] = _worker(_OPEN, _OPEN - timedelta(minutes=10))
+    stale = _check_workers({"workers": workers}, _OPEN, Config())
     assert stale.status == HealthStatus.DEGRADED
-    assert stale.observed == ["pb-crypto"]
+    assert stale.observed == ["pb-stocks"]
 
 
 def test_worker_liveness_constants_match_runtime() -> None:

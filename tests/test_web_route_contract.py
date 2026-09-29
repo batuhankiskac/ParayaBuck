@@ -61,7 +61,6 @@ REQUIRED_ROUTES = [
     ("/api/backtest/status", "GET"),
     ("/api/dashboard/overview", "GET"),
     ("/api/equity", "GET"),
-    ("/api/crypto", "GET"),
     ("/api/risk", "GET"),
     ("/api/execution", "GET"),
     ("/api/universe", "GET"),
@@ -86,6 +85,8 @@ def test_no_accidental_method_change():
         assert (path, method) in m
     # Negative: check that /api/engine/start is not GET
     assert ("/api/engine/start", "GET") not in m
+    # Crypto support was removed: its dashboard panel route must stay gone.
+    assert ("/api/crypto", "GET") not in m
 
 
 def test_openapi_baseline_intact():

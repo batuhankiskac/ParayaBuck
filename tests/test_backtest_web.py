@@ -17,7 +17,6 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "years": 3,
         "days": 90,
         "symbols": "AAPL",
-        "max_symbols": 5,
     }
     values.update(overrides)
     return values

@@ -103,29 +103,6 @@ def on_reconciliation_recovered(*, session_id: str | None = None, market: str | 
     )
 
 
-# ------------------------------------------------------------------ universe
-def on_universe_refresh_complete(*, market: str, session_id: str | None = None) -> None:
-    _emit_safely(
-        kind="scanner_refresh_complete",
-        message=f"universe refresh completed for {market}",
-        market=market,
-        session_id=session_id,
-    )
-
-
-def on_universe_refresh_failure(*, market: str, error: str, session_id: str | None = None) -> None:
-    key = f"universe_{market}"
-    if not _dedup(key, "failed"):
-        return
-    _emit_safely(
-        kind="scanner_refresh_failure",
-        message=f"universe refresh failed for {market}: {error}",
-        market=market,
-        session_id=session_id,
-        fields={"error": error, "market": market},
-    )
-
-
 # ------------------------------------------------------------------ account
 def on_account_stale(
     *, age_seconds: float | None = None, session_id: str | None = None, account_id: str | None = None

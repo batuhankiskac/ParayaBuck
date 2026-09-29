@@ -1,6 +1,6 @@
 """Canonical incident taxonomy and record for PAPER reliability.
 
-Strict classification for 13 categories, no generic bucket for known cases.
+Strict classification for 12 categories, no generic bucket for known cases.
 Every incident defines severity, halt, retry, recovery, and canonical payload.
 """
 
@@ -20,7 +20,6 @@ class IncidentCategory(StrEnum):
     ORDER_DRIFT = "ORDER_DRIFT"
     PENDING_ORDER_UNKNOWN = "PENDING_ORDER_UNKNOWN"
     SIGNAL_HISTORY_UNVERIFIED = "SIGNAL_HISTORY_UNVERIFIED"
-    UNIVERSE_REFRESH_FAILED = "UNIVERSE_REFRESH_FAILED"
     DATABASE_ERROR = "DATABASE_ERROR"
     STATE_RESTORE_FAILED = "STATE_RESTORE_FAILED"
     DUPLICATE_DECISION = "DUPLICATE_DECISION"
@@ -109,16 +108,6 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         recovery_condition="healthy==true + verified_through_by_symbol >= decision_timestamp + last_success<=3600s",
         operator_action="Wait for provider adequate_coverage, check digest/universe",
     ),
-    IncidentCategory.UNIVERSE_REFRESH_FAILED: IncidentSpec(
-        category=IncidentCategory.UNIVERSE_REFRESH_FAILED,
-        severity=IncidentSeverity.WARNING,
-        trading_halts=False,
-        auto_retry=True,
-        retry_interval_seconds=(300, 900, 1800, 3600),
-        bounded_attempts=None,
-        recovery_condition="validate_active_crypto_universe success + status==success",
-        operator_action="Check crypto_scanner_config_digest, asset API, fallback",
-    ),
     IncidentCategory.DATABASE_ERROR: IncidentSpec(
         category=IncidentCategory.DATABASE_ERROR,
         severity=IncidentSeverity.CRITICAL,
@@ -167,7 +156,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         retry_interval_seconds=(2,),
         bounded_attempts=None,
         recovery_condition="host_time vs broker Bar.timestamp within tolerance + queue_age<=threshold",
-        operator_action="Sync NTP, verify NEW_YORK tz, restart if has_data_gaps",
+        operator_action="Sync NTP, verify NEW_YORK tz",
     ),
     IncidentCategory.RESTART_RECOVERY_FAILED: IncidentSpec(
         category=IncidentCategory.RESTART_RECOVERY_FAILED,

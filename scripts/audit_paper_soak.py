@@ -8,6 +8,13 @@ stable so reports stay comparable.
 
 Receipts are decision snapshots. SQLite portfolio tables remain authoritative for
 orders, fills and their final statuses. This program never imports a broker.
+
+The observed identity is equity-only VT35: a decision on EVERY NYSE session
+close (early closes included), a full 0.98 allocation bounded by the CONFIGURED
+0.98 gross cap and 0.02 cash buffer, and one startup catch-up decision only
+when the deployment is genuinely cold. Decisions are labelled 00:00 ET but
+decided at that session's close, so ``--start``/``--end`` bound the decision
+moment and everything else is linked to its decision by id.
 """
 
 from __future__ import annotations
@@ -15,14 +22,19 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import sys
 from collections import Counter
-from datetime import datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from parayabuck.markets.nyse_calendar import NEW_YORK, nyse_sessions, session_close_utc  # noqa: E402
+
 EXPECTED = {
     "equity": ("equity_leveraged_trend_v1", 0.98),
 }
@@ -49,6 +61,53 @@ KNOWN = (
     }
 )
 GATES = tuple(f"S{index}" for index in range(1, 13) if index not in {6, 11})
+
+# Reasons ``startup_catch_up`` legitimately skips its immediate decision. They
+# arrive as ``portfolio_no_trade`` journal rows, so a window that contains one
+# of them proves the catch-up path ran and declined on purpose.
+CATCH_UP_SKIP_REASONS = frozenset(
+    {
+        "already_invested",
+        "catch_up_superseded",
+        "duplicate_decision",
+        "incomplete_strategy_batch",
+        "rebalance_blocked",
+        "rebalance_in_progress",
+        "warming_up",
+    }
+)
+
+
+def _instant(value: object) -> datetime:
+    """Aware UTC instant of an ISO timestamp; naive values are already UTC."""
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _session_of(value: object) -> date:
+    """New York session date of a decision label.
+
+    Provider daily bars are labeled 00:00 ET of the session they close, so the
+    label instant itself is the start of the session day, not the decision
+    moment: the decision happens at that session's NYSE close.
+    """
+    return _instant(value).astimezone(NEW_YORK).date()
+
+
+def _session_close(session: date) -> datetime:
+    """The session's NYSE close in UTC (early closes included)."""
+    close = session_close_utc(session)
+    if close is None:
+        raise ValueError(f"not an NYSE session: {session}")
+    return close
+
+
+def _journal_reason(event: dict[str, Any]) -> str:
+    try:
+        fields = json.loads(str(event.get("fields_json") or "{}"))
+    except (TypeError, ValueError):
+        return ""
+    return str(fields.get("reason") or "") if isinstance(fields, dict) else ""
 
 
 def _readonly(path: Path) -> sqlite3.Connection:
@@ -91,6 +150,11 @@ def audit(
     def flag(gate: str, message: str) -> None:
         issues[gate].append(message)
 
+    def _within(value: object) -> bool:
+        """Whether an instant falls inside the requested observation window."""
+        moment = _instant(value)
+        return (start is None or moment >= start) and (end is None or moment <= end)
+
     settings = yaml.safe_load(config.read_text(encoding="utf-8"))
     expected_config = (
         settings["runtime"]["mode"] == "paper"
@@ -109,6 +173,11 @@ def audit(
         flag("S1", "current configuration differs from frozen PAPER identity")
     if settings["live"]["enabled"] or settings["runtime"]["mode"] == "live":
         flag("S12", "current configuration enables LIVE")
+    # Admission headroom must be recomputed against the CONFIGURED limits.
+    # The audit used to hard-code the library defaults (0.6 gross / 0.4 cash),
+    # so every real VT35 BUY was reported as a violation.
+    maximum_gross = float(settings["risk"]["max_gross_exposure_pct"])
+    minimum_cash = float(settings["risk"]["cash_buffer_pct"])
 
     with _readonly(db) as connection:
         sessions = _rows(connection, "portfolio_runtime_sessions")
@@ -118,6 +187,9 @@ def audit(
         events = _rows(connection, "portfolio_execution_events")
         rebalances = _rows(connection, "portfolio_rebalance_executions")
         admissions = _rows(connection, "portfolio_buy_admission_observations")
+    # Unwindowed copy: catch-up due-ness is a question about the deployment's
+    # whole history, not about the slice under audit.
+    all_decisions = list(decisions)
     receipts = _receipt_files(receipts_dir)
     journal_events: list[dict[str, Any]] = []
     if journal is not None:
@@ -131,41 +203,32 @@ def audit(
         if (start is not None and start.tzinfo is None) or (end is not None and end.tzinfo is None):
             raise ValueError("Observation boundaries must include a UTC offset")
 
-        def within(value: object) -> bool:
-            stamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-            return (start is None or stamp >= start) and (end is None or stamp <= end)
-
-        decisions = [row for row in decisions if within(row["decision_timestamp"])]
+        # A decision is labelled 00:00 ET but happens at that session's close,
+        # so the window bounds the DECISION MOMENT, not the label. Selecting
+        # by label let a `--start` inside a session separate a decision from
+        # its orders and journal rows.
+        decisions = [row for row in decisions if _within(_session_close(_session_of(row["decision_timestamp"])))]
+        # Everything downstream is linked by identity, never by wall clock:
+        # a restart's own orders, fills and summaries belong to their
+        # decision even though the order is created hours after the label.
         selected_decisions = {row["decision_id"] for row in decisions}
         sessions = [row for row in sessions if row["session_id"] in {item["session_id"] for item in decisions}]
-        orders = [
-            row
-            for row in orders
-            if row["decision_id"] in selected_decisions or (row.get("created_at") and within(row["created_at"]))
-        ]
+        orders = [row for row in orders if row["decision_id"] in selected_decisions]
         selected_orders = {row["client_order_id"] for row in orders}
-        fills = [
+        fills = [row for row in fills if row["client_order_id"] in selected_orders]
+        events = [row for row in events if row["client_order_id"] in selected_orders]
+        rebalances = [row for row in rebalances if row["decision_id"] in selected_decisions]
+        admissions = [row for row in admissions if row["client_order_id"] in selected_orders]
+        receipts = [row for row in receipts if str(row.get("decision_id")) in selected_decisions]
+        # A journal row tied to a decision follows that decision; only
+        # decision-less evidence (reconciliation runs, drift incidents) is
+        # bounded by wall clock.
+        journal_events = [
             row
-            for row in fills
-            if row["client_order_id"] in selected_orders or (row.get("occurred_at") and within(row["occurred_at"]))
+            for row in journal_events
+            if str(row.get("decision_id") or "") in selected_decisions
+            or (not row.get("decision_id") and _within(row["occurred_at"]))
         ]
-        events = [
-            row
-            for row in events
-            if row["client_order_id"] in selected_orders or (row.get("received_at") and within(row["received_at"]))
-        ]
-        rebalances = [
-            row
-            for row in rebalances
-            if row["decision_id"] in selected_decisions or (row.get("updated_at") and within(row["updated_at"]))
-        ]
-        admissions = [
-            row
-            for row in admissions
-            if row["client_order_id"] in selected_orders or (row.get("observed_at") and within(row["observed_at"]))
-        ]
-        receipts = [row for row in receipts if within(row["decision_timestamp"])]
-        journal_events = [row for row in journal_events if within(row["occurred_at"])]
 
     if not sessions or not decisions or not receipts:
         flag("S2", "no complete forward observation")
@@ -292,7 +355,7 @@ def audit(
                 or selected_admission["gross_headroom"]
                 > max(
                     0.0,
-                    0.6 * selected_admission["account_equity"]
+                    maximum_gross * selected_admission["account_equity"]
                     - selected_admission["realized_gross"]
                     - selected_admission["committed_buy_notional"],
                 )
@@ -301,7 +364,7 @@ def audit(
                 > max(
                     0.0,
                     selected_admission["account_cash"]
-                    - 0.4 * selected_admission["account_equity"]
+                    - minimum_cash * selected_admission["account_equity"]
                     - selected_admission["committed_buy_notional"],
                 )
                 + 1e-6
@@ -328,26 +391,60 @@ def audit(
         kind = str(event.get("kind", ""))
         if event.get("mode") == "live":
             flag("S12", f"LIVE journal event {event['event_id']}")
+        # A startup reconciliation failure is resolved either by an explicit
+        # recovery marker or by the next run that reconciles clean: a later
+        # successful reconciliation IS the proof the incident ended.
         if kind in {"broker_local_drift", "reconciliation_failure"} and not any(
-            later.get("kind") == "reconciliation_recovered"
+            later.get("kind") in {"reconciliation_recovered", "reconciliation_succeeded"}
             and later.get("occurred_at", "") > event.get("occurred_at", "")
             for later in journal_events
         ):
             flag("S8", f"unreconciled incident {event['event_id']}")
     counts = Counter((receipt.get("market"), receipt.get("origin")) for receipt in receipts)
-    for market in EXPECTED:
-        for origin in ("scheduled", "startup_catch_up"):
-            if counts[market, origin] == 0:
-                flag("S9" if origin == "startup_catch_up" else "S2", f"no {market} {origin} decision observed")
-        scheduled = sorted(
-            datetime.fromisoformat(str(receipt["decision_timestamp"]))
-            for receipt in receipts
-            if receipt.get("market") == market and receipt.get("origin") == "scheduled"
+    # VT35 decides on EVERY NYSE session close, so the calendar — not a
+    # maximum-day heuristic — states what the ledger must contain. A session
+    # dropped by the data pipeline or the decision worker is missing from
+    # both the ledger and the journal, and only the calendar catches it.
+    decisions_by_session: dict[date, list[str]] = {}
+    for decision in decisions:
+        decisions_by_session.setdefault(_session_of(decision["decision_timestamp"]), []).append(
+            str(decision["decision_id"])
         )
-        maximum_gap_days = 8
-        for before, after in zip(scheduled, scheduled[1:]):
-            if (after - before).total_seconds() > maximum_gap_days * 86400:
-                flag("S2", f"unexplained {market} scheduled decision gap: {before} to {after}")
+    expected_sessions: list[date] = []
+    if decisions_by_session:
+        first, last = min(decisions_by_session), max(decisions_by_session)
+        expected_sessions = [session for session, _, _ in nyse_sessions(first, last)]
+        for session in expected_sessions:
+            decided = decisions_by_session.get(session, [])
+            if not decided:
+                flag("S2", f"no decision for NYSE session {session}")
+            elif len(decided) > 1:
+                flag("S4", f"multiple decisions for NYSE session {session}: {sorted(decided)}")
+    # A startup catch-up only fires on a COLD start: the runtime decides once
+    # on the latest completed bars when the deployment has never decided and
+    # holds nothing managed. Every later restart declines it (the deployment
+    # already decided), so requiring one per window flagged correct restarts.
+    cold_starts = [
+        session
+        for session in sessions
+        if session.get("started_at")
+        and _within(session["started_at"])
+        and not any(
+            _session_close(_session_of(decision["decision_timestamp"])) <= _instant(session["started_at"])
+            and decision["configuration_digest"] == session["configuration_digest"]
+            for decision in all_decisions
+        )
+    ]
+    catch_up_declined = any(
+        str(event.get("kind")) == "portfolio_no_trade" and _journal_reason(event) in CATCH_UP_SKIP_REASONS
+        for event in journal_events
+    )
+    catch_up_required = bool(cold_starts) and not catch_up_declined
+    for market in EXPECTED:
+        if counts[market, "scheduled"] == 0:
+            flag("S2", f"no {market} scheduled decision observed")
+        if counts[market, "startup_catch_up"] == 0 and catch_up_required:
+            flag("S9", f"cold start observed without a {market} startup catch-up decision")
     if journal is not None:
         if not any(event.get("kind") == "reconciliation_succeeded" for event in journal_events):
             flag("S8", "no successful reconciliation run observed")
@@ -381,6 +478,9 @@ def audit(
             "order_statuses": dict(Counter(str(order["status"]) for order in orders)),
             "operational_events": dict(Counter(str(event.get("kind")) for event in journal_events)),
             "restarts_observed": max(0, len(sessions) - 1),
+            "cold_starts_observed": len(cold_starts),
+            "startup_catch_up_required": catch_up_required,
+            "expected_nyse_sessions": len(expected_sessions),
             "reconciliation_runs_observed": sum(
                 event.get("kind") == "reconciliation_succeeded" for event in journal_events
             ),

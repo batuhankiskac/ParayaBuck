@@ -5,6 +5,9 @@ __pycache__/
 
 # GPT Pro handoff artifacts (prompts/reports) — local, never committed
 gptpro/
+# Agent worktree scratch (merged/merged-out clones). Untracked, never part of
+# the product; without this, ruff and CodeGraph scan stale copies of the tree.
+.claude/
 
 # Local Mission 3 experiment bundles are generated/local. Canonical evidence is
 # curated under data/research_manifests/, data/research_receipts/, data/research/

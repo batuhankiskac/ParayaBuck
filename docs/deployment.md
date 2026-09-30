@@ -181,9 +181,18 @@ git fetch ~/pb-update.bundle main:refs/remotes/bundle/main
 git log --oneline HEAD..bundle/main               # review what ships
 git merge --ff-only bundle/main
 .venv/bin/pip install -e . --no-deps              # when dependencies or entry points changed
+# when requirements.lock changed: the lock is a closed closure, so every
+# transitive dependency is pinned there — reinstall the whole file
+.venv/bin/pip install -r requirements.lock   # skip when the lock is unchanged
 .venv/bin/parayabuck doctor --strict --paper --offline
 sudo systemctl restart parayabuck
 ```
+
+`requirements.lock` is a complete, closed runtime closure (every transitive
+dependency pinned, nothing resolved at install time) and it matches the
+environment the test suite runs in. When a deploy changes it — the 2026-10-01
+closure update did — reinstall it on the VM with the command above; the
+`pip install -e . --no-deps` line alone leaves the old pins in place.
 
 From 2026-10-01 the trading host must be designated explicitly, and the
 shipped config no longer auto-starts. Before restarting:

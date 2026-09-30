@@ -23,7 +23,7 @@ RUN python -m pip install --upgrade pip \
     && python -m pip install -r requirements.lock \
     && python -m pip install . --no-deps
 
-RUN mkdir -p /app/data/runtime /app/data/universe /app/reports \
+RUN mkdir -p /app/data/runtime /app/reports \
     && chown -R parayabuck:parayabuck /app
 
 USER parayabuck

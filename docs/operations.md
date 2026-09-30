@@ -197,8 +197,11 @@ arithmetic at runtime:
 
 Read-only; works while the engine runs. Reads
 `data/runtime/health_snapshot.json` (written every 30 s), the decision DB and
-the event journal `data/runtime/observability.sqlite3` (30 days / 50,000
-events).
+the event journal (30 days / 50,000 events). The journal path, retention,
+maximum events and queue size come from the `observability:` block in
+`config/settings.yaml`; the engine applies them at start-up, so a custom
+`observability.journal_path` is the file both the engine writes and
+`ops events` reads. Default: `data/runtime/observability.sqlite3`.
 
 ```bash
 parayabuck ops status [--json]            # overall health, trading state, per-check lines
@@ -252,6 +255,21 @@ It also reports backup freshness: the age of the newest snapshot in
 `backup.path`. That row is a `WARN`, never a blocker — the service runs
 `doctor --strict` as `ExecStartPre`, and a stale backup must not keep the
 engine from starting.
+
+## Offline backtests (research, never runtime)
+
+`parayabuck backtest` and `parayabuck optimize` are offline research runs.
+They write their report, CSVs and universe snapshot under
+`backtest.output_dir` (`reports/`) and **never** touch
+`data/runtime/parayabuck.sqlite3`: a research row must not appear in the live
+decision ledger or in its backups. Explicit persistence (an API caller that
+asks for it) lands in `<backtest.output_dir>/backtest_runs.sqlite3` or a path
+it names.
+
+`report.summary["data_feed"]` states the feed the bars actually came from: the
+provider's effective feed for a download (`iex` when a configured SIP request
+hit an entitlement downgrade) and `unknown` for `--data <csv>`, with a
+`data_feed_note` caveat. A CSV run can never claim the SIP tape.
 
 ## State, backup and restore
 

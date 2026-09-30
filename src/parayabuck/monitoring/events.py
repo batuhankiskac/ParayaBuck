@@ -13,8 +13,9 @@ Webhook default choice
 ``DEFAULT_ALERT_EVENTS`` is the webhook-enabled default. It equals
 ``ALERT_KINDS_ORDERED`` with ``paper_receipt`` excluded:
 
-* ``paper_receipt`` is emitted on every scheduled weekly equity decision
-  (``receipt.py:build_receipt`` / ``write``). It is routine, high-volume
+* ``paper_receipt`` is emitted on every scheduled equity decision (daily,
+  ``strategy.equity.rebalance_frequency: hours:24``) via
+  ``receipt.py:build_receipt`` / ``write``. It is routine, high-volume
   lifecycle telemetry, not an operator-actionable failure. Enabling it on the
   webhook by default would spam the operator channel.
 * ``paper_incident`` is an incident/failure signal (reconciliation drift,

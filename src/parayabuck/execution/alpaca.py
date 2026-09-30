@@ -90,6 +90,7 @@ class AlpacaBroker:
         portfolio_fill_recovered: (Callable[..., None] | None) = None,
         portfolio_order_quantity_adopted: (Callable[[str, float], None] | None) = None,
         portfolio_flat_reconciled: (Callable[[str, Market], object] | None) = None,
+        bot_tradable_symbols: Callable[[], object] | None = None,
         runtime_state_dir: str | Path | None = None,
         peak_state_path: str | Path | None = None,
         client: Any | None = None,
@@ -123,6 +124,7 @@ class AlpacaBroker:
         self.portfolio_fill_recovered = portfolio_fill_recovered
         self.portfolio_order_quantity_adopted = portfolio_order_quantity_adopted
         self.portfolio_flat_reconciled = portfolio_flat_reconciled
+        self.bot_tradable_symbols = bot_tradable_symbols
         self._account_id = ""
         # Immutable snapshot cache: every fresh account() seeds it; callers
         # that tolerate bounded staleness (config-sanctioned entry-gate

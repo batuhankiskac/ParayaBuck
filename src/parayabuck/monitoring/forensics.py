@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from parayabuck.core.models import Market
+
 log = logging.getLogger("parayabuck.monitoring.forensics")
 
 
@@ -135,11 +137,16 @@ def find_stuck_rebalances(
 ) -> list[dict[str, Any]]:
     """Rebalances remaining in non-terminal phase longer than threshold.
 
+    Only markets the equity runtime still executes are reported: a legacy
+    rebalance row of a removed market is never advanced by the current build,
+    so it would pin ``ops status`` at DEGRADED for good.
+
     ``strict=True`` re-raises a read failure instead of answering ``[]``.
     """
     if db_path is None or not Path(str(db_path)).exists():
         return []
     terminal_phases = {"COMPLETE", "BLOCKED", "complete", "blocked"}
+    product_markets = {Market.EQUITY.value}
     stuck: list[dict[str, Any]] = []
     try:
         conn = sqlite3.connect(str(db_path), timeout=2.0)
@@ -150,6 +157,8 @@ def find_stuck_rebalances(
             rows = conn.execute("SELECT * FROM portfolio_rebalance_executions").fetchall()
             now = datetime.now(UTC)
             for r in rows:
+                if str(r["market"] or "") not in product_markets:
+                    continue
                 phase = str(r["phase"] or "")
                 if phase in terminal_phases:
                     continue

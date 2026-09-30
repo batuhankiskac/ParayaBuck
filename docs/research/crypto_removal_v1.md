@@ -63,15 +63,28 @@ sizes, streams, protects, scans or backtests crypto:
 - Old rows with `market='crypto'` (portfolio orders, ownership adjustments,
   managed positions) still load. Ownership reads skip them, so a crypto
   holding is never "managed" and can never cause an ownership-drift halt.
-- A foreign crypto position still counts toward account slots (cap 8) and
-  gross exposure exactly as before; reconciliation never places a stop on it;
-  portfolio orders and stops refuse non-equity markets.
-- **Startup safety.** If the broker account holds any crypto position (or a
-  legacy crypto ledger row) at startup, the runtime logs a WARNING and emits
-  one `risk_incident` alert (`market="crypto"`, `symbols=[...]`) saying crypto
-  support was removed and the positions are left untouched for the operator.
-  It starts equity-only and never crashes on them
-  (`tests/test_foreign_crypto_positions_startup.py`).
+- **Foreign inventory is not drift.** A position the bot does not own — any
+  crypto holding, or an equity symbol outside the strategy universe that no
+  ledger or portfolio row claims — is excluded from the reconciliation
+  buckets (`BROKER_STALE` / `MISSING_LOCAL_ORDER` and friends) instead of
+  halting the engine. It still counts toward account gross and slot limits
+  exactly as before, and reconciliation never places a stop on it. Foreign
+  **orders** are still fail-closed (`UNKNOWN_ORDER` drift), and so is foreign
+  activity on a symbol the bot does trade (QLD).
+- **Startup safety.** Foreign inventory found at startup (broker account
+  snapshot or legacy ledger rows) is logged as a WARNING and reported in ONE
+  `risk_incident` alert (`foreign=[{"market": …, "symbol": …}, …]`) naming
+  crypto and out-of-universe equity. The engine starts equity-only and never
+  crashes on them (`tests/test_foreign_crypto_positions_startup.py`,
+  `tests/execution/test_foreign_inventory_reconciliation.py`).
+- **Left-over state from a crypto build.** A halt row whose condition was
+  in-process only (decision worker crash, trade-update callback failure,
+  event-queue overflow) is migrated at startup — cleared with a
+  `circuit_breaker` audit record — because the start re-arms what it
+  described; every risk/ownership/protection/reconciliation row is still
+  restored and still halts. Rebalance rows of markets the equity runtime no
+  longer executes are ignored by `ops status` instead of pinning `execution`
+  at DEGRADED (`tests/test_legacy_state_startup.py`).
 
 ## Verification
 
@@ -123,8 +136,11 @@ warmup history once. Neither affects decisions.
   together with the code (and remove those keys from any operator override).
 - `data/runtime/active_crypto_universe.json` and its `.history.jsonl` on the
   VM are no longer read; they can be deleted by hand.
-- If the PAPER account still holds crypto, expect one `risk_incident` alert at
-  startup listing the symbols; liquidate them manually in Alpaca. The bot will
-  not touch them.
+- If the PAPER account still holds crypto (or any other position the bot does
+  not own), startup continues: one `risk_incident` alert lists the symbols and
+  the engine trades equity-only. Liquidate them manually in Alpaca if unwanted;
+  the bot will not touch them. Check `GET /positions` and `GET /orders?status=open`
+  first — an open foreign order is `UNKNOWN_ORDER` drift and does halt the
+  start. The full pre-deploy list is in `docs/deployment.md`.
 - Dashboard: the crypto card, `/api/crypto` and the crypto settings toggle are
   gone; asset version bumped to `20260930-1`.

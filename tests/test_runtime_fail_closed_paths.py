@@ -509,12 +509,12 @@ def _ledger_shell(
 
 @pytest.mark.parametrize(
     "reason",
-    ["portfolio_runtime_failure", "decision_worker_crashed", "trade_update_callback_failure"],
+    ["portfolio_runtime_failure", "ownership_drift", "protection_failure", "post_fill_risk_violation"],
 )
 def test_assigned_circuit_breaker_reasons_survive_a_restart(tmp_path: Path, reason: str) -> None:
-    """These three reasons are written by the portfolio/decision/trade-update
-    failure paths. If the restore allow-list omits one, the incident row
-    exists but a restart silently resumes trading."""
+    """A failure-path reason the restore allow-list keeps. If the allow-list
+    omits one, the incident row exists but a restart silently resumes
+    trading."""
     ledger = ExecutionLedger(str(tmp_path / f"{reason}.sqlite3"))
     ledger.save_safety_incident("acct", reason)
 
@@ -522,6 +522,24 @@ def test_assigned_circuit_breaker_reasons_survive_a_restart(tmp_path: Path, reas
     runtime._restore_persistent_state()
 
     assert runtime._circuit_breaker_reason == reason
+    ledger.close()
+
+
+@pytest.mark.parametrize("reason", sorted(runtime_module._RESTART_REARMED_REASONS))
+def test_rearmed_worker_halt_rows_are_migrated_not_restored(tmp_path: Path, reason: str) -> None:
+    """A process-local halt row describes worker or queue state this start
+    re-arms, and only a repeat failure can recreate — which halts again by
+    itself. Restoring it would halt a healthy engine over a condition
+    nothing can verify any more, so the row is migrated with an audit
+    record instead of restored."""
+    ledger = ExecutionLedger(str(tmp_path / f"{reason}.sqlite3"))
+    ledger.save_safety_incident("acct", reason)
+
+    runtime = _ledger_shell(ledger)
+    runtime._restore_persistent_state()
+
+    assert runtime._circuit_breaker_reason is None
+    assert ledger.load_safety_incidents("acct") == ()
     ledger.close()
 
 

@@ -29,6 +29,12 @@ This script is structurally incapable of targeting live credentials:
 
 No live order can ever be placed by this script, and no CLI flag can change
 that.
+
+It also refuses to compete with the engine on the same PAPER account: a fresh
+health-snapshot heartbeat (the engine is running) and the session-close
+decision window (15:45-16:30 ET) are both rejected. A live engine would see
+the smoke's open orders as unknown-order drift, and a smoke order near the
+close can drop that session's decision.
 """
 
 from __future__ import annotations
@@ -55,6 +61,8 @@ from parayabuck.execution.portfolio import (  # noqa: E402
     PortfolioOrderSide,
     RiskOverlayDecision,
 )
+from parayabuck.markets.timeframes import NEW_YORK  # noqa: E402
+from parayabuck.monitoring.snapshot import read_snapshot  # noqa: E402
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight  # noqa: E402
 from parayabuck.portfolio.runtime_service import PortfolioStateRepository  # noqa: E402
 
@@ -62,6 +70,44 @@ SMOKE_SYMBOL = "AAPL"
 SMOKE_SHARES = 1.0
 FILL_TIMEOUT_SECONDS = 45.0
 SMOKE_ORDER_PREFIX = "pbp-smoke-"
+# 15:45-16:30 ET: the engine decides the session at the US close. A smoke
+# order then competes for the same account and can drop that decision.
+SESSION_CLOSE_GUARD_MINUTES = (15 * 60 + 45, 16 * 60 + 30)
+# A live engine rewrites its health snapshot every snapshot interval and marks
+# it "stopped" on a clean shutdown.
+ENGINE_HEARTBEAT_MIN_TTL_SECONDS = 60.0
+
+
+def _engine_is_active(config) -> bool:
+    """True while the engine looks live; fail closed on an unreadable snapshot.
+
+    The smoke trades the same PAPER account as the engine: a live engine turns
+    the smoke's open orders into unknown-order drift and its filled position
+    into foreign inventory, so it must never run beside one.
+    """
+    path = Path(config.observability.snapshot_path)
+    if not path.is_absolute():
+        path = ROOT / path
+    snapshot = read_snapshot(path)
+    if not snapshot:
+        return False
+    if str(snapshot.get("runtime_state") or "").lower() == "stopped":
+        return False
+    try:
+        written_at = datetime.fromisoformat(str(snapshot["written_at"]))
+    except (KeyError, TypeError, ValueError):
+        return True
+    if written_at.tzinfo is None:
+        written_at = written_at.replace(tzinfo=UTC)
+    ttl = max(ENGINE_HEARTBEAT_MIN_TTL_SECONDS, config.observability.snapshot_interval_seconds * 3)
+    return (datetime.now(UTC) - written_at).total_seconds() <= ttl
+
+
+def _within_session_close_guard(now: datetime | None = None) -> bool:
+    """True inside the engine's session-close decision window (ET wall clock)."""
+    local = (now or datetime.now(UTC)).astimezone(NEW_YORK)
+    start, end = SESSION_CLOSE_GUARD_MINUTES
+    return start <= local.hour * 60 + local.minute <= end
 
 
 def _fail(message: str) -> int:
@@ -86,6 +132,18 @@ def _require_guards(config) -> bool:
     secret = os.getenv("ALPACA_SECRET_KEY", "")
     if not key or not secret:
         print("Paper smoke refused: ALPACA_API_KEY/ALPACA_SECRET_KEY are required")
+        return False
+    if _engine_is_active(config):
+        print(
+            "Paper smoke refused: the engine heartbeat is live. Stop the service "
+            "(sudo systemctl stop parayabuck) and wait for a 'stopped' health snapshot."
+        )
+        return False
+    if _within_session_close_guard():
+        print(
+            "Paper smoke refused: 15:45-16:30 ET is the engine's session-close decision window "
+            "for the shared PAPER account."
+        )
         return False
     return True
 

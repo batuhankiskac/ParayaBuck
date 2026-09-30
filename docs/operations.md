@@ -378,8 +378,10 @@ and the session enforces that rather than trusting every test:
   records every file under `data/runtime`, `data/cache`, `data/backups` and
   `logs` before `pytest -q` and verifies the tree is byte-identical (and gained
   no files) afterwards.
-- Process singletons (the alert webhook config, the Web backtest manager) are
-  reset around every test, so the suite is order independent.
+- Process singletons (the alert webhook config, the Web backtest manager) and
+  the process environment (`CONFIG_PATH`, which `parayabuck web --config`
+  exports for the process it serves) are restored around every test, so the
+  suite passes in any order.
 
 Run it the way CI does: `PYTHONPATH=src ./.venv/bin/python -m pytest -q -o pythonpath=src`.
 

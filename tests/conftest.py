@@ -274,18 +274,25 @@ _BACKTEST_MANAGER_FIELDS = (
     "_thread_factory",
 )
 
+# Environment variables a test can only set through production code, not
+# monkeypatch: parayabuck.web.app.main() exports CONFIG_PATH for the process it
+# serves, so a test that launched the entry point with --config repointed every
+# later load_config() at its own fixture config.
+_PROCESS_ENV_KEYS = ("CONFIG_PATH", "ENV_PATH")
+
 
 @pytest.fixture(autouse=True)
 def _restore_process_singletons():
-    """Keep the alert sink and the Web backtest singleton out of later tests.
+    """Keep the alert sink, the Web backtest singleton and the process env clean.
 
-    Both are process-global: a test that configured an example.com webhook, or
-    left a backtest ``running``, decided the assertions of whichever test ran
-    next.
+    All three are process-global: a test that configured an example.com webhook,
+    left a backtest ``running``, or launched the web entry point decided the
+    assertions of whichever test ran next.
     """
     from parayabuck.monitoring import alerts as alerts_module
 
     alerts_module.reset_for_tests()
+    before_env = {key: os.environ.get(key, _MISSING) for key in _PROCESS_ENV_KEYS}
     try:
         from parayabuck.web import server as srv
 
@@ -299,6 +306,11 @@ def _restore_process_singletons():
     yield
 
     alerts_module.reset_for_tests()
+    for key, value in before_env.items():
+        if value is _MISSING:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
     if before is None:
         return
     for name, value in before.items():

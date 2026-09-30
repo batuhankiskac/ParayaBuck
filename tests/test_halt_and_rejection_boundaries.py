@@ -410,6 +410,7 @@ def _http_error(status: int) -> HTTPError:
 
 def _rejected_submit_broker(submit_error: Exception) -> Any:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client_adapter = SimpleNamespace(_client=None)  # type: ignore[attr-defined]
     broker._client = SimpleNamespace(  # type: ignore[attr-defined]
         submit_order=lambda _request: (_ for _ in ()).throw(submit_error),
         get_order_by_client_id=lambda _cid: (_ for _ in ()).throw(_http_error(404)),
@@ -431,6 +432,7 @@ def test_a_non_http_submit_failure_keeps_its_original_type() -> None:
     """Without a broker status there is no 4xx to classify, so the caller's
     existing fail-closed handling is unchanged."""
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client_adapter = SimpleNamespace(_client=None)  # type: ignore[attr-defined]
     submit_error = ValueError("insufficient buying power")
     broker._client = SimpleNamespace(  # type: ignore[attr-defined]
         submit_order=lambda _request: (_ for _ in ()).throw(submit_error),

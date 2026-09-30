@@ -36,29 +36,37 @@ def test_backtest_start_and_status(monkeypatch: Any) -> None:
         def is_alive(self) -> bool:
             return False
 
+    before = (server.backtest_manager.state, server.backtest_manager._thread, server.backtest_manager.run_id)
     server.backtest_manager._thread_factory = FakeThread
     try:
         payload = server.BacktestPayload(**_payload())
         response = asyncio.run(server.run_backtest(payload))
+        assert response["status"] == "started"
+        assert response["run_id"].startswith("web-")
+
+        argv = thread_box["kwargs"]["args"][0]
+        assert argv[0] == "backtest"
+        assert "--output-dir" in argv
+        assert argv[argv.index("--output-dir") + 1] == server.backtest_manager.output_dir
+        assert "--start" in argv and "--end" in argv
+        assert "--market" in argv and argv[argv.index("--market") + 1] == "equity"
+        assert "--symbols" in argv and argv[argv.index("--symbols") + 1] == "AAPL"
+        assert "--strategy" in argv
+        assert "--param" in argv and argv[argv.index("--param") + 1] == "top_n=8"
+
+        status = asyncio.run(server.backtest_status())
+        assert status["state"] in {"running", "idle", "done"}
+        assert status["run_id"] == response["run_id"]
+        assert status["output_dir"].startswith("reports/")
     finally:
+        # The manager is a process singleton: a leaked state="running" made the
+        # next test (or a subset run) see a running backtest.
+        (
+            server.backtest_manager.state,
+            server.backtest_manager._thread,
+            server.backtest_manager.run_id,
+        ) = before
         server.backtest_manager._thread_factory = None
-    assert response["status"] == "started"
-    assert response["run_id"].startswith("web-")
-
-    argv = thread_box["kwargs"]["args"][0]
-    assert argv[0] == "backtest"
-    assert "--output-dir" in argv
-    assert argv[argv.index("--output-dir") + 1] == server.backtest_manager.output_dir
-    assert "--start" in argv and "--end" in argv
-    assert "--market" in argv and argv[argv.index("--market") + 1] == "equity"
-    assert "--symbols" in argv and argv[argv.index("--symbols") + 1] == "AAPL"
-    assert "--strategy" in argv
-    assert "--param" in argv and argv[argv.index("--param") + 1] == "top_n=8"
-
-    status = asyncio.run(server.backtest_status())
-    assert status["state"] in {"running", "idle", "done"}
-    assert status["run_id"] == response["run_id"]
-    assert status["output_dir"].startswith("reports/")
 
 
 def test_backtest_rejects_second_run_while_running(monkeypatch: Any) -> None:

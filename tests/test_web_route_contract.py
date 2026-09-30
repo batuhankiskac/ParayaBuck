@@ -1,11 +1,18 @@
-"""Freeze Web route contract: no accidental removal/rename/method change."""
+"""Freeze Web route contract: no accidental removal/rename/method change.
+
+Provenance: `docs/web_openapi_before.json` was deliberately regenerated on
+2026-10-01 from the current app (`parayabuck.web.server:app` -> `app.openapi()`)
+after it had been missing since 2026-09-15, which made
+``test_openapi_baseline_intact`` skip silently. The 2026-09-15 file was NOT
+restored from git history: the crypto routes were removed from the app on
+2026-10-01, so restoring it would have frozen a dead API surface. The baseline
+ freezes 33 paths / 35 operations as they exist today.
+"""
 
 from __future__ import annotations
 
 import json
 import pathlib
-
-import pytest
 
 from parayabuck.web.server import app
 
@@ -90,8 +97,7 @@ def test_no_accidental_method_change():
 
 
 def test_openapi_baseline_intact():
-    if not OPENAPI_BASELINE.exists():
-        pytest.skip("no baseline")
+    assert OPENAPI_BASELINE.exists(), "baseline not generated"
     baseline = json.loads(OPENAPI_BASELINE.read_text())
     from parayabuck.web.server import app as cur_app
 

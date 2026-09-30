@@ -263,7 +263,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional adjustment added to cash movements downloaded from Alpaca",
     )
     parser.add_argument("--report", default="reports/paper_incident/report.json")
-    parser.add_argument("--fixture", default="tests/fixtures/paper_incident_replay.json")
+    # The replay fixture is derived from the shared PAPER account, so its default
+    # lives under the git-ignored reports/ tree: writing it under tests/ left an
+    # untracked file holding broker-linked history that `git add -A` would commit.
+    parser.add_argument("--fixture", default="reports/paper_incident/replay.json")
     parser.add_argument(
         "--quiet",
         action="store_true",

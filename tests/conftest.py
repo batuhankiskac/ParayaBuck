@@ -209,6 +209,9 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
     # real logic (paper vs live + credentials). Auto-start not triggered in tests
     # because we clear ALPACA keys and never run the web lifespan.
     # Keep network blocked via Alpaca client stubs above.
+    # This machine is the designated trading host for every test that starts
+    # an engine; tests asserting the single-runner guard delete the variable.
+    monkeypatch.setenv("PARAYABUCK_TRADING_HOST", "1")
 
     # Redirect any direct sqlite3.connect to production files to isolated tmp
     import sqlite3 as _sqlite3

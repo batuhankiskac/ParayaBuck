@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from parayabuck.config import load_config
 from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
 from parayabuck.logger import get_logger
+from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
 from parayabuck.utils.io import atomic_write
 from parayabuck.web.schemas.settings import SettingsPayload, ValidatedSettings
 
@@ -39,6 +40,9 @@ _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
     {"starting", "running", "warming_up", "degraded", "halted", "stopping", "stop_failed"}
 )
 _START_ENGINE_BLOCKING_STATES: frozenset[str] = _ACTIVE_ENGINE_STATES - {"starting"}
+# Reported instead of a probe error when the live gates are closed, so the
+# operator sees why the account binding cannot be verified yet.
+_LIVE_PROBE_SKIPPED_REASON = "live account probe skipped: live.enabled=false or PARAYABUCK_ENABLE_LIVE is not YES"
 
 
 def _yaml_block(raw: dict[str, Any], name: str) -> dict[str, Any]:
@@ -118,6 +122,9 @@ class EngineManager:
         # stop_engine runs on a to_thread worker and must cancel via
         # loop.call_soon_threadsafe instead.
         self._retry_task_loop: asyncio.AbstractEventLoop | None = None
+        # Set by stop_engine while a start attempt is still in flight, so the
+        # running startup sequence stops before its order-producing steps.
+        self._start_cancel = threading.Event()
         self.security_warning = _tracked_secret_warning(Path.cwd())
         if self.security_warning:
             log.critical("%s", self.security_warning)
@@ -171,6 +178,9 @@ class EngineManager:
 
     def should_auto_start(self) -> bool:
         """Auto-start configured paper engines without weakening live safeguards."""
+        if not trading_host_authorized():
+            log.warning("%s", TRADING_HOST_REFUSAL)
+            return False
         try:
             raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
             app_config = (raw or {}).get("app") or {}
@@ -395,6 +405,10 @@ class EngineManager:
         )
 
     def start_engine(self, *, auto_start: bool = False) -> None:
+        # One runner per Alpaca account: refuse before any state change so the
+        # UI keeps reporting 'stopped' instead of a failed start.
+        if not trading_host_authorized():
+            raise ValueError(TRADING_HOST_REFUSAL)
         # Mutual exclusion with the Web backtest runner: the engine must not
         # start while an expensive in-process backtest is using the process.
         # The backtest lock is taken FIRST on both paths (BacktestManager.start
@@ -425,6 +439,9 @@ class EngineManager:
                     raise ValueError("Engine is already starting")
                 self.engine_state = "starting"
                 self.last_engine_error = None
+                # Fresh cancel event per attempt: a stop request may only
+                # cancel the startup that is in flight now.
+                self._start_cancel.clear()
 
         key, secret = self.get_credentials()
         if not key or not secret:
@@ -436,7 +453,7 @@ class EngineManager:
         runtime: Any = None
         interrupted = False
         try:
-            from parayabuck.runtime import EngineRuntime, TransientStartupError
+            from parayabuck.runtime import EngineRuntime, StartupCancelled, TransientStartupError
         except Exception as exc:
             # The runtime module must be importable for a start attempt; a
             # failure is permanent and must not leave the state at 'starting'.
@@ -481,6 +498,7 @@ class EngineManager:
                 secret_key=secret,
                 config=cfg,
                 live_startup_proof=live_startup_proof,
+                startup_cancel=self._start_cancel,
             )
             runtime.start()
             # Close the lazy /api/account broker (if any) instead of leaking
@@ -522,6 +540,16 @@ class EngineManager:
                     self.last_engine_error = f"transient: {exc}"
             self.invalidate_live_arming()
             raise
+        except StartupCancelled as exc:
+            # An operator stop arrived while the startup sequence was still
+            # running: it aborted before any order submission, so the engine
+            # ends up stopped — the outcome the operator asked for.
+            with self._state_lock:
+                self._reset_retry_state()
+                self.engine_state = "stopped"
+                self.last_engine_error = None
+            self.invalidate_live_arming()
+            raise RuntimeError(str(exc)) from exc
 
         except Exception as exc:
             if runtime is not None:
@@ -549,6 +577,9 @@ class EngineManager:
 
     def stop_engine(self) -> None:
         with self._state_lock:
+            # A start attempt still in flight must abort before its
+            # resume/catch-up steps submit orders (see StartupCancelled).
+            self._start_cancel.set()
             # A sleeping auto-start retry must not outlive an explicit stop:
             # cancel it (a start attempt already in flight is interrupted via
             # the 'stopping' state instead).
@@ -907,7 +938,13 @@ class EngineManager:
         self._append_live_config_checks(item, live_cfg, runtime_cfg)
         approval, approval_error, hmac_key, approval_path = self._check_approval_signature(item, live_cfg)
         key, secret = self.get_credentials()
-        account_id, account_probe_error = self._probe_live_account(key, secret)
+        # The probe authenticates against the LIVE endpoint, so PAPER keys
+        # must never reach it while the live gates are closed (settings-drawer
+        # refreshes would otherwise send them on every open).
+        if bool(live_cfg.get("enabled", False)) and os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES":
+            account_id, account_probe_error = self._probe_live_account(key, secret)
+        else:
+            account_id, account_probe_error = None, _LIVE_PROBE_SKIPPED_REASON
         expected_digests, digest_error = self._resolve_live_configuration_digests()
         self._append_live_binding_check(item, approval, account_id, account_probe_error, expected_digests, digest_error)
         self._append_live_session_checks(item, key, secret)
@@ -1107,7 +1144,7 @@ class EngineManager:
         elif account_id is None:
             binding_state = "unverifiable"
             binding_missing = (
-                f"cannot verify the live account binding: live account probe failed: {account_probe_error}"
+                f"cannot verify the live account binding: {account_probe_error}"
                 if account_probe_error is not None
                 else "cannot verify the live account binding without reachable live credentials"
             )

@@ -1,9 +1,14 @@
-# ParayaBuck 24/7 paper-trading deployment.
+# ParayaBuck console/backtest stack (NOT the trading deployment — the trading
+# host is the VM systemd unit, see deploy/systemd/parayabuck.service).
 #
 # Builds the existing Dockerfile (python:3.12-slim, non-root user, locked
-# requirements, /healthz liveness probe) and runs the Web/engine process with
-# durable state mounted from the repository. The port is published to loopback
-# only: the operator UI stays host-private.
+# requirements, /healthz liveness probe) and runs the Web process with durable
+# state mounted from the repository. The port is published to loopback only:
+# the operator UI stays host-private.
+#
+# This stack deliberately never sets PARAYABUCK_TRADING_HOST, so the engine
+# refuses to start inside the container on the shared Alpaca account. The
+# console, settings and backtests work; trading does not. Do not add it here.
 #
 #   docker compose up -d --build
 #   docker compose logs -f parayabuck

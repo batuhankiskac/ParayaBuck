@@ -4,6 +4,15 @@ Symptom-by-symptom playbooks for the PAPER bot on the VM. Diagnostics are
 read-only. **Do not bypass risk controls, edit the DB by hand, or start a
 second engine.** When unsure, collect a bundle first.
 
+On the VM the engine runs because the unit sets
+`Environment=PARAYABUCK_TRADING_HOST=1`; on any other machine that variable is
+absent and every engine start is refused. If a start fails with *"this
+machine is not designated as the trading host"*, the console and backtests
+still work — restore the unit line (`systemctl cat parayabuck | grep
+PARAYABUCK_TRADING_HOST`) and restart the service. Never add the variable to a
+laptop `.env` to "make it work": that is what lets a second runner onto the
+shared account.
+
 ```bash
 parayabuck ops status
 parayabuck ops doctor                 # exit 0 ok, 1 degraded, 2 critical
@@ -53,6 +62,11 @@ Alarms clear by themselves (`intent_recovered`) once reality matches intent.
 - Process alive, snapshot stale: the snapshot writer failed; check the
   `observability` check and the journal.
 - `stop_failed`: workers did not stop; a process restart is required.
+
+- Stop pressed while the engine was still starting: startup aborts before the
+  restart-rebalance resume and the startup catch-up, so no order is submitted
+  and the state settles at `stopped`. A start request reporting that the
+  startup was cancelled is that outcome, not a failure to retry.
 
 Do not delete `health_snapshot.json` to "fix" status.
 

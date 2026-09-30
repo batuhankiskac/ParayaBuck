@@ -165,7 +165,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in {None, "web"}:
         from parayabuck.web.app import main as web_main
 
-        web_main()
+        # The console used to ignore --config and always read CONFIG_PATH,
+        # so an operator could start a different trading configuration than
+        # the one they named on the command line.
+        web_main(config_path=args.config)
         return 0
     if args.command == "doctor":
         return _run_doctor(args)

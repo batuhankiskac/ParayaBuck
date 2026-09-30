@@ -441,7 +441,9 @@ def test_reconcile_returns_7_categories_and_fail_closed(tmp_path: Path) -> None:
     client = MagicMock()
     client.get_orders.return_value = []
     client._request.return_value = []
-    broker = AlpacaBroker(api_key="fake", secret_key="fake", paper=True, ledger=ledger)
+    # runtime_state_dir keeps the peak sidecar in tmp_path, never in the
+    # operator's relative data/runtime default.
+    broker = AlpacaBroker(api_key="fake", secret_key="fake", paper=True, ledger=ledger, runtime_state_dir=tmp_path)
     broker._client = client  # type: ignore[attr-defined]
     broker._account_id = "acct"  # type: ignore[attr-defined]
     # Broker has no positions; local has one -> LOCAL_STALE

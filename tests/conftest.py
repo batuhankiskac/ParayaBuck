@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import builtins
+import contextlib
 import io
 import os
+import shutil
+import socket
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -40,6 +44,125 @@ _PROTECTED_STATE_DIRS = (
 # Cheap prefilter: only paths mentioning these fragments are resolved and
 # classified, so the guard costs a substring test per open().
 _STATE_MARKERS = ("data/", "logs/")
+
+# --- Session-wide credential and network isolation -------------------------
+#
+# The repository's .env holds the shared PAPER key of the account the GCP VM
+# trades, and load_dotenv() is called from load_config(), the CLI and the web
+# engine manager. A test that loaded it could therefore authenticate against
+# that account, so: credentials are stripped from the environment, no dotenv
+# file inside the repository is ever loaded, and every non-loopback socket
+# connection raises.
+
+_CREDENTIAL_ENV_PREFIXES = ("ALPACA_", "PARAYABUCK_")
+_LOOPBACK_HOSTS = frozenset({"", "localhost", "::1", "0:0:0:0:0:0:0:1"})
+_MISSING = object()
+
+
+class OutboundNetworkBlocked(RuntimeError):
+    """A test tried to reach a host other than the loopback interface."""
+
+
+def _is_loopback(address: object) -> bool:
+    host = address[0] if isinstance(address, tuple) and address else address
+    try:
+        text = str(host)
+    except Exception:
+        return False
+    return text in _LOOPBACK_HOSTS or text.startswith("127.")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _block_outbound_network():
+    """Fail any test that opens a connection off the loopback interface."""
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+    real_create_connection = socket.create_connection
+
+    def _guard_connect(self, address):  # type: ignore[no-untyped-def]
+        if getattr(self, "family", None) == socket.AF_UNIX or _is_loopback(address):
+            return real_connect(self, address)
+        raise OutboundNetworkBlocked(f"outbound network blocked in tests: connect({address!r})")
+
+    def _guard_connect_ex(self, address):  # type: ignore[no-untyped-def]
+        if getattr(self, "family", None) == socket.AF_UNIX or _is_loopback(address):
+            return real_connect_ex(self, address)
+        raise OutboundNetworkBlocked(f"outbound network blocked in tests: connect_ex({address!r})")
+
+    def _guard_create_connection(address, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if _is_loopback(address):
+            return real_create_connection(address, *args, **kwargs)
+        raise OutboundNetworkBlocked(f"outbound network blocked in tests: create_connection({address!r})")
+
+    socket.socket.connect = _guard_connect  # type: ignore[method-assign]
+    socket.socket.connect_ex = _guard_connect_ex  # type: ignore[method-assign]
+    socket.create_connection = _guard_create_connection  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        socket.socket.connect = real_connect  # type: ignore[method-assign]
+        socket.socket.connect_ex = real_connect_ex  # type: ignore[method-assign]
+        socket.create_connection = real_create_connection  # type: ignore[assignment]
+
+
+_saved_credential_env: dict[str, str] = {}
+_session_env_dir: str | None = None
+_real_load_dotenv = None
+
+
+def _inside_repo(path: Path) -> bool:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return True
+    return resolved == _REPO_ROOT or _REPO_ROOT in resolved.parents
+
+
+def _install_dotenv_guard() -> None:
+    """Refuse to load any dotenv file inside the repository."""
+    global _real_load_dotenv
+    import dotenv
+    import dotenv.main
+
+    _real_load_dotenv = dotenv.main.load_dotenv
+
+    def _guarded_load_dotenv(dotenv_path=None, stream=None, **kwargs):  # type: ignore[no-untyped-def]
+        if stream is not None:
+            return _real_load_dotenv(dotenv_path, stream, **kwargs)
+        if dotenv_path is None:
+            found = dotenv.main.find_dotenv()
+            if not found:
+                return False
+            dotenv_path = found
+        try:
+            candidate = Path(dotenv_path)
+        except TypeError:
+            return False
+        if _inside_repo(candidate):
+            return False
+        return _real_load_dotenv(str(candidate), stream, **kwargs)
+
+    dotenv.main.load_dotenv = _guarded_load_dotenv  # type: ignore[assignment]
+    dotenv.load_dotenv = _guarded_load_dotenv  # type: ignore[assignment]
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Strip credentials and neutralize the repo .env before any test imports."""
+    global _session_env_dir
+    for key in [key for key in os.environ if key.startswith(_CREDENTIAL_ENV_PREFIXES)]:
+        _saved_credential_env[key] = os.environ.pop(key)
+    _session_env_dir = tempfile.mkdtemp(prefix="parayabuck-test-env-")
+    # ENV_PATH is what the engine manager and CLI resolve their dotenv from;
+    # point it at a file that is never created, so no key is ever read.
+    os.environ["ENV_PATH"] = str(Path(_session_env_dir) / ".env")
+    _install_dotenv_guard()
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    os.environ.update(_saved_credential_env)
+    _saved_credential_env.clear()
+    if _session_env_dir is not None:
+        shutil.rmtree(_session_env_dir, ignore_errors=True)
 
 
 def protected_state_path(path: object) -> Path | None:
@@ -135,6 +258,55 @@ def _restore_web_state():
             srv2.backtest_manager = orig_backtest  # type: ignore[attr-defined]
     except Exception:
         pass
+
+
+_BACKTEST_MANAGER_FIELDS = (
+    "state",
+    "_thread",
+    "run_id",
+    "output_dir",
+    "started_at",
+    "finished_at",
+    "error",
+    "summary",
+    "universe",
+    "progress",
+    "_thread_factory",
+)
+
+
+@pytest.fixture(autouse=True)
+def _restore_process_singletons():
+    """Keep the alert sink and the Web backtest singleton out of later tests.
+
+    Both are process-global: a test that configured an example.com webhook, or
+    left a backtest ``running``, decided the assertions of whichever test ran
+    next.
+    """
+    from parayabuck.monitoring import alerts as alerts_module
+
+    alerts_module.reset_for_tests()
+    try:
+        from parayabuck.web import server as srv
+
+        backtest = getattr(srv, "backtest_manager", None)
+    except Exception:
+        backtest = None
+    before = (
+        None if backtest is None else {name: getattr(backtest, name, _MISSING) for name in _BACKTEST_MANAGER_FIELDS}
+    )
+
+    yield
+
+    alerts_module.reset_for_tests()
+    if before is None:
+        return
+    for name, value in before.items():
+        if value is _MISSING:
+            with contextlib.suppress(AttributeError):
+                delattr(backtest, name)
+        else:
+            setattr(backtest, name, value)
 
 
 @pytest.fixture(autouse=True)
@@ -313,9 +485,11 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         pass
 
     # No patch for should_auto_start: tests that check its return value rely on
-    # real logic (paper vs live + credentials). Auto-start not triggered in tests
-    # because we clear ALPACA keys and never run the web lifespan.
-    # Keep network blocked via Alpaca client stubs above.
+    # real logic (paper vs live + credentials). An auto-start cannot happen in a
+    # test even if the web lifespan runs, because pytest_configure strips the
+    # ALPACA_*/PARAYABUCK_* variables, no dotenv file inside the repo is ever
+    # loaded and ENV_PATH names a file that does not exist — so the manager
+    # never holds a key. Network is blocked on top of that (session fixture).
     # This machine is the designated trading host for every test that starts
     # an engine; tests asserting the single-runner guard delete the variable.
     monkeypatch.setenv("PARAYABUCK_TRADING_HOST", "1")

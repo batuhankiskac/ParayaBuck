@@ -20,6 +20,29 @@ order is under $10 (`execution.rebalance_band_pct`,
 catch-up decision on the latest completed bars; a restart never duplicates a
 decision.
 
+
+## One runner per account
+
+The PAPER Alpaca account is shared between the VM and every other machine
+that has the credentials. Trading therefore needs an explicit per-machine
+designation: `PARAYABUCK_TRADING_HOST=1`, set only by the systemd unit on the
+VM (`deploy/systemd/parayabuck.service`).
+
+Without it `parayabuck web`, a bare `parayabuck` and `docker compose up` still
+serve the console, settings and backtests, but the engine refuses to start —
+auto-start logs the refusal and skips, a manual start returns an HTTP 400
+explaining that the machine is not the designated trading host. The state
+stays `stopped`; nothing is submitted to Alpaca. Only `1`, `true`, `yes` and
+`on` count as the designation — any other value (including `0` or `no`) keeps
+trading refused.
+
+Verify on the VM with:
+
+```bash
+systemctl show parayabuck -p Environment | grep PARAYABUCK_TRADING_HOST
+curl -s http://127.0.0.1:8000/api/status | python3 -m json.tool | grep engine_state
+```
+
 ## Health and readiness
 
 | Probe | Meaning |

@@ -80,6 +80,7 @@ from parayabuck.runtime_health import RuntimeHealth, WorkerHealth, _portfolio_ca
 from parayabuck.runtime_state import RuntimeMarketState
 from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.storage import SQLiteStore
+from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
 from parayabuck.universe import equity_universe_digest
 from parayabuck.utils import is_crypto
 
@@ -109,6 +110,16 @@ class TransientStartupError(RuntimeError):
     responses) during startup reconciliation or warmup. The runtime object is
     discarded by the caller, no permanent circuit-breaker incident is
     recorded, and the caller may retry startup.
+    """
+
+
+class StartupCancelled(RuntimeError):
+    """An operator stop request arrived while ``EngineRuntime.start()`` ran.
+
+    Raised at the startup checkpoints immediately before the two steps that
+    can submit orders (restart-rebalance resume and startup catch-up). The
+    caller already tore the attempt down; no incident is recorded because
+    nothing was placed and the engine ends in its stopped state.
     """
 
 
@@ -252,8 +263,11 @@ class EngineRuntime:
         secret_key: str,
         config: Config,
         live_startup_proof: LiveStartupProof | None = None,
+        startup_cancel: threading.Event | None = None,
     ) -> None:
         self._validate_execution_mode(config)
+        # Set by the operator's stop request while start() is still running.
+        self._startup_cancel = startup_cancel if startup_cancel is not None else threading.Event()
         self.api_key = api_key
         self.secret_key = secret_key
         self.app_config = config
@@ -922,6 +936,10 @@ class EngineRuntime:
             raise RuntimeError("Previous runtime workers did not stop; process restart required")
         if self.mode == RuntimeMode.DISABLED:
             raise RuntimeError("Runtime start refused because runtime.mode is disabled")
+        if not trading_host_authorized():
+            # Defence in depth behind the web manager: no code path may start
+            # an engine on a machine that is not the designated trading host.
+            raise RuntimeError(TRADING_HOST_REFUSAL)
         if self.mode == RuntimeMode.LIVE:
             if not self.app_config.live.enabled:
                 raise RuntimeError("Live runtime requires live.enabled=true")
@@ -1121,6 +1139,9 @@ class EngineRuntime:
                     f"Startup account fetch deferred after transient network failure: {exc}"
                 ) from exc
             raise
+        # Operator stop wins: from here on every remaining step can submit an
+        # order, so a stop request during warmup aborts instead of trading.
+        self._raise_if_startup_cancelled()
         # Restart recovery resumes pending rebalances against the one fresh
         # account snapshot.
         self._resume_startup_rebalances(account=account)
@@ -1130,6 +1151,9 @@ class EngineRuntime:
         # Normal no-trade/readiness outcomes are result statuses. Unexpected
         # exceptions are invalid composition/safety/provider failures and
         # must not be hidden behind an apparently running engine.
+        # Catch-up forces a full-target decision and submits its orders, so
+        # re-check between the two order-producing startup steps.
+        self._raise_if_startup_cancelled()
         try:
             self._run_startup_catch_up(account=account)
         except Exception as exc:
@@ -1197,6 +1221,19 @@ class EngineRuntime:
             len(self.symbols),
             ",".join(sorted(self.aggregators)),
         )
+
+    def _raise_if_startup_cancelled(self) -> None:
+        """Abort startup when the operator pressed Stop while it was running.
+
+        ``stop_engine`` runs on its own worker thread, so a stop issued during
+        warmup cannot reach the runtime directly; it signals this event
+        instead. Only the order-producing tail of startup checks it, so an
+        abort before the first order leaves the account exactly as the stop
+        asked for.
+        """
+        cancel = getattr(self, "_startup_cancel", None)
+        if cancel is not None and cancel.is_set():
+            raise StartupCancelled("Engine startup was cancelled by a stop request before orders were submitted")
 
     def _recover_portfolio_fill(
         self,

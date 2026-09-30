@@ -43,15 +43,22 @@ def _probe_web_bind(host: str, port: int) -> None:
     )
 
 
-def main() -> None:
+def main(config_path: str | os.PathLike[str] | None = None) -> None:
     """ParayaBuck Modern Web Trading Terminal entry point.
 
     Launches Uvicorn server serving FastAPI + Glassmorphic Web UI.
+
+    ``config_path`` is the ``--config`` the operator named. It is exported as
+    ``CONFIG_PATH`` before the server module is imported, so the engine
+    manager, alerting and metrics all resolve the very same settings file
+    instead of silently falling back to the default one.
     """
-    config_path = Path(os.getenv("CONFIG_PATH") or "config/settings.yaml")
+    if config_path is not None:
+        os.environ["CONFIG_PATH"] = str(config_path)
+    settings_path = Path(os.getenv("CONFIG_PATH") or "config/settings.yaml")
     app_config: dict[str, object] = {}
-    if config_path.exists():
-        with config_path.open(encoding="utf-8") as config_file:
+    if settings_path.exists():
+        with settings_path.open(encoding="utf-8") as config_file:
             app_config = (yaml.safe_load(config_file) or {}).get("app") or {}
 
     setup_logging(level=os.getenv("LOG_LEVEL", str(app_config.get("log_level", "INFO"))))

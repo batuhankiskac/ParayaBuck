@@ -9,6 +9,10 @@ User=parayabuck
 Group=parayabuck
 WorkingDirectory=/opt/parayabuck
 EnvironmentFile=/opt/parayabuck/.env
+# Single-runner guard: this VM is the designated trading host for the shared
+# Alpaca PAPER account. Remove this line and the engine refuses to start
+# (console and backtests keep working). Every other machine must NOT set it.
+Environment=PARAYABUCK_TRADING_HOST=1
 ExecStartPre=/opt/parayabuck/.venv/bin/parayabuck doctor --strict --paper --offline
 ExecStart=/opt/parayabuck/.venv/bin/parayabuck web
 Restart=on-failure

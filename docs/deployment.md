@@ -7,11 +7,17 @@ the VM share one Alpaca PAPER key, and two runners on one account corrupt the
 ledger (double-run incident, 2026-09-25). Record every deploy in
 `docs/OPERATIONS_LOG.md`.
 
+Trading additionally requires this machine to be designated as the trading
+host (`PARAYABUCK_TRADING_HOST=1`, set by the systemd unit). Without it the
+console, settings and backtests work and the engine refuses to start — see
+"One runner per account" in `docs/operations.md`.
+
 ## Process facts
 
 | Item | Value |
 |---|---|
-| Entry point | `parayabuck web` — serves the loopback console **and** runs the engine in-process (auto-starts in `paper` mode when credentials are present) |
+| Entry point | `parayabuck web` — serves the loopback console **and** runs the engine in-process (auto-starts in `paper` mode when `app.auto_start_engine` is on, credentials are present and this machine is the designated trading host) |
+| Trading host | `Environment=PARAYABUCK_TRADING_HOST=1` in the unit. Without it the process serves the console and backtests but refuses to start the engine on the shared account |
 | Bind | `127.0.0.1:8000` (`app.host/port`); reach it through an SSH tunnel: `ssh -L 8000:127.0.0.1:8000 <vm>` |
 | Working directory | Must be the repo root: `CONFIG_PATH=./config/settings.yaml` and every `data/runtime/...` path are cwd-relative |
 | Preflight | `ExecStartPre=parayabuck doctor --strict --paper --offline` — the unit refuses to start on a bad config, non-paper mode, live enabled, missing credentials, unwritable config dir, failed SQLite `integrity_check` or a tracked `.env` |
@@ -39,6 +45,17 @@ the installed unit rather than the template:
 systemctl cat parayabuck | grep -E 'WorkingDirectory|EnvironmentFile|ExecStart'
 ```
 
+The installed unit must carry this exact line (unit paths are rewritten by
+hand on the VM, so a bundle update never installs it):
+
+```bash
+systemctl cat parayabuck | grep PARAYABUCK_TRADING_HOST
+# Environment=PARAYABUCK_TRADING_HOST=1
+```
+
+Missing it, `systemctl restart parayabuck` serves the console with no engine:
+auto-start logs the refusal and the dashboard stays `stopped`.
+
 ### Environment file
 
 The file named by `EnvironmentFile=` (template: `/opt/parayabuck/.env`; on the
@@ -49,6 +66,7 @@ config loader also reads `.env` from the working directory.
 |---|---|---|
 | `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` | yes | PAPER keys |
 | `PARAYABUCK_ENABLE_LIVE` | yes | `NO` |
+| `PARAYABUCK_TRADING_HOST` | no | `1` designates the single runner. Set it in the unit's `[Service]` block, not here: a laptop `.env` must never carry it |
 | `CONFIG_PATH` | no | default `./config/settings.yaml` |
 | `OPEN_BROWSER` | no | `0` on the VM |
 | `LOG_LEVEL` | no | default `INFO` |
@@ -119,6 +137,25 @@ git merge --ff-only bundle/main
 sudo systemctl restart parayabuck
 ```
 
+From 2026-10-01 the trading host must be designated explicitly, and the
+shipped config no longer auto-starts. Before restarting:
+
+```bash
+# 1. the unit line (add it once; it is not managed by the bundle)
+sudo systemctl edit parayabuck     # [Service] Environment=PARAYABUCK_TRADING_HOST=1
+systemctl cat parayabuck | grep PARAYABUCK_TRADING_HOST
+
+# 2. this deployment wants the engine running unattended
+grep -n auto_start_engine config/settings.yaml   # app.auto_start_engine: true
+```
+
+Without step 1 the engine refuses to start on the shared account; without
+step 2 it stays `stopped` until an operator presses Start (readiness reports
+`trading_expected=false`, so check it explicitly rather than trusting a 200).
+`config/settings.yaml` is tracked: step 2 is a local edit, and a later bundle
+that changes the `app:` block makes `git merge --ff-only` abort rather than
+overwrite it.
+
 Verify:
 
 ```bash
@@ -158,5 +195,8 @@ Then add a row to `docs/OPERATIONS_LOG.md` with the deployed sha.
 
 `docker-compose.yml` builds the `Dockerfile` (python:3.12-slim, non-root,
 `HEALTHCHECK /healthz`, loopback `127.0.0.1:8000`, `restart: unless-stopped`,
-`./config`, `./data`, `./reports` mounted, `env_file: .env`). It starts the
-engine, so the one-runner rule applies: never run it while the VM runs.
+`./config`, `./data`, `./reports` mounted, `env_file: .env`). It is a
+console/backtest path only: the compose file sets no `PARAYABUCK_TRADING_HOST`,
+so the engine refuses to start inside the container on the shared account —
+the one-runner guard, not documentation, is what keeps a second runner out.
+Never add the variable there, and never run it while the VM engine trades.

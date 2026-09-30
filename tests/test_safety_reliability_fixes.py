@@ -175,7 +175,10 @@ def test_direct_live_start_without_proof_has_no_broker_boundary_calls(monkeypatc
     monkeypatch.setattr(
         runtime_module.os,
         "getenv",
-        lambda name, default=None: "YES" if name == "PARAYABUCK_ENABLE_LIVE" else default,
+        lambda name, default=None: {
+            "PARAYABUCK_ENABLE_LIVE": "YES",
+            "PARAYABUCK_TRADING_HOST": "1",  # single-runner guard (see parayabuck.trading_host)
+        }.get(name, default),
     )
     broker = _BrokerSpy()
     runtime = EngineRuntime.__new__(EngineRuntime)

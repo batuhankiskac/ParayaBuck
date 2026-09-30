@@ -107,7 +107,6 @@ class _State:
             portfolio_open_orders=open_orders,
             portfolio_owned_quantities=lambda: {"AAPL": state.owned_qty()} if state.owned_qty() else {},
             portfolio_fill_recovered=recovered,
-            manage_external_positions=False,
             ledger=SimpleNamespace(
                 managed_for_account=lambda _account: {},
                 managed_entries_for_account=lambda _account: (),

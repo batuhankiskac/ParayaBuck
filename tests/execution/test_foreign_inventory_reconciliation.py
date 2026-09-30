@@ -29,19 +29,24 @@ from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 
 
-def _broker(fake: FakeTradingClient, **kwargs: Any) -> AlpacaBroker:
-    """The production composition: real broker, account and reconciliation."""
-    return AlpacaBroker("k", "s", paper=True, client=fake, **kwargs)
+def _broker(fake: FakeTradingClient, state_dir: Path, **kwargs: Any) -> AlpacaBroker:
+    """The production composition: real broker, account and reconciliation.
+
+    ``state_dir`` is the runtime state directory. Without it the peak sidecar
+    falls back to the relative ``data/runtime`` default, i.e. the operator's
+    real PAPER peak file, whose account id fails this fake account closed.
+    """
+    return AlpacaBroker("k", "s", paper=True, client=fake, runtime_state_dir=state_dir, **kwargs)
 
 
-def test_crypto_and_out_of_universe_equity_are_never_drift() -> None:
+def test_crypto_and_out_of_universe_equity_are_never_drift(tmp_path: Path) -> None:
     fake = FakeTradingClient()
     fake.set_position("QLD", 10.0)
     fake.set_position("AAPL", 3.0)
     fake.set_position("BTC/USD", 0.5, market="crypto")
     broker = _broker(
         fake,
-        manage_external_positions=False,
+        tmp_path,
         portfolio_owned_quantities=lambda: {"QLD": 10.0},
         portfolio_open_orders=lambda: (),
         bot_tradable_symbols=lambda: {"QLD"},
@@ -58,14 +63,14 @@ def test_crypto_and_out_of_universe_equity_are_never_drift() -> None:
     assert fake.submitted_market_orders == 0
 
 
-def test_foreign_position_on_a_traded_symbol_still_reports_drift() -> None:
+def test_foreign_position_on_a_traded_symbol_still_reports_drift(tmp_path: Path) -> None:
     """QLD is the strategy's own symbol: an unowned QLD holding is drift."""
     fake = FakeTradingClient()
     fake.set_position("QLD", 10.0)
     fake.set_position("BTC/USD", 0.5, market="crypto")
     broker = _broker(
         fake,
-        manage_external_positions=False,
+        tmp_path,
         portfolio_owned_quantities=lambda: {},
         portfolio_open_orders=lambda: (),
         bot_tradable_symbols=lambda: {"QLD"},
@@ -78,14 +83,14 @@ def test_foreign_position_on_a_traded_symbol_still_reports_drift() -> None:
     assert "BTC/USD" not in {symbol for values in report.values() for symbol in values}
 
 
-def test_unowned_equity_stays_drift_without_a_stated_universe() -> None:
+def test_unowned_equity_stays_drift_without_a_stated_universe(tmp_path: Path) -> None:
     """Fail closed: with no tradable universe the bot cannot claim the
     position is someone else's, so it remains ownership drift."""
     fake = FakeTradingClient()
     fake.set_position("AAPL", 3.0)
     broker = _broker(
         fake,
-        manage_external_positions=False,
+        tmp_path,
         portfolio_owned_quantities=lambda: {},
         portfolio_open_orders=lambda: (),
     )
@@ -95,14 +100,14 @@ def test_unowned_equity_stays_drift_without_a_stated_universe() -> None:
     assert report["BROKER_STALE"] == ["AAPL"]
 
 
-def test_managed_position_outside_the_universe_is_still_reconciled() -> None:
+def test_managed_position_outside_the_universe_is_still_reconciled(tmp_path: Path) -> None:
     """A position the bot owns is never foreign, even once it leaves the
     configured universe: the quantity must keep being compared."""
     fake = FakeTradingClient()
     fake.set_position("MSFT", 4.0)
     broker = _broker(
         fake,
-        manage_external_positions=False,
+        tmp_path,
         portfolio_owned_quantities=lambda: {"MSFT": 4.0},
         portfolio_open_orders=lambda: (),
         bot_tradable_symbols=lambda: {"QLD"},
@@ -159,7 +164,9 @@ def _owned_fill(repo: PortfolioStateRepository, quantity: float, price: float) -
     )
 
 
-def _rebase_broker(fake: FakeTradingClient, repo: PortfolioStateRepository) -> tuple[AlpacaBroker, list[str]]:
+def _rebase_broker(
+    fake: FakeTradingClient, repo: PortfolioStateRepository, state_dir: Path
+) -> tuple[AlpacaBroker, list[str]]:
     """The runtime's composition: the repository is the rebase authority."""
     asked: list[str] = []
 
@@ -169,7 +176,7 @@ def _rebase_broker(fake: FakeTradingClient, repo: PortfolioStateRepository) -> t
 
     broker = _broker(
         fake,
-        manage_external_positions=False,
+        state_dir,
         portfolio_owned_quantities=lambda: repo.owned_quantities(ACCOUNT, Market.EQUITY),
         portfolio_open_orders=lambda: (),
         portfolio_ownership_resolved=resolve,
@@ -187,7 +194,7 @@ def test_owned_qld_shortfall_is_rebased_while_foreign_equity_stays_excluded(tmp_
     fake = FakeTradingClient()
     fake.set_position("QLD", 60.0)
     fake.set_position("AAPL", 3.0)
-    broker, asked = _rebase_broker(fake, repo)
+    broker, asked = _rebase_broker(fake, repo, tmp_path)
 
     report = broker.reconcile()
 
@@ -208,7 +215,7 @@ def test_unowned_qld_stays_drift_and_is_never_rebased(tmp_path: Path) -> None:
     fake = FakeTradingClient()
     fake.set_position("QLD", 10.0)
     fake.set_position("AAPL", 3.0)
-    broker, asked = _rebase_broker(fake, repo)
+    broker, asked = _rebase_broker(fake, repo, tmp_path)
 
     report = broker.reconcile()
 
@@ -216,4 +223,36 @@ def test_unowned_qld_stays_drift_and_is_never_rebased(tmp_path: Path) -> None:
     assert report["BROKER_STALE"] == [SYMBOL]
     assert report["MISSING_LOCAL_ORDER"] == [SYMBOL]
     assert repo.ownership_adjustments(ACCOUNT) == ()
+    repo.close()
+
+
+def test_portfolio_owned_position_without_ledger_ownership_is_never_protected(tmp_path: Path) -> None:
+    """The equity-only runtime owns its positions through the portfolio
+    repository, never the legacy ledger. reconcile() classified that missing
+    ledger row as "external" and invented a 4%-below-cost stop over the whole
+    position; the next reconcile then saw that stop as an UNKNOWN_ORDER, and a
+    fill triggered an ownership-drift halt. A position with no ledger
+    ownership is left completely alone."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _owned_fill(repo, 10.0, 100.0)
+    fake = FakeTradingClient()
+    fake.set_position(SYMBOL, 10.0)
+    broker = _broker(
+        fake,
+        tmp_path,
+        portfolio_owned_quantities=lambda: repo.owned_quantities(ACCOUNT, Market.EQUITY),
+        portfolio_open_orders=lambda: (),
+        bot_tradable_symbols=lambda: {SYMBOL},
+    )
+    # The option is gone; a stale deployment could still carry the attribute on
+    # a broker instance. It must have no effect whatsoever.
+    broker.manage_external_positions = True  # type: ignore[attr-defined]
+
+    report = broker.reconcile()
+
+    # The holding is the bot's own, so it reconciles — and nothing is attached to it.
+    assert report["MATCH"] == [SYMBOL]
+    assert report["UNKNOWN_ORDER"] == []
+    assert fake.submitted_stops == 0
+    assert fake.submitted_market_orders == 0
     repo.close()

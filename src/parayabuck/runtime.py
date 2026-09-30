@@ -382,7 +382,6 @@ class EngineRuntime:
             api_key,
             secret_key,
             paper=self.paper,
-            manage_external_positions=self.config.manage_external_positions,
             ledger=self.ledger,
             portfolio_owned_quantities=lambda: self._portfolio_repository.owned_quantities(
                 self.broker.account_id or "unknown"

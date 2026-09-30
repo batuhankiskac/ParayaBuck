@@ -202,7 +202,6 @@ def _reconcile_broker(repository: PortfolioStateRepository, foreign: Any) -> Any
         portfolio_open_orders=lambda: repository.open_orders("acct"),
         portfolio_owned_quantities=lambda: repository.owned_quantities("acct"),
         portfolio_fill_recovered=recovered,
-        manage_external_positions=False,
         ledger=None,
     )
 

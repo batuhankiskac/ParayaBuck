@@ -167,7 +167,6 @@ live:
   operator_approval_path: ""
   operator_approval_key_env: PARAYABUCK_OPERATOR_APPROVAL_KEY
 engine:
-  manage_external_positions: false
   event_grace_seconds: 5
   data_finalization_grace_seconds: 2
   maximum_queue_age_seconds: 30

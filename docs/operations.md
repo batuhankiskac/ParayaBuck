@@ -146,6 +146,8 @@ closes included).
 |---|---|
 | `equity_decision_missing` | No decision persisted for the last NYSE session by ITS close (16:00 ET, 13:00 ET on an early close) + `equity_decision_grace_minutes` |
 | `equity_position_under_target` | Latest decision targets a positive weight, but after the next open + `equity_fill_grace_minutes` the account holds less than `minimum_held_fraction` of it |
+| `equity_position_over_target` | The account still holds more than the decision targeted after the fill window — the everyday case is a cash target whose DAY SELL never filled. Residual dust under 1 % of equity is tolerated |
+| `equity_signal_source_hold` | The decision deliberately held the position because the IEX stream bar and the SIP daily bar disagree on the trend (see `signal_cross_check:`) |
 
 `intent_watchdog` keys: `enabled` (true), `equity_decision_grace_minutes`
 (45), `equity_fill_grace_minutes` (30), `minimum_held_fraction` (0.5),
@@ -213,16 +215,33 @@ parayabuck ops watchdog [--json]       # dead-man probe: /readyz + backup freshn
 Health checks: `runtime_heartbeat` (snapshot ≤ 90 s old), `workers`, `queue`
 (age ≤ 30 s), `account`, `reconciliation` (CRITICAL after 5 min without
 success), `signal_adjustment`, `market_halts`, `risk` (active safety incident
-= BLOCKED), `execution`, `alerts` (webhook failures/drops), `observability`.
-`UNKNOWN` means no evidence, not OK. Overall: CRITICAL > BLOCKED > DEGRADED >
-UNKNOWN > OK. Trading state is separate: `ACTIVE`, `ENTRY_BLOCKED`,
-`REBALANCE_BLOCKED`, `MARKET_HALTED`, `CIRCUIT_BREAKER`, `STOPPED`, `UNKNOWN`.
-The watchdog and the signal cross-check are not health checks (they do not
-change the overall status), but the `ops status` text view prints them from the
-health snapshot: `Watchdog` (`OK`, `ALARM` with the active codes, `PENDING`
+= BLOCKED), `execution`, `intent_watchdog` (CRITICAL on
+`equity_decision_missing`, otherwise DEGRADED), `signal_cross_check`,
+`alerts`, `observability`. `UNKNOWN` means no evidence, not OK. Overall:
+CRITICAL > BLOCKED > DEGRADED > UNKNOWN > OK. Trading state is separate:
+`ACTIVE`, `ENTRY_BLOCKED`, `REBALANCE_BLOCKED`, `MARKET_HALTED`,
+`CIRCUIT_BREAKER`, `STOPPED`, `UNKNOWN`. An active watchdog alarm never
+changes the trading state — it only colours the overall status and the doctor
+exit code. `ops status` additionally prints the watchdog and the cross-check in
+full text: `Watchdog` (`OK`, `ALARM` with the active codes, `PENDING`
 before the first pass, `DISABLED`) and `Cross-check` (last session's status,
 `PENDING` while waiting for the SIP bar, `NONE` before the first session).
 `/readyz` and `ops events --kind intent_alarm` carry the same information.
+The dashboard `Sağlık kontrolleri` badge shows the active alarm codes instead
+of `Sağlıklı`, and `/api/ops/status` returns the same checks.
+
+`signal_cross_check` reports the last **completed** comparison; a session still
+waiting for its SIP daily bar is appended to the summary rather than making the
+check UNKNOWN, so the post-close embargo window does not redden a healthy run.
+Only a runtime that has never finished a comparison is UNKNOWN.
+
+`alerts` and `observability` are read from the copy the **engine** persists
+into the health snapshot, never from the counters of the process asking. A CLI
+or web process has sent no alerts of its own, so a process-local reading would
+report "webhook OK" on a VM where no webhook exists. No persisted copy at all
+is `UNKNOWN`, not OK. `alerts` is DEGRADED when no webhook is configured, when
+more than half of ≥ 3 attempts fail, when deliveries were dropped, and when
+failures continue with a last success older than 24 h.
 
 `parayabuck doctor [--strict] [--paper] [--offline]` is the deployment
 preflight (config, mode, live off, credentials, writability, SQLite
@@ -272,7 +291,7 @@ mkdir -p /tmp/pb-bad && cp -a data/runtime/parayabuck.sqlite3* /tmp/pb-bad/   # 
 cp data/backups/<file>.sqlite3 data/runtime/parayabuck.sqlite3
 rm -f data/runtime/parayabuck.sqlite3-wal data/runtime/parayabuck.sqlite3-shm
 sudo systemctl start parayabuck
-.venv/bin/parayabuck ops doctor && curl -s http://127.0.0.1:8000/readyz
+.venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:8000/readyz
 ```
 
 Orders and fills after the backup are missing from the restored ledger. On

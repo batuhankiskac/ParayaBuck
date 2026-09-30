@@ -173,7 +173,6 @@ def _reconcile_broker(repository: PortfolioStateRepository, *, known: Any = None
         portfolio_open_orders=lambda: repository.open_orders("acct"),
         portfolio_owned_quantities=lambda: repository.owned_quantities("acct"),
         portfolio_fill_recovered=recovered,
-        manage_external_positions=False,
         ledger=SimpleNamespace(
             managed_for_account=lambda _account: {},
             managed_entries_for_account=lambda _account: (),

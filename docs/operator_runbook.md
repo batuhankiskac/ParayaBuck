@@ -31,14 +31,36 @@ already re-armed, see "Circuit breaker active").
 
 ## Intent alarm (`/readyz` 503 with `degraded_reasons`)
 
-- `equity_decision_missing` — no decision for the last NYSE session by
-  16:00 ET + 45 min. Check `ops explain latest`, `ops status` (Workers,
-  Adjustment, Market halts) and the journal for `Ignored unfinished equity daily
-  bar`, warmup, stream or signal-adjustment errors.
+An active alarm is now on every operator surface, not only `/readyz`:
+`ops status` (`Watchdog ALARM`), `ops doctor` (exit 2 for
+`equity_decision_missing`, exit 1 otherwise), the dashboard `Sağlık
+kontrolleri` badge (which lists the codes instead of `Sağlıklı`) and
+`/api/ops/status`. `equity_decision_missing` alone is CRITICAL; the rest are
+DEGRADED. None of them gate trading.
+
+
+- `equity_decision_missing` — no decision for the last NYSE session by ITS
+  close + 45 min. The close is 16:00 ET, or 13:00 ET on an early close
+  (2026-11-27, 2026-12-24); a holiday is not a session, so nothing is owed
+  over one. Check `ops explain latest`, `ops status` (Workers, Adjustment,
+  Market halts) and the journal for `Ignored unfinished equity daily bar`,
+  warmup, stream or signal-adjustment errors.
 - `equity_position_under_target` — the target is positive but QLD held is
-  below half of it 30 min after the next open. Check open orders/fills
+  below half of it 30 min after the next NYSE session open. Check open
+  orders/fills
   (`ops timeline --decision <id>`), `order_rejected` / `ambiguous_order`
   events, entry latches and the broker account.
+- `equity_position_over_target` — 30 min after the next NYSE session open the
+  account still holds more than the decision targeted (dust under 1 % of
+  equity is tolerated). In practice a cash target whose DAY SELL
+  never filled, leaving the previous position; check the order in
+  `ops timeline --decision <id>` (expired/cancelled?), `order_rejected` /
+  `order_expired` events and the broker account. The window is the next
+  *session* open, so over a weekend/holiday or an early close it does not
+  open early.
+- `equity_signal_source_hold` — the position was deliberately held because the
+  IEX stream bar and the SIP daily bar disagree on the trend. Not a fault;
+  confirm the `Cross-check` line in `ops status` before acting.
 
 Alarms clear by themselves (`intent_recovered`) once reality matches intent.
 
@@ -259,7 +281,11 @@ window, and with `PARAYABUCK_ALLOW_PAPER_SMOKE=YES`.
 
 ## Webhook alerts not arriving
 
-`ops status` → `alerts` check shows failed/dropped deliveries.
+`ops status` and `ops doctor` → `alerts` check shows the deliveries **as
+reported by the engine**, read from `health_snapshot.json` (`alerts` block).
+`UNKNOWN` means the engine has not published that copy yet (it is down, or the
+snapshot predates this build) — not that alerts are fine. `DEGRADED` with "no
+alert webhook configured" means alerts are going to the log only.
 
 - Is `PARAYABUCK_ALERT_WEBHOOK_URL` set in the unit's `EnvironmentFile` and was
   the service restarted? (`alerting.webhook_url` must be empty or it wins.)

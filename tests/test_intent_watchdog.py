@@ -141,6 +141,100 @@ def test_equity_cash_target_or_unknown_account_never_under_target() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# (c) equity target exceeded — a cash decision whose exit never filled
+# --------------------------------------------------------------------------- #
+
+
+def test_failed_exit_raises_over_target_after_the_fill_window() -> None:
+    """A DAY SELL that expired leaves the whole position; nothing under-target
+    catches it because the decision targeted cash (weight 0)."""
+    cash = _decision(_utc(2026, 9, 28, 13, 30), {})
+    still_holding = _account((_qld(98_000.0),))
+    # Inside the fill window the exit has not expired yet.
+    assert evaluate_equity(_utc(2026, 9, 29, 13, 59), cash, still_holding, running_since=None, settings=_SETTINGS) == []
+    alarms = evaluate_equity(_utc(2026, 9, 29, 14, 5), cash, still_holding, running_since=None, settings=_SETTINGS)
+    assert _codes(alarms) == ["equity_position_over_target"]
+    assert "QLD held 98.0% vs target 0.0%" in alarms[0].message
+
+
+def test_over_target_ignores_exit_dust_and_the_untouched_target() -> None:
+    cash = _decision(_utc(2026, 9, 28, 13, 30), {})
+    late = _utc(2026, 9, 29, 14, 5)
+    # A partially filled exit leaves rounding dust, not a position.
+    assert evaluate_equity(late, cash, _account((_qld(500.0),)), running_since=None, settings=_SETTINGS) == []
+    # A target that was met is not "over".
+    invested = _decision(_utc(2026, 9, 28, 13, 30), {"QLD": 0.8})
+    assert evaluate_equity(late, invested, _account((_qld(80_000.0),)), running_since=None, settings=_SETTINGS) == []
+
+
+def test_over_target_never_fires_without_an_account() -> None:
+    cash = _decision(_utc(2026, 9, 28, 13, 30), {})
+    assert evaluate_equity(_utc(2026, 9, 29, 14, 5), cash, None, running_since=None, settings=_SETTINGS) == []
+
+
+@pytest.mark.parametrize(
+    ("early_close_session", "next_session"),
+    [
+        # Friday after Thanksgiving: 13:00 ET close, then the weekend.
+        (date(2026, 11, 27), date(2026, 11, 30)),
+        # Christmas Eve: 13:00 ET close, the 25th is a holiday, then Monday.
+        (date(2026, 12, 24), date(2026, 12, 28)),
+    ],
+)
+def test_over_target_waits_for_the_next_session_open_after_an_early_close(
+    early_close_session: date,
+    next_session: date,
+) -> None:
+    """The fill window opens at the next NYSE session open, not at the early
+    close that produced the decision.
+
+    An exit decided at a 13:00 ET early close cannot be expected to have
+    filled minutes later, nor over the weekend/holiday that follows: the
+    window is next open + ``equity_fill_grace_minutes`` (30) and the next open
+    is a real session. A window anchored on the decision's own close would
+    alarm at 13:10 ET with the DAY SELL still legitimately working.
+    """
+    cash = _decision(_utc(early_close_session.year, early_close_session.month, early_close_session.day, 18, 0))
+    still_holding = _account((_qld(98_000.0),))
+    # 18:10 UTC = 13:10 ET, ten minutes after the early close: the fill
+    # window has not even opened yet.
+    assert (
+        evaluate_equity(
+            _utc(early_close_session.year, early_close_session.month, early_close_session.day, 18, 10),
+            cash,
+            still_holding,
+            running_since=None,
+            settings=_SETTINGS,
+        )
+        == []
+    )
+    # 14:59 UTC = 09:59 ET on the next session: the grace ends at the 09:30 ET
+    # open + 30 min, so this is one minute inside the fill window.
+    assert (
+        evaluate_equity(
+            _utc(next_session.year, next_session.month, next_session.day, 14, 59),
+            cash,
+            still_holding,
+            running_since=None,
+            settings=_SETTINGS,
+        )
+        == []
+    )
+    alarms = evaluate_equity(
+        _utc(next_session.year, next_session.month, next_session.day, 15, 5),
+        cash,
+        still_holding,
+        running_since=None,
+        settings=_SETTINGS,
+    )
+    assert _codes(alarms) == ["equity_position_over_target"]
+    assert "QLD held 98.0% vs target 0.0%" in alarms[0].message
+    # The window is anchored to the next session's open, not to the early
+    # close the decision was taken at.
+    assert alarms[0].due_at == f"{next_session.isoformat()}T15:00:00+00:00"
+
+
+# --------------------------------------------------------------------------- #
 # Runtime wiring: edge-triggered alerts + health surface, never trading gates
 # --------------------------------------------------------------------------- #
 

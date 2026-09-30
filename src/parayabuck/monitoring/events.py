@@ -33,6 +33,12 @@ from __future__ import annotations
 ALERT_KINDS_ORDERED: tuple[str, ...] = (
     "runtime_started",
     "runtime_stopped_unexpected",
+    # Engine start failed: permanent error, a startup guard (secret scan /
+    # live arming) blocking the start, or N transient auto-start retries.
+    "runtime_start_failed",
+    # A verified backup could not be written/verified, or the newest backup is
+    # older than the freshness bound (the backup timer stopped working).
+    "backup_failed",
     # Warning-level data-provider outage (paper_incident.emit_incident_record
     # maps a non-critical PROVIDER_UNAVAILABLE incident here).
     "data_provider_unavailable",
@@ -74,6 +80,8 @@ RENAMED_ALERT_KINDS: dict[str, str] = {
 WARNING_KINDS: frozenset[str] = frozenset(
     {
         "runtime_stopped_unexpected",
+        "runtime_start_failed",
+        "backup_failed",
         "data_provider_unavailable",
         "order_rejected",
         "ambiguous_order",

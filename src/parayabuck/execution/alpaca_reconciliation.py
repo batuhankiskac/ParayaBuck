@@ -8,9 +8,14 @@ Responsibility:
   ledger.managed_for_account`` → holdings 7-bucket (``MATCH`` etc.) →
   ``_reconcile_stale_portfolio_ownership`` → ``_reconcile_stale_ledger_entries``
   → protective-stop (re)submission (equity ledger-managed/external positions
-  only; foreign crypto positions in the shared account are left alone).
+  only; foreign positions in the shared account are left alone).
 - Idempotent: second call with same broker truth yields same buckets, no
   duplicate fills/stops.
+- Foreign inventory in the shared account (a crypto holding, or an equity
+  symbol outside the bot's tradable universe that no lineage claims) is
+  excluded from the ownership buckets: the runtime classifies it, alerts once
+  at startup and never trades or protects it. Foreign orders, and foreign
+  activity on a symbol the bot does trade, stay fail-closed drift.
 - Emits observability but never controls trading; monitoring failure does
   not affect reconciliation decisions.
 """
@@ -544,6 +549,23 @@ class ReconciliationService:
                 entry.owned_qty,
             )
 
+    def _bot_tradable_symbols(self) -> frozenset[str] | None:
+        """Canonical symbols this bot may trade, or None when it cannot say.
+
+        The brokerage account is shared, so the bot's own tradable universe is
+        the boundary between its positions and someone else's. None (no
+        provider, or an unreadable one) is fail-closed: every unowned equity
+        position then stays drift, exactly as before.
+        """
+        provider = getattr(self._broker, "bot_tradable_symbols", None)
+        if provider is None:
+            return None
+        try:
+            return frozenset(canonical_symbol(str(symbol)) for symbol in provider() or ())
+        except Exception:
+            log.warning("Bot tradable symbols unavailable; equity positions stay fail-closed", exc_info=True)
+            return None
+
     # -- public ----------------------------------------------------------
 
     def reconcile(self) -> dict[str, list[str]]:
@@ -600,12 +622,35 @@ class ReconciliationService:
                             _portfolio_quantities[str(_s)] = _portfolio_quantities.get(str(_s), 0.0) + 1.0
                 except Exception:
                     _portfolio_quantities = {str(s): 1.0 for s in portfolio_owned}
-        _broker_quantities: dict[str, float] = {}
-        for _p in account.positions:
-            if not getattr(_p, "is_flat", False):
-                _canon = canonical_symbol(getattr(_p, "symbol", ""), getattr(_p, "market", Market.EQUITY))
-                _broker_quantities[_canon] = _broker_quantities.get(_canon, 0.0) + abs(float(getattr(_p, "qty", 0.0)))
         _local_symbols = set(_ledger_quantities) | set(_portfolio_quantities) | set(portfolio_owned)
+        _tradable_symbols = self._bot_tradable_symbols()
+        _broker_quantities: dict[str, float] = {}
+        # Foreign inventory — a crypto holding, or an equity symbol no bot
+        # lineage claims that the strategy does not trade — is observed and
+        # alerted once at startup, never ownership drift: the bot neither
+        # sized nor protected it, so it can neither be reconciled nor
+        # legitimately sold. It still counts toward account gross and slot
+        # limits (AccountService), and it stays in ``broker_symbols`` below so
+        # a legacy managed ledger row is never closed as flat while the
+        # broker really holds it. Foreign activity on a symbol the bot DOES
+        # trade keeps today's fail-closed drift semantics.
+        _foreign_positions: dict[str, str] = {}
+        for _p in account.positions:
+            if getattr(_p, "is_flat", False):
+                continue
+            _market = getattr(_p, "market", Market.EQUITY)
+            _canon = canonical_symbol(getattr(_p, "symbol", ""), _market)
+            if _market != Market.EQUITY or (
+                _tradable_symbols is not None and _canon not in _local_symbols and _canon not in _tradable_symbols
+            ):
+                _foreign_positions[_canon] = _market.value
+                continue
+            _broker_quantities[_canon] = _broker_quantities.get(_canon, 0.0) + abs(float(getattr(_p, "qty", 0.0)))
+        if _foreign_positions:
+            log.warning(
+                "Foreign positions excluded from ownership reconciliation: %s",
+                ", ".join(f"{symbol} ({market})" for symbol, market in sorted(_foreign_positions.items())),
+            )
         _all_symbols = _local_symbols | set(_broker_quantities)
         for _sym in sorted(_all_symbols):
             if _sym in _ledger_quantities:

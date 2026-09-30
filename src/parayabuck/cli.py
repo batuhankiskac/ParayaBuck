@@ -57,6 +57,12 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="verify integrity of an existing backup file instead of creating one",
     )
+    backup.add_argument(
+        "--label",
+        type=str,
+        default=None,
+        help="label this snapshot (e.g. predeploy) so retention pruning never deletes it",
+    )
     doctor = commands.add_parser("doctor", help="read-only deployment preflight (no orders)")
     doctor.add_argument("--strict", action="store_true", help="fail on warnings")
     doctor.add_argument("--paper", action="store_true", help="require paper mode invariants")
@@ -91,6 +97,16 @@ def _parser() -> argparse.ArgumentParser:
     doctor_p.add_argument("--snapshot", default=None)
     doctor_p.add_argument("--db", default=None)
     doctor_p.add_argument("--journal", default=None)
+    watchdog_p = ops_sub.add_parser("watchdog", help="out-of-process dead-man probe: /readyz + backup freshness")
+    watchdog_p.add_argument("--json", action="store_true")
+    watchdog_p.add_argument("--readyz-url", default=None, help="override the probed /readyz URL")
+    watchdog_p.add_argument("--timeout", type=float, default=5.0, help="probe timeout in seconds")
+    watchdog_p.add_argument(
+        "--max-backup-age-hours",
+        type=float,
+        default=None,
+        help="newest backup older than this is a failure (default: 2x the 6h backup timer)",
+    )
     events_p = ops_sub.add_parser("events", help="query operational event journal")
     events_p.add_argument("--since", default=None, help="since time (ISO or 30m,2h,1d)")
     events_p.add_argument("--until", default=None, help="until time (ISO or relative)")
@@ -181,7 +197,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in {None, "web"}:
         from parayabuck.web.app import main as web_main
 
-        web_main()
+        # The console used to ignore --config and always read CONFIG_PATH,
+        # so an operator could start a different trading configuration than
+        # the one they named on the command line.
+        web_main(config_path=args.config)
         return 0
     if args.command == "doctor":
         return _run_doctor(args)
@@ -318,12 +337,26 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def _emit_ops_alert(kind: str, message: str, **fields: Any) -> None:
+    """Emit one operator alert from a CLI command. Never raises."""
+    try:
+        from parayabuck.monitoring.alerts import emit as emit_alert
+
+        emit_alert(kind, message=message, **fields)
+    except Exception:  # pragma: no cover - alerting must never mask the failure
+        log.exception("Could not emit %s alert", kind)
+
+
 def _run_backup(config: Config, args: argparse.Namespace) -> int:
     """Snapshot the runtime decision database with the sqlite3 online backup
     API (safe while the runtime keeps the WAL database open), then prune
     backups older than the retention window.
 
     With --verify-only, verify an existing backup instead of creating one.
+    With --label, publish the snapshot outside the retention prune glob so a
+    pre-deploy/rollback restore point survives pruning. Every failure emits
+    the ``backup_failed`` alert: the timer runs unattended, so a silent
+    failure would only surface when a restore is already needed.
     """
     from parayabuck.backup import backup_database, verify_backup
 
@@ -334,17 +367,41 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
             print(f"Backup OK: {target}")
             return 0
         print(f"Backup CORRUPT: {target}", file=sys.stderr)
+        _emit_ops_alert(
+            "backup_failed",
+            f"Backup failed integrity check: {target}",
+            reason="corrupt",
+            backup_path=str(target),
+        )
         return 1
     retention_days = args.retention_days if args.retention_days is not None else config.backup.retention_days
-    destination = backup_database(
-        config.runtime.decision_db_path,
-        config.backup.path,
-        retention_days=retention_days,
-    )
-    if not verify_backup(destination):
+    try:
+        destination = backup_database(
+            config.runtime.decision_db_path,
+            config.backup.path,
+            retention_days=retention_days,
+            label=getattr(args, "label", None),
+        )
+        verified = verify_backup(destination)
+    except Exception as exc:
+        _emit_ops_alert(
+            "backup_failed",
+            f"Backup could not be written: {exc}",
+            reason="write_failed",
+            source_path=str(config.runtime.decision_db_path),
+            backup_dir=str(config.backup.path),
+        )
+        raise
+    if not verified:
+        _emit_ops_alert(
+            "backup_failed",
+            f"Backup failed integrity check: {destination}",
+            reason="corrupt",
+            backup_path=str(destination),
+        )
         raise SystemExit(f"Backup failed integrity check: {destination}")
     print(f"Backup written: {destination}")
-    print(f"Retention: {retention_days:g} day(s); older backups pruned")
+    print(f"Retention: {retention_days:g} day(s); older automatic backups pruned")
     return 0
 
 
@@ -415,6 +472,24 @@ def _run_doctor(args: argparse.Namespace) -> int:
                 add(label, True, str(p))
             except Exception as exc:
                 add(label, False, f"{p}: {exc}")
+        # Backup freshness. Reported as a WARN row only, never as a blocker
+        # or a strict warning: the unit runs `doctor --strict` as
+        # ExecStartPre, and a stale backup must never keep the engine down.
+        try:
+            from parayabuck.backup import MAX_BACKUP_AGE_HOURS, latest_backup_age_hours
+
+            age_hours = latest_backup_age_hours(config.backup.path)
+            if age_hours is None:
+                detail = f"no backup in {config.backup.path}"
+            else:
+                detail = f"newest backup {age_hours:.1f}h old (limit {MAX_BACKUP_AGE_HOURS:g}h)"
+            if age_hours is None or age_hours > MAX_BACKUP_AGE_HOURS:
+                add("backup freshness", True, detail, is_blocker=False)
+                checks.append(("backup stale", "WARN", detail))
+            else:
+                add("backup freshness", True, detail)
+        except Exception as exc:
+            add("backup freshness", True, f"check skipped: {exc}", is_blocker=False)
         cfg_p = Path(config_path) if config_path and Path(config_path).exists() else Path("config/settings.yaml")
         try:
             cfg_p.parent.mkdir(parents=True, exist_ok=True)
@@ -570,6 +645,121 @@ def _parse_time_arg(value: str | None) -> datetime | None:
         raise SystemExit(f"Invalid time value: {value} (use ISO or 30m/2h/1d)")
 
 
+def _readiness_detail(payload: object) -> str:
+    """One-line engine context from a /readyz body."""
+    body = payload if isinstance(payload, dict) else {}
+    parts = [f"engine_state={body.get('engine_state')}"]
+    if body.get("engine_error"):
+        parts.append(f"engine_error={body['engine_error']}")
+    if body.get("start_retry_attempt"):
+        parts.append(f"start_retry_attempt={body['start_retry_attempt']}")
+    if body.get("degraded_reasons"):
+        parts.append(f"degraded_reasons={body['degraded_reasons']}")
+    return " ".join(parts)
+
+
+def _readiness_failure_reason(status: int | None, payload: object, error: str | None = None) -> str | None:
+    """Why this /readyz answer means "not trading", or None when it is ready."""
+    if error is not None:
+        return f"/readyz probe failed: {error}"
+    if status is None:
+        return "/readyz probe returned no response"
+    detail = _readiness_detail(payload)
+    if status != 200:
+        return f"/readyz returned HTTP {status} ({detail})"
+    if not isinstance(payload, dict) or payload.get("ready") is not True:
+        return f"/readyz reports not ready ({detail})"
+    return None
+
+
+def _backup_failure_reason(age_hours: float | None, max_age_hours: float) -> str | None:
+    """Why the backup set is too old to trust, or None when it is fresh."""
+    if age_hours is None:
+        return "no backup found; a database loss would be unrecoverable"
+    if age_hours > max_age_hours:
+        return f"newest backup is {age_hours:.1f}h old (limit {max_age_hours:g}h)"
+    return None
+
+
+def _probe_readyz(url: str, timeout: float) -> tuple[int | None, object, str | None]:
+    """GET the loopback /readyz endpoint: (status, parsed body, transport error)."""
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            status = int(response.status)
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        # 503 is the readiness answer itself, not a transport failure.
+        status = int(exc.code)
+        raw = exc.read()
+    except Exception as exc:
+        return None, None, str(exc)
+    try:
+        return status, json.loads(raw.decode("utf-8", "replace")), None
+    except ValueError:
+        return status, None, "response body is not JSON"
+
+
+def _ops_watchdog(args: argparse.Namespace) -> int:
+    """Out-of-process dead-man probe: /readyz plus backup freshness.
+
+    Everything the engine's own alarms report runs inside a process that may
+    never have started, and /healthz stays 200 while the engine is dead, so
+    systemd restarts nothing. This probe runs from
+    ``parayabuck-watchdog.timer`` and alerts on the operator webhook instead.
+    """
+    from parayabuck.backup import MAX_BACKUP_AGE_HOURS, latest_backup_age_hours
+
+    config_path = getattr(args, "config", None) or "config/settings.yaml"
+    try:
+        config = load_config(config_path)
+    except Exception as exc:
+        print(f"watchdog: configuration could not be loaded: {exc}", file=sys.stderr)
+        return 1
+    url = args.readyz_url or os.getenv("PARAYABUCK_READYZ_URL") or f"http://{config.app.host}:{config.app.port}/readyz"
+    status, payload, probe_error = _probe_readyz(url, float(args.timeout))
+    readiness = _readiness_failure_reason(status, payload, probe_error)
+    max_age = MAX_BACKUP_AGE_HOURS if args.max_backup_age_hours is None else float(args.max_backup_age_hours)
+    age_hours = latest_backup_age_hours(config.backup.path)
+    backup_failure = _backup_failure_reason(age_hours, max_age)
+    report: dict[str, Any] = {
+        "checked_at": datetime.now(UTC).isoformat(),
+        "readyz_url": url,
+        "ready": readiness is None,
+        "readyz_status": status,
+        "readiness_failure": readiness,
+        "backup_path": str(config.backup.path),
+        "backup_age_hours": None if age_hours is None else round(age_hours, 3),
+        "maximum_backup_age_hours": max_age,
+        "backup_failure": backup_failure,
+    }
+    if getattr(args, "json", False):
+        print(json.dumps(report, indent=2, default=str))
+    if readiness is not None:
+        print(f"watchdog: {readiness}", file=sys.stderr)
+        _emit_ops_alert(
+            "runtime_start_failed",
+            f"Engine is not ready: {readiness}",
+            reason="readyz_probe",
+            readyz_url=url,
+            readyz_status=status,
+        )
+    if backup_failure is not None:
+        print(f"watchdog: {backup_failure}", file=sys.stderr)
+        _emit_ops_alert(
+            "backup_failed",
+            f"Backup is not fresh: {backup_failure}",
+            reason="stale",
+            backup_dir=str(config.backup.path),
+            age_hours=None if age_hours is None else round(age_hours, 3),
+        )
+    if readiness is None and backup_failure is None:
+        print(f"watchdog: OK ({report['checked_at']}; newest backup age {report['backup_age_hours']}h)")
+    return 0 if readiness is None and backup_failure is None else 1
+
+
 def _run_ops(args: argparse.Namespace) -> int:
     cmd = getattr(args, "ops_cmd", None)
     if cmd is None or cmd == "status":
@@ -586,6 +776,8 @@ def _run_ops(args: argparse.Namespace) -> int:
         return _ops_bundle(args)
     if cmd == "rebase-ownership":
         return _ops_rebase_ownership(args)
+    if cmd == "watchdog":
+        return _ops_watchdog(args)
     print(f"Unknown ops command: {cmd}", file=sys.stderr)
     return 2
 

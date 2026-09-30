@@ -782,7 +782,7 @@ def test_restart_with_managed_symbol_outside_configured_universe_stays_pinned(
     assert runtime._managed_pin_symbols == {"MSFT"}
     assert "MSFT" in runtime._symbols_by_market[Market.EQUITY]
     assert set(runtime._symbols_by_market) == {Market.EQUITY}
-    assert runtime._foreign_crypto_symbols == ("BTC/USD",)
+    assert runtime._foreign_inventory == ((Market.CRYPTO, "BTC/USD"),)
     assert "BTC/USD" not in runtime.symbols
     ledger.close()
 

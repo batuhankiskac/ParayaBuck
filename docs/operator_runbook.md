@@ -4,19 +4,30 @@ Symptom-by-symptom playbooks for the PAPER bot on the VM. Diagnostics are
 read-only. **Do not bypass risk controls, edit the DB by hand, or start a
 second engine.** When unsure, collect a bundle first.
 
+On the VM the engine runs because the unit sets
+`Environment=PARAYABUCK_TRADING_HOST=1`; on any other machine that variable is
+absent and every engine start is refused. If a start fails with *"this
+machine is not designated as the trading host"*, the console and backtests
+still work — restore the unit line (`systemctl cat parayabuck | grep
+PARAYABUCK_TRADING_HOST`) and restart the service. Never add the variable to a
+laptop `.env` to "make it work": that is what lets a second runner onto the
+shared account.
+
 ```bash
 parayabuck ops status
 parayabuck ops doctor                 # exit 0 ok, 1 degraded, 2 critical
 parayabuck ops events --since 2h
 parayabuck ops bundle --output /tmp/pb_bundle.zip   # sanitized; share status.json + recent_events.jsonl first
 curl -s http://127.0.0.1:8000/readyz | python3 -m json.tool
+parayabuck ops watchdog              # dead-man probe: /readyz + backup freshness (exit 1 + alert on failure)
 sudo journalctl -u parayabuck --since "1 hour ago" --no-pager | tail -n 100
 ```
 
 Safety resets are operator actions in the dashboard (or
 `POST /api/engine/reset-safety-lock`, `POST /api/safety/risk-epoch`). A reset
 succeeds only after the queue drains, data gaps clear and reconciliation
-passes, and it clears only the reason it verified.
+passes, and it clears the reason it verified (plus the halt rows this start
+already re-armed, see "Circuit breaker active").
 
 ## Intent alarm (`/readyz` 503 with `degraded_reasons`)
 
@@ -44,6 +55,30 @@ Alarms clear by themselves (`intent_recovered`) once reality matches intent.
 | `SELL_PHASE_PENDING` | Previous rebalance still selling | `ops timeline --decision <id>` |
 | `AMBIGUOUS_ORDER` / `REBALANCE_BLOCKED` | Broker outcome unknown | Manual, see below |
 
+## Engine did not start (`runtime_start_failed`, `/readyz` 503 with `engine_state=error` or `starting`)
+
+The console is up (`/healthz` 200) but nothing is trading, and systemd did
+not restart anything because the process never died. `curl -s
+127.0.0.1:8000/readyz` gives `engine_state` and `engine_error`; the alert
+fields give `reason` and `attempts`.
+
+- `credentials_missing` / `startup_rejected` — a startup guard refused the
+  start (missing keys, tracked `.env` in git, live not armed, config error).
+  Fix the cause; do not bypass the guard. `Auto-start blocked` is deliberate.
+- `startup_error` — permanent startup error, e.g. Alpaca 401 after a key
+  rotation, a SQLite error in `begin_session`, a corrupt peak sidecar, a
+  catch-up exception. Fix it, then start the engine from the dashboard.
+- `transient_no_retry` / `transient_retrying` — network-class failure. The
+  auto-start loop retries with 5/15/30/60 s backoff and the state stays
+  `starting`; `start_retry_attempt` in `/readyz` shows how long it has been
+  going. Fix connectivity, or stop the engine and start it manually.
+- `readyz_probe` — `parayabuck ops watchdog` (the
+  `parayabuck-watchdog.timer` dead-man probe) found the deployment not ready.
+  Run it by hand for the same verdict; it also reports backup freshness.
+
+`ops status` says nothing about a start failure on its own: every alarm it
+aggregates lives in the runtime that failed to start. Use `/readyz` first.
+
 ## Runtime appears dead
 
 `ops status` shows heartbeat stale (> 90 s) or `UNKNOWN`.
@@ -53,6 +88,11 @@ Alarms clear by themselves (`intent_recovered`) once reality matches intent.
 - Process alive, snapshot stale: the snapshot writer failed; check the
   `observability` check and the journal.
 - `stop_failed`: workers did not stop; a process restart is required.
+
+- Stop pressed while the engine was still starting: startup aborts before the
+  restart-rebalance resume and the startup catch-up, so no order is submitted
+  and the state settles at `stopped`. A start request reporting that the
+  startup was cancelled is that outcome, not a failure to retry.
 
 Do not delete `health_snapshot.json` to "fix" status.
 
@@ -120,17 +160,58 @@ A rebalance in `sell_pending` / `buy_ready` / `buy_pending` for over 1 h
 (`ops doctor` → `stuck_rebalance`). Check broker order status and
 reconciliation. Do not edit `portfolio_rebalance_executions`.
 
+Rows of markets the equity runtime no longer executes (legacy crypto rows from
+the deleted sleeve) are ignored by `ops status`: nothing advances them, so
+they would otherwise pin `execution` at DEGRADED for good.
+
 ## Circuit breaker active
 
 Trading state `CIRCUIT_BREAKER`, runtime `halted`, incident persisted across
 restarts. Review `active_incidents.json` in the bundle and the broker account,
 then reset. Restarting does not clear it.
 
-## Crypto in the account
+Two kinds of row never come back after a restart:
 
-`risk_incident` at startup naming crypto symbols: the shared Alpaca account
-holds crypto. The bot never trades, stops or streams it; close it manually in
-the Alpaca dashboard if unwanted. Startup is not blocked.
+- worker restart limits (`pb-decisions_restart_limit` and friends) are not
+  restored — the worker is re-armed, and a repeat failure halts again by
+  itself. The row stays as an audit trail;
+- process-local halts (`decision_worker_crashed`,
+  `trade_update_callback_failure`, `final_market_event_queue_overflow`) are
+  migrated: the start re-arms the workers and the empty event queue, so the
+  row is cleared and a `circuit_breaker` alert records the migration.
+
+Every other reason (`ownership_drift`, `protection_failure`,
+`post_fill_risk_violation`, …) is restored on restart and needs its own
+verified reset. A reset verifies one reason at a time (plus the migrated set
+above): after resetting, check `ops status` for remaining rows and resolve each
+one.
+
+## Foreign inventory in the account
+
+`risk_incident` at startup naming crypto symbols and/or equity outside the
+strategy universe: the shared Alpaca account holds positions ParayaBuck does
+not own. The bot never trades, stops, streams or pins them, and they are not
+ownership drift — startup continues. They still count toward account gross and
+slot limits, so close them by hand in the Alpaca dashboard if unwanted.
+
+This is also the message for anything the account holds outside the strategy
+universe — a `paper_smoke` run, a manual position. Activity on a symbol the
+strategy *does* trade (QLD) is different: an unowned QLD holding is
+`BROKER_STALE` drift and halts the engine (see "Reconciliation failing").
+
+## Foreign order in the account
+
+An open broker order the engine does not own (manual order, leftover crypto
+order) is `UNKNOWN_ORDER` drift: the engine cannot know whether its fills are
+booked, so it refuses to start or halts until the order is terminal. Cancel or
+let it fill; do not delete rows to clear it.
+
+## `paper_smoke` refused
+
+The script trades the same PAPER account and refuses itself when the engine
+heartbeat is live (stop the service first) and inside 15:45-16:30 ET, the
+session-close decision window. Run it with the service stopped, outside that
+window, and with `PARAYABUCK_ALLOW_PAPER_SMOKE=YES`.
 
 ## Webhook alerts not arriving
 
@@ -149,3 +230,18 @@ Events are still journaled: `ops events --since 1h`.
 `ops doctor` reports `integrity_check` ≠ ok or foreign-key violations. Stop the
 service and restore a verified backup (`docs/operations.md`, State, backup and
 restore). Do not delete the DB.
+
+## Backups failing or stale (`backup_failed`)
+
+- `reason=write_failed` / `corrupt` — the snapshot itself failed. Check
+  `journalctl -u parayabuck-backup`, disk space and permissions on
+  `backup.path`, then run `parayabuck backup` by hand and confirm it prints
+  `Backup written:`.
+- `reason=stale` — the newest snapshot is over 12 h old, i.e. the 6 h timer
+  has not been succeeding. `systemctl list-timers parayabuck-backup.timer`
+  and `systemctl status parayabuck-backup.service`, then run the command
+  manually. `parayabuck doctor` reports the same age as a `WARN` row.
+
+Until it is fixed, any database loss restores from a stale snapshot and
+loses the decisions in between. A `parayabuck-keep-*.sqlite3` file (made
+with `--label`) is a manual snapshot; it is never auto-pruned.

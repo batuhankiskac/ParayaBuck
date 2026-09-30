@@ -362,3 +362,88 @@ def test_backup_directory_fsync_eperm_raises_and_preserves(tmp_path: Path, monke
         assert calls["n"] == 2
     finally:
         store.release()
+
+
+def _age(path: Path, hours: float, *, now: datetime) -> None:
+    """Backdate a backup file so retention/pruning sees the intended age."""
+    stamp = now.timestamp() - hours * 3600
+    os.utime(path, (stamp, stamp))
+
+
+def test_labelled_backup_survives_retention_pruning(tmp_path: Path) -> None:
+    """The pre-deploy snapshot the runbook keeps must outlive the 7-day
+    retention window: an automatic backup taken at the same time is pruned,
+    the labelled one is not."""
+    source = tmp_path / "runtime.sqlite3"
+    store = _make_runtime_db(source)
+    backup_dir = tmp_path / "backups"
+    day0 = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
+    day9 = datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
+    try:
+        keep = backup_database(source, backup_dir, retention_days=7, now=day0, label="predeploy")
+        automatic = backup_database(source, backup_dir, retention_days=7, now=day0)
+    finally:
+        store.release()
+    assert keep.name.startswith("parayabuck-keep-predeploy-")
+    assert verify_backup(keep)
+    _age(keep, 9 * 24, now=day9)
+    _age(automatic, 9 * 24, now=day9)
+
+    backup_database(source, backup_dir, retention_days=7, now=day9)
+
+    assert keep.is_file(), "retention pruning deleted the labelled pre-deploy backup"
+    assert not automatic.exists(), "the unlabelled automatic backup should have been pruned"
+
+
+def test_labelled_backup_is_still_a_restore_candidate(tmp_path: Path) -> None:
+    """Pruning skips the labelled snapshot, so restore selection must still
+    find it — otherwise a late rollback has no verified source."""
+    source = tmp_path / "runtime.sqlite3"
+    store = _make_runtime_db(source)
+    backup_dir = tmp_path / "backups"
+    try:
+        keep = backup_database(source, backup_dir, retention_days=7, label="predeploy")
+        automatic = backup_database(source, backup_dir, retention_days=7)
+    finally:
+        store.release()
+    _age(automatic, 48, now=datetime.now(UTC))
+
+    assert latest_verified_backup(backup_dir) == keep
+
+
+def test_labelled_backup_rejects_an_unsafe_label(tmp_path: Path) -> None:
+    source = tmp_path / "runtime.sqlite3"
+    store = _make_runtime_db(source)
+    try:
+        with pytest.raises(ValueError, match="backup label"):
+            backup_database(source, tmp_path / "backups", retention_days=7, label="../escape")
+        assert not (tmp_path / "escape").exists()
+    finally:
+        store.release()
+
+
+def test_latest_backup_age_hours_reports_the_newest_backup(tmp_path: Path) -> None:
+    """Backup freshness is the only signal that a silent backup-timer outage
+    has run for weeks."""
+    from parayabuck.backup import MAX_BACKUP_AGE_HOURS, latest_backup_age_hours
+
+    assert latest_backup_age_hours(tmp_path / "absent") is None
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert latest_backup_age_hours(empty) is None
+
+    now = datetime(2026, 8, 12, 18, 0, tzinfo=UTC)
+    stale = empty / "parayabuck-20260805T180000000000Z.sqlite3"
+    stale.write_bytes(b"SQLite format 3\x00")
+    _age(stale, 48, now=now)
+    age = latest_backup_age_hours(empty, now=now)
+    assert age is not None
+    assert abs(age - 48.0) < 1e-6
+    assert age > MAX_BACKUP_AGE_HOURS
+
+    keep = empty / "parayabuck-keep-predeploy-20260812T170000000000Z.sqlite3"
+    keep.write_bytes(b"SQLite format 3\x00")
+    _age(keep, 1, now=now)
+    fresh_age = latest_backup_age_hours(empty, now=now)
+    assert fresh_age is not None
+    assert abs(fresh_age - 1.0) < 1e-6

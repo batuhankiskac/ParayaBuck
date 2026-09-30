@@ -120,6 +120,14 @@ validate config + execution mode (live only when every live gate agrees) → res
 - Web auto-start retries a transient startup failure after 5/15/30/60 s (capped at 60 s).
 - Persisted halts (`safety_incidents`: ownership drift, protection failure, ambiguous order, drawdown halt) are restored as the circuit-breaker reason and survive restarts until a verified reconcile or operator reset.
 - Shutdown joins workers, closes the runtime session row and emits `runtime_stopped_unexpected` if halted.
+- Single-runner guard: `EngineRuntime.start()` refuses immediately unless
+  `PARAYABUCK_TRADING_HOST` designates this machine as the trading host
+  (`src/parayabuck/trading_host.py`); the web manager applies the same gate to
+  auto-start and to a manual start before it touches any state.
+- A stop requested while startup is still running aborts it at the checkpoints
+  immediately before the two order-producing steps (restart-rebalance resume,
+  startup catch-up) with `StartupCancelled`; no order is submitted and the
+  engine settles at `stopped`.
 
 Transient network errors (`RequestException`, `ConnectionError`, `TimeoutError`, `__cause__/__context__` wrapped) → `TransientStartupError` (retryable). Domain safety (`OwnershipDriftError`, `ProtectionReconciliationError`, `AmbiguousOrderState`, reconciliation `reconciliation_required`) → fail-closed, permanent.
 

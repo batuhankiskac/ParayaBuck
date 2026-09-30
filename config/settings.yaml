@@ -2,7 +2,11 @@ app:
   host: 127.0.0.1
   port: 8000
   open_browser: true
-  auto_start_engine: true
+  # Trading never starts from this file alone. The engine starts only on the
+  # machine that sets PARAYABUCK_TRADING_HOST=1 (the systemd unit on the VM);
+  # everywhere else `parayabuck web` serves the console and backtests and
+  # refuses to trade. Set true here to let a designated host auto-start.
+  auto_start_engine: false
   log_level: INFO
 runtime:
   mode: paper
@@ -127,6 +131,8 @@ alerting:
   events:
   - runtime_started
   - runtime_stopped_unexpected
+  - runtime_start_failed
+  - backup_failed
   - data_provider_unavailable
   - order_rejected
   - ambiguous_order

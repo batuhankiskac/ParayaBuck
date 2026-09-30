@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from parayabuck.config import load_config
 from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
 from parayabuck.logger import get_logger
+from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
 from parayabuck.utils.io import atomic_write
 from parayabuck.web.schemas.settings import SettingsPayload, ValidatedSettings
 
@@ -38,7 +39,44 @@ _AUTO_START_RETRY_BACKOFF: tuple[int, ...] = (5, 15, 30, 60)
 _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
     {"starting", "running", "warming_up", "degraded", "halted", "stopping", "stop_failed"}
 )
+# A failed start is invisible to systemd: /healthz stays 200, so
+# Restart=on-failure never fires, and every alarm that could report it runs
+# inside a runtime that never started. Every start-failure path therefore
+# emits ``runtime_start_failed``; a retrying auto-start stays quiet for the
+# first attempts, then repeats the alert every
+# ``_AUTO_START_RETRY_ALERT_REPEAT`` attempts so an endless retry loop
+# cannot spam the webhook while still reporting itself.
+_AUTO_START_RETRY_ALERT_AFTER = 3
+_AUTO_START_RETRY_ALERT_REPEAT = 10
+
+
+def _retry_alert_due(attempts: int) -> bool:
+    """True on the first alerting retry and every Nth attempt after it."""
+    if attempts < _AUTO_START_RETRY_ALERT_AFTER:
+        return False
+    return (attempts - _AUTO_START_RETRY_ALERT_AFTER) % _AUTO_START_RETRY_ALERT_REPEAT == 0
+
+
+def _alert_start_failure(*, reason: str, message: str, auto_start: bool, attempts: int | None = None) -> None:
+    """Alert the operator that the engine did not start. Never raises."""
+    try:
+        from parayabuck.monitoring.alerts import emit as emit_alert
+
+        emit_alert(
+            "runtime_start_failed",
+            message=message,
+            reason=reason,
+            auto_start=auto_start,
+            attempts=attempts,
+        )
+    except Exception:  # pragma: no cover - alerting must never mask the failure
+        log.exception("Could not emit runtime_start_failed alert")
+
+
 _START_ENGINE_BLOCKING_STATES: frozenset[str] = _ACTIVE_ENGINE_STATES - {"starting"}
+# Reported instead of a probe error when the live gates are closed, so the
+# operator sees why the account binding cannot be verified yet.
+_LIVE_PROBE_SKIPPED_REASON = "live account probe skipped: live.enabled=false or PARAYABUCK_ENABLE_LIVE is not YES"
 
 
 def _yaml_block(raw: dict[str, Any], name: str) -> dict[str, Any]:
@@ -118,6 +156,9 @@ class EngineManager:
         # stop_engine runs on a to_thread worker and must cancel via
         # loop.call_soon_threadsafe instead.
         self._retry_task_loop: asyncio.AbstractEventLoop | None = None
+        # Set by stop_engine while a start attempt is still in flight, so the
+        # running startup sequence stops before its order-producing steps.
+        self._start_cancel = threading.Event()
         self.security_warning = _tracked_secret_warning(Path.cwd())
         if self.security_warning:
             log.critical("%s", self.security_warning)
@@ -171,6 +212,9 @@ class EngineManager:
 
     def should_auto_start(self) -> bool:
         """Auto-start configured paper engines without weakening live safeguards."""
+        if not trading_host_authorized():
+            log.warning("%s", TRADING_HOST_REFUSAL)
+            return False
         try:
             raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
             app_config = (raw or {}).get("app") or {}
@@ -395,6 +439,10 @@ class EngineManager:
         )
 
     def start_engine(self, *, auto_start: bool = False) -> None:
+        # One runner per Alpaca account: refuse before any state change so the
+        # UI keeps reporting 'stopped' instead of a failed start.
+        if not trading_host_authorized():
+            raise ValueError(TRADING_HOST_REFUSAL)
         # Mutual exclusion with the Web backtest runner: the engine must not
         # start while an expensive in-process backtest is using the process.
         # The backtest lock is taken FIRST on both paths (BacktestManager.start
@@ -425,18 +473,23 @@ class EngineManager:
                     raise ValueError("Engine is already starting")
                 self.engine_state = "starting"
                 self.last_engine_error = None
+                # Fresh cancel event per attempt: a stop request may only
+                # cancel the startup that is in flight now.
+                self._start_cancel.clear()
 
         key, secret = self.get_credentials()
         if not key or not secret:
+            message = "Alpaca API key/secret missing. Configure settings first."
             with self._state_lock:
                 self.engine_state = "error"
-                self.last_engine_error = "Alpaca API key/secret missing. Configure settings first."
-            raise ValueError("Alpaca API key/secret missing. Configure settings first.")
+                self.last_engine_error = message
+            _alert_start_failure(reason="credentials_missing", message=message, auto_start=auto_start)
+            raise ValueError(message)
 
         runtime: Any = None
         interrupted = False
         try:
-            from parayabuck.runtime import EngineRuntime, TransientStartupError
+            from parayabuck.runtime import EngineRuntime, StartupCancelled, TransientStartupError
         except Exception as exc:
             # The runtime module must be importable for a start attempt; a
             # failure is permanent and must not leave the state at 'starting'.
@@ -445,6 +498,11 @@ class EngineManager:
                 self.engine_state = "error"
                 self.last_engine_error = str(exc)
             self.invalidate_live_arming()
+            _alert_start_failure(
+                reason="runtime_import_failed",
+                message=f"Engine runtime is not importable: {exc}",
+                auto_start=auto_start,
+            )
             raise
         try:
             # Never memoized: a secret committed after import must still block
@@ -481,6 +539,7 @@ class EngineManager:
                 secret_key=secret,
                 config=cfg,
                 live_startup_proof=live_startup_proof,
+                startup_cancel=self._start_cancel,
             )
             runtime.start()
             # Close the lazy /api/account broker (if any) instead of leaking
@@ -513,6 +572,8 @@ class EngineManager:
                     runtime.stop()
                 except Exception:
                     log.exception("Cleanup after transient engine start failure")
+            failed = False
+            attempts = 0
             with self._state_lock:
                 if interrupted or self.engine_state == "stopping":
                     self.engine_state = "stopped"
@@ -520,8 +581,33 @@ class EngineManager:
                 else:
                     self.engine_state = "starting" if auto_start else "error"
                     self.last_engine_error = f"transient: {exc}"
+                    # The retry loop records its counter after the attempt
+                    # that failed, so the attempt number is the next one.
+                    failed = True
+                    attempts = self._retry_attempt + 1
             self.invalidate_live_arming()
+            # A retrying auto-start keeps the state at 'starting' and the
+            # failure is expected to clear; alert only once the retries are
+            # visibly not clearing it. A manual transient failure ends in
+            # 'error' with no retry behind it, so it always alerts.
+            if failed and (not auto_start or _retry_alert_due(attempts)):
+                _alert_start_failure(
+                    reason="transient_retrying" if auto_start else "transient_no_retry",
+                    message=f"Transient engine start failure: {exc}",
+                    auto_start=auto_start,
+                    attempts=attempts,
+                )
             raise
+        except StartupCancelled as exc:
+            # An operator stop arrived while the startup sequence was still
+            # running: it aborted before any order submission, so the engine
+            # ends up stopped — the outcome the operator asked for.
+            with self._state_lock:
+                self._reset_retry_state()
+                self.engine_state = "stopped"
+                self.last_engine_error = None
+            self.invalidate_live_arming()
+            raise RuntimeError(str(exc)) from exc
 
         except Exception as exc:
             if runtime is not None:
@@ -529,6 +615,7 @@ class EngineManager:
                     runtime.stop()
                 except Exception:
                     log.exception("Cleanup after failed engine start")
+            failed = False
             with self._state_lock:
                 self._reset_retry_state()
                 if interrupted:
@@ -537,6 +624,7 @@ class EngineManager:
                 else:
                     self.engine_state = "error"
                     self.last_engine_error = str(exc)
+                    failed = True
                     # A failed runtime closes its ledger during cleanup. Never
                     # expose that stopped runtime (or its broker) to account/status
                     # polling, otherwise the UI repeatedly queries a closed SQLite
@@ -545,10 +633,24 @@ class EngineManager:
                         self.runtime = None
                         self.broker = None
             self.invalidate_live_arming()
+            # Every permanent failure is operator-actionable and terminal: a
+            # rotated key rejected by Alpaca, a startup guard (secret scan,
+            # live arming) blocking the start, a SQLite error in
+            # begin_session, a catch-up exception. None of them can be seen
+            # from the running process, so all of them alert.
+            if failed:
+                _alert_start_failure(
+                    reason="startup_rejected" if isinstance(exc, ValueError) else "startup_error",
+                    message=f"Engine start failed: {exc}",
+                    auto_start=auto_start,
+                )
             raise
 
     def stop_engine(self) -> None:
         with self._state_lock:
+            # A start attempt still in flight must abort before its
+            # resume/catch-up steps submit orders (see StartupCancelled).
+            self._start_cancel.set()
             # A sleeping auto-start retry must not outlive an explicit stop:
             # cancel it (a start attempt already in flight is interrupted via
             # the 'stopping' state instead).
@@ -907,7 +1009,13 @@ class EngineManager:
         self._append_live_config_checks(item, live_cfg, runtime_cfg)
         approval, approval_error, hmac_key, approval_path = self._check_approval_signature(item, live_cfg)
         key, secret = self.get_credentials()
-        account_id, account_probe_error = self._probe_live_account(key, secret)
+        # The probe authenticates against the LIVE endpoint, so PAPER keys
+        # must never reach it while the live gates are closed (settings-drawer
+        # refreshes would otherwise send them on every open).
+        if bool(live_cfg.get("enabled", False)) and os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES":
+            account_id, account_probe_error = self._probe_live_account(key, secret)
+        else:
+            account_id, account_probe_error = None, _LIVE_PROBE_SKIPPED_REASON
         expected_digests, digest_error = self._resolve_live_configuration_digests()
         self._append_live_binding_check(item, approval, account_id, account_probe_error, expected_digests, digest_error)
         self._append_live_session_checks(item, key, secret)
@@ -1107,7 +1215,7 @@ class EngineManager:
         elif account_id is None:
             binding_state = "unverifiable"
             binding_missing = (
-                f"cannot verify the live account binding: live account probe failed: {account_probe_error}"
+                f"cannot verify the live account binding: {account_probe_error}"
                 if account_probe_error is not None
                 else "cannot verify the live account binding without reachable live credentials"
             )

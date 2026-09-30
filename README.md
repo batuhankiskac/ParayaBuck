@@ -20,7 +20,10 @@ only. Evidence for VT35: `docs/research/profit_max_v1.md`,
 `docs/research/paper_config_v2.md`. Backtest returns do not imply live returns.
 
 > **Never run the engine on the laptop.** The laptop and the VM share one
-> Alpaca PAPER key; two runners corrupt the ledger (2026-09-25 incident). Local
+> Alpaca PAPER key; two runners corrupt the ledger (2026-09-25 incident). This
+> is enforced: an engine start (auto or manual) requires
+> `PARAYABUCK_TRADING_HOST=1`, which only the VM systemd unit sets, so local
+> `parayabuck web` serves the console and backtests and refuses to trade. Local
 > work is tests, backtests and research only.
 
 ## Architecture

@@ -20,6 +20,29 @@ order is under $10 (`execution.rebalance_band_pct`,
 catch-up decision on the latest completed bars; a restart never duplicates a
 decision.
 
+
+## One runner per account
+
+The PAPER Alpaca account is shared between the VM and every other machine
+that has the credentials. Trading therefore needs an explicit per-machine
+designation: `PARAYABUCK_TRADING_HOST=1`, set only by the systemd unit on the
+VM (`deploy/systemd/parayabuck.service`).
+
+Without it `parayabuck web`, a bare `parayabuck` and `docker compose up` still
+serve the console, settings and backtests, but the engine refuses to start —
+auto-start logs the refusal and skips, a manual start returns an HTTP 400
+explaining that the machine is not the designated trading host. The state
+stays `stopped`; nothing is submitted to Alpaca. Only `1`, `true`, `yes` and
+`on` count as the designation — any other value (including `0` or `no`) keeps
+trading refused.
+
+Verify on the VM with:
+
+```bash
+systemctl show parayabuck -p Environment | grep PARAYABUCK_TRADING_HOST
+curl -s http://127.0.0.1:8000/api/status | python3 -m json.tool | grep engine_state
+```
+
 ## Health and readiness
 
 | Probe | Meaning |
@@ -33,6 +56,9 @@ decision.
 when `app.auto_start_engine` is on in paper mode, a runtime is active, or the
 engine is in error. `503` during warmup (`engine_state=warming_up`) is normal.
 `/api/status` carries the full `RuntimeHealth`, including `intent_watchdog`.
+`engine_error` carries the last engine start/stop error and
+`start_retry_attempt` the number of auto-start retries so far, so an external
+probe can tell a dead engine from one that is still retrying.
 
 ## Alerts
 
@@ -50,6 +76,8 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 |---|---|---|
 | `runtime_started` | Engine start completed | yes |
 | `runtime_stopped_unexpected` | Stop from a halted/error state or with a breaker active | yes |
+| `runtime_start_failed` | Engine did not start: missing credentials, an unimportable runtime, a blocked startup (tracked-secret scan, live arming, config), a permanent startup error, a manual transient failure, N auto-start retries, or an out-of-process probe that found `/readyz` not ready | yes |
+| `backup_failed` | A backup could not be written or verified, or the newest backup is older than 12 h (backup timer stopped) | yes |
 | `daily_summary` | After each persisted equity decision | yes |
 | `intent_alarm` / `intent_recovered` | Watchdog code becomes active / clears | yes |
 | `order_rejected` | Broker rejected a portfolio order | yes |
@@ -67,6 +95,30 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 
 To forward a "no" kind, add it to `alerting.events` (unknown kinds fail config
 load).
+
+### Engine start failures
+
+A start that never completes is the one failure systemd cannot see: the web
+process keeps serving, so `/healthz` stays `200` and `Restart=on-failure`
+never fires, and every alarm that could report it lives in the runtime that
+failed to start. `/readyz` answers `503` (the engine is in `error`, or it is
+stuck at `starting` with a growing `start_retry_attempt`) and
+`runtime_start_failed` is emitted from every start-failure path:
+
+| `reason` | Meaning | Next step |
+|---|---|---|
+| `credentials_missing` | No API key/secret | Fix `.env`; the engine is not trading |
+| `runtime_import_failed` | `parayabuck.runtime` is not importable | The deploy is broken; reinstall |
+| `startup_rejected` | A startup guard refused the start (tracked-secret scan, live arming, config) | Read the message; the guard stays in place |
+| `startup_error` | Permanent startup error (Alpaca 401, SQLite error, catch-up exception) | Fix the cause, then start the engine |
+| `transient_no_retry` | A manual start hit a network-class failure | Retry the start |
+| `transient_retrying` | The auto-start loop is retrying and the attempts are not clearing | Fix the network, or stop and start the engine manually |
+| `readyz_probe` | `parayabuck ops watchdog` found the deployment not ready | Read `engine_state`/`engine_error` in the message |
+
+Transient auto-start retries keep the state at `starting` and back off
+5/15/30/60 s indefinitely; the alert fires from the third attempt and then
+every tenth, with `attempts`. Run `parayabuck ops watchdog` by hand to get
+the same verdict (see ops CLI below).
 
 ### Daily summary
 
@@ -113,6 +165,7 @@ parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not tr
 parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys, no webhook URL)
 parayabuck ops rebase-ownership SYMBOL --broker-qty QTY [--account-id ID] [--note TEXT]
     # adopt the broker's share count for one symbol; dry run unless --confirm
+parayabuck ops watchdog [--json]       # dead-man probe: /readyz + backup freshness; exit 1 + alert on failure
 ```
 
 Health checks: `runtime_heartbeat` (snapshot ≤ 90 s old), `workers`, `queue`
@@ -134,6 +187,11 @@ preflight (config, mode, live off, credentials, writability, SQLite
 integrity/WAL, tracked `.env`, config digest; online it also checks Alpaca
 PAPER reachability).
 
+It also reports backup freshness: the age of the newest snapshot in
+`backup.path`. That row is a `WARN`, never a blocker — the service runs
+`doctor --strict` as `ExecStartPre`, and a stale backup must not keep the
+engine from starting.
+
 ## State, backup and restore
 
 | Path | What | If lost |
@@ -146,10 +204,22 @@ PAPER reachability).
 
 `parayabuck backup` takes a consistent online snapshot (sqlite3 backup API,
 safe while running) to `backup.path` (`data/backups`), verifies it with
-`PRAGMA integrity_check`, and prunes files older than `backup.retention_days`
-(7). The timer runs it every 6 h. Check one file with
+`PRAGMA integrity_check`, and prunes *automatic* backups older than
+`backup.retention_days` (7). The timer runs it every 6 h. Check one file with
 `parayabuck backup --verify-only <file>`. Copy backups off the VM
 occasionally; they live on the same disk.
+
+Failures are never silent: `parayabuck backup` emits `backup_failed` (and
+exits non-zero) when a snapshot cannot be written or verified, and
+`parayabuck ops watchdog` — run every 15 min by
+`parayabuck-watchdog.timer` — emits the same kind when the newest backup is
+older than 12 h, i.e. when the timer itself has stopped working.
+
+`parayabuck backup --label <name>` publishes the snapshot as
+`parayabuck-keep-<name>-<stamp>.sqlite3`, outside the retention prune glob:
+the pre-deploy/rollback snapshot the runbook tells you to keep is never
+auto-pruned, and it stays a valid restore candidate. Use it before every
+deploy and rollback; delete it yourself when the release is stable.
 
 Restore (never overwrite in place unverified):
 
@@ -219,6 +289,12 @@ as a reconciliation anomaly (`ops status` → `reconciliation_anomalies`,
 dashboard → ownership). The command never flattens or cancels anything at the
 broker.
 
+This applies only to shares the bot owns. Inventory nobody claims is treated
+the other way round: crypto, and equity outside the strategy universe, is
+never ownership drift (`docs/operator_runbook.md`, "Foreign inventory in the
+account"). On a symbol the strategy trades, an unowned QLD holding stays
+`BROKER_STALE` drift and halts, because only the bot may hold or sell it.
+
 ## PAPER rules
 
 - Never change strategy parameters because a week lost or a month won. Any
@@ -231,4 +307,6 @@ broker.
   `docs/OPERATIONS_LOG.md`.
 - Real PAPER orders outside the engine need an explicit opt-in:
   `scripts/paper_smoke.py` requires `PARAYABUCK_ALLOW_PAPER_SMOKE=YES`,
-  paper mode, and live not enabled. Do not run it while the VM engine runs.
+  paper mode, and live not enabled. It refuses itself while the engine
+  heartbeat is live and inside 15:45-16:30 ET; stop the service first
+  (`docs/deployment.md`, Pre-deploy checks).

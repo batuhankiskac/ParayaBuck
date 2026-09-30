@@ -80,6 +80,7 @@ from parayabuck.runtime_health import RuntimeHealth, WorkerHealth, _portfolio_ca
 from parayabuck.runtime_state import RuntimeMarketState
 from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.storage import SQLiteStore
+from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
 from parayabuck.universe import equity_universe_digest
 from parayabuck.utils import is_crypto
 
@@ -109,6 +110,16 @@ class TransientStartupError(RuntimeError):
     responses) during startup reconciliation or warmup. The runtime object is
     discarded by the caller, no permanent circuit-breaker incident is
     recorded, and the caller may retry startup.
+    """
+
+
+class StartupCancelled(RuntimeError):
+    """An operator stop request arrived while ``EngineRuntime.start()`` ran.
+
+    Raised at the startup checkpoints immediately before the two steps that
+    can submit orders (restart-rebalance resume and startup catch-up). The
+    caller already tore the attempt down; no incident is recorded because
+    nothing was placed and the engine ends in its stopped state.
     """
 
 
@@ -184,13 +195,16 @@ _SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS = 10
 # reporting, halt tracking and worker restart handling cannot disagree.
 _STREAM_WORKER_BY_MARKET = {Market.EQUITY: "pb-stocks"}
 _MARKET_BY_STREAM_WORKER = {worker: market for market, worker in _STREAM_WORKER_BY_MARKET.items()}
-# Operator-facing text for crypto positions found in the shared brokerage
-# account at startup. ParayaBuck is equity-only: it never trades, pins,
-# streams or protects them.
-_FOREIGN_CRYPTO_MESSAGE = (
-    "Crypto support was removed from ParayaBuck, but the broker account holds crypto "
-    "positions ({symbols}); they are left untouched (no orders, no stops, no streaming) "
-    "and the operator must handle them manually"
+# Operator-facing text for inventory in the shared brokerage account that the
+# bot does not own: crypto (support was removed) and equity symbols outside the
+# strategy universe. ParayaBuck never trades, pins, streams or protects them;
+# it excludes them from ownership/drift, alerts once, and the operator must
+# handle them manually. They still count toward account gross and slot limits.
+_FOREIGN_INVENTORY_MESSAGE = (
+    "Foreign inventory in the shared broker account, left untouched by ParayaBuck "
+    "(no orders, no stops, no streaming, excluded from ownership reconciliation) — "
+    "crypto ({crypto}, crypto support was removed); equity outside the strategy "
+    "universe ({equity}). The operator must close unwanted positions manually"
 )
 
 
@@ -203,6 +217,20 @@ _ENTRY_BLOCKING_STATES = frozenset({"halted", "error", "stop_failed", "stopping"
 # loop never runs this long and still hits the limit.
 _SHARED_WORKER_HEALTHY_RESET_SECONDS = 600.0
 _RECONCILIATION_INCIDENT_REASONS = frozenset({"reconciliation_failed", "reconciliation_bug_suspected"})
+# Halt reasons a fresh process cannot still be in: they describe in-process
+# worker or queue state (a crashed decision worker, a trade-update callback
+# that raised, an event queue that overflowed) and this start re-arms all
+# three. A row left behind by a previous build would otherwise halt the engine
+# for a condition nothing can verify any more; a repeat failure raises the
+# halt again by itself. They stay operator-resettable while they are live, and
+# ``reset_safety_lock`` clears the same set after its own verification.
+_RESTART_REARMED_REASONS = frozenset(
+    {
+        "decision_worker_crashed",
+        "final_market_event_queue_overflow",
+        "trade_update_callback_failure",
+    }
+)
 
 
 class _StrategyTimeframes(Protocol):
@@ -252,8 +280,11 @@ class EngineRuntime:
         secret_key: str,
         config: Config,
         live_startup_proof: LiveStartupProof | None = None,
+        startup_cancel: threading.Event | None = None,
     ) -> None:
         self._validate_execution_mode(config)
+        # Set by the operator's stop request while start() is still running.
+        self._startup_cancel = startup_cancel if startup_cancel is not None else threading.Event()
         self.api_key = api_key
         self.secret_key = secret_key
         self.app_config = config
@@ -275,9 +306,11 @@ class EngineRuntime:
         self._symbols_by_market = {Market.EQUITY: set(self.symbols)}
         self._market_enabled = dict(self._strategy_enabled)
         self._market_entry_halts: dict[Market, str | None] = {Market.EQUITY: None}
-        # Crypto positions found in the shared brokerage account at startup:
-        # classified only so the operator is alerted; never traded or pinned.
-        self._foreign_crypto_symbols: tuple[str, ...] = ()
+        # Inventory in the shared brokerage account the bot does not own —
+        # crypto holdings, or equity outside the strategy universe. Classified
+        # only so the operator is alerted once at startup; never traded, pinned,
+        # protected or counted as ownership drift.
+        self._foreign_inventory: tuple[tuple[Market, str], ...] = ()
         # Entry-risk latch: reacts to daily-loss/drawdown breaches on the
         # account-poll cadence. A latched market still runs decisions, but
         # only risk-reducing SELLs may be planned; entries are blocked.
@@ -333,6 +366,7 @@ class EngineRuntime:
                 or None
             ),
             portfolio_ownership_resolved=self._resolve_portfolio_ownership,
+            bot_tradable_symbols=lambda: set(self._symbols_by_market.get(Market.EQUITY, ())),
             runtime_state_dir=runtime_state_dir,
         )
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
@@ -923,6 +957,10 @@ class EngineRuntime:
             raise RuntimeError("Previous runtime workers did not stop; process restart required")
         if self.mode == RuntimeMode.DISABLED:
             raise RuntimeError("Runtime start refused because runtime.mode is disabled")
+        if not trading_host_authorized():
+            # Defence in depth behind the web manager: no code path may start
+            # an engine on a machine that is not the designated trading host.
+            raise RuntimeError(TRADING_HOST_REFUSAL)
         if self.mode == RuntimeMode.LIVE:
             if not self.app_config.live.enabled:
                 raise RuntimeError("Live runtime requires live.enabled=true")
@@ -983,7 +1021,7 @@ class EngineRuntime:
             raise
         with self._state_lock:
             self._pin_managed_symbols()
-        self._warn_foreign_crypto_inventory()
+        self._warn_foreign_inventory()
         refreshed_specs = []
         for strategy, _symbols, maximum_allocation in self._strategy_specs:
             refreshed_specs.append(
@@ -1122,6 +1160,9 @@ class EngineRuntime:
                     f"Startup account fetch deferred after transient network failure: {exc}"
                 ) from exc
             raise
+        # Operator stop wins: from here on every remaining step can submit an
+        # order, so a stop request during warmup aborts instead of trading.
+        self._raise_if_startup_cancelled()
         # Restart recovery resumes pending rebalances against the one fresh
         # account snapshot.
         self._resume_startup_rebalances(account=account)
@@ -1131,6 +1172,9 @@ class EngineRuntime:
         # Normal no-trade/readiness outcomes are result statuses. Unexpected
         # exceptions are invalid composition/safety/provider failures and
         # must not be hidden behind an apparently running engine.
+        # Catch-up forces a full-target decision and submits its orders, so
+        # re-check between the two order-producing startup steps.
+        self._raise_if_startup_cancelled()
         try:
             self._run_startup_catch_up(account=account)
         except Exception as exc:
@@ -1199,6 +1243,19 @@ class EngineRuntime:
             ",".join(sorted(self.aggregators)),
         )
 
+    def _raise_if_startup_cancelled(self) -> None:
+        """Abort startup when the operator pressed Stop while it was running.
+
+        ``stop_engine`` runs on its own worker thread, so a stop issued during
+        warmup cannot reach the runtime directly; it signals this event
+        instead. Only the order-producing tail of startup checks it, so an
+        abort before the first order leaves the account exactly as the stop
+        asked for.
+        """
+        cancel = getattr(self, "_startup_cancel", None)
+        if cancel is not None and cancel.is_set():
+            raise StartupCancelled("Engine startup was cancelled by a stop request before orders were submitted")
+
     def _recover_portfolio_fill(
         self,
         client_order_id: str,
@@ -1250,27 +1307,38 @@ class EngineRuntime:
         )
         return resolved
 
-    def _warn_foreign_crypto_inventory(self) -> None:
-        """Alert when the shared broker account holds crypto at startup.
+    def _warn_foreign_inventory(self) -> None:
+        """Alert once at startup for inventory the bot does not own.
 
-        ParayaBuck is equity-only. Crypto positions found by
-        ``_pin_managed_symbols`` (broker account snapshot or managed ledger
-        rows) are never pinned, streamed, protected or traded; the operator
-        must handle them. Startup is not blocked.
+        ParayaBuck is equity-only and the brokerage account is shared. Crypto
+        positions, and equity positions outside the strategy universe that no
+        bot lineage claims, are classified by ``_pin_managed_symbols`` from
+        the broker account snapshot and the managed ledger rows. They are
+        never pinned, streamed, protected, traded or counted as ownership
+        drift; they still count toward account gross and slot limits. Startup
+        is not blocked.
         """
-        symbols = sorted(getattr(self, "_foreign_crypto_symbols", ()))
-        if not symbols:
+        inventory = tuple(getattr(self, "_foreign_inventory", ()))
+        if not inventory:
             return
-        message = _FOREIGN_CRYPTO_MESSAGE.format(symbols=", ".join(symbols))
+        crypto = [symbol for market, symbol in inventory if market == Market.CRYPTO]
+        equity = [symbol for market, symbol in inventory if market != Market.CRYPTO]
+        message = _FOREIGN_INVENTORY_MESSAGE.format(
+            crypto=", ".join(crypto) or "none", equity=", ".join(equity) or "none"
+        )
         log.warning(message)
-        alerts.emit("risk_incident", message=message, market=Market.CRYPTO.value, symbols=symbols)
+        alerts.emit(
+            "risk_incident",
+            message=message,
+            foreign=[{"market": market.value, "symbol": symbol} for market, symbol in inventory],
+        )
 
     def _pin_managed_symbols(self) -> None:
         """Keep managed equity positions observable after config removal.
 
-        Crypto positions or ledger rows in the shared account are classified
-        into ``_foreign_crypto_symbols`` for the startup alert and are never
-        pinned.
+        Inventory the bot does not own — crypto, and equity outside the
+        strategy universe — is classified into ``_foreign_inventory`` for the
+        single startup alert and is never pinned.
         """
         account_id = self.broker.account_id or "unknown"
         entries = self.ledger.managed_entries_for_account(account_id)
@@ -1287,13 +1355,26 @@ class EngineRuntime:
             broker_positions = self.broker.account().positions
         except Exception:
             broker_positions = ()
-        foreign_crypto = {
-            canonical_symbol(position.symbol, Market.CRYPTO)
-            for position in broker_positions
-            if not position.is_flat and (position.market == Market.CRYPTO or is_crypto(position.symbol))
-        }
-        foreign_crypto.update(item.canonical_symbol for item in entries if item.market == Market.CRYPTO)
-        self._foreign_crypto_symbols = tuple(sorted(foreign_crypto))
+        managed_symbols = {item.canonical_symbol for item in entries} | set(portfolio_symbols)
+        universe = set(self._symbols_by_market.get(Market.EQUITY, ()))
+        foreign: dict[str, Market] = {}
+        for position in broker_positions:
+            if position.is_flat:
+                continue
+            # A crypto-shaped symbol classifies as crypto whatever the asset class.
+            market = Market.CRYPTO if is_crypto(position.symbol) else position.market
+            symbol = canonical_symbol(position.symbol, market)
+            # Crypto is always foreign (this runtime never manages it, whoever
+            # a legacy ownership row claims); equity is foreign only when no
+            # lineage claims it and the strategy does not trade it.
+            if market == Market.CRYPTO or (symbol not in managed_symbols and symbol not in universe):
+                foreign[symbol] = market
+        for item in entries:
+            if item.market == Market.CRYPTO:
+                foreign.setdefault(item.canonical_symbol, Market.CRYPTO)
+        self._foreign_inventory = tuple(
+            sorted(((market, symbol) for symbol, market in foreign.items()), key=lambda pair: (pair[0].value, pair[1]))
+        )
         portfolio_pins = tuple(
             canonical_symbol(position.symbol, position.market)
             for position in broker_positions
@@ -1932,6 +2013,11 @@ class EngineRuntime:
           and ``portfolio_watermark``) are restored from the latest persisted
           decision so a restart never replays a duplicate decision or loses
           the cadence position.
+
+        * RESTART_REARMED — a halt row whose condition a fresh process cannot
+          still be in (``_RESTART_REARMED_REASONS``) is migrated, not
+          restored: it is cleared with an audit record, because the workers and
+          the event queue it described are re-armed by this start.
         """
         account_id = self.broker.account_id or "unknown"
         # Reasons in this set are exactly the ones ``reset_safety_lock``
@@ -1964,9 +2050,34 @@ class EngineRuntime:
             "trade_update_callback_failure",
         }
         incidents = self.ledger.load_safety_incidents(account_id)
+        # A halt row from a previous process whose condition is process-local
+        # cannot still be true here: the trade-update and decision workers are
+        # new threads and the final market event queue starts empty. Restoring
+        # it would halt a healthy process over a condition only a repeat
+        # failure can recreate — and a repeat failure re-raises the halt by
+        # itself, exactly as the f"{name}_restart_limit" halts above do. The
+        # startup reconciliation that ran before this call verified the broker,
+        # so the row is migrated (cleared) with this audit record instead.
+        rearmed = sorted({incident.reason for incident in incidents if incident.reason in _RESTART_REARMED_REASONS})
+        if rearmed:
+            for reason in rearmed:
+                self.ledger.clear_safety_incident(account_id, reason)
+            log.warning(
+                "Persisted halt rows migrated at startup (worker state re-armed): %s",
+                ", ".join(rearmed),
+            )
+            alerts.emit(
+                "circuit_breaker",
+                message="Persisted halt rows migrated at startup; their worker state was re-armed by this start",
+                reasons=rearmed,
+            )
         # Newest first, but a reconciliation-owned reason never masks another
         # persisted halt: a clean reconcile would clear it and resume trading.
-        restorable = [incident.reason for incident in incidents if incident.reason in persistent_reasons]
+        restorable = [
+            incident.reason
+            for incident in incidents
+            if incident.reason in persistent_reasons and incident.reason not in _RESTART_REARMED_REASONS
+        ]
         preferred = [reason for reason in restorable if reason not in _RECONCILIATION_INCIDENT_REASONS]
         if preferred or restorable:
             self._circuit_breaker_reason = (preferred or restorable)[0]
@@ -4083,8 +4194,13 @@ class EngineRuntime:
                     self._circuit_breaker_reason = None
             # The operator verified THIS halt's recovery condition above;
             # clear exactly its incident, never unrelated incidents (those
-            # need their own per-halt verification).
-            self.ledger.clear_safety_incident(account_id, reason)
+            # need their own per-halt verification). The one exception is
+            # ``_RESTART_REARMED_REASONS``: a leftover row from an earlier
+            # worker state has no verification left to perform, and clearing
+            # it here keeps a reset from leaving a row that would halt the
+            # next start behind the operator's back.
+            for cleared in sorted({reason} | _RESTART_REARMED_REASONS):
+                self.ledger.clear_safety_incident(account_id, cleared)
             market_halts = getattr(self, "_market_entry_halts", None)
             if market_halts is not None:
                 self._verify_market_halts(market_halts)

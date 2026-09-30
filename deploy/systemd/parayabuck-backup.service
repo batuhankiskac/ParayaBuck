@@ -9,6 +9,10 @@ Group=parayabuck
 WorkingDirectory=/opt/parayabuck
 EnvironmentFile=/opt/parayabuck/.env
 ExecStart=/opt/parayabuck/.venv/bin/parayabuck backup
+# A failed run exits non-zero and emits the `backup_failed` alert to the
+# webhook in the env file (PARAYABUCK_ALERT_WEBHOOK_URL), so a silent
+# multi-week timer outage cannot go unnoticed. parayabuck-watchdog.timer
+# additionally reports a backup set that is merely stale.
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

@@ -1,10 +1,12 @@
-"""Startup safety for crypto positions in the shared brokerage account.
+"""Startup safety for foreign inventory in the shared brokerage account.
 
-ParayaBuck is equity-only: crypto support was removed. If the broker account
-(or a legacy managed ledger row) still holds crypto at startup, the runtime
-must not crash and must not silently ignore it: it raises one clear
-``risk_incident`` alert plus a WARNING log and leaves the positions alone —
-never pinned, streamed, protected or traded.
+ParayaBuck is equity-only: crypto support was removed. The account is shared,
+so it can also hold equity the strategy does not trade (a ``paper_smoke`` run,
+a manual position). Inventory the bot does not own — crypto, and equity
+outside the strategy universe that no lineage claims — must neither crash
+nor silently pass: the runtime raises ONE ``risk_incident`` alert plus a
+WARNING log naming it, and leaves the positions alone — never pinned,
+streamed, protected or traded.
 """
 
 from __future__ import annotations
@@ -100,7 +102,7 @@ def test_shipped_config_builds_an_equity_only_runtime(tmp_path) -> None:
         assert set(runtime._symbols_by_market) == {Market.EQUITY}
         assert set(runtime._product_universes_by_market) == {Market.EQUITY}
         assert runtime._market_entry_halts == {Market.EQUITY: None}
-        assert runtime._foreign_crypto_symbols == ()
+        assert runtime._foreign_inventory == ()
         assert all("/" not in symbol for symbol in runtime.symbols)
     finally:
         runtime._portfolio_repository.close()
@@ -111,29 +113,44 @@ def test_no_crypto_positions_raise_no_alert(monkeypatch) -> None:
     runtime = _pinning_runtime(_account(PositionSnapshot("QLD", 10, 100.0, 100.0, Market.EQUITY, managed_qty=10)))
 
     runtime._pin_managed_symbols()
-    runtime._warn_foreign_crypto_inventory()
+    runtime._warn_foreign_inventory()
 
-    assert runtime._foreign_crypto_symbols == ()
+    assert runtime._foreign_inventory == ()
     assert emitted == []
 
 
-def test_crypto_positions_raise_one_alert_and_are_never_pinned(monkeypatch, caplog) -> None:
+def test_foreign_positions_raise_one_alert_and_are_never_pinned(monkeypatch, caplog) -> None:
     emitted = _capture_alerts(monkeypatch)
     ledger_row = SimpleNamespace(canonical_symbol="SOL/USD", market=Market.CRYPTO, status="open")
-    runtime = _pinning_runtime(_crypto_account(), entries=(ledger_row,))
+    runtime = _pinning_runtime(
+        _account(
+            PositionSnapshot("QLD", 10, 100.0, 100.0, Market.EQUITY, managed_qty=10),
+            PositionSnapshot("BTC/USD", 0.5, 60_000.0, 60_000.0, Market.CRYPTO),
+            PositionSnapshot("AAPL", 3, 100.0, 100.0, Market.EQUITY),
+        ),
+        entries=(ledger_row,),
+    )
 
     runtime._pin_managed_symbols()
     with caplog.at_level(logging.WARNING, logger="parayabuck.runtime"):
-        runtime._warn_foreign_crypto_inventory()
+        runtime._warn_foreign_inventory()
 
-    symbols = ["BTC/USD", "ETH/USD", "SOL/USD"]
     assert [(kind, fields) for kind, _message, fields in emitted] == [
-        ("risk_incident", {"market": "crypto", "symbols": symbols})
+        (
+            "risk_incident",
+            {
+                "foreign": [
+                    {"market": "crypto", "symbol": "BTC/USD"},
+                    {"market": "crypto", "symbol": "SOL/USD"},
+                    {"market": "equity", "symbol": "AAPL"},
+                ]
+            },
+        )
     ]
     message = emitted[0][1]
-    assert "Crypto support was removed" in message and "left untouched" in message
-    assert all(symbol in message for symbol in symbols)
-    assert "Crypto support was removed" in caplog.text
+    assert "crypto support was removed" in message
+    assert "BTC/USD, SOL/USD" in message and "AAPL" in message
+    assert "crypto support was removed" in caplog.text
     # Classified only: never pinned, observed or made tradable.
     assert runtime._managed_pin_symbols == {"QLD"}
     assert set(runtime._symbols_by_market) == {Market.EQUITY}
@@ -153,9 +170,9 @@ def test_unreadable_account_at_pin_time_does_not_crash(monkeypatch) -> None:
     runtime.broker.account = _account_down
 
     runtime._pin_managed_symbols()
-    runtime._warn_foreign_crypto_inventory()
+    runtime._warn_foreign_inventory()
 
-    assert runtime._foreign_crypto_symbols == ()
+    assert runtime._foreign_inventory == ()
     assert emitted == []
 
 
@@ -211,7 +228,14 @@ def test_runtime_starts_equity_only_while_crypto_is_held(monkeypatch) -> None:
     assert runtime._startup_committed
     assert runtime._state in {"running", "warming_up"}
     incidents = [fields for kind, _message, fields in emitted if kind == "risk_incident"]
-    assert incidents == [{"market": "crypto", "symbols": ["BTC/USD", "ETH/USD"]}]
+    assert incidents == [
+        {
+            "foreign": [
+                {"market": "crypto", "symbol": "BTC/USD"},
+                {"market": "crypto", "symbol": "ETH/USD"},
+            ]
+        }
+    ]
     # Only equity symbols are streamed; no crypto stream worker exists.
     assert len(subscribed) == 1
     assert sorted(subscribed[0][0]) == ["QLD", "QQQ", "SPY"]

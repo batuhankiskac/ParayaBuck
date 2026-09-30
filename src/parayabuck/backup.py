@@ -11,6 +11,7 @@ from __future__ import annotations
 import errno
 import math
 import os
+import re
 import sqlite3
 import tempfile
 from contextlib import closing
@@ -19,6 +20,19 @@ from pathlib import Path
 
 BACKUP_PREFIX = "parayabuck-"
 BACKUP_SUFFIX = ".sqlite3"
+# A labelled backup (the pre-deploy snapshot the runbook requires) is
+# published as ``parayabuck-keep-<label>-<stamp>.sqlite3``. It matches
+# BACKUP_GLOB (so it stays a valid restore candidate) but not
+# AUTO_BACKUP_GLOB, so retention pruning can never delete it while a late
+# rollback may still need it.
+KEEP_PREFIX = f"{BACKUP_PREFIX}keep-"
+AUTO_BACKUP_GLOB = f"{BACKUP_PREFIX}[0-9]*{BACKUP_SUFFIX}"
+BACKUP_GLOB = f"{BACKUP_PREFIX}*{BACKUP_SUFFIX}"
+# Freshness bound for the 6 h backup timer: two consecutive missed runs mean
+# the backup path is broken, and a later database loss would force a restore
+# from a stale snapshot. Checked by `parayabuck doctor` and `ops watchdog`.
+MAX_BACKUP_AGE_HOURS = 12.0
+_LABEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 
 
 class BackupVerificationError(RuntimeError):
@@ -39,9 +53,24 @@ def _validate_retention(retention_days: float) -> float:
     return retention_days
 
 
-def _backup_path(backup_dir: Path, stamp: datetime) -> Path:
-    """Timestamped, collision-safe backup filename."""
-    stem = f"{BACKUP_PREFIX}{stamp:%Y%m%dT%H%M%S%f}Z"
+def _validate_label(label: str | None) -> str | None:
+    """Return a filesystem-safe backup label, or None when unlabelled."""
+    if label is None:
+        return None
+    token = label.strip()
+    if not _LABEL_PATTERN.fullmatch(token):
+        raise ValueError("backup label must be 1-64 characters of [A-Za-z0-9_.-] starting with a letter or digit")
+    return token
+
+
+def _backup_path(backup_dir: Path, stamp: datetime, *, label: str | None = None) -> Path:
+    """Timestamped, collision-safe backup filename.
+
+    A labelled backup is published as ``parayabuck-keep-<label>-<stamp>``
+    so retention pruning never removes an operator-requested snapshot.
+    """
+    stem = f"{KEEP_PREFIX}{label}-" if label else BACKUP_PREFIX
+    stem += f"{stamp:%Y%m%dT%H%M%S%f}Z"
     candidate = backup_dir / f"{stem}{BACKUP_SUFFIX}"
     counter = 1
     while candidate.exists():
@@ -83,6 +112,7 @@ def backup_database(
     *,
     retention_days: float,
     now: datetime | None = None,
+    label: str | None = None,
 ) -> Path:
     """Create a consistent snapshot of ``source_path`` under ``backup_dir``.
 
@@ -94,7 +124,9 @@ def backup_database(
     pruned (oldest first) and the verified path is returned. IF INVALID, the
     new invalid backup is deleted, previous backups are preserved, and a
     ``BackupVerificationError`` is raised — pruning never happens before
-    validation.
+    validation. ``label`` marks an operator-requested snapshot (the
+    pre-deploy one): it is published outside the automatic-backup glob and
+    is therefore never pruned, matching the rollback runbook.
 
     Crash-consistency: construction uses a same-directory staging file, and
     only a closed, durable, verified snapshot is published under the normal
@@ -102,6 +134,7 @@ def backup_database(
     never contains a half-committed decision+order transaction.
     """
     retention = _validate_retention(retention_days)
+    keep_label = _validate_label(label)
     source = Path(source_path)
     target_dir = Path(backup_dir)
     if not source.is_file():
@@ -157,7 +190,7 @@ def backup_database(
         # A hard link publishes the already verified inode without overwriting a
         # backup selected concurrently. Re-select a suffixed name on collision.
         while True:
-            candidate = _backup_path(target_dir, stamp)
+            candidate = _backup_path(target_dir, stamp, label=keep_label)
             try:
                 os.link(stage, candidate)
             except FileExistsError:
@@ -212,10 +245,13 @@ def prune_backups(
     retention_days: float,
     now: datetime | None = None,
 ) -> list[Path]:
-    """Delete backups older than ``retention_days`` (oldest first).
+    """Delete automatic backups older than ``retention_days`` (oldest first).
 
-    Files are ordered by modification time, not by name, so the timestamp in
-    the filename is informational only. Returns the removed paths.
+    Only the automatic (timer) backups are eligible: a labelled
+    ``parayabuck-keep-*`` snapshot is an operator-requested restore point
+    that retention must never delete. Files are ordered by modification time,
+    not by name, so the timestamp in the filename is informational only.
+    Returns the removed paths.
     """
     retention = _validate_retention(retention_days)
     cutoff = (now or datetime.now(UTC)).timestamp() - retention * 86_400
@@ -223,7 +259,7 @@ def prune_backups(
     if not directory.is_dir():
         return []
     backups = sorted(
-        (candidate for candidate in directory.glob(f"{BACKUP_PREFIX}*{BACKUP_SUFFIX}") if candidate.is_file()),
+        (candidate for candidate in directory.glob(AUTO_BACKUP_GLOB) if candidate.is_file()),
         key=lambda candidate: candidate.stat().st_mtime,
     )
     removed: list[Path] = []
@@ -239,12 +275,17 @@ def prune_backups(
 
 
 def latest_verified_backup(backup_dir: str | Path) -> Path | None:
-    """Return the most recent verified backup in ``backup_dir``, or None."""
+    """Return the most recent verified backup in ``backup_dir``, or None.
+
+    Unlike pruning, this considers every backup including the labelled
+    ``parayabuck-keep-*`` snapshots, so a pre-deploy backup stays a valid
+    restore candidate.
+    """
     directory = Path(backup_dir)
     if not directory.is_dir():
         return None
     backups = sorted(
-        (candidate for candidate in directory.glob(f"{BACKUP_PREFIX}*{BACKUP_SUFFIX}") if candidate.is_file()),
+        (candidate for candidate in directory.glob(BACKUP_GLOB) if candidate.is_file()),
         key=lambda candidate: candidate.stat().st_mtime,
         reverse=True,
     )
@@ -254,12 +295,43 @@ def latest_verified_backup(backup_dir: str | Path) -> Path | None:
     return None
 
 
+def latest_backup_age_hours(backup_dir: str | Path, *, now: datetime | None = None) -> float | None:
+    """Age in hours of the newest backup in ``backup_dir``; None when there is none.
+
+    The freshness check behind ``parayabuck doctor`` and
+    ``parayabuck ops watchdog``: a backup timer that stopped running weeks
+    ago is otherwise indistinguishable from a healthy one until a database
+    loss forces a restore from a stale snapshot.
+    """
+    directory = Path(backup_dir)
+    if not directory.is_dir():
+        return None
+    newest: float | None = None
+    for candidate in directory.glob(BACKUP_GLOB):
+        if not candidate.is_file():
+            continue
+        try:
+            mtime = candidate.stat().st_mtime
+        except OSError:
+            continue
+        newest = mtime if newest is None else max(newest, mtime)
+    if newest is None:
+        return None
+    reference = (now or datetime.now(UTC)).timestamp()
+    return max(0.0, (reference - newest) / 3600.0)
+
+
 __all__ = [
+    "AUTO_BACKUP_GLOB",
+    "BACKUP_GLOB",
     "BACKUP_PREFIX",
     "BACKUP_SUFFIX",
+    "KEEP_PREFIX",
+    "MAX_BACKUP_AGE_HOURS",
     "BackupDurabilityError",
     "BackupVerificationError",
     "backup_database",
+    "latest_backup_age_hours",
     "latest_verified_backup",
     "prune_backups",
     "verify_backup",

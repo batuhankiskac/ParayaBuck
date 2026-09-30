@@ -1,4 +1,4 @@
-"""Database baseline: portfolio-state repository and ledger hot operations.
+"""Database baseline: portfolio-state repository hot operations.
 
 Seeds a fresh runtime DB and times the canonical write/read operations on the
 decision path persistence operations. Uses production classes against a
@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from benchmarks.harness import Report, timeit
 from parayabuck.core.models import Market
-from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
     PortfolioOrderRequest,
     PortfolioOrderSide,
@@ -64,7 +63,6 @@ def run(report: Report) -> None:
     DB.unlink(missing_ok=True)
     store = SQLiteStore(str(DB))
     repo = PortfolioStateRepository(str(DB), store=store)
-    ledger = ExecutionLedger(str(DB), store=store)
 
     session_id = repo.begin_session("account-1", "digest-bench", "paper")
     timestamp = datetime(2026, 8, 1, tzinfo=UTC)
@@ -83,11 +81,10 @@ def run(report: Report) -> None:
     )
 
     def fresh_db() -> None:
-        nonlocal store, repo, ledger, session_id
+        nonlocal store, repo, session_id
         DB.unlink(missing_ok=True)
         store = SQLiteStore(str(DB))
         repo = PortfolioStateRepository(str(DB), store=store)
-        ledger = ExecutionLedger(str(DB), store=store)
         session_id = repo.begin_session("account-1", "digest-bench", "paper")
 
     def record_decision() -> None:
@@ -144,64 +141,6 @@ def run(report: Report) -> None:
     )
     report.add(timing)
 
-    def ledger_fill() -> None:
-        from parayabuck.core.models import (
-            Direction,
-            ExecutionEvent,
-            ExitPolicy,
-            OrderIntent,
-            OrderRole,
-            OrderState,
-        )
-
-        intent = OrderIntent(
-            signal_id="signal-1",
-            symbol="AAPL",
-            market=Market.EQUITY,
-            direction=Direction.LONG,
-            qty=10.0,
-            entry_price=100.0,
-            stop_price=95.0,
-            target_price=120.0,
-            strategy="equity_leveraged_trend_v1",
-            client_order_id="pbp-ledger-1",
-            strategy_version="2.0.0",
-            exit_policy=ExitPolicy(),
-        )
-        ledger.register_entry_order(
-            account_id="account-1",
-            order=intent,
-            broker_order_id="broker-ledger-1",
-            decision_timestamp=timestamp,
-            reference_price=100.0,
-        )
-        event = ExecutionEvent(
-            account_id="account-1",
-            client_order_id="pbp-ledger-1",
-            broker_order_id="broker-ledger-1",
-            parent_order_id=None,
-            role=OrderRole.ENTRY,
-            symbol="AAPL",
-            market=Market.EQUITY,
-            state=OrderState.FILLED,
-            requested_qty=10.0,
-            cumulative_filled_qty=10.0,
-            average_fill_price=100.5,
-            occurred_at=timestamp + timedelta(minutes=1),
-            fee=0.5,
-            activity_id="activity-ledger-1",
-        )
-        ledger.apply_execution_event(event)
-
-    timing, _ = timeit(
-        ledger_fill,
-        label="ledger entry order + execution event",
-        warmup=3,
-        runs=10,
-        before_each=fresh_db,
-    )
-    report.add(timing)
-
     def queries() -> None:
         repo.record_decision(session_id, "account-1", "digest-bench", _target(timestamp), overlay, Market.EQUITY)
         repo.high_water("account-1")
@@ -221,7 +160,6 @@ def run(report: Report) -> None:
     report.add(timing)
 
     repo.close()
-    ledger.close()
     store.release()
 
 

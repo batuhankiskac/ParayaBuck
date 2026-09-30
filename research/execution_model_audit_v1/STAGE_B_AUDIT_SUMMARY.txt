@@ -1,3 +1,14 @@
+# ARCHIVE-ONLY artifact -- captured stdout of analyze_stage_b_audit.py for the
+# 2026-09-28 Stage B run: crypto sleeve ENABLED, equity allocation 0.93,
+# ending NAV 1,141,851.32, 1290 total fills (585 of them equity), 28.98% CAGR.
+# That is the pre-crypto-removal configuration and NOT the current reference:
+# equity-only VT35 (equity 0.98) ends at NAV 1,173,537.61 (arm S1 at 1x in
+# research/paper_config_v2/RESULTS.json). The run dumps are not committed and
+# the run cannot be repeated from this checkout: crypto code/data deleted
+# (tag archive/code/crypto-sleeve-2026-09), harness modules in tag
+# archive/research/sleeve-candidates-v2-v3-2026-09, canonical v5 CSVs
+# gitignored. See research/README.md.
+
 ending 1141851.319866288 counts {'decisions': 2860, 'fills': 1290} costs {'fees': 4848.163992918968, 'slippage': 3515.328942315009, 'spread': 1757.6644711575045}
 skips 99 [('2021-09-22', 3), ('2021-12-03', 3), ('2022-04-30', 3)] ['Historical strategy batch incomplete; decision skipped: timestamp=2021-09-22T00:00:00+00:00', 'Historical strategy batch incomplete; decision skipped: timestamp=2021-09-22T00:00:00+00:00', 'Historical strategy batch incomplete; decision skipped: timestamp=2021-09-22T00:00:00+00:00']
 non-midnight skips 0 []

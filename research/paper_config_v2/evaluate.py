@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
-"""Stage B metrics and preregistered gates for paper_config_v2.
+"""ARCHIVE-ONLY -- the committed ``RESULTS.json`` cannot be regenerated here.
+
+Stage B metrics and preregistered gates for paper_config_v2.
+
+The script itself imports and runs from this checkout. Its inputs do not exist
+here: the ``S{0,1,2}_{1.0,2.0}.json.gz`` run dumps written by the archive-only
+``run_stage_b.py`` (harness modules in tag
+``archive/research/sleeve-candidates-v2-v3-2026-09``) and the gitignored
+canonical v5 equity CSVs. It also OVERWRITES the committed ``RESULTS.json``;
+do not run it casually.
+
+Usage:
 
     python research/paper_config_v2/evaluate.py --runs <dir with S{0,1,2}_{1.0,2.0}.json.gz>
 
-Writes ``research/paper_config_v2/RESULTS.json``. Metric definitions follow
-``research/sleeve_candidates_v2/evaluate.py`` (session-close NAV path).
+Metric definitions follow ``research/sleeve_candidates_v2/evaluate.py``
+(session-close NAV path).
 """
 
 from __future__ import annotations

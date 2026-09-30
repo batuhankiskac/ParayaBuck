@@ -56,3 +56,25 @@ From the session-close NAV path (same definitions as
   0.5 pp (checked at 1x and 2x). Otherwise the sweep ships with the flag off.
 
 No further arms, parameters or windows are added after results are seen.
+
+## Status (added 2026-10-01, after the results were read)
+
+The text above is unchanged: it was written before any Stage B run and is kept
+as the preregistration. Status of reproducing it today:
+
+- **The campaign cannot be re-run from this checkout.** `run_stage_b.py`
+  imports `research.physical_availability_clock_v2` and
+  `research.sleeve_candidates_v2.stage_b` (tag
+  `archive/research/sleeve-candidates-v2-v3-2026-09`) and needs the gitignored
+  canonical v5 equity CSVs; `evaluate.py` needs the `S{0,1,2}_*.json.gz` run
+  dumps, which are not committed. Both files carry the details in their
+  docstrings. Nothing in `RESULTS.json` was regenerated.
+- **The S0 reproduction requirement above is no longer satisfiable**: S0 has
+  `strategy.crypto` enabled, and the crypto code, config keys, data and tests
+  were deleted in 2026-09 (`docs/research/crypto_removal_v1.md`, tag
+  `archive/code/crypto-sleeve-2026-09`). S0 1x ended at 1,141,851.32 in
+  `RESULTS.json` -- the pre-removal audited run, not the current reference.
+- **The current reference is arm S1 at 1x**: equity-only VT35 (hold QLD while
+  QQQ's completed close is above its SMA200, vol target 0.35, equity
+  allocation 0.98), ending NAV 1,173,537.61, 615 fills, 29.35% CAGR. It was
+  adopted and re-reproduced unchanged after the crypto deletion.

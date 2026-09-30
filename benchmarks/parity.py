@@ -2,8 +2,20 @@
 
 Runs the equity leveraged trend v1 backtest (holding QQQ, 2019-2021 window)
 on the local historical CSV and hashes the authoritative outputs (equity curve,
-fills, targets, universe history, summary economics). The reference hash is expected
-to remain stable when benchmarked code changes.
+fills, targets, universe history, summary economics). The reference hash is
+expected to remain stable when benchmarked code changes.
+
+No reference fixture is committed. The checked-in ``parity_guard.json`` was a
+frozen fixture of a superseded unified-equity pipeline (different dataset and
+no ``combined_hash`` key), so ``--check`` against it was a false assurance; it
+was removed on 2026-10-01. Generate the reference from the same checkout, the
+same dataset and the same HEAD you intend to guard, and keep the result with
+the change it guards. ``--check`` refuses to run against a missing, unreadable
+or key-less reference instead of passing silently.
+
+The dataset (``data/historical/equity_1200_2016_2026.csv``) is gitignored and
+not part of the checkout; the tool exits with an explicit message when it is
+absent. Nothing here reaches the network.
 
 Usage:
     python benchmarks/parity.py                # print hashes
@@ -32,6 +44,35 @@ CONFIG = ROOT / "config" / "settings.yaml"
 
 EQUITY_START = "2019-01-01"
 EQUITY_END = "2021-12-31"
+
+
+def _require_dataset() -> None:
+    if not EQUITY_CSV.exists():
+        raise SystemExit(
+            f"parity dataset missing: {EQUITY_CSV} is gitignored and not committed. "
+            "Restore it (Alpaca SIP historical download) before running the parity reference."
+        )
+
+
+def load_reference(path: Path) -> dict[str, object]:
+    """Read a reference fixture, refusing missing or superseded ones."""
+    if not path.exists():
+        raise SystemExit(
+            f"parity reference missing: {path}. Generate one with "
+            "`python benchmarks/parity.py --out <file>` on the checkout and dataset you guard."
+        )
+    try:
+        reference = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"parity reference unreadable: {path} is not valid JSON ({exc}).") from exc
+    missing = [key for key in ("combined_hash", "equity") if key not in reference]
+    if missing:
+        raise SystemExit(
+            f"parity reference {path} is stale: missing {', '.join(missing)}. "
+            "Regenerate it with `python benchmarks/parity.py --out <file>`; a reference from a "
+            "different pipeline is not evidence for this one."
+        )
+    return reference
 
 
 def _sha(value: object) -> str:
@@ -112,7 +153,8 @@ def main() -> int:
     parser.add_argument("--check")
     args = parser.parse_args()
     if args.check:
-        reference = json.loads(Path(args.check).read_text())
+        reference = load_reference(Path(args.check))
+        _require_dataset()
         current = collect()
         match = current["combined_hash"] == reference["combined_hash"]
         print(f"combined_hash: {current['combined_hash']}")
@@ -125,6 +167,7 @@ def main() -> int:
                 if before != after:
                     print(f"  equity.{key} changed: {before} -> {after}")
         return 0 if match else 1
+    _require_dataset()
     payload = collect()
     print(json.dumps(payload, indent=2))
     if args.out:

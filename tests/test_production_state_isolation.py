@@ -63,3 +63,29 @@ def test_a_foreign_account_peak_file_never_reaches_a_broker(tmp_path: Path, monk
     operator_file = (operator_state / "paper_equity_peak.json").resolve()
     assert broker._risk_peak.peak_state_path.resolve() != operator_file
     assert RiskPeakService(paper=True).peak_state_path.resolve() != operator_file
+
+
+def test_the_isolated_test_config_never_names_production_state(isolated_config_path: Path) -> None:
+    """The config the ops tests resolve their state paths through.
+
+    A config that pointed back into the repo's ``data/runtime`` would put the
+    operator's snapshot, journal and decision ledger back in reach of every
+    ops test — silently on a fresh checkout, loudly on the trading VM.
+    """
+    from dataclasses import asdict
+
+    from parayabuck.config import load_config
+
+    def _paths(value: object) -> list[str]:
+        if isinstance(value, str):
+            return [value] if "/" in value else []
+        if isinstance(value, dict):
+            return [path for item in value.values() for path in _paths(item)]
+        if isinstance(value, (list, tuple)):
+            return [path for item in value for path in _paths(item)]
+        return []
+
+    paths = _paths(asdict(load_config(str(isolated_config_path))))
+    assert paths, "the shipped config no longer carries any path"
+    for path in paths:
+        assert protected_state_path(path) is None, path

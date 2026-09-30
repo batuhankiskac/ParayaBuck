@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
 from parayabuck.data import cache as cache_module
 from parayabuck.data.cache import WarmupCache
@@ -81,6 +82,28 @@ def _state_tree_signature() -> dict[str, tuple[int, int]]:
                 continue
             signature[str(path)] = (st.st_mtime_ns, st.st_size)
     return signature
+
+
+@pytest.fixture
+def isolated_config_path(tmp_path: Path) -> Path:
+    """The shipped config with its state paths inside ``tmp_path``.
+
+    The ops commands and the web ops read model resolve their snapshot, journal
+    and decision DB from the config, so a test that runs one of them against
+    the shipped config answers from the operator's ``data/runtime`` — present on
+    the trading VM, absent on a fresh checkout. Point those tests at this file
+    (``--config`` on the CLI, the engine manager's ``config_path`` in the web).
+    """
+    raw = yaml.safe_load((_REPO_ROOT / "config" / "settings.yaml").read_text(encoding="utf-8"))
+    raw.setdefault("runtime", {})["decision_db_path"] = str(tmp_path / "decisions.sqlite3")
+    raw["observability"] = {
+        **(raw.get("observability") or {}),
+        "snapshot_path": str(tmp_path / "health_snapshot.json"),
+        "journal_path": str(tmp_path / "observability.sqlite3"),
+    }
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    return path
 
 
 @pytest.fixture(autouse=True)

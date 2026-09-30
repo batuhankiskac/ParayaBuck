@@ -1,0 +1,175 @@
+{
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "serve_index__get"
+      }
+    },
+    "/api/account": {
+      "get": {
+        "operationId": "get_account_api_account_get"
+      }
+    },
+    "/api/backtest/run": {
+      "post": {
+        "operationId": "run_backtest_api_backtest_run_post"
+      }
+    },
+    "/api/backtest/status": {
+      "get": {
+        "operationId": "backtest_status_api_backtest_status_get"
+      }
+    },
+    "/api/control-token": {
+      "get": {
+        "operationId": "get_control_token_api_control_token_get"
+      }
+    },
+    "/api/dashboard/overview": {
+      "get": {
+        "operationId": "dashboard_overview_api_dashboard_overview_get"
+      }
+    },
+    "/api/engine/reset-safety-lock": {
+      "post": {
+        "operationId": "reset_safety_lock_api_engine_reset_safety_lock_post"
+      }
+    },
+    "/api/engine/start": {
+      "post": {
+        "operationId": "start_engine_api_engine_start_post"
+      }
+    },
+    "/api/engine/stop": {
+      "post": {
+        "operationId": "stop_engine_api_engine_stop_post"
+      }
+    },
+    "/api/equity": {
+      "get": {
+        "operationId": "dashboard_equity_api_equity_get"
+      }
+    },
+    "/api/execution": {
+      "get": {
+        "operationId": "dashboard_execution_api_execution_get"
+      }
+    },
+    "/api/explanations": {
+      "get": {
+        "operationId": "dashboard_explanations_api_explanations_get"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "dashboard_health_api_health_get"
+      }
+    },
+    "/api/live/arming/confirm": {
+      "post": {
+        "operationId": "confirm_live_arming_api_live_arming_confirm_post"
+      }
+    },
+    "/api/live/arming/request": {
+      "post": {
+        "operationId": "request_live_arming_api_live_arming_request_post"
+      }
+    },
+    "/api/live/prerequisites": {
+      "get": {
+        "operationId": "live_prerequisites_api_live_prerequisites_get"
+      }
+    },
+    "/api/metrics": {
+      "get": {
+        "operationId": "dashboard_metrics_api_metrics_get"
+      }
+    },
+    "/api/mode": {
+      "post": {
+        "operationId": "toggle_mode_api_mode_post"
+      }
+    },
+    "/api/ops/decisions/latest": {
+      "get": {
+        "operationId": "get_ops_latest_api_ops_decisions_latest_get"
+      }
+    },
+    "/api/ops/events": {
+      "get": {
+        "operationId": "get_ops_events_api_ops_events_get"
+      }
+    },
+    "/api/ops/incidents": {
+      "get": {
+        "operationId": "get_ops_incidents_api_ops_incidents_get"
+      }
+    },
+    "/api/ops/status": {
+      "get": {
+        "operationId": "get_ops_status_api_ops_status_get"
+      }
+    },
+    "/api/ops/timeline/{decision_id}": {
+      "get": {
+        "operationId": "get_ops_timeline_api_ops_timeline__decision_id__get"
+      }
+    },
+    "/api/performance": {
+      "get": {
+        "operationId": "dashboard_performance_api_performance_get"
+      }
+    },
+    "/api/risk": {
+      "get": {
+        "operationId": "dashboard_risk_api_risk_get"
+      }
+    },
+    "/api/safety/risk-epoch": {
+      "post": {
+        "operationId": "start_new_risk_epoch_api_safety_risk_epoch_post"
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "operationId": "get_settings_api_settings_get"
+      },
+      "patch": {
+        "operationId": "patch_settings_api_settings_patch"
+      },
+      "post": {
+        "operationId": "save_settings_api_settings_post"
+      }
+    },
+    "/api/status": {
+      "get": {
+        "operationId": "get_status_api_status_get"
+      }
+    },
+    "/api/universe": {
+      "get": {
+        "operationId": "dashboard_universe_api_universe_get"
+      }
+    },
+    "/api/ws-ticket": {
+      "post": {
+        "operationId": "websocket_ticket_api_ws_ticket_post"
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "healthz_healthz_get"
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "readyz_readyz_get"
+      }
+    },
+    "/tools": {
+      "get": {
+        "operationId": "serve_tools_tools_get"
+      }
+    }
+  }
+}

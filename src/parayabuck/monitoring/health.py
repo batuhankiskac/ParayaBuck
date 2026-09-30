@@ -16,8 +16,7 @@ from typing import Any
 
 from parayabuck.config import Config, load_config
 from parayabuck.markets.timeframes import is_regular_equity_time
-from parayabuck.monitoring import alerts, metrics
-from parayabuck.monitoring.journal import journal_stats
+from parayabuck.monitoring import metrics
 
 log = logging.getLogger("parayabuck.monitoring.health")
 
@@ -79,6 +78,36 @@ def _age_seconds(iso: str | None, now: datetime) -> float | None:
     if dt is None:
         return None
     return (now - dt).total_seconds()
+
+
+# A last webhook success older than this, while failures keep coming, means
+# the operator's alert channel is effectively dead.
+_ALERT_STALE_SUCCESS_SECONDS = 24 * 3600.0
+# A missing scheduled decision is the 2026-09-29 incident class: the runtime
+# stays alive and every liveness check stays green, so it must not be reported
+# as a mere degradation.
+_INTENT_CRITICAL_CODES = frozenset({"equity_decision_missing"})
+
+
+def persisted_alert_state(snapshot: object) -> dict[str, Any] | None:
+    """The engine's own ``alert_stats()`` copy inside a health snapshot.
+
+    None means the snapshot carries no alert state at all (engine never ran, or
+    an older build): the caller must then answer UNKNOWN, never OK.
+    """
+    stats = snapshot.get("alerts") if isinstance(snapshot, dict) else None
+    return stats if isinstance(stats, dict) and "webhook_configured" in stats else None
+
+
+def persisted_journal_state(snapshot: object) -> dict[str, Any] | None:
+    """The engine's own ``journal_stats()`` copy inside a health snapshot."""
+    stats = snapshot.get("observability") if isinstance(snapshot, dict) else None
+    return stats if isinstance(stats, dict) and "event_journal_written" in stats else None
+
+
+def persisted_mode(snapshot: object) -> str:
+    """The runtime mode the engine last published (empty when unknown)."""
+    return str(snapshot.get("mode") or "") if isinstance(snapshot, dict) else ""
 
 
 # ------------------------------------------------------------------
@@ -535,60 +564,185 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
         return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary=f"execution check failed: {exc}")
 
 
-def _check_alerts() -> HealthCheck:
-    try:
-        stats = alerts.alert_stats()
-        failed = int(stats.get("webhook_failed", 0) or 0)  # type: ignore[call-overload]
-        attempted = int(stats.get("webhook_attempted", 0) or 0)  # type: ignore[call-overload]
-        dropped = int(stats.get("webhook_dropped", 0) or 0)  # type: ignore[call-overload]
-        jstats = journal_stats()
-        j_dropped = int(jstats.get("event_journal_dropped", 0) or 0)  # type: ignore[call-overload]
-        total_dropped = dropped + j_dropped
-        if failed > 0 and attempted > 0:
-            ratio = failed / max(1, attempted)
-            if ratio > 0.5 and attempted >= 3:
-                return HealthCheck(
-                    code="alerts",
-                    status=HealthStatus.DEGRADED,
-                    summary=f"webhook failing {failed}/{attempted} ({ratio:.0%})",
-                    observed={"failed": failed, "attempted": attempted},
-                    action="check webhook URL / network",
-                )
-            return HealthCheck(
-                code="alerts",
-                status=HealthStatus.DEGRADED,
-                summary=f"webhook failures {failed}/{attempted}",
-                observed={"failed": failed, "attempted": attempted},
-            )
-        if total_dropped > 0:
-            return HealthCheck(
-                code="alerts",
-                status=HealthStatus.DEGRADED,
-                summary=f"alerts dropped {total_dropped}",
-                observed={"dropped": total_dropped},
-            )
-        return HealthCheck(code="alerts", status=HealthStatus.OK, summary="webhook OK")
-    except Exception as exc:
-        return HealthCheck(code="alerts", status=HealthStatus.UNKNOWN, summary=f"alert check failed: {exc}")
+def _check_alerts(
+    alert_state: dict[str, Any] | None,
+    journal_state: dict[str, Any] | None,
+    *,
+    mode: str = "",
+    now: datetime | None = None,
+) -> HealthCheck:
+    """Webhook delivery, as reported by the engine — never by this process.
 
-
-def _check_observability() -> HealthCheck:
-    try:
-        stats = journal_stats()
-        failed = int(stats.get("event_journal_failed", 0) or 0)  # type: ignore[call-overload]
-        dropped = int(stats.get("event_journal_dropped", 0) or 0)  # type: ignore[call-overload]
-        if failed > 5 or dropped > 10:
-            return HealthCheck(
-                code="observability",
-                status=HealthStatus.DEGRADED,
-                summary=f"journal degraded failed={failed} dropped={dropped}",
-                observed=stats,
-            )
-        return HealthCheck(code="observability", status=HealthStatus.OK, summary="journal healthy")
-    except Exception as exc:
+    ``alert_stats()``/``journal_stats()`` are process-local. An operator
+    surface (the CLI, the web API) runs in its own process and would answer
+    "webhook OK" from counters that never saw an alert, hiding a missing or
+    rejected webhook. The engine persists its own copy into the health
+    snapshot; that copy is the only honest reading. No copy means no reading
+    at all, which is UNKNOWN — never OK.
+    """
+    if alert_state is None:
         return HealthCheck(
-            code="observability", status=HealthStatus.UNKNOWN, summary=f"observability check failed: {exc}"
+            code="alerts",
+            status=HealthStatus.UNKNOWN,
+            summary="no alert state persisted by the engine — delivery cannot be verified",
+            action="start the engine, or refresh once it has written a health snapshot",
         )
+    now = now or datetime.now(UTC)
+    failed = int(alert_state.get("webhook_failed", 0) or 0)
+    attempted = int(alert_state.get("webhook_attempted", 0) or 0)
+    dropped = int(alert_state.get("webhook_dropped", 0) or 0)
+    j_dropped = int((journal_state or {}).get("event_journal_dropped", 0) or 0)
+    total_dropped = dropped + j_dropped
+    if not alert_state.get("webhook_configured"):
+        return HealthCheck(
+            code="alerts",
+            status=HealthStatus.DEGRADED,
+            summary=f"no alert webhook configured in {mode or 'the running mode'} — alerts reach the log only",
+            observed={"mode": mode},
+            action="set alerting.webhook_url (or PARAYABUCK_ALERT_WEBHOOK_URL) and restart the engine",
+        )
+    if failed > 0 and attempted > 0:
+        ratio = failed / max(1, attempted)
+        last_success = alert_state.get("webhook_last_success_at")
+        success_age = _age_seconds(str(last_success) if last_success else None, now)
+        stale = success_age is None or success_age > _ALERT_STALE_SUCCESS_SECONDS
+        summary = (
+            f"webhook failing {failed}/{attempted} ({ratio:.0%})"
+            if ratio > 0.5 and attempted >= 3
+            else f"webhook failures {failed}/{attempted}"
+        )
+        if stale:
+            summary += f"; last success {last_success or 'never'}"
+        return HealthCheck(
+            code="alerts",
+            status=HealthStatus.DEGRADED,
+            summary=summary,
+            observed={"failed": failed, "attempted": attempted, "webhook_last_success_at": last_success},
+            action="check webhook URL / network",
+        )
+    if total_dropped > 0:
+        return HealthCheck(
+            code="alerts",
+            status=HealthStatus.DEGRADED,
+            summary=f"alerts dropped {total_dropped}",
+            observed={"dropped": total_dropped},
+        )
+    return HealthCheck(code="alerts", status=HealthStatus.OK, summary="webhook OK")
+
+
+def _check_observability(journal_state: dict[str, Any] | None) -> HealthCheck:
+    """The event journal as reported by the engine process."""
+    if journal_state is None:
+        return HealthCheck(
+            code="observability",
+            status=HealthStatus.UNKNOWN,
+            summary="no journal state persisted by the engine",
+        )
+    failed = int(journal_state.get("event_journal_failed", 0) or 0)
+    dropped = int(journal_state.get("event_journal_dropped", 0) or 0)
+    if failed > 5 or dropped > 10:
+        return HealthCheck(
+            code="observability",
+            status=HealthStatus.DEGRADED,
+            summary=f"journal degraded failed={failed} dropped={dropped}",
+            observed=journal_state,
+        )
+    return HealthCheck(code="observability", status=HealthStatus.OK, summary="journal healthy")
+
+
+def _check_intent_watchdog(health_snapshot: dict[str, Any] | None) -> HealthCheck:
+    """The intent-vs-reality watchdog state the runtime published.
+
+    A missed scheduled decision keeps the runtime alive and every liveness
+    check green (2026-09-25..29), so this is the only surface that says the
+    strategy stopped acting while the process looked healthy.
+    """
+    watchdog = health_snapshot.get("intent_watchdog") if isinstance(health_snapshot, dict) else None
+    if not isinstance(watchdog, dict) or not watchdog:
+        return HealthCheck(
+            code="intent_watchdog",
+            status=HealthStatus.UNKNOWN,
+            summary="no intent watchdog state in the health snapshot",
+        )
+    if watchdog.get("enabled") is False:
+        return HealthCheck(code="intent_watchdog", status=HealthStatus.OK, summary="watchdog disabled")
+    if not watchdog.get("evaluated_at"):
+        return HealthCheck(
+            code="intent_watchdog",
+            status=HealthStatus.UNKNOWN,
+            summary="watchdog has not evaluated yet",
+        )
+    codes = [str(code) for code in (watchdog.get("degraded_reasons") or [])]
+    if not codes:
+        return HealthCheck(
+            code="intent_watchdog",
+            status=HealthStatus.OK,
+            summary=f"no alarms (evaluated {watchdog.get('evaluated_at')})",
+        )
+    critical = sorted(code for code in codes if code in _INTENT_CRITICAL_CODES)
+    summary = "active alarms: " + ", ".join(codes)
+    if critical:
+        return HealthCheck(
+            code="intent_watchdog",
+            status=HealthStatus.CRITICAL,
+            summary=summary,
+            observed=codes,
+            action="check the decision schedule and the engine journal for the named session",
+        )
+    return HealthCheck(code="intent_watchdog", status=HealthStatus.DEGRADED, summary=summary, observed=codes)
+
+
+# Signal cross-check outcomes (portfolio.signal_cross_check STATUS_* values).
+_CROSS_CHECK_AGREE = "agree"
+
+
+def _check_signal_cross_check(health_snapshot: dict[str, Any] | None) -> HealthCheck:
+    """IEX-stream vs SIP-daily cross-check of the last equity decision."""
+    cross_check = health_snapshot.get("signal_cross_check") if isinstance(health_snapshot, dict) else None
+    if not isinstance(cross_check, dict) or not cross_check:
+        return HealthCheck(
+            code="signal_cross_check",
+            status=HealthStatus.UNKNOWN,
+            summary="no signal cross-check state in the health snapshot",
+        )
+    if cross_check.get("enabled") is False:
+        return HealthCheck(code="signal_cross_check", status=HealthStatus.OK, summary="cross-check disabled")
+    # A session still waiting for its SIP daily bar must not erase the last
+    # completed comparison — that would make every post-close embargo window
+    # read UNKNOWN. Only a runtime that has never finished one is UNKNOWN.
+    pending = cross_check.get("pending")
+    pending_note = (
+        "; waiting for the SIP daily bar: " + ", ".join(sorted(str(s) for s in pending))
+        if isinstance(pending, dict) and pending
+        else ""
+    )
+    last = cross_check.get("last")
+    if not isinstance(last, dict) or not last:
+        return HealthCheck(
+            code="signal_cross_check",
+            status=HealthStatus.UNKNOWN,
+            summary="no session cross-checked since start",
+        )
+    status = str(last.get("status") or "unknown")
+    session = last.get("session_date")
+    if status == _CROSS_CHECK_AGREE and not last.get("hold"):
+        return HealthCheck(
+            code="signal_cross_check",
+            status=HealthStatus.OK,
+            summary=f"sources agree on the trend (session {session}){pending_note}",
+        )
+    detail = f"session {session}, status {status}"
+    if last.get("hold"):
+        detail += ", position held"
+    if last.get("reason"):
+        detail += f" ({last.get('reason')})"
+    return HealthCheck(
+        code="signal_cross_check",
+        status=HealthStatus.DEGRADED,
+        summary=detail,
+        observed={"session_date": session, "status": status},
+        action="confirm the IEX and SIP daily bars agree before relying on the position",
+    )
 
 
 def evaluate_health(
@@ -639,8 +793,17 @@ def evaluate_health(
     checks.append(_check_market_halts(health_snapshot))
     checks.append(_check_risk(database_path, health_snapshot))
     checks.append(_check_execution(database_path))
-    checks.append(_check_alerts())
-    checks.append(_check_observability())
+    checks.append(_check_intent_watchdog(health_snapshot))
+    checks.append(_check_signal_cross_check(health_snapshot))
+    checks.append(
+        _check_alerts(
+            persisted_alert_state(health_snapshot),
+            persisted_journal_state(health_snapshot),
+            mode=persisted_mode(health_snapshot),
+            now=now,
+        )
+    )
+    checks.append(_check_observability(persisted_journal_state(health_snapshot)))
 
     # Derive overall
     statuses = [c.status for c in checks]
@@ -716,4 +879,12 @@ def _derive_trading_state(health_snapshot: dict[str, Any] | None, checks: list[H
     return TradingState.UNKNOWN
 
 
-__all__ = ["HealthCheck", "HealthStatus", "TradingState", "evaluate_health"]
+__all__ = [
+    "HealthCheck",
+    "HealthStatus",
+    "TradingState",
+    "evaluate_health",
+    "persisted_alert_state",
+    "persisted_journal_state",
+    "persisted_mode",
+]

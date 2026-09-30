@@ -402,9 +402,19 @@ def _now_iso() -> str:
 
 
 def alert_stats() -> dict[str, object]:
-    """Process-local delivery counters (webhook sends and throttled drops)."""
+    """Delivery counters plus whether a webhook would actually be used.
+
+    Process-local: the counters describe THIS process's sends. An operator
+    surface running in a different process (the CLI, the web server) must read
+    the snapshot the engine persists instead — see
+    ``monitoring.snapshot.build_snapshot`` — or it reports its own empty
+    counters as healthy.
+    """
+    _discover_settings()
     with _lock:
+        webhook_url = str(_settings.get("webhook_url", "")).strip()
         return {
+            "webhook_configured": bool(_settings.get("enabled")) and bool(webhook_url),
             "suppressed": _suppressed_count,
             "delivered": dict(_delivered_counts),
             "webhook_sent": _webhook_count,

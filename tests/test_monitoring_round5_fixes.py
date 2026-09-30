@@ -13,10 +13,14 @@ import pytest
 
 from parayabuck.config import Config
 from parayabuck.execution.ledger import ExecutionLedger
-from parayabuck.monitoring import health as health_module
+from parayabuck.monitoring import snapshot as snapshot_module
 from parayabuck.monitoring.health import HealthStatus, _check_risk, evaluate_health
 from parayabuck.monitoring.snapshot import build_snapshot, write_snapshot_atomic
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
+
+# What the engine persists into the snapshot: a configured, working webhook.
+_PERSISTED_ALERTS = {"webhook_configured": True, "webhook_attempted": 3, "webhook_failed": 0, "webhook_dropped": 0}
+_PERSISTED_JOURNAL = {"event_journal_written": 12, "event_journal_failed": 0, "event_journal_dropped": 0}
 
 
 def test_unrestored_restart_limit_incident_is_not_a_risk_block(tmp_path: Path) -> None:
@@ -36,9 +40,9 @@ def test_unrestored_restart_limit_incident_is_not_a_risk_block(tmp_path: Path) -
 
 
 def test_market_entry_halt_makes_overall_degraded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # process-local alert/journal counters are not this test's subject
-    monkeypatch.setattr(health_module.alerts, "alert_stats", dict)
-    monkeypatch.setattr(health_module, "journal_stats", dict)
+    # the engine-reported alert/journal copies are not this test's subject
+    monkeypatch.setattr(snapshot_module, "alert_stats", lambda: _PERSISTED_ALERTS)
+    monkeypatch.setattr(snapshot_module, "journal_stats", lambda: _PERSISTED_JOURNAL)
     db = tmp_path / "parayabuck.sqlite3"
     ExecutionLedger(str(db)).close()
     PortfolioStateRepository(db).close()
@@ -55,6 +59,12 @@ def test_market_entry_halt_makes_overall_degraded(tmp_path: Path, monkeypatch: p
         "last_reconciliation_at": fresh,
         "entry_risk_latch": {"equity": None},
         "signal_adjustment": {"healthy": True, "stale": False},
+        "intent_watchdog": {"enabled": True, "evaluated_at": fresh, "alarms": [], "degraded_reasons": []},
+        "signal_cross_check": {
+            "enabled": True,
+            "last": {"status": "agree", "session_date": "2026-09-28"},
+            "pending": {},
+        },
     }
     path = tmp_path / "health_snapshot.json"
 

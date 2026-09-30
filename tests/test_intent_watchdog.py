@@ -132,6 +132,38 @@ def test_equity_cash_target_or_unknown_account_never_under_target() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# (c) equity target exceeded — a cash decision whose exit never filled
+# --------------------------------------------------------------------------- #
+
+
+def test_failed_exit_raises_over_target_after_the_fill_window() -> None:
+    """A DAY SELL that expired leaves the whole position; nothing under-target
+    catches it because the decision targeted cash (weight 0)."""
+    cash = _decision(_utc(2026, 9, 28, 13, 30), {})
+    still_holding = _account((_qld(98_000.0),))
+    # Inside the fill window the exit has not expired yet.
+    assert evaluate_equity(_utc(2026, 9, 29, 13, 59), cash, still_holding, running_since=None, settings=_SETTINGS) == []
+    alarms = evaluate_equity(_utc(2026, 9, 29, 14, 5), cash, still_holding, running_since=None, settings=_SETTINGS)
+    assert _codes(alarms) == ["equity_position_over_target"]
+    assert "QLD held 98.0% vs target 0.0%" in alarms[0].message
+
+
+def test_over_target_ignores_exit_dust_and_the_untouched_target() -> None:
+    cash = _decision(_utc(2026, 9, 28, 13, 30), {})
+    late = _utc(2026, 9, 29, 14, 5)
+    # A partially filled exit leaves rounding dust, not a position.
+    assert evaluate_equity(late, cash, _account((_qld(500.0),)), running_since=None, settings=_SETTINGS) == []
+    # A target that was met is not "over".
+    invested = _decision(_utc(2026, 9, 28, 13, 30), {"QLD": 0.8})
+    assert evaluate_equity(late, invested, _account((_qld(80_000.0),)), running_since=None, settings=_SETTINGS) == []
+
+
+def test_over_target_never_fires_without_an_account() -> None:
+    cash = _decision(_utc(2026, 9, 28, 13, 30), {})
+    assert evaluate_equity(_utc(2026, 9, 29, 14, 5), cash, None, running_since=None, settings=_SETTINGS) == []
+
+
+# --------------------------------------------------------------------------- #
 # Runtime wiring: edge-triggered alerts + health surface, never trading gates
 # --------------------------------------------------------------------------- #
 

@@ -426,7 +426,16 @@
     // ---------- system ----------
     function renderHealth(h) {
       if (!h || h.unavailable) return;
-      setText("healthBadge", h.healthy === true ? "Sağlıklı" : h.healthy === false ? "Sorunlu" : (h.engine_state || "—"), h.healthy === true ? "badge ok" : h.healthy === false ? "badge bad" : "badge");
+      // Intent-watchdog alarms outrank the liveness flag: the runtime can be
+      // alive and healthy while a session went undecided (/readyz says 503).
+      const degraded = (h.degraded_reasons || []).map(String).filter(Boolean);
+      const badge = byId("healthBadge");
+      if (degraded.length) {
+        setText("healthBadge", "Sorunlu · " + degraded.join(", "), "badge bad");
+      } else {
+        setText("healthBadge", h.healthy === true ? "Sağlıklı" : h.healthy === false ? "Sorunlu" : (h.engine_state || "—"), h.healthy === true ? "badge ok" : h.healthy === false ? "badge bad" : "badge");
+      }
+      if (badge) badge.title = degraded.length ? "Niyet kontrolü uyarıları: " + degraded.join(", ") : "";
       const markets = h.markets || {};
       const dataOk = (markets.equity || {}).stream_healthy !== false;
       setText("healthData", dataOk ? "Güncel" : "Gecikme var", dataOk ? "pos" : "neg");

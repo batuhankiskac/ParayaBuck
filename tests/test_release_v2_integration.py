@@ -39,6 +39,7 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioRuntimeResult,
     PortfolioStateRepository,
 )
+from tests.helpers import make_broker
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -144,17 +145,15 @@ class _FakeAlpacaClient:
 
 
 def _broker(client: _FakeAlpacaClient, repo: PortfolioStateRepository, tmp_path: Path) -> AlpacaBroker:
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker.ledger = ExecutionLedger(str(tmp_path / "execution.sqlite3"))
-    broker.portfolio_owned_quantities = lambda: repo.owned_quantities(broker.account_id)
-    broker.portfolio_open_orders = lambda: repo.open_orders(broker.account_id)
+    broker = make_broker(
+        tmp_path,
+        client=client,
+        ledger=ExecutionLedger(str(tmp_path / "execution.sqlite3")),
+        peak_state_path=tmp_path / "peak.json",
+        portfolio_owned_quantities=lambda: repo.owned_quantities("acct"),
+        portfolio_open_orders=lambda: repo.open_orders("acct"),
+    )
     broker._account_id = "acct"
-    broker._client = client
-    broker._asset_cache = {}
-    broker._symbol_exit_locks = {}
-    broker._peak_equity = 0.0
-    broker._peak_state_path = Path(tmp_path) / "peak.json"
-    broker._stop_state_path = Path(tmp_path) / "stops.json"
     return broker
 
 

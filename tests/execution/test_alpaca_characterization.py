@@ -22,34 +22,20 @@ from parayabuck.execution.alpaca import (
 from parayabuck.execution.alpaca_account import AccountService
 from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.ledger import ExecutionLedger
+from tests.helpers import make_broker
 
 
 def _broker_with_fake(tmp_path: Path, fake: FakeTradingClient, *, with_ledger: bool = True) -> AlpacaBroker:
-    # Use the same construction as production but inject fake client
-    ledger = None
-    if with_ledger:
-        ledger = ExecutionLedger(str(tmp_path / "exec.sqlite3"))
-    # Create broker via __new__ to avoid TradingClient construction
-    broker = AlpacaBroker.__new__(AlpacaBroker)  # type: ignore[call-arg]
-    # Minimal init of attributes that __init__ would set
-    broker._client = fake  # type: ignore[attr-defined]
-    broker._paper = True
-    broker._peak_state_path = tmp_path / "peak.json"
-    broker._asset_cache = {}
-    broker.ledger = ledger
-    broker._peak_epoch = 0
-    broker._peak_equity = 0.0
-    broker._peak_account_id = None
-    broker._peak_reconciled = False
-    broker.portfolio_owned_quantities = lambda: {}
-    broker.portfolio_open_orders = lambda: []
-    broker.portfolio_fill_recovered = None
-    broker.portfolio_flat_reconciled = None
-    broker._account_id = ""
-    broker._snapshot_cache = None
-    broker._snapshot_cached_at = None
-    # Patch session timeout no-op for fake
-    return broker
+    """Construct the real broker so every assertion below reaches the
+    production services rather than a facade fallback copy."""
+    return make_broker(
+        tmp_path,
+        client=fake,
+        ledger=ExecutionLedger(str(tmp_path / "exec.sqlite3")) if with_ledger else None,
+        peak_state_path=tmp_path / "peak.json",
+        portfolio_owned_quantities=lambda: {},
+        portfolio_open_orders=lambda: [],
+    )
 
 
 # --- Account ---

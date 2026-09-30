@@ -30,7 +30,7 @@ from parayabuck.core.models import (
 )
 from parayabuck.data.aggregator import TimeframeAggregator
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
-from parayabuck.execution.alpaca import AlpacaBroker
+from parayabuck.execution.alpaca_reconciliation import ReconciliationService
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
 from parayabuck.markets.symbols import (
     canonical_symbol,
@@ -41,7 +41,7 @@ from parayabuck.runtime import EngineRuntime, WorkerHealth, _Event, _EventQueue,
 from parayabuck.runtime_state import RuntimeMarketState
 from parayabuck.utils import is_crypto
 from parayabuck.web import server
-from tests.helpers import apply_entry_fill
+from tests.helpers import apply_entry_fill, make_broker
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -530,13 +530,14 @@ def test_account_failure_does_not_drop_ingested_bar() -> None:
     assert state.bars.get("AAPL", "5m") == [bar]
 
 
-def test_external_position_is_not_modified_by_default() -> None:
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(
-        _request=lambda *_args, **_kwargs: [],
-        get=lambda *_args, **_kwargs: [],
+def test_external_position_is_not_modified_by_default(tmp_path: Path) -> None:
+    broker = make_broker(
+        tmp_path,
+        client=SimpleNamespace(
+            _request=lambda *_args, **_kwargs: [],
+            get=lambda *_args, **_kwargs: [],
+        ),
     )
-    broker.ledger = None
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {},
         managed_entries_for_account=lambda _account: (),
@@ -556,7 +557,7 @@ def test_external_position_is_not_modified_by_default() -> None:
     broker.reconcile()
 
 
-def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot() -> None:
+def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot(tmp_path: Path) -> None:
     owned = ManagedPosition(
         "XLE",
         Market.EQUITY,
@@ -571,9 +572,10 @@ def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot() -> 
         "open",
     )
     closed: list[str] = []
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: [])
-    broker.ledger = None
+    broker = make_broker(
+        tmp_path,
+        client=SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: []),
+    )
     broker._account_id = "acct"
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {"XLE": owned},
@@ -597,7 +599,7 @@ def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot() -> 
     assert closed == ["parayabuck-entry"]
 
 
-def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists() -> None:
+def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(tmp_path: Path) -> None:
     submitted: list[float] = []
     closed: list[str] = []
     owned = ManagedPosition(
@@ -613,9 +615,10 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
         110,
         "open",
     )
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: [])
-    broker.ledger = None
+    broker = make_broker(
+        tmp_path,
+        client=SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: []),
+    )
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {"XLE": owned},
         managed_entries_for_account=lambda _account: [owned],
@@ -643,7 +646,6 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
         ),
     )
     broker._has_protective_order = lambda *_args: False
-    broker._available_position_qty = lambda _symbol, qty, **_kwargs: qty
     broker._submit_stop = lambda _symbol, _market, qty, *_args, **_kwargs: submitted.append(qty) or True
     broker.reconcile()
     assert submitted == [pytest.approx(10)]
@@ -1137,14 +1139,16 @@ def test_fill_activity_recovery_merges_activities_of_one_order(tmp_path: Path) -
             "transaction_time": "2026-01-02T15:01:00+00:00",
         },
     ]
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(
-        _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+    broker = make_broker(
+        tmp_path,
+        ledger=ledger,
+        client=SimpleNamespace(
+            _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+        ),
     )
-    broker.ledger = ledger
     broker._account_id = "acct"
 
-    assert broker._reconcile_fill_activity_fees() is True
+    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
 
     rows = ledger.connection.execute(
         """SELECT client_order_id, broker_order_id, cumulative_filled_qty

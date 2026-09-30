@@ -1,7 +1,7 @@
 """Recovery of fills made by orders that then died, and FILL-activity backfill rows.
 
-Synthetic ``__new__`` brokers over ``tmp_path`` SQLite state: no network, no
-credentials, no production paths.
+Real brokers over ``tmp_path`` SQLite state: no network, no credentials, no
+production paths.
 """
 
 from __future__ import annotations
@@ -17,11 +17,13 @@ import pytest
 from parayabuck.core.models import Market
 from parayabuck.execution import telemetry
 from parayabuck.execution.alpaca import AlpacaBroker
+from parayabuck.execution.alpaca_reconciliation import ReconciliationService
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide, RiskOverlayDecision
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 from parayabuck.portfolio.runtime_service import PortfolioRuntime
+from tests.helpers import make_broker
 
 _DECISION_AT = datetime(2026, 1, 2, 14, 0, tzinfo=UTC)
 
@@ -57,9 +59,8 @@ def _record(repo: PortfolioStateRepository, decision_id: str, client_order_id: s
     )
 
 
-def _broker(repo: PortfolioStateRepository, broker_order: Any) -> AlpacaBroker:
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(get_order_by_client_id=lambda _cid: broker_order)  # type: ignore[attr-defined]
+def _broker(tmp_path: Path, repo: PortfolioStateRepository, broker_order: Any) -> AlpacaBroker:
+    broker = make_broker(tmp_path, client=SimpleNamespace(get_order_by_client_id=lambda _cid: broker_order))
 
     def recover(
         client_order_id: str,
@@ -113,7 +114,7 @@ def _fills(repo: PortfolioStateRepository, client_order_id: str) -> list[tuple[A
 def test_crashed_buy_that_partially_filled_then_died_books_its_fill(tmp_path: Path) -> None:
     repo, decision_id = _repository(tmp_path)
     _record(repo, decision_id, "pb-buy", PortfolioOrderSide.BUY)
-    broker = _broker(repo, _dead_partial("pb-buy", "buy"))
+    broker = _broker(tmp_path, repo, _dead_partial("pb-buy", "buy"))
 
     assert broker.resolve_portfolio_submission("pb-buy", "") == ("canceled", "b-1")
 
@@ -137,7 +138,7 @@ def test_stale_sell_that_partially_filled_then_died_books_its_fill(tmp_path: Pat
         unrealized_pnl=0.0,
     )
     _record(repo, decision_id, "pb-sell", PortfolioOrderSide.SELL)
-    broker = _broker(repo, _dead_partial("pb-sell", "sell"))
+    broker = _broker(tmp_path, repo, _dead_partial("pb-sell", "sell"))
     broker.portfolio_open_orders = lambda: repo.open_orders("acct")
 
     # The order died, so the remainder still falls through to the adjustment.
@@ -150,7 +151,7 @@ def test_stale_sell_that_partially_filled_then_died_books_its_fill(tmp_path: Pat
 def test_recovered_terminal_fill_is_not_booked_twice_by_a_later_delivery(tmp_path: Path) -> None:
     repo, decision_id = _repository(tmp_path)
     _record(repo, decision_id, "pb-buy", PortfolioOrderSide.BUY)
-    broker = _broker(repo, _dead_partial("pb-buy", "buy"))
+    broker = _broker(tmp_path, repo, _dead_partial("pb-buy", "buy"))
 
     broker.resolve_portfolio_submission("pb-buy", "")
     broker.resolve_portfolio_submission("pb-buy", "")
@@ -176,7 +177,7 @@ def test_dead_order_without_fill_books_nothing(tmp_path: Path) -> None:
     repo, decision_id = _repository(tmp_path)
     _record(repo, decision_id, "pb-buy", PortfolioOrderSide.BUY)
     order = SimpleNamespace(id="b-1", status="expired", filled_qty="0", filled_avg_price=None)
-    broker = _broker(repo, order)
+    broker = _broker(tmp_path, repo, order)
 
     assert broker.resolve_portfolio_submission("pb-buy", "") == ("expired", "b-1")
     assert _fills(repo, "pb-buy") == []
@@ -189,7 +190,7 @@ def test_resolved_crashed_submission_keeps_the_broker_order_id(tmp_path: Path) -
     repo, decision_id = _repository(tmp_path)
     _record(repo, decision_id, "pb-buy", PortfolioOrderSide.BUY)
     runtime = PortfolioRuntime.__new__(PortfolioRuntime)
-    runtime.broker = _broker(repo, _dead_partial("pb-buy", "buy"))
+    runtime.broker = _broker(tmp_path, repo, _dead_partial("pb-buy", "buy"))
     runtime.repository = repo
 
     rows = runtime._resolve_stuck_submission_rows(decision_id, repo.orders_for_decision(decision_id, side="buy"), "buy")
@@ -225,12 +226,9 @@ def _activity(activity_id: str, qty: str, price: str, at: str, *, commission: st
     }
 
 
-def _backfill(ledger: ExecutionLedger, activities: list[dict[str, str]]) -> None:
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker.__dict__["_client_adapter"] = _ActivityAdapter(activities)
-    broker.ledger = ledger
-    broker._account_id = "acct"
-    assert broker._reconcile_fill_activity_fees() is True
+def _backfill(tmp_path: Path, ledger: ExecutionLedger, activities: list[dict[str, str]]) -> None:
+    broker = make_broker(tmp_path, ledger=ledger, client_adapter=_ActivityAdapter(activities))
+    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
 
 
 def test_backfilled_portfolio_sell_row_is_terminal_quiet_and_not_open(
@@ -240,7 +238,7 @@ def test_backfilled_portfolio_sell_row_is_terminal_quiet_and_not_open(
     ledger = ExecutionLedger(str(db))
     try:
         with caplog.at_level(logging.WARNING, logger="parayabuck.execution.ledger"):
-            _backfill(ledger, [_activity("a1", "5", "100", "2026-09-01T15:00:00+00:00")])
+            _backfill(tmp_path, ledger, [_activity("a1", "5", "100", "2026-09-01T15:00:00+00:00")])
         row = ledger.connection.execute(
             "SELECT terminal_state, cumulative_filled_qty FROM orders WHERE client_order_id=?",
             ("alpaca-fill-activity-b-sell",),
@@ -260,8 +258,8 @@ def test_backfill_sums_every_partial_sell_fill_and_replays_idempotently(tmp_path
         _activity("a2", "2", "105", "2026-09-01T15:00:01+00:00", commission="0.2"),
     ]
     try:
-        _backfill(ledger, activities)
-        _backfill(ledger, activities)
+        _backfill(tmp_path, ledger, activities)
+        _backfill(tmp_path, ledger, activities)
         row = ledger.connection.execute(
             "SELECT cumulative_filled_qty, average_fill_price, actual_fee FROM orders WHERE client_order_id=?",
             ("alpaca-fill-activity-b-sell",),
@@ -294,7 +292,7 @@ def test_activity_fee_already_observed_by_the_portfolio_journal_counts_once(tmp_
     )
     ledger = ExecutionLedger(str(db))
     try:
-        _backfill(ledger, [_activity("a1", "5", "100", "2026-09-01T15:00:00+00:00", commission="0.5")])
+        _backfill(tmp_path, ledger, [_activity("a1", "5", "100", "2026-09-01T15:00:00+00:00", commission="0.5")])
     finally:
         ledger.close()
 
@@ -321,7 +319,7 @@ def test_activity_fee_is_kept_when_the_portfolio_journal_saw_no_fee(tmp_path: Pa
     )
     ledger = ExecutionLedger(str(db))
     try:
-        _backfill(ledger, [_activity("a1", "5", "100", "2026-09-01T15:00:00+00:00", commission="0.5")])
+        _backfill(tmp_path, ledger, [_activity("a1", "5", "100", "2026-09-01T15:00:00+00:00", commission="0.5")])
     finally:
         ledger.close()
 
@@ -347,6 +345,7 @@ def test_backfilled_portfolio_sell_counts_as_one_order(tmp_path: Path) -> None:
     ledger = ExecutionLedger(str(db))
     try:
         _backfill(
+            tmp_path,
             ledger,
             [
                 _activity("a1", "5", "100", "2026-09-01T15:00:00+00:00"),

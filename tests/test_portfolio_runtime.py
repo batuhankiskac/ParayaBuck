@@ -34,6 +34,7 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioStateRepository,
     configuration_digest,
 )
+from tests.helpers import make_broker
 
 
 class _Broker:
@@ -362,35 +363,33 @@ class _FakeAlpacaClient:
 def _portfolio_broker(
     client: _FakeAlpacaClient,
     repo: PortfolioStateRepository,
-    tmp_path=None,
+    tmp_path: Path,
     *,
     with_ledger: bool = True,
 ) -> AlpacaBroker:
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    ledger_path = tmp_path / "execution.sqlite3" if tmp_path is not None else None
-    broker.ledger = ExecutionLedger(str(ledger_path)) if with_ledger and ledger_path is not None else None
-    broker.portfolio_owned_quantities = lambda: repo.owned_quantities(broker.account_id)
-    broker.portfolio_open_orders = lambda: repo.open_orders(broker.account_id)
-    broker.portfolio_fill_recovered = (
-        lambda client_id, broker_id, qty, price, at, activity_id, fee, *, status="filled": repo.apply_trade_update(
-            client_order_id=client_id,
-            broker_order_id=broker_id,
-            status=status,
-            cumulative_filled_quantity=qty,
-            average_fill_price=price,
-            occurred_at=at,
-            activity_id=activity_id,
-            fee=fee,
-            realized_pnl=0.0,
-            unrealized_pnl=0.0,
-        )
+    broker = make_broker(
+        tmp_path,
+        client=client,
+        ledger=ExecutionLedger(str(tmp_path / "execution.sqlite3")) if with_ledger else None,
+        peak_state_path=tmp_path / "peak.json",
+        portfolio_owned_quantities=lambda: repo.owned_quantities("acct"),
+        portfolio_open_orders=lambda: repo.open_orders("acct"),
+        portfolio_fill_recovered=(
+            lambda client_id, broker_id, qty, price, at, activity_id, fee, *, status="filled": repo.apply_trade_update(
+                client_order_id=client_id,
+                broker_order_id=broker_id,
+                status=status,
+                cumulative_filled_quantity=qty,
+                average_fill_price=price,
+                occurred_at=at,
+                activity_id=activity_id,
+                fee=fee,
+                realized_pnl=0.0,
+                unrealized_pnl=0.0,
+            )
+        ),
     )
     broker._account_id = "acct"
-    broker._client = client
-    broker._asset_cache = {}
-    broker._symbol_exit_locks = {}
-    broker._peak_equity = 0.0
-    broker._peak_state_path = Path(tmp_path) / "peak.json" if tmp_path is not None else Path("/tmp/peak.json")
     return broker
 
 

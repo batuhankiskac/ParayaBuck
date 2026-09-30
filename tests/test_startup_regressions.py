@@ -17,9 +17,10 @@ from types import SimpleNamespace
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.aggregator import TimeframeAggregator
-from parayabuck.execution.alpaca import AlpacaBroker
+from parayabuck.execution.alpaca_reconciliation import ReconciliationService
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.runtime import EngineRuntime
+from tests.helpers import make_broker
 
 
 def _equity_runtime() -> EngineRuntime:
@@ -116,14 +117,16 @@ def test_fill_activity_recovery_does_not_rebook_existing_broker_order(
             "transaction_time": "2026-01-02T15:00:00+00:00",
         }
     ]
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(
-        _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+    broker = make_broker(
+        tmp_path,
+        ledger=ledger,
+        client=SimpleNamespace(
+            _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+        ),
     )
-    broker.ledger = ledger
     broker._account_id = "acct"
 
-    assert broker._reconcile_fill_activity_fees() is True
+    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
     # Still exactly one row for the broker order; the fee was recorded.
     rows = ledger.connection.execute(
         "SELECT client_order_id FROM orders WHERE broker_order_id='broker-exit'"

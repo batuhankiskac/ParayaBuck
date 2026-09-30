@@ -340,6 +340,11 @@ class ObservabilityConfig:
 
     Alerting (``alerting``) remains notification delivery; observability is
     local visibility/history. Keep knobs minimal.
+
+    Every field here is applied, not just validated: the runtime constructor
+    hands this block to ``journal.configure_global_journal`` (journal_path,
+    event_retention_days, event_max_events, event_queue_size) and builds the
+    snapshot writer from it (snapshot_path, snapshot_interval_seconds).
     """
 
     enabled: bool = True

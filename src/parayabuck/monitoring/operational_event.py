@@ -52,7 +52,6 @@ _CRITICAL_KINDS: frozenset[str] = frozenset(
         "runtime_stopped_unexpected",
         "circuit_breaker",
         "drawdown_halt",
-        "observability_degraded",
     }
 )
 
@@ -68,13 +67,14 @@ _WARNING_KINDS: frozenset[str] = frozenset(
 # Vocabulary — canonical alert kinds + lifecycle extensions
 # ---------------------------------------------------------------------------
 
-# Lifecycle-only kinds that answer operator questions not covered by alert kinds.
-# Each has documented operator question (see docstring below).
+# Lifecycle-only kinds that answer operator questions not covered by alert
+# kinds. Every entry here is emitted by a real call site; a kind nothing emits
+# would make ``ops events --kind <X>`` answer "never happened" for a question
+# the operator actually has.
 LIFECYCLE_KINDS: tuple[str, ...] = (
     "runtime_started",
     "runtime_stopping",
     # reconciliation lifecycle
-    "reconciliation_started",
     "reconciliation_succeeded",
     # account freshness transitions
     "account_became_stale",
@@ -88,9 +88,6 @@ LIFECYCLE_KINDS: tuple[str, ...] = (
     "decision_summary",
     # portfolio no-trade visibility
     "portfolio_no_trade",
-    # observability self
-    "observability_degraded",
-    "observability_recovered",
 )
 
 # Full operational vocabulary = alert kinds + lifecycle kinds (deduplicated, ordered)

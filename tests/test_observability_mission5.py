@@ -801,7 +801,7 @@ def test_chaos_failure_sequence(tmp_path: Path) -> None:
         ("reconciliation_failure", now + timedelta(minutes=20)),
         ("account_became_stale", now + timedelta(minutes=22)),
         ("decision_summary", now + timedelta(minutes=25)),
-        ("observability_degraded", now + timedelta(minutes=27)),
+        ("runtime_health_degraded", now + timedelta(minutes=27)),
         ("account_recovered", now + timedelta(minutes=40)),
         ("reconciliation_recovered", now + timedelta(minutes=41)),
         ("runtime_health_recovered", now + timedelta(minutes=45)),

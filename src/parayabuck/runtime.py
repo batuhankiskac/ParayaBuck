@@ -50,6 +50,7 @@ from parayabuck.markets.timeframes import (
 from parayabuck.monitoring import alerts
 from parayabuck.monitoring import metrics as runtime_metrics_store
 from parayabuck.monitoring import receipt as paper_receipt
+from parayabuck.monitoring.journal import configure_global_journal
 
 try:
     from parayabuck.monitoring import observe as _observe
@@ -471,6 +472,15 @@ class EngineRuntime:
                 )
         except Exception:
             self._snapshot_writer = None
+        # The process-global journal is the only writer of operational events
+        # and the only thing `ops events` reads them back from. Configure it
+        # here, before anything can emit, so a configured journal_path /
+        # retention / queue size is the one the engine actually uses. Never
+        # fatal: an unwritable journal must not stop the engine.
+        try:
+            configure_global_journal(self.app_config.observability)
+        except Exception:
+            log.warning("observability journal configuration failed", exc_info=True)
         self._circuit_breaker_reason: str | None = None
         self._series_watermarks: dict[tuple[str, str], datetime] = {}
         self._portfolio_watermarks: dict[Market, datetime] = {}
@@ -2439,10 +2449,20 @@ class EngineRuntime:
                     if market is None and time.monotonic() - run_started >= _SHARED_WORKER_HEALTHY_RESET_SECONDS:
                         worker.restart_count = 0
                     worker.restart_count += 1
+                    degraded_now = False
                     if market is None:
                         with getattr(self, "_state_lock", threading.RLock()):
                             if self._state not in _ENTRY_BLOCKING_STATES:
                                 self._state = "degraded"
+                                degraded_now = True
+                    # Edge-triggered: only the transition into "degraded"
+                    # emits, so the journal gets one event per degradation
+                    # instead of one per retry.
+                    if degraded_now and _observe is not None:
+                        _observe.on_runtime_health_degraded(
+                            reason=f"{name} worker failed: {exc}",
+                            session_id=getattr(self, "_runtime_session_id", None),
+                        )
                     if worker.restart_count > 5:
                         if market is None:
                             with getattr(self, "_state_lock", threading.RLock()):
@@ -2487,9 +2507,16 @@ class EngineRuntime:
                     # not hold /readyz at 503 until a process restart. Only a
                     # breaker-free degraded state is restored (never a halt),
                     # to the same running/warming_up choice start() makes.
+                    recovered = False
                     with getattr(self, "_state_lock", threading.RLock()):
                         if self._state == "degraded" and getattr(self, "_circuit_breaker_reason", None) is None:
                             self._state = "running" if self._has_ready_symbols() else "warming_up"
+                            recovered = True
+                    # Paired edge-trigger with the degraded emit above: the
+                    # un-pin only happens off "degraded", so one recovery
+                    # event closes exactly one degradation.
+                    if recovered and _observe is not None:
+                        _observe.on_runtime_health_recovered(session_id=getattr(self, "_runtime_session_id", None))
         finally:
             worker.alive = False
 

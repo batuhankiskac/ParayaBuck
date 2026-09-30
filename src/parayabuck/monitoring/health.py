@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from parayabuck.config import Config, load_config
-from parayabuck.markets.timeframes import is_regular_equity_time
+from parayabuck.markets.timeframes import is_session_open
 from parayabuck.monitoring import metrics
 
 log = logging.getLogger("parayabuck.monitoring.health")
@@ -179,7 +179,9 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
 # Per-worker liveness mirrors the runtime's own rules (_is_worker_healthy /
 # _stream_worker_delivering in runtime.py): the trade-update stream heartbeats
 # only at (re)start, the signal-adjustment monitor once per hourly pass, and a
-# market stream proves liveness by delivered bars, only while it must deliver.
+# market stream proves liveness by delivered bars, only while the NYSE
+# calendar says it must deliver (never on a holiday, never after an early
+# close).
 _EVENT_DRIVEN_WORKERS = frozenset({"pb-trade-updates"})
 _SIGNAL_ADJUSTMENT_WORKER = "pb-signal-adjustment"
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
@@ -200,7 +202,7 @@ def _worker_stale(
             market_info.get("enabled") is False or market_info.get("symbol_count") == 0
         ):
             return False
-        if market == "equity" and not is_regular_equity_time(now):
+        if market == "equity" and not is_session_open(now):
             return False
         last_event = _parse_iso(info.get("last_event_at"))
         return last_event is None or (now - last_event).total_seconds() > max(180.0, ttl)

@@ -91,6 +91,9 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 | `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed / recovered (equity entries halted meanwhile) | yes |
 | `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | yes |
 | `signal_source_mismatch` | IEX and SIP daily bars disagree on the trend (position held), their closes diverge, or the SIP bar is missing | yes |
+| `market_data_degraded` | The effective historical feed stopped being the configured one (SIP entitlement downgrade to IEX), and again when it recovers | yes |
+| `session_close_bar_incomplete` | A session closed with stream minutes missing: the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision | yes |
+| `reconciliation_unexpected_fill_side` | A broker FILL activity carried a side outside Alpaca's vocabulary; it is skipped and the cursor advanced, never fatal | yes |
 | `paper_receipt` | Per-decision receipt (high volume) | no |
 
 To forward a "no" kind, add it to `alerting.events` (unknown kinds fail config
@@ -141,7 +144,7 @@ closes included).
 
 | Code | Condition |
 |---|---|
-| `equity_decision_missing` | No decision persisted for the last NYSE session by close (never before 16:00 ET) + `equity_decision_grace_minutes` |
+| `equity_decision_missing` | No decision persisted for the last NYSE session by ITS close (16:00 ET, 13:00 ET on an early close) + `equity_decision_grace_minutes` |
 | `equity_position_under_target` | Latest decision targets a positive weight, but after the next open + `equity_fill_grace_minutes` the account holds less than `minimum_held_fraction` of it |
 | `equity_position_over_target` | The account still holds more than the decision targeted after the fill window — the everyday case is a cash target whose DAY SELL never filled. Residual dust under 1 % of equity is tolerated |
 | `equity_signal_source_hold` | The decision deliberately held the position because the IEX stream bar and the SIP daily bar disagree on the trend (see `signal_cross_check:`) |
@@ -150,6 +153,45 @@ closes included).
 (45), `equity_fill_grace_minutes` (30), `minimum_held_fraction` (0.5),
 `fail_readiness` (true: active alarms make `/readyz` 503),
 `evaluation_interval_seconds` (60).
+
+### Market data, the session calendar and the decision bar
+
+The NYSE schedule (pandas-market-calendars) is the single source of session
+truth — `parayabuck.markets.nyse_calendar` — and nothing uses weekday
+arithmetic at runtime:
+
+* **Session minutes.** Only minutes inside the real session are ingested or
+  fetched. On an early close (13:00 ET) the 13:00–16:00 IEX post-market
+  prints are dropped, so they can never become the decision close.
+* **Session close.** The daily decision bar is flushed at the session's
+  actual close plus a 30 s close grace
+  (`runtime._SESSION_CLOSE_FLUSH_GRACE_SECONDS`), not at a fixed 16:00 ET.
+  On an early-close day the decision is taken at 13:00 ET, and the intent
+  watchdog expects it there.
+* **Completeness.** A session-close bar whose last expected minute never
+  arrived is withheld, `session_close_bar_incomplete` fires, and the
+  provider's SIP daily bar is fetched for that session from
+  close + `signal_cross_check.sip_embargo_minutes` (bounded attempts). A
+  session whose fallback never lands has no decision bar and places no
+  order; the intent watchdog raises `equity_decision_missing`.
+* **Readiness.** Stream liveness and `/readyz` follow the same calendar, so
+  a holiday or a finished early close is never reported as degraded.
+* **Provider embargo.** A provider daily bar is final only
+  `sip_embargo_minutes` after the close (SIP history is clamped to
+  now − embargo), so a deploy restart between the close and the end of the
+  embargo decides on the last complete session instead of a partial bar.
+  Stream-built bars are final at the real close and are not affected.
+* **SIP → IEX downgrade.** Only a genuine entitlement error (401/403 or an
+  explicit entitlement body, read from the response — never from the request
+  URL) downgrades historical bars to IEX; a DNS blip or a timeout leaves the
+  configured feed alone. The downgrade is bounded: the next request at or
+  after 6 h re-probes SIP and restores it. `health.market_data` carries
+  `configured`, `effective`, `quote_effective`, `sip_fallback_active`,
+  `sip_fallback_since` and any pending `session_close_fallback`.
+* **Outage honesty.** The split-basis verifier treats a cache-served
+  response as unverified, so a provider outage fails closed instead of
+  emitting a false recovery.
+
 
 ## ops CLI
 

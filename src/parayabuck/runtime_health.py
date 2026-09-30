@@ -39,6 +39,9 @@ class RuntimeHealth:
     # "degraded_reasons"}. Observability only; never part of ``healthy``.
     intent_watchdog: dict[str, object] = field(default_factory=dict)
     signal_cross_check: dict[str, object] = field(default_factory=dict)
+    # Configured vs effective market-data feeds and any pending session-close
+    # fallback. Observability only; never part of ``healthy``.
+    market_data: dict[str, object] = field(default_factory=dict)
 
 
 def _portfolio_catch_up_health(runtime: object) -> dict[str, str | None]:

@@ -161,7 +161,6 @@ def merge_provider_authority(
             merged[bar.timestamp] = bar
     merged.update(provider_by_ts)
     ordered = tuple(merged[key] for key in sorted(merged))
-
     changed = len(ordered) != len(stored)
     if not changed:
         stored_by_ts = {bar.timestamp: bar for bar in stored}
@@ -170,7 +169,12 @@ def merge_provider_authority(
             if old is None:
                 changed = True
                 break
-            if fresh is not old and not close_matches(fresh.close, old.close):
+            # A same-label revision is a real change, whatever its size: the
+            # provider republishes a session's bar when it stops being
+            # partial, and that close is the decision input. The split
+            # tolerance is for comparing DIFFERENT bases, not for hiding one
+            # provider's own correction of its own label.
+            if fresh is not old and fresh.close != old.close:
                 changed = True
                 break
     return ordered, changed

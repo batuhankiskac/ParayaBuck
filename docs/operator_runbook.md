@@ -39,19 +39,25 @@ kontrolleri` badge (which lists the codes instead of `Sağlıklı`) and
 DEGRADED. None of them gate trading.
 
 
-- `equity_decision_missing` — no decision for the last NYSE session by
-  16:00 ET + 45 min. Check `ops explain latest`, `ops status` (Workers,
-  Adjustment, Market halts) and the journal for `Ignored unfinished equity daily
-  bar`, warmup, stream or signal-adjustment errors.
+- `equity_decision_missing` — no decision for the last NYSE session by ITS
+  close + 45 min. The close is 16:00 ET, or 13:00 ET on an early close
+  (2026-11-27, 2026-12-24); a holiday is not a session, so nothing is owed
+  over one. Check `ops explain latest`, `ops status` (Workers, Adjustment,
+  Market halts) and the journal for `Ignored unfinished equity daily bar`,
+  warmup, stream or signal-adjustment errors.
 - `equity_position_under_target` — the target is positive but QLD held is
-  below half of it 30 min after the next open. Check open orders/fills
+  below half of it 30 min after the next NYSE session open. Check open
+  orders/fills
   (`ops timeline --decision <id>`), `order_rejected` / `ambiguous_order`
   events, entry latches and the broker account.
-- `equity_position_over_target` — after the fill window the account still holds
-  more than the decision targeted. In practice a cash target whose DAY SELL
+- `equity_position_over_target` — 30 min after the next NYSE session open the
+  account still holds more than the decision targeted (dust under 1 % of
+  equity is tolerated). In practice a cash target whose DAY SELL
   never filled, leaving the previous position; check the order in
   `ops timeline --decision <id>` (expired/cancelled?), `order_rejected` /
-  `order_expired` events and the broker account.
+  `order_expired` events and the broker account. The window is the next
+  *session* open, so over a weekend/holiday or an early close it does not
+  open early.
 - `equity_signal_source_hold` — the position was deliberately held because the
   IEX stream bar and the SIP daily bar disagree on the trend. Not a fault;
   confirm the `Cross-check` line in `ops status` before acting.
@@ -128,6 +134,50 @@ broker positions/orders (app.alpaca.markets/paper) with `ops status` and the
 bundle, then reset from the dashboard once a clean reconcile has run. Never
 clear `safety_incidents` by hand, and never flatten broker positions to "fix"
 drift.
+
+`reconciliation_unexpected_fill_side` is NOT this failure: the reconciler
+skipped broker FILL activities whose side is outside Alpaca's vocabulary
+(`buy`, `sell`, `buy_minus`, `sell_plus`, `sell_short`,
+`sell_short_exempt`) and advanced its cursor. Check
+`parayabuck ops events --kind reconciliation_unexpected_fill_side` for the
+activity ids and symbols. A repeated alert for the same activity means
+Alpaca reports a side this build does not know; the position still has to be
+reconciled by hand, but reconciliation itself is not blocked.
+
+## Market data degraded (`market_data_degraded`)
+
+`state=degraded` means historical bars are served from a different feed than
+the configured one — in practice a SIP entitlement downgrade to IEX, so
+SMA/vol history comes from one exchange's prints, not the consolidated tape.
+`ops status` and `health.market_data` show `configured` / `effective` /
+`sip_fallback_since`; the downgrade is bounded and the next request at or
+after 6 h re-probes SIP on its own.
+
+- Confirm the cause: `parayabuck ops events --kind market_data_degraded` and
+  the log line `SIP historical entitlement unavailable`.
+- If the account is entitled to SIP history, the data plan needs fixing
+  (Alpaca answers 401/403 on SIP) — the downgrade clears itself afterwards.
+- A transport error (DNS, timeout) no longer downgrades. If the feed flipped
+  anyway, capture the log line and the exception and report it: only a
+  401/403 or an explicit entitlement body is accepted as an entitlement
+  error.
+
+## Incomplete session-close bar (`session_close_bar_incomplete`)
+
+The session closed with stream minutes missing (a stall, or a final minute
+more than the 30 s close grace late), so the daily bar built from IEX 1m
+bars was withheld instead of deciding on a stale close. The runtime fetches
+the provider's SIP daily bar for that session from
+close + `signal_cross_check.sip_embargo_minutes` and decides on it.
+
+- Check the log for `Session-close bucket incomplete` with the newest minute
+  actually received, and `ops status` / `health.market_data` for
+  `session_close_fallback`.
+- If the fallback landed, the decision is normal — nothing to do.
+- If it did not, the session has no decision and places no order, and
+  `equity_decision_missing` fires. Check Alpaca reachability
+  (`parayabuck doctor` without `--offline`) and the pb-stocks worker in
+  `ops status`; a stream that dies near the close repeats this.
 
 ## Ownership drift after a split or a foreign sell
 

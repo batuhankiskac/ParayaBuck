@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -78,8 +78,9 @@ def test_four_silent_sessions_raise_equity_decision_missing() -> None:
         (_utc(2026, 10, 3, 15, 0), _utc(2026, 10, 2, 13, 30)),
         # Thanksgiving 2026-11-26 is a holiday: Wednesday stays the due session.
         (_utc(2026, 11, 26, 23, 0), _utc(2026, 11, 25, 14, 30)),
-        # Early close (13:00 ET) on 11-27: the decision still comes at 16:00 ET.
-        (_utc(2026, 11, 27, 19, 0), _utc(2026, 11, 25, 14, 30)),
+        # Early close (13:00 ET) on 11-27: the decision comes at 13:00 ET, so
+        # a 13:01 ET decision for that session is already on record.
+        (_utc(2026, 11, 27, 19, 0), _utc(2026, 11, 27, 18, 1)),
     ],
 )
 def test_no_missing_alarm_when_the_due_session_is_decided(now: datetime, latest_label: datetime) -> None:
@@ -87,10 +88,18 @@ def test_no_missing_alarm_when_the_due_session_is_decided(now: datetime, latest_
     assert alarms == []
 
 
-def test_early_close_session_is_due_after_the_16_00_floor_plus_grace() -> None:
-    session, deadline = last_due_equity_session(_utc(2026, 11, 27, 21, 50), timedelta(minutes=45))  # type: ignore[misc]
+def test_early_close_session_is_due_after_its_own_close_plus_grace() -> None:
+    """2026-11-27 closes at 13:00 ET (18:00 UTC): the decision is expected
+    there, not at the 16:00 ET floor a weekday-window calendar implies."""
+    session, deadline = last_due_equity_session(_utc(2026, 11, 27, 18, 50), timedelta(minutes=45))  # type: ignore[misc]
     assert session.isoformat() == "2026-11-27"
-    assert deadline == _utc(2026, 11, 27, 21, 45)
+    assert deadline == _utc(2026, 11, 27, 18, 45)
+    # Still inside the grace at 18:40 UTC, so the previous session is the
+    # newest due one (Thanksgiving 2026-11-26 is not a session at all).
+    assert last_due_equity_session(_utc(2026, 11, 27, 18, 40), timedelta(minutes=45)) == (  # type: ignore[misc]
+        date(2026, 11, 25),
+        _utc(2026, 11, 25, 21, 45),
+    )
 
 
 def test_no_history_alarms_only_when_the_runtime_was_up_for_the_decision() -> None:
@@ -161,6 +170,68 @@ def test_over_target_ignores_exit_dust_and_the_untouched_target() -> None:
 def test_over_target_never_fires_without_an_account() -> None:
     cash = _decision(_utc(2026, 9, 28, 13, 30), {})
     assert evaluate_equity(_utc(2026, 9, 29, 14, 5), cash, None, running_since=None, settings=_SETTINGS) == []
+
+
+@pytest.mark.parametrize(
+    ("early_close_session", "next_session"),
+    [
+        # Friday after Thanksgiving: 13:00 ET close, then the weekend.
+        (date(2026, 11, 27), date(2026, 11, 30)),
+        # Christmas Eve: 13:00 ET close, the 25th is a holiday, then Monday.
+        (date(2026, 12, 24), date(2026, 12, 28)),
+    ],
+)
+def test_over_target_waits_for_the_next_session_open_after_an_early_close(
+    early_close_session: date,
+    next_session: date,
+) -> None:
+    """The fill window opens at the next NYSE session open, not at the early
+    close that produced the decision.
+
+    An exit decided at a 13:00 ET early close cannot be expected to have
+    filled minutes later, nor over the weekend/holiday that follows: the
+    window is next open + ``equity_fill_grace_minutes`` (30) and the next open
+    is a real session. A window anchored on the decision's own close would
+    alarm at 13:10 ET with the DAY SELL still legitimately working.
+    """
+    cash = _decision(_utc(early_close_session.year, early_close_session.month, early_close_session.day, 18, 0))
+    still_holding = _account((_qld(98_000.0),))
+    # 18:10 UTC = 13:10 ET, ten minutes after the early close: the fill
+    # window has not even opened yet.
+    assert (
+        evaluate_equity(
+            _utc(early_close_session.year, early_close_session.month, early_close_session.day, 18, 10),
+            cash,
+            still_holding,
+            running_since=None,
+            settings=_SETTINGS,
+        )
+        == []
+    )
+    # 14:59 UTC = 09:59 ET on the next session: the grace ends at the 09:30 ET
+    # open + 30 min, so this is one minute inside the fill window.
+    assert (
+        evaluate_equity(
+            _utc(next_session.year, next_session.month, next_session.day, 14, 59),
+            cash,
+            still_holding,
+            running_since=None,
+            settings=_SETTINGS,
+        )
+        == []
+    )
+    alarms = evaluate_equity(
+        _utc(next_session.year, next_session.month, next_session.day, 15, 5),
+        cash,
+        still_holding,
+        running_since=None,
+        settings=_SETTINGS,
+    )
+    assert _codes(alarms) == ["equity_position_over_target"]
+    assert "QLD held 98.0% vs target 0.0%" in alarms[0].message
+    # The window is anchored to the next session's open, not to the early
+    # close the decision was taken at.
+    assert alarms[0].due_at == f"{next_session.isoformat()}T15:00:00+00:00"
 
 
 # --------------------------------------------------------------------------- #

@@ -27,8 +27,8 @@ show:
   raise it.
 
 Everything here is pure and deterministic given ``now``; the exchange
-schedule comes from pandas-market-calendars (the calendar the warmup and
-month-end helpers already use), with holidays and early closes. Alarms are
+schedule comes from :mod:`parayabuck.markets.nyse_calendar` — the one
+calendar the engine uses — with holidays and early closes. Alarms are
 observability only: they never gate or alter trading.
 """
 
@@ -36,17 +36,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, time, timedelta
-from functools import lru_cache
+from datetime import date, datetime, timedelta
 
 from parayabuck.core.models import AccountSnapshot, Market
+from parayabuck.markets.nyse_calendar import NEW_YORK, nyse_sessions, sessions_around
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import NEW_YORK
 
-# The runtime flushes the session-close daily bar no earlier than 16:00 ET
-# (EngineRuntime._flush_aggregators), including on early-close days.
-_EQUITY_DECISION_FLOOR = time(16, 0)
-_CALENDAR_LOOKBACK_DAYS = 14
 # Absolute weight, as a fraction of account equity, by which a position may
 # exceed its target without alarming: the dust a partially filled exit leaves
 # behind. An expired exit leaves the whole position, orders of magnitude more.
@@ -83,34 +78,14 @@ class IntentAlarm:
         return asdict(self)
 
 
-@lru_cache(maxsize=64)
-def nyse_sessions(start: date, end: date) -> tuple[tuple[date, datetime, datetime], ...]:
-    """``(session_date, open_utc, close_utc)`` for every NYSE session in [start, end]."""
-    from pandas_market_calendars import get_calendar
-
-    schedule = get_calendar("NYSE").schedule(start_date=start, end_date=end)
-    return tuple(
-        (index.date(), row.market_open.to_pydatetime(), row.market_close.to_pydatetime())
-        for index, row in schedule.iterrows()
-    )
-
-
-def _sessions_around(now: datetime) -> tuple[tuple[date, datetime, datetime], ...]:
-    today = now.astimezone(NEW_YORK).date()
-    return nyse_sessions(
-        today - timedelta(days=_CALENDAR_LOOKBACK_DAYS), today + timedelta(days=_CALENDAR_LOOKBACK_DAYS)
-    )
-
-
 def equity_decision_time(session: date, close: datetime) -> datetime:
-    """Wall time the session-close decision is expected (never before 16:00 ET)."""
-    floor = datetime.combine(session, _EQUITY_DECISION_FLOOR, tzinfo=NEW_YORK)
-    return max(close, floor)
+    """Wall time the session-close decision is expected: the session's close."""
+    return close
 
 
 def last_due_equity_session(now: datetime, grace: timedelta) -> tuple[date, datetime] | None:
     """The newest session whose decision deadline (decision time + grace) has passed."""
-    for session, _open, close in reversed(_sessions_around(now)):
+    for session, _open, close in reversed(sessions_around(now)):
         deadline = equity_decision_time(session, close) + grace
         if deadline <= now:
             return session, deadline
@@ -118,7 +93,7 @@ def last_due_equity_session(now: datetime, grace: timedelta) -> tuple[date, date
 
 
 def next_equity_open_after(moment: datetime) -> datetime | None:
-    for _session, market_open, _close in _sessions_around(moment):
+    for _session, market_open, _close in sessions_around(moment):
         if market_open > moment:
             return market_open
     return None
@@ -265,7 +240,7 @@ def evaluate_equity(
         )
     elif latest is not None:
         session = latest.decision_timestamp.astimezone(NEW_YORK).date()
-        close = next((c for s, _o, c in _sessions_around(now) if s == session), None)
+        close = next((c for s, _o, c in sessions_around(now) if s == session), None)
         decided_at = equity_decision_time(session, close) if close is not None else latest.decision_timestamp
         next_open = next_equity_open_after(decided_at)
         if next_open is not None:

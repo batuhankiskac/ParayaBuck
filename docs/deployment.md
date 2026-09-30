@@ -84,8 +84,25 @@ config loader also reads `.env` from the working directory.
 3. `sudo systemctl restart parayabuck` (the alert sink is configured at engine
    start).
 4. Confirm: a `runtime_started` alert arrives, and `parayabuck ops status`
-   shows the `alerts` check without failures. Without a URL, alerts still go
-   to the journal/log.
+   shows the `alerts` check `OK`. `ops status`/`ops doctor` read that check from
+   the copy the **engine** persists in `health_snapshot.json`, not from their
+   own process — so `DEGRADED` ("no alert webhook configured", failures, drops
+   or a last success older than 24 h) means the alert path really is broken,
+   and `UNKNOWN` means the engine has not published a copy yet. Without a URL,
+   alerts still go to the journal/log, but every surface says `DEGRADED`.
+
+### Changing API keys on the VM
+
+The unit runs with `ProtectSystem=strict` and `ReadWritePaths=` limited to
+`config/`, `data/` and `reports/`, so `.env` in the repo root is read-only.
+The settings drawer therefore refuses a credential
+change up front (HTTP 400, engine left running) instead of stopping the engine
+and failing the write with EROFS. Edit `/opt/parayabuck/.env` on the host
+(`sudo install -m 0600 …`) and `sudo systemctl restart parayabuck`; never work
+around it by relaxing `ProtectSystem`.
+
+Config-only edits (risk limits, host/port, log level) are unaffected: they do
+not touch `.env`.
 
 ## First install (fresh VM)
 

@@ -208,7 +208,6 @@ class RiskLimits:
 
 @dataclass(frozen=True)
 class EngineConfig:
-    manage_external_positions: bool = False
     event_grace_seconds: float = 5.0
     data_finalization_grace_seconds: float = 2.0
     maximum_queue_age_seconds: float = 30.0

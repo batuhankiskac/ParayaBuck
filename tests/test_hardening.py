@@ -537,7 +537,6 @@ def test_external_position_is_not_modified_by_default() -> None:
         get=lambda *_args, **_kwargs: [],
     )
     broker.ledger = None
-    broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {},
         managed_entries_for_account=lambda _account: (),
@@ -617,7 +616,6 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: [])
     broker.ledger = None
-    broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {"XLE": owned},
         managed_entries_for_account=lambda _account: [owned],

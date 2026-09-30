@@ -1,10 +1,10 @@
 """Focused regression tests for the monitoring-layer defect fixes.
 
 Each test pins one operator-visible invariant: the execution check reads the
-ledger, the alert check counts undelivered webhooks, the journal drains on
-stop and restarts, receipt lookup matches identity fields, bundle sections
-stay parseable JSON, redaction reaches nested/decoded values and a supplied
-event_id reaches both alert sinks. All offline (tmp_path, no network).
+ledger, the journal drains on stop and restarts, receipt lookup matches
+identity fields, bundle sections stay parseable JSON, redaction reaches
+nested/decoded values and a supplied event_id reaches both alert sinks.
+All offline (tmp_path, no network).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from parayabuck.monitoring import alerts, health
+from parayabuck.monitoring import alerts
 from parayabuck.monitoring.diagnostic import create_bundle_zip
 from parayabuck.monitoring.forensics import (
     ambiguous_orders,
@@ -29,7 +29,7 @@ from parayabuck.monitoring.forensics import (
     submitting_orders,
     unresolved_orders,
 )
-from parayabuck.monitoring.health import HealthStatus, _check_alerts, _check_execution
+from parayabuck.monitoring.health import HealthStatus, _check_execution
 from parayabuck.monitoring.journal import EventJournal
 from parayabuck.monitoring.operational_event import OperationalEvent, create_event
 
@@ -116,33 +116,6 @@ def test_status_readers_keep_rows_written_in_any_casing(tmp_path: Path, reader: 
     _order_ledger(db, [(f"ord-{index}", status, datetime.now(UTC)) for index, status in enumerate(statuses)])
 
     assert sorted(o["client_order_id"] for o in reader(str(db))) == [f"ord-{i}" for i in range(len(statuses))]
-
-
-# ---------------------------------------------------------------------------
-# Alert check — dropped means undelivered webhooks, not throttled repeats
-# ---------------------------------------------------------------------------
-
-
-def test_alert_check_reports_webhook_drops_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    stats: dict[str, int] = {
-        "webhook_failed": 0,
-        "webhook_attempted": 0,
-        "webhook_dropped": 2,
-        # Throttling is by design; it must not read as a delivery failure
-        "suppressed": 7,
-    }
-    monkeypatch.setattr(alerts, "alert_stats", lambda: dict(stats))
-    monkeypatch.setattr(health, "journal_stats", lambda: {"event_journal_dropped": 0})
-
-    check = _check_alerts()
-
-    assert check.status == HealthStatus.DEGRADED
-    assert check.summary == "alerts dropped 2"
-
-    monkeypatch.setattr(alerts, "alert_stats", lambda: {**stats, "webhook_dropped": 0})
-    healthy = _check_alerts()
-    assert healthy.status == HealthStatus.OK
-    assert healthy.summary == "webhook OK"
 
 
 # ---------------------------------------------------------------------------

@@ -277,6 +277,75 @@ def test_settings_save_strips_obsolete_risk_keys_so_config_loads_again(tmp_path:
     assert saved["risk"]["daily_loss_limit_pct"] == 0.02
 
 
+def _credential_payload(**overrides: Any) -> server.SettingsPayload:
+    """A save that replaces the stored credentials (forces the .env write)."""
+    return server.SettingsPayload(api_key="newkey", secret_key="newsecret", restart_engine=True, **overrides)
+
+
+def _prepare_credential_save(tmp_path: Path, monkeypatch: Any) -> _CountingEngineManager:
+    manager = _CountingEngineManager(tmp_path)
+    manager.config_path.write_text(yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {}, **_LOADABLE_MARKETS}))
+    manager.env_path.write_text('ALPACA_API_KEY="oldkey"\nALPACA_SECRET_KEY="oldsecret"\n')
+    monkeypatch.setenv("ALPACA_API_KEY", "oldkey")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "oldsecret")
+    monkeypatch.setattr(server, "manager", manager)
+    return manager
+
+
+def test_credential_save_rejects_read_only_storage_before_stopping_the_engine(tmp_path: Path, monkeypatch: Any) -> None:
+    """A read-only deployment must yield a 400 with the engine still trading."""
+    from parayabuck.web.services.settings import SettingsService
+
+    manager = _prepare_credential_save(tmp_path, monkeypatch)
+    manager.env_path = tmp_path / "missing_dir" / ".env"
+
+    with pytest.raises(ValueError, match="read-only"):
+        asyncio.run(SettingsService(manager).save_settings(_credential_payload()))
+
+    assert manager.stop_calls == 0, "engine was stopped for a save that could never write"
+    assert manager.start_calls == 0
+    assert not manager.env_path.exists()
+    assert yaml.safe_load(manager.config_path.read_text())["runtime"]["mode"] == "paper"
+
+
+def test_failed_credential_write_restarts_the_engine_it_stopped(tmp_path: Path, monkeypatch: Any) -> None:
+    """A write that fails after the stop must not leave the bot down."""
+    from parayabuck.web.services import settings as settings_service
+    from parayabuck.web.services.settings import SettingsService
+
+    manager = _prepare_credential_save(tmp_path, monkeypatch)
+    config_before = manager.config_path.read_text()
+    env_before = manager.env_path.read_text()
+
+    def _boom(*_args: Any, **_kwargs: Any) -> None:
+        raise OSError(30, "Read-only file system")
+
+    monkeypatch.setattr(settings_service, "_atomic_update_credentials", _boom)
+
+    with pytest.raises(OSError):
+        asyncio.run(SettingsService(manager).save_settings(_credential_payload()))
+
+    assert manager.stop_calls == 1
+    assert manager.start_calls == 1, "engine left stopped after a failed save"
+    assert manager.engine_state == "running"
+    assert manager.config_path.read_text() == config_before
+    assert manager.env_path.read_text() == env_before
+
+
+def test_credential_save_writes_env_and_restarts_engine(tmp_path: Path, monkeypatch: Any) -> None:
+    from parayabuck.web.services.settings import SettingsService
+
+    manager = _prepare_credential_save(tmp_path, monkeypatch)
+
+    result = asyncio.run(SettingsService(manager).save_settings(_credential_payload()))
+
+    assert result["engine_restarted"] is True
+    assert manager.stop_calls == 1 and manager.start_calls == 1
+    written = yaml.safe_load(manager.config_path.read_text())
+    assert written["runtime"]["mode"] == "paper"
+    assert 'ALPACA_API_KEY="newkey"' in manager.env_path.read_text()
+
+
 def test_application_shutdown_stops_running_engine(monkeypatch: Any) -> None:
     class ShutdownManager:
         stop_calls = 0

@@ -389,7 +389,6 @@ def _portfolio_broker(
     broker._client = client
     broker._asset_cache = {}
     broker._symbol_exit_locks = {}
-    broker.manage_external_positions = False
     broker._peak_equity = 0.0
     broker._peak_state_path = Path(tmp_path) / "peak.json" if tmp_path is not None else Path("/tmp/peak.json")
     return broker
@@ -776,7 +775,6 @@ def test_reconcile_counts_only_remaining_qty_of_partially_filled_stop(tmp_path) 
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
-    broker.manage_external_positions = True
 
     broker.reconcile()
 
@@ -1255,7 +1253,7 @@ def test_manual_open_buy_does_not_exempt_ownership_drift(tmp_path) -> None:
 
 def test_manual_open_sell_does_not_exempt_ownership_drift(tmp_path) -> None:
     """A manual SELL open order is not repository inventory: drift still
-    raises unless manage_external_positions explicitly adopts the order."""
+    raises because no configuration adopts the order."""
     from parayabuck.execution.alpaca import OwnershipDriftError
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")

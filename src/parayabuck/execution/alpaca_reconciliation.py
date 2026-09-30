@@ -7,8 +7,8 @@ Responsibility:
   24 h, paginated, deduped by ``activity.id``) → ``managed =
   ledger.managed_for_account`` → holdings 7-bucket (``MATCH`` etc.) →
   ``_reconcile_stale_portfolio_ownership`` → ``_reconcile_stale_ledger_entries``
-  → protective-stop (re)submission (equity ledger-managed/external positions
-  only; foreign positions in the shared account are left alone).
+  → protective-stop (re)submission (equity positions with ledger-managed
+  ownership only; every other position is left alone).
 - Idempotent: second call with same broker truth yields same buckets, no
   duplicate fills/stops.
 - Foreign inventory in the shared account (a crypto holding, or an equity
@@ -591,7 +591,6 @@ class ReconciliationService:
                 raise ReconciliationResultError("Broker account has no identity")
         broker_orders = broker._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
         self._recover_portfolio_orders(broker_orders)
-        manage_external = bool(getattr(broker, "manage_external_positions", True))
         ledger = getattr(broker, "ledger", None)
         fill_activities_reconciled = True
         managed: dict[str, Any] = {}
@@ -707,15 +706,15 @@ class ReconciliationService:
                 log.info("Non-equity position left unchanged during reconciliation: %s", symbol)
                 continue
             ownership = managed.get(symbol)
-            if ownership is None and not manage_external:
-                log.info("External position left unchanged during reconciliation: %s", symbol)
+            if ownership is None:
+                # No legacy-ledger ownership: this runtime never opened the
+                # position, so it must never attach protection to it. Inventing
+                # a stop here would later surface as an UNKNOWN_ORDER and, if it
+                # filled, as an ownership-drift halt.
+                log.info("Position has no ledger ownership; left unchanged during reconciliation: %s", symbol)
                 continue
-            if ownership is not None:
-                stop_price = getattr(ownership, "current_stop", None) or ownership.original_stop
-                total_qty = min(abs(position.qty), ownership.owned_qty)
-            else:
-                total_qty = abs(position.qty)
-                stop_price = position.avg_price * (1 - 0.04 if is_long else 1 + 0.04)
+            stop_price = getattr(ownership, "current_stop", None) or ownership.original_stop
+            total_qty = min(abs(position.qty), ownership.owned_qty)
             available_qty = abs(position.qty_available) if position.qty_available is not None else total_qty
             required_qty = total_qty
             # use broker's has_protective check (delegates to ProtectionService when wired)

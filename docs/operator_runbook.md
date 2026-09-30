@@ -10,6 +10,7 @@ parayabuck ops doctor                 # exit 0 ok, 1 degraded, 2 critical
 parayabuck ops events --since 2h
 parayabuck ops bundle --output /tmp/pb_bundle.zip   # sanitized; share status.json + recent_events.jsonl first
 curl -s http://127.0.0.1:8000/readyz | python3 -m json.tool
+parayabuck ops watchdog              # dead-man probe: /readyz + backup freshness (exit 1 + alert on failure)
 sudo journalctl -u parayabuck --since "1 hour ago" --no-pager | tail -n 100
 ```
 
@@ -43,6 +44,30 @@ Alarms clear by themselves (`intent_recovered`) once reality matches intent.
 | `ACCOUNT_STALE` | Account snapshot > 30 s old | See below |
 | `SELL_PHASE_PENDING` | Previous rebalance still selling | `ops timeline --decision <id>` |
 | `AMBIGUOUS_ORDER` / `REBALANCE_BLOCKED` | Broker outcome unknown | Manual, see below |
+
+## Engine did not start (`runtime_start_failed`, `/readyz` 503 with `engine_state=error` or `starting`)
+
+The console is up (`/healthz` 200) but nothing is trading, and systemd did
+not restart anything because the process never died. `curl -s
+127.0.0.1:8000/readyz` gives `engine_state` and `engine_error`; the alert
+fields give `reason` and `attempts`.
+
+- `credentials_missing` / `startup_rejected` — a startup guard refused the
+  start (missing keys, tracked `.env` in git, live not armed, config error).
+  Fix the cause; do not bypass the guard. `Auto-start blocked` is deliberate.
+- `startup_error` — permanent startup error, e.g. Alpaca 401 after a key
+  rotation, a SQLite error in `begin_session`, a corrupt peak sidecar, a
+  catch-up exception. Fix it, then start the engine from the dashboard.
+- `transient_no_retry` / `transient_retrying` — network-class failure. The
+  auto-start loop retries with 5/15/30/60 s backoff and the state stays
+  `starting`; `start_retry_attempt` in `/readyz` shows how long it has been
+  going. Fix connectivity, or stop the engine and start it manually.
+- `readyz_probe` — `parayabuck ops watchdog` (the
+  `parayabuck-watchdog.timer` dead-man probe) found the deployment not ready.
+  Run it by hand for the same verdict; it also reports backup freshness.
+
+`ops status` says nothing about a start failure on its own: every alarm it
+aggregates lives in the runtime that failed to start. Use `/readyz` first.
 
 ## Runtime appears dead
 
@@ -116,3 +141,18 @@ Events are still journaled: `ops events --since 1h`.
 `ops doctor` reports `integrity_check` ≠ ok or foreign-key violations. Stop the
 service and restore a verified backup (`docs/operations.md`, State, backup and
 restore). Do not delete the DB.
+
+## Backups failing or stale (`backup_failed`)
+
+- `reason=write_failed` / `corrupt` — the snapshot itself failed. Check
+  `journalctl -u parayabuck-backup`, disk space and permissions on
+  `backup.path`, then run `parayabuck backup` by hand and confirm it prints
+  `Backup written:`.
+- `reason=stale` — the newest snapshot is over 12 h old, i.e. the 6 h timer
+  has not been succeeding. `systemctl list-timers parayabuck-backup.timer`
+  and `systemctl status parayabuck-backup.service`, then run the command
+  manually. `parayabuck doctor` reports the same age as a `WARN` row.
+
+Until it is fixed, any database loss restores from a stale snapshot and
+loses the decisions in between. A `parayabuck-keep-*.sqlite3` file (made
+with `--label`) is a manual snapshot; it is never auto-pruned.

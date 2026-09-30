@@ -38,6 +38,40 @@ _AUTO_START_RETRY_BACKOFF: tuple[int, ...] = (5, 15, 30, 60)
 _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
     {"starting", "running", "warming_up", "degraded", "halted", "stopping", "stop_failed"}
 )
+# A failed start is invisible to systemd: /healthz stays 200, so
+# Restart=on-failure never fires, and every alarm that could report it runs
+# inside a runtime that never started. Every start-failure path therefore
+# emits ``runtime_start_failed``; a retrying auto-start stays quiet for the
+# first attempts, then repeats the alert every
+# ``_AUTO_START_RETRY_ALERT_REPEAT`` attempts so an endless retry loop
+# cannot spam the webhook while still reporting itself.
+_AUTO_START_RETRY_ALERT_AFTER = 3
+_AUTO_START_RETRY_ALERT_REPEAT = 10
+
+
+def _retry_alert_due(attempts: int) -> bool:
+    """True on the first alerting retry and every Nth attempt after it."""
+    if attempts < _AUTO_START_RETRY_ALERT_AFTER:
+        return False
+    return (attempts - _AUTO_START_RETRY_ALERT_AFTER) % _AUTO_START_RETRY_ALERT_REPEAT == 0
+
+
+def _alert_start_failure(*, reason: str, message: str, auto_start: bool, attempts: int | None = None) -> None:
+    """Alert the operator that the engine did not start. Never raises."""
+    try:
+        from parayabuck.monitoring.alerts import emit as emit_alert
+
+        emit_alert(
+            "runtime_start_failed",
+            message=message,
+            reason=reason,
+            auto_start=auto_start,
+            attempts=attempts,
+        )
+    except Exception:  # pragma: no cover - alerting must never mask the failure
+        log.exception("Could not emit runtime_start_failed alert")
+
+
 _START_ENGINE_BLOCKING_STATES: frozenset[str] = _ACTIVE_ENGINE_STATES - {"starting"}
 
 
@@ -428,10 +462,12 @@ class EngineManager:
 
         key, secret = self.get_credentials()
         if not key or not secret:
+            message = "Alpaca API key/secret missing. Configure settings first."
             with self._state_lock:
                 self.engine_state = "error"
-                self.last_engine_error = "Alpaca API key/secret missing. Configure settings first."
-            raise ValueError("Alpaca API key/secret missing. Configure settings first.")
+                self.last_engine_error = message
+            _alert_start_failure(reason="credentials_missing", message=message, auto_start=auto_start)
+            raise ValueError(message)
 
         runtime: Any = None
         interrupted = False
@@ -445,6 +481,11 @@ class EngineManager:
                 self.engine_state = "error"
                 self.last_engine_error = str(exc)
             self.invalidate_live_arming()
+            _alert_start_failure(
+                reason="runtime_import_failed",
+                message=f"Engine runtime is not importable: {exc}",
+                auto_start=auto_start,
+            )
             raise
         try:
             # Never memoized: a secret committed after import must still block
@@ -513,6 +554,8 @@ class EngineManager:
                     runtime.stop()
                 except Exception:
                     log.exception("Cleanup after transient engine start failure")
+            failed = False
+            attempts = 0
             with self._state_lock:
                 if interrupted or self.engine_state == "stopping":
                     self.engine_state = "stopped"
@@ -520,7 +563,22 @@ class EngineManager:
                 else:
                     self.engine_state = "starting" if auto_start else "error"
                     self.last_engine_error = f"transient: {exc}"
+                    # The retry loop records its counter after the attempt
+                    # that failed, so the attempt number is the next one.
+                    failed = True
+                    attempts = self._retry_attempt + 1
             self.invalidate_live_arming()
+            # A retrying auto-start keeps the state at 'starting' and the
+            # failure is expected to clear; alert only once the retries are
+            # visibly not clearing it. A manual transient failure ends in
+            # 'error' with no retry behind it, so it always alerts.
+            if failed and (not auto_start or _retry_alert_due(attempts)):
+                _alert_start_failure(
+                    reason="transient_retrying" if auto_start else "transient_no_retry",
+                    message=f"Transient engine start failure: {exc}",
+                    auto_start=auto_start,
+                    attempts=attempts,
+                )
             raise
 
         except Exception as exc:
@@ -529,6 +587,7 @@ class EngineManager:
                     runtime.stop()
                 except Exception:
                     log.exception("Cleanup after failed engine start")
+            failed = False
             with self._state_lock:
                 self._reset_retry_state()
                 if interrupted:
@@ -537,6 +596,7 @@ class EngineManager:
                 else:
                     self.engine_state = "error"
                     self.last_engine_error = str(exc)
+                    failed = True
                     # A failed runtime closes its ledger during cleanup. Never
                     # expose that stopped runtime (or its broker) to account/status
                     # polling, otherwise the UI repeatedly queries a closed SQLite
@@ -545,6 +605,17 @@ class EngineManager:
                         self.runtime = None
                         self.broker = None
             self.invalidate_live_arming()
+            # Every permanent failure is operator-actionable and terminal: a
+            # rotated key rejected by Alpaca, a startup guard (secret scan,
+            # live arming) blocking the start, a SQLite error in
+            # begin_session, a catch-up exception. None of them can be seen
+            # from the running process, so all of them alert.
+            if failed:
+                _alert_start_failure(
+                    reason="startup_rejected" if isinstance(exc, ValueError) else "startup_error",
+                    message=f"Engine start failed: {exc}",
+                    auto_start=auto_start,
+                )
             raise
 
     def stop_engine(self) -> None:

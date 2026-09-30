@@ -127,6 +127,8 @@ alerting:
   events:
   - runtime_started
   - runtime_stopped_unexpected
+  - runtime_start_failed
+  - backup_failed
   - data_provider_unavailable
   - order_rejected
   - ambiguous_order

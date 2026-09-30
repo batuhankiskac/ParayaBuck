@@ -55,6 +55,8 @@ _CANONICAL_NON_CASH_ACTION_TYPES = {"stock_dividends", "forward_splits", "revers
 _CANONICAL_SPLIT_ACTION_TYPES = {"forward_splits", "reverse_splits"}
 _STOCK_DIVIDEND_ECHO_TOLERANCE = Decimal("1e-5")
 
+_RESEARCH_RUN_DB_NAME = "backtest_runs.sqlite3"
+
 
 @dataclass(frozen=True)
 class ProductBacktestResult:
@@ -309,7 +311,8 @@ def run_product_backtest(
     initial_cash: float | None = None,
     output_dir: str | None = None,
     cost_multiplier: float = 1.0,
-    persist: bool = True,
+    persist: bool = False,
+    persist_db_path: str | Path | None = None,
     persist_artifacts: bool = True,
     corporate_actions: list[CorporateAction] | None = None,
     universe: PointInTimeUniverse | None = None,
@@ -408,7 +411,7 @@ def run_product_backtest(
             "universe_hash": universe_hash,
             "universe_methodology": universe.methodology,
             "scanner_versions": sorted({snapshot.scanner_version for snapshot in universe.snapshots}),
-            "data_feed": (data_feed or "offline csv (feed unknown; downloader used the configured historical feed)"),
+            "data_feed": (data_feed or "unknown (no provider feed was reported for this run)"),
             "data_feed_note": _data_feed_note(data_feed),
             "survivorship_bias_limitation": (
                 "Candidate metadata may reflect currently supported Alpaca assets; historical "
@@ -466,7 +469,17 @@ def run_product_backtest(
         )
     score = ranking_score(result, config.backtest.ranking_metric)
     if persist:
-        _persist_run(config.runtime.decision_db_path, run_id, strategy.name, report.summary, score)
+        # Research rows must never reach ``runtime.decision_db_path``: that file
+        # is the live decision ledger (and is backed up as one). An explicit
+        # persistence request writes to a research database beside the run's
+        # reports instead.
+        _persist_run(
+            Path(persist_db_path) if persist_db_path is not None else destination.parent / _RESEARCH_RUN_DB_NAME,
+            run_id,
+            strategy.name,
+            report.summary,
+            score,
+        )
     return ProductBacktestResult(run_id, result, report, universe, str(destination), score)
 
 
@@ -485,6 +498,7 @@ def optimize_grid(
     oos_end: datetime | None = None,
     output_dir: str | None = None,
     corporate_actions: list[CorporateAction] | None = None,
+    data_feed: str | None = None,
 ) -> dict[str, object]:
     if not grid or any(not values for values in grid.values()):
         raise ValueError("Optimization grid must contain at least one value per parameter")
@@ -534,6 +548,7 @@ def optimize_grid(
             persist=False,
             persist_artifacts=False,
             corporate_actions=corporate_actions,
+            data_feed=data_feed,
             universe=train_universe,
             prepared_inputs=train_prepared,
         )
@@ -583,6 +598,8 @@ def optimize_grid(
             initial_cash=initial_cash,
             output_dir=output_dir,
             corporate_actions=corporate_actions,
+            data_feed=data_feed,
+            persist=False,
             universe=oos_universe,
             prepared_inputs=oos_prepared,
         )
@@ -715,7 +732,7 @@ def _validate_optimization_windows(
 
 
 def _persist_run(
-    database_path: str,
+    database_path: str | Path,
     run_id: str,
     strategy_name: str,
     summary: dict[str, object],

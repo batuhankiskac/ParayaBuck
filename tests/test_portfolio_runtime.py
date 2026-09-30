@@ -2664,10 +2664,10 @@ def test_startup_catch_up_duplicate_decision_at_same_timestamp(tmp_path) -> None
     assert runtime.startup_catch_up_status == "duplicate_decision"
 
 
-def test_startup_catch_up_superseded_after_any_prior_decision(tmp_path) -> None:
-    """Restart safety: any prior decision for this deployment (even at an
-    earlier timestamp) means the cadence is already running — the catch-up
-    never re-enters."""
+def test_startup_catch_up_superseded_when_the_newest_session_is_not_a_boundary(tmp_path) -> None:
+    """Restart safety: a prior decision plus a newest bar that is NOT a new
+    period start means the cadence is already running — the catch-up never
+    re-enters out of cadence."""
     broker = _Broker()
     runtime = _runtime(tmp_path, broker)
     bars = _bars()
@@ -2680,11 +2680,43 @@ def test_startup_catch_up_superseded_after_any_prior_decision(tmp_path) -> None:
         decision_origin="test_origin",
     )
     assert decided.status == "submitted"
-    # Warmup later advances past the decision; the catch-up must be superseded.
-    runtime.seed(bars)
+    # hours:24 buckets by UTC day, so a bar 12 h later is the SAME period.
+    same_period = earlier + timedelta(hours=12)
+    runtime.seed([dataclasses.replace(bar, timestamp=same_period) for bar in bars if bar.timestamp == earlier])
     result = runtime.startup_catch_up()
     assert result.status == "catch_up_superseded"
     assert runtime.startup_catch_up_status == "catch_up_superseded"
+
+
+def test_startup_decides_a_missed_scheduled_session_instead_of_skipping_it(tmp_path) -> None:
+    """F02: a restart or outage across the close leaves the newest session
+    undecided. It is a real cadence boundary, so startup decides it — once."""
+    broker = _Broker()
+    runtime = _runtime(tmp_path, broker)
+    bars = _bars()
+    timestamps = sorted({bar.timestamp for bar in bars})
+    earlier = timestamps[runtime.strategy.minimum_history_bars]
+    runtime.seed([bar for bar in bars if bar.timestamp <= earlier])
+    decided = runtime.process_closed_bars(
+        [bar for bar in bars if bar.timestamp == earlier],
+        force_scheduled=True,
+        decision_origin="test_origin",
+    )
+    assert decided.status == "submitted"
+    # Warmup now carries a LATER session that was never decided.
+    runtime.seed(bars)
+
+    recovered = runtime.startup_catch_up()
+
+    assert recovered.decision_id is not None
+    assert recovered.decision_id != decided.decision_id
+    assert runtime.startup_catch_up_status == f"recovered_session:{recovered.status}"
+    assert runtime.previous_timestamp == timestamps[-1]
+    # Idempotent: a second start decides nothing more.
+    assert runtime.startup_catch_up().status == "duplicate_decision"
+    assert len(broker.submitted) == len(runtime.repository.orders_for_decision(decided.decision_id)) + len(
+        runtime.repository.orders_for_decision(recovered.decision_id)
+    )
 
 
 def test_startup_catch_up_already_invested_skips_when_managed_position_exists(

@@ -4,6 +4,34 @@ import functools
 from typing import Any
 
 from requests import Session
+from requests.exceptions import RequestException
+
+
+def is_network_failure(exc: BaseException) -> bool:
+    """True when ``exc`` (or its ``__cause__``/``__context__`` chain) is a
+    network-class failure: a requests-level connection/timeout error, an HTTP
+    5xx/429 response, or a builtin ``ConnectionError``/``TimeoutError`` (the
+    builtins are not subclasses of ``RequestException``).
+
+    Purely structural — it knows nothing about domain safety exceptions, so
+    the runtime and the broker execution layer can share it without importing
+    each other. HTTP 4xx is permanent (auth/config/entitlement) and False.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, RequestException):
+            response = getattr(current, "response", None)
+            status = getattr(response, "status_code", None)
+            return status is None or status == 429 or status >= 500
+        if isinstance(current, (ConnectionError, TimeoutError)):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+__all__ = ["is_network_failure", "patch_session_timeout"]
 
 
 def patch_session_timeout(session: Session, timeout: float) -> None:

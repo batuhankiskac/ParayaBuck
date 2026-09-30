@@ -99,18 +99,50 @@ Do not delete `health_snapshot.json` to "fix" status.
 ## Account stale
 
 Snapshot older than `engine.maximum_account_age_for_entry_seconds` (30 s):
-entries blocked, sells allowed. Events `account_became_stale` →
-`account_recovered`. If stale for > 30 min with `reconciliation_failure`,
+the **whole** session-close decision is paused — BUYs *and* target SELLs — because
+position quantity, cash and exposure can no longer size any order safely.
+Broker-native protective exits (resting stops) keep working. Events
+`account_became_stale` → `account_recovered`. The paused decision is re-queued
+and retried every 60 s (see "Decision deferred"), so a short outage costs
+latency, not the session. If stale for > 30 min with `reconciliation_failure`,
 check Alpaca reachability (`parayabuck doctor` without `--offline`), then
 restart.
 
+## Decision deferred (`decision_deferred`)
+
+A session-close decision blocked by a *recoverable* gate — a reconciliation
+breaker, a stale account snapshot, a snapshot lease invalidated by a
+concurrent fill, or a transient broker timeout — is **not** dropped. It is
+re-queued and re-decided every `engine.decision_retry_interval_seconds` (60 s)
+until `engine.decision_retry_window_minutes` (40) after the 16:00 ET close,
+which is inside the intent watchdog's 45-minute decision grace. One alert is
+emitted per deferred session, never one per retry; the log line is
+`Decision deferred for retry`.
+
+- A later `decision_deferred` with `retry_window_ended` means the window
+  expired and the session was **not** decided. `equity_decision_missing`
+  (16:45 ET) is the authoritative alarm; treat it as a real missed session.
+- A halted runtime (`CIRCUIT_BREAKER`) blocks every decision, retry
+  included: the deferred batch is retried until the deadline, so a reset
+  inside the window still lands the session. Nothing trades while halted —
+  **not even sells** (a halt is a state where the account is not trusted).
+- `engine.reconcile_failure_threshold` (default 3) consecutive *transient*
+  reconciliation failures are required before the reconciliation breaker and
+  its persisted incident are raised. One Alpaca timeout only blocks entries
+  (fail-closed) and is retried on the next 60 s reconcile; a clean reconcile
+  clears it with no operator action. Drift, ownership and protection failures
+  still halt immediately.
+
 ## Reconciliation failing
 
-`reconcile` check CRITICAL after 5 min without success. With a
-`circuit_breaker` (`reconciliation_failed`) the runtime halts entries. Compare
-broker positions/orders (app.alpaca.markets/paper) with `ops status` and the
-bundle, then reset from the dashboard once a clean reconcile has run. Never
-clear `safety_incidents` by hand, and never flatten broker positions to "fix"
+`reconcile` check CRITICAL after 5 min without success. A single
+`reconciliation_failure` alert from a broker timeout is expected and
+self-clearing (see above); a persisted incident and a `circuit_breaker`
+(`reconciliation_failed`) mean the threshold was reached or reconciliation
+reported drift. Entries are blocked from the first failure. Compare broker
+positions/orders (app.alpaca.markets/paper) with `ops status` and the bundle,
+then reset from the dashboard once a clean reconcile has run. Never clear
+`safety_incidents` by hand, and never flatten broker positions to "fix"
 drift.
 
 ## Ownership drift after a split or a foreign sell
@@ -119,7 +151,10 @@ drift.
 `ops status` → `reconciliation_anomalies` lists a `split_rebase`,
 `foreign_sell_reduction` or `stale_ownership_clear` row. The repository's
 share count and the broker's disagree, so every decision — exits included — is
-dropped and no reset can succeed until they match.
+blocked and dropped, and no reset can succeed until they match. A decision
+blocked by the halt at the close is re-queued for the retry window, so a reset
+inside it still lands the session; after that the session is lost and
+`equity_decision_missing` alarms.
 
 Check what the bot absorbed automatically first: an audited rebase row with
 the old and new share count, the ratio and the reason. That is already the
@@ -167,8 +202,13 @@ they would otherwise pin `execution` at DEGRADED for good.
 ## Circuit breaker active
 
 Trading state `CIRCUIT_BREAKER`, runtime `halted`, incident persisted across
-restarts. Review `active_incidents.json` in the bundle and the broker account,
-then reset. Restarting does not clear it.
+restarts. **Nothing trades while halted — not even sells.** A halt means the
+account state is not trusted (ownership, protection, reconciliation or a
+crashed worker), so no order of any side is submitted: a decision blocked at
+the close is re-queued for the retry window, and the dependent BUY phase of a
+two-phase rebalance stays at `buy_ready` until a verified reset submits it.
+Review `active_incidents.json` in the bundle and the broker account, then
+reset. Restarting does not clear it.
 
 Two kinds of row never come back after a restart:
 

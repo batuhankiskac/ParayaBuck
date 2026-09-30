@@ -10,6 +10,7 @@ from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.data.adjustment import signal_session_date, verify_against_provider
+from parayabuck.execution.alpaca_models import DefiniteOrderRejection
 from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
     PortfolioOrderRequest,
@@ -30,7 +31,7 @@ from parayabuck.portfolio.base import (
     require_product_universe,
     require_product_universe_dependency,
 )
-from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
+from parayabuck.portfolio.models import MAX_WEIGHT, TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_models import (
     _AMBIGUOUS_ORDER_STATUSES,
     REBALANCE_PHASE_BLOCKED,
@@ -203,6 +204,34 @@ def _emit_rebalance_phase_safe(
 
 # market/strategy/reason -> decision day it was last journalled
 _no_trade_last: dict[str, str] = {}
+
+
+def _emit_order_rejected_safe(
+    *,
+    client_order_id: str,
+    symbol: str,
+    market: str,
+    decision_id: str,
+    reason: str,
+    error: str,
+) -> None:
+    """Record one broker-rejected order. Never affects the order flow."""
+    try:
+        from parayabuck.monitoring import alerts, metrics
+
+        metrics.record_event("order_rejected")
+        alerts.emit(
+            "order_rejected",
+            message=f"Portfolio order rejected by the broker: {client_order_id}",
+            client_order_id=client_order_id,
+            symbol=symbol,
+            market=market,
+            decision_id=decision_id,
+            reason=reason,
+            error=error,
+        )
+    except Exception:
+        log.warning("Order-rejection alert failed for %s", client_order_id, exc_info=True)
 
 
 def _emit_no_trade_safe(
@@ -459,9 +488,16 @@ class PortfolioRuntime:
         timestamp_sets = [{bar.timestamp for bar in series} for series in self.history.values() if series]
         if len(timestamp_sets) == len(self.history):
             common_timestamps = set.intersection(*timestamp_sets)
-            if common_timestamps:
-                common_latest = max(common_timestamps)
-                self.previous_timestamp = max(filter(None, (self.previous_timestamp, common_latest)))
+            if common_timestamps and self.previous_timestamp is None:
+                # ``previous_timestamp`` is the last DECIDED timestamp, not the
+                # last bar ever seen. A warmup retry re-seeds history and can
+                # pull in the current session's provider bar (labelled 00:00
+                # ET) while the hours:24 cadence buckets by UTC day — advancing
+                # into that session would make the real 16:00 stream bar a
+                # non-boundary and silently skip the session's decision. Only
+                # a runtime that has never decided takes its high-water from
+                # the seed.
+                self.previous_timestamp = max(common_timestamps)
 
     def prune_unfinished_signal_sessions(self, now: datetime | None = None) -> int:
         """Drop equity daily bars whose session has not closed from the
@@ -504,7 +540,14 @@ class PortfolioRuntime:
         managed-batch completeness, benchmark, high-water, risk overlay,
         planner, two-phase sells-then-buys, idempotency keys) — only when the
         deployment has never decided and holds no managed position in this
-        market. Never re-enters after ANY prior decision (restart safety).
+        market.
+
+        A prior decision normally supersedes the catch-up. The exception is a
+        scheduled boundary with NO decision for it: a restart or outage
+        across the session close leaves that session undecided forever
+        otherwise, so it is decided here as an ordinary (non-forced) session
+        decision — including while a position is held, since a trend exit is
+        exactly the decision that must not be skipped.
         """
         self.startup_catch_up_at = datetime.now(UTC)
         # An intra-session restart may have adopted the provider's forming
@@ -583,12 +626,18 @@ class PortfolioRuntime:
                 account_id=self.account_id,
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
-        if (
-            self.repository.latest_decision_timestamp(self.account_id, self.configuration_digest, self.market)
-            is not None
-        ):
-            # Any prior decision for this deployment means the cadence is
-            # already running: a catch-up would be an out-of-cadence re-entry.
+        prior_decision = self.repository.latest_decision_timestamp(
+            self.account_id, self.configuration_digest, self.market
+        )
+        # A scheduled boundary that has NO persisted decision is a session the
+        # process was not alive for (a deploy/restart across the close). It
+        # must be decided now — a decision is due whether or not a position is
+        # held, so the catch-up entry guard below does not apply to it.
+        recovering_session = prior_decision is not None and self.policy.is_period_start(prior_decision, timestamp)
+        if prior_decision is not None and not recovering_session:
+            # The cadence is already running and the newest completed session
+            # is not a new period start: a catch-up would be an out-of-cadence
+            # re-entry.
             self.startup_catch_up_status = "catch_up_superseded"
             _emit_no_trade_safe(
                 market=self._market_name(),
@@ -602,12 +651,14 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(None, None, None, (), (), "catch_up_superseded")
         if account is None:
             account = self.broker.account()
-        if any(
+        if not recovering_session and any(
             position.market == self.market and not position.is_flat and position.managed_qty > 1e-12
             for position in account.positions
         ):
             # Already invested in this market: never layer a catch-up entry on
-            # top of an existing managed position.
+            # top of an existing managed position. A RECOVERED session
+            # decision is exempt: it is a scheduled decision that can trim or
+            # exit the very position it finds.
             self.startup_catch_up_status = "already_invested"
             _emit_no_trade_safe(
                 market=self._market_name(),
@@ -651,11 +702,15 @@ class PortfolioRuntime:
         result = self.process_closed_bars(
             bars,
             entry_latch=entry_latch,
-            force_scheduled=True,
+            # A recovered session is a REAL cadence boundary (the policy check
+            # above), so the ordinary target applies — no forced full target.
+            force_scheduled=not recovering_session,
+            # The PAPER receipt vocabulary only knows these two origins; the
+            # recovery is distinguished by startup_catch_up_status instead.
             decision_origin="startup_catch_up",
             account=account,
         )
-        self.startup_catch_up_status = result.status
+        self.startup_catch_up_status = f"recovered_session:{result.status}" if recovering_session else result.status
         return result
 
     def update_symbols(self, symbols: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -1088,21 +1143,45 @@ class PortfolioRuntime:
             # The two data sources disagree on the trend: keep exactly what is
             # held this session. The strategy's own (primary-source) metadata
             # stays on the decision for the record.
+            # The held weights are raw broker marks, so a gap-up fill that left
+            # cash negative can push one past 1.0 (and a non-positive equity
+            # makes the ratio meaningless). A hold plans NO order either way,
+            # so an unrepresentable mark keeps the strategy target instead of
+            # raising ValueError and halting the runtime for the day.
+            held_weights = (
+                {
+                    canonical_symbol(position.symbol, position.market): (position.market_value / account.equity)
+                    for position in account.positions
+                    if position.market == self.market and not position.is_flat
+                }
+                if account.equity > 0
+                else {}
+            )
             held_weights = {
-                canonical_symbol(position.symbol, position.market): (position.market_value / account.equity)
-                for position in account.positions
-                if position.market == self.market and not position.is_flat
+                symbol: min(max(weight, 0.0), MAX_WEIGHT)
+                for symbol, weight in held_weights.items()
+                if symbol in self.symbols
             }
+            held_total = sum(held_weights.values())
+            if held_total > MAX_WEIGHT:
+                # Gross above equity (negative cash): a long-only target cannot
+                # represent what is held, so scale it back to a full book.
+                held_weights = {symbol: weight / held_total for symbol, weight in held_weights.items()}
+                held_total = MAX_WEIGHT
             held_targets = tuple(
                 TargetWeight(symbol, weight, "signal_source_hold", rank=1)
                 for symbol, weight in sorted(held_weights.items())
-                if weight > 0 and symbol in self.symbols
+                if weight > 0
             )
             raw_target = replace(
                 raw_target,
                 weights=held_targets,
-                cash_weight=1.0 - sum(weight.weight for weight in held_targets),
-                metadata={**raw_target.metadata, "signal_source_hold": True},
+                cash_weight=max(0.0, 1.0 - held_total),
+                metadata={
+                    **raw_target.metadata,
+                    "signal_source_hold": True,
+                    "signal_source_hold_target": "held" if held_targets else "strategy",
+                },
             )
         if any(canonical_symbol(weight.symbol, self.market) not in self.symbols for weight in raw_target.weights):
             raise ValueError("Strategy emitted a symbol outside the active universe")
@@ -1341,6 +1420,7 @@ class PortfolioRuntime:
         self,
         *,
         account: AccountSnapshot | None = None,
+        submit_deferred_buys: bool = True,
     ) -> PortfolioRuntimeResult | None:
         """Advance a persisted two-phase rebalance by one step.
 
@@ -1360,6 +1440,11 @@ class PortfolioRuntime:
         advance yet (or nothing is in flight). This is safe to call from a
         trade-update callback, a bar decision and process startup, and is
         restart-safe because all phase transitions are persisted.
+        ``submit_deferred_buys=False`` (the engine is halted) still runs the
+        terminal bookkeeping — resolving stuck rows, completing a buy_pending
+        phase, promoting a finished sell phase to ``buy_ready`` — but never
+        submits the risk-increasing BUY side. The phase stays ``buy_ready``
+        and the next un-halted advance submits it exactly once.
         """
         current = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current is None or current.phase == REBALANCE_PHASE_COMPLETE:
@@ -1367,6 +1452,9 @@ class PortfolioRuntime:
         if current.phase == REBALANCE_PHASE_BLOCKED:
             return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_blocked")
         if current.phase == REBALANCE_PHASE_BUY_READY:
+            if not submit_deferred_buys:
+                self._log_deferred_buy_withheld(current.decision_id)
+                return None
             return self._submit_deferred_buys(
                 current.decision_id,
                 account=account,
@@ -1397,6 +1485,9 @@ class PortfolioRuntime:
             # No sell rows recorded for a sell_pending rebalance: nothing can
             # ever become terminal, so re-plan the buys from the fresh state.
             self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
+            if not submit_deferred_buys:
+                self._log_deferred_buy_withheld(current.decision_id)
+                return None
             return self._submit_deferred_buys(
                 current.decision_id,
                 account=account,
@@ -1421,9 +1512,27 @@ class PortfolioRuntime:
         if not is_sell_phase_complete(statuses):
             return None
         self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
+        if not submit_deferred_buys:
+            self._log_deferred_buy_withheld(current.decision_id)
+            return None
         return self._submit_deferred_buys(
             current.decision_id,
             account=account,
+        )
+
+    def _log_deferred_buy_withheld(self, decision_id: str) -> None:
+        """Record that a ready BUY side was held back by a halt (F12).
+
+        Submitting here would be the one risk-increasing action taken while
+        the runtime is halted — the exact thing the halt exists to prevent.
+        The phase is persisted, so the BUY is submitted by the first advance
+        after the operator's verified reset.
+        """
+        log.warning(
+            "Deferred BUY not submitted while the runtime is halted: market=%s decision=%s phase=%s",
+            self._market_name(),
+            decision_id,
+            REBALANCE_PHASE_BUY_READY,
         )
 
     def _close_settled_blocked_rebalance(self, decision_id: str) -> bool:
@@ -2116,6 +2225,25 @@ class PortfolioRuntime:
                 log.warning("Could not record order submit start for %s", order.client_order_id, exc_info=True)
             try:
                 broker_order_id = self.broker.submit_portfolio_order(order)
+            except DefiniteOrderRejection as exc:
+                # A broker 4xx the recovery lookup proved never reached the
+                # broker: the row is REJECTED (terminal), not ambiguous. The
+                # dependent rebalance re-plans against the real state, so the
+                # runtime keeps running instead of halting (F15).
+                try:
+                    self.repository.record_submit_call_returned(order.client_order_id, datetime.now(UTC))
+                except Exception:
+                    log.warning("Could not record order submit return for %s", order.client_order_id, exc_info=True)
+                self.repository.update_order(order.client_order_id, "rejected")
+                _emit_order_rejected_safe(
+                    client_order_id=order.client_order_id,
+                    symbol=order.symbol,
+                    market=self._market_name(),
+                    decision_id=order.decision_id,
+                    reason="broker_rejected",
+                    error=str(exc),
+                )
+                continue
             except Exception:
                 try:
                     self.repository.record_submit_call_returned(order.client_order_id, datetime.now(UTC))

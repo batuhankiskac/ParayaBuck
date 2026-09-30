@@ -150,6 +150,7 @@ alerting:
   - intent_alarm
   - intent_recovered
   - signal_source_mismatch
+  - decision_deferred
 intent_watchdog:
   # Intent-vs-reality watchdog (observability only; never gates trading).
   # Alarms (alert kind intent_alarm) when, on the NYSE calendar, no equity

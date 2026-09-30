@@ -306,7 +306,12 @@
       const status = cu.status || "not_attempted";
       const cuEl = byId(prefix + "StartupCatchUp");
       if (cuEl) {
-        cuEl.textContent = status.indexOf("blocked:") === 0 ? "Engelli: " + status.slice(8) : (CATCH_UP[status] || status);
+        // "blocked:<reason>" and "recovered_session:<status>" carry a nested status.
+        const label = status.indexOf("blocked:") === 0 ? "Engelli: " + status.slice(8)
+          : status.indexOf("recovered_session:") === 0
+            ? "Eksik oturum kararı: " + (CATCH_UP[status.slice(19)] || status.slice(19))
+            : (CATCH_UP[status] || status);
+        cuEl.textContent = label;
         cuEl.title = cu.at ? "Son deneme: " + fmt.dateTime(cu.at) : cu.next_boundary_after ? "Sıradaki sınır: " + fmt.dateTime(cu.next_boundary_after) : status;
       }
       const tbody = byId(prefix + "HoldingsBody");

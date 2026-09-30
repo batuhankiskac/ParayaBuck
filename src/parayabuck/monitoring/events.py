@@ -62,6 +62,11 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # Signal cross-check: the IEX stream-built and SIP daily bars disagree on
     # the trend (position held), diverge in close, or the SIP bar was missing.
     "signal_source_mismatch",
+    # A session-close decision was re-queued for a bounded retry because a
+    # recoverable gate (breaker, reconcile failure, readiness, snapshot
+    # lease, transient broker fetch) was active at decision time. Emitted
+    # once per deferred session, never per retry attempt.
+    "decision_deferred",
 )
 
 ALERT_KINDS: frozenset[str] = frozenset(ALERT_KINDS_ORDERED)
@@ -92,6 +97,7 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "paper_incident",
         "intent_alarm",
         "signal_source_mismatch",
+        "decision_deferred",
     }
 )
 

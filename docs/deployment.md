@@ -145,6 +145,14 @@ Alpaca dashboard (or `GET /positions`, `GET /orders?status=open`) before
    orders are not, see 1.
 5. **Never run `scripts/paper_smoke.py` while the engine runs or between
    15:45 and 16:30 ET.** The script refuses both cases itself.
+6. **Prefer no restart between 15:55 and 16:30 ET.** That window spans the
+   16:00 ET session-close decision and the second-source (SIP cross-check)
+   deferral, which is held in memory. A restart after the close is now
+   recoverable — the new process decides the newest completed session when it
+   is a scheduled boundary with no persisted decision
+   (`startup_catch_up_status: recovered_session:<status>`) — but the decision
+   is then made without the cross-check, so a restart inside the window costs
+   the second-source comparison. A restart *before* the close is always safe.
 
 ## Update by git bundle
 

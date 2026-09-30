@@ -10,7 +10,7 @@ import threading
 import time
 from _thread import LockType
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
@@ -83,6 +83,7 @@ from parayabuck.storage import SQLiteStore
 from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
 from parayabuck.universe import equity_universe_digest
 from parayabuck.utils import is_crypto
+from parayabuck.utils.http import is_network_failure
 
 log = get_logger("parayabuck.runtime")
 
@@ -113,6 +114,16 @@ class TransientStartupError(RuntimeError):
     """
 
 
+class _TransientAccountFetch(RuntimeError):
+    """A network-class failure fetching the account snapshot for a decision.
+
+    Internal marker raised by ``_fresh_account_snapshot_lease``'s decision
+    call sites so the batch is re-queued and retried instead of tripping the
+    ``portfolio_runtime_failure`` halt. Only a network-class cause qualifies:
+    a database or domain failure must still fail closed.
+    """
+
+
 class StartupCancelled(RuntimeError):
     """An operator stop request arrived while ``EngineRuntime.start()`` ran.
 
@@ -136,18 +147,7 @@ def _is_transient_network_error(exc: BaseException) -> bool:
     """
     if isinstance(exc, (ProtectionReconciliationError, AmbiguousOrderState)):
         return False
-    seen: set[int] = set()
-    current: BaseException | None = exc
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        if isinstance(current, RequestException):
-            response = getattr(current, "response", None)
-            status = getattr(response, "status_code", None)
-            return status is None or status == 429 or status >= 500
-        if isinstance(current, (ConnectionError, TimeoutError)):
-            return True
-        current = current.__cause__ or current.__context__
-    return False
+    return is_network_failure(exc)
 
 
 _DATABASE_ERROR_TOKENS = ("database", "locked", "integrity", "sqlite")
@@ -2164,15 +2164,27 @@ class EngineRuntime:
         startup. A blocked rebalance (ambiguous SELL outcome) halts market
         entries until a verified reconciliation clears it.
         """
+        # A halt must not be the one moment the engine INCREASES risk: the
+        # trade-update path still runs the rebalance's terminal bookkeeping
+        # (a SELL fill must complete its phase) but the dependent BUY side
+        # stays deferred until the operator's verified reset.
+        submit_buys = getattr(self, "_circuit_breaker_reason", None) is None and not getattr(
+            self, "_reconcile_failed", False
+        )
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             if portfolio_runtime.market != market:
                 continue
             try:
                 with self._portfolio_lock:
-                    advance_kwargs: dict[str, object] = {}
+                    advance_kwargs: dict[str, object] = {"submit_deferred_buys": submit_buys}
                     if account is not None:
                         advance_kwargs["account"] = account
-                    result = portfolio_runtime.advance_rebalance(**advance_kwargs)
+                    try:
+                        result = portfolio_runtime.advance_rebalance(**advance_kwargs)
+                    except TypeError:
+                        # Lightweight test doubles may not accept the flag.
+                        advance_kwargs.pop("submit_deferred_buys")
+                        result = portfolio_runtime.advance_rebalance(**advance_kwargs)
             except Exception:
                 # The bar-path twin of this handler (in _process_timestamp)
                 # halts with a circuit breaker; here the persisted two-phase
@@ -2279,22 +2291,41 @@ class EngineRuntime:
                     with self._account_snapshot_guard():
                         if int(getattr(self, "_account_snapshot_generation", 0)) != fetch_generation:
                             cached = None
-            if cached is not None:
-                account = cached
-            else:
-                # If the cache read raced with an invalidation, use the latest
-                # generation as the publication fence for this broker fetch.
-                _, _, fetch_generation = self._account_snapshot_cache_state()
-                account = await asyncio.to_thread(self.broker.account)
-                # The fill-path fetch is the freshest snapshot in the system;
-                # share it with the decision-path cache.
-                now = datetime.now(UTC)
-                if not self._publish_account_snapshot(
-                    account,
-                    expected_generation=fetch_generation,
-                    timestamp=now,
-                ):
-                    raise RuntimeError("Account snapshot invalidated during trade-update fetch")
+            account: AccountSnapshot | None = None
+            try:
+                if cached is not None:
+                    account = cached
+                else:
+                    # If the cache read raced with an invalidation, use the latest
+                    # generation as the publication fence for this broker fetch.
+                    _, _, fetch_generation = self._account_snapshot_cache_state()
+                    account = await asyncio.to_thread(self.broker.account)
+                    # The fill-path fetch is the freshest snapshot in the system;
+                    # share it with the decision-path cache.
+                    now = datetime.now(UTC)
+                    if not self._publish_account_snapshot(
+                        account,
+                        expected_generation=fetch_generation,
+                        timestamp=now,
+                    ):
+                        raise RuntimeError("Account snapshot invalidated during trade-update fetch")
+            except Exception as exc:
+                # The fill is ALREADY booked above, so a post-booking account
+                # fetch/publication failure is provider noise and must never
+                # escalate into a persisted trade_update_callback_failure halt
+                # (F10). The 15 s account loop re-verifies ownership drift and
+                # re-persists risk state from its next fresh fetch.
+                log.warning(
+                    "Post-fill account refresh failed for %s (fill already booked, not halting): %s",
+                    update.client_order_id,
+                    exc,
+                )
+                alerts.emit(
+                    "data_provider_unavailable",
+                    message="Post-fill account refresh failed; fill booked, runtime not halted",
+                    client_order_id=update.client_order_id,
+                    error=str(exc),
+                )
             event = str(update.event).lower()
             if event == "partial_fill" or is_terminal_order_status(event):
                 # A terminal order must not release its ledger slot while this
@@ -2303,7 +2334,17 @@ class EngineRuntime:
                 # decision must reverify the still-held position before
                 # reusing its account slot.
                 self._invalidate_account_snapshot_after_execution()
-            self._persist_risk_state(account)
+            if account is not None:
+                try:
+                    self._persist_risk_state(account)
+                except Exception:
+                    # Non-fatal for the same reason: the account loop
+                    # re-persists from its next successful poll.
+                    log.warning(
+                        "Post-fill risk-state persistence failed for %s",
+                        update.client_order_id,
+                        exc_info=True,
+                    )
             # A terminal SELL fill may unlock the dependent BUY phase of a
             # two-phase rebalance: advance it now, event-driven, instead of
             # waiting for the next bar. A legacy crypto order row has no
@@ -2745,9 +2786,160 @@ class EngineRuntime:
         # This cadence updates bar and readiness state only. PortfolioRuntime
         # is the sole strategy/risk/order decision path.
 
-    def _process_portfolio_timestamp(self, bars: list[Bar], *, health: RuntimeHealth | None = None) -> None:
-        if self._warming_up or self._circuit_breaker_reason is not None or getattr(self, "_reconcile_failed", False):
-            return
+    def _decision_retry_settings(self) -> tuple[timedelta, timedelta]:
+        """(retry interval, retry window) for deferred session-close decisions."""
+        config = getattr(self, "config", None)
+        return (
+            timedelta(seconds=float(getattr(config, "decision_retry_interval_seconds", 60.0))),
+            timedelta(minutes=float(getattr(config, "decision_retry_window_minutes", 40.0))),
+        )
+
+    def _defer_portfolio_batch(
+        self,
+        bars: list[Bar],
+        market: Market,
+        reason: str,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
+        """Re-queue a session-close decision batch for a bounded retry.
+
+        A RECOVERABLE gate at decision time (an active reconciliation-owned
+        breaker, a stale account snapshot, a snapshot lease invalidated by a
+        concurrent fill, a transient broker fetch failure) must not cost the
+        session: the batch is parked in ``_deferred_portfolio_batches`` and
+        re-decided on the next decision-loop pass, until
+        ``decision_retry_window_minutes`` after the 16:00 ET close. That bound
+        sits inside the intent watchdog's decision grace, so a deferred
+        decision either lands or the watchdog still reports it missing.
+
+        Returns True when the batch was re-queued; False once the window has
+        expired (the session is then genuinely lost and the operator alert
+        plus the watchdog's ``equity_decision_missing`` are the record).
+        """
+        if not bars:
+            return False
+        now = now or datetime.now(UTC)
+        retry_interval, retry_window = self._decision_retry_settings()
+        decision_timestamp = max(bar.timestamp for bar in bars)
+        session_close = decision_timestamp.astimezone(NEW_YORK).replace(hour=16, minute=0, second=0, microsecond=0)
+        deadline = session_close + retry_window
+        if now >= deadline:
+            log.error(
+                "Decision retry window expired; session NOT decided: market=%s session=%s reason=%s window_ended=%s",
+                market.value,
+                decision_timestamp.isoformat(),
+                reason,
+                deadline.isoformat(),
+            )
+            alerts.emit(
+                "decision_deferred",
+                message="Session-close decision retry window expired; session not decided",
+                market=market.value,
+                decision_timestamp=decision_timestamp.isoformat(),
+                reason=reason,
+                retry_window_ended=deadline.isoformat(),
+            )
+            return False
+        retry_at = min(now + retry_interval, deadline)
+        deferred = getattr(self, "_deferred_portfolio_batches", None)
+        if not isinstance(deferred, dict):
+            deferred = {}
+            self._deferred_portfolio_batches = deferred
+        key = (market, decision_timestamp)
+        first_attempt = key not in deferred
+        deferred[key] = (list(bars), retry_at)
+        log.info(
+            "Decision deferred for retry: market=%s session=%s reason=%s retry_at=%s",
+            market.value,
+            decision_timestamp.isoformat(),
+            reason,
+            retry_at.isoformat(),
+        )
+        if first_attempt:
+            # One alert per deferred session, never one per 60 s retry.
+            runtime_metrics_store.record_event("decision_deferred")
+            alerts.emit(
+                "decision_deferred",
+                message="Session-close decision deferred by a recoverable gate; retrying",
+                market=market.value,
+                decision_timestamp=decision_timestamp.isoformat(),
+                reason=reason,
+                retry_at=retry_at.isoformat(),
+            )
+        return True
+
+    def _account_at_decision_close(self, account: AccountSnapshot, bars: list[Bar]) -> AccountSnapshot:
+        """Re-mark a broker snapshot at the decision-close prices (F36).
+
+        A deferred session-close decision (the SIP cross-check retry window,
+        or a re-queued gate) fetches its account 15-25 min after the close,
+        while every price the decision is computed from — signal closes,
+        context prices, order reference prices — is the 16:00 ET close.
+        Sizing against the later mark makes an after-hours dip look like
+        drift and plans a trim the strategy never asked for. Positions
+        outside the batch (foreign inventory) keep their broker mark, and a
+        re-mark that would produce a non-positive equity is discarded.
+        """
+        closes = {canonical_symbol(bar.symbol, bar.market): bar.close for bar in bars if bar.close > 0}
+        if not closes:
+            return account
+        positions = tuple(
+            replace(position, current_price=closes[canonical_symbol(position.symbol, position.market)])
+            if canonical_symbol(position.symbol, position.market) in closes and not position.is_flat
+            else position
+            for position in account.positions
+        )
+        equity = account.cash + sum(abs(position.qty) * position.current_price for position in positions)
+        if equity <= 0:
+            return account
+        delta = equity - account.equity
+        return replace(
+            account,
+            positions=positions,
+            equity=equity,
+            peak_equity=max(account.peak_equity, equity),
+            daily_pnl=account.daily_pnl + delta,
+            unrealized_pnl=account.unrealized_pnl + delta,
+        )
+
+    def _process_portfolio_timestamp(
+        self,
+        bars: list[Bar],
+        *,
+        health: RuntimeHealth | None = None,
+        deferred: bool = False,
+    ) -> bool:
+        """Decide one closed batch.
+
+        Returns False when the batch was re-queued for a later attempt: the
+        session is not decided yet and the caller must keep the deferred key
+        alive. True means the batch is finished with — decided, terminally
+        skipped, halted, or dropped because the retry window expired.
+
+        ``deferred=True`` marks a re-run of an already-parked batch, whose
+        account is fetched after the close: it is re-marked at the
+        decision-close prices so the decision is never sized against
+        after-hours marks.
+        """
+        if self._warming_up:
+            # Warmup owns the bars it seeds; no session is due from them.
+            log.debug("Portfolio batch ignored while warming up: bars=%d", len(bars))
+            return True
+        if self._circuit_breaker_reason is not None or getattr(self, "_reconcile_failed", False):
+            reason = getattr(self, "_circuit_breaker_reason", None) or "reconciliation_failed"
+            deferred_any = False
+            for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+                relevant = [
+                    bar
+                    for bar in bars
+                    if bar.market == portfolio_runtime.market
+                    and bar.timeframe == portfolio_runtime.strategy.timeframe
+                    and bar.symbol in portfolio_runtime.symbols
+                ]
+                if relevant and self._defer_portfolio_batch(relevant, portfolio_runtime.market, reason):
+                    deferred_any = True
+            return not deferred_any
         # Fail-closed: a pending reconciliation (material drift detected) blocks
         # new portfolio orders until a verified ``reconcile()`` clears it.
         # This is the engine-side complement to the broker's 7-category
@@ -2759,6 +2951,7 @@ class EngineRuntime:
         # is enforced against maximum_account_age_for_entry_seconds.
         account: AccountSnapshot | None = None
         account_lease: _AccountSnapshotLease | None = None
+        deferred_any = False
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             relevant = [
                 bar
@@ -2840,6 +3033,14 @@ class EngineRuntime:
                         getattr(portfolio_runtime.market, "value", portfolio_runtime.market),
                         exc_info=True,
                     )
+                # Recoverable readiness gate (stale account/queue, transient
+                # degraded state): re-queue instead of losing the session.
+                if self._defer_portfolio_batch(
+                    relevant,
+                    portfolio_runtime.market,
+                    f"readiness:{readiness_reasons[0] if readiness_reasons else 'readiness_blocked'}",
+                ):
+                    deferred_any = True
                 continue
             # basis) must not freeze the whole decision: risk-reducing SELL
             # exits still run, only entries are blocked. The equity signal
@@ -2860,6 +3061,9 @@ class EngineRuntime:
                 # open either way.
                 step = self._signal_cross_check_step(portfolio_runtime, relevant)
                 if step is None:
+                    # Already parked in _deferred_portfolio_batches by the
+                    # cross-check coordinator with its own retry_at.
+                    deferred_any = True
                     continue
                 cross_check = step if isinstance(step, CrossCheckOutcome) else None
             try:
@@ -2867,13 +3071,27 @@ class EngineRuntime:
                     # Broker I/O happens before the portfolio lock. The lease
                     # is checked again at the decision boundary below so a
                     # fill cannot invalidate the cached snapshot in between.
-                    account_lease = self._fresh_account_snapshot_lease()
+                    try:
+                        account_lease = self._fresh_account_snapshot_lease()
+                    except Exception as exc:
+                        if _is_transient_network_error(exc):
+                            raise _TransientAccountFetch(str(exc)) from exc
+                        raise
                     account = account_lease.snapshot
+                if deferred and account is not None:
+                    # The account was fetched after the close; re-mark it at
+                    # the decision close so the deferred decision is sized on
+                    # the same prices the strategy decided on (F36).
+                    account = self._account_at_decision_close(account, relevant)
                 if account_lease is not None and not self._account_snapshot_lease_is_current(account_lease):
                     log.warning(
-                        "Portfolio decision skipped: account snapshot lease invalidated for market=%s",
+                        "Portfolio decision deferred: account snapshot lease invalidated for market=%s",
                         portfolio_runtime.market.value,
                     )
+                    if self._defer_portfolio_batch(
+                        relevant, portfolio_runtime.market, "account_snapshot_lease_invalidated"
+                    ):
+                        deferred_any = True
                     continue
                 with self._portfolio_lock:
                     # Claim under the narrow cache guard immediately before
@@ -2883,9 +3101,13 @@ class EngineRuntime:
                     lease_claimed = account_lease is None or self._claim_account_snapshot_lease(account_lease)
                     if not lease_claimed:
                         log.warning(
-                            "Portfolio decision skipped: account snapshot lease invalidated before use for market=%s",
+                            "Portfolio decision deferred: account snapshot lease invalidated before use for market=%s",
                             portfolio_runtime.market.value,
                         )
+                        if self._defer_portfolio_batch(
+                            relevant, portfolio_runtime.market, "account_snapshot_lease_invalidated"
+                        ):
+                            deferred_any = True
                         continue
                     try:
                         kwargs: dict[str, Any] = {"entry_latch": entry_latch}
@@ -2897,6 +3119,14 @@ class EngineRuntime:
                     finally:
                         if account_lease is not None:
                             self._release_account_snapshot_lease(account_lease)
+            except _TransientAccountFetch as exc:
+                # A broker/network hiccup at decision time is not a portfolio
+                # failure: the session is re-queued and retried, and the
+                # runtime is NOT halted (F10).
+                log.warning("Portfolio decision deferred after account fetch failure: %s", exc)
+                if self._defer_portfolio_batch(relevant, portfolio_runtime.market, f"account_fetch:{exc}"):
+                    deferred_any = True
+                continue
             except OwnershipDriftError as exc:
                 # The portfolio lock was released when the exception left its
                 # with-block, and this path never holds the ingestion lock.
@@ -2924,7 +3154,9 @@ class EngineRuntime:
                     reason="ownership_drift",
                     market=portfolio_runtime.market.value,
                 )
-                return
+                # Halt is terminal for this batch: the breaker persists and
+                # the operator owns recovery, so no retry is queued.
+                return True
             except Exception as exc:
                 with getattr(self, "_state_lock", threading.RLock()):
                     self._circuit_breaker_reason = "portfolio_runtime_failure"
@@ -2971,7 +3203,7 @@ class EngineRuntime:
                     error=str(exc),
                     market=portfolio_runtime.market.value,
                 )
-                return
+                return True
             if portfolio_result.status == "rebalance_blocked":
                 with getattr(self, "_state_lock", threading.RLock()):
                     self._market_entry_halts[portfolio_runtime.market] = "rebalance_reconciliation_required"
@@ -3020,6 +3252,7 @@ class EngineRuntime:
             self._record_paper_decision_receipt(portfolio_runtime, portfolio_result, account)
             self._emit_equity_daily_summary(portfolio_runtime, portfolio_result, account)
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
+        return not deferred_any
 
     def _record_paper_decision_receipt(
         self, portfolio_runtime: Any, result: Any, account: AccountSnapshot | None
@@ -3666,7 +3899,13 @@ class EngineRuntime:
             log.warning("Signal cross-check alert failed", exc_info=True)
 
     def _run_due_deferred_portfolio_batches(self, now: datetime | None = None) -> None:
-        """Re-run decision batches deferred by the signal cross-check."""
+        """Re-run decision batches deferred by a gate or the cross-check.
+
+        The key is popped only AFTER ``_process_portfolio_timestamp`` reports
+        the batch handled: a re-queued batch (readiness still blocking, lease
+        invalidated again, cross-check still waiting) has already refreshed
+        its own ``retry_at`` in place and must survive this pass.
+        """
         deferred = getattr(self, "_deferred_portfolio_batches", None)
         if not deferred:
             return
@@ -3674,8 +3913,8 @@ class EngineRuntime:
         for key, (bars, retry_at) in sorted(deferred.items(), key=lambda item: item[0][1]):
             if retry_at is not None and retry_at > now:
                 continue
-            deferred.pop(key, None)
-            self._process_portfolio_timestamp(bars)
+            if self._process_portfolio_timestamp(bars, deferred=True):
+                deferred.pop(key, None)
 
     def signal_cross_check_status(self) -> dict[str, object]:
         """Last finished cross-check and any decision waiting for it."""
@@ -3902,6 +4141,39 @@ class EngineRuntime:
                 )
             )
 
+    def _note_transient_reconcile_failure(self, exc: BaseException, message: str) -> bool:
+        """Count one network-class reconciliation failure.
+
+        Returns True while the failure count is still below
+        ``engine.reconcile_failure_threshold`` (retry silently on the next
+        60 s reconcile cycle), False once the threshold is reached and the
+        caller must raise the breaker and persist the incident.
+
+        A single Alpaca timeout must not become a circuit breaker that
+        survives a restart and needs an operator reset: the decisions it
+        blocks are re-queued for a bounded retry instead, and a clean
+        reconcile clears ``_reconcile_failed`` on its own.
+        """
+        configured = getattr(getattr(self, "config", None), "reconcile_failure_threshold", None)
+        try:
+            threshold = max(1, int(configured)) if configured is not None else 3
+        except (TypeError, ValueError):
+            threshold = 3
+        failures = int(getattr(self, "_transient_reconcile_failures", 0)) + 1
+        self._transient_reconcile_failures = failures
+        runtime_metrics_store.record_event("reconciliation_failure")
+        if failures < threshold:
+            log.warning(
+                "%s (%d/%d consecutive, entries blocked, no incident yet): %s",
+                message,
+                failures,
+                threshold,
+                exc,
+            )
+            return True
+        log.error("%s (%d consecutive, raising reconciliation breaker): %s", message, failures, exc)
+        return False
+
     def _reconcile_safely(self) -> None:
         reconcile_lock = getattr(self, "_reconcile_lock", threading.Lock())
         with reconcile_lock:
@@ -3927,10 +4199,12 @@ class EngineRuntime:
                     self._last_reconciliation_at = datetime.now(UTC)
                     self._last_account_at = datetime.now(UTC)
                     self._generic_reconcile_failures = 0
+                    self._transient_reconcile_failures = 0
                     return
                 self._last_reconciliation_at = datetime.now(UTC)
                 self._last_account_at = datetime.now(UTC)
                 self._generic_reconcile_failures = 0
+                self._transient_reconcile_failures = 0
                 try:
                     if _observe is not None:
                         _observe.on_reconciliation_complete(
@@ -3949,6 +4223,13 @@ class EngineRuntime:
                     )
                 self._clear_reconciliation_incidents()
             except ReconciliationResultError as exc:
+                if _is_transient_network_error(exc):
+                    # F14: a network failure inside the FILL-activity backfill
+                    # surfaces here as a chained ReconciliationResultError, so
+                    # it must not be treated as a permanent invalid result.
+                    self._reconcile_failed = True
+                    self._note_transient_reconcile_failure(exc, "Reconciliation deferred after a broker network error")
+                    return
                 self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("reconciliation_failed")
@@ -3963,11 +4244,13 @@ class EngineRuntime:
                 # Alpaca occasionally times out for a single request. The next
                 # scheduled reconciliation retries it; a full traceback every
                 # minute obscures actionable protection failures.
-                log.warning("Position protection check deferred after Alpaca API error: %s", exc)
-                self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
+                if self._note_transient_reconcile_failure(
+                    exc, "Position protection check deferred after Alpaca API error"
+                ):
+                    return
+                self._raise_reconciliation_breaker("reconciliation_failed")
                 self._persist_reconciliation_incident("reconciliation_failed")
-                runtime_metrics_store.record_event("reconciliation_failure")
                 alerts.emit(
                     "reconciliation_failure",
                     message="Position protection check deferred after Alpaca API error",
@@ -4007,14 +4290,18 @@ class EngineRuntime:
                     message="Managed position protection reconciliation failed",
                     reason="protection_failure",
                 )
-            except Exception:
+            except Exception as exc:
+                self._reconcile_failed = True
+                if _is_transient_network_error(exc) and self._note_transient_reconcile_failure(
+                    exc, "Position protection check deferred after a broker network error"
+                ):
+                    return
                 # A generic failure is usually a code bug, not a broker
                 # timeout. Keep retrying (defense in depth) but escalate after
                 # three consecutive failures, which is strictly more lenient
                 # than a transient network error.
                 self._generic_reconcile_failures = getattr(self, "_generic_reconcile_failures", 0) + 1
                 log.exception("Periodic position protection check failed")
-                self._reconcile_failed = True
                 failure_reason = (
                     "reconciliation_bug_suspected" if self._generic_reconcile_failures >= 3 else "reconciliation_failed"
                 )
@@ -4207,6 +4494,11 @@ class EngineRuntime:
             with getattr(self, "_risk_state_lock", threading.Lock()):
                 self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}))
             self._persist_risk_state(account)
+        # A halt withholds the risk-increasing BUY phase of a two-phase
+        # rebalance (F12). The reset is the operator-verified recovery point,
+        # so resume the persisted rebalances here — exactly what the startup
+        # resume does, against the same fresh, reconciled snapshot.
+        self._resume_startup_rebalances(account=account)
         with getattr(self, "_state_lock", threading.RLock()):
             # A halt raised by another thread since the breaker was cleared
             # above set a new reason: keep that halt. A trade-update blip while

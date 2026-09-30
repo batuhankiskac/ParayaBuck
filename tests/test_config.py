@@ -309,3 +309,23 @@ def test_renamed_alert_kind_is_rejected_with_its_replacement() -> None:
     with pytest.raises(ValueError, match="scanner_refresh_failure with data_provider_unavailable"):
         AlertingConfig(events=("runtime_started", "scanner_refresh_failure"))
     assert "data_provider_unavailable" in AlertingConfig(events=("data_provider_unavailable",)).events
+
+
+def test_decision_retry_window_must_fit_the_watchdog_and_cover_the_cross_check() -> None:
+    """A deferred session-close decision must still land before the intent
+    watchdog calls it missing, and must not expire while a second-source
+    deferral is still running."""
+    # Defaults: 40 min < equity_decision_grace 45, and >= sip_embargo 15 +
+    # retry_window 10.
+    assert Config().engine.decision_retry_window_minutes == 40.0
+
+    with pytest.raises(ValueError, match="decision_retry_window_minutes must be below"):
+        Config(engine=EngineConfig(decision_retry_window_minutes=45.0))
+
+    with pytest.raises(ValueError, match="decision_retry_window_minutes must cover"):
+        Config(engine=EngineConfig(decision_retry_window_minutes=20.0))
+
+
+def test_reconcile_failure_threshold_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="reconcile_failure_threshold"):
+        EngineConfig(reconcile_failure_threshold=0)

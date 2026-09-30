@@ -468,7 +468,13 @@ def test_runtime_defers_the_batch_while_the_sip_bar_is_missing_then_reruns_it(mo
     deferred_bars, retry_at = engine._deferred_portfolio_batches[key]
     assert deferred_bars == bars and retry_at is not None
     rerun: list[list[Bar]] = []
-    monkeypatch.setattr(engine, "_process_portfolio_timestamp", lambda batch, **_: rerun.append(batch))
+
+    def _handled(batch: list[Bar], **_kwargs: object) -> bool:
+        # True = the batch was handled, so the runner pops the deferred key.
+        rerun.append(batch)
+        return True
+
+    monkeypatch.setattr(engine, "_process_portfolio_timestamp", _handled)
     engine._run_due_deferred_portfolio_batches(now=retry_at - timedelta(seconds=1))
     assert rerun == []
     engine._run_due_deferred_portfolio_batches(now=retry_at)

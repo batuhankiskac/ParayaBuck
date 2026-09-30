@@ -16,8 +16,10 @@ def net_owned_quantities(
     """Compute net owned quantity per symbol from filled orders and adjustments.
 
     ``order_rows``: iterable of (symbol, side, filled_qty)
-    ``adjustments``: iterable of (symbol, outstanding_adjusted_qty) where
-      outstanding = quantity - consumed_quantity over every adjustment kind.
+    ``adjustments``: iterable of (symbol, signed_outstanding_qty) where
+      outstanding = quantity - consumed_quantity and the sign is -1 for a
+      reduction (a liquidation, a stale clear, a rebase down onto the
+      broker's count) or +1 for an increase (a split rebase).
 
     Raises ``RuntimeError`` on negative net ownership (invariant violation).
     Filters out near-zero dust (|qty| <= 1e-12).
@@ -28,7 +30,7 @@ def net_owned_quantities(
             continue
         net[symbol] = net.get(symbol, 0.0) + (filled if side == "buy" else -filled)
     for symbol, adjusted in adjustments:
-        net[symbol] = net.get(symbol, 0.0) - float(adjusted or 0.0)
+        net[symbol] = net.get(symbol, 0.0) + float(adjusted or 0.0)
 
     negative = {s: q for s, q in net.items() if q < -1e-9}
     if negative:

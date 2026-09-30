@@ -629,6 +629,16 @@ class ReconciliationService:
             elif _broker_qty > 1e-12 and _local_qty <= 1e-12:
                 categories["BROKER_STALE"].append(_sym)
                 categories["MISSING_LOCAL_ORDER"].append(_sym)
+        if categories["QUANTITY_MISMATCH"]:
+            # A share count the runtime could not prove: a non-standard
+            # corporate action, or a foreign trade on the shared key. Name
+            # the symbols and the supported recovery — a bare bucket name
+            # sends the operator to SQLite, which the runbook forbids.
+            log.warning(
+                "Ownership quantity mismatch needs an operator rebase: %s. Confirm the broker "
+                "position, then `parayabuck ops rebase-ownership SYMBOL --broker-qty QTY --confirm`.",
+                ", ".join(categories["QUANTITY_MISMATCH"]),
+            )
         if portfolio_owned and (flat_reconciler := getattr(broker, "portfolio_flat_reconciled", None)):
             for symbol in portfolio_owned:
                 if symbol in broker_symbols:

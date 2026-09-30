@@ -332,6 +332,7 @@ class EngineRuntime:
                 self._portfolio_repository.clear_stale_ownership(self.broker.account_id or "unknown", symbol, market)
                 or None
             ),
+            portfolio_ownership_resolved=self._resolve_portfolio_ownership,
             runtime_state_dir=runtime_state_dir,
         )
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
@@ -1229,6 +1230,25 @@ class EngineRuntime:
         )
         if not applied:
             raise RuntimeError(f"Recovered broker order has no durable portfolio row: {client_order_id}")
+
+    def _resolve_portfolio_ownership(
+        self,
+        symbol: str,
+        market: Market,
+        broker_quantity: float,
+        broker_average_price: float | None,
+    ) -> float | None:
+        """Rebase portfolio ownership onto a broker share count that moved
+        without a fill of ours (stock split, foreign trade on the shared
+        key). See PortfolioStateRepository.reconcile_broker_quantity."""
+        resolved: float | None = self._portfolio_repository.reconcile_broker_quantity(
+            self.broker.account_id or "unknown",
+            symbol,
+            market,
+            broker_quantity,
+            broker_average_price,
+        )
+        return resolved
 
     def _warn_foreign_crypto_inventory(self) -> None:
         """Alert when the shared broker account holds crypto at startup.

@@ -111,6 +111,8 @@ parayabuck ops events --since 2h [--kind K] [--severity S] [--decision ID] [--or
 parayabuck ops timeline --decision ID | --order ID
 parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not trade
 parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys, no webhook URL)
+parayabuck ops rebase-ownership SYMBOL --broker-qty QTY [--account-id ID] [--note TEXT]
+    # adopt the broker's share count for one symbol; dry run unless --confirm
 ```
 
 Health checks: `runtime_heartbeat` (snapshot ≤ 90 s old), `workers`, `queue`
@@ -180,6 +182,42 @@ It reports realized/unrealized P&L, fees, transfers, expected vs actual
 equity and the unexplained residual. `scripts/execution_quality_report.py`
 prints fill latency, slippage and fees versus the backtest cost model (report
 only; it never changes behaviour).
+
+## Splits and foreign sells
+
+Ownership is net fills, so a corporate action — or another consumer of the
+shared Alpaca key — leaves the repository claiming a share count the broker
+disagrees with. While the two differ every decision (exits included) is
+dropped and no safety reset can succeed, because a clean reconcile is
+impossible. The runtime handles the cases it can prove and halts with an
+actionable incident for the rest:
+
+- **Split** (`2`, `3`, `4`, `5`, `1/2`, `1/3`, `1/4`, `1/5`, `1/8`, `1/10`
+  for-1 and their reciprocals) corroborated by the broker's average entry
+  price divided by the same ratio → ownership is rebased on the broker count
+  and an audited `split_rebase` adjustment is written.
+- **Fewer shares at the broker** than the repository owns (a partial or full
+  foreign sell) → ownership is reduced to the broker count and an audited
+  `foreign_sell_reduction` adjustment is written. Adopting a smaller count can
+  never over-claim a share.
+- Anything else (a non-standard ratio, a share count with an unchanged cost
+  basis that would mean claiming shares we never bought) → the runtime halts.
+  Verify the real position on the Alpaca dashboard and adopt it explicitly:
+
+```bash
+# 1. read the position off the broker, then dry run
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty 197.6 \
+  --note "QLD 2:1 split 2025-11-20 verified on the broker"
+# 2. apply it (refused while any portfolio order is still open)
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty 197.6 \
+  --note "QLD 2:1 split 2025-11-20 verified on the broker" --confirm
+# 3. reconciliation is now clean: reset the safety lock from the dashboard
+```
+
+Every rebase writes one row to `portfolio_ownership_adjustments` and appears
+as a reconciliation anomaly (`ops status` → `reconciliation_anomalies`,
+dashboard → ownership). The command never flattens or cancels anything at the
+broker.
 
 ## PAPER rules
 

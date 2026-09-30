@@ -73,6 +73,39 @@ bundle, then reset from the dashboard once a clean reconcile has run. Never
 clear `safety_incidents` by hand, and never flatten broker positions to "fix"
 drift.
 
+## Ownership drift after a split or a foreign sell
+
+`circuit_breaker` (`ownership_drift` or `reconciliation_failed`), and
+`ops status` → `reconciliation_anomalies` lists a `split_rebase`,
+`foreign_sell_reduction` or `stale_ownership_clear` row. The repository's
+share count and the broker's disagree, so every decision — exits included — is
+dropped and no reset can succeed until they match.
+
+Check what the bot absorbed automatically first: an audited rebase row with
+the old and new share count, the ratio and the reason. That is already the
+truth, and the `paper_incident` alert (`category=ownership_rebased`) names it.
+
+Then compare `ops bundle` with the Alpaca dashboard:
+
+- A **stock split** (QLD has split six times since 2012) explains a multiple
+  of the share count with the average entry price divided by the same ratio.
+  The runtime rebases these itself; a non-standard ratio still halts.
+- A **foreign sell** — another consumer of the shared PAPER key sold part of
+  a position the bot owns — leaves the broker holding fewer shares. The runtime
+  reduces ownership to the broker count, alerts, and keeps trading the
+  remainder.
+- Neither explains the numbers → adopt the broker's count explicitly:
+
+```bash
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty>   # dry run
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty> --confirm
+```
+
+Never edit `portfolio_ownership_adjustments`, never flatten the position and
+never delete the DB to "fix" drift. After a rebase, reconciliation is clean:
+reset the safety lock from the dashboard (`docs/operations.md`, section
+"Splits and foreign sells").
+
 ## Ambiguous order
 
 An order's broker outcome is unknown; dependent BUYs are blocked.

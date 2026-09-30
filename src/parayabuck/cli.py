@@ -10,6 +10,7 @@ import subprocess
 import sys
 import traceback
 from datetime import UTC, datetime, timedelta
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -125,6 +126,21 @@ def _parser() -> argparse.ArgumentParser:
     bundle_p.add_argument("--snapshot", default=None)
     bundle_p.add_argument("--journal", default=None)
     bundle_p.add_argument("--db", default=None)
+    rebase_p = ops_sub.add_parser(
+        "rebase-ownership",
+        help="adopt the broker's share count for one symbol (dry run unless --confirm)",
+    )
+    rebase_p.add_argument("symbol", help="symbol whose ownership must be rebased, e.g. QLD")
+    rebase_p.add_argument(
+        "--broker-qty",
+        type=float,
+        required=True,
+        help="share count read off the broker position (the operator verifies it)",
+    )
+    rebase_p.add_argument("--account-id", default=None, help="defaults to the latest runtime session's account")
+    rebase_p.add_argument("--note", default="", help="audit note recorded with the adjustment")
+    rebase_p.add_argument("--db", default=None, help="decision DB path override")
+    rebase_p.add_argument("--confirm", action="store_true", help="write the adjustment (dry run without it)")
     return parser
 
 
@@ -568,6 +584,8 @@ def _run_ops(args: argparse.Namespace) -> int:
         return _ops_explain(args)
     if cmd == "bundle":
         return _ops_bundle(args)
+    if cmd == "rebase-ownership":
+        return _ops_rebase_ownership(args)
     print(f"Unknown ops command: {cmd}", file=sys.stderr)
     return 2
 
@@ -1138,6 +1156,82 @@ def _ops_bundle(args: argparse.Namespace) -> int:
         print(f"Bundle failed: {exc}", file=sys.stderr)
         traceback.print_exc()
         return 1
+
+
+def _ops_rebase_ownership(args: argparse.Namespace) -> int:
+    """Adopt the broker's share count for one symbol (the recovery for a
+    stock split or a foreign trade the runtime could not prove).
+
+    Dry run by default: the plan is printed and nothing is written without
+    ``--confirm``. The broker quantity is an operator input on purpose — this
+    is the verified recovery path, not a second guess at the broker. An
+    audited adjustment row records the change; open orders are refused because
+    the broker quantity they would move is not final yet.
+    """
+    from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
+
+    symbol = canonical_symbol(str(args.symbol).strip().upper(), Market.EQUITY)
+    broker_qty = float(args.broker_qty)
+    if not isfinite(broker_qty) or broker_qty < 0:
+        print(f"Invalid --broker-qty {args.broker_qty!r}: must be finite and >= 0", file=sys.stderr)
+        return 2
+    try:
+        config = load_config(getattr(args, "config", None))
+    except Exception:
+        config = Config()
+    db_path = getattr(args, "db", None) or config.runtime.decision_db_path
+    repository = PortfolioStateRepository(db_path)
+    try:
+        account_id = getattr(args, "account_id", None) or repository.latest_account_id()
+        if not account_id:
+            print(
+                "No runtime session account in this database; pass --account-id explicitly.",
+                file=sys.stderr,
+            )
+            return 1
+        owned = repository.owned_quantities(account_id, Market.EQUITY).get(symbol, 0.0)
+        if owned <= 1e-12:
+            print(f"{symbol}: account {account_id} owns nothing; nothing to rebase.", file=sys.stderr)
+            return 1
+        pending = repository.open_orders(account_id)
+        if pending:
+            print(
+                f"Refusing: {len(pending)} non-terminal portfolio order(s) for account {account_id}. "
+                "Wait for them to settle (or stop the engine) so the broker quantity is final.",
+                file=sys.stderr,
+            )
+            return 1
+        note = str(getattr(args, "note", "") or "").strip()
+        print(f"Symbol      : {symbol} (market equity)")
+        print(f"Account     : {account_id}")
+        print(f"Database    : {db_path}")
+        print(f"Owned now   : {owned:g}")
+        print(f"Broker says : {broker_qty:g}")
+        print(f"Adjustment  : {broker_qty - owned:+g} ({'increase' if broker_qty > owned else 'decrease'})")
+        if abs(broker_qty - owned) <= 1e-12:
+            print("Nothing to do: ownership already matches the broker quantity.")
+            return 0
+        if not getattr(args, "confirm", False):
+            print("Dry run. Re-run with --confirm to write the audited adjustment.")
+            return 0
+        repository.rebase_ownership_to_broker_quantity(
+            account_id,
+            symbol,
+            Market.EQUITY,
+            broker_qty,
+            note=note,
+        )
+        log.warning(
+            "Operator ownership rebase: account=%s symbol=%s owned=%s -> %s",
+            account_id,
+            symbol,
+            owned,
+            broker_qty,
+        )
+        print("Ownership rebased. Reset the safety lock once reconciliation is clean.")
+        return 0
+    finally:
+        repository.close()
 
 
 def _load_bars(

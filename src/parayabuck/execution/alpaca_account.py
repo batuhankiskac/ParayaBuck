@@ -12,7 +12,10 @@ Responsibility:
 - Ownership: ``managed`` / ``mixed`` / ``external`` with
   ``managed_qty = min(|raw|, total_owned)``, ``external_qty``,
   ``qty_available``, dual-lineage fail-closed, shortfall with SELL
-  exemption.
+  exemption. A share count that moved without a fill of ours (stock split,
+  foreign trade on the shared key) is first offered to
+  ``broker.portfolio_ownership_resolved``, which records an audited
+  adjustment; whatever it cannot prove keeps the fail-closed drift error.
 - Portfolio-owned quantity is ``ExecutionLedger.managed_for_account`` plus
   ``PortfolioStateRepository`` owned quantities; the facade supplies both.
 - Snapshot cache coordination (broker owns cache, service seeds it).
@@ -21,6 +24,7 @@ Responsibility:
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
@@ -118,6 +122,63 @@ class AccountService:
                 return True
         return False
 
+    def _resolve_broker_quantity(
+        self,
+        canonical: str,
+        market: Market,
+        broker_qty: float,
+        raw: Any,
+        owned_before: float,
+    ) -> float | None:
+        """Rebase portfolio ownership onto a differing broker share count.
+
+        A stock split, or another consumer of the shared Alpaca key, moves the
+        broker's shares without a fill of ours. While ownership disagrees,
+        every decision (exits included) is dropped and no safety reset can
+        succeed, because a clean reconcile is impossible. The repository
+        records the audited adjustment and refuses anything it cannot prove;
+        a refusal leaves the fail-closed drift path in place. Returns the
+        owned quantity after the rebase, or ``None`` when it was declined.
+        """
+        resolver = getattr(self._broker, "portfolio_ownership_resolved", None)
+        if resolver is None:
+            return None
+        average_entry = getattr(raw, "avg_entry_price", None)
+        resolved = resolver(
+            canonical,
+            market,
+            broker_qty,
+            float(average_entry) if average_entry is not None else None,
+        )
+        if resolved is None:
+            return None
+        self._alert_ownership_rebase(canonical, market, owned_before, broker_qty)
+        return float(resolved)
+
+    @staticmethod
+    def _alert_ownership_rebase(canonical: str, market: Market, owned_before: float, broker_qty: float) -> None:
+        """One alert per rebase episode; the audit row is the durable record."""
+        try:
+            from parayabuck.monitoring import alerts
+
+            alerts.emit(
+                "paper_incident",
+                message=(
+                    f"Ownership rebased onto the broker share count for {canonical}: "
+                    f"owned {owned_before:g} -> broker {broker_qty:g}. Verify the corporate "
+                    "action or the foreign trade on the broker; the adjustment is listed "
+                    "as a reconciliation anomaly."
+                ),
+                category="ownership_rebased",
+                incident_id=f"ownership_rebased:{market.value}:{canonical}:{datetime.now(UTC):%Y-%m-%d}",
+                symbol=canonical,
+                market=market.value,
+                previous_owned_quantity=owned_before,
+                broker_quantity=broker_qty,
+            )
+        except Exception:
+            log.warning("Alert emission failed for the ownership rebase of %s", canonical, exc_info=True)
+
     # -- snapshot cache --------------------------------------------------
 
     def snapshot_if_fresh(self, max_age_seconds: float) -> AccountSnapshot | None:
@@ -154,6 +215,15 @@ class AccountService:
         raw_positions: Any = client.get_all_positions()
         drift_candidates: list[tuple[str, float, float, Market]] = []
         seen_position_keys: set[tuple[Market, str]] = set()
+        open_sell_orders: dict[str, list[object]] | None = None
+
+        def sell_orders() -> dict[str, list[object]]:
+            """Our working SELL orders, read at most once per snapshot."""
+            nonlocal open_sell_orders
+            if open_sell_orders is None:
+                open_sell_orders = self._portfolio_open_order_map()
+            return open_sell_orders
+
         for raw in raw_positions:
             current_price = float(raw.current_price)
             unrealized += float(raw.unrealized_pl or 0)
@@ -169,6 +239,7 @@ class AccountService:
             seen_position_keys.add(position_key)
             managed = managed_positions.get(canonical)
             raw_qty = float(raw.qty)
+            broker_qty = abs(raw_qty)
             ledger_owned = float(managed.owned_qty) if managed is not None else 0.0
             repo_owned = float(owned_quantities.get(canonical, 0.0))
             if ledger_owned > 1e-12 and repo_owned > 1e-12:
@@ -182,12 +253,24 @@ class AccountService:
             if (
                 managed is None
                 and total_owned > 1e-12
-                and abs(raw_qty) > 1e-12
-                and abs(raw_qty) + max(1e-9, total_owned * 1e-8) < total_owned
+                and broker_qty > 1e-12
+                and abs(broker_qty - total_owned) > max(1e-9, total_owned * 1e-8)
             ):
-                drift_candidates.append((canonical, total_owned, raw_qty, market))
-            managed_qty = min(abs(raw_qty), total_owned)
-            external_qty = abs(raw_qty) - managed_qty
+                # The share count moved without a fill of ours: a corporate
+                # action, or another consumer of the shared Alpaca key. A
+                # SELL of ours still working at the broker explains a
+                # shortfall and keeps ownership until it completes.
+                explained = broker_qty < total_owned and self._open_order_explains_drift(
+                    canonical, total_owned, broker_qty, market, sell_orders()
+                )
+                if not explained:
+                    resolved = self._resolve_broker_quantity(canonical, market, broker_qty, raw, total_owned)
+                    if resolved is not None:
+                        total_owned = resolved
+                    elif broker_qty < total_owned:
+                        drift_candidates.append((canonical, total_owned, raw_qty, market))
+            managed_qty = min(broker_qty, total_owned)
+            external_qty = broker_qty - managed_qty
             ownership = (
                 "managed"
                 if managed_qty > 1e-12 and external_qty <= 1e-12
@@ -214,13 +297,15 @@ class AccountService:
                 )
             )
         if drift_candidates:
-            repo_orders = self._portfolio_open_order_map()
+            repo_orders = sell_orders()
             for canonical, owned_qty, raw_qty, market in drift_candidates:
                 if self._open_order_explains_drift(canonical, owned_qty, raw_qty, market, repo_orders):
                     continue
                 raise OwnershipDriftError(
                     f"Ownership drift for {canonical}: repository managed "
-                    f"qty={owned_qty} exceeds broker position qty={raw_qty}"
+                    f"qty={owned_qty} exceeds broker position qty={raw_qty}. "
+                    "Confirm the broker position, then adopt it explicitly with "
+                    "`parayabuck ops rebase-ownership " + canonical + " --broker-qty <qty> --confirm`"
                 )
         # Account-scoped peak reconciliation
         broker._ensure_peak_reconciled(broker._account_id or "unknown", equity)

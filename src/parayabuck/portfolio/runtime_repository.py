@@ -23,6 +23,12 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.logger import get_logger
 from parayabuck.portfolio.models import TargetPortfolio
+from parayabuck.portfolio.ownership_rebase import (
+    FOREIGN_SELL_KIND,
+    SPLIT,
+    SPLIT_REBASE_KIND,
+    classify_share_change,
+)
 from parayabuck.portfolio.runtime_models import (
     _TERMINAL_ORDER_STATUSES,
     TERMINAL_ORDER_STATUSES_SQL,
@@ -65,6 +71,28 @@ def _latest_timestamp(*values: object) -> datetime | None:
             continue
         parsed.append(moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC))
     return max(parsed, default=None)
+
+
+def _at_or_before(first: object, second: object) -> bool:
+    """Whether ``first`` happened at or before ``second``.
+
+    Both are ISO strings or datetimes. An unreadable or missing timestamp
+    fails closed: an adjustment whose ordering cannot be proven is never
+    consumed.
+    """
+    moments: list[datetime] = []
+    for value in (first, second):
+        if isinstance(value, datetime):
+            moment = value
+        elif value:
+            try:
+                moment = datetime.fromisoformat(str(value))
+            except ValueError:
+                return False
+        else:
+            return False
+        moments.append(moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC))
+    return moments[0] <= moments[1]
 
 
 class PortfolioStateRepository:
@@ -136,6 +164,11 @@ class PortfolioStateRepository:
                     symbol TEXT NOT NULL,
                     market TEXT NOT NULL,
                     quantity REAL NOT NULL,
+                    -- +1 adds the outstanding quantity to ownership (a split
+                    -- rebase), -1 removes it (a liquidation or a rebase down
+                    -- onto the broker's count). Every historical row is a
+                    -- reduction, which is why the default is -1.
+                    sign REAL NOT NULL DEFAULT -1.0,
                     kind TEXT NOT NULL,
                     note TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
@@ -253,6 +286,17 @@ class PortfolioStateRepository:
                            WHERE o.client_order_id = portfolio_fills.client_order_id
                        )
                        WHERE fill_delay_seconds IS NULL"""
+                )
+            adjustment_columns = {
+                str(row[1])
+                for row in self.store.connection.execute("PRAGMA table_info(portfolio_ownership_adjustments)")
+            }
+            if "sign" not in adjustment_columns:
+                # Every adjustment written before ownership rebases existed
+                # reduced ownership, so the column default is the truth for
+                # those rows.
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_ownership_adjustments ADD COLUMN sign REAL NOT NULL DEFAULT -1.0"
                 )
             self._ensure_hot_path_indexes()
             # Epoch for monotonic peak: old history must not undo an explicit
@@ -912,29 +956,45 @@ class PortfolioStateRepository:
         *,
         kind: str,
         note: str = "",
+        sign: float = -1.0,
     ) -> None:
-        """Persist an explicit ownership reconciliation adjustment/anomaly."""
+        """Persist an explicit ownership reconciliation adjustment/anomaly.
+
+        ``sign`` is -1 (the default, and the only value historical rows
+        carry) for a reduction and +1 for an increase; a split rebase is the
+        only audited way to raise ownership.
+        """
         if not kind.strip():
             raise ValueError("Adjustment kind is required")
         if not math.isfinite(quantity) or quantity <= 0:
             raise ValueError("Adjustment quantity must be finite and positive")
+        if sign not in (1.0, -1.0):
+            raise ValueError("Adjustment sign must be +1 or -1")
         with self.store.lock, self.store.connection:
-            self._insert_ownership_adjustment_tx(account_id, symbol, market, quantity, kind, note)
+            self._insert_ownership_adjustment_tx(account_id, symbol, market, quantity, kind, note, sign)
 
     def _insert_ownership_adjustment_tx(
-        self, account_id: str, symbol: str, market: Market, quantity: float, kind: str, note: str
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        quantity: float,
+        kind: str,
+        note: str,
+        sign: float = -1.0,
     ) -> None:
         self.store.connection.execute(
             """INSERT INTO portfolio_ownership_adjustments(
-                adjustment_id, account_id, symbol, market, quantity, kind,
+                adjustment_id, account_id, symbol, market, quantity, sign, kind,
                 note, created_at, consumed_quantity
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)""",
             (
                 uuid4().hex,
                 account_id,
                 symbol,
                 market.value,
                 quantity,
+                float(sign),
                 kind,
                 note,
                 datetime.now(UTC).isoformat(),
@@ -942,28 +1002,41 @@ class PortfolioStateRepository:
         )
 
     def _consume_ownership_adjustments_tx(
-        self, account_id: str, symbol: str, market: Market, sell_delta: float
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        sell_delta: float,
+        order_created_at: datetime | None,
     ) -> None:
         """Consume pending stale-clear adjustments up to a real SELL fill.
 
         The race: broker stop fills while the stream is delayed; reconcile
         sees a flat broker and records an adjustment; the real fill arrives
         late. The real fill is the ground truth, so it cancels the provisional
-        adjustment instead of booking a second SELL on top of it."""
+        adjustment instead of booking a second SELL on top of it.
+
+        Only an order submitted BEFORE the adjustment can prove that sale. A
+        newer SELL is an unrelated trade and consumes nothing: cancelling a
+        newer exit against an older adjustment added phantom owned shares
+        back and then halted the runtime on ownership drift.
+        """
         if sell_delta <= 0:
             return
         remaining = float(sell_delta)
         rows = self.store.connection.execute(
-            """SELECT adjustment_id, quantity, consumed_quantity
+            """SELECT adjustment_id, quantity, consumed_quantity, created_at
                FROM portfolio_ownership_adjustments
                WHERE account_id = ? AND symbol = ? AND market = ? AND kind = 'stale_ownership_clear'
                  AND consumed_quantity < quantity
                ORDER BY created_at""",
             (account_id, symbol, market.value),
         ).fetchall()
-        for adjustment_id, quantity, consumed in rows:
+        for adjustment_id, quantity, consumed, created_at in rows:
             if remaining <= 1e-12:
                 break
+            if not _at_or_before(order_created_at, created_at):
+                continue
             capacity = float(quantity) - float(consumed)
             consume = min(capacity, remaining)
             self.store.connection.execute(
@@ -1109,6 +1182,7 @@ class PortfolioStateRepository:
                         delay_seconds = raw_delay
                 except (TypeError, ValueError):
                     delay_seconds = None
+            order_created_at = _latest_timestamp(created_at)
             self.store.connection.execute(
                 f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL},
                    broker_order_id = ?, cumulative_filled_quantity = ?,
@@ -1147,12 +1221,16 @@ class PortfolioStateRepository:
                 if side == "sell":
                     # A real SELL fill proves the sale that a stale-clear
                     # adjustment assumed; consume the adjustment instead of
-                    # booking a second SELL on top of it.
+                    # booking a second SELL on top of it. Only an order
+                    # submitted before the adjustment may do so — a newer
+                    # exit is an unrelated trade, and the cleared shares stay
+                    # cleared (the row remains an operator-visible anomaly).
                     self._consume_ownership_adjustments_tx(
                         account_id,
                         symbol,
                         Market(market),
                         fill_delta,
+                        order_created_at,
                     )
         return True
 
@@ -1266,10 +1344,13 @@ class PortfolioStateRepository:
             params = (*params, market.value)
         with self.store.lock:
             rows = self.store.connection.execute(query, params).fetchall()
-            # A stale-clear adjustment belongs to the market it was raised
-            # for; without the same market filter it is subtracted from the
-            # other market's net and the ownership invariant trips.
-            adjustments_query = """SELECT symbol, SUM(quantity - consumed_quantity)
+            # An adjustment belongs to the market it was raised for; without
+            # the same market filter it is netted into the other market's
+            # ownership and the ownership invariant trips. ``sign`` is -1 for
+            # a reduction (every historical row) and +1 for a split rebase,
+            # so the outstanding quantity is signed here and the pure net
+            # calculation simply adds it.
+            adjustments_query = """SELECT symbol, SUM(sign * (quantity - consumed_quantity))
                    FROM portfolio_ownership_adjustments
                    WHERE account_id = ? AND consumed_quantity < quantity AND market != ?"""
             adjustments_params: tuple[object, ...] = (account_id, _LEGACY_CRYPTO_MARKET)
@@ -1303,7 +1384,7 @@ class PortfolioStateRepository:
         with self.store.lock:
             rows = self.store.connection.execute(
                 """SELECT adjustment_id, symbol, market, quantity, consumed_quantity,
-                          kind, note, created_at
+                          sign, kind, note, created_at
                    FROM portfolio_ownership_adjustments
                    WHERE account_id = ? AND consumed_quantity < quantity AND market != ?
                    ORDER BY created_at""",
@@ -1317,12 +1398,142 @@ class PortfolioStateRepository:
                 "quantity": float(row[3]),
                 "consumed_quantity": float(row[4]),
                 "outstanding_quantity": float(row[3]) - float(row[4]),
-                "kind": str(row[5]),
-                "note": str(row[6]),
-                "created_at": str(row[7]),
+                "sign": float(row[5]),
+                "kind": str(row[6]),
+                "note": str(row[7]),
+                "created_at": str(row[8]),
             }
             for row in rows
         )
+
+    def latest_account_id(self) -> str | None:
+        """Account of the most recent runtime session (operator tooling)."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT account_id FROM portfolio_runtime_sessions
+                   ORDER BY started_at DESC, rowid DESC LIMIT 1"""
+            ).fetchone()
+        return str(row[0]) if row is not None and row[0] else None
+
+    def owned_average_cost(self, account_id: str, symbol: str, market: Market) -> float | None:
+        """Weighted average entry price of this account's BUY fills.
+
+        The counterpart of the broker position's ``avg_entry_price``: a split
+        divides both by the same ratio, so the pair is what separates a
+        corporate action from a foreign trade. ``None`` when no BUY fill was
+        booked (nothing to compare, and nothing is claimed either).
+        """
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT SUM(f.quantity * f.price) / NULLIF(SUM(f.quantity), 0)
+                   FROM portfolio_fills f
+                   JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
+                   JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                   JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                   WHERE s.account_id = ? AND o.symbol = ? AND o.market = ? AND o.side = 'buy'
+                     AND f.quantity > 0""",
+                (account_id, symbol, market.value),
+            ).fetchone()
+        return float(row[0]) if row is not None and row[0] is not None else None
+
+    def reconcile_broker_quantity(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        broker_quantity: float,
+        broker_average_cost: float | None = None,
+    ) -> float | None:
+        """Rebase ownership onto a broker share count that differs from ours.
+
+        A corporate action or another consumer of the shared Alpaca key makes
+        the repository's net-fill ownership disagree with the broker, and
+        every decision (exits included) is dropped while it does. Returns the
+        owned quantity after an audited adjustment was recorded, or ``None``
+        when the counts agree or the difference is not provable (the caller
+        then halts with an actionable incident for the operator to rebase
+        explicitly).
+
+        Read and write share one lock hold, so a concurrent fill can never be
+        rebased onto a stale owned quantity.
+        """
+        with self.store.lock, self.store.connection:
+            owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
+            if owned <= 1e-12 or not math.isfinite(broker_quantity) or broker_quantity <= 0:
+                return None
+            change = classify_share_change(
+                owned,
+                broker_quantity,
+                owned_average_cost=self.owned_average_cost(account_id, symbol, market),
+                broker_average_cost=broker_average_cost,
+            )
+            if not change.rebasable:
+                log.warning(
+                    "Ownership rebase declined: account=%s symbol=%s owned=%s broker=%s reason=%s",
+                    account_id,
+                    symbol,
+                    owned,
+                    broker_quantity,
+                    change.reason,
+                )
+                return None
+            self._insert_ownership_adjustment_tx(
+                account_id,
+                symbol,
+                market,
+                abs(change.adjustment_quantity),
+                kind=SPLIT_REBASE_KIND if change.kind == SPLIT else FOREIGN_SELL_KIND,
+                note=(
+                    f"{change.reason}; owned {owned:g} -> {broker_quantity:g} "
+                    f"(ratio {change.ratio:g}, operator rebase available: "
+                    "parayabuck ops rebase-ownership)"
+                ),
+                sign=1.0 if change.adjustment_quantity > 0 else -1.0,
+            )
+        log.warning(
+            "Ownership rebased on broker quantity: account=%s symbol=%s owned=%s -> %s kind=%s reason=%s",
+            account_id,
+            symbol,
+            owned,
+            broker_quantity,
+            change.kind,
+            change.reason,
+        )
+        return broker_quantity
+
+    def rebase_ownership_to_broker_quantity(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        broker_quantity: float,
+        *,
+        kind: str = "operator_rebase",
+        note: str = "",
+    ) -> float | None:
+        """Operator-verified adoption of the broker's share count.
+
+        Unconditional by design: the operator has read the real position off
+        the broker. Read and write share one lock hold, so the resulting
+        owned quantity is exactly ``broker_quantity``. Returns the new owned
+        quantity, or ``None`` when this account owns nothing in the symbol.
+        """
+        if not math.isfinite(broker_quantity) or broker_quantity < 0:
+            raise ValueError("Broker quantity must be finite and non-negative")
+        with self.store.lock, self.store.connection:
+            owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
+            if owned <= 1e-12:
+                return None
+            self._insert_ownership_adjustment_tx(
+                account_id,
+                symbol,
+                market,
+                abs(broker_quantity - owned),
+                kind=kind,
+                note=note or f"operator rebase onto the broker count: {owned:g} -> {broker_quantity:g}",
+                sign=1.0 if broker_quantity > owned else -1.0,
+            )
+        return broker_quantity
 
     def operations_snapshot(self, account_id: str) -> dict[str, object]:
         """Operator-facing snapshot scoped to one account.

@@ -152,7 +152,6 @@ def _broker(client: _FakeAlpacaClient, repo: PortfolioStateRepository, tmp_path:
     broker._client = client
     broker._asset_cache = {}
     broker._symbol_exit_locks = {}
-    broker.manage_external_positions = False
     broker._peak_equity = 0.0
     broker._peak_state_path = Path(tmp_path) / "peak.json"
     broker._stop_state_path = Path(tmp_path) / "stops.json"

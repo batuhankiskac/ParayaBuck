@@ -36,7 +36,6 @@ def _broker_with_fake(tmp_path: Path, fake: FakeTradingClient, *, with_ledger: b
     broker._paper = True
     broker._peak_state_path = tmp_path / "peak.json"
     broker._asset_cache = {}
-    broker.manage_external_positions = False
     broker.ledger = ledger
     broker._peak_epoch = 0
     broker._peak_equity = 0.0
@@ -423,7 +422,6 @@ def test_reconcile_never_protects_a_foreign_crypto_position(tmp_path: Path) -> N
     fake = FakeTradingClient()
     fake.set_position("BTC/USD", qty=1.0, market="crypto")
     broker = _broker_with_fake(tmp_path, fake, with_ledger=False)
-    broker.manage_external_positions = True
     broker.reconcile()
     assert fake.submitted_stops == 0
     assert fake.submitted_market_orders == 0

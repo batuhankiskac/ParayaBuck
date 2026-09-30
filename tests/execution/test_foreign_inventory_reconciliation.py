@@ -41,7 +41,6 @@ def test_crypto_and_out_of_universe_equity_are_never_drift() -> None:
     fake.set_position("BTC/USD", 0.5, market="crypto")
     broker = _broker(
         fake,
-        manage_external_positions=False,
         portfolio_owned_quantities=lambda: {"QLD": 10.0},
         portfolio_open_orders=lambda: (),
         bot_tradable_symbols=lambda: {"QLD"},
@@ -65,7 +64,6 @@ def test_foreign_position_on_a_traded_symbol_still_reports_drift() -> None:
     fake.set_position("BTC/USD", 0.5, market="crypto")
     broker = _broker(
         fake,
-        manage_external_positions=False,
         portfolio_owned_quantities=lambda: {},
         portfolio_open_orders=lambda: (),
         bot_tradable_symbols=lambda: {"QLD"},
@@ -85,7 +83,6 @@ def test_unowned_equity_stays_drift_without_a_stated_universe() -> None:
     fake.set_position("AAPL", 3.0)
     broker = _broker(
         fake,
-        manage_external_positions=False,
         portfolio_owned_quantities=lambda: {},
         portfolio_open_orders=lambda: (),
     )
@@ -102,7 +99,6 @@ def test_managed_position_outside_the_universe_is_still_reconciled() -> None:
     fake.set_position("MSFT", 4.0)
     broker = _broker(
         fake,
-        manage_external_positions=False,
         portfolio_owned_quantities=lambda: {"MSFT": 4.0},
         portfolio_open_orders=lambda: (),
         bot_tradable_symbols=lambda: {"QLD"},
@@ -169,7 +165,6 @@ def _rebase_broker(fake: FakeTradingClient, repo: PortfolioStateRepository) -> t
 
     broker = _broker(
         fake,
-        manage_external_positions=False,
         portfolio_owned_quantities=lambda: repo.owned_quantities(ACCOUNT, Market.EQUITY),
         portfolio_open_orders=lambda: (),
         portfolio_ownership_resolved=resolve,
@@ -216,4 +211,35 @@ def test_unowned_qld_stays_drift_and_is_never_rebased(tmp_path: Path) -> None:
     assert report["BROKER_STALE"] == [SYMBOL]
     assert report["MISSING_LOCAL_ORDER"] == [SYMBOL]
     assert repo.ownership_adjustments(ACCOUNT) == ()
+    repo.close()
+
+
+def test_portfolio_owned_position_without_ledger_ownership_is_never_protected(tmp_path: Path) -> None:
+    """The equity-only runtime owns its positions through the portfolio
+    repository, never the legacy ledger. reconcile() classified that missing
+    ledger row as "external" and invented a 4%-below-cost stop over the whole
+    position; the next reconcile then saw that stop as an UNKNOWN_ORDER, and a
+    fill triggered an ownership-drift halt. A position with no ledger
+    ownership is left completely alone."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _owned_fill(repo, 10.0, 100.0)
+    fake = FakeTradingClient()
+    fake.set_position(SYMBOL, 10.0)
+    broker = _broker(
+        fake,
+        portfolio_owned_quantities=lambda: repo.owned_quantities(ACCOUNT, Market.EQUITY),
+        portfolio_open_orders=lambda: (),
+        bot_tradable_symbols=lambda: {SYMBOL},
+    )
+    # The option is gone; a stale deployment could still carry the attribute on
+    # a broker instance. It must have no effect whatsoever.
+    broker.manage_external_positions = True  # type: ignore[attr-defined]
+
+    report = broker.reconcile()
+
+    # The holding is the bot's own, so it reconciles — and nothing is attached to it.
+    assert report["MATCH"] == [SYMBOL]
+    assert report["UNKNOWN_ORDER"] == []
+    assert fake.submitted_stops == 0
+    assert fake.submitted_market_orders == 0
     repo.close()

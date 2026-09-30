@@ -263,4 +263,6 @@ only; it never changes behaviour).
   `docs/OPERATIONS_LOG.md`.
 - Real PAPER orders outside the engine need an explicit opt-in:
   `scripts/paper_smoke.py` requires `PARAYABUCK_ALLOW_PAPER_SMOKE=YES`,
-  paper mode, and live not enabled. Do not run it while the VM engine runs.
+  paper mode, and live not enabled. It refuses itself while the engine
+  heartbeat is live and inside 15:45-16:30 ET; stop the service first
+  (`docs/deployment.md`, Pre-deploy checks).

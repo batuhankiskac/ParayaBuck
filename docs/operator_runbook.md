@@ -26,7 +26,8 @@ sudo journalctl -u parayabuck --since "1 hour ago" --no-pager | tail -n 100
 Safety resets are operator actions in the dashboard (or
 `POST /api/engine/reset-safety-lock`, `POST /api/safety/risk-epoch`). A reset
 succeeds only after the queue drains, data gaps clear and reconciliation
-passes, and it clears only the reason it verified.
+passes, and it clears the reason it verified (plus the halt rows this start
+already re-armed, see "Circuit breaker active").
 
 ## Intent alarm (`/readyz` 503 with `degraded_reasons`)
 
@@ -126,17 +127,58 @@ A rebalance in `sell_pending` / `buy_ready` / `buy_pending` for over 1 h
 (`ops doctor` → `stuck_rebalance`). Check broker order status and
 reconciliation. Do not edit `portfolio_rebalance_executions`.
 
+Rows of markets the equity runtime no longer executes (legacy crypto rows from
+the deleted sleeve) are ignored by `ops status`: nothing advances them, so
+they would otherwise pin `execution` at DEGRADED for good.
+
 ## Circuit breaker active
 
 Trading state `CIRCUIT_BREAKER`, runtime `halted`, incident persisted across
 restarts. Review `active_incidents.json` in the bundle and the broker account,
 then reset. Restarting does not clear it.
 
-## Crypto in the account
+Two kinds of row never come back after a restart:
 
-`risk_incident` at startup naming crypto symbols: the shared Alpaca account
-holds crypto. The bot never trades, stops or streams it; close it manually in
-the Alpaca dashboard if unwanted. Startup is not blocked.
+- worker restart limits (`pb-decisions_restart_limit` and friends) are not
+  restored — the worker is re-armed, and a repeat failure halts again by
+  itself. The row stays as an audit trail;
+- process-local halts (`decision_worker_crashed`,
+  `trade_update_callback_failure`, `final_market_event_queue_overflow`) are
+  migrated: the start re-arms the workers and the empty event queue, so the
+  row is cleared and a `circuit_breaker` alert records the migration.
+
+Every other reason (`ownership_drift`, `protection_failure`,
+`post_fill_risk_violation`, …) is restored on restart and needs its own
+verified reset. A reset verifies one reason at a time (plus the migrated set
+above): after resetting, check `ops status` for remaining rows and resolve each
+one.
+
+## Foreign inventory in the account
+
+`risk_incident` at startup naming crypto symbols and/or equity outside the
+strategy universe: the shared Alpaca account holds positions ParayaBuck does
+not own. The bot never trades, stops, streams or pins them, and they are not
+ownership drift — startup continues. They still count toward account gross and
+slot limits, so close them by hand in the Alpaca dashboard if unwanted.
+
+This is also the message for anything the account holds outside the strategy
+universe — a `paper_smoke` run, a manual position. Activity on a symbol the
+strategy *does* trade (QLD) is different: an unowned QLD holding is
+`BROKER_STALE` drift and halts the engine (see "Reconciliation failing").
+
+## Foreign order in the account
+
+An open broker order the engine does not own (manual order, leftover crypto
+order) is `UNKNOWN_ORDER` drift: the engine cannot know whether its fills are
+booked, so it refuses to start or halts until the order is terminal. Cancel or
+let it fill; do not delete rows to clear it.
+
+## `paper_smoke` refused
+
+The script trades the same PAPER account and refuses itself when the engine
+heartbeat is live (stop the service first) and inside 15:45-16:30 ET, the
+session-close decision window. Run it with the service stopped, outside that
+window, and with `PARAYABUCK_ALLOW_PAPER_SMOKE=YES`.
 
 ## Webhook alerts not arriving
 

@@ -115,6 +115,37 @@ credential is stored in the repo or in the unit. Run it by hand with
 probe while `parayabuck.service` is inactive, so a planned
 `systemctl stop parayabuck` (deploy, rollback) does not fire a false alert.
 
+## Pre-deploy checks (shared PAPER account)
+
+The Alpaca PAPER account is shared with the operator and with older builds, so
+what the account holds decides whether the next start trades. Read it in the
+Alpaca dashboard (or `GET /positions`, `GET /orders?status=open`) before
+`systemctl restart`:
+
+1. **No open orders the engine does not own.** Any open broker order whose
+   client id is not one of ours is `UNKNOWN_ORDER` drift and halts the start —
+   cancel them by hand first. A *filled* foreign order is harmless.
+2. **Foreign positions are fine.** Crypto, and equity outside the strategy
+   universe that no ledger or portfolio row claims, are classified as foreign
+   inventory: they raise one `risk_incident` at startup, are excluded from
+   ownership/drift and are never traded, stopped or pinned, and they still
+   count toward account gross and slot limits. Liquidate them by hand if you
+   do not want them. A position in a symbol the strategy *does* trade (QLD)
+   is still fail-closed drift.
+3. **No leftover halt rows.** List `safety_incidents` in the runtime DB and
+   resolve every row through its own verified recovery before deploying. A row
+   whose condition was in-process only (decision worker crash, trade-update
+   callback failure, event-queue overflow) is migrated automatically at the
+   next start with a `circuit_breaker` audit record, so it will not halt the
+   deploy — but every risk-, ownership-, protection- or reconciliation-owned
+   row is restored and still halts.
+4. **No crypto rebalances mid-phase and no open crypto orders** (only relevant
+   when coming from a build that had the crypto sleeve). Rebalance rows of
+   markets the equity runtime no longer executes are ignored by `ops status`;
+   orders are not, see 1.
+5. **Never run `scripts/paper_smoke.py` while the engine runs or between
+   15:45 and 16:30 ET.** The script refuses both cases itself.
+
 ## Update by git bundle
 
 On the laptop (`<deployed-sha>` = the commit the VM runs, from

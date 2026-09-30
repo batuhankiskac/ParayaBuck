@@ -295,6 +295,23 @@ verified reset. A reset verifies one reason at a time (plus the migrated set
 above): after resetting, check `ops status` for remaining rows and resolve each
 one.
 
+## `repair_local_state.py` and a stuck halt
+
+`scripts/repair_local_state.py` is a one-shot local repair: it quarantines the
+polluted warmup/observability files and closes interrupted runtime sessions.
+Two guards now bound it, and both are refusals, not warnings:
+
+- it refuses while the engine heartbeat is live (the same fail-closed check
+  `paper_smoke` uses), so it never rewrites state under a running engine;
+- it clears the `decision_worker_crashed` incident and its
+  `circuit_breaker_reason` **only when it verified a clean broker
+  reconciliation**. Without credentials, or with a failing reconcile, the halt
+  stays active and the script says so. Reset that halt the supported way —
+  reconcile, then reset from the dashboard or `ops` — not with this script.
+
+The script also refuses to touch any `risk_state` row whose
+`circuit_breaker_reason` is not `decision_worker_crashed`.
+
 ## Foreign inventory in the account
 
 `risk_incident` at startup naming crypto symbols and/or equity outside the

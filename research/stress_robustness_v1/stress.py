@@ -17,7 +17,7 @@ DTB3 = ROOT / "data/historical/stress_robustness_v1_dtb3.csv"
 OUT = Path(__file__).parent / "RESULTS.json"
 
 SMA, VOL_N, VOL_TARGET, BAND = 200, 20, 0.35, 0.005
-SCALE = 0.93
+SCALE = 0.98  # the risk overlay CAPS the strategy weight at this allocation; it never multiplies
 COST = 4.0 * 2 / 10_000  # 2x the 4 bps/side Stage A cost
 EXPENSE = 0.0095
 BILL_FEE = 0.0010
@@ -104,7 +104,7 @@ def simulate(opn, close, div, up, vol, y, start, mode, scale, bil=False):
         else:
             v = vol[:, i - 1]
             w = np.where(v > 0, np.minimum(1.0, VOL_TARGET / np.where(v > 0, v, 1.0)), 1.0)
-            want = np.where(up[:, i - 1] & ~np.isnan(v), scale * w, 0.0)
+            want = np.where(up[:, i - 1] & ~np.isnan(v), np.minimum(w, scale), 0.0)
         trade = np.abs(want - wa) > BAND
         turnover = np.abs(want - wa) + (np.abs(scale - want - wb) if bil else 0.0)
         nav = np.where(trade, nav * (1 - COST * turnover), nav)

@@ -39,7 +39,7 @@ SOURCES = (
 )
 START, END = "2017-01-03", "2026-07-30"
 WINDOWS = {"full": (START, END), "2017_2021": (START, "2021-12-31"), "2022_2026": ("2022-01-01", END)}
-SMA, VOL_N, VOL_TARGET, BAND, SIDE_BPS, BUDGET = 200, 20, 0.35, 0.005, 4.0, 0.93
+SMA, VOL_N, VOL_TARGET, BAND, SIDE_BPS, BUDGET = 200, 20, 0.35, 0.005, 4.0, 0.98
 STAGE_B_VT35 = {"cagr": 0.2898, "max_dd": 0.2916, "sharpe": 1.068}
 
 Targets = dict[str, float]
@@ -152,13 +152,13 @@ def make_arm(spec: dict, m: Market) -> Callable[[int], tuple[Targets, tuple]]:
             avg = sma(q, k)
             level = 0 if avg is None else trend_strength_level(q[k], avg)
             if level == 2:
-                return {"QLD": budget * vt(k)}, (level,)
+                return {"QLD": min(vt(k), budget)}, (level,)
             if level == 1:
-                return {"QQQ": budget * vt_weight(realized_vol(q, k))}, (level,)
+                return {"QQQ": min(vt_weight(realized_vol(q, k)), budget)}, (level,)
             return {}, (level,)
         frac, regime = core(k)
         split = spec.get("split", 1.0)
-        out: Targets = {"QLD": budget * split * frac} if frac > 0 else {}
+        out: Targets = {"QLD": min(split * frac, budget)} if frac > 0 else {}
         if kind == "second":
             x = m.close[spec["x"]]
             xa = sma(x, k)
@@ -178,7 +178,7 @@ def make_arm(spec: dict, m: Market) -> Callable[[int], tuple[Targets, tuple]]:
 
 ARMS: dict[str, dict] = {
     "VOO_hold_100": {"kind": "hold", "asset": "VOO", "budget": 1.0},
-    "VOO_hold_93": {"kind": "hold", "asset": "VOO"},
+    "VOO_hold_98": {"kind": "hold", "asset": "VOO"},
     "VT35_100": {"kind": "base", "budget": 1.0},
     "VT35": {"kind": "base"},
     "A2": {"kind": "buffer", "b": 0.02},
@@ -195,7 +195,7 @@ ARMS: dict[str, dict] = {
     "F-BIL": {"kind": "tbill", "etf": "BIL"},
     "F-SGOV": {"kind": "tbill", "etf": "SGOV"},
 }
-REFERENCE = {"VOO_hold_100", "VOO_hold_93", "VT35_100", "VT35"}
+REFERENCE = {"VOO_hold_100", "VOO_hold_98", "VT35_100", "VT35"}
 
 
 # ---------------------------------------------------------------- simulator
@@ -287,7 +287,7 @@ def run(m: Market) -> dict:
     vt = out["costs"]["1"]["VT35"]["full"]
     out["reproduction_vs_stage_b"] = {
         "stage_b": STAGE_B_VT35,
-        "screen_budget_093_1x": vt,
+        "screen_budget_098_1x": vt,
         "screen_budget_100_1x": out["costs"]["1"]["VT35_100"]["full"],
     }
     return out

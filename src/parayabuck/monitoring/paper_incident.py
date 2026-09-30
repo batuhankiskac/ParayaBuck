@@ -17,7 +17,7 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,12 @@ from parayabuck.monitoring.incident import (
 )
 
 log = logging.getLogger("parayabuck.monitoring.paper_incident")
+
+# Alpaca cash-activity classes that move equity without being a deposit or a
+# withdrawal. They are separate terms in the bridge: a QLD distribution is
+# income, a FEE/CFEE is a charge, and neither is an unexplained residual.
+INCOME_ACTIVITIES = frozenset({"DIV", "JNLS"})
+CASH_CHARGE_ACTIVITIES = frozenset({"FEE", "CFEE"})
 
 
 @dataclass(frozen=True)
@@ -80,6 +86,10 @@ class PaperIncidentSnapshot:
     starting_equity: float | None = None
     ending_equity: float | None = None
     starting_unrealized_pnl: float = 0.0
+    # Exclusive lower bound of the downloaded broker history, if any. The bot's
+    # own pre-window inventory is seeded from the local portfolio fills, so a
+    # normal exit after ``--after`` is not attributed to the whole lifetime.
+    after: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +100,8 @@ class PaperIncidentReport:
     unrealized_pnl_change: float
     slippage: float
     fees: float
+    cash_fees: float
+    dividends: float
     net_transfers: float
     expected_ending_equity: float | None
     actual_ending_equity: float | None
@@ -110,7 +122,7 @@ class PaperIncidentReconciler:
     """Reconcile a broker snapshot without mutating either source."""
 
     def reconcile(self, snapshot: PaperIncidentSnapshot, database_path: str | Path) -> PaperIncidentReport:
-        local_orders, local_positions = _read_local_ledger(database_path)
+        local_orders, local_positions, local_fills = _read_local_ledger(database_path)
         by_broker_id = {
             str(item.get("broker_order_id") or ""): item for item in local_orders if item.get("broker_order_id")
         }
@@ -126,16 +138,26 @@ class PaperIncidentReconciler:
                 and not (order.client_order_id and order.client_order_id in by_client_id)
             )
         )
+        # Only orders the window claims are compared: the local database holds
+        # the bot's whole history while the broker snapshot starts at ``--after``,
+        # so every older order would otherwise read as "missing at the broker".
         missing_broker = tuple(
             sorted(
                 str(order.get("broker_order_id") or order.get("client_order_id") or "")
                 for order in local_orders
-                if order.get("broker_order_id") not in broker_order_ids
+                if _within_window(order.get("created_at"), snapshot.after)
+                and order.get("broker_order_id") not in broker_order_ids
                 and order.get("client_order_id") not in broker_client_id_set
             )
         )
         duplicates = tuple(sorted(value for value, count in Counter(broker_client_ids).items() if value and count > 1))
-        realized, slippage = _fill_accounting(snapshot.fills, by_broker_id, by_client_id, snapshot.orders)
+        realized, slippage = _fill_accounting(
+            snapshot.fills,
+            by_broker_id,
+            by_client_id,
+            snapshot.orders,
+            _opening_inventory(local_fills, local_orders, snapshot.after),
+        )
         unrealized = sum(
             (position.current_price - position.average_entry_price) * position.quantity
             for position in snapshot.positions
@@ -156,10 +178,27 @@ class PaperIncidentReconciler:
         )
         closed = [position for position in local_positions if str(position.get("status") or "") == "closed"]
         fees = sum(fill.fee for fill in snapshot.fills)
-        net_transfers = sum(activity.net_amount for activity in snapshot.cash_activities)
+        cash_fees = sum(
+            activity.net_amount
+            for activity in snapshot.cash_activities
+            if activity.activity_type.upper() in CASH_CHARGE_ACTIVITIES
+        )
+        dividends = sum(
+            activity.net_amount
+            for activity in snapshot.cash_activities
+            if activity.activity_type.upper() in INCOME_ACTIVITIES
+        )
+        # Dividends and broker cash charges move equity too. Folding them into
+        # "net transfers" hid a normal QLD distribution inside the unexplained
+        # residual. Both are signed broker amounts, so they add as they are.
+        net_transfers = sum(
+            activity.net_amount
+            for activity in snapshot.cash_activities
+            if activity.activity_type.upper() not in CASH_CHARGE_ACTIVITIES | INCOME_ACTIVITIES
+        )
         unrealized_change = unrealized - snapshot.starting_unrealized_pnl
         expected_ending = (
-            snapshot.starting_equity + realized + unrealized_change - fees + net_transfers
+            snapshot.starting_equity + realized + unrealized_change - fees + cash_fees + dividends + net_transfers
             if snapshot.starting_equity is not None
             else None
         )
@@ -175,6 +214,8 @@ class PaperIncidentReconciler:
             unrealized_pnl_change=round(unrealized_change, 8),
             slippage=round(slippage, 8),
             fees=round(fees, 8),
+            cash_fees=round(cash_fees, 8),
+            dividends=round(dividends, 8),
             net_transfers=round(net_transfers, 8),
             expected_ending_equity=(round(expected_ending, 8) if expected_ending is not None else None),
             actual_ending_equity=snapshot.ending_equity,
@@ -249,22 +290,159 @@ def write_anonymized_fixture(path: str | Path, payload: dict[str, object]) -> No
 
 def _read_local_ledger(
     path: str | Path,
-) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
+    """Bot-owned orders, positions and fills from the CURRENT portfolio tables.
+
+    VT35 writes ``portfolio_orders``/``portfolio_fills``; the legacy
+    execution-ledger ``orders``/``managed_positions`` tables stay empty. The
+    reconciler used to read only those, so every bot order looked foreign,
+    every broker fill looked unmatched, slippage was always 0 and QLD showed
+    up as an external position. The ledger tables are still read when a
+    database has no portfolio tables at all.
+    """
     source = Path(path).resolve()
     uri = f"file:{source}?mode=ro"
     connection = sqlite3.connect(uri, uri=True)
     try:
         connection.row_factory = sqlite3.Row
         tables = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        orders = [dict(row) for row in connection.execute("SELECT * FROM orders")] if "orders" in tables else []
-        positions = (
-            [dict(row) for row in connection.execute("SELECT * FROM managed_positions")]
-            if "managed_positions" in tables
-            else []
-        )
+        if "portfolio_orders" in tables:
+            orders = [
+                {
+                    "client_order_id": row["client_order_id"],
+                    "broker_order_id": row["broker_order_id"],
+                    "symbol": row["symbol"],
+                    "side": row["side"],
+                    "created_at": row["created_at"],
+                    # The decision close the order was sized against.
+                    "reference_price": row["reference_price"],
+                }
+                for row in connection.execute("SELECT * FROM portfolio_orders")
+            ]
+            fills = (
+                [dict(row) for row in connection.execute("SELECT * FROM portfolio_fills")]
+                if "portfolio_fills" in tables
+                else []
+            )
+            positions: list[dict[str, object]] = []
+        else:
+            orders = (
+                [
+                    {
+                        "client_order_id": row.get("client_order_id"),
+                        "broker_order_id": row.get("broker_order_id"),
+                        "symbol": row.get("canonical_symbol") or row.get("symbol"),
+                        "side": row.get("side"),
+                        "created_at": row.get("updated_at"),
+                        "reference_price": row.get("entry_price") or row.get("reference_price"),
+                    }
+                    for row in (dict(item) for item in connection.execute("SELECT * FROM orders"))
+                ]
+                if "orders" in tables
+                else []
+            )
+            fills = []
+            positions = (
+                [dict(row) for row in connection.execute("SELECT * FROM managed_positions")]
+                if "managed_positions" in tables
+                else []
+            )
     finally:
         connection.close()
-    return orders, positions
+    if not positions:
+        positions = _positions_from_fills(orders, fills)
+    return orders, positions, fills
+
+
+def _positions_from_fills(
+    orders: list[dict[str, object]],
+    fills: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Per-symbol local positions derived from the portfolio fills.
+
+    The portfolio repository has no positions table: ownership lives in the
+    order/fill stream. Quantity, realized P&L and fees come from that stream
+    so an exit is attributed to the round trip that produced it.
+    """
+    side_of = {str(order["client_order_id"]): str(order.get("side") or "") for order in orders}
+    symbol_of = {str(order["client_order_id"]): str(order.get("symbol") or "") for order in orders}
+    totals: dict[str, dict[str, float]] = {}
+    for fill in sorted(fills, key=lambda row: (str(row["occurred_at"]), str(row["activity_id"]))):
+        symbol = symbol_of.get(str(fill["client_order_id"]))
+        if not symbol:
+            continue
+        row = totals.setdefault(symbol, {"realized_pnl": 0.0, "entry_fees": 0.0, "exit_fees": 0.0, "net": 0.0})
+        quantity = abs(float(str(fill["quantity"])))
+        row["realized_pnl"] += float(str(fill["realized_pnl"] or 0.0))
+        if side_of.get(str(fill["client_order_id"]), "").lower() == "sell":
+            row["exit_fees"] += float(str(fill["fee"] or 0.0))
+            row["net"] -= quantity
+        else:
+            row["entry_fees"] += float(str(fill["fee"] or 0.0))
+            row["net"] += quantity
+    return [
+        {
+            "canonical_symbol": symbol,
+            "status": "open" if row["net"] > 1e-12 else "closed",
+            "realized_pnl": row["realized_pnl"],
+            "entry_fees": row["entry_fees"],
+            "exit_fees": row["exit_fees"],
+        }
+        for symbol, row in sorted(totals.items())
+    ]
+
+
+def _within_window(value: object, after: datetime | None) -> bool:
+    """Whether an ISO timestamp falls inside the downloaded broker window."""
+    if after is None:
+        return True
+    if not value:
+        return True
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return (parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)) >= after
+
+
+def _at_or_before(value: object, moment: datetime) -> bool:
+    """Whether an ISO timestamp happened at or before ``moment`` (UTC)."""
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return (parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)) <= moment
+
+
+def _opening_inventory(
+    local_fills: list[dict[str, object]],
+    local_orders: list[dict[str, object]],
+    after: datetime | None,
+) -> dict[str, tuple[float, float]]:
+    """Quantity and average cost the bot already held when the window opened.
+
+    Without this seed the opening quantity at ``--after`` is zero, so a normal
+    exit realises nothing and its whole round-trip P&L lands in the equity
+    residual as unexplained loss.
+    """
+    if after is None:
+        return {}
+    # ``portfolio_fills`` carries no symbol; it reaches one through its order.
+    side_of = {str(order["client_order_id"]): str(order.get("side") or "") for order in local_orders}
+    symbol_of = {str(order["client_order_id"]): str(order.get("symbol") or "") for order in local_orders}
+    quantity: dict[str, float] = {}
+    cost: dict[str, float] = {}
+    for fill in sorted(local_fills, key=lambda row: (str(row["occurred_at"]), str(row["activity_id"]))):
+        if not _at_or_before(fill.get("occurred_at"), after):
+            continue
+        symbol = symbol_of.get(str(fill["client_order_id"]), "")
+        if not symbol:
+            continue
+        traded = abs(float(str(fill["quantity"])))
+        price = float(str(fill["price"]))
+        held = quantity.get(symbol, 0.0)
+        if side_of.get(str(fill["client_order_id"]), "").lower() == "sell":
+            sold = min(held, traded)
+            cost[symbol] = cost.get(symbol, 0.0) - sold * price
+            quantity[symbol] = held - sold
+        else:
+            quantity[symbol] = held + traded
+            cost[symbol] = cost.get(symbol, 0.0) + traded * price
+    return {symbol: (held, cost[symbol] / held) for symbol, held in quantity.items() if held > 1e-12}
 
 
 def _fill_accounting(
@@ -272,10 +450,12 @@ def _fill_accounting(
     by_broker_id: dict[str, dict[str, object]],
     by_client_id: dict[str, dict[str, object]],
     orders: tuple[BrokerOrderRecord, ...],
+    opening: dict[str, tuple[float, float]] | None = None,
 ) -> tuple[float, float]:
     broker_orders = {order.order_id: order for order in orders}
-    quantity: dict[str, float] = {}
-    average: dict[str, float] = {}
+    seed = opening or {}
+    quantity: dict[str, float] = {symbol: held for symbol, (held, _) in seed.items()}
+    average: dict[str, float] = {symbol: cost for symbol, (_, cost) in seed.items()}
     realized = 0.0
     slippage = 0.0
     for fill in sorted(fills, key=lambda item: (item.occurred_at, item.activity_id)):
@@ -293,7 +473,9 @@ def _fill_accounting(
         if local is None and fill.order_id in broker_orders:
             local = by_client_id.get(broker_orders[fill.order_id].client_order_id)
         if local is not None:
-            reference = float(str(local.get("entry_price") or 0.0))
+            # The reference is the DECISION close the order was sized against,
+            # not a legacy entry price the portfolio path never writes.
+            reference = float(str(local.get("reference_price") or 0.0))
             if reference > 0:
                 direction = 1.0 if fill.side.lower() == "buy" else -1.0
                 slippage += (fill.price - reference) * fill.quantity * direction

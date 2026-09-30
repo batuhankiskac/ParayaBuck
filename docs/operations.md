@@ -356,8 +356,9 @@ explain; review the broker account before any safety reset. Never delete the DB,
 
 ## Incident reconciliation
 
-Read-only P&L reconciliation of the ledger against Alpaca activity (transfers
-are fetched automatically):
+Read-only P&L reconciliation of the ledger against Alpaca activity. Deposits,
+withdrawals, dividends (`DIV`/`JNLS`) and broker cash charges (`FEE`/`CFEE`)
+are all fetched, because every one of them moves equity:
 
 ```bash
 .venv/bin/python scripts/reconcile_paper_incident.py \
@@ -365,10 +366,55 @@ are fetched automatically):
   --starting-equity 100000 --starting-unrealized-pnl 0
 ```
 
-It reports realized/unrealized P&L, fees, transfers, expected vs actual
-equity and the unexplained residual. `scripts/execution_quality_report.py`
-prints fill latency, slippage and fees versus the backtest cost model (report
-only; it never changes behaviour).
+`--after` is the window. The broker history starts there, so the reconciler
+seeds the opening position and its cost basis from the local `portfolio_fills`
+at or before that instant: a normal QLD exit is measured against the entry
+that funded it, not against zero. Everything is read from the current
+`portfolio_orders`/`portfolio_fills` tables, so the bot's own orders, fills and
+held symbols are recognised as its own; what is left over is genuine foreign
+activity (`external_position_symbols` for holdings, `broker_orders_missing_locally`
+for orders). Local orders older than the window are not reported as missing at
+the broker — the download simply does not cover them.
+
+The report gives realized/unrealized P&L, fill fees, cash fees, dividends,
+transfers, expected vs actual equity and the unexplained residual. A residual
+is a real finding only after those separate terms are read: a distribution or a
+charge that was folded into "transfers" used to look like unexplained loss.
+
+`scripts/execution_quality_report.py` prints fill latency, the decision-close
+gap and fees against the modeled fees (report only; it never changes
+behaviour). Its reference is `portfolio_orders.reference_price`, which is the
+**decision close**, while market orders fill at the next session open: the
+distribution it reports is an overnight gap, not execution slippage, and the
+report deliberately publishes no `within_model`/`above_model`/`below_model`
+verdict. The backtest-aligned comparison — next-open fills against the next
+open, with modeled adverse cost and fees — is
+`scripts/execution_shadow_report.py` (`paper_vs_zero_cost_open_bps`).
+
+## PAPER soak audit
+
+`scripts/audit_paper_soak.py` is the read-only, fail-closed gate set for a
+soak window. It runs against the production identity: equity-only VT35, a
+decision on **every NYSE session close** (early closes and holidays from the
+exchange calendar, not a fixed weekday heuristic), the configured 0.98 gross
+cap and 0.02 cash buffer for BUY admission headroom, and one startup catch-up
+decision **only when the deployment is genuinely cold**.
+
+```bash
+.venv/bin/python scripts/audit_paper_soak.py \
+  --db data/runtime/parayabuck.sqlite3 --journal data/runtime/operational.sqlite3 \
+  --start 2026-09-03T12:00:00Z
+```
+
+Decisions are labelled 00:00 ET but decided at that session's NYSE close, so
+`--start`/`--end` bound the **decision moment**. Every order, fill, admission,
+rebalance, receipt and decision summary is then linked to its decision by id,
+never by wall clock: a `--start` inside a session (the usual
+`--start <restart UTC>`) no longer splits a decision from its own orders.
+`counts.startup_catch_up_required` and `counts.expected_nyse_sessions` say
+whether S9 had anything to require and how many sessions were expected; a
+resolved reconciliation failure (a later `reconciliation_succeeded`) does not
+keep failing S8.
 
 ## Splits and foreign sells
 

@@ -65,10 +65,18 @@ Setup:
 
 Calibration of this model:
 
-- **2017–2026, VT35 alone:** 27.65% CAGR and 26.4% max DD. The engine's Stage B gave 28.98% and
-  29.2%.
-- **Overlap window, variant A:** 25.07% CAGR. The Stage B VT35 run, which includes crypto, gave
+- **2017–2026, VT35 alone (0.93 cap):** 28.51% CAGR and 27.5% max DD. The engine's Stage B
+  gave 28.98% and 29.2%.
+- **Overlap window, variant A:** 25.76% CAGR. The Stage B VT35 run, which includes crypto, gave
   26.1% and 29.2% DD.
+
+**Correction (2026-10-01, sizing convention).** The equity leg was previously sized as
+`cap × min(1, 0.35 / vol)`. Production never multiplies: the risk overlay caps the strategy weight
+at `maximum_allocation`, so the weight is `min(cap, min(1, 0.35 / vol))`. Re-run with
+`python3 research/crypto_sleeve_decision_v1/account_sim.py` (same pinned git-tag inputs,
+regenerating `RESULTS.json`), which raises every equity row by roughly 0.7–0.9 pp CAGR. The
+conclusion is unchanged: the sleeve's contribution is still inside noise and the removal
+recommendation stands.
 
 The model runs about 1 pp under the engine, so compare the differences between rows rather than
 the levels.
@@ -77,23 +85,23 @@ the levels.
 
 | Variant | CAGR | Max DD | Sharpe | Total |
 |---|---:|---:|---:|---:|
-| A: equity 0.93 + crypto strategy 0.05 (current) | 25.07% | 27.55% | 0.994 | 229.3% |
-| B: equity 0.93, crypto removed, 0.05 in cash | 24.09% | 26.07% | 0.999 | 215.8% |
-| C: equity 0.98, crypto removed | **25.34%** | 27.34% | 0.997 | 233.1% |
-| R1: equity 0.93 + BTC buy-and-hold 0.05 | 24.72% | 28.70% | 0.984 | 224.4% |
-| R2: equity 0.93 + BTC 200-day trend 0.05 | 24.97% | 26.55% | 1.002 | 227.9% |
+| A: equity 0.93 + crypto strategy 0.05 (current) | 25.76% | 28.98% | 0.996 | 239.1% |
+| B: equity 0.93, crypto removed, 0.05 in cash | 24.81% | 27.51% | 1.001 | 225.6% |
+| C: equity 0.98, crypto removed | 25.57% | 27.66% | 0.999 | 236.5% |
+| R1: equity 0.93 + BTC buy-and-hold 0.05 | 25.43% | 30.08% | 0.988 | 234.4% |
+| R2: equity 0.93 + BTC 200-day trend 0.05 | 25.68% | 27.95% | 1.005 | 237.9% |
 
 **Sensitivity checks.** Rows are in the same order: A / B / C / R1 / R2.
 
 | Check | CAGR | Max DD |
 |---|---|---|
-| Idle cash earns an approximate 3-month T-bill rate | 26.10 / 25.32 / 26.42 / 25.74 / 26.08% | 25.8 / 24.2 / 25.5 / 27.0 / 24.7% |
-| 2021-07-20 start (the day the BTC SMA200 is defined), cash at 0 | 23.71 / 22.29 / 23.42 / 23.80 / 23.20% | — |
+| Idle cash earns an approximate 3-month T-bill rate | 26.72 / 25.97 / 26.63 / 26.39 / 26.72% | 27.3 / 25.7 / 25.8 / 28.4 / 26.2% |
+| 2021-07-20 start (the day the BTC SMA200 is defined), cash at 0 | 24.18 / 22.78 / 23.59 / 24.28 / 23.69% | — |
 
-In the later-start check, A leads C by 0.3 pp. Over the full window, C leads A by 0.3 pp.
+In the later-start check, A leads C by 0.6 pp. Over the full window, A leads C by 0.2 pp.
 
-- **Statistical weight:** the monthly A−B difference is +0.09%/month (t = 0.80, 64 months). The
-  A−C difference is −0.02%/month (t = −0.19). Neither is distinguishable from zero.
+- **Statistical weight:** the monthly A−B difference is +0.09%/month (t = 0.79, 64 months). The
+  A−C difference is +0.02%/month (t = 0.18). Neither is distinguishable from zero.
 - **Calendar years:** the crypto replay's share of NAV was:
 
   | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 YTD |
@@ -157,10 +165,11 @@ Over the only window with data (5.3 years), the sleeve adds about +1 pp/yr of CA
 cash. That gain is not statistically significant (t ≈ 0.8). It also comes with a higher max
 drawdown (+1.5 pp) and no hedge, since the sleeve lost in 2022 together with equity.
 
-Moving the same 0.05 into VT35 (0.98, which respects the 0.02 buffer) gives the same or better
-return: 25.34% vs 25.07% CAGR, with a similar drawdown and Sharpe. So the crypto sleeve earns no
-return premium over a simpler, already-validated use of that capital. Meanwhile it carries 18% of
-commit history, a 24/7 execution path and a recent production-level bug.
+Moving the same 0.05 into VT35 (0.98, which respects the 0.02 buffer) gives the same
+return: 25.57% vs 25.76% CAGR, with a lower drawdown and the same Sharpe. So the crypto
+sleeve earns no return premium over a simpler, already-validated use of that capital.
+Meanwhile it carries 18% of commit history, a 24/7 execution path and a recent
+production-level bug.
 
 As a "learning basket" it teaches little. A 5% market-order sleeve that is 0.88 correlated with
 BTC is effectively a small BTC beta position. Its live record is already contaminated, and a clean

@@ -293,6 +293,19 @@ def test_equity_allocation_above_gross_limit_is_rejected(tmp_path: Path) -> None
         load_config(str(path))
 
 
+def test_removed_manage_external_positions_setting_fails_loudly(tmp_path: Path) -> None:
+    """The option that let the bot attach stops to positions it never owned is
+    gone; a stale deployment config naming it must be rejected, not silently
+    dropped back to the safe default."""
+    raw = _settings()
+    raw["engine"] = {"manage_external_positions": True}
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(TypeError, match="manage_external_positions"):
+        load_config(str(path))
+
+
 def test_shipped_settings_forward_every_default_webhook_kind() -> None:
     """config/settings.yaml must not silently drop an operator-actionable kind:
     it forwards exactly the default webhook set (everything but paper_receipt)."""

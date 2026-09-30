@@ -92,7 +92,19 @@ account-suffix confirmation. Any config change invalidates the approval.
 .venv/bin/python scripts/run_paper_chaos.py   # offline fake-broker fault injection
 ```
 
-Tests never touch the network, credentials or production paths.
+Tests never touch the network, credentials or production paths. `tests/conftest.py`
+enforces it: every test runs with the journal, snapshot, warmup cache, runtime
+DB, receipts and the risk-peak sidecar redirected into `tmp_path`, and any test
+that opens a file under the repo's `data/runtime/`, `data/cache/` or `logs/`,
+or changes one, fails with an isolation error. A test that needs runtime state
+must pass an explicit path (`runtime_state_dir=tmp_path`, or
+`peak_state_path=tmp_path / "peak.json"`) — never rely on the cwd-relative
+production default, which differs between a fresh checkout and the trading VM.
+
+Commands that resolve their state paths from the config (`ops status`,
+`ops doctor`, `ops timeline`, `ops bundle`, the web ops read model) take the
+`isolated_config_path` fixture: the shipped config with its decision DB,
+journal and snapshot inside `tmp_path`.
 
 ## Documentation
 

@@ -7,8 +7,8 @@ Responsibility:
   24 h, paginated, deduped by ``activity.id``) → ``managed =
   ledger.managed_for_account`` → holdings 7-bucket (``MATCH`` etc.) →
   ``_reconcile_stale_portfolio_ownership`` → ``_reconcile_stale_ledger_entries``
-  → protective-stop (re)submission (equity ledger-managed/external positions
-  only; foreign positions in the shared account are left alone).
+  → protective-stop (re)submission (equity positions with ledger-managed
+  ownership only; every other position is left alone).
 - Idempotent: second call with same broker truth yields same buckets, no
   duplicate fills/stops.
 - Foreign inventory in the shared account (a crypto holding, or an equity
@@ -43,10 +43,19 @@ from parayabuck.execution.alpaca_models import ProtectionReconciliationError
 from parayabuck.execution.ledger import FILL_ACTIVITY_RECOVERY_PREFIX
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.monitoring import alerts
 from parayabuck.utils import is_crypto
 from parayabuck.utils.http import is_network_failure
 
 log = get_logger("parayabuck.execution.alpaca_reconciliation")
+
+# Every side Alpaca reports on a FILL activity. The reconciler only rebuilds
+# order state for the two sides a long-only managed book produces; the rest
+# are legitimately present on the shared account (a manual short, a crypto or
+# bond leg) and must NOT block reconciliation. A side outside this vocabulary
+# is recorded and alerted instead of being fatal.
+_RECOVERABLE_FILL_SIDES = frozenset({"buy", "sell"})
+_KNOWN_FILL_SIDES = frozenset({*_RECOVERABLE_FILL_SIDES, "buy_minus", "sell_plus", "sell_short", "sell_short_exempt"})
 
 # Absolute floor for ledger-vs-broker position quantity agreement.
 QUANTITY_MATCH_FLOOR = 1e-8
@@ -184,11 +193,14 @@ class ReconciliationService:
                         occurred_at = datetime.fromisoformat(str(item["transaction_time"]))
                         broker_order_id = str(item["order_id"])
                         symbol = str(item["symbol"])
+                        # Structural corruption is fatal. An unlinked or
+                        # unexpected-side activity is NOT: it is skipped (and
+                        # reported) further down, because a single manual short
+                        # on the shared account used to pin the watermark and
+                        # block reconciliation until an operator fixed it by
+                        # hand.
                         if (
-                            side not in {"buy", "sell"}
-                            or not broker_order_id
-                            or not symbol
-                            or not isfinite(qty)
+                            not isfinite(qty)
                             or qty <= 0
                             or not isfinite(price)
                             or price <= 0
@@ -236,6 +248,9 @@ class ReconciliationService:
         # ledger event is cumulative, so each activity must carry the sum.
         recovered_sell_totals: dict[str, tuple[float, float]] = {}
         applied_watermark: datetime | None = None
+        # (activity_id, side, symbol, reason) for the activities this pass
+        # deliberately did not apply. Reported, never fatal.
+        skipped: list[tuple[str, str, str, str]] = []
         for activity in activities:
             fee_raw = activity.get("commission", activity.get("fee", 0))
             try:
@@ -259,7 +274,24 @@ class ReconciliationService:
             except (TypeError, ValueError):
                 qty = 0.0
                 price = 0.0
-            if activity_id and broker_order_id and symbol and side == "sell" and qty > 0 and price > 0:
+            # The cursor advances for EVERY well-formed activity, skipped ones
+            # included: the watermark is what stops the next pass from
+            # re-reading this page, so pinning it behind one odd activity is
+            # what made reconciliation fail for good.
+            if activity_id and (applied_watermark is None or occurred_at > applied_watermark):
+                applied_watermark = occurred_at
+            if not (activity_id and broker_order_id and symbol):
+                skipped.append((activity_id, side, symbol, "unlinked"))
+                continue
+            if side not in _RECOVERABLE_FILL_SIDES:
+                # Known-but-unmanaged (a manual short on the shared account) or
+                # a side outside Alpaca's vocabulary: no order state is
+                # rebuilt, and an unknown side is surfaced to the operator.
+                skipped.append(
+                    (activity_id, side, symbol, "unexpected_side" if side not in _KNOWN_FILL_SIDES else "side")
+                )
+                continue
+            if side == "sell" and qty > 0 and price > 0:
                 market = Market.CRYPTO if "/" in symbol else Market.EQUITY
                 order_lookup = getattr(ledger, "order_for_broker_id", None)
                 existing_client = (
@@ -289,7 +321,7 @@ class ReconciliationService:
                             activity_id=activity_id,
                         )
                     )
-            if activity_id and broker_order_id and symbol and side == "buy" and qty > 0 and price > 0:
+            if side == "buy" and qty > 0 and price > 0:
                 recovered_buy_fills.setdefault(broker_order_id, []).append(
                     (qty, price, occurred_at, activity_id, symbol)
                 )
@@ -300,8 +332,6 @@ class ReconciliationService:
                 fee=fee,
                 occurred_at=occurred_at,
             )
-            if applied_watermark is None or occurred_at > applied_watermark:
-                applied_watermark = occurred_at
             if applied:
                 log.info("Fee activity applied: broker_order_id=%s fee=%s", activity.get("order_id"), fee)
         entry_lookup = getattr(ledger, "entry_order_for_broker_id", None)
@@ -348,6 +378,33 @@ class ReconciliationService:
                     broker_order_id,
                     cumulative,
                 )
+        if skipped:
+            unexpected = [item for item in skipped if item[3] == "unexpected_side"]
+            log.warning(
+                "FILL activities skipped without order-state recovery: %d (%d unlinked, %d side not recoverable)",
+                len(skipped),
+                sum(1 for item in skipped if item[3] == "unlinked"),
+                len(skipped) - sum(1 for item in skipped if item[3] == "unlinked"),
+            )
+            if unexpected:
+                # A side outside Alpaca's FILL vocabulary: the reconciler will
+                # keep skipping it, so the operator is told rather than
+                # discovering it through a permanently failing reconcile.
+                try:
+                    alerts.emit(
+                        "reconciliation_unexpected_fill_side",
+                        message=(
+                            f"{len(unexpected)} broker FILL activity(ies) carry a side outside Alpaca's "
+                            "vocabulary; they are skipped, not applied, and the reconcile cursor advances"
+                        ),
+                        count=len(unexpected),
+                        activities=[
+                            {"activity_id": activity_id, "side": side, "symbol": symbol}
+                            for activity_id, side, symbol, _reason in unexpected[:20]
+                        ],
+                    )
+                except Exception:  # observability must never break reconciliation
+                    log.warning("Unexpected FILL side alert failed", exc_info=True)
         if watermark_setter is not None and applied_watermark is not None:
             watermark_setter(account_id, "fill_activity", applied_watermark)
         return True
@@ -599,7 +656,6 @@ class ReconciliationService:
                 raise ReconciliationResultError("Broker account has no identity")
         broker_orders = broker._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
         self._recover_portfolio_orders(broker_orders)
-        manage_external = bool(getattr(broker, "manage_external_positions", True))
         ledger = getattr(broker, "ledger", None)
         fill_activities_reconciled = True
         managed: dict[str, Any] = {}
@@ -715,15 +771,15 @@ class ReconciliationService:
                 log.info("Non-equity position left unchanged during reconciliation: %s", symbol)
                 continue
             ownership = managed.get(symbol)
-            if ownership is None and not manage_external:
-                log.info("External position left unchanged during reconciliation: %s", symbol)
+            if ownership is None:
+                # No legacy-ledger ownership: this runtime never opened the
+                # position, so it must never attach protection to it. Inventing
+                # a stop here would later surface as an UNKNOWN_ORDER and, if it
+                # filled, as an ownership-drift halt.
+                log.info("Position has no ledger ownership; left unchanged during reconciliation: %s", symbol)
                 continue
-            if ownership is not None:
-                stop_price = getattr(ownership, "current_stop", None) or ownership.original_stop
-                total_qty = min(abs(position.qty), ownership.owned_qty)
-            else:
-                total_qty = abs(position.qty)
-                stop_price = position.avg_price * (1 - 0.04 if is_long else 1 + 0.04)
+            stop_price = getattr(ownership, "current_stop", None) or ownership.original_stop
+            total_qty = min(abs(position.qty), ownership.owned_qty)
             available_qty = abs(position.qty_available) if position.qty_available is not None else total_qty
             required_qty = total_qty
             # use broker's has_protective check (delegates to ProtectionService when wired)

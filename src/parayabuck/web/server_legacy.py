@@ -3086,6 +3086,13 @@ def _dashboard_restart_count() -> int | None:
         _dashboard_release(connection)
 
 
+def _dashboard_degraded_reasons(health: dict[str, Any] | None) -> list[str]:
+    """Active intent-watchdog alarm codes from the RuntimeHealth dict."""
+    watchdog = (health or {}).get("intent_watchdog")
+    reasons = watchdog.get("degraded_reasons") if isinstance(watchdog, dict) else None
+    return [str(reason) for reason in reasons] if isinstance(reasons, list) else []
+
+
 def _dashboard_health(
     cfg: Any,
     health: dict[str, Any] | None,
@@ -3107,6 +3114,9 @@ def _dashboard_health(
         "healthy": (health or {}).get("healthy"),
         "workers": workers,
         "restart_count": restart_count,
+        # Intent-watchdog alarm codes, the same list /readyz fails readiness
+        # on: the badge must not read "Sağlıklı" while a session went undecided.
+        "degraded_reasons": _dashboard_degraded_reasons(health),
         "queue": {
             "size": (health or {}).get("queue_size"),
             "age_seconds": (health or {}).get("queue_age_seconds"),

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import builtins
+import io
+import os
 import threading
 import time
 from pathlib import Path
@@ -9,9 +12,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
 from parayabuck.data import cache as cache_module
 from parayabuck.data.cache import WarmupCache
+from parayabuck.execution import risk_peak as risk_peak_module
 from parayabuck.monitoring import journal as journal_module
 from parayabuck.monitoring import receipt as receipt_module
 from parayabuck.monitoring import snapshot as snapshot_module
@@ -20,25 +25,85 @@ from parayabuck.monitoring.snapshot import DEFAULT_SNAPSHOT_PATH, SnapshotWriter
 from parayabuck.storage import SQLiteStore
 from parayabuck.web.state import get_web_state, set_web_state
 
-_PROTECTED_PATHS = [
-    Path("data/cache/warmup.sqlite3"),
-    Path("data/cache/warmup.sqlite3-wal"),
-    # -shm is shared memory, mtime changes on read; not reliable for isolation check
-    Path("data/runtime/parayabuck.sqlite3"),
-    # wal for parayabuck is ephemeral; exclude -shm, check wal leniently
-    Path("data/runtime/observability.sqlite3"),
-    Path("data/runtime/health_snapshot.json"),
-]
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Mutable state the operator owns. Tests must never open or write it: a read
+# makes the suite depend on machine state (the PAPER peak sidecar carries the
+# live account id, so a fake account trips the account-scoped fail-closed
+# check), and a write corrupts the running engine's state.
+_PROTECTED_STATE_DIRS = (
+    _REPO_ROOT / "data" / "runtime",
+    _REPO_ROOT / "data" / "cache",
+    _REPO_ROOT / "logs",
+)
+
+# Cheap prefilter: only paths mentioning these fragments are resolved and
+# classified, so the guard costs a substring test per open().
+_STATE_MARKERS = ("data/", "logs/")
 
 
-def _file_signature(path: Path):
-    if not path.exists():
+def protected_state_path(path: object) -> Path | None:
+    """Return ``path`` resolved when it names a file under a production state dir."""
+    if path is None or isinstance(path, int):
         return None
     try:
-        st = path.stat()
-        return (st.st_mtime_ns, st.st_size)
-    except FileNotFoundError:
+        raw = os.fsdecode(os.fspath(path))
+    except TypeError:
         return None
+    if not any(marker in raw for marker in _STATE_MARKERS):
+        return None
+    try:
+        resolved = Path(raw).resolve()
+    except OSError:
+        return None
+    for root in _PROTECTED_STATE_DIRS:
+        if resolved == root or root in resolved.parents:
+            return resolved
+    return None
+
+
+def _display(path: str) -> str:
+    try:
+        return str(Path(path).relative_to(_REPO_ROOT))
+    except ValueError:
+        return path
+
+
+def _state_tree_signature() -> dict[str, tuple[int, int]]:
+    """mtime/size of every entry under the production state dirs."""
+    signature: dict[str, tuple[int, int]] = {}
+    for root in _PROTECTED_STATE_DIRS:
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            signature[str(path)] = (st.st_mtime_ns, st.st_size)
+    return signature
+
+
+@pytest.fixture
+def isolated_config_path(tmp_path: Path) -> Path:
+    """The shipped config with its state paths inside ``tmp_path``.
+
+    The ops commands and the web ops read model resolve their snapshot, journal
+    and decision DB from the config, so a test that runs one of them against
+    the shipped config answers from the operator's ``data/runtime`` — present on
+    the trading VM, absent on a fresh checkout. Point those tests at this file
+    (``--config`` on the CLI, the engine manager's ``config_path`` in the web).
+    """
+    raw = yaml.safe_load((_REPO_ROOT / "config" / "settings.yaml").read_text(encoding="utf-8"))
+    raw.setdefault("runtime", {})["decision_db_path"] = str(tmp_path / "decisions.sqlite3")
+    raw["observability"] = {
+        **(raw.get("observability") or {}),
+        "snapshot_path": str(tmp_path / "health_snapshot.json"),
+        "journal_path": str(tmp_path / "observability.sqlite3"),
+    }
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    return path
 
 
 @pytest.fixture(autouse=True)
@@ -73,8 +138,8 @@ def _restore_web_state():
 
 
 @pytest.fixture(autouse=True)
-def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
-    before = {p: _file_signature(p) for p in _PROTECTED_PATHS}
+def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    tree_before = _state_tree_signature()
     # An operator's real alert webhook in the developer shell must never
     # receive test traffic (the runtime falls back to this variable).
     monkeypatch.delenv("PARAYABUCK_ALERT_WEBHOOK_URL", raising=False)
@@ -85,6 +150,48 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
     iso_receipt_dir = tmp_path / "paper_receipts"
     iso_receipt_dir.mkdir(parents=True, exist_ok=True)
     iso_cache.parent.mkdir(parents=True, exist_ok=True)
+
+    # Access guard: record every open of production state. Recorded (not raised)
+    # so the offending test fails with the full list instead of an opaque
+    # error from deep inside the runtime.
+    state_accesses: list[str] = []
+
+    def _record(path: object) -> None:
+        hit = protected_state_path(path)
+        if hit is not None:
+            state_accesses.append(_display(str(hit)))
+
+    orig_io_open = io.open
+
+    def _guarded_io_open(file, *args, **kwargs):  # type: ignore[no-untyped-def]
+        _record(file)
+        return orig_io_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(io, "open", _guarded_io_open)
+    monkeypatch.setattr(builtins, "open", _guarded_io_open)
+
+    orig_os_open = os.open
+
+    def _guarded_os_open(path, *args, **kwargs):  # type: ignore[no-untyped-def]
+        _record(path)
+        return orig_os_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", _guarded_os_open)
+
+    # RiskPeakService resolves its sidecar to the relative data/runtime default
+    # when neither peak_state_path nor runtime_state_dir is given, so such a
+    # broker read (and later wrote) the operator's PAPER peak file — whose
+    # account id then failed a fake account closed.
+    iso_state_dir = tmp_path / "runtime_state"
+    iso_state_dir.mkdir(parents=True, exist_ok=True)
+    orig_resolve_peak = risk_peak_module.resolve_peak_state_path
+
+    def _patched_resolve_peak(paper, peak_state_path=None, runtime_state_dir=None):  # type: ignore[no-untyped-def]
+        if peak_state_path is None and runtime_state_dir is None:
+            return orig_resolve_peak(paper, None, iso_state_dir)
+        return orig_resolve_peak(paper, peak_state_path, runtime_state_dir)
+
+    monkeypatch.setattr(risk_peak_module, "resolve_peak_state_path", _patched_resolve_peak)
 
     # WarmupCache redirect
     orig_warmup_init = WarmupCache.__init__
@@ -219,6 +326,7 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
     _orig_connect = _sqlite3.connect
 
     def _patched_connect(database, *args, **kwargs):  # type: ignore[no-untyped-def]
+        _record(database)
         db_str = str(database)
         # Redirect production paths (including URI file:...) to isolated files
         if "data/runtime/parayabuck.sqlite3" in db_str and str(tmp_path) not in db_str:
@@ -278,17 +386,19 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
     except Exception:
         pass
 
-    for p, sig_before in before.items():
-        # The SQLite protection test intentionally writes to its target DB;
-        # its own assertions cover the protected-path behavior.
-        if p == Path("data/runtime/parayabuck.sqlite3") and "test_sqlite_protection" in request.node.name:
-            continue
-        sig_after = _file_signature(p)
-        if sig_before is None:
-            if sig_after is not None:
-                pytest.fail(f"Test created production file {p} that did not exist before — isolation failed")
-        else:
-            if sig_after != sig_before:
-                pytest.fail(
-                    f"Production file {p} was modified during test (before={sig_before}, after={sig_after}) — isolation failed, real cache/runtime polluted"
-                )
+    # Belt and braces: even an access the recorder cannot classify (a raw
+    # os-level write, a rename) shows up as a changed state tree.
+    tree_after = _state_tree_signature()
+    created = sorted(_display(p) for p in set(tree_after) - set(tree_before))
+    removed = sorted(_display(p) for p in set(tree_before) - set(tree_after))
+    changed = sorted(_display(p) for p in set(tree_before) & set(tree_after) if tree_after[p] != tree_before[p])
+    if created or removed or changed:
+        pytest.fail(
+            f"Production state changed during test (created={created}, removed={removed}, "
+            f"changed={changed}) — isolation failed; tests must use tmp_path"
+        )
+    if state_accesses:
+        pytest.fail(
+            f"Test opened production state paths {sorted(set(state_accesses))} — isolation failed; "
+            "tests must use tmp_path, never the repo's data/runtime, data/cache or logs"
+        )

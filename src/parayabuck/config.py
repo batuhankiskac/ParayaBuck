@@ -208,7 +208,6 @@ class RiskLimits:
 
 @dataclass(frozen=True)
 class EngineConfig:
-    manage_external_positions: bool = False
     event_grace_seconds: float = 5.0
     data_finalization_grace_seconds: float = 2.0
     maximum_queue_age_seconds: float = 30.0
@@ -224,7 +223,8 @@ class EngineConfig:
     # A session-close decision blocked by a RECOVERABLE gate (breaker,
     # reconcile failure, readiness gate, invalidated account-snapshot lease,
     # transient account fetch) is re-queued and retried on this cadence
-    # until ``decision_retry_window_minutes`` after the 16:00 ET close.
+    # until ``decision_retry_window_minutes`` after the session's NYSE close
+    # (16:00 ET, 13:00 ET on an early close).
     decision_retry_interval_seconds: float = 60.0
     decision_retry_window_minutes: float = 40.0
 

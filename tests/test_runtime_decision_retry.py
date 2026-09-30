@@ -8,7 +8,7 @@ threshold and the full 16:00 flush -> decision -> deferral -> retry chain.
 from __future__ import annotations
 
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -17,6 +17,7 @@ import pytest
 import parayabuck.runtime as runtime_module
 from parayabuck.config import EngineConfig, SignalCrossCheckConfig
 from parayabuck.core.models import AccountSnapshot, Bar, Market
+from parayabuck.markets.nyse_calendar import session_close_utc
 from parayabuck.markets.timeframes import NEW_YORK
 from parayabuck.runtime import EngineRuntime, _AccountSnapshotLease
 
@@ -228,10 +229,9 @@ def test_retry_stops_at_the_bounded_deadline_and_alerts_once(
 
     assert engine._deferred_portfolio_batches == {}
     assert [kind for kind, _ in _capture_alerts] == ["decision_deferred"]
-    assert (
-        _capture_alerts[0][1]["retry_window_ended"]
-        == (SESSION_CLOSE.astimezone(NEW_YORK) + timedelta(minutes=40)).isoformat()
-    )
+    # The NYSE calendar hands back the close in UTC; the deadline is the
+    # close + the retry window, compared as instants.
+    assert _capture_alerts[0][1]["retry_window_ended"] == (SESSION_CLOSE + timedelta(minutes=40)).isoformat()
 
 
 def test_warmup_batches_are_not_decisions_and_are_not_requeued(
@@ -244,6 +244,57 @@ def test_warmup_batches_are_not_decisions_and_are_not_requeued(
 
     assert engine._process_portfolio_timestamp(_bars()) is True
     assert engine._deferred_portfolio_batches == {}
+
+
+def test_early_close_retry_deadline_is_the_actual_close_not_16_et(
+    monkeypatch: pytest.MonkeyPatch, _capture_alerts: list[tuple[str, dict[str, object]]]
+) -> None:
+    """A 13:00 ET session must stop retrying at 13:40 ET.
+
+    Measured from a fixed 16:00 ET the window would run three hours past the
+    close of an early-close session — into the next session, where a stale
+    batch competes with the live one.
+    """
+    # 2026-11-27 (the Friday after Thanksgiving) closes at 13:00 ET.
+    early_close_session = date(2026, 11, 27)
+    early_close = session_close_utc(early_close_session)
+    assert early_close is not None
+    assert early_close.astimezone(NEW_YORK).hour == 13
+
+    engine = _engine((_portfolio_runtime(),))
+    engine._circuit_breaker_reason = "ownership_drift"
+    # The daily decision bar is labelled 09:30 ET of the session date.
+    bars = [
+        Bar(
+            datetime(2026, 11, 27, 9, 30, tzinfo=NEW_YORK).astimezone(UTC),
+            symbol,
+            "1d",
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            1_000_000,
+            Market.EQUITY,
+        )
+        for symbol in SYMBOLS
+    ]
+    clock = _Clock(early_close + timedelta(seconds=2))
+    clock.install(monkeypatch)
+
+    # Just after the real close the batch is still retried.
+    assert engine._process_portfolio_timestamp(bars) is False
+    assert (Market.EQUITY, bars[0].timestamp) in engine._deferred_portfolio_batches
+    assert [kind for kind, _ in _capture_alerts] == ["decision_deferred"]
+
+    # Past 13:40 ET the window has expired even though 16:40 ET has not
+    # arrived: the session is lost and the operator is told. The retry loop
+    # is what re-runs a parked batch and retires the key.
+    clock.freeze(early_close + timedelta(minutes=41))
+    engine._run_due_deferred_portfolio_batches()
+    assert engine._deferred_portfolio_batches == {}
+    expiry = [fields for kind, fields in _capture_alerts if fields.get("retry_window_ended")]
+    assert len(expiry) == 1
+    assert expiry[0]["retry_window_ended"] == (early_close + timedelta(minutes=40)).isoformat()
 
 
 # --------------------------------------------------------------------------- #

@@ -388,8 +388,10 @@ def _run_cli(*args: str) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
-def test_cli_ops_status_json(tmp_path: Path) -> None:
-    code, out, _ = _run_cli("ops", "status", "--json")
+def test_cli_ops_status_json(isolated_config_path: Path) -> None:
+    # Without --config the state paths come from the operator's config, i.e.
+    # from data/runtime on the trading VM; this suite runs against tmp_path.
+    code, out, _ = _run_cli("--config", str(isolated_config_path), "ops", "status", "--json")
     assert code == 0
     data = json.loads(out)
     assert "overall_health" in data
@@ -397,12 +399,12 @@ def test_cli_ops_status_json(tmp_path: Path) -> None:
     assert "checks" in data
 
 
-def test_cli_ops_doctor_exit_codes(tmp_path: Path) -> None:
+def test_cli_ops_doctor_exit_codes(isolated_config_path: Path) -> None:
     # fresh install should be 1 (UNKNOWN -> degraded) or 0? Our doctor returns 1 for UNKNOWN overall
-    code, out, _ = _run_cli("ops", "doctor")
+    code, out, _ = _run_cli("--config", str(isolated_config_path), "ops", "doctor")
     # Should be 1 because UNKNOWN overall maps to 1
     assert code in {0, 1, 2}
-    code2, out2, _ = _run_cli("ops", "doctor", "--json")
+    code2, out2, _ = _run_cli("--config", str(isolated_config_path), "ops", "doctor", "--json")
     assert code2 in {0, 1, 2}
     data = json.loads(out2)
     assert "overall" in data
@@ -454,13 +456,23 @@ def test_web_ops_severity_filter_never_widens_the_result() -> None:
     assert ops.query_events(10, severity="typo") == []
 
 
-def test_cli_ops_timeline(tmp_path: Path) -> None:
+def test_cli_ops_timeline(tmp_path: Path, isolated_config_path: Path) -> None:
     jp = tmp_path / "timeline.sqlite3"
     j = EventJournal(str(jp))
     dec = "dec-timeline-1"
     j.emit_sync(create_event(kind="decision_summary", message="summary", decision_id=dec))
     j.emit_sync(create_event(kind="rebalance_phase_changed", message="phase", decision_id=dec))
-    code, out, _ = _run_cli("ops", "timeline", "--decision", dec, "--journal", str(jp), "--json")
+    code, out, _ = _run_cli(
+        "--config",
+        str(isolated_config_path),
+        "ops",
+        "timeline",
+        "--decision",
+        dec,
+        "--journal",
+        str(jp),
+        "--json",
+    )
     assert code == 0
     data = json.loads(out)
     assert "events" in data
@@ -542,9 +554,9 @@ def test_doctor_wal_probe_closes_the_store_through_the_ownership_api(
     assert probe_stores[0]._closed is True
 
 
-def test_cli_ops_bundle(tmp_path: Path) -> None:
+def test_cli_ops_bundle(tmp_path: Path, isolated_config_path: Path) -> None:
     out = tmp_path / "bundle.zip"
-    code, stdout, _ = _run_cli("ops", "bundle", "--output", str(out))
+    code, stdout, _ = _run_cli("--config", str(isolated_config_path), "ops", "bundle", "--output", str(out))
     assert code == 0
     assert out.exists()
     assert out.stat().st_size < 5_000_000  # size limit

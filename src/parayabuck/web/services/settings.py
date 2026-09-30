@@ -1,4 +1,4 @@
-"""SettingsService — transactional save with VALIDATE→PLAN→stop→atomic write→restart.
+"""SettingsService — transactional save VALIDATE→PLAN→PRE-FLIGHT→stop→atomic write→restart.
 
 Transaction contract
 ------------------
@@ -15,17 +15,24 @@ Transaction contract
    inside the ``_settings_lock`` but before the stop.  No file is touched in
    this phase.
 
-3. STOP — if ``restart_engine`` is true, ``await to_thread(manager.stop_engine)``
+3. PRE-FLIGHT — for every non-no-op save, ``_ensure_writable`` verifies each
+   path the transaction is about to write: ``config_path`` (always) and
+   ``env_path`` (only when credentials change).  A path passes when its parent
+   directory exists and is writable+executable, and an existing file is
+   writable.  Rejection raises ``ValueError`` (HTTP 400) **before the stop** —
+   no stop, no file mutation, engine left running.
+
+4. STOP — if ``restart_engine`` is true, ``await to_thread(manager.stop_engine)``
    and assert ``engine_state == "stopped"``.  On stop failure the transaction
    aborts — no file has been mutated yet.
 
-4. ATOMIC WRITE — ``_atomic_update_credentials`` (when ``credentials_changed``)
+5. ATOMIC WRITE — ``_atomic_update_credentials`` (when ``credentials_changed``)
    then ``atomic_write(config_path, yaml.safe_dump(cfg_raw))``.  Both are
-   atomic file replacements.  Order is credentials-then-config to match
-   ``web/server.py``; fault handling below documents the partial-mutation
-   window.
+   atomic file replacements.  Order is credentials-then-config.  The whole
+   write phase is wrapped: on ANY failure the engine is best-effort restarted
+   if this transaction stopped it, and the original exception is re-raised.
 
-5. RESTART — if stopped for restart, ``await to_thread(manager.start_engine)``.
+6. RESTART — if stopped for restart, ``await to_thread(manager.start_engine)``.
    A restart failure is **not** a transaction failure: config+credentials are
    already persisted, the engine stays stopped, ``restart_error`` and
    ``engine_restarted=False`` are returned with ``status==success``.
@@ -44,29 +51,37 @@ Fault injection & rollback
 * ``digest 409`` (HTTPException): same — raised before stop.
 * ``stop fail`` (RuntimeError from ``stop_engine`` / state != stopped): abort
   before any write, engine reflects ``stop_failed``; no file mutation.
+* ``pre-flight reject`` (``_ensure_writable`` finds a read-only env/config
+  path, e.g. systemd ``ProtectSystem=strict``): ``ValueError`` → HTTP 400 with
+  an actionable message; no stop, no file mutation, engine left running.
 * ``env write fail`` (``_atomic_update_credentials`` raises): config not yet
   written, so ``settings.yaml`` is untouched; ``.env`` write is atomic so it
-  is either old or not partially written (``atomic_write``).  Transaction
-  raises and caller surfaces 500; engine remains stopped if it was stopped.
-  No automatic rollback of the stopped state — operator retries.
+  is either old or not partially written (``atomic_write``).  The engine is
+  best-effort restarted when this transaction stopped it, the original
+  exception is re-raised, and the caller surfaces 500.
 * ``config write fail`` (``atomic_write`` raises): if ``credentials_changed``
   the ``.env`` has already been mutated atomically while ``settings.yaml`` is
   unchanged (partial commit).  ``atomic_write`` itself never leaves a partial
-  ``settings.yaml`` (write-to-temp + rename).  Documented as the only
-  post-stop partial window; operator must re-save.
+  ``settings.yaml`` (write-to-temp + rename).  Same best-effort restart +
+  re-raise as above; operator must re-save the partial window.
+* ``pre-flight lies`` (``os.access`` passes but the write still fails — a race,
+  or a bind-mount that reports writable): layer 2 catches it; the engine is
+  never left stopped.
 * ``restart fail`` (``start_engine`` raises): not rolled back — already
   persisted config is authoritative; error is returned as ``restart_error``
   per contract (``_handle_save_settings`` semantics).
 
 No partial mutation on rejection
 ---------------------------------
-Rejection paths (validation, digest, runtime-change without restart) return
-before STOP/WRITE, so neither ``settings.yaml`` nor ``.env`` is touched.
+Rejection paths (validation, digest, runtime-change without restart,
+pre-flight) return before STOP/WRITE, so neither ``settings.yaml`` nor
+``.env`` is touched.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any
 
 import yaml
@@ -78,6 +93,23 @@ from parayabuck.web.managers.engine import _atomic_update_credentials
 from parayabuck.web.schemas.settings import SettingsPayload
 
 log = get_logger("parayabuck.web.settings_service")
+
+
+def _ensure_writable(path: Any) -> None:
+    """Reject a save whose target cannot be written — BEFORE the engine stops.
+
+    Under systemd ``ProtectSystem=strict`` the repo root is read-only and
+    ``atomic_write`` raises EROFS *after* the engine was stopped, leaving the
+    bot down with only a 500 for the operator.  Checking first turns that into
+    a clean 400 with the engine still trading.
+    """
+    parent = path.parent
+    writable_parent = parent.is_dir() and os.access(parent, os.W_OK | os.X_OK)
+    if not writable_parent or (path.exists() and not os.access(path, os.W_OK)):
+        raise ValueError(
+            f"Credential/config storage is read-only ({path}); under systemd hardening "
+            "edit the file on the host instead — the engine was left running."
+        )
 
 
 class SettingsService:
@@ -290,6 +322,13 @@ class SettingsService:
                 if latest != payload.expected_config_digest:
                     raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
 
+            # PRE-FLIGHT: the transaction below will write these files.  Verify
+            # they are writable *while the engine is still running* so a
+            # read-only deployment yields a 400, not a stranded stopped engine.
+            _ensure_writable(manager.config_path)
+            if has_credential_change:
+                _ensure_writable(manager.env_path)
+
             was_stopped_for_restart = False
             if restart_engine:
                 await asyncio.to_thread(manager.stop_engine)
@@ -310,14 +349,28 @@ class SettingsService:
                 if latest3 != payload.expected_config_digest:
                     raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
 
-            if has_credential_change:
-                _atomic_update_credentials(manager.env_path, api_key, secret_key)
-            atomic_write(
-                manager.config_path,
-                yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
-            )
-
-            manager.reset_broker()
+            try:
+                if has_credential_change:
+                    _atomic_update_credentials(manager.env_path, api_key, secret_key)
+                atomic_write(
+                    manager.config_path,
+                    yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
+                )
+                manager.reset_broker()
+            except Exception as exc:
+                # Never strand a stopped engine: put it back, then report the
+                # original failure.
+                if was_stopped_for_restart:
+                    log.warning(
+                        "Settings save failed after the engine was stopped (%s); "
+                        "attempting best-effort restart to avoid leaving the bot down",
+                        exc,
+                    )
+                    try:
+                        await asyncio.to_thread(manager.start_engine)
+                    except Exception as exc2:
+                        log.warning("Best-effort restart after failed save did not succeed: %s", exc2)
+                raise
             if has_credential_change:
                 manager.invalidate_live_arming()
             restart_error: str | None = None

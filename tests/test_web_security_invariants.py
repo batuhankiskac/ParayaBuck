@@ -226,7 +226,16 @@ def test_control_token_endpoint_is_no_store_and_loopback_only():
     assert r2.status_code == 403
 
 
-def test_control_token_not_in_observability_or_error_payloads():
+def test_control_token_not_in_observability_or_error_payloads(
+    isolated_config_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # /api/ops/status resolves its snapshot and decision DB through the engine
+    # manager's config path — the shipped config, i.e. data/runtime. Answer from
+    # tmp_path state instead; monkeypatch restores the manager afterwards.
+    import parayabuck.web.server as srv
+
+    monkeypatch.setattr(srv.manager, "config_path", isolated_config_path)
     app, mgr, _ = _app_with_fake_manager()
     client = TestClient(app, raise_server_exceptions=False)
     # Trigger an error response from a mutating endpoint without token -> 403 JSON must not contain token
@@ -238,7 +247,9 @@ def test_control_token_not_in_observability_or_error_payloads():
     r2 = client.get("/api/ops/status", headers={"Host": "testserver"})
     assert r2.status_code in {200, 500}  # may be 500 if no snapshot, but never 403
     if r2.status_code == 200:
-        assert "control_token" not in r2.text.lower()
+        # The secret itself, not the word: the payload echoes the snapshot
+        # path it read, and tmp_path is named after this test.
+        assert mgr.control_token not in r2.text
         assert "api_key" not in r2.text.lower()
 
 

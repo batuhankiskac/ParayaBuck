@@ -11,7 +11,8 @@ import time
 from _thread import LockType
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from datetime import time as clock_time
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -44,7 +45,8 @@ from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
     NEW_YORK,
     bars_to_calendar_days,
-    is_regular_equity_time,
+    is_session_open,
+    session_close_utc,
 )
 from parayabuck.monitoring import alerts
 from parayabuck.monitoring import metrics as runtime_metrics_store
@@ -195,6 +197,19 @@ _SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS = 10
 # reporting, halt tracking and worker restart handling cannot disagree.
 _STREAM_WORKER_BY_MARKET = {Market.EQUITY: "pb-stocks"}
 _MARKET_BY_STREAM_WORKER = {worker: market for market, worker in _STREAM_WORKER_BY_MARKET.items()}
+# The NYSE schedule owns the session close, so the daily decision bar is
+# flushed at the real close (13:00 ET on an early-close day) and never at a
+# fixed 16:00 ET.
+#
+# The session's last one-minute bar lands a few seconds after the close, so
+# the session-close flush gets a LONGER grace than an ordinary bucket: a late
+# final minute must not invalidate the whole session.
+_SESSION_CLOSE_FLUSH_GRACE_SECONDS = 30.0
+# Bounded retry for the provider (SIP) daily bar that replaces an incomplete
+# stream-built session-close bar. The first attempt is at the session's SIP
+# embargo (the earliest moment the provider's bar for that session is final).
+_SESSION_CLOSE_FALLBACK_INTERVAL = timedelta(minutes=1)
+_SESSION_CLOSE_FALLBACK_ATTEMPTS = 4
 # Operator-facing text for inventory in the shared brokerage account that the
 # bot does not own: crypto (support was removed) and equity symbols outside the
 # strategy universe. ParayaBuck never trades, pins, streams or protects them;
@@ -258,6 +273,21 @@ def required_aggregation_timeframes(
 
 
 # Health and event types are imported from runtime_health / runtime_events (see above)
+
+
+@dataclass
+class _SessionCloseFallback:
+    """A session whose stream-built daily bar was withheld as incomplete.
+
+    The provider's SIP daily bar for that session is the replacement input.
+    ``retry_at`` starts at the session's SIP embargo — the earliest moment the
+    provider's bar for it can be final — and backs off on each failed attempt.
+    """
+
+    session: date
+    symbols: tuple[str, ...]
+    retry_at: datetime
+    attempts: int = 0
 
 
 class EngineRuntime:
@@ -353,7 +383,6 @@ class EngineRuntime:
             api_key,
             secret_key,
             paper=self.paper,
-            manage_external_positions=self.config.manage_external_positions,
             ledger=self.ledger,
             portfolio_owned_quantities=lambda: self._portfolio_repository.owned_quantities(
                 self.broker.account_id or "unknown"
@@ -390,6 +419,9 @@ class EngineRuntime:
             )
             for timeframe in required_timeframes
         }
+        # Set when a session-close daily bar was withheld as incomplete and
+        # the provider's SIP daily bar is being fetched to replace it.
+        self._session_close_fallback: _SessionCloseFallback | None = None
         self._events = _EventQueue(self.config.event_queue_capacity)
         self._threads: list[threading.Thread] = []
         self._reconcile_thread: threading.Thread | None = None
@@ -787,6 +819,7 @@ class EngineRuntime:
             signal_adjustment=self.signal_adjustment_status(),
             intent_watchdog=self.intent_watchdog_status(),
             signal_cross_check=self.signal_cross_check_status(),
+            market_data=self.market_data_status(),
         )
 
     def _intent_watchdog_config(self) -> IntentWatchdogConfig:
@@ -926,6 +959,74 @@ class EngineRuntime:
             },
             "entry_gate_reason": (None if self._equity_signal_basis_verified() else "signal_adjustment_unverified"),
         }
+
+    def market_data_status(self) -> dict[str, object]:
+        """Configured vs effective market-data feeds, and the session-close
+        fallback pending state. Never raises: an unreadable client reports
+        ``available: false``."""
+        client = getattr(self, "_historical", None)
+        status = getattr(client, "feed_status", None)
+        if not callable(status):
+            return {"available": False}
+        try:
+            payload = dict(status())
+        except Exception as exc:  # defensive: health must never raise
+            log.warning("Market data feed status unavailable: %s", exc)
+            return {"available": False}
+        payload["available"] = True
+        fallback = getattr(self, "_session_close_fallback", None)
+        payload["session_close_fallback"] = (
+            None
+            if fallback is None
+            else {
+                "session_date": fallback.session.isoformat(),
+                "symbols": list(fallback.symbols),
+                "attempts": fallback.attempts,
+                "retry_at": fallback.retry_at.isoformat(),
+            }
+        )
+        return payload
+
+    def _check_market_data_feed(self) -> None:
+        """Alert once when the effective historical feed stops being the
+        configured one, and once when it recovers.
+
+        The SIP -> IEX downgrade used to be silent for the life of the
+        process: SMA200 and vol history would quietly be adopted from one
+        exchange's prints with nothing in health and nothing on the wire.
+        """
+        status = self.market_data_status()
+        if not status.get("available"):
+            return
+        degraded = bool(status.get("sip_fallback_active") or status.get("sip_quote_fallback_active")) or status.get(
+            "effective"
+        ) != status.get("configured")
+        previous = getattr(self, "_market_data_degraded", None)
+        self._market_data_degraded = degraded
+        if previous is None or previous == degraded:
+            return
+        if degraded:
+            alerts.emit(
+                "market_data_degraded",
+                message=(
+                    "Market data degraded: historical bars are served from "
+                    f"{status.get('effective')} instead of the configured {status.get('configured')}. "
+                )
+                + str(status.get("note") or ""),
+                state="degraded",
+                configured=status.get("configured"),
+                effective=status.get("effective"),
+                quote_effective=status.get("quote_effective"),
+            )
+        else:
+            alerts.emit(
+                "market_data_degraded",
+                message=f"Market data recovered: historical bars are served from {status.get('effective')}.",
+                state="recovered",
+                configured=status.get("configured"),
+                effective=status.get("effective"),
+                quote_effective=status.get("quote_effective"),
+            )
 
     def start(self) -> None:
         state = getattr(self, "_state", None)
@@ -2472,7 +2573,7 @@ class EngineRuntime:
 
     async def _on_bar(self, bar: Bar, *, corrected: bool) -> None:
         """Ingest a live or corrected bar into the aggregation pipeline."""
-        if bar.market.value == "equity" and not is_regular_equity_time(bar.timestamp):
+        if bar.market.value == "equity" and not is_session_open(bar.timestamp):
             return
         worker_name = _STREAM_WORKER_BY_MARKET[bar.market]
         if worker := self._workers.get(worker_name):
@@ -2731,18 +2832,132 @@ class EngineRuntime:
 
     def _flush_aggregators(self) -> None:
         now = datetime.now(UTC)
-        # Same finalization grace as flush_until: the 15:59 minute can arrive
-        # just after 16:00:00 and must still land in the session-close candles.
+        # Same finalization grace as flush_until, applied to the session-close
+        # candles as well: the last minute of a session can arrive just after
+        # the close and must still land in them.
         closing = now - timedelta(seconds=self.config.data_finalization_grace_seconds)
-        local = closing.astimezone(NEW_YORK)
+        # The NYSE schedule owns the close. A 13:00 ET early close flushes the
+        # daily decision bar at 13:00 ET; a holiday never flushes at all.
+        session_close = session_close_utc(now.astimezone(NEW_YORK).date())
+        close_grace = timedelta(
+            seconds=max(self.config.data_finalization_grace_seconds, _SESSION_CLOSE_FLUSH_GRACE_SECONDS)
+        )
+        incomplete: dict[str, datetime] = {}
         with self._ingestion_lock:
             finalized = {timeframe: aggregator.flush_until(now) for timeframe, aggregator in self.aggregators.items()}
-            if local.weekday() < 5 and (local.hour, local.minute) >= (16, 0):
+            if session_close is not None and now >= session_close + close_grace:
                 for timeframe, aggregator in self.aggregators.items():
-                    finalized[timeframe].extend(aggregator.flush_session_close(closing))
+                    finalized[timeframe].extend(aggregator.flush_session_close(closing, expected_close=session_close))
+                    if timeframe == "1d":
+                        incomplete = dict(aggregator.incomplete_session_close)
         for timeframe, bars in finalized.items():
             for bar in bars:
                 self._emit_finalized_bar(timeframe, bar)
+        self._arm_session_close_fallback(incomplete, session_close, now)
+        self._run_session_close_fallback(now)
+
+    def _arm_session_close_fallback(
+        self,
+        incomplete: dict[str, datetime],
+        session_close: datetime | None,
+        now: datetime,
+    ) -> None:
+        """Record a session whose stream-built daily bar was withheld.
+
+        A daily bar assembled from a close 1-4 minutes stale is a wrong
+        decision input, not a slightly stale one, so the bar is not emitted
+        and the provider's SIP daily bar is fetched for that session instead
+        (see :meth:`_run_session_close_fallback`).
+        """
+        if not incomplete or session_close is None:
+            return
+        if getattr(self, "_session_close_fallback", None) is not None:
+            return  # one fallback at a time; the armed one is already alerting
+        configured = getattr(getattr(self, "app_config", None), "signal_cross_check", None)
+        cross_check = configured if isinstance(configured, SignalCrossCheckConfig) else SignalCrossCheckConfig()
+        session = session_close.astimezone(NEW_YORK).date()
+        symbols = tuple(sorted(incomplete))
+        self._session_close_fallback = _SessionCloseFallback(
+            session=session,
+            symbols=symbols,
+            retry_at=session_close + timedelta(minutes=cross_check.sip_embargo_minutes),
+        )
+        stale = {symbol: value.astimezone(NEW_YORK).isoformat() for symbol, value in sorted(incomplete.items())}
+        log.error(
+            "Session-close daily bar incomplete; withheld and replaced by the SIP daily bar: "
+            "session=%s symbols=%s newest_minute=%s",
+            session.isoformat(),
+            ",".join(symbols),
+            stale,
+        )
+        alerts.emit(
+            "session_close_bar_incomplete",
+            message=(
+                f"Equity session {session.isoformat()} closed with missing stream minutes ({','.join(symbols)}); "
+                "the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision"
+            ),
+            market=Market.EQUITY.value,
+            session_date=session.isoformat(),
+            symbols=list(symbols),
+            newest_minute_by_symbol=stale,
+        )
+
+    def _run_session_close_fallback(self, now: datetime) -> None:
+        """Emit the provider's SIP daily bar for an incomplete session-close.
+
+        Runs OUTSIDE ``_ingestion_lock``: it is a network call and the stream
+        must keep ingesting while it waits. The provider's bar for a session
+        is final only after the SIP embargo, which is where ``retry_at``
+        starts, so a fetched bar is never a partial one. Bounded attempts: a
+        session with no decision bar places no order, and the intent watchdog
+        owns the alarm if the fallback never lands.
+        """
+        pending = getattr(self, "_session_close_fallback", None)
+        if pending is None or now < pending.retry_at:
+            return
+        client = getattr(self, "_historical", None)
+        fetch = getattr(client, "get_session_daily_bars", None)
+        if not callable(fetch):
+            self._session_close_fallback = None
+            return
+        pending.attempts += 1
+        close = session_close_utc(pending.session) or pending.retry_at
+        start = datetime(pending.session.year, pending.session.month, pending.session.day, tzinfo=NEW_YORK)
+        try:
+            bars = fetch(list(pending.symbols), start, close, feed="sip", adjustment="splits")
+        except Exception as exc:
+            log.warning(
+                "SIP daily-bar fallback for session %s failed (attempt %d): %s",
+                pending.session.isoformat(),
+                pending.attempts,
+                exc,
+            )
+            bars = {}
+        usable = {
+            symbol: bar
+            for symbol, bar in bars.items()
+            if symbol in pending.symbols
+            and bar is not None
+            and bar.timestamp.astimezone(NEW_YORK).date() == pending.session
+        }
+        for bar in sorted(usable.values(), key=lambda item: (item.timestamp, item.symbol)):
+            self._emit_finalized_bar("1d", bar)
+        if usable:
+            log.warning(
+                "Session-close daily bar replaced by the SIP daily bar: session=%s symbols=%s",
+                pending.session.isoformat(),
+                ",".join(sorted(usable)),
+            )
+            self._session_close_fallback = None
+            return
+        if pending.attempts >= _SESSION_CLOSE_FALLBACK_ATTEMPTS:
+            log.error(
+                "SIP daily-bar fallback exhausted for session %s: no equity decision this session",
+                pending.session.isoformat(),
+            )
+            self._session_close_fallback = None
+            return
+        pending.retry_at = now + _SESSION_CLOSE_FALLBACK_INTERVAL
 
     def _process_timestamp(
         self,
@@ -2794,6 +3009,22 @@ class EngineRuntime:
             timedelta(minutes=float(getattr(config, "decision_retry_window_minutes", 40.0))),
         )
 
+    @staticmethod
+    def _decision_session_close(session: date) -> datetime:
+        """The NYSE close of the session a decision bar belongs to.
+
+        The same calendar the session-close flush and the intent watchdog use,
+        so an early close (13:00 ET) really is the deadline the retry window
+        is measured from. A date with no session (or a calendar that cannot
+        load) falls back to the regular 16:00 ET close, which is the deadline
+        the pre-calendar code used — a degraded calendar must not cancel the
+        retry.
+        """
+        close = session_close_utc(session)
+        if close is not None:
+            return close
+        return datetime.combine(session, clock_time(16, 0), tzinfo=NEW_YORK).astimezone(UTC)
+
     def _defer_portfolio_batch(
         self,
         bars: list[Bar],
@@ -2809,9 +3040,14 @@ class EngineRuntime:
         concurrent fill, a transient broker fetch failure) must not cost the
         session: the batch is parked in ``_deferred_portfolio_batches`` and
         re-decided on the next decision-loop pass, until
-        ``decision_retry_window_minutes`` after the 16:00 ET close. That bound
-        sits inside the intent watchdog's decision grace, so a deferred
-        decision either lands or the watchdog still reports it missing.
+        ``decision_retry_window_minutes`` after the SESSION's close. The NYSE
+        schedule owns that close, so an early-close day gets 13:00 ET + the
+        window (13:40 ET), not 16:40 ET on a session that ended three hours
+        earlier — which would have kept retrying into the next session. That
+        bound still sits inside the intent watchdog's decision grace and
+        still covers the SIP embargo + cross-check retry window the deferral
+        has to survive, so a deferred decision either lands or the watchdog
+        still reports it missing.
 
         Returns True when the batch was re-queued; False once the window has
         expired (the session is then genuinely lost and the operator alert
@@ -2822,14 +3058,17 @@ class EngineRuntime:
         now = now or datetime.now(UTC)
         retry_interval, retry_window = self._decision_retry_settings()
         decision_timestamp = max(bar.timestamp for bar in bars)
-        session_close = decision_timestamp.astimezone(NEW_YORK).replace(hour=16, minute=0, second=0, microsecond=0)
+        session = decision_timestamp.astimezone(NEW_YORK).date()
+        session_close = self._decision_session_close(session)
         deadline = session_close + retry_window
         if now >= deadline:
             log.error(
-                "Decision retry window expired; session NOT decided: market=%s session=%s reason=%s window_ended=%s",
+                "Decision retry window expired; session NOT decided: market=%s session=%s reason=%s "
+                "session_close=%s window_ended=%s",
                 market.value,
                 decision_timestamp.isoformat(),
                 reason,
+                session_close.isoformat(),
                 deadline.isoformat(),
             )
             alerts.emit(
@@ -3762,6 +4001,16 @@ class EngineRuntime:
                 # Transient: bounded retry with short backoff.
                 time.sleep(0.5 * (attempt + 1))
                 continue
+        # A provider outage is answered from the local warmup cache, and that
+        # cache is the very history this call is supposed to verify against.
+        # Counting it as a success is how an HTTP outage produced a FALSE
+        # recovery alert and kept the staleness alarm quiet for days: nothing
+        # was verified, so a cache-served response is unverified.
+        if getattr(history_client, "_last_batch_degraded", False):
+            self._record_signal_adjustment_failure(
+                "provider unavailable: response served from the local warmup cache, not verified"
+            )
+            return False
         inadequate = [
             symbol
             for symbol in symbols
@@ -3980,6 +4229,7 @@ class EngineRuntime:
             return
         try:
             self.verify_equity_signal_basis()
+            self._check_market_data_feed()
         except Exception as exc:  # defensive: never kill the monitor
             worker.last_error = str(exc)
             log.warning("Signal adjustment monitor pass failed: %s", exc)
@@ -4606,7 +4856,10 @@ class EngineRuntime:
             return False
         if now is None:
             now = datetime.now(UTC)
-        if not is_regular_equity_time(now):
+        # The NYSE schedule owns this: a holiday, a weekend or a 13:00 ET
+        # early close owes no bars, so readiness must not report degraded for
+        # windows that never trade.
+        if not is_session_open(now):
             return True
         last_event = worker.last_event_at
         if last_event is None:

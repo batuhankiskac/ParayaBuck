@@ -84,8 +84,25 @@ config loader also reads `.env` from the working directory.
 3. `sudo systemctl restart parayabuck` (the alert sink is configured at engine
    start).
 4. Confirm: a `runtime_started` alert arrives, and `parayabuck ops status`
-   shows the `alerts` check without failures. Without a URL, alerts still go
-   to the journal/log.
+   shows the `alerts` check `OK`. `ops status`/`ops doctor` read that check from
+   the copy the **engine** persists in `health_snapshot.json`, not from their
+   own process — so `DEGRADED` ("no alert webhook configured", failures, drops
+   or a last success older than 24 h) means the alert path really is broken,
+   and `UNKNOWN` means the engine has not published a copy yet. Without a URL,
+   alerts still go to the journal/log, but every surface says `DEGRADED`.
+
+### Changing API keys on the VM
+
+The unit runs with `ProtectSystem=strict` and `ReadWritePaths=` limited to
+`config/`, `data/` and `reports/`, so `.env` in the repo root is read-only.
+The settings drawer therefore refuses a credential
+change up front (HTTP 400, engine left running) instead of stopping the engine
+and failing the write with EROFS. Edit `/opt/parayabuck/.env` on the host
+(`sudo install -m 0600 …`) and `sudo systemctl restart parayabuck`; never work
+around it by relaxing `ProtectSystem`.
+
+Config-only edits (risk limits, host/port, log level) are unaffected: they do
+not touch `.env`.
 
 ## First install (fresh VM)
 
@@ -145,14 +162,17 @@ Alpaca dashboard (or `GET /positions`, `GET /orders?status=open`) before
    orders are not, see 1.
 5. **Never run `scripts/paper_smoke.py` while the engine runs or between
    15:45 and 16:30 ET.** The script refuses both cases itself.
-6. **Prefer no restart between 15:55 and 16:30 ET.** That window spans the
-   16:00 ET session-close decision and the second-source (SIP cross-check)
-   deferral, which is held in memory. A restart after the close is now
-   recoverable — the new process decides the newest completed session when it
-   is a scheduled boundary with no persisted decision
-   (`startup_catch_up_status: recovered_session:<status>`) — but the decision
-   is then made without the cross-check, so a restart inside the window costs
-   the second-source comparison. A restart *before* the close is always safe.
+6. **Prefer no restart from 15:55 ET to the session close + 15 min** (16:30 ET
+   on a full session; **13:30 ET on an early-close day**, which ends at 13:00
+   ET). That window spans the session-close decision, the second-source (SIP
+   cross-check) deferral — which is held in memory — and the SIP embargo, so a
+   restart inside it decides the *previous* session instead of the one that
+   just closed. A restart after the embargo is now recoverable: the new process
+   decides the newest completed session when it is a scheduled boundary with no
+   persisted decision (`startup_catch_up_status: recovered_session:<status>`) —
+   but that decision is made without the cross-check, so a restart inside the
+   window costs the second-source comparison. A restart *before* the close is
+   always safe.
 
 ## Update by git bundle
 

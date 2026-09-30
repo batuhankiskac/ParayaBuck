@@ -67,6 +67,15 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # lease, transient broker fetch) was active at decision time. Emitted
     # once per deferred session, never per retry attempt.
     "decision_deferred",
+    # Market data: the effective historical feed stopped being the configured
+    # one (SIP entitlement downgrade to IEX) and later recovered.
+    "market_data_degraded",
+    # A session closed with missing stream minutes: the incomplete daily bar
+    # was withheld and the SIP daily bar is fetched for the decision.
+    "session_close_bar_incomplete",
+    # A broker FILL activity carried a side outside Alpaca's vocabulary: it is
+    # skipped and reported, never fatal for reconciliation.
+    "reconciliation_unexpected_fill_side",
 )
 
 ALERT_KINDS: frozenset[str] = frozenset(ALERT_KINDS_ORDERED)
@@ -98,6 +107,9 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "intent_alarm",
         "signal_source_mismatch",
         "decision_deferred",
+        "market_data_degraded",
+        "session_close_bar_incomplete",
+        "reconciliation_unexpected_fill_side",
     }
 )
 

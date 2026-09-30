@@ -30,8 +30,8 @@ from typing import Any
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.adjustment import signal_session_date
+from parayabuck.markets.nyse_calendar import NEW_YORK, session_close_utc
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import NEW_YORK
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 
 STATUS_AGREE = "agree"
@@ -257,14 +257,9 @@ SecondaryFetch = Callable[[list[str], datetime, datetime], Mapping[str, Bar]]
 
 def nyse_close_utc(session: date) -> datetime:
     """The session's NYSE close (early closes included); 16:00 ET fallback."""
-    try:
-        from parayabuck.monitoring.intent_watchdog import nyse_sessions
-
-        for day, _open, close in nyse_sessions(session, session):
-            if day == session:
-                return close
-    except Exception:  # calendar unavailable: the regular close is the safe default
-        pass
+    close = session_close_utc(session)
+    if close is not None:
+        return close
     return datetime.combine(session, time(16, 0), tzinfo=NEW_YORK)
 
 

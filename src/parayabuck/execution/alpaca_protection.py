@@ -150,7 +150,6 @@ class ProtectionService:
         canonical = canonical_symbol(symbol)
         ledger = getattr(broker, "ledger", None)
         account_id = getattr(broker, "_account_id", "") or "unknown"
-        legacy_external_management = ledger is None and bool(getattr(broker, "manage_external_positions", True))
         managed_order_ids = ledger.managed_order_ids(account_id, canonical) if ledger is not None else set()
         managed_client_ids = ledger.managed_client_order_ids(account_id, canonical) if ledger is not None else set()
 
@@ -160,7 +159,6 @@ class ProtectionService:
             parent_id = str(self._field(order, "parent_order_id", "") or "")
             return (
                 inherited
-                or legacy_external_management
                 or order_id in managed_order_ids
                 or parent_id in managed_order_ids
                 or client_id in managed_client_ids

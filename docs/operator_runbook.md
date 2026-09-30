@@ -31,14 +31,36 @@ already re-armed, see "Circuit breaker active").
 
 ## Intent alarm (`/readyz` 503 with `degraded_reasons`)
 
-- `equity_decision_missing` — no decision for the last NYSE session by
-  16:00 ET + 45 min. Check `ops explain latest`, `ops status` (Workers,
-  Adjustment, Market halts) and the journal for `Ignored unfinished equity daily
-  bar`, warmup, stream or signal-adjustment errors.
+An active alarm is now on every operator surface, not only `/readyz`:
+`ops status` (`Watchdog ALARM`), `ops doctor` (exit 2 for
+`equity_decision_missing`, exit 1 otherwise), the dashboard `Sağlık
+kontrolleri` badge (which lists the codes instead of `Sağlıklı`) and
+`/api/ops/status`. `equity_decision_missing` alone is CRITICAL; the rest are
+DEGRADED. None of them gate trading.
+
+
+- `equity_decision_missing` — no decision for the last NYSE session by ITS
+  close + 45 min. The close is 16:00 ET, or 13:00 ET on an early close
+  (2026-11-27, 2026-12-24); a holiday is not a session, so nothing is owed
+  over one. Check `ops explain latest`, `ops status` (Workers, Adjustment,
+  Market halts) and the journal for `Ignored unfinished equity daily bar`,
+  warmup, stream or signal-adjustment errors.
 - `equity_position_under_target` — the target is positive but QLD held is
-  below half of it 30 min after the next open. Check open orders/fills
+  below half of it 30 min after the next NYSE session open. Check open
+  orders/fills
   (`ops timeline --decision <id>`), `order_rejected` / `ambiguous_order`
   events, entry latches and the broker account.
+- `equity_position_over_target` — 30 min after the next NYSE session open the
+  account still holds more than the decision targeted (dust under 1 % of
+  equity is tolerated). In practice a cash target whose DAY SELL
+  never filled, leaving the previous position; check the order in
+  `ops timeline --decision <id>` (expired/cancelled?), `order_rejected` /
+  `order_expired` events and the broker account. The window is the next
+  *session* open, so over a weekend/holiday or an early close it does not
+  open early.
+- `equity_signal_source_hold` — the position was deliberately held because the
+  IEX stream bar and the SIP daily bar disagree on the trend. Not a fault;
+  confirm the `Cross-check` line in `ops status` before acting.
 
 Alarms clear by themselves (`intent_recovered`) once reality matches intent.
 
@@ -114,14 +136,17 @@ A session-close decision blocked by a *recoverable* gate — a reconciliation
 breaker, a stale account snapshot, a snapshot lease invalidated by a
 concurrent fill, or a transient broker timeout — is **not** dropped. It is
 re-queued and re-decided every `engine.decision_retry_interval_seconds` (60 s)
-until `engine.decision_retry_window_minutes` (40) after the 16:00 ET close,
-which is inside the intent watchdog's 45-minute decision grace. One alert is
-emitted per deferred session, never one per retry; the log line is
-`Decision deferred for retry`.
+until `engine.decision_retry_window_minutes` (40) after the **session's own
+close**, which is inside the intent watchdog's 45-minute decision grace. The
+close comes from the NYSE calendar: 16:00 ET on a full session, 13:00 ET on an
+early close, so an early-close day gives up at 13:40 ET instead of retrying
+three hours past the close. One alert is emitted per deferred session, never
+one per retry; the log line is `Decision deferred for retry`.
 
 - A later `decision_deferred` with `retry_window_ended` means the window
-  expired and the session was **not** decided. `equity_decision_missing`
-  (16:45 ET) is the authoritative alarm; treat it as a real missed session.
+  expired and the session was **not** decided. `equity_decision_missing` at the
+  session close + 45 min (16:45 ET; 13:45 ET on an early close) is the
+  authoritative alarm; treat it as a real missed session.
 - A halted runtime (`CIRCUIT_BREAKER`) blocks every decision, retry
   included: the deferred batch is retried until the deadline, so a reset
   inside the window still lands the session. Nothing trades while halted —
@@ -144,6 +169,50 @@ positions/orders (app.alpaca.markets/paper) with `ops status` and the bundle,
 then reset from the dashboard once a clean reconcile has run. Never clear
 `safety_incidents` by hand, and never flatten broker positions to "fix"
 drift.
+
+`reconciliation_unexpected_fill_side` is NOT this failure: the reconciler
+skipped broker FILL activities whose side is outside Alpaca's vocabulary
+(`buy`, `sell`, `buy_minus`, `sell_plus`, `sell_short`,
+`sell_short_exempt`) and advanced its cursor. Check
+`parayabuck ops events --kind reconciliation_unexpected_fill_side` for the
+activity ids and symbols. A repeated alert for the same activity means
+Alpaca reports a side this build does not know; the position still has to be
+reconciled by hand, but reconciliation itself is not blocked.
+
+## Market data degraded (`market_data_degraded`)
+
+`state=degraded` means historical bars are served from a different feed than
+the configured one — in practice a SIP entitlement downgrade to IEX, so
+SMA/vol history comes from one exchange's prints, not the consolidated tape.
+`ops status` and `health.market_data` show `configured` / `effective` /
+`sip_fallback_since`; the downgrade is bounded and the next request at or
+after 6 h re-probes SIP on its own.
+
+- Confirm the cause: `parayabuck ops events --kind market_data_degraded` and
+  the log line `SIP historical entitlement unavailable`.
+- If the account is entitled to SIP history, the data plan needs fixing
+  (Alpaca answers 401/403 on SIP) — the downgrade clears itself afterwards.
+- A transport error (DNS, timeout) no longer downgrades. If the feed flipped
+  anyway, capture the log line and the exception and report it: only a
+  401/403 or an explicit entitlement body is accepted as an entitlement
+  error.
+
+## Incomplete session-close bar (`session_close_bar_incomplete`)
+
+The session closed with stream minutes missing (a stall, or a final minute
+more than the 30 s close grace late), so the daily bar built from IEX 1m
+bars was withheld instead of deciding on a stale close. The runtime fetches
+the provider's SIP daily bar for that session from
+close + `signal_cross_check.sip_embargo_minutes` and decides on it.
+
+- Check the log for `Session-close bucket incomplete` with the newest minute
+  actually received, and `ops status` / `health.market_data` for
+  `session_close_fallback`.
+- If the fallback landed, the decision is normal — nothing to do.
+- If it did not, the session has no decision and places no order, and
+  `equity_decision_missing` fires. Check Alpaca reachability
+  (`parayabuck doctor` without `--offline`) and the pb-stocks worker in
+  `ops status`; a stream that dies near the close repeats this.
 
 ## Ownership drift after a split or a foreign sell
 
@@ -255,7 +324,11 @@ window, and with `PARAYABUCK_ALLOW_PAPER_SMOKE=YES`.
 
 ## Webhook alerts not arriving
 
-`ops status` → `alerts` check shows failed/dropped deliveries.
+`ops status` and `ops doctor` → `alerts` check shows the deliveries **as
+reported by the engine**, read from `health_snapshot.json` (`alerts` block).
+`UNKNOWN` means the engine has not published that copy yet (it is down, or the
+snapshot predates this build) — not that alerts are fine. `DEGRADED` with "no
+alert webhook configured" means alerts are going to the log only.
 
 - Is `PARAYABUCK_ALERT_WEBHOOK_URL` set in the unit's `EnvironmentFile` and was
   the service restarted? (`alerting.webhook_url` must be empty or it wins.)

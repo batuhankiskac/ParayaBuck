@@ -92,6 +92,9 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 | `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | yes |
 | `signal_source_mismatch` | IEX and SIP daily bars disagree on the trend (position held), their closes diverge, or the SIP bar is missing | yes |
 | `decision_deferred` | A session-close decision was re-queued because a recoverable gate (reconcile breaker, stale account snapshot, invalidated snapshot lease, transient broker fetch) was active; one per session, plus one when the retry window expires without a decision | yes |
+| `market_data_degraded` | The effective historical feed stopped being the configured one (SIP entitlement downgrade to IEX), and again when it recovers | yes |
+| `session_close_bar_incomplete` | A session closed with stream minutes missing: the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision | yes |
+| `reconciliation_unexpected_fill_side` | A broker FILL activity carried a side outside Alpaca's vocabulary; it is skipped and the cursor advanced, never fatal | yes |
 | `paper_receipt` | Per-decision receipt (high volume) | no |
 
 To forward a "no" kind, add it to `alerting.events` (unknown kinds fail config
@@ -142,8 +145,10 @@ closes included).
 
 | Code | Condition |
 |---|---|
-| `equity_decision_missing` | No decision persisted for the last NYSE session by close (never before 16:00 ET) + `equity_decision_grace_minutes` |
+| `equity_decision_missing` | No decision persisted for the last NYSE session by ITS close (16:00 ET, 13:00 ET on an early close) + `equity_decision_grace_minutes` |
 | `equity_position_under_target` | Latest decision targets a positive weight, but after the next open + `equity_fill_grace_minutes` the account holds less than `minimum_held_fraction` of it |
+| `equity_position_over_target` | The account still holds more than the decision targeted after the fill window — the everyday case is a cash target whose DAY SELL never filled. Residual dust under 1 % of equity is tolerated |
+| `equity_signal_source_hold` | The decision deliberately held the position because the IEX stream bar and the SIP daily bar disagree on the trend (see `signal_cross_check:`) |
 
 `intent_watchdog` keys: `enabled` (true), `equity_decision_grace_minutes`
 (45), `equity_fill_grace_minutes` (30), `minimum_held_fraction` (0.5),
@@ -157,19 +162,28 @@ not dropped: an active reconciliation-owned breaker, `_reconcile_failed`, the
 readiness gate, an account-snapshot lease invalidated by a concurrent fill, or
 a network-class account fetch failure. The batch is re-decided every
 `engine.decision_retry_interval_seconds` (60) until
-`engine.decision_retry_window_minutes` (40) after the 16:00 ET close — inside
-the intent watchdog's 45-minute decision grace, so a deferred decision either
-lands or the watchdog still reports it missing. The first deferral of a
-session emits `decision_deferred`; retries only log
-`Decision deferred for retry`. `retry_window_ended` marks a session that was
-genuinely lost.
+`engine.decision_retry_window_minutes` (40) after the **session's own close**
+(16:00 ET, or 13:00 ET on an early close — the deadline follows the NYSE
+calendar, so an early-close session stops retrying at 13:40 ET rather than
+running three hours into the next session). The window sits inside the intent
+watchdog's 45-minute decision grace, so a deferred decision either lands or
+the watchdog still reports it missing, and it outlives the second-source
+deferral it must survive (`sip_embargo_minutes` 15 + `retry_window_minutes`
+10 = 25 min after the close). The first deferral of a session emits
+`decision_deferred`; retries only log `Decision deferred for retry`.
+`retry_window_ended` marks a session that was genuinely lost.
 
 A restart does not lose the session either: if the newest completed session is
 a scheduled boundary with no persisted decision, startup decides it
 (`startup_catch_up_status: recovered_session:<status>`) — including while a
 position is held, since a trend exit is exactly the decision that must not be
-skipped. That decision runs without the second-source cross-check, so avoid
-restarting between 15:55 and 16:30 ET (`docs/deployment.md`).
+skipped. The recovered decision runs on the last **final** daily bar: a
+provider bar is only eligible once its session closed more than
+`signal_cross_check.sip_embargo_minutes` ago, so a restart inside the embargo
+(or on an early-close day, close + 15 min) decides the *previous* session
+instead. That decision also runs without the second-source cross-check, so
+avoid restarting from 15:55 ET to close + 15 min — 16:30 ET on a full session,
+13:30 ET on an early close (`docs/deployment.md`).
 
 Reconciliation is on the same footing: a single Alpaca timeout during the
 60 s reconcile cycle blocks entries (fail-closed) but raises no breaker and
@@ -178,6 +192,44 @@ consecutive transient failures. Drift, ownership and protection failures
 still halt immediately. A definite broker rejection (4xx the recovery lookup
 proved never reached the broker) books the row `rejected`, alerts
 `order_rejected` and keeps the runtime running.
+
+### Market data, the session calendar and the decision bar
+
+The NYSE schedule (pandas-market-calendars) is the single source of session
+truth — `parayabuck.markets.nyse_calendar` — and nothing uses weekday
+arithmetic at runtime:
+
+* **Session minutes.** Only minutes inside the real session are ingested or
+  fetched. On an early close (13:00 ET) the 13:00–16:00 IEX post-market
+  prints are dropped, so they can never become the decision close.
+* **Session close.** The daily decision bar is flushed at the session's
+  actual close plus a 30 s close grace
+  (`runtime._SESSION_CLOSE_FLUSH_GRACE_SECONDS`), not at a fixed 16:00 ET.
+  On an early-close day the decision is taken at 13:00 ET, and the intent
+  watchdog expects it there.
+* **Completeness.** A session-close bar whose last expected minute never
+  arrived is withheld, `session_close_bar_incomplete` fires, and the
+  provider's SIP daily bar is fetched for that session from
+  close + `signal_cross_check.sip_embargo_minutes` (bounded attempts). A
+  session whose fallback never lands has no decision bar and places no
+  order; the intent watchdog raises `equity_decision_missing`.
+* **Readiness.** Stream liveness and `/readyz` follow the same calendar, so
+  a holiday or a finished early close is never reported as degraded.
+* **Provider embargo.** A provider daily bar is final only
+  `sip_embargo_minutes` after the close (SIP history is clamped to
+  now − embargo), so a deploy restart between the close and the end of the
+  embargo decides on the last complete session instead of a partial bar.
+  Stream-built bars are final at the real close and are not affected.
+* **SIP → IEX downgrade.** Only a genuine entitlement error (401/403 or an
+  explicit entitlement body, read from the response — never from the request
+  URL) downgrades historical bars to IEX; a DNS blip or a timeout leaves the
+  configured feed alone. The downgrade is bounded: the next request at or
+  after 6 h re-probes SIP and restores it. `health.market_data` carries
+  `configured`, `effective`, `quote_effective`, `sip_fallback_active`,
+  `sip_fallback_since` and any pending `session_close_fallback`.
+* **Outage honesty.** The split-basis verifier treats a cache-served
+  response as unverified, so a provider outage fails closed instead of
+  emitting a false recovery.
 
 ## ops CLI
 
@@ -201,16 +253,33 @@ parayabuck ops watchdog [--json]       # dead-man probe: /readyz + backup freshn
 Health checks: `runtime_heartbeat` (snapshot ≤ 90 s old), `workers`, `queue`
 (age ≤ 30 s), `account`, `reconciliation` (CRITICAL after 5 min without
 success), `signal_adjustment`, `market_halts`, `risk` (active safety incident
-= BLOCKED), `execution`, `alerts` (webhook failures/drops), `observability`.
-`UNKNOWN` means no evidence, not OK. Overall: CRITICAL > BLOCKED > DEGRADED >
-UNKNOWN > OK. Trading state is separate: `ACTIVE`, `ENTRY_BLOCKED`,
-`REBALANCE_BLOCKED`, `MARKET_HALTED`, `CIRCUIT_BREAKER`, `STOPPED`, `UNKNOWN`.
-The watchdog and the signal cross-check are not health checks (they do not
-change the overall status), but the `ops status` text view prints them from the
-health snapshot: `Watchdog` (`OK`, `ALARM` with the active codes, `PENDING`
+= BLOCKED), `execution`, `intent_watchdog` (CRITICAL on
+`equity_decision_missing`, otherwise DEGRADED), `signal_cross_check`,
+`alerts`, `observability`. `UNKNOWN` means no evidence, not OK. Overall:
+CRITICAL > BLOCKED > DEGRADED > UNKNOWN > OK. Trading state is separate:
+`ACTIVE`, `ENTRY_BLOCKED`, `REBALANCE_BLOCKED`, `MARKET_HALTED`,
+`CIRCUIT_BREAKER`, `STOPPED`, `UNKNOWN`. An active watchdog alarm never
+changes the trading state — it only colours the overall status and the doctor
+exit code. `ops status` additionally prints the watchdog and the cross-check in
+full text: `Watchdog` (`OK`, `ALARM` with the active codes, `PENDING`
 before the first pass, `DISABLED`) and `Cross-check` (last session's status,
 `PENDING` while waiting for the SIP bar, `NONE` before the first session).
 `/readyz` and `ops events --kind intent_alarm` carry the same information.
+The dashboard `Sağlık kontrolleri` badge shows the active alarm codes instead
+of `Sağlıklı`, and `/api/ops/status` returns the same checks.
+
+`signal_cross_check` reports the last **completed** comparison; a session still
+waiting for its SIP daily bar is appended to the summary rather than making the
+check UNKNOWN, so the post-close embargo window does not redden a healthy run.
+Only a runtime that has never finished a comparison is UNKNOWN.
+
+`alerts` and `observability` are read from the copy the **engine** persists
+into the health snapshot, never from the counters of the process asking. A CLI
+or web process has sent no alerts of its own, so a process-local reading would
+report "webhook OK" on a VM where no webhook exists. No persisted copy at all
+is `UNKNOWN`, not OK. `alerts` is DEGRADED when no webhook is configured, when
+more than half of ≥ 3 attempts fail, when deliveries were dropped, and when
+failures continue with a last success older than 24 h.
 
 `parayabuck doctor [--strict] [--paper] [--offline]` is the deployment
 preflight (config, mode, live off, credentials, writability, SQLite
@@ -260,7 +329,7 @@ mkdir -p /tmp/pb-bad && cp -a data/runtime/parayabuck.sqlite3* /tmp/pb-bad/   # 
 cp data/backups/<file>.sqlite3 data/runtime/parayabuck.sqlite3
 rm -f data/runtime/parayabuck.sqlite3-wal data/runtime/parayabuck.sqlite3-shm
 sudo systemctl start parayabuck
-.venv/bin/parayabuck ops doctor && curl -s http://127.0.0.1:8000/readyz
+.venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:8000/readyz
 ```
 
 Orders and fills after the backup are missing from the restored ledger. On

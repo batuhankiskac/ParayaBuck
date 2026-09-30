@@ -10,7 +10,7 @@ import pytest
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.data.cache import WarmupCache
-from parayabuck.markets.timeframes import is_regular_equity_time
+from parayabuck.markets.timeframes import is_regular_equity_time, is_session_open
 
 
 def _bar(timestamp: datetime, timeframe: str = "5m") -> Bar:
@@ -132,7 +132,7 @@ def _regular_hours(start: datetime, end: datetime) -> int:
     count = 0
     timestamp = start
     while timestamp < end:
-        count += is_regular_equity_time(timestamp)
+        count += is_session_open(timestamp)
         timestamp += timedelta(hours=1)
     return count
 

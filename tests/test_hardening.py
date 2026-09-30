@@ -383,7 +383,7 @@ def test_blocking_trade_update_worker_stays_healthy_while_thread_is_alive() -> N
 def test_stale_stock_stream_event_during_the_session_degrades_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     import parayabuck.runtime as runtime_module
 
-    monkeypatch.setattr(runtime_module, "is_regular_equity_time", lambda _now: True)
+    monkeypatch.setattr(runtime_module, "is_session_open", lambda _now: True)
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
     stale = now - timedelta(minutes=10)
@@ -537,7 +537,6 @@ def test_external_position_is_not_modified_by_default() -> None:
         get=lambda *_args, **_kwargs: [],
     )
     broker.ledger = None
-    broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {},
         managed_entries_for_account=lambda _account: (),
@@ -617,7 +616,6 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: [])
     broker.ledger = None
-    broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {"XLE": owned},
         managed_entries_for_account=lambda _account: [owned],
@@ -1162,10 +1160,12 @@ def test_fill_activity_recovery_merges_activities_of_one_order(tmp_path: Path) -
 
 def test_session_close_flush_waits_for_the_finalization_grace(monkeypatch: pytest.MonkeyPatch) -> None:
     """The 15:59 minute may arrive just after 16:00:00: the session-close
-    flush honors the same finalization grace as flush_until, so the daily
-    and 15:55 5m candles still include it."""
+    flush honors a close-specific grace (longer than flush_until's), so the
+    daily and 15:55 5m candles still include it."""
     import parayabuck.runtime as runtime_module
     from parayabuck.markets.timeframes import NEW_YORK
+
+    close_grace = runtime_module._SESSION_CLOSE_FLUSH_GRACE_SECONDS
 
     clock = {"now": datetime(2026, 9, 25, 16, 0, 0, 500_000, tzinfo=NEW_YORK).astimezone(UTC)}
 
@@ -1195,7 +1195,9 @@ def test_session_close_flush_waits_for_the_finalization_grace(monkeypatch: pytes
 
     for tf_aggregator in runtime.aggregators.values():
         tf_aggregator.update(minute(15, 59, 104.0))  # late 15:59 minute
-    clock["now"] = datetime(2026, 9, 25, 16, 0, 2, 100_000, tzinfo=NEW_YORK).astimezone(UTC)
+    clock["now"] = datetime(2026, 9, 25, 16, 0, 0, tzinfo=NEW_YORK).astimezone(UTC) + timedelta(
+        seconds=close_grace + 0.1
+    )
     runtime._flush_aggregators()
 
     assert sorted(bar.timeframe for bar in emitted) == ["1d", "5m"]

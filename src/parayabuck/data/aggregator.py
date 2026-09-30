@@ -26,6 +26,10 @@ class TimeframeAggregator:
         self._last_components: dict[str, dict[datetime, Bar]] = {}
         # Latest bucket already emitted as final, per symbol.
         self._closed_through: dict[str, datetime] = {}
+        # Symbols whose session-close bucket was flushed WITHOUT its last
+        # expected minute, mapped to the newest minute actually received.
+        # The runtime falls back to the provider daily bar for these.
+        self.incomplete_session_close: dict[str, datetime] = {}
 
     def update(self, bar: Bar) -> Bar | None:
         if self.minutes == 1:
@@ -107,14 +111,52 @@ class TimeframeAggregator:
                 self._last_components[symbol] = self._components.pop(symbol, {})
         return sorted(flushed, key=lambda bar: (bar.timestamp, bar.symbol))
 
-    def flush_session_close(self, session_close: datetime) -> list[Bar]:
+    def flush_session_close(
+        self,
+        session_close: datetime,
+        *,
+        expected_close: datetime | None = None,
+    ) -> list[Bar]:
+        """Flush the open bucket of ``session_close``'s New York date.
+
+        With ``expected_close`` (the session's real NYSE close, early closes
+        included) a bucket is only emitted when its newest one-minute
+        component reaches the session's last minute. A bucket whose tail
+        minutes never arrived — a stalled stream, or a final minute more than
+        the grace late — is withheld and recorded in
+        :attr:`incomplete_session_close`: a daily bar built from a 15:58
+        close is a wrong decision input, not a slightly stale one.
+        """
         close_date = session_close.astimezone(NEW_YORK).date()
+        last_expected_minute = None if expected_close is None else expected_close - timedelta(minutes=1)
+        self.incomplete_session_close = {}
         flushed: list[Bar] = []
         for symbol, bar in list(self._current.items()):
-            if bar.timestamp.astimezone(NEW_YORK).date() == close_date:
-                flushed.append(self._current.pop(symbol))
-                self._closed_through[symbol] = bar.timestamp
-                self._last_components[symbol] = self._components.pop(symbol, {})
+            if bar.timestamp.astimezone(NEW_YORK).date() != close_date:
+                continue
+            components = self._components.get(symbol, {})
+            newest_component = max(components) if components else None
+            # Always retire the bucket, complete or not: the flush runs on
+            # every decision-loop iteration and must report an incomplete
+            # session once, not on every pass.
+            self._closed_through[symbol] = bar.timestamp
+            self._last_components[symbol] = self._components.pop(symbol, {})
+            candidate = self._current.pop(symbol)
+            if last_expected_minute is not None and (
+                newest_component is None or newest_component < last_expected_minute
+            ):
+                self.incomplete_session_close[symbol] = newest_component or candidate.timestamp
+                log.error(
+                    "Session-close bucket incomplete: symbol=%s timeframe=%s session=%s "
+                    "newest_minute=%s expected_minute=%s",
+                    symbol,
+                    self.timeframe,
+                    close_date.isoformat(),
+                    newest_component.isoformat() if newest_component else "none",
+                    last_expected_minute.astimezone(NEW_YORK).isoformat(),
+                )
+                continue
+            flushed.append(candidate)
         return sorted(flushed, key=lambda bar: (bar.timestamp, bar.symbol))
 
     def _new_bucket(self, bar: Bar, timestamp: datetime) -> Bar:

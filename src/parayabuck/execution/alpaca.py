@@ -84,7 +84,6 @@ class AlpacaBroker:
         secret_key: str,
         paper: bool = True,
         *,
-        manage_external_positions: bool = False,
         ledger: ExecutionLedger | None = None,
         portfolio_owned_quantities: Callable[[], dict[str, float]] | None = None,
         portfolio_open_orders: Callable[[], object] | None = None,
@@ -119,7 +118,6 @@ class AlpacaBroker:
         self._risk_peak = RiskPeakService(
             paper=paper, ledger=ledger, peak_state_path=peak_state_path, runtime_state_dir=runtime_state_dir
         )
-        self.manage_external_positions = manage_external_positions
         self.ledger = ledger
         self.portfolio_owned_quantities = portfolio_owned_quantities
         self.portfolio_open_orders = portfolio_open_orders
@@ -1197,7 +1195,6 @@ class AlpacaBroker:
         canonical = canonical_symbol(symbol)
         ledger = self.ledger
         account_id = getattr(self, "_account_id", "") or "unknown"
-        legacy_external_management = ledger is None and bool(getattr(self, "manage_external_positions", True))
         managed_order_ids = ledger.managed_order_ids(account_id, canonical) if ledger is not None else set()
         managed_client_ids = ledger.managed_client_order_ids(account_id, canonical) if ledger is not None else set()
 
@@ -1207,7 +1204,6 @@ class AlpacaBroker:
             parent_id = str(self._field(order, "parent_order_id", "") or "")
             return (
                 inherited
-                or legacy_external_management
                 or order_id in managed_order_ids
                 or parent_id in managed_order_ids
                 or client_id in managed_client_ids

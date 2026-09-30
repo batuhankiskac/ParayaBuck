@@ -351,9 +351,9 @@ def test_ops_status_api_carries_the_watchdog_check(tmp_path: Path) -> None:
 
 
 def _dashboard_panel(runtime_health: dict[str, Any]) -> dict[str, Any]:
-    from parayabuck.web import server_legacy as leg
+    from parayabuck.web.services import dashboard as svc
 
-    return leg._dashboard_health(
+    return svc._dashboard_health(
         SimpleNamespace(engine=SimpleNamespace(maximum_account_age_for_entry_seconds=30)),
         runtime_health,
         {},

@@ -113,6 +113,50 @@ bundle, then reset from the dashboard once a clean reconcile has run. Never
 clear `safety_incidents` by hand, and never flatten broker positions to "fix"
 drift.
 
+`reconciliation_unexpected_fill_side` is NOT this failure: the reconciler
+skipped broker FILL activities whose side is outside Alpaca's vocabulary
+(`buy`, `sell`, `buy_minus`, `sell_plus`, `sell_short`,
+`sell_short_exempt`) and advanced its cursor. Check
+`parayabuck ops events --kind reconciliation_unexpected_fill_side` for the
+activity ids and symbols. A repeated alert for the same activity means
+Alpaca reports a side this build does not know; the position still has to be
+reconciled by hand, but reconciliation itself is not blocked.
+
+## Market data degraded (`market_data_degraded`)
+
+`state=degraded` means historical bars are served from a different feed than
+the configured one — in practice a SIP entitlement downgrade to IEX, so
+SMA/vol history comes from one exchange's prints, not the consolidated tape.
+`ops status` and `health.market_data` show `configured` / `effective` /
+`sip_fallback_since`; the downgrade is bounded and the next request at or
+after 6 h re-probes SIP on its own.
+
+- Confirm the cause: `parayabuck ops events --kind market_data_degraded` and
+  the log line `SIP historical entitlement unavailable`.
+- If the account is entitled to SIP history, the data plan needs fixing
+  (Alpaca answers 401/403 on SIP) — the downgrade clears itself afterwards.
+- A transport error (DNS, timeout) no longer downgrades. If the feed flipped
+  anyway, capture the log line and the exception and report it: only a
+  401/403 or an explicit entitlement body is accepted as an entitlement
+  error.
+
+## Incomplete session-close bar (`session_close_bar_incomplete`)
+
+The session closed with stream minutes missing (a stall, or a final minute
+more than the 30 s close grace late), so the daily bar built from IEX 1m
+bars was withheld instead of deciding on a stale close. The runtime fetches
+the provider's SIP daily bar for that session from
+close + `signal_cross_check.sip_embargo_minutes` and decides on it.
+
+- Check the log for `Session-close bucket incomplete` with the newest minute
+  actually received, and `ops status` / `health.market_data` for
+  `session_close_fallback`.
+- If the fallback landed, the decision is normal — nothing to do.
+- If it did not, the session has no decision and places no order, and
+  `equity_decision_missing` fires. Check Alpaca reachability
+  (`parayabuck doctor` without `--offline`) and the pb-stocks worker in
+  `ops status`; a stream that dies near the close repeats this.
+
 ## Ownership drift after a split or a foreign sell
 
 `circuit_breaker` (`ownership_drift` or `reconciliation_failed`), and

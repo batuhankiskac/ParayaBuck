@@ -16,6 +16,7 @@ from starlette.requests import Request
 from parayabuck import runtime as runtime_module
 from parayabuck.web import server
 from parayabuck.web.managers import websocket as ws_managers
+from parayabuck.web.state import WebState
 
 # Settings saves validate the full config with load_config, which requires
 # at least one enabled market; fixtures carry the smallest loadable one.
@@ -530,11 +531,20 @@ def test_stop_failure_returns_json_http_error_and_marks_manager_failed(
 
 
 class _DeadWebSocket:
-    """Simulates a browser that vanished without a clean close handshake."""
+    """Simulates a browser that vanished without a clean close handshake.
 
-    def __init__(self) -> None:
+    Carries a composed ``app.state.web`` because that is where the router
+    resolves its manager: without it the route falls back to the process-wide
+    EngineManager singleton, whose ``fetch_account_snapshot`` builds a real
+    AlpacaBroker from the repo .env and reads the account the VM trades.
+    """
+
+    def __init__(self, engine_manager: Any) -> None:
         self.headers: dict[str, str] = {}
+        self.query_params: dict[str, str] = {}
         self.sent: list[Any] = []
+        web_state = WebState(engine_manager=engine_manager, backtest_manager=None)
+        self.app = SimpleNamespace(state=SimpleNamespace(web=web_state))
 
     async def accept(self) -> None:
         return
@@ -551,8 +561,10 @@ class _WebSocketManagerStub:
         self.log_queues: set[Any] = set()
         self._log_queues_lock = threading.Lock()
         self.stream_connections: set[Any] = set()
+        self.snapshot_fetches = 0
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
+        self.snapshot_fetches += 1
         return {"equity": 1.0}
 
     def current_engine_state(self) -> str:
@@ -639,18 +651,22 @@ def test_engine_start_allowed_when_web_backtest_idle(monkeypatch: Any) -> None:
 def test_websocket_stream_detects_dead_browser_and_cleans_up(monkeypatch: Any) -> None:
     manager = _WebSocketManagerStub()
     monkeypatch.setattr(server, "manager", manager)
-    websocket = _DeadWebSocket()
+    websocket = _DeadWebSocket(manager)
 
     asyncio.run(server.websocket_stream(websocket))  # must exit quietly, not spin
 
-    assert len(websocket.sent) == 1
-    assert websocket not in manager.stream_connections
+    # The payload proves the router read the composed app's manager: the
+    # process singleton would have answered from the broker (or raised).
+    assert websocket.sent == [
+        {"type": "update", "account": {"equity": 1.0}, "status": {"state": "stopped", "paper": True}}
+    ]
+    assert manager.snapshot_fetches == 1
 
 
 def test_websocket_logs_detects_dead_browser_and_cleans_queue(monkeypatch: Any) -> None:
     manager = _WebSocketManagerStub()
     monkeypatch.setattr(server, "manager", manager)
-    websocket = _DeadWebSocket()
+    websocket = _DeadWebSocket(manager)
 
     asyncio.run(server.websocket_logs(websocket))  # must exit quietly, not spin
 

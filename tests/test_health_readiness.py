@@ -159,3 +159,51 @@ def test_readyz_control_plane_ready_when_trading_not_expected(monkeypatch: Any) 
     assert payload["ready"] is True
     assert payload["trading_expected"] is False
     assert payload["trading_ready"] is False
+
+
+def _failing_start_manager(state: str, error: str | None, attempt: int) -> Any:
+    class FailingStartManager:
+        config_path = None
+        last_engine_error = error
+        _retry_attempt = attempt
+
+        def current_engine_state(self) -> str:
+            return state
+
+        def has_active_runtime(self) -> bool:
+            # 'starting' counts as active: the manager is mid start-up.
+            return state in {"running", "starting"}
+
+        @property
+        def runtime(self) -> Any:
+            return None
+
+    return FailingStartManager()
+
+
+def test_readyz_503_reports_the_start_failure(monkeypatch: Any) -> None:
+    """A failed start must be visible to an out-of-process probe (/healthz
+    stays 200 by design), including why it failed."""
+    monkeypatch.setattr(server, "manager", _failing_start_manager("error", "Alpaca rejected the API key (401)", 0))
+    monkeypatch.setattr(server, "load_config", lambda _path: Config())
+
+    ready = asyncio.run(server.readyz())
+    payload = json.loads(ready.body)
+    assert ready.status_code == 503
+    assert payload["ready"] is False
+    assert payload["engine_state"] == "error"
+    assert payload["engine_error"] == "Alpaca rejected the API key (401)"
+
+
+def test_readyz_503_while_a_start_keeps_retrying(monkeypatch: Any) -> None:
+    """An endless transient retry loop is not trading either: the state stays
+    'starting', so the attempt count is the only progress signal."""
+    monkeypatch.setattr(server, "manager", _failing_start_manager("starting", "transient: timeout", 47))
+    monkeypatch.setattr(server, "load_config", lambda _path: Config())
+
+    ready = asyncio.run(server.readyz())
+    payload = json.loads(ready.body)
+    assert ready.status_code == 503
+    assert payload["trading_expected"] is True
+    assert payload["engine_state"] == "starting"
+    assert payload["start_retry_attempt"] == 47

@@ -152,14 +152,20 @@ async def readyz() -> JSONResponse:
         and getattr(app_config, "auto_start_engine", False)
         and getattr(configured_mode, "value", None) == "paper"
     )
-    engine_error = engine_state == "error"
+    engine_failed = engine_state == "error"
+    # Why the engine is not running, for the out-of-process /readyz probe
+    # (`parayabuck ops watchdog`): a failed start must name its cause and its
+    # retry count, not just the state. Both attributes are absent on stub
+    # managers used by tests.
+    engine_failure = getattr(manager, "last_engine_error", None)
+    retry_attempt = getattr(manager, "_retry_attempt", 0)
     # has_active_runtime may be missing on stub fakes
     try:
         has_active = manager.has_active_runtime()
     except Exception:
         has_active = False
 
-    trading_expected = configured_to_trade or has_active or engine_error
+    trading_expected = configured_to_trade or has_active or engine_failed
     degraded_reasons = _intent_degraded_reasons(health)
     watchdog_config = getattr(cfg, "intent_watchdog", None) if cfg is not None else None
     fail_on_intent = bool(getattr(watchdog_config, "fail_readiness", True))
@@ -179,6 +185,8 @@ async def readyz() -> JSONResponse:
             "engine_state": engine_state,
             "runtime_expected": has_active,
             "degraded_reasons": degraded_reasons,
+            "engine_error": engine_failure,
+            "start_retry_attempt": retry_attempt if isinstance(retry_attempt, int) else 0,
             "error": config_error,
         },
         status_code=200 if ready else 503,

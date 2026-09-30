@@ -33,6 +33,9 @@ decision.
 when `app.auto_start_engine` is on in paper mode, a runtime is active, or the
 engine is in error. `503` during warmup (`engine_state=warming_up`) is normal.
 `/api/status` carries the full `RuntimeHealth`, including `intent_watchdog`.
+`engine_error` carries the last engine start/stop error and
+`start_retry_attempt` the number of auto-start retries so far, so an external
+probe can tell a dead engine from one that is still retrying.
 
 ## Alerts
 
@@ -50,6 +53,8 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 |---|---|---|
 | `runtime_started` | Engine start completed | yes |
 | `runtime_stopped_unexpected` | Stop from a halted/error state or with a breaker active | yes |
+| `runtime_start_failed` | Engine did not start: missing credentials, an unimportable runtime, a blocked startup (tracked-secret scan, live arming, config), a permanent startup error, a manual transient failure, N auto-start retries, or an out-of-process probe that found `/readyz` not ready | yes |
+| `backup_failed` | A backup could not be written or verified, or the newest backup is older than 12 h (backup timer stopped) | yes |
 | `daily_summary` | After each persisted equity decision | yes |
 | `intent_alarm` / `intent_recovered` | Watchdog code becomes active / clears | yes |
 | `order_rejected` | Broker rejected a portfolio order | yes |
@@ -67,6 +72,30 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 
 To forward a "no" kind, add it to `alerting.events` (unknown kinds fail config
 load).
+
+### Engine start failures
+
+A start that never completes is the one failure systemd cannot see: the web
+process keeps serving, so `/healthz` stays `200` and `Restart=on-failure`
+never fires, and every alarm that could report it lives in the runtime that
+failed to start. `/readyz` answers `503` (the engine is in `error`, or it is
+stuck at `starting` with a growing `start_retry_attempt`) and
+`runtime_start_failed` is emitted from every start-failure path:
+
+| `reason` | Meaning | Next step |
+|---|---|---|
+| `credentials_missing` | No API key/secret | Fix `.env`; the engine is not trading |
+| `runtime_import_failed` | `parayabuck.runtime` is not importable | The deploy is broken; reinstall |
+| `startup_rejected` | A startup guard refused the start (tracked-secret scan, live arming, config) | Read the message; the guard stays in place |
+| `startup_error` | Permanent startup error (Alpaca 401, SQLite error, catch-up exception) | Fix the cause, then start the engine |
+| `transient_no_retry` | A manual start hit a network-class failure | Retry the start |
+| `transient_retrying` | The auto-start loop is retrying and the attempts are not clearing | Fix the network, or stop and start the engine manually |
+| `readyz_probe` | `parayabuck ops watchdog` found the deployment not ready | Read `engine_state`/`engine_error` in the message |
+
+Transient auto-start retries keep the state at `starting` and back off
+5/15/30/60 s indefinitely; the alert fires from the third attempt and then
+every tenth, with `attempts`. Run `parayabuck ops watchdog` by hand to get
+the same verdict (see ops CLI below).
 
 ### Daily summary
 
@@ -111,6 +140,7 @@ parayabuck ops events --since 2h [--kind K] [--severity S] [--decision ID] [--or
 parayabuck ops timeline --decision ID | --order ID
 parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not trade
 parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys, no webhook URL)
+parayabuck ops watchdog [--json]       # dead-man probe: /readyz + backup freshness; exit 1 + alert on failure
 ```
 
 Health checks: `runtime_heartbeat` (snapshot ≤ 90 s old), `workers`, `queue`
@@ -132,6 +162,11 @@ preflight (config, mode, live off, credentials, writability, SQLite
 integrity/WAL, tracked `.env`, config digest; online it also checks Alpaca
 PAPER reachability).
 
+It also reports backup freshness: the age of the newest snapshot in
+`backup.path`. That row is a `WARN`, never a blocker — the service runs
+`doctor --strict` as `ExecStartPre`, and a stale backup must not keep the
+engine from starting.
+
 ## State, backup and restore
 
 | Path | What | If lost |
@@ -144,10 +179,22 @@ PAPER reachability).
 
 `parayabuck backup` takes a consistent online snapshot (sqlite3 backup API,
 safe while running) to `backup.path` (`data/backups`), verifies it with
-`PRAGMA integrity_check`, and prunes files older than `backup.retention_days`
-(7). The timer runs it every 6 h. Check one file with
+`PRAGMA integrity_check`, and prunes *automatic* backups older than
+`backup.retention_days` (7). The timer runs it every 6 h. Check one file with
 `parayabuck backup --verify-only <file>`. Copy backups off the VM
 occasionally; they live on the same disk.
+
+Failures are never silent: `parayabuck backup` emits `backup_failed` (and
+exits non-zero) when a snapshot cannot be written or verified, and
+`parayabuck ops watchdog` — run every 15 min by
+`parayabuck-watchdog.timer` — emits the same kind when the newest backup is
+older than 12 h, i.e. when the timer itself has stopped working.
+
+`parayabuck backup --label <name>` publishes the snapshot as
+`parayabuck-keep-<name>-<stamp>.sqlite3`, outside the retention prune glob:
+the pre-deploy/rollback snapshot the runbook tells you to keep is never
+auto-pruned, and it stays a valid restore candidate. Use it before every
+deploy and rollback; delete it yourself when the release is stable.
 
 Restore (never overwrite in place unverified):
 

@@ -18,6 +18,7 @@ ledger (double-run incident, 2026-09-25). Record every deploy in
 | Stop | `SIGTERM` stops the engine gracefully (ledger close, socket release); keep `TimeoutStopSec` ≥ 35 |
 | Liveness / readiness | `GET /healthz` (always 200 while the process serves) / `GET /readyz` (200 ready, 503 not; see `docs/operations.md`) |
 | Backups | `parayabuck-backup.timer` runs `parayabuck backup` every 6 h (10 min after boot) |
+| Dead-man probe | `parayabuck-watchdog.timer` runs `parayabuck ops watchdog` every 15 min: `/readyz` must be ready and the newest backup under 12 h old, otherwise it alerts (optional unit) |
 
 ## Units (`deploy/systemd/`)
 
@@ -26,6 +27,8 @@ ledger (double-run incident, 2026-09-25). Record every deploy in
 | `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `TimeoutStopSec=35`, `UMask=0077`, `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome=true`, `ReadWritePaths` = `config/`, `data/`, `reports/` |
 | `parayabuck-backup.service` | Oneshot `parayabuck backup` with the same env file and hardening |
 | `parayabuck-backup.timer` | `OnBootSec=10min`, `OnUnitActiveSec=6h`, `Persistent=true` |
+| `parayabuck-watchdog.service` | Oneshot `parayabuck ops watchdog`, `ExecCondition` = `systemctl is-active parayabuck.service`, same env file and hardening. Reports a failed/never-started engine and a stale backup set to the webhook. `ReadWritePaths` = `data/` |
+| `parayabuck-watchdog.timer` | `OnBootSec=5min`, `OnUnitActiveSec=15min`, `Persistent=true` |
 
 The templates assume an install at `/opt/parayabuck`. The current VM runs from
 the deploy user's home checkout (`~/ParayaBuck`, `.venv` inside it) with the
@@ -81,7 +84,18 @@ sudo -u parayabuck .venv/bin/parayabuck doctor --strict --paper --offline
 sudo cp deploy/systemd/parayabuck*.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now parayabuck.service parayabuck-backup.timer
+sudo systemctl enable --now parayabuck-watchdog.timer   # optional dead-man probe
+systemctl list-timers 'parayabuck-*'                     # confirm all three are scheduled
 ```
+
+The watchdog timer is optional but recommended: without it, nothing outside
+the web process notices that the engine never started (`/healthz` stays 200
+and systemd restarts nothing) or that the backup timer has been failing for
+weeks. It reads `PARAYABUCK_ALERT_WEBHOOK_URL` from the same env file — no
+credential is stored in the repo or in the unit. Run it by hand with
+`.venv/bin/parayabuck ops watchdog`; the unit's `ExecCondition` skips the
+probe while `parayabuck.service` is inactive, so a planned
+`systemctl stop parayabuck` (deploy, rollback) does not fire a false alert.
 
 ## Update by git bundle
 
@@ -96,7 +110,7 @@ gcloud compute scp /tmp/pb-update.bundle <vm>:~/pb-update.bundle --zone <zone>
 On the VM, in the checkout:
 
 ```bash
-.venv/bin/parayabuck backup                       # verified snapshot first
+.venv/bin/parayabuck backup --label predeploy     # verified snapshot first; never auto-pruned
 git fetch ~/pb-update.bundle main:refs/remotes/bundle/main
 git log --oneline HEAD..bundle/main               # review what ships
 git merge --ff-only bundle/main
@@ -123,7 +137,9 @@ Then add a row to `docs/OPERATIONS_LOG.md` with the deployed sha.
 
 ## Rollback
 
-1. `.venv/bin/parayabuck backup`, then `sudo systemctl stop parayabuck`.
+1. `.venv/bin/parayabuck backup --label rollback-<sha>`, then
+   `sudo systemctl stop parayabuck`. Labelled snapshots are never auto-pruned,
+   so the pre-rollback ledger is still there if the rollback has to be undone.
 2. `git reset --hard <previous-sha>` (or check out a tag), reinstall with
    `pip install -e . --no-deps`, restart. `config/settings.yaml` is tracked:
    the rolled-back commit brings its own config, which must match its code

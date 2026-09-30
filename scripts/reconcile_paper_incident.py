@@ -127,7 +127,7 @@ def _all_cash_activities(
     result: list[dict[str, object]] = []
     while True:
         params: dict[str, object] = {
-            "activity_types": "CSD,CSW,ACATC,JNLC",
+            "activity_types": "CSD,CSW,ACATC,JNLC,DIV,FEE,CFEE,JNLS",
             "direction": "desc",
             "page_size": 100,
         }
@@ -235,6 +235,8 @@ def _snapshot(
         starting_equity,
         ending_equity,
         starting_unrealized_pnl,
+        # The window bound, so pre-window holdings can be seeded locally.
+        _instant(after) if after else None,
     )
 
 

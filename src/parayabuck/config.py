@@ -214,10 +214,25 @@ class EngineConfig:
     account_poll_interval_seconds: float = 15.0
     maximum_account_age_for_entry_seconds: float = 30.0
     event_queue_capacity: int = 1024
+    # Consecutive TRANSIENT (network-class) reconciliation failures before
+    # the reconciliation breaker is raised and its incident persisted. One
+    # Alpaca timeout must not turn into a cross-restart halt; the decisions
+    # it blocks are re-queued for retry instead (see
+    # ``decision_retry_*``), so a single blip costs no session.
+    reconcile_failure_threshold: int = 3
+    # A session-close decision blocked by a RECOVERABLE gate (breaker,
+    # reconcile failure, readiness gate, invalidated account-snapshot lease,
+    # transient account fetch) is re-queued and retried on this cadence
+    # until ``decision_retry_window_minutes`` after the session's NYSE close
+    # (16:00 ET, 13:00 ET on an early close).
+    decision_retry_interval_seconds: float = 60.0
+    decision_retry_window_minutes: float = 40.0
 
     def __post_init__(self) -> None:
         if self.timing_capacity_values_invalid:
             raise ValueError("Engine timing and capacity values must be positive")
+        if self.reconcile_failure_threshold < 1:
+            raise ValueError("engine.reconcile_failure_threshold must be at least 1")
 
     @property
     def timing_capacity_values_invalid(self) -> bool:
@@ -227,6 +242,8 @@ class EngineConfig:
             self.maximum_queue_age_seconds,
             self.account_poll_interval_seconds,
             self.maximum_account_age_for_entry_seconds,
+            self.decision_retry_interval_seconds,
+            self.decision_retry_window_minutes,
         )
         return (
             any(not math.isfinite(value) for value in float_values)
@@ -236,6 +253,8 @@ class EngineConfig:
             or self.account_poll_interval_seconds <= 0
             or self.maximum_account_age_for_entry_seconds <= 0
             or self.event_queue_capacity <= 0
+            or self.decision_retry_interval_seconds <= 0
+            or self.decision_retry_window_minutes <= 0
         )
 
 
@@ -498,6 +517,23 @@ class Config:
         if effective_alloc - max_gross > eps:
             raise ValueError(
                 f"Capital invariant violated: equity allocation {effective_alloc:.4f} > max_gross {max_gross:.4f}"
+            )
+        # A retried session-close decision must still land before the intent
+        # watchdog would call it missing, and must outlive the second-source
+        # deferral it has to cover (a retry deadline inside the cross-check
+        # window would silently cancel the cross-check).
+        if self.intent_watchdog.enabled and self.engine.decision_retry_window_minutes >= (
+            self.intent_watchdog.equity_decision_grace_minutes
+        ):
+            raise ValueError(
+                "engine.decision_retry_window_minutes must be below intent_watchdog.equity_decision_grace_minutes"
+            )
+        if self.signal_cross_check.enabled and self.engine.decision_retry_window_minutes < (
+            cross_check.sip_embargo_minutes + cross_check.retry_window_minutes
+        ):
+            raise ValueError(
+                "engine.decision_retry_window_minutes must cover "
+                "signal_cross_check.sip_embargo_minutes + retry_window_minutes"
             )
         if max_gross + cash_buf - 1.0 > eps:
             raise ValueError(

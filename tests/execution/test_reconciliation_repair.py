@@ -336,8 +336,8 @@ def test_fill_pages_exhaust_to_empty_and_apply_each_activity_once(count: int) ->
     assert len(cursors) == (count + 99) // 100 + 1
 
 
-@pytest.mark.parametrize("failure", ["exception", "malformed", "missing_id", "duplicate"])  # type: ignore[untyped-decorator]
-def test_second_fill_page_failure_never_applies_first_page(failure: str) -> None:
+def _two_page_broker(failure: str) -> tuple[SimpleNamespace, list[str], list[datetime]]:
+    """A FILL backfill whose SECOND page fails in the given way."""
     first_page = [
         {
             "id": f"activity-{index:03d}",
@@ -374,7 +374,29 @@ def test_second_fill_page_failure_never_applies_first_page(failure: str) -> None
             entry_order_for_broker_id=lambda *_args: None,
         ),
     )
+    return broker, applied, watermarks
+
+
+@pytest.mark.parametrize("failure", ["malformed", "missing_id", "duplicate"])  # type: ignore[untyped-decorator]
+def test_second_fill_page_failure_never_applies_first_page(failure: str) -> None:
+    broker, applied, watermarks = _two_page_broker(failure)
+
     assert ReconciliationService(broker)._reconcile_fill_activity_fees() is False
+    assert applied == []
+    assert watermarks == []
+
+
+def test_network_failure_on_a_later_fill_page_applies_nothing_and_stays_retryable() -> None:
+    """A broker timeout is TRANSIENT, so it must surface (with its cause) for
+    the startup auto-retry instead of being swallowed into a bare error that
+    leaves the engine permanently down. Nothing from the first page is
+    applied either way."""
+    broker, applied, watermarks = _two_page_broker("exception")
+
+    with pytest.raises(ReconciliationResultError) as excinfo:
+        ReconciliationService(broker)._reconcile_fill_activity_fees()
+
+    assert isinstance(excinfo.value.__cause__, TimeoutError)
     assert applied == []
     assert watermarks == []
 

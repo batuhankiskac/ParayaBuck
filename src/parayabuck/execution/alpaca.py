@@ -47,6 +47,7 @@ from .alpaca_models import (  # noqa: E402
     STOP_CANCEL_POLL_INTERVAL_SECONDS,
     STOP_CANCEL_TIMEOUT_SECONDS,
     AmbiguousOrderState,
+    DefiniteOrderRejection,
     OwnershipDriftError,
     ProtectionReconciliationError,
     RiskStatePersistenceError,
@@ -1055,6 +1056,32 @@ class AlpacaBroker:
             raise
         return abs(float(self._field(position, "qty", 0) or 0))
 
+    @staticmethod
+    def _is_definite_client_rejection(exc: BaseException) -> bool:
+        """True when the submit failure carries a broker HTTP 4xx.
+
+        4xx is permanent refusal (validation, entitlement, forbidden) rather
+        than an infrastructure blip, so combined with a recovery lookup that
+        proves the client order id was never accepted the outcome is KNOWN:
+        no order exists at the broker. 429/408 stay retryable and 5xx stays
+        transient, so neither is classified as a rejection.
+        """
+        seen: set[int] = set()
+        current: BaseException | None = exc
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            status = getattr(current, "status_code", None)
+            if status is None:
+                status = getattr(getattr(current, "response", None), "status_code", None)
+            if status is not None:
+                try:
+                    code = int(status)
+                except (TypeError, ValueError):
+                    return False
+                return 400 <= code < 500 and code not in {408, 429}
+            current = current.__cause__ or current.__context__
+        return False
+
     def _submit_with_recovery(self, request: Any, client_order_id: str) -> Any:
         try:
             return self._client.submit_order(request)
@@ -1076,7 +1103,14 @@ class AlpacaBroker:
                     status = self._normalized_field(recovered, "status")
                     if status in {"rejected", "canceled", "cancelled", "expired", "done_for_day"}:
                         # A broker-confirmed terminal response is known, not
-                        # ambiguous. Preserve the original submit failure.
+                        # ambiguous. A 4xx refusal is a DEFINITE rejection:
+                        # the runtime books it rejected and keeps running
+                        # instead of halting on portfolio_runtime_failure.
+                        if self._is_definite_client_rejection(submit_exc):
+                            raise DefiniteOrderRejection(
+                                f"Broker rejected order {client_order_id} ({status}): {submit_exc}"
+                            ) from submit_exc
+                        # Otherwise preserve the original submit failure.
                         raise submit_exc
                     log.warning(
                         "Recovered Alpaca order %s after submit error: %s",
@@ -1088,6 +1122,10 @@ class AlpacaBroker:
                     # The deterministic client id was never accepted: the
                     # original submit failure is the definite outcome, not an
                     # ambiguity (mirrors resolve_portfolio_submission).
+                    if self._is_definite_client_rejection(submit_exc):
+                        raise DefiniteOrderRejection(
+                            f"Broker rejected order {client_order_id}: {submit_exc}"
+                        ) from submit_exc
                     raise submit_exc
                 if lookup_error is not None:
                     log.warning(
@@ -1323,6 +1361,7 @@ class AlpacaBroker:
 __all__ = [
     "AlpacaBroker",
     "AmbiguousOrderState",
+    "DefiniteOrderRejection",
     "OwnershipDriftError",
     "ProtectionReconciliationError",
     "RiskStatePersistenceError",

@@ -4,7 +4,7 @@ import dataclasses
 import json
 import sqlite3
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -24,6 +24,8 @@ from parayabuck.execution.portfolio import (
     RiskOverlayDecision,
 )
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import NEW_YORK, session_close_utc
+from parayabuck.portfolio import runtime_service
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1
 from parayabuck.portfolio.models import RebalancePolicy, TargetPortfolio, TargetWeight
@@ -2662,10 +2664,10 @@ def test_startup_catch_up_duplicate_decision_at_same_timestamp(tmp_path) -> None
     assert runtime.startup_catch_up_status == "duplicate_decision"
 
 
-def test_startup_catch_up_superseded_after_any_prior_decision(tmp_path) -> None:
-    """Restart safety: any prior decision for this deployment (even at an
-    earlier timestamp) means the cadence is already running — the catch-up
-    never re-enters."""
+def test_startup_catch_up_superseded_when_the_newest_session_is_not_a_boundary(tmp_path) -> None:
+    """Restart safety: a prior decision plus a newest bar that is NOT a new
+    period start means the cadence is already running — the catch-up never
+    re-enters out of cadence."""
     broker = _Broker()
     runtime = _runtime(tmp_path, broker)
     bars = _bars()
@@ -2678,11 +2680,130 @@ def test_startup_catch_up_superseded_after_any_prior_decision(tmp_path) -> None:
         decision_origin="test_origin",
     )
     assert decided.status == "submitted"
-    # Warmup later advances past the decision; the catch-up must be superseded.
-    runtime.seed(bars)
+    # hours:24 buckets by UTC day, so a bar 12 h later is the SAME period.
+    same_period = earlier + timedelta(hours=12)
+    runtime.seed([dataclasses.replace(bar, timestamp=same_period) for bar in bars if bar.timestamp == earlier])
     result = runtime.startup_catch_up()
     assert result.status == "catch_up_superseded"
     assert runtime.startup_catch_up_status == "catch_up_superseded"
+
+
+def test_startup_decides_a_missed_scheduled_session_instead_of_skipping_it(tmp_path) -> None:
+    """F02: a restart or outage across the close leaves the newest session
+    undecided. It is a real cadence boundary, so startup decides it — once."""
+    broker = _Broker()
+    runtime = _runtime(tmp_path, broker)
+    bars = _bars()
+    timestamps = sorted({bar.timestamp for bar in bars})
+    earlier = timestamps[runtime.strategy.minimum_history_bars]
+    runtime.seed([bar for bar in bars if bar.timestamp <= earlier])
+    decided = runtime.process_closed_bars(
+        [bar for bar in bars if bar.timestamp == earlier],
+        force_scheduled=True,
+        decision_origin="test_origin",
+    )
+    assert decided.status == "submitted"
+    # Warmup now carries a LATER session that was never decided.
+    runtime.seed(bars)
+
+    recovered = runtime.startup_catch_up()
+
+    assert recovered.decision_id is not None
+    assert recovered.decision_id != decided.decision_id
+    assert runtime.startup_catch_up_status == f"recovered_session:{recovered.status}"
+    assert runtime.previous_timestamp == timestamps[-1]
+    # Idempotent: a second start decides nothing more.
+    assert runtime.startup_catch_up().status == "duplicate_decision"
+    assert len(broker.submitted) == len(runtime.repository.orders_for_decision(decided.decision_id)) + len(
+        runtime.repository.orders_for_decision(recovered.decision_id)
+    )
+
+
+def _session_bars(sessions, *, close_of=lambda index: 100.0 * (1.004**index)):
+    """Daily bars labelled at midnight ET (the provider's session label)."""
+    bars: list[Bar] = []
+    for index, session in enumerate(sessions):
+        for symbol in EQUITY_UNIVERSE:
+            close = close_of(index)
+            bars.append(
+                Bar(
+                    datetime(session.year, session.month, session.day, tzinfo=NEW_YORK).astimezone(UTC),
+                    symbol,
+                    "1d",
+                    close,
+                    close,
+                    close,
+                    close,
+                    1_000_000,
+                    Market.EQUITY,
+                )
+            )
+    return bars
+
+
+def _freeze_service_clock(monkeypatch, moment: datetime):
+    """Pin ``runtime_service``'s wall clock (seed/prune/catch-up read it)."""
+
+    class _Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return moment.astimezone(tz) if tz is not None else moment
+
+    monkeypatch.setattr(runtime_service, "datetime", _Frozen)
+
+
+def test_startup_catch_up_waits_for_the_embargo_on_an_early_close_day(tmp_path, monkeypatch) -> None:
+    """A restart just after a 13:00 ET close must not decide that session on
+    the provider's still-partial bar.
+
+    2a recovers a session the process was not alive for; 2b makes a provider
+    daily bar final only after close + SIP embargo. Together: inside the
+    embargo the catch-up falls back to the previous session (already decided),
+    and once the embargo passes the same restart recovers the early-close
+    session itself.
+    """
+    early_close = date(2026, 11, 27)  # the Friday after Thanksgiving: a 13:00 ET close
+    sessions = [
+        date(2026, 11, 16),
+        date(2026, 11, 17),
+        date(2026, 11, 18),
+        date(2026, 11, 19),
+        date(2026, 11, 20),
+        date(2026, 11, 23),
+        date(2026, 11, 24),
+        early_close,
+    ]
+    assert session_close_utc(early_close) == datetime(2026, 11, 27, 13, 0, tzinfo=NEW_YORK).astimezone(UTC)
+    bars = _session_bars(sessions)
+    before_early_close = [bar for bar in bars if bar.timestamp != bars[-1].timestamp]
+
+    broker = _Broker()
+    runtime = _runtime(tmp_path, broker)
+    _freeze_service_clock(monkeypatch, datetime(2026, 11, 24, 21, 30, tzinfo=UTC))
+    runtime.seed(before_early_close)
+    decided = runtime.process_closed_bars(
+        [bar for bar in before_early_close if bar.timestamp == before_early_close[-1].timestamp],
+        force_scheduled=True,
+        decision_origin="test_origin",
+    )
+    assert decided.status == "submitted"
+
+    # Five minutes after the 13:00 ET close: inside the 15-minute embargo, so
+    # the provider's bar for this session is not adoptable and the catch-up
+    # has nothing new to decide.
+    _freeze_service_clock(monkeypatch, datetime(2026, 11, 27, 18, 5, tzinfo=UTC))
+    runtime.seed(bars)
+    early_close_label = bars[-1].timestamp
+    assert early_close_label not in {series[-1].timestamp for series in runtime.history.values() if series}
+    assert runtime.startup_catch_up().status == "duplicate_decision"
+
+    # Twenty minutes after the close: the bar is final, and the missed
+    # scheduled session is recovered.
+    _freeze_service_clock(monkeypatch, datetime(2026, 11, 27, 18, 20, tzinfo=UTC))
+    runtime.seed(bars)
+    recovered = runtime.startup_catch_up()
+    assert runtime.startup_catch_up_status == f"recovered_session:{recovered.status}"
+    assert recovered.decision_id is not None and recovered.decision_id != decided.decision_id
 
 
 def test_startup_catch_up_already_invested_skips_when_managed_position_exists(

@@ -59,6 +59,7 @@ RUNTIME_COUNTER_KEYS: frozenset[str] = frozenset(
         "paper_cycle",
         "paper_receipt_written",
         "paper_incident",
+        "decision_deferred",
     }
 )
 

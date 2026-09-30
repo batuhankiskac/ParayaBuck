@@ -10,7 +10,7 @@ webhook setup are in `docs/deployment.md`; symptom playbooks are in
 |---|---|
 | Regular session | 5m IEX bars stream for SPY, QQQ, QLD; the account is polled every 15 s and reconciled every 60 s |
 | ≥ 16:00 | The session's daily bar is flushed; VT35 decides on completed bars only (QQQ close vs 200-session SMA, QLD 20-session vol). A daily bar for a session still trading is dropped from the signal history (`Ignored unfinished equity daily bar` in the log) |
-| Right after the decision | Decision persisted; SELLs, then BUYs, submitted as DAY market orders sized against a fresh account snapshot; one `daily_summary` alert |
+| Right after the decision | Decision persisted; SELLs, then BUYs, submitted as DAY market orders sized against a fresh account snapshot; one `daily_summary` alert. A decision blocked by a recoverable gate is re-queued instead (`decision_deferred`) and re-decided every 60 s until 40 min after the close |
 | Next open (09:30) | Alpaca fills the queued orders |
 | Close + 45 min / next open + 30 min | Intent watchdog checks that a decision exists and that the target is held (below) |
 
@@ -91,6 +91,7 @@ suppressed for 60 s. Secrets are redacted from logs and payloads.
 | `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed / recovered (equity entries halted meanwhile) | yes |
 | `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | yes |
 | `signal_source_mismatch` | IEX and SIP daily bars disagree on the trend (position held), their closes diverge, or the SIP bar is missing | yes |
+| `decision_deferred` | A session-close decision was re-queued because a recoverable gate (reconcile breaker, stale account snapshot, invalidated snapshot lease, transient broker fetch) was active; one per session, plus one when the retry window expires without a decision | yes |
 | `market_data_degraded` | The effective historical feed stopped being the configured one (SIP entitlement downgrade to IEX), and again when it recovers | yes |
 | `session_close_bar_incomplete` | A session closed with stream minutes missing: the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision | yes |
 | `reconciliation_unexpected_fill_side` | A broker FILL activity carried a side outside Alpaca's vocabulary; it is skipped and the cursor advanced, never fatal | yes |
@@ -154,6 +155,44 @@ closes included).
 `fail_readiness` (true: active alarms make `/readyz` 503),
 `evaluation_interval_seconds` (60).
 
+### Decision retry (deferred session-close decisions)
+
+A session-close decision blocked by a **recoverable** condition is re-queued,
+not dropped: an active reconciliation-owned breaker, `_reconcile_failed`, the
+readiness gate, an account-snapshot lease invalidated by a concurrent fill, or
+a network-class account fetch failure. The batch is re-decided every
+`engine.decision_retry_interval_seconds` (60) until
+`engine.decision_retry_window_minutes` (40) after the **session's own close**
+(16:00 ET, or 13:00 ET on an early close — the deadline follows the NYSE
+calendar, so an early-close session stops retrying at 13:40 ET rather than
+running three hours into the next session). The window sits inside the intent
+watchdog's 45-minute decision grace, so a deferred decision either lands or
+the watchdog still reports it missing, and it outlives the second-source
+deferral it must survive (`sip_embargo_minutes` 15 + `retry_window_minutes`
+10 = 25 min after the close). The first deferral of a session emits
+`decision_deferred`; retries only log `Decision deferred for retry`.
+`retry_window_ended` marks a session that was genuinely lost.
+
+A restart does not lose the session either: if the newest completed session is
+a scheduled boundary with no persisted decision, startup decides it
+(`startup_catch_up_status: recovered_session:<status>`) — including while a
+position is held, since a trend exit is exactly the decision that must not be
+skipped. The recovered decision runs on the last **final** daily bar: a
+provider bar is only eligible once its session closed more than
+`signal_cross_check.sip_embargo_minutes` ago, so a restart inside the embargo
+(or on an early-close day, close + 15 min) decides the *previous* session
+instead. That decision also runs without the second-source cross-check, so
+avoid restarting from 15:55 ET to close + 15 min — 16:30 ET on a full session,
+13:30 ET on an early close (`docs/deployment.md`).
+
+Reconciliation is on the same footing: a single Alpaca timeout during the
+60 s reconcile cycle blocks entries (fail-closed) but raises no breaker and
+persists no incident until `engine.reconcile_failure_threshold` (3)
+consecutive transient failures. Drift, ownership and protection failures
+still halt immediately. A definite broker rejection (4xx the recovery lookup
+proved never reached the broker) books the row `rejected`, alerts
+`order_rejected` and keeps the runtime running.
+
 ### Market data, the session calendar and the decision bar
 
 The NYSE schedule (pandas-market-calendars) is the single source of session
@@ -191,7 +230,6 @@ arithmetic at runtime:
 * **Outage honesty.** The split-basis verifier treats a cache-served
   response as unverified, so a provider outage fails closed instead of
   emitting a false recovery.
-
 
 ## ops CLI
 

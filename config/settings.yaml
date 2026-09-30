@@ -149,6 +149,7 @@ alerting:
   - intent_alarm
   - intent_recovered
   - signal_source_mismatch
+  - decision_deferred
   - market_data_degraded
   - session_close_bar_incomplete
   - reconciliation_unexpected_fill_side

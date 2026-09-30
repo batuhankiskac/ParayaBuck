@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 from requests.exceptions import RequestException
 
-from parayabuck.config import Config
+from parayabuck.config import Config, EngineConfig
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.risk.state import RiskState
@@ -607,8 +607,9 @@ def test_verified_reconcile_success_clears_only_reconciliation_incidents(tmp_pat
 
 
 def test_reconcile_failure_keeps_persisted_incidents(tmp_path: Path) -> None:
-    """A transient reconcile failure must not clear incidents: the halt
-    remains persisted until a verified success."""
+    """Transient reconcile failures block entries but only the Nth one
+    persists a new incident: the halt must not outlive a single Alpaca
+    timeout, and the incidents already on the ledger are never cleared."""
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     ledger.save_safety_incident("acct", "ownership_drift")
 
@@ -621,11 +622,22 @@ def test_reconcile_failure_keeps_persisted_incidents(tmp_path: Path) -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime.broker = _FlakyBroker()
     runtime.ledger = ledger
+    runtime.config = EngineConfig(reconcile_failure_threshold=3)
     runtime._reconcile_lock = threading.Lock()
     runtime._last_reconciliation_at = None
     runtime._last_account_at = None
     runtime._generic_reconcile_failures = 0
+    runtime._transient_reconcile_failures = 0
     runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+
+    runtime._reconcile_safely()
+    runtime._reconcile_safely()
+
+    # Below the threshold: entries blocked, but nothing persisted, no halt.
+    assert runtime._circuit_breaker_reason is None
+    assert runtime._reconcile_failed is True
+    assert [i.reason for i in ledger.load_safety_incidents("acct")] == ["ownership_drift"]
 
     runtime._reconcile_safely()
 

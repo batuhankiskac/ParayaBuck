@@ -32,10 +32,23 @@ class OwnershipDriftError(ProtectionReconciliationError):
     the bot safely, so entries halt until an operator reconciles manually."""
 
 
+class DefiniteOrderRejection(RuntimeError):
+    """The broker definitively refused the order; the outcome is KNOWN.
+
+    A 4xx submit failure (for example 403 or 422) combined with a recovery
+    lookup that proves the broker never accepted the client order id, or a
+    broker-confirmed terminal status for that id, leaves no ambiguity: the
+    order does not exist at the broker. The runtime books the row as
+    ``rejected``, alerts ``order_rejected`` and keeps running — a rejection is
+    a re-plannable outcome, not a safety incident.
+    """
+
+
 __all__ = [
     "STOP_CANCEL_POLL_INTERVAL_SECONDS",
     "STOP_CANCEL_TIMEOUT_SECONDS",
     "AmbiguousOrderState",
+    "DefiniteOrderRejection",
     "OwnershipDriftError",
     "ProtectionReconciliationError",
     "RiskStatePersistenceError",

@@ -62,6 +62,11 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # Signal cross-check: the IEX stream-built and SIP daily bars disagree on
     # the trend (position held), diverge in close, or the SIP bar was missing.
     "signal_source_mismatch",
+    # A session-close decision was re-queued for a bounded retry because a
+    # recoverable gate (breaker, reconcile failure, readiness, snapshot
+    # lease, transient broker fetch) was active at decision time. Emitted
+    # once per deferred session, never per retry attempt.
+    "decision_deferred",
     # Market data: the effective historical feed stopped being the configured
     # one (SIP entitlement downgrade to IEX) and later recovered.
     "market_data_degraded",
@@ -101,6 +106,7 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "paper_incident",
         "intent_alarm",
         "signal_source_mismatch",
+        "decision_deferred",
         "market_data_degraded",
         "session_close_bar_incomplete",
         "reconciliation_unexpected_fill_side",

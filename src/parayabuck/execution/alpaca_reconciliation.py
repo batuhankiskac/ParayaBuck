@@ -45,6 +45,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.monitoring import alerts
 from parayabuck.utils import is_crypto
+from parayabuck.utils.http import is_network_failure
 
 log = get_logger("parayabuck.execution.alpaca_reconciliation")
 
@@ -231,6 +232,13 @@ class ReconciliationService:
                 seen_tokens.add(next_token)
                 page_token = next_token
         except Exception as exc:
+            if is_network_failure(exc):
+                # A 503/timeout on /account/activities/FILL is a TRANSIENT
+                # provider failure, not a malformed history. Chain the cause so
+                # the runtime classifies it as retryable instead of leaving the
+                # engine in a permanent 'error' state after a restart.
+                log.warning("Fill activity backfill failed after a broker network error: %s", exc)
+                raise ReconciliationResultError("FILL activity backfill incomplete") from exc
             log.warning("Fill activity fee reconciliation deferred: %s", exc)
             return False
         activities.sort(key=lambda item: str(item.get("transaction_time") or item.get("date") or ""))

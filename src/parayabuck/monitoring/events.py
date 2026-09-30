@@ -62,6 +62,15 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # Signal cross-check: the IEX stream-built and SIP daily bars disagree on
     # the trend (position held), diverge in close, or the SIP bar was missing.
     "signal_source_mismatch",
+    # Market data: the effective historical feed stopped being the configured
+    # one (SIP entitlement downgrade to IEX) and later recovered.
+    "market_data_degraded",
+    # A session closed with missing stream minutes: the incomplete daily bar
+    # was withheld and the SIP daily bar is fetched for the decision.
+    "session_close_bar_incomplete",
+    # A broker FILL activity carried a side outside Alpaca's vocabulary: it is
+    # skipped and reported, never fatal for reconciliation.
+    "reconciliation_unexpected_fill_side",
 )
 
 ALERT_KINDS: frozenset[str] = frozenset(ALERT_KINDS_ORDERED)
@@ -92,6 +101,9 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "paper_incident",
         "intent_alarm",
         "signal_source_mismatch",
+        "market_data_degraded",
+        "session_close_bar_incomplete",
+        "reconciliation_unexpected_fill_side",
     }
 )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -78,8 +78,9 @@ def test_four_silent_sessions_raise_equity_decision_missing() -> None:
         (_utc(2026, 10, 3, 15, 0), _utc(2026, 10, 2, 13, 30)),
         # Thanksgiving 2026-11-26 is a holiday: Wednesday stays the due session.
         (_utc(2026, 11, 26, 23, 0), _utc(2026, 11, 25, 14, 30)),
-        # Early close (13:00 ET) on 11-27: the decision still comes at 16:00 ET.
-        (_utc(2026, 11, 27, 19, 0), _utc(2026, 11, 25, 14, 30)),
+        # Early close (13:00 ET) on 11-27: the decision comes at 13:00 ET, so
+        # a 13:01 ET decision for that session is already on record.
+        (_utc(2026, 11, 27, 19, 0), _utc(2026, 11, 27, 18, 1)),
     ],
 )
 def test_no_missing_alarm_when_the_due_session_is_decided(now: datetime, latest_label: datetime) -> None:
@@ -87,10 +88,18 @@ def test_no_missing_alarm_when_the_due_session_is_decided(now: datetime, latest_
     assert alarms == []
 
 
-def test_early_close_session_is_due_after_the_16_00_floor_plus_grace() -> None:
-    session, deadline = last_due_equity_session(_utc(2026, 11, 27, 21, 50), timedelta(minutes=45))  # type: ignore[misc]
+def test_early_close_session_is_due_after_its_own_close_plus_grace() -> None:
+    """2026-11-27 closes at 13:00 ET (18:00 UTC): the decision is expected
+    there, not at the 16:00 ET floor a weekday-window calendar implies."""
+    session, deadline = last_due_equity_session(_utc(2026, 11, 27, 18, 50), timedelta(minutes=45))  # type: ignore[misc]
     assert session.isoformat() == "2026-11-27"
-    assert deadline == _utc(2026, 11, 27, 21, 45)
+    assert deadline == _utc(2026, 11, 27, 18, 45)
+    # Still inside the grace at 18:40 UTC, so the previous session is the
+    # newest due one (Thanksgiving 2026-11-26 is not a session at all).
+    assert last_due_equity_session(_utc(2026, 11, 27, 18, 40), timedelta(minutes=45)) == (  # type: ignore[misc]
+        date(2026, 11, 25),
+        _utc(2026, 11, 25, 21, 45),
+    )
 
 
 def test_no_history_alarms_only_when_the_runtime_was_up_for_the_decision() -> None:

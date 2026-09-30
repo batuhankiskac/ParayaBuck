@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
     NEW_YORK,
     TIMEFRAME_MINUTES,
-    is_regular_equity_time,
+    is_session_open,
     weekday_count,
 )
 from parayabuck.utils import is_crypto
@@ -43,6 +44,33 @@ MIN_CACHE_COVERAGE_PCT = 0.60
 # Alpaca caps a single bars response at 10,000 rows; windows spanning more
 # rows are split into multiple time-bounded requests.
 _MAX_ROWS_PER_REQUEST = 10_000
+
+# A configured SIP feed that the account is not entitled to answers 401/403.
+# Anything else — a DNS failure, a timeout, a 5xx — is a transport error and
+# must NOT downgrade history for the life of the process.
+_ENTITLEMENT_STATUS_CODES = frozenset({401, 403})
+
+# Explicit entitlement sentences in the RESPONSE BODY only. Bare words like
+# "sip" are deliberately absent: a transport error's message embeds the
+# request URL, and every Alpaca bar request carries `feed=sip`, so a
+# substring match on the message turned a network blip into a permanent IEX
+# downgrade.
+_ENTITLEMENT_BODY_PATTERNS = (
+    r"\bentitlement\b",
+    r"\bnot entitled\b",
+    r"\binsufficient\s+\S+\s+privileges?\b",
+    r"\bunauthorized\b[^.]*\bfeed\b",
+    r"\bno access to\b",
+)
+
+# Request URLs are stripped before any body matching: only the server's
+# answer may classify an error, never the endpoint we asked.
+_REQUEST_URL = re.compile(r"https?://\S+")
+
+# How long the SIP -> IEX downgrade is trusted before one bounded re-probe
+# tries SIP again, so granting the entitlement (or a data-plan change) heals
+# without a restart.
+_SIP_REPROBE_INTERVAL = timedelta(hours=6)
 
 
 def _floor_to_grid(value: datetime, minutes: int) -> datetime:
@@ -121,6 +149,10 @@ class AlpacaHistoricalData:
         # its own entitlement, so a quote-only failure must not downgrade bar
         # coverage.
         self._sip_fallback_active = False
+        # When the bounded SIP -> IEX downgrade engaged, so one re-probe can
+        # be scheduled per ``_SIP_REPROBE_INTERVAL`` instead of trusting a
+        # stale downgrade for the life of the process.
+        self._sip_fallback_since: datetime | None = None
         self._sip_quote_fallback_active = False
         # Alpaca's Basic data plan rejects SIP bar queries whose end reaches
         # into the most recent 15 minutes. Callers wire this from
@@ -158,12 +190,17 @@ class AlpacaHistoricalData:
         quote_effective = (
             "iex" if self._sip_quote_fallback_active or self._sip_fallback_active else self._configured_stock_feed
         )
+        fallback_since = getattr(self, "_sip_fallback_since", None)
         return {
             "configured": self._configured_stock_feed,
             "effective": bars_effective,
             "quote_effective": quote_effective,
             "sip_fallback_active": self._sip_fallback_active,
             "sip_quote_fallback_active": self._sip_quote_fallback_active,
+            # A downgrade is bounded, not permanent: the next SIP request at
+            # or after this instant re-probes and restores the configured feed.
+            "sip_fallback_since": (fallback_since.isoformat() if isinstance(fallback_since, datetime) else None),
+            "sip_reprobe_interval_minutes": int(_SIP_REPROBE_INTERVAL.total_seconds() // 60),
             "note": (
                 "IEX prints reflect one exchange, not the consolidated SIP/NBBO "
                 "tape; liquidity and spread proxies derived from IEX data are "
@@ -490,7 +527,7 @@ class AlpacaHistoricalData:
             adjustment=adjustment,
         )
         if timeframe != "1d":
-            return [bar for bar in bars if is_regular_equity_time(bar.timestamp)]
+            return [bar for bar in bars if is_session_open(bar.timestamp)]
         return bars
 
     @staticmethod
@@ -599,31 +636,60 @@ class AlpacaHistoricalData:
         return end_at
 
     @staticmethod
-    def _is_entitlement_error(exc: Exception) -> bool:
-        """Best-effort detection of an Alpaca market-data entitlement error.
+    def _error_status_code(exc: Exception) -> int | None:
+        """The HTTP status carried by an API/HTTP error, if any."""
+        for holder in (exc, getattr(exc, "response", None)):
+            status = getattr(holder, "status_code", None)
+            if isinstance(status, int):
+                return status
+        return None
 
-        Entitlement failures surface as API errors mentioning feed/SIP/
-        entitlement; anything ambiguous is NOT treated as an entitlement
-        problem so real outages still propagate to the caller.
+    @staticmethod
+    def _error_body(exc: Exception) -> str:
+        """The server's answer, with the request URL removed.
+
+        Only the body may classify an error. A transport error stringifies to
+        the request that failed — including ``?feed=sip`` — so matching the
+        raw message is how a DNS hiccup was read as a missing entitlement.
         """
-        import re
+        response = getattr(exc, "response", None)
+        for value in (getattr(response, "text", None), getattr(exc, "body", None)):
+            if isinstance(value, str) and value.strip():
+                return value
+        return _REQUEST_URL.sub(" ", f"{exc}")
 
-        message = f"{exc}".lower()
-        # "subscription does not permit querying recent SIP data" is the
-        # Basic plan's 15-minute recent-data restriction, NOT a missing SIP
-        # entitlement: the account can read SIP history, just not its newest
-        # minutes. Downgrading the whole process to IEX on it would be wrong.
-        if re.search(r"\brecent\b[^.]*\bdata\b", message):
+    @staticmethod
+    def _is_entitlement_error(exc: Exception) -> bool:
+        """Whether ``exc`` is a genuine Alpaca SIP entitlement failure.
+
+        Exactly two shapes qualify: a 401/403 status, or an explicit
+        entitlement sentence in the response body. Alpaca's Basic plan
+        answers 403 for "subscription does not permit querying recent SIP
+        data" too — a data-plan embargo, not a missing entitlement — so that
+        sentence is excluded first, whatever the status. Everything else
+        (DNS, timeouts, connection resets, 5xx) is NOT an entitlement
+        problem, and a real outage still propagates to the caller instead of
+        downgrading the process to IEX history for good.
+        """
+        body = AlpacaHistoricalData._error_body(exc).lower()
+        if re.search(r"\brecent\b[^.]*\bdata\b", body):
             return False
-        patterns = (
-            r"\bentitlement\b",
-            r"not entitled",
-            r"unauthorized.*feed",
-            r"\bsip\b",
-            r"\biex\b.*\bfeed\b",
-            r"data feed",
-        )
-        return any(re.search(pat, message) for pat in patterns)
+        if AlpacaHistoricalData._error_status_code(exc) in _ENTITLEMENT_STATUS_CODES:
+            return True
+        return any(re.search(pattern, body) for pattern in _ENTITLEMENT_BODY_PATTERNS)
+
+    def _sip_reprobe_due(self, now: datetime) -> bool:
+        """Whether the SIP -> IEX downgrade has aged past the re-probe interval."""
+        since = getattr(self, "_sip_fallback_since", None)
+        if not isinstance(since, datetime):
+            return False
+        return now - since >= _SIP_REPROBE_INTERVAL
+
+    def _restore_sip_feed(self) -> None:
+        """Undo the downgrade after a successful SIP request."""
+        self._stock_feed = DataFeed(self._configured_stock_feed)
+        self._sip_fallback_active = False
+        self._sip_fallback_since = None
 
     def _fetch_window(
         self,
@@ -633,6 +699,13 @@ class AlpacaHistoricalData:
         end_at: datetime,
         adjustment: str,
     ) -> dict[str, list[Bar]]:
+        # A downgraded client re-probes SIP on the next request once the
+        # interval has passed: the entitlement may since have been granted.
+        # Bounded to one attempt per interval, and a re-probe that fails with
+        # an entitlement error re-downgrades below instead of flapping.
+        if getattr(self, "_sip_fallback_active", False) and self._sip_reprobe_due(datetime.now(UTC)):
+            log.info("Re-probing the SIP historical feed after a bounded downgrade")
+            self._restore_sip_feed()
         end_at = self._clamp_recent_end(end_at)
         feed_name = self._effective_stock_feed_name
         cached = {
@@ -667,23 +740,27 @@ class AlpacaHistoricalData:
                 )
             )
         except Exception as exc:
-            # A configured SIP entitlement that the account does not have is a
+            # A configured SIP entitlement the account does not have is a
             # common paper-account situation: degrade to the IEX historical
-            # feed instead of failing every warmup/scanner request. The
-            # fallback is sticky for the process and surfaced via feed_status()
-            # so reports can label the data coverage honestly.
+            # feed instead of failing every warmup request. The downgrade is
+            # bounded — a re-probe restores SIP once it answers again — and
+            # surfaced via feed_status() so reports can label the coverage
+            # honestly. Only a GENUINE entitlement error (401/403 or an
+            # explicit entitlement body) gets here; a transport error
+            # mentioning `feed=sip` does not.
             if (
                 not self._sip_fallback_active
                 and self._configured_stock_feed == "sip"
                 and self._is_entitlement_error(exc)
             ):
                 log.warning(
-                    "SIP historical entitlement unavailable (%s); degrading to "
-                    "IEX historical feed for the rest of this process",
+                    "SIP historical entitlement unavailable (%s); degrading to the "
+                    "IEX historical feed until a re-probe succeeds",
                     exc,
                 )
                 self._stock_feed = DataFeed("iex")
                 self._sip_fallback_active = True
+                self._sip_fallback_since = datetime.now(UTC)
                 return self._fetch_window(
                     symbols,
                     timeframe,
@@ -710,7 +787,7 @@ class AlpacaHistoricalData:
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
             timestamp = timestamp.astimezone(UTC)
-            if timeframe != "1d" and not is_regular_equity_time(timestamp):
+            if timeframe != "1d" and not is_session_open(timestamp):
                 continue
             row_symbol = str(getattr(row, "symbol", symbols[0]))
             item = Bar(

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import math
+import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -507,6 +510,10 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
             )
             return {symbol: [] for symbol in symbols}
 
+        def feed_status(self) -> dict[str, object]:
+            # A configured SIP request that hit an entitlement downgrade.
+            return {"configured": "sip", "effective": "iex", "sip_fallback_active": True}
+
         def close(self) -> None:
             pass
 
@@ -515,7 +522,11 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
     start = datetime(2022, 1, 1, tzinfo=UTC)
     end = datetime(2022, 6, 1, tzinfo=UTC)
 
-    cli_module._load_bars(config, args, Market.EQUITY, start, end)
+    _bars_downloaded, data_feed = cli_module._load_bars(config, args, Market.EQUITY, start, end)
+
+    # The report must carry the feed the bars actually came from, not the
+    # configured one: an entitlement downgrade serves IEX prints.
+    assert data_feed == "iex"
 
     assert captured_requests
     first = captured_requests[0]
@@ -558,13 +569,18 @@ def test_load_bars_returns_the_single_window_download_for_a_deficient_symbol(tmp
             late_listing = datetime(2022, 2, 1, tzinfo=UTC)
             return {symbol: series(symbol, late_listing if symbol == "QLD" else start, end) for symbol in symbols}
 
+        def feed_status(self) -> dict[str, object]:
+            return {"configured": "sip", "effective": "sip", "sip_fallback_active": False}
+
         def close(self) -> None:
             pass
 
     monkeypatch.setattr(cli_module, "AlpacaHistoricalData", lambda *a, **k: FakeProvider())
     args = SimpleNamespace(data=None, symbols=None)
 
-    bars = cli_module._load_bars(config, args, Market.EQUITY, start, end)
+    bars, data_feed = cli_module._load_bars(config, args, Market.EQUITY, start, end)
+
+    assert data_feed == "sip"
 
     assert len(requests) == 1
     window_start, window_end = requests[0]
@@ -668,9 +684,7 @@ def test_persisted_data_feed_note_never_claims_a_feed_the_run_did_not_get(tmp_pa
         persist=False,
         persist_artifacts=False,
     )
-    assert unknown.report.summary["data_feed"] == (
-        "offline csv (feed unknown; downloader used the configured historical feed)"
-    )
+    assert unknown.report.summary["data_feed"] == "unknown (no provider feed was reported for this run)"
     assert unknown.report.summary["data_feed_note"] == "Feed unknown; provenance not verified for this offline run."
 
     sip = run_product_backtest(
@@ -714,3 +728,117 @@ def test_direct_run_normalizes_unsorted_warmup_like_the_optimizer(tmp_path) -> N
 
     assert baseline.result.equity_curve == unsorted.result.equity_curve
     assert [fill.timestamp for fill in baseline.result.fills] == [fill.timestamp for fill in unsorted.result.fills]
+
+
+def _csv_bars(path: Path, bars: list[Bar]) -> Path:
+    rows = ["timestamp,symbol,timeframe,open,high,low,close,volume,market"]
+    rows.extend(
+        ",".join(
+            (
+                bar.timestamp.isoformat(),
+                bar.symbol,
+                bar.timeframe,
+                str(bar.open),
+                str(bar.high),
+                str(bar.low),
+                str(bar.close),
+                str(bar.volume),
+                bar.market.value,
+            )
+        )
+        for bar in bars
+    )
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return path
+
+
+def _table_names(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    with contextlib.closing(sqlite3.connect(path)) as connection:
+        rows = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+    return {row[0] for row in rows}
+
+
+def test_cli_backtest_never_writes_research_rows_into_the_runtime_decision_db(tmp_path, monkeypatch) -> None:
+    # F41: the CLI backtest (and the web dashboard's one-off backtest, which
+    # shells it) must not inject research rows into the live decision ledger
+    # that the operator also backs up as the decision record.
+    csv_path = _csv_bars(tmp_path / "bars.csv", [bar for bar in _bars(220) if bar.timestamp.weekday() < 5])
+    config = _config(tmp_path)
+    decision_db = tmp_path / "runtime.sqlite3"
+    assert config.runtime.decision_db_path == str(decision_db)
+    monkeypatch.setattr(cli_module, "load_config", lambda _path: config)
+
+    exit_code = cli_module.main(
+        [
+            "backtest",
+            "--market",
+            "equity",
+            "--strategy",
+            "equity_leveraged_trend_v1",
+            "--data",
+            str(csv_path),
+            "--output-dir",
+            str(tmp_path / "cli-reports"),
+        ]
+    )
+
+    assert exit_code == 0
+    assert "backtest_runs" not in _table_names(decision_db)
+    assert not (tmp_path / "cli-reports" / "backtest_runs.sqlite3").exists()
+
+
+def test_explicit_persistence_writes_to_a_research_db_not_the_decision_db(tmp_path) -> None:
+    # F41: an explicit persistence request still gets its row, but in a
+    # research database beside the run's reports (or an explicit path).
+    config = _config(tmp_path)
+    decision_db = tmp_path / "runtime.sqlite3"
+    research_db = tmp_path / "research" / "runs.sqlite3"
+
+    run = run_product_backtest(config, _bars(220), market=Market.EQUITY, persist=True, persist_db_path=research_db)
+    default_run = run_product_backtest(
+        config,
+        _bars(220),
+        market=Market.EQUITY,
+        persist=True,
+        persist_artifacts=False,
+        output_dir=str(tmp_path / "reports"),
+    )
+
+    default_db = tmp_path / "reports" / "backtest_runs.sqlite3"
+    assert default_db.exists()
+    for database, run_id in ((research_db, run.run_id), (default_db, default_run.run_id)):
+        with contextlib.closing(sqlite3.connect(database)) as connection:
+            rows = connection.execute("SELECT run_id FROM backtest_runs").fetchall()
+        assert run_id in {row[0] for row in rows}
+    assert "backtest_runs" not in _table_names(decision_db)
+
+
+def test_offline_csv_backtest_report_never_claims_the_configured_sip_feed(tmp_path, monkeypatch) -> None:
+    # F42: the configured feed is only a claim; a --data csv run never asks
+    # Alpaca, so the persisted report must say the feed is unknown.
+    csv_path = _csv_bars(tmp_path / "bars.csv", [bar for bar in _bars(220) if bar.timestamp.weekday() < 5])
+    config = _config(tmp_path)
+    assert config.alpaca.stock_historical_feed == "sip"
+    monkeypatch.setattr(cli_module, "load_config", lambda _path: config)
+    reports = tmp_path / "feed-reports"
+
+    exit_code = cli_module.main(
+        [
+            "backtest",
+            "--market",
+            "equity",
+            "--strategy",
+            "equity_leveraged_trend_v1",
+            "--data",
+            str(csv_path),
+            "--output-dir",
+            str(reports),
+        ]
+    )
+
+    assert exit_code == 0
+    summary = json.loads(next(reports.glob("*/report.json")).read_text(encoding="utf-8"))["summary"]
+    assert summary["data_feed"] == "unknown (no provider feed was reported for this run)"
+    assert summary["data_feed_note"] == "Feed unknown; provenance not verified for this offline run."

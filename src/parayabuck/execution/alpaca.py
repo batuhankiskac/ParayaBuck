@@ -3,27 +3,16 @@ from __future__ import annotations
 import json
 import math
 import re
-import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from alpaca.trading.enums import QueryOrderStatus
-from alpaca.trading.requests import (
-    GetOrderByIdRequest,
-    GetOrdersRequest,
-)
+from alpaca.trading.requests import GetOrdersRequest
 
-from parayabuck.core.models import (
-    AccountSnapshot,
-    Fill,
-    Market,
-    OrderIntent,
-    OrderState,
-    PositionSnapshot,
-)
+from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.alpaca_client import AlpacaClient
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
@@ -33,7 +22,7 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.execution.risk_peak import RiskPeakService
 from parayabuck.logger import get_logger
-from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
+from parayabuck.markets.symbols import canonical_symbol, same_symbol
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.execution.alpaca")
@@ -44,8 +33,6 @@ from parayabuck.execution.alpaca_protection import ProtectionService  # noqa: E4
 from parayabuck.execution.alpaca_reconciliation import ReconciliationService  # noqa: E402
 
 from .alpaca_models import (  # noqa: E402
-    STOP_CANCEL_POLL_INTERVAL_SECONDS,
-    STOP_CANCEL_TIMEOUT_SECONDS,
     AmbiguousOrderState,
     DefiniteOrderRejection,
     OwnershipDriftError,
@@ -99,21 +86,10 @@ class AlpacaBroker:
     ) -> None:
         if client_adapter is not None:
             self._client_adapter = client_adapter
-            try:
-                object.__setattr__(
-                    self, "_client_inner", getattr(client_adapter, "_client", getattr(client_adapter, "client", None))
-                )
-                object.__setattr__(self, "_asset_cache_inner", getattr(client_adapter, "_asset_cache", {}))
-            except Exception:
-                pass
         elif client is not None:
             self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper, client=client)
-            object.__setattr__(self, "_client_inner", self._client_adapter._client)
-            object.__setattr__(self, "_asset_cache_inner", self._client_adapter._asset_cache)
         else:
             self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper)
-            object.__setattr__(self, "_client_inner", self._client_adapter._client)
-            object.__setattr__(self, "_asset_cache_inner", self._client_adapter._asset_cache)
         self._paper = paper
         self._risk_peak = RiskPeakService(
             paper=paper, ledger=ledger, peak_state_path=peak_state_path, runtime_state_dir=runtime_state_dir
@@ -141,69 +117,17 @@ class AlpacaBroker:
 
     @property
     def _client(self) -> Any:
-        adapter = self.__dict__.get("_client_adapter")
-        if adapter is not None:
-            return adapter._client
-        return self.__dict__.get("_client_inner")
+        return self._client_adapter._client
 
     @_client.setter
     def _client(self, value: Any) -> None:
-        adapter = self.__dict__.get("_client_adapter")
-        if adapter is not None:
+        self._client_adapter._client = value
+        session = getattr(value, "_session", None)
+        if session is not None:
             try:
-                adapter._client = value
-            except Exception:
-                pass
-            sess = getattr(value, "_session", None)
-            if sess is not None:
-                try:
-                    from parayabuck.utils.http import patch_session_timeout
+                from parayabuck.utils.http import patch_session_timeout
 
-                    patch_session_timeout(sess, timeout=15.0)
-                except Exception:
-                    pass
-        else:
-            try:
-                adapter_obj = AlpacaClient.__new__(AlpacaClient)
-                adapter_obj._client = value
-                existing_cache = self.__dict__.get("_asset_cache_inner") or self.__dict__.get("_asset_cache") or {}
-                if isinstance(existing_cache, dict):
-                    adapter_obj._asset_cache = existing_cache
-                else:
-                    adapter_obj._asset_cache = {}
-                adapter_obj._closed = False
-                sess = getattr(value, "_session", None)
-                if sess is not None:
-                    try:
-                        from parayabuck.utils.http import patch_session_timeout
-
-                        patch_session_timeout(sess, timeout=15.0)
-                    except Exception:
-                        pass
-                self.__dict__["_client_adapter"] = adapter_obj
-            except Exception:
-                pass
-        self.__dict__["_client_inner"] = value
-
-    @property
-    def _asset_cache(self) -> Any:
-        adapter = self.__dict__.get("_client_adapter")
-        if adapter is not None:
-            return adapter._asset_cache
-        return self.__dict__.get("_asset_cache_inner", {})
-
-    @_asset_cache.setter
-    def _asset_cache(self, value: Any) -> None:
-        adapter = self.__dict__.get("_client_adapter")
-        if adapter is not None:
-            try:
-                adapter._asset_cache = value
-            except Exception:
-                pass
-        self.__dict__["_asset_cache_inner"] = value
-        if adapter is not None and isinstance(value, dict):
-            try:
-                adapter._asset_cache = value
+                patch_session_timeout(session, timeout=15.0)
             except Exception:
                 pass
 
@@ -390,140 +314,11 @@ class AlpacaBroker:
 
     def snapshot_if_fresh(self, max_age_seconds: float) -> AccountSnapshot | None:
         """Return the last fetched account snapshot if it is at most
-        ``max_age_seconds`` old, else ``None``.
-
-        Delegates to :class:`AccountService` when composed; falls back to
-        local cache for uninitialized ``__new__`` test doubles.
-        """
-        svc = self.__dict__.get("_account_service")
-        if svc is not None:
-            try:
-                return svc.snapshot_if_fresh(max_age_seconds)  # type: ignore[no-any-return]
-            except Exception:
-                pass
-        cached = self._snapshot_cache
-        cached_at = self._snapshot_cached_at
-        if cached is None or cached_at is None:
-            return None
-        if time.monotonic() - cached_at <= max_age_seconds:
-            return cached
-        return None
+        ``max_age_seconds`` old, else ``None``."""
+        return self._account_service.snapshot_if_fresh(max_age_seconds)
 
     def account(self) -> AccountSnapshot:
-        svc = self.__dict__.get("_account_service")
-        if svc is not None:
-            return svc.account()  # type: ignore[no-any-return]
-        account: Any = self._client.get_account()
-        self._account_id = str(getattr(account, "id", "") or getattr(account, "account_number", ""))
-        if (
-            bool(getattr(account, "account_blocked", False))
-            or bool(getattr(account, "trading_blocked", False))
-            or bool(getattr(account, "trade_suspended_by_user", False))
-        ):
-            raise RuntimeError("Alpaca account is blocked from trading")
-        equity = float(account.equity or 0)
-        previous_equity = float(account.last_equity or equity)
-        positions: list[PositionSnapshot] = []
-        ledger = self.ledger
-        managed_positions = ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
-        owned_quantities: dict[str, float] = {}
-        portfolio_owned_provider = getattr(self, "portfolio_owned_quantities", None)
-        if portfolio_owned_provider is not None:
-            owned_quantities = portfolio_owned_provider() or {}
-        unrealized = 0.0
-        intraday_unrealized = 0.0
-        raw_positions: Any = self._client.get_all_positions()
-        drift_candidates: list[tuple[str, float, float, Market]] = []
-        seen_position_keys: set[tuple[Market, str]] = set()
-        for raw in raw_positions:
-            current_price = float(raw.current_price)
-            unrealized += float(raw.unrealized_pl or 0)
-            intraday_unrealized += float(raw.unrealized_intraday_pl or 0)
-            asset_class = str(getattr(raw, "asset_class", "")).lower()
-            market = Market.CRYPTO if "crypto" in asset_class or is_crypto(str(raw.symbol)) else Market.EQUITY
-            canonical = canonical_symbol(str(raw.symbol), market)
-            position_key = (market, canonical)
-            if position_key in seen_position_keys:
-                raise OwnershipDriftError(
-                    f"Duplicate broker position for {canonical} ({market.value}); "
-                    "reconciliation is required before trading resumes"
-                )
-            seen_position_keys.add(position_key)
-            managed = managed_positions.get(canonical)
-            raw_qty = float(raw.qty)
-            ledger_owned = float(managed.owned_qty) if managed is not None else 0.0
-            repo_owned = float(owned_quantities.get(canonical, 0.0))
-            if ledger_owned > 1e-12 and repo_owned > 1e-12:
-                raise OwnershipDriftError(
-                    "Dual ownership lineage for "
-                    f"{canonical}: ledger managed qty={ledger_owned} and "
-                    f"portfolio managed qty={repo_owned} are both positive; "
-                    "reconciliation is required before trading resumes"
-                )
-            total_owned = ledger_owned + repo_owned
-            if (
-                managed is None
-                and total_owned > 1e-12
-                and abs(raw_qty) > 1e-12
-                and abs(raw_qty) + max(1e-9, total_owned * 1e-8) < total_owned
-            ):
-                drift_candidates.append((canonical, total_owned, raw_qty, market))
-            managed_qty = min(abs(raw_qty), total_owned)
-            external_qty = abs(raw_qty) - managed_qty
-            ownership = (
-                "managed"
-                if managed_qty > 1e-12 and external_qty <= 1e-12
-                else "mixed"
-                if managed_qty > 1e-12
-                else "external"
-            )
-            positions.append(
-                PositionSnapshot(
-                    symbol=canonical,
-                    qty=raw_qty,
-                    avg_price=float(raw.avg_entry_price),
-                    current_price=current_price,
-                    market=market,
-                    qty_available=(
-                        float(raw.qty_available) if getattr(raw, "qty_available", None) is not None else None
-                    ),
-                    ownership=ownership,
-                    managed_qty=managed_qty,
-                    stop_price=(managed.current_stop or managed.original_stop if managed is not None else None),
-                    initial_risk=(
-                        abs(float(raw.avg_entry_price) - managed.original_stop) if managed is not None else None
-                    ),
-                )
-            )
-        if drift_candidates:
-            repo_orders = self._portfolio_open_order_map()
-            for canonical, owned_qty, raw_qty, market in drift_candidates:
-                if self._open_order_explains_drift(canonical, owned_qty, raw_qty, market, repo_orders):
-                    continue
-                raise OwnershipDriftError(
-                    f"Ownership drift for {canonical}: repository managed "
-                    f"qty={owned_qty} exceeds broker position qty={raw_qty}"
-                )
-        self._ensure_peak_reconciled(self._account_id or "unknown", equity)
-        old_peak = self._peak_equity
-        self._peak_equity = max(self._peak_equity, equity)
-        if self._peak_equity != old_peak:
-            self._save_peak_equity()
-        daily_pnl = equity - previous_equity
-        cash = float(account.cash or 0)
-        snapshot = AccountSnapshot(
-            cash=cash,
-            equity=equity,
-            peak_equity=self._peak_equity,
-            daily_pnl=daily_pnl,
-            positions=tuple(positions),
-            realized_pnl=daily_pnl - intraday_unrealized,
-            unrealized_pnl=unrealized,
-            fees=(ledger.total_fees_for_account(self._account_id or "unknown") if ledger is not None else 0.0),
-        )
-        self._snapshot_cache = snapshot
-        self._snapshot_cached_at = time.monotonic()
-        return snapshot
+        return self._account_service.account()
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
         """Broker-authoritative increments introduced by Alpaca asset metadata."""
@@ -805,51 +600,6 @@ class AlpacaBroker:
         orders = provider() or ()
         return {canonical_symbol(str(getattr(order, "symbol", ""))) for order in orders if getattr(order, "symbol", "")}
 
-    def _portfolio_open_order_map(self) -> dict[str, list[object]]:
-        """Open portfolio orders grouped by canonical symbol (SELL legs)."""
-        provider = getattr(self, "portfolio_open_orders", None)
-        if provider is None:
-            return {}
-        grouped: dict[str, list[object]] = {}
-        for order in provider() or ():
-            symbol = str(getattr(order, "symbol", ""))
-            if not symbol or str(getattr(order, "side", "")).lower() != "sell":
-                continue
-            market = getattr(order, "market", None)
-            canonical = canonical_symbol(symbol, market)
-            grouped.setdefault(canonical, []).append(order)
-        return grouped
-
-    @staticmethod
-    def _open_order_explains_drift(
-        canonical: str,
-        owned_qty: float,
-        raw_qty: float,
-        market: Market,
-        orders_by_symbol: dict[str, list[object]],
-    ) -> bool:
-        """Whether a working managed SELL can explain the ownership shortfall.
-
-        The exemption requires a closing/risk-reducing SELL that belongs to
-        the current portfolio repository/account, on the same symbol, with a
-        remaining quantity large enough to cover the discrepancy. Anything
-        else — a manual order, a BUY, or an under-sized SELL — keeps the
-        drift fail-closed.
-        """
-        shortfall = max(0.0, owned_qty - abs(raw_qty))
-        if shortfall <= 1e-12:
-            return False
-        for order in orders_by_symbol.get(canonical, ()):
-            order_market = getattr(order, "market", None)
-            if order_market is not None and order_market != market:
-                continue
-            quantity = float(getattr(order, "quantity", 0.0) or 0.0)
-            filled = float(getattr(order, "cumulative_filled_quantity", 0.0) or 0.0)
-            remaining = max(0.0, quantity - filled)
-            if remaining >= shortfall - max(1e-9, shortfall * 1e-8):
-                return True
-        return False
-
     def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str:
         """Submit one simple long/cash rebalance leg with ambiguity recovery."""
         svc = self.__dict__.get("_order_service")
@@ -866,16 +616,6 @@ class AlpacaBroker:
             self.__dict__["_reconciliation_service"] = svc
         return svc.reconcile()
 
-    def _reconcile_fill_activity_fees(self) -> bool:
-        svc = self.__dict__.get("_reconciliation_service")
-        if svc is None:
-            try:
-                svc = ReconciliationService(self)
-                self.__dict__["_reconciliation_service"] = svc
-            except Exception:
-                return False
-        return svc._reconcile_fill_activity_fees()
-
     def _has_nested_bracket_protection(
         self,
         parent_order_ids: str | set[str],
@@ -883,132 +623,18 @@ class AlpacaBroker:
         position_is_long: bool,
         required_qty: float,
     ) -> bool:
-        svc = self.__dict__.get("_protection_service")
-        if svc is not None:
-            return svc._has_nested_bracket_protection(parent_order_ids, symbol, position_is_long, required_qty)  # type: ignore[no-any-return]
-        closing_side = "sell" if position_is_long else "buy"
-
-        def protective_qty(order: Any) -> Decimal:
-            side = self._normalized_field(order, "side")
-            order_type = self._normalized_field(order, "type")
-            stop_price = self._field(order, "stop_price")
-            status = self._normalized_field(order, "status")
-            if (
-                side == closing_side
-                # Same dead-leg vocabulary as _open_protective_orders: a
-                # done_for_day/replaced/stopped leg no longer protects.
-                and status
-                not in {
-                    "canceled",
-                    "cancelled",
-                    "done_for_day",
-                    "expired",
-                    "filled",
-                    "rejected",
-                    "replaced",
-                    "stopped",
-                }
-                and (stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"})
-            ):
-                # Only the still-working remainder protects the position; an
-                # already-filled portion must never be double-counted.
-                return max(
-                    Decimal(0),
-                    abs(Decimal(str(self._field(order, "qty", 0) or 0)))
-                    - abs(Decimal(str(self._field(order, "filled_qty", 0) or 0))),
-                )
-            return sum(
-                (protective_qty(leg) for leg in (self._field(order, "legs") or ())),
-                start=Decimal(0),
-            )
-
-        ids = {parent_order_ids} if isinstance(parent_order_ids, str) else parent_order_ids
-        protected = Decimal(0)
-        for parent_order_id in ids:
-            parent: Any = self._client.get_order_by_id(
-                parent_order_id,
-                GetOrderByIdRequest(nested=True),
-            )
-            if same_symbol(str(self._field(parent, "symbol", symbol)), symbol):
-                protected += protective_qty(parent)
-        matches, self._last_protection_mismatch = self._protection_matches(protected, Decimal(str(required_qty)))
-        self._last_protected_qty = float(protected)
-        return matches
+        svc = self.__dict__.get("_protection_service") or ProtectionService(self)
+        return svc._has_nested_bracket_protection(parent_order_ids, symbol, position_is_long, required_qty)
 
     def _asset(self, symbol: str) -> Any:
-        adapter = self.__dict__.get("_client_adapter")
-        if adapter is not None:
-            return adapter._asset(symbol)
-        identity = normalize_symbol(symbol)
-        cache_key = identity.canonical
-        asset = (
-            self._asset_cache.get(cache_key)
-            or self._asset_cache.get(symbol)
-            or self._asset_cache.get(identity.asset_lookup_symbol)
-        )
-        if asset is None:
-            asset = self._client.get_asset(identity.asset_lookup_symbol)
-            self._asset_cache[cache_key] = asset
-        return asset
+        return self._client_adapter._asset(symbol)
 
     def _price_step(self, symbol: str, market: Market, reference_price: float) -> Decimal:
-        adapter = self.__dict__.get("_client_adapter")
-        if adapter is not None:
-            return adapter._price_step(symbol, market, reference_price)  # type: ignore[no-any-return]
-        increment = getattr(self._asset(symbol), "price_increment", None)
-        if increment is not None:
-            return Decimal(str(increment))
-        return Decimal("0.01") if reference_price >= 1 else Decimal("0.0001")
+        return self._client_adapter._price_step(symbol, market, reference_price)  # type: ignore[no-any-return]
 
     @staticmethod
     def _round_to_step(value: float, step: Decimal) -> float:
-        try:
-            return AlpacaClient._round_to_step(value, step)
-        except Exception:
-            rounded = (Decimal(str(value)) / step).to_integral_value(rounding=ROUND_HALF_UP) * step
-            return float(rounded)
-
-    def _wait_for_fill(
-        self, order_id: str, intent: OrderIntent, timeout: float = 5.0
-    ) -> tuple[OrderState, Fill | None]:
-        deadline = time.monotonic() + timeout
-        fill: Fill | None = None
-        state = OrderState.ACCEPTED
-        while time.monotonic() < deadline:
-            try:
-                order: Any = self._client.get_order_by_id(order_id)
-                status = self._normalized_field(order, "status")
-                filled_qty = float(self._field(order, "filled_qty", 0) or 0)
-                filled_price = float(self._field(order, "filled_avg_price", 0) or 0)
-                if filled_qty > 0 and filled_price > 0:
-                    fill = Fill(
-                        intent.client_order_id,
-                        intent.symbol,
-                        filled_qty,
-                        filled_price,
-                        intent.direction,
-                        datetime.now(UTC),
-                    )
-                if status == "filled":
-                    return OrderState.FILLED, fill
-                if status == "partially_filled":
-                    state = OrderState.PARTIALLY_FILLED
-                elif status in {"canceled", "cancelled"}:
-                    return OrderState.CANCELLED, fill
-                elif status == "expired":
-                    return OrderState.EXPIRED, fill
-                elif status == "rejected":
-                    return OrderState.REJECTED, fill
-                else:
-                    state = OrderState.ACCEPTED
-            except Exception as exc:
-                log.warning("Order status lookup failed for %s: %s", order_id, exc)
-                # A failed lookup is not new information: keep the last
-                # observed state so a PARTIALLY_FILLED order is still
-                # cancel/re-protected instead of silently downgraded.
-            time.sleep(0.5)
-        log.warning("Order %s not filled within %.1fs", order_id, timeout)
-        return state, fill
+        return AlpacaClient._round_to_step(value, step)
 
     def _submit_stop(
         self,
@@ -1045,16 +671,6 @@ class AlpacaBroker:
                 pass
         match = re.search(r"available:\s*([0-9]+(?:\.[0-9]+)?)", message)
         return max(0.0, float(match.group(1))) if match else 0.0
-
-    def _position_qty(self, symbol: str) -> float:
-        try:
-            position = self._client.get_open_position(normalize_symbol(symbol).asset_lookup_symbol)
-        except Exception as exc:
-            message = str(exc).lower()
-            if "position does not exist" in message or "404" in message:
-                return 0.0
-            raise
-        return abs(float(self._field(position, "qty", 0) or 0))
 
     @staticmethod
     def _is_definite_client_rejection(exc: BaseException) -> bool:
@@ -1156,159 +772,15 @@ class AlpacaBroker:
         required_qty: float,
         open_orders: Any = None,
     ) -> bool:
-        svc = self.__dict__.get("_protection_service")
-        if svc is not None:
-            return svc._has_protective_order(symbol, position_is_long, required_qty, open_orders)  # type: ignore[no-any-return]
-        protective_orders = self._open_protective_orders(symbol, position_is_long, open_orders)
-        protected = sum(
-            (
-                max(
-                    Decimal(0),
-                    abs(Decimal(str(self._field(order, "qty", 0) or 0)))
-                    - abs(Decimal(str(self._field(order, "filled_qty", 0) or 0))),
-                )
-                for order in protective_orders
-            ),
-            start=Decimal(0),
-        )
-        matches, self._last_protection_mismatch = self._protection_matches(protected, Decimal(str(required_qty)))
-        self._last_protected_qty = float(protected)
-        return matches
-
-    def _open_protective_orders(self, symbol: str, position_is_long: bool, open_orders: Any = None) -> list[Any]:
-        svc = self.__dict__.get("_protection_service")
-        if svc is not None:
-            return svc._open_protective_orders(symbol, position_is_long, open_orders)  # type: ignore[no-any-return]
-        if open_orders is None:
-            orders: Any = self._get_open_orders(
-                GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
-            )
-        else:
-            orders = open_orders
-        if isinstance(orders, dict):
-            log.warning(
-                "Unexpected get_orders payload shape for %s; treating as no open orders",
-                symbol,
-            )
-            return []
-        closing_side = "sell" if position_is_long else "buy"
-        canonical = canonical_symbol(symbol)
-        ledger = self.ledger
-        account_id = getattr(self, "_account_id", "") or "unknown"
-        managed_order_ids = ledger.managed_order_ids(account_id, canonical) if ledger is not None else set()
-        managed_client_ids = ledger.managed_client_order_ids(account_id, canonical) if ledger is not None else set()
-
-        def is_owned(order: Any, inherited: bool = False) -> bool:
-            order_id = str(self._field(order, "id", "") or "")
-            client_id = str(self._field(order, "client_order_id", "") or "")
-            parent_id = str(self._field(order, "parent_order_id", "") or "")
-            return (
-                inherited
-                or order_id in managed_order_ids
-                or parent_id in managed_order_ids
-                or client_id in managed_client_ids
-                or client_id.startswith("parayabuck-")
-            )
-
-        protective: list[Any] = []
-
-        def visit(order: Any, inherited: bool = False) -> None:
-            owned = is_owned(order, inherited)
-            side = self._normalized_field(order, "side")
-            order_type = self._normalized_field(order, "type")
-            stop_price = self._field(order, "stop_price")
-            status = self._normalized_field(order, "status")
-            if (
-                owned
-                and side == closing_side
-                and status
-                not in {
-                    "canceled",
-                    "cancelled",
-                    "done_for_day",
-                    "expired",
-                    "filled",
-                    "rejected",
-                    "replaced",
-                    "stopped",
-                }
-                and (stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"})
-            ):
-                protective.append(order)
-                return
-            for leg in self._field(order, "legs") or ():
-                visit(leg, owned)
-
-        for order in orders or ():
-            # The per-symbol server filter (symbols=[symbol]) of the legacy
-            # per-position fetch is replicated here so a shared broker-wide
-            # open-orders batch keeps identical per-symbol semantics. An
-            # order with an unknown symbol is never protective for this
-            # position.
-            if not same_symbol(str(self._field(order, "symbol", "")), symbol):
-                continue
-            visit(order)
-        return protective
+        svc = self.__dict__.get("_protection_service") or ProtectionService(self)
+        return svc._has_protective_order(symbol, position_is_long, required_qty, open_orders)
 
     def _cancel_protective_orders(self, symbol: str, position_is_long: bool) -> None:
-        svc = self.__dict__.get("_protection_service")
-        if svc is not None:
-            return svc._cancel_protective_orders(symbol, position_is_long)  # type: ignore[no-any-return]
-        for order in self._open_protective_orders(symbol, position_is_long):
-            order_id = self._field(order, "id")
-            if order_id:
-                self._client.cancel_order_by_id(order_id)
-                self._wait_for_cancel_confirmation(str(order_id), symbol)
-
-    def _wait_for_cancel_confirmation(self, order_id: str, symbol: str) -> None:
-        svc = self.__dict__.get("_protection_service")
-        if svc is not None:
-            return svc._wait_for_cancel_confirmation(order_id, symbol)  # type: ignore[no-any-return]
-        deadline = time.monotonic() + STOP_CANCEL_TIMEOUT_SECONDS
-        last_status = ""
-        while time.monotonic() < deadline:
-            try:
-                order = self._client.get_order_by_id(order_id)
-                last_status = self._normalized_field(order, "status")
-                if last_status in {"canceled", "cancelled", "expired", "rejected"}:
-                    return
-                if last_status == "filled":
-                    _emit_alert(
-                        "ambiguous_order",
-                        message=(f"Protective order filled while cancellation was pending for {symbol}"),
-                        symbol=symbol,
-                        reason="protective_order_filled_during_cancel",
-                    )
-                    raise AmbiguousOrderState(f"Protective order filled while cancellation was pending for {symbol}")
-            except AmbiguousOrderState:
-                raise
-            except Exception:
-                # A lookup failure is not proof that the protective order was
-                # cancelled. Keep polling until the bounded deadline.
-                pass
-            time.sleep(STOP_CANCEL_POLL_INTERVAL_SECONDS)
-        _emit_alert(
-            "ambiguous_order",
-            message=(f"Protective order cancellation is unconfirmed for {symbol}: {last_status or 'lookup_failed'}"),
-            symbol=symbol,
-            reason="cancel_unconfirmed",
-            last_status=last_status or "lookup_failed",
-        )
-        raise AmbiguousOrderState(
-            f"Protective order cancellation is unconfirmed for {symbol}: {last_status or 'lookup_failed'}"
-        )
-
-    @staticmethod
-    def _protection_matches(protected: Decimal, required: Decimal) -> tuple[bool, str]:
-        tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
-        mismatch = "missing" if protected == 0 else ("under" if protected < required - tolerance else "over")
-        return abs(protected - required) <= tolerance, mismatch
+        svc = self.__dict__.get("_protection_service") or ProtectionService(self)
+        svc._cancel_protective_orders(symbol, position_is_long)
 
     def _normalized_field(self, value: Any, name: str) -> str:
-        adapter = self.__dict__.get("_client_adapter")
-        if adapter is not None:
-            return adapter._normalized_field(value, name)  # type: ignore[no-any-return]
-        return str(self._field(value, name, "")).lower().split(".")[-1]
+        return self._client_adapter._normalized_field(value, name)  # type: ignore[no-any-return]
 
     @staticmethod
     def _field(value: Any, name: str, default: Any = None) -> Any:

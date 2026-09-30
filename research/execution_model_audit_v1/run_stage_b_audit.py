@@ -1,14 +1,65 @@
 #!/usr/bin/env python3
-"""Instrumented VT35 Stage B shared-ledger replay (execution model audit v1).
+"""ARCHIVE-ONLY -- not runnable from this checkout.
 
+Instrumented VT35 Stage B shared-ledger replay (execution model audit v1).
+``main()`` refuses to start and prints what is missing. This file is kept as
+the record of how the audit was produced; the committed evidence is
+``STAGE_B_AUDIT_SUMMARY.txt`` and ``RESULTS_FILL_TIMING.json``.
+
+Why it cannot run here
+----------------------
+Missing modules (deleted from ``research/``; restore from tag
+``archive/research/sleeve-candidates-v2-v3-2026-09``):
+
+* ``research/physical_availability_clock_v2/{run_historical,shared_replay,timing}.py``
+* ``research/sleeve_candidates_v2/stage_b/{composite,run_stage_b}.py``
+
+Missing data (gitignored, never committed, in no tag -- Alpaca SIP downloads
+that need network access and credentials; re-fetch with the archive tag's
+``research/sleeve_candidates_v2/download_data.py``):
+
+* ``data/historical/equity_pit_symmetric_2016_2026_v5.csv`` -- 882,354,549
+  bytes, sha256 ``bb7aaae8...`` (see
+  ``data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json``)
+* ``data/historical/equity_survivorship_full_corporate_actions_v5.csv``
+
+Missing data (in tag ``archive/research/profit-max-v1-2026-09``):
+
+* ``data/historical/profit_max_v1_daily_split_sip.csv``
+* ``data/historical/profit_max_v1_corporate_actions.csv``
+
+The audited run also had the crypto sleeve enabled; that code, config keys and
+data were deleted in 2026-09 (tag ``archive/code/crypto-sleeve-2026-09``), so
+this harness cannot reproduce its own historical run from current main.
+
+To reproduce
+------------
+Scratch root holding this checkout's ``src`` and ``config`` plus the restored
+files above (~95 s, ~6 GB RAM):
+
+    .venv/bin/python research/execution_model_audit_v1/run_stage_b_audit.py \
+        --config <abs>/config/settings.yaml --cost 1.0 --out <dir>/VT35_1.0.json.gz
+
+Provenance of the committed numbers
+-----------------------------------
+The 2026-09-28 corrected re-run audited here ended at NAV 1,141,851.32 with
+1,290 fills (585 of them equity) and 28.98% CAGR. That is the *pre-removal*
+configuration: crypto sleeve on, equity allocation 0.93. It is not the
+current reference.
+
+The current reference is the equity-only VT35 identity (hold QLD while QQQ's
+completed close is above its SMA200, vol target 0.35, equity allocation 0.98):
+ending NAV 1,173,537.61, 615 fills, 29.35% CAGR -- arm S1 at 1x in
+``research/paper_config_v2/RESULTS.json``, re-reproduced unchanged after the
+crypto code was deleted (``docs/research/crypto_removal_v1.md``).
+
+Origin and adaptations
+----------------------
 A copy of ``research/profit_max_v1/run_shared.py`` (tag
 ``archive/research/profit-max-v1-2026-09``) adapted to current main, plus an
 audit dump (``<out>_audit.json.gz``): every strategy ``decide`` call with its
 metadata, the "batch incomplete" skip warnings, and all equity decision/fill
-events. Economics are unchanged: with ``config/settings.yaml`` it reproduces
-the 2026-09-28 corrected re-run (ending NAV 1,141,851; 28.98% CAGR).
-
-Adaptations to current main (none touches the execution model):
+events. Neither change touches the execution model:
 
 * ``build_numeric_history`` was removed in da6190b and the engine no longer
   reads it; it is stubbed here and in the archived harness modules.
@@ -17,19 +68,6 @@ Adaptations to current main (none touches the execution model):
   so ``sleeve_symbols = ()`` and the slot admission gets no exemption. The
   harness engine factory (``run_stage_b._engine_factory``) no longer passes
   ``ordinary_alpha_excluded_symbols``.
-
-Setup: a scratch root holding ``src`` and ``config`` of this checkout,
-``research/{physical_availability_clock_v2,sleeve_candidates_v2}`` from tag
-``archive/research/sleeve-candidates-v2-v3-2026-09``,
-``research/profit_max_v1`` + ``data/historical/profit_max_v1_*`` from the
-profit-max tag, the canonical v5 equity/crypto CSVs under
-``data/historical`` and ``maintenance/crypto_canonical_causal_execution_v1``;
-this file goes to ``<root>/research/profit_max_v1/``. Then
-
-    .venv/bin/python research/profit_max_v1/run_stage_b_audit.py \
-        --config <abs>/config/settings.yaml --cost 1.0 --out <dir>/VT35_1.0.json.gz
-
-(~95 s, ~6 GB RAM.)
 """
 
 from __future__ import annotations
@@ -46,16 +84,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
-from research.physical_availability_clock_v2 import run_historical as rh  # noqa: E402
-from research.physical_availability_clock_v2 import shared_replay as shared  # noqa: E402
-from research.physical_availability_clock_v2.timing import (  # noqa: E402
-    equity_action_effective_open,
-    equity_daily_available_at,
-    equity_session_open,
-)
-from research.sleeve_candidates_v2.stage_b import composite as sleeve  # noqa: E402
-from research.sleeve_candidates_v2.stage_b import run_stage_b as stage_b  # noqa: E402
-
 from parayabuck.backtest.lifetimes import load_entity_lifetimes  # noqa: E402
 from parayabuck.backtest.product import (  # noqa: E402
     _prepared_window,
@@ -68,6 +96,39 @@ from parayabuck.config import load_config  # noqa: E402
 from parayabuck.core.models import Market  # noqa: E402
 from parayabuck.execution.portfolio import reserve_opening_order_slots  # noqa: E402
 from parayabuck.portfolio import portfolio_strategy_from  # noqa: E402
+
+ARCHIVE_ONLY = """\
+ARCHIVE-ONLY harness -- it cannot run from this checkout.
+
+Missing modules, restore from tag archive/research/sleeve-candidates-v2-v3-2026-09:
+  research/physical_availability_clock_v2/{run_historical,shared_replay,timing}.py
+  research/sleeve_candidates_v2/stage_b/{composite,run_stage_b}.py
+Missing data, gitignored and in no tag (Alpaca SIP; network + credentials):
+  data/historical/equity_pit_symmetric_2016_2026_v5.csv (sha256 bb7aaae8...)
+  data/historical/equity_survivorship_full_corporate_actions_v5.csv
+Missing data, in tag archive/research/profit-max-v1-2026-09:
+  data/historical/profit_max_v1_{daily_split_sip,corporate_actions}.csv
+The audited run also had the crypto sleeve enabled: deleted code, config keys
+and data, tag archive/code/crypto-sleeve-2026-09. See the module docstring.
+"""
+
+
+def _load_archive_modules() -> None:
+    """Bind the archived harness modules, or refuse loudly without them."""
+    global rh, shared, sleeve, stage_b
+    global equity_action_effective_open, equity_daily_available_at, equity_session_open
+    try:
+        from research.physical_availability_clock_v2 import run_historical as rh
+        from research.physical_availability_clock_v2 import shared_replay as shared
+        from research.physical_availability_clock_v2.timing import (
+            equity_action_effective_open,
+            equity_daily_available_at,
+            equity_session_open,
+        )
+        from research.sleeve_candidates_v2.stage_b import composite as sleeve
+        from research.sleeve_candidates_v2.stage_b import run_stage_b as stage_b
+    except ModuleNotFoundError as exc:
+        raise SystemExit(f"{ARCHIVE_ONLY}\nnot importable: {exc}") from exc
 
 
 def build_numeric_history(*a, **k):  # removed from main in da6190b; engine no longer reads it
@@ -116,6 +177,7 @@ def main() -> int:
     parser.add_argument("--cost", required=True, type=float, choices=(1.0, 2.0, 3.0))
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
+    _load_archive_modules()
     started = time.monotonic()
     config = load_config(args.config)
     if config.risk.max_positions != 8:

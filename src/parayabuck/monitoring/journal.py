@@ -35,8 +35,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from parayabuck.monitoring.operational_event import OperationalEvent, redact_fields
+
+if TYPE_CHECKING:
+    from parayabuck.config import ObservabilityConfig
 
 log = logging.getLogger("parayabuck.monitoring.journal")
 
@@ -482,6 +486,10 @@ class EventJournal:
 # ----------------------------------------------------------------------
 _global_journal: EventJournal | None = None
 _global_lock = threading.Lock()
+# Set once ``configure_global_journal`` has decided this process's global
+# journal, so a second runtime construction cannot replace (and orphan the
+# writer thread of) the one already installed.
+_global_is_configured = False
 
 
 def get_journal(path: str | Path | None = None) -> EventJournal:
@@ -492,6 +500,37 @@ def get_journal(path: str | Path | None = None) -> EventJournal:
         elif path is not None and str(path) != str(_global_journal.path):
             # allow tests to request isolated path
             return EventJournal(path)
+        return _global_journal
+
+
+def configure_global_journal(observability: ObservabilityConfig) -> EventJournal | None:
+    """Install the process-global journal from the ``observability:`` config block.
+
+    The engine writes every operational event through the one process-global
+    journal, and the CLI/web read it back with ``ops events``. When nothing
+    applied ``observability.journal_path`` (and the retention/max/queue knobs)
+    here, that journal was built from the hard-coded defaults, so a configured
+    custom path left ``ops events`` reading an empty file during an incident.
+    Called once from the runtime constructor — never from a hot path.
+
+    First decision wins. A global already sitting at an explicit non-default
+    path belongs to whoever installed it (``get_journal(path)``, a forensics
+    read, a test isolation harness) and configuration does not steal it.
+    """
+    global _global_journal, _global_is_configured
+    with _global_lock:
+        if _global_is_configured:
+            return _global_journal
+        if _global_journal is not None and str(_global_journal.path) != DEFAULT_JOURNAL_PATH:
+            _global_is_configured = True
+            return _global_journal
+        _global_journal = EventJournal(
+            observability.journal_path,
+            queue_size=observability.event_queue_size,
+            retention_days=observability.event_retention_days,
+            max_events=observability.event_max_events,
+        )
+        _global_is_configured = True
         return _global_journal
 
 
@@ -525,6 +564,7 @@ __all__ = [
     "DEFAULT_RETENTION_DAYS",
     "EventJournal",
     "SCHEMA_VERSION",
+    "configure_global_journal",
     "emit_journal",
     "get_journal",
     "journal_stats",

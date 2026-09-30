@@ -214,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     market = Market(args.market)
     start = _date(args.start) if args.start else None
     end = _date(args.end, end_of_day=True) if args.end else None
-    bars = _load_bars(config, args, market, start, end)
+    bars, data_feed = _load_bars(config, args, market, start, end)
     corporate_actions = load_csv_corporate_actions(args.corporate_actions) if args.corporate_actions else None
     if args.command == "optimize":
         grid = _parse_grid(args.grid)
@@ -233,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
             oos_end=_date(args.oos_end, end_of_day=True) if args.oos_end else None,
             output_dir=args.output_dir,
             corporate_actions=corporate_actions,
+            data_feed=data_feed,
         )
         print(json.dumps(payload, indent=2, default=str))
         return 0
@@ -251,7 +252,9 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             cost_multiplier=multiplier,
             corporate_actions=corporate_actions,
-            data_feed=config.alpaca.stock_historical_feed,
+            data_feed=data_feed,
+            # A research run must never write into the runtime decision ledger.
+            persist=False,
         )
         _print_summary(run.report.summary, run.output_dir)
     return 0
@@ -1432,9 +1435,16 @@ def _load_bars(
     market: Market,
     start: datetime | None,
     end: datetime | None,
-) -> list[Bar]:
+) -> tuple[list[Bar], str | None]:
+    """Bars for the run plus the feed they actually came from.
+
+    The second element is ``None`` when the bars came from an offline CSV: no
+    provider was asked, so no feed may be claimed. A download reports the
+    provider's EFFECTIVE historical feed, which is IEX when a configured SIP
+    request hit an entitlement downgrade.
+    """
     if args.data:
-        return load_csv_bars(args.data, default_market=market)
+        return load_csv_bars(args.data, default_market=market), None
     load_dotenv()
     key = os.getenv("ALPACA_API_KEY", "")
     secret = os.getenv("ALPACA_SECRET_KEY", "")
@@ -1523,9 +1533,10 @@ def _load_bars(
                 )
                 break
             start_at = extended_start
+        effective_feed = str(provider.feed_status()["effective"])
     finally:
         provider.close()
-    return [bar for symbol in symbols for bar in by_symbol.get(symbol, ())]
+    return [bar for symbol in symbols for bar in by_symbol.get(symbol, ())], effective_feed
 
 
 def _warmup_window_days(config: Config, market: Market, end_date: datetime | None = None) -> int:

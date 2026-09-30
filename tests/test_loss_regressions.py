@@ -18,11 +18,11 @@ from parayabuck.core.models import (
     OrderRole,
     OrderState,
 )
-from parayabuck.execution.alpaca import AlpacaBroker
+from parayabuck.execution.alpaca_reconciliation import ReconciliationService
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.runtime import EngineRuntime
-from tests.helpers import apply_entry_fill
+from tests.helpers import apply_entry_fill, make_broker
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -209,15 +209,17 @@ def test_fill_activity_recovers_exit_pnl_when_stream_was_offline(tmp_path: Path)
         "commission": "1",
         "transaction_time": datetime.now(UTC).isoformat(),
     }
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._account_id = "acct"
-    broker.ledger = ledger
-    broker._client = SimpleNamespace(
-        _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else [activity],
+    broker = make_broker(
+        tmp_path,
+        ledger=ledger,
+        client=SimpleNamespace(
+            _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else [activity]
+        ),
     )
+    broker._account_id = "acct"
 
-    broker._reconcile_fill_activity_fees()
-    broker._reconcile_fill_activity_fees()
+    ReconciliationService(broker)._reconcile_fill_activity_fees()
+    ReconciliationService(broker)._reconcile_fill_activity_fees()
 
     row = ledger.connection.execute(
         """
@@ -260,15 +262,17 @@ def test_fill_activity_recovers_entry_fill_idempotently(tmp_path: Path) -> None:
         }
         for index, price in enumerate((99, 101), 1)
     ]
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._account_id = "acct"
-    broker.ledger = ledger
-    broker._client = SimpleNamespace(
-        _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+    broker = make_broker(
+        tmp_path,
+        ledger=ledger,
+        client=SimpleNamespace(
+            _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+        ),
     )
+    broker._account_id = "acct"
 
-    broker._reconcile_fill_activity_fees()
-    broker._reconcile_fill_activity_fees()
+    ReconciliationService(broker)._reconcile_fill_activity_fees()
+    ReconciliationService(broker)._reconcile_fill_activity_fees()
 
     position = ledger.managed_for_account("acct")["XLE"]
     assert position.owned_qty == 10

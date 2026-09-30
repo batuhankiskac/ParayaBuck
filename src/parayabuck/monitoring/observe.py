@@ -1,8 +1,8 @@
 """Observability integration — emit at domain boundaries with isolation.
 
 Every function is never-raising and bounded. Trading correctness never depends
-on observability. Failures are counted via journal metrics and optionally emit
-observability_degraded event (best effort).
+on observability. Failures are counted via journal metrics and reported by the
+``observability`` health check.
 """
 
 from __future__ import annotations
@@ -87,22 +87,6 @@ def on_reconciliation_complete(*, phase: str, session_id: str | None = None) -> 
     )
 
 
-def on_reconciliation_failure(*, error: str, session_id: str | None = None, market: str | None = None) -> None:
-    _emit_safely(
-        kind="reconciliation_failure",
-        message=f"reconciliation failed: {error}",
-        session_id=session_id,
-        market=market,
-        fields={"error": error},
-    )
-
-
-def on_reconciliation_recovered(*, session_id: str | None = None, market: str | None = None) -> None:
-    _emit_safely(
-        kind="reconciliation_recovered", message="reconciliation recovered", session_id=session_id, market=market
-    )
-
-
 # ------------------------------------------------------------------ account
 def on_account_stale(
     *, age_seconds: float | None = None, session_id: str | None = None, account_id: str | None = None
@@ -122,26 +106,6 @@ def on_account_recovered(*, session_id: str | None = None, account_id: str | Non
     if not _dedup("account", "fresh"):
         return
     _emit_safely(kind="account_recovered", message="account recovered", session_id=session_id, account_id=account_id)
-
-
-# ------------------------------------------------------------------ risk
-def on_risk_latch(*, market: str | None = None, reason: str | None = None, session_id: str | None = None) -> None:
-    _emit_safely(
-        kind="risk_incident",
-        message=f"risk latch {reason} for {market}",
-        market=market,
-        session_id=session_id,
-        fields={"reason": reason, "market": market} if reason else {"market": market},
-    )
-
-
-def on_drawdown_halt(*, reason: str | None = None, session_id: str | None = None) -> None:
-    _emit_safely(
-        kind="drawdown_halt",
-        message=f"drawdown halt {reason}",
-        session_id=session_id,
-        fields={"reason": reason} if reason else {},
-    )
 
 
 # ------------------------------------------------------------------ rebalance
@@ -166,38 +130,6 @@ def on_rebalance_phase_changed(
         fields={"from_phase": from_phase, "to_phase": to_phase, "reason": reason, "order_counts": order_counts}
         if reason or order_counts
         else {"from_phase": from_phase, "to_phase": to_phase},
-    )
-
-
-# ------------------------------------------------------------------ orders
-def on_order_rejected(
-    *,
-    client_order_id: str,
-    reason: str,
-    symbol: str | None = None,
-    session_id: str | None = None,
-    market: str | None = None,
-) -> None:
-    _emit_safely(
-        kind="order_rejected",
-        message=f"order rejected {client_order_id}: {reason}",
-        client_order_id=client_order_id,
-        market=market,
-        session_id=session_id,
-        fields={"reason": reason, "symbol": symbol} if symbol else {"reason": reason},
-    )
-
-
-def on_ambiguous_order(
-    *, client_order_id: str, symbol: str | None = None, session_id: str | None = None, market: str | None = None
-) -> None:
-    _emit_safely(
-        kind="ambiguous_order",
-        message=f"ambiguous order {client_order_id}",
-        client_order_id=client_order_id,
-        market=market,
-        session_id=session_id,
-        fields={"symbol": symbol} if symbol else {},
     )
 
 
@@ -248,16 +180,3 @@ def on_decision_summary(
         account_id=account_id,
         fields=fields,
     )
-
-
-# ------------------------------------------------------------------ observability self
-def on_observability_degraded(*, reason: str) -> None:
-    if not _dedup("observability", "degraded"):
-        return
-    _emit_safely(kind="observability_degraded", message=f"observability degraded: {reason}", fields={"reason": reason})
-
-
-def on_observability_recovered() -> None:
-    if not _dedup("observability", "ok"):
-        return
-    _emit_safely(kind="observability_recovered", message="observability recovered")

@@ -1,51 +1,75 @@
-# Deferred Large-Module Refactor — Safe Extraction Seams
+# Deferred Large-Module Refactor — Remaining Seams
 
-Post-hardening audit 2026-08-27: four hotspot modules exceed 100KB. No big-bang split before deployment per mission §18. Current hotspots are stable and hardened; extraction is deferred to post-PAPER-soak with narrow, tested seams.
+Audit 2026-10-01 (wave 3c) rewrote this file. The 2026-08-27 version described
+the four >100KB hotspots as they were BEFORE the web and broker splits; those
+splits have since landed, and the sizes below are the current tree. Anything not
+listed here is either already split or is small enough to leave alone. Line
+counts are rounded; re-measure with `wc -l` before planning work.
 
-## Hotspots (lines / bytes)
+## Already split (do not plan these again)
 
-- `src/parayabuck/runtime.py` ~4109L / 209KB — EngineRuntime, warmup, catch-up, reconciliation, health
-- `src/parayabuck/web/server.py` ~3363L / 144KB — FastAPI, dashboard, API, ws, settings, credentials
-- `src/parayabuck/execution/alpaca.py` ~2409L / 116KB — Alpaca broker, orders, polling, stop-limit
-- `src/parayabuck/execution/ledger.py` ~1607L / 69KB — SQLite WAL, decisions/orders/fills/sessions
-- `src/parayabuck/portfolio/runtime_service.py` ~2205L / 104KB — PortfolioRuntime, per-market loops (also hotspot but not in original 4)
+| Was | Now |
+| --- | --- |
+| `web/server.py` monolith (3,363L) | `web/routers/*` (routes), `web/services/*` (display/aggregation), `web/managers/*` (engine, backtest, websocket lifecycle), `web/app.py` + `web/application.py` + `web/lifespan.py` (assembly). `web/server.py` is the compatibility surface only (~530L). The 3,564-line `web/server_legacy.py` duplicate was deleted in wave 3c; the dashboard payload block now lives in `web/services/dashboard.py`. |
+| `execution/alpaca.py` monolith (2,409L) | `alpaca_account.py`, `alpaca_orders.py`, `alpaca_protection.py`, `alpaca_reconciliation.py`, `alpaca_updates.py`, `alpaca_client.py`, `alpaca_models.py`; `alpaca.py` is the facade that composes them (~1,000L). |
+| `markets/month_end.py` | Deleted in wave 3c — no production caller (VT35 decides daily; there is no month-end rebalance). |
 
-## Safe Seams (no behavior change, extraction-ready)
+## Remaining hotspots
+
+- `src/parayabuck/runtime.py` ~4,700L — `EngineRuntime`: bootstrap, warmup, catch-up, reconciliation, health, event loop.
+- `src/parayabuck/portfolio/runtime_service.py` ~2,200L — `PortfolioRuntime`, per-market decision loops, ownership reconciliation, runtime repository.
+- `src/parayabuck/execution/ledger.py` ~1,600L — SQLite WAL, decisions/orders/fills/sessions, replay.
+
+## Safe seams (no behaviour change, extraction-ready)
 
 ### runtime.py
-- `EngineRuntime.__init__` → `engine/bootstrap.py` (config validation + strategy_specs + store/ledger/broker construction)
-- `EngineRuntime._run` loop + catch-up → `engine/loop.py`
+- `EngineRuntime.__init__` → `engine/bootstrap.py` (config validation + strategy specs + store/ledger/broker construction)
+- `_run` loop + catch-up → `engine/loop.py`
 - Reconciliation (`_reconcile_*`) → `engine/reconcile.py`
 - Health / metrics → `engine/health.py`
-Seam: `EngineRuntime` keeps public API, delegates to helpers; helpers receive `Config`, `SQLiteStore`, `AlpacaBroker` via constructor.
 
-### web/server.py
-- `EngineManager` (800L) → `web/manager.py` (state, credentials, live arming, digests)
-- `SettingsPayload` + `_validated_settings_payload` + `/_handle_save_settings` → `web/settings_service.py` + `web/schemas.py`
-- Routes (`/api/settings`, `/api/account`, etc.) → `web/routes/settings.py`, `routes/account.py`
-- Static/templates mount → `web/app.py` (already separate)
-Seam: `server.py` becomes thin FastAPI assembly; `manager` stays singleton.
+Seam: `EngineRuntime` keeps its public API and delegates; helpers receive
+`Config`, `SQLiteStore`, `AlpacaBroker` via constructor.
 
-### execution/alpaca.py
-- `_save_peak_equity` + `RiskStatePersistenceError` → `execution/peak_state.py` (now uses `atomic_write`, configurable `runtime_state_dir`)
-- Order building (`_build_order_request`) → `execution/orders.py`
-- Polling / fill recovery → `execution/polling.py`
-Seam: `AlpacaBroker` composes `PeakState` and `OrderBuilder`; peak path derived from `runtime.decision_db_path` parent (already implemented).
+### portfolio/runtime_service.py
+- Decision loop per market → `portfolio/decision_loop.py`
+- Ownership reconciliation + drift halts → `portfolio/ownership.py` (`runtime_ownership.py` already holds part of this)
+- No-trade event suppression / receipt emission → `portfolio/notrade.py`
+
+Seam: `PortfolioRuntime` keeps its public API; the repository stays injected.
 
 ### execution/ledger.py
-- `ExecutionLedger` (decisions/orders/fills) → `ledger/decision_store.py` + `ledger/order_store.py`
-- `PortfolioStateRepository` already separate (`portfolio/runtime_service.py`) — no split needed.
-Seam: `SQLiteStore` remains shared; stores share connection/lock.
+- Decision store → `ledger/decision_store.py`; order/fill store → `ledger/order_store.py`
+- `PortfolioStateRepository` is already separate (`portfolio/runtime_repository.py`).
 
-## Constraints for Extraction
+Seam: `SQLiteStore` remains shared; the split stores share its connection and lock.
+
+## Constraints for extraction
 
 - Preserve `atomic_write` durability, WAL invariants, and fail-closed peak semantics.
-- Keep `product_strategy_from` gate at execution boundary; extraction must not reintroduce `portfolio_strategy_from` in runtime.
-- Settings API must keep `extra="forbid"` and PATCH + digest semantics; schemas move but validation stays.
-- No allocation / risk / timeframe parameter changes during extraction.
-- Each seam gets a dedicated test file before moving code; integration test is `pytest -q` + `pytest -m paper_chaos -q`.
+- Keep the `product_strategy_from` gate at the execution boundary; extraction
+  must not reintroduce `portfolio_strategy_from` in the runtime.
+- Settings API keeps `extra="forbid"` plus PATCH and digest semantics; schemas
+  move but validation stays.
+- No allocation, risk or timeframe parameter changes during extraction.
+- Each seam gets a dedicated test file before moving code; the integration gate
+  is `pytest -q` plus `pytest -m paper_chaos -q`.
+
+## Dead-code policy
+
+Wave 3c removed the legacy monolith, the month-end scheduler, unreachable
+observability hooks and the AlpacaBroker facade duplicates. Do not add a
+"kept just in case" path back: git history and the `archive/*` tags are the
+recovery mechanism. A new module must ship with a production caller or it is
+review debt from the moment it lands.
 
 ## Deferred Docker Hardening
 
-`read_only: true` with writable `config`, `data`, `reports` and tmpfs for `/tmp` was audited but **DEFERRED**: UI config persistence via `atomic_write` requires `ReadWritePaths` and directory fsync; enabling `read_only: true` without thorough integration test would break settings saves and backup. Documented as post-soak hardening; current hardening keeps `non-root`, `restart unless-stopped`, `stop_grace_period 30s`, loopback `127.0.0.1:8000:8000`, `UMask 0077`, `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`.
-
+`read_only: true` with writable `config`, `data`, `reports` and tmpfs for `/tmp`
+was audited but **DEFERRED**: UI config persistence via `atomic_write` requires
+`ReadWritePaths` and directory fsync; enabling `read_only: true` without a
+thorough integration test would break settings saves and backup. Documented as
+post-soak hardening; current hardening keeps `non-root`,
+`restart unless-stopped`, `stop_grace_period 30s`, loopback
+`127.0.0.1:8000:8000`, `UMask 0077`, `NoNewPrivileges`, `PrivateTmp`,
+`ProtectSystem=strict`.

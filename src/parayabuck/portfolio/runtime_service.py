@@ -286,7 +286,7 @@ def _emit_no_trade_safe(
         # The journal id hashes ``occurred_at``, so nothing dedups per day at
         # the sink. Suppression must therefore be day-scoped here: the
         # dashboard banner reads the newest portfolio_no_trade event with no
-        # age filter (web/server_legacy.py), so suppressing forever freezes
+        # age filter (web/services/dashboard.py), so suppressing forever freezes
         # it on the first day's reason.
         day = (decision_timestamp or datetime.now(UTC)).date().isoformat()
         if _no_trade_last.get(key) == day:

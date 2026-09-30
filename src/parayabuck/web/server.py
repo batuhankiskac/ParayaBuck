@@ -410,44 +410,19 @@ except Exception:
     _atomic_update_credentials = None  # type: ignore[assignment]
 
 
-# --- Legacy helpers for dashboard tests ---
+# --- Dashboard helpers (thin delegates to the dashboard service) ---
 def _dashboard_payload(*args: Any, **kwargs: Any) -> Any:
-    # Sync wrapper for dashboard tests and services/dashboard delegation.
-    # Try legacy sync implementation first, then thin's own.
-    try:
-        import parayabuck.web.server_legacy as _leg
+    """Full dashboard payload; per-request state via the service context."""
+    from parayabuck.web.services.dashboard import _dashboard_payload as _impl
 
-        # The legacy implementation now receives explicit per-request state.
-        context = kwargs.pop("context", None)
-        if context is None:
-            context = _leg.DashboardContext(
-                engine_manager=web_state.engine_manager,
-                backtest_manager=web_state.backtest_manager,
-            )
-        call_kwargs = dict(kwargs)
-        call_kwargs["context"] = context
-        return _leg._dashboard_payload(*args, **call_kwargs)
-    except Exception:
-        pass
-    try:
-        # Avoid recursion: if we're being called from get_overview_payload, don't call back
-        # Instead, try to build payload via status service directly
-        import parayabuck.web.services.dashboard as _dash_svc
-
-        # fallback: try to call the service's internal helper if available
-        return _dash_svc.get_overview_payload(*args, **kwargs)
-    except Exception as exc:
-        return {"unavailable": True, "error": str(exc)}
+    return _impl(*args, **kwargs)
 
 
-def _dashboard_market_decisions(*args: Any, **kwargs: Any) -> Any:
-    try:
-        import parayabuck.web.server_legacy as leg
+def _dashboard_market_decisions(account_id: str) -> dict[str, dict[str, Any]]:
+    """Latest persisted decision per market — the real implementation, unwrapped."""
+    from parayabuck.web.services.dashboard import _dashboard_market_decisions as _impl
 
-        return leg._dashboard_market_decisions(*args, **kwargs)
-    except Exception as exc:
-        log.warning("Market decisions unavailable: %s", exc)
-        return {}
+    return _impl(account_id)
 
 
 # --- WebSocket wrappers ---

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "parayabuck"
 version = "1.0.0"
-description = "Event-driven Alpaca trading engine for US stocks and crypto with a Web UI"
+description = "Event-driven Alpaca trading engine for US equities (VT35) with a Web UI"
 requires-python = ">=3.12"
 dependencies = [
     "pandas>=2.2,<3.1",
@@ -49,13 +49,14 @@ where = ["src"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+# The agent worktree scratch tree is local-only (see .gitignore). Excluding it
+# keeps stale copies out of the lint gate.
+extend-exclude = [".claude"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP"]
 ignore = ["E501", "E402", "E741"]
 
-[tool.ruff.lint.per-file-ignores]
-"scripts/archive/**" = ["F401", "F821", "E722"]
 [tool.mypy]
 # NumPy 2.5 publishes PEP 695 type aliases in its stubs. Static analysis needs a 3.12+
 # grammar target to parse those third-party stubs.

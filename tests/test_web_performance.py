@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -10,10 +11,10 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.web import server
 from parayabuck.web.routers import dashboard
 from parayabuck.web.services import performance
+from tests.helpers import make_broker
 
 T0 = datetime(2026, 9, 1, tzinfo=UTC)
 
@@ -128,8 +129,8 @@ def test_performance_cache_is_per_period_and_mode_and_expires() -> None:
     assert len(broker.calls) == 4
 
 
-def test_alpaca_portfolio_history_drops_unfunded_and_invalid_points() -> None:
-    broker = AlpacaBroker.__new__(AlpacaBroker)
+def test_alpaca_portfolio_history_drops_unfunded_and_invalid_points(tmp_path: Path) -> None:
+    broker = make_broker(tmp_path)
     requests: list[Any] = []
     stamps = [1_788_000_000 + i * 86_400 for i in range(5)]
 

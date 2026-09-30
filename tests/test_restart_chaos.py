@@ -36,7 +36,7 @@ from parayabuck.core.models import (
     OrderIntent,
     PositionSnapshot,
 )
-from parayabuck.execution.alpaca import AlpacaBroker, OwnershipDriftError
+from parayabuck.execution.alpaca import OwnershipDriftError
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -50,7 +50,7 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioStateRepository,
 )
 from parayabuck.runtime import EngineRuntime, WorkerHealth
-from tests.helpers import apply_entry_fill
+from tests.helpers import apply_entry_fill, make_broker
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -321,38 +321,39 @@ def test_restart_with_open_order_gates_submission(tmp_path: Path) -> None:
     assert runtime_b.advance_rebalance() is None
 
 
-def test_open_managed_sell_exempts_drift_after_restart() -> None:
+def test_open_managed_sell_exempts_drift_after_restart(tmp_path: Path) -> None:
     """Level: AlpacaBroker unit. After a restart the repository keeps
     reporting the working managed SELL, and that open order must exempt the
     ownership-drift shortfall (the missing quantity is attributable to the
     in-flight exit). Without the open order the same account fails closed."""
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(
-        get_account=lambda: SimpleNamespace(
-            id="acct",
-            account_number="acct",
-            account_blocked=False,
-            trading_blocked=False,
-            trade_suspended_by_user=False,
-            equity="100000",
-            last_equity="100000",
-            cash="50000",
-            non_marginable_buying_power="50000",
+    broker = make_broker(
+        tmp_path,
+        client=SimpleNamespace(
+            get_account=lambda: SimpleNamespace(
+                id="acct",
+                account_number="acct",
+                account_blocked=False,
+                trading_blocked=False,
+                trade_suspended_by_user=False,
+                equity="100000",
+                last_equity="100000",
+                cash="50000",
+                non_marginable_buying_power="50000",
+            ),
+            get_all_positions=lambda: [
+                SimpleNamespace(
+                    symbol="QLD",
+                    qty="20",
+                    current_price="100",
+                    unrealized_pl="0",
+                    unrealized_intraday_pl="0",
+                    asset_class="us_equity",
+                    avg_entry_price="100",
+                    qty_available="0",
+                )
+            ],
         ),
-        get_all_positions=lambda: [
-            SimpleNamespace(
-                symbol="QLD",
-                qty="20",
-                current_price="100",
-                unrealized_pl="0",
-                unrealized_intraday_pl="0",
-                asset_class="us_equity",
-                avg_entry_price="100",
-                qty_available="0",
-            )
-        ],
     )
-    broker.ledger = None
     broker.portfolio_owned_quantities = lambda: {"QLD": 50.0}
     broker._peak_equity = 0.0
     broker._save_peak_equity = lambda: None

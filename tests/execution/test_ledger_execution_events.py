@@ -23,7 +23,9 @@ from parayabuck.core.models import (
     OrderState,
 )
 from parayabuck.execution.alpaca import AlpacaBroker
+from parayabuck.execution.alpaca_reconciliation import ReconciliationService
 from parayabuck.execution.ledger import ExecutionLedger
+from tests.helpers import make_broker
 
 
 def _entry(ledger: ExecutionLedger) -> OrderIntent:
@@ -79,12 +81,16 @@ def _booked_exit(ledger: ExecutionLedger, parent_broker_id: str) -> None:
     )
 
 
-def _fill_activity_broker(ledger: ExecutionLedger, activities: list[dict[str, Any]]) -> AlpacaBroker:
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(
-        _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+def _fill_activity_broker(tmp_path: Path, ledger: ExecutionLedger, activities: list[dict[str, Any]]) -> AlpacaBroker:
+    broker = make_broker(
+        tmp_path,
+        ledger=ledger,
+        client=SimpleNamespace(
+            _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
+        ),
     )
-    broker.ledger = ledger
+    # ``account()`` binds the account id in production; the ledger rows below
+    # are already scoped to it.
     broker._account_id = "acct"
     return broker
 
@@ -111,9 +117,9 @@ def test_fill_activity_fee_for_booked_exit_is_applied_to_the_position(tmp_path: 
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     _entry(ledger)
     _booked_exit(ledger, "broker-entry")
-    broker = _fill_activity_broker(ledger, _exit_fee_activity())
+    broker = _fill_activity_broker(tmp_path, ledger, _exit_fee_activity())
 
-    assert broker._reconcile_fill_activity_fees() is True
+    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
 
     entry_fees, exit_fees, realized = ledger.connection.execute(
         "SELECT entry_fees, exit_fees, realized_pnl FROM managed_positions"
@@ -129,10 +135,10 @@ def test_fill_activity_fee_is_booked_exactly_once_on_replay(tmp_path: Path) -> N
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     _entry(ledger)
     _booked_exit(ledger, "broker-entry")
-    broker = _fill_activity_broker(ledger, _exit_fee_activity())
+    broker = _fill_activity_broker(tmp_path, ledger, _exit_fee_activity())
 
-    assert broker._reconcile_fill_activity_fees() is True
-    assert broker._reconcile_fill_activity_fees() is True
+    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
+    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
 
     assert ledger.total_fees_for_account("acct") == pytest.approx(0.75)
     assert ledger.connection.execute("SELECT COUNT(*) FROM fee_activities").fetchone()[0] == 2

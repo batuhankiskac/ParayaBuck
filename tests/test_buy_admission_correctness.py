@@ -11,7 +11,6 @@ import pytest
 
 from parayabuck import load_config
 from parayabuck.core.models import Market, PositionSnapshot
-from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.portfolio import (
     BrokerWorkingBuyOrder,
     PortfolioOrderRequest,
@@ -21,6 +20,7 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.portfolio.runtime_models import OpenPortfolioOrder
 from parayabuck.runtime import EngineRuntime
+from tests.helpers import make_broker
 from tests.test_two_phase_rebalance import _bars, _position, _runtime, _SimBroker
 
 _NAMES = ("AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOG")
@@ -224,8 +224,8 @@ def test_broker_open_failure_never_means_zero_commitment(tmp_path) -> None:  # t
         runtime._size_buys_to_safe_capacity((_buy(),))
 
 
-def test_alpaca_working_buy_adapter_uses_remaining_quantity() -> None:
-    broker = AlpacaBroker.__new__(AlpacaBroker)
+def test_alpaca_working_buy_adapter_uses_remaining_quantity(tmp_path: Path) -> None:
+    broker = make_broker(tmp_path)
     broker._get_open_orders = lambda _request: (  # type: ignore[method-assign]
         SimpleNamespace(
             client_order_id="broker-working",

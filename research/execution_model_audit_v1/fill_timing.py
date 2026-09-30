@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Light VT35 fill-timing simulation (execution model audit v1).
+"""ARCHIVE-ONLY -- not runnable from this checkout without restored inputs. The
+script itself imports and runs here; its input data does not exist in this
+checkout (gitignored, present only in the archive tag).
+
+Light VT35 fill-timing simulation (execution model audit v1).
 
 Reads the profit_max_v1 campaign bars and restated dividends from a directory
 holding the files of tag ``archive/research/profit-max-v1-2026-09``::
@@ -132,6 +136,8 @@ def metrics(curve, a: str = START, b: str = END) -> dict[str, float]:  # type: i
 
 
 def main() -> int:
+    if len(sys.argv) < 2:
+        raise SystemExit(__doc__)
     data = load(sys.argv[1])
     out: dict[str, dict[str, object]] = {}
     for alloc in (1.0, 0.93):

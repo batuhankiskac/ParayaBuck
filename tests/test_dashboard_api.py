@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import subprocess
 import sys
 import threading
 from datetime import UTC, datetime
@@ -12,6 +14,7 @@ import pytest
 import yaml
 
 from parayabuck.web import server
+from parayabuck.web.services import dashboard as svc
 
 
 def _repo_config(root: Path, *, mode: str = "paper", live_enabled: bool = False) -> Path:
@@ -48,6 +51,7 @@ def _stub_manager(
             self.security_warning = None
             self.log_queues: set[Any] = set()
             self._log_queues_lock = threading.Lock()
+            self._state_lock = threading.Lock()
             self._paper = paper
 
         def is_paper_mode(self) -> bool:
@@ -248,12 +252,10 @@ def test_dashboard_risk_panel_exposes_policies_and_state(tmp_path: Path, monkeyp
 
 
 def test_dashboard_risk_exposes_sampled_buy_capacity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from parayabuck.web import server_legacy
-
     config_path = _repo_config(tmp_path)
     monkeypatch.setattr(server, "manager", _stub_manager(config_path))
     monkeypatch.setattr(
-        server_legacy,
+        svc,
         "_dashboard_buy_capacity",
         lambda: {
             "positions_count": 5,
@@ -267,7 +269,7 @@ def test_dashboard_risk_exposes_sampled_buy_capacity(tmp_path: Path, monkeypatch
             "reconciliation_status": "complete",
         },
     )
-    server_legacy._dashboard_snapshot_reset()
+    svc._dashboard_snapshot_reset()
     capacity = asyncio.run(server.dashboard_overview())["risk"]["buy_capacity"]
     assert capacity["effective_slots"] == capacity["maximum_positions"] == 6
     assert capacity["broker_working_order_count"] == 1
@@ -343,7 +345,7 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkey
         }
     ]
     monkeypatch.setattr(server, "manager", _stub_manager(config_path, positions=positions))
-    monkeypatch.setattr(server, "_dashboard_market_decisions", lambda _account_id: {"equity": _equity_decision()})
+    monkeypatch.setattr(svc, "_dashboard_market_decisions", lambda _account_id: {"equity": _equity_decision()})
 
     equity = asyncio.run(server.dashboard_overview())["equity"]
     holding = equity["holdings"][0]
@@ -373,7 +375,7 @@ def test_dashboard_explanations_derive_structured_reasons(tmp_path: Path, monkey
         }
     ]
     monkeypatch.setattr(server, "manager", _stub_manager(config_path, positions=positions))
-    monkeypatch.setattr(server, "_dashboard_market_decisions", lambda _account_id: {"equity": _equity_decision()})
+    monkeypatch.setattr(svc, "_dashboard_market_decisions", lambda _account_id: {"equity": _equity_decision()})
 
     explanations = asyncio.run(server.dashboard_overview())["explanations"]
     assert set(explanations) == {"equity"}
@@ -467,35 +469,198 @@ def test_focused_endpoints_are_slices(
 
 def test_panel_endpoint_surfaces_the_overview_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """A failing overview must not be reported as a missing panel on all 8 panels."""
-    from parayabuck.web import server_legacy
-    from parayabuck.web.services import dashboard as svc
 
     def _boom(**_kwargs: Any) -> dict[str, Any]:
         raise RuntimeError("ledger locked")
 
-    monkeypatch.setattr(server_legacy, "_dashboard_payload", _boom)
+    monkeypatch.setattr(svc, "_dashboard_payload", _boom)
 
     assert svc.get_overview_payload() == {"unavailable": True, "error": "ledger locked"}
     assert svc.get_panel("equity") == {"unavailable": True, "error": "ledger locked"}
 
 
-def test_market_decisions_failure_is_reported_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An empty market-decisions panel must say why the legacy call failed."""
-    from parayabuck.web import server_legacy
-
-    class _Log:
-        def __init__(self) -> None:
-            self.warnings: list[str] = []
-
-        def warning(self, fmt: str, *args: Any) -> None:
-            self.warnings.append(fmt % args if args else fmt)
+def test_market_decisions_failure_reaches_the_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failed decision read must not degrade into a silently empty panel."""
 
     def _boom(*_args: Any, **_kwargs: Any) -> Any:
         raise RuntimeError("ledger locked")
 
-    log = _Log()
-    monkeypatch.setattr(server_legacy, "_dashboard_market_decisions", _boom)
-    monkeypatch.setattr(server, "log", log)
+    monkeypatch.setattr(svc, "_dashboard_market_decisions", _boom)
 
-    assert server._dashboard_market_decisions("acct-1") == {}
-    assert any("ledger locked" in message for message in log.warnings)
+    # The server shim delegates to the real reader instead of swallowing.
+    with pytest.raises(RuntimeError, match="ledger locked"):
+        server._dashboard_market_decisions("acct-1")
+
+    svc._dashboard_snapshot_reset()
+    assert svc.get_overview_payload() == {"unavailable": True, "error": "ledger locked"}
+
+
+# ---------------------------------------------------------------------------
+# The HTTP surface still answers, and it answers without duplicating a
+# single process-wide object (engine manager / FastAPI app / log handler)
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_overview_route_answers_from_the_bound_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from parayabuck.web.application import create_app
+    from parayabuck.web.managers.backtest import BacktestManager
+    from parayabuck.web.state import WebState
+
+    _install_fake_telemetry_module(monkeypatch, telemetry=False)
+    _install_fake_metrics_module(monkeypatch, metrics=False)
+    config_path = _repo_config(tmp_path)
+    engine_manager = _stub_manager(config_path)
+    state = WebState(
+        engine_manager=engine_manager,
+        backtest_manager=BacktestManager(engine_state_provider=engine_manager.current_engine_state),
+    )
+    state.bind()
+    svc._dashboard_snapshot_reset()
+
+    # No ``with`` block: the request must not run the engine lifespan.
+    response = TestClient(create_app(state)).get("/api/dashboard/overview")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload) >= {
+        "equity",
+        "risk",
+        "execution",
+        "universe",
+        "health",
+        "explanations",
+        "metrics",
+    }
+    assert payload["engine_state"] == "stopped"
+    assert payload["mode"]["badge"] == "paper"
+    assert payload["account"]["equity"] == 100000.0
+
+
+_NO_DUPLICATE_SINGLETONS = r'''
+import logging
+import sys
+import tempfile
+from pathlib import Path
+
+import yaml
+from fastapi import FastAPI
+
+import parayabuck
+import parayabuck.monitoring.journal as journal_module
+from parayabuck.web.managers.engine import EngineManager
+
+expected_src = Path(sys.argv[1]).resolve()
+assert Path(parayabuck.__file__).resolve().is_relative_to(expected_src), parayabuck.__file__
+
+counts = {"engine_manager": 0, "fastapi_app": 0}
+
+
+def instrument(cls, key):
+    original = cls.__init__
+
+    def __init__(self, *args, **kwargs):
+        counts[key] += 1
+        return original(self, *args, **kwargs)
+
+    cls.__init__ = __init__
+
+
+instrument(EngineManager, "engine_manager")
+instrument(FastAPI, "fastapi_app")
+baseline = dict(counts)
+app_logger = logging.getLogger("parayabuck")
+baseline_handlers = len(app_logger.handlers)
+
+
+def handler_homes():
+    """Every module that still publishes its own log handler class."""
+    return sorted(
+        name
+        for name, module in list(sys.modules.items())
+        if name.startswith("parayabuck") and getattr(module, "WebSocketLogHandler", None) is not None
+    )
+
+
+assert handler_homes() == ["parayabuck.web.managers.websocket"], handler_homes()
+
+import parayabuck.web.app  # noqa: E402,F401
+import parayabuck.web.services.dashboard as svc  # noqa: E402
+
+assert counts == baseline, f"importing the dashboard built {counts}, baseline {baseline}"
+assert len(app_logger.handlers) == baseline_handlers
+
+# Every read below stays inside a temp dir; the optional batch modules stay
+# unimported so the payload degrades instead of touching the ledger.
+root = Path(tempfile.mkdtemp())
+raw = yaml.safe_load(Path("config/settings.yaml").read_text(encoding="utf-8"))
+raw["runtime"]["decision_db_path"] = str(root / "runtime.sqlite3")
+config_path = root / "settings.yaml"
+config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+sys.modules["parayabuck.execution.telemetry"] = None
+sys.modules["parayabuck.monitoring.metrics"] = None
+journal_module.get_journal = lambda *a, **k: type("J", (), {"path": str(root / "observability.sqlite3")})()
+
+
+class _StubManager:
+    runtime = None
+    broker = None
+    last_engine_error = None
+
+    def __init__(self):
+        self.config_path = config_path
+
+    def is_paper_mode(self):
+        return True
+
+    def current_engine_state(self):
+        return "stopped"
+
+    def fetch_account_snapshot(self):
+        return {
+            "equity": 100000.0,
+            "cash": 60000.0,
+            "daily_pnl": 0.0,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+            "drawdown": 0.0,
+            "gross_exposure": 0.0,
+            "positions": [],
+            "account_suffix": "",
+            "snapshot_at": None,
+            "age_seconds": 0.0,
+            "stale": False,
+            "source": "broker",
+        }
+
+
+class _State:
+    engine_manager = _StubManager()
+    backtest_manager = None
+
+
+payload = svc.get_overview_payload(_State())
+assert set(payload) >= {"equity", "risk", "execution", "universe", "health", "explanations", "metrics"}, payload
+assert payload["engine_state"] == "stopped"
+assert counts == baseline, f"the dashboard build created {counts}, baseline {baseline}"
+assert len(app_logger.handlers) == baseline_handlers
+assert handler_homes() == ["parayabuck.web.managers.websocket"], handler_homes()
+'''
+
+
+def test_dashboard_import_and_build_construct_no_extra_singletons() -> None:
+    """Importing or serving the dashboard must not build a second engine
+    manager, FastAPI app or WebSocket log handler: each of those attaches a
+    git scan, a route table and a logging fan-out to the process."""
+    repo = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-c", _NO_DUPLICATE_SINGLETONS, str(repo / "src")],
+        cwd=str(repo),
+        env={**os.environ, "PYTHONPATH": str(repo / "src"), "PYTHONDONTWRITEBYTECODE": "1"},
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    assert result.returncode == 0, result.stderr

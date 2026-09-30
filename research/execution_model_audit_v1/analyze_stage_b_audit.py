@@ -1,6 +1,19 @@
-"""Summarize the instrumented Stage B audit dump (execution model audit v1).
+"""ARCHIVE-ONLY -- not runnable from this checkout without restored inputs.
 
-python3 analyze_stage_b_audit.py <dir-with-out/VT35_1.0*.json.gz-and-pm/data/historical>/
+Summarize the instrumented Stage B audit dump (execution model audit v1).
+The script imports and runs from this checkout; its inputs do not exist here:
+
+* ``<dir>/out/VT35_1.0.json.gz`` and ``<dir>/out/VT35_1.0_audit.json.gz`` --
+  written by ``run_stage_b_audit.py``, itself archive-only (its harness modules
+  live in tag ``archive/research/sleeve-candidates-v2-v3-2026-09``). They are
+  not committed.
+* ``<dir>/pm/data/historical/profit_max_v1_daily_split_sip.csv`` -- tag
+  ``archive/research/profit-max-v1-2026-09``:
+  ``git archive archive/research/profit-max-v1-2026-09 data | tar -x -C <dir>/pm``
+
+Usage:
+
+    python3 research/execution_model_audit_v1/analyze_stage_b_audit.py <dir>
 """
 
 import csv
@@ -10,6 +23,8 @@ import math
 import sys
 from collections import Counter
 
+if len(sys.argv) < 2:
+    raise SystemExit(__doc__)
 S = sys.argv[1].rstrip("/") + "/"
 a = json.load(gzip.open(S + "out/VT35_1.0_audit.json.gz", "rt"))
 p = json.load(gzip.open(S + "out/VT35_1.0.json.gz", "rt"))

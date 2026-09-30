@@ -15,12 +15,12 @@ import pytest
 import yaml
 from fastapi import HTTPException
 
-from parayabuck.web import server_legacy
 from parayabuck.web.lifespan import create_lifespan
 from parayabuck.web.managers import websocket as ws_manager
 from parayabuck.web.managers.engine import EngineManager
 from parayabuck.web.routers import settings as settings_router
 from parayabuck.web.schemas.settings import SettingsPayload
+from parayabuck.web.services import dashboard as dashboard_svc
 from parayabuck.web.services.settings import SettingsService
 from tests.test_auto_start_retry import _REAL_SLEEP, _FlakyRuntime, _manager_with
 
@@ -64,14 +64,9 @@ def test_shutdown_during_in_flight_transient_start_does_not_wait_on_retries(monk
     assert manager._retry_task is None
 
 
-@pytest.mark.parametrize(
-    "handler_cls",
-    [ws_manager.WebSocketLogHandler, server_legacy.WebSocketLogHandler],
-    ids=["managers", "legacy"],
-)
-def test_log_handler_never_raises_into_the_logging_caller(monkeypatch: Any, handler_cls: Any) -> None:
+def test_log_handler_never_raises_into_the_logging_caller(monkeypatch: Any) -> None:
     monkeypatch.setattr(logging, "raiseExceptions", False)
-    handler = handler_cls()
+    handler = ws_manager.WebSocketLogHandler()
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger = logging.getLogger("round9.web.handler")
     logger.propagate = False
@@ -121,9 +116,9 @@ def test_dashboard_anomalies_skip_crypto_dust_clear_bookkeeping(monkeypatch: Any
             "INSERT INTO portfolio_ownership_adjustments VALUES "
             f"('acct', 'BTC/USD', 'crypto', 1e-9, '{kind}', 'dust', '2026-09-02T00:{minute:02d}:00+00:00')"
         )
-    monkeypatch.setattr(server_legacy, "_dashboard_readonly_connection", lambda: connection)
-    monkeypatch.setattr(server_legacy, "_dashboard_account_id", lambda: "acct")
+    monkeypatch.setattr(dashboard_svc, "_dashboard_readonly_connection", lambda: connection)
+    monkeypatch.setattr(dashboard_svc, "_dashboard_account_id", lambda: "acct")
 
-    anomalies = server_legacy._dashboard_execution()["reconciliation_anomalies"]
+    anomalies = dashboard_svc._dashboard_execution()["reconciliation_anomalies"]
 
     assert [(row["symbol"], row["kind"]) for row in anomalies] == [("SPY", "external_sell")]

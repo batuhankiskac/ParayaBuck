@@ -129,7 +129,7 @@ def test_no_trade_event_re_emits_on_the_next_decision_day(monkeypatch):
     """Every decision day must leave its own row in the real journal.
 
     The dashboard banner is simply the newest ``portfolio_no_trade`` row
-    (``web/server_legacy.py``), and the journal inserts on the event id primary
+    (``web/services/dashboard.py``), and the journal inserts on the event id primary
     key, so a day-stable id would silently keep only the first day's row and
     freeze the banner on that reason forever.
     """

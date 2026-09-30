@@ -3,15 +3,17 @@
 Local repair for Phase 4: quarantine polluted cache/observability and fix runtime DB.
 
 Steps (report Phase 4):
-1. Verify PAPER engine not running and no file locks.
+1. Verify the engine heartbeat is not live (same guard as scripts/paper_smoke.py).
+   A live engine is a hard refusal: nothing is quarantined and nothing is written.
 2. Create timestamped quarantine dir on same filesystem.
 3. Move warmup.sqlite3 (+wal,shm) to quarantine via rename (no copy).
 4. Move observability.sqlite3*, health_snapshot.json to quarantine.
 5. Do NOT delete parayabuck.sqlite3; backup, then:
    - close open portfolio_runtime_sessions and runtime_sessions as interrupted
-   - optionally run broker reconciliation (if creds available)
-   - clear decision_worker_crashed incident if reconciliation ok or operator confirms
-   - rewrite today's risk snapshot from broker (or clear breaker)
+   - run broker reconciliation (if creds available)
+   - clear the decision_worker_crashed incident AND its risk_state breaker ONLY
+     when broker reconciliation actually verified. When it did not, the halt
+     stays active: run broker.reconcile() (with working credentials) and re-run.
 7. Restart the engine; it re-downloads the quarantined warmup cache on start.
 
 This script implements quarantine and DB repair steps 1-6; step 7 is left for
@@ -22,6 +24,7 @@ Idempotent: safe to run twice; second run will find already-quarantined files.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sqlite3
@@ -43,57 +46,49 @@ OBS_FILES = [
 LEDGER = Path("data/runtime/parayabuck.sqlite3")
 
 
-def check_engine_not_running():
-    print("[1] Checking engine not running...")
-    # Check health_snapshot pid
-    snap = Path("data/runtime/health_snapshot.json")
-    if snap.exists():
-        try:
-            import json
+def _load_heartbeat_guard():
+    """Load the engine-heartbeat guard from scripts/paper_smoke.py.
 
-            data = json.loads(snap.read_text(encoding="utf-8"))
-            pid = data.get("pid")
-            if pid:
-                try:
-                    os.kill(int(pid), 0)
-                    print(f"  WARN: PID {pid} from health_snapshot still alive — engine may be running")
-                    print("  Refusing to quarantine while engine is running. Stop engine first.")
-                    return False
-                except ProcessLookupError:
-                    print(f"  PID {pid} not alive — ok")
-                except PermissionError:
-                    print(f"  PID {pid} exists but no permission — assume running, abort")
-                    return False
-        except Exception as e:
-            print(f"  Could not parse health_snapshot: {e}")
-    # Check port 8000
-    import socket
+    ``scripts/`` is not a package, so it is loaded from its file path.
+    """
+    import importlib.util
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(0.5)
+    path = Path(__file__).resolve().parent / "paper_smoke.py"
+    spec = importlib.util.spec_from_file_location("parayabuck_paper_smoke", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load engine heartbeat guard from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _heartbeat_config():
+    """Config the heartbeat guard reads the snapshot path/interval from."""
+    from parayabuck.config import load_config
+
+    return load_config()
+
+
+def check_engine_not_running() -> bool:
+    """False while the engine heartbeat looks live; fail closed on any doubt.
+
+    Reuses the ``scripts/paper_smoke.py`` heartbeat guard: a fresh health
+    snapshot whose ``runtime_state`` is not ``stopped`` means the engine is
+    running, and this repair must never quarantine files or rewrite the ledger
+    underneath it.
+    """
+    print("[1] Checking engine heartbeat is not live...")
     try:
-        s.connect(("127.0.0.1", 8000))
-        print("  WARN: Port 8000 is listening — engine may be running, abort")
-        s.close()
+        active = _load_heartbeat_guard()._engine_is_active(_heartbeat_config())
+    except Exception as exc:
+        print(f"  REFUSED: cannot determine engine heartbeat ({exc})")
+        print("  Fix config / health snapshot and re-run. Nothing was changed.")
         return False
-    except Exception:
-        print("  Port 8000 not listening — ok")
-    finally:
-        try:
-            s.close()
-        except Exception:
-            pass
-    # Check file locks via attempt to open warmup db
-    # Use sqlite busy timeout check
-    try:
-        if WARMUP_FILES[0].exists():
-            con = sqlite3.connect(f"file:{WARMUP_FILES[0]}?mode=ro", uri=True, timeout=1)
-            con.execute("SELECT COUNT(*) FROM bars LIMIT 1")
-            con.close()
-            print("  Warmup DB readable — ok")
-    except Exception as e:
-        print(f"  Warmup DB check: {e} — may be locked, will try quarantine anyway")
-    print("  Engine not running checks passed")
+    if active:
+        print("  REFUSED: engine heartbeat is live. Stop the engine first")
+        print("  (systemctl stop parayabuck), wait for a 'stopped' health snapshot.")
+        return False
+    print("  No live engine heartbeat — ok")
     return True
 
 
@@ -179,11 +174,19 @@ def backup_ledger(qdir: Path):
     return dst
 
 
-def repair_runtime_db():
-    print("[6] Repairing runtime DB: close open sessions, clear circuit breaker...")
+def repair_runtime_db() -> bool:
+    """Repair the ledger; return True only when broker reconciliation verified.
+
+    A verified reconcile is the ONLY thing that clears the
+    ``decision_worker_crashed`` halt. Without it the incident row and its
+    matching ``risk_state`` breaker reason are left untouched and the halt
+    stays active, because the script cannot know the crash left no unknown
+    broker-side orders or foreign inventory.
+    """
+    print("[6] Repairing runtime DB: close open sessions, clear halt if reconciled...")
     if not LEDGER.exists():
         print("  No ledger, skip")
-        return
+        return False
     con = sqlite3.connect(str(LEDGER), timeout=5)
     con.execute("PRAGMA busy_timeout=5000")
     now = datetime.now(UTC).isoformat()
@@ -204,95 +207,43 @@ def repair_runtime_db():
             (now,),
         )
         print("  Closed runtime sessions as interrupted")
-    # Check safety incident
-    cur = con.execute("SELECT * FROM safety_incidents WHERE reason='decision_worker_crashed'")
-    rows = cur.fetchall()
-    print(f"  Found {len(rows)} decision_worker_crashed incidents")
-    # Try broker reconciliation if possible
-    reconcile_ok = False
-    try:
-        # Attempt to run broker reconcile to verify holdings==broker
-        # This requires API keys; try to load config and broker
-        from parayabuck.config import load_config
+    # Try broker reconciliation to verify holdings==broker (no creds => no verify)
+    reconcile_ok = _run_broker_reconcile()
 
-        cfg = load_config()
-        # Only attempt if keys exist
-        api_key = os.getenv("ALPACA_API_KEY")
-        secret = os.getenv("ALPACA_SECRET_KEY")
-        if api_key and secret:
-            from parayabuck.execution.alpaca import AlpacaBroker
-            from parayabuck.execution.ledger import ExecutionLedger
-            from parayabuck.storage import SQLiteStore
-
-            store = SQLiteStore(str(LEDGER))
-            ledger = ExecutionLedger(str(LEDGER), store=store)
-            broker = AlpacaBroker(api_key, secret, paper=cfg.runtime.mode.value == "paper", ledger=ledger)
-            print("  Running broker.reconcile() for verification...")
-            broker.reconcile()
-            print("  Reconciliation succeeded")
-            reconcile_ok = True
-            # need to close store
-            try:
-                store.release()
-            except Exception:
-                pass
+    if reconcile_ok:
+        cleared = con.execute("DELETE FROM safety_incidents WHERE reason='decision_worker_crashed'").rowcount
+        if cleared:
+            print(f"  Cleared {cleared} decision_worker_crashed incident (reconcile verified)")
         else:
-            print("  No Alpaca keys, skipping broker reconcile")
-            reconcile_ok = False
-    except Exception as e:
-        print(f"  Reconciliation attempt failed: {e}")
-        reconcile_ok = False
+            print("  No decision_worker_crashed incident to clear")
+    else:
+        remaining = con.execute(
+            "SELECT COUNT(*) FROM safety_incidents WHERE reason='decision_worker_crashed'"
+        ).fetchone()[0]
+        if remaining:
+            print(f"  HALT STILL ACTIVE: keeping {remaining} decision_worker_crashed incident(s).")
+            print("  Broker reconciliation did NOT verify, so the halt is not lifted.")
+            print("  Run broker.reconcile() with working credentials (or re-run this script")
+            print("  with ALPACA_API_KEY/ALPACA_SECRET_KEY set) and confirm the incident")
+            print("  before considering any manual clearing.")
 
-    if rows:
-        if reconcile_ok:
-            con.execute("DELETE FROM safety_incidents WHERE reason='decision_worker_crashed'")
-            print("  Cleared decision_worker_crashed incident (reconcile ok)")
-        else:
-            # Still clear but note that verification not done? Report says only if verify ok.
-            # For local repair we clear after manual review if operator opts.
-            # Here we will NOT auto-clear if reconcile not ok, leave for operator.
-            print("  Keeping incident until reconcile verifies (run broker.reconcile manually then delete)")
-            # Optionally clear risk snapshot anyway but keep incident
-            # For this automated script, we will clear incident after closing sessions
-            # because report says open sessions interrupted + reconcile + clear.
-            # If reconcile not available, we still clear after operator confirmation.
-            # We will clear but log.
-            # To be safe, clear anyway after closing sessions, as local file is polluted.
-            # Operator can re-create if needed.
-            con.execute("DELETE FROM safety_incidents WHERE reason='decision_worker_crashed'")
-            print("  Cleared incident (operator override: local repair)")
-
-    # Fix risk_state for today: clear circuit_breaker_reason
-    cur = con.execute("SELECT session_date, payload FROM risk_state ORDER BY session_date DESC LIMIT 1")
-    row = cur.fetchone()
-    if row:
-        latest_date = row[0]
-        import json
-
-        payload = json.loads(row[1])
-        if payload.get("circuit_breaker_reason") == "decision_worker_crashed":
-            payload["circuit_breaker_reason"] = None
-            con.execute(
-                "UPDATE risk_state SET payload=?, updated_at=? WHERE session_date=?",
-                (json.dumps(payload), now, latest_date),
-            )
-            print(f"  Cleared circuit_breaker_reason for risk_state {latest_date}")
-        else:
-            print(f"  Latest risk_state {latest_date} breaker already {payload.get('circuit_breaker_reason')}")
-    # Also check specifically 2026-08-29 entry if exists
-    cur = con.execute("SELECT payload FROM risk_state WHERE session_date='2026-08-29'")
-    r = cur.fetchone()
-    if r:
-        import json
-
-        p = json.loads(r[0])
-        if p.get("circuit_breaker_reason"):
-            p["circuit_breaker_reason"] = None
-            con.execute(
-                "UPDATE risk_state SET payload=?, updated_at=? WHERE session_date='2026-08-29'",
-                (json.dumps(p), now),
-            )
-            print("  Cleared 2026-08-29 risk_state breaker")
+    if reconcile_ok:
+        # Latest risk_state row, and only its decision_worker_crashed breaker.
+        cur = con.execute("SELECT session_date, payload FROM risk_state ORDER BY session_date DESC LIMIT 1")
+        row = cur.fetchone()
+        if row:
+            latest_date, raw = row
+            payload = json.loads(raw)
+            reason = payload.get("circuit_breaker_reason")
+            if reason == "decision_worker_crashed":
+                payload["circuit_breaker_reason"] = None
+                con.execute(
+                    "UPDATE risk_state SET payload=?, updated_at=? WHERE session_date=?",
+                    (json.dumps(payload), now, latest_date),
+                )
+                print(f"  Cleared decision_worker_crashed breaker for risk_state {latest_date}")
+            else:
+                print(f"  Latest risk_state {latest_date} breaker left untouched ({reason})")
 
     con.commit()
     # Verify
@@ -303,17 +254,60 @@ def repair_runtime_db():
     ).fetchone()[0]
     print(f"  After repair: open portfolio {open_port2}, open rt {open_rt2}, incidents {remaining_incidents}")
     con.close()
+    return reconcile_ok
+
+
+def _run_broker_reconcile() -> bool:
+    """True only when broker.reconcile() actually ran to completion.
+
+    Missing credentials, a missing config or any broker error all return False:
+    unverified reconciliation must never authorise clearing the halt.
+    """
+    try:
+        from parayabuck.config import load_config
+
+        cfg = load_config()
+        # Only attempt if keys exist
+        api_key = os.getenv("ALPACA_API_KEY")
+        secret = os.getenv("ALPACA_SECRET_KEY")
+        if not (api_key and secret):
+            print("  No Alpaca keys, skipping broker reconcile")
+            return False
+        from parayabuck.execution.alpaca import AlpacaBroker
+        from parayabuck.execution.ledger import ExecutionLedger
+        from parayabuck.storage import SQLiteStore
+
+        store = SQLiteStore(str(LEDGER))
+        try:
+            ledger = ExecutionLedger(str(LEDGER), store=store)
+            broker = AlpacaBroker(api_key, secret, paper=cfg.runtime.mode.value == "paper", ledger=ledger)
+            print("  Running broker.reconcile() for verification...")
+            broker.reconcile()
+        finally:
+            try:
+                store.release()
+            except Exception:
+                pass
+        print("  Reconciliation succeeded")
+        return True
+    except Exception as e:
+        print(f"  Reconciliation attempt failed: {e}")
+        return False
 
 
 def main():
     if not check_engine_not_running():
-        print("Abort: engine still running")
+        print("Abort: engine still running. Nothing was quarantined or changed.")
         return 1
     qdir = make_quarantine_dir()
     quarantine_files(qdir)
     backup_ledger(qdir)
-    repair_runtime_db()
+    reconciled = repair_runtime_db()
     print("\nDone. Quarantine at", qdir)
+    if not reconciled:
+        print("\nHALT STILL ACTIVE: broker reconciliation did not verify, so the")
+        print("decision_worker_crashed incident was NOT cleared. Run broker.reconcile()")
+        print("with working credentials and re-run this script before trading.")
     print("Next steps:")
     print("  - Verify cache health: python scripts/check_cache_health.py")
     print("  - Start engine in PAPER: python -m parayabuck start --paper or via web UI")

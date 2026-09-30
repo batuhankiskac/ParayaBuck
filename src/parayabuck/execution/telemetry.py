@@ -697,12 +697,36 @@ def forward_metrics(
 # --------------------------------------------------------------------------
 
 
-def configured_cost_assumptions(config: object | None = None) -> dict[str, object]:
-    """The backtest cost assumptions a calibration report compares against.
+# ``TargetToOrderPlanner`` stamps ``portfolio_orders.reference_price`` with the
+# DECISION close while every market order fills at the NEXT SESSION OPEN. A
+# fill minus that reference is therefore the overnight gap plus any execution
+# slippage, so it can never prove anything about the backtest cost model. The
+# open-aligned, model-comparing measurement is
+# ``shadow_comparator.paper_vs_zero_cost_open_bps``.
+_GAP_BASIS = "decision_close_reference"
+_GAP_NOTE = (
+    "portfolio_orders.reference_price is the DECISION close; market orders fill at the "
+    "next session OPEN, so this distribution is a next-open-vs-decision-close gap, not slippage"
+)
+_BACKTEST_ALIGNED_METRIC = "shadow_comparator.paper_vs_zero_cost_open_bps"
+_BACKTEST_ALIGNED_NOTE = (
+    "shadow_comparator matches each PAPER fill to the scheduled bar OPEN and reports "
+    "paper_vs_zero_cost_open_bps beside a modeled adverse/commission/fee cost; that is the "
+    "backtest-aligned comparison, not this report"
+)
+_NO_VERDICT_NOTE = (
+    "no model verdict is emitted: this report compares next-open fills with the decision "
+    "close, which mixes the overnight gap with execution quality, and observed costs never "
+    "adjust a configured assumption"
+)
+
+
+def _configured_backtest(config: object | None) -> Any:
+    """The ``BacktestConfig`` a report is measured against, or ``None``.
 
     ``config`` may be a ``parayabuck.config.Config`` (or any object exposing
-    ``backtest.slippage_bps`` etc.); when ``None`` the shipped defaults are
-    reported. This function NEVER modifies any assumption.
+    ``backtest.slippage_bps`` etc.); when ``None`` the shipped defaults stand
+    in. Never modifies the configuration it returns.
     """
     if config is None:
         # Lazy import keeps this module cheap for callers that only need
@@ -710,11 +734,126 @@ def configured_cost_assumptions(config: object | None = None) -> dict[str, objec
         try:  # pragma: no cover - config is always importable in-tree
             from parayabuck.config import BacktestConfig
         except ImportError:  # pragma: no cover
-            backtest = None
-        else:
-            backtest = BacktestConfig()
-    else:
-        backtest = getattr(config, "backtest", None)
+            return None
+        return BacktestConfig()
+    return getattr(config, "backtest", None)
+
+
+def _modeled_fill_fee(
+    backtest: Any,
+    *,
+    side: str,
+    quantity: float,
+    price: float,
+    occurred_at: str,
+) -> float | None:
+    """The fee the backtest cost model charges for one equity fill.
+
+    Computed exactly like ``PortfolioBacktestEngine``: ``backtest.commission``
+    plus the equity regulatory accrual, taken from the effective-dated
+    schedule or the configured flat rates, at the fill's own trade date.
+    """
+    # Lazy import keeps ledger-only telemetry callers cheap.
+    from parayabuck.backtest.portfolio_engine import OrderSide, equity_regulatory_fee
+
+    if quantity <= 0 or price <= 0:
+        return None
+    try:
+        order_side = OrderSide(str(side).lower())
+        trade_date = datetime.fromisoformat(occurred_at).date()
+    except (TypeError, ValueError):
+        return None
+    fee = float(backtest.commission)
+    if bool(backtest.equity_use_effective_dated_fees):
+        from parayabuck.backtest.regulatory_fees import rates_for_trade_date
+
+        rates = rates_for_trade_date(trade_date)
+        return float(
+            fee
+            + equity_regulatory_fee(
+                order_side,
+                quantity,
+                price,
+                taf_per_share=rates.taf_per_share,
+                taf_cap=rates.taf_cap,
+                cat_per_share=rates.cat_per_share,
+                sec_fee_rate=rates.sec_fee_rate,
+            )
+        )
+    return float(
+        fee
+        + equity_regulatory_fee(
+            order_side,
+            quantity,
+            price,
+            taf_per_share=float(backtest.equity_taf_per_share),
+            taf_cap=float(backtest.equity_taf_cap),
+            cat_per_share=float(backtest.equity_cat_per_share),
+            sec_fee_rate=float(backtest.equity_sec_fee_rate),
+        )
+    )
+
+
+def _modeled_fee_summary(backtest: Any | None, fills: list[tuple[str, float, float, str]]) -> dict[str, object]:
+    """Stat summary of the modeled fee for ``fills``, or why it is absent."""
+    if backtest is None:
+        return {
+            "available": False,
+            "note": "no configuration available; modeled fees not computed",
+        }
+    values = [
+        fee
+        for fee in (
+            _modeled_fill_fee(
+                backtest,
+                side=side,
+                quantity=quantity,
+                price=price,
+                occurred_at=occurred_at,
+            )
+            for side, quantity, price, occurred_at in fills
+        )
+        if fee is not None
+    ]
+    return {
+        "available": True,
+        **_stat_summary(values),
+        "total": round(sum(values), 6),
+        "coverage": "equity_fills_only",
+        "note": (
+            "backtest.commission + equity_regulatory_fee per equity fill at the fill's own "
+            "occurred_at date; non-equity and unusable fills are excluded"
+        ),
+    }
+
+
+def _gap_comparison(observed_gap: dict[str, float | None]) -> dict[str, object]:
+    """Decision-close gap distribution, deliberately carrying no model verdict."""
+    return {
+        "basis": _GAP_BASIS,
+        "basis_note": _GAP_NOTE,
+        "observed_median_bps": observed_gap["median"],
+        "observed_p75_bps": observed_gap["p75"],
+        "observed_p95_bps": observed_gap["p95"],
+        "model_verdict": None,
+        "model_verdict_note": _NO_VERDICT_NOTE,
+        "reference_basis": "decision_close",
+        "alignment_status": "not_backtest_aligned",
+        "transferability_verdict": "UNKNOWN",
+        "measurement_quality": "legacy_close_reference_only",
+        "backtest_aligned_metric": _BACKTEST_ALIGNED_METRIC,
+        "backtest_aligned_metric_note": _BACKTEST_ALIGNED_NOTE,
+    }
+
+
+def configured_cost_assumptions(config: object | None = None) -> dict[str, object]:
+    """The backtest cost assumptions a calibration report compares against.
+
+    ``config`` may be a ``parayabuck.config.Config`` (or any object exposing
+    ``backtest.slippage_bps`` etc.); when ``None`` the shipped defaults are
+    reported. This function NEVER modifies any assumption.
+    """
+    backtest = _configured_backtest(config)
     if backtest is None:
         return {
             "available": False,
@@ -726,7 +865,16 @@ def configured_cost_assumptions(config: object | None = None) -> dict[str, objec
         "spread_bps": float(backtest.spread_bps),
         "commission": float(backtest.commission),
         "equity_use_effective_dated_fees": bool(backtest.equity_use_effective_dated_fees),
+        "equity_taf_per_share": float(backtest.equity_taf_per_share),
+        "equity_taf_cap": float(backtest.equity_taf_cap),
+        "equity_cat_per_share": float(backtest.equity_cat_per_share),
+        "equity_sec_fee_rate": float(backtest.equity_sec_fee_rate),
         "model": ("adverse slippage = slippage_bps + spread_bps/2 per fill; equity regulatory fees by trade date"),
+        "modeled_fee_basis": (
+            "backtest.commission + equity_regulatory_fee per equity fill at the fill's own "
+            "occurred_at date, using the effective-dated schedule when "
+            "equity_use_effective_dated_fees and otherwise the flat equity fee rates above"
+        ),
     }
 
 
@@ -739,25 +887,41 @@ def cost_calibration(
     """Configured vs observed cost report. REPORT ONLY — never adjusts
     assumptions; observed values feed the report so a human can compare.
 
+    NOT a backtest cost-model verdict. The price side compares next-open fills
+    with ``portfolio_orders.reference_price`` (the decision close), so it mixes
+    the overnight gap with execution quality; the fee side reports observed
+    fees beside the fee the backtest model charges for the same fills.
+    ``shadow_comparator.paper_vs_zero_cost_open_bps`` is the backtest-aligned
+    comparison.
+
     ``_connection`` (private) lets a caller share one already-open read-only
     connection; the caller owns its lifecycle.
     """
     owns = _connection is None
     connection = _connection if _connection is not None else _open_readonly(db_path)
+    backtest = _configured_backtest(config)
     configured = configured_cost_assumptions(config)
     if connection is None:
         empty = _empty_state()
+        empty_gap = _stat_summary([])
         empty["configured"] = configured
         empty["observed"] = {
-            "slippage": _stat_summary([]),
-            "spread_estimate": _stat_summary([]),
+            "slippage_bps": empty_gap,
+            "slippage_bps_basis": _GAP_BASIS,
+            "slippage_bps_note": _GAP_NOTE,
+            "spread_estimate_bps": _stat_summary([]),
             "fees": _stat_summary([]),
+            "modeled_fees": _modeled_fee_summary(backtest, []),
             "total_fees": 0.0,
         }
-        empty["verdict"] = "no_observed_data"
+        empty["comparison"] = _gap_comparison(empty_gap)
+        empty["is_backtest_cost_model_verdict"] = False
+        empty["backtest_aligned_metric"] = _BACKTEST_ALIGNED_METRIC
+        empty["backtest_aligned_metric_note"] = _BACKTEST_ALIGNED_NOTE
         return empty
     try:
-        slippage_values: list[float] = []
+        gap_values: list[float] = []
+        modeled_fee_fills: list[tuple[str, float, float, str]] = []
         spread_values: list[float] = []
         fee_values: list[float] = []
         fee_completeness = "legacy_or_no_raw_fee_provenance"
@@ -772,25 +936,33 @@ def cost_calibration(
             elif fee_rows:
                 fee_completeness = "observed_event_local_not_aggregated"
         if _table_exists(connection, "portfolio_fills") and _table_exists(connection, "portfolio_orders"):
+            fill_cols = _columns(connection, "portfolio_fills")
+            order_cols = _columns(connection, "portfolio_orders")
+            quantity_sql = "f.quantity" if "quantity" in fill_cols else "NULL"
+            occurred_sql = "f.occurred_at" if "occurred_at" in fill_cols else "NULL"
+            market_sql = "o.market" if "market" in order_cols else "NULL"
             for row in _query(
                 connection,
-                """
-                SELECT f.price, f.fee, o.reference_price, o.side
+                f"""
+                SELECT f.price, f.fee, {quantity_sql}, {occurred_sql},
+                       o.reference_price, o.side, {market_sql}
                 FROM portfolio_fills f
                 JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
                 """,
             ):
-                price, fee, reference, side = row
+                price, fee, quantity, occurred_at, reference, side, market = row
                 if price and reference:
                     bps = slippage_bps(float(price), float(reference), str(side))
                     if bps is not None:
-                        slippage_values.append(bps)
+                        gap_values.append(bps)
                 if fee is not None and fee > 0:
                     fee_values.append(float(fee))
+                if str(market).lower() == "equity":
+                    modeled_fee_fills.append((str(side), _to_float(quantity), _to_float(price), str(occurred_at)))
         orders_cols = _columns(connection, "orders")
         if "slippage_bps" in orders_cols:
             for (stored_bps,) in _query(connection, "SELECT slippage_bps FROM orders WHERE slippage_bps IS NOT NULL"):
-                slippage_values.append(float(stored_bps))
+                gap_values.append(float(stored_bps))
         if "spread_estimate_bps" in orders_cols:
             for (stored_spread,) in _query(
                 connection,
@@ -800,53 +972,33 @@ def cost_calibration(
         if _table_exists(connection, "fee_activities"):
             fee_values.extend(_unduplicated_activity_fees(connection))
 
-        observed_slippage = _stat_summary(slippage_values)
+        observed_gap = _stat_summary(gap_values)
         observed_spread = _stat_summary(spread_values)
         observed_fees = _stat_summary(fee_values)
 
-        configured_slippage = _to_float(configured.get("slippage_bps", 0.0))
-        configured_spread = _to_float(configured.get("spread_bps", 0.0))
-        modeled_total_bps = configured_slippage + configured_spread / 2.0
-        observed_median = observed_slippage["median"]
-        verdict: str
-        if observed_median is None:
-            verdict = "no_observed_data"
-        else:
-            deviation = observed_median - modeled_total_bps
-            if abs(deviation) <= 0.5 * max(1.0, modeled_total_bps):
-                verdict = "within_model"
-            elif deviation > 0:
-                verdict = "above_model"
-            else:
-                verdict = "below_model"
         return {
             "available": True,
             "configured": configured,
             "observed": {
-                "slippage_bps": observed_slippage,
+                # Key name unchanged: external readers index it directly. The
+                # basis fields below say what the numbers really are.
+                "slippage_bps": observed_gap,
+                "slippage_bps_basis": _GAP_BASIS,
+                "slippage_bps_note": _GAP_NOTE,
                 "spread_estimate_bps": observed_spread,
                 "fees": observed_fees,
+                "modeled_fees": _modeled_fee_summary(backtest, modeled_fee_fills),
                 "total_fees": round(sum(fee_values), 6),
                 "fee_completeness": fee_completeness,
             },
-            "comparison": {
-                "modeled_adverse_bps": round(modeled_total_bps, 4),
-                "observed_median_bps": observed_median,
-                "observed_p75_bps": observed_slippage["p75"],
-                "observed_p95_bps": observed_slippage["p95"],
-                "verdict": verdict,
-                # The current diagnostic is deliberately a decision-close
-                # reference comparison.  It is useful within that diagnostic,
-                # but cannot prove the backtest cost model is conservative.
-                "reference_basis": "decision_close",
-                "alignment_status": "not_backtest_aligned",
-                "transferability_verdict": "UNKNOWN",
-                "measurement_quality": "legacy_close_reference_only",
-            },
+            "comparison": _gap_comparison(observed_gap),
             "reference_basis": "decision_close",
             "alignment_status": "not_backtest_aligned",
             "transferability_verdict": "UNKNOWN",
             "measurement_quality": "legacy_close_reference_only",
+            "is_backtest_cost_model_verdict": False,
+            "backtest_aligned_metric": _BACKTEST_ALIGNED_METRIC,
+            "backtest_aligned_metric_note": _BACKTEST_ALIGNED_NOTE,
             "policy": (
                 "REPORT ONLY: observed costs never adjust any configured "
                 "assumption; a cost-model change requires separate validation and approval."

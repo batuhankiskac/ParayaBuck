@@ -13,9 +13,11 @@ import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from parayabuck.config import BacktestConfig
 from parayabuck.core.models import (
     Direction,
     ExecutionEvent,
@@ -284,7 +286,52 @@ def _seed_portfolio_database(path: Path) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_cost_calibration_aggregates_median_p75_p95(tmp_path: Path) -> None:
+def _seed_equity_fills(path: Path, fills: list[tuple[str, str, str, float, float, float, float]]) -> None:
+    """Seed one equity order+fill per entry of ``fills``.
+
+    Each entry is ``(activity_id, side, occurred_at, quantity,
+    reference_price, fill_price, fee)``. ``reference_price`` is what the
+    planner stamped on the order — the DECISION close — while the fill price
+    is the next session's open.
+    """
+    connection = sqlite3.connect(path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS portfolio_orders (
+                client_order_id TEXT PRIMARY KEY, decision_id TEXT NOT NULL,
+                symbol TEXT NOT NULL, market TEXT NOT NULL, side TEXT NOT NULL,
+                quantity REAL NOT NULL, reference_price REAL NOT NULL,
+                status TEXT NOT NULL, broker_order_id TEXT NOT NULL DEFAULT '',
+                cumulative_filled_quantity REAL NOT NULL DEFAULT 0,
+                average_fill_price REAL, created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS portfolio_fills (
+                activity_id TEXT PRIMARY KEY, client_order_id TEXT NOT NULL,
+                occurred_at TEXT NOT NULL, quantity REAL NOT NULL,
+                price REAL NOT NULL, fee REAL NOT NULL,
+                realized_pnl REAL NOT NULL, unrealized_pnl REAL NOT NULL,
+                slippage REAL NOT NULL
+            );
+            """
+        )
+        for activity, side, occurred, quantity, reference, price, fee in fills:
+            connection.execute(
+                "INSERT INTO portfolio_orders VALUES "
+                "('o-" + activity + "', 'd1', 'AAPL', 'equity', ?, ?, ?, "
+                "'filled', 'b1', ?, ?, '2026-02-05T14:59:00+00:00')",
+                (side, quantity, reference, quantity, price),
+            )
+            connection.execute(
+                "INSERT INTO portfolio_fills VALUES (?, ?, ?, ?, ?, ?, 0.0, 0.0, 0.0)",
+                (activity, "o-" + activity, occurred, quantity, price, fee),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def test_cost_calibration_reports_the_decision_close_gap_without_a_model_verdict(tmp_path: Path) -> None:
     db = tmp_path / "runtime.sqlite3"
     _seed_portfolio_database(db)
     calibration = telemetry.cost_calibration(db)
@@ -294,13 +341,109 @@ def test_cost_calibration_aggregates_median_p75_p95(tmp_path: Path) -> None:
     assert observed["median"] == pytest.approx(10.0)
     assert observed["p75"] == pytest.approx(12.5)
     assert observed["p95"] == pytest.approx(14.5)
+    # The key name survives for existing readers; the basis says what it is.
+    assert calibration["observed"]["slippage_bps_basis"] == "decision_close_reference"
+    assert "DECISION close" in calibration["observed"]["slippage_bps_note"]
+    # A decision-close reference can never adjudicate the backtest cost model.
     comparison = calibration["comparison"]
-    assert comparison["modeled_adverse_bps"] == pytest.approx(3.0)  # 2 bps slippage + 2/2 spread
-    # Median 10 bps is well above the modeled 3 bps -> above_model (report only).
-    assert comparison["verdict"] == "above_model"
+    assert "verdict" not in comparison
+    assert comparison["model_verdict"] is None
+    assert "modeled_adverse_bps" not in comparison
+    assert comparison["observed_median_bps"] == pytest.approx(10.0)
+    assert comparison["alignment_status"] == "not_backtest_aligned"
+    assert calibration["is_backtest_cost_model_verdict"] is False
+    assert calibration["backtest_aligned_metric"] == "shadow_comparator.paper_vs_zero_cost_open_bps"
     assert calibration["policy"].startswith("REPORT ONLY")
     # Observed fees: 0.5 + 0.5 + 3.75.
     assert calibration["observed"]["total_fees"] == pytest.approx(4.75)
+
+
+def test_cost_calibration_emits_no_model_verdict_on_an_overnight_gap(tmp_path: Path) -> None:
+    """A BUY 2% above the decision close is a gap, not a model failure."""
+    db = tmp_path / "gap.sqlite3"
+    _seed_equity_fills(
+        db,
+        [("f1", "buy", "2026-02-06T14:30:00+00:00", 100.0, 100.0, 102.0, 0.0)],
+    )
+    calibration = telemetry.cost_calibration(db)
+    assert calibration["observed"]["slippage_bps"]["median"] == pytest.approx(200.0)
+    serialized = json.dumps(calibration)
+    for verdict in ("above_model", "below_model", "within_model", '"verdict"'):
+        assert verdict not in serialized
+    assert calibration["comparison"]["model_verdict"] is None
+    assert calibration["comparison"]["reference_basis"] == "decision_close"
+    assert calibration["comparison"]["alignment_status"] == "not_backtest_aligned"
+    assert calibration["is_backtest_cost_model_verdict"] is False
+
+
+def test_cost_calibration_modeled_fees_match_observed_when_the_model_is_free(tmp_path: Path) -> None:
+    db = tmp_path / "zero.sqlite3"
+    _seed_equity_fills(
+        db,
+        [("f1", "buy", "2026-02-06T14:30:00+00:00", 100.0, 100.0, 100.0, 0.0)],
+    )
+    config = BacktestConfig(
+        commission=0.0,
+        equity_use_effective_dated_fees=False,
+        equity_taf_per_share=0.0,
+        equity_taf_cap=0.0,
+        equity_cat_per_share=0.0,
+        equity_sec_fee_rate=0.0,
+    )
+    calibration = telemetry.cost_calibration(db, SimpleNamespace(backtest=config))
+    modeled = calibration["observed"]["modeled_fees"]
+    assert modeled["available"] is True
+    assert modeled["count"] == 1
+    assert modeled["total"] == pytest.approx(0.0)
+    # Zero gap and a zero-fee model: observed and modeled agree.
+    assert calibration["observed"]["total_fees"] == pytest.approx(modeled["total"])
+
+
+def test_cost_calibration_modeled_fees_use_the_effective_dated_schedule_per_fill_date(tmp_path: Path) -> None:
+    db = tmp_path / "dated.sqlite3"
+    # Two BUYs: CAT is 0.000022/share in Nov 2025 and 0.000003/share in Jun 2026.
+    _seed_equity_fills(
+        db,
+        [
+            ("f1", "buy", "2025-11-03T14:30:00+00:00", 100.0, 100.0, 100.0, 0.0),
+            ("f2", "buy", "2026-06-01T14:30:00+00:00", 100.0, 100.0, 100.0, 0.0),
+        ],
+    )
+    calibration = telemetry.cost_calibration(db, SimpleNamespace(backtest=BacktestConfig()))
+    modeled = calibration["observed"]["modeled_fees"]
+    assert modeled["count"] == 2
+    # commission defaults to 0; a BUY accrues CAT only: 0.0022 + 0.0003.
+    assert modeled["total"] == pytest.approx(0.0025)
+
+
+def test_cost_calibration_modeled_fees_charge_a_sell_the_configured_flat_schedule(tmp_path: Path) -> None:
+    db = tmp_path / "flat.sqlite3"
+    _seed_equity_fills(
+        db,
+        [("f1", "sell", "2026-06-01T14:30:00+00:00", 100.0, 100.0, 100.0, 0.0)],
+    )
+    config = BacktestConfig(
+        commission=0.005,
+        equity_use_effective_dated_fees=False,
+        equity_taf_per_share=0.000195,
+        equity_taf_cap=9.79,
+        equity_cat_per_share=0.000003,
+        equity_sec_fee_rate=0.0000206,
+    )
+    calibration = telemetry.cost_calibration(db, SimpleNamespace(backtest=config))
+    modeled = calibration["observed"]["modeled_fees"]
+    # commission 0.005 + CAT 0.0003 + TAF 0.0195 (under the 9.79 cap) + SEC 0.206.
+    assert modeled["total"] == pytest.approx(0.2308)
+
+
+def test_cost_calibration_without_a_config_says_so_instead_of_inventing_a_model(tmp_path: Path) -> None:
+    db = tmp_path / "runtime.sqlite3"
+    _seed_portfolio_database(db)
+    calibration = telemetry.cost_calibration(db, SimpleNamespace(backtest=None))
+    modeled = calibration["observed"]["modeled_fees"]
+    assert modeled["available"] is False
+    assert "no configuration available" in modeled["note"]
+    assert calibration["configured"]["available"] is False
 
 
 def test_cost_calibration_no_observed_data_is_report_only(tmp_path: Path) -> None:
@@ -308,8 +451,10 @@ def test_cost_calibration_no_observed_data_is_report_only(tmp_path: Path) -> Non
     sqlite3.connect(db).close()
     calibration = telemetry.cost_calibration(db)
     assert calibration["available"] is True
-    assert calibration["comparison"]["verdict"] == "no_observed_data"
     assert calibration["observed"]["slippage_bps"]["count"] == 0
+    assert calibration["comparison"]["model_verdict"] is None
+    assert calibration["observed"]["modeled_fees"]["available"] is True
+    assert calibration["observed"]["modeled_fees"]["count"] == 0
 
 
 # --------------------------------------------------------------------------

@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Execution-quality report over the runtime ledger.
 
-Prints the cost-calibration report (configured slippage/spread/fees vs the
-observed median/p75/p95 slippage and observed fees) plus the expected-vs-
-actual summary of the latest decisions. REPORT ONLY: this script never
-adjusts a cost assumption, never places an order, and never writes to the
-runtime database.
+Prints the cost-calibration report (configured slippage/spread/fees, the
+observed next-open-vs-decision-close gap, and observed vs modeled fees) plus
+the expected-vs-actual summary of the latest decisions. REPORT ONLY: this
+script never adjusts a cost assumption, never places an order, and never
+writes to the runtime database.
+
+The gap distribution is measured against ``portfolio_orders.reference_price``,
+the DECISION close, while market orders fill at the next session open: it is
+an overnight move, not execution slippage, so this report deliberately prints
+no ``above_model``/``below_model`` verdict. The backtest-aligned comparison
+(next-open fills against the next open, with modeled adverse cost and fees)
+is ``scripts/execution_shadow_report.py``.
 
 Usage:
     .venv/bin/python scripts/execution_quality_report.py [--db PATH] [--config PATH]
@@ -81,23 +88,30 @@ def main() -> int:
         print("  (no configuration available)")
 
     observed = calibration["observed"]
-    _print_summary("Observed slippage (bps, positive = adverse)", observed["slippage_bps"])
+    _print_summary(
+        f"Observed {observed.get('slippage_bps_basis', 'decision close')} gap (bps)", observed["slippage_bps"]
+    )
+    print(f"  basis: {observed.get('slippage_bps_note', 'next open vs decision close')}")
     _print_summary("Observed spread estimates (bps)", observed["spread_estimate_bps"])
     _print_summary("Observed fees", observed["fees"])
     print(f"  total observed fees: {_fmt(observed.get('total_fees'), 6)}")
+    modeled = observed.get("modeled_fees")
+    if isinstance(modeled, dict) and modeled.get("available"):
+        _print_summary("Modeled fees (same fills, backtest cost model)", modeled)
+        print(f"  basis: {configured.get('modeled_fee_basis')}")
+    else:
+        print(f"  modeled fees: {(modeled or {}).get('note', 'not computed')}")
 
     comparison = calibration["comparison"]
-    print("\nDecision-close diagnostic (configured vs observed; not backtest-aligned):")
-    modeled = comparison.get("modeled_adverse_bps")
-    print(f"  modeled adverse bps (slippage + spread/2): {_fmt(modeled)}")
+    print("\nDecision-close diagnostic (NOT a backtest cost-model verdict):")
     print(f"  observed median bps: {_fmt(comparison.get('observed_median_bps'))}")
     print(f"  observed p75 bps:    {_fmt(comparison.get('observed_p75_bps'))}")
     print(f"  observed p95 bps:    {_fmt(comparison.get('observed_p95_bps'))}")
-    print(f"  within-reference verdict: {comparison.get('verdict')}")
+    print(f"  model verdict:       {comparison.get('model_verdict')}")
+    print(f"  model verdict note:  {comparison.get('model_verdict_note')}")
     print(f"  reference basis: {comparison.get('reference_basis', 'decision_close')}")
     print(f"  alignment status: {comparison.get('alignment_status', 'not_backtest_aligned')}")
-    print(f"  transferability verdict: {comparison.get('transferability_verdict', 'UNKNOWN')}")
-    print(f"  measurement quality: {comparison.get('measurement_quality', 'unknown')}")
+    print(f"  backtest-aligned metric: {comparison.get('backtest_aligned_metric')}")
     print(f"  policy: {calibration.get('policy')}")
 
     metrics = execution_metrics(db_path)

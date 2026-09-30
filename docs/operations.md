@@ -314,6 +314,11 @@ equity and the unexplained residual. `scripts/execution_quality_report.py`
 prints fill latency, slippage and fees versus the backtest cost model (report
 only; it never changes behaviour).
 
+It also writes an anonymised replay fixture for offline reproduction. Both
+outputs go to the git-ignored `reports/paper_incident/` tree by default
+(`--report`, `--fixture`); keep broker-linked history out of `tests/`, where a
+later `git add -A` would commit it.
+
 ## Splits and foreign sells
 
 Ownership is net fills, so a corporate action — or another consumer of the
@@ -355,6 +360,28 @@ the other way round: crypto, and equity outside the strategy universe, is
 never ownership drift (`docs/operator_runbook.md`, "Foreign inventory in the
 account"). On a symbol the strategy trades, an unowned QLD holding stays
 `BROKER_STALE` drift and halts, because only the bot may hold or sell it.
+
+## Tests and the isolation gate
+
+The test suite must never touch the trading account or the operator's state,
+and the session enforces that rather than trusting every test:
+
+- `tests/conftest.py` strips `ALPACA_*`/`PARAYABUCK_*` from the environment,
+  points `ENV_PATH` at a file that does not exist, refuses to load any dotenv
+  file inside the repository (so the repo `.env` — the shared PAPER key — is
+  never read), and blocks every non-loopback socket for the whole session.
+  A test therefore cannot log in to Alpaca even if it builds a real broker.
+- The same fixture fails a test that opens or changes a file under
+  `data/runtime/`, `data/cache/` or `logs/`, and redirects the peak sidecar,
+  journal, snapshot, decision DB and receipt defaults into `tmp_path`.
+- `scripts/check_production_isolation.py` is the CI gate around the suite: it
+  records every file under `data/runtime`, `data/cache`, `data/backups` and
+  `logs` before `pytest -q` and verifies the tree is byte-identical (and gained
+  no files) afterwards.
+- Process singletons (the alert webhook config, the Web backtest manager) are
+  reset around every test, so the suite is order independent.
+
+Run it the way CI does: `PYTHONPATH=src ./.venv/bin/python -m pytest -q -o pythonpath=src`.
 
 ## PAPER rules
 

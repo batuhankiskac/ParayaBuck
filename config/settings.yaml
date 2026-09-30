@@ -5,8 +5,9 @@ app:
   # Trading never starts from this file alone. The engine starts only on the
   # machine that sets PARAYABUCK_TRADING_HOST=1 (the systemd unit on the VM);
   # everywhere else `parayabuck web` serves the console and backtests and
-  # refuses to trade. Set true here to let a designated host auto-start.
-  auto_start_engine: false
+  # refuses to trade, so auto-start is safe to leave on: only the designated
+  # host (the VM) actually starts trading after a restart.
+  auto_start_engine: true
   log_level: INFO
 runtime:
   mode: paper

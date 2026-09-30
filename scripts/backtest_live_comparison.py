@@ -28,12 +28,41 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from parayabuck.core.models import Bar, Market  # noqa: E402
+from parayabuck.core.models import AccountSnapshot, Bar, Market  # noqa: E402
+from parayabuck.execution.portfolio import (  # noqa: E402
+    PortfolioRiskLimits,
+    PortfolioRiskOverlay,
+    portfolio_risk_limits_from_config,
+)
 from parayabuck.markets.timeframes import NEW_YORK  # noqa: E402
 from parayabuck.portfolio.base import PortfolioContext  # noqa: E402
 from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1  # noqa: E402
 
 STRATEGY = EquityLeveragedTrendV1.name
+
+# Reference sizing is computed for a cold, empty account: the overlay then
+# reduces to min(maximum_allocation, maximum_equity, maximum_gross,
+# 1 - minimum_cash), the same cap production applies on a flat account.
+COLD_ACCOUNT = AccountSnapshot(cash=1.0, equity=1.0, peak_equity=1.0, daily_pnl=0.0)
+
+
+def reference_target_weight(
+    overlay: PortfolioRiskOverlay,
+    target: Any,
+    hold_symbol: str,
+    allocation: float,
+) -> float:
+    """Strategy weight after the production risk overlay: a cap, never a multiplier."""
+    decision = overlay.apply(
+        target,
+        COLD_ACCOUNT,
+        market=Market.EQUITY,
+        approved_symbols=(hold_symbol,),
+        maximum_allocation=allocation,
+        mode="paper",
+        enforce_drawdown_halt=False,
+    )
+    return sum(weight.weight for weight in decision.target.weights if weight.symbol == hold_symbol)
 
 
 def session_of(timestamp: datetime) -> date:
@@ -77,7 +106,13 @@ def load_live(db: str | Path) -> list[dict[str, Any]]:
         con.close()
 
 
-def reference_decision(strategy: EquityLeveragedTrendV1, bars: dict[str, list[Bar]], session: date) -> dict[str, Any]:
+def reference_decision(
+    strategy: EquityLeveragedTrendV1,
+    bars: dict[str, list[Bar]],
+    session: date,
+    overlay: PortfolioRiskOverlay,
+    allocation: float,
+) -> dict[str, Any]:
     """What the backtest decides on ``session``'s completed official close."""
     history = {
         symbol: tuple(bar for bar in series if session_of(bar.timestamp) <= session) for symbol, series in bars.items()
@@ -105,6 +140,7 @@ def reference_decision(strategy: EquityLeveragedTrendV1, bars: dict[str, list[Ba
         "signal_sma": target.metadata["signal_sma"],
         "realized_volatility": target.metadata["realized_volatility"],
         "strategy_weight": sum(weight.weight for weight in target.weights),
+        "target_weight": reference_target_weight(overlay, target, strategy.hold_symbol, allocation),
         "fill_session": session_of(later[0].timestamp).isoformat() if later else None,
         "fill_open": later[0].open if later else None,
     }
@@ -114,13 +150,15 @@ def compare(
     live: list[dict[str, Any]],
     bars: dict[str, list[Bar]],
     strategy: EquityLeveragedTrendV1,
+    risk_limits: PortfolioRiskLimits,
     allocation: float,
     band: float,
 ) -> dict[str, Any]:
+    overlay = PortfolioRiskOverlay(risk_limits)
     rows = []
     for decision in live:
         session = session_of(decision["decision_timestamp"])
-        ref = reference_decision(strategy, bars, session)
+        ref = reference_decision(strategy, bars, session, overlay, allocation)
         meta = decision["target"].get("metadata", {})
         live_weight = sum(
             float(w["weight"]) for w in decision["target"].get("weights", ()) if w["symbol"] == strategy.hold_symbol
@@ -146,8 +184,7 @@ def compare(
         if ref["status"] != "ok":
             flags.append(ref["status"])
         else:
-            expected = ref["strategy_weight"] * allocation
-            row["reference"]["target_weight"] = expected
+            expected = ref["target_weight"]
             row["weight_gap"] = live_weight - expected
             if meta.get("trend_state") != ref["trend_state"]:
                 flags.append("trend_state_mismatch")
@@ -206,7 +243,12 @@ def main() -> int:
         if bar.symbol in wanted and bar.timeframe == "1d":
             bars[bar.symbol].append(bar)
     report = compare(
-        load_live(args.db), bars, strategy, selection.maximum_allocation, config.execution.rebalance_band_pct
+        load_live(args.db),
+        bars,
+        strategy,
+        portfolio_risk_limits_from_config(config.risk),
+        selection.maximum_allocation,
+        config.execution.rebalance_band_pct,
     )
     rendered = json.dumps(report, indent=2, sort_keys=True, default=str) + "\n"
     if args.json_output:

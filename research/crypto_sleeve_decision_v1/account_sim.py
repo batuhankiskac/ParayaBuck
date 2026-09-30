@@ -11,9 +11,11 @@ Inputs are read directly from immutable git tags (no download, no network):
   costs included; its ``daily_bars`` supply BTC/USD daily closes for the BTC references).
 
 Model (calendar-day loop, UTC days):
-* VT35 equity: QLD weight = cap * min(1, 0.35 / sample-vol20 of QLD simple returns * sqrt(252))
-  while QQQ close > SMA200, else 0. Decided on the session close, traded at the NEXT session
-  open (engine semantics; ``next_close`` kept as a conservative calibration), 0.005 NAV band,
+* VT35 equity: QLD weight = min(cap, min(1, 0.35 / (sample-vol20 of QLD simple returns
+  * sqrt(252)))) while QQQ close > SMA200, else 0. The risk overlay CAPS the strategy
+  weight at the allocation; it never multiplies by it. Decided on the session close,
+  traded at the NEXT session open (engine semantics; ``next_close`` kept as a
+  conservative calibration), 0.005 NAV band,
   3 bps per traded notional (2 bps slippage + half of 2 bps spread). QLD dividends credited on ex-date.
 * Strategy crypto sleeve: additive contribution account_nav * r_replay where r_replay is the
   replay's daily NAV return (the replay keeps ~5% of its own NAV in crypto, 95% idle cash).
@@ -238,7 +240,7 @@ def simulate(
             pending_cr = None
         # 3) decide on this close
         if d in session and d in weights:
-            pending_eq = eq_cap * weights[d]
+            pending_eq = min(eq_cap, weights[d])
         series.append((d, nav))
         d += timedelta(days=1)
     m = metrics(series)

@@ -64,7 +64,7 @@ def target(i: int, qqq: list[float], qc: list[float]) -> float:
     return 1.0 if vol <= 0 else min(1.0, 0.35 / vol)
 
 
-def run(data, mode: str, alloc: float = 0.93, bps: float = 3.0, band: float = 0.005):  # type: ignore[no-untyped-def]
+def run(data, mode: str, alloc: float = 0.98, bps: float = 3.0, band: float = 0.005):  # type: ignore[no-untyped-def]
     days, qqq, qo, qc, divs = data
     first = days.index(next(d for d in days if d >= START))
     cash, shares, curve, trades = 1.0, 0.0, [], 0
@@ -97,7 +97,7 @@ def run(data, mode: str, alloc: float = 0.93, bps: float = 3.0, band: float = 0.
             else:
                 trade(qc[i], value)
         nav = cash + shares * qc[i]
-        weight = target(i, qqq, qc) * alloc
+        weight = min(target(i, qqq, qc), alloc)
         current = shares * qc[i] / nav
         if abs(weight - current) >= band and not (weight == 0 and shares == 0) and i + 1 < len(days):
             quantity = weight * nav / qc[i]
@@ -134,7 +134,7 @@ def metrics(curve, a: str = START, b: str = END) -> dict[str, float]:  # type: i
 def main() -> int:
     data = load(sys.argv[1])
     out: dict[str, dict[str, object]] = {}
-    for alloc in (1.0, 0.93):
+    for alloc in (1.0, 0.98):
         for bps in (3.0, 6.0, 9.0):
             key = f"alloc={alloc} bps={bps}"
             out[key] = {}

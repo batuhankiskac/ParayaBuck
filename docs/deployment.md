@@ -205,8 +205,9 @@ environment the test suite runs in. When a deploy changes it — the 2026-10-01
 closure update did — reinstall it on the VM with the command above; the
 `pip install -e . --no-deps` line alone leaves the old pins in place.
 
-From 2026-10-01 the trading host must be designated explicitly, and the
-shipped config no longer auto-starts. Before restarting:
+From 2026-10-01 the trading host must be designated explicitly. The shipped
+config keeps `app.auto_start_engine: true`, which is safe because only a host
+with `PARAYABUCK_TRADING_HOST=1` can start the engine. Before restarting:
 
 ```bash
 # 1. the unit line (add it once; it is not managed by the bundle)
@@ -220,9 +221,8 @@ grep -n auto_start_engine config/settings.yaml   # app.auto_start_engine: true
 Without step 1 the engine refuses to start on the shared account; without
 step 2 it stays `stopped` until an operator presses Start (readiness reports
 `trading_expected=false`, so check it explicitly rather than trusting a 200).
-`config/settings.yaml` is tracked: step 2 is a local edit, and a later bundle
-that changes the `app:` block makes `git merge --ff-only` abort rather than
-overwrite it.
+Step 2 needs no local edit: the shipped value is already `true`. On the VM the
+unit line lives in the drop-in `/etc/systemd/system/parayabuck.service.d/trading-host.conf`.
 
 Verify:
 

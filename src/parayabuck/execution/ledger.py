@@ -94,6 +94,7 @@ class ExecutionLedger:
             self._migrate_v4_circuit_breaker_backfill()
             self._migrate_v5_execution_quality_columns()
             self._migrate_v6_watermark()
+            self._migrate_v7_fee_booking_marker()
             self.connection.commit()
 
     def _create_initial_schema(self) -> None:
@@ -361,6 +362,25 @@ class ExecutionLedger:
             """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
                 VALUES (6, CURRENT_TIMESTAMP)
+                """
+        )
+
+    def _migrate_v7_fee_booking_marker(self) -> None:
+        # v7: ``fee_activities.booked`` records whether a recorded fee has
+        # actually been added to its managed lot's ``entry_fees`` /
+        # ``exit_fees``. The activity primary key alone only proves the fee
+        # was SEEN: a fee applied before its fill existed matched 0
+        # ``managed_positions`` rows, and the next pass short-circuited on
+        # the key, so the commission stayed unbooked for good. The DEFAULT is
+        # 1 on purpose -- every row written before this migration was applied
+        # under the old code, and defaulting them to pending would
+        # double-count them on the next pass. New rows are inserted with 0
+        # and flipped to 1 only once the lot update lands.
+        self._ensure_column("fee_activities", "booked", "INTEGER NOT NULL DEFAULT 1")
+        self.connection.execute(
+            """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (7, CURRENT_TIMESTAMP)
                 """
         )
 
@@ -732,7 +752,16 @@ class ExecutionLedger:
         fee: float,
         occurred_at: datetime,
     ) -> bool:
-        """Apply one Alpaca fill-activity fee exactly once."""
+        """Apply one Alpaca fill-activity fee exactly once, repairably.
+
+        The fee row is written when the activity is first seen, but it only
+        counts against the managed lot once the ``managed_positions`` update
+        actually matched a row -- that is what ``fee_activities.booked``
+        records. The reconciler re-reads the 24 h overlap window on every
+        pass, so a fee whose lot did not exist yet (a cold start that has to
+        recover the fill itself from account activity) is booked by a later
+        pass instead of being stranded by the activity primary key.
+        """
         if fee <= 0 or not activity_id or not broker_order_id:
             return False
         now = occurred_at.isoformat()
@@ -753,14 +782,22 @@ class ExecutionLedger:
                 inserted = self.connection.execute(
                     """
                     INSERT OR IGNORE INTO fee_activities(
-                        activity_id, client_order_id, fee, occurred_at
-                    ) VALUES (?, ?, ?, ?)
+                        activity_id, client_order_id, fee, occurred_at, booked
+                    ) VALUES (?, ?, ?, ?, 0)
                     """,
                     (activity_id, str(entry_client_order_id or order[0]), fee, now),
                 )
                 if not inserted.rowcount:
-                    self.connection.commit()
-                    return False
+                    recorded = self.connection.execute(
+                        "SELECT booked FROM fee_activities WHERE activity_id=?",
+                        (activity_id,),
+                    ).fetchone()
+                    if recorded is None or int(recorded[0] or 0):
+                        self.connection.commit()
+                        return False
+                    # Recorded but never booked: the lot may exist now, so
+                    # fall through and complete the booking instead of
+                    # treating the primary-key hit as "already applied".
                 if entry_client_order_id is None:
                     # The fee is real and must be recorded, but this order is
                     # not linked to a managed lot, so there is no
@@ -773,10 +810,14 @@ class ExecutionLedger:
                         order[0],
                         fee,
                     )
+                    self.connection.execute(
+                        "UPDATE fee_activities SET booked=1 WHERE activity_id=?",
+                        (activity_id,),
+                    )
                     self.connection.commit()
                     return True
                 if OrderRole(str(order[2])) == OrderRole.ENTRY:
-                    self.connection.execute(
+                    booked = self.connection.execute(
                         """
                         UPDATE managed_positions
                         SET entry_fees=entry_fees+?,
@@ -794,13 +835,29 @@ class ExecutionLedger:
                         (fee, fee, now, account_id, str(entry_client_order_id)),
                     )
                 else:
-                    self.connection.execute(
+                    booked = self.connection.execute(
                         """
                         UPDATE managed_positions
                         SET exit_fees=exit_fees+?, realized_pnl=realized_pnl-?, updated_at=?
                         WHERE account_id=? AND entry_client_order_id=?
                         """,
                         (fee, fee, now, account_id, str(entry_client_order_id)),
+                    )
+                if booked.rowcount:
+                    self.connection.execute(
+                        "UPDATE fee_activities SET booked=1 WHERE activity_id=?",
+                        (activity_id,),
+                    )
+                else:
+                    # No lot to book against yet. The row stays pending and a
+                    # later pass re-reads the activity and retries; every
+                    # reconcile pass can rediscover the same order, so this
+                    # transient state must not warn.
+                    log.debug(
+                        "Fee recorded before its managed lot exists: activity_id=%s client_order_id=%s fee=%s",
+                        activity_id,
+                        order[0],
+                        fee,
                     )
                 self.connection.commit()
                 return True

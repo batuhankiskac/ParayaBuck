@@ -248,6 +248,12 @@ class ReconciliationService:
         # ledger event is cumulative, so each activity must carry the sum.
         recovered_sell_totals: dict[str, tuple[float, float]] = {}
         applied_watermark: datetime | None = None
+        # Fees are applied in a SECOND pass, after entry fills have been
+        # recovered below. Booking a fee first would match 0
+        # ``managed_positions`` rows on a cold start (the lot is created by
+        # the fill recovery itself), and the activity primary key would then
+        # strand the commission for good.
+        pending_fees: list[tuple[str, str, float, datetime]] = []
         # (activity_id, side, symbol, reason) for the activities this pass
         # deliberately did not apply. Reported, never fatal.
         skipped: list[tuple[str, str, str, str]] = []
@@ -325,15 +331,7 @@ class ReconciliationService:
                 recovered_buy_fills.setdefault(broker_order_id, []).append(
                     (qty, price, occurred_at, activity_id, symbol)
                 )
-            applied = ledger.apply_fee_activity(
-                broker._account_id or "unknown",
-                activity_id=activity_id,
-                broker_order_id=broker_order_id,
-                fee=fee,
-                occurred_at=occurred_at,
-            )
-            if applied:
-                log.info("Fee activity applied: broker_order_id=%s fee=%s", activity.get("order_id"), fee)
+            pending_fees.append((activity_id, broker_order_id, fee, occurred_at))
         entry_lookup = getattr(ledger, "entry_order_for_broker_id", None)
         if entry_lookup is not None:
             for broker_order_id, fills in recovered_buy_fills.items():
@@ -378,6 +376,15 @@ class ReconciliationService:
                     broker_order_id,
                     cumulative,
                 )
+        for activity_id, broker_order_id, fee, occurred_at in pending_fees:
+            if ledger.apply_fee_activity(
+                broker._account_id or "unknown",
+                activity_id=activity_id,
+                broker_order_id=broker_order_id,
+                fee=fee,
+                occurred_at=occurred_at,
+            ):
+                log.info("Fee activity applied: broker_order_id=%s fee=%s", broker_order_id, fee)
         if skipped:
             unexpected = [item for item in skipped if item[3] == "unexpected_side"]
             log.warning(

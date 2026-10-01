@@ -145,6 +145,77 @@ def test_fill_activity_fee_is_booked_exactly_once_on_replay(tmp_path: Path) -> N
     ledger.close()
 
 
+def _entry_fee_activity(commission: str = "0.75") -> list[dict[str, Any]]:
+    """A BUY fill activity for ``broker-entry``, the cold-start case: the
+    stream never delivered this fill, so the lot does not exist yet."""
+    return [
+        {
+            "id": "act-cold-entry",
+            "order_id": "broker-entry",
+            "side": "buy",
+            "symbol": "AAPL",
+            "qty": "5",
+            "price": "100",
+            "commission": commission,
+            "transaction_time": "2026-01-02T14:00:00+00:00",
+        }
+    ]
+
+
+def _unfilled_entry(ledger: ExecutionLedger) -> OrderIntent:
+    """A registered entry order with NO booked fill: the state a cold start
+    finds when the stream lost the fill that the broker did execute."""
+    order = OrderIntent(
+        signal_id="signal-cold",
+        symbol="AAPL",
+        market=Market.EQUITY,
+        direction=Direction.LONG,
+        qty=5.0,
+        entry_price=100.0,
+        stop_price=95.0,
+        target_price=110.0,
+        strategy="test",
+        client_order_id="entry-cold",
+    )
+    ledger.register_entry_order("acct", order, "broker-entry")
+    return order
+
+
+def test_cold_start_entry_fill_recovery_books_its_commission(tmp_path: Path) -> None:
+    """A fill recovered from account activity must carry its commission with it.
+
+    The entry lot is created BY the fill recovery, so a fee booked before that
+    pass matches no ``managed_positions`` row. The commission then has to be
+    repairable, or ``total_fees_for_account`` under-reports the entry cost for
+    the rest of the account's life.
+    """
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    _unfilled_entry(ledger)
+    broker = _fill_activity_broker(tmp_path, ledger, _entry_fee_activity())
+
+    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
+
+    position = ledger.managed_for_account("acct")["AAPL"]
+    assert position.owned_qty == 5.0
+    assert ledger.total_fees_for_account("acct") == pytest.approx(0.75)
+    ledger.close()
+
+
+def test_cold_start_entry_commission_is_not_double_counted_on_replay(tmp_path: Path) -> None:
+    """The repair is idempotent: re-reading the overlap window books it once."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    _unfilled_entry(ledger)
+    broker = _fill_activity_broker(tmp_path, ledger, _entry_fee_activity())
+
+    reconciler = ReconciliationService(broker)
+    assert reconciler._reconcile_fill_activity_fees() is True
+    assert reconciler._reconcile_fill_activity_fees() is True
+
+    assert ledger.total_fees_for_account("acct") == pytest.approx(0.75)
+    assert ledger.connection.execute("SELECT COUNT(*) FROM fee_activities").fetchone()[0] == 1
+    ledger.close()
+
+
 def _unlinked_exit_event(cumulative: float) -> ExecutionEvent:
     # A real execution event; FILL-activity backfill rows (``alpaca-fill-
     # activity-*``) record completed broker fills and are stamped terminal.

@@ -1,10 +1,11 @@
 """Fault injection for the Alpaca execution boundary.
 
 Every test drives PRODUCTION code -- ``AlpacaBroker._submit_with_recovery``,
-``AlpacaBroker._wait_for_cancel_confirmation`` and the broker's FILL-activity
-backfill -- and asserts the broker's decision (returned order, raised
-exception, alert payload, ledger rows). ``FakeTradingClient`` only supplies
-scripted broker responses; it is never the subject of an assertion.
+``ProtectionService._wait_for_cancel_confirmation`` and
+``ReconciliationService._reconcile_fill_activity_fees`` -- and asserts the
+boundary's decision (returned order, raised exception, alert payload, ledger
+rows). ``FakeTradingClient`` only supplies scripted broker responses; it is
+never the subject of an assertion.
 
 Offline and deterministic: the client is a local fake, ledger and peak
 sidecar live under ``tmp_path``, and the cancel-confirmation loop bounds are
@@ -23,9 +24,11 @@ import pytest
 from alpaca.common.exceptions import APIError
 
 from parayabuck.core.models import Direction, Fill, Market, OrderIntent
-from parayabuck.execution import alpaca as alpaca_module
+from parayabuck.execution import alpaca_protection as protection_module
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.alpaca_models import AmbiguousOrderState
+from parayabuck.execution.alpaca_protection import ProtectionService
+from parayabuck.execution.alpaca_reconciliation import ReconciliationService
 from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.monitoring import alerts
@@ -46,12 +49,13 @@ def alerts_emitted(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str,
 
 @pytest.fixture
 def broker(tmp_path: Path) -> Iterator[AlpacaBroker]:
-    """A production broker wired to a ``tmp_path`` ledger/peak sidecar."""
+    """A production broker wired to a ``tmp_path`` ledger/peak sidecar.
+
+    The services under test are constructed against this broker directly:
+    the facade keeps no fallback copies of their logic.
+    """
     ledger = ExecutionLedger(str(tmp_path / "ledger.db"))
     instance = AlpacaBroker("k", "s", paper=True, ledger=ledger, peak_state_path=tmp_path / "peak.json")
-    # The facade only falls back to its own cancel-confirmation loop when no
-    # protection service is attached; that is the branch under test.
-    instance.__dict__.pop("_protection_service", None)
     try:
         yield instance
     finally:
@@ -66,8 +70,8 @@ def _broker_with_fake(instance: AlpacaBroker, fake: FakeTradingClient) -> Alpaca
 
 def _fast_cancel_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
     """Collapse the module-level cancel-confirmation bounds to milliseconds."""
-    monkeypatch.setattr(alpaca_module, "STOP_CANCEL_TIMEOUT_SECONDS", _CANCEL_TIMEOUT_SECONDS)
-    monkeypatch.setattr(alpaca_module, "STOP_CANCEL_POLL_INTERVAL_SECONDS", _CANCEL_POLL_INTERVAL_SECONDS)
+    monkeypatch.setattr(protection_module, "STOP_CANCEL_TIMEOUT_SECONDS", _CANCEL_TIMEOUT_SECONDS)
+    monkeypatch.setattr(protection_module, "STOP_CANCEL_POLL_INTERVAL_SECONDS", _CANCEL_POLL_INTERVAL_SECONDS)
 
 
 def _not_found_error() -> APIError:
@@ -185,6 +189,7 @@ def test_cancel_confirmation_returns_once_the_broker_reports_canceled(
 ) -> None:
     """The loop keeps polling until the broker confirms the cancellation."""
     _fast_cancel_bounds(monkeypatch)
+    protection = ProtectionService(broker)
     statuses = ["pending_cancel", "canceled"]
 
     def order_by_id(order_id: str) -> Any:
@@ -194,7 +199,7 @@ def test_cancel_confirmation_returns_once_the_broker_reports_canceled(
     fake.script_get_order_by_id = order_by_id
     _broker_with_fake(broker, fake)
 
-    broker._wait_for_cancel_confirmation("o1", "IWM")
+    protection._wait_for_cancel_confirmation("o1", "IWM")
 
     # The first poll was not terminal, so production had to ask again.
     assert statuses == []
@@ -207,6 +212,7 @@ def test_cancel_confirmation_is_ambiguous_when_the_broker_never_confirms(
     """A still-pending protective order after the bound is an ambiguity, not a cancel."""
     _fast_cancel_bounds(monkeypatch)
     polls: list[str] = []
+    protection = ProtectionService(broker)
 
     def order_by_id(order_id: str) -> Any:
         polls.append(order_id)
@@ -217,7 +223,7 @@ def test_cancel_confirmation_is_ambiguous_when_the_broker_never_confirms(
     _broker_with_fake(broker, fake)
 
     with pytest.raises(AmbiguousOrderState) as excinfo:
-        broker._wait_for_cancel_confirmation("o1", "IWM")
+        protection._wait_for_cancel_confirmation("o1", "IWM")
 
     assert "IWM" in str(excinfo.value)
     assert polls  # the broker polled the order before giving up
@@ -231,6 +237,7 @@ def test_cancel_confirmation_is_ambiguous_when_the_protective_order_fills(
 ) -> None:
     """A fill landing mid-cancel means the stop executed: halt, loudly."""
     _fast_cancel_bounds(monkeypatch)
+    protection = ProtectionService(broker)
     fake = FakeTradingClient()
     fake.script_get_order_by_id = lambda order_id: SimpleNamespace(
         id=order_id, symbol="IWM", status="filled", filled_qty="10"
@@ -238,7 +245,7 @@ def test_cancel_confirmation_is_ambiguous_when_the_protective_order_fills(
     _broker_with_fake(broker, fake)
 
     with pytest.raises(AmbiguousOrderState) as excinfo:
-        broker._wait_for_cancel_confirmation("o1", "IWM")
+        protection._wait_for_cancel_confirmation("o1", "IWM")
 
     assert "IWM" in str(excinfo.value)
     assert alerts_emitted == [
@@ -297,11 +304,12 @@ def test_a_redelivered_fill_activity_is_booked_once(broker: AlpacaBroker) -> Non
     fake.activities = [_fill_activity("activity-1", qty="10", price="100", at=_FILLED_AT, commission="1")]
     _broker_with_fake(broker, fake)
     broker._account_id = "acct"
+    reconciler = ReconciliationService(broker)
 
-    assert broker._reconcile_fill_activity_fees() is True
+    assert reconciler._reconcile_fill_activity_fees() is True
     # The same activity id arrives again on the next pass (a restart replays
     # the 24 h overlap window).
-    assert broker._reconcile_fill_activity_fees() is True
+    assert reconciler._reconcile_fill_activity_fees() is True
 
     assert ledger.connection.execute(
         "SELECT cumulative_filled_qty, average_fill_price, terminal_state FROM orders WHERE client_order_id=?",
@@ -342,14 +350,15 @@ def test_recovered_fills_extend_a_known_lot_and_book_their_fee_once(broker: Alpa
     ]
     _broker_with_fake(broker, fake)
     broker._account_id = "acct"
+    reconciler = ReconciliationService(broker)
 
-    assert broker._reconcile_fill_activity_fees() is True
+    assert reconciler._reconcile_fill_activity_fees() is True
     recovered = ledger.managed_for_account("acct")["XLE"]
     assert recovered.owned_qty == 10.0
     assert recovered.filled_avg_price == pytest.approx(101.5)
     assert ledger.total_fees_for_account("acct") == pytest.approx(1.0)
 
-    assert broker._reconcile_fill_activity_fees() is True
+    assert reconciler._reconcile_fill_activity_fees() is True
 
     replayed = ledger.managed_for_account("acct")["XLE"]
     assert replayed.owned_qty == 10.0

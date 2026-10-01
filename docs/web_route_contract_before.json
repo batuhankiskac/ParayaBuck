@@ -52,16 +52,6 @@
       "category": "control"
     },
     {
-      "path": "/api/crypto",
-      "methods": [
-        "GET"
-      ],
-      "name": "dashboard_crypto",
-      "cls": "APIRoute",
-      "mutating": false,
-      "category": "dashboard"
-    },
-    {
       "path": "/api/dashboard/overview",
       "methods": [
         "GET"
@@ -192,6 +182,36 @@
       "category": "safety"
     },
     {
+      "path": "/api/ops/decisions/latest",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_ops_latest",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "ops"
+    },
+    {
+      "path": "/api/ops/events",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_ops_events",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "ops"
+    },
+    {
+      "path": "/api/ops/incidents",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_ops_incidents",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "ops"
+    },
+    {
       "path": "/api/ops/status",
       "methods": [
         "GET"
@@ -200,6 +220,26 @@
       "cls": "APIRoute",
       "mutating": false,
       "category": "ops"
+    },
+    {
+      "path": "/api/ops/timeline/{decision_id}",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_ops_timeline",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "ops"
+    },
+    {
+      "path": "/api/performance",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_performance",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
     },
     {
       "path": "/api/risk",
@@ -247,6 +287,36 @@
         "POST"
       ],
       "name": "save_settings",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "settings"
+    },
+    {
+      "path": "/api/settings/",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_settings_slash",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "settings"
+    },
+    {
+      "path": "/api/settings/",
+      "methods": [
+        "PATCH"
+      ],
+      "name": "patch_settings_slash",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "settings"
+    },
+    {
+      "path": "/api/settings/",
+      "methods": [
+        "POST"
+      ],
+      "name": "save_settings_slash",
       "cls": "APIRoute",
       "mutating": true,
       "category": "settings"

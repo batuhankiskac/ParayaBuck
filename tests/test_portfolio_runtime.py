@@ -2593,7 +2593,7 @@ def test_backtest_decides_but_runtime_waits_for_boundary_then_catch_up_fires(
     assert result.status == "submitted"
     assert result.target is not None
     assert result.target.metadata.get("decision_origin") == "startup_catch_up"
-    assert result.target.invested_weight > 0
+    assert sum(w.weight for w in result.target.weights) > 0
     assert result.orders
     assert all(order.side == PortfolioOrderSide.BUY for order in result.orders)
     assert len(broker.submitted) == len(result.orders)
@@ -2941,7 +2941,7 @@ def test_forced_scheduled_applies_full_target_and_leaves_normal_cadence_unchange
     assert forced.status == "submitted"
     assert forced.target is not None
     assert forced.target.metadata.get("decision_origin") == "test_origin"
-    assert forced.target.invested_weight > 0
+    assert sum(w.weight for w in forced.target.weights) > 0
     assert forced.orders and all(order.side == PortfolioOrderSide.BUY for order in forced.orders)
 
     # A later normal scheduled decision is not labelled as a catch-up.

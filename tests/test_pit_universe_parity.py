@@ -66,8 +66,6 @@ def test_excluded_symbol_not_ranked() -> None:
     assert not ctx.in_universe("ZZZ_EXCLUDED"), "Excluded symbol should be out of universe"
     assert not ctx.in_universe("AAA"), "Unconfigured symbol should be out of universe"
     assert ctx.in_universe("SPY"), "Configured symbol should be in universe"
-    ranked = strat.rank_candidates(ctx)
-    assert "ZZZ_EXCLUDED" not in ranked, "Strategy ranked excluded symbol"
 
 
 def test_ca_parity_source_same_for_old_and_full() -> None:

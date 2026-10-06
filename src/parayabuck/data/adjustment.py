@@ -17,8 +17,8 @@ Design v3:
 * ``merge_provider_authority`` overrides stored bars wherever the provider
   speaks, retains stored bars STRICTLY NEWER than the provider tail
   (provisional stream bars), and RETAINS stored bars OLDER than the
-  provider window verbatim when they are outside its span AND agree with
-  the basis implied by the overlap boundary. A successful verification can
+  provider window verbatim (the window spans every bar the strategy reads,
+  so they are never decision inputs). A successful verification can
   therefore never shorten a healthy 274+ bar history.
 * Adequacy is checked per symbol BEFORE anything is adopted: a partial or
   empty provider response fails closed instead of marking global success.
@@ -39,16 +39,6 @@ from datetime import date, datetime
 
 from parayabuck.core.models import Bar
 from parayabuck.markets.timeframes import NEW_YORK
-
-# A raw vs split-adjusted close difference within this relative band is
-# provider rounding noise, not a corporate action.
-SPLIT_RATIO_TOLERANCE = 0.005
-
-
-def close_matches(left: float, right: float, tolerance: float = SPLIT_RATIO_TOLERANCE) -> bool:
-    if left <= 0 or right <= 0:
-        return False
-    return abs(left - right) / right <= tolerance
 
 
 def signal_session_date(timestamp: datetime) -> date:
@@ -101,22 +91,6 @@ def adequate_coverage(
     return True
 
 
-def detect_basis_break(
-    stored: Sequence[Bar],
-    provider_splits: Sequence[Bar],
-    tolerance: float = SPLIT_RATIO_TOLERANCE,
-) -> bool:
-    """True when stored history disagrees with the provider's splits series
-    on any common timestamp — i.e. a corporate action rebased the basis
-    since the stored bars were written."""
-    adjusted = {bar.timestamp: bar.close for bar in provider_splits}
-    for bar in stored:
-        reference = adjusted.get(bar.timestamp)
-        if reference is not None and not close_matches(bar.close, reference, tolerance):
-            return True
-    return False
-
-
 def merge_provider_authority(
     stored: Sequence[Bar],
     provider_splits: Sequence[Bar],
@@ -136,9 +110,11 @@ def merge_provider_authority(
        once every covered session was rebased).
     3. Stored bars strictly OLDER than the provider's oldest are RETAINED
        verbatim — they are outside the verified window. Retention is sound
-       only when no basis break exists anywhere (callers verify first); the
-       result length therefore never drops below ``len(stored)`` minus
-       in-span holes the provider explicitly does not list.
+       because the verifier's provider window spans the strategy's whole
+       required history (``adequate_coverage``), so any retained bar is one
+       the strategy no longer reads; the result length therefore never drops
+       below ``len(stored)`` minus in-span holes the provider explicitly
+       does not list.
     4. Stored bars INSIDE the provider span that the provider does not list
        are dropped (provider holes are authoritative gaps).
 
@@ -180,23 +156,10 @@ def merge_provider_authority(
     return ordered, changed
 
 
-def verify_against_provider(
-    stored: Sequence[Bar],
-    provider_splits: Sequence[Bar],
-    tolerance: float = SPLIT_RATIO_TOLERANCE,
-) -> bool:
-    """Whether EVERY overlapping stored bar matches the provider basis."""
-    return not detect_basis_break(stored, provider_splits, tolerance)
-
-
 __all__ = [
-    "SPLIT_RATIO_TOLERANCE",
     "adequate_coverage",
-    "close_matches",
     "coverage_span",
     "covers_session",
-    "detect_basis_break",
     "merge_provider_authority",
     "signal_session_date",
-    "verify_against_provider",
 ]

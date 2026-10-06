@@ -170,19 +170,11 @@ def test_no_trade_event_re_emits_on_the_next_decision_day(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_param_helpers_reject_boolean_parameters():
+def test_boolean_parameters_are_rejected_at_construction():
     # A YAML ``sma_bars: true`` must fail closed at construction instead of
     # silently becoming 1 through ``isinstance(True, int)``.
     with pytest.raises(ValueError, match="sma_bars must be a non-negative integer"):
         EquityLeveragedTrendV1({"sma_bars": True})
-
-    strategy = EquityLeveragedTrendV1()
-    strategy.parameters["sma_bars"] = True
-    with pytest.raises(ValueError, match="sma_bars must be numeric"):
-        strategy.param_int("sma_bars", 200)
-    strategy.parameters["vol_target"] = True
-    with pytest.raises(ValueError, match="vol_target must be numeric"):
-        strategy.param_float("vol_target", 0.0)
 
 
 # ---------------------------------------------------------------------------

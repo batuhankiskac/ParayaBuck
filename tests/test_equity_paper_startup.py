@@ -177,7 +177,7 @@ def test_equity_startup_contract_offline(tmp_path: Path) -> None:
     assert equity_runtime.startup_catch_up_status == "submitted"
     assert catch_up.target is not None
     assert catch_up.target.metadata.get("decision_origin") == "startup_catch_up"
-    assert catch_up.target.invested_weight > 0
+    assert sum(w.weight for w in catch_up.target.weights) > 0
 
     # Account reconciliation: a fresh broker snapshot before any decision.
     account = broker.account()
@@ -208,7 +208,7 @@ def test_equity_startup_contract_offline(tmp_path: Path) -> None:
     ).fetchone()
     assert row is not None
     target = TargetPortfolio.from_dict(json.loads(str(row[0])))
-    assert target.invested_weight <= 0.50 + 1e-9
+    assert sum(w.weight for w in target.weights) <= 0.50 + 1e-9
     assert len(target.weights) <= config.risk.max_positions
     markets = {str(row[0]) for row in connection.execute("SELECT DISTINCT market FROM portfolio_decisions")}
     assert markets == {"equity"}

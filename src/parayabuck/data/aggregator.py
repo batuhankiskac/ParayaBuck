@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from itertools import pairwise
 
 from parayabuck.core.models import Bar
 from parayabuck.logger import get_logger
@@ -192,43 +191,4 @@ def _combine_bars(ordered: list[Bar], timestamp: datetime, timeframe: str) -> Ba
     )
 
 
-def aggregate_historical_bars(
-    bars: list[Bar],
-    target_timeframe: str,
-    *,
-    require_complete: bool = True,
-) -> list[Bar]:
-    """Aggregate closed historical bars without leaking incomplete target bars."""
-    if not bars:
-        return []
-    source_timeframes = {bar.timeframe for bar in bars}
-    if len(source_timeframes) != 1:
-        raise ValueError("Historical aggregation requires one source timeframe")
-    source_timeframe = next(iter(source_timeframes))
-    source_minutes = TIMEFRAME_MINUTES[source_timeframe]
-    target_minutes = TIMEFRAME_MINUTES[target_timeframe]
-    if target_minutes < source_minutes or target_minutes % source_minutes:
-        raise ValueError("Target timeframe must be an integer multiple of the source")
-    if target_minutes == source_minutes:
-        return [Bar(**{**bar.__dict__, "timeframe": target_timeframe}) for bar in bars]
-
-    aggregator = TimeframeAggregator(target_timeframe)
-    buckets: dict[tuple[str, datetime], list[Bar]] = {}
-    for bar in sorted(bars, key=lambda item: (item.symbol, item.timestamp)):
-        bucket = aggregator._bucket(bar.timestamp)
-        buckets.setdefault((bar.symbol, bucket), []).append(bar)
-    expected = target_minutes // source_minutes
-    result: list[Bar] = []
-    source_delta = timedelta(minutes=source_minutes)
-    # Each bucket list holds one symbol appended in timestamp order already.
-    for (_symbol, bucket), ordered in sorted(buckets.items(), key=lambda item: (item[0][1], item[0][0])):
-        contiguous = all(
-            current.timestamp - previous.timestamp == source_delta for previous, current in pairwise(ordered)
-        )
-        if require_complete and (len(ordered) != expected or not contiguous):
-            continue
-        result.append(_combine_bars(ordered, bucket, target_timeframe))
-    return result
-
-
-__all__ = ["TimeframeAggregator", "aggregate_historical_bars"]
+__all__ = ["TimeframeAggregator"]

@@ -42,7 +42,7 @@ class PortfolioContext:
         usable without a PIT universe. **Dynamic product execution (PAPER
         backtest/runtime) MUST NOT rely on this fallback**: callers on the
         product path must invoke :func:`require_product_universe` before
-        ``strategy.decide()`` / ``rank_candidates()`` so a missing universe
+        ``strategy.decide()`` so a missing universe
         fails closed instead of treating every symbol as in-universe.
         """
         if self.universe is None:
@@ -66,8 +66,7 @@ def require_product_universe(
     ``RuntimeError`` on violation so the decision path halts instead of
     silently treating every symbol as tradable.
 
-    Call this BEFORE ``strategy.decide()`` or ``strategy.rank_candidates()``
-    on the PAPER / backtest product path. Static or non-product test
+    Call this BEFORE ``strategy.decide()`` on the PAPER / backtest product path. Static or non-product test
     contexts that intentionally operate without a PIT universe may pass
     ``allow_static_context=True`` to retain the permissive
     :meth:`PortfolioContext.in_universe` behaviour. That opt-in must be
@@ -216,33 +215,6 @@ class PortfolioStrategy(ABC):
     def requires_intermediate_risk_rebalance(self, context: PortfolioContext) -> bool:
         """Whether a non-scheduled decision may only reduce portfolio risk."""
         return False
-
-    def rank_candidates(self, context: PortfolioContext) -> tuple[str, ...]:
-        """Optional alpha ranking of the candidate pool for observation-set
-        selection (stream limit != opportunity universe).
-
-        Returns candidate symbols sorted by the strategy's own alpha, best
-        first. The base implementation returns () — meaning the strategy
-        provides no pool ranking and the scanner's eligibility-quality
-        stream set is used as the observation set. Strategies that implement
-        this MUST share the exact scoring code with ``decide`` so BACKTEST,
-        PAPER and LIVE rank identically.
-        """
-        return ()
-
-    # -- typed parameter access (values are validated in _validate_parameters)
-
-    def param_int(self, name: str, default: int) -> int:
-        value = self.parameters.get(name, default)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(f"{name} must be numeric")
-        return int(value)
-
-    def param_float(self, name: str, default: float) -> float:
-        value = self.parameters.get(name, default)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(f"{name} must be numeric")
-        return float(value)
 
 
 __all__ = [

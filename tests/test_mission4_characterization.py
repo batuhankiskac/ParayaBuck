@@ -7,7 +7,6 @@ refactor. If any test fails after extraction, the refactor broke a contract.
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -266,9 +265,9 @@ class TestProductUniverseFailClosed:
 
 
 # ---------------------------------------------------------------------------
-# WarmupCache migration crash safety
+# WarmupCache reopen and integrity
 # ---------------------------------------------------------------------------
-class TestWarmupCacheMigration:
+class TestWarmupCacheReopen:
     def _make_bar(self, symbol="AAPL", market=Market.EQUITY, ts=None):
         if ts is None:
             ts = datetime(2025, 1, 1, tzinfo=UTC)
@@ -276,7 +275,7 @@ class TestWarmupCacheMigration:
             timestamp=ts, symbol=symbol, timeframe="1d", open=100, high=101, low=99, close=100, volume=10, market=market
         )
 
-    def test_scenario_a_modern_noop(self, tmp_path):
+    def test_reopen_preserves_rows(self, tmp_path):
         from parayabuck.data.cache import WarmupCache
 
         p = tmp_path / "a.sqlite3"
@@ -284,7 +283,7 @@ class TestWarmupCacheMigration:
         bar = self._make_bar()
         cache.upsert([bar], feed="test", adjustment="all")
         cache.close()
-        # Reopen should be no-op and preserve rows
+        # Reopening preserves rows
         cache2 = WarmupCache(str(p))
         rows = cache2.get(
             "AAPL",
@@ -298,148 +297,6 @@ class TestWarmupCacheMigration:
         # Check integrity
         assert cache2.connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert cache2.connection.execute("PRAGMA foreign_key_check").fetchall() == []
-        cache2.close()
-
-    def test_scenario_b_old_db_migrates(self, tmp_path):
-        p = tmp_path / "b.sqlite3"
-        # Create old schema without adjustment/market in PK
-        conn = sqlite3.connect(p)
-        conn.execute(
-            "CREATE TABLE bars (feed TEXT, symbol TEXT, timeframe TEXT, timestamp TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, retrieved_at TEXT, PRIMARY KEY(feed, symbol, timeframe, timestamp))"
-        )
-        conn.execute(
-            "INSERT INTO bars VALUES ('test','AAPL','1d','2025-01-01T00:00:00+00:00',100,101,99,100,10,'2025-01-01T00:00:00+00:00')"
-        )
-        conn.execute(
-            "CREATE TABLE scope_meta (scope TEXT PRIMARY KEY, config_digest TEXT, identity TEXT, updated_at TEXT)"
-        )
-        conn.commit()
-        conn.close()
-        from parayabuck.data.cache import WarmupCache
-
-        cache = WarmupCache(str(p))
-        # Should have migrated and preserved row as equity/raw
-        rows = cache.get(
-            "AAPL",
-            "1d",
-            market=Market.EQUITY,
-            feed="test",
-            start=datetime(2024, 1, 1, tzinfo=UTC),
-            end=datetime(2026, 1, 1, tzinfo=UTC),
-            adjustment="raw",
-        )
-        assert len(rows) == 1
-        assert rows[0].symbol == "AAPL"
-        # Modern schema check
-        cols = {r[1] for r in cache.connection.execute("PRAGMA table_info(bars)").fetchall()}
-        assert "market" in cols and "adjustment" in cols
-        assert cache.connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        cache.close()
-
-    def test_scenario_c_crash_after_rename(self, tmp_path):
-        p = tmp_path / "c.sqlite3"
-        conn = sqlite3.connect(p)
-        # Simulate crash after ALTER bars RENAME TO bars_legacy but before copy
-        conn.execute(
-            "CREATE TABLE bars_legacy (feed TEXT, symbol TEXT, timeframe TEXT, timestamp TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, retrieved_at TEXT, PRIMARY KEY(feed, symbol, timeframe, timestamp))"
-        )
-        conn.execute(
-            "INSERT INTO bars_legacy VALUES ('test','AAPL','1d','2025-01-01T00:00:00+00:00',100,101,99,100,10,'2025-01-01T00:00:00+00:00')"
-        )
-        conn.execute(
-            "CREATE TABLE scope_meta (scope TEXT PRIMARY KEY, config_digest TEXT, identity TEXT, updated_at TEXT)"
-        )
-        conn.commit()
-        conn.close()
-        from parayabuck.data.cache import WarmupCache
-
-        cache = WarmupCache(str(p))
-        rows = cache.get(
-            "AAPL",
-            "1d",
-            market=Market.EQUITY,
-            feed="test",
-            start=datetime(2024, 1, 1, tzinfo=UTC),
-            end=datetime(2026, 1, 1, tzinfo=UTC),
-            adjustment="raw",
-        )
-        assert len(rows) == 1
-        # Legacy should be gone after recovery, bars modern
-        tables = {
-            r[0] for r in cache.connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        }
-        assert "bars" in tables
-        assert (
-            "bars_legacy" not in tables
-            or cache.connection.execute("SELECT COUNT(*) FROM bars_legacy").fetchone()[0] == 0
-            or "bars_legacy" not in tables
-        )
-        assert cache.connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        cache.close()
-
-    def test_scenario_d_crash_after_create_before_drop(self, tmp_path):
-        p = tmp_path / "d.sqlite3"
-        from parayabuck.data.cache import WarmupCache
-
-        # Create modern bars empty + legacy with data
-        cache = WarmupCache(str(p))
-        # Manually create legacy with old data and empty modern bars to simulate D
-        cache.connection.execute("DROP TABLE IF EXISTS bars_legacy")
-        cache.connection.execute(
-            "CREATE TABLE bars_legacy (feed TEXT, symbol TEXT, timeframe TEXT, timestamp TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, retrieved_at TEXT, PRIMARY KEY(feed, symbol, timeframe, timestamp))"
-        )
-        cache.connection.execute(
-            "INSERT INTO bars_legacy VALUES ('test','AAPL','1d','2025-01-01T00:00:00+00:00',100,101,99,100,10,'2025-01-01T00:00:00+00:00')"
-        )
-        cache.connection.commit()
-        # Now bars is already modern empty, legacy has data -> next startup should merge
-        cache.close()
-        cache2 = WarmupCache(str(p))
-        rows = cache2.get(
-            "AAPL",
-            "1d",
-            market=Market.EQUITY,
-            feed="test",
-            start=datetime(2024, 1, 1, tzinfo=UTC),
-            end=datetime(2026, 1, 1, tzinfo=UTC),
-            adjustment="raw",
-        )
-        assert len(rows) == 1
-        assert cache2.connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        cache2.close()
-
-    def test_scenario_e_both_exist_modern_no_data_loss(self, tmp_path):
-        p = tmp_path / "e.sqlite3"
-        from parayabuck.data.cache import WarmupCache
-
-        cache = WarmupCache(str(p))
-        bar = self._make_bar(symbol="AAPL")
-        cache.upsert([bar], feed="test", adjustment="all")
-        # Simulate both exist after migration: create legacy with same row
-        cache.connection.execute(
-            "CREATE TABLE IF NOT EXISTS bars_legacy (feed TEXT, symbol TEXT, market TEXT, timeframe TEXT, adjustment TEXT, timestamp TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, retrieved_at TEXT, PRIMARY KEY(feed, symbol, market, timeframe, adjustment, timestamp))"
-        )
-        cache.connection.execute("INSERT OR IGNORE INTO bars_legacy SELECT * FROM bars")
-        cache.connection.commit()
-        cache.close()
-        # Next startup should handle both existing without losing data
-        cache2 = WarmupCache(str(p))
-        rows = cache2.get(
-            "AAPL",
-            "1d",
-            market=Market.EQUITY,
-            feed="test",
-            start=datetime(2024, 1, 1, tzinfo=UTC),
-            end=datetime(2026, 1, 1, tzinfo=UTC),
-        )
-        assert len(rows) == 1
-        tables = {
-            r[0] for r in cache2.connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        }
-        assert "bars" in tables
-        # bars_legacy should be removed after merge (modern case)
-        # but we ensure no crash and integrity ok
-        assert cache2.connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         cache2.close()
 
     def test_integrity_checks(self, tmp_path):

@@ -125,12 +125,6 @@ def session_close_utc(session: date) -> datetime | None:
     return None if bounds is None else bounds[1]
 
 
-def session_open_utc(session: date) -> datetime | None:
-    """The session's NYSE open in UTC, else None."""
-    bounds = session_bounds(session)
-    return None if bounds is None else bounds[0]
-
-
 def is_session_open(moment: datetime) -> bool:
     """Whether ``moment`` falls inside the NYSE regular session for its date.
 
@@ -143,14 +137,6 @@ def is_session_open(moment: datetime) -> bool:
         return False
     moment_utc = moment.astimezone(UTC)
     return bounds[0] <= moment_utc < bounds[1]
-
-
-def session_minutes(session: date) -> int:
-    """Number of one-minute bars in one NYSE session (390 on a full day)."""
-    bounds = session_bounds(session)
-    if bounds is None:
-        return 0
-    return int((bounds[1] - bounds[0]).total_seconds() // 60)
 
 
 def sessions_around(now: datetime) -> tuple[tuple[date, datetime, datetime], ...]:
@@ -167,7 +153,5 @@ __all__ = [
     "nyse_sessions",
     "session_bounds",
     "session_close_utc",
-    "session_minutes",
-    "session_open_utc",
     "sessions_around",
 ]

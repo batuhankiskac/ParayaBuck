@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
-from parayabuck.data.adjustment import signal_session_date, verify_against_provider
+from parayabuck.data.adjustment import signal_session_date
 from parayabuck.execution.alpaca_models import DefiniteOrderRejection
 from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
@@ -872,19 +872,6 @@ class PortfolioRuntime:
             series[-1] = bar
             return
         series.append(bar)
-
-    def signal_history_matches_provider(self, provider_splits: dict[str, list[Bar]]) -> bool:
-        """Whether every equity symbol's stored history agrees with the
-        provider's split-adjusted closes on overlapping timestamps."""
-        if self.market != Market.EQUITY:
-            return True
-        for symbol, series in self.history.items():
-            provider = provider_splits.get(symbol)
-            if provider is None:
-                continue
-            if not verify_against_provider(tuple(series), provider):
-                return False
-        return True
 
     def adopt_authoritative_signal_history(
         self,

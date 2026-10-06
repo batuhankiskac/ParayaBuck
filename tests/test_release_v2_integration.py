@@ -305,7 +305,7 @@ def test_equity_parameter_promotion_uses_normal_delta_and_restart_idempotency(
     # Shipped equity risk caps: at most 8 positions, 0.93 per asset / total.
     assert len(first.target.weights) <= 8
     assert all(weight.weight <= 0.93 for weight in first.target.weights)
-    assert first.target.invested_weight <= 0.93
+    assert sum(w.weight for w in first.target.weights) <= 0.93
     paper_observability = first.target.metadata["paper_observability"]
     assert paper_observability["strategy_name"] == "equity_leveraged_trend_v1"
     assert paper_observability["decision_timestamp"] == days[300].isoformat()

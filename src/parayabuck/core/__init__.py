@@ -7,7 +7,6 @@ from parayabuck.core.models import (
     OrderIntent,
     OrderState,
     PositionSnapshot,
-    Regime,
 )
 
 __all__ = [
@@ -19,5 +18,4 @@ __all__ = [
     "OrderIntent",
     "OrderState",
     "PositionSnapshot",
-    "Regime",
 ]

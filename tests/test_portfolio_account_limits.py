@@ -145,7 +145,7 @@ def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
         mode="paper",
     )
     assert len(decision.target.weights) <= 6  # maximum_positions
-    assert decision.target.invested_weight <= 0.50 + 1e-9  # maximum_allocation
+    assert sum(w.weight for w in decision.target.weights) <= 0.50 + 1e-9  # maximum_allocation
 
 
 def _ranked_target(

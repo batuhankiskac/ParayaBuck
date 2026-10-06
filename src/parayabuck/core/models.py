@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
-from uuid import uuid4
 
 
 class Market(StrEnum):
@@ -20,35 +19,6 @@ class Market(StrEnum):
     CRYPTO = "crypto"
 
 
-class Direction(StrEnum):
-    LONG = "long"
-    SHORT = "short"
-    FLAT = "flat"
-
-
-class OrderState(StrEnum):
-    CREATED = "created"
-    VALIDATED = "validated"
-    SUBMITTED = "submitted"
-    ACCEPTED = "accepted"
-    PARTIALLY_FILLED = "partially_filled"
-    FILLED = "filled"
-    CANCELLED = "cancelled"
-    REJECTED = "rejected"
-    EXPIRED = "expired"
-    RECONCILIATION_REQUIRED = "reconciliation_required"
-    MANUAL_INTERVENTION_REQUIRED = "manual_intervention_required"
-    UNKNOWN = "unknown"
-
-
-class OrderRole(StrEnum):
-    ENTRY = "entry"
-    TAKE_PROFIT = "take_profit"
-    PROTECTIVE_STOP = "protective_stop"
-    MANUAL_EXIT = "manual_exit"
-    EMERGENCY_EXIT = "emergency_exit"
-
-
 class ProtectionState(StrEnum):
     UNPROTECTED = "unprotected"
     REQUESTED = "requested"
@@ -57,34 +27,6 @@ class ProtectionState(StrEnum):
     OVER_PROTECTED = "over_protected"
     TRIGGERED_UNFILLED = "triggered_unfilled"
     FAILED = "failed"
-
-
-@dataclass(frozen=True)
-class ExecutionEvent:
-    account_id: str
-    client_order_id: str
-    broker_order_id: str
-    parent_order_id: str | None
-    role: OrderRole
-    symbol: str
-    market: Market
-    state: OrderState | None
-    requested_qty: float
-    cumulative_filled_qty: float
-    average_fill_price: float | None
-    occurred_at: datetime
-    fee: float = 0.0
-    activity_id: str | None = None
-
-
-@dataclass(frozen=True)
-class ExecutionTransition:
-    previous_state: OrderState | None
-    current_state: OrderState | None
-    fill_delta: float
-    position_delta: float
-    realized_pnl_delta: float
-    entry_client_order_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -167,29 +109,3 @@ class AccountSnapshot:
         if self.peak_equity <= 0:
             return 0.0
         return max(0.0, (self.peak_equity - self.equity) / self.peak_equity)
-
-
-@dataclass(frozen=True)
-class OrderIntent:
-    signal_id: str
-    symbol: str
-    market: Market
-    direction: Direction
-    qty: float
-    entry_price: float
-    stop_price: float
-    target_price: float
-    strategy: str
-    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    client_order_id: str = field(default_factory=lambda: f"parayabuck-{uuid4().hex}")
-
-
-@dataclass(frozen=True)
-class Fill:
-    client_order_id: str
-    symbol: str
-    qty: float
-    price: float
-    direction: Direction
-    timestamp: datetime
-    commission: float = 0.0

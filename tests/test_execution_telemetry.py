@@ -18,11 +18,6 @@ from types import SimpleNamespace
 import pytest
 
 from parayabuck.config import BacktestConfig
-from parayabuck.core.models import (
-    Direction,
-    Market,
-    OrderIntent,
-)
 from parayabuck.execution import telemetry
 
 
@@ -541,26 +536,6 @@ def test_empty_and_missing_database_never_raise(tmp_path: Path) -> None:
     # JSON-serializable in every state.
     json.dumps(metrics)
     json.dumps(forward)
-
-
-# --------------------------------------------------------------------------
-# Legacy ledger capture (migration v5 columns)
-# --------------------------------------------------------------------------
-
-
-def _intent(symbol: str, *, direction: Direction = Direction.LONG) -> OrderIntent:
-    return OrderIntent(
-        signal_id="sig-1",
-        symbol=symbol,
-        market=Market.EQUITY,
-        direction=direction,
-        qty=10.0,
-        entry_price=100.0,
-        stop_price=95.0,
-        target_price=115.0,
-        strategy="equity_leveraged_trend_v1",
-        client_order_id="pb-" + symbol,
-    )
 
 
 def test_open_order_counts_follow_the_repository_terminal_vocabulary(tmp_path: Path) -> None:

@@ -112,6 +112,12 @@ def _is_partial_provider_bar(bar: Bar, now: datetime, embargo: timedelta = DEFAU
     return not provider_day_bar_is_final(bar.timestamp, now, embargo)
 
 
+def _sip_embargo_of(runtime: object) -> timedelta:
+    """The runtime's configured SIP embargo (default for bare test doubles)."""
+    embargo: timedelta = getattr(runtime, "sip_embargo", DEFAULT_SIP_EMBARGO)
+    return embargo
+
+
 # Rebalance ``status`` recorded when a settled BLOCKED rebalance is closed
 # without submitting its deferred BUYs (phase becomes ``complete``).
 REBALANCE_STATUS_CLOSED_UNRESOLVED = "closed_unresolved"
@@ -579,7 +585,7 @@ class PortfolioRuntime:
             symbol = canonical_symbol(bar.symbol, bar.market)
             if bar.market != self.market or bar.timeframe != self.strategy.timeframe or symbol not in self.history:
                 continue
-            if _is_partial_provider_bar(bar, now, self.sip_embargo):
+            if _is_partial_provider_bar(bar, now, _sip_embargo_of(self)):
                 continue
             series = self.history[symbol]
             if not series or series[-1].timestamp < bar.timestamp:
@@ -907,7 +913,7 @@ class PortfolioRuntime:
             provider = [
                 bar
                 for bar in provider_splits.get(symbol) or ()
-                if not _is_partial_provider_bar(bar, now, self.sip_embargo)
+                if not _is_partial_provider_bar(bar, now, _sip_embargo_of(self))
             ]
             if not provider:
                 continue

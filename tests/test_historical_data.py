@@ -675,28 +675,11 @@ def test_empty_provider_response_does_not_stamp_the_scope(warmup_cache: Any) -> 
     assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
 
 
-def test_dedup_replay_of_an_outage_served_batch_does_not_stamp_the_scope(warmup_cache: Any) -> None:
-    end = _today()
-    start = end - timedelta(days=6)
-    _seed_old_scope_cache(warmup_cache, start, end)
-    history = _incremental_history(warmup_cache, _FailingStockBars())
-    history.get_bars_batch(list(_INCREMENTAL_SYMBOLS), "1d", start, end)
-    # The provider recovers, but the identical request inside the dedup TTL
-    # replays the outage-served result instead of calling it.
-    healthy = _FakeStockBars()
-    history._stock_client = healthy
-
-    _fetch_incremental(history, start, end)
-
-    assert healthy.requests == []
-    assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
-
-
 def test_empty_equity_tail_keeps_a_valid_scope_and_the_next_refresh_stays_incremental(
     warmup_cache: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Routine live case (weekend/holiday/no new closed bar): a scope-valid
-    equity 1d cache whose tail request returns no rows must stay scope-valid,
+    RAW equity 1d cache whose tail request returns no rows must stay scope-valid,
     serve the cached window, and keep the next refresh a tail-only download."""
     import pandas as pd
 
@@ -738,7 +721,7 @@ def test_empty_equity_tail_keeps_a_valid_scope_and_the_next_refresh_stays_increm
                 for stamp in stamps
             ],
             feed="iex",
-            adjustment="splits",
+            adjustment="raw",
         )
     warmup_cache.scope_set(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST, "unit-test")
 
@@ -748,7 +731,7 @@ def test_empty_equity_tail_keeps_a_valid_scope_and_the_next_refresh_stays_increm
             "1d",
             start=start,
             end=end,
-            adjustment="splits",
+            adjustment="raw",
             scope=_INCREMENTAL_SCOPE,
             config_digest=_INCREMENTAL_DIGEST,
         )
@@ -766,3 +749,78 @@ def test_empty_equity_tail_keeps_a_valid_scope_and_the_next_refresh_stays_increm
     # Both refreshes asked only for the overlap tail, never the full window.
     for request in requests:
         assert request.start >= stamps[-1] - timedelta(days=2)
+
+
+def test_split_adjusted_incremental_fetch_always_downloads_the_full_window(warmup_cache: Any) -> None:
+    """A split rebases every older adjusted bar, so cached adjusted rows are
+    never trusted: a scope-valid cache still gets a full-window download and
+    the provider's rebased closes replace the stale cached ones."""
+    end = _today()
+    start = end - timedelta(days=8)
+    history = _incremental_history(warmup_cache, _FakeStockBars())
+    history.get_bars_batch_incremental(
+        list(_INCREMENTAL_SYMBOLS),
+        "1d",
+        start=start,
+        end=end,
+        adjustment="splits",
+        scope=_INCREMENTAL_SCOPE,
+        config_digest=_INCREMENTAL_DIGEST,
+    )
+    first_bar = min(_day_grid(start, end))
+    rebased = _FakeStockBars(close_overrides={first_bar: 100.5})
+    history._stock_client = rebased
+
+    result = history.get_bars_batch_incremental(
+        list(_INCREMENTAL_SYMBOLS),
+        "1d",
+        start=start,
+        end=end,
+        adjustment="splits",
+        scope=_INCREMENTAL_SCOPE,
+        config_digest=_INCREMENTAL_DIGEST,
+    )
+
+    assert [request[1] for request in rebased.requests] == [start]
+    assert next(bar.close for bar in result["QQQ"] if bar.timestamp == first_bar) == 100.5
+
+
+def test_plain_fetch_never_counts_cache_rows_as_provider_coverage(warmup_cache: Any) -> None:
+    """The verifier reads ``get_bars_batch``: a symbol the provider did not
+    answer may be served from the cache only as a DEGRADED answer."""
+    end = _today()
+    start = end - timedelta(days=8)
+    grid = _day_grid(start, end)
+    _seed_cache(warmup_cache, grid)
+    history = _incremental_history(warmup_cache, _FakeStockBars())
+    history._provider_fallbacks = 0
+    history._last_batch_degraded = False
+
+    complete = history.get_bars_batch(list(_INCREMENTAL_SYMBOLS), "1d", start, end)
+    assert history._last_batch_degraded is False
+    assert {symbol: len(bars) for symbol, bars in complete.items()} == {symbol: len(grid) for symbol in complete}
+
+    history._stock_client = _FakeStockBars(omit=("SPY",))
+    partial = history.get_bars_batch(list(_INCREMENTAL_SYMBOLS), "1d", start, end)
+
+    assert history._last_batch_degraded is True
+    assert [bar.timestamp for bar in partial["SPY"]] == grid
+
+
+def test_incremental_fetch_resolves_a_due_sip_reprobe_before_choosing_the_cache_feed(warmup_cache: Any) -> None:
+    """A downgraded client whose SIP re-probe is due queries SIP; the cache
+    must be read under SIP too, not under the stale IEX name (which would
+    discard the valid SIP cache and force a full download)."""
+    end = _today()
+    start = end - timedelta(days=8)
+    provider = _FakeStockBars()
+    history = _incremental_history(warmup_cache, provider)
+    _fetch_incremental(history, start, end)
+    history._stock_feed = "iex"
+    history._sip_fallback_active = True
+    history._sip_fallback_since = datetime.now(UTC) - timedelta(hours=7)
+
+    _fetch_incremental(history, start, end + timedelta(days=1))
+
+    assert history._sip_fallback_active is False
+    assert provider.requests[-1][1] == end - timedelta(days=2)

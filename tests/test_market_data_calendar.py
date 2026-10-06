@@ -404,11 +404,7 @@ def _sip_history(get_stock_bars: Any) -> Any:
     history._sip_quote_fallback_active = False
     history._sip_fallback_since = None
     history._sip_embargo = timedelta(minutes=15)
-    history._dedup_ttl_seconds = 60.0
     history._provider_fallbacks = 0
-    history._last_batch_key = None
-    history._last_batch_result = None
-    history._last_batch_at = None
     history._last_batch_degraded = False
     history._stock_client = SimpleNamespace(get_stock_bars=get_stock_bars)
     history._cache = SimpleNamespace(get=lambda *a, **k: [], upsert=lambda *a, **k: None)
@@ -503,8 +499,6 @@ def test_the_downgrade_is_bounded_by_a_sip_reprobe() -> None:
         feeds.append(_feed_name(request)) or SimpleNamespace(df=pandas.DataFrame())
     )
     history._sip_fallback_since = datetime.now(UTC) - timedelta(hours=7)
-    history._last_batch_key = None
-    history._last_batch_at = None
     assert history.get_bars_batch(["QQQ"], "1d", start=start, end=end) == {"QQQ": []}
     assert history._sip_fallback_active is False
     assert history.feed_status()["effective"] == "sip"

@@ -162,7 +162,6 @@ def test_operator_reset_verifies_market_halts_under_the_state_lock() -> None:
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime.market_state = SimpleNamespace()
     runtime._risk_state_lock = threading.Lock()
     runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime.ledger = SimpleNamespace(
@@ -568,7 +567,6 @@ def test_assigned_circuit_breaker_reasons_are_operator_resettable(tmp_path: Path
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
 
     runtime.reset_safety_lock()
 
@@ -642,7 +640,6 @@ def test_operator_latch_clear_takes_the_risk_state_lock(tmp_path: Path) -> None:
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     risk_state_lock = _TrackedRLock()
     runtime._risk_state_lock = risk_state_lock  # type: ignore[assignment]
     runtime.latch_write_lock_states().clear()  # drop the seeding write

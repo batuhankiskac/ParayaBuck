@@ -9,12 +9,12 @@ import sqlite3
 import threading
 import time
 from _thread import LockType
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as clock_time
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from requests.exceptions import RequestException
 
@@ -80,7 +80,6 @@ from parayabuck.portfolio.signal_cross_check import (
 from parayabuck.risk.state import RiskState
 from parayabuck.runtime_events import _Event, _EventQueue
 from parayabuck.runtime_health import RuntimeHealth, WorkerHealth, _portfolio_catch_up_health
-from parayabuck.runtime_state import RuntimeMarketState
 from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.storage import SQLiteStore
 from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
@@ -249,30 +248,6 @@ _RESTART_REARMED_REASONS = frozenset(
 )
 
 
-class _StrategyTimeframes(Protocol):
-    timeframe: str
-    required_timeframes: tuple[str, ...]
-
-
-def required_aggregation_timeframes(
-    execution_timeframe: str,
-    market_state_timeframe: str,
-    strategy_specs: Sequence[tuple[_StrategyTimeframes, tuple[str, ...], float]],
-) -> frozenset[str]:
-    """The union of cadences the bar aggregation pipeline must produce.
-
-    Includes the execution and market-state cadences, every enabled
-    strategy's primary signal timeframe, AND every strategy-declared
-    ``required_timeframes`` (StrategySpec) so a strategy that needs a second
-    series gets its bars aggregated and seeded like any other cadence.
-    """
-    timeframes: set[str] = {execution_timeframe, market_state_timeframe}
-    for strategy, _symbols, _cap in strategy_specs:
-        timeframes.add(strategy.timeframe)
-        timeframes.update(strategy.required_timeframes)
-    return frozenset(timeframes)
-
-
 # Health and event types are imported from runtime_health / runtime_events (see above)
 
 
@@ -400,25 +375,18 @@ class EngineRuntime:
             runtime_state_dir=runtime_state_dir,
         )
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
-        self.market_state = RuntimeMarketState(
-            self.config,
-            allowed_trade_symbols=set(active_equities),
-        )
-        self._consecutive_losses = 0
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_stream_feed)
         self.trading_updates = AlpacaTradingUpdateStream(api_key, secret_key, self.paper, self._on_trade_update)
+        # The stream's one-minute bars are aggregated ONLY into the strategy
+        # signal cadences (the daily decision bar for VT35): nothing else in
+        # the engine consumes stream-built candles.
         self._strategy_timeframes = {strategy.timeframe for strategy, _symbols, _cap in strategy_specs}
-        required_timeframes = required_aggregation_timeframes(
-            self.app_config.runtime.execution_timeframe,
-            self.app_config.runtime.market_state_timeframe,
-            strategy_specs,
-        )
         self.aggregators = {
             timeframe: TimeframeAggregator(
                 timeframe,
                 self.config.data_finalization_grace_seconds,
             )
-            for timeframe in required_timeframes
+            for timeframe in sorted(self._strategy_timeframes)
         }
         # Set when a session-close daily bar was withheld as incomplete and
         # the provider's SIP daily bar is being fetched to replace it.
@@ -483,8 +451,6 @@ class EngineRuntime:
         except Exception:
             log.warning("observability journal configuration failed", exc_info=True)
         self._circuit_breaker_reason: str | None = None
-        self._series_watermarks: dict[tuple[str, str], datetime] = {}
-        self._portfolio_watermarks: dict[Market, datetime] = {}
         self._warming_up = False
         self._not_ready_symbols: set[str] = set(self.symbols)
         self._historical: AlpacaHistoricalData | None = None
@@ -1518,13 +1484,6 @@ class EngineRuntime:
             if symbols:
                 self._market_enabled[candidate_market] = True
         self.symbols = sorted(self._symbols_by_market[Market.EQUITY])
-        self._expected_all_symbols = set().union(
-            *(
-                symbols
-                for candidate_market, symbols in self._symbols_by_market.items()
-                if getattr(self, "_market_enabled", {}).get(candidate_market, False)
-            )
-        )
         self._not_ready_symbols.update(equity_pins)
 
     def stop(self) -> bool:
@@ -1930,6 +1889,15 @@ class EngineRuntime:
                     worker.last_error = str(exc)
                     log.warning("Account refresh failed: %s", exc)
                 self._maybe_run_intent_watchdog()
+                # The periodic readiness refresh (warming_up -> running
+                # promotion and the bounded warmup retry) runs on this loop:
+                # the decision loop only wakes for the daily decision bar.
+                if getattr(self, "_startup_committed", False) and not self._warming_up:
+                    try:
+                        self._refresh_readiness()
+                    except Exception as exc:
+                        worker.last_error = str(exc)
+                        log.warning("Readiness refresh failed: %s", exc, exc_info=True)
                 self._stop_event.wait(self.config.account_poll_interval_seconds)
         finally:
             worker.alive = False
@@ -2120,10 +2088,10 @@ class EngineRuntime:
         * TRANSIENT_READINESS — the entry-risk latch and market entry halts are
           reconstructed from authoritative state at startup and never
           persisted.
-        * WATERMARK — decision watermarks (``previous_timestamp`` per market
-          and ``portfolio_watermark``) are restored from the latest persisted
-          decision so a restart never replays a duplicate decision or loses
-          the cadence position.
+        * WATERMARK — the decision watermark (``previous_timestamp`` per
+          market) is restored by ``PortfolioRuntime`` itself from the latest
+          persisted decision, so a restart never replays a duplicate decision
+          or loses the cadence position.
 
         * RESTART_REARMED — a halt row whose condition a fresh process cannot
           still be in (``_RESTART_REARMED_REASONS``) is migrated, not
@@ -2209,34 +2177,6 @@ class EngineRuntime:
         previous = self.ledger.load_risk_state(account_id, datetime.now(UTC).date())
         if previous is not None:
             self._consecutive_losses = previous.consecutive_losses
-        # --- Watermark restoration (restart scenarios A-G) ---
-        # PortfolioRuntime already restores ``previous_timestamp`` from the
-        # repository's latest_decision_timestamp in its __init__. Here we
-        # mirror that into the engine-level watermark maps so
-        # ``_process_portfolio_timestamp`` and the bar coalescer start with
-        # the persisted high-water instead of ``datetime.min`` and never
-        # re-emit a duplicate decision after a restart (before/after decision,
-        # after order submission, after partial/complete fill, while
-        # verification or universe refresh was running).
-        try:
-            for rt in getattr(self, "_portfolio_runtimes", ()):
-                ts = self._portfolio_repository.latest_decision_timestamp(
-                    account_id, rt.configuration_digest, rt.market
-                )
-                if ts is not None:
-                    self._portfolio_watermarks[rt.market] = max(
-                        ts, self._portfolio_watermarks.get(rt.market, datetime.min.replace(tzinfo=UTC))
-                    )
-                    for sym in getattr(rt, "symbols", ()):
-                        key = (sym, rt.strategy.timeframe)
-                        self._series_watermarks[key] = max(
-                            ts, self._series_watermarks.get(key, datetime.min.replace(tzinfo=UTC))
-                        )
-        except Exception:
-            # Watermark restore is best-effort; a repository hiccup must not
-            # brick startup — the duplicate-decision guard in
-            # PortfolioRuntime still prevents double orders.
-            log.warning("Watermark restoration skipped after repository hiccup", exc_info=True)
 
     async def _on_trade_update(self, update: TradeUpdate) -> None:
         try:
@@ -2297,11 +2237,9 @@ class EngineRuntime:
                         advance_kwargs.pop("submit_deferred_buys")
                         result = portfolio_runtime.advance_rebalance(**advance_kwargs)
             except Exception:
-                # The bar-path twin of this handler (in _process_timestamp)
-                # halts with a circuit breaker; here the persisted two-phase
-                # state stays pending and every later trade update retries —
-                # so the traceback is the only forensic record of a persistent
-                # failure. Keep it, unlike the old single-line log.error.
+                # The persisted two-phase state stays pending and every later
+                # trade update retries — so the traceback is the only forensic
+                # record of a persistent failure.
                 log.exception(
                     "Two-phase rebalance advance failed: market=%s",
                     market.value,
@@ -2610,30 +2548,27 @@ class EngineRuntime:
             # Only a live bar proves the stream recovered; a corrected bar
             # does not clear a market halt on its own.
             self._mark_market_stream_recovered(bar.market)
+        if corrected:
+            # A corrected minute only revises the still-open candle it belongs
+            # to. A correction of an already-emitted candle has no consumer:
+            # the decision for that bucket was already taken.
+            with self._ingestion_lock:
+                for aggregator in self.aggregators.values():
+                    aggregator.update_correction(bar)
+            return
         with self._ingestion_lock:
-            finalized = {
-                timeframe: (aggregator.update_correction(bar) if corrected else aggregator.update(bar))
-                for timeframe, aggregator in self.aggregators.items()
-            }
+            finalized = {timeframe: aggregator.update(bar) for timeframe, aggregator in self.aggregators.items()}
         for timeframe, closed in finalized.items():
-            if closed is None:
-                continue
-            if corrected:
-                self._put_event("correction", closed)
-                continue
-            self._emit_finalized_bar(timeframe, closed)
+            if closed is not None:
+                self._emit_finalized_bar(timeframe, closed)
 
     def _emit_finalized_bar(self, timeframe: str, bar: Bar) -> None:
-        """Queue one finalized bar for every cadence it feeds."""
-        if timeframe == self.app_config.runtime.execution_timeframe:
-            self._put_event("primary", bar)
-        elif timeframe == self.app_config.runtime.market_state_timeframe:
-            self._put_event("higher", bar)
+        """Queue one finalized strategy-cadence bar for the decision loop."""
         if timeframe in self._strategy_timeframes:
-            self._put_event("portfolio", bar)
+            self._put_event(bar)
 
-    def _put_event(self, kind: str, bar: Bar) -> None:
-        event = _Event(kind, bar, datetime.now(UTC))
+    def _put_event(self, bar: Bar) -> None:
+        event = _Event(bar, datetime.now(UTC))
         result = self._events.put_market_event(event)
         # _put_event runs from several threads (stock stream, decision loop);
         # the diagnostics counters must not be mutated
@@ -2642,8 +2577,6 @@ class EngineRuntime:
         with getattr(self, "_event_stats_lock", threading.Lock()):
             if result == "coalesced":
                 self._coalesced_events += 1
-            elif result == "replaced":
-                self._dropped_events += 1
             elif result == "overflow":
                 overflowed = True
                 self._dropped_events += 1
@@ -2666,15 +2599,8 @@ class EngineRuntime:
         worker = self._workers["pb-decisions"]
         worker.alive = True
         next_reconcile = time.monotonic() + 60.0
-        pending: dict[datetime, dict[str, Bar]] = {}
-        first_seen: dict[datetime, float] = {}
         portfolio_pending: dict[tuple[str, datetime], dict[str, Bar]] = {}
         portfolio_first_seen: dict[tuple[str, datetime], float] = {}
-        # Symbols already evaluated per closed batch. A late bar whose symbol
-        # was missing from the closed batch must be re-evaluated instead of
-        # being silently ingested as a correction (which never reaches the
-        # decision pipeline).
-        processed_batches: dict[datetime, frozenset[str]] = {}
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
@@ -2687,66 +2613,11 @@ class EngineRuntime:
                         break
                 else:
                     worker.last_event_at = item.received_at
-                    if item.kind == "portfolio":
-                        portfolio_key = (item.bar.timeframe, item.bar.timestamp)
-                        portfolio_pending.setdefault(portfolio_key, {})[item.bar.symbol] = item.bar
-                        portfolio_first_seen.setdefault(portfolio_key, time.monotonic())
-                    elif item.kind == "higher":
-                        # Every market_state writer shares _ingestion_lock so
-                        # a concurrent warmup seed (which runs under
-                        # the same lock) can never interleave with a BarStore
-                        # read-modify-write and lose a bar.
-                        with self._ingestion_lock:
-                            self.market_state.seed([item.bar])
-                    elif item.kind == "correction":
-                        with self._ingestion_lock:
-                            self.market_state.ingest_corrections([item.bar])
-                    elif item.bar.timestamp <= max(
-                        self._series_watermarks.get(
-                            (item.bar.symbol, item.bar.timeframe),
-                            datetime.min.replace(tzinfo=UTC),
-                        ),
-                        self._portfolio_watermarks.get(item.bar.market, datetime.min.replace(tzinfo=UTC)),
-                    ):
-                        batch = processed_batches.get(item.bar.timestamp)
-                        if batch is not None and item.bar.symbol not in batch:
-                            processed_batches[item.bar.timestamp] = batch | {item.bar.symbol}
-                            expected: set[str] = getattr(self, "_expected_all_symbols", set())
-                            self._process_timestamp(
-                                {item.bar.symbol: item.bar},
-                                expected - (batch | {item.bar.symbol}),
-                            )
-                            log.info(
-                                "Late finalized bar re-evaluated: symbol=%s timeframe=%s timestamp=%s",
-                                item.bar.symbol,
-                                item.bar.timeframe,
-                                item.bar.timestamp,
-                            )
-                        else:
-                            with self._ingestion_lock:
-                                self.market_state.ingest_corrections([item.bar])
-                            log.debug(
-                                "Late finalized bar ingested as correction: symbol=%s timeframe=%s timestamp=%s",
-                                item.bar.symbol,
-                                item.bar.timeframe,
-                                item.bar.timestamp,
-                            )
-                    else:
-                        key = item.bar.timestamp
-                        pending.setdefault(key, {})[item.bar.symbol] = item.bar
-                        first_seen.setdefault(key, time.monotonic())
+                    portfolio_key = (item.bar.timeframe, item.bar.timestamp)
+                    portfolio_pending.setdefault(portfolio_key, {})[item.bar.symbol] = item.bar
+                    portfolio_first_seen.setdefault(portfolio_key, time.monotonic())
                 self._flush_aggregators()
                 now_mono = time.monotonic()
-                # Symbol membership only changes on start/pin; the union is
-                # refreshed by _pin_managed_symbols instead of rebuilt on
-                # every loop iteration.
-                expected_all: set[str] = getattr(self, "_expected_all_symbols", set())
-                closable = [
-                    timestamp
-                    for timestamp, bars in pending.items()
-                    if expected_all.issubset(bars)
-                    or now_mono - first_seen[timestamp] >= self.config.event_grace_seconds
-                ]
                 # RuntimeHealth is expensive to build; build it ONCE per loop
                 # iteration (lazily, only when a batch is actually processed)
                 # and reuse it for every readiness gate in this batch.
@@ -2758,29 +2629,6 @@ class EngineRuntime:
                 # crash a running PAPER engine's decision worker (P0).
                 real_gate = getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)
                 batch_health: RuntimeHealth | None = None
-                for timestamp in sorted(closable):
-                    bars_by_symbol = pending.pop(timestamp)
-                    first_seen.pop(timestamp, None)
-                    if batch_health is None and real_gate:
-                        batch_health = self.health()
-                    self._process_timestamp(bars_by_symbol, expected_all, health=batch_health)
-                    processed_batches[timestamp] = frozenset(bars_by_symbol)
-                    for bar in bars_by_symbol.values():
-                        self._series_watermarks[(bar.symbol, bar.timeframe)] = max(
-                            timestamp,
-                            self._series_watermarks.get(
-                                (bar.symbol, bar.timeframe),
-                                datetime.min.replace(tzinfo=UTC),
-                            ),
-                        )
-                    for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
-                        self._portfolio_watermarks[candidate_market] = max(
-                            timestamp,
-                            self._portfolio_watermarks.get(
-                                candidate_market,
-                                datetime.min.replace(tzinfo=UTC),
-                            ),
-                        )
                 portfolio_closable = []
                 for portfolio_key, candidate_bars in portfolio_pending.items():
                     timeframe, _timestamp = portfolio_key
@@ -2801,21 +2649,10 @@ class EngineRuntime:
                         batch_health = self.health()
                     self._process_portfolio_timestamp(list(candidate_bars.values()), health=batch_health)
                 self._run_due_deferred_portfolio_batches()
-                if len(processed_batches) > 256:
-                    cutoff = max(processed_batches) - timedelta(hours=6)
-                    for stale in [ts for ts in processed_batches if ts < cutoff]:
-                        del processed_batches[stale]
                 # Recompute the queue-age diagnostic from both sources under
                 # the stats lock so an event enqueued concurrently cannot be
                 # missed (which would report a zero age while events wait).
                 with self._event_stats_lock:
-                    pending_oldest = min(
-                        (
-                            datetime.now(UTC) - timedelta(seconds=max(0.0, now_mono - seen))
-                            for seen in first_seen.values()
-                        ),
-                        default=None,
-                    )
                     portfolio_oldest = min(
                         (
                             datetime.now(UTC) - timedelta(seconds=max(0.0, now_mono - seen))
@@ -2826,11 +2663,7 @@ class EngineRuntime:
                     self._oldest_received_at = min(
                         (
                             candidate
-                            for candidate in (
-                                self._events.oldest_received_at(),
-                                pending_oldest,
-                                portfolio_oldest,
-                            )
+                            for candidate in (self._events.oldest_received_at(), portfolio_oldest)
                             if candidate is not None
                         ),
                         default=None,
@@ -2985,48 +2818,6 @@ class EngineRuntime:
             self._session_close_fallback = None
             return
         pending.retry_at = now + _SESSION_CLOSE_FALLBACK_INTERVAL
-
-    def _process_timestamp(
-        self,
-        bars_by_symbol: dict[str, Bar],
-        expected: set[str],
-        *,
-        health: RuntimeHealth | None = None,
-    ) -> None:
-        bars = list(bars_by_symbol.values())
-        # Same shared-writer discipline as the "higher"/"correction" branches
-        # above: warmup seeds under _ingestion_lock.
-        with self._ingestion_lock:
-            self.market_state.ingest_closed_bars(bars)
-        if self._warming_up:
-            return
-        self._refresh_readiness()
-        gate = self._entry_readiness_reasons
-        if health is None and (
-            getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)
-        ):
-            health = self.health()
-        gate_kwargs = {"health": health} if health is not None else {}
-        market_reasons: dict[Market, tuple[str, ...]] = {}
-        for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
-            try:
-                market_reasons[candidate_market] = gate(candidate_market, **gate_kwargs)
-            except TypeError:
-                market_reasons[candidate_market] = gate(candidate_market)
-
-        if not any(
-            symbol not in self._not_ready_symbols and not market_reasons[bar.market]
-            for symbol, bar in bars_by_symbol.items()
-        ):
-            return
-        missing = tuple(sorted(expected - set(bars_by_symbol)))
-        if missing:
-            log.warning(
-                "Ranking universe is partial; missing symbols: %s",
-                ", ".join(missing),
-            )
-        # This cadence updates bar and readiness state only. PortfolioRuntime
-        # is the sole strategy/risk/order decision path.
 
     def _decision_retry_settings(self) -> tuple[timedelta, timedelta]:
         """(retry interval, retry window) for deferred session-close decisions."""
@@ -4939,8 +4730,7 @@ class EngineRuntime:
 
         Gates warm-cache reuse on the identity of everything that determines
         the warmup window: the enabled strategies (name, parameters, signal
-        timeframe, minimum history) and the operational aggregation
-        timeframes. Any change invalidates the scope and fails closed to a
+        timeframe, minimum history). Any change invalidates the scope and fails closed to a
         full refetch; the head-coverage check inside the incremental fetch
         additionally guards against a shorter window silently standing in
         for a longer one.
@@ -4949,8 +4739,6 @@ class EngineRuntime:
 
         payload = {
             "timeframes": sorted(self.aggregators),
-            "execution_timeframe": self.app_config.runtime.execution_timeframe,
-            "market_state_timeframe": self.app_config.runtime.market_state_timeframe,
             # The signal-history adjustment basis is part of the cache
             # identity: switching it must fail the scope closed to a full
             # refetch (rows are additionally keyed by adjustment).
@@ -4968,75 +4756,46 @@ class EngineRuntime:
         return hashlib.sha256(_json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
     def _warmup_symbols(self, history: AlpacaHistoricalData, symbols: list[str], *, retry: bool) -> None:
-        """Download warmup history for ``symbols`` and seed it.
+        """Download split-adjusted signal history for ``symbols`` and seed it.
 
-        Equity symbols are fetched on TWO explicit bases: RAW seeds the
-        execution-side market state (as-traded stream truth), SPLITS seeds
-        the portfolio runtimes' strategy signal history (the same basis as
-        backtest historical data; bridged across live splits by
-        ``data/adjustment.py``). Bars are seeded into the market state and
-        every matching portfolio runtime under the ingestion and portfolio
-        locks.
+        Only the strategy signal cadences are fetched, on the SPLITS basis
+        (the same basis as backtest historical data; bridged across live
+        splits by ``data/adjustment.py``). Bars are seeded into every
+        matching portfolio runtime under the ingestion and portfolio locks.
         """
         warmup_digest = self._warmup_config_digest()
         group = list(symbols)
-        warmup_timeframes = set(self.aggregators)
-        for timeframe in warmup_timeframes:
+        for timeframe in sorted(self._strategy_timeframes):
             strategy_requirements = [
                 runtime.strategy.minimum_history_bars + 5
                 for runtime in self._portfolio_runtimes
                 if runtime.market == Market.EQUITY and runtime.strategy.timeframe == timeframe
             ]
-            operational = timeframe in {
-                self.app_config.runtime.execution_timeframe,
-                self.app_config.runtime.market_state_timeframe,
-            }
-            if not strategy_requirements and not operational:
+            if not strategy_requirements:
                 continue
-            # ``max(2, *[])`` would reduce to ``max(2)`` — a single
-            # argument, which Python tries to iterate. Operational
-            # timeframes with no strategy requirement still need a
-            # baseline window.
-            requested_bars = max(2, *strategy_requirements) if strategy_requirements else 2
+            requested_bars = max(strategy_requirements)
             for symbol_batch in _symbol_batches(group):
                 try:
                     start = _warmup_start(symbol_batch[0], timeframe, requested_bars)
                     fetcher = getattr(history, "get_bars_batch_incremental", None)
-
-                    def _fetch(
-                        adjustment: str,
-                        scope: str,
-                        batch: list[str] = symbol_batch,
-                        window_start: str = start,
-                    ) -> dict[str, list[Bar]]:
-                        if fetcher is None:
-                            # Fakes/tests without the incremental fetcher
-                            # use the plain download contract unchanged.
-                            return history.get_bars_batch(batch, timeframe, start=window_start, adjustment=adjustment)
-                        result: dict[str, list[Bar]] = fetcher(
-                            batch,
+                    if fetcher is None:
+                        # Fakes/tests without the incremental fetcher use the
+                        # plain download contract unchanged.
+                        signal_bars = history.get_bars_batch(symbol_batch, timeframe, start=start, adjustment="splits")
+                    else:
+                        signal_bars = fetcher(
+                            symbol_batch,
                             timeframe,
-                            start=window_start,
-                            adjustment=adjustment,
-                            scope=scope,
+                            start=start,
+                            adjustment="splits",
+                            scope="runtime_warmup_signal",
                             config_digest=warmup_digest,
                             identity=f"{timeframe}:{requested_bars}",
                         )
-                        return result
-
-                    execution_bars = _fetch("raw", "runtime_warmup")
-                    signal_bars = _fetch("splits", "runtime_warmup_signal")
                     for symbol in symbol_batch:
-                        raw_tail = execution_bars.get(symbol, [])[-requested_bars:]
                         signal_tail = signal_bars.get(symbol, [])[-requested_bars:]
                         with self._ingestion_lock, self._portfolio_lock:
-                            self.market_state.seed(raw_tail)
                             for runtime in self._portfolio_runtimes:
-                                # Only the runtime whose strategy reads this
-                                # cadence: an operational pass (5m execution)
-                                # would otherwise call seed() with an
-                                # all-filtered list and still bump
-                                # previous_timestamp.
                                 if runtime.strategy.timeframe == timeframe and runtime.market == Market.EQUITY:
                                     runtime.seed(signal_tail)
                         if len(signal_tail) < requested_bars:

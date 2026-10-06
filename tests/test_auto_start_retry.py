@@ -244,7 +244,6 @@ def _full_paper_runtime(**overrides: Any) -> EngineRuntime:
     runtime._events = None  # type: ignore[attr-defined]
     runtime._workers = {}  # type: ignore[attr-defined]
     runtime._not_ready_symbols = set()  # type: ignore[attr-defined]
-    runtime.market_state = SimpleNamespace(allowed_trade_symbols=None)  # type: ignore[attr-defined]
     runtime._decision_loop = lambda: None  # type: ignore[attr-defined]
     runtime._account_loop = lambda: None  # type: ignore[attr-defined]
     runtime._run_stream_worker = lambda name, target: None  # type: ignore[attr-defined]

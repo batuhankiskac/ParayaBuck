@@ -50,86 +50,44 @@ def _make_bar(symbol="AAPL", ts=None, timeframe="1d"):
     )
 
 
-def _make_event(kind, symbol, ts, timeframe="1d"):
+def _make_event(symbol, ts, timeframe="1d"):
     bar = _make_bar(symbol, ts, timeframe)
-    return runtime_mod._Event(kind=kind, bar=bar, received_at=datetime.now(UTC))
+    return runtime_mod._Event(bar=bar, received_at=datetime.now(UTC))
 
 
 class TestEventQueue:
-    def test_primary_never_replaced_by_non_primary(self):
+    def test_full_queue_never_evicts_a_different_bar(self):
         q = runtime_mod._EventQueue(maxsize=2)
-        # Fill with primary events
-        e1 = _make_event("primary", "AAPL", datetime(2025, 1, 1, tzinfo=UTC))
-        e2 = _make_event("primary", "AAPL", datetime(2025, 1, 2, tzinfo=UTC))
+        e1 = _make_event("QQQ", datetime(2025, 1, 1, tzinfo=UTC))
+        e2 = _make_event("QLD", datetime(2025, 1, 1, tzinfo=UTC))
         assert q.put_market_event(e1) == "added"
         assert q.put_market_event(e2) == "added"
-        # Non-primary should overflow, not replace primary
-        e3 = _make_event("warmup", "AAPL", datetime(2025, 1, 3, tzinfo=UTC))
+        e3 = _make_event("SPY", datetime(2025, 1, 1, tzinfo=UTC))
         assert q.put_market_event(e3) == "overflow"
-        snap = q.snapshot()
-        assert snap[0].kind == "primary" and snap[1].kind == "primary"
+        assert [event.bar.symbol for event in q.snapshot()] == ["QQQ", "QLD"]
 
     def test_coalescible_replaces_in_place(self):
         q = runtime_mod._EventQueue(maxsize=2)
         ts = datetime(2025, 1, 1, tzinfo=UTC)
-        e1 = _make_event("warmup", "AAPL", ts)
-        e2 = _make_event("warmup", "MSFT", datetime(2025, 1, 2, tzinfo=UTC))
-        q.put_market_event(e1)
-        q.put_market_event(e2)
-        # Duplicate key coalesces
-        e1_dup = _make_event("warmup", "AAPL", ts)
-        assert q.put_market_event(e1_dup) == "coalesced"
+        q.put_market_event(_make_event("AAPL", ts))
+        q.put_market_event(_make_event("MSFT", datetime(2025, 1, 2, tzinfo=UTC)))
+        assert q.put_market_event(_make_event("AAPL", ts)) == "coalesced"
         snap = q.snapshot()
         # ordering preserved, first slot still AAPL but updated
         assert snap[0].bar.symbol == "AAPL"
         assert snap[1].bar.symbol == "MSFT"
         assert q.qsize() == 2
 
-    def test_overflow_non_primary_replaces_victim(self):
-        q = runtime_mod._EventQueue(maxsize=2)
-        # Fill with one primary, one non-primary
-        e_primary = _make_event("primary", "AAPL", datetime(2025, 1, 1, tzinfo=UTC))
-        e_warmup = _make_event("warmup", "MSFT", datetime(2025, 1, 2, tzinfo=UTC))
-        q.put_market_event(e_primary)
-        q.put_market_event(e_warmup)
-        # Another non-primary with new key should replace the non-primary victim (most recent non-primary from end)
-        e_new = _make_event("warmup", "GOOG", datetime(2025, 1, 3, tzinfo=UTC))
-        assert q.put_market_event(e_new) == "replaced"
-        snap = q.snapshot()
-        # primary preserved, warmup replaced with GOOG
-        kinds = [e.kind for e in snap if e is not None]
-        symbols = [e.bar.symbol for e in snap if e is not None]
-        assert "primary" in kinds
-        assert "GOOG" in symbols
-        assert "MSFT" not in symbols
-
-    def test_primary_overflow_when_full_and_no_coalesce(self):
+    def test_overflow_when_full_and_no_coalesce(self):
         q = runtime_mod._EventQueue(maxsize=1)
-        e1 = _make_event("primary", "AAPL", datetime(2025, 1, 1, tzinfo=UTC))
-        q.put_market_event(e1)
-        e2 = _make_event("primary", "MSFT", datetime(2025, 1, 2, tzinfo=UTC))
-        assert q.put_market_event(e2) == "overflow"
+        q.put_market_event(_make_event("AAPL", datetime(2025, 1, 1, tzinfo=UTC)))
+        assert q.put_market_event(_make_event("MSFT", datetime(2025, 1, 2, tzinfo=UTC))) == "overflow"
         assert q.qsize() == 1
-
-    def test_coalesce_prioritizes_exact_key_over_victim(self):
-        q = runtime_mod._EventQueue(maxsize=2)
-        e1 = _make_event("warmup", "AAPL", datetime(2025, 1, 1, tzinfo=UTC))
-        e2 = _make_event("warmup", "MSFT", datetime(2025, 1, 2, tzinfo=UTC))
-        q.put_market_event(e1)
-        q.put_market_event(e2)
-        # Duplicate of e2 should coalesce, not replace e1
-        e2_dup = _make_event("warmup", "MSFT", datetime(2025, 1, 2, tzinfo=UTC))
-        assert q.put_market_event(e2_dup) == "coalesced"
-        assert q.qsize() == 2
-        snap = q.snapshot()
-        assert snap[1].bar.symbol == "MSFT"
 
     def test_put_nowait_and_get_ordering(self):
         q = runtime_mod._EventQueue(maxsize=3)
-        e1 = _make_event("primary", "AAPL", datetime(2025, 1, 1, tzinfo=UTC))
-        e2 = _make_event("primary", "MSFT", datetime(2025, 1, 2, tzinfo=UTC))
-        q.put_nowait(e1)
-        q.put_nowait(e2)
+        q.put_nowait(_make_event("AAPL", datetime(2025, 1, 1, tzinfo=UTC)))
+        q.put_nowait(_make_event("MSFT", datetime(2025, 1, 2, tzinfo=UTC)))
         assert q.get_nowait().bar.symbol == "AAPL"
         assert q.get_nowait().bar.symbol == "MSFT"
 

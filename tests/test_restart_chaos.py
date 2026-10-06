@@ -776,7 +776,6 @@ def test_restart_with_managed_symbol_outside_configured_universe_stays_pinned(
     # The configured universe no longer includes MSFT.
     runtime._symbols_by_market = {Market.EQUITY: {"SPY", "QQQ", "QLD"}}
     runtime._strategy_enabled = {Market.EQUITY: True}
-    runtime.market_state = SimpleNamespace(allowed_trade_symbols=set())
     runtime._not_ready_symbols = set()
     runtime.symbols = sorted(runtime._symbols_by_market[Market.EQUITY])
     runtime._pin_managed_symbols()

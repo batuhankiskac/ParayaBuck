@@ -175,8 +175,6 @@ def _restarted_runtime(tmp_path: Path, broker: _SimBroker, weights: dict[str, fl
 
 def _bare_engine(tmp_path: Path) -> EngineRuntime:
     eng = EngineRuntime.__new__(EngineRuntime)
-    eng._portfolio_watermarks = {Market.EQUITY: datetime(2025, 1, 2, tzinfo=UTC)}  # type: ignore[attr-defined]
-    eng._series_watermarks = {("AAPL", "1d"): datetime(2025, 1, 2, tzinfo=UTC)}  # type: ignore[attr-defined]
     eng._portfolio_repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")  # type: ignore[attr-defined]
     eng.ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))  # type: ignore[attr-defined]
     eng.broker = SimpleNamespace(
@@ -359,24 +357,17 @@ def test_restart_scenario_E_complete_fill_holdings_match(tmp_path: Path) -> None
 
 
 def test_restart_scenario_F_verification_watermark_restored(tmp_path: Path) -> None:
-    # Engine watermark restoration is the guarantee: _restore_persistent_state
-    # copies latest_decision_timestamp into _portfolio_watermarks/_series_watermarks
+    # The decision watermark lives in PortfolioRuntime: a restarted runtime
+    # restores previous_timestamp from the latest persisted decision.
     broker = _SimBroker()
-    rt_a, repo_a = _runtime(tmp_path, broker, {"AAPL": 0.10})
+    rt_a, _repo_a = _runtime(tmp_path, broker, {"AAPL": 0.10})
     day = datetime(2025, 1, 2, tzinfo=UTC)
     result_a = rt_a.process_closed_bars(_bars(("AAPL",), day=day))
     assert result_a.decision_id is not None
-    # Simulate engine watermark persistence
-    eng = _bare_engine(tmp_path)
-    eng._portfolio_repository = repo_a
-    eng._portfolio_watermarks = {}
-    eng._series_watermarks = {}
-    eng._portfolio_runtimes = (rt_a,)  # type: ignore[assignment]
-    eng._restore_persistent_state()
-    assert eng._portfolio_watermarks[Market.EQUITY] == day
-    assert eng._series_watermarks[("AAPL", "1d")] == day
+    rt_b, _repo_b = _restarted_runtime(tmp_path, broker, {"AAPL": 0.10})
+    assert rt_b.previous_timestamp == day
     rt_a.close()
-    eng.ledger.close()
+    rt_b.close()
 
 
 # ---------------------------------------------------------------------------
@@ -410,20 +401,15 @@ def test_risk_and_watermark_restored_after_restart(tmp_path: Path) -> None:
     eng._consecutive_losses = 0
     eng._restore_persistent_state()
     assert eng._consecutive_losses == 3
-    # Watermark: create a decision then check restoration
+    # Watermark: create a decision; a restarted runtime resumes from it.
     broker = _SimBroker()
     rt, _ = _runtime(tmp_path, broker, {"AAPL": 0.10})
     day = datetime(2025, 1, 2, tzinfo=UTC)
     rt.process_closed_bars(_bars(("AAPL",), day=day))
-    eng2 = _bare_engine(tmp_path)
-    eng2._portfolio_repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    eng2._portfolio_watermarks = {}
-    eng2._series_watermarks = {}
-    eng2._portfolio_runtimes = (rt,)  # type: ignore[assignment]
-    eng2.ledger = ledger
-    eng2._restore_persistent_state()
-    assert eng2._portfolio_watermarks[Market.EQUITY] == day
+    restarted, _ = _restarted_runtime(tmp_path, broker, {"AAPL": 0.10})
+    assert restarted.previous_timestamp == day
     rt.close()
+    restarted.close()
     ledger.close()
 
 

@@ -81,7 +81,6 @@ def _pinning_runtime(account: AccountSnapshot, entries: tuple[Any, ...] = ()) ->
     runtime._market_enabled = {Market.EQUITY: True}
     runtime._symbols_by_market = {Market.EQUITY: {"SPY", "QQQ", "QLD"}}
     runtime._not_ready_symbols = set()
-    runtime.market_state = SimpleNamespace(allowed_trade_symbols={"SPY", "QQQ", "QLD"})
     runtime.broker = SimpleNamespace(
         account_id="acct",
         account=lambda: account,
@@ -156,7 +155,6 @@ def test_foreign_positions_raise_one_alert_and_are_never_pinned(monkeypatch, cap
     assert set(runtime._symbols_by_market) == {Market.EQUITY}
     assert runtime._symbols_by_market[Market.EQUITY] == {"SPY", "QQQ", "QLD"}
     assert runtime.symbols == ["QLD", "QQQ", "SPY"]
-    assert runtime.market_state.allowed_trade_symbols == {"SPY", "QQQ", "QLD"}
     assert runtime._not_ready_symbols == {"QLD"}
 
 

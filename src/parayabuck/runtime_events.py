@@ -1,7 +1,12 @@
 """Runtime internal event queue — extracted from runtime.py.
 
-Preserves thread synchronization, coalescing, replacement, overflow, and
-ordering. Do not replace with asyncio.Queue in this mission.
+Preserves thread synchronization, coalescing, overflow, and ordering. Do not
+replace with asyncio.Queue.
+
+The only market events are finalized strategy-cadence bars (the daily
+decision bar). They are never evicted: a full queue coalesces a repeat of the
+same bar and otherwise reports overflow, which the runtime turns into a halt
+instead of silently dropping a decision input.
 """
 
 from __future__ import annotations
@@ -18,13 +23,12 @@ from parayabuck.core.models import Bar
 
 @dataclass(frozen=True)
 class _Event:
-    kind: str
     bar: Bar
     received_at: datetime
 
 
 class _EventQueue:
-    """Bounded queue with domain-aware coalescing and overflow policy."""
+    """Bounded queue with same-bar coalescing and a no-eviction overflow policy."""
 
     def __init__(self, maxsize: int) -> None:
         self.maxsize = maxsize
@@ -62,37 +66,26 @@ class _EventQueue:
         return self.qsize() == 0
 
     def put_market_event(self, event: _Event) -> str:
+        """Queue ``event``; returns ``added``, ``coalesced`` or ``overflow``.
+
+        A full queue replaces a queued event for the SAME bar (symbol,
+        timeframe, timestamp) with the newer one. It never evicts a different
+        bar: every queued event is a decision input.
+        """
         with self._condition:
             if len(self._items) < self.maxsize:
                 self._items.append(event)
                 self._condition.notify()
                 return "added"
-            key = (event.kind, event.bar.symbol, event.bar.timeframe, event.bar.timestamp)
+            key = (event.bar.symbol, event.bar.timeframe, event.bar.timestamp)
             for index in range(len(self._items) - 1, -1, -1):
                 candidate = self._items[index]
                 if candidate is None:
                     continue
-                candidate_key = (
-                    candidate.kind,
-                    candidate.bar.symbol,
-                    candidate.bar.timeframe,
-                    candidate.bar.timestamp,
-                )
-                if candidate_key == key:
+                if (candidate.bar.symbol, candidate.bar.timeframe, candidate.bar.timestamp) == key:
                     self._items[index] = event
                     return "coalesced"
-            if event.kind == "primary":
-                return "overflow"
-            victim = None
-            for index in range(len(self._items) - 1, -1, -1):
-                candidate = self._items[index]
-                if candidate is not None and candidate.kind != "primary":
-                    victim = index
-                    break
-            if victim is None:
-                return "overflow"
-            self._items[victim] = event
-            return "replaced"
+            return "overflow"
 
     def snapshot(self) -> tuple[_Event | None, ...]:
         with self._condition:
@@ -104,9 +97,4 @@ class _EventQueue:
             return min(received) if received else None
 
 
-# Public aliases — EngineRuntime and external callers should use these.
-# Private names kept for backward compatibility with tests that patch them.
-RuntimeEvent = _Event
-EventQueue = _EventQueue
-
-__all__ = ["RuntimeEvent", "EventQueue", "_Event", "_EventQueue"]
+__all__ = ["_Event", "_EventQueue"]

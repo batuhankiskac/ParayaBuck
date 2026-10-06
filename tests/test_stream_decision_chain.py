@@ -3,7 +3,7 @@
 Every link below runs as production code:
 
     ``_on_minute_bar`` → real ``TimeframeAggregator`` daily finalization →
-    ``_emit_finalized_bar`` → ``_put_event("portfolio", bar)`` → the real
+    ``_emit_finalized_bar`` → ``_put_event(bar)`` → the real
     ``_decision_loop`` thread (batch key ``(bar.timeframe, bar.timestamp)``,
     expected symbols from ``_portfolio_runtimes``) → the real
     ``_signal_cross_check_step`` deferring the batch → the real
@@ -189,15 +189,10 @@ def _engine(portfolio_runtime: Any, historical: Any) -> EngineRuntime:
     engine._portfolio_lock = threading.RLock()
     engine._state_lock = threading.RLock()
     engine._event_stats_lock = threading.Lock()
-    # The daily cadence is the one under test; a 5m aggregator would queue
-    # primary/higher events that belong to other subsystems.
     engine.aggregators = {"1d": TimeframeAggregator("1d", app_config.engine.data_finalization_grace_seconds)}
     engine._strategy_timeframes = {"1d"}
     engine._historical = historical
     engine._portfolio_runtimes = (portfolio_runtime,)
-    engine._expected_all_symbols = set()
-    engine._series_watermarks = {}
-    engine._portfolio_watermarks = {}
     engine._deferred_portfolio_batches = {}
     engine._last_portfolio_status = {}
     engine._coalesced_events = 0
@@ -284,13 +279,12 @@ def test_minute_stream_defers_the_equity_batch_and_the_loop_reruns_it(
     assert status["pending"][session.isoformat()]["attempts"] == len(sip.calls)
 
 
-def test_a_corrected_minute_re_aggregates_the_daily_bar_without_deciding_twice() -> None:
-    """A corrected minute re-emits the daily bar as a correction, not a new batch.
+def test_a_corrected_minute_never_queues_a_second_decision_bar() -> None:
+    """A correction of an already-emitted daily bar queues nothing.
 
-    ``_on_updated_minute_bar`` must never queue a second ``portfolio`` event
-    for a session the decision loop already closed: that batch key was popped
-    and its watermark advanced, and a re-decision would place a second order
-    for the same session.
+    ``_on_updated_minute_bar`` must never queue a second event for a session
+    the decision loop already closed: a re-decision would place a second
+    order for the same session.
     """
     sessions = _finished_sessions(datetime.now(UTC))
     assert sessions, "the NYSE calendar window must hold a closed session"
@@ -301,12 +295,28 @@ def test_a_corrected_minute_re_aggregates_the_daily_bar_without_deciding_twice()
         for symbol in _SYMBOLS:
             asyncio.run(engine._on_minute_bar(_minute(symbol, open_utc + timedelta(minutes=offset), close)))
     engine._flush_aggregators()
-    closed = [(item.kind, item.bar.symbol, item.bar) for item in _events(engine)]
-    assert [(kind, symbol) for kind, symbol, _bar in closed] == [("portfolio", symbol) for symbol in sorted(_SYMBOLS)]
-    assert {bar for _kind, _symbol, bar in closed} == {_daily(symbol, open_utc) for symbol in _SYMBOLS}
+    closed = [item.bar for item in _events(engine)]
+    assert [bar.symbol for bar in closed] == sorted(_SYMBOLS)
+    assert set(closed) == {_daily(symbol, open_utc) for symbol in _SYMBOLS}
 
     asyncio.run(engine._on_updated_minute_bar(_minute("QQQ", open_utc + timedelta(minutes=1), 445.0)))
-    corrected = _events(engine)[-1]
-    assert corrected.kind == "correction"
-    assert corrected.bar == _daily("QQQ", open_utc, high=445.0)
-    assert [item.kind for item in _events(engine)] == ["portfolio", "portfolio", "correction"]
+    assert [item.bar for item in _events(engine)] == closed
+
+
+def test_a_corrected_minute_revises_the_still_open_daily_bar() -> None:
+    """A correction that lands before the session-close flush is part of the
+    daily decision bar the loop receives."""
+    sessions = _finished_sessions(datetime.now(UTC))
+    assert sessions, "the NYSE calendar window must hold a closed session"
+    open_utc = sessions[-1][1]
+    engine = _engine(_EquityPortfolioRuntime({}), None)
+
+    for offset, close in enumerate(_MINUTE_CLOSES):
+        for symbol in _SYMBOLS:
+            asyncio.run(engine._on_minute_bar(_minute(symbol, open_utc + timedelta(minutes=offset), close)))
+    asyncio.run(engine._on_updated_minute_bar(_minute("QQQ", open_utc + timedelta(minutes=1), 445.0)))
+    assert _events(engine) == []
+    engine._flush_aggregators()
+
+    by_symbol = {item.bar.symbol: item.bar for item in _events(engine)}
+    assert by_symbol["QQQ"] == _daily("QQQ", open_utc, high=445.0)

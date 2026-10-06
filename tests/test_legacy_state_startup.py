@@ -94,7 +94,6 @@ def test_operator_reset_also_clears_a_leftover_worker_halt_row(tmp_path: Path) -
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",

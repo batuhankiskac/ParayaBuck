@@ -212,7 +212,6 @@ def test_operator_reset_refuses_while_a_shared_worker_is_stopped(tmp_path: Path)
     runtime._events = SimpleNamespace(empty=lambda: True)
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
-    runtime.market_state = SimpleNamespace()
     runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
     runtime.ledger = ledger
 
@@ -562,7 +561,6 @@ def test_operator_reset_clears_only_the_verified_incident(tmp_path: Path) -> Non
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
@@ -1077,7 +1075,6 @@ def test_operator_reset_keeps_a_halt_raised_during_verification(tmp_path: Path) 
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     runtime._persist_risk_state = lambda _account: None  # type: ignore[method-assign]
 
     def concurrent_halt(_halts: object) -> None:
@@ -1121,7 +1118,6 @@ def test_operator_reset_keeps_a_halt_raised_during_broker_reconcile(tmp_path: Pa
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     runtime._persist_risk_state = lambda _account: None  # type: ignore[method-assign]
 
     runtime.reset_safety_lock()
@@ -1160,7 +1156,6 @@ def test_operator_reset_restores_a_blip_degraded_runtime(tmp_path: Path, alive: 
     runtime._running = True
     runtime._state = "degraded"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
 
     def persist(_account: AccountSnapshot) -> None:
         worker.alive = alive
@@ -1207,7 +1202,7 @@ def test_halt_writers_hold_the_state_lock(monkeypatch: pytest.MonkeyPatch) -> No
     runtime._dropped_events = 0
     runtime._events = SimpleNamespace(put_market_event=lambda _event: "overflow")
 
-    runtime._put_event("primary", SimpleNamespace())
+    runtime._put_event(SimpleNamespace())
 
     now = datetime.now(UTC)
     runtime._workers = {"pb-trade-updates": WorkerHealth(now, now, restart_count=5)}

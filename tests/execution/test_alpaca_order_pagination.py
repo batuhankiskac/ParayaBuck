@@ -110,7 +110,7 @@ def test_order_id_cursor_keeps_filters_and_descending_order_across_501_orders() 
     client = _PaginatedTradingClient(orders)
     adapter = AlpacaClient(client=client)
 
-    result = adapter.get_orders(GetOrdersRequest(status="open", symbols=["AAA", "BBB"], nested=True))
+    result = adapter.get_open_orders(GetOrdersRequest(status="open", symbols=["AAA", "BBB"], nested=True))
 
     assert [str(order.id) for order in result] == [str(order.id) for order in orders]
     assert len(client.http_calls) == 2
@@ -132,7 +132,7 @@ def test_ascending_queries_use_after_order_id_and_preserve_api_order() -> None:
     client = _PaginatedTradingClient(orders)
     adapter = AlpacaClient(client=client)
 
-    result = adapter.get_orders(GetOrdersRequest(status="open", direction="asc"))
+    result = adapter.get_open_orders(GetOrdersRequest(status="open", direction="asc"))
 
     assert [str(order.id) for order in result] == [str(order.id) for order in reversed(orders)]
     assert client.http_calls[0][1]["direction"] == "asc"
@@ -143,7 +143,7 @@ def test_duplicate_order_ids_are_returned_once_across_overlapping_pages() -> Non
     client = _PaginatedTradingClient(_orders(501), overlap_boundary=True)
     adapter = AlpacaClient(client=client)
 
-    result = adapter.get_orders(GetOrdersRequest(status="open"))
+    result = adapter.get_open_orders(GetOrdersRequest(status="open"))
 
     ids = [str(order.id) for order in result]
     assert len(ids) == 501
@@ -155,7 +155,7 @@ def test_repeated_page_fails_when_cursor_stops_advancing() -> None:
     adapter = AlpacaClient(client=client)
 
     with pytest.raises(RuntimeError, match="pagination"):
-        adapter.get_orders(GetOrdersRequest(status="open"))
+        adapter.get_open_orders(GetOrdersRequest(status="open"))
 
 
 def test_later_page_error_propagates_without_returning_partial_orders() -> None:
@@ -163,7 +163,7 @@ def test_later_page_error_propagates_without_returning_partial_orders() -> None:
     adapter = AlpacaClient(client=client)
 
     with pytest.raises(RuntimeError, match="later-page failure"):
-        adapter.get_orders(GetOrdersRequest(status="open"))
+        adapter.get_open_orders(GetOrdersRequest(status="open"))
 
     assert len(client.http_calls) == 2
 
@@ -173,7 +173,7 @@ def test_missing_order_id_fails_closed() -> None:
     adapter = AlpacaClient(client=client)
 
     with pytest.raises(RuntimeError, match="without an ID"):
-        adapter.get_orders(GetOrdersRequest(status="open"))
+        adapter.get_open_orders(GetOrdersRequest(status="open"))
 
 
 def test_timestamp_filtered_full_page_fails_instead_of_returning_partial_results() -> None:
@@ -181,4 +181,4 @@ def test_timestamp_filtered_full_page_fails_instead_of_returning_partial_results
     adapter = AlpacaClient(client=client)
 
     with pytest.raises(RuntimeError, match="timestamp filters"):
-        adapter.get_orders(GetOrdersRequest(status="open", after="2026-01-01T00:00:00Z"))
+        adapter.get_open_orders(GetOrdersRequest(status="open", after="2026-01-01T00:00:00Z"))

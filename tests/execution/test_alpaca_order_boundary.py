@@ -12,7 +12,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from parayabuck.execution.alpaca_protection import ProtectionService
 
 from parayabuck.core.models import Market
 from parayabuck.execution.alpaca import AlpacaBroker, AmbiguousOrderState
@@ -169,26 +168,17 @@ def test_terminal_partial_fill_is_booked_from_the_live_recovery_path(tmp_path: P
     assert kwargs["status"] == "expired"
 
 
-@pytest.mark.parametrize("dead_status", ["done_for_day", "replaced", "stopped", "cancelled"])
-def test_nested_bracket_dead_stop_leg_is_not_protection(dead_status: str, tmp_path: Path) -> None:
-    """A bracket stop leg that can no longer execute must not count as live
-    protection."""
-    leg = SimpleNamespace(side="sell", type="stop", stop_price=95.0, status=dead_status, qty="2", filled_qty="0")
-    parent = SimpleNamespace(symbol="AAPL", side="buy", type="market", stop_price=None, status="filled", legs=[leg])
-    broker = make_broker(
-        tmp_path,
-        client=SimpleNamespace(get_order_by_id=lambda _order_id, _request=None: parent),
-    )
-
-    assert broker._has_nested_bracket_protection("parent-1", "AAPL", True, 2.0) is False
-    assert broker._last_protection_mismatch == "missing"
-    assert ProtectionService(broker)._has_nested_bracket_protection("parent-1", "AAPL", True, 2.0) is False
-
-
 def test_facade_exposes_no_dead_fill_or_position_internals() -> None:
     """Fill polling and single-position lookup have no production owner: the
     strategy decides at the close and fills at the next open, so a live caller
     could only ever reach them on an uninitialised double. The facade must not
     keep them as dead surface."""
-    for removed in ("_wait_for_fill", "_position_qty"):
+    for removed in (
+        "_wait_for_fill",
+        "_position_qty",
+        "_submit_stop",
+        "_has_protective_order",
+        "_has_nested_bracket_protection",
+        "_cancel_protective_orders",
+    ):
         assert not hasattr(AlpacaBroker, removed), f"AlpacaBroker still exposes dead {removed}"

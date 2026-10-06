@@ -218,3 +218,23 @@ def test_a_verified_downtrend_still_sells(tmp_path) -> None:
     result = runtime.process_closed_bars(batch)
 
     assert [(order.symbol, order.side) for order in result.orders] == [("QLD", PortfolioOrderSide.SELL)]
+
+
+def test_operator_alert_is_retried_after_a_failed_emit(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from parayabuck.monitoring import alerts
+
+    runtime = _runtime(tmp_path, _Broker())
+    calls: list[str] = []
+
+    def flaky_emit(kind: str, **fields: object) -> None:
+        calls.append(kind)
+        if len(calls) == 1:
+            raise RuntimeError("sink down")
+
+    monkeypatch.setattr(alerts, "emit", flaky_emit)
+    key = ("decision-1", "stuck_deferred_buy")
+    runtime._raise_operator_alert_once(key, message="stuck")
+    runtime._raise_operator_alert_once(key, message="stuck")
+    runtime._raise_operator_alert_once(key, message="stuck")
+
+    assert calls == ["paper_incident", "paper_incident"]

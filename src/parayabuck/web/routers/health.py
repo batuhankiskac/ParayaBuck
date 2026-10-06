@@ -153,9 +153,8 @@ async def readyz() -> JSONResponse:
         and getattr(configured_mode, "value", None) == "paper"
     )
     engine_failed = engine_state == "error"
-    # Why the engine is not running, for the out-of-process /readyz probe
-    # (`parayabuck ops watchdog`): a failed start must name its cause and its
-    # retry count, not just the state. Both attributes are absent on stub
+    # Why the engine is not running, for an operator probing /readyz: a
+    # failed start must name its cause and its retry count, not just the state. Both attributes are absent on stub
     # managers used by tests.
     engine_failure = getattr(manager, "last_engine_error", None)
     retry_attempt = getattr(manager, "_retry_attempt", 0)

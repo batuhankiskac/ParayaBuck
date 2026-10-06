@@ -310,10 +310,9 @@ def test_runtime_pass_is_inert_when_disabled_or_before_startup(emitted) -> None:
 
 
 def test_watchdog_alert_kinds_are_known_and_alarm_is_a_warning() -> None:
-    from parayabuck.monitoring.events import ALERT_KINDS, DEFAULT_ALERT_EVENTS, WARNING_KINDS
+    from parayabuck.monitoring.events import ALERT_KINDS, WARNING_KINDS
 
     assert {"intent_alarm", "intent_recovered"} <= ALERT_KINDS
-    assert {"intent_alarm", "intent_recovered"} <= set(DEFAULT_ALERT_EVENTS)
     assert "intent_alarm" in WARNING_KINDS
     alerts.reset_for_tests()
 

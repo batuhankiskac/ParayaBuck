@@ -1,32 +1,12 @@
 """Single source of truth for alert/incident event vocabulary.
 
 Defines the canonical set of alert kinds and their severity classification.
-Both ``parayabuck.config.AlertingConfig`` and ``parayabuck.monitoring.alerts``
-import from here so the vocabulary cannot drift.
+``parayabuck.monitoring.alerts`` and the operational event journal import
+from here so the vocabulary cannot drift.
 
-Webhook default choice
-----------------------
 ``ALERT_KINDS`` is the full vocabulary (including ``paper_incident``,
-``paper_receipt`` and ``daily_summary``). Any kind in this set is valid in
-``alerting.events`` and will pass ``AlertingConfig`` validation.
-
-``DEFAULT_ALERT_EVENTS`` is the webhook-enabled default. It equals
-``ALERT_KINDS_ORDERED`` with ``paper_receipt`` excluded:
-
-* ``paper_receipt`` is emitted on every scheduled equity decision (daily,
-  ``strategy.equity.rebalance_frequency: hours:24``) via
-  ``receipt.py:build_receipt`` / ``write``. It is routine, high-volume
-  lifecycle telemetry, not an operator-actionable failure. Enabling it on the
-  webhook by default would spam the operator channel.
-* ``paper_incident`` is an incident/failure signal (reconciliation drift,
-  DB integrity) and **is** webhook-enabled by default.
-
-Operators who want receipt webhooks can explicitly add ``paper_receipt`` to
-``alerting.events`` in ``config/settings.yaml`` or via
-``configure_alerting(events=...)``. Excluding it by default preserves the
-pre-existing operator semantics where ``config/settings.yaml`` listed 12-14
-failure/lifecycle kinds without ``paper_receipt``, while still accepting
-``paper_receipt`` as a valid configurable kind (drift test passes).
+``paper_receipt`` and ``daily_summary``). Every accepted kind goes to the
+local log and the operational event journal; nothing is delivered off-host.
 """
 
 from __future__ import annotations
@@ -81,14 +61,6 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
 
 ALERT_KINDS: frozenset[str] = frozenset(ALERT_KINDS_ORDERED)
 
-# Kinds that were renamed; a configuration still naming the old kind is
-# rejected with a pointer to the new one instead of a bare "unknown kind".
-RENAMED_ALERT_KINDS: dict[str, str] = {
-    # The crypto universe scanner is gone; the kind only ever carried
-    # data-provider outages in the equity-only runtime.
-    "scanner_refresh_failure": "data_provider_unavailable",
-}
-
 # Kinds that describe a failure/incident are logged at WARNING; routine
 # lifecycle/recovery events at INFO. Kept next to the kinds so the severity
 # table cannot drift from the event vocabulary.
@@ -114,13 +86,8 @@ WARNING_KINDS: frozenset[str] = frozenset(
     }
 )
 
-# Webhook default: all ordered kinds except the high-volume receipt.
-DEFAULT_ALERT_EVENTS: tuple[str, ...] = tuple(kind for kind in ALERT_KINDS_ORDERED if kind != "paper_receipt")
-
 __all__ = [
     "ALERT_KINDS",
     "ALERT_KINDS_ORDERED",
-    "DEFAULT_ALERT_EVENTS",
-    "RENAMED_ALERT_KINDS",
     "WARNING_KINDS",
 ]

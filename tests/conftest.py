@@ -285,7 +285,7 @@ _PROCESS_ENV_KEYS = ("CONFIG_PATH", "ENV_PATH")
 def _restore_process_singletons():
     """Keep the alert sink, the Web backtest singleton and the process env clean.
 
-    All three are process-global: a test that configured an example.com webhook,
+    All three are process-global: a test that shortened the alert throttle,
     left a backtest ``running``, or launched the web entry point decided the
     assertions of whichever test ran next.
     """
@@ -324,9 +324,6 @@ def _restore_process_singletons():
 @pytest.fixture(autouse=True)
 def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     tree_before = _state_tree_signature()
-    # An operator's real alert webhook in the developer shell must never
-    # receive test traffic (the runtime falls back to this variable).
-    monkeypatch.delenv("PARAYABUCK_ALERT_WEBHOOK_URL", raising=False)
     iso_cache = tmp_path / "warmup_isolated.sqlite3"
     iso_journal = tmp_path / "observability_isolated.sqlite3"
     iso_snapshot = tmp_path / "health_snapshot_isolated.json"
@@ -536,7 +533,7 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     yield
 
     time.sleep(0.05)
-    ignored = {"pb-journal-writer", "pb-alert-webhook-worker"}
+    ignored = {"pb-journal-writer"}
     alive = [t for t in threading.enumerate() if t.is_alive() and t.name.startswith("pb-") and t.name not in ignored]
     # Also ignore daemon threads that are expected to linger briefly
     alive_non_daemon = [t for t in alive if not t.daemon]

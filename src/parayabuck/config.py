@@ -13,7 +13,6 @@ from dotenv import load_dotenv
 
 from parayabuck.core.models import Market
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
-from parayabuck.monitoring.events import ALERT_KINDS, ALERT_KINDS_ORDERED, DEFAULT_ALERT_EVENTS, RENAMED_ALERT_KINDS
 
 # Single source of truth for the default ledger location: monitoring/metrics
 # and the web dashboard fall back to this path when config resolution fails,
@@ -101,35 +100,12 @@ class LiveConfig:
 
 @dataclass(frozen=True)
 class AlertingConfig:
-    """Event-notification sink configuration (console/log always on)."""
+    """Local alert sink configuration (log + event journal; nothing off-host)."""
 
-    enabled: bool = True
-    webhook_url: str = ""
-    # Default webhook-enabled events exclude high-volume paper_receipt (see events.py).
-    # Paper_incident remains enabled; operators may add paper_receipt explicitly.
-    events: tuple[str, ...] = DEFAULT_ALERT_EVENTS
     # One-line summary (trend vs SMA, target vs held weight, positions,
-    # equity, daily change) after each equity session-close decision. It is
-    # always logged/journaled; it reaches the webhook only when a webhook URL
-    # is configured and ``daily_summary`` is in ``events``.
+    # equity, daily change) after each equity session-close decision,
+    # written to the log and the event journal.
     daily_summary: bool = True
-
-    def __post_init__(self) -> None:
-        renamed = sorted(kind for kind in self.events if kind in RENAMED_ALERT_KINDS)
-        if renamed:
-            raise ValueError(
-                "alerting.events uses renamed kinds; replace "
-                + ", ".join(f"{old} with {RENAMED_ALERT_KINDS[old]}" for old in renamed)
-            )
-        known = set(ALERT_KINDS)
-        unknown = set(self.events) - known
-        if unknown:
-            raise ValueError(f"alerting.events contains unknown kinds: {sorted(unknown)}")
-        object.__setattr__(
-            self,
-            "events",
-            tuple(dict.fromkeys(kind for kind in ALERT_KINDS_ORDERED if kind in self.events)),
-        )
 
 
 @dataclass(frozen=True)
@@ -620,6 +596,22 @@ def _reject_removed_crypto_settings(raw: dict[str, Any]) -> None:
         raise ValueError(f"{_CRYPTO_REMOVED}; remove these settings: {', '.join(sorted(found))}")
 
 
+_WEBHOOK_REMOVED = (
+    "Outbound alert delivery was removed on 2026-10-06: alerts stay local "
+    "(log + event journal; read them with `parayabuck ops events`, "
+    "`parayabuck ops status`, the dashboard or journalctl)"
+)
+_REMOVED_ALERTING_KEYS = ("enabled", "webhook_url", "events")
+
+
+def _reject_removed_alerting_settings(raw: dict[str, Any]) -> None:
+    """Fail loudly on the removed webhook keys instead of silently dropping them."""
+    block = raw.get("alerting")
+    found = [f"alerting.{key}" for key in _REMOVED_ALERTING_KEYS if isinstance(block, dict) and key in block]
+    if found:
+        raise ValueError(f"{_WEBHOOK_REMOVED}; remove these settings: {', '.join(found)}")
+
+
 def load_config(config_path: str | None = None) -> Config:
     load_dotenv()
     path = Path(config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml")
@@ -627,6 +619,7 @@ def load_config(config_path: str | None = None) -> Config:
         raise FileNotFoundError(f"Config file not found: {path}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     _reject_removed_crypto_settings(raw)
+    _reject_removed_alerting_settings(raw)
     runtime_raw = _block(raw.get("runtime"))
     # The pre-v1 ``risk_monitor_timeframe`` key was renamed to
     # ``market_state_timeframe`` (the cadence observes market state; risk

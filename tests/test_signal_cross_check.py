@@ -505,10 +505,9 @@ def test_runtime_without_a_second_source_client_is_a_no_op(monkeypatch) -> None:
 
 
 def test_alert_kind_is_known_and_a_warning() -> None:
-    from parayabuck.monitoring.events import ALERT_KINDS, DEFAULT_ALERT_EVENTS, WARNING_KINDS
+    from parayabuck.monitoring.events import ALERT_KINDS, WARNING_KINDS
 
     assert "signal_source_mismatch" in ALERT_KINDS
-    assert "signal_source_mismatch" in DEFAULT_ALERT_EVENTS
     assert "signal_source_mismatch" in WARNING_KINDS
 
 

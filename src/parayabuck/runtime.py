@@ -490,17 +490,8 @@ class EngineRuntime:
         self._historical: AlpacaHistoricalData | None = None
         self._managed_pin_symbols: set[str] = set()
         self._last_portfolio_status: dict[Market, str] = {}
-        # Observability state: the alert sink is configured once from the
-        # config block; the runtime session row pairs with the ledger's
-        # runtime_sessions table so restart counts are persisted.
-        # An empty ``alerting.webhook_url`` falls back to the documented
-        # PARAYABUCK_ALERT_WEBHOOK_URL environment override, so the secret
-        # URL can live in the service EnvironmentFile instead of the YAML.
-        alerts.configure_alerting(
-            enabled=config.alerting.enabled,
-            webhook_url=config.alerting.webhook_url or os.getenv("PARAYABUCK_ALERT_WEBHOOK_URL", "").strip(),
-            events=config.alerting.events,
-        )
+        # Observability state: the runtime session row pairs with the
+        # ledger's runtime_sessions table so restart counts are persisted.
         self._runtime_session_id: str | None = None
         self._reconcile_failed = False
         self._live_startup_proof = live_startup_proof

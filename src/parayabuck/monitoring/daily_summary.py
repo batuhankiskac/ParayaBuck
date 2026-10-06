@@ -4,8 +4,7 @@ Pure formatting: every value comes from the persisted decision target (its
 strategy metadata and post-risk account-level weights) and the account
 snapshot the decision was made on. Nothing here participates in strategy,
 risk or order math. Delivery goes through ``monitoring.alerts.emit`` (log +
-journal always; webhook only when ``alerting.webhook_url`` or
-``PARAYABUCK_ALERT_WEBHOOK_URL`` is configured).
+event journal).
 """
 
 from __future__ import annotations

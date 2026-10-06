@@ -3,7 +3,7 @@
 Each test pins one invariant: health checks fail closed (UNKNOWN) on a missing
 or unreadable ledger instead of reporting OK, a naive incident timestamp cannot
 hide an active drawdown halt, one non-JSON field cannot sink a journal batch,
-webhook credentials never reach the log, alert fields are redacted on every
+alert fields are redacted on every
 sink, the throttle map stays bounded, and the doctor/bundle never fall back to a
 cwd-relative ledger, and the ledger checks close what they open. All offline (tmp_path, no network).
 """
@@ -103,53 +103,24 @@ def test_non_json_field_does_not_sink_journal_batch(tmp_path: Path) -> None:
 # Alerts — credentials never logged, fields redacted, throttle map bounded
 # ---------------------------------------------------------------------------
 
-_WEBHOOK_URL = "https://hooks.example.test/services/T000/B000/SECRETTOKEN"
 
-
-@pytest.mark.parametrize(
-    "message",
-    [
-        f"404 Client Error: Not Found for url: {_WEBHOOK_URL}",
-        "HTTPSConnectionPool(host='hooks.example.test', port=443): Max retries exceeded "
-        "with url: /services/T000/B000/SECRETTOKEN",
-    ],
-)
-def test_webhook_failure_log_omits_webhook_credential(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, message: str
-) -> None:
-    def failing_post(url: str, **_: object) -> None:
-        raise RuntimeError(message)
-
-    monkeypatch.setattr(alerts.requests, "post", failing_post)
-    alerts.reset_for_tests()
-    with caplog.at_level(logging.WARNING, logger="parayabuck.monitoring.alerts"):
-        alerts._post_webhook(_WEBHOOK_URL, {"kind": "paper_incident"})
-    alerts.reset_for_tests()
-
-    assert "delivery failed" in caplog.text
-    assert "SECRETTOKEN" not in caplog.text
-
-
-def test_alert_fields_are_redacted_on_log_and_webhook(
+def test_alert_fields_are_redacted_on_log_and_journal(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     from parayabuck.monitoring import journal as journal_module
 
-    posted: list[dict[str, object]] = []
-    monkeypatch.setattr(journal_module, "emit_journal", lambda event: True)
-    monkeypatch.setattr(alerts, "_enqueue_webhook", lambda url, payload: posted.append(payload))
+    journaled: list[object] = []
+    monkeypatch.setattr(journal_module, "emit_journal", lambda event: journaled.append(event))
     alerts.reset_for_tests()
-    alerts.configure_alerting(
-        enabled=True, webhook_url="http://127.0.0.1:1/unused", events=("paper_incident",), throttle_seconds=0.0
-    )
+    alerts.configure_alerting(throttle_seconds=0.0)
 
     with caplog.at_level(logging.INFO, logger="parayabuck.monitoring.alerts"):
         alerts.emit("paper_incident", message="boom", category="X", api_key_hint="leaky-value")
     alerts.reset_for_tests()
 
     assert "leaky-value" not in caplog.text
-    fields = posted[0]["fields"]
-    assert isinstance(fields, dict)
+    assert "***REDACTED***" in caplog.text
+    fields = journaled[0].fields
     assert fields["api_key_hint"] == "***REDACTED***"
     assert fields["category"] == "X"
 
@@ -160,7 +131,7 @@ def test_throttle_map_prunes_expired_keys(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(journal_module, "emit_journal", lambda event: True)
     monkeypatch.setattr(alerts, "_THROTTLE_KEYS_MAX", 3)
     alerts.reset_for_tests()
-    alerts.configure_alerting(enabled=False, throttle_seconds=60.0)
+    alerts.configure_alerting(throttle_seconds=60.0)
     now = time.monotonic()
     alerts._last_emitted_at.update({f"old-{index}": now - 3600.0 for index in range(5)})
     alerts._last_emitted_at["recent"] = now

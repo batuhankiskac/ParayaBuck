@@ -30,7 +30,7 @@ AUTO_BACKUP_GLOB = f"{BACKUP_PREFIX}[0-9]*{BACKUP_SUFFIX}"
 BACKUP_GLOB = f"{BACKUP_PREFIX}*{BACKUP_SUFFIX}"
 # Freshness bound for the 6 h backup timer: two consecutive missed runs mean
 # the backup path is broken, and a later database loss would force a restore
-# from a stale snapshot. Checked by `parayabuck doctor` and `ops watchdog`.
+# from a stale snapshot. Checked by `parayabuck doctor`.
 MAX_BACKUP_AGE_HOURS = 12.0
 _LABEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 
@@ -298,8 +298,7 @@ def latest_verified_backup(backup_dir: str | Path) -> Path | None:
 def latest_backup_age_hours(backup_dir: str | Path, *, now: datetime | None = None) -> float | None:
     """Age in hours of the newest backup in ``backup_dir``; None when there is none.
 
-    The freshness check behind ``parayabuck doctor`` and
-    ``parayabuck ops watchdog``: a backup timer that stopped running weeks
+    The freshness check behind ``parayabuck doctor``: a backup timer that stopped running weeks
     ago is otherwise indistinguishable from a healthy one until a database
     loss forces a restore from a stale snapshot.
     """

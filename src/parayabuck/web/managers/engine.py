@@ -45,7 +45,7 @@ _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
 # emits ``runtime_start_failed``; a retrying auto-start stays quiet for the
 # first attempts, then repeats the alert every
 # ``_AUTO_START_RETRY_ALERT_REPEAT`` attempts so an endless retry loop
-# cannot spam the webhook while still reporting itself.
+# cannot flood the log/journal while still reporting itself.
 _AUTO_START_RETRY_ALERT_AFTER = 3
 _AUTO_START_RETRY_ALERT_REPEAT = 10
 

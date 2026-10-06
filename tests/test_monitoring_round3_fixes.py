@@ -1,7 +1,7 @@
 """Regression tests for the third monitoring-layer defect pass.
 
 Each test pins one invariant: a healthy runtime's snapshot is not reported as
-entry-blocked or stale, webhook query-string credentials never reach the log,
+entry-blocked or stale,
 filled orders are not "unresolved", and explicit paths are never swapped for
 cwd-relative defaults. All offline (tmp_path, no network).
 """
@@ -19,7 +19,6 @@ import yaml
 from parayabuck.config import Config
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.monitoring import health as health_module
-from parayabuck.monitoring.alerts import _scrub_webhook_url
 from parayabuck.monitoring.diagnostic import collect_bundle_data
 from parayabuck.monitoring.forensics import decision_reconstruction, unresolved_orders
 from parayabuck.monitoring.health import HealthStatus, _check_account, _check_execution, _check_risk, _check_workers
@@ -86,21 +85,6 @@ def test_worker_liveness_constants_match_runtime() -> None:
     }
 
 
-def test_webhook_scrub_removes_query_string_credentials() -> None:
-    url = "https://chat.example.test/v1/spaces/AAA/messages?key=SECRETKEY&token=SECRETTOKEN"
-    # requests' ConnectionError text carries the path and query, not the full URL
-    text = (
-        "HTTPSConnectionPool(host='chat.example.test', port=443): Max retries exceeded with url: "
-        "/v1/spaces/AAA/messages?key=SECRETKEY&token=SECRETTOKEN (Caused by NewConnectionError())"
-    )
-
-    scrubbed = _scrub_webhook_url(text, url)
-
-    assert "SECRETKEY" not in scrubbed
-    assert "SECRETTOKEN" not in scrubbed
-    assert "/v1/spaces/AAA" not in scrubbed
-
-
 def test_stream_filled_orders_are_not_unresolved(tmp_path: Path) -> None:
     db = tmp_path / "ledger.sqlite3"
     conn = sqlite3.connect(db)
@@ -119,7 +103,9 @@ def test_reconstruction_never_falls_back_from_an_explicit_journal(tmp_path: Path
     db = tmp_path / "ledger.sqlite3"
     sqlite3.connect(db).close()
     # the process-default journal holds an event for this decision
-    assert get_journal().emit_sync(create_event(kind="decision_summary", message="x", decision_id="d1"))
+    default_journal = get_journal()
+    assert default_journal.emit(create_event(kind="decision_summary", message="x", decision_id="d1"))
+    default_journal.stop(timeout=5.0)
 
     result = decision_reconstruction(db, "d1", journal_path=tmp_path / "missing.sqlite3")
 

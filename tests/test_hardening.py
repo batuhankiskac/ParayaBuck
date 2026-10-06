@@ -5,7 +5,6 @@ import math
 import os
 import sqlite3
 import threading
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,7 +14,6 @@ import pytest
 import yaml
 from fastapi import HTTPException
 
-from parayabuck.config import EngineConfig
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -38,7 +36,6 @@ from parayabuck.markets.symbols import (
     same_symbol,
 )
 from parayabuck.runtime import EngineRuntime, WorkerHealth, _Event, _EventQueue, _symbol_batches
-from parayabuck.runtime_state import RuntimeMarketState
 from parayabuck.utils import is_crypto
 from parayabuck.web import server
 from tests.helpers import apply_entry_fill, make_broker
@@ -195,112 +192,6 @@ def test_warmup_symbol_batches_stay_below_alpaca_row_limit() -> None:
     assert [symbol for batch in batches for symbol in batch] == symbols
 
 
-def test_partial_primary_batch_updates_market_state_without_legacy_decision(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    timestamp = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
-    bar = _bar(timestamp)
-    ingested: list[tuple[str, ...]] = []
-
-    class Engine:
-        entry_halt_reason = None
-
-        def ingest_closed_bars(self, bars: list[Bar]) -> Any:
-            ingested.append(tuple(bar.symbol for bar in bars))
-            return SimpleNamespace(
-                bars=tuple(bars),
-                mutations=(SimpleNamespace(value="inserted"),),
-            )
-
-    runtime.market_state = Engine()
-    runtime.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0))
-    runtime._historical = None
-    runtime._warming_up = False
-    runtime._not_ready_symbols = set()
-    runtime._last_account_at = None
-    runtime._circuit_breaker_reason = None
-    runtime._refresh_readiness = lambda: None
-    runtime._persist_risk_state = lambda _account: None
-    runtime._entry_readiness_reasons = lambda _market=None: ()
-
-    runtime._process_timestamp({"AAPL": bar}, {"AAPL", "MSFT"})
-
-    assert ingested == [("AAPL",)]
-    assert "Ranking universe is partial; missing symbols: MSFT" in caplog.text
-
-
-def test_late_primary_bar_is_ingested_and_duplicate_is_correction() -> None:
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    timestamp = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
-    ingested: list[tuple[str, ...]] = []
-    corrections: list[str] = []
-    first_ingested = threading.Event()
-
-    class Engine:
-        entry_halt_reason = None
-
-        def ingest_closed_bars(self, bars: list[Bar]) -> Any:
-            ingested.append(tuple(bar.symbol for bar in bars))
-            first_ingested.set()
-            return SimpleNamespace(
-                bars=tuple(bars),
-                mutations=tuple(SimpleNamespace(value="inserted") for _bar in bars),
-            )
-
-        def ingest_corrections(self, bars: list[Bar]) -> Any:
-            corrections.extend(bar.symbol for bar in bars)
-
-    runtime.market_state = Engine()
-    runtime.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0))
-    runtime.config = SimpleNamespace(
-        event_grace_seconds=0.0,
-        maximum_queue_age_seconds=30,
-        maximum_account_age_for_entry_seconds=300,
-    )
-    runtime._historical = None
-    runtime._warming_up = False
-    runtime._not_ready_symbols = set()
-    runtime._last_account_at = None
-    runtime._circuit_breaker_reason = None
-    runtime._refresh_readiness = lambda: None
-    runtime._persist_risk_state = lambda _account: None
-    runtime._entry_readiness_reasons = lambda _market=None: ()
-    runtime._expected_all_symbols = {"AAPL", "MSFT"}
-    runtime._workers = {"pb-decisions": WorkerHealth(datetime.now(UTC), datetime.now(UTC))}
-    runtime._events = _EventQueue(4096)
-    runtime._event_stats_lock = threading.Lock()
-    runtime._oldest_received_at = None
-    runtime._coalesced_events = 0
-    runtime._dropped_events = 0
-    runtime._series_watermarks = {}
-    runtime._portfolio_watermarks = {}
-    runtime._state = "running"
-    runtime._running = True
-    runtime._flush_aggregators = lambda: None
-    runtime._schedule_reconcile = lambda: None
-
-    thread = threading.Thread(target=runtime._decision_loop, daemon=True)
-    thread.start()
-    try:
-        runtime._events.put_market_event(_Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC)))
-        assert first_ingested.wait(5)
-        runtime._events.put_market_event(_Event("primary", _bar(timestamp, "MSFT"), datetime.now(UTC)))
-        deadline = time.monotonic() + 5
-        while len(ingested) < 2 and time.monotonic() < deadline:
-            time.sleep(0.01)
-        runtime._events.put_market_event(_Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC)))
-        deadline = time.monotonic() + 5
-        while "AAPL" not in corrections and time.monotonic() < deadline:
-            time.sleep(0.01)
-    finally:
-        runtime._running = False
-        thread.join(timeout=5)
-
-    assert ingested == [("AAPL",), ("MSFT",)]
-    assert corrections == ["AAPL"]
-
-
 def test_runtime_leaves_warmup_only_when_every_symbol_is_ready() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime.symbols = ["AAPL", "DOG"]
@@ -415,7 +306,11 @@ def test_stale_stock_stream_event_during_the_session_degrades_runtime(monkeypatc
     assert health.markets["equity"]["stream_healthy"] is False
 
 
-def test_queue_overflow_never_evicts_final_primary_bar() -> None:
+def _daily(timestamp: datetime, symbol: str) -> Bar:
+    return Bar(timestamp, symbol, "1d", 100, 101, 99, 100, 1_000, Market.EQUITY)
+
+
+def test_queue_overflow_never_evicts_a_queued_decision_bar() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime._events = _EventQueue(maxsize=2)
     runtime._dropped_events = 0
@@ -423,20 +318,25 @@ def test_queue_overflow_never_evicts_final_primary_bar() -> None:
     runtime._oldest_received_at = None
     runtime._circuit_breaker_reason = None
     timestamp = datetime.now(UTC)
-    first = Bar(timestamp, "AAPL", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY)
-    second = Bar(timestamp, "MSFT", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY)
-    higher = Bar(timestamp, "AAPL", "1h", 100, 101, 99, 100, 1_000, Market.EQUITY)
-    runtime._events.put_nowait(_Event("primary", first, timestamp))
-    runtime._events.put_nowait(_Event("primary", second, timestamp))
+    runtime._events.put_nowait(_Event(_daily(timestamp, "SPY"), timestamp))
+    runtime._events.put_nowait(_Event(_daily(timestamp, "QQQ"), timestamp))
 
-    runtime._put_event("higher", higher)
+    runtime._put_event(_daily(timestamp, "QLD"))
 
-    assert [item.kind for item in runtime._events.snapshot() if item is not None] == [
-        "primary",
-        "primary",
-    ]
+    assert [item.bar.symbol for item in runtime._events.snapshot() if item is not None] == ["SPY", "QQQ"]
     assert runtime._circuit_breaker_reason == "final_market_event_queue_overflow"
     assert runtime._dropped_events == 1
+
+
+def test_full_queue_coalesces_a_repeat_of_the_same_decision_bar() -> None:
+    queue_ = _EventQueue(maxsize=1)
+    timestamp = datetime.now(UTC)
+    queue_.put_nowait(_Event(_daily(timestamp, "QQQ"), timestamp))
+    revised = Bar(timestamp, "QQQ", "1d", 100, 101, 99, 100.5, 1_000, Market.EQUITY)
+
+    assert queue_.put_market_event(_Event(revised, timestamp)) == "coalesced"
+    assert queue_.put_market_event(_Event(_daily(timestamp, "QLD"), timestamp)) == "overflow"
+    assert [item.bar.close for item in queue_.snapshot() if item is not None] == [100.5]
 
 
 def test_queue_overflow_breaker_marks_runtime_halted() -> None:
@@ -451,11 +351,9 @@ def test_queue_overflow_breaker_marks_runtime_halted() -> None:
     runtime._circuit_breaker_reason = None
     runtime._state = "running"
     timestamp = datetime.now(UTC)
-    runtime._events.put_nowait(
-        _Event("primary", Bar(timestamp, "AAPL", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY), timestamp)
-    )
+    runtime._events.put_nowait(_Event(_daily(timestamp, "QQQ"), timestamp))
 
-    runtime._put_event("primary", Bar(timestamp, "MSFT", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY))
+    runtime._put_event(_daily(timestamp, "QLD"))
 
     assert runtime._circuit_breaker_reason == "final_market_event_queue_overflow"
     assert runtime._state == "halted"
@@ -521,13 +419,6 @@ def test_equity_hour_buckets_anchor_at_0930_new_york_across_dst() -> None:
     summer = datetime(2025, 7, 2, 14, 31, tzinfo=UTC)  # 10:31 ET
     assert aggregator._bucket(winter) == datetime(2025, 1, 2, 15, 30, tzinfo=UTC)
     assert aggregator._bucket(summer) == datetime(2025, 7, 2, 14, 30, tzinfo=UTC)
-
-
-def test_account_failure_does_not_drop_ingested_bar() -> None:
-    state = RuntimeMarketState(EngineConfig())
-    bar = _bar(datetime.now(UTC))
-    state.ingest_closed_bars([bar])
-    assert state.bars.get("AAPL", "5m") == [bar]
 
 
 def test_external_position_is_not_modified_by_default(tmp_path: Path) -> None:
@@ -973,7 +864,6 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     reconciled: list[bool] = []
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
@@ -1048,7 +938,6 @@ def test_safety_lock_reset_retains_unrecognized_halt() -> None:
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: "unknown_halt_reason"}
-    runtime.market_state = SimpleNamespace()
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
@@ -1074,7 +963,6 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
     runtime._events = SimpleNamespace(empty=lambda: True)
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
-    runtime.market_state = SimpleNamespace(entry_halt_reason="locked")
     runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
     runtime.ledger = SimpleNamespace(
         managed_entries_for_account=lambda _account: (SimpleNamespace(status="manual_intervention_required"),),

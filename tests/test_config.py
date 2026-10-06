@@ -15,7 +15,7 @@ def _settings() -> dict[str, object]:
         "app": {"host": "127.0.0.1", "port": 8000, "log_level": "INFO"},
         "runtime": {"mode": "paper"},
         "alpaca": {"stock_stream_feed": "iex", "stock_historical_feed": "sip"},
-        "symbols": ["AAPL", "SPY"],
+        "symbols": ["SPY", "QQQ", "QLD"],
         "engine": {},
         "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
         "strategy": {
@@ -33,7 +33,7 @@ def test_loads_single_application_config(tmp_path: Path) -> None:
     assert isinstance(config, Config)
     assert isinstance(config.engine, EngineConfig)
     assert isinstance(config.risk, RiskLimits)
-    assert config.symbols == ("AAPL", "SPY")
+    assert config.symbols == ("SPY", "QQQ", "QLD")
     assert config.risk.daily_loss_limit_pct == 0.02
     assert config.risk.max_drawdown_pct == 0.12
     assert config.runtime.mode == RuntimeMode.PAPER
@@ -342,3 +342,26 @@ def test_decision_retry_window_must_fit_the_watchdog_and_cover_the_cross_check()
 def test_reconcile_failure_threshold_must_be_positive() -> None:
     with pytest.raises(ValueError, match="reconcile_failure_threshold"):
         EngineConfig(reconcile_failure_threshold=0)
+
+
+@pytest.mark.parametrize("key", ["signal_symbol", "hold_symbol"])
+def test_strategy_symbol_outside_the_universe_fails_loading(tmp_path: Path, key: str) -> None:
+    """E11: a signal/hold symbol the runtime never streams or warms up must be
+    a load error, not an engine that silently never becomes ready."""
+    raw = _settings()
+    raw["strategy"]["equity"]["parameters"] = {key: "TQQQ"}  # type: ignore[index]
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match=f"universe.equity.symbols.*{key}=TQQQ"):
+        load_config(str(path))
+
+
+def test_disabled_strategy_skips_the_universe_symbol_check(tmp_path: Path) -> None:
+    raw = _settings()
+    raw["strategy"] = {"equity": {"enabled": False, "name": "equity_leveraged_trend_v1", "maximum_allocation": 0.5}}
+    raw["symbols"] = ["SPY"]
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    assert load_config(str(path)).universe.equity.symbols == ("SPY",)

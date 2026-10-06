@@ -503,3 +503,19 @@ def test_rebase_cli_rejects_a_negative_broker_quantity(tmp_path: Path, capsys: p
     assert exit_code == 2
     assert "Invalid --broker-qty" in capsys.readouterr().err
     assert _owned(repo) == pytest.approx(100.0)
+
+
+def test_rebase_cli_fails_instead_of_falling_back_to_the_default_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """E19: an unloadable config must not silently route the write to the
+    default decision DB path."""
+    monkeypatch.chdir(tmp_path)
+    broken = tmp_path / "broken.yaml"
+    broken.write_text("runtime: {mode: backtest}\n", encoding="utf-8")
+
+    exit_code = main(["--config", str(broken), "ops", "rebase-ownership", SYMBOL, "--broker-qty", "200", "--confirm"])
+
+    assert exit_code == 2
+    assert "Cannot load the configuration" in capsys.readouterr().err
+    assert not (tmp_path / "data").exists()

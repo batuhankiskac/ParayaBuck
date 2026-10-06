@@ -9,12 +9,12 @@ import sqlite3
 import threading
 import time
 from _thread import LockType
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as clock_time
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from requests.exceptions import RequestException
 
@@ -80,7 +80,6 @@ from parayabuck.portfolio.signal_cross_check import (
 from parayabuck.risk.state import RiskState
 from parayabuck.runtime_events import _Event, _EventQueue
 from parayabuck.runtime_health import RuntimeHealth, WorkerHealth, _portfolio_catch_up_health
-from parayabuck.runtime_state import RuntimeMarketState
 from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.storage import SQLiteStore
 from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
@@ -179,10 +178,10 @@ def _is_database_error(exc: BaseException) -> bool:
 
 _WARMUP_SYMBOL_BATCH_SIZE = 8
 _WARMUP_RETRY_SECONDS = 600.0
-# Consecutive warmup retries before the delay reaches its ceiling
-# (600s * 2**6 ~= 10.7h: roughly a daily cadence for a symbol whose last bar
-# permanently lags its benchmark's).
-_WARMUP_RETRY_MAX_EXPONENT = 6
+# Ceiling of the doubling warmup-retry backoff: a symbol whose last bar lags
+# its benchmark's is retried at most every 30 minutes, so a recovered provider
+# makes the engine ready again within the same session.
+_WARMUP_RETRY_MAX_SECONDS = 1800.0
 # How often the split-adjustment reconciler compares raw vs split-adjusted
 # daily tails (hourly; a split is applied at most one check after it trades).
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
@@ -247,30 +246,6 @@ _RESTART_REARMED_REASONS = frozenset(
         "trade_update_callback_failure",
     }
 )
-
-
-class _StrategyTimeframes(Protocol):
-    timeframe: str
-    required_timeframes: tuple[str, ...]
-
-
-def required_aggregation_timeframes(
-    execution_timeframe: str,
-    market_state_timeframe: str,
-    strategy_specs: Sequence[tuple[_StrategyTimeframes, tuple[str, ...], float]],
-) -> frozenset[str]:
-    """The union of cadences the bar aggregation pipeline must produce.
-
-    Includes the execution and market-state cadences, every enabled
-    strategy's primary signal timeframe, AND every strategy-declared
-    ``required_timeframes`` (StrategySpec) so a strategy that needs a second
-    series gets its bars aggregated and seeded like any other cadence.
-    """
-    timeframes: set[str] = {execution_timeframe, market_state_timeframe}
-    for strategy, _symbols, _cap in strategy_specs:
-        timeframes.add(strategy.timeframe)
-        timeframes.update(strategy.required_timeframes)
-    return frozenset(timeframes)
 
 
 # Health and event types are imported from runtime_health / runtime_events (see above)
@@ -396,29 +371,22 @@ class EngineRuntime:
                 or None
             ),
             portfolio_ownership_resolved=self._resolve_portfolio_ownership,
-            bot_tradable_symbols=lambda: set(self._symbols_by_market.get(Market.EQUITY, ())),
+            bot_tradable_symbols=self._bot_tradable_symbols,
             runtime_state_dir=runtime_state_dir,
         )
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
-        self.market_state = RuntimeMarketState(
-            self.config,
-            allowed_trade_symbols=set(active_equities),
-        )
-        self._consecutive_losses = 0
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_stream_feed)
         self.trading_updates = AlpacaTradingUpdateStream(api_key, secret_key, self.paper, self._on_trade_update)
+        # The stream's one-minute bars are aggregated ONLY into the strategy
+        # signal cadences (the daily decision bar for VT35): nothing else in
+        # the engine consumes stream-built candles.
         self._strategy_timeframes = {strategy.timeframe for strategy, _symbols, _cap in strategy_specs}
-        required_timeframes = required_aggregation_timeframes(
-            self.app_config.runtime.execution_timeframe,
-            self.app_config.runtime.market_state_timeframe,
-            strategy_specs,
-        )
         self.aggregators = {
             timeframe: TimeframeAggregator(
                 timeframe,
                 self.config.data_finalization_grace_seconds,
             )
-            for timeframe in required_timeframes
+            for timeframe in sorted(self._strategy_timeframes)
         }
         # Set when a session-close daily bar was withheld as incomplete and
         # the provider's SIP daily bar is being fetched to replace it.
@@ -483,8 +451,6 @@ class EngineRuntime:
         except Exception:
             log.warning("observability journal configuration failed", exc_info=True)
         self._circuit_breaker_reason: str | None = None
-        self._series_watermarks: dict[tuple[str, str], datetime] = {}
-        self._portfolio_watermarks: dict[Market, datetime] = {}
         self._warming_up = False
         self._not_ready_symbols: set[str] = set(self.symbols)
         self._historical: AlpacaHistoricalData | None = None
@@ -1013,7 +979,9 @@ class EngineRuntime:
         ) != status.get("configured")
         previous = getattr(self, "_market_data_degraded", None)
         self._market_data_degraded = degraded
-        if previous is None or previous == degraded:
+        # The first observation is a baseline only when healthy: a downgrade
+        # already in effect at startup must alert too.
+        if previous == degraded or (previous is None and not degraded):
             return
         if degraded:
             alerts.emit(
@@ -1418,6 +1386,26 @@ class EngineRuntime:
         )
         return resolved
 
+    def _bot_tradable_symbols(self) -> set[str]:
+        """Equity symbols the bot itself may hold: the strategies' hold
+        symbols plus managed pins.
+
+        The brokerage account is shared, so this is the boundary between the
+        bot's positions and the operator's. VT35 observes SPY/QQQ but only
+        ever holds QLD; an operator SPY/QQQ position is foreign inventory,
+        not ownership drift. A strategy that does not name a hold symbol is
+        treated as able to trade its whole observed universe (fail-safe:
+        more positions stay subject to drift).
+        """
+        tradable: set[str] = set()
+        for strategy, symbols, _cap in getattr(self, "_strategy_specs", ()):
+            hold = getattr(strategy, "hold_symbol", None)
+            if isinstance(hold, str) and hold.strip():
+                tradable.add(canonical_symbol(hold))
+            else:
+                tradable.update(canonical_symbol(symbol) for symbol in symbols)
+        return tradable | set(getattr(self, "_managed_pin_symbols", ()))
+
     def _warn_foreign_inventory(self) -> None:
         """Alert once at startup for inventory the bot does not own.
 
@@ -1467,7 +1455,7 @@ class EngineRuntime:
         except Exception:
             broker_positions = ()
         managed_symbols = {item.canonical_symbol for item in entries} | set(portfolio_symbols)
-        universe = set(self._symbols_by_market.get(Market.EQUITY, ()))
+        tradable = self._bot_tradable_symbols()
         foreign: dict[str, Market] = {}
         for position in broker_positions:
             if position.is_flat:
@@ -1478,7 +1466,7 @@ class EngineRuntime:
             # Crypto is always foreign (this runtime never manages it, whoever
             # a legacy ownership row claims); equity is foreign only when no
             # lineage claims it and the strategy does not trade it.
-            if market == Market.CRYPTO or (symbol not in managed_symbols and symbol not in universe):
+            if market == Market.CRYPTO or (symbol not in managed_symbols and symbol not in tradable):
                 foreign[symbol] = market
         for item in entries:
             if item.market == Market.CRYPTO:
@@ -1518,13 +1506,6 @@ class EngineRuntime:
             if symbols:
                 self._market_enabled[candidate_market] = True
         self.symbols = sorted(self._symbols_by_market[Market.EQUITY])
-        self._expected_all_symbols = set().union(
-            *(
-                symbols
-                for candidate_market, symbols in self._symbols_by_market.items()
-                if getattr(self, "_market_enabled", {}).get(candidate_market, False)
-            )
-        )
         self._not_ready_symbols.update(equity_pins)
 
     def stop(self) -> bool:
@@ -1930,6 +1911,15 @@ class EngineRuntime:
                     worker.last_error = str(exc)
                     log.warning("Account refresh failed: %s", exc)
                 self._maybe_run_intent_watchdog()
+                # The periodic readiness refresh (warming_up -> running
+                # promotion and the bounded warmup retry) runs on this loop:
+                # the decision loop only wakes for the daily decision bar.
+                if getattr(self, "_startup_committed", False) and not self._warming_up:
+                    try:
+                        self._refresh_readiness()
+                    except Exception as exc:
+                        worker.last_error = str(exc)
+                        log.warning("Readiness refresh failed: %s", exc, exc_info=True)
                 self._stop_event.wait(self.config.account_poll_interval_seconds)
         finally:
             worker.alive = False
@@ -1951,16 +1941,23 @@ class EngineRuntime:
         """
         account_id = self.broker.account_id or "unknown"
         equity = max(1e-9, account.equity)
-        daily_loss = max(0.0, -account.daily_pnl / equity)
-        breach: str | None = None
-        if daily_loss >= self.app_config.risk.daily_loss_limit_pct:
-            breach = "daily_loss_limit"
-        elif account.drawdown_pct >= self.app_config.risk.max_drawdown_pct:
-            breach = "portfolio_drawdown_halt"
-        if breach == "portfolio_drawdown_halt":
+        # The daily-loss limit is a fraction of the DAY-START equity: measured
+        # against current equity a 0.20 limit would only trip at a 16.7% loss.
+        day_start_equity = max(1e-9, account.equity - account.daily_pnl)
+        daily_loss = max(0.0, -account.daily_pnl / day_start_equity)
+        drawdown_breached = account.drawdown_pct >= self.app_config.risk.max_drawdown_pct
+        # Drawdown is evaluated first and on its own: a concurrent daily-loss
+        # breach must never clear (and the next poll re-save) the persisted
+        # drawdown incident while the drawdown is still past its limit.
+        if drawdown_breached:
             self.ledger.save_safety_incident(account_id, "portfolio_drawdown_halt")
         else:
             self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
+        breach: str | None = None
+        if drawdown_breached:
+            breach = "portfolio_drawdown_halt"
+        elif daily_loss >= self.app_config.risk.daily_loss_limit_pct:
+            breach = "daily_loss_limit"
         previous = dict(getattr(self, "_entry_risk_latch", {}))
         new_latch: dict[Market, str | None] = dict.fromkeys(self._entry_risk_latch, breach)
         # Alert only on latch TRANSITIONS (the account loop re-evaluates this
@@ -2005,11 +2002,6 @@ class EngineRuntime:
         with getattr(self, "_state_lock", threading.RLock()):
             self._circuit_breaker_reason = "ownership_drift"
             self._state = "halted"
-        # Serialize against the account loop's _evaluate_entry_risk_latch,
-        # which runs under this lock inside _persist_risk_state: its
-        # read-copy-rebuild-assign would otherwise drop this halt.
-        with getattr(self, "_risk_state_lock", threading.Lock()):
-            self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}), "ownership_drift")
         try:
             self._persist_safety_state("ownership_drift")
         finally:
@@ -2083,6 +2075,21 @@ class EngineRuntime:
             if current is None or current in _RECONCILIATION_INCIDENT_REASONS:
                 self._circuit_breaker_reason = reason
 
+    def _raise_halt(self, reason: str) -> None:
+        """Halt the runtime for ``reason`` without masking a stronger halt.
+
+        The state always becomes ``halted``. The breaker reason is replaced
+        only when none is set or the current one is reconciliation-owned —
+        the same rule as ``_raise_reconciliation_breaker``: overwriting
+        ownership_drift or protection_failure would hand the operator a reset
+        for the wrong incident while the stronger one's row stays persisted.
+        """
+        with getattr(self, "_state_lock", threading.RLock()):
+            current = getattr(self, "_circuit_breaker_reason", None)
+            if current is None or current in _RECONCILIATION_INCIDENT_REASONS:
+                self._circuit_breaker_reason = reason
+            self._state = "halted"
+
     def _clear_reconciliation_incidents(self) -> None:
         """Clear only incidents whose documented recovery is clean reconcile."""
         account_id = getattr(self.broker, "account_id", None) or "unknown"
@@ -2109,10 +2116,9 @@ class EngineRuntime:
 
         Persisted state is classified by lifetime semantics:
 
-        * SESSION_SCOPED — daily-loss/drawdown baselines (``consecutive_losses``
-          and the risk numbers) live in the per-session ``risk_state`` row and
-          are restored from TODAY's row only: a new session day deliberately
-          starts with a clean baseline.
+        * SESSION_SCOPED — the daily-loss/drawdown numbers live in the
+          per-session ``risk_state`` row; the latch is re-evaluated from the
+          broker account on the first poll, so nothing is restored here.
         * PERSISTENT_INCIDENT — circuit-breaker reasons live in the
           ``safety_incidents`` table and are restored REGARDLESS of the
           session date, so a halt persisted at 23:59 survives a 00:01 restart
@@ -2120,10 +2126,10 @@ class EngineRuntime:
         * TRANSIENT_READINESS — the entry-risk latch and market entry halts are
           reconstructed from authoritative state at startup and never
           persisted.
-        * WATERMARK — decision watermarks (``previous_timestamp`` per market
-          and ``portfolio_watermark``) are restored from the latest persisted
-          decision so a restart never replays a duplicate decision or loses
-          the cadence position.
+        * WATERMARK — the decision watermark (``previous_timestamp`` per
+          market) is restored by ``PortfolioRuntime`` itself from the latest
+          persisted decision, so a restart never replays a duplicate decision
+          or loses the cadence position.
 
         * RESTART_REARMED — a halt row whose condition a fresh process cannot
           still be in (``_RESTART_REARMED_REASONS``) is migrated, not
@@ -2206,37 +2212,6 @@ class EngineRuntime:
                 account_id=account_id,
                 reason="portfolio_drawdown_halt",
             )
-        previous = self.ledger.load_risk_state(account_id, datetime.now(UTC).date())
-        if previous is not None:
-            self._consecutive_losses = previous.consecutive_losses
-        # --- Watermark restoration (restart scenarios A-G) ---
-        # PortfolioRuntime already restores ``previous_timestamp`` from the
-        # repository's latest_decision_timestamp in its __init__. Here we
-        # mirror that into the engine-level watermark maps so
-        # ``_process_portfolio_timestamp`` and the bar coalescer start with
-        # the persisted high-water instead of ``datetime.min`` and never
-        # re-emit a duplicate decision after a restart (before/after decision,
-        # after order submission, after partial/complete fill, while
-        # verification or universe refresh was running).
-        try:
-            for rt in getattr(self, "_portfolio_runtimes", ()):
-                ts = self._portfolio_repository.latest_decision_timestamp(
-                    account_id, rt.configuration_digest, rt.market
-                )
-                if ts is not None:
-                    self._portfolio_watermarks[rt.market] = max(
-                        ts, self._portfolio_watermarks.get(rt.market, datetime.min.replace(tzinfo=UTC))
-                    )
-                    for sym in getattr(rt, "symbols", ()):
-                        key = (sym, rt.strategy.timeframe)
-                        self._series_watermarks[key] = max(
-                            ts, self._series_watermarks.get(key, datetime.min.replace(tzinfo=UTC))
-                        )
-        except Exception:
-            # Watermark restore is best-effort; a repository hiccup must not
-            # brick startup — the duplicate-decision guard in
-            # PortfolioRuntime still prevents double orders.
-            log.warning("Watermark restoration skipped after repository hiccup", exc_info=True)
 
     async def _on_trade_update(self, update: TradeUpdate) -> None:
         try:
@@ -2246,9 +2221,7 @@ class EngineRuntime:
             # the ledger. An unhandled exception here can kill the stream
             # worker (or run unobserved inside the SDK loop), degrading the
             # whole runtime. Escalate to a halt instead of failing silently.
-            with getattr(self, "_state_lock", threading.RLock()):
-                self._circuit_breaker_reason = "trade_update_callback_failure"
-                self._state = "halted"
+            self._raise_halt("trade_update_callback_failure")
             log.exception(
                 "Trade update handling failed for order %s: %s",
                 update.client_order_id,
@@ -2279,8 +2252,13 @@ class EngineRuntime:
         # trade-update path still runs the rebalance's terminal bookkeeping
         # (a SELL fill must complete its phase) but the dependent BUY side
         # stays deferred until the operator's verified reset.
-        submit_buys = getattr(self, "_circuit_breaker_reason", None) is None and not getattr(
-            self, "_reconcile_failed", False
+        # The entry-risk latch (daily loss, drawdown) and a market entry halt
+        # block new entries everywhere else; a deferred BUY is an entry too.
+        submit_buys = (
+            getattr(self, "_circuit_breaker_reason", None) is None
+            and not getattr(self, "_reconcile_failed", False)
+            and getattr(self, "_entry_risk_latch", {}).get(market) is None
+            and getattr(self, "_market_entry_halts", {}).get(market) is None
         )
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             if portfolio_runtime.market != market:
@@ -2297,11 +2275,9 @@ class EngineRuntime:
                         advance_kwargs.pop("submit_deferred_buys")
                         result = portfolio_runtime.advance_rebalance(**advance_kwargs)
             except Exception:
-                # The bar-path twin of this handler (in _process_timestamp)
-                # halts with a circuit breaker; here the persisted two-phase
-                # state stays pending and every later trade update retries —
-                # so the traceback is the only forensic record of a persistent
-                # failure. Keep it, unlike the old single-line log.error.
+                # The persisted two-phase state stays pending and every later
+                # trade update retries — so the traceback is the only forensic
+                # record of a persistent failure.
                 log.exception(
                     "Two-phase rebalance advance failed: market=%s",
                     market.value,
@@ -2374,7 +2350,7 @@ class EngineRuntime:
                     message=f"Portfolio order rejected: {update.client_order_id}",
                     client_order_id=update.client_order_id,
                     symbol=update.symbol,
-                    market=Market.CRYPTO.value if is_crypto(update.symbol) else Market.EQUITY.value,
+                    market=Market.EQUITY.value,
                 )
             # Reuse the account-loop snapshot when it is fresh (one poll
             # interval) instead of issuing a full get_account +
@@ -2507,15 +2483,13 @@ class EngineRuntime:
                         )
                     if worker.restart_count > 5:
                         if market is None:
-                            with getattr(self, "_state_lock", threading.RLock()):
-                                self._circuit_breaker_reason = f"{name}_restart_limit"
-                                self._state = "halted"
+                            self._raise_halt(f"{name}_restart_limit")
                             log.exception("%s shared worker restart limit reached", name)
                             runtime_metrics_store.record_event("circuit_breaker")
                             alerts.emit(
                                 "circuit_breaker",
                                 message=(f"{name} shared worker restart limit reached; runtime halted"),
-                                reason=self._circuit_breaker_reason,
+                                reason=f"{name}_restart_limit",
                             )
                             return
                         with getattr(self, "_state_lock", threading.RLock()):
@@ -2610,30 +2584,27 @@ class EngineRuntime:
             # Only a live bar proves the stream recovered; a corrected bar
             # does not clear a market halt on its own.
             self._mark_market_stream_recovered(bar.market)
+        if corrected:
+            # A corrected minute only revises the still-open candle it belongs
+            # to. A correction of an already-emitted candle has no consumer:
+            # the decision for that bucket was already taken.
+            with self._ingestion_lock:
+                for aggregator in self.aggregators.values():
+                    aggregator.update_correction(bar)
+            return
         with self._ingestion_lock:
-            finalized = {
-                timeframe: (aggregator.update_correction(bar) if corrected else aggregator.update(bar))
-                for timeframe, aggregator in self.aggregators.items()
-            }
+            finalized = {timeframe: aggregator.update(bar) for timeframe, aggregator in self.aggregators.items()}
         for timeframe, closed in finalized.items():
-            if closed is None:
-                continue
-            if corrected:
-                self._put_event("correction", closed)
-                continue
-            self._emit_finalized_bar(timeframe, closed)
+            if closed is not None:
+                self._emit_finalized_bar(timeframe, closed)
 
     def _emit_finalized_bar(self, timeframe: str, bar: Bar) -> None:
-        """Queue one finalized bar for every cadence it feeds."""
-        if timeframe == self.app_config.runtime.execution_timeframe:
-            self._put_event("primary", bar)
-        elif timeframe == self.app_config.runtime.market_state_timeframe:
-            self._put_event("higher", bar)
+        """Queue one finalized strategy-cadence bar for the decision loop."""
         if timeframe in self._strategy_timeframes:
-            self._put_event("portfolio", bar)
+            self._put_event(bar)
 
-    def _put_event(self, kind: str, bar: Bar) -> None:
-        event = _Event(kind, bar, datetime.now(UTC))
+    def _put_event(self, bar: Bar) -> None:
+        event = _Event(bar, datetime.now(UTC))
         result = self._events.put_market_event(event)
         # _put_event runs from several threads (stock stream, decision loop);
         # the diagnostics counters must not be mutated
@@ -2642,8 +2613,6 @@ class EngineRuntime:
         with getattr(self, "_event_stats_lock", threading.Lock()):
             if result == "coalesced":
                 self._coalesced_events += 1
-            elif result == "replaced":
-                self._dropped_events += 1
             elif result == "overflow":
                 overflowed = True
                 self._dropped_events += 1
@@ -2652,9 +2621,7 @@ class EngineRuntime:
         if overflowed:
             # The halt takes the state lock only after the stats lock is
             # released: no stats -> state nesting from the stream threads.
-            with getattr(self, "_state_lock", threading.RLock()):
-                self._circuit_breaker_reason = "final_market_event_queue_overflow"
-                self._state = "halted"
+            self._raise_halt("final_market_event_queue_overflow")
             runtime_metrics_store.record_event("circuit_breaker")
             alerts.emit(
                 "circuit_breaker",
@@ -2666,15 +2633,8 @@ class EngineRuntime:
         worker = self._workers["pb-decisions"]
         worker.alive = True
         next_reconcile = time.monotonic() + 60.0
-        pending: dict[datetime, dict[str, Bar]] = {}
-        first_seen: dict[datetime, float] = {}
         portfolio_pending: dict[tuple[str, datetime], dict[str, Bar]] = {}
         portfolio_first_seen: dict[tuple[str, datetime], float] = {}
-        # Symbols already evaluated per closed batch. A late bar whose symbol
-        # was missing from the closed batch must be re-evaluated instead of
-        # being silently ingested as a correction (which never reaches the
-        # decision pipeline).
-        processed_batches: dict[datetime, frozenset[str]] = {}
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
@@ -2687,66 +2647,11 @@ class EngineRuntime:
                         break
                 else:
                     worker.last_event_at = item.received_at
-                    if item.kind == "portfolio":
-                        portfolio_key = (item.bar.timeframe, item.bar.timestamp)
-                        portfolio_pending.setdefault(portfolio_key, {})[item.bar.symbol] = item.bar
-                        portfolio_first_seen.setdefault(portfolio_key, time.monotonic())
-                    elif item.kind == "higher":
-                        # Every market_state writer shares _ingestion_lock so
-                        # a concurrent warmup seed (which runs under
-                        # the same lock) can never interleave with a BarStore
-                        # read-modify-write and lose a bar.
-                        with self._ingestion_lock:
-                            self.market_state.seed([item.bar])
-                    elif item.kind == "correction":
-                        with self._ingestion_lock:
-                            self.market_state.ingest_corrections([item.bar])
-                    elif item.bar.timestamp <= max(
-                        self._series_watermarks.get(
-                            (item.bar.symbol, item.bar.timeframe),
-                            datetime.min.replace(tzinfo=UTC),
-                        ),
-                        self._portfolio_watermarks.get(item.bar.market, datetime.min.replace(tzinfo=UTC)),
-                    ):
-                        batch = processed_batches.get(item.bar.timestamp)
-                        if batch is not None and item.bar.symbol not in batch:
-                            processed_batches[item.bar.timestamp] = batch | {item.bar.symbol}
-                            expected: set[str] = getattr(self, "_expected_all_symbols", set())
-                            self._process_timestamp(
-                                {item.bar.symbol: item.bar},
-                                expected - (batch | {item.bar.symbol}),
-                            )
-                            log.info(
-                                "Late finalized bar re-evaluated: symbol=%s timeframe=%s timestamp=%s",
-                                item.bar.symbol,
-                                item.bar.timeframe,
-                                item.bar.timestamp,
-                            )
-                        else:
-                            with self._ingestion_lock:
-                                self.market_state.ingest_corrections([item.bar])
-                            log.debug(
-                                "Late finalized bar ingested as correction: symbol=%s timeframe=%s timestamp=%s",
-                                item.bar.symbol,
-                                item.bar.timeframe,
-                                item.bar.timestamp,
-                            )
-                    else:
-                        key = item.bar.timestamp
-                        pending.setdefault(key, {})[item.bar.symbol] = item.bar
-                        first_seen.setdefault(key, time.monotonic())
+                    portfolio_key = (item.bar.timeframe, item.bar.timestamp)
+                    portfolio_pending.setdefault(portfolio_key, {})[item.bar.symbol] = item.bar
+                    portfolio_first_seen.setdefault(portfolio_key, time.monotonic())
                 self._flush_aggregators()
                 now_mono = time.monotonic()
-                # Symbol membership only changes on start/pin; the union is
-                # refreshed by _pin_managed_symbols instead of rebuilt on
-                # every loop iteration.
-                expected_all: set[str] = getattr(self, "_expected_all_symbols", set())
-                closable = [
-                    timestamp
-                    for timestamp, bars in pending.items()
-                    if expected_all.issubset(bars)
-                    or now_mono - first_seen[timestamp] >= self.config.event_grace_seconds
-                ]
                 # RuntimeHealth is expensive to build; build it ONCE per loop
                 # iteration (lazily, only when a batch is actually processed)
                 # and reuse it for every readiness gate in this batch.
@@ -2758,29 +2663,6 @@ class EngineRuntime:
                 # crash a running PAPER engine's decision worker (P0).
                 real_gate = getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)
                 batch_health: RuntimeHealth | None = None
-                for timestamp in sorted(closable):
-                    bars_by_symbol = pending.pop(timestamp)
-                    first_seen.pop(timestamp, None)
-                    if batch_health is None and real_gate:
-                        batch_health = self.health()
-                    self._process_timestamp(bars_by_symbol, expected_all, health=batch_health)
-                    processed_batches[timestamp] = frozenset(bars_by_symbol)
-                    for bar in bars_by_symbol.values():
-                        self._series_watermarks[(bar.symbol, bar.timeframe)] = max(
-                            timestamp,
-                            self._series_watermarks.get(
-                                (bar.symbol, bar.timeframe),
-                                datetime.min.replace(tzinfo=UTC),
-                            ),
-                        )
-                    for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
-                        self._portfolio_watermarks[candidate_market] = max(
-                            timestamp,
-                            self._portfolio_watermarks.get(
-                                candidate_market,
-                                datetime.min.replace(tzinfo=UTC),
-                            ),
-                        )
                 portfolio_closable = []
                 for portfolio_key, candidate_bars in portfolio_pending.items():
                     timeframe, _timestamp = portfolio_key
@@ -2801,21 +2683,10 @@ class EngineRuntime:
                         batch_health = self.health()
                     self._process_portfolio_timestamp(list(candidate_bars.values()), health=batch_health)
                 self._run_due_deferred_portfolio_batches()
-                if len(processed_batches) > 256:
-                    cutoff = max(processed_batches) - timedelta(hours=6)
-                    for stale in [ts for ts in processed_batches if ts < cutoff]:
-                        del processed_batches[stale]
                 # Recompute the queue-age diagnostic from both sources under
                 # the stats lock so an event enqueued concurrently cannot be
                 # missed (which would report a zero age while events wait).
                 with self._event_stats_lock:
-                    pending_oldest = min(
-                        (
-                            datetime.now(UTC) - timedelta(seconds=max(0.0, now_mono - seen))
-                            for seen in first_seen.values()
-                        ),
-                        default=None,
-                    )
                     portfolio_oldest = min(
                         (
                             datetime.now(UTC) - timedelta(seconds=max(0.0, now_mono - seen))
@@ -2826,11 +2697,7 @@ class EngineRuntime:
                     self._oldest_received_at = min(
                         (
                             candidate
-                            for candidate in (
-                                self._events.oldest_received_at(),
-                                pending_oldest,
-                                portfolio_oldest,
-                            )
+                            for candidate in (self._events.oldest_received_at(), portfolio_oldest)
                             if candidate is not None
                         ),
                         default=None,
@@ -2841,17 +2708,21 @@ class EngineRuntime:
         except Exception as exc:
             worker.last_error = str(exc)
             # Every with-block of the loop body has exited here: no lock held.
-            with getattr(self, "_state_lock", threading.RLock()):
-                self._circuit_breaker_reason = (
-                    "ownership_drift" if isinstance(exc, OwnershipDriftError) else "decision_worker_crashed"
-                )
-                self._state = "halted"
+            if isinstance(exc, OwnershipDriftError):
+                # Ownership drift is the strongest halt: it always wins.
+                reason = "ownership_drift"
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._circuit_breaker_reason = reason
+                    self._state = "halted"
+            else:
+                reason = "decision_worker_crashed"
+                self._raise_halt(reason)
             log.exception("Decision worker failed")
             runtime_metrics_store.record_event("circuit_breaker")
             alerts.emit(
                 "circuit_breaker",
                 message="Decision worker failed; runtime halted",
-                reason=self._circuit_breaker_reason,
+                reason=reason,
                 error=str(exc),
             )
         finally:
@@ -2985,48 +2856,6 @@ class EngineRuntime:
             self._session_close_fallback = None
             return
         pending.retry_at = now + _SESSION_CLOSE_FALLBACK_INTERVAL
-
-    def _process_timestamp(
-        self,
-        bars_by_symbol: dict[str, Bar],
-        expected: set[str],
-        *,
-        health: RuntimeHealth | None = None,
-    ) -> None:
-        bars = list(bars_by_symbol.values())
-        # Same shared-writer discipline as the "higher"/"correction" branches
-        # above: warmup seeds under _ingestion_lock.
-        with self._ingestion_lock:
-            self.market_state.ingest_closed_bars(bars)
-        if self._warming_up:
-            return
-        self._refresh_readiness()
-        gate = self._entry_readiness_reasons
-        if health is None and (
-            getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)
-        ):
-            health = self.health()
-        gate_kwargs = {"health": health} if health is not None else {}
-        market_reasons: dict[Market, tuple[str, ...]] = {}
-        for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
-            try:
-                market_reasons[candidate_market] = gate(candidate_market, **gate_kwargs)
-            except TypeError:
-                market_reasons[candidate_market] = gate(candidate_market)
-
-        if not any(
-            symbol not in self._not_ready_symbols and not market_reasons[bar.market]
-            for symbol, bar in bars_by_symbol.items()
-        ):
-            return
-        missing = tuple(sorted(expected - set(bars_by_symbol)))
-        if missing:
-            log.warning(
-                "Ranking universe is partial; missing symbols: %s",
-                ", ".join(missing),
-            )
-        # This cadence updates bar and readiness state only. PortfolioRuntime
-        # is the sole strategy/risk/order decision path.
 
     def _decision_retry_settings(self) -> tuple[timedelta, timedelta]:
         """(retry interval, retry window) for deferred session-close decisions."""
@@ -3192,8 +3021,21 @@ class EngineRuntime:
             # Warmup owns the bars it seeds; no session is due from them.
             log.debug("Portfolio batch ignored while warming up: bars=%d", len(bars))
             return True
-        if self._circuit_breaker_reason is not None or getattr(self, "_reconcile_failed", False):
-            reason = getattr(self, "_circuit_breaker_reason", None) or "reconciliation_failed"
+        breaker = getattr(self, "_circuit_breaker_reason", None)
+        if breaker is not None and breaker not in _RECONCILIATION_INCIDENT_REASONS:
+            # A hard halt (ownership drift, portfolio runtime failure, a
+            # crashed worker, ...) needs an operator-verified reset; no
+            # 40-minute retry can clear it, so the batch is not re-queued.
+            log.warning(
+                "Portfolio batch not decided: runtime halted (%s); bars=%d",
+                breaker,
+                len(bars),
+            )
+            return True
+        if breaker is not None or getattr(self, "_reconcile_failed", False):
+            # A reconciliation-owned gate clears on the next clean reconcile:
+            # re-queue the session for the bounded retry.
+            reason = breaker or "reconciliation_failed"
             deferred_any = False
             for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
                 relevant = [
@@ -3424,9 +3266,21 @@ class EngineRuntime:
                 # the operator owns recovery, so no retry is queued.
                 return True
             except Exception as exc:
-                with getattr(self, "_state_lock", threading.RLock()):
-                    self._circuit_breaker_reason = "portfolio_runtime_failure"
-                    self._state = "halted"
+                if self._is_deferrable_decision_failure(portfolio_runtime, relevant, exc):
+                    # A network-class failure in a pre-submission broker read
+                    # (open orders, asset rules, account, working buys) with
+                    # NO decision persisted for this session is provider
+                    # noise, not a portfolio failure: PortfolioRuntime
+                    # restored its watermark, so the re-queued batch is
+                    # decided afresh (F10).
+                    log.warning(
+                        "Portfolio decision deferred after a broker network error before any order was persisted: %s",
+                        exc,
+                    )
+                    if self._defer_portfolio_batch(relevant, portfolio_runtime.market, f"broker_read:{exc}"):
+                        deferred_any = True
+                    continue
+                self._raise_halt("portfolio_runtime_failure")
                 # DB integrity: fail closed immediately, never retry
                 err_lower = str(exc).lower()
                 if _is_database_error(exc):
@@ -3519,6 +3373,30 @@ class EngineRuntime:
             self._emit_equity_daily_summary(portfolio_runtime, portfolio_result, account)
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
         return not deferred_any
+
+    def _is_deferrable_decision_failure(self, portfolio_runtime: Any, bars: list[Bar], exc: BaseException) -> bool:
+        """True when a decision failure may be retried instead of halting.
+
+        Only a network-class failure qualifies, and only while no decision
+        row exists for the batch's session: the decision row and its order
+        rows are persisted in one transaction, so no decision row means no
+        order was persisted (nor submitted) for it. Anything else — a domain
+        or database failure, or a failure after the decision was written —
+        fails closed. A repository that cannot answer fails closed too.
+        """
+        if isinstance(exc, OwnershipDriftError) or not _is_transient_network_error(exc):
+            return False
+        try:
+            timestamp = max(bar.timestamp for bar in bars)
+            return not portfolio_runtime.repository.has_decision(
+                portfolio_runtime.account_id,
+                portfolio_runtime.configuration_digest,
+                timestamp,
+                portfolio_runtime.market,
+            )
+        except Exception:
+            log.warning("Decision persistence check failed; failing closed", exc_info=True)
+            return False
 
     def _record_paper_decision_receipt(
         self, portfolio_runtime: Any, result: Any, account: AccountSnapshot | None
@@ -3680,7 +3558,7 @@ class EngineRuntime:
         except Exception:
             log.warning("Equity daily summary failed", exc_info=True)
 
-    def _run_startup_catch_up(self, *, account: AccountSnapshot | None = None) -> None:
+    def _run_startup_catch_up(self, *, account: AccountSnapshot | None = None, blocked_only: bool = False) -> None:
         """Force an immediate full-target decision on the latest warmup bars.
 
         A fresh account started mid-period would otherwise sit in cash until
@@ -3689,15 +3567,24 @@ class EngineRuntime:
         as ``PortfolioRuntimeResult`` statuses. Exceptions are invariant,
         persistence, safety, or provider failures and propagate to ``start``
         so an invalid engine cannot advertise itself as running.
+
+        ``blocked_only`` (the operator-reset retry) re-runs only the runtimes
+        whose earlier catch-up a breaker or readiness gate blocked.
         """
-        if (
-            not self._running
-            or self._warming_up
-            or self._circuit_breaker_reason is not None
-            or getattr(self, "_reconcile_failed", False)
-        ):
+        if not self._running or self._warming_up:
             return
-        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+        runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
+        if blocked_only:
+            runtimes = tuple(runtime for runtime in runtimes if _catch_up_blocked(runtime))
+        breaker = self._circuit_breaker_reason or (
+            "reconciliation_failed" if getattr(self, "_reconcile_failed", False) else None
+        )
+        if breaker is not None:
+            # Recorded as blocked so reset_safety_lock knows to retry it.
+            for portfolio_runtime in runtimes:
+                portfolio_runtime.startup_catch_up_status = f"blocked:{breaker}"
+            return
+        for portfolio_runtime in runtimes:
             reasons = self._entry_readiness_reasons(portfolio_runtime.market)
             if reasons:
                 portfolio_runtime.startup_catch_up_status = "blocked:" + ",".join(reasons)
@@ -4220,13 +4107,19 @@ class EngineRuntime:
         """
         if not getattr(self, "_symbols_by_market", {}).get(Market.EQUITY):
             return None
-        if self._equity_signal_basis_verified(decision_timestamp):
-            return None
-        if not self.verify_equity_signal_basis(required_through=decision_timestamp):
-            return "signal_adjustment_unverified"
-        if not self._equity_signal_basis_verified(decision_timestamp):
-            # Verification succeeded for history but the provider has not
-            # published the decision-day bar yet: still fail closed.
+        try:
+            if self._equity_signal_basis_verified(decision_timestamp):
+                return None
+            if not self.verify_equity_signal_basis(required_through=decision_timestamp):
+                return "signal_adjustment_unverified"
+            if not self._equity_signal_basis_verified(decision_timestamp):
+                # Verification succeeded for history but the provider has not
+                # published the decision-day bar yet: still fail closed.
+                return "signal_adjustment_unverified"
+        except Exception as exc:
+            # An unexpected verifier failure must not crash the decision
+            # thread: entries fail closed, risk-reducing exits keep flowing.
+            log.warning("Equity signal-basis verification raised; entries fail closed: %s", exc, exc_info=True)
             return "signal_adjustment_unverified"
         return None
 
@@ -4315,7 +4208,7 @@ class EngineRuntime:
         if not pending or pending != getattr(self, "_warmup_retry_symbols", frozenset()):
             attempt = 0
             self._warmup_retry_attempt = 0
-        retry_delay = _WARMUP_RETRY_SECONDS * 2 ** min(attempt, _WARMUP_RETRY_MAX_EXPONENT)
+        retry_delay = min(_WARMUP_RETRY_MAX_SECONDS, _WARMUP_RETRY_SECONDS * 2 ** min(attempt, 8))
         if (
             self._running
             and pending
@@ -4371,30 +4264,12 @@ class EngineRuntime:
         return bool(required) and not (required & self._not_ready_symbols)
 
     def _persist_risk_state(self, account: AccountSnapshot) -> None:
-        # _account_loop, the decision loop and reconciliation call this
-        # concurrently; the load-compare-record sequence must be atomic or
-        # the same realized PnL delta is counted twice.
+        # _account_loop, the trade-update path and the operator resets call
+        # this concurrently; the latch evaluation and the incident/risk-state
+        # writes must not interleave.
         with getattr(self, "_risk_state_lock", threading.Lock()):
             account_id = self.broker.account_id or "unknown"
             today = datetime.now(UTC).date()
-            previous = self.ledger.load_risk_state(account_id, today)
-            current_losses = getattr(
-                self,
-                "_consecutive_losses",
-                previous.consecutive_losses if previous is not None else 0,
-            )
-            if previous is not None and current_losses == previous.consecutive_losses:
-                realized_delta = float(account.realized_pnl) - previous.realized_pnl
-                if abs(realized_delta) > 1e-9:
-                    # Insurance for fills recovered from broker activities
-                    # while the TradingStream callback was unavailable. Live
-                    # callbacks already change the counter, so the equality
-                    # guard prevents counting the same close twice.
-                    if realized_delta < 0:
-                        current_losses += 1
-                    elif realized_delta > 0:
-                        current_losses = 0
-            self._consecutive_losses = current_losses
             self._evaluate_entry_risk_latch(account)
             reason = self._circuit_breaker_reason
             # The circuit_breaker_reason in the session row is kept for
@@ -4411,7 +4286,9 @@ class EngineRuntime:
                     realized_pnl=float(account.realized_pnl),
                     unrealized_pnl=float(account.unrealized_pnl),
                     fees=self.ledger.total_fees_for_account(account_id),
-                    consecutive_losses=current_losses,
+                    # Schema field kept for old rows; no rule reads a loss
+                    # streak, so it is no longer tracked.
+                    consecutive_losses=0,
                     circuit_breaker_reason=reason,
                     updated_at=datetime.now(UTC),
                     peak_epoch=int(getattr(self.broker, "_peak_epoch", 0) or 0),
@@ -4504,8 +4381,22 @@ class EngineRuntime:
                     # F14: a network failure inside the FILL-activity backfill
                     # surfaces here as a chained ReconciliationResultError, so
                     # it must not be treated as a permanent invalid result.
+                    # Escalate exactly like the RequestException branch below
+                    # once the consecutive-failure threshold is reached: a
+                    # persistent outage must raise the breaker and alert.
                     self._reconcile_failed = True
-                    self._note_transient_reconcile_failure(exc, "Reconciliation deferred after a broker network error")
+                    if self._note_transient_reconcile_failure(
+                        exc, "Reconciliation deferred after a broker network error"
+                    ):
+                        return
+                    self._raise_reconciliation_breaker("reconciliation_failed")
+                    self._persist_reconciliation_incident("reconciliation_failed")
+                    alerts.emit(
+                        "reconciliation_failure",
+                        message="Reconciliation deferred after a broker network error",
+                        reason="reconciliation_failed",
+                        error=str(exc),
+                    )
                     return
                 self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
@@ -4751,20 +4642,25 @@ class EngineRuntime:
                 raise ValueError("A managed position still requires manual intervention")
             account = self.broker.account()
             self._publish_account_snapshot(account)
-            with getattr(self, "_state_lock", threading.RLock()):
-                # Clear only the reason being reset: a halt another thread
-                # raised during the broker calls above set its own reason.
-                if self._circuit_breaker_reason == reason:
-                    self._circuit_breaker_reason = None
-            # The operator verified THIS halt's recovery condition above;
-            # clear exactly its incident, never unrelated incidents (those
-            # need their own per-halt verification). The one exception is
-            # ``_RESTART_REARMED_REASONS``: a leftover row from an earlier
-            # worker state has no verification left to perform, and clearing
-            # it here keeps a reset from leaving a row that would halt the
-            # next start behind the operator's back.
-            for cleared in sorted({reason} | _RESTART_REARMED_REASONS):
-                self.ledger.clear_safety_incident(account_id, cleared)
+            # The breaker and its incident row clear together under the risk
+            # state lock: the account loop's _persist_risk_state re-saves
+            # whatever breaker reason it read under that lock, so clearing
+            # outside it could resurrect the row the operator just cleared.
+            with getattr(self, "_risk_state_lock", threading.Lock()):
+                with getattr(self, "_state_lock", threading.RLock()):
+                    # Clear only the reason being reset: a halt another thread
+                    # raised during the broker calls above set its own reason.
+                    if self._circuit_breaker_reason == reason:
+                        self._circuit_breaker_reason = None
+                # The operator verified THIS halt's recovery condition above;
+                # clear exactly its incident, never unrelated incidents (those
+                # need their own per-halt verification). The one exception is
+                # ``_RESTART_REARMED_REASONS``: a leftover row from an earlier
+                # worker state has no verification left to perform, and
+                # clearing it here keeps a reset from leaving a row that would
+                # halt the next start behind the operator's back.
+                for cleared in sorted({reason} | _RESTART_REARMED_REASONS):
+                    self.ledger.clear_safety_incident(account_id, cleared)
             market_halts = getattr(self, "_market_entry_halts", None)
             if market_halts is not None:
                 self._verify_market_halts(market_halts)
@@ -4789,6 +4685,23 @@ class EngineRuntime:
             if self._running and restorable and self._circuit_breaker_reason is None:
                 self._state = "running"
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
+        # A startup catch-up the halt blocked never re-runs by itself: retry it
+        # now, against the same verified snapshot. Its own gates still apply.
+        if any(_catch_up_blocked(runtime) for runtime in getattr(self, "_portfolio_runtimes", ())):
+            try:
+                self._run_startup_catch_up(account=account, blocked_only=True)
+            except Exception as exc:
+                # Same fail-closed contract as a scheduled decision failure.
+                self._raise_halt("portfolio_runtime_failure")
+                log.exception("Startup catch-up retry after the safety-lock reset failed closed")
+                runtime_metrics_store.record_event("circuit_breaker")
+                alerts.emit(
+                    "circuit_breaker",
+                    message="Startup catch-up retry failed closed; runtime halted",
+                    reason="portfolio_runtime_failure",
+                    error=str(exc),
+                )
+                raise ValueError(f"Safety lock reset, but the startup catch-up retry failed: {exc}") from exc
 
     def _verify_market_halts(self, market_halts: dict[Market, str | None]) -> None:
         """Clear each market halt only after its specific verified recovery.
@@ -4939,8 +4852,7 @@ class EngineRuntime:
 
         Gates warm-cache reuse on the identity of everything that determines
         the warmup window: the enabled strategies (name, parameters, signal
-        timeframe, minimum history) and the operational aggregation
-        timeframes. Any change invalidates the scope and fails closed to a
+        timeframe, minimum history). Any change invalidates the scope and fails closed to a
         full refetch; the head-coverage check inside the incremental fetch
         additionally guards against a shorter window silently standing in
         for a longer one.
@@ -4949,8 +4861,6 @@ class EngineRuntime:
 
         payload = {
             "timeframes": sorted(self.aggregators),
-            "execution_timeframe": self.app_config.runtime.execution_timeframe,
-            "market_state_timeframe": self.app_config.runtime.market_state_timeframe,
             # The signal-history adjustment basis is part of the cache
             # identity: switching it must fail the scope closed to a full
             # refetch (rows are additionally keyed by adjustment).
@@ -4968,75 +4878,46 @@ class EngineRuntime:
         return hashlib.sha256(_json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
     def _warmup_symbols(self, history: AlpacaHistoricalData, symbols: list[str], *, retry: bool) -> None:
-        """Download warmup history for ``symbols`` and seed it.
+        """Download split-adjusted signal history for ``symbols`` and seed it.
 
-        Equity symbols are fetched on TWO explicit bases: RAW seeds the
-        execution-side market state (as-traded stream truth), SPLITS seeds
-        the portfolio runtimes' strategy signal history (the same basis as
-        backtest historical data; bridged across live splits by
-        ``data/adjustment.py``). Bars are seeded into the market state and
-        every matching portfolio runtime under the ingestion and portfolio
-        locks.
+        Only the strategy signal cadences are fetched, on the SPLITS basis
+        (the same basis as backtest historical data; bridged across live
+        splits by ``data/adjustment.py``). Bars are seeded into every
+        matching portfolio runtime under the ingestion and portfolio locks.
         """
         warmup_digest = self._warmup_config_digest()
         group = list(symbols)
-        warmup_timeframes = set(self.aggregators)
-        for timeframe in warmup_timeframes:
+        for timeframe in sorted(self._strategy_timeframes):
             strategy_requirements = [
                 runtime.strategy.minimum_history_bars + 5
                 for runtime in self._portfolio_runtimes
                 if runtime.market == Market.EQUITY and runtime.strategy.timeframe == timeframe
             ]
-            operational = timeframe in {
-                self.app_config.runtime.execution_timeframe,
-                self.app_config.runtime.market_state_timeframe,
-            }
-            if not strategy_requirements and not operational:
+            if not strategy_requirements:
                 continue
-            # ``max(2, *[])`` would reduce to ``max(2)`` — a single
-            # argument, which Python tries to iterate. Operational
-            # timeframes with no strategy requirement still need a
-            # baseline window.
-            requested_bars = max(2, *strategy_requirements) if strategy_requirements else 2
+            requested_bars = max(strategy_requirements)
             for symbol_batch in _symbol_batches(group):
                 try:
                     start = _warmup_start(symbol_batch[0], timeframe, requested_bars)
                     fetcher = getattr(history, "get_bars_batch_incremental", None)
-
-                    def _fetch(
-                        adjustment: str,
-                        scope: str,
-                        batch: list[str] = symbol_batch,
-                        window_start: str = start,
-                    ) -> dict[str, list[Bar]]:
-                        if fetcher is None:
-                            # Fakes/tests without the incremental fetcher
-                            # use the plain download contract unchanged.
-                            return history.get_bars_batch(batch, timeframe, start=window_start, adjustment=adjustment)
-                        result: dict[str, list[Bar]] = fetcher(
-                            batch,
+                    if fetcher is None:
+                        # Fakes/tests without the incremental fetcher use the
+                        # plain download contract unchanged.
+                        signal_bars = history.get_bars_batch(symbol_batch, timeframe, start=start, adjustment="splits")
+                    else:
+                        signal_bars = fetcher(
+                            symbol_batch,
                             timeframe,
-                            start=window_start,
-                            adjustment=adjustment,
-                            scope=scope,
+                            start=start,
+                            adjustment="splits",
+                            scope="runtime_warmup_signal",
                             config_digest=warmup_digest,
                             identity=f"{timeframe}:{requested_bars}",
                         )
-                        return result
-
-                    execution_bars = _fetch("raw", "runtime_warmup")
-                    signal_bars = _fetch("splits", "runtime_warmup_signal")
                     for symbol in symbol_batch:
-                        raw_tail = execution_bars.get(symbol, [])[-requested_bars:]
                         signal_tail = signal_bars.get(symbol, [])[-requested_bars:]
                         with self._ingestion_lock, self._portfolio_lock:
-                            self.market_state.seed(raw_tail)
                             for runtime in self._portfolio_runtimes:
-                                # Only the runtime whose strategy reads this
-                                # cadence: an operational pass (5m execution)
-                                # would otherwise call seed() with an
-                                # all-filtered list and still bump
-                                # previous_timestamp.
                                 if runtime.strategy.timeframe == timeframe and runtime.market == Market.EQUITY:
                                     runtime.seed(signal_tail)
                         if len(signal_tail) < requested_bars:
@@ -5048,6 +4929,12 @@ class EngineRuntime:
                                 requested_bars,
                             )
                 except Exception as exc:
+                    if not retry and _is_transient_network_error(exc):
+                        # The first warmup runs inside start(): a provider
+                        # outage must reach its TransientStartupError path
+                        # (discard + retry startup) instead of starting an
+                        # engine with no history.
+                        raise
                     log.warning(
                         "Warmup%s batch skipped %s symbols=%d: %s",
                         " retry" if retry else "",
@@ -5055,6 +4942,11 @@ class EngineRuntime:
                         len(symbol_batch),
                         exc,
                     )
+
+
+def _catch_up_blocked(runtime: object) -> bool:
+    """True when a runtime's startup catch-up was blocked by a gate."""
+    return str(getattr(runtime, "startup_catch_up_status", None) or "").startswith("blocked:")
 
 
 def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:

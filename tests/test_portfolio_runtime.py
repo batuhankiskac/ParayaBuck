@@ -2447,7 +2447,6 @@ def test_health_exposes_entry_risk_latch() -> None:
     runtime._strategy_specs = ()
     runtime._portfolio_repository = None
     runtime.ledger = None
-    runtime.market_state = SimpleNamespace()
     runtime.broker = SimpleNamespace(account_id="acct")
     health = runtime.health()
     assert health.entry_risk_latch == {"equity": "daily_loss_limit"}
@@ -2490,7 +2489,6 @@ def _health_runtime() -> object:
     runtime._portfolio_repository = None
     runtime.ledger = None
     runtime.broker = SimpleNamespace(account_id="acct")
-    runtime.market_state = SimpleNamespace()
     return runtime
 
 

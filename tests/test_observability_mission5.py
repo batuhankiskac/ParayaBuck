@@ -491,7 +491,7 @@ def test_ops_timeline_uses_configured_journal_path_with_explicit_db(
     EventJournal(str(journal)).emit_sync(create_event(kind="decision_summary", message="summary", decision_id=decision))
     config = tmp_path / "settings.yaml"
     config.write_text(
-        "symbols: [AAPL]\n"
+        "symbols: [SPY, QQQ, QLD]\n"
         "strategy:\n"
         "  equity:\n"
         "    name: equity_leveraged_trend_v1\n"
@@ -536,7 +536,7 @@ def test_doctor_wal_probe_closes_the_store_through_the_ownership_api(
     monkeypatch.setattr(storage_module, "SQLiteStore", _RecordingStore)
     config = tmp_path / "settings.yaml"
     config.write_text(
-        "symbols: [AAPL]\n"
+        "symbols: [SPY, QQQ, QLD]\n"
         "strategy:\n"
         "  equity:\n"
         "    name: equity_leveraged_trend_v1\n"

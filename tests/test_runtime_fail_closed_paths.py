@@ -162,7 +162,6 @@ def test_operator_reset_verifies_market_halts_under_the_state_lock() -> None:
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime.market_state = SimpleNamespace()
     runtime._risk_state_lock = threading.Lock()
     runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime.ledger = SimpleNamespace(
@@ -429,7 +428,8 @@ def _elapse(runtime: EngineRuntime, seconds: float) -> None:
 def test_warmup_retry_delay_doubles_per_consecutive_attempt() -> None:
     """A symbol whose last bar permanently lags its benchmark's must not
     drive a provider round-trip every 10 minutes for the life of the
-    process: each consecutive attempt doubles the floor."""
+    process: each consecutive attempt doubles the floor, up to a 30-minute
+    ceiling so a recovered provider makes the engine ready the same session."""
     runtime = _readiness_runtime(ready=False)
 
     _elapse(runtime, 600)
@@ -441,10 +441,12 @@ def test_warmup_retry_delay_doubles_per_consecutive_attempt() -> None:
     _elapse(runtime, 1200)
     assert runtime._warmup_retry_attempt == 2
 
-    _elapse(runtime, 2399)
+    _elapse(runtime, 1799)  # 2400s would be next, but the ceiling is 1800s
     assert runtime._warmup_retry_attempt == 2
-    _elapse(runtime, 2400)
+    _elapse(runtime, 1800)
     assert runtime._warmup_retry_attempt == 3
+    _elapse(runtime, 1800)
+    assert runtime._warmup_retry_attempt == 4
 
 
 def test_warmup_retry_backoff_resets_once_a_symbol_recovers() -> None:
@@ -500,7 +502,6 @@ def _ledger_shell(
     runtime.app_config = Config()
     runtime._risk_state_lock = threading.Lock()
     runtime._state_lock = threading.RLock()
-    runtime._consecutive_losses = 0
     runtime._circuit_breaker_reason = None
     runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._portfolio_runtimes = ()
@@ -568,7 +569,6 @@ def test_assigned_circuit_breaker_reasons_are_operator_resettable(tmp_path: Path
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
 
     runtime.reset_safety_lock()
 
@@ -605,23 +605,6 @@ class _LatchWriteProbeRuntime(EngineRuntime):
         return self.__dict__.setdefault("_latch_write_lock_states", [])
 
 
-def test_ownership_drift_halt_takes_the_risk_state_lock(tmp_path: Path) -> None:
-    """``_evaluate_entry_risk_latch`` rebuilds the latch dict from scratch
-    while holding the risk-state lock. An unlocked drift halt can therefore
-    be dropped by the very next account poll."""
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    runtime = _ledger_shell(ledger, _LatchWriteProbeRuntime)
-    risk_state_lock = _TrackedRLock()
-    runtime._risk_state_lock = risk_state_lock  # type: ignore[assignment]
-    runtime.latch_write_lock_states().clear()  # drop the seeding write
-
-    runtime._halt_for_ownership_drift()
-
-    assert runtime._entry_risk_latch[Market.EQUITY] == "ownership_drift"
-    assert runtime.latch_write_lock_states() == [True]
-    ledger.close()
-
-
 def test_operator_latch_clear_takes_the_risk_state_lock(tmp_path: Path) -> None:
     """The operator reset clears the latch from the web thread; without the
     risk-state lock the account loop's rebuild can restore a stale latch."""
@@ -642,7 +625,6 @@ def test_operator_latch_clear_takes_the_risk_state_lock(tmp_path: Path) -> None:
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     risk_state_lock = _TrackedRLock()
     runtime._risk_state_lock = risk_state_lock  # type: ignore[assignment]
     runtime.latch_write_lock_states().clear()  # drop the seeding write

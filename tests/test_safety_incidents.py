@@ -41,7 +41,6 @@ def _runtime_with_ledger(ledger: ExecutionLedger) -> EngineRuntime:
     runtime.app_config = Config()
     runtime._risk_state_lock = threading.Lock()
     runtime._state_lock = threading.RLock()
-    runtime._consecutive_losses = 0
     runtime._circuit_breaker_reason = None
     runtime._entry_risk_latch = {Market.EQUITY: None}
     return runtime
@@ -122,7 +121,7 @@ def test_persistent_ownership_drift_alerts_only_on_transition(tmp_path: Path, mo
     assert emitted == ["circuit_breaker"]
     assert recorded == ["circuit_breaker"]
     assert runtime._state == "halted"
-    assert set(runtime._entry_risk_latch.values()) == {"ownership_drift"}
+    assert runtime._circuit_breaker_reason == "ownership_drift"
     ledger.close()
 
 
@@ -212,7 +211,6 @@ def test_operator_reset_refuses_while_a_shared_worker_is_stopped(tmp_path: Path)
     runtime._events = SimpleNamespace(empty=lambda: True)
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
-    runtime.market_state = SimpleNamespace()
     runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
     runtime.ledger = ledger
 
@@ -264,34 +262,6 @@ def test_protection_failure_persisted_by_risk_state_survives_restart(tmp_path: P
 
 
 # --- SESSION_SCOPED: daily-loss baselines keep session semantics ---
-
-
-def test_daily_loss_breach_restored_on_same_day_restart(tmp_path: Path) -> None:
-    """A daily-loss breach on day N is still blocked after a restart on the
-    SAME day: consecutive_losses is restored from today's risk_state row."""
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    today = datetime.now(UTC).date()
-    ledger.save_risk_state(
-        RiskState(
-            account_id="acct",
-            session_date=today,
-            day_start_equity=10_000.0,
-            peak_equity=10_000.0,
-            realized_pnl=-400.0,
-            unrealized_pnl=0.0,
-            fees=0.0,
-            consecutive_losses=4,
-            circuit_breaker_reason=None,
-            updated_at=datetime.now(UTC),
-        )
-    )
-
-    runtime = _runtime_with_ledger(ledger)
-    runtime._restore_persistent_state()
-
-    assert runtime._consecutive_losses == 4
-    assert runtime._circuit_breaker_reason is None
-    ledger.close()
 
 
 def test_corrupt_risk_state_row_is_ignored_not_raised(tmp_path: Path) -> None:
@@ -366,7 +336,6 @@ def test_new_session_clears_session_scoped_state_but_keeps_persistent_incident(
     runtime = _runtime_with_ledger(ledger)
     runtime._restore_persistent_state()
 
-    assert runtime._consecutive_losses == 0  # session-scoped: today's row only
     assert runtime._circuit_breaker_reason == "ownership_drift"  # persistent
     ledger.close()
 
@@ -562,7 +531,6 @@ def test_operator_reset_clears_only_the_verified_incident(tmp_path: Path) -> Non
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
@@ -1077,7 +1045,6 @@ def test_operator_reset_keeps_a_halt_raised_during_verification(tmp_path: Path) 
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     runtime._persist_risk_state = lambda _account: None  # type: ignore[method-assign]
 
     def concurrent_halt(_halts: object) -> None:
@@ -1121,7 +1088,6 @@ def test_operator_reset_keeps_a_halt_raised_during_broker_reconcile(tmp_path: Pa
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
     runtime._persist_risk_state = lambda _account: None  # type: ignore[method-assign]
 
     runtime.reset_safety_lock()
@@ -1160,7 +1126,6 @@ def test_operator_reset_restores_a_blip_degraded_runtime(tmp_path: Path, alive: 
     runtime._running = True
     runtime._state = "degraded"
     runtime._market_entry_halts = {Market.EQUITY: None}
-    runtime.market_state = SimpleNamespace()
 
     def persist(_account: AccountSnapshot) -> None:
         worker.alive = alive
@@ -1207,7 +1172,7 @@ def test_halt_writers_hold_the_state_lock(monkeypatch: pytest.MonkeyPatch) -> No
     runtime._dropped_events = 0
     runtime._events = SimpleNamespace(put_market_event=lambda _event: "overflow")
 
-    runtime._put_event("primary", SimpleNamespace())
+    runtime._put_event(SimpleNamespace())
 
     now = datetime.now(UTC)
     runtime._workers = {"pb-trade-updates": WorkerHealth(now, now, restart_count=5)}

@@ -174,3 +174,182 @@ def test_signal_basis_latch_fails_closed_when_the_verifier_raises() -> None:
     runtime.verify_equity_signal_basis = _boom
 
     assert runtime._equity_signal_basis_latch(datetime.now(UTC)) == "signal_adjustment_unverified"
+
+
+_CLEAN_RECONCILIATION = {
+    "MATCH": [],
+    "LOCAL_STALE": [],
+    "BROKER_STALE": [],
+    "QUANTITY_MISMATCH": [],
+    "UNKNOWN_ORDER": [],
+    "MISSING_LOCAL_ORDER": [],
+    "MISSING_BROKER_ORDER": [],
+}
+
+
+def _reset_runtime(cleared: list[tuple[str, bool]]) -> EngineRuntime:
+    """A halted runtime whose reset_safety_lock verification passes."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "ambiguous_order_state"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._risk_state_lock = threading.Lock()
+    runtime._state_lock = threading.RLock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime._entry_risk_latch = {Market.EQUITY: None}
+    runtime._portfolio_runtimes = ()
+    account = _account(10_000)
+    runtime.broker = SimpleNamespace(
+        account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION), account=lambda: account
+    )
+    runtime.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: (),
+        clear_safety_incident=lambda _account, reason: cleared.append((reason, runtime._risk_state_lock.locked())),
+    )
+    runtime._persist_risk_state = lambda _account: None
+    return runtime
+
+
+def test_reset_clears_breaker_and_incident_under_the_risk_state_lock() -> None:
+    """E15: the account loop's _persist_risk_state re-saves the breaker reason
+    it read under the risk-state lock; clearing outside that lock could
+    resurrect the incident row the operator just cleared."""
+    cleared: list[tuple[str, bool]] = []
+    runtime = _reset_runtime(cleared)
+
+    runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason is None
+    reset_rows = {"ambiguous_order_state", *runtime_module._RESTART_REARMED_REASONS}
+    assert ("ambiguous_order_state", True) in cleared
+    assert all(locked for reason, locked in cleared if reason in reset_rows)
+
+
+def test_reset_retries_a_startup_catch_up_the_halt_blocked() -> None:
+    """E9: a catch-up blocked at startup by the breaker re-runs after reset."""
+    runtime = _reset_runtime([])
+    calls: list[dict[str, Any]] = []
+    blocked = SimpleNamespace(market=Market.EQUITY, startup_catch_up_status="blocked:ambiguous_order_state")
+    runtime._portfolio_runtimes = (blocked,)
+    runtime._resume_startup_rebalances = lambda **_kwargs: None
+    runtime._run_startup_catch_up = lambda **kwargs: calls.append(kwargs)
+
+    runtime.reset_safety_lock()
+
+    assert len(calls) == 1
+    assert calls[0]["blocked_only"] is True
+
+
+def test_reset_does_not_rerun_a_completed_startup_catch_up() -> None:
+    runtime = _reset_runtime([])
+    calls: list[dict[str, Any]] = []
+    runtime._portfolio_runtimes = (SimpleNamespace(market=Market.EQUITY, startup_catch_up_status="submitted"),)
+    runtime._resume_startup_rebalances = lambda **_kwargs: None
+    runtime._run_startup_catch_up = lambda **kwargs: calls.append(kwargs)
+
+    runtime.reset_safety_lock()
+
+    assert calls == []
+
+
+def test_startup_catch_up_records_a_breaker_block_for_the_reset_retry() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._running = True
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = "ownership_drift"
+    portfolio_runtime = SimpleNamespace(market=Market.EQUITY, startup_catch_up_status=None)
+    runtime._portfolio_runtimes = (portfolio_runtime,)
+
+    runtime._run_startup_catch_up(account=_account())
+
+    assert portfolio_runtime.startup_catch_up_status == "blocked:ownership_drift"
+
+
+def test_bot_tradable_symbols_are_the_strategy_hold_symbol_plus_pins() -> None:
+    """E7: VT35 observes SPY/QQQ/QLD but only holds QLD, so an operator's SPY
+    or QQQ position is foreign inventory, not ownership drift."""
+    from parayabuck.portfolio import product_strategy_from
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    strategy = product_strategy_from("equity_leveraged_trend_v1", {}, timeframe="1d")
+    runtime._strategy_specs = ((strategy, ("SPY", "QQQ", "QLD"), 0.5),)
+    runtime._managed_pin_symbols = {"TQQQ"}
+
+    assert runtime._bot_tradable_symbols() == {"QLD", "TQQQ"}
+
+
+def test_bot_tradable_symbols_fall_back_to_the_universe_without_a_hold_symbol() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._strategy_specs = ((SimpleNamespace(), ("SPY", "QQQ"), 0.5),)
+    runtime._managed_pin_symbols = set()
+
+    assert runtime._bot_tradable_symbols() == {"SPY", "QQQ"}
+
+
+def _latch_runtime(saved: list[str], cleared: list[str]) -> EngineRuntime:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.broker = SimpleNamespace(account_id="acct")
+    runtime.ledger = SimpleNamespace(
+        save_safety_incident=lambda _account, reason: saved.append(reason),
+        clear_safety_incident=lambda _account, reason: cleared.append(reason),
+    )
+    runtime.app_config = SimpleNamespace(risk=SimpleNamespace(daily_loss_limit_pct=0.20, max_drawdown_pct=0.30))
+    runtime._entry_risk_latch = {Market.EQUITY: None}
+    return runtime
+
+
+def test_daily_loss_latch_is_measured_against_day_start_equity(emitted: list[tuple[str, dict[str, Any]]]) -> None:
+    """E13: an 18% loss of day-start equity (21.95% of current equity) does
+    not trip a 20% limit; a 20% loss does."""
+    runtime = _latch_runtime([], [])
+
+    runtime._evaluate_entry_risk_latch(AccountSnapshot(cash=82.0, equity=82.0, peak_equity=100.0, daily_pnl=-18.0))
+    assert runtime._entry_risk_latch[Market.EQUITY] is None
+
+    runtime._evaluate_entry_risk_latch(AccountSnapshot(cash=80.0, equity=80.0, peak_equity=100.0, daily_pnl=-20.0))
+    assert runtime._entry_risk_latch[Market.EQUITY] == "daily_loss_limit"
+
+
+def test_drawdown_incident_is_never_cleared_while_daily_loss_also_breaches(
+    emitted: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """E12: with both limits breached, drawdown wins and its persisted
+    incident is saved, never cleared-then-resaved."""
+    saved: list[str] = []
+    cleared: list[str] = []
+    runtime = _latch_runtime(saved, cleared)
+
+    runtime._evaluate_entry_risk_latch(AccountSnapshot(cash=60.0, equity=60.0, peak_equity=100.0, daily_pnl=-40.0))
+
+    assert runtime._entry_risk_latch[Market.EQUITY] == "portfolio_drawdown_halt"
+    assert saved == ["portfolio_drawdown_halt"]
+    assert cleared == []
+
+
+def test_deferred_buys_respect_the_entry_risk_latch_and_market_halts() -> None:
+    """E14: a deferred BUY of a two-phase rebalance is an entry, so a latched
+    or halted market keeps it deferred."""
+    flags: list[bool] = []
+
+    def advance(**kwargs: Any) -> None:
+        flags.append(kwargs["submit_deferred_buys"])
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+    runtime._portfolio_lock = threading.RLock()
+    runtime._portfolio_runtimes = (SimpleNamespace(market=Market.EQUITY, advance_rebalance=advance),)
+
+    runtime._entry_risk_latch = {Market.EQUITY: "daily_loss_limit"}
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime._advance_portfolio_rebalance(Market.EQUITY)
+    runtime._entry_risk_latch = {Market.EQUITY: None}
+    runtime._market_entry_halts = {Market.EQUITY: "rebalance_reconciliation_required"}
+    runtime._advance_portfolio_rebalance(Market.EQUITY)
+    runtime._market_entry_halts = {Market.EQUITY: None}
+    runtime._advance_portfolio_rebalance(Market.EQUITY)
+
+    assert flags == [False, False, True]

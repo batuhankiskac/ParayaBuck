@@ -523,14 +523,24 @@ def test_market_data_degradation_alerts_once_per_transition(monkeypatch: pytest.
             "note": "one exchange only",
         }
     )
-    engine._check_market_data_feed()  # first observation: baseline, silent
-    assert events == []
-    engine._check_market_data_feed()  # unchanged: still silent
-    assert events == []
+    # A downgrade already in effect at the first observation alerts (E10).
+    engine._check_market_data_feed()
+    assert [(kind, fields["state"]) for kind, fields in events] == [("market_data_degraded", "degraded")]
+    engine._check_market_data_feed()  # unchanged: silent
+    assert len(events) == 1
     state["fallback"] = False
     engine._check_market_data_feed()
-    assert [kind for kind, _fields in events] == ["market_data_degraded"]
-    assert events[0][1]["state"] == "recovered"
+    assert [fields["state"] for _kind, fields in events] == ["degraded", "recovered"]
+
+
+def test_healthy_first_market_data_observation_is_a_silent_baseline(monkeypatch: pytest.MonkeyPatch) -> None:
+    events = _capture_events(monkeypatch, runtime_module)
+    engine = EngineRuntime.__new__(EngineRuntime)
+    engine._historical = SimpleNamespace(feed_status=lambda: {"configured": "sip", "effective": "sip"})
+
+    engine._check_market_data_feed()
+
+    assert events == []
 
 
 # --------------------------------------------------------------------------- #

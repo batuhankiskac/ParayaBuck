@@ -371,7 +371,7 @@ class EngineRuntime:
                 or None
             ),
             portfolio_ownership_resolved=self._resolve_portfolio_ownership,
-            bot_tradable_symbols=lambda: set(self._symbols_by_market.get(Market.EQUITY, ())),
+            bot_tradable_symbols=self._bot_tradable_symbols,
             runtime_state_dir=runtime_state_dir,
         )
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
@@ -979,7 +979,9 @@ class EngineRuntime:
         ) != status.get("configured")
         previous = getattr(self, "_market_data_degraded", None)
         self._market_data_degraded = degraded
-        if previous is None or previous == degraded:
+        # The first observation is a baseline only when healthy: a downgrade
+        # already in effect at startup must alert too.
+        if previous == degraded or (previous is None and not degraded):
             return
         if degraded:
             alerts.emit(
@@ -1384,6 +1386,26 @@ class EngineRuntime:
         )
         return resolved
 
+    def _bot_tradable_symbols(self) -> set[str]:
+        """Equity symbols the bot itself may hold: the strategies' hold
+        symbols plus managed pins.
+
+        The brokerage account is shared, so this is the boundary between the
+        bot's positions and the operator's. VT35 observes SPY/QQQ but only
+        ever holds QLD; an operator SPY/QQQ position is foreign inventory,
+        not ownership drift. A strategy that does not name a hold symbol is
+        treated as able to trade its whole observed universe (fail-safe:
+        more positions stay subject to drift).
+        """
+        tradable: set[str] = set()
+        for strategy, symbols, _cap in getattr(self, "_strategy_specs", ()):
+            hold = getattr(strategy, "hold_symbol", None)
+            if isinstance(hold, str) and hold.strip():
+                tradable.add(canonical_symbol(hold))
+            else:
+                tradable.update(canonical_symbol(symbol) for symbol in symbols)
+        return tradable | set(getattr(self, "_managed_pin_symbols", ()))
+
     def _warn_foreign_inventory(self) -> None:
         """Alert once at startup for inventory the bot does not own.
 
@@ -1433,7 +1455,7 @@ class EngineRuntime:
         except Exception:
             broker_positions = ()
         managed_symbols = {item.canonical_symbol for item in entries} | set(portfolio_symbols)
-        universe = set(self._symbols_by_market.get(Market.EQUITY, ()))
+        tradable = self._bot_tradable_symbols()
         foreign: dict[str, Market] = {}
         for position in broker_positions:
             if position.is_flat:
@@ -1444,7 +1466,7 @@ class EngineRuntime:
             # Crypto is always foreign (this runtime never manages it, whoever
             # a legacy ownership row claims); equity is foreign only when no
             # lineage claims it and the strategy does not trade it.
-            if market == Market.CRYPTO or (symbol not in managed_symbols and symbol not in universe):
+            if market == Market.CRYPTO or (symbol not in managed_symbols and symbol not in tradable):
                 foreign[symbol] = market
         for item in entries:
             if item.market == Market.CRYPTO:
@@ -1919,16 +1941,23 @@ class EngineRuntime:
         """
         account_id = self.broker.account_id or "unknown"
         equity = max(1e-9, account.equity)
-        daily_loss = max(0.0, -account.daily_pnl / equity)
-        breach: str | None = None
-        if daily_loss >= self.app_config.risk.daily_loss_limit_pct:
-            breach = "daily_loss_limit"
-        elif account.drawdown_pct >= self.app_config.risk.max_drawdown_pct:
-            breach = "portfolio_drawdown_halt"
-        if breach == "portfolio_drawdown_halt":
+        # The daily-loss limit is a fraction of the DAY-START equity: measured
+        # against current equity a 0.20 limit would only trip at a 16.7% loss.
+        day_start_equity = max(1e-9, account.equity - account.daily_pnl)
+        daily_loss = max(0.0, -account.daily_pnl / day_start_equity)
+        drawdown_breached = account.drawdown_pct >= self.app_config.risk.max_drawdown_pct
+        # Drawdown is evaluated first and on its own: a concurrent daily-loss
+        # breach must never clear (and the next poll re-save) the persisted
+        # drawdown incident while the drawdown is still past its limit.
+        if drawdown_breached:
             self.ledger.save_safety_incident(account_id, "portfolio_drawdown_halt")
         else:
             self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
+        breach: str | None = None
+        if drawdown_breached:
+            breach = "portfolio_drawdown_halt"
+        elif daily_loss >= self.app_config.risk.daily_loss_limit_pct:
+            breach = "daily_loss_limit"
         previous = dict(getattr(self, "_entry_risk_latch", {}))
         new_latch: dict[Market, str | None] = dict.fromkeys(self._entry_risk_latch, breach)
         # Alert only on latch TRANSITIONS (the account loop re-evaluates this
@@ -2232,8 +2261,13 @@ class EngineRuntime:
         # trade-update path still runs the rebalance's terminal bookkeeping
         # (a SELL fill must complete its phase) but the dependent BUY side
         # stays deferred until the operator's verified reset.
-        submit_buys = getattr(self, "_circuit_breaker_reason", None) is None and not getattr(
-            self, "_reconcile_failed", False
+        # The entry-risk latch (daily loss, drawdown) and a market entry halt
+        # block new entries everywhere else; a deferred BUY is an entry too.
+        submit_buys = (
+            getattr(self, "_circuit_breaker_reason", None) is None
+            and not getattr(self, "_reconcile_failed", False)
+            and getattr(self, "_entry_risk_latch", {}).get(market) is None
+            and getattr(self, "_market_entry_halts", {}).get(market) is None
         )
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             if portfolio_runtime.market != market:
@@ -3533,7 +3567,7 @@ class EngineRuntime:
         except Exception:
             log.warning("Equity daily summary failed", exc_info=True)
 
-    def _run_startup_catch_up(self, *, account: AccountSnapshot | None = None) -> None:
+    def _run_startup_catch_up(self, *, account: AccountSnapshot | None = None, blocked_only: bool = False) -> None:
         """Force an immediate full-target decision on the latest warmup bars.
 
         A fresh account started mid-period would otherwise sit in cash until
@@ -3542,15 +3576,24 @@ class EngineRuntime:
         as ``PortfolioRuntimeResult`` statuses. Exceptions are invariant,
         persistence, safety, or provider failures and propagate to ``start``
         so an invalid engine cannot advertise itself as running.
+
+        ``blocked_only`` (the operator-reset retry) re-runs only the runtimes
+        whose earlier catch-up a breaker or readiness gate blocked.
         """
-        if (
-            not self._running
-            or self._warming_up
-            or self._circuit_breaker_reason is not None
-            or getattr(self, "_reconcile_failed", False)
-        ):
+        if not self._running or self._warming_up:
             return
-        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+        runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
+        if blocked_only:
+            runtimes = tuple(runtime for runtime in runtimes if _catch_up_blocked(runtime))
+        breaker = self._circuit_breaker_reason or (
+            "reconciliation_failed" if getattr(self, "_reconcile_failed", False) else None
+        )
+        if breaker is not None:
+            # Recorded as blocked so reset_safety_lock knows to retry it.
+            for portfolio_runtime in runtimes:
+                portfolio_runtime.startup_catch_up_status = f"blocked:{breaker}"
+            return
+        for portfolio_runtime in runtimes:
             reasons = self._entry_readiness_reasons(portfolio_runtime.market)
             if reasons:
                 portfolio_runtime.startup_catch_up_status = "blocked:" + ",".join(reasons)
@@ -4624,20 +4667,25 @@ class EngineRuntime:
                 raise ValueError("A managed position still requires manual intervention")
             account = self.broker.account()
             self._publish_account_snapshot(account)
-            with getattr(self, "_state_lock", threading.RLock()):
-                # Clear only the reason being reset: a halt another thread
-                # raised during the broker calls above set its own reason.
-                if self._circuit_breaker_reason == reason:
-                    self._circuit_breaker_reason = None
-            # The operator verified THIS halt's recovery condition above;
-            # clear exactly its incident, never unrelated incidents (those
-            # need their own per-halt verification). The one exception is
-            # ``_RESTART_REARMED_REASONS``: a leftover row from an earlier
-            # worker state has no verification left to perform, and clearing
-            # it here keeps a reset from leaving a row that would halt the
-            # next start behind the operator's back.
-            for cleared in sorted({reason} | _RESTART_REARMED_REASONS):
-                self.ledger.clear_safety_incident(account_id, cleared)
+            # The breaker and its incident row clear together under the risk
+            # state lock: the account loop's _persist_risk_state re-saves
+            # whatever breaker reason it read under that lock, so clearing
+            # outside it could resurrect the row the operator just cleared.
+            with getattr(self, "_risk_state_lock", threading.Lock()):
+                with getattr(self, "_state_lock", threading.RLock()):
+                    # Clear only the reason being reset: a halt another thread
+                    # raised during the broker calls above set its own reason.
+                    if self._circuit_breaker_reason == reason:
+                        self._circuit_breaker_reason = None
+                # The operator verified THIS halt's recovery condition above;
+                # clear exactly its incident, never unrelated incidents (those
+                # need their own per-halt verification). The one exception is
+                # ``_RESTART_REARMED_REASONS``: a leftover row from an earlier
+                # worker state has no verification left to perform, and
+                # clearing it here keeps a reset from leaving a row that would
+                # halt the next start behind the operator's back.
+                for cleared in sorted({reason} | _RESTART_REARMED_REASONS):
+                    self.ledger.clear_safety_incident(account_id, cleared)
             market_halts = getattr(self, "_market_entry_halts", None)
             if market_halts is not None:
                 self._verify_market_halts(market_halts)
@@ -4662,6 +4710,23 @@ class EngineRuntime:
             if self._running and restorable and self._circuit_breaker_reason is None:
                 self._state = "running"
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
+        # A startup catch-up the halt blocked never re-runs by itself: retry it
+        # now, against the same verified snapshot. Its own gates still apply.
+        if any(_catch_up_blocked(runtime) for runtime in getattr(self, "_portfolio_runtimes", ())):
+            try:
+                self._run_startup_catch_up(account=account, blocked_only=True)
+            except Exception as exc:
+                # Same fail-closed contract as a scheduled decision failure.
+                self._raise_halt("portfolio_runtime_failure")
+                log.exception("Startup catch-up retry after the safety-lock reset failed closed")
+                runtime_metrics_store.record_event("circuit_breaker")
+                alerts.emit(
+                    "circuit_breaker",
+                    message="Startup catch-up retry failed closed; runtime halted",
+                    reason="portfolio_runtime_failure",
+                    error=str(exc),
+                )
+                raise ValueError(f"Safety lock reset, but the startup catch-up retry failed: {exc}") from exc
 
     def _verify_market_halts(self, market_halts: dict[Market, str | None]) -> None:
         """Clear each market halt only after its specific verified recovery.
@@ -4902,6 +4967,11 @@ class EngineRuntime:
                         len(symbol_batch),
                         exc,
                     )
+
+
+def _catch_up_blocked(runtime: object) -> bool:
+    """True when a runtime's startup catch-up was blocked by a gate."""
+    return str(getattr(runtime, "startup_catch_up_status", None) or "").startswith("blocked:")
 
 
 def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:

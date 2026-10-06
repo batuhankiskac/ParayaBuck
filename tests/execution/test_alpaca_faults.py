@@ -196,7 +196,14 @@ def test_a_terminal_partial_fill_found_on_submit_recovery_is_booked_not_rejected
     assert result is terminal
     assert len(recovered_fills) == 1
     client_id, broker_id, quantity, price, occurred_at, _activity, fee, kwargs = recovered_fills[0]
-    assert (client_id, broker_id, quantity, price, occurred_at, fee) == ("cid-5", "broker-5", 3.0, 100.5, _FILLED_AT, None)
+    assert (client_id, broker_id, quantity, price, occurred_at, fee) == (
+        "cid-5",
+        "broker-5",
+        3.0,
+        100.5,
+        _FILLED_AT,
+        None,
+    )
     assert kwargs == {"status": "canceled"}
 
 

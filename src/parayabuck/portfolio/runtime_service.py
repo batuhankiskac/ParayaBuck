@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import asdict, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
@@ -24,7 +24,11 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import equity_day_bar_is_closed, provider_day_bar_is_final
+from parayabuck.markets.timeframes import (
+    DEFAULT_SIP_EMBARGO,
+    equity_day_bar_is_closed,
+    provider_day_bar_is_final,
+)
 from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES, rebalance_policy_for
 from parayabuck.portfolio.base import (
     PortfolioStrategy,
@@ -86,7 +90,7 @@ def _is_unfinished_signal_bar(market: Market, bar: Bar, now: datetime) -> bool:
     return market == Market.EQUITY and bar.timeframe == "1d" and not equity_day_bar_is_closed(bar.timestamp, now)
 
 
-def _is_partial_provider_bar(bar: Bar, now: datetime) -> bool:
+def _is_partial_provider_bar(bar: Bar, now: datetime, embargo: timedelta = DEFAULT_SIP_EMBARGO) -> bool:
     """A PROVIDER equity daily bar that must not enter the signal history.
 
     Two independent reasons, both about the newest session:
@@ -97,14 +101,15 @@ def _is_partial_provider_bar(bar: Bar, now: datetime) -> bool:
       will not serve SIP history for the newest 15 minutes, so between the
       close and the end of the embargo the provider's bar for that session is
       PARTIAL — a restart inside that window would otherwise decide on a
-      close up to 15 minutes stale.
+      close up to 15 minutes stale. ``embargo`` is the configured
+      ``signal_cross_check.sip_embargo_minutes``.
 
     Stream-aggregated bars are exempt from the second reason: they are final
     at the real session close.
     """
     if bar.market != Market.EQUITY or bar.timeframe != "1d":
         return False
-    return not provider_day_bar_is_final(bar.timestamp, now)
+    return not provider_day_bar_is_final(bar.timestamp, now, embargo)
 
 
 # Rebalance ``status`` recorded when a settled BLOCKED rebalance is closed
@@ -368,6 +373,7 @@ class PortfolioRuntime:
         live_dollar_cap: float = 0.0,
         execution_policy: PortfolioExecutionPolicy | None = None,
         allow_static_universe: bool = False,
+        sip_embargo: timedelta = DEFAULT_SIP_EMBARGO,
     ) -> None:
         if mode not in {"paper", "live"}:
             raise ValueError("PortfolioRuntime mode must be paper or live")
@@ -394,6 +400,8 @@ class PortfolioRuntime:
         self.universe_version = universe_version
         self.account_id = account_id
         self.allow_static_universe = bool(allow_static_universe)
+        # How long after the close a provider daily bar stays partial.
+        self.sip_embargo = sip_embargo
         self.policy = rebalance_policy_for(self.strategy)
         self.execution_policy = execution_policy or PortfolioExecutionPolicy()
         self.decision_service = PortfolioDecisionService()
@@ -571,7 +579,7 @@ class PortfolioRuntime:
             symbol = canonical_symbol(bar.symbol, bar.market)
             if bar.market != self.market or bar.timeframe != self.strategy.timeframe or symbol not in self.history:
                 continue
-            if _is_partial_provider_bar(bar, now):
+            if _is_partial_provider_bar(bar, now, self.sip_embargo):
                 continue
             series = self.history[symbol]
             if not series or series[-1].timestamp < bar.timestamp:
@@ -896,7 +904,11 @@ class PortfolioRuntime:
             # is inside the SIP embargo: its close is partial, not the session
             # close. The stream's own complete bar is kept until the provider
             # republishes the final one.
-            provider = [bar for bar in provider_splits.get(symbol) or () if not _is_partial_provider_bar(bar, now)]
+            provider = [
+                bar
+                for bar in provider_splits.get(symbol) or ()
+                if not _is_partial_provider_bar(bar, now, self.sip_embargo)
+            ]
             if not provider:
                 continue
             merged, changed = merge_provider_authority(tuple(series), provider)

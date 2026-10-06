@@ -238,3 +238,18 @@ def test_operator_alert_is_retried_after_a_failed_emit(tmp_path, monkeypatch: py
     runtime._raise_operator_alert_once(key, message="stuck")
 
     assert calls == ["paper_incident", "paper_incident"]
+
+
+@pytest.mark.parametrize(("embargo_minutes", "adopted"), [(15, 1), (30, 0)])
+def test_provider_bar_partiality_uses_the_configured_sip_embargo(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, embargo_minutes: int, adopted: int
+) -> None:
+    runtime = _runtime(tmp_path, _Broker())
+    runtime.sip_embargo = timedelta(minutes=embargo_minutes)
+    # 20 minutes after the 16:00 ET (20:00 UTC) close.
+    monkeypatch.setattr(runtime_service, "_utcnow", lambda: datetime(2026, 9, 21, 20, 20, tzinfo=UTC))
+    provider = {"QQQ": [_bar("QQQ", _provider_label(SESSION), 123.0)]}
+
+    changed = runtime.adopt_authoritative_signal_history(provider, {})
+
+    assert changed == adopted

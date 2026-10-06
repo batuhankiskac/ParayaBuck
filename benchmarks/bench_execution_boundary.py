@@ -1,6 +1,6 @@
 """Execution boundary benchmarks — broker path latency without network.
 
-Scope: AlpacaBroker facade + AccountService/OrderService/Reconciliation/Protection via FakeTradingClient.
+Scope: AlpacaBroker facade + AccountService/OrderService/Reconciliation via FakeTradingClient.
 Dataset: synthetic 100 positions, no CSV, no universe.
 Window: N/A (broker isolated).
 Setup: ledger + fake client, peak temp dir, no network.
@@ -13,9 +13,7 @@ Cases:
 - submit portfolio BUY
 - submit portfolio SELL
 - submit timeout → recovered by client ID
-- reconcile 20 positions (no protection)
-- reconcile 20 protected positions (requires stop lifecycle)
-- protection matching (20 positions)
+- reconcile 20 positions
 - peak state atomic save
 """
 
@@ -37,9 +35,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from benchmarks.harness import Report, timeit
 from parayabuck.core.models import Market
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide
+from tests.fake_client import FakeTradingClient
 
 
 def _git_head() -> str:
@@ -198,55 +196,6 @@ def bench_reconcile_20(report: Report) -> None:
     report.add(timing)
 
 
-def bench_reconcile_20_protected(report: Report) -> None:
-    broker, fake, _ = _broker_with_fake()
-    for i in range(20):
-        sym = f"P{i:03d}"
-        fake.set_position(sym, qty=10)
-        fake.set_asset(sym)
-        try:
-            from parayabuck.execution.fake_client import _FakeOrder
-
-            fake.open_orders.append(  # type: ignore[attr-defined]
-                _FakeOrder(
-                    id=f"stop-{sym}",
-                    client_order_id=f"parayabuck-stop-{sym}",
-                    symbol=sym,
-                    side="sell",
-                    qty=10,
-                    status="accepted",
-                )
-            )
-        except Exception:
-            pass
-    broker.portfolio_owned_quantities = lambda: {f"P{i:03d}": 10 for i in range(20)}
-
-    def _reconcile() -> None:
-        broker.reconcile()
-
-    timing, _ = timeit(_reconcile, label="reconcile 20 protected positions (Fake)", runs=100)
-    report.add(timing)
-
-
-def bench_protection_matching(report: Report) -> None:
-    broker, fake, _ = _broker_with_fake()
-    for i in range(20):
-        sym = f"M{i:03d}"
-        fake.set_position(sym, qty=10)
-        fake.set_asset(sym)
-    broker.portfolio_owned_quantities = lambda: {f"M{i:03d}": 10 for i in range(20)}
-    # Pre-warm account snapshot
-    snap = broker.account()
-
-    def _match() -> None:
-        # Direct protection matching via broker helper
-        for p in snap.positions[:20]:
-            broker._has_protective_order(p.symbol, p.qty > 0, 10)
-
-    timing, _ = timeit(_match, label="protection matching 20 positions", runs=200)
-    report.add(timing)
-
-
 def bench_peak(report: Report) -> None:
     broker, _fake, _ = _broker_with_fake()
 
@@ -266,8 +215,6 @@ if __name__ == "__main__":
     bench_submit_sell(report)
     bench_submit_recovered(report)
     bench_reconcile_20(report)
-    bench_reconcile_20_protected(report)
-    bench_protection_matching(report)
     bench_peak(report)
     report.print_table(scale=1)
     # Write JSON artifact

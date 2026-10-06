@@ -300,7 +300,6 @@ def _account_broker(repo: PortfolioStateRepository, *, quantity: float, average:
         _peak_equity=0.0,
         _save_peak_equity=lambda: None,
         _snapshot_cache=None,
-        _snapshot_cached_at=None,
     )
 
 

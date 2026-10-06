@@ -78,5 +78,3 @@ def test_corrupt_risk_state_payload_is_treated_as_absent(tmp_path: Path) -> None
     ledger.connection.commit()
     assert ledger.load_risk_state("acct", datetime.now(UTC).date()) is None
     ledger.close()
-
-

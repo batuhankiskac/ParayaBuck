@@ -13,10 +13,10 @@ def _payload(**overrides: Any) -> dict[str, Any]:
     values = {
         "market": "equity",
         "strategy": "equity_leveraged_trend_v1",
-        "parameters": {"top_n": 8},
+        "parameters": {"vol_target": 0.35},
         "years": 3,
         "days": 90,
-        "symbols": "AAPL",
+        "symbols": "SPY,QQQ,QLD",
     }
     values.update(overrides)
     return values
@@ -50,9 +50,9 @@ def test_backtest_start_and_status(monkeypatch: Any) -> None:
         assert argv[argv.index("--output-dir") + 1] == server.backtest_manager.output_dir
         assert "--start" in argv and "--end" in argv
         assert "--market" in argv and argv[argv.index("--market") + 1] == "equity"
-        assert "--symbols" in argv and argv[argv.index("--symbols") + 1] == "AAPL"
+        assert "--symbols" in argv and argv[argv.index("--symbols") + 1] == "SPY,QQQ,QLD"
         assert "--strategy" in argv
-        assert "--param" in argv and argv[argv.index("--param") + 1] == "top_n=8"
+        assert "--param" in argv and argv[argv.index("--param") + 1] == "vol_target=0.35"
 
         status = asyncio.run(server.backtest_status())
         assert status["state"] in {"running", "idle", "done"}

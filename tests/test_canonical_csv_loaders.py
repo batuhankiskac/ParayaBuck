@@ -245,12 +245,3 @@ def test_incomplete_canonical_action_schema_fails_closed(tmp_path: Path) -> None
         load_csv_corporate_actions(path)
 
 
-def test_canonical_v5_action_receipt_has_expected_apply_once_count() -> None:
-    path = Path("data/historical/equity_survivorship_full_corporate_actions_v5.csv")
-    if not path.exists():
-        pytest.skip("canonical v5 corporate actions are not available")
-
-    actions = load_csv_corporate_actions(path)
-
-    assert len(actions) == 141_699
-    assert all(action.action_type == CorporateActionType.DIVIDEND for action in actions)

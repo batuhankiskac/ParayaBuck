@@ -10,14 +10,11 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 from parayabuck.backtest.universe import build_static_equity_point_in_time_universe
 from parayabuck.config import EquityUniverseConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
-from parayabuck.portfolio.models import PortfolioState
 
 
 def _bar(symbol: str, timestamp: datetime, close: float) -> Bar:
@@ -82,48 +79,6 @@ def test_static_equity_universe_only_trades_configured_symbols() -> None:
     for rebalance in result.rebalances:
         for symbol, _weight in rebalance.target_weights:
             assert universe.contains(symbol, Market.EQUITY, rebalance.decision_timestamp)
-
-
-def test_open_managed_orders_stay_pinned_across_restart() -> None:
-    """Pending managed orders decided before a restart are re-armed and fill."""
-    symbols = ("SPY", "QQQ", "QLD", "S00")
-    bars = _panel(list(symbols))
-    universe = build_static_equity_point_in_time_universe(
-        bars,
-        _static_equity_config(symbols, maximum_stream_symbols=len(symbols)),
-    )
-    decision_timestamp = bars[10].timestamp
-    state = PortfolioState(
-        strategy_name="equity_leveraged_trend_v1",
-        strategy_version="1.0.0",
-        holdings={},
-        cash=100_000.0,
-        pending_orders=(
-            {
-                "client_order_id": "pbp-restored",
-                "symbol": "S00",
-                "market": "equity",
-                "side": "buy",
-                "qty": 10.0,
-                "created_at": decision_timestamp.isoformat(),
-                "decision_timestamp": decision_timestamp.isoformat(),
-            },
-        ),
-    )
-    strategy = portfolio_strategy_from("equity_leveraged_trend_v1", {"sma_bars": 5})
-    engine = PortfolioBacktestEngine(
-        strategy,
-        rebalance_policy_for(strategy),
-        state=state,
-        universe=universe,
-        universe_version="test",
-    )
-    engine.run(bars, liquidate_at_end=False)
-    # The restored order filled on the next tradable bar after its creation.
-    restored_fills = [fill for fill in engine._fills if fill.client_order_id == "pbp-restored"]
-    assert restored_fills
-    assert restored_fills[0].qty == pytest.approx(10.0)
-    assert restored_fills[0].timestamp > restored_fills[0].decision_timestamp
 
 
 def test_disabled_strategy_creates_no_orders(tmp_path) -> None:

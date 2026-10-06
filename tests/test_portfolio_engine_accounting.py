@@ -7,6 +7,7 @@ import pytest
 from parayabuck.backtest.portfolio_engine import (
     OrderSide,
     PortfolioBacktestEngine,
+    _Position,
     equity_regulatory_fee,
     session_date_for,
 )
@@ -14,7 +15,6 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.execution.portfolio import PortfolioRiskLimits
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import (
-    PortfolioState,
     RebalancePolicy,
     TargetPortfolio,
     TargetWeight,
@@ -106,8 +106,6 @@ def _engine(
     strategy: PortfolioStrategy,
     *,
     commission: float = 0.0,
-    state_path: str | None = None,
-    state=None,
     risk_limits=None,
 ) -> PortfolioBacktestEngine:
     return PortfolioBacktestEngine(
@@ -121,8 +119,6 @@ def _engine(
         max_participation_pct=0.10,
         turnover_band=0.005,
         minimum_order_notional=10.0,
-        state_path=state_path,
-        state=state,
         risk_limits=risk_limits,
     )
 
@@ -346,213 +342,6 @@ def test_rebalance_record_reports_signed_and_actual_weights() -> None:
     assert second.cost > 0
 
 
-def test_restart_keeps_cash_and_never_reissues_filled_orders(tmp_path) -> None:
-    epoch = datetime(2024, 1, 1, tzinfo=UTC)
-    bars = _equity_days(120, epoch)
-    state_path = str(tmp_path / "state.json")
-
-    strategy = _ScheduleStrategy({0: {"SPY": 0.6}}, epoch)
-    first_engine = _engine(strategy, state_path=state_path)
-    first_engine.run(bars[:60], liquidate_at_end=False)
-
-    state = PortfolioBacktestEngine.load_state(state_path)
-    assert state is not None and state.cash is not None
-    persisted_cash = state.cash
-
-    reference_engine = _engine(strategy)
-    reference = reference_engine.run(bars, liquidate_at_end=False)
-
-    restarted_engine = _engine(strategy, state=state)
-    restarted = restarted_engine.run(bars[60:], warmup=bars[:60], liquidate_at_end=False)
-
-    # Cash at restart equals the interrupted run's persisted cash.
-    assert restarted.state.cash is not None
-    assert restarted.state.cash == persisted_cash
-    # Position quantities, cash and fills after the restart match the
-    # uninterrupted run exactly.
-    assert restarted.state.holdings == reference.state.holdings
-    assert restarted.state.cash == pytest.approx(reference.state.cash)
-    assert [fill.timestamp for fill in restarted.fills] == [
-        fill.timestamp for fill in reference.fills if fill.timestamp >= bars[60].timestamp
-    ]
-    assert [fill.qty for fill in restarted.fills] == [
-        fill.qty for fill in reference.fills if fill.timestamp >= bars[60].timestamp
-    ]
-    # Idempotent client order ids: identical decisions produce identical ids.
-    restart_ids = [fill.client_order_id for fill in restarted.fills]
-    ref_ids = [fill.client_order_id for fill in reference.fills if fill.timestamp >= bars[60].timestamp]
-    assert restart_ids == ref_ids
-
-
-def test_state_round_trip_preserves_economic_fields(tmp_path) -> None:
-    epoch = datetime(2024, 1, 1, tzinfo=UTC)
-    strategy = _ScheduleStrategy({}, epoch, default_targets={"SPY": 0.6})
-    state_path = str(tmp_path / "state.json")
-    engine = _engine(strategy, commission=1.0, state_path=state_path)
-    engine.run(_equity_days(60, epoch), liquidate_at_end=False)
-    state = PortfolioBacktestEngine.load_state(state_path)
-    assert state is not None
-    assert state.schema_version == 3
-    assert state.last_processed_bar is not None
-    assert state.last_prices.get("SPY") is not None
-    assert state.entry_fees.get("SPY") is not None
-    assert state.cash is not None
-    assert state.last_target.get("SPY") == 0.6
-    assert state.peak_equity is not None
-    assert state.day_start_equity is not None
-    assert state.last_observed_equity is not None
-    assert state.risk_session_date is not None
-
-
-def test_v1_state_without_cash_migrates_by_deriving_cash(tmp_path) -> None:
-    from parayabuck.portfolio.models import PortfolioState
-
-    epoch = datetime(2024, 1, 1, tzinfo=UTC)
-    bars = _equity_days(60, epoch)
-    strategy = _HoldStrategy("SPY", 0.6)
-    first_engine = _engine(strategy)
-    result = first_engine.run(bars, liquidate_at_end=False)
-    v1 = PortfolioState.from_dict({**result.state.to_dict(), "schema_version": 1, "cash": None})
-    migrated = PortfolioState.from_dict(v1.to_dict())
-    # The v1 state keeps cash=None; the engine derives cash once on resume.
-    assert migrated.cash is None
-    engine = _engine(strategy, state=migrated)
-    resumed = engine.run(bars[60:], warmup=bars[:60], liquidate_at_end=False)
-    assert resumed.state.holdings == result.state.holdings
-    assert resumed.state.cash is not None
-    assert resumed.state.cash == pytest.approx(
-        100_000.0 - result.state.holdings["SPY"] * result.state.avg_prices["SPY"]
-    )
-
-
-def test_restart_risk_state_equivalence_with_drawdown_after_restart(tmp_path) -> None:
-    """A -> B -> C -> D uninterrupted must equal A -> B, save, restart, C -> D:
-    ending equity, holdings, cash, fills, realized PnL, daily-loss and
-    drawdown-halt behavior, pending orders and the persisted risk lifecycle.
-
-    The scenario forces a high-water before the restart (the ramp peak is
-    captured in the saved state) and the drawdown limit is crossed only AFTER
-    the restart, so an unpersisted peak would silently disable the halt.
-    """
-    epoch = datetime(2024, 1, 1, tzinfo=UTC)
-    ramp = [
-        _bar(epoch + timedelta(days=index), "SPY", 100 * 1.005**index, Market.EQUITY, 5_000_000) for index in range(40)
-    ]
-    crash = [
-        _bar(
-            epoch + timedelta(days=40 + index),
-            "SPY",
-            100 * 1.005**39 * 0.988**index,
-            Market.EQUITY,
-            5_000_000,
-        )
-        for index in range(30)
-    ]
-    bars = ramp + crash
-    strategy = _ScheduleStrategy({}, epoch, default_targets={"SPY": 0.6})
-    limits = PortfolioRiskLimits(
-        daily_loss_limit=0.005,
-        drawdown_halt=0.05,
-        maximum_equity=0.60,
-        maximum_equity_asset=0.60,
-    )
-    state_path = str(tmp_path / "state.json")
-
-    reference_engine = _engine(strategy, risk_limits=limits)
-    reference = reference_engine.run(bars, liquidate_at_end=False)
-
-    first_engine = _engine(strategy, state_path=state_path, risk_limits=limits)
-    first_engine.run(bars[:40], liquidate_at_end=False)
-    saved = PortfolioBacktestEngine.load_state(state_path)
-    assert saved is not None
-    # The high-water of the ramp was persisted before the restart.
-    assert saved.peak_equity == pytest.approx(reference.state.peak_equity)
-
-    restarted_engine = _engine(strategy, state=saved, risk_limits=limits)
-    restarted = restarted_engine.run(bars[40:], warmup=bars[:40], liquidate_at_end=False)
-
-    assert restarted.state.cash == pytest.approx(reference.state.cash)
-    assert restarted.state.holdings == reference.state.holdings
-    assert restarted.state.avg_prices == pytest.approx(reference.state.avg_prices)
-    assert restarted.state.realized_pnl == pytest.approx(reference.state.realized_pnl)
-    assert restarted.state.pending_orders == reference.state.pending_orders
-    assert restarted.state.pending_target == reference.state.pending_target
-    assert restarted.state.last_processed_bar == reference.state.last_processed_bar
-    cutoff = bars[39].timestamp
-    assert [fill.timestamp for fill in restarted.fills] == [
-        fill.timestamp for fill in reference.fills if fill.timestamp > cutoff
-    ]
-    assert [fill.qty for fill in restarted.fills] == [fill.qty for fill in reference.fills if fill.timestamp > cutoff]
-    # Persisted risk lifecycle identical: peak, day-start, last observed and
-    # the active session date all survived the restart.
-    assert restarted.state.peak_equity == pytest.approx(reference.state.peak_equity)
-    assert restarted.state.day_start_equity == pytest.approx(reference.state.day_start_equity)
-    assert restarted.state.last_observed_equity == pytest.approx(reference.state.last_observed_equity)
-    assert restarted.state.risk_session_date == reference.state.risk_session_date
-    # Ending equity matches to the cent.
-    assert restarted.ending_equity == pytest.approx(reference.ending_equity, abs=1e-6)
-    # Daily-loss and drawdown halt behavior after the restart matches the
-    # uninterrupted run exactly (the drawdown limit is crossed only after the
-    # restart, so this proves the persisted peak feeds the halt).
-    reference_post = [record for record in reference.rebalances if record.decision_timestamp > cutoff]
-    assert len(restarted.rebalances) == len(reference_post)
-    assert [record.risk_overlay_halted for record in restarted.rebalances] == [
-        record.risk_overlay_halted for record in reference_post
-    ]
-    assert [record.risk_overlay_reasons for record in restarted.rebalances] == [
-        record.risk_overlay_reasons for record in reference_post
-    ]
-    # The drawdown halt genuinely fired after the restart in both runs.
-    post_reasons = [reason for record in reference_post for reason in record.risk_overlay_reasons]
-    assert "portfolio_drawdown_halt" in post_reasons
-
-
-def test_v2_state_without_risk_lifecycle_still_loads(tmp_path) -> None:
-    """A pre-v3 state (no risk lifecycle fields) loads safely and the engine
-    seeds the lifecycle from the starting equity once."""
-    from parayabuck.portfolio.models import PortfolioState
-
-    epoch = datetime(2024, 1, 1, tzinfo=UTC)
-    bars = _equity_days(120, epoch)
-    strategy = _HoldStrategy("SPY", 0.6)
-    engine = _engine(strategy)
-    result = engine.run(bars[:60], liquidate_at_end=False)
-    v2_raw = result.state.to_dict()
-    v2_raw.pop("peak_equity")
-    v2_raw.pop("day_start_equity")
-    v2_raw.pop("last_observed_equity")
-    v2_raw.pop("risk_session_date")
-    v2_raw["schema_version"] = 2
-    v2 = PortfolioState.from_dict(v2_raw)
-    assert v2.peak_equity is None
-    resumed = _engine(strategy, state=v2).run(bars[60:], warmup=bars[:60], liquidate_at_end=False)
-    # Seeded from the starting equity, so the resumed run is self-consistent
-    # and re-derives the lifecycle from its own observations.
-    assert resumed.state.peak_equity is not None
-    assert resumed.state.peak_equity >= resumed.starting_equity
-    assert resumed.state.risk_session_date is not None
-
-
-def test_restart_after_liquidated_run_does_not_resurrect_positions(tmp_path) -> None:
-    epoch = datetime(2024, 1, 1, tzinfo=UTC)
-    bars = _equity_days(60, epoch)
-    strategy = _HoldStrategy("SPY", 0.6)
-    state_path = str(tmp_path / "state.json")
-    first_engine = _engine(strategy, commission=1.0, state_path=state_path)
-    first = first_engine.run(bars, liquidate_at_end=True)
-    state = PortfolioBacktestEngine.load_state(state_path)
-    assert state is not None
-    # Liquidation cleared the position bookkeeping while keeping cash.
-    assert state.holdings == {}
-    assert state.pending_orders == ()
-    assert state.cash is not None
-    # A restart from this state must not re-buy the liquidated position.
-    restarted_engine = _engine(strategy, state=state)
-    restarted = restarted_engine.run([], liquidate_at_end=False)
-    assert restarted.state.holdings == {}
-    assert restarted.state.cash == pytest.approx(first.state.cash)
-
-
 class _DailyRiskStrategy(PortfolioStrategy):
     """Fixed target that decides on every bar (intermediate risk allowed)."""
 
@@ -756,14 +545,6 @@ def test_on_target_symbol_never_produces_a_zero_quantity_order() -> None:
     # Weight 0.1 of a 100_000 book at a 100.0 price is exactly the 100
     # shares already held, so the target delta is exactly 0.0.
     strategy = _ScheduleStrategy({0: {"SPY": 0.1}}, epoch)
-    state = PortfolioState(
-        strategy.name,
-        strategy.version,
-        holdings={"SPY": 100.0},
-        avg_prices={"SPY": 100.0},
-        cash=90_000.0,
-        last_prices={"SPY": 100.0},
-    )
     engine = PortfolioBacktestEngine(
         strategy,
         RebalancePolicy(strategy.market, "monthly"),
@@ -772,8 +553,11 @@ def test_on_target_symbol_never_produces_a_zero_quantity_order() -> None:
         benchmark_symbol="SPY",
         turnover_band=0.0,
         minimum_order_notional=0.0,
-        state=state,
     )
+    # Seed an already-held, on-target position of 100 shares.
+    engine._positions["SPY"] = _Position("SPY", Market.EQUITY, "1d", 100.0, 100.0, epoch)
+    engine._cash = 90_000.0
+    engine._last_price["SPY"] = 100.0
     # Two liquid bars: the decision lands on the first, and the second bar's
     # fill cycle is where a leaked zero-quantity order would be booked.
     bars = [_bar(epoch + timedelta(days=offset), "SPY", 100.0, Market.EQUITY, 1_000_000) for offset in (1, 2)]
@@ -852,3 +636,65 @@ def test_benchmark_stays_price_only_without_corporate_actions(corporate_actions)
     assert [bar.close for bar in result.benchmark_bars] == [100.0, 102.0, 99.0, 101.0]
     assert result.benchmark_max_drawdown == pytest.approx(3.0 / 102.0)
     assert report.summary["benchmark_return_basis"] == "price"
+
+
+def _gap_bar(timestamp: datetime, open_: float, close: float, volume: float = 5_000_000) -> Bar:
+    return Bar(timestamp, "SPY", "1d", open_, max(open_, close), min(open_, close), close, volume, Market.EQUITY)
+
+
+def test_gap_up_buy_partially_fills_to_available_cash_and_reports_shortfall() -> None:
+    """A BUY sized at the decision close that the next open makes unaffordable
+    fills what the cash above the buffer buys; the rest is rejected notional."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    strategy = _ScheduleStrategy({0: {"SPY": 0.99}}, epoch)
+    engine = _engine(strategy, commission=1.0)
+    engine.minimum_cash = 0.01
+    bars = [
+        _gap_bar(epoch, 100.0, 100.0),
+        # +10% gap: 990 shares at ~110 cost ~108.9k against 100k cash.
+        _gap_bar(epoch + timedelta(days=1), 110.0, 110.0),
+        _gap_bar(epoch + timedelta(days=2), 110.0, 110.0),
+    ]
+    result = engine.run(bars, liquidate_at_end=False)
+
+    assert len(result.fills) == 1
+    fill = result.fills[0]
+    decided_qty = 0.99 * 100_000.0 / 100.0
+    assert 0 < fill.qty < decided_qty
+    # The fill spent the cash down to the 1% buffer (marked at the decision
+    # close, when the book was all cash), never below it.
+    assert engine._cash == pytest.approx(0.01 * 100_000.0, rel=1e-9)
+    record = result.rebalances[0]
+    assert record.rejected_notional == pytest.approx((decided_qty - fill.qty) * 110.0)
+    # The remainder is not retried on later bars.
+    assert engine._pending == []
+
+
+def test_affordable_buy_rejects_a_dust_quantity() -> None:
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    engine = _engine(_ScheduleStrategy({}, epoch))
+    engine._cash = 5.0
+    assert engine._affordable_buy_quantity(100.0, epoch.date()) == 0.0
+
+
+def test_orders_blocked_by_zero_volume_are_reported_as_rejected_notional() -> None:
+    """Without observable volume the capacity model cannot size an order; it
+    must not vanish silently from the decision's accounting."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    strategy = _ScheduleStrategy({0: {"SPY": 0.5}}, epoch)
+    engine = _engine(strategy)
+    bars = [_gap_bar(epoch + timedelta(days=offset), 100.0, 100.0, volume=0.0) for offset in range(3)]
+    result = engine.run(bars, liquidate_at_end=False)
+
+    assert result.fills == ()
+    record = result.rebalances[0]
+    assert record.rejected_notional == pytest.approx(0.5 * 100_000.0)
+    assert record.unfilled_notional == pytest.approx(0.5 * 100_000.0)
+
+
+def test_context_uses_the_configured_benchmark_symbol() -> None:
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    strategy = _ScheduleStrategy({}, epoch)
+    engine = PortfolioBacktestEngine(strategy, RebalancePolicy(strategy.market, "monthly"), benchmark_symbol="QQQ")
+    engine._history[("QQQ", "1d")] = [_bar(epoch, "QQQ", 100.0, Market.EQUITY, 1_000_000)]
+    assert engine._build_context(epoch).benchmark_symbol == "QQQ"

@@ -52,6 +52,17 @@ def _bar(timestamp: datetime, close: float) -> Bar:
     )
 
 
+def _run(engine: PortfolioBacktestEngine, dataset: MarketDataset):
+    """Feed a validated dual-series dataset through the engine's event loop."""
+    return engine.run(
+        list(dataset.executable_bars),
+        liquidate_at_end=False,
+        signal_bars=list(dataset.signal_bars),
+        corporate_actions=list(dataset.corporate_actions),
+        cash_rates=list(dataset.cash_rates),
+    )
+
+
 def _lineage() -> DatasetLineage:
     return DatasetLineage(
         dataset_id="dual-series-test",
@@ -85,7 +96,7 @@ def test_dual_series_uses_signal_history_and_executable_fill_prices() -> None:
         slippage_bps=0.0,
         spread_bps=0.0,
     )
-    result = engine.run_dataset(dataset, liquidate_at_end=False)
+    result = _run(engine, dataset)
     assert result.fills[0].reference_price == 51.0
     assert result.benchmark_return == pytest.approx(0.02)
     assert dataset.content_digest() == dataset.content_digest()
@@ -117,7 +128,7 @@ def test_dividend_and_split_are_credited_exactly_once() -> None:
         slippage_bps=0.0,
         spread_bps=0.0,
     )
-    result = engine.run_dataset(dataset, liquidate_at_end=False)
+    result = _run(engine, dataset)
     initial_qty = result.fills[0].qty
     assert result.state.holdings["SPY"] == pytest.approx(initial_qty * 2)
     assert result.state.avg_prices["SPY"] == pytest.approx(101.0 / 2)
@@ -149,7 +160,7 @@ def test_split_on_first_fill_bar_rescales_the_resting_buy_order() -> None:
         slippage_bps=0.0,
         spread_bps=0.0,
     )
-    result = engine.run_dataset(dataset, liquidate_at_end=False)
+    result = _run(engine, dataset)
     assert result.fills[0].timestamp == start + timedelta(days=1)
     assert result.fills[0].qty == pytest.approx(1_000.0)
     assert result.state.holdings["SPY"] == pytest.approx(1_000.0)
@@ -185,7 +196,7 @@ def test_cash_hurdle_uses_point_in_time_rate_series() -> None:
         slippage_bps=0,
         spread_bps=0,
     )
-    result = engine.run_dataset(dataset, liquidate_at_end=False)
+    result = _run(engine, dataset)
     assert result.cash_hurdle_return == pytest.approx(0.10, rel=0.01)
     assert result.cash_yield > 0
     without_rate = MarketDataset(Market.EQUITY, "1d", bars, bars, _lineage())

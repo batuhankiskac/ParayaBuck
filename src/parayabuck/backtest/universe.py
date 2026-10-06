@@ -149,24 +149,9 @@ def hash_point_in_time_universe(universe: PointInTimeUniverse) -> str:
     return digest.hexdigest()
 
 
-def verify_persisted_universe(
-    universe: PointInTimeUniverse,
-    expected_hash: str,
-) -> None:
-    """Fail-closed check that the run's universe matches the persisted one."""
-    if not expected_hash:
-        return
-    recomputed = hash_point_in_time_universe(universe)
-    if recomputed != expected_hash:
-        raise ValueError(
-            f"Universe snapshot hash mismatch: persisted {expected_hash[:12]}... vs recomputed {recomputed[:12]}..."
-        )
-
-
 __all__ = [
     "PointInTimeUniverse",
     "UniverseSnapshot",
     "build_static_equity_point_in_time_universe",
     "hash_point_in_time_universe",
-    "verify_persisted_universe",
 ]

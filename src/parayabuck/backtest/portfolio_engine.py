@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import json
 import math
 from bisect import bisect_right
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from enum import StrEnum
 from itertools import pairwise
-from pathlib import Path
 
 from parayabuck.backtest.regulatory_fees import rates_for_trade_date
 from parayabuck.backtest.stats import sample_stddev
@@ -17,7 +15,6 @@ from parayabuck.data.market_dataset import (
     CashRateObservation,
     CorporateAction,
     CorporateActionType,
-    MarketDataset,
 )
 from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
@@ -37,7 +34,6 @@ from parayabuck.portfolio.models import (
     TargetWeight,
 )
 from parayabuck.portfolio.universes import EQUITY_UNIVERSE_VERSION
-from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.backtest.portfolio_engine")
 
@@ -242,17 +238,11 @@ def equity_regulatory_fee(
     return cat + taf + quantity * price * sec_fee_rate
 
 
-def _prepare_corporate_actions(
-    actions: list[CorporateAction] | None,
-    *,
-    cutoff: datetime | None,
-) -> list[CorporateAction]:
+def _prepare_corporate_actions(actions: list[CorporateAction] | None) -> list[CorporateAction]:
     """Return one replay-safe action per economic event, in event order."""
     prepared: list[CorporateAction] = []
     seen: set[tuple[str, datetime, CorporateActionType, float]] = set()
     for action in actions or []:
-        if cutoff is not None and action.timestamp <= cutoff:
-            continue
         key = (
             canonical_symbol(action.symbol, Market.EQUITY),
             action.timestamp,
@@ -281,8 +271,8 @@ class PortfolioBacktestEngine:
     * turnover below ``turnover_band`` or ``minimum_order_notional`` is
       skipped;
     * one net delta per symbol per rebalance prevents sell/buy churn;
-    * restarting with a persisted ``PortfolioState`` resumes the same
-      allocation without duplicate orders.
+    * an order blocked by unknown volume or limited by cash is reported in
+      the decision's ``rejected_notional``.
     """
 
     def __init__(
@@ -308,8 +298,6 @@ class PortfolioBacktestEngine:
         execution_policy: PortfolioExecutionPolicy | None = None,
         universe: object | None = None,
         universe_version: str = "",
-        state: PortfolioState | None = None,
-        state_path: str | None = None,
         cash_rate_annualized: float = 0.0,
         risk_limits: PortfolioRiskLimits | None = None,
         maximum_allocation: float = 1.0,
@@ -373,15 +361,16 @@ class PortfolioBacktestEngine:
         self.universe_version = universe_version or EQUITY_UNIVERSE_VERSION
         self.allow_static_universe = bool(allow_static_universe)
         self.terminal_lifecycles = self._validated_terminal_lifecycles(terminal_lifecycles)
-        self.state_path = Path(state_path) if state_path else None
         self.cash_rate_annualized = float(cash_rate_annualized)
         self.risk_overlay = PortfolioRiskOverlay(risk_limits) if risk_limits is not None else None
+        # The cash buffer a cash-limited BUY may not spend into.
+        self.minimum_cash = risk_limits.minimum_cash if risk_limits is not None else 0.0
         self.maximum_allocation = maximum_allocation
         # Offline backtests default to SHADOW drawdown halts (the alpha curve
         # keeps trading; breaches are recorded as events). Production-policy
         # simulations opt into real enforcement with this constructor flag.
         self.enforce_drawdown_halt = bool(enforce_drawdown_halt)
-        self.state = state or PortfolioState(strategy_name=strategy.name, strategy_version=strategy.version)
+        self.state = PortfolioState(strategy_name=strategy.name, strategy_version=strategy.version)
         self._idempotency = IdempotencyKeyFactory(strategy.name, strategy.version)
         self._history: dict[tuple[str, str], list[Bar]] = {}
         self._execution_history: dict[tuple[str, str], list[Bar]] = {}
@@ -393,69 +382,29 @@ class PortfolioBacktestEngine:
         self._rebalances: list[RebalanceRecord] = []
         self._realized_pnl_events: list[tuple[datetime, str, float]] = []
         self._closed_position_events: list[tuple[datetime, str, float]] = []
+        # Rejected notional per decision: cash shortfalls of BUYs at the open,
+        # and (keyed by order) orders blocked by zero/unknown volume.
+        self._cash_shortfall_notional: dict[datetime, float] = {}
+        self._volume_blocked_notional: dict[tuple[datetime, str], float] = {}
         self._dividend_total = 0.0
         self._cash_rate_observations: tuple[CashRateObservation, ...] = ()
         self._risk_contribution_history: list[float] = []
         self._previous_timestamp: datetime | None = None
-        self._last_price: dict[str, float] = dict(self.state.last_prices)
+        self._last_processed: datetime | None = None
+        self._last_price: dict[str, float] = {}
         self._weight_history: list[tuple[datetime, dict[str, float]]] = []
         self._universe_history: list[tuple[datetime, tuple[str, ...]]] = []
         self._holdings_history: list[tuple[int, float, float]] = []
-        self._rebalance_number = self.state.rebalance_count
+        self._rebalance_number = 0
         # Explicit daily-loss/high-water lifecycle. day-start equity is the
         # previous session's closing equity, never the current post-close
         # equity; the risk state advances on every processed bar so drawdown
-        # and daily PnL stay live between scheduled rebalances. A persisted
-        # v3 state restores the lifecycle so a restart behaves identically to
-        # an uninterrupted run (high-water before restart, drawdown crossed
-        # after restart, mid-session day-start).
-        self._peak_equity = self.state.peak_equity if self.state.peak_equity is not None else starting_equity
-        self._day_start_equity = (
-            self.state.day_start_equity if self.state.day_start_equity is not None else starting_equity
-        )
-        self._last_observed_equity = (
-            self.state.last_observed_equity if self.state.last_observed_equity is not None else starting_equity
-        )
+        # and daily PnL stay live between scheduled rebalances.
+        self._peak_equity = starting_equity
+        self._day_start_equity = starting_equity
+        self._last_observed_equity = starting_equity
         self._risk_session_date: date | None = None
-        if self.state.risk_session_date:
-            try:
-                self._risk_session_date = date.fromisoformat(self.state.risk_session_date)
-            except ValueError:
-                self._risk_session_date = None
-        if self.state.last_rebalance_at is not None:
-            # Period detection resumes from the last decision so a restart in
-            # the middle of a month does not fire an unscheduled rebalance.
-            self._previous_timestamp = self.state.last_rebalance_at
-        # Cash is authoritative when persisted (schema v2); a v1 state without
-        # cash derives it from holdings once at migration time.
-        if self.state.cash is not None:
-            self._cash = self.state.cash
-        else:
-            self._cash = starting_equity
-        if self.state.holdings:
-            for symbol, quantity in self.state.holdings.items():
-                avg_price = self.state.avg_prices.get(symbol, 0.0)
-                if quantity <= 0 or avg_price <= 0:
-                    continue
-                self._positions[symbol] = _Position(
-                    symbol,
-                    Market.EQUITY,
-                    strategy.timeframe,
-                    quantity,
-                    avg_price,
-                    self.state.last_rebalance_at or datetime(1970, 1, 1, tzinfo=UTC),
-                    entry_fee=self.state.entry_fees.get(symbol, 0.0),
-                    realized_pnl_accumulator=self.state.realized_pnl_accumulators.get(symbol, 0.0),
-                )
-                if self.state.cash is None:
-                    # v1 migration: derive cash from the holdings cost basis.
-                    self._cash -= quantity * avg_price
-        # Pending orders decided before the restart must survive it; they are
-        # re-armed so fills resume where the interrupted run left off.
-        for raw_order in self.state.pending_orders:
-            order = self._order_from_dict(raw_order)
-            if order is not None:
-                self._pending.append(order)
+        self._cash = starting_equity
 
     # -- public API ---------------------------------------------------------
 
@@ -479,8 +428,6 @@ class PortfolioBacktestEngine:
         reusing one preparation across identical trial runs yields identical
         results while skipping the per-trial sort of the full bar set.
         """
-        # a restart resumes fills exactly where the interrupted run left off.
-        restored_pending = list(self._pending)
         self._pending = []
         self._fills = []
         self._rebalances = []
@@ -488,13 +435,14 @@ class PortfolioBacktestEngine:
         self._closed_position_events = []
         self._liquidation_costs = []
         self._liquidation_events = []
+        self._cash_shortfall_notional = {}
+        self._volume_blocked_notional = {}
         self._dividend_total = 0.0
         self._cash_rate_observations = tuple(sorted(cash_rates or [], key=lambda item: item.timestamp))
         self._risk_contribution_history = []
         self._weight_history = []
         self._universe_history = []
         self._holdings_history = []
-        self._pending.extend(restored_pending)
         if cash_rate_annualized is not None:
             self.cash_rate_annualized = float(cash_rate_annualized)
         if prepared_inputs is not None:
@@ -510,18 +458,12 @@ class PortfolioBacktestEngine:
                     self._deduplicate(signal_bars),
                     key=lambda bar: (bar.timestamp, bar.symbol),
                 )
-        watermark = self.state.last_processed_bar
-        cutoff: datetime | None = None
-        if watermark:
-            cutoff = datetime.fromisoformat(watermark)
-            ordered = [bar for bar in ordered if bar.timestamp > cutoff]
-            decision_bars = [bar for bar in decision_bars if bar.timestamp > cutoff]
         # Callers pass warmup sorted and canonicalized (the product runner uses
         # _normalized_warmup on both paths); avoid a per-trial sort here.
         for bar in warmup or []:
             self._ingest(bar)
             self._ingest_execution(bar)
-        action_queue = _prepare_corporate_actions(corporate_actions, cutoff=cutoff)
+        action_queue = _prepare_corporate_actions(corporate_actions)
         action_index = 0
         decision_index = 0
         curve: list[float] = []
@@ -593,11 +535,9 @@ class PortfolioBacktestEngine:
                 self.state.avg_prices = {}
                 self.state.entry_fees = {}
                 self.state.realized_pnl_accumulators = {}
-                self.state.pending_orders = ()
+                self._pending = []
                 self.state.pending_target = {}
                 self.state.cash = self._cash
-                if self.state_path is not None:
-                    self.save_state()
         price_benchmark = [bar for bar in decision_bars if bar.symbol == self.benchmark_symbol]
         benchmark_price_return = self._close_to_close_return(price_benchmark)
         # The strategy is credited cash dividends from the action list, so the
@@ -665,43 +605,6 @@ class PortfolioBacktestEngine:
             )
         return adjusted
 
-    def run_dataset(
-        self,
-        dataset: MarketDataset,
-        *,
-        liquidate_at_end: bool = True,
-        cash_rate_annualized: float | None = None,
-    ) -> PortfolioBacktestResult:
-        """Run a validated dual-series dataset through the normal event loop."""
-        if dataset.market != self.strategy.market:
-            raise ValueError("Dataset market does not match strategy market")
-        if dataset.timeframe != self.strategy.timeframe:
-            raise ValueError("Dataset timeframe does not match strategy timeframe")
-        return self.run(
-            list(dataset.executable_bars),
-            liquidate_at_end=liquidate_at_end,
-            cash_rate_annualized=cash_rate_annualized,
-            signal_bars=list(dataset.signal_bars),
-            corporate_actions=list(dataset.corporate_actions),
-            cash_rates=list(dataset.cash_rates),
-        )
-
-    def save_state(self) -> None:
-        if self.state_path is None:
-            return
-        atomic_write(
-            self.state_path,
-            json.dumps(self.state.to_dict(), indent=2, ensure_ascii=False, sort_keys=True),
-        )
-
-    @staticmethod
-    def load_state(path: str | Path) -> PortfolioState | None:
-        source = Path(path)
-        if not source.exists():
-            return None
-        raw = json.loads(source.read_text(encoding="utf-8"))
-        return PortfolioState.from_dict(raw if isinstance(raw, dict) else {})
-
     # -- internals ----------------------------------------------------------
 
     @staticmethod
@@ -715,21 +618,6 @@ class PortfolioBacktestEngine:
             "created_at": order.created_at.isoformat(),
             "decision_timestamp": order.decision_timestamp.isoformat(),
         }
-
-    def _order_from_dict(self, raw: dict[str, object]) -> PortfolioOrder | None:
-        try:
-            return PortfolioOrder(
-                client_order_id=str(raw["client_order_id"]),
-                symbol=str(raw["symbol"]),
-                market=Market(str(raw["market"])),
-                side=OrderSide(str(raw["side"])),
-                qty=float(str(raw["qty"])),
-                created_at=datetime.fromisoformat(str(raw["created_at"])),
-                decision_timestamp=datetime.fromisoformat(str(raw["decision_timestamp"])),
-            )
-        except (KeyError, ValueError) as exc:
-            log.warning("Dropping malformed persisted pending order: %s", exc)
-            return None
 
     def _ingest(self, bar: Bar) -> None:
         self._append_history(self._history, bar)
@@ -810,27 +698,19 @@ class PortfolioBacktestEngine:
         ]
         concentration = max(single_values) / equity if equity > 0 and single_values else 0.0
         self._holdings_history.append((len(active), cash_ratio, concentration))
-        # Refresh the persisted snapshot fields after every completed bar
-        # (fills included) so a restart resumes the exact allocation of the
-        # last processed bar.
+        self._last_processed = timestamp
+
+    def _sync_state_bookkeeping(self) -> None:
+        """Mirror the final books, pending orders and risk lifecycle into ``state``."""
         self.state.pending_orders = tuple(self._order_to_dict(order) for order in self._pending)
-        self.state.last_processed_bar = timestamp.isoformat()
-        # Persist the daily-loss/high-water lifecycle alongside holdings/cash
-        # at every completed cycle so a restart resumes the same risk state.
+        if self._last_processed is not None:
+            self.state.last_processed_bar = self._last_processed.isoformat()
         self.state.peak_equity = self._peak_equity
         self.state.day_start_equity = self._day_start_equity
         self.state.last_observed_equity = self._last_observed_equity
         self.state.risk_session_date = (
             self._risk_session_date.isoformat() if self._risk_session_date is not None else None
         )
-        if self.state_path is not None:
-            # Only the persisted state needs the mirrored books; without a
-            # state path _result() syncs them once before the result is read.
-            self._sync_state_bookkeeping()
-            self.save_state()
-
-    def _sync_state_bookkeeping(self) -> None:
-        """Mirror live positions, cash and prices into the persisted state."""
         self.state.holdings = {symbol: position.qty for symbol, position in self._positions.items() if position.qty > 0}
         self.state.avg_prices = {
             symbol: position.avg_price for symbol, position in self._positions.items() if position.qty > 0
@@ -908,6 +788,22 @@ class PortfolioBacktestEngine:
             )
         return fee * self.equity_regulatory_fee_multiplier
 
+    def _affordable_buy_quantity(self, fill_price: float, trade_date: date) -> float:
+        """Largest BUY quantity whose notional plus fees keeps the cash buffer.
+
+        BUY regulatory fees are linear in quantity (CAT only), so the bound is
+        exact. A quantity below ``minimum_order_notional`` is not worth an
+        order and returns 0.
+        """
+        spendable = self._cash - self.minimum_cash * self._equity() - self.commission
+        per_share = fill_price + self._equity_fee(OrderSide.BUY, 1.0, fill_price, trade_date)
+        if spendable <= 0 or per_share <= 0:
+            return 0.0
+        quantity = spendable / per_share
+        if quantity * fill_price < self.minimum_order_notional:
+            return 0.0
+        return quantity
+
     def _fill_side(self, bar: Bar, side: OrderSide) -> None:
         symbol = bar.symbol
         remaining: list[PortfolioOrder] = []
@@ -920,9 +816,24 @@ class PortfolioBacktestEngine:
                 continue
             known_average_volume = self._known_average_volume(order, bar.timeframe)
             if known_average_volume <= 0:
+                # No positive volume was observable when the order was made
+                # (the window is fixed at ``created_at``), so the capacity
+                # model can never size it: it waits until a later decision
+                # supersedes it and is reported as rejected notional.
+                blocked_key = (order.decision_timestamp, order.client_order_id)
+                if blocked_key not in self._volume_blocked_notional:
+                    log.warning(
+                        "Backtest order blocked by zero/unknown volume: %s %s qty=%.6f decision=%s",
+                        side.value,
+                        symbol,
+                        order.qty,
+                        order.decision_timestamp.isoformat(),
+                    )
+                self._volume_blocked_notional[blocked_key] = order.qty * bar.open
                 remaining.append(order)
                 continue
             fillable = min(order.qty, known_average_volume * self.max_participation_pct)
+            cash_limited = False
             if side == OrderSide.SELL:
                 position = self._positions.get(symbol)
                 if position is None or position.qty <= 0:
@@ -940,8 +851,29 @@ class PortfolioBacktestEngine:
             if side == OrderSide.BUY:
                 notional = fillable * fill_price
                 if notional + fee > self._cash:
-                    remaining.append(order)
-                    continue
+                    # A gap-up open made the decided quantity unaffordable.
+                    # Fill what the cash above the configured buffer buys and
+                    # report the rest as rejected instead of skipping silently.
+                    affordable = self._affordable_buy_quantity(fill_price, bar.timestamp.date())
+                    shortfall = (order.qty - affordable) * bar.open
+                    self._cash_shortfall_notional[order.decision_timestamp] = (
+                        self._cash_shortfall_notional.get(order.decision_timestamp, 0.0) + shortfall
+                    )
+                    log.warning(
+                        "Backtest BUY limited by cash at the open: %s qty=%.6f of %.6f decision=%s",
+                        symbol,
+                        affordable,
+                        order.qty,
+                        order.decision_timestamp.isoformat(),
+                    )
+                    if affordable <= 0:
+                        continue
+                    cash_limited = True
+                    fillable = affordable
+                    slippage_cost = fillable * bar.open * self.slippage_bps / 10_000
+                    spread_cost = fillable * bar.open * (self.spread_bps / 2) / 10_000
+                    fee = self.commission + self._equity_fee(side, fillable, fill_price, bar.timestamp.date())
+                    notional = fillable * fill_price
                 self._cash -= notional + fee
                 position = self._positions.get(symbol)
                 if position is None:
@@ -997,7 +929,7 @@ class PortfolioBacktestEngine:
                     client_order_id=order.client_order_id,
                 )
             )
-            if fillable < order.qty:
+            if fillable < order.qty and not cash_limited:
                 remaining.append(
                     PortfolioOrder(
                         order.client_order_id,
@@ -1176,7 +1108,7 @@ class PortfolioBacktestEngine:
         # recent data holes spans more calendar time than the benchmark's
         # trailing window, so the benchmark dict must stay full to preserve
         # every aligned pair (and therefore the exact scores).
-        benchmark_key = "SPY"
+        benchmark_key = canonical_symbol(self.benchmark_symbol, self.strategy.market)
         visible_symbols = self._effective_observation_symbols(timestamp)
         visible = set(visible_symbols) if visible_symbols is not None else None
         history: dict[str, tuple[Bar, ...]] = {}
@@ -1349,8 +1281,6 @@ class PortfolioBacktestEngine:
         self.state.last_rebalance_at = decision
         self.state.rebalance_count = self._rebalance_number
         self.state.universe_version = target.universe_version or self.universe_version
-        if self.state_path is not None:
-            self.save_state()
 
     def _record_risk_contribution(self, target: TargetPortfolio) -> None:
         contributions: list[float] = []
@@ -1762,6 +1692,9 @@ class PortfolioBacktestEngine:
         fills_by_decision: dict[datetime, list[PortfolioFill]] = {}
         for fill in self._fills:
             fills_by_decision.setdefault(fill.decision_timestamp, []).append(fill)
+        rejected_by_decision = dict(self._cash_shortfall_notional)
+        for (decision_timestamp, _client_order_id), notional in self._volume_blocked_notional.items():
+            rejected_by_decision[decision_timestamp] = rejected_by_decision.get(decision_timestamp, 0.0) + notional
         enriched: list[RebalanceRecord] = []
         for record in self._rebalances:
             decision_fills = fills_by_decision.get(record.decision_timestamp, ())
@@ -1813,7 +1746,7 @@ class PortfolioBacktestEngine:
                     post_fill_actual_weights=tuple(sorted(actual_weights.items())),
                     target_vs_actual_drift=drift,
                     unfilled_notional=unfilled,
-                    rejected_notional=0.0,
+                    rejected_notional=rejected_by_decision.get(record.decision_timestamp, 0.0),
                     expected_turnover=record.expected_turnover,
                     realized_turnover=realized_turnover,
                     cost=cost,

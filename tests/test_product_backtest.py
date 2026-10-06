@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 import parayabuck.cli as cli_module
-from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine, TerminalLifecycle
+from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine, TerminalLifecycle, _Position, session_date_for
 from parayabuck.backtest.product import (
     build_product_universe,
     load_csv_bars,
@@ -26,7 +26,6 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
 from parayabuck.markets.timeframes import bars_to_calendar_days
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
-from parayabuck.portfolio.models import PortfolioState
 from parayabuck.universe import STATIC_EQUITY_UNIVERSE_VERSION
 
 
@@ -168,21 +167,14 @@ def test_backtest_context_pins_managed_symbol_within_observation_capacity(tmp_pa
         pinned_symbols=("SPY",),
     )
     universe = PointInTimeUniverse(Market.EQUITY, (snapshot,), "test")
-    state = PortfolioState(
-        strategy.name,
-        strategy.version,
-        holdings={"HELD": 1.0},
-        avg_prices={"HELD": 100.0},
-        cash=99_900.0,
-        last_prices={"HELD": 100.0},
-    )
     engine = PortfolioBacktestEngine(
         strategy,
         rebalance_policy_for(strategy),
         universe=universe,
         universe_version="test",
-        state=state,
     )
+    engine._positions["HELD"] = _Position("HELD", Market.EQUITY, "1d", 1.0, 100.0, timestamp)
+    engine._cash = 99_900.0
     for symbol in ("SPY", "A", "B", "C", "HELD"):
         bar = Bar(timestamp, symbol, "1d", 100, 101, 99, 100, 1_000_000, Market.EQUITY)
         engine._history[(symbol, "1d")] = [bar]
@@ -842,3 +834,93 @@ def test_offline_csv_backtest_report_never_claims_the_configured_sip_feed(tmp_pa
     summary = json.loads(next(reports.glob("*/report.json")).read_text(encoding="utf-8"))["summary"]
     assert summary["data_feed"] == "unknown (no provider feed was reported for this run)"
     assert summary["data_feed_note"] == "Feed unknown; provenance not verified for this offline run."
+
+
+def test_equity_csv_requires_a_volume_column(tmp_path) -> None:
+    """A missing volume column used to read as 0.0, which deferred every
+    order and produced a silent zero-trade backtest."""
+    csv_path = tmp_path / "no_volume.csv"
+    csv_path.write_text(
+        "timestamp,symbol,open,high,low,close\n2025-01-06T00:00:00+00:00,SPY,100,101,99,100\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="missing required columns: volume"):
+        load_csv_bars(csv_path, default_market=Market.EQUITY)
+
+
+def test_equity_csv_rejects_a_blank_volume(tmp_path) -> None:
+    csv_path = tmp_path / "blank_volume.csv"
+    csv_path.write_text(
+        "timestamp,symbol,open,high,low,close,volume\n2025-01-06T00:00:00+00:00,SPY,100,101,99,100,\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="row 2 has no volume for SPY"):
+        load_csv_bars(csv_path, default_market=Market.EQUITY)
+
+
+def test_naive_daily_csv_timestamp_is_the_new_york_session_date(tmp_path) -> None:
+    """A naive daily stamp read as 00:00 UTC is the PREVIOUS New York date."""
+    csv_path = tmp_path / "naive.csv"
+    csv_path.write_text(
+        "timestamp,symbol,open,high,low,close,volume\n"
+        "2025-01-06,SPY,100,101,99,100,1000\n"
+        "2025-07-07T00:00:00,SPY,100,101,99,100,1000\n"
+        "2025-01-07T05:00:00+00:00,SPY,100,101,99,100,1000\n",
+        encoding="utf-8",
+    )
+    winter, summer, aware = load_csv_bars(csv_path, default_market=Market.EQUITY)
+
+    assert winter.timestamp == datetime(2025, 1, 6, 5, tzinfo=UTC)
+    assert summer.timestamp == datetime(2025, 7, 7, 4, tzinfo=UTC)
+    assert session_date_for(winter.timestamp).isoformat() == "2025-01-06"
+    assert session_date_for(summer.timestamp).isoformat() == "2025-07-07"
+    # Timezone-aware stamps are taken as given.
+    assert aware.timestamp == datetime(2025, 1, 7, 5, tzinfo=UTC)
+
+
+def test_backtest_without_start_treats_the_strategy_warmup_as_warmup(tmp_path) -> None:
+    """Without --start the first decidable session opens the evaluation window;
+    the forced-cash warmup no longer dilutes CAGR/Sharpe."""
+    config = _config(tmp_path)
+    bars = _bars(60)
+    strategy = portfolio_strategy_from(
+        config.strategy.equity.name, config.strategy.equity.parameters, timeframe=config.strategy.equity.timeframe
+    )
+    first_decidable = sorted({bar.timestamp for bar in bars})[strategy.minimum_history_bars - 1]
+
+    run = run_product_backtest(config, bars, market=Market.EQUITY, persist_artifacts=False)
+    explicit = run_product_backtest(config, bars, market=Market.EQUITY, start=first_decidable, persist_artifacts=False)
+
+    assert run.result.start_date == first_decidable.isoformat()
+    assert run.result.equity_curve == explicit.result.equity_curve
+    assert run.report.summary["evaluation_start_source"] == (
+        f"first bar + {strategy.minimum_history_bars}-bar strategy warmup"
+    )
+    assert explicit.report.summary["evaluation_start_source"] == "requested"
+
+
+def test_backtest_without_enough_history_evaluates_every_bar(tmp_path) -> None:
+    config = _config(tmp_path)
+    bars = [bar for bar in _bars(30) if bar.symbol != "QLD" or bar.timestamp.day == 1]
+    run = run_product_backtest(config, bars, market=Market.EQUITY, persist_artifacts=False)
+    assert run.result.start_date == min(bar.timestamp for bar in bars).isoformat()
+    assert run.report.summary["evaluation_start_source"] == "full history"
+
+
+def test_price_adjustment_model_states_whether_dividends_were_credited(tmp_path) -> None:
+    config = _config(tmp_path)
+    plain = run_product_backtest(config, _bars(60), market=Market.EQUITY, persist_artifacts=False)
+    assert "no dividend cash flows" in plain.report.summary["price_adjustment_model"]
+    dividend = CorporateAction(datetime(2023, 2, 1, tzinfo=UTC), "QLD", CorporateActionType.DIVIDEND, 0.1)
+    with_actions = run_product_backtest(
+        config, _bars(60), market=Market.EQUITY, corporate_actions=[dividend], persist_artifacts=False
+    )
+    assert "explicit dividend cash flows" in with_actions.report.summary["price_adjustment_model"]
+
+
+def test_product_backtest_passes_the_benchmark_symbol_through(tmp_path) -> None:
+    run = run_product_backtest(
+        _config(tmp_path), _bars(60), market=Market.EQUITY, benchmark_symbol="QQQ", persist_artifacts=False
+    )
+    assert run.result.benchmark_symbol == "QQQ"
+    assert {bar.symbol for bar in run.result.benchmark_bars} == {"QQQ"}

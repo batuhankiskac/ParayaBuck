@@ -31,8 +31,9 @@ from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
     portfolio_risk_limits_from_config,
 )
+from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import TIMEFRAME_MINUTES, is_regular_equity_time
+from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES, is_regular_equity_time
 from parayabuck.portfolio import PortfolioStrategy, portfolio_strategy_from, rebalance_policy_for
 
 _MAX_OPTIMIZATION_COMBINATIONS = 256
@@ -56,6 +57,8 @@ _CANONICAL_SPLIT_ACTION_TYPES = {"forward_splits", "reverse_splits"}
 _STOCK_DIVIDEND_ECHO_TOLERANCE = Decimal("1e-5")
 
 _RESEARCH_RUN_DB_NAME = "backtest_runs.sqlite3"
+
+log = get_logger("parayabuck.backtest.product")
 
 
 @dataclass(frozen=True)
@@ -87,17 +90,27 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
     rows: list[Bar] = []
     with source.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        required = {"timestamp", "symbol", "open", "high", "low", "close"}
+        # ``volume`` is required: the fill model sizes every order from the
+        # trailing average volume, so a missing column (formerly read as 0.0)
+        # deferred every order and produced a silent zero-trade backtest.
+        required = {"timestamp", "symbol", "open", "high", "low", "close", "volume"}
         if not required.issubset(reader.fieldnames or ()):
             missing = sorted(required - set(reader.fieldnames or ()))
             raise ValueError(f"CSV is missing required columns: {', '.join(missing)}")
-        for raw in reader:
+        for row_number, raw in enumerate(reader, start=2):
             timestamp = datetime.fromisoformat(str(raw["timestamp"]))
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
             market = Market(str(raw.get("market") or default_market.value).lower())
             _require_equity(market)
             timeframe = _canonical_csv_timeframe(raw.get("timeframe") or "1d")
+            if timestamp.tzinfo is None:
+                # A naive daily stamp names the New York session date. Read as
+                # 00:00 UTC it would be the PREVIOUS New York date (19:00/20:00
+                # ET), shifting every session lookup by one day. Intraday naive
+                # stamps keep the historical UTC reading.
+                timestamp = timestamp.replace(tzinfo=NEW_YORK if timeframe == "1d" else UTC)
+            raw_volume = str(raw["volume"] or "").strip()
+            if not raw_volume:
+                raise ValueError(f"CSV row {row_number} has no volume for {raw['symbol']}")
             if timestamp.weekday() >= 5:
                 raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
             if timeframe != "1d" and not is_regular_equity_time(timestamp):
@@ -111,7 +124,7 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
                     high=float(raw["high"]),
                     low=float(raw["low"]),
                     close=float(raw["close"]),
-                    volume=float(raw.get("volume") or 0.0),
+                    volume=float(raw_volume),
                     market=market,
                 )
             )
@@ -298,6 +311,35 @@ def build_product_universe(
     return build_static_equity_point_in_time_universe(available, config.universe.equity)
 
 
+def default_evaluation_start(bars: list[Bar], config: Config, minimum_history_bars: int) -> datetime | None:
+    """First session on which every configured universe symbol has a full warmup.
+
+    ``bars`` are already filtered to the run's market/timeframe/end. Returns
+    the timestamp of the ``minimum_history_bars``-th bar of the latest-starting
+    configured symbol, so the evaluation window opens on the first close the
+    strategy can decide on. ``None`` (evaluate everything, with a warning) when
+    a configured symbol is absent or shorter than its warmup.
+    """
+    by_symbol: dict[str, set[datetime]] = {}
+    for bar in bars:
+        by_symbol.setdefault(canonical_symbol(bar.symbol, bar.market), set()).add(bar.timestamp)
+    symbols = [canonical_symbol(symbol, Market.EQUITY) for symbol in config.universe.equity.symbols]
+    required = max(1, minimum_history_bars)
+    starts: list[datetime] = []
+    for symbol in symbols:
+        timestamps = sorted(by_symbol.get(symbol, ()))
+        if len(timestamps) < required:
+            log.warning(
+                "No default backtest warmup: %s has %d of %d required bars; every bar is evaluated",
+                symbol,
+                len(timestamps),
+                required,
+            )
+            return None
+        starts.append(timestamps[required - 1])
+    return max(starts) if starts else None
+
+
 def run_product_backtest(
     config: Config,
     bars: list[Bar],
@@ -319,6 +361,7 @@ def run_product_backtest(
     data_feed: str | None = None,
     prepared_inputs: tuple[list[Bar], list[Bar], tuple[list[Bar], list[Bar]]] | None = None,
     terminal_lifecycles: Mapping[str, TerminalLifecycle] | None = None,
+    benchmark_symbol: str = "SPY",
 ) -> ProductBacktestResult:
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
@@ -332,12 +375,20 @@ def run_product_backtest(
         parameters if parameters is not None else selection.parameters,
         timeframe=strategy_timeframe or selection.timeframe,
     )
+    evaluation_start_source = "requested" if start is not None or prepared_inputs is not None else "full history"
     if prepared_inputs is None:
         available = [
             bar
             for bar in bars
             if bar.market == market and bar.timeframe == strategy.timeframe and (end is None or bar.timestamp <= end)
         ]
+        if start is None:
+            # Without an explicit start the bars before the strategy can first
+            # decide are warmup, not forced-cash evaluation sessions that
+            # dilute CAGR/Sharpe.
+            start = default_evaluation_start(available, config, strategy.minimum_history_bars)
+            if start is not None:
+                evaluation_start_source = f"first bar + {strategy.minimum_history_bars}-bar strategy warmup"
         filtered = [bar for bar in available if start is None or bar.timestamp >= start]
         if not filtered:
             raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
@@ -360,7 +411,6 @@ def run_product_backtest(
             raise ValueError("prepared_inputs requires an explicit universe")
         prepared = (ordered, decision_bars)
     risk = portfolio_risk_limits_from_config(config.risk)
-    benchmark = "SPY"
 
     universe_hash = hash_point_in_time_universe(universe)
     engine = PortfolioBacktestEngine(
@@ -376,7 +426,7 @@ def run_product_backtest(
         equity_sec_fee_rate=config.backtest.equity_sec_fee_rate,
         equity_use_effective_dated_fees=config.backtest.equity_use_effective_dated_fees,
         equity_regulatory_fee_multiplier=cost_multiplier,
-        benchmark_symbol=benchmark,
+        benchmark_symbol=benchmark_symbol,
         universe=universe,
         universe_version=universe_hash,
         risk_limits=risk,
@@ -403,10 +453,8 @@ def run_product_backtest(
             "market": market.value,
             "strategy_parameters": dict(strategy.parameter_tuple()),
             "fill_model": "decision on closed bar; next tradable bar open",
-            "price_adjustment_model": (
-                "split-adjusted execution/signal prices with explicit dividend cash flows; "
-                "callers must not supply split actions for already split-adjusted bars"
-            ),
+            "evaluation_start_source": evaluation_start_source,
+            "price_adjustment_model": _price_adjustment_model(corporate_actions),
             "cost_multiplier": cost_multiplier,
             "universe_hash": universe_hash,
             "universe_methodology": universe.methodology,
@@ -518,6 +566,22 @@ def optimize_grid(
         timeframe=selection.timeframe,
     )
     strategy_timeframe = observation_strategy.timeframe
+    if train_start is None:
+        # Same warmup rule as ``run_product_backtest``: bars before the
+        # longest candidate's first decidable session are warmup.
+        longest_history = max(
+            portfolio_strategy_from(
+                strategy_name or selection.name,
+                parameters={**baseline, **dict(zip(keys, values, strict=True))},
+                timeframe=selection.timeframe,
+            ).minimum_history_bars
+            for values in itertools.product(*(grid[key] for key in keys))
+        )
+        train_start = default_evaluation_start(
+            [bar for bar in bars if bar.market == market and bar.timeframe == strategy_timeframe],
+            config,
+            longest_history,
+        )
     # The eligible pool and requested baseline observation basis are
     # trial-invariant: build them once per window and reuse them so candidate
     # parameters cannot silently redefine streamed membership between trials.
@@ -615,6 +679,20 @@ def optimize_grid(
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
     payload["output"] = str(path)
     return payload
+
+
+def _price_adjustment_model(corporate_actions: list[CorporateAction] | None) -> str:
+    """What the run's prices and cash flows actually were."""
+    if corporate_actions:
+        return (
+            "split-adjusted execution/signal prices with explicit dividend cash flows from the "
+            "supplied corporate actions; callers must not supply split actions for already "
+            "split-adjusted bars"
+        )
+    return (
+        "prices as supplied (downloads are split-adjusted) with no dividend cash flows: no "
+        "corporate actions were supplied, so strategy and benchmark returns are price-only"
+    )
 
 
 def _data_feed_note(data_feed: str | None) -> str:
@@ -763,6 +841,7 @@ def _persist_run(
 __all__ = [
     "ProductBacktestResult",
     "build_product_universe",
+    "default_evaluation_start",
     "load_csv_bars",
     "optimize_grid",
     "ranking_score",

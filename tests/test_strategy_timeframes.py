@@ -167,27 +167,6 @@ def test_execution_timeframe_remains_independent() -> None:
     assert required == {"5m", "1d"}
 
 
-def test_backtest_uses_same_strategy_timeframe() -> None:
-    from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
-    from parayabuck.data.market_dataset import DatasetLineage, MarketDataset
-
-    strategy = portfolio_strategy_from("equity_leveraged_trend_v1")
-    engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy))
-    # The backtest engine refuses a dataset whose timeframe differs from the
-    # strategy's signal timeframe: no silent reinterpretation.
-    bars_4h = _equity_4h_series(("SPY",), count=40)
-    dataset = MarketDataset(
-        market=Market.EQUITY,
-        timeframe="4h",
-        signal_bars=tuple(bars_4h),
-        executable_bars=tuple(bars_4h),
-        lineage=DatasetLineage("x", (), "test", "test", "raw", datetime.now(UTC), "hash"),
-    )
-    with pytest.raises(ValueError, match="Dataset timeframe does not match strategy timeframe"):
-        engine.run_dataset(dataset)
-    assert strategy.timeframe == "1d"
-
-
 def test_paper_runtime_uses_same_strategy_timeframe(tmp_path) -> None:
     broker = _Broker()
     strategy = portfolio_strategy_from("equity_leveraged_trend_v1", {"sma_bars": 5})

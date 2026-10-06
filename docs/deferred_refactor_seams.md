@@ -5,6 +5,8 @@ the four >100KB hotspots as they were BEFORE the web and broker splits; those
 splits have since landed, and the sizes below are the current tree. Anything not
 listed here is either already split or is small enough to leave alone. Line
 counts are rounded; re-measure with `wc -l` before planning work.
+The 2026-10-06 audit fix wave removed code from several of these modules, so
+the counts below may now be high.
 
 ## Already split (do not plan these again)
 

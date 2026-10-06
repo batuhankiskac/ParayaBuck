@@ -26,7 +26,8 @@ correctness or safety defects.
    generated offline artifacts or optimizer output.
    Offline backtests record drawdown breaches as shadow events
    (`drawdown_halt_shadow_events`) instead of freezing the alpha curve on
-   the monotonic peak.
+   the monotonic peak; the daily-loss latch is enforced in backtests as in
+   PAPER.
 3. **Same strategy semantics across backtest/paper/live.** One
    `PortfolioStrategy` interface, one target/risk meaning, one
    execution policy (`PortfolioExecutionPolicy`) shared by the simulator

@@ -7,7 +7,7 @@ overlay and one execution path shared by backtest, PAPER and LIVE.
 |---|---|
 | Strategy | **VT35** — `equity_leveraged_trend_v1` (Leveraged Index Trend v1) |
 | Rule | Hold QLD (2x Nasdaq-100) while QQQ's completed daily close is above its 200-session SMA, at weight `min(1, 0.35 / 20-session annualized QLD volatility)`; cash otherwise |
-| Timing | Decided on the completed session bar after the 16:00 ET close; DAY market orders fill at the next regular open |
+| Timing | Decided on the completed session bar after the NYSE close (16:00 ET; 13:00 ET on early-close days); DAY market orders fill at the next regular open |
 | Allocation | Equity 0.98 of account equity; 0.02 cash buffer |
 | Universe | Static `[SPY, QQQ, QLD]` (QQQ signal, QLD holding, SPY benchmark) |
 | Mode | PAPER on a GCP VM (systemd). **LIVE disabled.** |
@@ -45,7 +45,8 @@ static equity symbols -> VT35 target portfolio -> risk overlay -> order planner
 - Unfinished equity daily bars (a session still trading) are dropped from the
   signal history, so a mid-session restart never decides on a partial bar.
 - Operator visibility: loopback dashboard, `/readyz`, `parayabuck ops ...`,
-  webhook alerts including a one-line daily summary and an intent watchdog.
+  local alerts (log + event journal + health surfaces) including a one-line
+  daily summary and an intent watchdog; nothing is sent off the VM.
 - State: SQLite under `data/runtime/`, online verified backups.
 
 ## Install
@@ -54,8 +55,20 @@ Python 3.12+.
 
 ```bash
 python -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/python -m pip install -r requirements-dev.lock   # runtime + dev tools
+.venv/bin/python -m pip install -e . --no-deps
 cp .env.example .env   # credentials live only in .env, never in YAML or git
+```
+
+`uv.lock` is the single dependency source. `requirements.lock` (runtime, used
+by the VM and the Dockerfile) and `requirements-dev.lock` (the same runtime
+pins plus test/lint tools, used by CI) are exports of it; CI fails when they
+drift. After changing `pyproject.toml` dependencies:
+
+```bash
+uv lock
+uv export --locked --no-hashes --no-emit-project --no-dev --format requirements.txt -o requirements.lock
+uv export --locked --no-hashes --no-emit-project --no-dev --extra dev --format requirements.txt -o requirements-dev.lock
 ```
 
 Configuration: `config/settings.yaml` (`runtime`, `universe`, `strategy.equity`,
@@ -69,10 +82,18 @@ Configuration: `config/settings.yaml` (`runtime`, `universe`, `strategy.equity`,
 ```
 
 CSV columns `timestamp,symbol,open,high,low,close,volume` (optional
-`market,timeframe`). `--start/--end` download `universe.equity.symbols` with
-the configured Alpaca credentials. `--cost-stress` repeats at 1x/2x/3x costs;
-regulatory fees follow the effective-dated schedule. Reports include CAGR,
-Sharpe, Sortino, max drawdown, Calmar, costs, exposure and SPY comparison.
+`market,timeframe`); `volume` is required because fills are capped at 10% of
+the trailing average volume. A naive daily `timestamp` (e.g. `2024-01-02`) is
+that New York session date. Without `--data` the run downloads
+`universe.equity.symbols` with the configured Alpaca credentials: `--start`
+plus the strategy warmup before it, or the last 5 years when `--start` is
+omitted. Without `--start` the evaluation window opens on the first session on
+which every configured symbol has the strategy's minimum history (200 sessions
+for VT35); the earlier bars are warmup and do not count toward CAGR/Sharpe.
+`--cost-stress` repeats at 1x/2x/3x costs; regulatory fees follow the
+effective-dated schedule. Reports include CAGR, Sharpe, Sortino, max drawdown,
+Calmar, costs, exposure, SPY comparison and `rejected_notional` per decision
+(orders blocked by unknown volume or limited by cash at a gap-up open).
 
 ## Enabling live (not enabled)
 

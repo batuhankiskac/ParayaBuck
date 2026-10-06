@@ -173,7 +173,10 @@ def _add_backtest_arguments(
         help="optional CSV of explicit equity dividends (split-adjusted prices are expected)",
     )
     parser.add_argument("--symbols", help="comma-separated download candidates")
-    parser.add_argument("--start")
+    parser.add_argument(
+        "--start",
+        help="evaluation start (default: first session with the strategy's full warmup; earlier bars are warmup)",
+    )
     parser.add_argument("--end")
     parser.add_argument("--initial-cash", type=float, default=None)
     parser.add_argument("--output-dir", default=None)

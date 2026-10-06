@@ -2,14 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from parayabuck.backtest.universe import (
     PointInTimeUniverse,
     UniverseSnapshot,
     build_static_equity_point_in_time_universe,
     hash_point_in_time_universe,
-    verify_persisted_universe,
 )
 from parayabuck.config import EquityUniverseConfig
 from parayabuck.core.models import Bar, Market
@@ -101,17 +98,6 @@ def test_universe_hash_commits_observation_order_and_capacity() -> None:
     resized_universe = PointInTimeUniverse(Market.EQUITY, (resized,), "same")
     assert hash_point_in_time_universe(base_universe) != hash_point_in_time_universe(reordered_universe)
     assert hash_point_in_time_universe(base_universe) != hash_point_in_time_universe(resized_universe)
-
-
-def test_verify_persisted_universe_rejects_silent_recompute() -> None:
-    universe = _equity_universe()
-    persisted = hash_point_in_time_universe(universe)
-    verify_persisted_universe(universe, persisted)  # no error
-    different = _equity_universe(EquityUniverseConfig(maximum_stream_symbols=3, symbols=("SPY", "QQQ", "QLD")))
-    with pytest.raises(ValueError, match="mismatch"):
-        verify_persisted_universe(different, persisted)
-    # Empty expected hash means "no constraint" (legacy experiments).
-    verify_persisted_universe(different, "")
 
 
 def test_static_equity_universe_joins_each_symbol_at_its_first_bar() -> None:

@@ -140,17 +140,14 @@ def test_regulatory_fee_multiplier_must_be_finite_and_positive(multiplier: float
         _engine(multiplier, effective_dated=True)
 
 
-def test_corporate_actions_are_economically_deduplicated_and_watermark_filtered() -> None:
+def test_corporate_actions_are_economically_deduplicated_and_ordered() -> None:
     before = datetime(2025, 1, 2, tzinfo=UTC)
     after = datetime(2025, 1, 3, tzinfo=UTC)
-    stale = CorporateAction(before, "brk.b", CorporateActionType.DIVIDEND, 1.0)
+    earlier = CorporateAction(before, "brk.b", CorporateActionType.DIVIDEND, 1.0)
     first = CorporateAction(after, "BRK.B", CorporateActionType.DIVIDEND, 2.0)
     duplicate_alias = CorporateAction(after, "brk.b", CorporateActionType.DIVIDEND, 2.0)
     distinct_value = CorporateAction(after, "BRK.B", CorporateActionType.DIVIDEND, 3.0)
 
-    prepared = _prepare_corporate_actions(
-        [distinct_value, stale, first, duplicate_alias],
-        cutoff=before,
-    )
+    prepared = _prepare_corporate_actions([distinct_value, earlier, first, duplicate_alias])
 
-    assert prepared == [distinct_value, first]
+    assert prepared == [earlier, distinct_value, first]

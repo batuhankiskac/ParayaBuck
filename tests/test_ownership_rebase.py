@@ -22,7 +22,7 @@ from parayabuck.execution.alpaca_account import AccountService
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide, RiskOverlayDecision
 from parayabuck.monitoring import alerts as alerts_module
 from parayabuck.portfolio.models import TargetPortfolio
-from parayabuck.portfolio.ownership_rebase import classify_share_change
+from parayabuck.portfolio.ownership_rebase import classify_share_change, open_position_cost_bases
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 
 ACCOUNT = "acct"
@@ -503,3 +503,50 @@ def test_rebase_cli_rejects_a_negative_broker_quantity(tmp_path: Path, capsys: p
     assert exit_code == 2
     assert "Invalid --broker-qty" in capsys.readouterr().err
     assert _owned(repo) == pytest.approx(100.0)
+
+
+# ---------------------------------------------------------------------------
+# Cost basis of the CURRENT position (audit P2)
+# ---------------------------------------------------------------------------
+
+
+def test_split_after_rebalancing_is_confirmed_on_the_current_position_cost(tmp_path: Path) -> None:
+    """After a flat-out and trims, an all-history BUY average (62.7) no longer
+    matches the broker; the open position's cost (72) still does, so a 2:1
+    split is adopted instead of silently turning half the position external."""
+    repo = _repo(tmp_path)
+    _fill(repo, "buy", 100.0, 50.0, T0)
+    _fill(repo, "sell", 100.0, 55.0, T0 + timedelta(days=1))
+    _fill(repo, "buy", 80.0, 80.0, T0 + timedelta(days=2))
+    _fill(repo, "sell", 20.0, 90.0, T0 + timedelta(days=3))
+    _fill(repo, "buy", 40.0, 60.0, T0 + timedelta(days=4))
+    assert _owned(repo) == pytest.approx(100.0)
+    assert repo.owned_average_cost(ACCOUNT, SYMBOL, Market.EQUITY) == pytest.approx(72.0)
+
+    assert repo.reconcile_broker_quantity(ACCOUNT, SYMBOL, Market.EQUITY, 200.0, 36.0) == 200.0
+    assert _owned(repo) == pytest.approx(200.0)
+
+
+def test_open_position_cost_bases_follow_fifo_and_average_cost() -> None:
+    events = [("buy", 10.0, 10.0), ("buy", 10.0, 20.0), ("sell", 10.0, 30.0)]
+    fifo, average = open_position_cost_bases(events)
+    assert fifo == pytest.approx(20.0)  # the 10.0 lot was sold first
+    assert average == pytest.approx(15.0)
+    assert open_position_cost_bases([*events, ("sell", 10.0, 30.0)]) == ()
+    # A split rebase doubles the shares and halves the lot prices.
+    assert open_position_cost_bases([*events, ("adjust", 10.0, None)]) == pytest.approx((10.0, 7.5))
+
+
+def test_unconfirmed_surplus_on_a_bot_owned_symbol_alerts_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _repo(tmp_path)
+    _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
+    emitted: list[dict[str, object]] = []
+    monkeypatch.setattr(alerts_module, "emit", lambda kind, **fields: emitted.append({"kind": kind, **fields}))
+    broker = _account_broker(repo, quantity=200.0, average=ENTRY_PRICE, resolver=_resolver(repo))
+
+    first = AccountService(broker).account()
+    AccountService(broker).account()
+
+    assert [(p.managed_qty, p.ownership) for p in first.positions] == [(100.0, "mixed")]
+    assert [event["category"] for event in emitted] == ["ownership_surplus_unconfirmed"]
+    assert _owned(repo) == 100.0

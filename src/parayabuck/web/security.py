@@ -9,6 +9,7 @@ static Cache-Control are also preserved here.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import secrets
 import threading
@@ -22,6 +23,7 @@ from starlette.requests import Request
 
 _TRUSTED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 _CONTROL_TOKEN_HEADER = "x-parayabuck-control-token"
+_CONTROL_TOKEN_PATH = "/api/control-token"
 
 
 def _trusted_browser_origin_for_middleware(origin: str | None) -> bool:
@@ -46,6 +48,31 @@ def is_trusted_host(host_header: str) -> bool:
     return host in allowed
 
 
+def is_trusted_client(client_host: str | None) -> bool:
+    """Peer-address check for the control token and every mutating request.
+
+    The Host header is client-supplied, so it cannot stop a remote peer from
+    fetching the control token when the server is reachable off-host. Only a
+    loopback peer is trusted. The single exception is the documented
+    container mode (``PARAYABUCK_CONTAINER=YES`` on a machine that is NOT the
+    trading host): Docker publishes the port on the host's loopback only and
+    proxies it through the bridge network, so the peer is a private address.
+    """
+    if not client_host:
+        return False
+    if os.getenv("PYTEST_CURRENT_TEST") and client_host == "testclient":
+        return True
+    try:
+        address = ipaddress.ip_address(client_host)
+    except ValueError:
+        return False
+    if address.is_loopback:
+        return True
+    from parayabuck.trading_host import trading_host_authorized
+
+    return os.getenv("PARAYABUCK_CONTAINER") == "YES" and not trading_host_authorized() and address.is_private
+
+
 def validate_control_token(provided: str | None, expected: str | None) -> bool:
     if not isinstance(provided, str) or not provided:
         return False
@@ -60,6 +87,7 @@ def build_protect_middleware(
     """Return an ``@app.middleware("http")``-compatible callable that enforces
 
     * loopback-only Host header (``testserver`` allowed under pytest),
+    * loopback-only peer address for the control token and mutating methods,
     * loopback-only Origin for mutating methods,
     * ``x-parayabuck-control-token`` for mutating methods,
     * security headers (CSP, Referrer-Policy, nosniff) and ``no-store`` for
@@ -73,6 +101,11 @@ def build_protect_middleware(
     async def protect_local_control_api(request: Request, call_next: Any) -> Any:
         if not is_trusted_host(request.headers.get("host") or ""):
             return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
+        mutating = request.method not in {"GET", "HEAD", "OPTIONS"}
+        if (mutating or request.url.path == _CONTROL_TOKEN_PATH) and not is_trusted_client(
+            request.client.host if request.client is not None else None
+        ):
+            return JSONResponse(status_code=403, content={"detail": "Untrusted client address"})
         if request.method not in {"GET", "HEAD", "OPTIONS"} and not _trusted_browser_origin_for_middleware(
             request.headers.get("origin")
         ):

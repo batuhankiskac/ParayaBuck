@@ -20,8 +20,8 @@ from parayabuck.execution.alpaca import (
     RiskStatePersistenceError,
 )
 from parayabuck.execution.alpaca_account import AccountService
-from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.ledger import ExecutionLedger
+from tests.fake_client import FakeTradingClient
 from tests.helpers import make_broker
 
 
@@ -58,7 +58,7 @@ def test_account_snapshot_caching(tmp_path: Path) -> None:
     assert fresh is not None
     assert fresh.equity == snap1.equity
     # After expiry, should be None (we can't easily mock time, but check that max_age 0 with immediate still fresh? We just check that stale returns None after manual clear)
-    broker._snapshot_cached_at = 0.0  # type: ignore[attr-defined]
+    broker._snapshot_cache = (snap1, 0.0)
     assert broker.snapshot_if_fresh(max_age_seconds=0.001) is None
 
 
@@ -139,24 +139,49 @@ def test_ownership_external_when_no_managed(tmp_path: Path) -> None:
         assert any(p.ownership == "external" for p in snap.positions)
 
 
-def test_dual_ownership_fails_closed(tmp_path: Path) -> None:
+def test_foreign_short_on_a_bot_traded_symbol_fails_closed(tmp_path: Path) -> None:
+    """A short on a symbol the bot trades is never owned inventory: reading it
+    as a position would make a cash target BUY to cover it."""
     fake = FakeTradingClient()
-    fake.set_position("IWM", qty=10)
+    fake.set_position("QLD", qty=-5)
     broker = _broker_with_fake(tmp_path, fake)
-    broker.portfolio_owned_quantities = lambda: {"IWM": 5.0}
-    if broker.ledger is not None:
-        broker.ledger.managed_for_account = lambda acct: {
-            "IWM": SimpleNamespace(
-                symbol="IWM",
-                owned_qty=5.0,
-                market=Market.EQUITY,
-                current_stop=None,
-                original_stop=None,
-                canonical_symbol="IWM",
-            )
-        }  # type: ignore[assignment]
-        with pytest.raises(OwnershipDriftError):
-            broker.account()
+    broker.portfolio_owned_quantities = lambda: {}
+    broker.bot_tradable_symbols = lambda: {"SPY", "QQQ", "QLD"}
+    with pytest.raises(OwnershipDriftError, match="short position"):
+        broker.account()
+
+
+def test_foreign_short_outside_the_bot_universe_is_external(tmp_path: Path) -> None:
+    fake = FakeTradingClient()
+    fake.set_position("TSLA", qty=-5)
+    broker = _broker_with_fake(tmp_path, fake)
+    broker.portfolio_owned_quantities = lambda: {}
+    broker.bot_tradable_symbols = lambda: {"SPY", "QQQ", "QLD"}
+    (position,) = broker.account().positions
+    assert (position.symbol, position.qty, position.ownership, position.managed_qty) == ("TSLA", -5.0, "external", 0.0)
+
+
+def test_unquoted_foreign_position_does_not_break_the_snapshot(tmp_path: Path) -> None:
+    fake = FakeTradingClient()
+    fake.set_position("XYZ", qty=3)
+    fake.positions[0].current_price = None
+    fake.positions[0].avg_entry_price = None
+    broker = _broker_with_fake(tmp_path, fake)
+    broker.portfolio_owned_quantities = lambda: {}
+    broker.bot_tradable_symbols = lambda: {"QLD"}
+    (position,) = broker.account().positions
+    assert (position.symbol, position.current_price, position.avg_price) == ("XYZ", 0.0, 0.0)
+
+
+def test_unquoted_bot_traded_position_still_fails(tmp_path: Path) -> None:
+    fake = FakeTradingClient()
+    fake.set_position("QLD", qty=3)
+    fake.positions[0].current_price = None
+    broker = _broker_with_fake(tmp_path, fake)
+    broker.portfolio_owned_quantities = lambda: {"QLD": 3.0}
+    broker.bot_tradable_symbols = lambda: {"QLD"}
+    with pytest.raises(ValueError, match="no price"):
+        broker.account()
 
 
 def test_broker_shortfall_with_working_sell_explains(tmp_path: Path) -> None:
@@ -353,7 +378,7 @@ def test_submit_recovers_when_lookup_finds_order(tmp_path: Path) -> None:
     ).__dict__  # type: ignore[attr-defined]
     # Actually _make_order returns SimpleNamespace, we need _FakeOrder
     # Simpler: create _FakeOrder directly
-    from parayabuck.execution.fake_client import _FakeOrder
+    from tests.fake_client import _FakeOrder
 
     fake.orders_by_client_id["parayabuck-recover-123"] = _FakeOrder(
         id="broker-parayabuck-recover-123", client_order_id="parayabuck-recover-123", symbol="IWM", side="buy", qty=10

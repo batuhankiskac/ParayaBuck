@@ -6,32 +6,34 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from parayabuck.core.models import (
-    Direction,
-    ExecutionEvent,
-    ExecutionTransition,
-    Market,
-    OrderIntent,
-    OrderRole,
-    OrderState,
-    ProtectionState,
-)
+from parayabuck.core.models import Market, ProtectionState
 from parayabuck.logger import get_logger
-from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.risk.state import RiskState, SafetyIncident
 from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
 
 log = get_logger("parayabuck.execution.ledger")
 
-# The side of an order row is the side of the position, not of the order
-# stream: an exit/stop closes a lot, so it always trades against the entry.
-_OPPOSITE_SIDES = {"long": "sell", "buy": "sell", "sell": "buy", "short": "buy"}
+# Sentinel scope of a ``safety_incidents`` row whose timestamps cannot be
+# parsed. The row is still returned (a halt is never dropped silently); its
+# timestamps fall back to the epoch so it sorts as the oldest incident.
+CORRUPT_INCIDENT_SCOPE = "corrupt"
+_CORRUPT_INCIDENT_TIME = datetime(1970, 1, 1, tzinfo=UTC)
 
-# Client-id prefix of the manual-exit rows the FILL-activity backfill records
-# for broker fills that are already complete (see
-# ``ReconciliationService._reconcile_fill_activity_fees``).  Such a row is a
-# settled historical fact, not a working execution awaiting a lot link.
-FILL_ACTIVITY_RECOVERY_PREFIX = "alpaca-fill-activity-"
+# Legacy single-name/bracket ledger rows that still claim ownership or a
+# working order. Nothing in the VT35 runtime manages them any more, so their
+# presence means the database predates the portfolio path and must be closed
+# out by an operator before the engine trades.
+_LEGACY_OPEN_POSITION_STATUSES = ("open", "manual_intervention_required")
+
+
+class LegacyLedgerStateError(RuntimeError):
+    """The database still holds open rows of the removed legacy ledger.
+
+    Raised at ledger construction (engine startup). The legacy managed-position
+    and protective-stop stack was deleted; an open ``managed_positions`` row or
+    a non-terminal ``orders`` row would otherwise be silently ignored while the
+    broker may still hold the shares or the order.
+    """
 
 
 @dataclass(frozen=True)
@@ -64,18 +66,16 @@ class ManagedPosition:
 
 
 class ExecutionLedger:
-    """Small transactional ownership ledger shared by execution and reconciliation.
+    """Runtime safety state: risk-state rows, persistent safety incidents and
+    runtime sessions, plus the read-only legacy ownership view.
 
-    Hardening: every mutation is idempotent and crash-safe. Order events use
-    ``INSERT OR IGNORE`` on (client_order_id, event_type, broker_timestamp,
-    payload); managed quantity moves through ``_record_entry_fill_delta_tx``
-    / ``_record_exit_fill_delta_tx`` inside ``BEGIN IMMEDIATE`` so a replayed
-    fill never double-counts owned_qty. ``holdings == broker after reconcile``
-    is enforced by ``reconcile()`` in the broker layer which compares ledger
-    state to the broker snapshot and never silently overwrites a material
-    difference. Risk and watermark state are persisted per-account and restored
-    via ``_restore_persistent_state`` so a restart never loses fills or
-    position accounting.
+    The legacy single-name/bracket tables (``managed_positions``, ``orders``,
+    ``order_events``, ``executions``, ``fee_activities``,
+    ``reconcile_watermarks``, ``protective_orders``) are still created and
+    migrated so an old database keeps opening, but nothing writes them any
+    more: portfolio execution lives in ``PortfolioStateRepository``. Opening a
+    database whose legacy tables still claim an open position or a working
+    order fails closed with :class:`LegacyLedgerStateError`.
     """
 
     def __init__(self, path: str, *, store: SQLiteStore | None = None) -> None:
@@ -83,7 +83,58 @@ class ExecutionLedger:
         self._store.acquire()
         self.connection = self._store.connection
         self._lock = self._store.lock
-        self._migrate()
+        try:
+            self._migrate()
+            self._refuse_legacy_open_state()
+        except BaseException:
+            self._store.release()
+            raise
+
+    def _refuse_legacy_open_state(self) -> None:
+        """Fail closed when legacy ledger rows still claim live broker state.
+
+        Two cheap indexed-or-tiny SELECTs. The rows are never modified here:
+        closing them out needs an operator to confirm the broker side first.
+        """
+        with self._lock:
+            positions = self.connection.execute(
+                """
+                SELECT account_id, canonical_symbol, entry_client_order_id, status
+                FROM managed_positions
+                WHERE status IN (?, ?)
+                ORDER BY opened_at LIMIT 5
+                """,
+                _LEGACY_OPEN_POSITION_STATUSES,
+            ).fetchall()
+            orders = self.connection.execute(
+                """
+                SELECT client_order_id, canonical_symbol, order_role
+                FROM orders WHERE terminal_state IS NULL
+                ORDER BY updated_at LIMIT 5
+                """
+            ).fetchall()
+        if not positions and not orders:
+            return
+        found: list[str] = []
+        if positions:
+            found.append(
+                "managed_positions open rows: "
+                + ", ".join(f"{row[1]} entry={row[2]} status={row[3]} account={row[0]}" for row in positions)
+            )
+        if orders:
+            found.append(
+                "orders non-terminal rows: " + ", ".join(f"{row[0]} ({row[1]}, role={row[2]})" for row in orders)
+            )
+        raise LegacyLedgerStateError(
+            "Legacy execution-ledger state is still open and nothing manages it any more ("
+            + "; ".join(found)
+            + "). Manual remedy: stop the engine, back up the database, confirm at the broker that "
+            "each listed position/order is flat or no longer working (flatten it, cancel it, or adopt the "
+            "shares with `parayabuck ops rebase-ownership`), then close the legacy rows with "
+            "\"UPDATE managed_positions SET status='closed', owned_qty=0, remaining_owned_qty=0, "
+            "closed_at=CURRENT_TIMESTAMP WHERE status IN ('open','manual_intervention_required'); "
+            "UPDATE orders SET terminal_state='canceled' WHERE terminal_state IS NULL;\" and restart."
+        )
 
     def _migrate(self) -> None:
         with self._lock:
@@ -396,276 +447,6 @@ class ExecutionLedger:
             quoted_col = '"' + name.replace('"', '""') + '"'
             self.connection.execute(f"ALTER TABLE {quoted_table} ADD COLUMN {quoted_col} {definition}")
 
-    def register_entry_order(
-        self,
-        account_id: str,
-        order: OrderIntent,
-        broker_order_id: str | None = None,
-        *,
-        decision_timestamp: datetime | None = None,
-        target_weight: float | None = None,
-        reference_price: float | None = None,
-        spread_estimate_bps: float | None = None,
-    ) -> None:
-        now = datetime.now(UTC).isoformat()
-        symbol = canonical_symbol(order.symbol, order.market)
-        with self._lock:
-            existing_open = self.connection.execute(
-                """
-                SELECT entry_client_order_id FROM managed_positions
-                WHERE account_id=? AND canonical_symbol=?
-                  AND status IN ('open', 'manual_intervention_required')
-                  AND entry_client_order_id<>?
-                LIMIT 1
-                """,
-                (account_id, symbol, order.client_order_id),
-            ).fetchone()
-            if existing_open is not None:
-                raise ValueError(f"Single-managed-entry invariant violated for {symbol}: existing={existing_open[0]}")
-            existing_pending = self.connection.execute(
-                """
-                SELECT client_order_id FROM orders
-                WHERE account_id=? AND canonical_symbol=? AND order_role='entry'
-                  AND client_order_id<>?
-                  AND (terminal_state IS NULL OR terminal_state NOT IN
-                       ('filled', 'cancelled', 'canceled', 'expired', 'rejected'))
-                LIMIT 1
-                """,
-                (account_id, symbol, order.client_order_id),
-            ).fetchone()
-            if existing_pending is not None:
-                raise ValueError(f"Single-managed-entry invariant violated for {symbol}: pending={existing_pending[0]}")
-            self.connection.execute(
-                """
-                INSERT INTO orders(
-                    client_order_id, account_id, broker_order_id,
-                    parent_broker_order_id, entry_client_order_id, order_role,
-                    canonical_symbol, market, side, requested_qty,
-                    cumulative_filled_qty, signal_id, strategy, entry_price,
-                    stop_price, target_price, updated_at, decision_timestamp,
-                    target_weight, reference_price, spread_estimate_bps, submitted_at
-                ) VALUES (?, ?, ?, NULL, ?, 'entry', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?)
-                ON CONFLICT(client_order_id) DO UPDATE SET
-                    account_id=excluded.account_id,
-                    broker_order_id=COALESCE(excluded.broker_order_id, orders.broker_order_id),
-                    requested_qty=excluded.requested_qty,
-                    reference_price=COALESCE(excluded.reference_price, orders.reference_price),
-                    submitted_at=COALESCE(excluded.submitted_at, orders.submitted_at),
-                    updated_at=excluded.updated_at
-                """,
-                (
-                    order.client_order_id,
-                    account_id,
-                    broker_order_id,
-                    order.client_order_id,
-                    symbol,
-                    order.market.value,
-                    order.direction.value,
-                    order.qty,
-                    order.signal_id,
-                    order.strategy,
-                    order.entry_price,
-                    order.stop_price,
-                    order.target_price,
-                    now,
-                    decision_timestamp.isoformat() if decision_timestamp is not None else None,
-                    target_weight,
-                    reference_price,
-                    spread_estimate_bps,
-                    now,
-                ),
-            )
-            self.connection.commit()
-
-    def _record_entry_fill_delta_tx(
-        self,
-        account_id: str,
-        order: OrderIntent,
-        qty_delta: float,
-        price: float,
-        fee_delta: float,
-        broker_order_id: str | None,
-        now: str,
-    ) -> None:
-        symbol = canonical_symbol(order.symbol, order.market)
-        existing = self.connection.execute(
-            """
-            SELECT entry_filled_qty, filled_avg_price
-            FROM managed_positions
-            WHERE account_id=? AND canonical_symbol=? AND entry_client_order_id=?
-            """,
-            (account_id, symbol, order.client_order_id),
-        ).fetchone()
-        previous_qty = float(existing[0]) if existing else 0.0
-        previous_average = float(existing[1]) if existing else 0.0
-        total_entry = previous_qty + qty_delta
-        average = (previous_average * previous_qty + price * qty_delta) / total_entry if total_entry > 0 else price
-        self.connection.execute(
-            """
-            INSERT INTO managed_positions(
-                account_id, canonical_symbol, market, strategy, source_signal_id,
-                entry_client_order_id, broker_order_id, owned_qty, entry_filled_qty,
-                exit_filled_qty, remaining_owned_qty, filled_avg_price,
-                original_stop, original_target, current_stop, realized_pnl, entry_fees, exit_fees,
-                protection_state, status, opened_at, closed_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, ?, 0,
-                      'unprotected', 'open', ?, NULL, ?)
-            ON CONFLICT(account_id, canonical_symbol, entry_client_order_id) DO UPDATE SET
-                broker_order_id=COALESCE(
-                    excluded.broker_order_id, managed_positions.broker_order_id
-                ),
-                owned_qty=managed_positions.remaining_owned_qty + excluded.entry_filled_qty,
-                entry_filled_qty=managed_positions.entry_filled_qty + excluded.entry_filled_qty,
-                remaining_owned_qty=(
-                    managed_positions.remaining_owned_qty + excluded.entry_filled_qty
-                ),
-                filled_avg_price=excluded.filled_avg_price,
-                entry_fees=managed_positions.entry_fees + excluded.entry_fees,
-                status='open',
-                closed_at=NULL,
-                updated_at=excluded.updated_at
-            """,
-            (
-                account_id,
-                symbol,
-                order.market.value,
-                order.strategy,
-                order.signal_id,
-                order.client_order_id,
-                broker_order_id,
-                qty_delta,
-                qty_delta,
-                qty_delta,
-                average,
-                order.stop_price,
-                order.target_price,
-                order.stop_price,
-                fee_delta,
-                now,
-                now,
-            ),
-        )
-
-    def _record_exit_fill_delta_tx(
-        self,
-        account_id: str,
-        entry_client_order_id: str,
-        qty_delta: float,
-        price: float,
-        fee_delta: float,
-        now: str,
-    ) -> float:
-        row = self.connection.execute(
-            """
-            SELECT entry_filled_qty, exit_filled_qty, remaining_owned_qty,
-                   filled_avg_price, market, entry_fees
-            FROM managed_positions
-            WHERE account_id=? AND entry_client_order_id=?
-              AND status IN ('open', 'manual_intervention_required')
-            ORDER BY opened_at LIMIT 1
-            """,
-            (account_id, entry_client_order_id),
-        ).fetchone()
-        if row is None:
-            return 0.0
-        remaining = max(0.0, float(row[2]))
-        applied = min(remaining, qty_delta)
-        if applied <= 0:
-            return 0.0
-        entry_price = float(row[3])
-        order_row = self.connection.execute(
-            "SELECT side FROM orders WHERE client_order_id=?",
-            (entry_client_order_id,),
-        ).fetchone()
-        is_short = bool(order_row and str(order_row[0]) == Direction.SHORT.value)
-        gross_pnl = (entry_price - price) * applied if is_short else (price - entry_price) * applied
-        entry_fee_allocation = float(row[5]) * applied / float(row[0]) if float(row[0]) > 0 else 0.0
-        net_pnl = gross_pnl - fee_delta - entry_fee_allocation
-        remaining_after = max(0.0, remaining - applied)
-        status = "closed" if remaining_after <= 1e-12 else "open"
-        self.connection.execute(
-            """
-            UPDATE managed_positions
-            SET exit_filled_qty=exit_filled_qty+?,
-                remaining_owned_qty=?,
-                owned_qty=?,
-                realized_pnl=realized_pnl+?,
-                exit_fees=exit_fees+?,
-                status=?,
-                closed_at=CASE WHEN ?='closed' THEN ? ELSE NULL END,
-                updated_at=?
-            WHERE account_id=? AND entry_client_order_id=?
-            """,
-            (
-                applied,
-                remaining_after,
-                remaining_after,
-                net_pnl,
-                fee_delta,
-                status,
-                status,
-                now,
-                now,
-                account_id,
-                entry_client_order_id,
-            ),
-        )
-        return net_pnl
-
-    def mark_position_closed(
-        self, account_id: str, entry_client_order_id: str, *, closed_at: datetime | None = None
-    ) -> None:
-        with self._lock:
-            self.connection.execute(
-                """
-                UPDATE managed_positions
-                SET owned_qty=0, remaining_owned_qty=0, status='closed',
-                    closed_at=?, updated_at=?
-                WHERE account_id=? AND entry_client_order_id=?
-                """,
-                (
-                    (closed_at or datetime.now(UTC)).isoformat(),
-                    datetime.now(UTC).isoformat(),
-                    account_id,
-                    entry_client_order_id,
-                ),
-            )
-            self.connection.commit()
-
-    def mark_manual_intervention(self, account_id: str, entry_client_order_id: str) -> None:
-        with self._lock:
-            self.connection.execute(
-                """
-                UPDATE managed_positions
-                SET status='manual_intervention_required', updated_at=?
-                WHERE account_id=? AND entry_client_order_id=? AND status='open'
-                """,
-                (datetime.now(UTC).isoformat(), account_id, entry_client_order_id),
-            )
-            self.connection.commit()
-
-    def set_protection_state(
-        self,
-        account_id: str,
-        entry_client_order_id: str,
-        state: ProtectionState,
-    ) -> None:
-        with self._lock:
-            self.connection.execute(
-                """
-                UPDATE managed_positions SET protection_state=?, updated_at=?
-                WHERE account_id=? AND entry_client_order_id=?
-                """,
-                (
-                    state.value,
-                    datetime.now(UTC).isoformat(),
-                    account_id,
-                    entry_client_order_id,
-                ),
-            )
-            self.connection.commit()
-
     def managed_entries_for_account(self, account_id: str) -> list[ManagedPosition]:
         with self._lock:
             rows = self.connection.execute(
@@ -733,704 +514,30 @@ class ExecutionLedger:
         return result
 
     def total_fees_for_account(self, account_id: str) -> float:
+        """Observed broker fees of this account's portfolio fills.
+
+        ``portfolio_fills`` lives in the same runtime database (written by
+        ``PortfolioStateRepository``); an absent table (a ledger-only test
+        database) reads as no fees.
+        """
         with self._lock:
+            exists = self.connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='portfolio_fills'"
+            ).fetchone()
+            if exists is None:
+                return 0.0
             row = self.connection.execute(
                 """
-                SELECT COALESCE(SUM(entry_fees + exit_fees), 0)
-                FROM managed_positions WHERE account_id=?
+                SELECT COALESCE(SUM(f.fee), 0)
+                FROM portfolio_fills f
+                JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
+                JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                WHERE s.account_id = ?
                 """,
                 (account_id,),
             ).fetchone()
         return float(row[0] if row else 0.0)
-
-    def apply_fee_activity(
-        self,
-        account_id: str,
-        *,
-        activity_id: str,
-        broker_order_id: str,
-        fee: float,
-        occurred_at: datetime,
-    ) -> bool:
-        """Apply one Alpaca fill-activity fee exactly once, repairably.
-
-        The fee row is written when the activity is first seen, but it only
-        counts against the managed lot once the ``managed_positions`` update
-        actually matched a row -- that is what ``fee_activities.booked``
-        records. The reconciler re-reads the 24 h overlap window on every
-        pass, so a fee whose lot did not exist yet (a cold start that has to
-        recover the fill itself from account activity) is booked by a later
-        pass instead of being stranded by the activity primary key.
-        """
-        if fee <= 0 or not activity_id or not broker_order_id:
-            return False
-        now = occurred_at.isoformat()
-        with self._lock:
-            self.connection.execute("BEGIN IMMEDIATE")
-            try:
-                order = self.connection.execute(
-                    """
-                    SELECT client_order_id, entry_client_order_id, order_role
-                    FROM orders WHERE broker_order_id=?
-                    """,
-                    (broker_order_id,),
-                ).fetchone()
-                if order is None:
-                    self.connection.rollback()
-                    return False
-                entry_client_order_id = order[1]
-                inserted = self.connection.execute(
-                    """
-                    INSERT OR IGNORE INTO fee_activities(
-                        activity_id, client_order_id, fee, occurred_at, booked
-                    ) VALUES (?, ?, ?, ?, 0)
-                    """,
-                    (activity_id, str(entry_client_order_id or order[0]), fee, now),
-                )
-                if not inserted.rowcount:
-                    recorded = self.connection.execute(
-                        "SELECT booked FROM fee_activities WHERE activity_id=?",
-                        (activity_id,),
-                    ).fetchone()
-                    if recorded is None or int(recorded[0] or 0):
-                        self.connection.commit()
-                        return False
-                    # Recorded but never booked: the lot may exist now, so
-                    # fall through and complete the booking instead of
-                    # treating the primary-key hit as "already applied".
-                if entry_client_order_id is None:
-                    # The fee is real and must be recorded, but this order is
-                    # not linked to a managed lot, so there is no
-                    # managed_positions row to book it against.  Every
-                    # reconcile pass can rediscover the same order, so this
-                    # routine path must not warn.
-                    log.debug(
-                        "Fee recorded without a managed lot: activity_id=%s client_order_id=%s fee=%s",
-                        activity_id,
-                        order[0],
-                        fee,
-                    )
-                    self.connection.execute(
-                        "UPDATE fee_activities SET booked=1 WHERE activity_id=?",
-                        (activity_id,),
-                    )
-                    self.connection.commit()
-                    return True
-                if OrderRole(str(order[2])) == OrderRole.ENTRY:
-                    booked = self.connection.execute(
-                        """
-                        UPDATE managed_positions
-                        SET entry_fees=entry_fees+?,
-                            realized_pnl=realized_pnl-(
-                                CASE
-                                    WHEN entry_filled_qty > 0
-                                    THEN ? * MIN(exit_filled_qty, entry_filled_qty)
-                                             / entry_filled_qty
-                                    ELSE 0
-                                END
-                            ),
-                            updated_at=?
-                        WHERE account_id=? AND entry_client_order_id=?
-                        """,
-                        (fee, fee, now, account_id, str(entry_client_order_id)),
-                    )
-                else:
-                    booked = self.connection.execute(
-                        """
-                        UPDATE managed_positions
-                        SET exit_fees=exit_fees+?, realized_pnl=realized_pnl-?, updated_at=?
-                        WHERE account_id=? AND entry_client_order_id=?
-                        """,
-                        (fee, fee, now, account_id, str(entry_client_order_id)),
-                    )
-                if booked.rowcount:
-                    self.connection.execute(
-                        "UPDATE fee_activities SET booked=1 WHERE activity_id=?",
-                        (activity_id,),
-                    )
-                else:
-                    # No lot to book against yet. The row stays pending and a
-                    # later pass re-reads the activity and retries; every
-                    # reconcile pass can rediscover the same order, so this
-                    # transient state must not warn.
-                    log.debug(
-                        "Fee recorded before its managed lot exists: activity_id=%s client_order_id=%s fee=%s",
-                        activity_id,
-                        order[0],
-                        fee,
-                    )
-                self.connection.commit()
-                return True
-            except Exception:
-                self.connection.rollback()
-                raise
-
-    def get_reconcile_watermark(self, account_id: str, kind: str) -> datetime | None:
-        """Last successfully reconciled watermark for a recovery pass, or None."""
-        with self._lock:
-            row = self.connection.execute(
-                """
-                SELECT watermark FROM reconcile_watermarks
-                WHERE account_id=? AND kind=?
-                """,
-                (account_id, kind),
-            ).fetchone()
-        if row is None or not row[0]:
-            return None
-        watermark = datetime.fromisoformat(str(row[0]))
-        if watermark.tzinfo is None:
-            watermark = watermark.replace(tzinfo=UTC)
-        return watermark
-
-    def set_reconcile_watermark(self, account_id: str, kind: str, watermark: datetime) -> None:
-        """Persist the watermark only after a pass completed without exception."""
-        with self._lock:
-            self.connection.execute(
-                """
-                INSERT INTO reconcile_watermarks(account_id, kind, watermark, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(account_id, kind) DO UPDATE SET
-                    watermark=excluded.watermark, updated_at=excluded.updated_at
-                """,
-                (account_id, kind, watermark.isoformat(), datetime.now(UTC).isoformat()),
-            )
-            self.connection.commit()
-
-    def holdings_match_broker(self, account_id: str, broker_quantities: dict[str, float], tol: float = 1e-9) -> bool:
-        """True when ledger owned quantities equal broker quantities within tol.
-
-        Used by restart tests to assert ``holdings == broker after reconcile``
-        without silently overwriting a material ``QUANTITY_MISMATCH``.
-        """
-        ledger_quantities: dict[str, float] = {}
-        for pos in self.managed_entries_for_account(account_id):
-            if pos.status in {"open", "manual_intervention_required"}:
-                ledger_quantities[pos.canonical_symbol] = ledger_quantities.get(pos.canonical_symbol, 0.0) + float(
-                    pos.owned_qty
-                )
-        all_symbols = set(ledger_quantities) | set(broker_quantities)
-        for sym in all_symbols:
-            if abs(ledger_quantities.get(sym, 0.0) - broker_quantities.get(sym, 0.0)) > tol:
-                return False
-        return True
-
-    def apply_execution_event(self, event: ExecutionEvent) -> ExecutionTransition:
-        """Apply one broker event atomically using cumulative fill quantities."""
-        terminal_states = {
-            OrderState.FILLED,
-            OrderState.CANCELLED,
-            OrderState.REJECTED,
-            OrderState.EXPIRED,
-            OrderState.MANUAL_INTERVENTION_REQUIRED,
-        }
-        with self._lock:
-            self.connection.execute("BEGIN IMMEDIATE")
-            try:
-                existing = self.connection.execute(
-                    """
-                    SELECT cumulative_filled_qty, average_fill_price, terminal_state,
-                           entry_client_order_id, order_role, side
-                    FROM orders WHERE client_order_id=?
-                    """,
-                    (event.client_order_id,),
-                ).fetchone()
-                previous_filled = float(existing[0]) if existing else 0.0
-                previous_average = float(existing[1]) if existing and existing[1] is not None else None
-                previous_state = OrderState(existing[2]) if existing and existing[2] is not None else None
-                existing_side = str(existing[5] or "").strip().lower() if existing else ""
-                role = OrderRole(existing[4]) if existing else event.role
-                if role == OrderRole.MANUAL_EXIT and event.role != OrderRole.MANUAL_EXIT:
-                    role = event.role
-                entry_client_order_id = self._resolve_entry_client_order_id(event, existing)
-
-                requested = max(0.0, event.requested_qty)
-                cumulative = min(max(0.0, event.cumulative_filled_qty), requested)
-                effective_cumulative = max(previous_filled, cumulative)
-                fill_delta = max(0.0, cumulative - previous_filled)
-                fill_price = self._delta_fill_price(previous_average, previous_filled, cumulative, fill_delta, event)
-                current_state = event.state
-                if previous_state in terminal_states and current_state not in terminal_states:
-                    current_state = previous_state
-                terminal_state = (
-                    current_state.value
-                    if current_state in terminal_states
-                    else (
-                        previous_state.value
-                        if previous_state is not None and previous_state in terminal_states
-                        else None
-                    )
-                )
-                now = event.occurred_at.isoformat()
-                fee_delta = 0.0
-                if event.fee > 0:
-                    activity_id = event.activity_id or (
-                        f"{event.client_order_id}:{event.occurred_at.isoformat()}:"
-                        f"{event.cumulative_filled_qty}:{event.fee}"
-                    )
-                    inserted_fee = self.connection.execute(
-                        """
-                        INSERT OR IGNORE INTO fee_activities(
-                            activity_id, client_order_id, fee, occurred_at
-                        ) VALUES (?, ?, ?, ?)
-                        """,
-                        (activity_id, event.client_order_id, event.fee, now),
-                    )
-                    if inserted_fee.rowcount:
-                        fee_delta = event.fee
-                # A non-entry fill that cannot be linked to a managed lot is a
-                # real fill with no owner: never drop it silently, never stamp
-                # the row terminal, and log the recovery action.  The gate is
-                # the missing link, not the fill delta — reconciliation
-                # re-emits the same event on every pass, and a delta-gated
-                # guard would let the replay re-stamp the row terminal.
-                # Backfilled rows for already-completed broker fills (every
-                # portfolio SELL, which lives outside this ledger) are stamped
-                # terminal as reported; only real execution events stay open.
-                if (
-                    role != OrderRole.ENTRY
-                    and entry_client_order_id is None
-                    and effective_cumulative > 0
-                    and not event.client_order_id.startswith(FILL_ACTIVITY_RECOVERY_PREFIX)
-                ):
-                    terminal_state = None
-                    if fill_delta > 0 or fee_delta > 0:
-                        log.warning(
-                            "Unlinked execution fill: client_order_id=%s broker_order_id=%s "
-                            "role=%s fill_delta=%s fee=%s "
-                            "recovery_action=await_managed_entry_link",
-                            event.client_order_id,
-                            event.broker_order_id,
-                            role.value,
-                            fill_delta,
-                            fee_delta,
-                        )
-                # Never guess the side: the event carries no direction, so the
-                # only real evidence is the linked lot's recorded side.  With
-                # no link the row keeps the previous empty value, which the
-                # conflict clause backfills once the link appears.
-                order_side = self._resolved_order_side(
-                    event.client_order_id, role, entry_client_order_id, existing_side
-                )
-                self.connection.execute(
-                    """
-                    INSERT INTO orders(
-                        client_order_id, account_id, broker_order_id,
-                        parent_broker_order_id, entry_client_order_id, order_role,
-                        canonical_symbol, market, side, requested_qty,
-                        cumulative_filled_qty, average_fill_price, terminal_state,
-                        updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(client_order_id) DO UPDATE SET
-                        account_id=excluded.account_id,
-                        broker_order_id=COALESCE(excluded.broker_order_id, orders.broker_order_id),
-                        parent_broker_order_id=COALESCE(
-                            excluded.parent_broker_order_id, orders.parent_broker_order_id
-                        ),
-                        entry_client_order_id=COALESCE(
-                            excluded.entry_client_order_id, orders.entry_client_order_id
-                        ),
-                        order_role=excluded.order_role,
-                        side=CASE WHEN orders.side='' THEN excluded.side ELSE orders.side END,
-                        requested_qty=MAX(orders.requested_qty, excluded.requested_qty),
-                        cumulative_filled_qty=MAX(
-                            orders.cumulative_filled_qty, excluded.cumulative_filled_qty
-                        ),
-                        average_fill_price=CASE
-                            WHEN excluded.cumulative_filled_qty >= orders.cumulative_filled_qty
-                            THEN COALESCE(excluded.average_fill_price, orders.average_fill_price)
-                            ELSE orders.average_fill_price
-                        END,
-                        terminal_state=COALESCE(orders.terminal_state, excluded.terminal_state),
-                        updated_at=excluded.updated_at
-                    """,
-                    (
-                        event.client_order_id,
-                        event.account_id,
-                        event.broker_order_id or None,
-                        event.parent_order_id,
-                        entry_client_order_id,
-                        role.value,
-                        canonical_symbol(event.symbol, event.market),
-                        event.market.value,
-                        order_side,
-                        requested,
-                        effective_cumulative,
-                        event.average_fill_price,
-                        terminal_state,
-                        now,
-                    ),
-                )
-                payload = json.dumps(
-                    {
-                        "role": role.value,
-                        "requested_qty": requested,
-                        "cumulative_filled_qty": cumulative,
-                        "average_fill_price": event.average_fill_price,
-                    },
-                    sort_keys=True,
-                )
-                self.connection.execute(
-                    """
-                    INSERT OR IGNORE INTO order_events(
-                        client_order_id, broker_order_id, event_type,
-                        broker_timestamp, payload
-                    ) VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (
-                        event.client_order_id,
-                        event.broker_order_id,
-                        current_state.value if current_state else "unknown_event",
-                        now,
-                        payload,
-                    ),
-                )
-                position_delta, realized_pnl_delta = self._apply_position_deltas_tx(
-                    event.account_id,
-                    role,
-                    entry_client_order_id,
-                    fill_delta,
-                    fill_price,
-                    fee_delta,
-                    event.broker_order_id,
-                    now,
-                )
-                # Execution-quality capture (telemetry, REPORT ONLY): record
-                # the terminal fill timestamp, fill delay vs submission,
-                # adverse slippage vs the decision reference price, and the
-                # actual fee on the authoritative orders row. None of this
-                # changes order behavior.
-                if (
-                    fill_delta > 0
-                    or fee_delta > 0
-                    or (current_state in terminal_states and event.average_fill_price is not None)
-                ):
-                    captured = self.connection.execute(
-                        """
-                        SELECT submitted_at, reference_price, side
-                        FROM orders WHERE client_order_id=?
-                        """,
-                        (event.client_order_id,),
-                    ).fetchone()
-                    submitted_at = str(captured[0]) if captured and captured[0] else None
-                    reference = float(captured[1]) if captured and captured[1] is not None else None
-                    direction = str(captured[2]) if captured and captured[2] else ""
-                    delay: float | None = None
-                    slippage: float | None = None
-                    if fill_delta > 0 and fill_price > 0:
-                        if submitted_at:
-                            try:
-                                occurred_dt = event.occurred_at
-                                submitted_dt = datetime.fromisoformat(submitted_at)
-                                raw_delay = (occurred_dt - submitted_dt).total_seconds()
-                                if raw_delay >= 0:
-                                    delay = raw_delay
-                            except (TypeError, ValueError):
-                                delay = None
-                        if reference and reference > 0:
-                            sign: float | None = None
-                            if direction in {"long", "buy"}:
-                                sign = 1.0
-                            elif direction in {"sell", "short"}:
-                                sign = -1.0
-                            if sign is not None:
-                                slippage = (fill_price - reference) / reference * 10_000.0 * sign
-                    self.connection.execute(
-                        """
-                        UPDATE orders
-                        SET filled_at=COALESCE(?, filled_at),
-                            fill_delay_seconds=COALESCE(?, fill_delay_seconds),
-                            slippage_bps=COALESCE(?, slippage_bps),
-                            actual_fee=actual_fee+?,
-                            updated_at=?
-                        WHERE client_order_id=?
-                        """,
-                        (
-                            now if fill_delta > 0 else None,
-                            delay,
-                            slippage,
-                            fee_delta,
-                            now,
-                            event.client_order_id,
-                        ),
-                    )
-                self.connection.commit()
-                return ExecutionTransition(
-                    previous_state=previous_state,
-                    current_state=current_state,
-                    fill_delta=fill_delta,
-                    position_delta=position_delta,
-                    realized_pnl_delta=realized_pnl_delta,
-                    entry_client_order_id=entry_client_order_id,
-                )
-            except Exception:
-                self.connection.rollback()
-                raise
-
-    def _resolved_order_side(
-        self, client_order_id: str, role: OrderRole, entry_client_order_id: str | None, existing_side: str
-    ) -> str:
-        """The side a fill order row really traded, or ``""`` when unknown.
-
-        ``ExecutionEvent`` has no direction field, so the role says nothing
-        about the side: a short entry still exits with a buy, and a buy-side
-        protective stop on a short closes with a buy.  Guessing from the role
-        would stamp the wrong sign on the slippage read of every such row.
-        """
-        if role == OrderRole.ENTRY or not entry_client_order_id or entry_client_order_id == client_order_id:
-            return existing_side
-        row = self.connection.execute(
-            "SELECT side FROM orders WHERE client_order_id=?",
-            (entry_client_order_id,),
-        ).fetchone()
-        entry_side = str(row[0] or "").strip().lower() if row else ""
-        return _OPPOSITE_SIDES.get(entry_side, existing_side)
-
-    def _resolve_entry_client_order_id(self, event: ExecutionEvent, existing: tuple[object, ...] | None) -> str | None:
-        """Link a child event to its managed entry lot.
-
-        Order of preference: the stored entry id, the parent broker id, an
-        unambiguous broker-generated prefix match, then a single open lot for
-        the symbol at the event time. Never guess between multiple lots.
-        """
-        entry_client_order_id = str(existing[3]) if existing and existing[3] else None
-        role = OrderRole(str(existing[4])) if existing else event.role
-        if entry_client_order_id is None and event.parent_order_id:
-            parent = self.connection.execute(
-                """
-                SELECT COALESCE(entry_client_order_id, client_order_id)
-                FROM orders WHERE broker_order_id=?
-                """,
-                (event.parent_order_id,),
-            ).fetchone()
-            if parent:
-                entry_client_order_id = str(parent[0])
-        if entry_client_order_id is None and role != OrderRole.ENTRY:
-            named_parent = self.connection.execute(
-                """
-                SELECT entry_client_order_id
-                FROM managed_positions
-                WHERE account_id=? AND ? LIKE entry_client_order_id || '-%'
-                ORDER BY length(entry_client_order_id) DESC LIMIT 1
-                """,
-                (event.account_id, event.client_order_id),
-            ).fetchone()
-            if named_parent:
-                entry_client_order_id = str(named_parent[0])
-        if entry_client_order_id is None and role != OrderRole.ENTRY:
-            # Alpaca bracket child updates can omit parent_order_id and
-            # use broker-generated UUID client ids. Link only when one
-            # managed lot is an unambiguous match; never guess between
-            # multiple same-symbol entries.
-            candidates = self.connection.execute(
-                """
-                SELECT entry_client_order_id
-                FROM managed_positions
-                WHERE account_id=? AND canonical_symbol=? AND market=?
-                  AND status IN ('open', 'manual_intervention_required')
-                  AND remaining_owned_qty > 0
-                  AND opened_at <= ?
-                ORDER BY opened_at
-                """,
-                (
-                    event.account_id,
-                    canonical_symbol(event.symbol, event.market),
-                    event.market.value,
-                    event.occurred_at.isoformat(),
-                ),
-            ).fetchall()
-            if len(candidates) == 1:
-                entry_client_order_id = str(candidates[0][0])
-        if role == OrderRole.ENTRY:
-            entry_client_order_id = event.client_order_id
-        return entry_client_order_id
-
-    @staticmethod
-    def _delta_fill_price(
-        previous_average: float | None,
-        previous_filled: float,
-        cumulative: float,
-        fill_delta: float,
-        event: ExecutionEvent,
-    ) -> float:
-        """Weighted price of the newly-filled delta from cumulative averages."""
-        average_fill_price = event.average_fill_price
-        if fill_delta > 0 and average_fill_price is not None and previous_average is not None and previous_filled > 0:
-            return max(
-                0.0,
-                (average_fill_price * cumulative - previous_average * previous_filled) / fill_delta,
-            )
-        return event.average_fill_price or previous_average or 0.0
-
-    def _apply_position_deltas_tx(
-        self,
-        account_id: str,
-        role: OrderRole,
-        entry_client_order_id: str | None,
-        fill_delta: float,
-        fill_price: float,
-        fee_delta: float,
-        broker_order_id: str | None,
-        now: str,
-    ) -> tuple[float, float]:
-        """Apply entry/exit fill and fee-only deltas inside the open transaction."""
-        position_delta = 0.0
-        realized_pnl_delta = 0.0
-        if fill_delta > 0 and fill_price > 0 and entry_client_order_id:
-            if role == OrderRole.ENTRY:
-                order = self._load_order_intent_tx(entry_client_order_id)
-                if order is not None:
-                    self._record_entry_fill_delta_tx(
-                        account_id,
-                        order,
-                        fill_delta,
-                        fill_price,
-                        fee_delta,
-                        broker_order_id,
-                        now,
-                    )
-                    position_delta = fill_delta
-            else:
-                realized_pnl_delta = self._record_exit_fill_delta_tx(
-                    account_id,
-                    entry_client_order_id,
-                    fill_delta,
-                    fill_price,
-                    fee_delta,
-                    now,
-                )
-                position_delta = -fill_delta
-        elif fee_delta > 0 and entry_client_order_id:
-            if role == OrderRole.ENTRY:
-                self.connection.execute(
-                    """
-                    UPDATE managed_positions
-                    SET entry_fees=entry_fees+?, updated_at=?
-                    WHERE account_id=? AND entry_client_order_id=?
-                    """,
-                    (fee_delta, now, account_id, entry_client_order_id),
-                )
-            else:
-                self.connection.execute(
-                    """
-                    UPDATE managed_positions
-                    SET exit_fees=exit_fees+?, realized_pnl=realized_pnl-?, updated_at=?
-                    WHERE account_id=? AND entry_client_order_id=?
-                    """,
-                    (fee_delta, fee_delta, now, account_id, entry_client_order_id),
-                )
-                realized_pnl_delta = -fee_delta
-        return position_delta, realized_pnl_delta
-
-    def _load_order_intent_tx(self, client_order_id: str) -> OrderIntent | None:
-        row = self.connection.execute(
-            """
-            SELECT signal_id, canonical_symbol, market, side, requested_qty,
-                   entry_price, stop_price, target_price, strategy
-            FROM orders WHERE client_order_id=?
-            """,
-            (client_order_id,),
-        ).fetchone()
-        if row is None or any(row[index] is None for index in (0, 5, 6, 7, 8)):
-            return None
-        return OrderIntent(
-            signal_id=str(row[0]),
-            symbol=str(row[1]),
-            market=Market(row[2]),
-            direction=Direction(row[3]),
-            qty=float(row[4]),
-            entry_price=float(row[5]),
-            stop_price=float(row[6]),
-            target_price=float(row[7]),
-            strategy=str(row[8]),
-            client_order_id=client_order_id,
-        )
-
-    def managed_order_ids(self, account_id: str, canonical: str) -> set[str]:
-        with self._lock:
-            rows = self.connection.execute(
-                """
-                SELECT o.broker_order_id
-                FROM orders o
-                JOIN managed_positions p
-                  ON p.entry_client_order_id=o.entry_client_order_id
-                WHERE p.account_id=? AND p.canonical_symbol=?
-                  AND p.status IN ('open', 'manual_intervention_required')
-                  AND o.broker_order_id IS NOT NULL
-                """,
-                (account_id, canonical),
-            ).fetchall()
-        return {str(row[0]) for row in rows}
-
-    def managed_entry_broker_order_ids(self, account_id: str, canonical: str) -> set[str]:
-        """Return every still-open entry parent for an aggregated symbol position."""
-        with self._lock:
-            rows = self.connection.execute(
-                """
-                SELECT broker_order_id
-                FROM managed_positions
-                WHERE account_id=? AND canonical_symbol=?
-                  AND status IN ('open', 'manual_intervention_required')
-                  AND remaining_owned_qty > 0
-                  AND broker_order_id IS NOT NULL
-                """,
-                (account_id, canonical),
-            ).fetchall()
-        return {str(row[0]) for row in rows}
-
-    def managed_client_order_ids(self, account_id: str, canonical: str) -> set[str]:
-        with self._lock:
-            rows = self.connection.execute(
-                """
-                SELECT o.client_order_id
-                FROM orders o
-                JOIN managed_positions p
-                  ON p.entry_client_order_id=o.entry_client_order_id
-                WHERE p.account_id=? AND p.canonical_symbol=?
-                  AND p.status IN ('open', 'manual_intervention_required')
-                """,
-                (account_id, canonical),
-            ).fetchall()
-        return {str(row[0]) for row in rows}
-
-    def order_for_broker_id(self, account_id: str, broker_order_id: str) -> str | None:
-        """Client order id of any ledger order with this broker order id.
-
-        Used by fill-activity recovery to avoid re-booking an exit whose
-        broker order is already in the ledger under a different client id
-        (e.g. a portfolio SELL row or an earlier recovery row); inserting a
-        second row would violate the unique broker-order index.
-        """
-        with self._lock:
-            row = self.connection.execute(
-                """
-                SELECT client_order_id FROM orders
-                WHERE account_id=? AND broker_order_id=?
-                LIMIT 1
-                """,
-                (account_id, broker_order_id),
-            ).fetchone()
-            if row is None:
-                return None
-            return str(row[0])
-
-    def entry_order_for_broker_id(self, account_id: str, broker_order_id: str) -> tuple[OrderIntent, float] | None:
-        """Return a durable entry and its known cumulative fill for recovery."""
-        with self._lock:
-            row = self.connection.execute(
-                """
-                SELECT client_order_id, cumulative_filled_qty
-                FROM orders
-                WHERE account_id=? AND broker_order_id=? AND order_role='entry'
-                LIMIT 1
-                """,
-                (account_id, broker_order_id),
-            ).fetchone()
-            if row is None:
-                return None
-            order = self._load_order_intent_tx(str(row[0]))
-            if order is None:
-                return None
-            return order, float(row[1] or 0)
 
     def save_risk_state(self, state: RiskState) -> None:
         payload = json.dumps(
@@ -1542,23 +649,29 @@ class ExecutionLedger:
         incidents: list[SafetyIncident] = []
         for row in rows:
             try:
-                incidents.append(
-                    SafetyIncident(
-                        account_id=str(row[0]),
-                        reason=str(row[1]),
-                        scope=str(row[2]),
-                        activated_at=datetime.fromisoformat(row[3]),
-                        updated_at=datetime.fromisoformat(row[4]),
-                    )
-                )
+                activated_at = datetime.fromisoformat(row[3])
+                updated_at = datetime.fromisoformat(row[4])
+                scope = str(row[2])
             except (TypeError, ValueError):
-                # A corrupt incident row must not fail runtime startup; the
-                # halt it describes is skipped (fail-open for the row itself).
+                # A corrupt row still describes a halt: keep it (fail closed)
+                # with a sentinel scope and epoch timestamps instead of
+                # silently dropping the incident.
                 log.warning(
-                    "Ignoring corrupt safety_incident row for account=%s reason=%s",
+                    "Corrupt safety_incident row kept as a halt for account=%s reason=%s",
                     account_id,
                     row[1],
                 )
+                activated_at = updated_at = _CORRUPT_INCIDENT_TIME
+                scope = CORRUPT_INCIDENT_SCOPE
+            incidents.append(
+                SafetyIncident(
+                    account_id=str(row[0]),
+                    reason=str(row[1]),
+                    scope=scope,
+                    activated_at=activated_at,
+                    updated_at=updated_at,
+                )
+            )
         return tuple(incidents)
 
     def clear_safety_incident(self, account_id: str, reason: str | None = None) -> None:
@@ -1615,4 +728,4 @@ class ExecutionLedger:
         self._store.release()
 
 
-__all__ = ["ExecutionLedger", "ManagedPosition"]
+__all__ = ["CORRUPT_INCIDENT_SCOPE", "ExecutionLedger", "LegacyLedgerStateError", "ManagedPosition"]

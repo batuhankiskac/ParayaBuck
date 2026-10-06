@@ -27,13 +27,11 @@ from typing import Any
 
 import pytest
 
-import parayabuck.execution.alpaca_reconciliation as reconciliation_module
 import parayabuck.runtime as runtime_module
 from parayabuck.config import SignalCrossCheckConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.adjustment import merge_provider_authority
 from parayabuck.data.aggregator import TimeframeAggregator
-from parayabuck.execution.alpaca_reconciliation import ReconciliationService
 from parayabuck.markets import nyse_calendar
 from parayabuck.markets.timeframes import (
     NEW_YORK,
@@ -571,88 +569,3 @@ def test_cache_served_verification_is_not_a_success(monkeypatch: pytest.MonkeyPa
     assert engine._signal_adjustment_state()["healthy"] is False
     assert [kind for kind, _fields in events] == ["signal_adjustment_failure"]
     assert equity.signal_verified_through_by_symbol == {}
-
-
-# --------------------------------------------------------------------------- #
-# F37 — an unexpected FILL side is reported, never fatal
-# --------------------------------------------------------------------------- #
-
-
-def _activity(
-    side: str,
-    *,
-    activity_id: str,
-    order_id: str = "broker-1",
-    symbol: str = "AAPL",
-    at: str = "2026-01-01T00:00:00+00:00",
-) -> dict[str, str]:
-    return {
-        "id": activity_id,
-        "order_id": order_id,
-        "symbol": symbol,
-        "side": side,
-        "qty": "1",
-        "price": "10",
-        "transaction_time": at,
-        "commission": "0",
-    }
-
-
-def _reconcile_broker(activities: list[dict[str, str]], watermarks: dict[tuple[str, str], Any]) -> Any:
-    def request(_method: str, _path: str, data: dict[str, object]) -> list[dict[str, str]]:
-        cursor = str(data["page_token"]) if "page_token" in data else None
-        if cursor is None:
-            return activities[:1]
-        index = next(i + 1 for i, item in enumerate(activities) if item["id"] == cursor)
-        return activities[index : index + 1]
-
-    return SimpleNamespace(
-        _client_adapter=SimpleNamespace(request=request),
-        _account_id="acct",
-        ledger=SimpleNamespace(
-            get_reconcile_watermark=lambda *_args: None,
-            set_reconcile_watermark=lambda account, key, value: watermarks.__setitem__((account, key), value),
-            apply_fee_activity=lambda _account, **_kwargs: False,
-            entry_order_for_broker_id=lambda *_args: None,
-            order_for_broker_id=lambda *_args: None,
-        ),
-    )
-
-
-def test_manual_short_fill_does_not_block_reconciliation(monkeypatch: pytest.MonkeyPatch) -> None:
-    events = _capture_events(monkeypatch, reconciliation_module)
-    watermarks: dict[tuple[str, str], Any] = {}
-    broker = _reconcile_broker([_activity("sell_short", activity_id="a1")], watermarks)
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
-    # A known side the bot does not own: skipped silently, cursor advanced.
-    assert events == []
-    assert watermarks[("acct", "fill_activity")] == datetime(2026, 1, 1, tzinfo=UTC)
-
-
-def test_unknown_fill_side_is_alerted_and_still_advances_the_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
-    events = _capture_events(monkeypatch, reconciliation_module)
-    watermarks: dict[tuple[str, str], Any] = {}
-    broker = _reconcile_broker(
-        [
-            _activity("teleport", activity_id="a1"),
-            _activity("buy", activity_id="a2", at="2026-01-02T00:00:00+00:00"),
-        ],
-        watermarks,
-    )
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
-    assert [kind for kind, _fields in events] == ["reconciliation_unexpected_fill_side"]
-    assert events[0][1]["activities"] == [{"activity_id": "a1", "side": "teleport", "symbol": "AAPL"}]
-    # The cursor is past BOTH activities, so the next pass neither re-reads
-    # the page nor re-raises.
-    assert watermarks[("acct", "fill_activity")] == datetime(2026, 1, 2, tzinfo=UTC)
-
-
-def test_unlinked_fill_activity_is_skipped_without_an_alert(monkeypatch: pytest.MonkeyPatch) -> None:
-    events = _capture_events(monkeypatch, reconciliation_module)
-    watermarks: dict[tuple[str, str], Any] = {}
-    unlinked = _activity("buy", activity_id="a1")
-    unlinked["order_id"] = ""
-    broker = _reconcile_broker([unlinked], watermarks)
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
-    assert events == []
-    assert watermarks[("acct", "fill_activity")] == datetime(2026, 1, 1, tzinfo=UTC)

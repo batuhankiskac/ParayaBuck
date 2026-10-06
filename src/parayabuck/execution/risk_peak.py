@@ -228,28 +228,14 @@ class RiskPeakService:
     def ensure_reconciled(self, account_id: str, current_equity: float) -> None:
         if not account_id:
             account_id = "unknown"
-        if not hasattr(self, "_peak_state_path"):
-            self._peak_state_path = Path("data/runtime") / (
-                "paper_equity_peak.json" if getattr(self, "_paper", True) else "live_equity_peak.json"
-            )
-        if not hasattr(self, "_peak_account_id"):
-            self._peak_account_id = None
-        if not hasattr(self, "_peak_epoch"):
-            self._peak_epoch = 0
-        if not hasattr(self, "_peak_equity"):
-            self._peak_equity = 0.0
-        if not hasattr(self, "_peak_reconciled"):
-            self._peak_reconciled = False
-        if not hasattr(self, "ledger"):
-            self.ledger = None
-        existing = getattr(self, "_peak_account_id", None)
+        existing = self._peak_account_id
         if existing is not None and existing != account_id:
             raise RuntimeError(
                 f"Account identity changed from {existing} to {account_id} — fail closed; peak is account-scoped and must not cross accounts"
             )
-        if getattr(self, "_peak_reconciled", False) and existing == account_id:
+        if self._peak_reconciled and existing == account_id:
             return
-        if getattr(self, "ledger", None) is None:
+        if self.ledger is None:
             self._peak_account_id = account_id
             self._peak_reconciled = True
             return
@@ -370,17 +356,11 @@ class RiskPeakService:
     def save_peak_equity(self, account_id: str | None = None) -> None:
         if not math.isfinite(self._peak_equity) or self._peak_equity < 0:
             raise ValueError(f"Cannot persist non-finite or negative peak: {self._peak_equity!r}")
-        epoch = int(getattr(self, "_peak_epoch", 0) or 0)
-        resolved = (
-            account_id
-            or getattr(self, "_peak_account_id", None)
-            or getattr(self, "_broker_account_id", None)
-            or "unknown"
-        )
-        resolved = str(resolved)
-        if getattr(self, "_peak_account_id", None) is None and getattr(self, "_broker_account_id", None):
-            self._peak_account_id = str(getattr(self, "_broker_account_id"))
-            resolved = str(self._peak_account_id)
+        epoch = int(self._peak_epoch or 0)
+        resolved = str(account_id or self._peak_account_id or self._broker_account_id or "unknown")
+        if self._peak_account_id is None and self._broker_account_id:
+            self._peak_account_id = str(self._broker_account_id)
+            resolved = self._peak_account_id
         payload = json.dumps({"account_id": resolved, "peak_equity": self._peak_equity, "epoch": epoch})
         try:
             atomic_write(self._peak_state_path, payload)
@@ -390,12 +370,12 @@ class RiskPeakService:
     def reset_peak_equity(self, equity: float, account_id: str | None = None) -> None:
         if equity <= 0:
             raise ValueError("Cannot reset the equity peak to a non-positive value")
-        resolved = account_id or getattr(self, "_peak_account_id", None) or getattr(self, "_broker_account_id", None)
+        resolved = account_id or self._peak_account_id or self._broker_account_id
         if not resolved:
             raise RuntimeError("Cannot reset peak before account is known (peak is account-scoped)")
         resolved = str(resolved)
         _, persisted_epoch = self.query_persisted_peak(resolved)
-        current_epoch = int(getattr(self, "_peak_epoch", 0) or 0)
+        current_epoch = int(self._peak_epoch or 0)
         if persisted_epoch is not None:
             current_epoch = max(current_epoch, int(persisted_epoch))
         self._peak_epoch, self._peak_equity, self._peak_account_id, self._peak_reconciled = (

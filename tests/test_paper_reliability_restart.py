@@ -341,13 +341,9 @@ def test_restart_scenario_E_complete_fill_holdings_match(tmp_path: Path) -> None
     rt_b, repo_b = _restarted_runtime(tmp_path, broker_b, {"AAPL": 0.15})
     # Holdings must equal broker after reconcile (simulated)
     assert repo_b.owned_quantities("acct").get("AAPL") == qty
-    # Ledger holdings_match helper
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    # Simulate broker quantities matching ledger (empty ledger case still holds)
     assert repo_b.owned_symbols("acct") == {"AAPL"}
     rt_a.close()
     rt_b.close()
-    ledger.close()
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +429,7 @@ def test_reconcile_returns_7_categories_and_fail_closed(tmp_path: Path) -> None:
     # Broker has no positions; local has one -> LOCAL_STALE
     # Create a portfolio-owned stale symbol via ownership_adjustment path
     # Easiest: make portfolio_owned_quantities return a stale symbol
-    broker.portfolio_owned_quantities = lambda: {"AAPL"}  # type: ignore[method-assign]
+    broker.portfolio_owned_quantities = lambda: {"AAPL": 1.0}  # type: ignore[method-assign]
     broker.portfolio_flat_reconciled = lambda s, m: repo.clear_stale_ownership("acct", s, m)  # type: ignore[method-assign]
     broker.portfolio_open_orders = lambda: ()  # type: ignore[method-assign]
     # Broker account: flat

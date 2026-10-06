@@ -26,14 +26,10 @@ from typing import Any
 import pytest
 
 from parayabuck import runtime as runtime_module
-from parayabuck.config import Config
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
-    Direction,
-    Fill,
     Market,
-    OrderIntent,
     PositionSnapshot,
 )
 from parayabuck.execution.alpaca import OwnershipDriftError
@@ -50,7 +46,7 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioStateRepository,
 )
 from parayabuck.runtime import EngineRuntime, WorkerHealth
-from tests.helpers import apply_entry_fill, make_broker
+from tests.helpers import make_broker
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -703,88 +699,6 @@ def test_cleared_incident_does_not_restore_halt(tmp_path: Path) -> None:
     runtime._restore_persistent_state()
     assert runtime._circuit_breaker_reason is None
     reopened.close()
-
-
-# ---------------------------------------------------------------------------
-# 11. Managed symbol no longer in the configured universe stays pinned
-# ---------------------------------------------------------------------------
-
-
-def _register_filled_entry(ledger: ExecutionLedger, intent: OrderIntent, price: float) -> None:
-    ledger.register_entry_order("acct", intent, f"broker-{intent.signal_id}")
-    apply_entry_fill(
-        ledger,
-        "acct",
-        intent,
-        Fill(intent.client_order_id, intent.symbol, intent.qty, price, Direction.LONG, datetime.now(UTC), 0.0),
-        f"broker-{intent.signal_id}",
-    )
-
-
-def test_restart_with_managed_symbol_outside_configured_universe_stays_pinned(
-    tmp_path: Path,
-) -> None:
-    """Level: EngineRuntime unit. A managed equity position persisted in the
-    ledger is re-pinned on restart even when the configured universe no
-    longer contains the symbol: the pin keeps the symbol observable. A legacy
-    crypto ledger row is only classified as foreign, never pinned."""
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    _register_filled_entry(
-        ledger,
-        OrderIntent(
-            symbol="MSFT",
-            market=Market.EQUITY,
-            direction=Direction.LONG,
-            qty=5.0,
-            entry_price=400.0,
-            stop_price=360.0,
-            target_price=480.0,
-            strategy="equity",
-            signal_id="chaos-equity-entry",
-        ),
-        400.0,
-    )
-    _register_filled_entry(
-        ledger,
-        OrderIntent(
-            symbol="BTC/USD",
-            market=Market.CRYPTO,
-            direction=Direction.LONG,
-            qty=0.5,
-            entry_price=100_000.0,
-            stop_price=90_000.0,
-            target_price=120_000.0,
-            strategy="legacy",
-            signal_id="chaos-legacy-entry",
-        ),
-        100_000.0,
-    )
-    assert sorted(entry.canonical_symbol for entry in ledger.managed_entries_for_account("acct")) == [
-        "BTC/USD",
-        "MSFT",
-    ]
-
-    runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime.app_config = Config()
-    runtime.broker = SimpleNamespace(
-        account_id="acct",
-        account=lambda: AccountSnapshot(100_000, 100_000, 100_000, 0.0, positions=()),
-        portfolio_open_order_symbols=lambda: set(),
-    )
-    runtime.ledger = ledger
-    runtime._portfolio_repository = None
-    # The configured universe no longer includes MSFT.
-    runtime._symbols_by_market = {Market.EQUITY: {"SPY", "QQQ", "QLD"}}
-    runtime._strategy_enabled = {Market.EQUITY: True}
-    runtime._not_ready_symbols = set()
-    runtime.symbols = sorted(runtime._symbols_by_market[Market.EQUITY])
-    runtime._pin_managed_symbols()
-    assert runtime._managed_pin_symbols == {"MSFT"}
-    assert "MSFT" in runtime._symbols_by_market[Market.EQUITY]
-    assert set(runtime._symbols_by_market) == {Market.EQUITY}
-    assert runtime._foreign_inventory == ((Market.CRYPTO, "BTC/USD"),)
-    assert "BTC/USD" not in runtime.symbols
-    ledger.close()
 
 
 def test_stream_worker_restart_limit_alerts_once_not_per_retry(monkeypatch: Any) -> None:

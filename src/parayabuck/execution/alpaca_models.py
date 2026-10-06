@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-# Bounded wait for the broker to confirm a protective-order cancellation
-# before a replacement is submitted.
-STOP_CANCEL_TIMEOUT_SECONDS = 5.0
-STOP_CANCEL_POLL_INTERVAL_SECONDS = 0.25
-
 
 class RiskStatePersistenceError(RuntimeError):
     """Peak equity sidecar is present but unreadable or invalid.
@@ -23,7 +18,7 @@ class AmbiguousOrderState(RuntimeError):
 
 
 class ProtectionReconciliationError(RuntimeError):
-    pass
+    """Broker ownership could not be reconciled; the runtime fails closed."""
 
 
 class OwnershipDriftError(ProtectionReconciliationError):
@@ -45,8 +40,6 @@ class DefiniteOrderRejection(RuntimeError):
 
 
 __all__ = [
-    "STOP_CANCEL_POLL_INTERVAL_SECONDS",
-    "STOP_CANCEL_TIMEOUT_SECONDS",
     "AmbiguousOrderState",
     "DefiniteOrderRejection",
     "OwnershipDriftError",

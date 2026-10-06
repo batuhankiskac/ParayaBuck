@@ -1,4 +1,4 @@
-"""Offline restart and activity completeness regressions."""
+"""Offline restart and portfolio-order reconciliation regressions."""
 
 from __future__ import annotations
 
@@ -96,7 +96,6 @@ class _State:
         return SimpleNamespace(
             account=account,
             _client=SimpleNamespace(get_account=lambda: SimpleNamespace(id="acct")),
-            _client_adapter=SimpleNamespace(request=lambda *_args, **_kwargs: []),
             _account_id="acct",
             _field=lambda value, name, default=None: getattr(value, name, default),
             _normalized_field=lambda value, name: str(getattr(value, name)),
@@ -107,10 +106,6 @@ class _State:
             portfolio_open_orders=open_orders,
             portfolio_owned_quantities=lambda: {"AAPL": state.owned_qty()} if state.owned_qty() else {},
             portfolio_fill_recovered=recovered,
-            ledger=SimpleNamespace(
-                managed_for_account=lambda _account: {},
-                managed_entries_for_account=lambda _account: (),
-            ),
         )
 
 
@@ -229,266 +224,6 @@ def test_restart_equivalence_for_filled_buy() -> None:
     assert restarted.recoveries == 1
 
 
-def test_repeated_fill_page_is_failure_without_watermark() -> None:
-    page = [
-        {
-            "id": f"activity-{index:03d}",
-            "order_id": f"order-{index:03d}",
-            "symbol": "AAPL",
-            "side": "buy",
-            "qty": "1",
-            "price": "1",
-            "transaction_time": "2026-01-01T00:00:00+00:00",
-        }
-        for index in range(100)
-    ]
-    applied: list[str] = []
-    watermarks: list[datetime] = []
-    broker = SimpleNamespace(
-        _client_adapter=SimpleNamespace(request=lambda *_args, **_kwargs: page),
-        _account_id="acct",
-        ledger=SimpleNamespace(
-            get_reconcile_watermark=lambda *_args: None,
-            set_reconcile_watermark=lambda _account, _kind, value: watermarks.append(value),
-            apply_fee_activity=lambda _account, **kwargs: applied.append(str(kwargs["activity_id"])),
-            entry_order_for_broker_id=lambda *_args: None,
-        ),
-    )
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is False
-    assert applied == []
-    assert watermarks == []
-
-
-def test_malformed_fill_page_is_failure() -> None:
-    broker = SimpleNamespace(
-        _client_adapter=SimpleNamespace(request=lambda *_args, **_kwargs: {"bad": "page"}),
-        _account_id="acct",
-        ledger=SimpleNamespace(get_reconcile_watermark=lambda *_args: None),
-    )
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is False
-
-
-def test_incomplete_fill_history_blocks_account_drift_and_startup() -> None:
-    broker = _State().broker()
-    broker._client_adapter.request = lambda *_args, **_kwargs: {"invalid": "page"}
-    account_calls = 0
-    original_account = broker.account
-
-    def account() -> AccountSnapshot:
-        nonlocal account_calls
-        account_calls += 1
-        return original_account()
-
-    broker.account = account
-    with pytest.raises(ReconciliationResultError, match="FILL activity backfill incomplete"):
-        ReconciliationService(broker).reconcile()
-    assert account_calls == 0
-
-
-def test_malformed_fill_activity_is_failure() -> None:
-    broker = SimpleNamespace(
-        _client_adapter=SimpleNamespace(
-            request=lambda *_args, **_kwargs: [
-                {"id": "activity-1", "order_id": "broker-1", "symbol": "AAPL", "side": "buy", "qty": "1", "price": "10"}
-            ]
-        ),
-        _account_id="acct",
-        ledger=SimpleNamespace(get_reconcile_watermark=lambda *_args: None),
-    )
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is False
-
-
-@pytest.mark.parametrize("count", [0, 1, 100, 101, 201])  # type: ignore[untyped-decorator]
-def test_fill_pages_exhaust_to_empty_and_apply_each_activity_once(count: int) -> None:
-    activities = [
-        {
-            "id": f"activity-{index:03d}",
-            "order_id": f"order-{index:03d}",
-            "symbol": "AAPL",
-            "side": "buy",
-            "qty": "1",
-            "price": "10",
-            "transaction_time": "2026-01-01T00:00:00+00:00",
-        }
-        for index in range(count)
-    ]
-    applied: list[str] = []
-    cursors: list[str | None] = []
-
-    def request(_method: str, _path: str, data: dict[str, object]) -> list[dict[str, str]]:
-        cursor = str(data["page_token"]) if "page_token" in data else None
-        cursors.append(cursor)
-        start = next((i + 1 for i, item in enumerate(activities) if item["id"] == cursor), 0)
-        return activities[start : start + 100]
-
-    broker = SimpleNamespace(
-        _client_adapter=SimpleNamespace(request=request),
-        _account_id="acct",
-        ledger=SimpleNamespace(
-            get_reconcile_watermark=lambda *_args: None,
-            set_reconcile_watermark=lambda *_args: None,
-            apply_fee_activity=lambda _account, **kw: applied.append(str(kw["activity_id"])),
-            entry_order_for_broker_id=lambda *_args: None,
-        ),
-    )
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
-    assert applied == [item["id"] for item in activities]
-    assert len(cursors) == (count + 99) // 100 + 1
-
-
-def _two_page_broker(failure: str) -> tuple[SimpleNamespace, list[str], list[datetime]]:
-    """A FILL backfill whose SECOND page fails in the given way."""
-    first_page = [
-        {
-            "id": f"activity-{index:03d}",
-            "order_id": f"order-{index:03d}",
-            "symbol": "AAPL",
-            "side": "buy",
-            "qty": "1",
-            "price": "10",
-            "transaction_time": "2026-01-01T00:00:00+00:00",
-        }
-        for index in range(100)
-    ]
-    applied: list[str] = []
-    watermarks: list[datetime] = []
-
-    def request(_method: str, _path: str, data: dict[str, object]) -> object:
-        if "page_token" not in data:
-            return first_page
-        if failure == "exception":
-            raise TimeoutError("later page")
-        if failure == "malformed":
-            return {"invalid": "page"}
-        if failure == "missing_id":
-            return [{"id": "", **{k: v for k, v in first_page[-1].items() if k != "id"}}]
-        return first_page
-
-    broker = SimpleNamespace(
-        _client_adapter=SimpleNamespace(request=request),
-        _account_id="acct",
-        ledger=SimpleNamespace(
-            get_reconcile_watermark=lambda *_args: None,
-            set_reconcile_watermark=lambda _account, _kind, value: watermarks.append(value),
-            apply_fee_activity=lambda _account, **kw: applied.append(str(kw["activity_id"])),
-            entry_order_for_broker_id=lambda *_args: None,
-        ),
-    )
-    return broker, applied, watermarks
-
-
-@pytest.mark.parametrize("failure", ["malformed", "missing_id", "duplicate"])  # type: ignore[untyped-decorator]
-def test_second_fill_page_failure_never_applies_first_page(failure: str) -> None:
-    broker, applied, watermarks = _two_page_broker(failure)
-
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is False
-    assert applied == []
-    assert watermarks == []
-
-
-def test_network_failure_on_a_later_fill_page_applies_nothing_and_stays_retryable() -> None:
-    """A broker timeout is TRANSIENT, so it must surface (with its cause) for
-    the startup auto-retry instead of being swallowed into a bare error that
-    leaves the engine permanently down. Nothing from the first page is
-    applied either way."""
-    broker, applied, watermarks = _two_page_broker("exception")
-
-    with pytest.raises(ReconciliationResultError) as excinfo:
-        ReconciliationService(broker)._reconcile_fill_activity_fees()
-
-    assert isinstance(excinfo.value.__cause__, TimeoutError)
-    assert applied == []
-    assert watermarks == []
-
-
-def test_three_partial_fills_use_incremental_qty_not_sum_of_cumulative() -> None:
-    quantities = (3, 4, 3)
-    cumulatives = (3, 7, 10)
-    activities = [
-        {
-            "id": f"partial-{i}",
-            "order_id": "broker-1",
-            "symbol": "AAPL",
-            "side": "buy",
-            "qty": str(qty),
-            "cum_qty": str(cum),
-            "leaves_qty": str(10 - cum),
-            "price": "10",
-            "transaction_time": f"2026-01-01T00:00:0{i}+00:00",
-        }
-        for i, (qty, cum) in enumerate(zip(quantities, cumulatives, strict=True))
-    ]
-    recovered: list[Any] = []
-    broker = SimpleNamespace(
-        _client_adapter=SimpleNamespace(
-            request=lambda _method, _path, data: [] if "page_token" in data else activities
-        ),
-        _account_id="acct",
-        ledger=SimpleNamespace(
-            get_reconcile_watermark=lambda *_args: None,
-            set_reconcile_watermark=lambda *_args: None,
-            apply_fee_activity=lambda *_args, **_kwargs: False,
-            entry_order_for_broker_id=lambda *_args: (
-                SimpleNamespace(qty=10, client_order_id="intent-1", symbol="AAPL", market=Market.EQUITY),
-                0,
-            ),
-            apply_execution_event=lambda event: recovered.append(event),
-        ),
-    )
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
-    assert len(recovered) == 1
-    assert recovered[0].cumulative_filled_qty == 10
-
-
-def test_overlap_activity_id_across_pages_is_applied_once() -> None:
-    first_page = [
-        {
-            "id": f"activity-{i:03d}",
-            "order_id": f"broker-{i:03d}",
-            "symbol": "AAPL",
-            "side": "buy",
-            "qty": "1",
-            "price": "10",
-            "transaction_time": "2026-01-01T00:00:00+00:00",
-        }
-        for i in range(100)
-    ]
-    last_page = [
-        first_page[-1],
-        {
-            "id": "activity-100",
-            "order_id": "broker-100",
-            "symbol": "AAPL",
-            "side": "buy",
-            "qty": "1",
-            "price": "10",
-            "transaction_time": "2026-01-01T00:00:00+00:00",
-        },
-    ]
-    applied: list[str] = []
-
-    def request(_method: str, _path: str, data: dict[str, object]) -> list[dict[str, str]]:
-        if "page_token" not in data:
-            return first_page
-        if data["page_token"] == "activity-099":
-            return last_page
-        return []
-
-    broker = SimpleNamespace(
-        _client_adapter=SimpleNamespace(request=request),
-        _account_id="acct",
-        ledger=SimpleNamespace(
-            get_reconcile_watermark=lambda *_args: None,
-            set_reconcile_watermark=lambda *_args: None,
-            apply_fee_activity=lambda _account, **kw: applied.append(str(kw["activity_id"])),
-            entry_order_for_broker_id=lambda *_args: None,
-        ),
-    )
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
-    assert len(applied) == 101
-    assert len(set(applied)) == 101
-
-
 def _oversized_fill_broker(
     *, ordered_qty: float | None, filled_qty: float = 1.5
 ) -> tuple[Any, list[tuple[str, float]]]:
@@ -542,4 +277,66 @@ def test_quantity_within_broker_precision_matches() -> None:
 def test_quantity_gap_beyond_broker_precision_still_mismatches() -> None:
     state = _State(broker_qty=0.02906, filled_qty=0.0291)
     report = ReconciliationService(state.broker()).reconcile()
+    assert report["QUANTITY_MISMATCH"] == ["AAPL"]
+
+
+def test_calculated_fully_filled_order_is_booked_filled() -> None:
+    """``calculated`` (done for the day, settlement pending) is a valid final
+    state, not an unrecognized one: a full fill books ``filled``."""
+    state = _State(broker_status="calculated")
+    broker = state.broker()
+    broker._fetch_broker_order("intent-1", "broker-1").qty = 1.0
+    report = ReconciliationService(broker).reconcile()
+    assert state.local_status == "filled"
+    assert report["MATCH"] == ["AAPL"]
+
+
+def test_calculated_partially_filled_order_is_booked_done_for_day() -> None:
+    state = _State(broker_status="calculated", broker_qty=0.4)
+    broker = state.broker()
+    broker._fetch_broker_order("intent-1", "broker-1").qty = 1.0
+    ReconciliationService(broker).reconcile()
+    assert (state.local_status, state.local_qty) == ("done_for_day", 0.4)
+
+
+@pytest.mark.parametrize("status", ["held", "stopped", "suspended", "replaced", "pending_review"])
+def test_paused_or_reviewed_broker_order_stays_working(status: str) -> None:
+    """Valid Alpaca states in which the order can still fill are working
+    states, never a fatal 'unrecognized status'."""
+    state = _State(broker_status=status, broker_qty=0.0, filled_qty=0.0)
+    ReconciliationService(state.broker()).reconcile()
+    assert state.local_status == status
+
+
+def test_owned_quantity_provider_failure_propagates_instead_of_inventing_quantities() -> None:
+    state = _State()
+    broker = state.broker()
+    calls = 0
+
+    def failing_provider() -> dict[str, float]:
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("repository unavailable")
+
+    broker.portfolio_owned_quantities = failing_provider
+    with pytest.raises(RuntimeError, match="repository unavailable"):
+        ReconciliationService(broker).reconcile()
+    assert calls == 1
+
+
+def test_a_broker_short_never_matches_a_long_portfolio_quantity() -> None:
+    """Signed quantities: owning 1 share while the broker is short 1 share is
+    drift, not a MATCH on abs(qty)."""
+    state = _State()
+    broker = state.broker()
+    broker.portfolio_owned_quantities = lambda: {"AAPL": 1.0}
+    broker.account = lambda: AccountSnapshot(
+        cash=0,
+        equity=100,
+        peak_equity=100,
+        daily_pnl=0,
+        positions=(PositionSnapshot(symbol="AAPL", qty=-1.0, avg_price=100, current_price=100, market=Market.EQUITY),),
+    )
+    report = ReconciliationService(broker).reconcile()
+    assert report["MATCH"] == []
     assert report["QUANTITY_MISMATCH"] == ["AAPL"]

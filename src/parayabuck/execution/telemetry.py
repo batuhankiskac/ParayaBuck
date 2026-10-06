@@ -4,9 +4,11 @@ Pure, JSON-serializable, read-only queries against the single runtime
 SQLite database (``config.runtime.decision_db_path``). The runtime database
 holds BOTH authoritative record families in one file:
 
-* the execution ledger (``orders``, ``order_events``, ``executions``,
-  ``fee_activities``, ``managed_positions``, ``safety_incidents``,
-  ``runtime_sessions``) written by ``parayabuck.execution.ledger``, and
+* the execution ledger (``safety_incidents``, ``risk_state``,
+  ``runtime_sessions``) written by ``parayabuck.execution.ledger``, plus the
+  historical legacy tables (``orders``, ``order_events``, ``executions``,
+  ``fee_activities``, ``managed_positions``) that nothing writes any more
+  but old databases still carry, and
 * the portfolio repository (``portfolio_decisions``, ``portfolio_orders``,
   ``portfolio_fills``, ``portfolio_runtime_sessions``,
   ``portfolio_rebalance_executions``, ``portfolio_high_water``) written by
@@ -28,8 +30,13 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-from parayabuck.execution.ledger import FILL_ACTIVITY_RECOVERY_PREFIX
 from parayabuck.portfolio.runtime_models import _AMBIGUOUS_ORDER_STATUSES, is_terminal_order_status
+
+# Client-id prefix of the ``orders`` rows the removed FILL-activity backfill
+# wrote for every broker fill (a portfolio SELL included). Nothing writes
+# them any more, but historical databases keep them, so the reports below
+# still de-duplicate them against ``portfolio_orders``/``portfolio_fills``.
+HISTORICAL_FILL_ACTIVITY_PREFIX = "alpaca-fill-activity-"
 
 # Direction of the adverse-slippage sign convention: for a BUY a fill above
 # the reference price is adverse; for a SELL a fill below the reference is
@@ -105,8 +112,8 @@ def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
 def _unduplicated_activity_fees(connection: sqlite3.Connection) -> list[float]:
     """Positive ``fee_activities`` fees not already counted from ``portfolio_fills``.
 
-    The FILL-activity backfill records a portfolio SELL's commission under
-    its ledger recovery row, while the stream records the same fill's fee in
+    The removed FILL-activity backfill recorded a portfolio SELL's commission
+    under its ledger recovery row, while the stream records the same fill's fee in
     ``portfolio_fills``. When the portfolio journal already observed a fee for
     that broker order, the activity copy is the same money and is skipped;
     otherwise it is the only evidence and is kept.
@@ -232,9 +239,10 @@ def execution_metrics(
         by_terminal: dict[str, int] = {}
         total_orders = 0
         open_orders = 0
-        # The FILL-activity backfill mirrors every portfolio SELL into a
-        # ledger recovery row; that row is the same broker order already
-        # counted from portfolio_orders below, so it is not counted twice.
+        # The removed FILL-activity backfill mirrored every portfolio SELL
+        # into a ledger recovery row (historical databases keep them); that
+        # row is the same broker order already counted from portfolio_orders
+        # below, so it is not counted twice.
         # A recovery row with no portfolio order (a manual broker sale) stays.
         portfolio_broker_ids = {
             str(row[0])
@@ -242,7 +250,7 @@ def execution_metrics(
         }
 
         def portfolio_shadow(client_order_id: object, broker_order_id: object) -> bool:
-            return str(client_order_id).startswith(FILL_ACTIVITY_RECOVERY_PREFIX) and (
+            return str(client_order_id).startswith(HISTORICAL_FILL_ACTIVITY_PREFIX) and (
                 str(broker_order_id or "") in portfolio_broker_ids
             )
 

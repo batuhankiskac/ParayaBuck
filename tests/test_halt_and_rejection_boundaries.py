@@ -21,11 +21,9 @@ from requests import Response
 from requests.exceptions import HTTPError
 
 import parayabuck.runtime as runtime_module
-from parayabuck.core.models import AccountSnapshot, Bar, Market, OrderRole, PositionSnapshot
-from parayabuck.execution.alpaca import AlpacaBroker
+from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.execution.alpaca_models import DefiniteOrderRejection
 from parayabuck.execution.alpaca_orders import OrderService
-from parayabuck.execution.alpaca_reconciliation import ReconciliationResultError, ReconciliationService
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide
 from parayabuck.portfolio.runtime_models import REBALANCE_PHASE_BUY_READY
 from parayabuck.portfolio.runtime_service import (
@@ -33,6 +31,7 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioStateRepository,
 )
 from parayabuck.runtime import EngineRuntime
+from tests.helpers import make_broker
 
 SESSION_LABEL = datetime(2026, 9, 29, 13, 30, tzinfo=UTC)
 
@@ -64,11 +63,8 @@ def _trade_update(client_order_id: str = "pbp-buy", symbol: str = "QLD") -> Any:
         event="fill",
         client_order_id=client_order_id,
         broker_order_id="broker-1",
-        parent_order_id=None,
-        role=OrderRole.ENTRY,
         symbol=symbol,
         market=Market.EQUITY,
-        requested_qty=1.0,
         filled_qty=1.0,
         average_fill_price=100.0,
         timestamp=datetime(2026, 9, 29, 13, 31, tzinfo=UTC),
@@ -373,29 +369,6 @@ def test_seed_after_a_decision_does_not_suppress_the_same_session_decision(tmp_p
 
 
 # --------------------------------------------------------------------------- #
-# F14: a network error fetching FILL activities is transient, not permanent
-# --------------------------------------------------------------------------- #
-
-
-def test_fill_activity_network_error_keeps_its_transient_cause() -> None:
-    """F14: the backfill used to swallow the exception and raise a bare
-    error, so a 503 during a restart left the engine permanently down."""
-    error = HTTPError("503 Service Unavailable", response=Response())
-    error.response.status_code = 503
-    broker = SimpleNamespace(
-        _client_adapter=SimpleNamespace(request=lambda *_args, **_kwargs: (_ for _ in ()).throw(error)),
-        _account_id="acct",
-        ledger=SimpleNamespace(get_reconcile_watermark=lambda *_args: None),
-    )
-
-    with pytest.raises(ReconciliationResultError) as excinfo:
-        ReconciliationService(broker)._reconcile_fill_activity_fees()
-
-    assert excinfo.value.__cause__ is error
-    assert runtime_module._is_transient_network_error(excinfo.value)
-
-
-# --------------------------------------------------------------------------- #
 # F15: a definite broker rejection alerts and does not halt
 # --------------------------------------------------------------------------- #
 
@@ -408,19 +381,19 @@ def _http_error(status: int) -> HTTPError:
     return error
 
 
-def _rejected_submit_broker(submit_error: Exception) -> Any:
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client_adapter = SimpleNamespace(_client=None)  # type: ignore[attr-defined]
-    broker._client = SimpleNamespace(  # type: ignore[attr-defined]
-        submit_order=lambda _request: (_ for _ in ()).throw(submit_error),
-        get_order_by_client_id=lambda _cid: (_ for _ in ()).throw(_http_error(404)),
+def _rejected_submit_broker(tmp_path: Path, submit_error: Exception) -> Any:
+    return make_broker(
+        tmp_path,
+        client=SimpleNamespace(
+            submit_order=lambda _request: (_ for _ in ()).throw(submit_error),
+            get_order_by_client_id=lambda _cid: (_ for _ in ()).throw(_http_error(404)),
+        ),
     )
-    return broker
 
 
-def test_definite_broker_rejection_is_typed_not_ambiguous() -> None:
+def test_definite_broker_rejection_is_typed_not_ambiguous(tmp_path: Path) -> None:
     """A 422 plus a 404 lookup proves the order never reached the broker."""
-    service = OrderService(_rejected_submit_broker(_http_error(422)))
+    service = OrderService(_rejected_submit_broker(tmp_path, _http_error(422)))
 
     with pytest.raises(DefiniteOrderRejection) as excinfo:
         service._submit_with_recovery(SimpleNamespace(), "cid-1")
@@ -428,16 +401,11 @@ def test_definite_broker_rejection_is_typed_not_ambiguous() -> None:
     assert isinstance(excinfo.value.__cause__, HTTPError)
 
 
-def test_a_non_http_submit_failure_keeps_its_original_type() -> None:
+def test_a_non_http_submit_failure_keeps_its_original_type(tmp_path: Path) -> None:
     """Without a broker status there is no 4xx to classify, so the caller's
     existing fail-closed handling is unchanged."""
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client_adapter = SimpleNamespace(_client=None)  # type: ignore[attr-defined]
     submit_error = ValueError("insufficient buying power")
-    broker._client = SimpleNamespace(  # type: ignore[attr-defined]
-        submit_order=lambda _request: (_ for _ in ()).throw(submit_error),
-        get_order_by_client_id=lambda _cid: (_ for _ in ()).throw(_http_error(404)),
-    )
+    broker = _rejected_submit_broker(tmp_path, submit_error)
 
     with pytest.raises(ValueError) as excinfo:
         OrderService(broker)._submit_with_recovery(SimpleNamespace(), "cid-1")

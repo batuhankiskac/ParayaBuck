@@ -17,19 +17,12 @@ from fastapi import HTTPException
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
-    Direction,
-    ExecutionEvent,
-    Fill,
     Market,
-    OrderIntent,
-    OrderRole,
-    OrderState,
     PositionSnapshot,
 )
 from parayabuck.data.aggregator import TimeframeAggregator
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
-from parayabuck.execution.alpaca_reconciliation import ReconciliationService
-from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
+from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.markets.symbols import (
     canonical_symbol,
     normalize_symbol,
@@ -38,7 +31,7 @@ from parayabuck.markets.symbols import (
 from parayabuck.runtime import EngineRuntime, WorkerHealth, _Event, _EventQueue, _symbol_batches
 from parayabuck.utils import is_crypto
 from parayabuck.web import server
-from tests.helpers import apply_entry_fill, make_broker
+from tests.helpers import make_broker
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -91,38 +84,6 @@ def test_execution_ledger_preserves_and_moves_legacy_decision_orders(
         """
     ).fetchall()
     assert preserved == [("legacy-order", "submitted", "broker_submit")]
-    ledger.close()
-
-
-def test_ledger_rejects_a_second_active_entry_for_the_same_symbol(tmp_path: Path) -> None:
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    first = OrderIntent(
-        symbol="MSFT",
-        market=Market.EQUITY,
-        direction=Direction.LONG,
-        qty=1,
-        entry_price=100,
-        stop_price=95,
-        target_price=110,
-        strategy="test",
-        signal_id="one",
-    )
-    second = OrderIntent(
-        symbol="MSFT",
-        market=Market.EQUITY,
-        direction=Direction.LONG,
-        qty=1,
-        entry_price=100,
-        stop_price=95,
-        target_price=110,
-        strategy="test",
-        signal_id="two",
-    )
-    ledger.register_entry_order("acct", first)
-
-    with pytest.raises(ValueError, match="Single-managed-entry invariant"):
-        ledger.register_entry_order("acct", second)
-
     ledger.close()
 
 
@@ -429,13 +390,6 @@ def test_external_position_is_not_modified_by_default(tmp_path: Path) -> None:
             get=lambda *_args, **_kwargs: [],
         ),
     )
-    broker.ledger = SimpleNamespace(
-        managed_for_account=lambda _account: {},
-        managed_entries_for_account=lambda _account: (),
-        mark_manual_intervention=lambda *_args: None,
-        set_protection_state=lambda *_args: None,
-        apply_fee_activity=lambda *args: True,
-    )
     broker._account_id = "acct"
     broker.account = lambda: AccountSnapshot(
         1_000,
@@ -444,102 +398,9 @@ def test_external_position_is_not_modified_by_default(tmp_path: Path) -> None:
         0,
         positions=(PositionSnapshot("AAPL", 10, 100, 101, Market.EQUITY),),
     )
-    broker._submit_stop = lambda *_args, **_kwargs: pytest.fail("external position must remain untouched")
-    broker.reconcile()
-
-
-def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot(tmp_path: Path) -> None:
-    owned = ManagedPosition(
-        "XLE",
-        Market.EQUITY,
-        "test",
-        "signal",
-        "parayabuck-entry",
-        "broker-order",
-        170,
-        58.59,
-        56.0,
-        64.0,
-        "open",
-    )
-    closed: list[str] = []
-    broker = make_broker(
-        tmp_path,
-        client=SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: []),
-    )
-    broker._account_id = "acct"
-    broker.ledger = SimpleNamespace(
-        managed_for_account=lambda _account: {"XLE": owned},
-        managed_entries_for_account=lambda _account: [owned],
-        mark_position_closed=lambda _account, entry: closed.append(entry),
-        mark_manual_intervention=lambda *_args: None,
-        set_protection_state=lambda *_args: None,
-        managed_entry_broker_order_ids=lambda _account, _symbol: set(),
-        apply_fee_activity=lambda *args: True,
-    )
-    broker.account = lambda: AccountSnapshot(
-        1_000,
-        10_000,
-        10_000,
-        0,
-        positions=(),
-    )
-
-    broker.reconcile()
-
-    assert closed == ["parayabuck-entry"]
-
-
-def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(tmp_path: Path) -> None:
-    submitted: list[float] = []
-    closed: list[str] = []
-    owned = ManagedPosition(
-        "XLE",
-        Market.EQUITY,
-        "test",
-        "signal",
-        "parayabuck-entry",
-        "broker-order",
-        10,
-        100,
-        95,
-        110,
-        "open",
-    )
-    broker = make_broker(
-        tmp_path,
-        client=SimpleNamespace(_request=lambda *_args, **_kwargs: [], get=lambda *_args, **_kwargs: []),
-    )
-    broker.ledger = SimpleNamespace(
-        managed_for_account=lambda _account: {"XLE": owned},
-        managed_entries_for_account=lambda _account: [owned],
-        mark_position_closed=lambda _account, entry: closed.append(entry),
-        mark_manual_intervention=lambda *_args: None,
-        set_protection_state=lambda *_args: None,
-        managed_entry_broker_order_ids=lambda _account, _symbol: set(),
-        apply_fee_activity=lambda *_args, **_kwargs: True,
-    )
-    broker._account_id = "acct"
-    broker.account = lambda: AccountSnapshot(
-        1_000,
-        10_000,
-        10_000,
-        0,
-        positions=(
-            PositionSnapshot(
-                "XLE",
-                51,
-                100,
-                101,
-                Market.EQUITY,
-                qty_available=51,
-            ),
-        ),
-    )
-    broker._has_protective_order = lambda *_args: False
-    broker._submit_stop = lambda _symbol, _market, qty, *_args, **_kwargs: submitted.append(qty) or True
-    broker.reconcile()
-    assert submitted == [pytest.approx(10)]
+    # The client has no order-submission surface: reconciliation only
+    # reports the unowned position, it never trades or protects it.
+    assert broker.reconcile()["BROKER_STALE"] == ["AAPL"]
 
 
 def test_atomic_credentials_preserve_unmanaged_fields_and_never_touch_example(
@@ -588,178 +449,6 @@ def test_direct_settings_call_cannot_auto_restart_into_live(tmp_path: Path, monk
     with pytest.raises(HTTPException) as error:
         asyncio.run(server.save_settings(server.SettingsPayload(paper_mode=False, restart_engine=True)))
     assert error.value.status_code == 400
-
-
-def test_execution_ledger_applies_cumulative_entry_and_child_exit_deltas(
-    tmp_path: Path,
-) -> None:
-    ledger = ExecutionLedger(str(tmp_path / "execution.sqlite3"))
-    created = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
-    order = OrderIntent(
-        "signal",
-        "AAPL",
-        Market.EQUITY,
-        Direction.LONG,
-        10,
-        100,
-        95,
-        110,
-        "test",
-        created_at=created,
-        client_order_id="parayabuck-entry",
-    )
-    ledger.register_entry_order("acct", order, "broker-entry")
-
-    def event(
-        client_id: str,
-        broker_id: str,
-        role: OrderRole,
-        cumulative: float,
-        state: OrderState,
-        *,
-        parent: str | None = None,
-        price: float = 100,
-    ) -> ExecutionEvent:
-        return ExecutionEvent(
-            "acct",
-            client_id,
-            broker_id,
-            parent,
-            role,
-            "AAPL",
-            Market.EQUITY,
-            state,
-            10,
-            cumulative,
-            price,
-            created + timedelta(minutes=cumulative),
-        )
-
-    deltas = [
-        ledger.apply_execution_event(
-            event(
-                "parayabuck-entry",
-                "broker-entry",
-                OrderRole.ENTRY,
-                cumulative,
-                state,
-            )
-        ).fill_delta
-        for cumulative, state in (
-            (2, OrderState.PARTIALLY_FILLED),
-            (5, OrderState.PARTIALLY_FILLED),
-            (10, OrderState.FILLED),
-        )
-    ]
-    assert deltas == [2, 3, 5]
-    assert ledger.managed_for_account("acct")["AAPL"].owned_qty == 10
-
-    exit_deltas = [
-        ledger.apply_execution_event(
-            event(
-                "target-child",
-                "broker-target",
-                OrderRole.TAKE_PROFIT,
-                cumulative,
-                state,
-                parent="broker-entry",
-                price=110,
-            )
-        ).fill_delta
-        for cumulative, state in (
-            (4, OrderState.PARTIALLY_FILLED),
-            (10, OrderState.FILLED),
-        )
-    ]
-    assert exit_deltas == [4, 6]
-    duplicate = ledger.apply_execution_event(
-        event(
-            "target-child",
-            "broker-target",
-            OrderRole.TAKE_PROFIT,
-            10,
-            OrderState.FILLED,
-            parent="broker-entry",
-            price=110,
-        )
-    )
-    out_of_order = ledger.apply_execution_event(
-        event(
-            "target-child",
-            "broker-target",
-            OrderRole.TAKE_PROFIT,
-            4,
-            OrderState.PARTIALLY_FILLED,
-            parent="broker-entry",
-            price=110,
-        )
-    )
-    assert duplicate.fill_delta == 0
-    assert out_of_order.fill_delta == 0
-    assert ledger.managed_for_account("acct") == {}
-    row = ledger.connection.execute(
-        """
-        SELECT entry_filled_qty, exit_filled_qty, remaining_owned_qty, status
-        FROM managed_positions WHERE entry_client_order_id='parayabuck-entry'
-        """
-    ).fetchone()
-    assert row == (10.0, 10.0, 0.0, "closed")
-    ledger.close()
-
-
-def test_late_entry_fee_restates_realized_pnl(tmp_path: Path) -> None:
-    ledger = ExecutionLedger(str(tmp_path / "fees.sqlite3"))
-    order = OrderIntent(
-        "signal",
-        "AAPL",
-        Market.EQUITY,
-        Direction.LONG,
-        10,
-        100,
-        95,
-        110,
-        "test",
-        client_order_id="parayabuck-fee-entry",
-    )
-    ledger.register_entry_order("acct", order, "broker-entry")
-    apply_entry_fill(
-        ledger,
-        "acct",
-        order,
-        Fill(order.client_order_id, "AAPL", 10, 100, Direction.LONG, datetime.now(UTC)),
-        "broker-entry",
-    )
-    exit_transition = ledger.apply_execution_event(
-        ExecutionEvent(
-            "acct",
-            "target-exit",
-            "broker-target",
-            "broker-entry",
-            OrderRole.TAKE_PROFIT,
-            "AAPL",
-            Market.EQUITY,
-            OrderState.FILLED,
-            10,
-            10,
-            110,
-            datetime.now(UTC),
-        )
-    )
-    assert exit_transition.realized_pnl_delta == 100
-
-    assert ledger.apply_fee_activity(
-        "acct",
-        activity_id="fee-1",
-        broker_order_id="broker-entry",
-        fee=5,
-        occurred_at=datetime.now(UTC),
-    )
-    realized = ledger.connection.execute(
-        "SELECT realized_pnl FROM managed_positions WHERE entry_client_order_id=?",
-        (order.client_order_id,),
-    ).fetchone()[0]
-    assert realized == pytest.approx(95)
-    ledger.close()
 
 
 def test_aggregator_waits_for_finalization_grace() -> None:
@@ -996,58 +685,6 @@ def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(tmp_path: 
     with pytest.raises(ValueError, match="fresh confirmation"):
         manager._require_valid_live_arm(*credentials)
     assert not manager._live_armed
-
-
-def test_fill_activity_recovery_merges_activities_of_one_order(tmp_path: Path) -> None:
-    """A single broker order can produce several FILL activities (partial
-    fills, fee legs). The offline-recovery path must merge them into ONE
-    ledger row instead of colliding on the unique broker_order_id index."""
-    from parayabuck.execution.ledger import ExecutionLedger
-
-    ledger = ExecutionLedger(str(tmp_path / "activities.sqlite3"))
-    activities = [
-        {
-            "id": "act-1",
-            "order_id": "broker-exit",
-            "side": "sell",
-            "symbol": "AAPL",
-            "qty": "5",
-            "price": "101",
-            "commission": "0.5",
-            "transaction_time": "2026-01-02T15:00:00+00:00",
-        },
-        {
-            "id": "act-2",
-            "order_id": "broker-exit",
-            "side": "sell",
-            "symbol": "AAPL",
-            "qty": "5",
-            "price": "102",
-            "commission": "0.5",
-            "transaction_time": "2026-01-02T15:01:00+00:00",
-        },
-    ]
-    broker = make_broker(
-        tmp_path,
-        ledger=ledger,
-        client=SimpleNamespace(
-            _request=lambda *_args, **kwargs: [] if kwargs.get("data", {}).get("page_token") else activities
-        ),
-    )
-    broker._account_id = "acct"
-
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
-
-    rows = ledger.connection.execute(
-        """SELECT client_order_id, broker_order_id, cumulative_filled_qty
-           FROM orders WHERE broker_order_id = 'broker-exit'"""
-    ).fetchall()
-    # One merged row per broker order; the second activity updated it instead
-    # of colliding on the unique index, and its quantity is added (5 + 5).
-    assert rows == [("alpaca-fill-activity-broker-exit", "broker-exit", 10.0)]
-    fee_rows = ledger.connection.execute("SELECT COUNT(*) FROM fee_activities").fetchone()[0]
-    assert fee_rows == 2
-    ledger.close()
 
 
 def test_session_close_flush_waits_for_the_finalization_grace(monkeypatch: pytest.MonkeyPatch) -> None:

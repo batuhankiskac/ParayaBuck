@@ -6,7 +6,6 @@ production paths.
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,7 +16,6 @@ import pytest
 from parayabuck.core.models import Market
 from parayabuck.execution import telemetry
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.alpaca_reconciliation import ReconciliationService
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide, RiskOverlayDecision
 from parayabuck.portfolio.models import TargetPortfolio
@@ -201,77 +199,32 @@ def test_resolved_crashed_submission_keeps_the_broker_order_id(tmp_path: Path) -
     ]
 
 
-# -- FILL-activity backfill rows ---------------------------------------------
+# -- historical FILL-activity mirror rows -------------------------------------
+#
+# The removed FILL-activity backfill mirrored every broker fill into a ledger
+# ``orders`` row plus a ``fee_activities`` row. Old databases keep them, so the
+# telemetry reports must still count such a row once.
 
 
-class _ActivityAdapter:
-    def __init__(self, activities: list[dict[str, str]]) -> None:
-        self._activities = activities
-
-    def request(self, _method: str, _path: str, data: dict[str, object] | None = None) -> list[dict[str, str]]:
-        # One page, then the empty page that ends pagination.
-        return [] if data and "page_token" in data else list(self._activities)
-
-
-def _activity(activity_id: str, qty: str, price: str, at: str, *, commission: str = "0") -> dict[str, str]:
-    return {
-        "id": activity_id,
-        "side": "sell",
-        "qty": qty,
-        "price": price,
-        "transaction_time": at,
-        "order_id": "b-sell",
-        "symbol": "QLD",
-        "commission": commission,
-    }
-
-
-def _backfill(tmp_path: Path, ledger: ExecutionLedger, activities: list[dict[str, str]]) -> None:
-    broker = make_broker(tmp_path, ledger=ledger, client_adapter=_ActivityAdapter(activities))
-    assert ReconciliationService(broker)._reconcile_fill_activity_fees() is True
-
-
-def test_backfilled_portfolio_sell_row_is_terminal_quiet_and_not_open(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+def _historical_mirror_row(
+    ledger: ExecutionLedger, broker_order_id: str, activity_id: str, qty: float, price: float, fee: float
 ) -> None:
-    db = tmp_path / "runtime.sqlite3"
-    ledger = ExecutionLedger(str(db))
-    try:
-        with caplog.at_level(logging.WARNING, logger="parayabuck.execution.ledger"):
-            _backfill(tmp_path, ledger, [_activity("a1", "5", "100", "2026-09-01T15:00:00+00:00")])
-        row = ledger.connection.execute(
-            "SELECT terminal_state, cumulative_filled_qty FROM orders WHERE client_order_id=?",
-            ("alpaca-fill-activity-b-sell",),
-        ).fetchone()
-    finally:
-        ledger.close()
-
-    assert row == ("filled", 5.0)
-    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
-    assert telemetry.execution_metrics(db)["orders"]["open"] == 0
-
-
-def test_backfill_sums_every_partial_sell_fill_and_replays_idempotently(tmp_path: Path) -> None:
-    ledger = ExecutionLedger(str(tmp_path / "runtime.sqlite3"))
-    activities = [
-        _activity("a1", "3", "100", "2026-09-01T15:00:00+00:00", commission="0.3"),
-        _activity("a2", "2", "105", "2026-09-01T15:00:01+00:00", commission="0.2"),
-    ]
-    try:
-        _backfill(tmp_path, ledger, activities)
-        _backfill(tmp_path, ledger, activities)
-        row = ledger.connection.execute(
-            "SELECT cumulative_filled_qty, average_fill_price, actual_fee FROM orders WHERE client_order_id=?",
-            ("alpaca-fill-activity-b-sell",),
-        ).fetchone()
-        fees = ledger.connection.execute("SELECT activity_id, fee FROM fee_activities ORDER BY activity_id").fetchall()
-    finally:
-        ledger.close()
-
-    assert row[0] == 5.0
-    assert row[1] == pytest.approx(102.0)  # (3 * 100 + 2 * 105) / 5
-    assert row[2] == pytest.approx(0.5)
-    assert fees == [("a1", 0.3), ("a2", 0.2)]
+    client_order_id = f"{telemetry.HISTORICAL_FILL_ACTIVITY_PREFIX}{broker_order_id}"
+    at = "2026-09-01T15:00:00+00:00"
+    with ledger.connection:
+        ledger.connection.execute(
+            """INSERT INTO orders(
+                client_order_id, account_id, broker_order_id, order_role, canonical_symbol, market,
+                side, requested_qty, cumulative_filled_qty, average_fill_price, terminal_state,
+                updated_at, filled_at, actual_fee
+            ) VALUES (?, 'acct', ?, 'manual_exit', 'QLD', 'equity', '', ?, ?, ?, 'filled', ?, ?, ?)""",
+            (client_order_id, broker_order_id, qty, qty, price, at, at, fee),
+        )
+        if fee > 0:
+            ledger.connection.execute(
+                "INSERT INTO fee_activities(activity_id, client_order_id, fee, occurred_at) VALUES (?, ?, ?, ?)",
+                (activity_id, client_order_id, fee, at),
+            )
 
 
 def test_activity_fee_already_observed_by_the_portfolio_journal_counts_once(tmp_path: Path) -> None:
@@ -292,7 +245,7 @@ def test_activity_fee_already_observed_by_the_portfolio_journal_counts_once(tmp_
     )
     ledger = ExecutionLedger(str(db))
     try:
-        _backfill(tmp_path, ledger, [_activity("a1", "5", "100", "2026-09-01T15:00:00+00:00", commission="0.5")])
+        _historical_mirror_row(ledger, "b-sell", "a1", 5.0, 100.0, 0.5)
     finally:
         ledger.close()
 
@@ -319,14 +272,14 @@ def test_activity_fee_is_kept_when_the_portfolio_journal_saw_no_fee(tmp_path: Pa
     )
     ledger = ExecutionLedger(str(db))
     try:
-        _backfill(tmp_path, ledger, [_activity("a1", "5", "100", "2026-09-01T15:00:00+00:00", commission="0.5")])
+        _historical_mirror_row(ledger, "b-sell", "a1", 5.0, 100.0, 0.5)
     finally:
         ledger.close()
 
     assert telemetry.execution_metrics(db)["fees"]["total"] == pytest.approx(0.5)
 
 
-def test_backfilled_portfolio_sell_counts_as_one_order(tmp_path: Path) -> None:
+def test_historical_mirrored_portfolio_sell_counts_as_one_order(tmp_path: Path) -> None:
     db = tmp_path / "runtime.sqlite3"
     repo, decision_id = _repository(tmp_path)
     _record(repo, decision_id, "pb-sell", PortfolioOrderSide.SELL)
@@ -344,15 +297,9 @@ def test_backfilled_portfolio_sell_counts_as_one_order(tmp_path: Path) -> None:
     )
     ledger = ExecutionLedger(str(db))
     try:
-        _backfill(
-            tmp_path,
-            ledger,
-            [
-                _activity("a1", "5", "100", "2026-09-01T15:00:00+00:00"),
-                # A manual broker sale has no portfolio order: its row counts.
-                {**_activity("a2", "1", "100", "2026-09-01T16:00:00+00:00"), "order_id": "b-manual"},
-            ],
-        )
+        _historical_mirror_row(ledger, "b-sell", "a1", 5.0, 100.0, 0.0)
+        # A manual broker sale has no portfolio order: its row counts.
+        _historical_mirror_row(ledger, "b-manual", "a2", 1.0, 100.0, 0.0)
     finally:
         ledger.close()
 

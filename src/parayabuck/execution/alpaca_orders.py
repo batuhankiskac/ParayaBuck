@@ -5,12 +5,14 @@ Extracted from :mod:`parayabuck.execution.alpaca` (Mission 8).
 Responsibility:
 - ``PortfolioOrderRequest`` → validated broker request → ``submit`` →
   ``broker_order_id`` or :class:`AmbiguousOrderState`.
-- Equity-only guard, quantity flooring to ``quantity_increment``, notional
-  guard, open-order guard (``_has_open_order``), ``DAY``
+- Equity-only guard, quantity flooring to ``quantity_increment``; the local
+  tradable / minimum-size / minimum-notional / open-order guards raise
+  :class:`DefiniteOrderRejection` (nothing reached the broker); ``DAY``
   ``MarketOrderRequest``, ``client_order_id`` as recovery key.
 - ``_submit_with_recovery`` delegates to the broker facade, which owns the
   single recovery decision: on submit raise, try ``get_order_by_client_id``
-  → terminal re-raise, working recover, 404 re-raise, lookup fail →
+  → terminal with a fill recovered, terminal/404 definite rejection or
+  re-raise, working recover, lookup fail →
   :class:`AmbiguousOrderState` (no blind resubmit).
 """
 
@@ -23,7 +25,7 @@ from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.trading.requests import MarketOrderRequest
 
 from parayabuck.core.models import Market
-from parayabuck.execution.alpaca_models import AmbiguousOrderState
+from parayabuck.execution.alpaca_models import AmbiguousOrderState, DefiniteOrderRejection
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderRequest,
@@ -79,45 +81,29 @@ class OrderService:
     def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str:
         if order.market != Market.EQUITY:
             raise ValueError(f"Portfolio orders are equity-only; refusing {order.market.value} order {order.symbol}")
-        rules = self.asset_trading_rules(order.symbol, order.market)
+        # Local pre-submit guards: nothing reaches the broker, so a refusal is
+        # a KNOWN outcome. The runtime books the row ``rejected``, emits
+        # ``order_rejected`` and re-plans instead of halting.
+        try:
+            rules = self.asset_trading_rules(order.symbol, order.market)
+        except ValueError as exc:
+            raise DefiniteOrderRejection(f"Portfolio order {order.client_order_id} not submitted: {exc}") from exc
         quantity = Decimal(str(order.quantity))
         increment = Decimal(str(rules.quantity_increment))
         quantity = floor_increment_decimal(quantity, increment)
         if quantity < Decimal(str(rules.minimum_order_size)):
-            _emit_alert(
-                "order_rejected",
-                message=(f"Portfolio order below minimum size: {order.symbol} client_order_id={order.client_order_id}"),
-                symbol=order.symbol,
-                market=order.market.value,
-                client_order_id=order.client_order_id,
-                reason="below_minimum_size",
+            raise DefiniteOrderRejection(
+                f"Portfolio order {order.client_order_id} not submitted: below minimum size for {order.symbol}"
             )
-            raise ValueError(f"Portfolio order is below minimum size: {order.symbol}")
         if float(quantity) * order.reference_price < rules.minimum_order_notional:
-            _emit_alert(
-                "order_rejected",
-                message=(
-                    f"Portfolio order below minimum notional: {order.symbol} client_order_id={order.client_order_id}"
-                ),
-                symbol=order.symbol,
-                market=order.market.value,
-                client_order_id=order.client_order_id,
-                reason="below_minimum_notional",
+            raise DefiniteOrderRejection(
+                f"Portfolio order {order.client_order_id} not submitted: below minimum notional for {order.symbol}"
             )
-            raise ValueError(f"Portfolio order is below minimum notional: {order.symbol}")
         if self._has_open_order(order.symbol):
-            _emit_alert(
-                "order_rejected",
-                message=(
-                    f"Portfolio order rejected: open order already exists for "
-                    f"{order.symbol} client_order_id={order.client_order_id}"
-                ),
-                symbol=order.symbol,
-                market=order.market.value,
-                client_order_id=order.client_order_id,
-                reason="open_order_exists",
+            raise DefiniteOrderRejection(
+                f"Portfolio order {order.client_order_id} not submitted: an open order already exists for "
+                f"{order.symbol}"
             )
-            raise ValueError(f"Open order already exists for {order.symbol}")
         request = MarketOrderRequest(
             symbol=order.symbol,
             qty=float(quantity),

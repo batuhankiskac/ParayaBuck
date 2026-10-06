@@ -13,8 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from parayabuck.core.models import AccountSnapshot, Bar, Fill, Market, OrderIntent, PositionSnapshot
-from parayabuck.execution.ledger import ExecutionLedger
+from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.monitoring import alerts, metrics
 from parayabuck.monitoring.incident import IncidentCategory
 from parayabuck.monitoring.paper_incident import (
@@ -27,9 +26,7 @@ from parayabuck.monitoring.receipt import build_receipt
 from parayabuck.portfolio.runtime_service import (
     PortfolioRuntime,
     PortfolioStateRepository,
-    is_terminal_order_status,
 )
-from tests.helpers import apply_entry_fill
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -224,58 +221,6 @@ def test_accepted_but_timeout_ambiguous_reconciles_without_duplicate(tmp_path: P
     assert retry_calls["n"] == 1  # exactly one post-reconcile attempt
     assert rec2.recovery_result == "reconciled_then_action_succeeded"
     alerts.reset_for_tests()
-
-
-# ---------------------------------------------------------------------------
-# 4. Partial fill — no duplicate economic action after restart, stays non-terminal
-# ---------------------------------------------------------------------------
-def test_partial_fill_no_duplicate_restart(tmp_path: Path) -> None:
-    """A partial fill before restart must not be double-counted after restart."""
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    account_id = "acct"
-    # Simulate an entry order with partial fill
-    from parayabuck.core.models import Direction
-
-    intent = OrderIntent(
-        signal_id="sig-partial",
-        symbol="AAPL",
-        market=Market.EQUITY,
-        direction=Direction.LONG,
-        qty=10.0,
-        entry_price=100.0,
-        stop_price=95.0,
-        target_price=110.0,
-        strategy="test",
-        client_order_id="partial-1",
-    )
-    # Register entry
-    ledger.register_entry_order(account_id, intent, "broker-1")
-    from parayabuck.core.models import Direction as _Dir2
-
-    fill = Fill(
-        client_order_id=intent.client_order_id,
-        symbol="AAPL",
-        qty=4.0,
-        price=100.0,
-        direction=_Dir2.LONG,
-        timestamp=datetime.now(UTC),
-        commission=1.0,
-    )
-    apply_entry_fill(ledger, account_id, intent, fill, "broker-1")
-    # Re-apply same fill (replay after restart) must be idempotent
-    apply_entry_fill(ledger, account_id, intent, fill, "broker-1")
-    # Verify quantity not double-counted
-    owned = ledger.managed_entries_for_account(account_id)
-    # Should have single entry with qty 4, not 8
-    assert len(owned) == 1
-    # Position still non-terminal; is_terminal should be false for partial
-    assert not is_terminal_order_status("partially_filled")  # sanity
-    # Stored order should be non-terminal (partial fill)
-    # The execution ledger keeps cumulative_filled; second apply should not double
-    # Verify no double count via managed entries (idempotent replay)
-    owned2 = ledger.managed_entries_for_account(account_id)
-    assert owned2[0].owned_qty == 4.0
-    ledger.close()
 
 
 # ---------------------------------------------------------------------------

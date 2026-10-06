@@ -5,7 +5,6 @@ import math
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +28,6 @@ log = get_logger("parayabuck.execution.alpaca")
 
 from parayabuck.execution.alpaca_account import AccountService  # noqa: E402
 from parayabuck.execution.alpaca_orders import OrderService  # noqa: E402
-from parayabuck.execution.alpaca_protection import ProtectionService  # noqa: E402
 from parayabuck.execution.alpaca_reconciliation import ReconciliationService  # noqa: E402
 
 from .alpaca_models import (  # noqa: E402
@@ -82,14 +80,8 @@ class AlpacaBroker:
         runtime_state_dir: str | Path | None = None,
         peak_state_path: str | Path | None = None,
         client: Any | None = None,
-        client_adapter: Any | None = None,
     ) -> None:
-        if client_adapter is not None:
-            self._client_adapter = client_adapter
-        elif client is not None:
-            self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper, client=client)
-        else:
-            self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper)
+        self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper, client=client)
         self._paper = paper
         self._risk_peak = RiskPeakService(
             paper=paper, ledger=ledger, peak_state_path=peak_state_path, runtime_state_dir=runtime_state_dir
@@ -107,12 +99,10 @@ class AlpacaBroker:
         # that tolerate bounded staleness (config-sanctioned entry-gate
         # freshness) may reuse it via snapshot_if_fresh() instead of issuing
         # another get_account + get_all_positions round-trip.
-        self._snapshot_cache: AccountSnapshot | None = None
-        self._snapshot_cached_at: float | None = None
+        self._snapshot_cache: tuple[AccountSnapshot, float] | None = None
         # Composition: services own the heavy lifting; facade delegates.
         self._account_service = AccountService(self)
         self._order_service = OrderService(self)
-        self._protection_service = ProtectionService(self)
         self._reconciliation_service = ReconciliationService(self)
 
     @property
@@ -133,138 +123,51 @@ class AlpacaBroker:
 
     # -- Peak sidecar delegation (risk_peak service, facade API unchanged) --
     def _get_peak_service(self) -> RiskPeakService:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            try:
-                rp.ledger = self.__dict__.get("ledger", self.__dict__.get("_ledger"))
-            except Exception:
-                pass
-            try:
-                rp._paper = bool(self.__dict__.get("_paper", True))
-            except Exception:
-                pass
-            try:
-                acct = self.__dict__.get("_account_id", "")
-                rp._broker_account_id = acct if acct else None
-            except Exception:
-                pass
-            return rp  # type: ignore[no-any-return]
-        paper = bool(self.__dict__.get("_paper", True))
-        ledger = self.__dict__.get("ledger", self.__dict__.get("_ledger"))
-        peak_path = self.__dict__.get("_peak_state_path")
-        if peak_path is None and "_peak_state_path" in self.__dict__:
-            peak_path = self.__dict__["_peak_state_path"]
-        rp = RiskPeakService(paper=paper, ledger=ledger, peak_state_path=peak_path)
-        # Override eager-loaded state with broker's own attributes (for __new__ test isolation).
-        # Base __new__ brokers start with no peak binding; service eager load would otherwise
-        # retain stale file account_id (e.g. 4edcc...) and cause false fail-closed.
-        for attr, svc_attr in [
-            ("_peak_equity", "_peak_equity"),
-            ("_peak_epoch", "_peak_epoch"),
-            ("_peak_account_id", "_peak_account_id"),
-            ("_peak_reconciled", "_peak_reconciled"),
-        ]:
-            if attr in self.__dict__:
-                try:
-                    setattr(rp, svc_attr, self.__dict__[attr])
-                except Exception:
-                    pass
-            else:
-                # No broker attribute -> reset to clean defaults, discarding eager file load
-                # (matches base __new__ semantics where _peak_account_id is None)
-                try:
-                    if svc_attr == "_peak_equity":
-                        rp._peak_equity = 0.0
-                    elif svc_attr == "_peak_epoch":
-                        rp._peak_epoch = 0
-                    elif svc_attr == "_peak_account_id":
-                        rp._peak_account_id = None
-                    elif svc_attr == "_peak_reconciled":
-                        rp._peak_reconciled = False
-                except Exception:
-                    pass
-        try:
-            acct = self.__dict__.get("_account_id", "")
-            rp._broker_account_id = acct if acct else None
-        except Exception:
-            pass
-        self.__dict__["_risk_peak"] = rp
+        """The peak service, bound to the broker's current ledger and account."""
+        rp = self._risk_peak
+        rp.ledger = self.ledger
+        rp._broker_account_id = self._account_id or None
         return rp
 
     @property
     def _peak_state_path(self) -> Path:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            return rp.peak_state_path  # type: ignore[no-any-return]
-        return self.__dict__.get("_peak_state_path", Path("data/runtime/paper_equity_peak.json"))  # type: ignore[no-any-return]
+        return self._risk_peak.peak_state_path
 
     @_peak_state_path.setter
     def _peak_state_path(self, value: Path) -> None:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            rp.peak_state_path = Path(value)
-        else:
-            self.__dict__["_peak_state_path"] = Path(value)
+        self._risk_peak.peak_state_path = Path(value)
 
     @property
     def _peak_equity(self) -> float:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            return float(rp.peak_equity)
-        return float(self.__dict__.get("_peak_equity", 0.0))
+        return float(self._risk_peak.peak_equity)
 
     @_peak_equity.setter
     def _peak_equity(self, value: float) -> None:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            rp.peak_equity = float(value)
-        else:
-            self.__dict__["_peak_equity"] = float(value)
+        self._risk_peak.peak_equity = float(value)
 
     @property
     def _peak_epoch(self) -> int:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            return int(rp.peak_epoch)
-        return int(self.__dict__.get("_peak_epoch", 0))
+        return int(self._risk_peak.peak_epoch)
 
     @_peak_epoch.setter
     def _peak_epoch(self, value: int) -> None:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            rp.peak_epoch = int(value)
-        else:
-            self.__dict__["_peak_epoch"] = int(value)
+        self._risk_peak.peak_epoch = int(value)
 
     @property
     def _peak_account_id(self) -> str | None:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            return rp.peak_account_id  # type: ignore[no-any-return]
-        return self.__dict__.get("_peak_account_id")
+        return self._risk_peak.peak_account_id
 
     @_peak_account_id.setter
     def _peak_account_id(self, value: str | None) -> None:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            rp.peak_account_id = value
-        else:
-            self.__dict__["_peak_account_id"] = value
+        self._risk_peak.peak_account_id = value
 
     @property
     def _peak_reconciled(self) -> bool:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            return bool(rp.peak_reconciled)
-        return bool(self.__dict__.get("_peak_reconciled", False))
+        return bool(self._risk_peak.peak_reconciled)
 
     @_peak_reconciled.setter
     def _peak_reconciled(self, value: bool) -> None:
-        rp = self.__dict__.get("_risk_peak")
-        if rp is not None:
-            rp.peak_reconciled = bool(value)
-        else:
-            self.__dict__["_peak_reconciled"] = bool(value)
+        self._risk_peak.peak_reconciled = bool(value)
 
     @property
     def account_suffix(self) -> str:
@@ -272,18 +175,8 @@ class AlpacaBroker:
 
     def close(self) -> None:
         """Close the Alpaca REST session pool (no-op for fake clients)."""
-        adapter = self.__dict__.get("_client_adapter")
-        if adapter is not None:
-            try:
-                adapter.close()
-            except Exception as exc:
-                log.warning("Alpaca session close warning: %s", exc)
-            return
-        session = getattr(self._client, "_session", None)
-        if session is None:
-            return
         try:
-            session.close()
+            self._client_adapter.close()
         except Exception as exc:
             log.warning("Alpaca session close warning: %s", exc)
 
@@ -327,6 +220,11 @@ class AlpacaBroker:
             raise ValueError(f"Asset is not tradable: {symbol}")
         minimum = float(getattr(asset, "min_order_size", None) or 0.000000001)
         quantity_increment = float(getattr(asset, "min_trade_increment", None) or 0.000000001)
+        if getattr(asset, "fractionable", None) is False:
+            # A non-fractionable asset only trades whole shares: a fractional
+            # order would be refused by the broker after planning.
+            minimum = max(minimum, 1.0)
+            quantity_increment = max(quantity_increment, 1.0)
         price_increment = float(getattr(asset, "price_increment", None) or 0.01)
         minimum_notional = float(getattr(asset, "min_order_notional", None) or 1.0)
         return AssetTradingRules(
@@ -354,11 +252,7 @@ class AlpacaBroker:
 
     def _get_open_orders(self, request: Any) -> Any:
         """Use the adapter's exhaustive OPEN-order query for every broker path."""
-        adapter = self.__dict__.get("_client_adapter")
-        getter = getattr(adapter, "get_open_orders", None) if adapter is not None else None
-        if getter is None:
-            raise RuntimeError("Alpaca adapter does not support exhaustive open-order retrieval")
-        return getter(request)
+        return self._client_adapter.get_open_orders(request)
 
     def working_buy_orders(self) -> tuple[BrokerWorkingBuyOrder, ...]:
         """Exhaustive broker BUY commitments; an unpriced order stays unknown."""
@@ -602,52 +496,14 @@ class AlpacaBroker:
 
     def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str:
         """Submit one simple long/cash rebalance leg with ambiguity recovery."""
-        svc = self.__dict__.get("_order_service")
-        if svc is None:
-            svc = OrderService(self)
-            self.__dict__["_order_service"] = svc
-        return svc.submit_portfolio_order(order)
+        return self._order_service.submit_portfolio_order(order)
 
     def reconcile(self) -> dict[str, list[str]]:
-        """Synchronize broker, stream and ledger state after any drift."""
-        svc = self.__dict__.get("_reconciliation_service")
-        if svc is None:
-            svc = ReconciliationService(self)
-            self.__dict__["_reconciliation_service"] = svc
-        return svc.reconcile()
-
-    def _has_nested_bracket_protection(
-        self,
-        parent_order_ids: str | set[str],
-        symbol: str,
-        position_is_long: bool,
-        required_qty: float,
-    ) -> bool:
-        svc = self.__dict__.get("_protection_service") or ProtectionService(self)
-        return svc._has_nested_bracket_protection(parent_order_ids, symbol, position_is_long, required_qty)
+        """Synchronize broker and portfolio state after any drift."""
+        return self._reconciliation_service.reconcile()
 
     def _asset(self, symbol: str) -> Any:
         return self._client_adapter._asset(symbol)
-
-    def _price_step(self, symbol: str, market: Market, reference_price: float) -> Decimal:
-        return self._client_adapter._price_step(symbol, market, reference_price)  # type: ignore[no-any-return]
-
-    @staticmethod
-    def _round_to_step(value: float, step: Decimal) -> float:
-        return AlpacaClient._round_to_step(value, step)
-
-    def _submit_stop(
-        self,
-        symbol: str,
-        market: Market,
-        qty: float,
-        stop_price: float,
-        position_is_long: bool,
-        client_order_id: str | None = None,
-    ) -> str | None:
-        """Submit an equity protective stop; return its client order id or ``None``."""
-        svc = self.__dict__.get("_protection_service") or ProtectionService(self)
-        return svc.submit_stop(symbol, market, qty, stop_price, position_is_long, client_order_id=client_order_id)
 
     @staticmethod
     def _available_qty_from_error(exc: Exception) -> float:
@@ -698,15 +554,19 @@ class AlpacaBroker:
             current = current.__cause__ or current.__context__
         return False
 
+    def _is_definite_refusal(self, exc: Exception) -> bool:
+        """A submit failure that proves the broker refused this request: an
+        HTTP 4xx, or Alpaca's insufficient-quantity validation body."""
+        return self._is_definite_client_rejection(exc) or self._available_qty_from_error(exc) > 0
+
     def _submit_with_recovery(self, request: Any, client_order_id: str) -> Any:
         try:
             return self._client.submit_order(request)
         except Exception as submit_exc:
-            # Structured broker validation failures are definite rejections:
-            # Alpaca did not accept the requested quantity, so recovery may
-            # safely size down without risking a duplicate order.
-            if self._available_qty_from_error(submit_exc) > 0:
-                raise
+            # Every failure — a validation refusal included — is resolved by
+            # the deterministic client id first: a timed-out earlier submit
+            # may have been accepted, and its working order is what holds the
+            # shares an "insufficient qty available" refusal complains about.
             get_by_client_id = getattr(self._client, "get_order_by_client_id", None)
             if get_by_client_id is not None:
                 lookup_error: Exception | None = None
@@ -717,12 +577,27 @@ class AlpacaBroker:
                     lookup_error = lookup_exc
                 if recovered is not None:
                     status = self._normalized_field(recovered, "status")
-                    if status in {"rejected", "canceled", "cancelled", "expired", "done_for_day"}:
+                    if status in _DEAD_ORDER_STATUSES:
+                        filled = float(self._field(recovered, "filled_qty", 0) or 0)
+                        if filled > 0:
+                            # The order died after a partial fill: the fill is
+                            # real and must be booked, and the real terminal
+                            # order is the outcome (not a rejection).
+                            broker_id = str(self._field(recovered, "id", "") or "")
+                            self._recover_terminal_partial_fill(recovered, client_order_id, broker_id, status)
+                            log.warning(
+                                "Recovered terminal Alpaca order %s (%s, filled_qty=%s) after submit error: %s",
+                                client_order_id,
+                                status,
+                                filled,
+                                submit_exc,
+                            )
+                            return recovered
                         # A broker-confirmed terminal response is known, not
-                        # ambiguous. A 4xx refusal is a DEFINITE rejection:
-                        # the runtime books it rejected and keeps running
-                        # instead of halting on portfolio_runtime_failure.
-                        if self._is_definite_client_rejection(submit_exc):
+                        # ambiguous. A definite refusal is a rejection: the
+                        # runtime books it rejected and keeps running instead
+                        # of halting on portfolio_runtime_failure.
+                        if self._is_definite_refusal(submit_exc):
                             raise DefiniteOrderRejection(
                                 f"Broker rejected order {client_order_id} ({status}): {submit_exc}"
                             ) from submit_exc
@@ -738,7 +613,7 @@ class AlpacaBroker:
                     # The deterministic client id was never accepted: the
                     # original submit failure is the definite outcome, not an
                     # ambiguity (mirrors resolve_portfolio_submission).
-                    if self._is_definite_client_rejection(submit_exc):
+                    if self._is_definite_refusal(submit_exc):
                         raise DefiniteOrderRejection(
                             f"Broker rejected order {client_order_id}: {submit_exc}"
                         ) from submit_exc
@@ -765,31 +640,12 @@ class AlpacaBroker:
             return False
         return any(same_symbol(str(self._field(order, "symbol", symbol)), symbol) for order in orders)
 
-    def _has_protective_order(
-        self,
-        symbol: str,
-        position_is_long: bool,
-        required_qty: float,
-        open_orders: Any = None,
-    ) -> bool:
-        svc = self.__dict__.get("_protection_service") or ProtectionService(self)
-        return svc._has_protective_order(symbol, position_is_long, required_qty, open_orders)
-
-    def _cancel_protective_orders(self, symbol: str, position_is_long: bool) -> None:
-        svc = self.__dict__.get("_protection_service") or ProtectionService(self)
-        svc._cancel_protective_orders(symbol, position_is_long)
-
     def _normalized_field(self, value: Any, name: str) -> str:
-        return self._client_adapter._normalized_field(value, name)  # type: ignore[no-any-return]
+        return self._client_adapter._normalized_field(value, name)
 
     @staticmethod
     def _field(value: Any, name: str, default: Any = None) -> Any:
-        try:
-            return AlpacaClient._field(value, name, default)
-        except Exception:
-            from parayabuck.utils.objects import field_value as _fv
-
-            return _fv(value, name, default)
+        return AlpacaClient._field(value, name, default)
 
     def _ensure_peak_reconciled(self, account_id: str, current_equity: float) -> None:
         svc = self._get_peak_service()
@@ -797,37 +653,13 @@ class AlpacaBroker:
 
     def _save_peak_equity(self) -> None:
         svc = self._get_peak_service()
-        try:
-            svc._broker_account_id = self.__dict__.get("_account_id") or None
-        except Exception:
-            pass
-        acct = getattr(svc, "_peak_account_id", None) or self.__dict__.get("_account_id")
+        acct = svc.peak_account_id or self._account_id
         svc.save_peak_equity(str(acct) if acct else None)
-        try:
-            self.__dict__["_peak_equity"] = float(svc.peak_equity)
-            self.__dict__["_peak_epoch"] = int(svc.peak_epoch)
-            if svc.peak_account_id is not None:
-                self.__dict__["_peak_account_id"] = svc.peak_account_id
-            self.__dict__["_peak_reconciled"] = bool(svc.peak_reconciled)
-        except Exception:
-            pass
 
     def reset_peak_equity(self, equity: float) -> None:
         svc = self._get_peak_service()
-        try:
-            svc._broker_account_id = self.__dict__.get("_account_id") or None
-        except Exception:
-            pass
-        acct = getattr(svc, "_peak_account_id", None) or self.__dict__.get("_account_id")
+        acct = svc.peak_account_id or self._account_id
         svc.reset_peak_equity(equity, str(acct) if acct else None)
-        try:
-            self.__dict__["_peak_equity"] = float(svc.peak_equity)
-            self.__dict__["_peak_epoch"] = int(svc.peak_epoch)
-            if svc.peak_account_id is not None:
-                self.__dict__["_peak_account_id"] = svc.peak_account_id
-            self.__dict__["_peak_reconciled"] = bool(svc.peak_reconciled)
-        except Exception:
-            pass
 
 
 __all__ = [

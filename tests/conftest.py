@@ -51,8 +51,9 @@ _STATE_MARKERS = ("data/", "logs/")
 # trades, and load_dotenv() is called from load_config(), the CLI and the web
 # engine manager. A test that loaded it could therefore authenticate against
 # that account, so: credentials are stripped from the environment, no dotenv
-# file inside the repository is ever loaded, and every non-loopback socket
-# connection raises.
+# file is loaded unless a test created it explicitly under the temp dir (never
+# by upward search, never inside or above the checkout), and every
+# non-loopback socket connection raises.
 
 _CREDENTIAL_ENV_PREFIXES = ("ALPACA_", "PARAYABUCK_")
 _LOOPBACK_HOSTS = frozenset({"", "localhost", "::1", "0:0:0:0:0:0:0:1"})
@@ -118,8 +119,32 @@ def _inside_repo(path: Path) -> bool:
     return resolved == _REPO_ROOT or _REPO_ROOT in resolved.parents
 
 
+def _dotenv_allowed(path: Path) -> bool:
+    """True only for a dotenv file a test created under the OS temp dir.
+
+    Anything inside the checkout, in a directory that contains the checkout
+    (a parent ``.env``, e.g. the main checkout above a ``.claude/worktrees``
+    worktree), or outside the temp dir is refused.
+    """
+    try:
+        resolved = path.resolve()
+        temp_root = Path(tempfile.gettempdir()).resolve()
+    except OSError:
+        return False
+    if _inside_repo(resolved):
+        return False
+    if resolved.parent == _REPO_ROOT or resolved.parent in _REPO_ROOT.parents:
+        return False
+    return resolved != temp_root and temp_root in resolved.parents
+
+
 def _install_dotenv_guard() -> None:
-    """Refuse to load any dotenv file inside the repository."""
+    """Refuse every dotenv load except explicit files under the temp dir.
+
+    A bare ``load_dotenv()`` searches upward from the caller's file, which
+    from a worktree checkout reaches the main checkout's real ``.env``, so
+    an implicit search never loads anything during tests.
+    """
     global _real_load_dotenv
     import dotenv
     import dotenv.main
@@ -130,15 +155,12 @@ def _install_dotenv_guard() -> None:
         if stream is not None:
             return _real_load_dotenv(dotenv_path, stream, **kwargs)
         if dotenv_path is None:
-            found = dotenv.main.find_dotenv()
-            if not found:
-                return False
-            dotenv_path = found
+            return False
         try:
             candidate = Path(dotenv_path)
         except TypeError:
             return False
-        if _inside_repo(candidate):
+        if not _dotenv_allowed(candidate):
             return False
         return _real_load_dotenv(str(candidate), stream, **kwargs)
 
@@ -148,7 +170,7 @@ def _install_dotenv_guard() -> None:
     real_dotenv_values = dotenv.main.dotenv_values
 
     def _guarded_dotenv_values(dotenv_path=None, stream=None, **kwargs):  # type: ignore[no-untyped-def]
-        if stream is None and (dotenv_path is None or _inside_repo(Path(dotenv_path))):
+        if stream is None and (dotenv_path is None or not _dotenv_allowed(Path(dotenv_path))):
             return {}
         return real_dotenv_values(dotenv_path, stream, **kwargs)
 

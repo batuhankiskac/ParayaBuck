@@ -271,6 +271,47 @@ def test_reconcile_honours_explicit_fixture_path(
     assert not (tmp_path / "reports/paper_incident/replay.json").exists()
 
 
+def test_reconcile_loads_only_the_configured_env_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The script must name its dotenv explicitly: a bare upward search from a
+    worktree checkout reached the main checkout's real ``.env``."""
+    module = _load_reconcile()
+    calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(module, "load_dotenv", lambda *args, **kwargs: calls.append(args) or False)
+    monkeypatch.setenv("ENV_PATH", str(tmp_path / "configured.env"))
+    monkeypatch.delenv("ALPACA_API_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_SECRET_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit):
+        module.main(["--database", str(_empty_database(tmp_path / "parayabuck.sqlite3")), "--quiet"])
+
+    assert calls == [(tmp_path / "configured.env",)]
+
+
+def test_dotenv_guard_never_loads_a_parent_directory_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``.env`` above the working directory or above the checkout is never
+    loaded during tests, whether by bare upward search or by explicit path."""
+    import os
+
+    import dotenv
+
+    from tests.conftest import _REPO_ROOT, _dotenv_allowed
+
+    outer = tmp_path / "outer"
+    nested = outer / "checkout" / "tests"
+    nested.mkdir(parents=True)
+    (outer / ".env").write_text("PARAYABUCK_DOTENV_LEAK=1\n", encoding="utf-8")
+    monkeypatch.delenv("PARAYABUCK_DOTENV_LEAK", raising=False)
+    monkeypatch.chdir(nested)
+
+    assert dotenv.load_dotenv() is False
+    assert dotenv.dotenv_values() == {}
+    assert "PARAYABUCK_DOTENV_LEAK" not in os.environ
+    for refused in (_REPO_ROOT / ".env", *(parent / ".env" for parent in _REPO_ROOT.parents), Path.home() / ".env"):
+        assert not _dotenv_allowed(refused), refused
+    assert _dotenv_allowed(tmp_path / "explicit.env")
+
+
 def test_reconcile_requires_credentials(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Without credentials the script exits before writing anything."""
     module = _load_reconcile()

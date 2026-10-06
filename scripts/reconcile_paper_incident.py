@@ -240,8 +240,21 @@ def _snapshot(
     )
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _env_path() -> Path:
+    """The dotenv the engine uses: ``ENV_PATH`` or the checkout's ``.env``.
+
+    Explicit on purpose: a bare upward search could load a ``.env`` from an
+    unrelated parent directory (e.g. the main checkout above a worktree).
+    """
+    configured = os.getenv("ENV_PATH")
+    return Path(configured) if configured else _REPO_ROOT / ".env"
+
+
 def main(argv: list[str] | None = None) -> int:
-    load_dotenv()
+    load_dotenv(_env_path(), override=False)
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", required=True)
     parser.add_argument("--after", help="ISO-8601 start time for order history")

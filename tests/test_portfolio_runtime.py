@@ -891,7 +891,6 @@ def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None
     would trip the fail-closed drift check and lose the fill forever."""
     import asyncio
 
-    from parayabuck.core.models import OrderRole
     from parayabuck.execution.alpaca_updates import TradeUpdate
     from parayabuck.runtime import EngineRuntime
 
@@ -943,11 +942,8 @@ def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None
         event="fill",
         client_order_id="pbp-sell",
         broker_order_id="broker-sell",
-        parent_order_id=None,
-        role=OrderRole.MANUAL_EXIT,
         symbol="QLD",
         market=Market.EQUITY,
-        requested_qty=0.5,
         filled_qty=0.3,
         average_fill_price=99.0,
         timestamp=datetime(2025, 1, 1, tzinfo=UTC),
@@ -963,7 +959,6 @@ def test_terminal_fill_invalidates_cached_account_snapshot(tmp_path) -> None:
     """A fill cannot leave the next decision trusting a pre-fill snapshot."""
     import asyncio
 
-    from parayabuck.core.models import OrderRole
     from parayabuck.execution.alpaca_updates import TradeUpdate
     from parayabuck.runtime import EngineRuntime
 
@@ -1018,11 +1013,8 @@ def test_terminal_fill_invalidates_cached_account_snapshot(tmp_path) -> None:
         event="fill",
         client_order_id="buy-1",
         broker_order_id="broker-buy-1",
-        parent_order_id=None,
-        role=OrderRole.ENTRY,
         symbol="AAPL",
         market=Market.EQUITY,
-        requested_qty=1.0,
         filled_qty=1.0,
         average_fill_price=100.0,
         timestamp=now,
@@ -1638,70 +1630,6 @@ def _owned_equity_entry(repo: PortfolioStateRepository, *, quantity: float, symb
     )
 
 
-def _ledger_entry(ledger: ExecutionLedger, *, quantity: float, symbol: str) -> None:
-    from parayabuck.core.models import Direction, ExecutionEvent, OrderIntent, OrderRole, OrderState
-
-    intent = OrderIntent(
-        "signal",
-        symbol,
-        Market.EQUITY,
-        Direction.LONG,
-        quantity,
-        100,
-        95,
-        110,
-        "test",
-        client_order_id=f"pbp-legacy-{symbol}",
-    )
-    ledger.register_entry_order("acct", intent, f"broker-legacy-{symbol}")
-    ledger.apply_execution_event(
-        ExecutionEvent(
-            "acct",
-            f"pbp-legacy-{symbol}",
-            f"broker-legacy-{symbol}",
-            None,
-            OrderRole.ENTRY,
-            symbol,
-            Market.EQUITY,
-            OrderState.FILLED,
-            quantity,
-            quantity,
-            100.0,
-            datetime(2025, 1, 1, tzinfo=UTC),
-        )
-    )
-
-
-def test_legacy_ledger_ownership_splits_mixed_position(tmp_path) -> None:
-    """2 legacy-managed + 10 manual on one symbol: managed 2, external 10."""
-    from parayabuck.execution.ledger import ExecutionLedger
-
-    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    ledger = ExecutionLedger(str(tmp_path / "legacy.sqlite3"))
-    _ledger_entry(ledger, quantity=2, symbol="GE")
-    client = _FakeAlpacaClient()
-    client.positions = [
-        SimpleNamespace(
-            symbol="GE",
-            qty="12",
-            avg_entry_price="100",
-            current_price="100",
-            qty_available="12",
-            unrealized_pl="0",
-            unrealized_intraday_pl="0",
-            asset_class="us_equity",
-        )
-    ]
-    broker = _portfolio_broker(client, repo, tmp_path, with_ledger=False)
-    broker.ledger = ledger
-    snapshot = broker.account()
-    position = snapshot.positions[0]
-    assert position.managed_qty == pytest.approx(2.0)
-    assert position.external_qty == pytest.approx(10.0)
-    assert position.ownership == "mixed"
-    ledger.close()
-
-
 def test_portfolio_ownership_splits_mixed_position(tmp_path) -> None:
     """2 portfolio-managed + 10 manual on one symbol: managed 2, external 10."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
@@ -1725,36 +1653,6 @@ def test_portfolio_ownership_splits_mixed_position(tmp_path) -> None:
     assert position.managed_qty == pytest.approx(2.0)
     assert position.external_qty == pytest.approx(10.0)
     assert position.ownership == "mixed"
-
-
-def test_dual_positive_ownership_is_fail_closed(tmp_path) -> None:
-    """Positive ownership in both ledger and portfolio systems is an
-    explicit reconciliation invariant: fail closed instead of guessing."""
-    from parayabuck.execution.alpaca import OwnershipDriftError
-    from parayabuck.execution.ledger import ExecutionLedger
-
-    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    _owned_equity_entry(repo, quantity=2, symbol="GE")
-    ledger = ExecutionLedger(str(tmp_path / "legacy.sqlite3"))
-    _ledger_entry(ledger, quantity=2, symbol="GE")
-    client = _FakeAlpacaClient()
-    client.positions = [
-        SimpleNamespace(
-            symbol="GE",
-            qty="4",
-            avg_entry_price="100",
-            current_price="100",
-            qty_available="4",
-            unrealized_pl="0",
-            unrealized_intraday_pl="0",
-            asset_class="us_equity",
-        )
-    ]
-    broker = _portfolio_broker(client, repo, tmp_path, with_ledger=False)
-    broker.ledger = ledger
-    with pytest.raises(OwnershipDriftError, match="Dual ownership lineage"):
-        broker.account()
-    ledger.close()
 
 
 def test_operations_snapshot_is_isolated_between_two_accounts(tmp_path) -> None:
@@ -1985,7 +1883,6 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
 def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> None:
     """A stop fill arriving after reconcile wrote an adjustment cancels the
     adjustment instead of booking a second SELL on top of it."""
-    from parayabuck.core.models import OrderRole
     from parayabuck.execution.alpaca_updates import TradeUpdate
     from parayabuck.runtime import EngineRuntime
 
@@ -2027,11 +1924,8 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
         event="fill",
         client_order_id="pbp-exit-sell",
         broker_order_id="broker-exit",
-        parent_order_id=None,
-        role=OrderRole.MANUAL_EXIT,
         symbol="QLD",
         market=Market.EQUITY,
-        requested_qty=0.5,
         filled_qty=0.5,
         average_fill_price=97.5,
         timestamp=datetime(2025, 1, 1, 15, 0, tzinfo=UTC),

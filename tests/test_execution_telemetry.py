@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,14 +20,10 @@ import pytest
 from parayabuck.config import BacktestConfig
 from parayabuck.core.models import (
     Direction,
-    ExecutionEvent,
     Market,
     OrderIntent,
-    OrderRole,
-    OrderState,
 )
 from parayabuck.execution import telemetry
-from parayabuck.execution.ledger import ExecutionLedger
 
 
 def _percentiles(values: list[float]) -> tuple[float, float, float]:
@@ -565,101 +561,6 @@ def _intent(symbol: str, *, direction: Direction = Direction.LONG) -> OrderInten
         strategy="equity_leveraged_trend_v1",
         client_order_id="pb-" + symbol,
     )
-
-
-def test_ledger_capture_columns_populated_on_fill(tmp_path: Path) -> None:
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    try:
-        decision_at = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
-        intent = _intent("AAPL")
-        ledger.register_entry_order(
-            "acct",
-            intent,
-            decision_timestamp=decision_at,
-            target_weight=0.10,
-            reference_price=100.0,
-            spread_estimate_bps=1.5,
-        )
-        row = ledger.connection.execute(
-            "SELECT decision_timestamp, target_weight, reference_price, "
-            "spread_estimate_bps, submitted_at FROM orders WHERE client_order_id=?",
-            ("pb-AAPL",),
-        ).fetchone()
-        assert row[0] == decision_at.isoformat()
-        assert row[1] == 0.10
-        assert row[2] == 100.0
-        assert row[3] == 1.5
-        assert row[4] is not None  # submitted_at
-
-        # The fill lands 30s after the (real-time) submission stamp.
-        submitted_at = datetime.fromisoformat(str(row[4]))
-        filled_at = submitted_at + timedelta(seconds=30)
-        ledger.apply_execution_event(
-            ExecutionEvent(
-                account_id="acct",
-                client_order_id=intent.client_order_id,
-                broker_order_id="broker-1",
-                parent_order_id=None,
-                role=OrderRole.ENTRY,
-                symbol=intent.symbol,
-                market=intent.market,
-                state=OrderState.FILLED,
-                requested_qty=intent.qty,
-                cumulative_filled_qty=10.0,
-                average_fill_price=100.5,
-                occurred_at=filled_at,
-                fee=0.25,
-            )
-        )
-        row = ledger.connection.execute(
-            "SELECT filled_at, fill_delay_seconds, slippage_bps, actual_fee, terminal_state "
-            "FROM orders WHERE client_order_id=?",
-            ("pb-AAPL",),
-        ).fetchone()
-        assert row[0] == filled_at.isoformat()
-        assert row[1] == 30.0  # fill delay vs submitted_at (registered ~now)
-        assert row[2] == 50.0  # (100.5 - 100) / 100 * 1e4, long = buy
-        assert row[3] == 0.25
-        assert row[4] == "filled"
-
-        metrics = telemetry.execution_metrics(tmp_path / "ledger.sqlite3")
-        assert metrics["fills"]["count"] == 0  # legacy rows count under orders_with_fills
-        assert metrics["orders_with_fills"]["count"] == 1
-        assert metrics["slippage"]["median"] == 50.0
-        assert metrics["fees"]["total"] == 0.25
-        assert metrics["fill_latency"]["mean"] == 30.0
-    finally:
-        ledger.close()
-
-
-def test_ledger_capture_short_sell_slippage_is_adverse_positive(tmp_path: Path) -> None:
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    try:
-        intent = _intent("MSFT", direction=Direction.SHORT)
-        ledger.register_entry_order("acct", intent, reference_price=200.0)
-        filled_at = datetime.now(UTC) + timedelta(seconds=5)
-        ledger.apply_execution_event(
-            ExecutionEvent(
-                account_id="acct",
-                client_order_id=intent.client_order_id,
-                broker_order_id="broker-2",
-                parent_order_id=None,
-                role=OrderRole.ENTRY,
-                symbol=intent.symbol,
-                market=intent.market,
-                state=OrderState.FILLED,
-                requested_qty=intent.qty,
-                cumulative_filled_qty=10.0,
-                average_fill_price=199.0,
-                occurred_at=filled_at,
-            )
-        )
-        row = ledger.connection.execute(
-            "SELECT slippage_bps FROM orders WHERE client_order_id=?", ("pb-MSFT",)
-        ).fetchone()
-        assert row[0] == 50.0  # short filled below reference = adverse
-    finally:
-        ledger.close()
 
 
 def test_open_order_counts_follow_the_repository_terminal_vocabulary(tmp_path: Path) -> None:

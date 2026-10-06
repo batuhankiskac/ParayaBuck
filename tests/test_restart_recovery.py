@@ -20,16 +20,10 @@ import pytest
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
-    Direction,
-    ExecutionEvent,
     Market,
-    OrderIntent,
-    OrderRole,
-    OrderState,
     PositionSnapshot,
 )
 from parayabuck.execution import telemetry
-from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderRequest,
@@ -202,81 +196,6 @@ def test_restart_preserves_fill_quality_telemetry(tmp_path: Path) -> None:
     assert replay.status in {"duplicate_decision", "not_scheduled"}
     assert broker2.submitted == []
     runtime2.close()
-
-
-def test_restart_preserves_legacy_ledger_capture(tmp_path: Path) -> None:
-    """The legacy ledger capture columns (decision timestamp, reference
-    price, submitted/filled stamps, fill delay, slippage, actual fee) are
-    persisted and survive an ExecutionLedger reopen."""
-    db = tmp_path / "ledger.sqlite3"
-    decision_at = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
-    ledger = ExecutionLedger(str(db))
-    intent = OrderIntent(
-        signal_id="sig-1",
-        symbol="AAPL",
-        market=Market.EQUITY,
-        direction=Direction.LONG,
-        qty=10.0,
-        entry_price=100.0,
-        stop_price=95.0,
-        target_price=115.0,
-        strategy="equity_leveraged_trend_v1",
-        client_order_id="pb-restart-1",
-    )
-    ledger.register_entry_order(
-        "acct",
-        intent,
-        decision_timestamp=decision_at,
-        target_weight=0.10,
-        reference_price=100.0,
-    )
-    submitted_at = ledger.connection.execute(
-        "SELECT submitted_at FROM orders WHERE client_order_id=?", ("pb-restart-1",)
-    ).fetchone()[0]
-    filled_at = datetime.fromisoformat(str(submitted_at)) + timedelta(seconds=20)
-    ledger.apply_execution_event(
-        ExecutionEvent(
-            account_id="acct",
-            client_order_id=intent.client_order_id,
-            broker_order_id="broker-1",
-            parent_order_id=None,
-            role=OrderRole.ENTRY,
-            symbol=intent.symbol,
-            market=intent.market,
-            state=OrderState.FILLED,
-            requested_qty=intent.qty,
-            cumulative_filled_qty=10.0,
-            average_fill_price=100.2,
-            occurred_at=filled_at,
-            fee=0.4,
-        )
-    )
-    ledger.close()
-
-    # ---- restart: fresh ledger on the same database ----
-    ledger2 = ExecutionLedger(str(db))
-    try:
-        row = ledger2.connection.execute(
-            "SELECT decision_timestamp, target_weight, reference_price, "
-            "submitted_at, filled_at, fill_delay_seconds, slippage_bps, actual_fee "
-            "FROM orders WHERE client_order_id=?",
-            ("pb-restart-1",),
-        ).fetchone()
-        assert row[0] == decision_at.isoformat()
-        assert row[1] == 0.10
-        assert row[2] == 100.0
-        assert row[3] is not None
-        assert row[4] == filled_at.isoformat()
-        assert row[5] == pytest.approx(20.0)
-        assert row[6] == pytest.approx(20.0)  # (100.2 - 100) / 100 * 1e4
-        assert row[7] == 0.4
-        metrics = telemetry.execution_metrics(db)
-        assert metrics["fills"]["count"] == 0  # legacy rows count under orders_with_fills
-        assert metrics["orders_with_fills"]["count"] == 1
-        assert metrics["slippage"]["median"] == pytest.approx(20.0)
-        assert metrics["fees"]["total"] == pytest.approx(0.4)
-    finally:
-        ledger2.close()
 
 
 def test_fill_delay_migration_backfills_legacy_fills(tmp_path: Path) -> None:

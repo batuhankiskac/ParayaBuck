@@ -907,9 +907,12 @@ class PortfolioStateRepository:
                     raise RuntimeError(f"Cannot adopt quantity for unknown portfolio order: {client_order_id}")
 
     def update_order(self, client_order_id: str, status: str, broker_order_id: str = "") -> None:
+        """Advance an order's status; an empty ``broker_order_id`` keeps the
+        recorded broker id instead of erasing it."""
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
-                f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL}, broker_order_id = ?
+                f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL},
+                       broker_order_id = COALESCE(NULLIF(?, ''), broker_order_id)
                    WHERE client_order_id = ?""",
                 (status, status, broker_order_id, client_order_id),
             )

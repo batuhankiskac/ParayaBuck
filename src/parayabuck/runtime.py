@@ -178,10 +178,10 @@ def _is_database_error(exc: BaseException) -> bool:
 
 _WARMUP_SYMBOL_BATCH_SIZE = 8
 _WARMUP_RETRY_SECONDS = 600.0
-# Consecutive warmup retries before the delay reaches its ceiling
-# (600s * 2**6 ~= 10.7h: roughly a daily cadence for a symbol whose last bar
-# permanently lags its benchmark's).
-_WARMUP_RETRY_MAX_EXPONENT = 6
+# Ceiling of the doubling warmup-retry backoff: a symbol whose last bar lags
+# its benchmark's is retried at most every 30 minutes, so a recovered provider
+# makes the engine ready again within the same session.
+_WARMUP_RETRY_MAX_SECONDS = 1800.0
 # How often the split-adjustment reconciler compares raw vs split-adjusted
 # daily tails (hourly; a split is applied at most one check after it trades).
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
@@ -2051,6 +2051,21 @@ class EngineRuntime:
             if current is None or current in _RECONCILIATION_INCIDENT_REASONS:
                 self._circuit_breaker_reason = reason
 
+    def _raise_halt(self, reason: str) -> None:
+        """Halt the runtime for ``reason`` without masking a stronger halt.
+
+        The state always becomes ``halted``. The breaker reason is replaced
+        only when none is set or the current one is reconciliation-owned —
+        the same rule as ``_raise_reconciliation_breaker``: overwriting
+        ownership_drift or protection_failure would hand the operator a reset
+        for the wrong incident while the stronger one's row stays persisted.
+        """
+        with getattr(self, "_state_lock", threading.RLock()):
+            current = getattr(self, "_circuit_breaker_reason", None)
+            if current is None or current in _RECONCILIATION_INCIDENT_REASONS:
+                self._circuit_breaker_reason = reason
+            self._state = "halted"
+
     def _clear_reconciliation_incidents(self) -> None:
         """Clear only incidents whose documented recovery is clean reconcile."""
         account_id = getattr(self.broker, "account_id", None) or "unknown"
@@ -2186,9 +2201,7 @@ class EngineRuntime:
             # the ledger. An unhandled exception here can kill the stream
             # worker (or run unobserved inside the SDK loop), degrading the
             # whole runtime. Escalate to a halt instead of failing silently.
-            with getattr(self, "_state_lock", threading.RLock()):
-                self._circuit_breaker_reason = "trade_update_callback_failure"
-                self._state = "halted"
+            self._raise_halt("trade_update_callback_failure")
             log.exception(
                 "Trade update handling failed for order %s: %s",
                 update.client_order_id,
@@ -2445,15 +2458,13 @@ class EngineRuntime:
                         )
                     if worker.restart_count > 5:
                         if market is None:
-                            with getattr(self, "_state_lock", threading.RLock()):
-                                self._circuit_breaker_reason = f"{name}_restart_limit"
-                                self._state = "halted"
+                            self._raise_halt(f"{name}_restart_limit")
                             log.exception("%s shared worker restart limit reached", name)
                             runtime_metrics_store.record_event("circuit_breaker")
                             alerts.emit(
                                 "circuit_breaker",
                                 message=(f"{name} shared worker restart limit reached; runtime halted"),
-                                reason=self._circuit_breaker_reason,
+                                reason=f"{name}_restart_limit",
                             )
                             return
                         with getattr(self, "_state_lock", threading.RLock()):
@@ -2585,9 +2596,7 @@ class EngineRuntime:
         if overflowed:
             # The halt takes the state lock only after the stats lock is
             # released: no stats -> state nesting from the stream threads.
-            with getattr(self, "_state_lock", threading.RLock()):
-                self._circuit_breaker_reason = "final_market_event_queue_overflow"
-                self._state = "halted"
+            self._raise_halt("final_market_event_queue_overflow")
             runtime_metrics_store.record_event("circuit_breaker")
             alerts.emit(
                 "circuit_breaker",
@@ -2674,17 +2683,21 @@ class EngineRuntime:
         except Exception as exc:
             worker.last_error = str(exc)
             # Every with-block of the loop body has exited here: no lock held.
-            with getattr(self, "_state_lock", threading.RLock()):
-                self._circuit_breaker_reason = (
-                    "ownership_drift" if isinstance(exc, OwnershipDriftError) else "decision_worker_crashed"
-                )
-                self._state = "halted"
+            if isinstance(exc, OwnershipDriftError):
+                # Ownership drift is the strongest halt: it always wins.
+                reason = "ownership_drift"
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._circuit_breaker_reason = reason
+                    self._state = "halted"
+            else:
+                reason = "decision_worker_crashed"
+                self._raise_halt(reason)
             log.exception("Decision worker failed")
             runtime_metrics_store.record_event("circuit_breaker")
             alerts.emit(
                 "circuit_breaker",
                 message="Decision worker failed; runtime halted",
-                reason=self._circuit_breaker_reason,
+                reason=reason,
                 error=str(exc),
             )
         finally:
@@ -2983,8 +2996,21 @@ class EngineRuntime:
             # Warmup owns the bars it seeds; no session is due from them.
             log.debug("Portfolio batch ignored while warming up: bars=%d", len(bars))
             return True
-        if self._circuit_breaker_reason is not None or getattr(self, "_reconcile_failed", False):
-            reason = getattr(self, "_circuit_breaker_reason", None) or "reconciliation_failed"
+        breaker = getattr(self, "_circuit_breaker_reason", None)
+        if breaker is not None and breaker not in _RECONCILIATION_INCIDENT_REASONS:
+            # A hard halt (ownership drift, portfolio runtime failure, a
+            # crashed worker, ...) needs an operator-verified reset; no
+            # 40-minute retry can clear it, so the batch is not re-queued.
+            log.warning(
+                "Portfolio batch not decided: runtime halted (%s); bars=%d",
+                breaker,
+                len(bars),
+            )
+            return True
+        if breaker is not None or getattr(self, "_reconcile_failed", False):
+            # A reconciliation-owned gate clears on the next clean reconcile:
+            # re-queue the session for the bounded retry.
+            reason = breaker or "reconciliation_failed"
             deferred_any = False
             for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
                 relevant = [
@@ -3215,9 +3241,21 @@ class EngineRuntime:
                 # the operator owns recovery, so no retry is queued.
                 return True
             except Exception as exc:
-                with getattr(self, "_state_lock", threading.RLock()):
-                    self._circuit_breaker_reason = "portfolio_runtime_failure"
-                    self._state = "halted"
+                if self._is_deferrable_decision_failure(portfolio_runtime, relevant, exc):
+                    # A network-class failure in a pre-submission broker read
+                    # (open orders, asset rules, account, working buys) with
+                    # NO decision persisted for this session is provider
+                    # noise, not a portfolio failure: PortfolioRuntime
+                    # restored its watermark, so the re-queued batch is
+                    # decided afresh (F10).
+                    log.warning(
+                        "Portfolio decision deferred after a broker network error before any order was persisted: %s",
+                        exc,
+                    )
+                    if self._defer_portfolio_batch(relevant, portfolio_runtime.market, f"broker_read:{exc}"):
+                        deferred_any = True
+                    continue
+                self._raise_halt("portfolio_runtime_failure")
                 # DB integrity: fail closed immediately, never retry
                 err_lower = str(exc).lower()
                 if _is_database_error(exc):
@@ -3310,6 +3348,30 @@ class EngineRuntime:
             self._emit_equity_daily_summary(portfolio_runtime, portfolio_result, account)
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
         return not deferred_any
+
+    def _is_deferrable_decision_failure(self, portfolio_runtime: Any, bars: list[Bar], exc: BaseException) -> bool:
+        """True when a decision failure may be retried instead of halting.
+
+        Only a network-class failure qualifies, and only while no decision
+        row exists for the batch's session: the decision row and its order
+        rows are persisted in one transaction, so no decision row means no
+        order was persisted (nor submitted) for it. Anything else — a domain
+        or database failure, or a failure after the decision was written —
+        fails closed. A repository that cannot answer fails closed too.
+        """
+        if isinstance(exc, OwnershipDriftError) or not _is_transient_network_error(exc):
+            return False
+        try:
+            timestamp = max(bar.timestamp for bar in bars)
+            return not portfolio_runtime.repository.has_decision(
+                portfolio_runtime.account_id,
+                portfolio_runtime.configuration_digest,
+                timestamp,
+                portfolio_runtime.market,
+            )
+        except Exception:
+            log.warning("Decision persistence check failed; failing closed", exc_info=True)
+            return False
 
     def _record_paper_decision_receipt(
         self, portfolio_runtime: Any, result: Any, account: AccountSnapshot | None
@@ -4011,13 +4073,19 @@ class EngineRuntime:
         """
         if not getattr(self, "_symbols_by_market", {}).get(Market.EQUITY):
             return None
-        if self._equity_signal_basis_verified(decision_timestamp):
-            return None
-        if not self.verify_equity_signal_basis(required_through=decision_timestamp):
-            return "signal_adjustment_unverified"
-        if not self._equity_signal_basis_verified(decision_timestamp):
-            # Verification succeeded for history but the provider has not
-            # published the decision-day bar yet: still fail closed.
+        try:
+            if self._equity_signal_basis_verified(decision_timestamp):
+                return None
+            if not self.verify_equity_signal_basis(required_through=decision_timestamp):
+                return "signal_adjustment_unverified"
+            if not self._equity_signal_basis_verified(decision_timestamp):
+                # Verification succeeded for history but the provider has not
+                # published the decision-day bar yet: still fail closed.
+                return "signal_adjustment_unverified"
+        except Exception as exc:
+            # An unexpected verifier failure must not crash the decision
+            # thread: entries fail closed, risk-reducing exits keep flowing.
+            log.warning("Equity signal-basis verification raised; entries fail closed: %s", exc, exc_info=True)
             return "signal_adjustment_unverified"
         return None
 
@@ -4106,7 +4174,7 @@ class EngineRuntime:
         if not pending or pending != getattr(self, "_warmup_retry_symbols", frozenset()):
             attempt = 0
             self._warmup_retry_attempt = 0
-        retry_delay = _WARMUP_RETRY_SECONDS * 2 ** min(attempt, _WARMUP_RETRY_MAX_EXPONENT)
+        retry_delay = min(_WARMUP_RETRY_MAX_SECONDS, _WARMUP_RETRY_SECONDS * 2 ** min(attempt, 8))
         if (
             self._running
             and pending
@@ -4295,8 +4363,22 @@ class EngineRuntime:
                     # F14: a network failure inside the FILL-activity backfill
                     # surfaces here as a chained ReconciliationResultError, so
                     # it must not be treated as a permanent invalid result.
+                    # Escalate exactly like the RequestException branch below
+                    # once the consecutive-failure threshold is reached: a
+                    # persistent outage must raise the breaker and alert.
                     self._reconcile_failed = True
-                    self._note_transient_reconcile_failure(exc, "Reconciliation deferred after a broker network error")
+                    if self._note_transient_reconcile_failure(
+                        exc, "Reconciliation deferred after a broker network error"
+                    ):
+                        return
+                    self._raise_reconciliation_breaker("reconciliation_failed")
+                    self._persist_reconciliation_incident("reconciliation_failed")
+                    alerts.emit(
+                        "reconciliation_failure",
+                        message="Reconciliation deferred after a broker network error",
+                        reason="reconciliation_failed",
+                        error=str(exc),
+                    )
                     return
                 self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
@@ -4807,6 +4889,12 @@ class EngineRuntime:
                                 requested_bars,
                             )
                 except Exception as exc:
+                    if not retry and _is_transient_network_error(exc):
+                        # The first warmup runs inside start(): a provider
+                        # outage must reach its TransientStartupError path
+                        # (discard + retry startup) instead of starting an
+                        # engine with no history.
+                        raise
                     log.warning(
                         "Warmup%s batch skipped %s symbols=%d: %s",
                         " retry" if retry else "",

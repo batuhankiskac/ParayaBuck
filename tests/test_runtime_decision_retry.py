@@ -219,7 +219,7 @@ def test_retry_stops_at_the_bounded_deadline_and_alerts_once(
     """The bound sits inside the intent watchdog grace, so an unrecoverable
     gate yields a decision_deferred expiry, not a silent loss."""
     engine = _engine((_portfolio_runtime(),))
-    engine._circuit_breaker_reason = "ownership_drift"
+    engine._circuit_breaker_reason = "reconciliation_failed"
     clock = _Clock(SESSION_CLOSE + timedelta(minutes=41))
     clock.install(monkeypatch)
 
@@ -232,6 +232,23 @@ def test_retry_stops_at_the_bounded_deadline_and_alerts_once(
     # The NYSE calendar hands back the close in UTC; the deadline is the
     # close + the retry window, compared as instants.
     assert _capture_alerts[0][1]["retry_window_ended"] == (SESSION_CLOSE + timedelta(minutes=40)).isoformat()
+
+
+@pytest.mark.parametrize("reason", ["ownership_drift", "portfolio_runtime_failure", "decision_worker_crashed"])
+def test_hard_halt_is_not_requeued_as_a_recoverable_gate(
+    monkeypatch: pytest.MonkeyPatch, _capture_alerts: list[tuple[str, dict[str, object]]], reason: str
+) -> None:
+    """A halt only an operator reset can clear gets no 40-minute retry and no
+    misleading "deferred by a recoverable gate" alert."""
+    engine = _engine((_portfolio_runtime(),))
+    engine._circuit_breaker_reason = reason
+    clock = _Clock(SESSION_CLOSE + timedelta(seconds=2))
+    clock.install(monkeypatch)
+
+    assert engine._process_portfolio_timestamp(_bars()) is True
+
+    assert engine._deferred_portfolio_batches == {}
+    assert _capture_alerts == []
 
 
 def test_warmup_batches_are_not_decisions_and_are_not_requeued(
@@ -262,7 +279,7 @@ def test_early_close_retry_deadline_is_the_actual_close_not_16_et(
     assert early_close.astimezone(NEW_YORK).hour == 13
 
     engine = _engine((_portfolio_runtime(),))
-    engine._circuit_breaker_reason = "ownership_drift"
+    engine._circuit_breaker_reason = "reconciliation_failed"
     # The daily decision bar is labelled 09:30 ET of the session date.
     bars = [
         Bar(
@@ -402,3 +419,80 @@ def test_the_nth_consecutive_reconcile_timeout_raises_the_breaker(tmp_path: Any)
     assert engine._circuit_breaker_reason == "reconciliation_failed"
     assert [i.reason for i in engine.ledger.load_safety_incidents("acct")] == ["reconciliation_failed"]
     engine.ledger.close()
+
+
+def _runtime_with_repository(process: Any, *, decided: bool) -> SimpleNamespace:
+    runtime = _portfolio_runtime(process)
+    runtime.account_id = "acct"
+    runtime.configuration_digest = "digest"
+    runtime.repository = SimpleNamespace(has_decision=lambda *_args: decided)
+    return runtime
+
+
+def _broker_read_timeout(bars: list[Bar], **_kwargs: Any) -> Any:
+    raise ConnectionError("asset trading rules read timed out")
+
+
+def test_network_error_before_any_order_is_persisted_defers_instead_of_halting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F10/E8: a pre-submission broker read failing on the network, with no
+    decision (hence no order) persisted for the session, re-queues the batch."""
+    monkeypatch.setattr(runtime_module, "automate_incident_recovery", lambda *_a, **_k: None)
+    engine = _engine((_runtime_with_repository(_broker_read_timeout, decided=False),))
+    clock = _Clock(SESSION_CLOSE + timedelta(seconds=2))
+    clock.install(monkeypatch)
+
+    assert engine._process_portfolio_timestamp(_bars()) is False
+
+    assert engine._circuit_breaker_reason is None
+    assert engine._state == "running"
+    assert (Market.EQUITY, SESSION_LABEL) in engine._deferred_portfolio_batches
+
+
+def test_network_error_after_the_decision_was_persisted_still_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(runtime_module, "automate_incident_recovery", lambda *_a, **_k: None)
+    engine = _engine((_runtime_with_repository(_broker_read_timeout, decided=True),))
+    clock = _Clock(SESSION_CLOSE + timedelta(seconds=2))
+    clock.install(monkeypatch)
+
+    assert engine._process_portfolio_timestamp(_bars()) is True
+
+    assert engine._circuit_breaker_reason == "portfolio_runtime_failure"
+    assert engine._state == "halted"
+    assert engine._deferred_portfolio_batches == {}
+
+
+def test_domain_error_before_any_order_is_persisted_still_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(runtime_module, "automate_incident_recovery", lambda *_a, **_k: None)
+
+    def _invalid(bars: list[Bar], **_kwargs: Any) -> Any:
+        raise ValueError("Strategy emitted a symbol outside the active universe")
+
+    engine = _engine((_runtime_with_repository(_invalid, decided=False),))
+    clock = _Clock(SESSION_CLOSE + timedelta(seconds=2))
+    clock.install(monkeypatch)
+
+    assert engine._process_portfolio_timestamp(_bars()) is True
+
+    assert engine._circuit_breaker_reason == "portfolio_runtime_failure"
+    assert engine._deferred_portfolio_batches == {}
+
+
+def test_portfolio_failure_never_masks_a_stronger_halt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """E16: a later halt writer keeps an existing protection_failure reason."""
+    monkeypatch.setattr(runtime_module, "automate_incident_recovery", lambda *_a, **_k: None)
+    engine = _engine(())
+
+    engine._circuit_breaker_reason = "protection_failure"
+    engine._raise_halt("portfolio_runtime_failure")
+    assert engine._circuit_breaker_reason == "protection_failure"
+    assert engine._state == "halted"
+
+    engine._circuit_breaker_reason = "reconciliation_failed"
+    engine._raise_halt("decision_worker_crashed")
+    assert engine._circuit_breaker_reason == "decision_worker_crashed"

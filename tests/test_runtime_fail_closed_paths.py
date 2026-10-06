@@ -428,7 +428,8 @@ def _elapse(runtime: EngineRuntime, seconds: float) -> None:
 def test_warmup_retry_delay_doubles_per_consecutive_attempt() -> None:
     """A symbol whose last bar permanently lags its benchmark's must not
     drive a provider round-trip every 10 minutes for the life of the
-    process: each consecutive attempt doubles the floor."""
+    process: each consecutive attempt doubles the floor, up to a 30-minute
+    ceiling so a recovered provider makes the engine ready the same session."""
     runtime = _readiness_runtime(ready=False)
 
     _elapse(runtime, 600)
@@ -440,10 +441,12 @@ def test_warmup_retry_delay_doubles_per_consecutive_attempt() -> None:
     _elapse(runtime, 1200)
     assert runtime._warmup_retry_attempt == 2
 
-    _elapse(runtime, 2399)
+    _elapse(runtime, 1799)  # 2400s would be next, but the ceiling is 1800s
     assert runtime._warmup_retry_attempt == 2
-    _elapse(runtime, 2400)
+    _elapse(runtime, 1800)
     assert runtime._warmup_retry_attempt == 3
+    _elapse(runtime, 1800)
+    assert runtime._warmup_retry_attempt == 4
 
 
 def test_warmup_retry_backoff_resets_once_a_symbol_recovers() -> None:

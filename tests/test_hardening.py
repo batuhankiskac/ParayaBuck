@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import math
 import os
 import sqlite3
@@ -12,7 +11,6 @@ from typing import Any
 
 import pytest
 import yaml
-from fastapi import HTTPException
 
 from parayabuck.core.models import (
     AccountSnapshot,
@@ -30,8 +28,8 @@ from parayabuck.markets.symbols import (
 )
 from parayabuck.runtime import EngineRuntime, WorkerHealth, _Event, _EventQueue, _symbol_batches
 from parayabuck.utils import is_crypto
-from parayabuck.web import server
-from tests.helpers import make_broker
+from parayabuck.web.managers.engine import EngineManager, LiveArmToken, _atomic_update_credentials
+from tests.helpers import make_broker, web_client
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -411,7 +409,7 @@ def test_atomic_credentials_preserve_unmanaged_fields_and_never_touch_example(
     env.write_text("UNMANAGED=value\nALPACA_API_KEY=old\n")
     example.write_text("ALPACA_SECRET_KEY=your_secret_key_here\n")
     before = example.read_bytes()
-    server._atomic_update_credentials(env, "new-key", "new-secret")
+    _atomic_update_credentials(env, "new-key", "new-secret")
     written = env.read_text()
     assert "UNMANAGED=value" in written
     # Values are quoted so '#'/'=' inside a key or secret cannot corrupt the
@@ -425,13 +423,13 @@ def test_atomic_credentials_preserve_unmanaged_fields_and_never_touch_example(
 def test_atomic_credentials_quote_values_with_special_characters(tmp_path: Path) -> None:
     env = tmp_path / ".env"
     env.write_text("")
-    server._atomic_update_credentials(env, "key#with=sign", "secret with spaces")
+    _atomic_update_credentials(env, "key#with=sign", "secret with spaces")
     assert 'ALPACA_API_KEY="key#with=sign"' in env.read_text()
     assert 'ALPACA_SECRET_KEY="secret with spaces"' in env.read_text()
 
 
 def test_direct_settings_call_cannot_auto_restart_into_live(tmp_path: Path, monkeypatch: Any) -> None:
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.config_path = tmp_path / "settings.yaml"
     manager.env_path = tmp_path / ".env"
     manager.engine_state = "running"
@@ -445,10 +443,8 @@ def test_direct_settings_call_cannot_auto_restart_into_live(tmp_path: Path, monk
             }
         )
     )
-    monkeypatch.setattr(server, "manager", manager)
-    with pytest.raises(HTTPException) as error:
-        asyncio.run(server.save_settings(server.SettingsPayload(paper_mode=False, restart_engine=True)))
-    assert error.value.status_code == 400
+    response = web_client(manager).post("/api/settings", json={"paper_mode": False, "restart_engine": True})
+    assert response.status_code == 400
 
 
 def test_aggregator_waits_for_finalization_grace() -> None:
@@ -663,13 +659,13 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
 
 
 def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(tmp_path: Path, monkeypatch: Any) -> None:
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.config_path = tmp_path / "settings.yaml"
     manager.config_path.write_text(yaml.safe_dump({"alpaca": {"paper": True}, "symbols": ["AAPL"]}))
     credentials = ["key-a", "secret-a"]
     monkeypatch.setattr(manager, "get_credentials", lambda: tuple(credentials))
     now = datetime.now(UTC)
-    manager._pending_live_arm = server.LiveArmToken(
+    manager._pending_live_arm = LiveArmToken(
         "account-a",
         "1234",
         manager._credential_fingerprint(*credentials),

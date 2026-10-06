@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -11,12 +10,19 @@ from typing import Any
 import pytest
 import yaml
 from fastapi import WebSocketDisconnect
-from starlette.requests import Request
 
 from parayabuck import runtime as runtime_module
-from parayabuck.web import server
+from parayabuck.web.lifespan import create_lifespan
 from parayabuck.web.managers import websocket as ws_managers
+from parayabuck.web.managers.backtest import BacktestManager
+from parayabuck.web.managers.engine import EngineManager
+from parayabuck.web.routers import health as health_router
+from parayabuck.web.routers import websocket as websocket_router
+from parayabuck.web.schemas.settings import SettingsPayload
+from parayabuck.web.services import status as status_service
+from parayabuck.web.services.settings import SettingsService
 from parayabuck.web.state import WebState
+from tests.helpers import web_client
 
 # Settings saves validate the full config with load_config, which requires
 # at least one enabled market; fixtures carry the smallest loadable one.
@@ -26,7 +32,7 @@ _LOADABLE_MARKETS: dict[str, Any] = {
 }
 
 
-class _CountingEngineManager(server.EngineManager):
+class _CountingEngineManager(EngineManager):
     def __init__(self, root: Path) -> None:
         super().__init__()
         self.config_path = root / "settings.yaml"
@@ -52,24 +58,15 @@ class _RestartFailureManagerStub(_CountingEngineManager):
 
 
 def test_control_token_and_index_are_not_cached() -> None:
-    token_response = asyncio.run(server.get_control_token())
+    manager = EngineManager()
+    client = web_client(manager)
+    token_response = client.get("/api/control-token")
     assert token_response.headers["cache-control"] == "no-store"
-    assert json.loads(token_response.body)["control_token"] == server.manager.control_token
+    assert token_response.json()["control_token"] == manager.control_token
 
-    request = Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/",
-            "headers": [],
-            "query_string": b"",
-            "server": ("testserver", 80),
-            "client": ("127.0.0.1", 1),
-            "scheme": "http",
-        }
-    )
-    index_response = asyncio.run(server.serve_index(request))
+    index_response = client.get("/")
     assert index_response.headers["cache-control"] == "no-store"
+    assert manager.control_token in index_response.text
 
 
 class _RestartFailureManagerStub(_CountingEngineManager):
@@ -81,7 +78,7 @@ class _RestartFailureManagerStub(_CountingEngineManager):
 
 @pytest.mark.parametrize("state", ["warming_up", "degraded", "halted", "stop_failed"])
 def test_engine_manager_refuses_second_runtime(state: str) -> None:
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.engine_state = state
     manager.runtime = object()
 
@@ -93,7 +90,7 @@ def test_concurrent_ws_ticket_issuance_never_drops_tickets() -> None:
     """issue_ws_ticket prunes by rebuilding the map while consume pops from
     it. Without the lock, two concurrent issuers could rebuild from the same
     snapshot and silently drop each other's fresh tickets (spurious 1008)."""
-    manager = server.EngineManager()
+    manager = EngineManager()
     workers = 8
     per_worker = 25
     errors: list[Exception] = []
@@ -121,7 +118,7 @@ def test_reset_safety_lock_does_not_deadlock_on_state_lock() -> None:
     """reset_safety_lock acquires _state_lock and then calls
     current_engine_state(), which re-acquires it. A non-reentrant lock would
     deadlock; the manager must complete the reset within a bounded time."""
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.engine_state = "halted"
     manager.runtime = SimpleNamespace(
         health=lambda: SimpleNamespace(state="halted"),
@@ -166,11 +163,10 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_
             }
         )
     )
-    monkeypatch.setattr(server, "manager", manager)
 
     result = asyncio.run(
-        server.save_settings(
-            server.SettingsPayload(
+        SettingsService(manager).save_settings(
+            SettingsPayload(
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
                 max_drawdown_pct=12.0,
@@ -198,9 +194,8 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_
 def test_settings_save_succeeds_when_automatic_restart_times_out(tmp_path: Path, monkeypatch: Any) -> None:
     manager = _RestartFailureManagerStub(tmp_path)
     manager.config_path.write_text(yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {}, **_LOADABLE_MARKETS}))
-    monkeypatch.setattr(server, "manager", manager)
 
-    result = asyncio.run(server.save_settings(server.SettingsPayload(execution_timeframe="5m")))
+    result = asyncio.run(SettingsService(manager).save_settings(SettingsPayload(execution_timeframe="5m")))
 
     assert result["status"] == "success"
     assert result["engine_restarted"] is False
@@ -222,11 +217,10 @@ def test_settings_save_strips_obsolete_engine_keys_so_config_loads_again(tmp_pat
             }
         )
     )
-    monkeypatch.setattr(server, "manager", manager)
 
     result = asyncio.run(
-        server.save_settings(
-            server.SettingsPayload(
+        SettingsService(manager).save_settings(
+            SettingsPayload(
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
                 max_drawdown_pct=12.0,
@@ -258,11 +252,10 @@ def test_settings_save_strips_obsolete_risk_keys_so_config_loads_again(tmp_path:
             }
         )
     )
-    monkeypatch.setattr(server, "manager", manager)
 
     result = asyncio.run(
-        server.save_settings(
-            server.SettingsPayload(
+        SettingsService(manager).save_settings(
+            SettingsPayload(
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
                 max_drawdown_pct=12.0,
@@ -278,9 +271,9 @@ def test_settings_save_strips_obsolete_risk_keys_so_config_loads_again(tmp_path:
     assert saved["risk"]["daily_loss_limit_pct"] == 0.02
 
 
-def _credential_payload(**overrides: Any) -> server.SettingsPayload:
+def _credential_payload(**overrides: Any) -> SettingsPayload:
     """A save that replaces the stored credentials (forces the .env write)."""
-    return server.SettingsPayload(api_key="newkey", secret_key="newsecret", restart_engine=True, **overrides)
+    return SettingsPayload(api_key="newkey", secret_key="newsecret", restart_engine=True, **overrides)
 
 
 def _prepare_credential_save(tmp_path: Path, monkeypatch: Any) -> _CountingEngineManager:
@@ -289,7 +282,6 @@ def _prepare_credential_save(tmp_path: Path, monkeypatch: Any) -> _CountingEngin
     manager.env_path.write_text('ALPACA_API_KEY="oldkey"\nALPACA_SECRET_KEY="oldsecret"\n')
     monkeypatch.setenv("ALPACA_API_KEY", "oldkey")
     monkeypatch.setenv("ALPACA_SECRET_KEY", "oldsecret")
-    monkeypatch.setattr(server, "manager", manager)
     return manager
 
 
@@ -355,10 +347,9 @@ def test_application_shutdown_stops_running_engine(monkeypatch: Any) -> None:
             self.stop_calls += 1
 
     manager = ShutdownManager()
-    monkeypatch.setattr(server, "manager", manager)
 
     async def run_lifespan() -> None:
-        async with server.app_lifespan(server.app):
+        async with create_lifespan(lambda: manager)(None):
             pass
 
     asyncio.run(run_lifespan())
@@ -389,10 +380,9 @@ def test_application_lifespan_auto_starts_paper_engine(monkeypatch: Any) -> None
             pass
 
     manager = AutoStartManager()
-    monkeypatch.setattr(server, "manager", manager)
 
     async def run_lifespan() -> None:
-        async with server.app_lifespan(server.app):
+        async with create_lifespan(lambda: manager)(None):
             await asyncio.sleep(0.01)
 
     asyncio.run(run_lifespan())
@@ -402,7 +392,7 @@ def test_application_lifespan_auto_starts_paper_engine(monkeypatch: Any) -> None
 
 
 def test_live_mode_is_never_eligible_for_auto_start(tmp_path: Path, monkeypatch: Any) -> None:
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.config_path = tmp_path / "settings.yaml"
     manager.security_warning = None
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
@@ -440,7 +430,7 @@ def test_live_mode_is_never_eligible_for_auto_start(tmp_path: Path, monkeypatch:
 )
 def test_paper_mode_tolerates_an_empty_runtime_section(tmp_path: Path, config_text: str, expected_paper: bool) -> None:
     """`runtime:` with no value parses to None — the paper badge must still resolve."""
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.config_path = tmp_path / "settings.yaml"
     manager.config_path.write_text(config_text, encoding="utf-8")
 
@@ -464,7 +454,7 @@ def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:
             self.is_running = False
 
     monkeypatch.setattr(runtime_module, "EngineRuntime", FakeRuntime)
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.config_path = Path("config/settings.yaml")
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
 
@@ -496,7 +486,7 @@ def test_failed_runtime_start_does_not_leave_closed_runtime_exposed(
             return type("Health", (), {"state": "stopped"})()
 
     monkeypatch.setattr(runtime_module, "EngineRuntime", FailedRuntime)
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.config_path = Path("config/settings.yaml")
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
 
@@ -517,16 +507,13 @@ def test_stop_failure_returns_json_http_error_and_marks_manager_failed(
         def stop(self) -> bool:
             raise RuntimeError("worker shutdown failed")
 
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.engine_state = "running"
     manager.runtime = FailingRuntime()
-    monkeypatch.setattr(server, "manager", manager)
+    response = web_client(manager).post("/api/engine/stop")
 
-    with pytest.raises(server.HTTPException) as raised:
-        asyncio.run(server.stop_engine())
-
-    assert raised.value.status_code == 500
-    assert raised.value.detail == "Engine could not stop cleanly: worker shutdown failed"
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Engine could not stop cleanly: worker shutdown failed"
     assert manager.engine_state == "stop_failed"
 
 
@@ -578,8 +565,8 @@ class _WebSocketManagerStub:
         return not ticket or ticket == "valid-ticket"
 
 
-def _bare_engine_manager(state: str) -> server.EngineManager:
-    engine = server.EngineManager.__new__(server.EngineManager)
+def _bare_engine_manager(state: str) -> EngineManager:
+    engine = EngineManager.__new__(EngineManager)
     engine.config_path = None
     engine.engine_state = state
     engine.runtime = None
@@ -590,17 +577,17 @@ def _bare_engine_manager(state: str) -> server.EngineManager:
 def test_web_backtest_refused_while_engine_active(monkeypatch: Any) -> None:
     """A Web backtest must not start while the trading engine is active."""
     engine = _bare_engine_manager("running")
-    monkeypatch.setattr(server, "manager", engine)
+    backtests = BacktestManager(engine_state_provider=engine.current_engine_state)
     with pytest.raises(ValueError, match="stop the engine first"):
-        server.backtest_manager.start({"market": "equity"})
-    # The engine singleton stays untouched by the refused start.
-    assert server.backtest_manager.state == "idle"
+        backtests.start({"market": "equity"})
+    # The backtest manager stays untouched by the refused start.
+    assert backtests.state == "idle"
 
 
 def test_web_backtest_allowed_when_engine_stopped(monkeypatch: Any) -> None:
     """With the engine stopped, the Web backtest starts normally."""
     engine = _bare_engine_manager("stopped")
-    monkeypatch.setattr(server, "manager", engine)
+    backtests = BacktestManager(engine_state_provider=engine.current_engine_state)
 
     class _FakeThread:
         def __init__(self, target=None, args=(), kwargs=None, **extra) -> None:
@@ -615,22 +602,16 @@ def test_web_backtest_allowed_when_engine_stopped(monkeypatch: Any) -> None:
         def is_alive(self) -> bool:
             return False
 
-    original_factory = server.backtest_manager._thread_factory
-    try:
-        server.backtest_manager._thread_factory = _FakeThread
-        run_id = server.backtest_manager.start({"market": "equity"})
-        assert run_id.startswith("web-")
-        assert server.backtest_manager.state == "running"
-    finally:
-        server.backtest_manager._thread_factory = original_factory
-        server.backtest_manager.state = "idle"
-        server.backtest_manager._thread = None
+    backtests._thread_factory = _FakeThread
+    run_id = backtests.start({"market": "equity"})
+    assert run_id.startswith("web-")
+    assert backtests.state == "running"
 
 
 def test_engine_start_refused_while_web_backtest_running(monkeypatch: Any) -> None:
     """The engine must not start while a Web backtest is running."""
-    manager = server.EngineManager()
-    monkeypatch.setattr(server.backtest_manager.__class__, "is_running", property(lambda self: True))
+    manager = EngineManager()
+    monkeypatch.setattr(BacktestManager, "is_running", property(lambda self: True))
     with pytest.raises(ValueError, match="Web backtest is still running"):
         manager.start_engine()
     assert manager.engine_state == "stopped"
@@ -639,21 +620,20 @@ def test_engine_start_refused_while_web_backtest_running(monkeypatch: Any) -> No
 def test_engine_start_allowed_when_web_backtest_idle(monkeypatch: Any) -> None:
     """An idle backtest manager does not block engine start (no credentials:
     the start fails for the credentials reason, not the backtest reason)."""
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.env_path = Path("/nonexistent/.env")
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
     monkeypatch.delenv("ALPACA_SECRET_KEY", raising=False)
-    monkeypatch.setattr(server.backtest_manager.__class__, "is_running", property(lambda self: False))
+    monkeypatch.setattr(BacktestManager, "is_running", property(lambda self: False))
     with pytest.raises(ValueError, match="Alpaca API key/secret missing"):
         manager.start_engine()
 
 
 def test_websocket_stream_detects_dead_browser_and_cleans_up(monkeypatch: Any) -> None:
     manager = _WebSocketManagerStub()
-    monkeypatch.setattr(server, "manager", manager)
     websocket = _DeadWebSocket(manager)
 
-    asyncio.run(server.websocket_stream(websocket))  # must exit quietly, not spin
+    asyncio.run(websocket_router.websocket_stream(websocket))  # must exit quietly, not spin
 
     # The payload proves the router read the composed app's manager: the
     # process singleton would have answered from the broker (or raised).
@@ -665,10 +645,9 @@ def test_websocket_stream_detects_dead_browser_and_cleans_up(monkeypatch: Any) -
 
 def test_websocket_logs_detects_dead_browser_and_cleans_queue(monkeypatch: Any) -> None:
     manager = _WebSocketManagerStub()
-    monkeypatch.setattr(server, "manager", manager)
     websocket = _DeadWebSocket(manager)
 
-    asyncio.run(server.websocket_logs(websocket))  # must exit quietly, not spin
+    asyncio.run(websocket_router.websocket_logs(websocket))  # must exit quietly, not spin
 
     assert manager.log_queues == set()
 
@@ -700,10 +679,10 @@ def test_status_reports_universe_counts_while_runtime_is_starting(tmp_path: Path
         {"universe": type("Universe", (), {"equity": equity_config})()},
     )()
 
-    monkeypatch.setattr(server, "manager", StartingManager())
-    monkeypatch.setattr(server, "load_config", lambda _path: config)
+    status_manager = StartingManager()
+    monkeypatch.setattr(status_service, "_load_config", lambda _path: config)
 
-    status = asyncio.run(server.get_status())
+    status = status_service.build_status_snapshot(status_manager)
 
     assert status["state"] == "starting"
     assert status["active_equity_symbol_count"] == 2
@@ -713,7 +692,6 @@ def test_status_reports_universe_counts_while_runtime_is_starting(tmp_path: Path
 
 
 def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
-    from parayabuck.web import server
 
     class StaticManager:
         config_path = None
@@ -740,20 +718,19 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
         )()
         return type("Config", (), {"strategy": strategy, "universe": universe})()
 
-    monkeypatch.setattr(server, "manager", StaticManager())
-    monkeypatch.setattr(server, "load_config", lambda _path: make_config(True))
-    configured = asyncio.run(server.get_status())
+    status_manager = StaticManager()
+    monkeypatch.setattr(status_service, "_load_config", lambda _path: make_config(True))
+    configured = status_service.build_status_snapshot(status_manager)
     assert configured["strategy_status"] == "configured:equity/equity_leveraged_trend_v1"
 
-    monkeypatch.setattr(server, "load_config", lambda _path: make_config(False))
-    disabled = asyncio.run(server.get_status())
+    monkeypatch.setattr(status_service, "_load_config", lambda _path: make_config(False))
+    disabled = status_service.build_status_snapshot(status_manager)
     assert disabled["strategy_status"] == "configured:"
 
 
 def test_status_exposes_strategy_metadata_instead_of_global_timeframe(monkeypatch: Any) -> None:
     """The status payload surfaces each strategy's OWN signal timeframe and
     rebalance cadence (no global strategy-timeframe selector exists)."""
-    from parayabuck.web import server
 
     class StaticManager:
         config_path = None
@@ -788,9 +765,9 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(monkeypatc
     )()
     config = type("Config", (), {"strategy": strategy, "universe": universe})()
 
-    monkeypatch.setattr(server, "manager", StaticManager())
-    monkeypatch.setattr(server, "load_config", lambda _path: config)
-    status = asyncio.run(server.get_status())
+    status_manager = StaticManager()
+    monkeypatch.setattr(status_service, "_load_config", lambda _path: config)
+    status = status_service.build_status_snapshot(status_manager)
     meta = status["strategy_metadata"]
     assert meta["equity"]["name"] == "equity_leveraged_trend_v1"
     assert meta["equity"]["signal_timeframe"] == "1d"
@@ -804,7 +781,6 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(monkeypatc
 
 
 def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
-    from parayabuck.web import server
 
     class StaticManager:
         config_path = None
@@ -821,13 +797,13 @@ def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
         def is_paper_mode(self) -> bool:
             return True
 
-    monkeypatch.setattr(server, "manager", StaticManager())
+    status_manager = StaticManager()
 
     def _raise(*_args: object, **_kwargs: object) -> object:
         raise ValueError("boom")
 
-    monkeypatch.setattr(server, "load_config", _raise)
-    status = asyncio.run(server.get_status())
+    monkeypatch.setattr(status_service, "_load_config", _raise)
+    status = status_service.build_status_snapshot(status_manager)
     assert status["strategy_status"] == "configuration_error"
     assert status["scanner"] == {"equity_status": "error"}
 
@@ -852,18 +828,18 @@ def test_readyz_rejects_degraded_or_halted_runtime(monkeypatch: Any) -> None:
             health = SimpleNamespace(state=self._state, healthy=False)
             return SimpleNamespace(health=lambda: health)
 
-    monkeypatch.setattr(server, "manager", DegradedManager("degraded"))
-    monkeypatch.setattr(server, "load_config", lambda _path: object())
+    client = web_client(DegradedManager("degraded"))
+    monkeypatch.setattr(health_router, "load_config", lambda _path: object())
 
-    response = asyncio.run(server.readyz())
-    payload = json.loads(response.body)
+    response = client.get("/readyz")
+    payload = response.json()
     assert payload["ready"] is False
     assert payload["runtime_expected"] is True
     assert response.status_code == 503
 
-    monkeypatch.setattr(server, "manager", DegradedManager("halted"))
-    response = asyncio.run(server.readyz())
-    assert json.loads(response.body)["ready"] is False
+    client = web_client(DegradedManager("halted"))
+    response = client.get("/readyz")
+    assert response.json()["ready"] is False
     assert response.status_code == 503
 
 
@@ -881,11 +857,11 @@ def test_readyz_reports_ready_when_no_runtime_is_expected(monkeypatch: Any) -> N
         def runtime(self) -> Any:
             return None
 
-    monkeypatch.setattr(server, "manager", StoppedManager())
-    monkeypatch.setattr(server, "load_config", lambda _path: object())
+    client = web_client(StoppedManager())
+    monkeypatch.setattr(health_router, "load_config", lambda _path: object())
 
-    response = asyncio.run(server.readyz())
-    payload = json.loads(response.body)
+    response = client.get("/readyz")
+    payload = response.json()
     assert payload["ready"] is True
     assert payload["runtime_expected"] is False
     assert response.status_code == 200
@@ -907,10 +883,10 @@ def test_readyz_config_invalid_returns_503(monkeypatch: Any) -> None:
         def runtime(self) -> Any:
             return None
 
-    monkeypatch.setattr(server, "manager", BadConfigManager())
-    monkeypatch.setattr(server, "load_config", lambda _path: (_ for _ in ()).throw(ValueError("bad yaml")))
-    response = asyncio.run(server.readyz())
-    payload = json.loads(response.body)
+    client = web_client(BadConfigManager())
+    monkeypatch.setattr(health_router, "load_config", lambda _path: (_ for _ in ()).throw(ValueError("bad yaml")))
+    response = client.get("/readyz")
+    payload = response.json()
     assert payload["ready"] is False
     assert payload["config_valid"] is False
     assert payload["process_alive"] is True
@@ -935,10 +911,10 @@ def test_readyz_auto_start_failure_returns_503(monkeypatch: Any) -> None:
         def runtime(self) -> Any:
             return None
 
-    monkeypatch.setattr(server, "manager", FailedStartManager())
-    monkeypatch.setattr(server, "load_config", lambda _path: Config())
-    response = asyncio.run(server.readyz())
-    payload = json.loads(response.body)
+    client = web_client(FailedStartManager())
+    monkeypatch.setattr(health_router, "load_config", lambda _path: Config())
+    response = client.get("/readyz")
+    payload = response.json()
     assert payload["config_valid"] is True
     assert payload["trading_expected"] is True
     assert payload["trading_ready"] is False
@@ -963,10 +939,10 @@ def test_readyz_healthy_running_runtime_returns_200(monkeypatch: Any) -> None:
             health = SimpleNamespace(state="running", healthy=True)
             return SimpleNamespace(health=lambda: health)
 
-    monkeypatch.setattr(server, "manager", HealthyManager())
-    monkeypatch.setattr(server, "load_config", lambda _path: Config())
-    response = asyncio.run(server.readyz())
-    payload = json.loads(response.body)
+    client = web_client(HealthyManager())
+    monkeypatch.setattr(health_router, "load_config", lambda _path: Config())
+    response = client.get("/readyz")
+    payload = response.json()
     assert payload["ready"] is True
     assert payload["trading_expected"] is True
     assert payload["trading_ready"] is True
@@ -992,10 +968,10 @@ def test_readyz_intentional_stop_control_plane_ready(monkeypatch: Any) -> None:
         def runtime(self) -> Any:
             return None
 
-    monkeypatch.setattr(server, "manager", StoppedManager())
-    monkeypatch.setattr(server, "load_config", lambda _path: Config(app=AppConfig(auto_start_engine=False)))
-    response = asyncio.run(server.readyz())
-    payload = json.loads(response.body)
+    client = web_client(StoppedManager())
+    monkeypatch.setattr(health_router, "load_config", lambda _path: Config(app=AppConfig(auto_start_engine=False)))
+    response = client.get("/readyz")
+    payload = response.json()
     assert payload["ready"] is True
     assert payload["trading_expected"] is False
     assert response.status_code == 200
@@ -1004,7 +980,6 @@ def test_readyz_intentional_stop_control_plane_ready(monkeypatch: Any) -> None:
 def test_account_snapshot_exposes_mixed_ownership(monkeypatch: Any, tmp_path: Path) -> None:
     """The operator account snapshot exposes total/managed/external quantity
     and the ownership state for every position."""
-    from parayabuck.web.server import EngineManager
 
     manager = EngineManager()
     manager.config_path = tmp_path / "settings.yaml"

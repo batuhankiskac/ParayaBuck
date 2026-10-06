@@ -306,22 +306,23 @@ def test_removed_manage_external_positions_setting_fails_loudly(tmp_path: Path) 
         load_config(str(path))
 
 
-def test_shipped_settings_forward_every_default_webhook_kind() -> None:
-    """config/settings.yaml must not silently drop an operator-actionable kind:
-    it forwards exactly the default webhook set (everything but paper_receipt)."""
-    from parayabuck.monitoring.events import DEFAULT_ALERT_EVENTS
+@pytest.mark.parametrize("key", ["webhook_url", "enabled", "events"])
+def test_removed_alert_delivery_keys_are_rejected(tmp_path: Path, key: str) -> None:
+    """Outbound alert delivery is gone; a stale webhook key must fail loudly,
+    never load with the operator's intent silently dropped."""
+    raw = _settings()
+    raw["alerting"] = {"daily_summary": True, key: "" if key == "webhook_url" else []}
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match=rf"alerts stay local.*alerting\.{key}"):
+        load_config(str(path))
 
+
+def test_shipped_settings_carry_no_alert_delivery_keys() -> None:
     settings = Path(__file__).resolve().parents[1] / "config" / "settings.yaml"
-    events = yaml.safe_load(settings.read_text(encoding="utf-8"))["alerting"]["events"]
-    assert set(events) == set(DEFAULT_ALERT_EVENTS)
-
-
-def test_renamed_alert_kind_is_rejected_with_its_replacement() -> None:
-    from parayabuck.config import AlertingConfig
-
-    with pytest.raises(ValueError, match="scanner_refresh_failure with data_provider_unavailable"):
-        AlertingConfig(events=("runtime_started", "scanner_refresh_failure"))
-    assert "data_provider_unavailable" in AlertingConfig(events=("data_provider_unavailable",)).events
+    alerting = yaml.safe_load(settings.read_text(encoding="utf-8"))["alerting"]
+    assert alerting == {"daily_summary": True}
+    assert load_config(str(settings)).alerting.daily_summary is True
 
 
 def test_decision_retry_window_must_fit_the_watchdog_and_cover_the_cross_check() -> None:

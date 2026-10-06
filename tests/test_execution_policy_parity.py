@@ -264,10 +264,10 @@ def test_live_authorization_digest_includes_execution_policy() -> None:
     """The Web UI live-arm authorization digest is computed over the raw
     configuration; adding/changing the execution section must invalidate an
     existing live approval."""
-    from parayabuck.web import server as web_server
+    from parayabuck.web.managers.engine import EngineManager
 
     base = {"runtime": {"mode": "live"}}
     with_band = {"runtime": {"mode": "live"}, "execution": {"rebalance_band_pct": 0.01}}
     with_notional = {"runtime": {"mode": "live"}, "execution": {"minimum_order_notional": 25}}
-    digests = {web_server.EngineManager._digest_config(raw, paper=False) for raw in (base, with_band, with_notional)}
+    digests = {EngineManager._digest_config(raw, paper=False) for raw in (base, with_band, with_notional)}
     assert len(digests) == 3

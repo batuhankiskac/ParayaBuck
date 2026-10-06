@@ -348,10 +348,10 @@ def _run_doctor_checks(
         except Exception as exc:
             _add("decision_db", "CRITICAL", f"db check failed: {exc}")
 
-    # The engine-reported state (watchdog, cross-check, alerts, journal) is
-    # read from the snapshot the ENGINE writes. `ops doctor` is a separate
-    # process whose own counters are always empty, so reading them here would
-    # report a healthy webhook that was never configured.
+    # The engine-reported state (watchdog, cross-check, journal) is read from
+    # the snapshot the ENGINE writes. `ops doctor` is a separate process whose
+    # own counters are always empty, so reading them here would report a
+    # healthy journal the engine never wrote to.
     snapshot_data: dict[str, Any] | None = None
     # snapshot
     sp = Path(snapshot_path)
@@ -433,13 +433,10 @@ def _run_doctor_checks(
     # Intent watchdog / signal cross-check — the runtime may be alive and every
     # liveness check green while the strategy stopped deciding.
     from parayabuck.monitoring.health import (
-        _check_alerts,
         _check_intent_watchdog,
         _check_observability,
         _check_signal_cross_check,
-        persisted_alert_state,
         persisted_journal_state,
-        persisted_mode,
     )
 
     merged: dict[str, Any] | None = None
@@ -448,14 +445,8 @@ def _run_doctor_checks(
         merged = {**snapshot_data, **inner} if isinstance(inner, dict) else snapshot_data
     for check in (_check_intent_watchdog(merged), _check_signal_cross_check(merged)):
         _add(check.code, str(check.status), check.summary, action=check.action)
-    alert_check = _check_alerts(
-        persisted_alert_state(merged),
-        persisted_journal_state(merged),
-        mode=persisted_mode(merged),
-    )
-    _add(alert_check.code, str(alert_check.status), alert_check.summary, action=alert_check.action)
     journal_check = _check_observability(persisted_journal_state(merged))
-    _add(journal_check.code, str(journal_check.status), journal_check.summary)
+    _add(journal_check.code, str(journal_check.status), journal_check.summary, action=journal_check.action)
 
     # receipt writable
     try:

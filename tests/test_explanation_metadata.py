@@ -1,7 +1,7 @@
 """Alerting and runtime-metric contract tests.
 
 * ``parayabuck.monitoring.alerts.emit`` never raises, delivers to the log
-  sink, POSTs to a configured webhook, and throttles repeat failures;
+  sink (and the event journal), and throttles repeat failures;
 * ``parayabuck.monitoring.metrics.runtime_metrics`` reads an empty or
   temp runtime ledger without raising and aggregates persisted state plus
   process-local counters.
@@ -9,11 +9,8 @@
 
 from __future__ import annotations
 
-import json
-import queue
-import threading
-from datetime import UTC, date, datetime, timedelta
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import logging
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -43,123 +40,42 @@ def test_alerts_emit_never_raises_and_accepts_all_kinds() -> None:
     assert alerts.alert_stats()["suppressed"] == 0
 
 
-def test_alerts_webhook_delivery() -> None:
-    received: queue.Queue[dict[str, object]] = queue.Queue()
-
-    class _Handler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802 (http.server convention)
-            length = int(self.headers.get("Content-Length", "0"))
-            received.put(json.loads(self.rfile.read(length)))
-            self.send_response(200)
-            self.end_headers()
-
-        def log_message(self, *args: object) -> None:
-            pass
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        alerts.configure_alerting(
-            webhook_url=f"http://127.0.0.1:{server.server_address[1]}/alerts",
-            throttle_seconds=0.0,
-        )
-        alerts.emit(
-            "data_provider_unavailable",
-            message="scanner down",
-            market="equity",
-            attempt=1,
-        )
-        payload = received.get(timeout=5.0)
-        assert payload["kind"] == "data_provider_unavailable"
-        assert payload["message"] == "scanner down"
-        assert payload["fields"] == {"market": "equity", "attempt": 1}
-        assert payload["occurred_at"]
-        assert alerts.alert_stats()["webhook_sent"] == 1
-    finally:
-        server.shutdown()
-        server.server_close()
+def test_alerts_log_carries_kind_message_and_fields(caplog: pytest.LogCaptureFixture) -> None:
+    alerts.configure_alerting(throttle_seconds=0.0)
+    with caplog.at_level(logging.INFO, logger="parayabuck.monitoring.alerts"):
+        alerts.emit("data_provider_unavailable", message="scanner down", market="equity", attempt=1)
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("ALERT ")]
+    assert lines == ["ALERT data_provider_unavailable: scanner down fields={'market': 'equity', 'attempt': 1}"]
+    assert alerts.alert_stats()["delivered"] == {"data_provider_unavailable": 1}
 
 
-def test_alerts_throttle_coalesces_repeat_failures() -> None:
-    hits: list[dict[str, object]] = []
-    sent = queue.Queue()
-
-    class _Handler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length))
-            sent.put(payload)
-            hits.append(payload)
-            self.send_response(200)
-            self.end_headers()
-
-        def log_message(self, *args: object) -> None:
-            pass
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    try:
-        alerts.configure_alerting(
-            webhook_url=f"http://127.0.0.1:{server.server_address[1]}/alerts",
-            throttle_seconds=60.0,
-        )
+def test_alerts_throttle_coalesces_repeat_failures(caplog: pytest.LogCaptureFixture) -> None:
+    alerts.configure_alerting(throttle_seconds=60.0)
+    with caplog.at_level(logging.INFO, logger="parayabuck.monitoring.alerts"):
         alerts.emit("reconciliation_failure", message="first")
         alerts.emit("reconciliation_failure", message="second, throttled")
-        delivered = sent.get(timeout=5.0)
-        assert delivered["kind"] == "reconciliation_failure"
-        assert delivered["message"] == "first"
-        assert delivered["fields"] == {}
-        assert len(hits) == 1
-        assert alerts.alert_stats()["suppressed"] == 1
-        assert alerts.alert_stats()["webhook_sent"] == 1
-        # A different kind is NOT throttled by the same window.
-        alerts.emit("data_provider_unavailable", message="other kind")
-        assert sent.get(timeout=5.0)["kind"] == "data_provider_unavailable"
-    finally:
-        server.shutdown()
-        server.server_close()
+    assert alerts.alert_stats()["suppressed"] == 1
+    assert alerts.alert_stats()["delivered"] == {"reconciliation_failure": 1}
+    # The suppression is visible at INFO with its running count, never DEBUG-only.
+    suppressed = [r for r in caplog.records if "suppressed" in r.getMessage()]
+    assert len(suppressed) == 1 and suppressed[0].levelno == logging.INFO
+    assert "1 repeat(s)" in suppressed[0].getMessage()
+    # A different kind is NOT throttled by the same window.
+    alerts.emit("data_provider_unavailable", message="other kind")
+    assert alerts.alert_stats()["delivered"]["data_provider_unavailable"] == 1
 
 
-def test_alerts_webhook_event_filtering_and_disable() -> None:
-    hits: list[str] = []
-
-    class _Handler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
-            length = int(self.headers.get("Content-Length", "0"))
-            hits.append(json.loads(self.rfile.read(length))["kind"])
-            self.send_response(200)
-            self.end_headers()
-
-        def log_message(self, *args: object) -> None:
-            pass
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-
-    def _await_hits(count: int, timeout: float = 5.0) -> None:
-        deadline = datetime.now(UTC) + timedelta(seconds=timeout)
-        while len(hits) < count and datetime.now(UTC) < deadline:
-            threading.Event().wait(0.05)
-        assert len(hits) >= count
-
-    try:
-        url = f"http://127.0.0.1:{server.server_address[1]}/alerts"
-        alerts.configure_alerting(webhook_url=url, throttle_seconds=0.0)
-        alerts.emit("runtime_started", message="started")
-        _await_hits(1)
-        assert hits == ["runtime_started"]
-        # Restrict the webhook event set; console/log sink still receives all.
-        alerts.configure_alerting(webhook_url=url, throttle_seconds=0.0, events=("runtime_started",))
-        alerts.emit("data_provider_unavailable", message="not delivered to webhook")
-        assert hits == ["runtime_started"]
-        # Disable the webhook entirely.
-        alerts.configure_alerting(webhook_url=url, throttle_seconds=0.0, enabled=False)
-        alerts.emit("runtime_started", message="started again")
-        assert hits == ["runtime_started"]
-    finally:
-        server.shutdown()
-        server.server_close()
+def test_alerts_throttle_keys_on_reason_and_state() -> None:
+    """A new failure reason (or state) of the same kind must not be swallowed
+    by an earlier, different one inside the throttle window."""
+    alerts.configure_alerting(throttle_seconds=60.0)
+    alerts.emit("runtime_start_failed", message="a", reason="credentials_missing")
+    alerts.emit("runtime_start_failed", message="b", reason="trading_host_unauthorized")
+    alerts.emit("runtime_start_failed", message="c", reason="trading_host_unauthorized")
+    alerts.emit("circuit_breaker", message="d", state="tripped")
+    alerts.emit("circuit_breaker", message="e", state="cleared")
+    assert alerts.alert_stats()["delivered"] == {"runtime_start_failed": 2, "circuit_breaker": 2}
+    assert alerts.alert_stats()["suppressed"] == 1
 
 
 # ---------------------------------------------------------------------------

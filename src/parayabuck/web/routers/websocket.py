@@ -46,15 +46,6 @@ def _consume_ticket(ticket: str, kind: str, websocket: WebSocket | None = None) 
 
     if _consume_shared(ticket, kind):
         return True
-    for mod in ("parayabuck.web.managers.engine", "parayabuck.web.server"):
-        try:
-            m = __import__(mod, fromlist=["manager"])
-            mgr = getattr(m, "manager", None)
-            if mgr is not None and hasattr(mgr, "consume_ws_ticket"):
-                if bool(mgr.consume_ws_ticket(ticket, kind)):
-                    return True
-        except Exception:
-            continue
     # Fail closed: with neither an app-scoped nor a process-wide store there
     # is no ticket to validate, so a missing ticket is never trusted.
     return False

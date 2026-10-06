@@ -6,8 +6,9 @@ the engine, so they may only report state the engine itself published.
 
 * F22 — an active intent-watchdog alarm (and the signal cross-check state)
   must appear on all four surfaces, not only on ``/readyz``.
-* F23 — alert/webhook and journal state must come from the snapshot the engine
-  persists; with no such copy the answer is UNKNOWN, never OK.
+* F23 — journal state must come from the snapshot the engine persists; with
+  no such copy the answer is UNKNOWN, never OK. Alerts are local-only
+  (2026-10-06): no surface may degrade because nothing is delivered off-host.
 * dashboard badge — a runtime that is alive and "healthy" while a session went
   undecided must not read "Sağlıklı".
 
@@ -28,23 +29,18 @@ import pytest
 
 from parayabuck.config import Config, ObservabilityConfig, RuntimeConfig
 from parayabuck.monitoring.diagnostic import _run_doctor_checks
-from parayabuck.monitoring.health import HealthStatus, _check_alerts, evaluate_health
+from parayabuck.monitoring.health import HealthStatus, _check_observability, evaluate_health
 from parayabuck.monitoring.snapshot import write_snapshot_atomic
 
 _NOW = datetime(2026, 9, 30, 14, 0, tzinfo=UTC)
 
-_WORKING_WEBHOOK: dict[str, Any] = {
-    "webhook_configured": True,
-    "webhook_attempted": 4,
-    "webhook_succeeded": 4,
-    "webhook_failed": 0,
-    "webhook_dropped": 0,
-    "webhook_last_success_at": _NOW.isoformat(),
-}
+_ALERT_COUNTERS: dict[str, Any] = {"suppressed": 0, "delivered": {"runtime_started": 1}}
 _HEALTHY_JOURNAL: dict[str, Any] = {
     "event_journal_written": 42,
     "event_journal_failed": 0,
     "event_journal_dropped": 0,
+    "event_journal_last_success_at": _NOW.isoformat(),
+    "event_journal_last_failure_at": None,
 }
 
 
@@ -100,7 +96,7 @@ def _snapshot(
     if persist_journal:
         payload["observability"] = journal_state if journal_state is not None else _HEALTHY_JOURNAL
     if persist_alerts:
-        payload["alerts"] = alerts_state if alerts_state is not None else _WORKING_WEBHOOK
+        payload["alerts"] = alerts_state if alerts_state is not None else _ALERT_COUNTERS
     path = directory / "health_snapshot.json"
     write_snapshot_atomic(path, payload)
     return path
@@ -111,77 +107,54 @@ def _check(payload: dict[str, Any], code: str) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# F23 — alert state comes from the engine's persisted copy, not this process
+# F23 — journal state comes from the engine's persisted copy; alerts are local
 # --------------------------------------------------------------------------- #
 
 
-def test_no_persisted_alert_copy_is_unknown_never_ok() -> None:
-    # The pre-fix check read THIS process's counters, which in a CLI or web
-    # process are all zero, and answered "webhook OK".
-    check = _check_alerts(None, None, mode="paper", now=_NOW)
+def test_no_persisted_journal_copy_is_unknown_never_ok() -> None:
+    check = _check_observability(None)
 
     assert check.status is HealthStatus.UNKNOWN
     assert "OK" not in check.summary
 
 
-def test_snapshot_without_alert_block_degrades_to_unknown(tmp_path: Path) -> None:
-    path = _snapshot(tmp_path, persist_alerts=False)
-
-    health = evaluate_health(snapshot_path=path, database_path=tmp_path / "none.db", now=_NOW)
-
-    assert _check(health, "alerts")["status"] == "UNKNOWN"
-    assert _check(health, "observability")["status"] == "OK"
-
-
-def test_missing_webhook_in_paper_is_degraded(tmp_path: Path) -> None:
-    """A VM with no webhook configured sends alerts nowhere; the deploy check
-    used to print 'webhook OK' anyway."""
-    path = _snapshot(tmp_path, alerts_state=dict(_WORKING_WEBHOOK, webhook_configured=False))
-
-    health = evaluate_health(snapshot_path=path, database_path=tmp_path / "none.db", now=_NOW)
-    alerts_check = _check(health, "alerts")
-
-    assert alerts_check["status"] == "DEGRADED"
-    assert "no alert webhook configured in paper" in alerts_check["summary"]
-    assert health["overall_health"] == "DEGRADED"
+def test_local_only_alerts_never_degrade_health(tmp_path: Path) -> None:
+    """Outbound delivery was removed: there is no alerts check, and neither a
+    missing alert block nor zero counters can make the verdict DEGRADED."""
+    for name, kwargs in (("plain", {}), ("no_block", {"persist_alerts": False})):
+        health = evaluate_health(snapshot_path=_snapshot(tmp_path / name, **kwargs), now=_NOW)
+        assert "alerts" not in {c["code"] for c in health["checks"]}
+        assert not [c for c in health["checks"] if c["status"] == "DEGRADED"]
+        assert _check(health, "observability")["status"] == "OK"
 
 
-def test_failing_webhook_with_a_stale_last_success_is_degraded(tmp_path: Path) -> None:
-    state = dict(
-        _WORKING_WEBHOOK,
-        webhook_attempted=9,
-        webhook_succeeded=1,
-        webhook_failed=8,
-        webhook_last_success_at=(_NOW - timedelta(days=3)).isoformat(),
+def test_recovered_journal_burst_does_not_pin_degraded(tmp_path: Path) -> None:
+    """The counters are process-lifetime totals: a burst the journal has since
+    written past must not stay DEGRADED until the next restart."""
+    recovered = dict(
+        _HEALTHY_JOURNAL,
+        event_journal_failed=50,
+        event_journal_dropped=20,
+        event_journal_last_failure_at=(_NOW - timedelta(hours=2)).isoformat(),
     )
-    path = _snapshot(tmp_path, alerts_state=state)
-
-    alerts_check = _check(evaluate_health(snapshot_path=path, now=_NOW), "alerts")
-
-    assert alerts_check["status"] == "DEGRADED"
-    assert "failing 8/9" in alerts_check["summary"]
-    assert "last success" in alerts_check["summary"]
-
-
-def test_dropped_webhooks_are_read_from_the_engine_copy(tmp_path: Path) -> None:
-    # Throttling is by design; a dropped delivery is not.
-    path = _snapshot(
-        tmp_path,
-        alerts_state=dict(_WORKING_WEBHOOK, webhook_dropped=2, suppressed=7),
-        journal_state=dict(_HEALTHY_JOURNAL, event_journal_dropped=0),
+    check = _check(
+        evaluate_health(snapshot_path=_snapshot(tmp_path, journal_state=recovered), now=_NOW), "observability"
     )
 
-    alerts_check = _check(evaluate_health(snapshot_path=path, now=_NOW), "alerts")
-
-    assert alerts_check["status"] == "DEGRADED"
-    assert alerts_check["summary"] == "alerts dropped 2"
+    assert check["status"] == "OK"
+    assert "recovered" in check["summary"]
 
 
-def test_working_webhook_from_the_engine_is_ok(tmp_path: Path) -> None:
-    health = evaluate_health(snapshot_path=_snapshot(tmp_path), now=_NOW)
+def test_currently_failing_journal_is_degraded(tmp_path: Path) -> None:
+    failing = dict(
+        _HEALTHY_JOURNAL,
+        event_journal_failed=1,
+        event_journal_last_success_at=(_NOW - timedelta(hours=2)).isoformat(),
+        event_journal_last_failure_at=_NOW.isoformat(),
+    )
+    check = _check(evaluate_health(snapshot_path=_snapshot(tmp_path, journal_state=failing), now=_NOW), "observability")
 
-    assert _check(health, "alerts")["status"] == "OK"
-    assert _check(health, "observability")["status"] == "OK"
+    assert check["status"] == "DEGRADED"
 
 
 # --------------------------------------------------------------------------- #
@@ -280,23 +253,18 @@ def test_doctor_reports_the_watchdog_alarm_as_critical(tmp_path: Path) -> None:
     assert result["overall"] == "CRITICAL"
 
 
-def test_doctor_alert_check_reads_the_snapshot_not_this_process(
+def test_doctor_journal_check_reads_the_snapshot_not_this_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`ops doctor` runs in its own process: its own counters are always empty,
-    which is why they must not be what it reports."""
-    from parayabuck.monitoring import alerts
+    which is why they must not be what it reports. It has no alerts check."""
+    from parayabuck.monitoring import journal
 
-    monkeypatch.setattr(alerts, "alert_stats", lambda: dict(_WORKING_WEBHOOK))
-    snapshot = _snapshot(tmp_path, persist_alerts=False)
+    monkeypatch.setattr(journal, "journal_stats", lambda *a, **k: dict(_HEALTHY_JOURNAL))
+    result = _doctor(_snapshot(tmp_path, persist_journal=False), tmp_path)
 
-    assert _doctor_check(_doctor(snapshot, tmp_path), "alerts")["status"] == "UNKNOWN"
-
-
-def test_doctor_reports_an_unconfigured_webhook(tmp_path: Path) -> None:
-    snapshot = _snapshot(tmp_path, alerts_state=dict(_WORKING_WEBHOOK, webhook_configured=False))
-
-    assert _doctor_check(_doctor(snapshot, tmp_path), "alerts")["status"] == "DEGRADED"
+    assert _doctor_check(result, "observability")["status"] == "UNKNOWN"
+    assert "alerts" not in {c["code"] for c in result["checks"]}
 
 
 def _run_cli(*args: str) -> tuple[int, str]:
@@ -342,7 +310,7 @@ def test_ops_status_api_carries_the_watchdog_check(tmp_path: Path) -> None:
 
     assert payload["overall_health"] == "CRITICAL"
     assert _check(payload, "intent_watchdog")["status"] == "CRITICAL"
-    assert _check(payload, "alerts")["status"] == "OK"
+    assert "alerts" not in {c["code"] for c in payload["checks"]}
 
 
 # --------------------------------------------------------------------------- #
@@ -372,18 +340,16 @@ def test_dashboard_health_panel_has_no_degraded_reasons_when_clear() -> None:
     assert _dashboard_panel(_runtime_health())["degraded_reasons"] == []
 
 
-def test_snapshot_persists_the_alert_copy_for_other_processes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without this the engine's counters never leave the engine and every
-    out-of-process surface is structurally UNKNOWN."""
+def test_snapshot_persists_the_alert_copy_for_other_processes() -> None:
+    """Without this the engine's counters never leave the engine and
+    `ops status` cannot show what the engine emitted."""
     from parayabuck.monitoring import alerts
     from parayabuck.monitoring import snapshot as snapshot_module
 
-    monkeypatch.setattr(alerts, "_enqueue_webhook", lambda url, payload: None)
     alerts.reset_for_tests()
-    alerts.configure_alerting(enabled=True, webhook_url="http://127.0.0.1:1/hook", events=("paper_incident",))
+    alerts.emit("runtime_started", message="up")
     snap = snapshot_module.build_snapshot(runtime_health=_runtime_health())
     alerts.reset_for_tests()
 
-    assert snap["alerts"]["webhook_configured"] is True
-    assert snap["alerts"]["webhook_attempted"] == 0
+    assert snap["alerts"] == {"suppressed": 0, "delivered": {"runtime_started": 1}}
     assert json.dumps(snap)  # persisted verbatim

@@ -9,13 +9,29 @@ Group=parayabuck
 WorkingDirectory=/opt/parayabuck
 EnvironmentFile=/opt/parayabuck/.env
 ExecStart=/opt/parayabuck/.venv/bin/parayabuck backup
-# A failed run exits non-zero and emits the `backup_failed` alert to the
-# webhook in the env file (PARAYABUCK_ALERT_WEBHOOK_URL), so a silent
-# multi-week timer outage cannot go unnoticed. parayabuck-watchdog.timer
-# additionally reports a backup set that is merely stale.
+# A failed run exits non-zero (the unit shows failed in `systemctl status`)
+# and records a `backup_failed` alert in the log and the event journal
+# (`parayabuck ops events --kind backup_failed`). `parayabuck doctor` reports
+# a backup set that is merely stale. Nothing is delivered off-host.
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/parayabuck/config /opt/parayabuck/data /opt/parayabuck/reports /opt/parayabuck/data/backups
+# The backup reads config/ and the decision DB and writes only under data/
+# (data/backups plus the event journal in data/runtime).
+ReadWritePaths=/opt/parayabuck/data
+CapabilityBoundingSet=
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+# AF_NETLINK: glibc getaddrinfo probes interfaces over netlink.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM

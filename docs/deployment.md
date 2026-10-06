@@ -21,20 +21,32 @@ console, settings and backtests work and the engine refuses to start — see
 | Bind | `127.0.0.1:8000` (`app.host/port`); reach it through an SSH tunnel: `ssh -L 8000:127.0.0.1:8000 <vm>` |
 | Working directory | Must be the repo root: `CONFIG_PATH=./config/settings.yaml` and every `data/runtime/...` path are cwd-relative |
 | Preflight | `ExecStartPre=parayabuck doctor --strict --paper --offline` — the unit refuses to start on a bad config, non-paper mode, live enabled, missing credentials, unwritable config dir, failed SQLite `integrity_check` or a tracked `.env` |
-| Stop | `SIGTERM` stops the engine gracefully (ledger close, socket release); keep `TimeoutStopSec` ≥ 35 |
+| Stop | `SIGTERM` stops the engine gracefully (worker joins, ledger close, socket release); `TimeoutStopSec=120` covers the worst-case join sequence |
 | Liveness / readiness | `GET /healthz` (always 200 while the process serves) / `GET /readyz` (200 ready, 503 not; see `docs/operations.md`) |
 | Backups | `parayabuck-backup.timer` runs `parayabuck backup` every 6 h (10 min after boot) |
-| Dead-man probe | `parayabuck-watchdog.timer` runs `parayabuck ops watchdog` every 15 min: `/readyz` must be ready and the newest backup under 12 h old, otherwise it alerts (optional unit) |
+| Alerts | Local only: the log (`journalctl -u parayabuck`) and the event journal (`parayabuck ops events`). Nothing is sent off the VM (2026-10-06) |
 
 ## Units (`deploy/systemd/`)
 
 | File | Purpose |
 |---|---|
-| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `TimeoutStopSec=35`, `UMask=0077`, `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome=true`, `ReadWritePaths` = `config/`, `data/`, `reports/` |
-| `parayabuck-backup.service` | Oneshot `parayabuck backup` with the same env file and hardening |
+| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `TimeoutStopSec=120`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/`, plus the sandbox below |
+| `parayabuck-backup.service` | Oneshot `parayabuck backup`, same env file and sandbox; `ReadWritePaths` = `data/` only (it reads `config/` and writes `data/backups` and the event journal) |
 | `parayabuck-backup.timer` | `OnBootSec=10min`, `OnUnitActiveSec=6h`, `Persistent=true` |
-| `parayabuck-watchdog.service` | Oneshot `parayabuck ops watchdog`, `ExecCondition` = `systemctl is-active parayabuck.service`, same env file and hardening. Reports a failed/never-started engine and a stale backup set to the webhook. `ReadWritePaths` = `data/` |
-| `parayabuck-watchdog.timer` | `OnBootSec=5min`, `OnUnitActiveSec=15min`, `Persistent=true` |
+
+Both services share one sandbox: `NoNewPrivileges`, `PrivateTmp`,
+`ProtectSystem=strict`, `ProtectHome=true`, an empty `CapabilityBoundingSet=`,
+`PrivateDevices`, `ProtectKernelTunables/Modules/Logs`, `ProtectControlGroups`,
+`RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK` (netlink only for
+glibc's interface probe in `getaddrinfo`), `RestrictNamespaces`,
+`LockPersonality`, `RestrictSUIDSGID`, `SystemCallArchitectures=native` and
+`SystemCallFilter=@system-service` (denied calls fail with `EPERM`, never kill
+the process). `MemoryDenyWriteExecute` stays off for CPython/numpy. Check the
+result with `systemd-analyze security parayabuck` after installing.
+
+There is no watchdog unit any more: `parayabuck ops watchdog` and
+`parayabuck-watchdog.{service,timer}` existed only to deliver a dead-man alert
+off the VM and were removed with outbound alerting on 2026-10-06.
 
 The templates assume an install at `/opt/parayabuck`. The current VM runs from
 the deploy user's home checkout (`~/ParayaBuck`, `.venv` inside it) with the
@@ -70,26 +82,24 @@ config loader also reads `.env` from the working directory.
 | `CONFIG_PATH` | no | default `./config/settings.yaml` |
 | `OPEN_BROWSER` | no | `0` on the VM |
 | `LOG_LEVEL` | no | default `INFO` |
-| `PARAYABUCK_ALERT_WEBHOOK_URL` | no | alert webhook (below) |
 | `PARAYABUCK_OPERATOR_APPROVAL_KEY` | live only | unused in PAPER |
 
-### Enabling the alert webhook
+### Where alerts go
 
-1. Create an incoming webhook that accepts a JSON POST (Slack, Discord,
-   Mattermost or any generic receiver; the payload carries `message`, `text`
-   and `content`).
-2. On the VM, add `PARAYABUCK_ALERT_WEBHOOK_URL=<url>` to the env file above.
-   Keep `alerting.webhook_url: ""` in `config/settings.yaml` — the URL is a
-   secret, and a non-empty YAML value overrides the environment variable.
-3. `sudo systemctl restart parayabuck` (the alert sink is configured at engine
-   start).
-4. Confirm: a `runtime_started` alert arrives, and `parayabuck ops status`
-   shows the `alerts` check `OK`. `ops status`/`ops doctor` read that check from
-   the copy the **engine** persists in `health_snapshot.json`, not from their
-   own process — so `DEGRADED` ("no alert webhook configured", failures, drops
-   or a last success older than 24 h) means the alert path really is broken,
-   and `UNKNOWN` means the engine has not published a copy yet. Without a URL,
-   alerts still go to the journal/log, but every surface says `DEGRADED`.
+Alerts never leave the VM. Every alert kind is written to the service log and
+to the operational event journal (`data/runtime/observability.sqlite3`),
+throttled per incident. Read them with:
+
+```bash
+.venv/bin/parayabuck ops status                 # health checks + alert counters the engine published
+.venv/bin/parayabuck ops events --since 24h     # the journal (filter with --kind/--severity)
+sudo journalctl -u parayabuck -g 'ALERT ' --since today
+```
+
+or on the dashboard through the SSH tunnel. No surface turns `DEGRADED`
+because nothing is delivered off-host. `alerting.enabled`,
+`alerting.webhook_url` and `alerting.events` are rejected on load; only
+`alerting.daily_summary` remains.
 
 ### Changing API keys on the VM
 
@@ -119,18 +129,26 @@ sudo -u parayabuck .venv/bin/parayabuck doctor --strict --paper --offline
 sudo cp deploy/systemd/parayabuck*.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now parayabuck.service parayabuck-backup.timer
-sudo systemctl enable --now parayabuck-watchdog.timer   # optional dead-man probe
-systemctl list-timers 'parayabuck-*'                     # confirm all three are scheduled
+systemctl list-timers 'parayabuck-*'                     # confirm the backup timer is scheduled
 ```
 
-The watchdog timer is optional but recommended: without it, nothing outside
-the web process notices that the engine never started (`/healthz` stays 200
-and systemd restarts nothing) or that the backup timer has been failing for
-weeks. It reads `PARAYABUCK_ALERT_WEBHOOK_URL` from the same env file — no
-credential is stored in the repo or in the unit. Run it by hand with
-`.venv/bin/parayabuck ops watchdog`; the unit's `ExecCondition` skips the
-probe while `parayabuck.service` is inactive, so a planned
-`systemctl stop parayabuck` (deploy, rollback) does not fire a false alert.
+Nothing outside the web process watches the engine: a start that failed
+shows up in `/readyz` (503 with `engine_error`), `parayabuck ops status`, the
+dashboard and `runtime_start_failed` in the journal; a failing backup timer
+shows up as a failed `parayabuck-backup.service` and as the `backup stale` row
+of `parayabuck doctor`.
+
+### Removing the old watchdog and webhook (hosts installed before 2026-10-06)
+
+```bash
+sudo systemctl disable --now parayabuck-watchdog.timer
+sudo rm -f /etc/systemd/system/parayabuck-watchdog.service /etc/systemd/system/parayabuck-watchdog.timer
+sudo cp deploy/systemd/parayabuck.service deploy/systemd/parayabuck-backup.service /etc/systemd/system/
+#   (re-apply the hand edits: checkout paths, ProtectHome=read-only, the trading-host drop-in stays)
+sudo systemctl daemon-reload
+sudo sed -i '/^PARAYABUCK_ALERT_WEBHOOK_URL=/d' <env file>   # ignored now; drop the secret
+grep -n -A6 '^alerting:' config/settings.yaml                # only daily_summary may remain
+```
 
 ## Pre-deploy checks (shared PAPER account)
 
@@ -160,9 +178,7 @@ Alpaca dashboard (or `GET /positions`, `GET /orders?status=open`) before
    when coming from a build that had the crypto sleeve). Rebalance rows of
    markets the equity runtime no longer executes are ignored by `ops status`;
    orders are not, see 1.
-5. **Never run `scripts/paper_smoke.py` while the engine runs or between
-   15:45 and 16:30 ET.** The script refuses both cases itself.
-6. **Prefer no restart from 15:55 ET to the session close + 15 min** (16:30 ET
+5. **Prefer no restart from 15:55 ET to the session close + 15 min** (16:30 ET
    on a full session; **13:30 ET on an early-close day**, which ends at 13:00
    ET). That window spans the session-close decision, the second-source (SIP
    cross-check) deferral — which is held in memory — and the SIP embargo, so a
@@ -268,3 +284,7 @@ console/backtest path only: the compose file sets no `PARAYABUCK_TRADING_HOST`,
 so the engine refuses to start inside the container on the shared account —
 the one-runner guard, not documentation, is what keeps a second runner out.
 Never add the variable there, and never run it while the VM engine trades.
+Inside the container the console binds `0.0.0.0` (`PARAYABUCK_CONTAINER=YES`);
+the control token and every mutating request are then served only to loopback
+or private (Docker bridge) peers, and a trading host refuses that bind
+outright.

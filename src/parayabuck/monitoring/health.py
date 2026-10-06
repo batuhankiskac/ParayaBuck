@@ -80,34 +80,16 @@ def _age_seconds(iso: str | None, now: datetime) -> float | None:
     return (now - dt).total_seconds()
 
 
-# A last webhook success older than this, while failures keep coming, means
-# the operator's alert channel is effectively dead.
-_ALERT_STALE_SUCCESS_SECONDS = 24 * 3600.0
 # A missing scheduled decision is the 2026-09-29 incident class: the runtime
 # stays alive and every liveness check stays green, so it must not be reported
 # as a mere degradation.
 _INTENT_CRITICAL_CODES = frozenset({"equity_decision_missing"})
 
 
-def persisted_alert_state(snapshot: object) -> dict[str, Any] | None:
-    """The engine's own ``alert_stats()`` copy inside a health snapshot.
-
-    None means the snapshot carries no alert state at all (engine never ran, or
-    an older build): the caller must then answer UNKNOWN, never OK.
-    """
-    stats = snapshot.get("alerts") if isinstance(snapshot, dict) else None
-    return stats if isinstance(stats, dict) and "webhook_configured" in stats else None
-
-
 def persisted_journal_state(snapshot: object) -> dict[str, Any] | None:
     """The engine's own ``journal_stats()`` copy inside a health snapshot."""
     stats = snapshot.get("observability") if isinstance(snapshot, dict) else None
     return stats if isinstance(stats, dict) and "event_journal_written" in stats else None
-
-
-def persisted_mode(snapshot: object) -> str:
-    """The runtime mode the engine last published (empty when unknown)."""
-    return str(snapshot.get("mode") or "") if isinstance(snapshot, dict) else ""
 
 
 # ------------------------------------------------------------------
@@ -566,72 +548,6 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
         return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary=f"execution check failed: {exc}")
 
 
-def _check_alerts(
-    alert_state: dict[str, Any] | None,
-    journal_state: dict[str, Any] | None,
-    *,
-    mode: str = "",
-    now: datetime | None = None,
-) -> HealthCheck:
-    """Webhook delivery, as reported by the engine — never by this process.
-
-    ``alert_stats()``/``journal_stats()`` are process-local. An operator
-    surface (the CLI, the web API) runs in its own process and would answer
-    "webhook OK" from counters that never saw an alert, hiding a missing or
-    rejected webhook. The engine persists its own copy into the health
-    snapshot; that copy is the only honest reading. No copy means no reading
-    at all, which is UNKNOWN — never OK.
-    """
-    if alert_state is None:
-        return HealthCheck(
-            code="alerts",
-            status=HealthStatus.UNKNOWN,
-            summary="no alert state persisted by the engine — delivery cannot be verified",
-            action="start the engine, or refresh once it has written a health snapshot",
-        )
-    now = now or datetime.now(UTC)
-    failed = int(alert_state.get("webhook_failed", 0) or 0)
-    attempted = int(alert_state.get("webhook_attempted", 0) or 0)
-    dropped = int(alert_state.get("webhook_dropped", 0) or 0)
-    j_dropped = int((journal_state or {}).get("event_journal_dropped", 0) or 0)
-    total_dropped = dropped + j_dropped
-    if not alert_state.get("webhook_configured"):
-        return HealthCheck(
-            code="alerts",
-            status=HealthStatus.DEGRADED,
-            summary=f"no alert webhook configured in {mode or 'the running mode'} — alerts reach the log only",
-            observed={"mode": mode},
-            action="set alerting.webhook_url (or PARAYABUCK_ALERT_WEBHOOK_URL) and restart the engine",
-        )
-    if failed > 0 and attempted > 0:
-        ratio = failed / max(1, attempted)
-        last_success = alert_state.get("webhook_last_success_at")
-        success_age = _age_seconds(str(last_success) if last_success else None, now)
-        stale = success_age is None or success_age > _ALERT_STALE_SUCCESS_SECONDS
-        summary = (
-            f"webhook failing {failed}/{attempted} ({ratio:.0%})"
-            if ratio > 0.5 and attempted >= 3
-            else f"webhook failures {failed}/{attempted}"
-        )
-        if stale:
-            summary += f"; last success {last_success or 'never'}"
-        return HealthCheck(
-            code="alerts",
-            status=HealthStatus.DEGRADED,
-            summary=summary,
-            observed={"failed": failed, "attempted": attempted, "webhook_last_success_at": last_success},
-            action="check webhook URL / network",
-        )
-    if total_dropped > 0:
-        return HealthCheck(
-            code="alerts",
-            status=HealthStatus.DEGRADED,
-            summary=f"alerts dropped {total_dropped}",
-            observed={"dropped": total_dropped},
-        )
-    return HealthCheck(code="alerts", status=HealthStatus.OK, summary="webhook OK")
-
-
 def _check_observability(journal_state: dict[str, Any] | None) -> HealthCheck:
     """The event journal as reported by the engine process."""
     if journal_state is None:
@@ -642,14 +558,25 @@ def _check_observability(journal_state: dict[str, Any] | None) -> HealthCheck:
         )
     failed = int(journal_state.get("event_journal_failed", 0) or 0)
     dropped = int(journal_state.get("event_journal_dropped", 0) or 0)
-    if failed > 5 or dropped > 10:
+    # The counters are process-lifetime totals: a burst that the journal has
+    # since recovered from must not pin DEGRADED until the next restart. Only
+    # a failure newer than the last successful write is a current failure.
+    last_failure = _parse_iso(journal_state.get("event_journal_last_failure_at"))
+    last_success = _parse_iso(journal_state.get("event_journal_last_success_at"))
+    if last_failure is not None and (last_success is None or last_failure >= last_success):
         return HealthCheck(
             code="observability",
             status=HealthStatus.DEGRADED,
-            summary=f"journal degraded failed={failed} dropped={dropped}",
+            summary=f"journal failing (failed={failed} dropped={dropped}; last failure {last_failure.isoformat()})",
             observed=journal_state,
+            action="check data/runtime disk space and permissions; `parayabuck ops doctor`",
         )
-    return HealthCheck(code="observability", status=HealthStatus.OK, summary="journal healthy")
+    summary = (
+        "journal healthy"
+        if not (failed or dropped)
+        else f"journal healthy (recovered; failed={failed} dropped={dropped})"
+    )
+    return HealthCheck(code="observability", status=HealthStatus.OK, summary=summary)
 
 
 def _check_intent_watchdog(health_snapshot: dict[str, Any] | None) -> HealthCheck:
@@ -797,14 +724,6 @@ def evaluate_health(
     checks.append(_check_execution(database_path))
     checks.append(_check_intent_watchdog(health_snapshot))
     checks.append(_check_signal_cross_check(health_snapshot))
-    checks.append(
-        _check_alerts(
-            persisted_alert_state(health_snapshot),
-            persisted_journal_state(health_snapshot),
-            mode=persisted_mode(health_snapshot),
-            now=now,
-        )
-    )
     checks.append(_check_observability(persisted_journal_state(health_snapshot)))
 
     # Derive overall
@@ -886,7 +805,5 @@ __all__ = [
     "HealthStatus",
     "TradingState",
     "evaluate_health",
-    "persisted_alert_state",
     "persisted_journal_state",
-    "persisted_mode",
 ]

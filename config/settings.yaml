@@ -117,42 +117,12 @@ backup:
   path: data/backups
   retention_days: 7
 alerting:
-  # Event-notification sink for runtime operators. The console/log sink is
-  # always attached; webhook_url enables an additional generic POST sink
-  # (also overridable via PARAYABUCK_ALERT_WEBHOOK_URL). Failure events are
-  # throttled per kind so a broken data provider or broker cannot spam the webhook.
-  # Keep the URL (it is a credential) out of this file: leave webhook_url
-  # empty and set PARAYABUCK_ALERT_WEBHOOK_URL in the service EnvironmentFile.
-  enabled: true
-  webhook_url: ""
+  # Alerts stay on this host: every alert goes to the log (journalctl -u
+  # parayabuck) and the operational event journal (parayabuck ops events);
+  # repeats are throttled per incident. Nothing is delivered off-host.
   # One-line summary after each equity session-close decision (event
-  # daily_summary; log/journal always, webhook when a URL is configured).
+  # daily_summary).
   daily_summary: true
-  events:
-  - runtime_started
-  - runtime_stopped_unexpected
-  - runtime_start_failed
-  - backup_failed
-  - data_provider_unavailable
-  - order_rejected
-  - ambiguous_order
-  - reconciliation_failure
-  - reconciliation_recovered
-  - risk_incident
-  - drawdown_halt
-  - risk_epoch_reset
-  - circuit_breaker
-  - signal_adjustment_failure
-  - signal_adjustment_recovery
-  - paper_incident
-  - daily_summary
-  - intent_alarm
-  - intent_recovered
-  - signal_source_mismatch
-  - decision_deferred
-  - market_data_degraded
-  - session_close_bar_incomplete
-  - reconciliation_unexpected_fill_side
 intent_watchdog:
   # Intent-vs-reality watchdog (observability only; never gates trading).
   # Alarms (alert kind intent_alarm) when, on the NYSE calendar, no equity

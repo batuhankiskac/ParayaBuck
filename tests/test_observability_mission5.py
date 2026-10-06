@@ -110,19 +110,26 @@ def test_event_timestamp_must_be_utc() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _write(journal: EventJournal, event: OperationalEvent) -> bool:
+    """Write one event synchronously through the writer's batch path."""
+    failed_before = journal.stats()["event_journal_failed"]
+    journal._flush_batch([event])
+    return journal.stats()["event_journal_failed"] == failed_before
+
+
 def test_journal_write_read_and_retention(tmp_path: Path) -> None:
     jp = tmp_path / "obs.sqlite3"
     j = EventJournal(str(jp), queue_size=10, retention_days=30, max_events=100)
     _ = j  # keep reference
     ev = create_event(kind="runtime_started", message="started", session_id="s1")
-    assert j.emit_sync(ev)
+    assert _write(j, ev)
     # flush and query
     events = j.query(limit=10)
     assert len(events) == 1
     assert events[0].kind == "runtime_started"
     # retention: insert old event and trigger cleanup via max_events
     old = create_event(kind="test", message="old", occurred_at=datetime.now(UTC) - timedelta(days=40))
-    j.emit_sync(old)
+    _write(j, old)
     # force cleanup
     conn = sqlite3.connect(str(jp))
     conn.execute(
@@ -143,7 +150,7 @@ def test_journal_write_read_and_retention(tmp_path: Path) -> None:
     j2 = EventJournal(str(jp), retention_days=30, max_events=2)
     # insert third to exceed max
     for i in range(3):
-        j2.emit_sync(create_event(kind="test", message=f"m{i}"))
+        _write(j2, create_event(kind="test", message=f"m{i}"))
     # after writes, cleanup should have run after 100? force via private
     conn = sqlite3.connect(str(jp))
     try:
@@ -185,12 +192,12 @@ def test_journal_bounded_queue_and_drop(tmp_path: Path) -> None:
 def test_journal_failure_isolation(tmp_path: Path) -> None:
     # Simulate disk failure by using a directory as path (write will fail)
     # inject failure by making path a directory and trying to write?
-    # Instead test that emit_sync never raises even with bad path
+    # Instead test that a failed write never raises even with bad path
     bad = EventJournal(str(tmp_path / "nonexistent_dir" / "x" / "y.sqlite3"), queue_size=5)
     # The directory will be created, so to simulate failure we patch connect to raise
     with patch("parayabuck.monitoring.journal.sqlite3.connect", side_effect=sqlite3.OperationalError("disk full")):
         ev = create_event(kind="test", message="fail")
-        assert not bad.emit_sync(ev)  # returns False but not raise
+        assert not _write(bad, ev)  # counted as failed, never raised
         assert bad.stats()["event_journal_failed"] >= 1
     # Ensure trading not affected - this is the isolation property: emit returns, does not raise
     try:
@@ -416,8 +423,8 @@ def test_cli_ops_events_filters(tmp_path: Path) -> None:
     now = datetime.now(UTC)
     ev1 = create_event(kind="reconciliation_failure", message="fail1", occurred_at=now - timedelta(minutes=10))
     ev2 = create_event(kind="data_provider_unavailable", message="fail2", occurred_at=now - timedelta(minutes=5))
-    j.emit_sync(ev1)
-    j.emit_sync(ev2)
+    _write(j, ev1)
+    _write(j, ev2)
     # query via CLI with custom journal
     code, out, _ = _run_cli("ops", "events", "--journal", str(jp), "--limit", "10", "--json")
     assert code == 0
@@ -440,14 +447,15 @@ def test_web_ops_severity_filter_never_widens_the_result() -> None:
 
     now = datetime.now(UTC)
     journal = get_journal()
-    journal.emit_sync(
+    _write(
+        journal,
         create_event(
             kind="reconciliation_failure",
             message="drift",
             occurred_at=now - timedelta(minutes=5),
-        )
+        ),
     )
-    journal.emit_sync(create_event(kind="runtime_started", message="started", occurred_at=now))
+    _write(journal, create_event(kind="runtime_started", message="started", occurred_at=now))
 
     assert len(ops.query_events(10)) >= 2
     assert {e["kind"] for e in ops.query_events(10, severity="WARNING")} == {"reconciliation_failure"}
@@ -460,8 +468,8 @@ def test_cli_ops_timeline(tmp_path: Path, isolated_config_path: Path) -> None:
     jp = tmp_path / "timeline.sqlite3"
     j = EventJournal(str(jp))
     dec = "dec-timeline-1"
-    j.emit_sync(create_event(kind="decision_summary", message="summary", decision_id=dec))
-    j.emit_sync(create_event(kind="rebalance_phase_changed", message="phase", decision_id=dec))
+    _write(j, create_event(kind="decision_summary", message="summary", decision_id=dec))
+    _write(j, create_event(kind="rebalance_phase_changed", message="phase", decision_id=dec))
     code, out, _ = _run_cli(
         "--config",
         str(isolated_config_path),
@@ -488,7 +496,7 @@ def test_ops_timeline_uses_configured_journal_path_with_explicit_db(
 
     journal = tmp_path / "observability.sqlite3"
     decision = "dec-configured-journal"
-    EventJournal(str(journal)).emit_sync(create_event(kind="decision_summary", message="summary", decision_id=decision))
+    _write(EventJournal(str(journal)), create_event(kind="decision_summary", message="summary", decision_id=decision))
     config = tmp_path / "settings.yaml"
     config.write_text(
         "symbols: [SPY, QQQ, QLD]\n"
@@ -689,7 +697,7 @@ def test_forensics_decision_reconstruction(tmp_path: Path) -> None:
 
 def test_alert_throttle_distinct_incidents() -> None:
     alerts.reset_for_tests()
-    alerts.configure_alerting(enabled=True, webhook_url="", throttle_seconds=60.0)
+    alerts.configure_alerting(throttle_seconds=60.0)
     # Two paper_incident with different incident_id should both be delivered (not throttled)
     alerts.emit("paper_incident", message="first", category="PROVIDER_UNAVAILABLE", incident_id="id1")
     alerts.emit("paper_incident", message="second", category="PROVIDER_UNAVAILABLE", incident_id="id2")
@@ -703,35 +711,12 @@ def test_alert_throttle_distinct_incidents() -> None:
 
     # Distinct provider incidents should not suppress each other
     alerts.reset_for_tests()
-    alerts.configure_alerting(enabled=True, webhook_url="", throttle_seconds=60.0)
+    alerts.configure_alerting(throttle_seconds=60.0)
     alerts.emit("data_provider_unavailable", message="provider fail", incident_id="inc-1")
     alerts.emit("data_provider_unavailable", message="provider fail again", incident_id="inc-2")
     stats = alerts.alert_stats()
     # With per-incident throttling, both should be delivered
     assert stats["delivered"].get("data_provider_unavailable", 0) == 2
-    alerts.reset_for_tests()
-
-
-def test_alert_webhook_counters_and_failure() -> None:
-    alerts.reset_for_tests()
-    alerts.configure_alerting(
-        enabled=True, webhook_url="http://127.0.0.1:1/fake", events=("runtime_started",), throttle_seconds=0
-    )
-
-    # Mock failing post
-    class FakeFail:
-        def raise_for_status(self):
-            raise Exception("fail")
-
-    with patch("parayabuck.monitoring.alerts.requests.post", return_value=FakeFail()):
-        alerts.emit("runtime_started", message="test")
-        # worker is async; give time
-        time.sleep(0.3)
-        # also test direct _post_webhook increments failed
-        alerts._post_webhook("http://127.0.0.1:1/fake", {"kind": "runtime_started", "message": "x"})
-        stats = alerts.alert_stats()
-        assert stats["webhook_attempted"] >= 1
-        assert stats["webhook_failed"] >= 1
     alerts.reset_for_tests()
 
 
@@ -774,11 +759,10 @@ def test_snapshot_failure_does_not_crash() -> None:
 
 def test_alert_failure_does_not_crash() -> None:
     alerts.reset_for_tests()
-    alerts.configure_alerting(webhook_url="http://127.0.0.1:1/fake", throttle_seconds=0)
-    with patch("parayabuck.monitoring.alerts.requests.post", side_effect=Exception("network down")):
+    alerts.configure_alerting(throttle_seconds=0)
+    with patch("parayabuck.monitoring.journal.emit_journal", side_effect=Exception("journal down")):
         try:
             alerts.emit("runtime_started", message="x")
-            time.sleep(0.2)
         except Exception:
             pytest.fail("alert emit should never raise")
     alerts.reset_for_tests()
@@ -807,14 +791,15 @@ def test_chaos_failure_sequence(tmp_path: Path) -> None:
         ("runtime_health_recovered", now + timedelta(minutes=45)),
     ]
     for kind, ts in seq:
-        j.emit_sync(
+        _write(
+            j,
             create_event(
                 kind=kind,
                 message=f"{kind} event",
                 occurred_at=ts,
                 session_id="sess1",
                 decision_id="dec1" if "decision" in kind else None,
-            )
+            ),
         )
 
     events = j.query(limit=20)

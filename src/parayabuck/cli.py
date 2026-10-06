@@ -97,16 +97,6 @@ def _parser() -> argparse.ArgumentParser:
     doctor_p.add_argument("--snapshot", default=None)
     doctor_p.add_argument("--db", default=None)
     doctor_p.add_argument("--journal", default=None)
-    watchdog_p = ops_sub.add_parser("watchdog", help="out-of-process dead-man probe: /readyz + backup freshness")
-    watchdog_p.add_argument("--json", action="store_true")
-    watchdog_p.add_argument("--readyz-url", default=None, help="override the probed /readyz URL")
-    watchdog_p.add_argument("--timeout", type=float, default=5.0, help="probe timeout in seconds")
-    watchdog_p.add_argument(
-        "--max-backup-age-hours",
-        type=float,
-        default=None,
-        help="newest backup older than this is a failure (default: 2x the 6h backup timer)",
-    )
     events_p = ops_sub.add_parser("events", help="query operational event journal")
     events_p.add_argument("--since", default=None, help="since time (ISO or 30m,2h,1d)")
     events_p.add_argument("--until", default=None, help="until time (ISO or relative)")
@@ -209,7 +199,19 @@ def main(argv: list[str] | None = None) -> int:
         return _run_doctor(args)
     if args.command == "ops":
         return _run_ops(args)
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+    except Exception as exc:
+        # The backup timer runs unattended: an invalid settings file must be
+        # a clear ERROR in the journal, not a bare traceback.
+        log.error("parayabuck %s: configuration could not be loaded: %s", args.command, exc)
+        if args.command == "backup":
+            _emit_ops_alert(
+                "backup_failed",
+                f"Backup skipped: configuration could not be loaded: {exc}",
+                reason="config_invalid",
+            )
+        return 1
     if args.command == "authorize-live":
         return _authorize_live(config, args)
     if args.command == "backup":
@@ -602,6 +604,7 @@ def _run_doctor(args: argparse.Namespace) -> int:
         elif args.offline:
             add("network offline", True, "--offline skip")
     except Exception as exc:
+        log.error("parayabuck doctor: configuration could not be loaded or checked: %s", exc)
         add("config parses", False, str(exc))
         blocker = True
     print("=== ParayaBuck Doctor ===")
@@ -651,121 +654,6 @@ def _parse_time_arg(value: str | None) -> datetime | None:
         raise SystemExit(f"Invalid time value: {value} (use ISO or 30m/2h/1d)")
 
 
-def _readiness_detail(payload: object) -> str:
-    """One-line engine context from a /readyz body."""
-    body = payload if isinstance(payload, dict) else {}
-    parts = [f"engine_state={body.get('engine_state')}"]
-    if body.get("engine_error"):
-        parts.append(f"engine_error={body['engine_error']}")
-    if body.get("start_retry_attempt"):
-        parts.append(f"start_retry_attempt={body['start_retry_attempt']}")
-    if body.get("degraded_reasons"):
-        parts.append(f"degraded_reasons={body['degraded_reasons']}")
-    return " ".join(parts)
-
-
-def _readiness_failure_reason(status: int | None, payload: object, error: str | None = None) -> str | None:
-    """Why this /readyz answer means "not trading", or None when it is ready."""
-    if error is not None:
-        return f"/readyz probe failed: {error}"
-    if status is None:
-        return "/readyz probe returned no response"
-    detail = _readiness_detail(payload)
-    if status != 200:
-        return f"/readyz returned HTTP {status} ({detail})"
-    if not isinstance(payload, dict) or payload.get("ready") is not True:
-        return f"/readyz reports not ready ({detail})"
-    return None
-
-
-def _backup_failure_reason(age_hours: float | None, max_age_hours: float) -> str | None:
-    """Why the backup set is too old to trust, or None when it is fresh."""
-    if age_hours is None:
-        return "no backup found; a database loss would be unrecoverable"
-    if age_hours > max_age_hours:
-        return f"newest backup is {age_hours:.1f}h old (limit {max_age_hours:g}h)"
-    return None
-
-
-def _probe_readyz(url: str, timeout: float) -> tuple[int | None, object, str | None]:
-    """GET the loopback /readyz endpoint: (status, parsed body, transport error)."""
-    import urllib.error
-    import urllib.request
-
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            status = int(response.status)
-            raw = response.read()
-    except urllib.error.HTTPError as exc:
-        # 503 is the readiness answer itself, not a transport failure.
-        status = int(exc.code)
-        raw = exc.read()
-    except Exception as exc:
-        return None, None, str(exc)
-    try:
-        return status, json.loads(raw.decode("utf-8", "replace")), None
-    except ValueError:
-        return status, None, "response body is not JSON"
-
-
-def _ops_watchdog(args: argparse.Namespace) -> int:
-    """Out-of-process dead-man probe: /readyz plus backup freshness.
-
-    Everything the engine's own alarms report runs inside a process that may
-    never have started, and /healthz stays 200 while the engine is dead, so
-    systemd restarts nothing. This probe runs from
-    ``parayabuck-watchdog.timer`` and alerts on the operator webhook instead.
-    """
-    from parayabuck.backup import MAX_BACKUP_AGE_HOURS, latest_backup_age_hours
-
-    config_path = getattr(args, "config", None) or "config/settings.yaml"
-    try:
-        config = load_config(config_path)
-    except Exception as exc:
-        print(f"watchdog: configuration could not be loaded: {exc}", file=sys.stderr)
-        return 1
-    url = args.readyz_url or os.getenv("PARAYABUCK_READYZ_URL") or f"http://{config.app.host}:{config.app.port}/readyz"
-    status, payload, probe_error = _probe_readyz(url, float(args.timeout))
-    readiness = _readiness_failure_reason(status, payload, probe_error)
-    max_age = MAX_BACKUP_AGE_HOURS if args.max_backup_age_hours is None else float(args.max_backup_age_hours)
-    age_hours = latest_backup_age_hours(config.backup.path)
-    backup_failure = _backup_failure_reason(age_hours, max_age)
-    report: dict[str, Any] = {
-        "checked_at": datetime.now(UTC).isoformat(),
-        "readyz_url": url,
-        "ready": readiness is None,
-        "readyz_status": status,
-        "readiness_failure": readiness,
-        "backup_path": str(config.backup.path),
-        "backup_age_hours": None if age_hours is None else round(age_hours, 3),
-        "maximum_backup_age_hours": max_age,
-        "backup_failure": backup_failure,
-    }
-    if getattr(args, "json", False):
-        print(json.dumps(report, indent=2, default=str))
-    if readiness is not None:
-        print(f"watchdog: {readiness}", file=sys.stderr)
-        _emit_ops_alert(
-            "runtime_start_failed",
-            f"Engine is not ready: {readiness}",
-            reason="readyz_probe",
-            readyz_url=url,
-            readyz_status=status,
-        )
-    if backup_failure is not None:
-        print(f"watchdog: {backup_failure}", file=sys.stderr)
-        _emit_ops_alert(
-            "backup_failed",
-            f"Backup is not fresh: {backup_failure}",
-            reason="stale",
-            backup_dir=str(config.backup.path),
-            age_hours=None if age_hours is None else round(age_hours, 3),
-        )
-    if readiness is None and backup_failure is None:
-        print(f"watchdog: OK ({report['checked_at']}; newest backup age {report['backup_age_hours']}h)")
-    return 0 if readiness is None and backup_failure is None else 1
-
-
 def _run_ops(args: argparse.Namespace) -> int:
     cmd = getattr(args, "ops_cmd", None)
     if cmd is None or cmd == "status":
@@ -782,8 +670,6 @@ def _run_ops(args: argparse.Namespace) -> int:
         return _ops_bundle(args)
     if cmd == "rebase-ownership":
         return _ops_rebase_ownership(args)
-    if cmd == "watchdog":
-        return _ops_watchdog(args)
     print(f"Unknown ops command: {cmd}", file=sys.stderr)
     return 2
 
@@ -916,12 +802,15 @@ def _ops_status(args: argparse.Namespace) -> int:
     print("")
     print("Execution")
     print(f"  {_check_line('execution', 'execution').strip()}")
-    # Alerts
+    # Alerts are local only (log + event journal); show the engine's counters
     print("")
-    print("Alerts")
-    print(f"  {_check_line('alerts', 'alerts').strip()}")
-    # Observability
-    print(f"  {_check_line('observability', 'observability').strip()}")
+    print("Alerts (local: `parayabuck ops events`, journalctl -u parayabuck)")
+    alert_counts = snap_data.get("alerts") if isinstance(snap_data, dict) else None
+    if isinstance(alert_counts, dict):
+        delivered = alert_counts.get("delivered")
+        emitted = sum(int(v or 0) for v in delivered.values()) if isinstance(delivered, dict) else 0
+        print(f"  emitted {emitted}, throttled repeats {int(alert_counts.get('suppressed') or 0)}")
+    print(f"  {_check_line('observability', 'journal').strip()}")
     # Active incidents summary if present
     try:
         from parayabuck.monitoring import metrics as _m

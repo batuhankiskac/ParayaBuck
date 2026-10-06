@@ -19,9 +19,13 @@ parayabuck ops doctor                 # exit 0 ok, 1 degraded, 2 critical
 parayabuck ops events --since 2h
 parayabuck ops bundle --output /tmp/pb_bundle.zip   # sanitized; share status.json + recent_events.jsonl first
 curl -s http://127.0.0.1:8000/readyz | python3 -m json.tool
-parayabuck ops watchdog              # dead-man probe: /readyz + backup freshness (exit 1 + alert on failure)
 sudo journalctl -u parayabuck --since "1 hour ago" --no-pager | tail -n 100
 ```
+
+Alerts are local only: nothing is sent off the VM. Every alert is in the
+journal (`ops events`, filter with `--kind`/`--severity`) and in the service
+log (`journalctl -u parayabuck -g 'ALERT '`); `ops status` prints how many the
+engine emitted and how many repeats it throttled.
 
 Safety resets are operator actions in the dashboard (or
 `POST /api/engine/reset-safety-lock`, `POST /api/safety/risk-epoch`). A reset
@@ -51,8 +55,9 @@ DEGRADED. None of them gate trading.
   (`ops timeline --decision <id>`), `order_rejected` / `ambiguous_order`
   events, entry latches and the broker account.
 - `equity_position_over_target` — 30 min after the next NYSE session open the
-  account still holds more than the decision targeted (dust under 1 % of
-  equity is tolerated). In practice a cash target whose DAY SELL
+  account still holds more than the decision targeted, beyond
+  max(1 % of equity, 10 % of the target) — the slack covers exit dust and the
+  ordinary price drift of a held position between decisions. In practice a cash target whose DAY SELL
   never filled, leaving the previous position; check the order in
   `ops timeline --decision <id>` (expired/cancelled?), `order_rejected` /
   `order_expired` events and the broker account. The window is the next
@@ -94,9 +99,6 @@ fields give `reason` and `attempts`.
   auto-start loop retries with 5/15/30/60 s backoff and the state stays
   `starting`; `start_retry_attempt` in `/readyz` shows how long it has been
   going. Fix connectivity, or stop the engine and start it manually.
-- `readyz_probe` — `parayabuck ops watchdog` (the
-  `parayabuck-watchdog.timer` dead-man probe) found the deployment not ready.
-  Run it by hand for the same verdict; it also reports backup freshness.
 
 `ops status` says nothing about a start failure on its own: every alarm it
 aggregates lives in the runtime that failed to start. Use `/readyz` first.
@@ -301,13 +303,22 @@ one.
 polluted warmup/observability files and closes interrupted runtime sessions.
 Two guards now bound it, and both are refusals, not warnings:
 
-- it refuses while the engine heartbeat is live (the same fail-closed check
-  `paper_smoke` uses), so it never rewrites state under a running engine;
+- it refuses while the engine heartbeat is live (a fresh health snapshot not
+  marked `stopped`, or one it cannot read), so it never rewrites state under a
+  running engine;
 - it clears the `decision_worker_crashed` incident and its
-  `circuit_breaker_reason` **only when it verified a clean broker
-  reconciliation**. Without credentials, or with a failing reconcile, the halt
-  stays active and the script says so. Reset that halt the supported way —
-  reconcile, then reset from the dashboard or `ops` — not with this script.
+  `circuit_breaker_reason` **only when broker reconciliation ran and every
+  drift bucket came back empty** (the broker gets the runtime's portfolio
+  ownership providers, so a bot-owned QLD position is not misread as
+  `BROKER_STALE`). Without credentials, with a failing reconcile or with any
+  drift, the halt stays active and the script says so. Reset that halt the
+  supported way — reconcile, then reset from the dashboard or `ops` — not
+  with this script.
+
+A cleared incident row is first appended to
+`data/runtime/safety_incident_resolutions.jsonl` (when it was raised, when and
+by what it was resolved): `safety_incidents` only holds active halts, so that
+file is the audit trail.
 
 The script also refuses to touch any `risk_state` row whose
 `circuit_breaker_reason` is not `decision_worker_crashed`.
@@ -321,7 +332,7 @@ ownership drift — startup continues. They still count toward account gross and
 slot limits, so close them by hand in the Alpaca dashboard if unwanted.
 
 This is also the message for anything the account holds outside the strategy
-universe — a `paper_smoke` run, a manual position. Activity on a symbol the
+universe — a manual position, or a leftover from an old smoke run. Activity on a symbol the
 strategy *does* trade (QLD) is different: an unowned QLD holding is
 `BROKER_STALE` drift and halts the engine (see "Reconciliation failing").
 
@@ -332,28 +343,23 @@ order) is `UNKNOWN_ORDER` drift: the engine cannot know whether its fills are
 booked, so it refuses to start or halts until the order is terminal. Cancel or
 let it fill; do not delete rows to clear it.
 
-## `paper_smoke` refused
+## Where are the alerts?
 
-The script trades the same PAPER account and refuses itself when the engine
-heartbeat is live (stop the service first) and inside 15:45-16:30 ET, the
-session-close decision window. Run it with the service stopped, outside that
-window, and with `PARAYABUCK_ALLOW_PAPER_SMOKE=YES`.
+Nothing is delivered off the VM any more (no webhook, no dead-man probe since
+2026-10-06), and no health check turns DEGRADED for that reason. Every alert
+is in the event journal and the service log:
 
-## Webhook alerts not arriving
+```bash
+parayabuck ops events --since 24h --severity WARNING
+parayabuck ops events --kind backup_failed --since 7d
+sudo journalctl -u parayabuck -g 'ALERT ' --since today
+```
 
-`ops status` and `ops doctor` → `alerts` check shows the deliveries **as
-reported by the engine**, read from `health_snapshot.json` (`alerts` block).
-`UNKNOWN` means the engine has not published that copy yet (it is down, or the
-snapshot predates this build) — not that alerts are fine. `DEGRADED` with "no
-alert webhook configured" means alerts are going to the log only.
-
-- Is `PARAYABUCK_ALERT_WEBHOOK_URL` set in the unit's `EnvironmentFile` and was
-  the service restarted? (`alerting.webhook_url` must be empty or it wins.)
-- Is the kind in `alerting.events`?
-- `journalctl -u parayabuck | grep "webhook delivery failed"` — the URL is
-  scrubbed from the message.
-
-Events are still journaled: `ops events --since 1h`.
+`ops status` prints the engine's emitted/throttled counters (from
+`health_snapshot.json`); a throttled repeat is logged at INFO with its count.
+A configuration that still carries `alerting.webhook_url`, `alerting.enabled`
+or `alerting.events` fails to load (doctor/`ExecStartPre` refuses the start)
+with a message naming the keys: delete them.
 
 ## Database issue
 
@@ -363,14 +369,18 @@ restore). Do not delete the DB.
 
 ## Backups failing or stale (`backup_failed`)
 
+- `reason=config_invalid` — `config/settings.yaml` does not load (the error is
+  logged as ERROR by `parayabuck backup`). Fix the file; `parayabuck doctor`
+  shows the same error.
 - `reason=write_failed` / `corrupt` — the snapshot itself failed. Check
   `journalctl -u parayabuck-backup`, disk space and permissions on
   `backup.path`, then run `parayabuck backup` by hand and confirm it prints
   `Backup written:`.
-- `reason=stale` — the newest snapshot is over 12 h old, i.e. the 6 h timer
-  has not been succeeding. `systemctl list-timers parayabuck-backup.timer`
-  and `systemctl status parayabuck-backup.service`, then run the command
-  manually. `parayabuck doctor` reports the same age as a `WARN` row.
+- Stale backups (no `backup_failed` event, the timer just stopped) show up as
+  the `backup stale` `WARN` row of `parayabuck doctor` (newest snapshot over
+  12 h old). Check `systemctl list-timers parayabuck-backup.timer` and
+  `systemctl status parayabuck-backup.service`, then run the command
+  manually.
 
 Until it is fixed, any database loss restores from a stale snapshot and
 loses the decisions in between. A `parayabuck-keep-*.sqlite3` file (made

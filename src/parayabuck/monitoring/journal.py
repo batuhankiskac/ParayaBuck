@@ -99,6 +99,9 @@ class JournalStats:
     failed: int = 0
     dropped: int = 0
     last_success_at: str | None = None
+    # A failure (write error or drop) newer than the last success means the
+    # journal is failing now; an old one only describes history.
+    last_failure_at: str | None = None
 
 
 class EventJournal:
@@ -192,6 +195,7 @@ class EventJournal:
             leftover = self._queue.qsize()
             if leftover:
                 self._stats.dropped += leftover
+                self._stats.last_failure_at = datetime.now(UTC).isoformat()
                 log.warning("journal stopped with %d queued events dropped", leftover)
 
     def _writer_loop(self) -> None:
@@ -286,6 +290,7 @@ class EventJournal:
         except Exception:
             with self._lock:
                 self._stats.failed += len(batch)
+                self._stats.last_failure_at = datetime.now(UTC).isoformat()
             log.warning("journal batch write failed for %d events", len(batch), exc_info=True)
 
     def _retention_cleanup(self, conn: sqlite3.Connection) -> None:
@@ -322,60 +327,16 @@ class EventJournal:
         except queue.Full:
             with self._lock:
                 self._stats.dropped += 1
+                self._stats.last_failure_at = datetime.now(UTC).isoformat()
             log.warning("journal queue full; dropping event kind=%s", event.kind)
             return False
         except Exception:
             with self._lock:
                 self._stats.failed += 1
+                self._stats.last_failure_at = datetime.now(UTC).isoformat()
             log.warning("journal emit failed for kind=%s", event.kind, exc_info=True)
             return False
 
-    def emit_sync(self, event: OperationalEvent) -> bool:
-        """Synchronous write (for tests / CLI without writer thread). Never raises."""
-        try:
-            conn = self._connect()
-            try:
-                conn.execute(
-                    """INSERT OR IGNORE INTO operational_events
-                    (event_id, occurred_at, kind, severity, message,
-                     session_id, account_id, mode, market, strategy,
-                     decision_id, client_order_id, broker_order_id,
-                     incident_id, correlation_id, fields_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        event.event_id,
-                        event.occurred_at.isoformat(),
-                        event.kind,
-                        event.severity,
-                        event.message,
-                        event.session_id,
-                        event.account_id,
-                        event.mode,
-                        event.market,
-                        event.strategy,
-                        event.decision_id,
-                        event.client_order_id,
-                        event.broker_order_id,
-                        event.incident_id,
-                        event.correlation_id,
-                        _fields_json(event.fields),
-                        datetime.now(UTC).isoformat(),
-                    ),
-                )
-                conn.commit()
-                with self._lock:
-                    self._stats.written += 1
-                    self._stats.last_success_at = datetime.now(UTC).isoformat()
-                return True
-            finally:
-                conn.close()
-        except Exception:
-            with self._lock:
-                self._stats.failed += 1
-            log.warning("journal sync write failed", exc_info=True)
-            return False
-
-    # ---------------------------------------------------------------- query
     def query(
         self,
         *,
@@ -478,6 +439,7 @@ class EventJournal:
                 "event_journal_dropped": self._stats.dropped,
                 "event_journal_queue_depth": self._queue.qsize(),
                 "event_journal_last_success_at": self._stats.last_success_at,
+                "event_journal_last_failure_at": self._stats.last_failure_at,
             }
 
 
@@ -554,6 +516,7 @@ def journal_stats(path: str | Path | None = None) -> dict[str, object]:
             "event_journal_dropped": 0,
             "event_journal_queue_depth": 0,
             "event_journal_last_success_at": None,
+            "event_journal_last_failure_at": None,
         }
 
 

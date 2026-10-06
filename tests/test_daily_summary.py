@@ -94,29 +94,17 @@ def _result(target: TargetPortfolio | None, decision_id: str | None = "d1") -> S
     )
 
 
-def test_runtime_summary_is_logged_but_not_posted_without_webhook_url(monkeypatch) -> None:
-    posted: list[dict[str, object]] = []
-    monkeypatch.setattr(alerts, "_enqueue_webhook", lambda url, payload: posted.append(payload))
-    alerts.configure_alerting(enabled=True, webhook_url="", throttle_seconds=0)
+def test_runtime_summary_is_logged_and_journaled_once(monkeypatch) -> None:
+    journaled: list[object] = []
+    monkeypatch.setattr("parayabuck.monitoring.journal.emit_journal", lambda event: journaled.append(event))
+    alerts.configure_alerting(throttle_seconds=0)
     _shell()._emit_equity_daily_summary(SimpleNamespace(market=Market.EQUITY), _result(_target()), _account())
-    stats = alerts.alert_stats()
-    assert stats["delivered"] == {"daily_summary": 1}
-    assert stats["webhook_attempted"] == 0
-    assert posted == []
-
-
-def test_runtime_summary_is_posted_once_when_webhook_configured(monkeypatch) -> None:
-    posted: list[tuple[str, dict[str, object]]] = []
-    monkeypatch.setattr(alerts, "_enqueue_webhook", lambda url, payload: posted.append((url, payload)))
-    alerts.configure_alerting(enabled=True, webhook_url="http://hooks.invalid/abc", throttle_seconds=0)
-    _shell()._emit_equity_daily_summary(SimpleNamespace(market=Market.EQUITY), _result(_target()), _account())
-    assert len(posted) == 1
-    url, payload = posted[0]
-    assert url == "http://hooks.invalid/abc"
-    assert payload["kind"] == "daily_summary"
-    assert payload["text"] == payload["message"] == payload["content"]
-    assert "QLD target 80.0%" in str(payload["message"])
-    assert payload["decision_id"] == "d1"
+    assert alerts.alert_stats()["delivered"] == {"daily_summary": 1}
+    assert len(journaled) == 1
+    event = journaled[0]
+    assert event.kind == "daily_summary"
+    assert "QLD target 80.0%" in event.message
+    assert event.decision_id == "d1"
 
 
 @pytest.mark.parametrize(
@@ -129,14 +117,14 @@ def test_runtime_summary_is_posted_once_when_webhook_configured(monkeypatch) -> 
     ],
 )
 def test_runtime_summary_skips_disabled_non_equity_and_non_decisions(monkeypatch, runtime, market, result) -> None:
-    alerts.configure_alerting(enabled=True, webhook_url="", throttle_seconds=0)
+    alerts.configure_alerting(throttle_seconds=0)
     runtime._emit_equity_daily_summary(SimpleNamespace(market=market), result, _account())
     assert alerts.alert_stats()["delivered"] == {}
 
 
-def test_daily_summary_is_a_default_webhook_event() -> None:
+def test_daily_summary_is_on_by_default() -> None:
     from parayabuck.config import AlertingConfig
-    from parayabuck.monitoring.events import DEFAULT_ALERT_EVENTS
+    from parayabuck.monitoring.events import ALERT_KINDS
 
-    assert "daily_summary" in DEFAULT_ALERT_EVENTS
+    assert "daily_summary" in ALERT_KINDS
     assert AlertingConfig().daily_summary is True

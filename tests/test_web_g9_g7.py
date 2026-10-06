@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import socket
 from datetime import UTC, datetime, timedelta
@@ -9,7 +8,6 @@ from typing import Any
 
 import pytest
 import yaml
-from fastapi import HTTPException
 
 import parayabuck.execution.alpaca as alpaca_module
 from parayabuck.config import load_config
@@ -20,7 +18,8 @@ from parayabuck.portfolio.runtime_service import configuration_digest
 from parayabuck.universe import equity_universe_digest
 from parayabuck.utils.io import atomic_write
 from parayabuck.web import app as web_app
-from parayabuck.web import server
+from parayabuck.web.managers.engine import EngineManager
+from tests.helpers import web_client
 
 
 def _live_config(root: Path) -> Path:
@@ -87,8 +86,8 @@ def _write_approval(
     )
 
 
-def _manager(root: Path) -> server.EngineManager:
-    manager = server.EngineManager()
+def _manager(root: Path) -> EngineManager:
+    manager = EngineManager()
     manager.config_path = root / "settings.yaml"
     manager.env_path = root / ".env"
     # Never touch the network in tests: credentials are stubbed per-test and
@@ -307,8 +306,7 @@ def test_live_prerequisites_route_returns_checklist(monkeypatch: Any) -> None:
                 "config_error": None,
             }
 
-    monkeypatch.setattr(server, "manager", _StubManager())
-    result = asyncio.run(server.live_prerequisites())
+    result = web_client(_StubManager()).get("/api/live/prerequisites").json()
     assert result["all_met"] is False
     assert result["items"] == [{"id": "x", "satisfied": False}]
 
@@ -318,8 +316,7 @@ def test_risk_epoch_route_calls_manager_and_returns_baseline(monkeypatch: Any) -
         def start_new_risk_epoch(self) -> dict[str, object]:
             return {"baseline_equity": 94_000.0}
 
-    monkeypatch.setattr(server, "manager", _StubManager())
-    result = asyncio.run(server.start_new_risk_epoch())
+    result = web_client(_StubManager()).post("/api/safety/risk-epoch").json()
     assert result == {"baseline_equity": 94_000.0}
 
 
@@ -328,7 +325,5 @@ def test_risk_epoch_route_400_when_engine_not_running(monkeypatch: Any) -> None:
         def start_new_risk_epoch(self) -> dict[str, object]:
             raise ValueError("The trading engine is not running; start it first")
 
-    monkeypatch.setattr(server, "manager", _StubManager())
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(server.start_new_risk_epoch())
-    assert exc_info.value.status_code == 400
+    response = web_client(_StubManager()).post("/api/safety/risk-epoch")
+    assert response.status_code == 400

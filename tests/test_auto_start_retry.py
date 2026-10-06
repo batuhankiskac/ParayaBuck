@@ -26,7 +26,11 @@ from parayabuck.execution.alpaca import (
     ProtectionReconciliationError,
 )
 from parayabuck.runtime import EngineRuntime, TransientStartupError
-from parayabuck.web import server
+from parayabuck.web.lifespan import create_lifespan
+from parayabuck.web.managers import engine as engine_module
+from parayabuck.web.managers.engine import EngineManager
+from parayabuck.web.services import status as status_service
+from parayabuck.web.state import WebState
 
 _REAL_SLEEP = asyncio.sleep
 
@@ -464,20 +468,20 @@ class _FlakyRuntime:
         return SimpleNamespace(state="running")
 
 
-def _manager_with(monkeypatch: Any, flaky: _FlakyRuntime) -> server.EngineManager:
+def _manager_with(monkeypatch: Any, flaky: _FlakyRuntime) -> EngineManager:
     monkeypatch.setattr(runtime_module, "EngineRuntime", lambda **kwargs: flaky)
     monkeypatch.setattr(
-        server,
+        engine_module,
         "load_config",
         lambda _path: SimpleNamespace(runtime=SimpleNamespace(mode=SimpleNamespace(value="paper"))),
     )
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.config_path = Path("config/settings.yaml")
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
     return manager
 
 
-async def _wait_for_retry_pending(manager: server.EngineManager) -> None:
+async def _wait_for_retry_pending(manager: EngineManager) -> None:
     for _ in range(500):
         if manager._retry_task is not None:
             return
@@ -492,7 +496,7 @@ def test_first_transient_fails_second_succeeds(monkeypatch: Any) -> None:
     async def _no_wait(_delay: float) -> None:
         await _REAL_SLEEP(0)
 
-    monkeypatch.setattr(server.asyncio, "sleep", _no_wait)
+    monkeypatch.setattr(engine_module.asyncio, "sleep", _no_wait)
 
     asyncio.run(manager.auto_start_engine())
 
@@ -517,7 +521,7 @@ def test_backoff_is_bounded_and_capped(monkeypatch: Any) -> None:
         attempts_at_sleep.append(manager._retry_attempt)
         await _REAL_SLEEP(0)
 
-    monkeypatch.setattr(server.asyncio, "sleep", _recording_sleep)
+    monkeypatch.setattr(engine_module.asyncio, "sleep", _recording_sleep)
 
     asyncio.run(manager.auto_start_engine())
 
@@ -581,10 +585,10 @@ def test_shutdown_while_waiting_retry_cancels_it(monkeypatch: Any) -> None:
     flaky = _FlakyRuntime(failures=999)
     manager = _manager_with(monkeypatch, flaky)
     monkeypatch.setattr(manager, "should_auto_start", lambda: True)
-    monkeypatch.setattr(server, "manager", manager)
+    state = WebState(engine_manager=manager, backtest_manager=manager._backtest_manager)
 
     async def run_lifespan() -> None:
-        async with server.app_lifespan(server.app):
+        async with create_lifespan(lambda: state)(None):
             await _wait_for_retry_pending(manager)
             assert manager.engine_state == "starting"
 
@@ -626,7 +630,7 @@ def test_successful_start_resets_retry_counters(monkeypatch: Any) -> None:
         recorded_delays.append(delay)
         await _REAL_SLEEP(0)
 
-    monkeypatch.setattr(server.asyncio, "sleep", _recording_sleep)
+    monkeypatch.setattr(engine_module.asyncio, "sleep", _recording_sleep)
 
     asyncio.run(manager.auto_start_engine())
 
@@ -642,11 +646,10 @@ def test_successful_start_resets_retry_counters(monkeypatch: Any) -> None:
 def test_status_exposes_retry_info_only_while_retrying(monkeypatch: Any) -> None:
     flaky = _FlakyRuntime(failures=999)
     manager = _manager_with(monkeypatch, flaky)
-    monkeypatch.setattr(server, "manager", manager)
     # get_status needs a parseable-but-harmless config in this test.
     monkeypatch.setattr(
-        server,
-        "load_config",
+        status_service,
+        "_load_config",
         lambda _path: SimpleNamespace(
             runtime=SimpleNamespace(mode=SimpleNamespace(value="paper")),
             strategy=SimpleNamespace(equity=SimpleNamespace(enabled=False)),
@@ -657,14 +660,14 @@ def test_status_exposes_retry_info_only_while_retrying(monkeypatch: Any) -> None
     async def scenario() -> None:
         task = asyncio.create_task(manager.auto_start_engine())
         await _wait_for_retry_pending(manager)
-        status = await server.get_status()
+        status = await asyncio.to_thread(status_service.build_status_snapshot, manager)
         assert status["engine"]["retry"]["attempt"] == 1
         assert status["engine"]["retry"]["retry_in_seconds"] <= 5.0
         assert "next_retry_at" in status["engine"]["retry"]
         manager.stop_engine()
         with pytest.raises(asyncio.CancelledError):
             await task
-        idle = await server.get_status()
+        idle = await asyncio.to_thread(status_service.build_status_snapshot, manager)
         assert "engine" not in idle  # settled engine exposes no retry noise
 
     asyncio.run(scenario())

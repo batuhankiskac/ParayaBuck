@@ -12,7 +12,6 @@ import pytest
 from parayabuck.backup import (
     BackupDurabilityError,
     backup_database,
-    latest_verified_backup,
     prune_backups,
     verify_backup,
 )
@@ -56,7 +55,6 @@ def test_backup_produces_valid_restorable_database(tmp_path: Path) -> None:
     assert backup_path.name.startswith("parayabuck-")
     assert backup_path.name.endswith(".sqlite3")
     assert verify_backup(backup_path) is True
-    assert latest_verified_backup(backup_path.parent) == backup_path
     # The snapshot is normalized to a standalone rollback-journal database:
     # no -wal/-shm sidecars, restorable read-only without extra files.
     assert not Path(f"{backup_path}-wal").exists()
@@ -183,22 +181,6 @@ def test_verify_backup_rejects_zero_byte_file(tmp_path: Path) -> None:
     empty.touch()
 
     assert verify_backup(empty) is False
-
-
-def test_latest_verified_backup_skips_newer_empty_file(tmp_path: Path) -> None:
-    source = tmp_path / "runtime.sqlite3"
-    store = _make_runtime_db(source)
-    backup_dir = tmp_path / "backups"
-    try:
-        genuine = backup_database(source, backup_dir, retention_days=7)
-        invalid = backup_dir / "parayabuck-newer.sqlite3"
-        invalid.touch()
-        newer = genuine.stat().st_mtime + 1
-        os.utime(invalid, (newer, newer))
-
-        assert latest_verified_backup(backup_dir) == genuine
-    finally:
-        store.release()
 
 
 def test_failed_online_backup_leaves_no_discoverable_artifact_and_does_not_prune(
@@ -393,22 +375,6 @@ def test_labelled_backup_survives_retention_pruning(tmp_path: Path) -> None:
 
     assert keep.is_file(), "retention pruning deleted the labelled pre-deploy backup"
     assert not automatic.exists(), "the unlabelled automatic backup should have been pruned"
-
-
-def test_labelled_backup_is_still_a_restore_candidate(tmp_path: Path) -> None:
-    """Pruning skips the labelled snapshot, so restore selection must still
-    find it — otherwise a late rollback has no verified source."""
-    source = tmp_path / "runtime.sqlite3"
-    store = _make_runtime_db(source)
-    backup_dir = tmp_path / "backups"
-    try:
-        keep = backup_database(source, backup_dir, retention_days=7, label="predeploy")
-        automatic = backup_database(source, backup_dir, retention_days=7)
-    finally:
-        store.release()
-    _age(automatic, 48, now=datetime.now(UTC))
-
-    assert latest_verified_backup(backup_dir) == keep
 
 
 def test_labelled_backup_rejects_an_unsafe_label(tmp_path: Path) -> None:

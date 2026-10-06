@@ -18,8 +18,8 @@ from parayabuck.monitoring.health import HealthStatus, _check_risk, evaluate_hea
 from parayabuck.monitoring.snapshot import build_snapshot, write_snapshot_atomic
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 
-# What the engine persists into the snapshot: a configured, working webhook.
-_PERSISTED_ALERTS = {"webhook_configured": True, "webhook_attempted": 3, "webhook_failed": 0, "webhook_dropped": 0}
+# What the engine persists into the snapshot: its local alert counters.
+_PERSISTED_ALERTS = {"suppressed": 0, "delivered": {"runtime_started": 1}}
 _PERSISTED_JOURNAL = {"event_journal_written": 12, "event_journal_failed": 0, "event_journal_dropped": 0}
 
 

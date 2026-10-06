@@ -49,7 +49,7 @@ def test_a_dotenv_file_outside_the_repository_still_loads(tmp_path: Path) -> Non
 
 
 def test_a_connection_off_the_loopback_interface_is_refused() -> None:
-    """Every attempt to reach a broker, a webhook or a data vendor raises."""
+    """Every attempt to reach a broker or a data vendor raises."""
     with pytest.raises(OutboundNetworkBlocked):
         socket.create_connection(("paper-api.alpaca.markets", 443), timeout=1)
     with pytest.raises(OutboundNetworkBlocked):

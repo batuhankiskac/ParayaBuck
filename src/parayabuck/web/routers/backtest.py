@@ -10,20 +10,12 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
+from parayabuck.web.deps import get_backtest_manager
 from parayabuck.web.schemas.settings import BacktestPayload
 
 router = APIRouter(prefix="/api/backtest", tags=["backtest"])
-
-
-def get_backtest_manager(request: Request) -> Any:
-    """Resolve the app-local ``BacktestManager`` from ``WebState``."""
-    state = getattr(request.app.state, "web", None)
-    manager = getattr(state, "backtest_manager", None) if state is not None else None
-    if manager is None:
-        raise HTTPException(status_code=503, detail="Backtest manager unavailable")
-    return manager
 
 
 @router.post("/run", summary="Run backtest")

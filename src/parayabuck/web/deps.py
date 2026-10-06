@@ -1,23 +1,13 @@
-"""Dependency / DI helpers for Web platform.
+"""The one place a router or service resolves the Web composition state.
 
-Centralizes the WebState / EngineManager resolution that was previously
-copied verbatim into every router as `_get_manager`.  Routers can now do::
+Order (identical everywhere):
 
-    from parayabuck.web.deps import get_engine_manager
+1. ``request.app.state.web`` — the state the app was created with;
+2. ``parayabuck.web.state.get_web_state()`` — the process-wide state that
+   ``parayabuck.web.server`` installs (used by request-less service calls).
 
-which tries, in priority order:
-
-1. request.app.state.web.engine_manager (factory-injected)
-2. parayabuck.web.state.get_web_state().engine_manager
-3. parayabuck.web.server.manager (legacy compat, tests patch this)
-
-No circular imports: `parayabuck.web.server` is imported lazily inside
-the function, not at module load time.  The helpers are deliberately
-sync (no async) so they can be used from both sync and async contexts.
-
-Concurrency helpers (locks) are also re-exported here for discoverability
-— the actual RLock instances live on the managers (EngineManager._state_lock,
-BacktestManager.lock) so there is a single source of truth.
+There is no other fallback: a missing state is a 503, never a second,
+silently created EngineManager.
 """
 
 from __future__ import annotations
@@ -26,38 +16,34 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
-
-def get_web_state() -> Any | None:
-    try:
-        from parayabuck.web.state import get_web_state as _get
-
-        return _get()
-    except Exception:
-        return None
+from parayabuck.web.state import WebState, get_web_state
 
 
-def get_engine_manager(request: Request | None = None) -> Any:
-    """Resolve the active EngineManager or raise 500."""
+def resolve_web_state(request: Request | None = None) -> WebState:
     if request is not None:
-        web_state = getattr(request.app.state, "web", None)
-        if web_state is not None and hasattr(web_state, "engine_manager"):
-            mgr = getattr(web_state, "engine_manager", None)
-            if mgr is not None:
-                return mgr
-    ws = get_web_state()
-    if ws is not None and hasattr(ws, "engine_manager"):
-        mgr = getattr(ws, "engine_manager", None)
-        if mgr is not None:
-            return mgr
-        # WebState itself might be an EngineManager in tests
-        if hasattr(ws, "current_engine_state"):
-            return ws
-    try:
-        import parayabuck.web.server as server_mod
+        state = getattr(request.app.state, "web", None)
+        if state is not None:
+            return state  # type: ignore[no-any-return]
+    state = get_web_state()
+    if state is None:
+        raise HTTPException(status_code=503, detail="Web state unavailable")
+    return state
 
-        mgr = getattr(server_mod, "manager", None)
-        if mgr is not None:
-            return mgr
-    except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=500, detail="Engine manager unavailable") from exc
-    raise HTTPException(status_code=500, detail="Engine manager unavailable")
+
+def get_engine_manager(request: Request) -> Any:
+    """The active EngineManager, or 503."""
+    manager = getattr(resolve_web_state(request), "engine_manager", None)
+    if manager is None:
+        raise HTTPException(status_code=503, detail="Engine manager unavailable")
+    return manager
+
+
+def get_backtest_manager(request: Request) -> Any:
+    """The active BacktestManager, or 503."""
+    manager = getattr(resolve_web_state(request), "backtest_manager", None)
+    if manager is None:
+        raise HTTPException(status_code=503, detail="Backtest manager unavailable")
+    return manager
+
+
+__all__ = ["get_backtest_manager", "get_engine_manager", "resolve_web_state"]

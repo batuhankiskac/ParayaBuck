@@ -14,24 +14,24 @@ log = get_logger("parayabuck.web.ops")
 _OPS_LIMIT_MAX = 1000
 
 
-def _current_config() -> Any | None:
-    """Engine config from WebState, else from the legacy server singleton."""
+def manager_config(manager: Any) -> Any | None:
+    """The configuration an engine manager runs from (None when unavailable)."""
     from parayabuck.config import load_config
 
+    config_path = getattr(manager, "config_path", None)
+    if not config_path:
+        return None
     try:
-        from parayabuck.web.state import get_web_state
-
-        ws = get_web_state()
-        if ws and getattr(ws.engine_manager, "config_path", None):
-            return load_config(str(ws.engine_manager.config_path))
-    except Exception:
-        pass
-    try:
-        import parayabuck.web.server as srv
-
-        return load_config(str(srv.manager.config_path))
+        return load_config(str(config_path))
     except Exception:
         return None
+
+
+def _current_config() -> Any | None:
+    """Engine config of the process-wide WebState (request-less callers)."""
+    from parayabuck.web.state import get_web_state
+
+    return manager_config(getattr(get_web_state(), "engine_manager", None))
 
 
 def _resolve_db_path(cfg: Any | None) -> str:
@@ -107,13 +107,13 @@ def query_events(limit: int = 100, **filters: Any) -> list[dict[str, Any]]:
         return []
 
 
-def get_incidents(limit: int = 100) -> list[dict[str, Any]]:
+def get_incidents(limit: int = 100, config: Any | None = None) -> list[dict[str, Any]]:
     try:
         limit = max(1, min(int(limit), _OPS_LIMIT_MAX))
     except Exception:
         limit = 100
     # Prefer querying safety_incidents table directly (forensics reuses same table)
-    db_path = _resolve_db_path(_current_config())
+    db_path = _resolve_db_path(config if config is not None else _current_config())
     if not Path(str(db_path)).exists():
         return []
     try:
@@ -135,7 +135,7 @@ def get_incidents(limit: int = 100) -> list[dict[str, Any]]:
         return []
 
 
-def get_timeline(decision_id: str) -> dict[str, Any]:
+def get_timeline(decision_id: str, config: Any | None = None) -> dict[str, Any]:
     if not decision_id or not decision_id.strip():
         return {"decision_id": decision_id, "error": "decision_id required", "unavailable": True}
     decision_id = decision_id.strip()
@@ -144,16 +144,16 @@ def get_timeline(decision_id: str) -> dict[str, Any]:
         from parayabuck.monitoring.forensics import decision_reconstruction
 
         # decision_reconstruction expects (db_path, decision_id)
-        db_path = _resolve_db_path(_current_config())
+        db_path = _resolve_db_path(config if config is not None else _current_config())
         return decision_reconstruction(db_path, decision_id)
     except Exception as exc:  # pragma: no cover
         log.warning("timeline reconstruction failed: %s", exc)
         return {"error": str(exc), "decision_id": decision_id, "unavailable": True}
 
 
-def get_latest_decision() -> dict[str, Any]:
+def get_latest_decision(config: Any | None = None) -> dict[str, Any]:
     try:
-        db_path = Path(_resolve_db_path(_current_config()))
+        db_path = Path(_resolve_db_path(config if config is not None else _current_config()))
         if not db_path.exists():
             return {"decision": None, "unavailable": True, "reason": "no decision DB", "overall_health": "UNKNOWN"}
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5.0)

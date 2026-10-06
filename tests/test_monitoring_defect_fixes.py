@@ -307,30 +307,22 @@ def test_journal_stop_timeout_keeps_writer_accountable(tmp_path: Path, monkeypat
 
 
 # ---------------------------------------------------------------------------
-# Alert identity — one event_id for the journal and the webhook payload
+# Alert identity — a supplied event_id is the journal row's id
 # ---------------------------------------------------------------------------
 
 
-def test_supplied_event_id_reaches_both_sinks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_supplied_event_id_reaches_the_journal(monkeypatch: pytest.MonkeyPatch) -> None:
     from parayabuck.monitoring import journal as journal_module
 
     journaled: list[OperationalEvent] = []
-    posted: list[dict[str, object]] = []
     monkeypatch.setattr(journal_module, "emit_journal", lambda event: journaled.append(event))
-    monkeypatch.setattr(alerts, "_enqueue_webhook", lambda url, payload: posted.append(payload))
     alerts.reset_for_tests()
-    alerts.configure_alerting(
-        enabled=True,
-        webhook_url="http://127.0.0.1:1/unused",
-        events=("paper_incident",),
-        throttle_seconds=0.0,
-    )
+    alerts.configure_alerting(throttle_seconds=0.0)
 
     alerts.emit("paper_incident", message="boom", category="PROVIDER_UNAVAILABLE", event_id="fixed-id")
     alerts.reset_for_tests()
 
     assert journaled[0].event_id == "fixed-id"
-    assert posted[0]["event_id"] == "fixed-id"
 
 
 # ---------------------------------------------------------------------------

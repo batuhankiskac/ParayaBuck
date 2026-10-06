@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 from parayabuck.config import load_config
 from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
@@ -30,10 +30,6 @@ from parayabuck.utils.io import atomic_write
 from parayabuck.web.schemas.settings import SettingsPayload, ValidatedSettings
 
 log = get_logger("parayabuck.web.engine")
-
-# Compatibility export only.  Mutual exclusion is owned by each composed
-# EngineManager/WebState pair, never by this module-level name.
-backtest_manager: Any | None = None
 
 _AUTO_START_RETRY_BACKOFF: tuple[int, ...] = (5, 15, 30, 60)
 _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
@@ -45,7 +41,7 @@ _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
 # emits ``runtime_start_failed``; a retrying auto-start stays quiet for the
 # first attempts, then repeats the alert every
 # ``_AUTO_START_RETRY_ALERT_REPEAT`` attempts so an endless retry loop
-# cannot spam the webhook while still reporting itself.
+# cannot flood the log/journal while still reporting itself.
 _AUTO_START_RETRY_ALERT_AFTER = 3
 _AUTO_START_RETRY_ALERT_REPEAT = 10
 
@@ -205,9 +201,15 @@ class EngineManager:
         return False
 
     def get_credentials(self) -> tuple[str | None, str | None]:
-        load_dotenv(self.env_path, override=True)
-        key = os.getenv("ALPACA_API_KEY")
-        secret = os.getenv("ALPACA_SECRET_KEY")
+        """The two Alpaca keys; the env file wins over the process environment.
+
+        Read per call (the settings drawer rewrites the file) but only these
+        two keys: reloading the whole file with override=True on every poll
+        rewrote unrelated process environment variables.
+        """
+        values = dotenv_values(self.env_path) if self.env_path.exists() else {}
+        key = values.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY")
+        secret = values.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY")
         return key, secret
 
     def should_auto_start(self) -> bool:
@@ -542,20 +544,28 @@ class EngineManager:
                 startup_cancel=self._start_cancel,
             )
             runtime.start()
-            # Close the lazy /api/account broker (if any) instead of leaking
-            # its pooled HTTP session; the runtime's broker takes over
-            # account polling from here.
-            self.reset_broker()
-            with self._state_lock:
-                # A stop request issued while the engine was starting wins:
-                # shut the fresh runtime down instead of leaving it running
-                # after an explicit stop.
-                interrupted = self.engine_state == "stopping"
-                if not interrupted:
-                    self.runtime = runtime
-                    self.broker = runtime.broker
-                    self.engine_state = "running"
-                    self._reset_retry_state()
+            # The runtime's broker takes over account polling. Swap it in under
+            # the account lock: a poll between a separate reset and this
+            # assignment used to build a lazy AlpacaBroker that was then
+            # overwritten without being closed (a leaked HTTP pool).
+            replaced_broker = None
+            with self._account_lock:
+                with self._state_lock:
+                    # A stop request issued while the engine was starting wins:
+                    # shut the fresh runtime down instead of leaving it running
+                    # after an explicit stop.
+                    interrupted = self.engine_state == "stopping"
+                    if not interrupted:
+                        replaced_broker = self.broker
+                        self.runtime = runtime
+                        self.broker = runtime.broker
+                        self.engine_state = "running"
+                        self._reset_retry_state()
+            if replaced_broker is not None and replaced_broker is not runtime.broker:
+                try:
+                    replaced_broker.close()
+                except Exception:
+                    log.exception("Closing the replaced account broker failed")
             if interrupted:
                 raise RuntimeError("Engine start was interrupted by a stop request")
             if live_mode:
@@ -833,7 +843,11 @@ class EngineManager:
                 runtime = self.runtime
                 runtime_ledger = getattr(runtime, "ledger", None)
                 if runtime_ledger is not None and bool(self.broker.account_id):
-                    managed = runtime_ledger.managed_for_account(self.broker.account_id)
+                    try:
+                        managed = runtime_ledger.managed_for_account(self.broker.account_id)
+                    except Exception:
+                        # Ownership detail is display-only; the balances still serve
+                        log.warning("Managed-position lookup failed for the account snapshot", exc_info=True)
                 positions_list = []
                 for p in acct.positions:
                     if not p.is_flat:
@@ -1335,7 +1349,7 @@ _SECRET_WARNING_CACHE: dict[Path, str | None] = {}
 def _tracked_secret_warning(root: Path) -> str | None:
     """Constructor-time warning, scanned once per resolved root.
 
-    Four EngineManagers are built at import; the engine-start gate calls
+    Tests build many EngineManagers; the engine-start gate calls
     _scan_tracked_secrets directly so it never sees this memo.
     """
     resolved = root.resolve()

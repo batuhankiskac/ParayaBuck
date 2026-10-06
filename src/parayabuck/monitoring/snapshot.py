@@ -48,9 +48,9 @@ def build_snapshot(
         "mode": mode,
         "runtime_state": runtime_state or (runtime_health.get("state") if isinstance(runtime_health, dict) else None),
         "runtime_health": runtime_health or {},
-        # Delivery/journal counters of THIS (engine) process. `ops status`,
+        # Alert/journal counters of THIS (engine) process. `ops status`,
         # `ops doctor` and the web API run in other processes, so the snapshot
-        # is the only place they can read a real alert reading from.
+        # is the only place they can read the engine's real counters from.
         "observability": journal_stats(),
         "alerts": alert_stats(),
         "extra": extra or {},

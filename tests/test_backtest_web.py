@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import date
+from types import SimpleNamespace
 from typing import Any
 
-import pytest
-
-from parayabuck.web import server
+from parayabuck.web.managers.backtest import BacktestManager
+from tests.helpers import web_client
 
 
 def _payload(**overrides: Any) -> dict[str, Any]:
@@ -36,37 +35,27 @@ def test_backtest_start_and_status(monkeypatch: Any) -> None:
         def is_alive(self) -> bool:
             return False
 
-    before = (server.backtest_manager.state, server.backtest_manager._thread, server.backtest_manager.run_id)
-    server.backtest_manager._thread_factory = FakeThread
-    try:
-        payload = server.BacktestPayload(**_payload())
-        response = asyncio.run(server.run_backtest(payload))
-        assert response["status"] == "started"
-        assert response["run_id"].startswith("web-")
+    backtests = BacktestManager()
+    backtests._thread_factory = FakeThread
+    client = web_client(SimpleNamespace(current_engine_state=lambda: "stopped"), backtest_manager=backtests)
+    response = client.post("/api/backtest/run", json=_payload()).json()
+    assert response["status"] == "started"
+    assert response["run_id"].startswith("web-")
 
-        argv = thread_box["kwargs"]["args"][0]
-        assert argv[0] == "backtest"
-        assert "--output-dir" in argv
-        assert argv[argv.index("--output-dir") + 1] == server.backtest_manager.output_dir
-        assert "--start" in argv and "--end" in argv
-        assert "--market" in argv and argv[argv.index("--market") + 1] == "equity"
-        assert "--symbols" in argv and argv[argv.index("--symbols") + 1] == "SPY,QQQ,QLD"
-        assert "--strategy" in argv
-        assert "--param" in argv and argv[argv.index("--param") + 1] == "vol_target=0.35"
+    argv = thread_box["kwargs"]["args"][0]
+    assert argv[0] == "backtest"
+    assert "--output-dir" in argv
+    assert argv[argv.index("--output-dir") + 1] == backtests.output_dir
+    assert "--start" in argv and "--end" in argv
+    assert "--market" in argv and argv[argv.index("--market") + 1] == "equity"
+    assert "--symbols" in argv and argv[argv.index("--symbols") + 1] == "SPY,QQQ,QLD"
+    assert "--strategy" in argv
+    assert "--param" in argv and argv[argv.index("--param") + 1] == "vol_target=0.35"
 
-        status = asyncio.run(server.backtest_status())
-        assert status["state"] in {"running", "idle", "done"}
-        assert status["run_id"] == response["run_id"]
-        assert status["output_dir"].startswith("reports/")
-    finally:
-        # The manager is a process singleton: a leaked state="running" made the
-        # next test (or a subset run) see a running backtest.
-        (
-            server.backtest_manager.state,
-            server.backtest_manager._thread,
-            server.backtest_manager.run_id,
-        ) = before
-        server.backtest_manager._thread_factory = None
+    status = client.get("/api/backtest/status").json()
+    assert status["state"] in {"running", "idle", "done"}
+    assert status["run_id"] == response["run_id"]
+    assert status["output_dir"].startswith("reports/")
 
 
 def test_backtest_rejects_second_run_while_running(monkeypatch: Any) -> None:
@@ -74,19 +63,17 @@ def test_backtest_rejects_second_run_while_running(monkeypatch: Any) -> None:
         def is_alive(self) -> bool:
             return True
 
-    server.backtest_manager._thread = AliveThread()
-    server.backtest_manager.state = "running"
-    try:
-        with pytest.raises(Exception, match="zaten çalışıyor"):
-            asyncio.run(server.run_backtest(server.BacktestPayload(**_payload())))
-    finally:
-        server.backtest_manager._thread = None
-        server.backtest_manager.state = "idle"
-        server.backtest_manager._thread_factory = None
+    backtests = BacktestManager()
+    backtests._thread = AliveThread()
+    backtests.state = "running"
+    client = web_client(SimpleNamespace(current_engine_state=lambda: "stopped"), backtest_manager=backtests)
+    response = client.post("/api/backtest/run", json=_payload())
+    assert response.status_code == 400
+    assert "zaten çalışıyor" in response.json()["detail"]
 
 
 def test_backtest_argv_zero_days_uses_years() -> None:
-    manager = server.BacktestManager()
+    manager = BacktestManager()
     argv = manager._build_argv(
         {"market": "equity", "days": 0, "years": 10},
         "/tmp/out",
@@ -99,7 +86,7 @@ def test_backtest_argv_zero_days_uses_years() -> None:
 
 
 def test_backtest_manager_stream_captures_progress() -> None:
-    manager = server.BacktestManager()
+    manager = BacktestManager()
     stream = manager._stream()
     stream.write("satır bir\n")
     stream.write("satır iki")

@@ -129,7 +129,7 @@ def test_readme_mentions_legacy_strategies_only_in_migration_section() -> None:
 
 
 def test_web_backtest_payload_no_longer_carries_sweep_flags() -> None:
-    from parayabuck.web.server import BacktestPayload
+    from parayabuck.web.schemas.settings import BacktestPayload
 
     fields = set(BacktestPayload.model_fields)
     assert "sweep" not in fields

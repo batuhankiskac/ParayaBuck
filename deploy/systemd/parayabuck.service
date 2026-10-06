@@ -17,16 +17,32 @@ ExecStartPre=/opt/parayabuck/.venv/bin/parayabuck doctor --strict --paper --offl
 ExecStart=/opt/parayabuck/.venv/bin/parayabuck web
 Restart=on-failure
 RestartSec=10
-TimeoutStopSec=35
+# A graceful stop joins the stream, account, decision and journal workers in
+# sequence; 120 s covers the worst case so systemd never SIGKILLs mid-persist.
+TimeoutStopSec=120
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+# State persistence (settings drawer, runtime DB/journal, backtest reports);
+# everything else is read-only. The app refuses a non-loopback bind.
 ReadWritePaths=/opt/parayabuck/config /opt/parayabuck/data /opt/parayabuck/reports
-# Loopback-only UI: the app itself validates host is 127.0.0.1
-# Systemd hardening: ensure tmp writable for atomic writes
-# Requires explicit ReadWritePaths for state persistence; all else read-only.
+CapabilityBoundingSet=
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+# AF_NETLINK: glibc getaddrinfo probes interfaces over netlink.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# MemoryDenyWriteExecute stays off: CPython/numpy may need W+X mappings.
 
 [Install]
 WantedBy=multi-user.target

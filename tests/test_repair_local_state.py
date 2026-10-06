@@ -310,3 +310,81 @@ def test_no_hardcoded_session_date_is_cleared(repair, offline, tmp_path: Path, m
 
     assert repair.repair_runtime_db() is True
     assert _breakers(ledger) == {"2026-09-30": None, "2026-08-29": "decision_worker_crashed"}
+
+
+# ------------------------------------------------------------ audit / locking
+
+
+def test_corrupt_snapshot_fails_closed(repair, offline) -> None:
+    offline.snapshot_path.write_text("{not json", encoding="utf-8")
+
+    assert repair.check_engine_not_running() is False
+
+
+def test_session_updates_are_committed_before_the_broker_opens_the_ledger(
+    repair, offline, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The broker opens its own connection to the ledger; an uncommitted
+    UPDATE left open here made that "database is locked"."""
+    ledger = _make_ledger(tmp_path)
+    monkeypatch.setattr(repair, "LEDGER", ledger)
+
+    def _second_writer() -> bool:
+        other = sqlite3.connect(ledger, timeout=0.2)
+        try:
+            other.execute("UPDATE runtime_sessions SET mode='paper'")
+            other.commit()
+        finally:
+            other.close()
+        return True
+
+    monkeypatch.setattr(repair, "_run_broker_reconcile", _second_writer)
+
+    assert repair.repair_runtime_db() is True
+    assert _open_sessions(ledger) == (0, 0)
+
+
+def test_cleared_incident_is_recorded_in_the_resolution_log(
+    repair, offline, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ledger = _make_ledger(tmp_path)
+    monkeypatch.setattr(repair, "LEDGER", ledger)
+    monkeypatch.setattr(repair, "_run_broker_reconcile", lambda: True)
+
+    assert repair.repair_runtime_db() is True
+    assert _incidents(ledger) == []
+    log_lines = (tmp_path / "safety_incident_resolutions.jsonl").read_text(encoding="utf-8").splitlines()
+    entries = [json.loads(line) for line in log_lines]
+    assert [(e["reason"], e["account_id"], e["activated_at"]) for e in entries] == [
+        ("decision_worker_crashed", "acct", "2026-09-01T20:00:00+00:00")
+    ]
+    assert entries[0]["resolved_at"]
+
+
+def test_reconcile_with_drift_is_not_verified(repair, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A reconcile that ran but still reports drift (e.g. QLD BROKER_STALE)
+    must never lift the halt; the ownership providers are wired in."""
+    import parayabuck.execution.alpaca as alpaca_module
+
+    config = tmp_path / "settings.yaml"
+    config.write_text((_REPO_ROOT / "config" / "settings.yaml").read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setenv("CONFIG_PATH", str(config))
+    monkeypatch.setenv("ALPACA_API_KEY", "key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "secret")
+    monkeypatch.setattr(repair, "LEDGER", tmp_path / "parayabuck.sqlite3")
+    seen: dict[str, object] = {}
+
+    def _reconcile(self):
+        seen["owned"] = self.portfolio_owned_quantities is not None
+        seen["open_orders"] = self.portfolio_open_orders is not None
+        seen["tradable"] = set(self.bot_tradable_symbols())
+        return {"MATCH": [], "BROKER_STALE": ["QLD"], "MISSING_LOCAL_ORDER": ["QLD"]}
+
+    monkeypatch.setattr(alpaca_module.AlpacaBroker, "reconcile", _reconcile)
+
+    assert repair._run_broker_reconcile() is False
+    assert seen["owned"] is True and seen["open_orders"] is True
+    assert "QLD" in seen["tradable"]
+
+    monkeypatch.setattr(alpaca_module.AlpacaBroker, "reconcile", lambda self: {"MATCH": ["QLD"], "BROKER_STALE": []})
+    assert repair._run_broker_reconcile() is True

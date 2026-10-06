@@ -11,6 +11,7 @@ import uvicorn
 import yaml
 
 from parayabuck.logger import setup_logging
+from parayabuck.trading_host import trading_host_authorized
 
 
 def _probe_web_bind(host: str, port: int) -> None:
@@ -65,6 +66,12 @@ def main(config_path: str | os.PathLike[str] | None = None) -> None:
 
     host = os.getenv("HOST", str(app_config.get("host", "127.0.0.1")))
     container_bind = os.getenv("PARAYABUCK_CONTAINER") == "YES" and host == "0.0.0.0"
+    if container_bind and trading_host_authorized():
+        # The trading host serves the control API; it never listens off-loopback.
+        raise ValueError(
+            "The designated trading host (PARAYABUCK_TRADING_HOST) must bind a loopback "
+            "address; the container 0.0.0.0 bind is only allowed on non-trading machines."
+        )
     if container_bind:
         import logging
 

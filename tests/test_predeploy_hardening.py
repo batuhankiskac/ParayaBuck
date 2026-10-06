@@ -1,8 +1,6 @@
 import json
 import sqlite3
-import time
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +14,9 @@ from parayabuck.execution.risk_peak import RiskPeakService
 from parayabuck.monitoring import alerts
 from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.storage import SQLiteStore, StorageInitializationError
-from parayabuck.web.server import SettingsPayload, manager
+from parayabuck.web.schemas.settings import SettingsPayload
+from parayabuck.web.server import manager
+from parayabuck.web.services.settings import SettingsService
 
 # --- Peak state fail-closed ---
 
@@ -558,9 +558,7 @@ def test_settings_patch_preserves_omitted(tmp_path, monkeypatch):
         # GET should return correct defaults
         import asyncio
 
-        from parayabuck.web.server import get_settings
-
-        result = asyncio.run(get_settings())
+        result = asyncio.run(SettingsService(manager).get_settings())
         assert result["daily_loss_limit_pct"] == 20.0
         assert result["max_drawdown_pct"] == 75.0
         assert "crypto_trading_enabled" not in result
@@ -599,10 +597,8 @@ def test_settings_concurrency_409(tmp_path, monkeypatch):
 
         from fastapi import HTTPException
 
-        from parayabuck.web.server import _handle_save_settings
-
         with pytest.raises(HTTPException) as exc:
-            asyncio.run(_handle_save_settings(payload))
+            asyncio.run(SettingsService(manager).save_settings(payload))
         assert exc.value.status_code == 409
         # B remains unchanged
         final_raw = yaml.safe_load(cfg_path.read_text())
@@ -658,86 +654,21 @@ def test_container_credential_mutation_rejected(tmp_path, monkeypatch):
         monkeypatch.delenv("PARAYABUCK_CONTAINER", raising=False)
 
 
-# --- Webhook truthful delivery ---
+# --- Alert throttle per distinct incident ---
 
 
-class _RecordingPoster:
-    """Stands in for ``requests.post`` so no webhook traffic leaves the process."""
-
-    def __init__(self, status_code: int = 200) -> None:
-        self.status_code = status_code
-        self.urls: list[str] = []
-
-    def __call__(self, url: str, **_kwargs: Any) -> Any:
-        self.urls.append(url)
-        poster = self
-
-        class _Response:
-            def raise_for_status(self) -> None:
-                if poster.status_code >= 400:
-                    raise RuntimeError(f"HTTP {poster.status_code}")
-
-        return _Response()
-
-
-def _wait_until(predicate, timeout: float = 10.0) -> bool:
-    """Bounded wait: the webhook worker is a daemon thread, never join it blind."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
-        time.sleep(0.01)
-    return predicate()
-
-
-def test_webhook_success_and_failure():
+def test_alert_throttle_distinct_incidents():
     alerts.reset_for_tests()
-    alerts.configure_alerting(
-        enabled=True, webhook_url="https://example.com/hook", events=tuple(alerts.ALERT_KINDS), throttle_seconds=0
-    )
-
-    # The patch must cover the whole test: emit() hands the payload to the
-    # background worker, which POSTs it whenever it gets round to it — after
-    # the test (and its patch) would otherwise be gone.
-    poster = _RecordingPoster(200)
-    with patch("parayabuck.monitoring.alerts.requests.post", side_effect=poster):
-        alerts.emit("runtime_started", message="ok")
-        assert _wait_until(lambda: poster.urls), "the webhook worker never delivered inside the patch"
-        assert poster.urls == ["https://example.com/hook"]
-        stats = alerts.alert_stats()
-        assert stats["webhook_succeeded"] >= 1
-
-        failing = _RecordingPoster(500)
-        with patch("parayabuck.monitoring.alerts.requests.post", side_effect=failing):
-            alerts._post_webhook("https://example.com/hook", {"kind": "runtime_started", "message": "fail"})
-            assert alerts.alert_stats()["webhook_failed"] >= 1
-
-        with patch("parayabuck.monitoring.alerts.requests.post", side_effect=TimeoutError("timeout")):
-            alerts._post_webhook("https://example.com/hook", {"kind": "runtime_started", "message": "timeout"})
-            assert alerts.alert_stats()["webhook_failed"] >= 2
-
-
-def test_webhook_throttle_distinct_incidents():
-    alerts.reset_for_tests()
-    alerts.configure_alerting(
-        enabled=True, webhook_url="https://example.com/hook", events=("paper_incident",), throttle_seconds=60
-    )
-    poster = _RecordingPoster(200)
-    with patch("parayabuck.monitoring.alerts.requests.post", side_effect=poster):
-        # First incident
-        alerts.emit("paper_incident", message="inc1", category="risk", incident_id="id1")
-        # Different incident id should not be throttled
-        alerts.emit("paper_incident", message="inc2", category="risk", incident_id="id2")
-        stats = alerts.alert_stats()
-        # Both delivered (suppressed =0)
-        assert stats["suppressed"] == 0
-        # Same incident duplicate should be throttled
-        alerts.emit("paper_incident", message="inc1 dup", category="risk", incident_id="id1")
-        stats2 = alerts.alert_stats()
-        assert stats2["suppressed"] == 1
-        # Both distinct incidents were actually POSTed, inside this patch.
-        assert _wait_until(lambda: len(poster.urls) == 2)
-        assert stats2["webhook_queued"] == 2
+    alerts.configure_alerting(throttle_seconds=60)
+    # Different incident ids are never throttled against each other
+    alerts.emit("paper_incident", message="inc1", category="risk", incident_id="id1")
+    alerts.emit("paper_incident", message="inc2", category="risk", incident_id="id2")
+    assert alerts.alert_stats()["suppressed"] == 0
+    # The same incident repeated inside the window is throttled
+    alerts.emit("paper_incident", message="inc1 dup", category="risk", incident_id="id1")
+    stats = alerts.alert_stats()
+    assert stats["suppressed"] == 1
+    assert stats["delivered"] == {"paper_incident": 2}
 
 
 # --- Account-scoped peak recovery A-G ---

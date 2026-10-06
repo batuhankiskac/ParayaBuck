@@ -3,8 +3,8 @@
 from pathlib import Path
 
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.ledger import ExecutionLedger
+from tests.fake_client import FakeTradingClient
 
 
 def test_chaos_no_duplicate_fills_or_stops(tmp_path: Path):

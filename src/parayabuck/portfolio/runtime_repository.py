@@ -59,6 +59,30 @@ _NON_REGRESSING_STATUS_SQL = (
 )
 
 
+def _execution_price(
+    previous_quantity: float,
+    previous_average: float | None,
+    cumulative_quantity: float,
+    cumulative_average: float,
+    fill_delta: float,
+) -> float:
+    """Price of the newly filled delta, derived from cumulative averages.
+
+    Broker updates report the order's cumulative average, so the second
+    partial fill of an order must not be recorded at the blended price:
+    ``(avg2 * cum2 - avg1 * cum1) / delta`` is what that execution paid. With
+    no earlier fill (or no earlier average) the cumulative average is the
+    execution price; a non-positive or non-finite derivation (inconsistent
+    broker rounding) falls back to the cumulative average.
+    """
+    if previous_quantity <= 0 or previous_average is None or fill_delta <= 0:
+        return cumulative_average
+    derived = (cumulative_average * cumulative_quantity - previous_average * previous_quantity) / fill_delta
+    if not math.isfinite(derived) or derived <= 0:
+        return cumulative_average
+    return derived
+
+
 def _latest_timestamp(*values: object) -> datetime | None:
     """Latest of the stored ISO timestamps (naive values read as UTC)."""
     parsed: list[datetime] = []
@@ -1114,7 +1138,8 @@ class PortfolioStateRepository:
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
                 """SELECT o.cumulative_filled_quantity, o.reference_price, o.side,
-                          o.market, s.account_id, o.created_at, o.symbol
+                          o.market, s.account_id, o.created_at, o.symbol,
+                          o.average_fill_price
                    FROM portfolio_orders o
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -1198,8 +1223,15 @@ class PortfolioStateRepository:
                 ),
             )
             if fill_delta > 0 and average_fill_price is not None:
+                fill_price = _execution_price(
+                    previous,
+                    float(row[7]) if row[7] is not None else None,
+                    cumulative_filled_quantity,
+                    average_fill_price,
+                    fill_delta,
+                )
                 direction = 1.0 if side == "buy" else -1.0
-                slippage = (average_fill_price - reference) * fill_delta * direction
+                slippage = (fill_price - reference) * fill_delta * direction
                 self.store.connection.execute(
                     """INSERT OR IGNORE INTO portfolio_fills(
                         activity_id, client_order_id, occurred_at, quantity, price,
@@ -1210,7 +1242,7 @@ class PortfolioStateRepository:
                         client_order_id,
                         occurred_at.isoformat(),
                         fill_delta,
-                        average_fill_price,
+                        fill_price,
                         float(fee or 0.0),
                         realized_pnl,
                         unrealized_pnl,

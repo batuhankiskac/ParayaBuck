@@ -10,15 +10,18 @@ Responsibility:
   crypto holding in the shared account is classified ``Market.CRYPTO`` so it
   is recognized and left alone (the bot trades equities only).
 - Ownership: ``managed`` / ``mixed`` / ``external`` with
-  ``managed_qty = min(|raw|, total_owned)``, ``external_qty``,
-  ``qty_available``, dual-lineage fail-closed, shortfall with SELL
-  exemption. A share count that moved without a fill of ours (stock split,
-  foreign trade on the shared key) is first offered to
-  ``broker.portfolio_ownership_resolved``, which records an audited
-  adjustment; whatever it cannot prove keeps the fail-closed drift error.
-- Portfolio-owned quantity is ``ExecutionLedger.managed_for_account`` plus
-  ``PortfolioStateRepository`` owned quantities; the facade supplies both.
-- Snapshot cache coordination (broker owns cache, service seeds it).
+  ``managed_qty = min(|raw|, owned)``, ``external_qty``, ``qty_available``,
+  shortfall with SELL exemption. A short on a symbol the bot trades (or
+  owns) is never inventory: it is ownership drift. A share count that moved
+  without a fill of ours (stock split, foreign trade on the shared key) is
+  first offered to ``broker.portfolio_ownership_resolved``, which records an
+  audited adjustment; whatever it cannot prove keeps the fail-closed drift
+  error.
+- Portfolio-owned quantity comes from ``PortfolioStateRepository`` through
+  ``broker.portfolio_owned_quantities``.
+- Foreign positions the bot cannot claim tolerate a missing quote or entry
+  price; a position the bot trades never does.
+- Snapshot cache: one immutable ``(snapshot, monotonic_ts)`` tuple.
 """
 
 from __future__ import annotations
@@ -183,12 +186,27 @@ class AccountService:
 
     def snapshot_if_fresh(self, max_age_seconds: float) -> AccountSnapshot | None:
         cached = getattr(self._broker, "_snapshot_cache", None)
-        cached_at = getattr(self._broker, "_snapshot_cached_at", None)
-        if cached is None or cached_at is None:
+        if cached is None:
             return None
+        snapshot, cached_at = cached
         if time.monotonic() - cached_at <= max_age_seconds:
-            return cached  # type: ignore[no-any-return]
+            return snapshot  # type: ignore[no-any-return]
         return None
+
+    def _bot_tradable_symbols(self) -> frozenset[str] | None:
+        """Canonical symbols the bot trades, or None when no provider says."""
+        provider = getattr(self._broker, "bot_tradable_symbols", None)
+        if provider is None:
+            return None
+        return frozenset(canonical_symbol(str(symbol)) for symbol in provider() or ())
+
+    @staticmethod
+    def _price(value: Any, *, symbol: str, tolerate_missing: bool) -> float:
+        if value is None:
+            if tolerate_missing:
+                return 0.0
+            raise ValueError(f"Broker position {symbol} has no price")
+        return float(value)
 
     # -- main entry ------------------------------------------------------
 
@@ -205,11 +223,11 @@ class AccountService:
         previous_equity = float(account.last_equity or equity)
         positions: list[PositionSnapshot] = []
         ledger = getattr(broker, "ledger", None)
-        managed_positions = ledger.managed_for_account(broker._account_id or "unknown") if ledger is not None else {}
         owned_quantities: dict[str, float] = {}
         portfolio_owned_provider = getattr(broker, "portfolio_owned_quantities", None)
         if portfolio_owned_provider is not None:
             owned_quantities = portfolio_owned_provider() or {}
+        tradable_symbols = self._bot_tradable_symbols()
         unrealized = 0.0
         intraday_unrealized = 0.0
         raw_positions: Any = client.get_all_positions()
@@ -225,7 +243,6 @@ class AccountService:
             return open_sell_orders
 
         for raw in raw_positions:
-            current_price = float(raw.current_price)
             unrealized += float(raw.unrealized_pl or 0)
             intraday_unrealized += float(raw.unrealized_intraday_pl or 0)
             market = self.classify_market(raw)
@@ -237,22 +254,25 @@ class AccountService:
                     "reconciliation is required before trading resumes"
                 )
             seen_position_keys.add(position_key)
-            managed = managed_positions.get(canonical)
             raw_qty = float(raw.qty)
             broker_qty = abs(raw_qty)
-            ledger_owned = float(managed.owned_qty) if managed is not None else 0.0
-            repo_owned = float(owned_quantities.get(canonical, 0.0))
-            if ledger_owned > 1e-12 and repo_owned > 1e-12:
+            total_owned = float(owned_quantities.get(canonical, 0.0))
+            bot_symbol = total_owned > 1e-12 or (
+                market == Market.EQUITY and tradable_symbols is not None and canonical in tradable_symbols
+            )
+            if raw_qty < -1e-12 and bot_symbol:
+                # The bot is long-only: a short on a symbol it trades is
+                # foreign activity on the shared key. Reading it as owned
+                # inventory would make a "cash" target BUY to cover it.
                 raise OwnershipDriftError(
-                    "Dual ownership lineage for "
-                    f"{canonical}: ledger managed qty={ledger_owned} and "
-                    f"portfolio managed qty={repo_owned} are both positive; "
-                    "reconciliation is required before trading resumes"
+                    f"Ownership drift for {canonical}: the broker reports a short position "
+                    f"qty={raw_qty} on a bot-traded symbol (portfolio owned qty={total_owned}). "
+                    "Close the foreign short at the broker; reconciliation is required before trading resumes"
                 )
-            total_owned = ledger_owned + repo_owned
+            current_price = self._price(raw.current_price, symbol=canonical, tolerate_missing=not bot_symbol)
+            average_price = self._price(raw.avg_entry_price, symbol=canonical, tolerate_missing=not bot_symbol)
             if (
-                managed is None
-                and total_owned > 1e-12
+                total_owned > 1e-12
                 and broker_qty > 1e-12
                 and abs(broker_qty - total_owned) > max(1e-9, total_owned * 1e-8)
             ):
@@ -282,7 +302,7 @@ class AccountService:
                 PositionSnapshot(
                     symbol=canonical,
                     qty=raw_qty,
-                    avg_price=float(raw.avg_entry_price),
+                    avg_price=average_price,
                     current_price=current_price,
                     market=market,
                     qty_available=(
@@ -290,10 +310,6 @@ class AccountService:
                     ),
                     ownership=ownership,
                     managed_qty=managed_qty,
-                    stop_price=(managed.current_stop or managed.original_stop if managed is not None else None),
-                    initial_risk=(
-                        abs(float(raw.avg_entry_price) - managed.original_stop) if managed is not None else None
-                    ),
                 )
             )
         if drift_candidates:
@@ -325,6 +341,8 @@ class AccountService:
             unrealized_pnl=unrealized,
             fees=(ledger.total_fees_for_account(broker._account_id or "unknown") if ledger is not None else 0.0),
         )
-        broker._snapshot_cache = snapshot
-        broker._snapshot_cached_at = time.monotonic()
+        # One assignment publishes snapshot and timestamp together, so a
+        # concurrent snapshot_if_fresh never pairs a new snapshot with an old
+        # timestamp (or the reverse).
+        broker._snapshot_cache = (snapshot, time.monotonic())
         return snapshot

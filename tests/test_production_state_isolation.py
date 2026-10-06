@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.risk_peak import RiskPeakService, resolve_peak_state_path
+from tests.fake_client import FakeTradingClient
 
 from .conftest import protected_state_path
 

@@ -20,8 +20,8 @@ from parayabuck.execution.alpaca import (
     RiskStatePersistenceError,
 )
 from parayabuck.execution.alpaca_account import AccountService
-from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.ledger import ExecutionLedger
+from tests.fake_client import FakeTradingClient
 from tests.helpers import make_broker
 
 
@@ -353,7 +353,7 @@ def test_submit_recovers_when_lookup_finds_order(tmp_path: Path) -> None:
     ).__dict__  # type: ignore[attr-defined]
     # Actually _make_order returns SimpleNamespace, we need _FakeOrder
     # Simpler: create _FakeOrder directly
-    from parayabuck.execution.fake_client import _FakeOrder
+    from tests.fake_client import _FakeOrder
 
     fake.orders_by_client_id["parayabuck-recover-123"] = _FakeOrder(
         id="broker-parayabuck-recover-123", client_order_id="parayabuck-recover-123", symbol="IWM", side="buy", qty=10

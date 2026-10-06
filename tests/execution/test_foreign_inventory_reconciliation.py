@@ -23,10 +23,10 @@ import pytest
 
 from parayabuck.core.models import Market
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide, RiskOverlayDecision
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
+from tests.fake_client import FakeTradingClient
 
 
 def _broker(fake: FakeTradingClient, state_dir: Path, **kwargs: Any) -> AlpacaBroker:

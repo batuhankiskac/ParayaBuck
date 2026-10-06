@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from decimal import ROUND_HALF_UP, Decimal
+import time
+from collections.abc import Callable
 from typing import Any
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.models import Order
 from pydantic import TypeAdapter
 
-from parayabuck.core.models import Market
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import normalize_symbol
 from parayabuck.utils.http import patch_session_timeout
@@ -17,6 +17,8 @@ log = get_logger("parayabuck.execution.alpaca_client")
 
 _DEFAULT_TIMEOUT = 15.0
 _MAX_ORDERS_PAGE_SIZE = 500
+# Asset metadata is re-read from Alpaca at least once a day.
+_ASSET_CACHE_TTL_SECONDS = 24 * 60 * 60.0
 _ORDER_LIST_ADAPTER: TypeAdapter[list[Order]] = TypeAdapter(list[Order])
 
 
@@ -45,7 +47,8 @@ class AlpacaClient:
             self._client: Any = client
         else:
             self._client = TradingClient(api_key, secret_key, paper=paper)
-        self._asset_cache: dict[str, Any] = {}
+        self._asset_cache: dict[str, tuple[Any, float]] = {}
+        self._clock: Callable[[], float] = time.monotonic
         self._closed: bool = False
         session = getattr(self._client, "_session", None)
         if session is not None:
@@ -53,14 +56,6 @@ class AlpacaClient:
                 patch_session_timeout(session, timeout=_DEFAULT_TIMEOUT)
             except Exception:
                 log.warning("Failed to patch Alpaca session timeout", exc_info=True)
-
-    @property
-    def client(self) -> Any:
-        return self._client
-
-    @client.setter
-    def client(self, value: Any) -> None:
-        self._client = value
 
     # -- lifecycle -----------------------------------------------------
 
@@ -77,31 +72,7 @@ class AlpacaClient:
         finally:
             self._closed = True
 
-    # -- thin TradingClient wrappers -----------------------------------
-
-    def get_account(self) -> Any:
-        return self._client.get_account()
-
-    def get_all_positions(self) -> Any:
-        return self._client.get_all_positions()
-
-    def get_open_position(self, symbol: str) -> Any:
-        # Alpaca expects the asset-lookup symbol (no slash for crypto).
-        lookup = normalize_symbol(symbol).asset_lookup_symbol
-        return self._client.get_open_position(lookup)
-
-    def get_asset(self, symbol: str) -> Any:
-        return self._asset(symbol)
-
-    def get_orders(self, request: Any = None) -> Any:
-        """List orders, exhausting unbounded OPEN queries before returning."""
-        request_fields = request.to_request_fields() if request is not None else {}
-        status = request_fields.get("status")
-        status = getattr(status, "value", status)
-        normalized_status = str(status).lower().split(".")[-1] if status is not None else "open"
-        if normalized_status == "open" and request_fields.get("limit") is None:
-            return self.get_open_orders(request)
-        return self._client.get_orders(request)
+    # -- exhaustive OPEN-order query -------------------------------------
 
     def get_open_orders(self, request: Any = None) -> list[Order]:
         """Return the complete OPEN-order collection using order-ID cursors.
@@ -184,41 +155,6 @@ class AlpacaClient:
             seen_cursors.add(next_cursor)
             cursor = next_cursor
 
-    def get_order_by_id(self, order_id: str) -> Any:
-        return self._client.get_order_by_id(order_id)
-
-    def get_order_by_client_id(self, client_order_id: str) -> Any:
-        getter = getattr(self._client, "get_order_by_client_id", None)
-        if getter is None:
-            return None
-        return getter(client_order_id)
-
-    def submit_order(self, request: Any) -> Any:
-        return self._client.submit_order(request)
-
-    def cancel_order_by_id(self, order_id: str) -> Any:
-        canceller = getattr(self._client, "cancel_order_by_id", None)
-        if canceller is not None:
-            return canceller(order_id)
-        # Fallback alias used by some fakes
-        alt = getattr(self._client, "cancel_order", None)
-        if alt is not None:
-            return alt(order_id)
-        raise AttributeError("underlying client has no cancel_order_by_id")
-
-    def request(self, method: str, path: str, data: dict[str, object] | None = None) -> Any:
-        """Raw ``_request`` wrapper for Fill activity pagination (FILL).
-
-        Mirrors ``TradingClient._request(method, path, data=...)``; returns
-        whatever the underlying client returns (typically a list payload).
-        """
-        req = getattr(self._client, "_request", None)
-        if req is None:
-            raise AttributeError("underlying client has no _request")
-        if data is not None:
-            return req(method, path, data=data)
-        return req(method, path)
-
     # -- normalization helpers (kept at SDK boundary) -------------------
 
     @staticmethod
@@ -229,28 +165,21 @@ class AlpacaClient:
         return str(self._field(value, name, "")).lower().split(".")[-1]
 
     def _asset(self, symbol: str) -> Any:
+        """Alpaca asset metadata, cached for at most ``_ASSET_CACHE_TTL_SECONDS``.
+
+        ``tradable``/``fractionable``/increments can change (a halt, a
+        delisting, a fractional-trading change), so an entry is re-read once
+        it is a day old instead of being trusted for the life of the process.
+        """
         identity = normalize_symbol(symbol)
         cache_key = identity.canonical
-        asset = (
-            self._asset_cache.get(cache_key)
-            or self._asset_cache.get(symbol)
-            or self._asset_cache.get(identity.asset_lookup_symbol)
-        )
-        if asset is None:
-            asset = self._client.get_asset(identity.asset_lookup_symbol)
-            self._asset_cache[cache_key] = asset
+        now = self._clock()
+        cached = self._asset_cache.get(cache_key)
+        if cached is not None and now - cached[1] < _ASSET_CACHE_TTL_SECONDS:
+            return cached[0]
+        asset = self._client.get_asset(identity.asset_lookup_symbol)
+        self._asset_cache[cache_key] = (asset, now)
         return asset
-
-    def _price_step(self, symbol: str, market: Market, reference_price: float) -> Decimal:
-        increment = getattr(self._asset(symbol), "price_increment", None)
-        if increment is not None:
-            return Decimal(str(increment))
-        return Decimal("0.01") if reference_price >= 1 else Decimal("0.0001")
-
-    @staticmethod
-    def _round_to_step(value: float, step: Decimal) -> float:
-        rounded = (Decimal(str(value)) / step).to_integral_value(rounding=ROUND_HALF_UP) * step
-        return float(rounded)
 
 
 __all__ = ["AlpacaClient"]

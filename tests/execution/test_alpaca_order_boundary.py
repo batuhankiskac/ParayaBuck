@@ -12,11 +12,11 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from parayabuck.execution.alpaca_protection import ProtectionService
 
 from parayabuck.core.models import Market
 from parayabuck.execution.alpaca import AlpacaBroker, AmbiguousOrderState
 from parayabuck.execution.alpaca_orders import OrderService
-from parayabuck.execution.alpaca_protection import ProtectionService
 from parayabuck.execution.portfolio import AssetTradingRules, PortfolioOrderRequest, PortfolioOrderSide
 from tests.helpers import make_broker
 

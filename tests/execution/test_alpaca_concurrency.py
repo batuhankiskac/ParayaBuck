@@ -3,8 +3,8 @@
 from pathlib import Path
 
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.fake_client import FakeTradingClient
 from parayabuck.execution.ledger import ExecutionLedger
+from tests.fake_client import FakeTradingClient
 
 
 def _broker(tmp_path: Path):

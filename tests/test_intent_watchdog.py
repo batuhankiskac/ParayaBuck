@@ -167,6 +167,18 @@ def test_over_target_ignores_exit_dust_and_the_untouched_target() -> None:
     assert evaluate_equity(late, invested, _account((_qld(80_000.0),)), running_since=None, settings=_SETTINGS) == []
 
 
+def test_over_target_tolerates_price_drift_of_a_partial_target() -> None:
+    """A 0.90 target that drifted to 0.93 on an up day is not a failed order;
+    the old flat 1% tolerance failed readiness for it."""
+    late = _utc(2026, 9, 29, 14, 5)
+    partial = _decision(_utc(2026, 9, 28, 13, 30), {"QLD": 0.9})
+    assert evaluate_equity(late, partial, _account((_qld(93_000.0),)), running_since=None, settings=_SETTINGS) == []
+    # A position far beyond any drift (double fill, or a missed reduction) still alarms
+    half = _decision(_utc(2026, 9, 28, 13, 30), {"QLD": 0.5})
+    alarms = evaluate_equity(late, half, _account((_qld(60_000.0),)), running_since=None, settings=_SETTINGS)
+    assert _codes(alarms) == ["equity_position_over_target"]
+
+
 def test_over_target_never_fires_without_an_account() -> None:
     cash = _decision(_utc(2026, 9, 28, 13, 30), {})
     assert evaluate_equity(_utc(2026, 9, 29, 14, 5), cash, None, running_since=None, settings=_SETTINGS) == []

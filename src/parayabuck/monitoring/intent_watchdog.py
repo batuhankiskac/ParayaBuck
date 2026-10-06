@@ -22,9 +22,9 @@ show:
 * ``equity_position_over_target`` — the mirror of the under-target check:
   after the fill window the account still holds more of a symbol than the
   decision targeted (the everyday case is a cash target whose DAY SELL never
-  filled, leaving the previous position in a downtrend). A small residual is
-  tolerated so partially filled exits and fractional-share rounding do not
-  raise it.
+  filled, leaving the previous position in a downtrend). A residual is
+  tolerated so partially filled exits, fractional-share rounding and the
+  ordinary price drift of a held position between decisions do not raise it.
 
 Everything here is pure and deterministic given ``now``; the exchange
 schedule comes from :mod:`parayabuck.markets.nyse_calendar` — the one
@@ -46,6 +46,17 @@ from parayabuck.markets.symbols import canonical_symbol
 # exceed its target without alarming: the dust a partially filled exit leaves
 # behind. An expired exit leaves the whole position, orders of magnitude more.
 _EXIT_RESIDUAL_WEIGHT = 0.01
+# Relative slack on a positive target: a held position's weight drifts with its
+# own price between decisions (w' = w(1+r)/(1+w*r)), so a 0.60 QLD target reads
+# ~0.62 after a +10% day. 10% of the target covers any single-session move a
+# 2x ETF makes, while an unfilled exit (whole position vs a lower target) or a
+# double fill stays far outside it.
+_OVER_TARGET_RELATIVE = 0.10
+
+
+def over_target_tolerance(target: float) -> float:
+    """Weight a holding may exceed ``target`` by before it counts as over target."""
+    return max(_EXIT_RESIDUAL_WEIGHT, _OVER_TARGET_RELATIVE * max(0.0, target))
 
 
 @dataclass(frozen=True)
@@ -168,7 +179,7 @@ def _over_target(
     for symbol in sorted(set(held) | set(targets)):
         actual = held.get(symbol, 0.0)
         target = targets.get(symbol, 0.0)
-        if actual > target + _EXIT_RESIDUAL_WEIGHT:
+        if actual > target + over_target_tolerance(target):
             over.append(f"{symbol} held {actual:.1%} vs target {target:.1%}")
     if not over:
         return []
@@ -266,4 +277,5 @@ __all__ = [
     "last_due_equity_session",
     "next_equity_open_after",
     "nyse_sessions",
+    "over_target_tolerance",
 ]

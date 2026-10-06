@@ -243,5 +243,3 @@ def test_incomplete_canonical_action_schema_fails_closed(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="Canonical corporate-action CSV is missing required columns"):
         load_csv_corporate_actions(path)
-
-

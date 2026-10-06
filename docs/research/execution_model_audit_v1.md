@@ -1,5 +1,14 @@
 # VT35 execution model audit v1 (2026-09-29)
 
+> **Superseded in part (note added 2026-10-06).** The live-runtime column of
+> §1 and the live-only risks of §4 describe commit b976749, before audit waves
+> 2a/2b (2026-10-01): the daily bar is now flushed at the session's actual NYSE
+> close (13:00 ET on early closes) from `parayabuck.markets.nyse_calendar`, a
+> recoverable gate re-queues a close decision instead of losing the session,
+> and startup catch-up drops unfinished daily bars. The Stage B side, the
+> fill-timing result (§3) and the "no backtest bug" conclusion stand. Line
+> numbers are b976749's.
+
 Question: does the Stage B backtest behind VT35 (`equity_leveraged_trend_v1`,
 28.98% CAGR / 29.2% max DD, 2017-01-03 → 2026-07-30, `profit_max_v1.md`) model
 decision time, fill time and fill price the way the PAPER runtime trades? How

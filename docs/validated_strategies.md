@@ -18,8 +18,8 @@ Hold QLD (2x Nasdaq-100) while QQQ's completed daily close is above its
 200-session SMA, at weight `min(1, 0.35 / annualized 20-session realized QLD
 volatility)` of the equity allocation; the rest is cash. The target is all
 cash in a downtrend, with insufficient history, or when QLD is unavailable.
-Decided every session on completed bars after the close; orders fill at the
-next open.
+Decided every session on completed bars after the NYSE close (13:00 ET on
+early-close days); orders fill at the next open.
 
 | Parameter | Value |
 |---|---|

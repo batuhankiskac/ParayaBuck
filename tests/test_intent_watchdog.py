@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import threading
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
@@ -361,13 +359,13 @@ def _manager(reasons: list[str]) -> Any:
 def test_readyz_reports_intent_alarms_as_degraded_reasons(
     monkeypatch, reasons: list[str], fail_readiness: bool, status: int, ready: bool
 ) -> None:
-    from parayabuck.web import server
+    from parayabuck.web.routers import health as health_router
+    from tests.helpers import web_client
 
     config = Config(intent_watchdog=IntentWatchdogConfig(fail_readiness=fail_readiness))
-    monkeypatch.setattr(server, "manager", _manager(reasons))
-    monkeypatch.setattr(server, "load_config", lambda _path: config)
-    response = asyncio.run(server.readyz())
-    payload = json.loads(response.body)
+    monkeypatch.setattr(health_router, "load_config", lambda _path: config)
+    response = web_client(_manager(reasons)).get("/readyz")
+    payload = response.json()
     assert response.status_code == status
     assert payload["ready"] is ready
     assert payload["trading_ready"] is True

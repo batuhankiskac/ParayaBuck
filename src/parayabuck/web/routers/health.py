@@ -12,58 +12,22 @@ A failed auto-start (config parses, engine in error) is NOT ready (503).
 An operator-intentional stop (auto_start false, engine stopped) IS ready
 (200). Readiness never derives from ``runtime is None`` alone.
 
-No circular imports: the EngineManager / WebState is resolved lazily
-inside each handler via ``get_web_state()`` or the injected provider.
-Tests can monkeypatch parayabuck.web.server.manager or inject a fake
-state via create_app — both still work because this router also checks
-the server compat shim as fallback.
+The EngineManager is resolved per request through ``web.deps`` (the app's
+own state first, then the process-wide state).
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from parayabuck.config import load_config
 from parayabuck.logger import get_logger
+from parayabuck.web.deps import get_engine_manager
 
 log = get_logger("parayabuck.web.health")
 
 router = APIRouter(tags=["health"])
-
-
-def _resolve_manager() -> Any:
-    """Resolve the active EngineManager.
-
-    Preference:
-    1. WebState singleton via web.state.get_web_state() (new factory path)
-    2. parayabuck.web.server.manager compat shim (older direct monkeypatch tests)
-    """
-    # 1. New factory state
-    try:
-        from parayabuck.web.state import get_web_state
-
-        state = get_web_state()
-        if state is not None:
-            mgr = getattr(state, "engine_manager", None)
-            if mgr is not None:
-                return mgr
-            # state itself may be the manager in some test fakes
-            if hasattr(state, "current_engine_state"):
-                return state
-    except Exception:
-        pass
-    # 2. Compat shim — server.py global manager
-    try:
-        from parayabuck.web import server as server_mod
-
-        mgr = getattr(server_mod, "manager", None)
-        if mgr is not None:
-            return mgr
-    except Exception:
-        pass
-    return None
 
 
 @router.get("/healthz")
@@ -80,46 +44,12 @@ def _intent_degraded_reasons(health: object) -> list[str]:
 
 
 @router.get("/readyz")
-async def readyz() -> JSONResponse:
+async def readyz(request: Request) -> JSONResponse:
     """Deployment/trading readiness, distinct from /healthz process liveness."""
-    # Lazy import so config loader can be monkeypatched in tests.
-    try:
-        from parayabuck.config import load_config as _load_config
-    except Exception:  # pragma: no cover
-        _load_config = None  # type: ignore[assignment]
-
-    # Allow tests to monkeypatch parayabuck.web.server.load_config
-    try:
-        from parayabuck.web import server as _server_mod
-
-        load_config = getattr(_server_mod, "load_config", _load_config)
-    except Exception:
-        load_config = _load_config
-
-    manager = _resolve_manager()
-
-    # If no manager resolved (e.g. in a minimal TestClient), fall back to a
-    # synthetic stopped manager so the endpoint still answers structurally.
-    if manager is None:
-
-        class _StubManager:  # pragma: no cover
-            config_path = "config/settings.yaml"
-            runtime = None
-
-            def current_engine_state(self) -> str:
-                return "stopped"
-
-            def has_active_runtime(self) -> bool:
-                return False
-
-        manager = _StubManager()
+    manager = get_engine_manager(request)
 
     try:
-        cfg = (
-            load_config(str(getattr(manager, "config_path", "config/settings.yaml")))
-            if load_config is not None
-            else None
-        )
+        cfg = load_config(str(getattr(manager, "config_path", "config/settings.yaml")))
         config_valid = True
         config_error = None
     except Exception as exc:

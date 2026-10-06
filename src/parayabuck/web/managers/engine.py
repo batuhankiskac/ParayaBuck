@@ -31,10 +31,6 @@ from parayabuck.web.schemas.settings import SettingsPayload, ValidatedSettings
 
 log = get_logger("parayabuck.web.engine")
 
-# Compatibility export only.  Mutual exclusion is owned by each composed
-# EngineManager/WebState pair, never by this module-level name.
-backtest_manager: Any | None = None
-
 _AUTO_START_RETRY_BACKOFF: tuple[int, ...] = (5, 15, 30, 60)
 _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
     {"starting", "running", "warming_up", "degraded", "halted", "stopping", "stop_failed"}
@@ -847,7 +843,11 @@ class EngineManager:
                 runtime = self.runtime
                 runtime_ledger = getattr(runtime, "ledger", None)
                 if runtime_ledger is not None and bool(self.broker.account_id):
-                    managed = runtime_ledger.managed_for_account(self.broker.account_id)
+                    try:
+                        managed = runtime_ledger.managed_for_account(self.broker.account_id)
+                    except Exception:
+                        # Ownership detail is display-only; the balances still serve
+                        log.warning("Managed-position lookup failed for the account snapshot", exc_info=True)
                 positions_list = []
                 for p in acct.positions:
                     if not p.is_flat:
@@ -1349,7 +1349,7 @@ _SECRET_WARNING_CACHE: dict[Path, str | None] = {}
 def _tracked_secret_warning(root: Path) -> str | None:
     """Constructor-time warning, scanned once per resolved root.
 
-    Four EngineManagers are built at import; the engine-start gate calls
+    Tests build many EngineManagers; the engine-start gate calls
     _scan_tracked_secrets directly so it never sees this memo.
     """
     resolved = root.resolve()

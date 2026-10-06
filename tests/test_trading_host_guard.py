@@ -30,8 +30,8 @@ from parayabuck.execution.alpaca_reconciliation import RECONCILIATION_CATEGORIES
 from parayabuck.runtime import EngineRuntime, StartupCancelled
 from parayabuck.trading_host import trading_host_authorized
 from parayabuck.web import app as web_app
-from parayabuck.web import server
 from parayabuck.web.managers import engine as engine_manager_module
+from parayabuck.web.managers.engine import EngineManager
 
 _PAPER_AUTO_START_CONFIG: dict[str, Any] = {
     "app": {"auto_start_engine": True},
@@ -39,8 +39,8 @@ _PAPER_AUTO_START_CONFIG: dict[str, Any] = {
 }
 
 
-def _manager(root: Path) -> server.EngineManager:
-    manager = server.EngineManager()
+def _manager(root: Path) -> EngineManager:
+    manager = EngineManager()
     manager.config_path = root / "settings.yaml"
     manager.env_path = root / ".env"
     manager.get_credentials = lambda: ("pk-fake-key", "fake-secret-value")  # type: ignore[method-assign]

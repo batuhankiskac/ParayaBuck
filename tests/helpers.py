@@ -68,4 +68,39 @@ def apply_entry_fill(
     )
 
 
-__all__ = ["apply_entry_fill", "make_broker"]
+_TEST_CONTROL_TOKEN = "test-control-token"
+
+
+def web_client(manager: Any, backtest_manager: Any | None = None) -> Any:
+    """``TestClient`` over an app composed around ``manager`` (no lifespan).
+
+    The client is a loopback peer and sends the manager's control token, so
+    mutating routes pass the local-only middleware exactly like the browser
+    UI. Fakes without a token get a fixed test token.
+    """
+    from fastapi.testclient import TestClient
+
+    from parayabuck.web.application import create_app
+    from parayabuck.web.state import WebState
+
+    token = getattr(manager, "control_token", None)
+    if not isinstance(token, str) or not token:
+        token = _TEST_CONTROL_TOKEN
+        manager.control_token = token
+    state = WebState(
+        engine_manager=manager,
+        backtest_manager=(
+            backtest_manager
+            if backtest_manager is not None
+            else getattr(manager, "_backtest_manager", None) or SimpleNamespace()
+        ),
+    )
+    return TestClient(
+        create_app(state),
+        raise_server_exceptions=False,
+        client=("127.0.0.1", 50000),
+        headers={"X-Parayabuck-Control-Token": token},
+    )
+
+
+__all__ = ["apply_entry_fill", "make_broker", "web_client"]

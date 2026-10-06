@@ -55,17 +55,14 @@ def test_factory_apps_keep_control_and_websocket_state_isolated():
 
 def test_ws_ticket_fails_closed_without_a_store(monkeypatch: pytest.MonkeyPatch) -> None:
     """A live store validates its own ticket; with no store at all nothing is trusted."""
-    import parayabuck.web.managers.engine as engine_module
     import parayabuck.web.routers.websocket as ws_router
     from parayabuck.web.managers.websocket import ticket_store
 
     assert ws_router._consume_ticket(ticket_store.issue("stream"), "stream") is True
 
-    # No app-scoped store, no shared store and no module singletons: there is
-    # nothing that could validate a ticket, so none may be trusted.
+    # No app-scoped store and no shared store: there is nothing that could
+    # validate a ticket, so none may be trusted.
     monkeypatch.setattr(ws_router, "_consume_shared", lambda _ticket, _kind: False)
-    monkeypatch.setattr(engine_module, "manager", None)
-    monkeypatch.setattr("parayabuck.web.server.manager", None)
 
     assert ws_router._consume_ticket("", "stream") is False
     assert ws_router._consume_ticket("not-a-ticket", "stream") is False
@@ -277,13 +274,10 @@ def test_control_token_not_in_observability_or_error_payloads(
     isolated_config_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # /api/ops/status resolves its snapshot and decision DB through the engine
-    # manager's config path — the shipped config, i.e. data/runtime. Answer from
-    # tmp_path state instead; monkeypatch restores the manager afterwards.
-    import parayabuck.web.server as srv
-
-    monkeypatch.setattr(srv.manager, "config_path", isolated_config_path)
+    # /api/ops/status resolves its snapshot and decision DB through the app's
+    # engine manager config path; answer from tmp_path state.
     app, mgr, _ = _app_with_fake_manager()
+    mgr.config_path = isolated_config_path
     client = TestClient(app, raise_server_exceptions=False)
     # Trigger an error response from a mutating endpoint without token -> 403 JSON must not contain token
     r = client.post("/api/engine/start", headers={"Host": "testserver"})

@@ -23,10 +23,6 @@ def _wired_pair():
     mgr = EngineManager()
     bm = BacktestManager(engine_state_provider=mgr.current_engine_state)
     bm.bind_engine_state_provider(mgr.current_engine_state)
-    # also bind the global that EngineManager.start_engine checks
-    import parayabuck.web.managers.engine as eng_mod
-
-    eng_mod.backtest_manager = bm
     state = WebState(engine_manager=mgr, backtest_manager=bm)
     state.bind()
     return mgr, bm, state
@@ -67,10 +63,6 @@ def test_engine_rejected_while_backtest_running():
         assert not bm.is_running
     finally:
         bm._run = original_run  # type: ignore
-        # cleanup global
-        import parayabuck.web.managers.engine as eng_mod
-
-        eng_mod.backtest_manager = bm
 
 
 def test_engine_backtest_race_only_one_wins(monkeypatch: pytest.MonkeyPatch, tmp_path: Any):
@@ -151,9 +143,8 @@ def test_backtest_refuses_unverified_engine_state(provider):
     assert bm.state == "idle"
 
 
-def test_engine_start_uses_bound_backtest_guard_not_module_global(monkeypatch):
+def test_engine_start_uses_its_bound_backtest_guard(monkeypatch):
     local = BacktestManager(engine_state_provider=lambda: "stopped")
-    global_guard = BacktestManager(engine_state_provider=lambda: "stopped")
     mgr = EngineManager(backtest_manager=local)
 
     class AliveThread:
@@ -162,7 +153,6 @@ def test_engine_start_uses_bound_backtest_guard_not_module_global(monkeypatch):
 
     local._thread = AliveThread()
     local.state = "running"
-    monkeypatch.setattr("parayabuck.web.managers.engine.backtest_manager", global_guard)
 
     with pytest.raises(ValueError, match="Web backtest is still running"):
         mgr.start_engine()

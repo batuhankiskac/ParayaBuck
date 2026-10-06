@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import subprocess
@@ -13,8 +12,10 @@ from typing import Any
 import pytest
 import yaml
 
-from parayabuck.web import server
+from parayabuck.web.managers.backtest import BacktestManager
+from parayabuck.web.managers.engine import EngineManager
 from parayabuck.web.services import dashboard as svc
+from parayabuck.web.state import WebState
 
 
 def _repo_config(root: Path, *, mode: str = "paper", live_enabled: bool = False) -> Path:
@@ -37,10 +38,10 @@ def _stub_manager(
     engine_state: str = "stopped",
     paper: bool = True,
     positions: list[dict[str, Any]] | None = None,
-) -> server.EngineManager:
+) -> EngineManager:
     """EngineManager-shaped stub: no runtime/broker, deterministic account."""
 
-    class _Stub(server.EngineManager):
+    class _Stub(EngineManager):
         def __init__(self) -> None:
             self.config_path = config_path
             self.env_path = config_path.parent / ".env"
@@ -78,6 +79,10 @@ def _stub_manager(
             }
 
     return _Stub()
+
+
+def _web_state(manager: Any) -> WebState:
+    return WebState(engine_manager=manager, backtest_manager=BacktestManager())
 
 
 def _install_fake_telemetry_module(monkeypatch: pytest.MonkeyPatch, *, telemetry: bool) -> None:
@@ -137,9 +142,9 @@ def _install_fake_metrics_module(monkeypatch: pytest.MonkeyPatch, *, metrics: bo
 
 def test_dashboard_overview_returns_all_panels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    state = _web_state(_stub_manager(config_path))
 
-    overview = asyncio.run(server.dashboard_overview())
+    overview = svc.get_overview_payload(state)
 
     for panel in (
         "mode",
@@ -174,9 +179,9 @@ def test_dashboard_overview_returns_all_panels(tmp_path: Path, monkeypatch: pyte
 
 def test_dashboard_paper_badge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path, mode="paper", live_enabled=False)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    state = _web_state(_stub_manager(config_path))
 
-    mode = asyncio.run(server.dashboard_overview())["mode"]
+    mode = svc.get_overview_payload(state)["mode"]
     assert mode["paper"] is True
     assert mode["runtime_mode"] == "paper"
     assert mode["live_enabled"] is False
@@ -188,9 +193,9 @@ def test_dashboard_live_disabled_marker(tmp_path: Path, monkeypatch: pytest.Monk
     """A live-configured deployment whose engine is not trading shows LIVE
     clearly disabled, driven by config.live.enabled + runtime.mode."""
     config_path = _repo_config(tmp_path, mode="live", live_enabled=True)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path, engine_state="stopped", paper=False))
+    state = _web_state(_stub_manager(config_path, engine_state="stopped", paper=False))
 
-    mode = asyncio.run(server.dashboard_overview())["mode"]
+    mode = svc.get_overview_payload(state)["mode"]
     assert mode["paper"] is False
     assert mode["runtime_mode"] == "live"
     assert mode["live_enabled"] is True
@@ -202,9 +207,9 @@ def test_dashboard_live_disabled_marker(tmp_path: Path, monkeypatch: pytest.Monk
 
 def test_dashboard_live_active_badge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path, mode="live", live_enabled=True)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path, engine_state="running", paper=False))
+    state = _web_state(_stub_manager(config_path, engine_state="running", paper=False))
 
-    mode = asyncio.run(server.dashboard_overview())["mode"]
+    mode = svc.get_overview_payload(state)["mode"]
     assert mode["badge"] == "live"
     assert mode["live_active"] is True
     assert mode["live_disabled"] is False
@@ -217,9 +222,9 @@ def test_dashboard_live_active_badge(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    state = _web_state(_stub_manager(config_path))
 
-    overview = asyncio.run(server.dashboard_overview())
+    overview = svc.get_overview_payload(state)
     equity = overview["equity"]
 
     assert equity["name"] == "equity_leveraged_trend_v1"
@@ -234,9 +239,9 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkey
 
 def test_dashboard_risk_panel_exposes_policies_and_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    state = _web_state(_stub_manager(config_path))
 
-    risk = asyncio.run(server.dashboard_overview())["risk"]
+    risk = svc.get_overview_payload(state)["risk"]
     assert risk["gross_exposure_pct"] == 40.0
     assert risk["gross_exposure_limit_pct"] == 98.0
     assert risk["cash_pct"] == 60.0
@@ -253,7 +258,7 @@ def test_dashboard_risk_panel_exposes_policies_and_state(tmp_path: Path, monkeyp
 
 def test_dashboard_risk_exposes_sampled_buy_capacity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    state = _web_state(_stub_manager(config_path))
     monkeypatch.setattr(
         svc,
         "_dashboard_buy_capacity",
@@ -270,7 +275,7 @@ def test_dashboard_risk_exposes_sampled_buy_capacity(tmp_path: Path, monkeypatch
         },
     )
     svc._dashboard_snapshot_reset()
-    capacity = asyncio.run(server.dashboard_overview())["risk"]["buy_capacity"]
+    capacity = svc.get_overview_payload(state)["risk"]["buy_capacity"]
     assert capacity["effective_slots"] == capacity["maximum_positions"] == 6
     assert capacity["broker_working_order_count"] == 1
     assert capacity["committed_buy_notional"] == 500.0
@@ -279,9 +284,9 @@ def test_dashboard_risk_exposes_sampled_buy_capacity(tmp_path: Path, monkeypatch
 
 def test_dashboard_universe_and_health_panels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    state = _web_state(_stub_manager(config_path))
 
-    overview = asyncio.run(server.dashboard_overview())
+    overview = svc.get_overview_payload(state)
     # Equity is the configured static set: no discovery, no refresh cycle.
     equity = overview["universe"]["equity"]
     assert equity["observation_set"]
@@ -344,10 +349,10 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkey
             "protection_state": "protected",
         }
     ]
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path, positions=positions))
+    state = _web_state(_stub_manager(config_path, positions=positions))
     monkeypatch.setattr(svc, "_dashboard_market_decisions", lambda _account_id: {"equity": _equity_decision()})
 
-    equity = asyncio.run(server.dashboard_overview())["equity"]
+    equity = svc.get_overview_payload(state)["equity"]
     holding = equity["holdings"][0]
     assert holding["symbol"] == "QLD"
     assert holding["reason"] == "trend_on_vol_target"
@@ -374,10 +379,10 @@ def test_dashboard_explanations_derive_structured_reasons(tmp_path: Path, monkey
             "unrealized_pnl": 50.0,
         }
     ]
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path, positions=positions))
+    state = _web_state(_stub_manager(config_path, positions=positions))
     monkeypatch.setattr(svc, "_dashboard_market_decisions", lambda _account_id: {"equity": _equity_decision()})
 
-    explanations = asyncio.run(server.dashboard_overview())["explanations"]
+    explanations = svc.get_overview_payload(state)["explanations"]
     assert set(explanations) == {"equity"}
     equity = explanations["equity"]
     assert equity["strategy_name"] == "equity_leveraged_trend_v1"
@@ -404,22 +409,22 @@ def test_dashboard_metrics_degrade_to_unavailable_when_modules_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config_path = _repo_config(tmp_path)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    state = _web_state(_stub_manager(config_path))
     _install_fake_telemetry_module(monkeypatch, telemetry=False)
     _install_fake_metrics_module(monkeypatch, metrics=False)
 
-    metrics = asyncio.run(server.dashboard_overview())["metrics"]
+    metrics = svc.get_overview_payload(state)["metrics"]
     assert metrics["telemetry"]["unavailable"] is True
     assert metrics["runtime_metrics"]["unavailable"] is True
 
 
 def test_dashboard_metrics_consume_batch_modules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    state = _web_state(_stub_manager(config_path))
     _install_fake_telemetry_module(monkeypatch, telemetry=True)
     _install_fake_metrics_module(monkeypatch, metrics=True)
 
-    metrics = asyncio.run(server.dashboard_overview())["metrics"]
+    metrics = svc.get_overview_payload(state)["metrics"]
     assert metrics["telemetry"]["unavailable"] is False
     assert metrics["telemetry"]["execution_metrics"]["orders"] == 3
     assert metrics["telemetry"]["forward_metrics"]["decision_count"] == 1
@@ -427,7 +432,7 @@ def test_dashboard_metrics_consume_batch_modules(tmp_path: Path, monkeypatch: py
     assert metrics["runtime_metrics"]["restart_count"] == 2
     assert metrics["runtime_metrics"]["drawdown_incidents"] == 1
     # The health panel surfaces the same restart count source.
-    health = asyncio.run(server.dashboard_overview())["health"]
+    health = svc.get_overview_payload(state)["health"]
     assert health["restart_count"] == 2
 
 
@@ -452,12 +457,12 @@ def test_focused_endpoints_are_slices(
     endpoint: str, panel: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config_path = _repo_config(tmp_path)
-    monkeypatch.setattr(server, "manager", _stub_manager(config_path))
+    state = _web_state(_stub_manager(config_path))
     _install_fake_telemetry_module(monkeypatch, telemetry=True)
     _install_fake_metrics_module(monkeypatch, metrics=True)
 
-    overview = asyncio.run(server.dashboard_overview())
-    slice_payload = asyncio.run(getattr(server, endpoint)())
+    overview = svc.get_overview_payload(state)
+    slice_payload = svc.get_panel(panel, state)
     assert slice_payload == overview[panel]
     assert isinstance(slice_payload, dict)
 
@@ -486,10 +491,6 @@ def test_market_decisions_failure_reaches_the_operator(monkeypatch: pytest.Monke
         raise RuntimeError("ledger locked")
 
     monkeypatch.setattr(svc, "_dashboard_market_decisions", _boom)
-
-    # The server shim delegates to the real reader instead of swallowing.
-    with pytest.raises(RuntimeError, match="ledger locked"):
-        server._dashboard_market_decisions("acct-1")
 
     svc._dashboard_snapshot_reset()
     assert svc.get_overview_payload() == {"unavailable": True, "error": "ledger locked"}
@@ -647,6 +648,58 @@ assert counts == baseline, f"the dashboard build created {counts}, baseline {bas
 assert len(app_logger.handlers) == baseline_handlers
 assert handler_homes() == ["parayabuck.web.managers.websocket"], handler_homes()
 '''
+
+
+_ONE_PROCESS_WIDE_STATE = r"""
+import sys
+from pathlib import Path
+
+from fastapi import FastAPI
+
+import parayabuck
+from parayabuck.web.managers.engine import EngineManager
+
+assert Path(parayabuck.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve()), parayabuck.__file__
+counts = {"engine_manager": 0, "fastapi_app": 0}
+
+
+def instrument(cls, key):
+    original = cls.__init__
+
+    def __init__(self, *args, **kwargs):
+        counts[key] += 1
+        return original(self, *args, **kwargs)
+
+    cls.__init__ = __init__
+
+
+instrument(EngineManager, "engine_manager")
+instrument(FastAPI, "fastapi_app")
+import parayabuck.web.application  # noqa: E402,F401
+
+assert counts == {"engine_manager": 0, "fastapi_app": 0}, counts
+import parayabuck.web.server as server  # noqa: E402
+from parayabuck.web.state import get_web_state  # noqa: E402
+
+assert counts == {"engine_manager": 1, "fastapi_app": 1}, counts
+assert get_web_state() is server.web_state and server.app.state.web is server.web_state
+"""
+
+
+def test_serving_module_builds_exactly_one_engine_manager_and_app() -> None:
+    """``uvicorn parayabuck.web.server:app`` composes one process-wide state;
+    importing the application factory builds nothing."""
+    repo = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-c", _ONE_PROCESS_WIDE_STATE, str(repo / "src")],
+        cwd=str(repo),
+        env={**os.environ, "PYTHONPATH": str(repo / "src"), "PYTHONDONTWRITEBYTECODE": "1"},
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_dashboard_import_and_build_construct_no_extra_singletons() -> None:

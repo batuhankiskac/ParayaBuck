@@ -14,7 +14,9 @@ from parayabuck.execution.risk_peak import RiskPeakService
 from parayabuck.monitoring import alerts
 from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.storage import SQLiteStore, StorageInitializationError
-from parayabuck.web.server import SettingsPayload, manager
+from parayabuck.web.schemas.settings import SettingsPayload
+from parayabuck.web.server import manager
+from parayabuck.web.services.settings import SettingsService
 
 # --- Peak state fail-closed ---
 
@@ -556,9 +558,7 @@ def test_settings_patch_preserves_omitted(tmp_path, monkeypatch):
         # GET should return correct defaults
         import asyncio
 
-        from parayabuck.web.server import get_settings
-
-        result = asyncio.run(get_settings())
+        result = asyncio.run(SettingsService(manager).get_settings())
         assert result["daily_loss_limit_pct"] == 20.0
         assert result["max_drawdown_pct"] == 75.0
         assert "crypto_trading_enabled" not in result
@@ -597,10 +597,8 @@ def test_settings_concurrency_409(tmp_path, monkeypatch):
 
         from fastapi import HTTPException
 
-        from parayabuck.web.server import _handle_save_settings
-
         with pytest.raises(HTTPException) as exc:
-            asyncio.run(_handle_save_settings(payload))
+            asyncio.run(SettingsService(manager).save_settings(payload))
         assert exc.value.status_code == 409
         # B remains unchanged
         final_raw = yaml.safe_load(cfg_path.read_text())

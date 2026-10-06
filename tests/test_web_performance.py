@@ -11,7 +11,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from parayabuck.web import server
+from parayabuck.web.managers.engine import EngineManager
 from parayabuck.web.routers import dashboard
 from parayabuck.web.services import performance
 from tests.helpers import make_broker
@@ -151,7 +151,7 @@ def test_alpaca_portfolio_history_drops_unfunded_and_invalid_points(tmp_path: Pa
 
 
 def test_cached_account_snapshot_keeps_the_flat_shape() -> None:
-    manager = server.EngineManager()
+    manager = EngineManager()
     manager.last_account = {"equity": 1234.5, "cash": 10.0, "positions": [{"symbol": "QLD"}]}
     manager._last_account_monotonic = time.monotonic()
 

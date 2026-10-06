@@ -31,7 +31,11 @@ def _default_state() -> WebState:
 
 
 def create_app(state: WebState | None = None) -> FastAPI:
-    """Create FastAPI app with all routers and middleware."""
+    """Create FastAPI app with all routers and middleware.
+
+    The process-wide app lives in ``parayabuck.web.server``; importing this
+    module builds nothing.
+    """
     if state is None:
         state = _default_state()
     state.bind()
@@ -101,15 +105,3 @@ def create_app(state: WebState | None = None) -> FastAPI:
         pass
 
     return app
-
-
-# Process-wide default — importing this module creates the same app that
-# ``uvicorn parayabuck.web.server:app`` and
-# ``uvicorn parayabuck.web.application:app`` would serve. Tests that need a
-# fake state call ``create_app(fake_state)`` instead and never touch this.
-try:
-    app: FastAPI = create_app()
-except Exception:  # pragma: no cover
-    # Never break import of the package when optional deps are missing in a
-    # tooling context.
-    app = FastAPI(title="ParayaBuck Trading Terminal")

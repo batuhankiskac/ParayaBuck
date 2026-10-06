@@ -14,9 +14,9 @@ import yaml
 from pydantic import ValidationError
 
 from parayabuck.web.managers.engine import EngineManager
-from parayabuck.web.routers import safety
 from parayabuck.web.schemas.settings import ModePayload, SettingsPayload
 from parayabuck.web.services.settings import SettingsService
+from tests.helpers import web_client
 
 WEB = Path(__file__).resolve().parents[1] / "src" / "parayabuck" / "web"
 EMPTY_BLOCKS = "app:\nruntime:\nlive:\nstrategy:\nalpaca:\nrisk:\nengine:\n"
@@ -92,17 +92,67 @@ def test_settings_save_with_empty_blocks_succeeds(tmp_path: Path) -> None:
 
 
 def test_toggle_mode_to_paper_with_empty_runtime_block(tmp_path: Path) -> None:
-    manager = _manager(tmp_path, EMPTY_BLOCKS)
+    # Empty runtime/live blocks plus the smallest loadable market: the mode
+    # write is validated, so the file must load afterwards.
+    manager = _manager(tmp_path, "app:\nruntime:\nlive:\nalpaca:\nrisk:\nengine:\n" + yaml.safe_dump(_LOADABLE_MARKETS))
     manager.reset_broker = lambda: None  # type: ignore[method-assign]
-    request: Any = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(web=SimpleNamespace(engine_manager=manager)))
-    )
 
-    result = asyncio.run(safety.toggle_mode(ModePayload(paper=True), request))
+    result = web_client(manager).post("/api/mode", json={"paper": True}).json()
 
     assert result == {"status": "success", "paper": True}
     saved = yaml.safe_load(manager.config_path.read_text(encoding="utf-8"))
     assert saved["runtime"] == {"mode": "paper"}
+
+
+def test_toggle_mode_never_writes_a_config_that_fails_to_load(tmp_path: Path) -> None:
+    """Switching to live without a dollar cap used to write an invalid
+    settings.yaml that broke the next restart (doctor ExecStartPre) and every
+    backup run. The candidate is validated first; the file stays untouched."""
+    manager = _manager(tmp_path, yaml.safe_dump({"runtime": {"mode": "paper"}, **_LOADABLE_MARKETS}))
+    manager.reset_broker = lambda: None  # type: ignore[method-assign]
+    manager.get_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
+    manager._require_valid_live_arm = lambda *_a, **_k: None  # type: ignore[method-assign]
+    before = manager.config_path.read_text(encoding="utf-8")
+
+    response = web_client(manager).post("/api/mode", json={"paper": False})
+
+    assert response.status_code == 400
+    assert "hard dollar cap" in response.json()["detail"]
+    assert manager.config_path.read_text(encoding="utf-8") == before
+    assert not list(tmp_path.glob(".*.validate"))
+
+
+def test_toggle_mode_waits_for_the_settings_lock(tmp_path: Path) -> None:
+    """/api/mode and the settings drawer serialize on the same state lock."""
+    import parayabuck.web.routers.safety as safety_router
+    from parayabuck.web.state import WebState
+
+    # Empty runtime/live blocks plus the smallest loadable market: the mode
+    # write is validated, so the file must load afterwards.
+    manager = _manager(tmp_path, "app:\nruntime:\nlive:\nalpaca:\nrisk:\nengine:\n" + yaml.safe_dump(_LOADABLE_MARKETS))
+    manager.reset_broker = lambda: None  # type: ignore[method-assign]
+    state = WebState(engine_manager=manager, backtest_manager=manager._backtest_manager)
+    request: Any = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(web=state)))
+    writes: list[str] = []
+    real_write = safety_router._write_mode
+
+    def _recording_write(path: Any, paper: bool) -> None:
+        writes.append("mode")
+        real_write(path, paper)
+
+    async def scenario() -> None:
+        safety_router._write_mode = _recording_write  # type: ignore[assignment]
+        try:
+            async with state.settings_lock:
+                task = asyncio.create_task(safety_router.toggle_mode(ModePayload(paper=True), request))
+                await asyncio.sleep(0.05)
+                assert writes == []  # blocked behind the settings save
+            assert (await task)["status"] == "success"
+        finally:
+            safety_router._write_mode = real_write  # type: ignore[assignment]
+
+    asyncio.run(scenario())
+    assert writes == ["mode"]
 
 
 # --- F2: production risk limits round-trip through the settings schema -----

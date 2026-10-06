@@ -56,11 +56,7 @@ def _live_manager() -> Any:
     from parayabuck.web.state import get_web_state
 
     state = get_web_state()
-    if state is not None:
-        return state.engine_manager
-    import parayabuck.web.server as srv
-
-    return getattr(srv, "manager", None)
+    return state.engine_manager if state is not None else None
 
 
 def _dashboard_manager() -> Any:
@@ -1186,21 +1182,15 @@ def _dashboard_account() -> dict[str, Any]:
 def _context(state: Any | None) -> DashboardContext:
     """Explicit display dependencies for one dashboard request.
 
-    ``state`` is the request's WebState. Without one (direct/test calls) the
-    live singletons are resolved lazily, so importing this module — or serving a
-    request from a bound state — never builds an extra engine manager.
+    ``state`` is the request's WebState; without one the process-wide state is
+    used, so importing this module never builds an engine manager.
     """
-    if state is not None:
-        engine_manager = getattr(state, "engine_manager", None)
-        backtest_manager = getattr(state, "backtest_manager", None)
-    else:
-        import parayabuck.web.server as srv
+    if state is None:
+        from parayabuck.web.state import get_web_state
 
-        bound = getattr(srv, "web_state", None)
-        engine_manager = getattr(bound, "engine_manager", None) if bound is not None else getattr(srv, "manager", None)
-        backtest_manager = (
-            getattr(bound, "backtest_manager", None) if bound is not None else getattr(srv, "backtest_manager", None)
-        )
+        state = get_web_state()
+    engine_manager = getattr(state, "engine_manager", None)
+    backtest_manager = getattr(state, "backtest_manager", None)
     return DashboardContext(
         engine_manager=engine_manager,
         backtest_manager=backtest_manager,

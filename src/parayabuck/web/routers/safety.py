@@ -4,9 +4,8 @@ Verbatim extraction of server.py sections:
   /api/safety/risk-epoch (1945-1957), /api/mode (1959-1993),
   /api/live/* (1994-2023), /api/ws-ticket (2024-2030).
 
-All handlers resolve EngineManager via request.app.state.web or
-get_web_state (state injection for tests), then translate domain errors
-via a small helper to 400/500 — no magic global handler. Paths are
+All handlers resolve EngineManager through ``web.deps`` (the request's
+WebState), then translate domain errors via a small helper to 400/500. Paths are
 preserved so OpenAPI contract is unchanged. No secrets are returned.
 """
 
@@ -18,34 +17,16 @@ from typing import Any
 import yaml
 from fastapi import APIRouter, HTTPException, Request
 
+from parayabuck.config import load_config
 from parayabuck.logger import get_logger
 from parayabuck.utils.io import atomic_write
+from parayabuck.web.deps import get_engine_manager, resolve_web_state
 from parayabuck.web.managers.engine import _yaml_block
 from parayabuck.web.schemas.settings import LiveConfirmationPayload, ModePayload, WebSocketTicketPayload
 
 log = get_logger("parayabuck.web.routers.safety")
 
 router = APIRouter(prefix="/api", tags=["safety"])
-
-
-def _get_manager(request: Request) -> Any:
-    web_state = getattr(request.app.state, "web", None)
-    if web_state is not None and hasattr(web_state, "engine_manager"):
-        return web_state.engine_manager
-    try:
-        from parayabuck.web.state import get_web_state
-
-        ws = get_web_state()
-        if ws is not None and hasattr(ws, "engine_manager"):
-            return ws.engine_manager
-    except Exception:
-        pass
-    try:
-        import parayabuck.web.server as server_mod
-
-        return server_mod.manager
-    except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=500, detail="Engine manager unavailable") from exc
 
 
 def _http(status: int, detail: str) -> HTTPException:
@@ -61,7 +42,7 @@ async def start_new_risk_epoch(request: Request) -> dict[str, Any]:
 
     Starts a new risk epoch — explicit recovery for portfolio_drawdown_halt.
     """
-    manager = _get_manager(request)
+    manager = get_engine_manager(request)
     try:
         return await asyncio.to_thread(manager.start_new_risk_epoch)
     except ValueError as exc:
@@ -74,10 +55,29 @@ async def start_new_risk_epoch(request: Request) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # POST /api/mode
 # ---------------------------------------------------------------------------
+def _write_mode(config_path: Any, paper: bool) -> None:
+    """Rewrite runtime.mode (and live.enabled) only if the result loads."""
+    raw: dict[str, Any] = {}
+    if config_path.exists():
+        with open(config_path, encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    _yaml_block(raw, "runtime")["mode"] = "paper" if paper else "live"
+    if not paper:
+        _yaml_block(raw, "live")["enabled"] = True
+    text = yaml.safe_dump(raw, sort_keys=False, default_flow_style=False)
+    candidate = config_path.with_name(f".{config_path.name}.validate")
+    atomic_write(candidate, text)
+    try:
+        load_config(str(candidate))
+    finally:
+        candidate.unlink(missing_ok=True)
+    atomic_write(config_path, text)
+
+
 @router.post("/mode")
 async def toggle_mode(payload: ModePayload, request: Request) -> dict[str, Any]:
     """POST /api/mode — toggle paper/live mode; 400 if engine active or live guard fails."""
-    manager = _get_manager(request)
+    manager = get_engine_manager(request)
     if manager.has_active_runtime():
         raise _http(
             400,
@@ -90,21 +90,15 @@ async def toggle_mode(payload: ModePayload, request: Request) -> dict[str, Any]:
             if not key or not secret:
                 raise ValueError("Alpaca credentials are required")
             manager._require_valid_live_arm(key, secret, consume=False)
-        raw: dict[str, Any] = {}
-        if manager.config_path.exists():
-            with open(manager.config_path, encoding="utf-8") as f:
-                raw = yaml.safe_load(f) or {}
-        _yaml_block(raw, "runtime")["mode"] = "paper" if payload.paper else "live"
-        if not payload.paper:
-            _yaml_block(raw, "live")["enabled"] = True
-        atomic_write(
-            manager.config_path,
-            yaml.safe_dump(raw, sort_keys=False, default_flow_style=False),
-        )
+        # Same lock as the settings drawer, and the same validate-then-replace
+        # discipline: an unvalidated write (e.g. live without a dollar cap)
+        # broke the next restart (doctor ExecStartPre) and every backup run.
+        async with resolve_web_state(request).settings_lock:
+            await asyncio.to_thread(_write_mode, manager.config_path, payload.paper)
 
         manager.reset_broker()  # Force broker reset
         return {"status": "success", "paper": payload.paper}
-    except ValueError as e:
+    except (ValueError, TypeError) as e:
         raise _http(400, str(e)) from e
     except Exception:
         log.exception("Trading-mode toggle failed with an unexpected error")
@@ -117,13 +111,13 @@ async def toggle_mode(payload: ModePayload, request: Request) -> dict[str, Any]:
 @router.get("/live/prerequisites")
 async def live_prerequisites(request: Request) -> dict[str, Any]:
     """Live-arm readiness checklist (no secrets in the response)."""
-    manager = _get_manager(request)
+    manager = get_engine_manager(request)
     return await asyncio.to_thread(manager.live_prerequisites)
 
 
 @router.post("/live/arming/request")
 async def request_live_arming(request: Request) -> dict[str, str]:
-    manager = _get_manager(request)
+    manager = get_engine_manager(request)
     try:
         suffix = await asyncio.to_thread(manager.request_live_arming)
         return {
@@ -136,7 +130,7 @@ async def request_live_arming(request: Request) -> dict[str, str]:
 
 @router.post("/live/arming/confirm")
 async def confirm_live_arming(payload: LiveConfirmationPayload, request: Request) -> dict[str, str]:
-    manager = _get_manager(request)
+    manager = get_engine_manager(request)
     try:
         manager.confirm_live_arming(payload.phrase)
         return {
@@ -152,7 +146,7 @@ async def confirm_live_arming(payload: LiveConfirmationPayload, request: Request
 # ---------------------------------------------------------------------------
 @router.post("/ws-ticket")
 async def websocket_ticket(payload: WebSocketTicketPayload, request: Request) -> dict[str, str]:
-    manager = _get_manager(request)
+    manager = get_engine_manager(request)
     try:
         return {"ticket": manager.issue_ws_ticket(payload.kind)}
     except ValueError as exc:

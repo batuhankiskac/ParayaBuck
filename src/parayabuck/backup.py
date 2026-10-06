@@ -274,27 +274,6 @@ def prune_backups(
     return removed
 
 
-def latest_verified_backup(backup_dir: str | Path) -> Path | None:
-    """Return the most recent verified backup in ``backup_dir``, or None.
-
-    Unlike pruning, this considers every backup including the labelled
-    ``parayabuck-keep-*`` snapshots, so a pre-deploy backup stays a valid
-    restore candidate.
-    """
-    directory = Path(backup_dir)
-    if not directory.is_dir():
-        return None
-    backups = sorted(
-        (candidate for candidate in directory.glob(BACKUP_GLOB) if candidate.is_file()),
-        key=lambda candidate: candidate.stat().st_mtime,
-        reverse=True,
-    )
-    for candidate in backups:
-        if verify_backup(candidate):
-            return candidate
-    return None
-
-
 def latest_backup_age_hours(backup_dir: str | Path, *, now: datetime | None = None) -> float | None:
     """Age in hours of the newest backup in ``backup_dir``; None when there is none.
 
@@ -331,7 +310,6 @@ __all__ = [
     "BackupVerificationError",
     "backup_database",
     "latest_backup_age_hours",
-    "latest_verified_backup",
     "prune_backups",
     "verify_backup",
 ]

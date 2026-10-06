@@ -1,30 +1,18 @@
 from __future__ import annotations
 
-import asyncio
+from typing import Any
 
-from starlette.requests import Request
+from parayabuck.web.managers.engine import EngineManager
+from tests.helpers import web_client
 
-from parayabuck.web import server
 
-
-def _request(path: str) -> Request:
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": path,
-            "headers": [],
-            "query_string": b"",
-            "server": ("testserver", 80),
-            "client": ("127.0.0.1", 1),
-            "scheme": "http",
-        }
-    )
+def _get(path: str) -> Any:
+    return web_client(EngineManager()).get(path)
 
 
 def test_dashboard_prioritizes_money_chart_and_positions() -> None:
-    response = asyncio.run(server.serve_index(_request("/")))
-    html = bytes(response.body).decode()
+    response = _get("/")
+    html = response.text
 
     equity = html.index('id="equityValue"')
     chart = html.index('id="perfChart"')
@@ -40,8 +28,8 @@ def test_dashboard_prioritizes_money_chart_and_positions() -> None:
 
 
 def test_tools_page_contains_technical_workflows() -> None:
-    response = asyncio.run(server.serve_tools(_request("/tools")))
-    html = bytes(response.body).decode()
+    response = _get("/tools")
+    html = response.text
 
     assert 'id="backtestRunBtn"' in html
     assert 'id="operationsDetail"' in html
@@ -53,8 +41,8 @@ def test_tools_page_contains_technical_workflows() -> None:
 
 def test_pages_load_only_same_origin_assets() -> None:
     """The CSP forbids inline scripts/styles and third-party origins."""
-    for handler, path in ((server.serve_index, "/"), (server.serve_tools, "/tools")):
-        html = bytes(asyncio.run(handler(_request(path))).body).decode()
+    for path in ("/", "/tools"):
+        html = _get(path).text
         assert "<script>" not in html
         assert 'style="' not in html
         assert "https://" not in html

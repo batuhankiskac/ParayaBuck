@@ -1,8 +1,7 @@
 """Settings router — GET /api/settings, POST /api/settings, PATCH /api/settings.
 
-Delegates to ``SettingsService`` resolved via ``WebState`` (``state.py``).
-Falls back to the legacy ``server.manager`` singleton for tests that patch
-``server.manager`` directly.  PATCH semantics are preserved via
+Delegates to ``SettingsService`` built from the request's ``WebState``
+(its engine manager and its single settings lock).  PATCH semantics are preserved via
 ``payload.model_fields_set`` inside the service (fields absent from the set
 are not overwritten).
 
@@ -13,47 +12,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from parayabuck.logger import get_logger
+from parayabuck.web.deps import resolve_web_state
 from parayabuck.web.schemas.settings import SettingsPayload
+from parayabuck.web.services.settings import SettingsService
 
 log = get_logger("parayabuck.web.routers.settings")
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
-def get_settings_service() -> Any:
-    """Resolve ``SettingsService`` from ``WebState`` or legacy singleton."""
-    # Lazy imports avoid circular import at module load time.
-    try:
-        from parayabuck.web.state import get_web_state
-
-        state = get_web_state()
-        if state is not None and getattr(state, "engine_manager", None) is not None:
-            from parayabuck.web.services.settings import SettingsService
-
-            # Reuse the singleton lock from server.py when available so
-            # concurrent saves serialise across legacy + new code.
-            settings_lock = None
-            try:
-                from parayabuck.web.server import _settings_lock as legacy_lock
-
-                settings_lock = legacy_lock
-            except Exception:
-                settings_lock = None
-            return SettingsService(state.engine_manager, settings_lock=settings_lock)
-    except Exception:
-        pass
-    # Fallback: legacy server.manager (tests monkeypatch server.manager)
-    try:
-        from parayabuck.web.server import _settings_lock as legacy_lock
-        from parayabuck.web.server import manager as legacy_manager
-        from parayabuck.web.services.settings import SettingsService
-
-        return SettingsService(legacy_manager, settings_lock=legacy_lock)
-    except Exception as exc:  # pragma: no cover - misconfiguration
-        raise RuntimeError("SettingsService could not be resolved") from exc
+def get_settings_service(request: Request) -> SettingsService:
+    """``SettingsService`` over the request's engine manager and settings lock."""
+    state = resolve_web_state(request)
+    return SettingsService(state.engine_manager, settings_lock=state.settings_lock)
 
 
 @router.get("", summary="Get settings")

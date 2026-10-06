@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -12,6 +13,9 @@ class WebState:
     engine_manager: Any
     backtest_manager: Any
     ticket_store: Any | None = None
+    # Serializes every settings.yaml rewrite of this app (settings drawer and
+    # /api/mode): one lock per state, never one per request.
+    settings_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def bind(self) -> None:
         """Wire cross-dependencies (backtest ↔ engine)."""
@@ -28,9 +32,8 @@ class WebState:
             bind_backtest(self.engine_manager.current_engine_state)
 
 
-# Global singleton used by server.py compatibility layer and by tests that
-# call `get_web_state()` via lazy import.  The factory in application.py
-# will replace this on app creation, but importing `web.state` never
+# The process-wide state ``parayabuck.web.server`` installs; request-less
+# service calls resolve it through ``web.deps``. Importing this module never
 # starts engines or contacts brokers.
 _web_state: WebState | None = None
 

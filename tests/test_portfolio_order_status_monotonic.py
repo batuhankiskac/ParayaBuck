@@ -16,8 +16,8 @@ def _submitted_order(tmp_path) -> tuple[PortfolioStateRepository, PortfolioOrder
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     target = TargetPortfolio("monotonic", "1", _AT, (), 1.0)
     session = repo.begin_session("acct", "digest", "paper")
-    decision_id = repo.record_decision(
-        session, "acct", "digest", target, RiskOverlayDecision(target, False, (), 0.0, 0.0), Market.EQUITY
+    decision_id = repo.record_decision_with_orders(
+        session, "acct", "digest", target, RiskOverlayDecision(target, False, (), 0.0, 0.0), Market.EQUITY, ()
     )
     order = PortfolioOrderRequest(
         client_order_id="monotonic-buy",

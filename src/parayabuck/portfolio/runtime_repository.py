@@ -545,37 +545,6 @@ class PortfolioStateRepository:
         check = metadata.get("signal_cross_check") if isinstance(metadata, dict) else None
         return dict(check) if isinstance(check, dict) else None
 
-    def record_decision(
-        self,
-        session_id: str,
-        account_id: str,
-        configuration_digest: str,
-        target: TargetPortfolio,
-        risk: RiskOverlayDecision,
-        market: Market,
-    ) -> str:
-        """Persist one decision (without orders). Prefer ``record_decision_with_orders`` for crash-consistency."""
-        decision_id: str = _decision_id(account_id, configuration_digest, target.decision_timestamp, market)
-        with self.store.lock, self.store.connection:
-            self.store.connection.execute(
-                """INSERT OR IGNORE INTO portfolio_decisions(
-                    decision_id, session_id, account_id, configuration_digest,
-                    decision_timestamp, market, strategy_name, target_json, risk_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    decision_id,
-                    session_id,
-                    account_id,
-                    configuration_digest,
-                    target.decision_timestamp.isoformat(),
-                    market.value,
-                    target.strategy_name,
-                    json.dumps(target.to_dict(), sort_keys=True, default=str),
-                    json.dumps(asdict(risk), sort_keys=True, default=str),
-                ),
-            )
-        return decision_id
-
     def record_decision_with_orders(
         self,
         session_id: str,

@@ -39,12 +39,12 @@ class SQLiteStore:
 
     Transaction boundaries:
     * Every critical write that must be crash-consistent (decision+orders,
-      execution-event + position delta, rebalance phase transition) is wrapped
-      in a single SQLite transaction (``BEGIN IMMEDIATE``/``with connection:``)
-      so a crash cannot leave a half-decision, half-order, or half-position
-      state. See ``portfolio/runtime_service.py:record_decision`` and
-      ``execution/ledger.py:apply_execution_event`` for the authoritative
-      boundaries and the crash-consistency test in
+      trade update + fill, rebalance phase transition) is wrapped in a single
+      SQLite transaction (``BEGIN IMMEDIATE``/``with connection:``) so a crash
+      cannot leave a half-decision, half-order, or half-fill state. See
+      ``portfolio/runtime_repository.py:record_decision_with_orders`` and
+      ``portfolio/runtime_repository.py:apply_trade_update`` for the
+      authoritative boundaries and the crash-consistency test in
       ``tests/test_hardening.py::test_crash_consistency_decision_order_atomic``.
     * Concurrent handling: all writers acquire ``store.lock`` (a re-entrant
       lock) before touching ``store.connection``; the lock plus WAL plus

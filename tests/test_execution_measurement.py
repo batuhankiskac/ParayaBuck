@@ -51,7 +51,7 @@ def _order(repo: PortfolioStateRepository) -> tuple[str, PortfolioOrderRequest]:
     target = TargetPortfolio("measurement", "1", timestamp, (), 1.0)
     risk = RiskOverlayDecision(target, False, (), 0.0, 0.0)
     session = repo.begin_session("acct", "digest", "paper")
-    decision_id = repo.record_decision(session, "acct", "digest", target, risk, Market.EQUITY)
+    decision_id = repo.record_decision_with_orders(session, "acct", "digest", target, risk, Market.EQUITY, ())
     order = PortfolioOrderRequest(
         client_order_id="measurement-buy",
         decision_id=decision_id,

@@ -100,13 +100,14 @@ def _record_fill(repo: PortfolioStateRepository, account_id: str, client_order_i
     target = TargetPortfolio(
         weights=(), cash_weight=1.0, decision_timestamp=_AT, strategy_name="eq", strategy_version="1"
     )
-    decision_id = repo.record_decision(
+    decision_id = repo.record_decision_with_orders(
         session_id,
         account_id,
         f"digest-{client_order_id}",
         target,
         RiskOverlayDecision(target, False, (), 0.0, 0.0),
         Market.EQUITY,
+        (),
     )
     repo.record_order(
         PortfolioOrderRequest(

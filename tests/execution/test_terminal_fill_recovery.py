@@ -32,8 +32,8 @@ def _repository(tmp_path: Path) -> tuple[PortfolioStateRepository, str]:
     target = TargetPortfolio(
         weights=(), cash_weight=1.0, decision_timestamp=_DECISION_AT, strategy_name="eq", strategy_version="1"
     )
-    decision_id = repo.record_decision(
-        session_id, "acct", "digest", target, RiskOverlayDecision(target, False, (), 0.0, 0.0), Market.EQUITY
+    decision_id = repo.record_decision_with_orders(
+        session_id, "acct", "digest", target, RiskOverlayDecision(target, False, (), 0.0, 0.0), Market.EQUITY, ()
     )
     return repo, decision_id
 

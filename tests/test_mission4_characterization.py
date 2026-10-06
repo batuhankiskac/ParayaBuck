@@ -301,7 +301,7 @@ class TestRebalancePhases:
         )
         risk = RiskOverlayDecision(target=target, halted=False, reasons=(), gross_before=1.0, gross_after=1.0)
         sess = repo.begin_session("acct1", "digest1", "paper")
-        did = repo.record_decision(sess, "acct1", "digest1", target, risk, Market.EQUITY)
+        did = repo.record_decision_with_orders(sess, "acct1", "digest1", target, risk, Market.EQUITY, ())
         repo.save_rebalance_execution(did, "acct1", Market.EQUITY, REBALANCE_PHASE_SELL_PENDING)
         state = repo.current_rebalance_execution("acct1", Market.EQUITY)
         assert state is not None and state.phase == REBALANCE_PHASE_SELL_PENDING
@@ -332,7 +332,7 @@ class TestRebalancePhases:
         risk = RiskOverlayDecision(target=target, halted=False, reasons=(), gross_before=1.0, gross_after=1.0)
         # Create session/decision
         sess = repo.begin_session("acct1", "digest1", "paper")
-        repo.record_decision(sess, "acct1", "digest1", target, risk, Market.EQUITY)
+        repo.record_decision_with_orders(sess, "acct1", "digest1", target, risk, Market.EQUITY, ())
         # Directly insert a sell order with filled quantity without buy
         with repo.store.lock, repo.store.connection:
             # Find decision_id

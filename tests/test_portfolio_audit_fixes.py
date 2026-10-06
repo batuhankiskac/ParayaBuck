@@ -85,15 +85,15 @@ def test_owned_quantities_ignores_legacy_crypto_rows(tmp_path):
     crypto_ts = datetime(2025, 1, 2, tzinfo=UTC)
 
     equity_session = repo.begin_session("acct", "digest-equity", "paper")
-    equity_decision = repo.record_decision(
-        equity_session, "acct", "digest-equity", _target(equity_ts), _risk(equity_ts), Market.EQUITY
+    equity_decision = repo.record_decision_with_orders(
+        equity_session, "acct", "digest-equity", _target(equity_ts), _risk(equity_ts), Market.EQUITY, ()
     )
     repo.record_order(_order(equity_decision, Market.EQUITY, "QLD", 5.0), "filled")
     _fill(repo, "cid-QLD", 5.0)
 
     crypto_session = repo.begin_session("acct", "digest-crypto", "paper")
-    crypto_decision = repo.record_decision(
-        crypto_session, "acct", "digest-crypto", _target(crypto_ts), _risk(crypto_ts), Market.CRYPTO
+    crypto_decision = repo.record_decision_with_orders(
+        crypto_session, "acct", "digest-crypto", _target(crypto_ts), _risk(crypto_ts), Market.CRYPTO, ()
     )
     repo.record_order(_order(crypto_decision, Market.CRYPTO, "BTC/USD", 0.5), "filled")
     _fill(repo, "cid-BTC/USD", 0.5)

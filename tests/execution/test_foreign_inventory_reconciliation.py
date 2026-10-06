@@ -132,7 +132,7 @@ def _owned_fill(repo: PortfolioStateRepository, quantity: float, price: float) -
     target = TargetPortfolio("vt35", "1", T0, (), 1.0)
     risk = RiskOverlayDecision(target, False, (), 0.0, 0.0)
     session = repo.begin_session(ACCOUNT, "digest", "paper")
-    decision_id = repo.record_decision(session, ACCOUNT, "digest", target, risk, Market.EQUITY)
+    decision_id = repo.record_decision_with_orders(session, ACCOUNT, "digest", target, risk, Market.EQUITY, ())
     client_order_id = "cid-buy"
     repo.record_order(
         PortfolioOrderRequest(

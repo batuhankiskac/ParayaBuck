@@ -820,21 +820,23 @@ def test_owned_quantities_are_isolated_per_account(tmp_path) -> None:
         strategy_version="1",
         risk_reducing=False,
     )
-    paper_decision = repo.record_decision(
+    paper_decision = repo.record_decision_with_orders(
         paper,
         "paper-acct",
         "digest-a",
         _decision_target(base.decision_timestamp),
         _risk_decision(base.decision_timestamp),
         Market.EQUITY,
+        (),
     )
-    repo.record_decision(
+    repo.record_decision_with_orders(
         live,
         "live-acct",
         "digest-b",
         _decision_target(base.decision_timestamp),
         _risk_decision(base.decision_timestamp),
         Market.EQUITY,
+        (),
     )
     base = dataclasses.replace(base, decision_id=paper_decision)
     repo.record_order(base, "submitting")
@@ -863,21 +865,23 @@ def test_decision_identity_is_scoped_to_account_and_configuration(tmp_path) -> N
     session_a = repo.begin_session("acct-a", "same-digest", "paper")
     session_b = repo.begin_session("acct-b", "same-digest", "paper")
     timestamp = datetime(2026, 8, 10, tzinfo=UTC)
-    id_a = repo.record_decision(
+    id_a = repo.record_decision_with_orders(
         session_a,
         "acct-a",
         "same-digest",
         _decision_target(timestamp),
         _risk_decision(timestamp),
         Market.EQUITY,
+        (),
     )
-    id_b = repo.record_decision(
+    id_b = repo.record_decision_with_orders(
         session_b,
         "acct-b",
         "same-digest",
         _decision_target(timestamp),
         _risk_decision(timestamp),
         Market.EQUITY,
+        (),
     )
     assert id_a != id_b
     assert repo.has_decision("acct-a", "same-digest", timestamp, Market.EQUITY)
@@ -1458,13 +1462,14 @@ def test_legacy_decisions_table_migrates_to_account_scoped_identity(tmp_path) ->
     timestamp = datetime(2026, 8, 10, tzinfo=UTC)
     assert repo.has_decision("acct-a", "d", timestamp, Market.EQUITY)
     session_b = repo.begin_session("acct-b", "d", "paper")
-    id_b = repo.record_decision(
+    id_b = repo.record_decision_with_orders(
         session_b,
         "acct-b",
         "d",
         _decision_target(timestamp),
         _risk_decision(timestamp),
         Market.EQUITY,
+        (),
     )
     assert id_b != "legacy-id"
     assert repo.has_decision("acct-b", "d", timestamp, Market.EQUITY)
@@ -1598,13 +1603,14 @@ def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) ->
 def _owned_equity_entry(repo: PortfolioStateRepository, *, quantity: float, symbol: str = "QLD") -> None:
     session_id = repo.begin_session("acct", "digest", "paper")
     decision_timestamp = datetime(2025, 1, 1, tzinfo=UTC)
-    decision_id = repo.record_decision(
+    decision_id = repo.record_decision_with_orders(
         session_id,
         "acct",
         "digest",
         _decision_target(decision_timestamp),
         _risk_decision(decision_timestamp),
         Market.EQUITY,
+        (),
     )
     entry = PortfolioOrderRequest(
         client_order_id=f"pbp-entry-{symbol}",
@@ -1666,13 +1672,14 @@ def test_operations_snapshot_is_isolated_between_two_accounts(tmp_path) -> None:
     for account in ("acct-a", "acct-b"):
         session = repo.begin_session(account, "digest", "paper")
         timestamp = datetime(2025, 1, 1, tzinfo=UTC)
-        decision_id = repo.record_decision(
+        decision_id = repo.record_decision_with_orders(
             session,
             account,
             "digest",
             _decision_target(timestamp),
             _risk_decision(timestamp),
             Market.EQUITY,
+            (),
         )
         repo.record_order(
             PortfolioOrderRequest(
@@ -1740,13 +1747,14 @@ def test_negative_net_ownership_is_an_invariant_violation(tmp_path) -> None:
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
     session = repo.begin_session("acct", "digest", "paper")
-    decision_id = repo.record_decision(
+    decision_id = repo.record_decision_with_orders(
         session,
         "acct",
         "digest",
         _decision_target(datetime(2025, 1, 2, tzinfo=UTC)),
         _risk_decision(datetime(2025, 1, 2, tzinfo=UTC)),
         Market.EQUITY,
+        (),
     )
     repo.record_order(
         PortfolioOrderRequest(
@@ -2065,13 +2073,14 @@ def test_old_database_with_child_rows_migrates_cleanly(tmp_path) -> None:
     # different account with the same digest and timestamp.
     session_b = repo.begin_session("acct-new", "digest-v1", "paper")
     timestamp = datetime(2026, 8, 8, tzinfo=UTC)
-    id_b = repo.record_decision(
+    id_b = repo.record_decision_with_orders(
         session_b,
         "acct-new",
         "digest-v1",
         _decision_target(timestamp),
         _risk_decision(timestamp),
         Market.EQUITY,
+        (),
     )
     assert id_b != "dec-2"
     assert repo.has_decision("acct-new", "digest-v1", timestamp, Market.EQUITY)
@@ -2740,7 +2749,9 @@ def test_startup_catch_up_rebalance_in_progress_defers(tmp_path) -> None:
         cash_weight=0.9,
     )
     legacy_risk = RiskOverlayDecision(legacy_target, False, (), 0.0, 0.10)
-    decision_id = repo.record_decision(session, "acct", "legacy-digest", legacy_target, legacy_risk, Market.EQUITY)
+    decision_id = repo.record_decision_with_orders(
+        session, "acct", "legacy-digest", legacy_target, legacy_risk, Market.EQUITY, ()
+    )
     repo.save_rebalance_execution(decision_id, "acct", Market.EQUITY, REBALANCE_PHASE_SELL_PENDING)
     repo.record_order(
         PortfolioOrderRequest(
@@ -2785,7 +2796,7 @@ def test_startup_catch_up_propagates_rebalance_blocked(tmp_path) -> None:
         cash_weight=0.9,
     )
     risk = RiskOverlayDecision(target, False, (), 0.0, 0.10)
-    decision_id = repo.record_decision(session, "acct", "legacy-digest", target, risk, Market.EQUITY)
+    decision_id = repo.record_decision_with_orders(session, "acct", "legacy-digest", target, risk, Market.EQUITY, ())
     repo.save_rebalance_execution(
         decision_id,
         "acct",

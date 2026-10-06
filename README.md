@@ -131,8 +131,8 @@ journal and snapshot inside `tmp_path`.
 
 | Doc | Contents |
 |---|---|
-| `docs/deployment.md` | GCP VM, systemd units, deploy by git bundle, env/webhook, rollback |
-| `docs/operations.md` | Daily cycle, health/readiness, alerts, watchdog, ops CLI, backup/restore, PAPER policy |
+| `docs/deployment.md` | GCP VM, systemd units, deploy by git bundle, env file, rollback |
+| `docs/operations.md` | Daily cycle, health/readiness, local alerts, intent watchdog, ops CLI, backup/restore, PAPER policy |
 | `docs/operator_runbook.md` | Symptom-by-symptom incident playbooks |
 | `docs/dashboard.md` | Web dashboard panels and APIs |
 | `docs/validated_strategies.md` | Frozen VT35 spec and risk limits |

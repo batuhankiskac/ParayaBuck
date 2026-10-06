@@ -47,7 +47,7 @@ def _order(
     target = TargetPortfolio("vt35", "1", when, (), 1.0)
     risk = RiskOverlayDecision(target, False, (), 0.0, 0.0)
     session = repo.begin_session(ACCOUNT, "digest", "paper")
-    decision_id = repo.record_decision(session, ACCOUNT, "digest", target, risk, Market.EQUITY)
+    decision_id = repo.record_decision_with_orders(session, ACCOUNT, "digest", target, risk, Market.EQUITY, ())
     order = PortfolioOrderRequest(
         client_order_id=client_order_id,
         decision_id=decision_id,
@@ -426,7 +426,7 @@ def test_rebase_cli_refuses_while_orders_are_open(tmp_path: Path, capsys: pytest
     decision_target = TargetPortfolio("vt35", "1", T0, (), 1.0)
     risk = RiskOverlayDecision(decision_target, False, (), 0.0, 0.0)
     session = repo.begin_session(ACCOUNT, "digest", "paper")
-    decision_id = repo.record_decision(session, ACCOUNT, "digest", decision_target, risk, Market.EQUITY)
+    decision_id = repo.record_decision_with_orders(session, ACCOUNT, "digest", decision_target, risk, Market.EQUITY, ())
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
     repo.record_order(
         PortfolioOrderRequest(

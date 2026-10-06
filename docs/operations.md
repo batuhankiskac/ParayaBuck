@@ -1,7 +1,7 @@
 # Operations
 
-How the running PAPER bot behaves and how to watch it. Deployment and the
-webhook setup are in `docs/deployment.md`; symptom playbooks are in
+How the running PAPER bot behaves and how to watch it. Deployment is in
+`docs/deployment.md`; symptom playbooks are in
 `docs/operator_runbook.md`. All commands run on the VM, in the checkout.
 
 ## Daily cycle
@@ -62,43 +62,50 @@ probe can tell a dead engine from one that is still retrying.
 
 ## Alerts
 
-Every alert is written to the log/journal (`journalctl -u parayabuck`,
-`parayabuck ops events`). If a webhook URL is set
-(`PARAYABUCK_ALERT_WEBHOOK_URL`, see `docs/deployment.md`) and the kind is in
-`alerting.events`, it is also POSTed as JSON: `event_id`, `kind`, `severity`,
-`message` (also as `text` and `content` for Slack/Discord), `occurred_at`,
-`fields`, plus correlation ids. Delivery runs on a background queue (256
-entries, 3 attempts, 0.5/1/2 s backoff); it never blocks or fails trading.
-Repeats of the same kind (per incident/market/order where relevant) are
-suppressed for 60 s. Secrets are redacted from logs and payloads.
+Alerts are local only (2026-10-06: the VM sends nothing to the operator).
+Every alert is written to the service log and to the operational event
+journal; nothing is POSTed anywhere. Read them on the VM:
 
-| Kind | Fires when | Webhook in current config |
+```bash
+parayabuck ops events --since 24h [--kind K] [--severity WARNING]   # the journal
+parayabuck ops status                       # health checks + emitted/throttled alert counters
+sudo journalctl -u parayabuck -g 'ALERT ' --since today
+```
+
+or on the dashboard through the SSH tunnel. Repeats of the same kind (per
+incident/market/order, and per `reason`/`state`, where relevant) are throttled
+for 60 s; a throttled repeat is logged at INFO with its running count. Secrets
+are redacted from the log line and the journal row. Emission never blocks or
+fails trading, and no health check depends on alert delivery.
+
+| Kind | Fires when | Severity |
 |---|---|---|
-| `runtime_started` | Engine start completed | yes |
-| `runtime_stopped_unexpected` | Stop from a halted/error state or with a breaker active | yes |
-| `runtime_start_failed` | Engine did not start: missing credentials, an unimportable runtime, a blocked startup (tracked-secret scan, live arming, config), a permanent startup error, a manual transient failure, N auto-start retries, or an out-of-process probe that found `/readyz` not ready | yes |
-| `backup_failed` | A backup could not be written or verified, or the newest backup is older than 12 h (backup timer stopped) | yes |
-| `daily_summary` | After each persisted equity decision | yes |
-| `intent_alarm` / `intent_recovered` | Watchdog code becomes active / clears | yes |
-| `order_rejected` | Broker rejected a portfolio order | yes |
-| `ambiguous_order` | Order outcome unknown; dependent BUYs blocked | yes |
-| `reconciliation_failure` / `reconciliation_recovered` | Reconciliation failed / recovered | yes |
-| `risk_incident` | Daily-loss latch (SELL-only), or crypto found in the account at startup | yes |
-| `drawdown_halt` | Drawdown limit breached (or restored at startup) | yes |
-| `risk_epoch_reset` | Operator reset the drawdown baseline | yes |
-| `circuit_breaker` | Breaker engaged (ownership drift, worker restart limit, queue overflow, persisted incident restored) | yes |
-| `data_provider_unavailable` | Warning-level data-provider outage (renamed from `scanner_refresh_failure`, which config load now rejects) | yes |
-| `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed / recovered (equity entries halted meanwhile) | yes |
-| `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | yes |
-| `signal_source_mismatch` | IEX and SIP daily bars disagree on the trend (position held), their closes diverge, or the SIP bar is missing | yes |
-| `decision_deferred` | A session-close decision was re-queued because a recoverable gate (reconcile breaker, stale account snapshot, invalidated snapshot lease, transient broker fetch) was active; one per session, plus one when the retry window expires without a decision | yes |
-| `market_data_degraded` | The effective historical feed stopped being the configured one (SIP entitlement downgrade to IEX), and again when it recovers | yes |
-| `session_close_bar_incomplete` | A session closed with stream minutes missing: the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision | yes |
-| `reconciliation_unexpected_fill_side` | A broker FILL activity carried a side outside Alpaca's vocabulary; it is skipped and the cursor advanced, never fatal | yes |
-| `paper_receipt` | Per-decision receipt (high volume) | no |
+| `runtime_started` | Engine start completed | info |
+| `runtime_stopped_unexpected` | Stop from a halted/error state or with a breaker active | warning |
+| `runtime_start_failed` | Engine did not start: missing credentials, an unimportable runtime, a blocked startup (tracked-secret scan, live arming, config), a permanent startup error, a manual transient failure, or N auto-start retries | warning |
+| `backup_failed` | `parayabuck backup` could not load the configuration, or write or verify a snapshot | warning |
+| `daily_summary` | After each persisted equity decision | info |
+| `intent_alarm` / `intent_recovered` | Watchdog code becomes active / clears | warning / info |
+| `order_rejected` | Broker rejected a portfolio order | warning |
+| `ambiguous_order` | Order outcome unknown; dependent BUYs blocked | warning |
+| `reconciliation_failure` / `reconciliation_recovered` | Reconciliation failed / recovered | warning / info |
+| `risk_incident` | Daily-loss latch (SELL-only), or crypto found in the account at startup | warning |
+| `drawdown_halt` | Drawdown limit breached (or restored at startup) | warning |
+| `risk_epoch_reset` | Operator reset the drawdown baseline | info |
+| `circuit_breaker` | Breaker engaged (ownership drift, worker restart limit, queue overflow, persisted incident restored) | warning |
+| `data_provider_unavailable` | Warning-level data-provider outage (formerly `scanner_refresh_failure`) | warning |
+| `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed / recovered (equity entries halted meanwhile) | info |
+| `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | warning |
+| `signal_source_mismatch` | IEX and SIP daily bars disagree on the trend (position held), their closes diverge, or the SIP bar is missing | warning |
+| `decision_deferred` | A session-close decision was re-queued because a recoverable gate (reconcile breaker, stale account snapshot, invalidated snapshot lease, transient broker fetch) was active; one per session, plus one when the retry window expires without a decision | warning |
+| `market_data_degraded` | The effective historical feed stopped being the configured one (SIP entitlement downgrade to IEX), and again when it recovers | warning |
+| `session_close_bar_incomplete` | A session closed with stream minutes missing: the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision | warning |
+| `reconciliation_unexpected_fill_side` | A broker FILL activity carried a side outside Alpaca's vocabulary; it is skipped and the cursor advanced, never fatal | warning |
+| `paper_receipt` | Per-decision receipt (high volume) | info |
 
-To forward a "no" kind, add it to `alerting.events` (unknown kinds fail config
-load).
+`alerting.enabled`, `alerting.webhook_url` and `alerting.events` were removed
+with outbound delivery and are rejected on load with a pointer to this
+section; `alerting.daily_summary` is the only alerting key.
 
 ### Engine start failures
 
@@ -117,12 +124,11 @@ stuck at `starting` with a growing `start_retry_attempt`) and
 | `startup_error` | Permanent startup error (Alpaca 401, SQLite error, catch-up exception) | Fix the cause, then start the engine |
 | `transient_no_retry` | A manual start hit a network-class failure | Retry the start |
 | `transient_retrying` | The auto-start loop is retrying and the attempts are not clearing | Fix the network, or stop and start the engine manually |
-| `readyz_probe` | `parayabuck ops watchdog` found the deployment not ready | Read `engine_state`/`engine_error` in the message |
 
 Transient auto-start retries keep the state at `starting` and back off
 5/15/30/60 s indefinitely; the alert fires from the third attempt and then
-every tenth, with `attempts`. Run `parayabuck ops watchdog` by hand to get
-the same verdict (see ops CLI below).
+every tenth, with `attempts`. `curl -s http://127.0.0.1:8000/readyz` gives the
+same verdict by hand (`engine_state`, `engine_error`, `start_retry_attempt`).
 
 ### Daily summary
 
@@ -247,10 +253,9 @@ parayabuck ops doctor [--json]            # exit 0 ok, 1 degraded, 2 critical
 parayabuck ops events --since 2h [--kind K] [--severity S] [--decision ID] [--order ID]
 parayabuck ops timeline --decision ID | --order ID
 parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not trade
-parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys, no webhook URL)
+parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys or secrets)
 parayabuck ops rebase-ownership SYMBOL --broker-qty QTY [--account-id ID] [--note TEXT]
     # adopt the broker's share count for one symbol; dry run unless --confirm
-parayabuck ops watchdog [--json]       # dead-man probe: /readyz + backup freshness; exit 1 + alert on failure
 ```
 
 Health checks: `runtime_heartbeat` (snapshot ≤ 90 s old), `workers`, `queue`
@@ -258,7 +263,7 @@ Health checks: `runtime_heartbeat` (snapshot ≤ 90 s old), `workers`, `queue`
 success), `signal_adjustment`, `market_halts`, `risk` (active safety incident
 = BLOCKED), `execution`, `intent_watchdog` (CRITICAL on
 `equity_decision_missing`, otherwise DEGRADED), `signal_cross_check`,
-`alerts`, `observability`. `UNKNOWN` means no evidence, not OK. Overall:
+`observability`. `UNKNOWN` means no evidence, not OK. Overall:
 CRITICAL > BLOCKED > DEGRADED > UNKNOWN > OK. Trading state is separate:
 `ACTIVE`, `ENTRY_BLOCKED`, `REBALANCE_BLOCKED`, `MARKET_HALTED`,
 `CIRCUIT_BREAKER`, `STOPPED`, `UNKNOWN`. An active watchdog alarm never
@@ -276,13 +281,15 @@ waiting for its SIP daily bar is appended to the summary rather than making the
 check UNKNOWN, so the post-close embargo window does not redden a healthy run.
 Only a runtime that has never finished a comparison is UNKNOWN.
 
-`alerts` and `observability` are read from the copy the **engine** persists
-into the health snapshot, never from the counters of the process asking. A CLI
-or web process has sent no alerts of its own, so a process-local reading would
-report "webhook OK" on a VM where no webhook exists. No persisted copy at all
-is `UNKNOWN`, not OK. `alerts` is DEGRADED when no webhook is configured, when
-more than half of ≥ 3 attempts fail, when deliveries were dropped, and when
-failures continue with a last success older than 24 h.
+`observability` (the event journal) and the alert counters `ops status`
+prints are read from the copy the **engine** persists into the health
+snapshot, never from the counters of the process asking: a CLI or web process
+has written nothing of its own. No persisted copy at all is `UNKNOWN`, not OK.
+`observability` is DEGRADED only while the journal is failing now — its
+newest write failure or drop is more recent than its last successful write. A
+burst it has since written past reads `OK (recovered; …)` instead of pinning
+DEGRADED until the next restart. There is no `alerts` check: alerts are local,
+so there is no delivery to verify.
 
 `parayabuck doctor [--strict] [--paper] [--offline]` is the deployment
 preflight (config, mode, live off, credentials, writability, SQLite
@@ -326,11 +333,12 @@ safe while running) to `backup.path` (`data/backups`), verifies it with
 `parayabuck backup --verify-only <file>`. Copy backups off the VM
 occasionally; they live on the same disk.
 
-Failures are never silent: `parayabuck backup` emits `backup_failed` (and
-exits non-zero) when a snapshot cannot be written or verified, and
-`parayabuck ops watchdog` — run every 15 min by
-`parayabuck-watchdog.timer` — emits the same kind when the newest backup is
-older than 12 h, i.e. when the timer itself has stopped working.
+Failures are visible on the VM: `parayabuck backup` logs an ERROR, records
+`backup_failed` in the journal and exits non-zero (the unit shows `failed` in
+`systemctl status parayabuck-backup`) when the configuration does not load or
+a snapshot cannot be written or verified; `parayabuck doctor` prints a
+`backup stale` row when the newest backup is older than 12 h, i.e. when the
+timer itself has stopped working.
 
 `parayabuck backup --label <name>` publishes the snapshot as
 `parayabuck-keep-<name>-<stamp>.sqlite3`, outside the retention prune glob:
@@ -338,16 +346,22 @@ the pre-deploy/rollback snapshot the runbook tells you to keep is never
 auto-pruned, and it stays a valid restore candidate. Use it before every
 deploy and rollback; delete it yourself when the release is stable.
 
-Restore (never overwrite in place unverified):
+Restore (never overwrite in place unverified). The units run with
+`UMask=0077`, so the ledger and the backups are mode `0600` and owned by the
+service user: every step runs as that user, and the restored file is installed
+with the same owner and mode, or the engine cannot open it.
 
 ```bash
 sudo systemctl stop parayabuck
-mkdir -p /tmp/pb-bad && cp -a data/runtime/parayabuck.sqlite3* /tmp/pb-bad/   # keep evidence
-.venv/bin/parayabuck backup --verify-only data/backups/<file>.sqlite3
-cp data/backups/<file>.sqlite3 data/runtime/parayabuck.sqlite3
-rm -f data/runtime/parayabuck.sqlite3-wal data/runtime/parayabuck.sqlite3-shm
+PB_USER=$(systemctl show -p User --value parayabuck)     # parayabuck on a template install
+EVIDENCE=/var/tmp/pb-bad-$(date -u +%Y%m%dT%H%M%SZ)
+sudo install -d -o "$PB_USER" -g "$PB_USER" -m 700 "$EVIDENCE"
+sudo -u "$PB_USER" cp -a data/runtime/parayabuck.sqlite3* "$EVIDENCE"/   # keep evidence
+sudo -u "$PB_USER" .venv/bin/parayabuck backup --verify-only data/backups/<file>.sqlite3
+sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<file>.sqlite3 data/runtime/parayabuck.sqlite3
+sudo -u "$PB_USER" rm -f data/runtime/parayabuck.sqlite3-wal data/runtime/parayabuck.sqlite3-shm
 sudo systemctl start parayabuck
-.venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:8000/readyz
+sudo -u "$PB_USER" .venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:8000/readyz
 ```
 
 Orders and fills after the backup are missing from the restored ledger. On
@@ -480,7 +494,7 @@ and the session enforces that rather than trusting every test:
   records every file under `data/runtime`, `data/cache`, `data/backups` and
   `logs` before `pytest -q` and verifies the tree is byte-identical (and gained
   no files) afterwards.
-- Process singletons (the alert webhook config, the Web backtest manager) and
+- Process singletons (the alert throttle state, the Web backtest manager) and
   the process environment (`CONFIG_PATH`, which `parayabuck web --config`
   exports for the process it serves) are restored around every test, so the
   suite passes in any order.
@@ -497,8 +511,6 @@ Run it the way CI does: `PYTHONPATH=src ./.venv/bin/python -m pytest -q -o pytho
   short-term P&L.
 - A config-digest change starts a new observation window; log it in
   `docs/OPERATIONS_LOG.md`.
-- Real PAPER orders outside the engine need an explicit opt-in:
-  `scripts/paper_smoke.py` requires `PARAYABUCK_ALLOW_PAPER_SMOKE=YES`,
-  paper mode, and live not enabled. It refuses itself while the engine
-  heartbeat is live and inside 15:45-16:30 ET; stop the service first
-  (`docs/deployment.md`, Pre-deploy checks).
+- Nothing places PAPER orders outside the engine: the old AAPL smoke script
+  (`scripts/paper_smoke.py`) was deleted on 2026-10-06 because it traded the
+  shared account beside the VM engine.

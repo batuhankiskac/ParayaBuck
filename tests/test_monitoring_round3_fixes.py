@@ -131,7 +131,7 @@ def test_bundle_status_uses_the_bundle_config(tmp_path: Path) -> None:
     config_path = tmp_path / "settings.yaml"
     settings = {
         "runtime": {"mode": "paper"},
-        "symbols": ["AAPL"],
+        "symbols": ["SPY", "QQQ", "QLD"],
         "engine": {"event_queue_capacity": 10},
         "strategy": {"equity": {"enabled": True, "name": "equity_leveraged_trend_v1", "maximum_allocation": 0.55}},
     }

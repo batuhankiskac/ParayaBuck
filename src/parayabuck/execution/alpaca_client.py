@@ -49,7 +49,6 @@ class AlpacaClient:
             self._client = TradingClient(api_key, secret_key, paper=paper)
         self._asset_cache: dict[str, tuple[Any, float]] = {}
         self._clock: Callable[[], float] = time.monotonic
-        self._closed: bool = False
         session = getattr(self._client, "_session", None)
         if session is not None:
             try:
@@ -63,14 +62,11 @@ class AlpacaClient:
         """Close the Alpaca REST session pool; idempotent and safe for fakes."""
         session = getattr(self._client, "_session", None)
         if session is None:
-            self._closed = True
             return
         try:
             session.close()
         except Exception as exc:
             log.warning("Alpaca session close warning: %s", exc)
-        finally:
-            self._closed = True
 
     # -- exhaustive OPEN-order query -------------------------------------
 

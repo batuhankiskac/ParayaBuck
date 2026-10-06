@@ -80,14 +80,8 @@ class AlpacaBroker:
         runtime_state_dir: str | Path | None = None,
         peak_state_path: str | Path | None = None,
         client: Any | None = None,
-        client_adapter: Any | None = None,
     ) -> None:
-        if client_adapter is not None:
-            self._client_adapter = client_adapter
-        elif client is not None:
-            self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper, client=client)
-        else:
-            self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper)
+        self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper, client=client)
         self._paper = paper
         self._risk_peak = RiskPeakService(
             paper=paper, ledger=ledger, peak_state_path=peak_state_path, runtime_state_dir=runtime_state_dir
@@ -647,7 +641,7 @@ class AlpacaBroker:
         return any(same_symbol(str(self._field(order, "symbol", symbol)), symbol) for order in orders)
 
     def _normalized_field(self, value: Any, name: str) -> str:
-        return self._client_adapter._normalized_field(value, name)  # type: ignore[no-any-return]
+        return self._client_adapter._normalized_field(value, name)
 
     @staticmethod
     def _field(value: Any, name: str, default: Any = None) -> Any:

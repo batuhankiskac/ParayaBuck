@@ -193,7 +193,6 @@ def _reconcile_broker(repository: PortfolioStateRepository, foreign: Any) -> Any
         _client=SimpleNamespace(
             get_account=lambda: SimpleNamespace(id="acct"), get_order_by_client_id=get_order_by_client_id
         ),
-        _client_adapter=SimpleNamespace(request=lambda *_args, **_kwargs: []),
         _account_id="acct",
         _field=lambda value, name, default=None: getattr(value, name, default),
         _normalized_field=lambda value, name: str(getattr(value, name)),
@@ -202,7 +201,6 @@ def _reconcile_broker(repository: PortfolioStateRepository, foreign: Any) -> Any
         portfolio_open_orders=lambda: repository.open_orders("acct"),
         portfolio_owned_quantities=lambda: repository.owned_quantities("acct"),
         portfolio_fill_recovered=recovered,
-        ledger=None,
     )
 
 

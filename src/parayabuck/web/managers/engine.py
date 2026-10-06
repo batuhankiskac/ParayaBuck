@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 from parayabuck.config import load_config
 from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
@@ -205,9 +205,15 @@ class EngineManager:
         return False
 
     def get_credentials(self) -> tuple[str | None, str | None]:
-        load_dotenv(self.env_path, override=True)
-        key = os.getenv("ALPACA_API_KEY")
-        secret = os.getenv("ALPACA_SECRET_KEY")
+        """The two Alpaca keys; the env file wins over the process environment.
+
+        Read per call (the settings drawer rewrites the file) but only these
+        two keys: reloading the whole file with override=True on every poll
+        rewrote unrelated process environment variables.
+        """
+        values = dotenv_values(self.env_path) if self.env_path.exists() else {}
+        key = values.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY")
+        secret = values.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY")
         return key, secret
 
     def should_auto_start(self) -> bool:
@@ -542,20 +548,28 @@ class EngineManager:
                 startup_cancel=self._start_cancel,
             )
             runtime.start()
-            # Close the lazy /api/account broker (if any) instead of leaking
-            # its pooled HTTP session; the runtime's broker takes over
-            # account polling from here.
-            self.reset_broker()
-            with self._state_lock:
-                # A stop request issued while the engine was starting wins:
-                # shut the fresh runtime down instead of leaving it running
-                # after an explicit stop.
-                interrupted = self.engine_state == "stopping"
-                if not interrupted:
-                    self.runtime = runtime
-                    self.broker = runtime.broker
-                    self.engine_state = "running"
-                    self._reset_retry_state()
+            # The runtime's broker takes over account polling. Swap it in under
+            # the account lock: a poll between a separate reset and this
+            # assignment used to build a lazy AlpacaBroker that was then
+            # overwritten without being closed (a leaked HTTP pool).
+            replaced_broker = None
+            with self._account_lock:
+                with self._state_lock:
+                    # A stop request issued while the engine was starting wins:
+                    # shut the fresh runtime down instead of leaving it running
+                    # after an explicit stop.
+                    interrupted = self.engine_state == "stopping"
+                    if not interrupted:
+                        replaced_broker = self.broker
+                        self.runtime = runtime
+                        self.broker = runtime.broker
+                        self.engine_state = "running"
+                        self._reset_retry_state()
+            if replaced_broker is not None and replaced_broker is not runtime.broker:
+                try:
+                    replaced_broker.close()
+                except Exception:
+                    log.exception("Closing the replaced account broker failed")
             if interrupted:
                 raise RuntimeError("Engine start was interrupted by a stop request")
             if live_mode:

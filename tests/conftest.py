@@ -145,6 +145,16 @@ def _install_dotenv_guard() -> None:
     dotenv.main.load_dotenv = _guarded_load_dotenv  # type: ignore[assignment]
     dotenv.load_dotenv = _guarded_load_dotenv  # type: ignore[assignment]
 
+    real_dotenv_values = dotenv.main.dotenv_values
+
+    def _guarded_dotenv_values(dotenv_path=None, stream=None, **kwargs):  # type: ignore[no-untyped-def]
+        if stream is None and (dotenv_path is None or _inside_repo(Path(dotenv_path))):
+            return {}
+        return real_dotenv_values(dotenv_path, stream, **kwargs)
+
+    dotenv.main.dotenv_values = _guarded_dotenv_values  # type: ignore[assignment]
+    dotenv.dotenv_values = _guarded_dotenv_values  # type: ignore[assignment]
+
 
 def pytest_configure(config: pytest.Config) -> None:
     """Strip credentials and neutralize the repo .env before any test imports."""

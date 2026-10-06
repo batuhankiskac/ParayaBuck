@@ -1,68 +1,50 @@
-"""Canonical backtest benchmark: equity leveraged trend v1 (daily).
+"""Backtest benchmark: VT35 product backtest on the committed golden fixture.
 
-Uses the gitignored local historical CSVs when present; falls back to a
-smaller synthetic window when they are missing (report is labeled synthetic).
+Times CSV loading and ``run_product_backtest`` on
+``tests/fixtures/vt35_golden_bars.csv`` (QQQ/QLD/SPY 2019-2022, the same bars
+``tests/test_vt35_golden.py`` locks), so it always runs from a clean checkout.
 """
 
 from __future__ import annotations
 
 import sys
-from datetime import UTC, datetime
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from benchmarks.harness import Report, timeit
 from parayabuck.backtest.product import load_csv_bars, run_product_backtest
-from parayabuck.config import load_config
+from parayabuck.config import Config, load_config
 from parayabuck.core.models import Market
 
 ROOT = Path(__file__).resolve().parents[1]
-EQUITY_CSV = ROOT / "data" / "historical" / "equity_1200_2016_2026.csv"
+FIXTURE = ROOT / "tests" / "fixtures" / "vt35_golden_bars.csv"
 CONFIG = ROOT / "config" / "settings.yaml"
-
-# Canonical window: 3 years for equity (1200 symbols).
-EQUITY_START = "2019-01-01"
-EQUITY_END = "2021-12-31"
-
-
-def _bars_for(path: Path, market: Market) -> list:
-    return load_csv_bars(path, default_market=market)
 
 
 def run(report: Report) -> None:
-    config = load_config(str(CONFIG))
+    config: Config = load_config(str(CONFIG))
+    timing, bars = timeit(
+        lambda: load_csv_bars(FIXTURE, default_market=Market.EQUITY),
+        label="golden fixture CSV load (3,024 rows)",
+        warmup=1,
+        runs=5,
+    )
+    report.add(timing)
 
-    if EQUITY_CSV.exists():
-        timing, bars = timeit(
-            lambda: _bars_for(EQUITY_CSV, Market.EQUITY),
-            label="equity CSV load (1.7M rows)",
-            warmup=0,
-            runs=1,
-        )
-        report.add(timing)
-        market = Market.EQUITY
-    else:
-        bars = []
-        market = Market.EQUITY
-
-    if bars:
+    with tempfile.TemporaryDirectory() as output_dir:
 
         def equity_run() -> None:
             run_product_backtest(
                 config,
                 bars,
-                market=market,
-                strategy_name="equity_leveraged_trend_v1",
-                # The dataset has no QLD; hold QQQ so the run trades.
-                parameters={"hold_symbol": "QQQ", "vol_target": 0.35},
-                start=datetime.fromisoformat(EQUITY_START).replace(tzinfo=UTC),
-                end=datetime.fromisoformat(EQUITY_END).replace(tzinfo=UTC),
-                output_dir=str(ROOT / "data" / "smoke" / "bench_equity"),
+                market=Market.EQUITY,
+                output_dir=output_dir,
                 persist_artifacts=False,
             )
 
-        timing, _ = timeit(equity_run, label="equity trend backtest 2019-2021", warmup=0, runs=3)
+        timing, _ = timeit(equity_run, label="VT35 backtest 2019-2022", warmup=1, runs=5)
         report.add(timing)
 
 

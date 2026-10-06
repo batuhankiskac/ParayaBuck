@@ -154,6 +154,9 @@ def test_live_runtime_scales_allocation_to_hard_cap(tmp_path) -> None:
 
 
 def test_runtime_rejects_partial_strategy_batch_even_when_a_target_is_ready(tmp_path) -> None:
+    """A partial batch decides nothing and does NOT consume its period: the
+    next complete batch is still that period's decision (a late symbol must
+    not cost the session)."""
     broker = _Broker()
     runtime = _monthly_runtime(tmp_path, broker)
     bars = _bars()
@@ -181,7 +184,8 @@ def test_runtime_rejects_partial_strategy_batch_even_when_a_target_is_ready(tmp_
         )
         for symbol in EQUITY_UNIVERSE
     ]
-    assert runtime.process_closed_bars(next_batch).status == "not_scheduled"
+    assert runtime.previous_timestamp is None
+    assert runtime.process_closed_bars(next_batch).status == "submitted"
 
 
 def test_restart_restores_last_decision_boundary_without_extra_rebalance(tmp_path) -> None:

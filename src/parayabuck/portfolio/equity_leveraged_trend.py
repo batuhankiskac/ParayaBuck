@@ -74,6 +74,11 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         return str(self.parameters["hold_symbol"])
 
     @property
+    def decision_symbols(self) -> tuple[str, ...]:
+        """The trend input and the held ETF; the benchmark is never read."""
+        return tuple(dict.fromkeys((self.signal_symbol, self.hold_symbol)))
+
+    @property
     def sma_bars(self) -> int:
         return int(self.parameters["sma_bars"])  # type: ignore[call-overload, no-any-return]
 

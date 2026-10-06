@@ -179,6 +179,16 @@ class PortfolioStrategy(ABC):
     def parameter_tuple(self) -> tuple[tuple[str, object], ...]:
         return tuple(sorted(self.parameters.items()))
 
+    @property
+    def decision_symbols(self) -> tuple[str, ...] | None:
+        """Symbols whose decision-session bar the strategy actually reads.
+
+        ``None`` means every history symbol is required. A strategy that
+        reads only part of its universe narrows this so a symbol it never
+        reads (a benchmark) cannot hold a decision back.
+        """
+        return None
+
     def supports_timeframe(self, timeframe: str) -> bool:
         """Whether ``timeframe`` is a validated signal resolution for this strategy."""
         return timeframe == self.timeframe or timeframe in self.supported_timeframes

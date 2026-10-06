@@ -440,6 +440,19 @@ class PortfolioStateRepository:
             ).fetchone()
         return row is not None
 
+    def recent_decision_timestamps(
+        self, account_id: str, configuration_digest: str, market: Market, limit: int = 32
+    ) -> tuple[datetime, ...]:
+        """The newest ``limit`` persisted decision timestamps, newest first."""
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                """SELECT decision_timestamp FROM portfolio_decisions
+                   WHERE account_id = ? AND configuration_digest = ? AND market = ?
+                   ORDER BY decision_timestamp DESC LIMIT ?""",
+                (account_id, configuration_digest, market.value, limit),
+            ).fetchall()
+        return tuple(datetime.fromisoformat(str(row[0])) for row in rows)
+
     def latest_decision_timestamp(self, account_id: str, configuration_digest: str, market: Market) -> datetime | None:
         """Return the last persisted decision boundary for restart-safe scheduling."""
         with self.store.lock:

@@ -64,6 +64,11 @@ log = get_logger("parayabuck.portfolio.runtime_service")
 # to the operator (once per episode, never per bar).
 STUCK_DEFERRED_BUY_ALERT_SECONDS = 900.0
 
+# Entry-latch reason EngineRuntime sets when the equity signal's
+# corporate-action basis is unverified. Any target computed on that basis is
+# suspect, so such a decision holds the current position (no order at all).
+BASIS_UNVERIFIED_LATCH = "signal_adjustment_unverified"
+
 
 def _utcnow() -> datetime:
     """Decision wall clock (module-level so tests can pin it deterministically)."""
@@ -316,6 +321,7 @@ def _emit_no_trade_safe(
             "incomplete_strategy_batch": "günlük veri zamanları diğer sembollerle eşleşmiyor",
             "not_scheduled": "rebalance zamanı değil",
             "duplicate_decision": "aynı zaman damgası için zaten karar var",
+            "catch_up_superseded": "son seans zaten karar döngüsünde, telafi kararı gerekmiyor",
             "incomplete_managed_batch": "yönetilen pozisyonların verisi eksik",
             "exposure_scaled_to_limit": "sermaye limiti nedeniyle hedef küçültüldü",
             "rebalance_in_progress": "önceki rebalance henüz tamamlanmadı",
@@ -422,9 +428,73 @@ class PortfolioRuntime:
         self.last_buy_admission: BuyAdmission | None = None
         # Operator alert keys already raised by this process (edge-triggered).
         self._raised_operator_alerts: set[tuple[str, str]] = set()
+        # Whether the current process_closed_bars call persisted its decision.
+        self._decision_recorded = False
 
     def _market_name(self) -> str:
         return self.market.value if hasattr(self.market, "value") else str(self.market)
+
+    def _daily_equity_signal(self) -> bool:
+        return self.market == Market.EQUITY and getattr(self.strategy, "timeframe", None) == "1d"
+
+    def _session_key(self, timestamp: datetime) -> object:
+        """Identity of the decision period a signal bar belongs to.
+
+        Equity daily bars carry two labels for one session (stream 09:30 ET,
+        provider 00:00 ET), so they are matched by New York session date;
+        every other series by its exact timestamp.
+        """
+        return signal_session_date(timestamp) if self._daily_equity_signal() else timestamp
+
+    def _required_symbols(self) -> tuple[str, ...]:
+        """History symbols the strategy reads at a decision (all by default).
+
+        A symbol the strategy never reads (the SPY benchmark) must not hold
+        a decision back by arriving late or not at all.
+        """
+        declared = getattr(self.strategy, "decision_symbols", None)
+        if declared is None:
+            return tuple(self.history)
+        wanted = {canonical_symbol(symbol, self.market) for symbol in declared}
+        required = tuple(symbol for symbol in self.history if symbol in wanted)
+        return required or tuple(self.history)
+
+    def _align_session_tails(self, timestamp: datetime) -> tuple[datetime, tuple[str, ...]]:
+        """Give every history tail on ``timestamp``'s session ONE label.
+
+        Returns ``(decision_timestamp, missing_required_symbols)``. The label
+        is the newest one present on that session (the stream's 09:30 ET
+        label whenever any stream bar exists), so a provider bar fetched for
+        a late symbol joins the stream bars of the same session instead of
+        forming its own, never-complete batch.
+        """
+        key = self._session_key(timestamp)
+        in_session = {
+            symbol: series[-1]
+            for symbol, series in self.history.items()
+            if series and self._session_key(series[-1].timestamp) == key
+        }
+        label = max((bar.timestamp for bar in in_session.values()), default=timestamp)
+        for symbol, bar in in_session.items():
+            if bar.timestamp != label:
+                self.history[symbol][-1] = replace(bar, timestamp=label)
+        missing = tuple(sorted(symbol for symbol in self._required_symbols() if symbol not in in_session))
+        return label, missing
+
+    def _session_decided(self, timestamp: datetime) -> bool:
+        """Whether a decision exists for ``timestamp``'s decision period,
+        under either equity daily label."""
+        if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
+            return True
+        if not self._daily_equity_signal():
+            return False
+        key = self._session_key(timestamp)
+        return any(
+            self._session_key(decided) == key
+            for decided in self.repository.recent_decision_timestamps(
+                self.account_id, self.configuration_digest, self.market
+            )
+        )
 
     def _with_paper_observability(
         self,
@@ -575,15 +645,16 @@ class PortfolioRuntime:
         # bar for today; the catch-up decides on the last COMPLETED session.
         self.prune_unfinished_signal_sessions()
         series_by_symbol = dict(self.history)
-        timestamps = [series[-1].timestamp if series else None for series in series_by_symbol.values()]
+        required = self._required_symbols()
+        timestamps = [
+            series_by_symbol[symbol][-1].timestamp if series_by_symbol[symbol] else None for symbol in required
+        ]
         if any(timestamp is None for timestamp in timestamps) or any(
-            len(series) < self.strategy.minimum_history_bars for series in series_by_symbol.values()
+            len(series_by_symbol[symbol]) < self.strategy.minimum_history_bars for symbol in required
         ):
             self.startup_catch_up_status = "warming_up"
             # Visibility: persistent no-trade event
-            warming = tuple(
-                sorted(s for s, ser in self.history.items() if len(ser) < self.strategy.minimum_history_bars)
-            )
+            warming = tuple(sorted(s for s in required if len(self.history[s]) < self.strategy.minimum_history_bars))
             last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
             try:
                 next_boundary = (
@@ -609,7 +680,8 @@ class PortfolioRuntime:
                 entry_latch=entry_latch,
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "warming_up")
-        if len(set(timestamps)) != 1:
+        present = [timestamp for timestamp in timestamps if timestamp is not None]
+        if len({self._session_key(timestamp) for timestamp in present}) != 1:
             self.startup_catch_up_status = "incomplete_strategy_batch"
             last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
             _emit_no_trade_safe(
@@ -622,8 +694,9 @@ class PortfolioRuntime:
                     sorted(
                         {
                             s
-                            for s, ser in self.history.items()
-                            if not ser or ser[-1].timestamp != max(t for t in timestamps if t is not None)
+                            for s in required
+                            if not self.history[s]
+                            or self._session_key(self.history[s][-1].timestamp) != self._session_key(max(present))
                         }
                     )
                 ),
@@ -633,9 +706,13 @@ class PortfolioRuntime:
                 entry_latch=entry_latch,
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
-        timestamp = timestamps[0]
-        assert timestamp is not None
-        if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
+        session = self._session_key(present[0])
+        timestamp = max(
+            series[-1].timestamp
+            for series in series_by_symbol.values()
+            if series and self._session_key(series[-1].timestamp) == session
+        )
+        if self._session_decided(timestamp):
             self.startup_catch_up_status = "duplicate_decision"
             _emit_no_trade_safe(
                 market=self._market_name(),
@@ -663,7 +740,7 @@ class PortfolioRuntime:
             _emit_no_trade_safe(
                 market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
-                reason="duplicate_decision",
+                reason="catch_up_superseded",
                 decision_timestamp=timestamp,
                 data_timestamp=timestamp,
                 session_id=self.session_id,
@@ -719,7 +796,7 @@ class PortfolioRuntime:
                 advance_result.submitted_order_ids if advance_result is not None else (),
                 status,
             )
-        bars = [series[-1] for series in series_by_symbol.values()]
+        bars = [series[-1] for series in series_by_symbol.values() if series]
         result = self.process_closed_bars(
             bars,
             entry_latch=entry_latch,
@@ -846,6 +923,38 @@ class PortfolioRuntime:
     ) -> PortfolioRuntimeResult:
         """Decide on a closed batch and plan/submit its orders.
 
+        A failure before the decision is persisted (a broker read raising,
+        for instance) restores the cadence high-water, so a retry of the same
+        batch decides the session instead of finding it consumed.
+        """
+        previous_timestamp = self.previous_timestamp
+        self._decision_recorded = False
+        try:
+            return self._process_closed_bars(
+                bars,
+                entry_latch=entry_latch,
+                force_scheduled=force_scheduled,
+                decision_origin=decision_origin,
+                account=account,
+                signal_cross_check=signal_cross_check,
+            )
+        except BaseException:
+            if not self._decision_recorded:
+                self.previous_timestamp = previous_timestamp
+            raise
+
+    def _process_closed_bars(
+        self,
+        bars: list[Bar],
+        *,
+        entry_latch: str | None,
+        force_scheduled: bool,
+        decision_origin: str,
+        account: AccountSnapshot | None,
+        signal_cross_check: CrossCheckOutcome | None,
+    ) -> PortfolioRuntimeResult:
+        """Body of :meth:`process_closed_bars`.
+
         ``signal_cross_check`` is the runtime's second-source comparison for
         this session (None when not run, e.g. offline or disabled). It is
         recorded on the decision; when it says the sources disagree on the
@@ -866,25 +975,20 @@ class PortfolioRuntime:
         self.prune_unfinished_signal_sessions(now)
         if not eligible:
             return PortfolioRuntimeResult(None, None, None, (), (), "no_eligible_bars")
-        timestamp = max(bar.timestamp for bar in eligible)
-        batch_symbols = {canonical_symbol(bar.symbol, bar.market) for bar in eligible if bar.timestamp == timestamp}
         for bar in sorted(eligible, key=lambda item: (item.timestamp, item.symbol)):
             self._append_signal_bar(bar)
+        # One decision per session: every tail on the batch's session shares
+        # one label, and only the symbols the strategy reads must be present.
+        timestamp, missing_symbols = self._align_session_tails(max(bar.timestamp for bar in eligible))
+        required = self._required_symbols()
         # ``boundary`` is the real cadence; ``scheduled`` additionally honors
         # a forced catch-up decision (startup catch-up), which must apply the
         # FULL target like any boundary decision.
         boundary = self.policy.is_period_start(self.previous_timestamp, timestamp)
         scheduled = boundary or force_scheduled
-        # Receiving a timed-out partial batch explicitly skips that rebalance
-        # period. A later day must not turn it into a silent delayed rebalance.
-        self.previous_timestamp = timestamp
+        previous_timestamp = self.previous_timestamp
         warming_symbols = tuple(
-            sorted(
-                symbol for symbol, series in self.history.items() if len(series) < self.strategy.minimum_history_bars
-            )
-        )
-        missing_symbols = tuple(
-            sorted(symbol for symbol, series in self.history.items() if not series or series[-1].timestamp != timestamp)
+            sorted(symbol for symbol in required if len(self.history[symbol]) < self.strategy.minimum_history_bars)
         )
         if warming_symbols:
             last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
@@ -920,8 +1024,12 @@ class PortfolioRuntime:
                 account_id=self.account_id,
                 entry_latch=entry_latch,
             )
+            # The cadence high-water stays put: the late symbol (e.g. from the
+            # SIP session-close fallback) completes this session later.
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
-        if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
+        # A complete batch consumes its period whatever happens next.
+        self.previous_timestamp = timestamp
+        if self._session_decided(timestamp):
             _emit_no_trade_safe(
                 market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
@@ -1014,8 +1122,12 @@ class PortfolioRuntime:
             for position in account.positions
             if position.market == self.market and not position.is_flat and position.managed_qty > 1e-12
         }
-        if not managed.issubset(batch_symbols):
-            missing_managed = managed - batch_symbols
+        current_symbols = {
+            symbol for symbol, series in self.history.items() if series and series[-1].timestamp == timestamp
+        }
+        if not managed.issubset(current_symbols):
+            missing_managed = managed - current_symbols
+            self.previous_timestamp = previous_timestamp
             _emit_no_trade_safe(
                 market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
@@ -1066,6 +1178,7 @@ class PortfolioRuntime:
             timestamp,
             universe=self.universe,
             universe_version=self.universe_version,
+            required_symbols=required,
         )
         # Fail-closed PAPER product universe guard: dynamic product
         # strategies must execute against a PIT universe that exposes
@@ -1155,15 +1268,20 @@ class PortfolioRuntime:
                 metadata={**raw_target.metadata, "decision_origin": decision_origin},
             )
         signal_hold = signal_cross_check is not None and signal_cross_check.hold and scheduled
+        # An unverified basis can make the strategy's SELL as wrong as its
+        # BUY (a pre-split close looks like a crash below the SMA), so the
+        # latch holds the position rather than only capping entries.
+        basis_hold = entry_latch is not None and BASIS_UNVERIFIED_LATCH in entry_latch.split("|")
+        hold_reason = "signal_source_mismatch" if signal_hold else (BASIS_UNVERIFIED_LATCH if basis_hold else None)
         if signal_cross_check is not None:
             raw_target = replace(
                 raw_target,
                 metadata={**raw_target.metadata, "signal_cross_check": signal_cross_check.to_metadata()},
             )
-        if signal_hold:
-            # The two data sources disagree on the trend: keep exactly what is
-            # held this session. The strategy's own (primary-source) metadata
-            # stays on the decision for the record.
+        if hold_reason is not None:
+            # The two data sources disagree on the trend, or the signal basis
+            # is unverified: keep exactly what is held this session. The
+            # strategy's own metadata stays on the decision for the record.
             # The held weights are raw broker marks, so a gap-up fill that left
             # cash negative can push one past 1.0 (and a non-positive equity
             # makes the ratio meaningless). A hold plans NO order either way,
@@ -1190,7 +1308,7 @@ class PortfolioRuntime:
                 held_weights = {symbol: weight / held_total for symbol, weight in held_weights.items()}
                 held_total = MAX_WEIGHT
             held_targets = tuple(
-                TargetWeight(symbol, weight, "signal_source_hold", rank=1)
+                TargetWeight(symbol, weight, "signal_source_hold" if signal_hold else "signal_basis_hold", rank=1)
                 for symbol, weight in sorted(held_weights.items())
                 if weight > 0
             )
@@ -1200,8 +1318,10 @@ class PortfolioRuntime:
                 cash_weight=max(0.0, 1.0 - held_total),
                 metadata={
                     **raw_target.metadata,
-                    "signal_source_hold": True,
-                    "signal_source_hold_target": "held" if held_targets else "strategy",
+                    ("signal_source_hold" if signal_hold else "signal_basis_hold"): True,
+                    ("signal_source_hold_target" if signal_hold else "signal_basis_hold_target"): (
+                        "held" if held_targets else "strategy"
+                    ),
                 },
             )
         if any(canonical_symbol(weight.symbol, self.market) not in self.symbols for weight in raw_target.weights):
@@ -1256,7 +1376,19 @@ class PortfolioRuntime:
                 account_id=self.account_id,
                 entry_latch=entry_latch,
             )
-        rules = {symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols}
+        # Trading rules only for what the planner can touch (targeted or held):
+        # a benchmark-only symbol must never fail the decision on its rules.
+        held_symbols = {
+            canonical_symbol(position.symbol, position.market)
+            for position in account.positions
+            if position.market == self.market and not position.is_flat
+        }
+        targeted_symbols = {canonical_symbol(weight.symbol, self.market) for weight in risk.target.weights}
+        rules = {
+            symbol: self.broker.asset_trading_rules(symbol, self.market)
+            for symbol in self.symbols
+            if symbol in held_symbols or symbol in targeted_symbols
+        }
         # The order idempotency key must be scoped to the account-local
         # decision identity (account + configuration digest + timestamp +
         # market), otherwise two configurations sharing a strategy name,
@@ -1283,14 +1415,14 @@ class PortfolioRuntime:
                 reserved_position_keys=reserved_slots,
                 open_order_symbols=tuple(sorted(open_order_symbols)),
             )
-        if signal_hold:
+        if hold_reason is not None:
             # A hold never trades, not even a sub-cap trim the risk overlay
             # may have produced from drifted current weights.
             planned = ()
             _emit_no_trade_safe(
                 market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
-                reason="signal_source_mismatch",
+                reason=hold_reason,
                 decision_timestamp=timestamp,
                 data_timestamp=timestamp,
                 target_weights=tuple(risk.target.weights),
@@ -1304,7 +1436,7 @@ class PortfolioRuntime:
             risk,
             account,
             planned,
-            entry_latch=entry_latch or ("signal_source_mismatch" if signal_hold else None),
+            entry_latch=entry_latch or hold_reason,
         )
         if observed_target is not risk.target:
             risk = replace(risk, target=observed_target)
@@ -1326,6 +1458,7 @@ class PortfolioRuntime:
                 orders,
                 initial_status="submitting",
             )
+            self._decision_recorded = True
             # Orders are already persisted as submitting; submit them idempotently.
             submitted = self._submit_orders(orders)
             _emit_decision_summary_safe(
@@ -1337,7 +1470,7 @@ class PortfolioRuntime:
                 universe_version=self.universe_version,
                 planned=orders,
                 submitted=submitted,
-                no_trade_reason="SIGNAL_SOURCE_MISMATCH" if signal_hold else None,
+                no_trade_reason=hold_reason.upper() if hold_reason is not None else None,
             )
             return PortfolioRuntimeResult(
                 decision_id,
@@ -1345,7 +1478,7 @@ class PortfolioRuntime:
                 risk,
                 orders,
                 submitted,
-                "signal_source_hold" if signal_hold else "submitted",
+                "signal_source_hold" if signal_hold else ("signal_basis_hold" if basis_hold else "submitted"),
             )
         if sells:
             # Two-phase rebalance. Submit the risk-reducing sells now and
@@ -1365,6 +1498,7 @@ class PortfolioRuntime:
                 buy_orders_json=json.dumps([asdict(order) for order in buys], sort_keys=True, default=str),
                 rebalance_phase=REBALANCE_PHASE_SELL_PENDING,
             )
+            self._decision_recorded = True
             submitted = self._submit_orders(sells)
             _emit_decision_summary_safe(
                 decision_id=decision_id,
@@ -1416,6 +1550,7 @@ class PortfolioRuntime:
             buys,
             initial_status="submitting",
         )
+        self._decision_recorded = True
         self._record_buy_admission_observation(decision_id, admission, buys)
         submitted = self._submit_orders(buys)
         _emit_decision_summary_safe(
@@ -1670,7 +1805,6 @@ class PortfolioRuntime:
         keys = self._operator_alert_keys()
         if key in keys:
             return
-        keys.add(key)
         log.critical("%s: market=%s %s", message, self._market_name(), fields)
         try:
             from parayabuck.monitoring import alerts
@@ -1683,7 +1817,10 @@ class PortfolioRuntime:
                 **fields,
             )
         except Exception:
-            pass
+            # Not recorded as raised: the next occurrence retries the alert.
+            log.warning("Operator alert emit failed: key=%s", key, exc_info=True)
+            return
+        keys.add(key)
 
     def _resolve_stuck_submission_rows(
         self, decision_id: str, orders: tuple[dict[str, object], ...], side: str
@@ -1724,6 +1861,11 @@ class PortfolioRuntime:
                 outcome = resolver(client_order_id, str(item.get("broker_order_id") or ""))
             except Exception:
                 # Broker unreachable: do not guess; retry on a later advance.
+                log.warning(
+                    "Submission lookup failed; row stays submitting: client_order_id=%s",
+                    client_order_id,
+                    exc_info=True,
+                )
                 continue
             if outcome is None:
                 continue

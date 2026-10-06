@@ -19,14 +19,22 @@ A share change is rebased automatically only when it is provable:
   broker average entry price divided by that same ratio. A foreign buy changes
   the quantity but leaves our own cost basis alone, so the quantity gap alone
   never proves a split.
-- Anything else stays ``UNKNOWN``: the caller halts with an actionable
-  incident and the operator rebases explicitly
+- Anything else stays ``UNKNOWN``: a shortfall halts with an actionable
+  incident, an unconfirmed surplus raises an operator alert (the extra shares
+  stay external), and the operator rebases explicitly
   (``parayabuck ops rebase-ownership``).
+
+Our own cost basis is the CURRENT position's, never the average of every BUY
+ever filled: the broker's ``avg_entry_price`` describes the open lots only,
+so after a few rebalances an all-history average would never corroborate a
+real split. :func:`open_position_cost_bases` replays fills since the position
+was last flat under both FIFO lot depletion and the average-cost method.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 # Standard split and reverse-split ratios a US equity issuer uses (n-for-1
@@ -66,7 +74,66 @@ __all__ = [
     "ShareChange",
     "classify_share_change",
     "known_split_ratio",
+    "open_position_cost_bases",
 ]
+
+BUY = "buy"
+SELL = "sell"
+ADJUST = "adjust"
+
+
+def open_position_cost_bases(events: Iterable[tuple[str, float, float | None]]) -> tuple[float, ...]:
+    """Average entry price of the CURRENT position, under FIFO and average cost.
+
+    ``events`` are chronological ``(kind, quantity, price)`` tuples: ``buy``
+    and ``sell`` fills (positive quantity, fill price) and ``adjust`` for an
+    audited ownership adjustment (signed quantity, no price). A reduction
+    depletes like a sell; an addition is a split rebase and rescales the open
+    lots (more shares, same total cost). Lots are discarded whenever the
+    position goes flat. Returns ``(fifo, average_cost)`` — the same value
+    twice when no sell touched the open lots — or ``()`` when nothing is open.
+    """
+    lots: list[list[float]] = []  # FIFO [quantity, price]
+    quantity = 0.0
+    cost = 0.0  # average-cost method total
+    for kind, raw_quantity, price in events:
+        amount = float(raw_quantity)
+        if kind == ADJUST and amount > 0:
+            if quantity <= 1e-12:
+                continue
+            ratio = (quantity + amount) / quantity
+            lots = [[lot_quantity * ratio, lot_price / ratio] for lot_quantity, lot_price in lots]
+            quantity += amount
+            continue
+        if kind == BUY:
+            if price is None or price <= 0 or amount <= 0:
+                continue
+            lots.append([amount, float(price)])
+            quantity += amount
+            cost += amount * float(price)
+            continue
+        # sell, or a reducing adjustment
+        reduce = min(abs(amount), quantity)
+        if reduce <= 0:
+            continue
+        cost -= cost / quantity * reduce
+        quantity -= reduce
+        remaining = reduce
+        while remaining > 1e-12 and lots:
+            taken = min(remaining, lots[0][0])
+            lots[0][0] -= taken
+            remaining -= taken
+            if lots[0][0] <= 1e-12:
+                lots.pop(0)
+        if quantity <= 1e-9:
+            lots, quantity, cost = [], 0.0, 0.0
+    if quantity <= 1e-9:
+        return ()
+    fifo_quantity = sum(lot_quantity for lot_quantity, _ in lots)
+    if fifo_quantity <= 1e-12:
+        return ()
+    fifo = sum(lot_quantity * lot_price for lot_quantity, lot_price in lots) / fifo_quantity
+    return (fifo, cost / quantity)
 
 
 @dataclass(frozen=True)
@@ -98,19 +165,21 @@ def known_split_ratio(ratio: float) -> float | None:
 
 
 def _cost_basis_confirms(
-    owned_average_cost: float | None,
+    owned_average_costs: Sequence[float | None],
     broker_average_cost: float | None,
     ratio: float,
 ) -> bool:
-    """Whether the broker's average entry price agrees with ``owned / ratio``."""
-    if owned_average_cost is None or broker_average_cost is None:
+    """Whether the broker's average entry price agrees with ``owned / ratio``
+    for any of our cost-basis candidates (FIFO, average cost)."""
+    if broker_average_cost is None or not math.isfinite(broker_average_cost) or broker_average_cost <= 0:
         return False
-    if not math.isfinite(owned_average_cost) or not math.isfinite(broker_average_cost):
-        return False
-    if owned_average_cost <= 0 or broker_average_cost <= 0:
-        return False
-    expected = owned_average_cost / ratio
-    return abs(broker_average_cost - expected) <= COST_BASIS_TOLERANCE * expected
+    for owned in owned_average_costs:
+        if owned is None or not math.isfinite(owned) or owned <= 0:
+            continue
+        expected = owned / ratio
+        if abs(broker_average_cost - expected) <= COST_BASIS_TOLERANCE * expected:
+            return True
+    return False
 
 
 def classify_share_change(
@@ -119,13 +188,15 @@ def classify_share_change(
     *,
     owned_average_cost: float | None = None,
     broker_average_cost: float | None = None,
+    owned_average_cost_candidates: Sequence[float] = (),
 ) -> ShareChange:
     """Classify one symbol's owned-vs-broker share count difference.
 
-    ``owned_average_cost`` is the repository's own weighted average entry
-    price (from BUY fills); ``broker_average_cost`` is the broker position's
-    ``avg_entry_price``. Both are needed to accept a share *increase* as a
-    split; a share decrease is adoptable without them.
+    ``owned_average_cost`` is the repository's average entry price of the
+    current position (``owned_average_cost_candidates`` may add the other
+    lot method's value); ``broker_average_cost`` is the broker position's
+    ``avg_entry_price``. Both sides are needed to accept a share *increase*
+    as a split; a share decrease is adoptable without them.
     """
     owned = float(owned_quantity)
     broker = float(broker_quantity)
@@ -136,7 +207,7 @@ def classify_share_change(
         return ShareChange(MATCH, owned, broker, 1.0, "owned quantity matches the broker position")
     ratio_match = known_split_ratio(ratio)
     corroborated = ratio_match is not None and _cost_basis_confirms(
-        owned_average_cost, broker_average_cost, ratio_match
+        (owned_average_cost, *owned_average_cost_candidates), broker_average_cost, ratio_match
     )
     # The ratio reported on the result is the standard one when it matched, so
     # the audit row shows 2 rather than 1.9999998.

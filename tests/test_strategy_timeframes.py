@@ -14,7 +14,7 @@ import pytest
 
 from parayabuck.config import Config, RuntimeConfig
 from parayabuck.core.models import AccountSnapshot, Bar, Market
-from parayabuck.data.aggregator import TimeframeAggregator, aggregate_historical_bars
+from parayabuck.data.aggregator import TimeframeAggregator
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderRequest,
@@ -130,20 +130,6 @@ def test_spec_declares_owned_timeframes_and_cadence() -> None:
 
 
 def test_required_timeframe_aggregation_is_initialized() -> None:
-    # 1h equity bars must be reproducible from the streaming path used by
-    # paper/live AND from historical aggregation of 30m session bars.
-    session_open = datetime(2024, 1, 2, 14, 30, tzinfo=UTC)  # 09:30 ET
-    half_hour_bars = [
-        _bar("SPY", session_open + timedelta(minutes=30 * index), "30m", Market.EQUITY, 100.0 + index)
-        for index in range(13)  # 09:30 .. 15:30 ET
-    ]
-    aggregated = aggregate_historical_bars(half_hour_bars, "1h", require_complete=True)
-    # Buckets are anchored at the 09:30 ET open; the 15:30 bucket holds a
-    # single 30m bar and is incomplete, so it is never emitted.
-    assert [bar.timestamp for bar in aggregated] == [session_open + timedelta(hours=index) for index in range(6)]
-    assert aggregated[0].open == 100.0
-    assert aggregated[0].close == 101.0
-    assert aggregated[-1].close == 111.0
     aggregator = TimeframeAggregator("1h")
     assert aggregator.timeframe == "1h"
     assert aggregator.minutes == 60

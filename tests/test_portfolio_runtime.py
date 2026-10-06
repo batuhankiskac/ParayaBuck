@@ -154,6 +154,9 @@ def test_live_runtime_scales_allocation_to_hard_cap(tmp_path) -> None:
 
 
 def test_runtime_rejects_partial_strategy_batch_even_when_a_target_is_ready(tmp_path) -> None:
+    """A partial batch decides nothing and does NOT consume its period: the
+    next complete batch is still that period's decision (a late symbol must
+    not cost the session)."""
     broker = _Broker()
     runtime = _monthly_runtime(tmp_path, broker)
     bars = _bars()
@@ -181,7 +184,8 @@ def test_runtime_rejects_partial_strategy_batch_even_when_a_target_is_ready(tmp_
         )
         for symbol in EQUITY_UNIVERSE
     ]
-    assert runtime.process_closed_bars(next_batch).status == "not_scheduled"
+    assert runtime.previous_timestamp is None
+    assert runtime.process_closed_bars(next_batch).status == "submitted"
 
 
 def test_restart_restores_last_decision_boundary_without_extra_rebalance(tmp_path) -> None:
@@ -2481,7 +2485,7 @@ def test_backtest_decides_but_runtime_waits_for_boundary_then_catch_up_fires(
     assert result.status == "submitted"
     assert result.target is not None
     assert result.target.metadata.get("decision_origin") == "startup_catch_up"
-    assert result.target.invested_weight > 0
+    assert sum(w.weight for w in result.target.weights) > 0
     assert result.orders
     assert all(order.side == PortfolioOrderSide.BUY for order in result.orders)
     assert len(broker.submitted) == len(result.orders)
@@ -2829,7 +2833,7 @@ def test_forced_scheduled_applies_full_target_and_leaves_normal_cadence_unchange
     assert forced.status == "submitted"
     assert forced.target is not None
     assert forced.target.metadata.get("decision_origin") == "test_origin"
-    assert forced.target.invested_weight > 0
+    assert sum(w.weight for w in forced.target.weights) > 0
     assert forced.orders and all(order.side == PortfolioOrderSide.BUY for order in forced.orders)
 
     # A later normal scheduled decision is not labelled as a catch-up.

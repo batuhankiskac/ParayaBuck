@@ -87,11 +87,6 @@ def validate_strategy_timeframe(strategy: PortfolioStrategy, configured: str) ->
         )
 
 
-def supported_portfolio_strategies() -> tuple[str, ...]:
-    """Names the PAPER product supports."""
-    return tuple(sorted(PRODUCT_STRATEGY_NAMES))
-
-
 def rebalance_policy_for(strategy: PortfolioStrategy, parameters: dict[str, object] | None = None) -> RebalancePolicy:
     """Map a portfolio strategy to its rebalance policy.
 
@@ -119,6 +114,5 @@ __all__ = [
     "portfolio_strategy_from",
     "product_strategy_from",
     "rebalance_policy_for",
-    "supported_portfolio_strategies",
     "validate_strategy_timeframe",
 ]

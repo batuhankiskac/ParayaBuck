@@ -114,15 +114,9 @@ def _first_expected_bar(timeframe: str, start: datetime) -> datetime:
 class AlpacaHistoricalData:
     """Bounded Alpaca equity REST client used to warm up the streaming engine.
 
-    Dedup & measurement: ``get_bars_batch`` deduplicates identical consecutive
-    provider calls (same sorted symbols, timeframe, start, end, adjustment)
-    within a short TTL (60 s) so repeated signal-verification latches that
-    happen on the same decision timestamp do not re-hit Alpaca. The cache
-    is measurement-aware: a dedup hit returns the cached bars without counting
-    as a new provider call.
-    The dedup is bounded (single-entry, TTL) and never weakens fail-closed
-    semantics — a new timestamp, new symbol set, or expired TTL triggers a
-    fresh provider fetch and fresh adequacy checks.
+    ``_last_batch_degraded`` tells the caller of the latest ``get_bars_batch``
+    whether any part of its answer came from the local cache instead of the
+    provider (the split-basis verifier treats such an answer as unverified).
     """
 
     def __init__(
@@ -168,11 +162,6 @@ class AlpacaHistoricalData:
             self._cache = cache
         else:
             self._cache = WarmupCache(str(cache))
-        # Dedup identical consecutive provider calls (measure/bounded).
-        self._last_batch_key: tuple[object, ...] | None = None
-        self._last_batch_result: dict[str, list[Bar]] | None = None
-        self._last_batch_at: datetime | None = None
-        self._dedup_ttl_seconds: float = 60.0
         # Bumped whenever a window is answered without real provider rows (the
         # outage cache fallback or an empty response). The incremental path
         # compares it across its fetches so such rows are never stamped as
@@ -245,25 +234,6 @@ class AlpacaHistoricalData:
         if not symbols:
             return {}
         symbols, start_at, end_at = self._resolve_batch_request(symbols, timeframe, start, end, adjustment)
-        # Dedup identical consecutive provider calls (bounded, fail-closed):
-        # same sorted symbols + window + adjustment within TTL returns cached
-        # bars without hitting Alpaca. This prevents repeated identical
-        # verification calls (per-symbol trailing-window fix) from hammering
-        # the provider while keeping measurement of symbols/bars/provider_calls.
-        dedup_key = (tuple(sorted(symbols)), timeframe, start_at.isoformat(), end_at.isoformat(), adjustment)
-        now = datetime.now(UTC)
-        last_at = getattr(self, "_last_batch_at", None)
-        if (
-            dedup_key == getattr(self, "_last_batch_key", None)
-            and last_at is not None
-            and (now - last_at).total_seconds() < getattr(self, "_dedup_ttl_seconds", 60.0)
-            and getattr(self, "_last_batch_result", None) is not None
-        ):
-            if getattr(self, "_last_batch_degraded", False):
-                # The replayed result carries the original call's degradation.
-                self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
-            # Return a shallow copy so callers cannot mutate the cached dict.
-            return {symbol: list(bars) for symbol, bars in self._last_batch_result.items()}  # type: ignore[union-attr]
         fallbacks_before = getattr(self, "_provider_fallbacks", 0)
         minutes = TIMEFRAME_MINUTES.get(timeframe)
         if minutes is not None:
@@ -286,9 +256,6 @@ class AlpacaHistoricalData:
                     minutes,
                     adjustment,
                 )
-                self._last_batch_key = dedup_key
-                self._last_batch_result = {s: list(b) for s, b in result.items()}
-                self._last_batch_at = now
                 self._last_batch_degraded = getattr(self, "_provider_fallbacks", 0) != fallbacks_before
                 return result
         result = self._fetch_window(
@@ -298,9 +265,6 @@ class AlpacaHistoricalData:
             end_at,
             adjustment,
         )
-        self._last_batch_key = dedup_key
-        self._last_batch_result = {s: list(b) for s, b in result.items()}
-        self._last_batch_at = now
         self._last_batch_degraded = getattr(self, "_provider_fallbacks", 0) != fallbacks_before
         return result
 
@@ -421,8 +385,14 @@ class AlpacaHistoricalData:
         When the cache validates, each symbol downloads only
         ``[last_cached - overlap_timeframes * step, end]``: the overlap
         re-fetches every bar that could have been forming (and therefore
-        partial) when it was cached, so closed cached bars (immutable) plus
-        the fresh tail equal a full-window download exactly.
+        partial) when it was cached, so closed cached RAW bars (immutable)
+        plus the fresh tail equal a full-window download exactly.
+
+        Split- or dividend-adjusted series are NOT immutable: the provider
+        rebases every older bar after a corporate action, so cached adjusted
+        rows may be on a stale basis. Those requests always download the full
+        window. A feed change during the request (an SIP entitlement
+        downgrade) also falls back to a full download on the new feed.
         """
         if not symbols:
             return {}
@@ -433,6 +403,9 @@ class AlpacaHistoricalData:
         if not isinstance(cache, WarmupCache):
             # Fakes/tests without the real cache degrade to the plain fetch.
             return self.get_bars_batch(symbols, timeframe, start, end, adjustment=adjustment)
+        # Resolve a due SIP re-probe BEFORE choosing the cache feed name, so
+        # cached rows are read and written under the feed actually queried.
+        self._reprobe_sip_if_due()
         end_at = self._clamp_recent_end(end_at)
         feed_name = self._effective_stock_feed_name
         minutes = TIMEFRAME_MINUTES[timeframe]
@@ -452,7 +425,7 @@ class AlpacaHistoricalData:
         # The scope checks and the merge below need the same cached window, so
         # each symbol's bars are materialised once and reused.
         windows: dict[str, list[Bar]] = {}
-        if cache.scope_is_valid(scope, config_digest):
+        if adjustment == "raw" and cache.scope_is_valid(scope, config_digest):
             for symbol in symbols:
                 cached = windows[symbol] = self._cached_window(
                     cache, symbol, timeframe, feed_name, adjustment, grid_start, end_at
@@ -489,6 +462,10 @@ class AlpacaHistoricalData:
                 # Cache already extends to the request end; nothing to fetch.
                 for symbol in tail:
                     fetched[symbol] = windows[symbol]
+        if self._effective_stock_feed_name != feed_name:
+            # The feed changed mid-request: the cached windows belong to the
+            # old feed and must not be merged with rows from the new one.
+            return self.get_bars_batch(symbols, timeframe, start_at, end_at, adjustment=adjustment)
         result: dict[str, list[Bar]] = {}
         for symbol in symbols:
             window = windows.get(symbol)
@@ -685,6 +662,19 @@ class AlpacaHistoricalData:
             return False
         return now - since >= _SIP_REPROBE_INTERVAL
 
+    def _reprobe_sip_if_due(self) -> None:
+        """Lift an aged SIP -> IEX downgrade so the next request re-probes SIP.
+
+        The entitlement may since have been granted. Bounded to one attempt
+        per interval, and a re-probe that fails with an entitlement error
+        re-downgrades in ``_fetch_window`` instead of flapping. Callers that
+        pick a cache feed name run this FIRST so the name matches the feed
+        the request will actually use.
+        """
+        if getattr(self, "_sip_fallback_active", False) and self._sip_reprobe_due(datetime.now(UTC)):
+            log.info("Re-probing the SIP historical feed after a bounded downgrade")
+            self._restore_sip_feed()
+
     def _restore_sip_feed(self) -> None:
         """Undo the downgrade after a successful SIP request."""
         self._stock_feed = DataFeed(self._configured_stock_feed)
@@ -699,13 +689,7 @@ class AlpacaHistoricalData:
         end_at: datetime,
         adjustment: str,
     ) -> dict[str, list[Bar]]:
-        # A downgraded client re-probes SIP on the next request once the
-        # interval has passed: the entitlement may since have been granted.
-        # Bounded to one attempt per interval, and a re-probe that fails with
-        # an entitlement error re-downgrades below instead of flapping.
-        if getattr(self, "_sip_fallback_active", False) and self._sip_reprobe_due(datetime.now(UTC)):
-            log.info("Re-probing the SIP historical feed after a bounded downgrade")
-            self._restore_sip_feed()
+        self._reprobe_sip_if_due()
         end_at = self._clamp_recent_end(end_at)
         feed_name = self._effective_stock_feed_name
         cached = {
@@ -818,10 +802,21 @@ class AlpacaHistoricalData:
                 replaced = False
         if not replaced and fetched:
             self._cache.upsert(fetched, feed=feed_name, adjustment=adjustment)
-        for symbol in symbols:
-            merged = {bar.timestamp: bar for bar in cached.get(symbol, [])}
-            merged.update({bar.timestamp: bar for bar in bars.get(symbol, [])})
-            bars[symbol] = [merged[key] for key in sorted(merged)]
+        # The provider is authoritative for the window it answered: cached
+        # rows are never mixed into its answer. A symbol it returned nothing
+        # for is served from the cache, and the answer is marked degraded so
+        # no caller (the split-basis verifier above all) counts cache rows as
+        # provider coverage.
+        cache_only = sorted(symbol for symbol in symbols if not bars.get(symbol) and cached.get(symbol))
+        for symbol in cache_only:
+            bars[symbol] = list(cached[symbol])
+        if cache_only:
+            log.warning(
+                "Historical API returned no %s rows for %s; served from the local cache (degraded)",
+                timeframe,
+                ",".join(cache_only),
+            )
+            self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
         log.info("Fetched %d %s bars for %d symbols", total, timeframe, len(symbols))
         # Measured provider-call observability (for signal/universe hardening).
         try:

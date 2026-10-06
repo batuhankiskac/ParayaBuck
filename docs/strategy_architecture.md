@@ -56,8 +56,19 @@ Rules:
    trading are dropped from the signal history
    (`prune_unfinished_signal_sessions`), so a restart mid-session never decides
    on a partial bar.
-5. Incomplete bar batches skip the decision; a timed-out partial batch never
-   silently delays it.
+5. One decision per NYSE session. Daily bars are matched by New York session
+   date, not label: the stream labels a session 09:30 ET, the provider (and
+   the SIP session-close fallback) 00:00 ET, and the runtime gives every tail
+   of one session a single label (the newest present) before deciding. A
+   decision already persisted for the session under either label is a
+   duplicate.
+6. Only the symbols the strategy reads (`strategy.decision_symbols`; VT35:
+   QQQ and QLD) must be present for the session. SPY never blocks a decision
+   and a stale SPY close is not a context price. An incomplete batch decides
+   nothing and does NOT consume the session: the late symbol completes it.
+   A failure before the decision is persisted does not consume it either.
+7. An unverified signal basis (`signal_adjustment_unverified`) holds the
+   current position for the session: no BUY and no SELL.
 
 ## 3. Portfolio / risk boundary
 
@@ -77,7 +88,7 @@ The portfolio/risk layer alone:
 
 ## 4. Registry
 
-`supported_portfolio_strategies()` = `{"equity_leveraged_trend_v1"}`. Any
+`PRODUCT_STRATEGY_NAMES` = `("equity_leveraged_trend_v1",)`. Any
 other name fails with `Unsupported portfolio strategy: <name>`. Strategies are
 immutable once validated: a signal change is a new named strategy
 (`docs/validated_strategies.md`).

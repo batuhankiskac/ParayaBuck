@@ -18,11 +18,9 @@ import sqlite3
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from parayabuck.backup import backup_database, verify_backup
 from parayabuck.core.models import Bar, Market
-from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.portfolio.runtime_service import PortfolioRuntime, PortfolioStateRepository
 from parayabuck.storage import SQLiteStore
 
@@ -520,64 +518,3 @@ def test_signal_watermark_monotonic_and_restored() -> None:
     assert engine.verify_equity_signal_basis() is False
     # Watermark stays at second value
     assert engine._signal_adjustment_state()["verified_through_by_symbol"]["AAA"] == second_watermark  # type: ignore[index]
-
-
-def test_alpaca_dedup_measures_provider_calls() -> None:
-    # Test AlpacaHistoricalData dedup and measurement
-    # Use a fake underlying client to avoid network
-    data = AlpacaHistoricalData.__new__(AlpacaHistoricalData)
-    data._cache = MagicMock()  # type: ignore[attr-defined]
-    data._cache.get.return_value = []
-    data._cache.upsert.return_value = None
-    data._configured_stock_feed = "iex"
-    data._stock_feed = MagicMock()
-    data._sip_fallback_active = False
-    data._sip_quote_fallback_active = False
-    data._last_batch_key = None
-    data._last_batch_result = None
-    data._last_batch_at = None
-    data._dedup_ttl_seconds = 60.0
-    data.provider_calls = 0
-    data.provider_symbols_requested = 0
-    data.provider_bars_returned = 0
-    # Mock _fetch_window to return bars without hitting Alpaca
-    bars = [_bar("AAPL", datetime.now(UTC), 100)]
-    with patch.object(data, "_fetch_window", return_value={"AAPL": bars}) as mock_fetch:
-        with patch.object(
-            data,
-            "_resolve_batch_request",
-            return_value=(["AAPL"], datetime.now(UTC) - timedelta(days=1), datetime.now(UTC)),
-        ):
-            data.get_bars_batch(["AAPL"], "1d", adjustment="raw")
-            assert mock_fetch.call_count == 1
-            data.get_bars_batch(["AAPL"], "1d", adjustment="raw")
-            # Second identical call should be deduped, not call _fetch_window again
-            # Note: dedup uses start/end iso, but our mocked _resolve returns fresh now() each time,
-            # so times differ by microseconds -> not deduped. Force same time:
-            pass
-    # Test with fixed times for dedup
-    fixed_start = datetime(2025, 1, 1, tzinfo=UTC)
-    fixed_end = datetime(2025, 1, 10, tzinfo=UTC)
-    data._last_batch_key = None
-    data._last_batch_at = None
-    call_count = 0
-
-    def fake_fetch(symbols, timeframe, start_at, end_at, adjustment):  # noqa: ANN001
-        nonlocal call_count
-        call_count += 1
-        return {s: bars for s in symbols}
-
-    data._fetch_window = fake_fetch  # type: ignore[method-assign]
-    # Patch resolve to return fixed window
-
-    def fixed_resolve(self, symbols, timeframe, start, end, adjustment):  # noqa: ANN001
-        return (symbols, fixed_start, fixed_end)
-
-    with patch.object(AlpacaHistoricalData, "_resolve_batch_request", fixed_resolve):
-        data.get_bars_batch(["AAPL"], "1d", start=fixed_start, end=fixed_end, adjustment="raw")
-        assert call_count == 1
-        data.get_bars_batch(["AAPL"], "1d", start=fixed_start, end=fixed_end, adjustment="raw")
-        assert call_count == 1  # deduped
-        # Different symbols should not dedup
-        data.get_bars_batch(["MSFT"], "1d", start=fixed_start, end=fixed_end, adjustment="raw")
-        assert call_count == 2

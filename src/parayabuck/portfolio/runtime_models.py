@@ -146,8 +146,17 @@ class PortfolioDecisionService:
         *,
         universe: object | None,
         universe_version: str,
+        required_symbols: tuple[str, ...] | None = None,
     ) -> PortfolioContext:
-        if any(not series or series[-1].timestamp != decision_timestamp for series in history.values()):
+        """Context for one decision.
+
+        Every ``required_symbols`` series (all of ``history`` when None) must
+        end on ``decision_timestamp``. Other series ride along as history
+        but price only when they are current too: a stale benchmark close
+        never becomes an order reference price.
+        """
+        required = tuple(history) if required_symbols is None else required_symbols
+        if any(not history.get(symbol) or history[symbol][-1].timestamp != decision_timestamp for symbol in required):
             raise ValueError("Portfolio context requires a complete closed-bar batch")
         return PortfolioContext(
             decision_timestamp=decision_timestamp,
@@ -162,7 +171,11 @@ class PortfolioDecisionService:
                 for position in account.positions
                 if position.market == strategy.market
             },
-            prices={symbol: series[-1].close for symbol, series in history.items()},
+            prices={
+                symbol: series[-1].close
+                for symbol, series in history.items()
+                if series and series[-1].timestamp == decision_timestamp
+            },
             benchmark_symbol="SPY",
         )
 

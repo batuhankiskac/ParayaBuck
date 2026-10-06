@@ -26,14 +26,6 @@ class Direction(StrEnum):
     FLAT = "flat"
 
 
-class Regime(StrEnum):
-    TREND_UP = "trend_up"
-    TREND_DOWN = "trend_down"
-    RANGE = "range"
-    HIGH_VOLATILITY = "high_volatility"
-    UNKNOWN = "unknown"
-
-
 class OrderState(StrEnum):
     CREATED = "created"
     VALIDATED = "validated"
@@ -134,11 +126,7 @@ class PositionSnapshot:
     managed_qty: float = 0.0
     stop_price: float | None = None
     initial_risk: float | None = None
-    bars_held: int = 0
     trailing_stop: float | None = None
-    highest_high: float | None = None
-    lowest_low: float | None = None
-    pending_trailing_stop: float | None = None
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.qty):

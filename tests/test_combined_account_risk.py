@@ -144,8 +144,8 @@ def test_risk_overlay_enforces_account_limits_with_existing_inventory() -> None:
         mode="backtest",
     )
     assert not equity_decision.halted
-    assert equity_decision.target.invested_weight == pytest.approx(0.93)
-    gross = equity_decision.target.invested_weight
+    assert sum(w.weight for w in equity_decision.target.weights) == pytest.approx(0.93)
+    gross = sum(w.weight for w in equity_decision.target.weights)
     assert gross <= config.risk.max_gross_exposure_pct + _EPS
     assert 1.0 - gross >= config.risk.cash_buffer_pct - _EPS
 
@@ -167,7 +167,7 @@ def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
     )
     assert "position_count_limit" in decision.reasons
     assert len(decision.target.weights) <= config.risk.max_positions
-    assert decision.target.invested_weight <= config.strategy.equity.maximum_allocation + _EPS
+    assert sum(w.weight for w in decision.target.weights) <= config.strategy.equity.maximum_allocation + _EPS
     assert all(weight.weight <= config.risk.max_position_pct + _EPS for weight in decision.target.weights)
 
 

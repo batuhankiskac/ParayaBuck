@@ -1138,6 +1138,7 @@ class EngineRuntime:
                         rebalance_band_pct=self.app_config.execution.rebalance_band_pct,
                         minimum_order_notional=self.app_config.execution.minimum_order_notional,
                     ),
+                    sip_embargo=timedelta(minutes=self.app_config.signal_cross_check.sip_embargo_minutes),
                 )
             )
         self._portfolio_runtimes = tuple(portfolio_runtimes)

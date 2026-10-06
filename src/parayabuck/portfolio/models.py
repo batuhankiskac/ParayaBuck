@@ -89,10 +89,6 @@ class TargetPortfolio:
         if total > 1.0 + WEIGHT_TOLERANCE:
             raise ValueError(f"Target weights exceed 1: {total:.6f}")
 
-    @property
-    def invested_weight(self) -> float:
-        return sum(weight.weight for weight in self.weights)
-
     def weight_for(self, symbol: str, market: Market | None = None) -> float:
         try:
             canonical = canonical_symbol(symbol, market)

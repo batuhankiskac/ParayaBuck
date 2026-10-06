@@ -9,11 +9,17 @@ into the decision bar, stream readiness and the health panel.
 This module imports nothing from ``parayabuck`` so any layer may use it.
 When the calendar cannot be loaded the fallbacks are the OLD behaviour
 (weekday 09:30-16:00, close at 16:00 ET): a degraded calendar must not stop
-ingestion or the session-close decision.
+ingestion or the session-close decision. The failure is logged once, the
+degraded state is cached (the calendar is retried at most every
+``CALENDAR_RETRY_SECONDS``) and :func:`calendar_degraded_reason` exposes it
+for health surfaces.
 """
 
 from __future__ import annotations
 
+import logging
+import threading
+import time as _monotonic_clock
 from datetime import UTC, date, datetime, time, timedelta
 from functools import lru_cache
 from zoneinfo import ZoneInfo
@@ -26,6 +32,49 @@ _REGULAR_CLOSE = time(16, 0)
 
 # Lookback/lookahead window for "sessions around now" queries.
 CALENDAR_LOOKBACK_DAYS = 14
+
+# While degraded, the calendar is re-tried at most this often.
+CALENDAR_RETRY_SECONDS = 300.0
+
+_log = logging.getLogger("parayabuck.markets.nyse_calendar")
+_degraded_lock = threading.Lock()
+_degraded_reason: str | None = None
+_degraded_retry_at = 0.0
+
+
+def calendar_degraded_reason() -> str | None:
+    """Why the NYSE calendar is unavailable (weekday fallback in use), or None."""
+    return _degraded_reason
+
+
+def _mark_degraded(exc: Exception) -> None:
+    global _degraded_reason, _degraded_retry_at
+    with _degraded_lock:
+        first = _degraded_reason is None
+        _degraded_reason = f"{type(exc).__name__}: {exc}"[:300]
+        _degraded_retry_at = _monotonic_clock.monotonic() + CALENDAR_RETRY_SECONDS
+    if first:
+        _log.warning(
+            "NYSE calendar unavailable; using the weekday 09:30-16:00 ET fallback: %s", _degraded_reason, exc_info=True
+        )
+
+
+def _mark_healthy() -> None:
+    global _degraded_reason
+    if _degraded_reason is None:
+        return
+    with _degraded_lock:
+        _degraded_reason = None
+    _log.warning("NYSE calendar available again")
+
+
+def _fallback_bounds(session: date) -> tuple[datetime, datetime] | None:
+    if session.weekday() >= 5:
+        return None
+    return (
+        datetime.combine(session, _REGULAR_OPEN, tzinfo=NEW_YORK).astimezone(UTC),
+        datetime.combine(session, _REGULAR_CLOSE, tzinfo=NEW_YORK).astimezone(UTC),
+    )
 
 
 @lru_cache(maxsize=64)
@@ -56,17 +105,17 @@ def session_bounds(session: date) -> tuple[datetime, datetime] | None:
     regular-weekday window rather than None so a dependency problem can
     never stop the runtime from ingesting or deciding.
     """
+    if _degraded_reason is not None and _monotonic_clock.monotonic() < _degraded_retry_at:
+        return _fallback_bounds(session)
     try:
-        for day, market_open, market_close in nyse_sessions(session, session):
-            if day == session:
-                return market_open, market_close
-    except Exception:
-        if session.weekday() < 5:
-            return (
-                datetime.combine(session, _REGULAR_OPEN, tzinfo=NEW_YORK).astimezone(UTC),
-                datetime.combine(session, _REGULAR_CLOSE, tzinfo=NEW_YORK).astimezone(UTC),
-            )
-        return None
+        sessions = nyse_sessions(session, session)
+    except Exception as exc:
+        _mark_degraded(exc)
+        return _fallback_bounds(session)
+    _mark_healthy()
+    for day, market_open, market_close in sessions:
+        if day == session:
+            return market_open, market_close
     return None
 
 
@@ -74,12 +123,6 @@ def session_close_utc(session: date) -> datetime | None:
     """The session's NYSE close in UTC (early closes included), else None."""
     bounds = session_bounds(session)
     return None if bounds is None else bounds[1]
-
-
-def session_open_utc(session: date) -> datetime | None:
-    """The session's NYSE open in UTC, else None."""
-    bounds = session_bounds(session)
-    return None if bounds is None else bounds[0]
 
 
 def is_session_open(moment: datetime) -> bool:
@@ -96,14 +139,6 @@ def is_session_open(moment: datetime) -> bool:
     return bounds[0] <= moment_utc < bounds[1]
 
 
-def session_minutes(session: date) -> int:
-    """Number of one-minute bars in one NYSE session (390 on a full day)."""
-    bounds = session_bounds(session)
-    if bounds is None:
-        return 0
-    return int((bounds[1] - bounds[0]).total_seconds() // 60)
-
-
 def sessions_around(now: datetime) -> tuple[tuple[date, datetime, datetime], ...]:
     """Sessions in a window around ``now`` (cached by the calendar)."""
     today = now.astimezone(NEW_YORK).date()
@@ -113,11 +148,10 @@ def sessions_around(now: datetime) -> tuple[tuple[date, datetime, datetime], ...
 __all__ = [
     "CALENDAR_LOOKBACK_DAYS",
     "NEW_YORK",
+    "calendar_degraded_reason",
     "is_session_open",
     "nyse_sessions",
     "session_bounds",
     "session_close_utc",
-    "session_minutes",
-    "session_open_utc",
     "sessions_around",
 ]

@@ -108,3 +108,14 @@ def test_update_without_price_keeps_persisted_fill_price(tmp_path) -> None:
     row = _row(repo)
     assert row["status"] == "pending_cancel"
     assert row["average_fill_price"] == 100.5
+
+
+def test_status_update_without_broker_id_keeps_recorded_broker_id(tmp_path) -> None:
+    repo, order = _submitted_order(tmp_path)
+    repo.update_order(order.client_order_id, "submitted", "broker-1")
+
+    repo.update_order(order.client_order_id, "new")
+
+    row = _row(repo)
+    assert row["status"] == "new"
+    assert row["broker_order_id"] == "broker-1"

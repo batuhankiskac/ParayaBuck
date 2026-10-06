@@ -30,13 +30,6 @@ TIMEFRAME_MINUTES: dict[str, int] = {
 DEFAULT_SIP_EMBARGO = timedelta(minutes=15)
 
 
-def timeframe_duration(timeframe: str) -> timedelta:
-    try:
-        return timedelta(minutes=TIMEFRAME_MINUTES[timeframe])
-    except KeyError as exc:
-        raise ValueError(f"Unsupported timeframe: {timeframe}") from exc
-
-
 def is_regular_equity_time(timestamp: datetime) -> bool:
     """Weekday 09:30-16:00 ET window, WITHOUT the exchange calendar.
 
@@ -180,6 +173,5 @@ __all__ = [
     "is_session_open",
     "provider_day_bar_is_final",
     "session_close_utc",
-    "timeframe_duration",
     "weekday_count",
 ]

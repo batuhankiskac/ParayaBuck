@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from parayabuck.portfolio import portfolio_strategy_from, supported_portfolio_strategies
+from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES, portfolio_strategy_from
 
 LEGACY_STRATEGY_NAMES = (
     "stock_trend_pullback",
@@ -26,7 +26,7 @@ LEGACY_MODULES = (
 
 
 def test_legacy_strategies_are_not_registered() -> None:
-    registered = set(supported_portfolio_strategies())
+    registered = set(PRODUCT_STRATEGY_NAMES)
     assert not registered & set(LEGACY_STRATEGY_NAMES)
     for name in LEGACY_STRATEGY_NAMES:
         with pytest.raises(ValueError, match="Unsupported portfolio strategy"):
@@ -73,7 +73,7 @@ def test_cli_no_longer_exposes_legacy_strategy_options() -> None:
 
 
 def test_new_strategies_are_registered() -> None:
-    registered = set(supported_portfolio_strategies())
+    registered = set(PRODUCT_STRATEGY_NAMES)
     # The PAPER product surface is equity-only.
     assert registered == {"equity_leveraged_trend_v1"}
 

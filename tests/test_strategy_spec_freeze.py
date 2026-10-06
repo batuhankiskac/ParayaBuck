@@ -21,9 +21,9 @@ import pytest
 
 from parayabuck.config import Config, load_config
 from parayabuck.portfolio import (
+    PRODUCT_STRATEGY_NAMES,
     portfolio_strategy_from,
     rebalance_policy_for,
-    supported_portfolio_strategies,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -64,7 +64,7 @@ def test_production_equity_selection_is_leveraged_trend_v1(config: Config) -> No
 
 
 def test_production_selection_is_the_only_product_strategy(config: Config) -> None:
-    registered = set(supported_portfolio_strategies())
+    registered = set(PRODUCT_STRATEGY_NAMES)
     assert registered == {"equity_leveraged_trend_v1"}
     assert config.strategy.equity.name in registered
 

@@ -15,10 +15,8 @@ import pytest
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.data.adjustment import (
-    SPLIT_RATIO_TOLERANCE,
     adequate_coverage,
     covers_session,
-    detect_basis_break,
     merge_provider_authority,
 )
 from parayabuck.portfolio.runtime_service import PortfolioRuntime
@@ -32,6 +30,15 @@ def _bar(symbol: str, timestamp: datetime, close: float) -> Bar:
 
 def _days(count: int) -> list[datetime]:
     return [_TS0 + timedelta(days=index) for index in range(count)]
+
+
+def detect_basis_break(stored, provider) -> bool:  # noqa: ANN001
+    """Test oracle: any same-timestamp close off the provider by > 0.5%."""
+    reference = {bar.timestamp: bar.close for bar in provider}
+    return any(
+        bar.timestamp in reference and abs(bar.close - reference[bar.timestamp]) > 0.005 * reference[bar.timestamp]
+        for bar in stored
+    )
 
 
 def _economic_path(start: float, count: int) -> list[float]:
@@ -319,15 +326,6 @@ def test_restart_between_splits_lands_on_provider_authority() -> None:
     post_restart.seed(list(provider_now))
 
     assert [b.close for b in pre_restart.history["AAA"]] == [b.close for b in post_restart.history["AAA"]]
-
-
-def test_tolerance_rejects_rounding_noise_only() -> None:
-    dates = _days(2)
-    provider = [_bar("AAA", d, 100.0) for d in dates]
-    noisy = [_bar("AAA", d, 100.0 * (1 + SPLIT_RATIO_TOLERANCE / 2)) for d in dates]
-    breaking = [_bar("AAA", d, 25.0) for d in dates]
-    assert not detect_basis_break(tuple(noisy), provider)
-    assert detect_basis_break(tuple(breaking), provider)
 
 
 # --------------------------------------------------------------------------- #

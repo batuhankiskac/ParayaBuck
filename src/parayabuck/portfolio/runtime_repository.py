@@ -24,10 +24,14 @@ from parayabuck.execution.portfolio import (
 from parayabuck.logger import get_logger
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.ownership_rebase import (
+    ADJUST,
+    BUY,
     FOREIGN_SELL_KIND,
+    SELL,
     SPLIT,
     SPLIT_REBASE_KIND,
     classify_share_change,
+    open_position_cost_bases,
 )
 from parayabuck.portfolio.runtime_models import (
     _TERMINAL_ORDER_STATUSES,
@@ -81,6 +85,12 @@ def _execution_price(
     if not math.isfinite(derived) or derived <= 0:
         return cumulative_average
     return derived
+
+
+def _parse_instant(value: object) -> datetime:
+    """A stored ISO timestamp as an aware UTC datetime (naive means UTC)."""
+    parsed = datetime.fromisoformat(str(value))
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
 
 
 def _latest_timestamp(*values: object) -> datetime | None:
@@ -463,6 +473,19 @@ class PortfolioStateRepository:
                 (account_id, configuration_digest, timestamp.isoformat(), market.value),
             ).fetchone()
         return row is not None
+
+    def recent_decision_timestamps(
+        self, account_id: str, configuration_digest: str, market: Market, limit: int = 32
+    ) -> tuple[datetime, ...]:
+        """The newest ``limit`` persisted decision timestamps, newest first."""
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                """SELECT decision_timestamp FROM portfolio_decisions
+                   WHERE account_id = ? AND configuration_digest = ? AND market = ?
+                   ORDER BY decision_timestamp DESC LIMIT ?""",
+                (account_id, configuration_digest, market.value, limit),
+            ).fetchall()
+        return tuple(datetime.fromisoformat(str(row[0])) for row in rows)
 
     def latest_decision_timestamp(self, account_id: str, configuration_digest: str, market: Market) -> datetime | None:
         """Return the last persisted decision boundary for restart-safe scheduling."""
@@ -931,9 +954,12 @@ class PortfolioStateRepository:
                     raise RuntimeError(f"Cannot adopt quantity for unknown portfolio order: {client_order_id}")
 
     def update_order(self, client_order_id: str, status: str, broker_order_id: str = "") -> None:
+        """Advance an order's status; an empty ``broker_order_id`` keeps the
+        recorded broker id instead of erasing it."""
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
-                f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL}, broker_order_id = ?
+                f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL},
+                       broker_order_id = COALESCE(NULLIF(?, ''), broker_order_id)
                    WHERE client_order_id = ?""",
                 (status, status, broker_order_id, client_order_id),
             )
@@ -1448,25 +1474,43 @@ class PortfolioStateRepository:
         return str(row[0]) if row is not None and row[0] else None
 
     def owned_average_cost(self, account_id: str, symbol: str, market: Market) -> float | None:
-        """Weighted average entry price of this account's BUY fills.
+        """Average entry price of the CURRENT owned position (FIFO lots).
 
         The counterpart of the broker position's ``avg_entry_price``: a split
         divides both by the same ratio, so the pair is what separates a
-        corporate action from a foreign trade. ``None`` when no BUY fill was
-        booked (nothing to compare, and nothing is claimed either).
+        corporate action from a foreign trade. Only fills since the position
+        was last flat count. ``None`` when nothing is open.
         """
+        bases = self.owned_cost_bases(account_id, symbol, market)
+        return bases[0] if bases else None
+
+    def owned_cost_bases(self, account_id: str, symbol: str, market: Market) -> tuple[float, ...]:
+        """``(fifo, average_cost)`` entry price of the current owned position,
+        or ``()`` when nothing is open (see ``open_position_cost_bases``)."""
         with self.store.lock:
-            row = self.store.connection.execute(
-                """SELECT SUM(f.quantity * f.price) / NULLIF(SUM(f.quantity), 0)
+            fills = self.store.connection.execute(
+                """SELECT f.occurred_at, o.side, f.quantity, f.price
                    FROM portfolio_fills f
                    JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
-                   WHERE s.account_id = ? AND o.symbol = ? AND o.market = ? AND o.side = 'buy'
-                     AND f.quantity > 0""",
+                   WHERE s.account_id = ? AND o.symbol = ? AND o.market = ? AND f.quantity > 0""",
                 (account_id, symbol, market.value),
-            ).fetchone()
-        return float(row[0]) if row is not None and row[0] is not None else None
+            ).fetchall()
+            adjustments = self.store.connection.execute(
+                """SELECT created_at, sign * (quantity - consumed_quantity)
+                   FROM portfolio_ownership_adjustments
+                   WHERE account_id = ? AND symbol = ? AND market = ? AND consumed_quantity < quantity""",
+                (account_id, symbol, market.value),
+            ).fetchall()
+        events: list[tuple[datetime, int, tuple[str, float, float | None]]] = []
+        for occurred_at, side, quantity, price in fills:
+            kind = BUY if str(side).lower() == "buy" else SELL
+            events.append((_parse_instant(occurred_at), 0, (kind, float(quantity), float(price))))
+        for created_at, signed_quantity in adjustments:
+            events.append((_parse_instant(created_at), 1, (ADJUST, float(signed_quantity), None)))
+        events.sort(key=lambda item: (item[0], item[1]))
+        return open_position_cost_bases(event for _, _, event in events)
 
     def reconcile_broker_quantity(
         self,
@@ -1493,12 +1537,16 @@ class PortfolioStateRepository:
             owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
             if owned <= 1e-12 or not math.isfinite(broker_quantity) or broker_quantity <= 0:
                 return None
+            bases = self.owned_cost_bases(account_id, symbol, market)
             change = classify_share_change(
                 owned,
                 broker_quantity,
-                owned_average_cost=self.owned_average_cost(account_id, symbol, market),
+                owned_average_cost=bases[0] if bases else None,
                 broker_average_cost=broker_average_cost,
+                owned_average_cost_candidates=bases[1:],
             )
+            if not change.rebasable and broker_quantity > owned:
+                self._alert_unconfirmed_surplus(account_id, symbol, market, owned, broker_quantity, change.reason)
             if not change.rebasable:
                 log.warning(
                     "Ownership rebase declined: account=%s symbol=%s owned=%s broker=%s reason=%s",
@@ -1532,6 +1580,51 @@ class PortfolioStateRepository:
             change.reason,
         )
         return broker_quantity
+
+    def _alert_unconfirmed_surplus(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        owned: float,
+        broker_quantity: float,
+        reason: str,
+    ) -> None:
+        """Raise an operator incident (once per episode) for broker shares on a
+        bot-owned symbol that no fill or provable split explains.
+
+        The surplus is left external, so the bot never trades it; but an
+        unconfirmed forward split would otherwise silently halve what the
+        strategy believes it holds, so it must not pass unnoticed.
+        """
+        key = (account_id, market.value, symbol, round(owned, 6), round(broker_quantity, 6))
+        alerted = self.__dict__.setdefault("_surplus_alerts", set())
+        if key in alerted:
+            return
+        message = (
+            f"Broker holds {broker_quantity:g} {symbol} but the bot owns {owned:g} and no fill or "
+            f"confirmed split explains the surplus ({reason}). The surplus is treated as external. "
+            "If a forward split happened, adopt it with "
+            f"`parayabuck ops rebase-ownership {symbol} --broker-qty {broker_quantity:g} --confirm`."
+        )
+        log.error("Unconfirmed ownership surplus: account=%s %s", account_id, message)
+        try:
+            from parayabuck.monitoring import alerts
+
+            alerts.emit(
+                "paper_incident",
+                message=message,
+                category="ownership_surplus_unconfirmed",
+                incident_id=f"ownership_surplus:{market.value}:{symbol}:{broker_quantity:g}",
+                symbol=symbol,
+                market=market.value,
+                owned_quantity=owned,
+                broker_quantity=broker_quantity,
+            )
+        except Exception:
+            log.warning("Alert emission failed for the ownership surplus of %s", symbol, exc_info=True)
+            return
+        alerted.add(key)
 
     def rebase_ownership_to_broker_quantity(
         self,

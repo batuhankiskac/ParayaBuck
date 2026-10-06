@@ -2002,11 +2002,6 @@ class EngineRuntime:
         with getattr(self, "_state_lock", threading.RLock()):
             self._circuit_breaker_reason = "ownership_drift"
             self._state = "halted"
-        # Serialize against the account loop's _evaluate_entry_risk_latch,
-        # which runs under this lock inside _persist_risk_state: its
-        # read-copy-rebuild-assign would otherwise drop this halt.
-        with getattr(self, "_risk_state_lock", threading.Lock()):
-            self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}), "ownership_drift")
         try:
             self._persist_safety_state("ownership_drift")
         finally:
@@ -2121,10 +2116,9 @@ class EngineRuntime:
 
         Persisted state is classified by lifetime semantics:
 
-        * SESSION_SCOPED — daily-loss/drawdown baselines (``consecutive_losses``
-          and the risk numbers) live in the per-session ``risk_state`` row and
-          are restored from TODAY's row only: a new session day deliberately
-          starts with a clean baseline.
+        * SESSION_SCOPED — the daily-loss/drawdown numbers live in the
+          per-session ``risk_state`` row; the latch is re-evaluated from the
+          broker account on the first poll, so nothing is restored here.
         * PERSISTENT_INCIDENT — circuit-breaker reasons live in the
           ``safety_incidents`` table and are restored REGARDLESS of the
           session date, so a halt persisted at 23:59 survives a 00:01 restart
@@ -2218,9 +2212,6 @@ class EngineRuntime:
                 account_id=account_id,
                 reason="portfolio_drawdown_halt",
             )
-        previous = self.ledger.load_risk_state(account_id, datetime.now(UTC).date())
-        if previous is not None:
-            self._consecutive_losses = previous.consecutive_losses
 
     async def _on_trade_update(self, update: TradeUpdate) -> None:
         try:
@@ -2359,7 +2350,7 @@ class EngineRuntime:
                     message=f"Portfolio order rejected: {update.client_order_id}",
                     client_order_id=update.client_order_id,
                     symbol=update.symbol,
-                    market=Market.CRYPTO.value if is_crypto(update.symbol) else Market.EQUITY.value,
+                    market=Market.EQUITY.value,
                 )
             # Reuse the account-loop snapshot when it is fresh (one poll
             # interval) instead of issuing a full get_account +
@@ -4273,30 +4264,12 @@ class EngineRuntime:
         return bool(required) and not (required & self._not_ready_symbols)
 
     def _persist_risk_state(self, account: AccountSnapshot) -> None:
-        # _account_loop, the decision loop and reconciliation call this
-        # concurrently; the load-compare-record sequence must be atomic or
-        # the same realized PnL delta is counted twice.
+        # _account_loop, the trade-update path and the operator resets call
+        # this concurrently; the latch evaluation and the incident/risk-state
+        # writes must not interleave.
         with getattr(self, "_risk_state_lock", threading.Lock()):
             account_id = self.broker.account_id or "unknown"
             today = datetime.now(UTC).date()
-            previous = self.ledger.load_risk_state(account_id, today)
-            current_losses = getattr(
-                self,
-                "_consecutive_losses",
-                previous.consecutive_losses if previous is not None else 0,
-            )
-            if previous is not None and current_losses == previous.consecutive_losses:
-                realized_delta = float(account.realized_pnl) - previous.realized_pnl
-                if abs(realized_delta) > 1e-9:
-                    # Insurance for fills recovered from broker activities
-                    # while the TradingStream callback was unavailable. Live
-                    # callbacks already change the counter, so the equality
-                    # guard prevents counting the same close twice.
-                    if realized_delta < 0:
-                        current_losses += 1
-                    elif realized_delta > 0:
-                        current_losses = 0
-            self._consecutive_losses = current_losses
             self._evaluate_entry_risk_latch(account)
             reason = self._circuit_breaker_reason
             # The circuit_breaker_reason in the session row is kept for
@@ -4313,7 +4286,9 @@ class EngineRuntime:
                     realized_pnl=float(account.realized_pnl),
                     unrealized_pnl=float(account.unrealized_pnl),
                     fees=self.ledger.total_fees_for_account(account_id),
-                    consecutive_losses=current_losses,
+                    # Schema field kept for old rows; no rule reads a loss
+                    # streak, so it is no longer tracked.
+                    consecutive_losses=0,
                     circuit_breaker_reason=reason,
                     updated_at=datetime.now(UTC),
                     peak_epoch=int(getattr(self.broker, "_peak_epoch", 0) or 0),

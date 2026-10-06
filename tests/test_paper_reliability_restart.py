@@ -181,7 +181,6 @@ def _bare_engine(tmp_path: Path) -> EngineRuntime:
         account_id="acct",
         account=lambda: AccountSnapshot(cash=100_000, equity=100_000, peak_equity=100_000, daily_pnl=0, positions=()),
     )  # type: ignore[attr-defined]
-    eng._consecutive_losses = 2  # type: ignore[attr-defined]
     eng._circuit_breaker_reason = None  # type: ignore[attr-defined]
     eng._entry_risk_latch = {Market.EQUITY: None}  # type: ignore[attr-defined]
     eng._portfolio_runtimes = ()  # type: ignore[attr-defined]
@@ -398,9 +397,8 @@ def test_risk_and_watermark_restored_after_restart(tmp_path: Path) -> None:
     )
     eng = _bare_engine(tmp_path)
     eng.ledger = ledger
-    eng._consecutive_losses = 0
     eng._restore_persistent_state()
-    assert eng._consecutive_losses == 3
+    assert eng._circuit_breaker_reason is None
     # Watermark: create a decision; a restarted runtime resumes from it.
     broker = _SimBroker()
     rt, _ = _runtime(tmp_path, broker, {"AAPL": 0.10})

@@ -44,7 +44,6 @@ def _restarting_runtime(ledger: ExecutionLedger) -> EngineRuntime:
     runtime.ledger = ledger
     runtime._risk_state_lock = threading.Lock()
     runtime._state_lock = threading.RLock()
-    runtime._consecutive_losses = 0
     runtime._circuit_breaker_reason = None
     runtime._entry_risk_latch = {Market.EQUITY: None}
     return runtime

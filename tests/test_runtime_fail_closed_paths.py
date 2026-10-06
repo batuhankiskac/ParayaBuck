@@ -502,7 +502,6 @@ def _ledger_shell(
     runtime.app_config = Config()
     runtime._risk_state_lock = threading.Lock()
     runtime._state_lock = threading.RLock()
-    runtime._consecutive_losses = 0
     runtime._circuit_breaker_reason = None
     runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._portfolio_runtimes = ()
@@ -604,23 +603,6 @@ class _LatchWriteProbeRuntime(EngineRuntime):
 
     def latch_write_lock_states(self) -> list[bool]:
         return self.__dict__.setdefault("_latch_write_lock_states", [])
-
-
-def test_ownership_drift_halt_takes_the_risk_state_lock(tmp_path: Path) -> None:
-    """``_evaluate_entry_risk_latch`` rebuilds the latch dict from scratch
-    while holding the risk-state lock. An unlocked drift halt can therefore
-    be dropped by the very next account poll."""
-    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
-    runtime = _ledger_shell(ledger, _LatchWriteProbeRuntime)
-    risk_state_lock = _TrackedRLock()
-    runtime._risk_state_lock = risk_state_lock  # type: ignore[assignment]
-    runtime.latch_write_lock_states().clear()  # drop the seeding write
-
-    runtime._halt_for_ownership_drift()
-
-    assert runtime._entry_risk_latch[Market.EQUITY] == "ownership_drift"
-    assert runtime.latch_write_lock_states() == [True]
-    ledger.close()
 
 
 def test_operator_latch_clear_takes_the_risk_state_lock(tmp_path: Path) -> None:

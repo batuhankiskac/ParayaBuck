@@ -8,6 +8,28 @@ permissions:
   contents: read
 
 jobs:
+  locks:
+    # uv.lock is the single dependency source. requirements.lock (runtime) and
+    # requirements-dev.lock (runtime + dev tools) are exports of it, so every
+    # shared pin is identical in CI, the Dockerfile and the VM.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.11.4 pip-audit
+      - name: uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Requirement files are current exports of uv.lock
+        run: |
+          uv export --locked --no-hashes --no-emit-project --no-dev --format requirements.txt -o requirements.lock
+          uv export --locked --no-hashes --no-emit-project --no-dev --extra dev --format requirements.txt -o requirements-dev.lock
+          git diff --exit-code -- requirements.lock requirements-dev.lock
+      - name: Dependency audit (runtime lock)
+        if: always()
+        run: pip-audit -r requirements.lock
+
   quality:
     strategy:
       fail-fast: false
@@ -23,7 +45,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -r requirements-dev.lock .
+      - run: python -m pip install -r requirements-dev.lock
+      - run: python -m pip install --no-deps .
       - run: python -m pip install build pip-audit
         if: always()
       - run: ruff check .
@@ -50,7 +73,7 @@ jobs:
           python -m pip install --force-reinstall --no-deps dist/*.whl
           cd /tmp
           python -c "import parayabuck.web.server"
-      - name: Dependency audit
+      - name: Dependency audit (installed test environment)
         if: always()
         run: pip-audit
       - name: Secret scan

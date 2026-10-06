@@ -54,8 +54,20 @@ Python 3.12+.
 
 ```bash
 python -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/python -m pip install -r requirements-dev.lock   # runtime + dev tools
+.venv/bin/python -m pip install -e . --no-deps
 cp .env.example .env   # credentials live only in .env, never in YAML or git
+```
+
+`uv.lock` is the single dependency source. `requirements.lock` (runtime, used
+by the VM and the Dockerfile) and `requirements-dev.lock` (the same runtime
+pins plus test/lint tools, used by CI) are exports of it; CI fails when they
+drift. After changing `pyproject.toml` dependencies:
+
+```bash
+uv lock
+uv export --locked --no-hashes --no-emit-project --no-dev --format requirements.txt -o requirements.lock
+uv export --locked --no-hashes --no-emit-project --no-dev --extra dev --format requirements.txt -o requirements-dev.lock
 ```
 
 Configuration: `config/settings.yaml` (`runtime`, `universe`, `strategy.equity`,

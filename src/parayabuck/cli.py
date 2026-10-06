@@ -1370,11 +1370,15 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
     if not isfinite(broker_qty) or broker_qty < 0:
         print(f"Invalid --broker-qty {args.broker_qty!r}: must be finite and >= 0", file=sys.stderr)
         return 2
-    try:
-        config = load_config(getattr(args, "config", None))
-    except Exception:
-        config = Config()
-    db_path = getattr(args, "db", None) or config.runtime.decision_db_path
+    db_path = getattr(args, "db", None)
+    if not db_path:
+        # A write command must never fall back to the default config: that
+        # could rebase ownership in a different database than the engine's.
+        try:
+            db_path = load_config(getattr(args, "config", None)).runtime.decision_db_path
+        except Exception as exc:
+            print(f"Cannot load the configuration ({exc}); fix it or pass --db explicitly.", file=sys.stderr)
+            return 2
     repository = PortfolioStateRepository(db_path)
     try:
         account_id = getattr(args, "account_id", None) or repository.latest_account_id()

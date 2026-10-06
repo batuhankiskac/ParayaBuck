@@ -580,6 +580,32 @@ def _resolved_timeframe(strategy: MarketStrategyConfig) -> MarketStrategyConfig:
     )
 
 
+def _validate_strategy_symbols(strategy: MarketStrategyConfig, equity: EquityUniverseConfig) -> None:
+    """Fail loading when the strategy reads or holds a symbol outside the universe.
+
+    The runtime streams, warms up and decides only on ``universe.equity.symbols``;
+    a signal or hold symbol outside it would never get history and the engine
+    would sit warming up (or decide on a missing series) with no error.
+    """
+    if not (strategy.enabled and equity.enabled):
+        return
+    from parayabuck.markets.symbols import canonical_symbol
+    from parayabuck.portfolio import product_strategy_from
+
+    resolved = product_strategy_from(strategy.name, strategy.parameters, timeframe=strategy.timeframe)
+    universe = {canonical_symbol(str(symbol)) for symbol in equity.symbols}
+    missing = []
+    for key in ("signal_symbol", "hold_symbol"):
+        symbol = getattr(resolved, key, None)
+        if isinstance(symbol, str) and symbol.strip() and canonical_symbol(symbol) not in universe:
+            missing.append(f"strategy.equity.parameters.{key}={symbol}")
+    if missing:
+        raise ValueError(
+            "Strategy symbols must be in universe.equity.symbols "
+            f"({', '.join(sorted(universe)) or 'empty'}): {', '.join(missing)}"
+        )
+
+
 def _block(value: Any) -> dict[str, Any]:
     """Copy one YAML mapping block; a present-but-empty block (``None``) is empty."""
     return {} if value is None else dict(value)
@@ -720,6 +746,7 @@ def load_config(config_path: str | None = None) -> Config:
         _block(strategy_raw.get("equity")),
     )
     equity_strategy = _resolved_timeframe(equity_strategy)
+    _validate_strategy_symbols(equity_strategy, equity)
     alpaca_raw = _block(raw.get("alpaca"))
     legacy_paper = alpaca_raw.pop("paper", None)
     if legacy_paper is False:

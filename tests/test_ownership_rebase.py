@@ -536,7 +536,7 @@ def test_split_after_rebalancing_is_confirmed_on_the_current_position_cost(tmp_p
     _fill(repo, "sell", 20.0, 90.0, T0 + timedelta(days=3))
     _fill(repo, "buy", 40.0, 60.0, T0 + timedelta(days=4))
     assert _owned(repo) == pytest.approx(100.0)
-    assert repo.owned_average_cost(ACCOUNT, SYMBOL, Market.EQUITY) == pytest.approx(72.0)
+    assert repo.owned_cost_bases(ACCOUNT, SYMBOL, Market.EQUITY)[0] == pytest.approx(72.0)
 
     assert repo.reconcile_broker_quantity(ACCOUNT, SYMBOL, Market.EQUITY, 200.0, 36.0) == 200.0
     assert _owned(repo) == pytest.approx(200.0)

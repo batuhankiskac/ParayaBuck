@@ -212,17 +212,6 @@ class AlpacaHistoricalData:
         except Exception as exc:
             log.warning("Warmup cache close warning: %s", exc)
 
-    def get_bars(
-        self,
-        symbol: str,
-        timeframe: str,
-        start: datetime | str | None = None,
-        end: datetime | str | None = None,
-        adjustment: str = "raw",
-    ) -> list[Bar]:
-        canonical = canonical_symbol(symbol, Market.EQUITY)
-        return self.get_bars_batch([canonical], timeframe, start, end, adjustment=adjustment).get(canonical, [])
-
     def get_bars_batch(
         self,
         symbols: list[str],
@@ -788,11 +777,21 @@ class AlpacaHistoricalData:
             bars.setdefault(row_symbol, []).append(item)
         total = sum(len(items) for items in bars.values())
         fetched = [bar for items in bars.values() for bar in items]
-        # Use atomic replace_window for full fetches so stale rows already in
-        # the cache are removed. Fall back to upsert if replace reports
-        # failure (empty payload or error).
+        # A partial provider window must never evict good cached bars: only
+        # replace the cached [start, end] window when every answered symbol
+        # covers it — spanning the window AND containing every cached
+        # session in it (a provider hole must not delete a bar the cache
+        # already holds); otherwise upsert.
+        cached_in_window = {
+            symbol: [bar for bar in cached.get(symbol, []) if start_at <= bar.timestamp <= end_at] for symbol in symbols
+        }
+        complete = {
+            symbol
+            for symbol in symbols
+            if self._window_is_complete(bars.get(symbol, []), start_at, end_at, cached_in_window.get(symbol, []))
+        }
         replaced = False
-        if fetched:
+        if fetched and complete == set(symbols):
             try:
                 replaced = self._cache.replace_window(
                     fetched, feed=feed_name, adjustment=adjustment, start=start_at, end=end_at
@@ -802,6 +801,12 @@ class AlpacaHistoricalData:
                 replaced = False
         if not replaced and fetched:
             self._cache.upsert(fetched, feed=feed_name, adjustment=adjustment)
+            if complete != set(symbols):
+                log.warning(
+                    "Historical API returned a partial %s window for %s; cached bars preserved (upsert, no window replace)",
+                    timeframe,
+                    ",".join(sorted(set(symbols) - complete)),
+                )
         # The provider is authoritative for the window it answered: cached
         # rows are never mixed into its answer. A symbol it returned nothing
         # for is served from the cache, and the answer is marked degraded so
@@ -866,6 +871,33 @@ class AlpacaHistoricalData:
         bars_per_day = max(1, 390 // minutes)
         expected = trading_days * bars_per_day
         return bool(expected <= 0 or unique / expected >= min_pct)
+
+    @staticmethod
+    def _window_is_complete(
+        bars: list[Bar], start_at: datetime, end_at: datetime, cached: list[Bar] | None = None
+    ) -> bool:
+        """Whether fetched rows may atomically replace the cached window.
+
+        The fetched instants must span the window, hold at least as many
+        unique timestamps as trading days imply, AND contain every session
+        the cache already holds in it — a provider hole must keep the
+        write to an upsert so cached bars survive.
+        """
+        if not bars:
+            return False
+        stamps = sorted({bar.timestamp for bar in bars})
+        if stamps[0] > start_at or stamps[-1] < end_at:
+            return False
+        if cached:
+            cached_stamps = {bar.timestamp for bar in cached}
+            if not cached_stamps.issubset(set(stamps)):
+                return False
+        timeframe = bars[0].timeframe
+        minutes = TIMEFRAME_MINUTES.get(timeframe, 0)
+        if minutes <= 0:
+            return True
+        bars_per_day = max(1, 390 // minutes)
+        return len(stamps) >= max(1, weekday_count(start_at, end_at) * bars_per_day)
 
     @staticmethod
     def _parse_datetime(value: datetime | str | None) -> datetime | None:

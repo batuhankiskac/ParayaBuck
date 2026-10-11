@@ -2750,9 +2750,15 @@ def test_startup_catch_up_rebalance_in_progress_defers(tmp_path) -> None:
     )
     legacy_risk = RiskOverlayDecision(legacy_target, False, (), 0.0, 0.10)
     decision_id = repo.record_decision_with_orders(
-        session, "acct", "legacy-digest", legacy_target, legacy_risk, Market.EQUITY, ()
+        session,
+        "acct",
+        "legacy-digest",
+        legacy_target,
+        legacy_risk,
+        Market.EQUITY,
+        (),
+        rebalance_phase=REBALANCE_PHASE_SELL_PENDING,
     )
-    repo.save_rebalance_execution(decision_id, "acct", Market.EQUITY, REBALANCE_PHASE_SELL_PENDING)
     repo.record_order(
         PortfolioOrderRequest(
             client_order_id="legacy-sell-1",
@@ -2796,14 +2802,10 @@ def test_startup_catch_up_propagates_rebalance_blocked(tmp_path) -> None:
         cash_weight=0.9,
     )
     risk = RiskOverlayDecision(target, False, (), 0.0, 0.10)
-    decision_id = repo.record_decision_with_orders(session, "acct", "legacy-digest", target, risk, Market.EQUITY, ())
-    repo.save_rebalance_execution(
-        decision_id,
-        "acct",
-        Market.EQUITY,
-        REBALANCE_PHASE_BLOCKED,
-        status="reconciliation_required",
+    decision_id = repo.record_decision_with_orders(
+        session, "acct", "legacy-digest", target, risk, Market.EQUITY, (), rebalance_phase=REBALANCE_PHASE_BLOCKED
     )
+    repo.update_rebalance_execution(decision_id, REBALANCE_PHASE_BLOCKED, status="reconciliation_required")
     runtime = PortfolioRuntime(
         _fixture_strategy(),
         EQUITY_UNIVERSE,

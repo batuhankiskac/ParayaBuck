@@ -77,6 +77,18 @@ def _fallback_bounds(session: date) -> tuple[datetime, datetime] | None:
     )
 
 
+def _fallback_sessions(start: date, end: date) -> tuple[tuple[date, datetime, datetime], ...]:
+    """Weekday 09:30-16:00 ET sessions in [start, end] (holidays included)."""
+    sessions: list[tuple[date, datetime, datetime]] = []
+    cursor = start
+    while cursor <= end:
+        bounds = _fallback_bounds(cursor)
+        if bounds is not None:
+            sessions.append((cursor, bounds[0], bounds[1]))
+        cursor += timedelta(days=1)
+    return tuple(sessions)
+
+
 @lru_cache(maxsize=64)
 def nyse_sessions(start: date, end: date) -> tuple[tuple[date, datetime, datetime], ...]:
     """``(session_date, open_utc, close_utc)`` for every NYSE session in [start, end]."""
@@ -140,9 +152,25 @@ def is_session_open(moment: datetime) -> bool:
 
 
 def sessions_around(now: datetime) -> tuple[tuple[date, datetime, datetime], ...]:
-    """Sessions in a window around ``now`` (cached by the calendar)."""
+    """Sessions in a window around ``now`` (cached by the calendar).
+
+    Same degraded contract as ``session_bounds``: a calendar failure falls
+    back to the regular-weekday window so the intent watchdog keeps
+    evaluating (old alarms can clear, new misses still alarm) instead of
+    throwing on every pass.
+    """
     today = now.astimezone(NEW_YORK).date()
-    return nyse_sessions(today - timedelta(days=CALENDAR_LOOKBACK_DAYS), today + timedelta(days=CALENDAR_LOOKBACK_DAYS))
+    start = today - timedelta(days=CALENDAR_LOOKBACK_DAYS)
+    end = today + timedelta(days=CALENDAR_LOOKBACK_DAYS)
+    if _degraded_reason is not None and _monotonic_clock.monotonic() < _degraded_retry_at:
+        return _fallback_sessions(start, end)
+    try:
+        sessions = nyse_sessions(start, end)
+    except Exception as exc:
+        _mark_degraded(exc)
+        return _fallback_sessions(start, end)
+    _mark_healthy()
+    return sessions
 
 
 __all__ = [

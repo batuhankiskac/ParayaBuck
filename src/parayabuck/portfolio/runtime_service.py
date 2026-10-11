@@ -782,11 +782,11 @@ class PortfolioRuntime:
                 account_id=self.account_id,
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "already_invested")
-        # Let a persisted two-phase rebalance advance first; a still-active
-        # rebalance defers the catch-up (submitting fresh BUYs while an older
-        # SELL is working could stack risk-increasing exposure).
+        # A deferred BUY is an entry: a latched market keeps it deferred even
+        # though no fresh decision is planned here.
         advance_result = self.advance_rebalance(
             account=account,
+            submit_deferred_buys=entry_latch is None,
         )
         current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
@@ -1046,13 +1046,12 @@ class PortfolioRuntime:
                 entry_latch=entry_latch,
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
-        # A persisted two-phase rebalance may have become ready since the last
-        # event (trade update, restart, or reconcile). Advance it first, then
-        # defer any new decision while the previous rebalance is still in
-        # flight: submitting a fresh BUY while an older SELL is working could
-        # stack risk-increasing exposure on top of the not-yet-sold position.
+        # A deferred BUY is an entry, so a latched market keeps it deferred
+        # (the latch caps fresh targets below; the persisted BUY side of an
+        # earlier decision needs the same gate).
         advance_result = self.advance_rebalance(
             account=account,
+            submit_deferred_buys=entry_latch is None,
         )
         # A terminal deferred BUY has just completed the persisted rebalance.
         # End this cycle before planning again: the caller's account snapshot
@@ -1264,10 +1263,12 @@ class PortfolioRuntime:
                 cash_weight=1.0 - sum(weight.weight for weight in reducing_weights),
                 metadata={**raw_target.metadata, "intermediate_risk_reduction": True},
             )
-        if force_scheduled:
+        if force_scheduled or decision_origin != "scheduled":
             # Tag the decision origin on the FINAL target so both the normal
             # forced path and any entry-latch/reduction path carry it into the
-            # persisted decision and the returned result.
+            # persisted decision and the returned result. A recovering session
+            # (restart across the close) is a real scheduled decision but is
+            # not forced, so its startup_catch_up origin is tagged too.
             raw_target = replace(
                 raw_target,
                 metadata={**raw_target.metadata, "decision_origin": decision_origin},

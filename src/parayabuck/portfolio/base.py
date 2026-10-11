@@ -118,7 +118,6 @@ class StrategySpec:
     display_name: str
     primary_timeframe: str
     supported_timeframes: tuple[str, ...]
-    required_timeframes: tuple[str, ...]
     rebalance_policy: str
     minimum_history_bars: int
 
@@ -130,7 +129,6 @@ class StrategySpec:
             "display_name": self.display_name,
             "primary_timeframe": self.primary_timeframe,
             "supported_timeframes": list(self.supported_timeframes),
-            "required_timeframes": list(self.required_timeframes),
             "rebalance_policy": self.rebalance_policy,
             "minimum_history_bars": self.minimum_history_bars,
         }
@@ -153,9 +151,6 @@ class PortfolioStrategy(ABC):
     # Empty means the strategy is single-timeframe and MUST NOT be run on any
     # other resolution.
     supported_timeframes: tuple[str, ...] = ()
-    # Additional timeframes whose bars must be seeded/aggregated before the
-    # strategy can decide (e.g. a lower-resolution reference series).
-    required_timeframes: tuple[str, ...] = ()
     # Declared decision cadence ("monthly", "weekly", "hours:N"). Informational
     # metadata; the executable policy mapping lives in
     # ``parayabuck.portfolio.rebalance_policy_for``.
@@ -201,7 +196,6 @@ class PortfolioStrategy(ABC):
             display_name=self.display_name or self.name,
             primary_timeframe=self.timeframe,
             supported_timeframes=self.supported_timeframes,
-            required_timeframes=self.required_timeframes,
             rebalance_policy=self.rebalance_policy_declared,
             minimum_history_bars=self.minimum_history_bars,
         )

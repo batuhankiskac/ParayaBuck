@@ -59,7 +59,7 @@ def covers_session(verified_through: datetime, required: datetime) -> bool:
     return signal_session_date(verified_through) >= signal_session_date(required)
 
 
-def coverage_span(provider: Sequence[Bar]) -> tuple[datetime, datetime] | None:
+def _coverage_span(provider: Sequence[Bar]) -> tuple[datetime, datetime] | None:
     """(oldest, newest) timestamps of a provider series, or None if empty."""
     if not provider:
         return None
@@ -72,15 +72,20 @@ def adequate_coverage(
     *,
     required_oldest: datetime,
     required_newest: datetime | None = None,
+    stored: Sequence[Bar] | None = None,
 ) -> bool:
     """Whether one symbol's provider series covers the REQUIRED window.
 
     ``required_oldest`` bounds the strategy's full history window;
     ``required_newest`` (a decision-day timestamp) must have its New York
     session present-or-exceeded (see ``covers_session``) before that day may
-    be traded on this basis.
+    be traded on this basis. When ``stored`` is given, every stored in-span
+    session must also be present in the provider set: a mid-window provider
+    hole is incompleteness (fail closed), not an authoritative gap — the
+    merge would otherwise drop a good stored bar and advance the watermark
+    past the hole.
     """
-    span = coverage_span(provider)
+    span = _coverage_span(provider)
     if span is None:
         return False
     oldest, newest = span
@@ -88,6 +93,14 @@ def adequate_coverage(
         return False
     if required_newest is not None and not covers_session(newest, required_newest):
         return False
+    if stored is not None:
+        provider_sessions = {signal_session_date(bar.timestamp) for bar in provider}
+        oldest_session = signal_session_date(oldest)
+        newest_session = signal_session_date(newest)
+        for bar in stored:
+            session = signal_session_date(bar.timestamp)
+            if oldest_session <= session <= newest_session and session not in provider_sessions:
+                return False
     return True
 
 
@@ -158,7 +171,6 @@ def merge_provider_authority(
 
 __all__ = [
     "adequate_coverage",
-    "coverage_span",
     "covers_session",
     "merge_provider_authority",
     "signal_session_date",

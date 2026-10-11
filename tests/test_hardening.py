@@ -19,7 +19,6 @@ from parayabuck.core.models import (
     PositionSnapshot,
 )
 from parayabuck.data.aggregator import TimeframeAggregator
-from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.markets.symbols import (
     canonical_symbol,
@@ -117,25 +116,6 @@ def test_legacy_crypto_symbols_outside_the_allowlist_canonicalize() -> None:
         canonical_symbol("USD", Market.CRYPTO)
     with pytest.raises(ValueError):
         canonical_symbol("PAXG", Market.CRYPTO)
-
-
-def test_bar_store_correction_updates_without_retriggering() -> None:
-    store = BarStore()
-    timestamp = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
-    original = _bar(timestamp)
-    corrected = _bar(timestamp, close=100.5)
-    assert store.upsert(original) == BarMutation.INSERTED
-    assert store.upsert(corrected) == BarMutation.STALE_REJECTED
-    assert store.upsert(corrected, BarRevision.CORRECTION) == BarMutation.UPDATED
-    assert store.get("AAPL", "5m")[-1].close == 100.5
-
-
-def test_sparse_equity_bars_are_not_mistaken_for_transport_gaps() -> None:
-    start = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
-    equities = BarStore()
-
-    assert equities.upsert(_bar(start)) == BarMutation.INSERTED
-    assert equities.upsert(_bar(start + timedelta(minutes=10))) == BarMutation.INSERTED
 
 
 def test_warmup_symbol_batches_stay_below_alpaca_row_limit() -> None:

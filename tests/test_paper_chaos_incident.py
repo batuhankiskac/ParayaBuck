@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
+from parayabuck.execution.portfolio import RiskOverlayDecision
 from parayabuck.monitoring import alerts, metrics
 from parayabuck.monitoring.incident import IncidentCategory
 from parayabuck.monitoring.paper_incident import (
@@ -23,6 +24,7 @@ from parayabuck.monitoring.paper_incident import (
     provider_temporary_retry,
 )
 from parayabuck.monitoring.receipt import build_receipt
+from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_service import (
     PortfolioRuntime,
     PortfolioStateRepository,
@@ -248,28 +250,22 @@ def test_restart_resumes_without_duplicate_orders(tmp_path: Path) -> None:
     # Use PortfolioStateRepository directly for restart semantics
     repo = PortfolioStateRepository(tmp_path / "restart.sqlite3")
     account_id = "acct"
-    # Simulate a two-phase rebalance saved as sell_pending (need a decision row for FK)
-    decision_id = "dec-1"
-    # Create minimal session and decision row via begin_session + dummy insert
     sid = repo.begin_session(account_id, "cfg123", "paper")
-    # Insert dummy decision to satisfy FK
-
-    with repo.store.lock, repo.store.connection:
-        repo.store.connection.execute(
-            "INSERT INTO portfolio_decisions(decision_id, session_id, account_id, configuration_digest, decision_timestamp, market, strategy_name, target_json, risk_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                decision_id,
-                sid,
-                account_id,
-                "cfg123",
-                datetime.now(UTC).isoformat(),
-                Market.EQUITY.value,
-                "test",
-                "{}",
-                "{}",
-            ),
-        )
-    repo.save_rebalance_execution(decision_id, account_id, Market.EQUITY, "sell_pending", buy_orders_json="[]")
+    # A decision row plus its sell_pending marker, written atomically like
+    # the production decision path does.
+    stamp = datetime.now(UTC)
+    chaos_target = TargetPortfolio("test", "1", stamp, (), 1.0)
+    chaos_risk = RiskOverlayDecision(chaos_target, False, (), 0.0, 0.0)
+    repo.record_decision_with_orders(
+        sid,
+        account_id,
+        "cfg123",
+        chaos_target,
+        chaos_risk,
+        Market.EQUITY,
+        (),
+        rebalance_phase="sell_pending",
+    )
     # Restart: repository reopened
     repo2 = PortfolioStateRepository(tmp_path / "restart.sqlite3")
     execution = repo2.current_rebalance_execution(account_id, Market.EQUITY)

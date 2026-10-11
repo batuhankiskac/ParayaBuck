@@ -386,7 +386,6 @@ def test_risk_and_watermark_restored_after_restart(tmp_path: Path) -> None:
             realized_pnl=1000,
             unrealized_pnl=500,
             fees=10,
-            consecutive_losses=3,
             circuit_breaker_reason=None,
             updated_at=datetime.now(UTC),
         )

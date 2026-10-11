@@ -2057,7 +2057,6 @@ class EngineRuntime:
                     realized_pnl=previous.realized_pnl,
                     unrealized_pnl=previous.unrealized_pnl,
                     fees=previous.fees,
-                    consecutive_losses=previous.consecutive_losses,
                     circuit_breaker_reason=reason,
                     updated_at=datetime.now(UTC),
                     # The persisted-peak restore groups risk_state rows by
@@ -4420,9 +4419,6 @@ class EngineRuntime:
                     realized_pnl=float(account.realized_pnl),
                     unrealized_pnl=float(account.unrealized_pnl),
                     fees=self.ledger.total_fees_for_account(account_id),
-                    # Schema field kept for old rows; no rule reads a loss
-                    # streak, so it is no longer tracked.
-                    consecutive_losses=0,
                     circuit_breaker_reason=reason,
                     updated_at=datetime.now(UTC),
                     peak_epoch=int(getattr(self.broker, "_peak_epoch", 0) or 0),

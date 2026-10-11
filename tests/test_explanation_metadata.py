@@ -119,7 +119,6 @@ def test_runtime_metrics_reads_persisted_state(tmp_path) -> None:
                 realized_pnl=-900.0,
                 unrealized_pnl=-100.0,
                 fees=3.5,
-                consecutive_losses=2,
                 circuit_breaker_reason=None,
                 updated_at=now,
             )

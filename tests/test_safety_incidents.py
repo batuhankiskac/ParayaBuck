@@ -82,7 +82,6 @@ def test_drift_halt_rewrite_keeps_the_risk_state_peak_epoch(tmp_path: Path) -> N
             realized_pnl=0.0,
             unrealized_pnl=0.0,
             fees=0.0,
-            consecutive_losses=0,
             circuit_breaker_reason=None,
             updated_at=datetime.now(UTC),
             peak_epoch=3,
@@ -310,7 +309,6 @@ def test_new_session_clears_session_scoped_state_but_keeps_persistent_incident(
             realized_pnl=0.0,
             unrealized_pnl=0.0,
             fees=0.0,
-            consecutive_losses=0,  # healthy new session
             circuit_breaker_reason=None,
             updated_at=now,
         )
@@ -325,7 +323,6 @@ def test_new_session_clears_session_scoped_state_but_keeps_persistent_incident(
             realized_pnl=-900.0,
             unrealized_pnl=0.0,
             fees=0.0,
-            consecutive_losses=6,
             circuit_breaker_reason=None,
             updated_at=now - timedelta(days=1),
         )

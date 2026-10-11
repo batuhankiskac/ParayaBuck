@@ -25,7 +25,6 @@ from parayabuck.monitoring import forensics as forensics_module
 from parayabuck.monitoring.intent_watchdog import degraded_reasons
 from parayabuck.monitoring.journal import EventJournal
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
-from parayabuck.risk.state import RiskState
 from parayabuck.web.managers.engine import EngineManager
 from parayabuck.web.routers.health import _intent_degraded_reasons
 from parayabuck.web.services.dashboard import _dashboard_degraded_reasons
@@ -149,7 +148,7 @@ def test_f2_old_payload_with_consecutive_losses_still_loads(tmp_path: Path) -> N
             ledger.connection.commit()
         loaded = ledger.load_risk_state("acct", today)
         assert loaded is not None
-        assert loaded.consecutive_losses == 0
+        assert not hasattr(loaded, "consecutive_losses")
         # A fresh save drops the dead key from the payload.
         ledger.save_risk_state(loaded)
         with ledger._lock:
@@ -160,22 +159,6 @@ def test_f2_old_payload_with_consecutive_losses_still_loads(tmp_path: Path) -> N
         assert "consecutive_losses" not in json.loads(row[0])
     finally:
         ledger.close()
-
-
-def test_f2_runtime_kwarg_still_accepted() -> None:
-    state = RiskState(
-        account_id="acct",
-        session_date=datetime.now(UTC).date(),
-        day_start_equity=10_000.0,
-        peak_equity=10_000.0,
-        realized_pnl=0.0,
-        unrealized_pnl=0.0,
-        fees=0.0,
-        consecutive_losses=3,
-        circuit_breaker_reason=None,
-        updated_at=datetime.now(UTC),
-    )
-    assert state.consecutive_losses == 3
 
 
 # --- Task 4: read paths never create the journal ---

@@ -18,12 +18,6 @@ class RiskState:
     circuit_breaker_reason: str | None
     updated_at: datetime
     peak_epoch: int = 0
-    # Removed R4A-6 remainder: ``consecutive_losses`` was persisted but never
-    # read by any latch, restore, dashboard, or doctor path. Kept as a
-    # keyword-tolerant default so F1-owned runtime.py call sites that still
-    # pass it keep working until the coordinator removes the writes, and so
-    # old persisted payloads carrying the key still load.
-    consecutive_losses: int = 0
 
 
 @dataclass(frozen=True)

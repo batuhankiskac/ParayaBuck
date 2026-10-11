@@ -1531,7 +1531,6 @@ def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) ->
             realized_pnl=1_000.0,
             unrealized_pnl=-500.0,
             fees=10.0,
-            consecutive_losses=1,
             circuit_breaker_reason=None,
             updated_at=datetime.now(UTC),
         )

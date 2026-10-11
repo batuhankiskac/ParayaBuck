@@ -38,9 +38,9 @@ async def healthz() -> dict[str, str]:
 
 def _intent_degraded_reasons(health: object) -> list[str]:
     """Active intent-watchdog alarm codes from a RuntimeHealth (or none)."""
-    watchdog = getattr(health, "intent_watchdog", None) if health is not None else None
-    reasons = watchdog.get("degraded_reasons") if isinstance(watchdog, dict) else None
-    return [str(reason) for reason in reasons] if isinstance(reasons, list) else []
+    from parayabuck.monitoring.intent_watchdog import degraded_reasons
+
+    return degraded_reasons(health)
 
 
 @router.get("/readyz")

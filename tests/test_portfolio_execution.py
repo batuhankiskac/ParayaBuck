@@ -115,6 +115,7 @@ def test_planner_sells_before_buys_quantizes_and_never_sells_external() -> None:
         prices={"SPY": 100, "QQQ": 100, "IWM": 100},
         rules={symbol: _rule(symbol) for symbol in ("SPY", "QQQ", "IWM")},
         approved_symbols=("SPY", "QQQ", "IWM"),
+        decision_id="test-decision",
     )
     assert [order.side for order in orders] == [
         PortfolioOrderSide.SELL,
@@ -135,6 +136,7 @@ def test_planner_skips_symbol_with_existing_open_order() -> None:
         prices={"SPY": 100},
         rules={"SPY": _rule("SPY")},
         approved_symbols=("SPY",),
+        decision_id="test-decision",
         open_order_symbols={"SPY"},
     )
     assert orders == ()
@@ -149,6 +151,7 @@ def test_planner_pending_buy_does_not_block_risk_reducing_sell() -> None:
         prices={"SPY": 100},
         rules={"SPY": _rule("SPY")},
         approved_symbols=("SPY",),
+        decision_id="test-decision",
         open_order_sides={"SPY": {"buy"}},
     )
 
@@ -165,6 +168,7 @@ def test_planner_pending_buy_still_suppresses_risk_increasing_duplicate() -> Non
         prices={"SPY": 100},
         rules={"SPY": _rule("SPY")},
         approved_symbols=("SPY",),
+        decision_id="test-decision",
         open_order_sides={"SPY": {"buy"}},
     )
 
@@ -180,6 +184,7 @@ def test_planner_broker_symbol_only_order_still_blocks_risk_reducing_duplicate()
         prices={"SPY": 100},
         rules={"SPY": _rule("SPY")},
         approved_symbols=("SPY",),
+        decision_id="test-decision",
         open_order_symbols={"SPY"},
     )
 
@@ -273,6 +278,7 @@ def test_planner_never_orders_a_purely_external_position() -> None:
         prices={"SPY": 100, "QQQ": 100, "IWM": 100},
         rules={symbol: _rule(symbol) for symbol in ("SPY", "QQQ", "IWM")},
         approved_symbols=("SPY", "QQQ", "IWM"),
+        decision_id="test-decision",
     )
     assert all(order.symbol != "SPY" for order in orders)
     assert all(order.symbol != "IWM" for order in orders)
@@ -289,6 +295,7 @@ def test_planner_sells_managed_position_when_target_drops_to_zero() -> None:
         prices={"SPY": 100, "QQQ": 100},
         rules={symbol: _rule(symbol) for symbol in ("SPY", "QQQ")},
         approved_symbols=("SPY", "QQQ"),
+        decision_id="test-decision",
     )
     assert [order.symbol for order in orders] == ["SPY", "QQQ"]
     sell = next(order for order in orders if order.symbol == "SPY")
@@ -480,6 +487,7 @@ def test_planner_never_sells_external_units_of_a_mixed_position() -> None:
         prices={"AAPL": 100},
         rules={"AAPL": _rule("AAPL")},
         approved_symbols=("AAPL",),
+        decision_id="test-decision",
     )
     assert len(orders) == 1
     assert orders[0].side == PortfolioOrderSide.SELL
@@ -492,6 +500,7 @@ def test_planner_never_sells_external_units_of_a_mixed_position() -> None:
         prices={"AAPL": 100},
         rules={"AAPL": _rule("AAPL")},
         approved_symbols=("AAPL",),
+        decision_id="test-decision",
     )
     assert len(orders_flat) == 1
     assert orders_flat[0].side == PortfolioOrderSide.SELL

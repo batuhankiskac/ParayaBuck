@@ -1307,13 +1307,13 @@ class EngineManager:
     def _digest_config(raw: dict[str, Any], *, paper: bool) -> str:
         raw = json.loads(json.dumps(raw))
         _yaml_block(raw, "runtime")["mode"] = "paper" if paper else "live"
-        # The arm→/api/mode toggle and the settings-drawer live entry flip
-        # exactly these fields after the arm is verified; keep them out of the
-        # digest so the verified arm survives its own mode flip. Every live
-        # safety gate (credentials fingerprint, approval file, cap) stays.
+        # Only the mode flip itself survives the arm: the arm→/api/mode
+        # toggle and the settings-drawer live entry flip runtime.mode and
+        # live.enabled after the arm is verified, so those two stay out of
+        # the digest. The dollar cap and the approval path are live safety
+        # gates: changing either after arming must invalidate the arm.
         live = _yaml_block(raw, "live")
-        for _mode_flip_key in ("enabled", "hard_dollar_cap", "operator_approval_path"):
-            live.pop(_mode_flip_key, None)
+        live.pop("enabled", None)
         encoded = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 

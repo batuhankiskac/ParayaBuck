@@ -54,8 +54,8 @@ def test_digest_treats_empty_runtime_block_like_absent_block() -> None:
 
 def test_digest_of_dict_blocks_is_unchanged() -> None:
     raw = {"runtime": {"mode": "live"}, "live": {"enabled": True}}
-    # _digest_config always normalizes the live block; the flip fields inside
-    # it (enabled/cap/approval) are excluded, leaving an empty live mapping.
+    # _digest_config normalizes runtime.mode and excludes live.enabled; the
+    # cap and approval path stay in the digest as live safety gates.
     expected_raw = {"runtime": {"mode": "paper"}, "live": {}}
     expected = hashlib.sha256(json.dumps(expected_raw, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -63,15 +63,29 @@ def test_digest_of_dict_blocks_is_unchanged() -> None:
     assert raw["runtime"]["mode"] == "live"
 
 
-def test_digest_ignores_mode_flip_fields() -> None:
-    """The arm→/api/mode toggle flips live.enabled/cap/approval after the arm
-    is verified; the digest excludes exactly those fields so the arm survives."""
+def test_digest_ignores_only_the_mode_flip_fields() -> None:
+    """The arm→/api/mode toggle flips runtime.mode and live.enabled after the
+    arm is verified; the digest excludes exactly those two. The dollar cap and
+    the approval path stay in the digest so raising the cap or swapping the
+    approval after arming invalidates the arm."""
     pre = {"runtime": {"mode": "paper"}, "live": {"enabled": False}}
     post = {
         "runtime": {"mode": "live"},
-        "live": {"enabled": True, "hard_dollar_cap": 5000.0, "operator_approval_path": "/tmp/approval.json"},
+        "live": {"enabled": True},
     }
     assert EngineManager._digest_config(pre, paper=False) == EngineManager._digest_config(post, paper=False)
+    tampered_cap = {
+        "runtime": {"mode": "live"},
+        "live": {"enabled": True, "hard_dollar_cap": 5000.0},
+    }
+    assert EngineManager._digest_config(pre, paper=False) != EngineManager._digest_config(tampered_cap, paper=False)
+    tampered_approval = {
+        "runtime": {"mode": "live"},
+        "live": {"enabled": True, "operator_approval_path": "/tmp/approval.json"},
+    }
+    assert EngineManager._digest_config(pre, paper=False) != EngineManager._digest_config(
+        tampered_approval, paper=False
+    )
 
 
 def test_get_settings_with_empty_blocks_returns_absent_block_digest(tmp_path: Path) -> None:

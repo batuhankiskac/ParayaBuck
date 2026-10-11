@@ -262,6 +262,7 @@ def test_production_overlay_and_band_suppressed_exit_cannot_open_seventh_slot() 
         prices={symbol: 100.0 for symbol in tradable},
         rules=rules,
         approved_symbols=tradable,
+        decision_id="slot-decision",
     )
     assert [(order.symbol, order.side.value) for order in planned] == [("GDDY", "buy"), ("NEW1", "buy")]
     assert TargetToOrderPlanner().policy.rebalance_band_pct == 0.005
@@ -300,6 +301,7 @@ def test_band_eligible_sell_does_not_release_slot_at_order_planning() -> None:
         prices={symbol: 100.0 for symbol in tradable},
         rules=rules,
         approved_symbols=tradable,
+        decision_id="slot-decision",
     )
     assert any(order.symbol == "TDG" and order.side == PortfolioOrderSide.SELL for order in planned)
     assert any(order.symbol == "NEW1" and order.side == PortfolioOrderSide.BUY for order in planned)

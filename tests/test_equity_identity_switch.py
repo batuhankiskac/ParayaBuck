@@ -68,6 +68,7 @@ def _plan(
         prices={symbol: 100.0 for symbol in symbols},
         rules=_rules(*symbols),
         approved_symbols=symbols,
+        decision_id="identity-decision",
         open_order_symbols=open_order_symbols,
     )
 

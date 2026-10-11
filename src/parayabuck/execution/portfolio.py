@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -438,17 +437,17 @@ class TargetToOrderPlanner:
         prices: dict[str, float],
         rules: dict[str, AssetTradingRules],
         approved_symbols: tuple[str, ...],
+        decision_id: str,
         open_order_symbols: set[str] | None = None,
         open_order_sides: Mapping[str, set[str] | frozenset[str]] | None = None,
-        decision_id: str | None = None,
         client_order_salt: str = "",
     ) -> tuple[PortfolioOrderRequest, ...]:
         """Build rebalance orders from a target.
 
         ``decision_id`` is the account-local, configuration-scoped decision
-        identity from the runtime repository; when provided it seeds the
-        client order ids so that two configurations sharing a strategy name,
-        version and timestamp never produce the same broker idempotency key.
+        identity from the runtime repository; it seeds the client order ids
+        so that two configurations sharing a strategy name, version and
+        timestamp never produce the same broker idempotency key.
         ``client_order_salt`` is the per-ledger salt that keeps those ids
         distinct from ids another ledger derives for the same decision.
         """
@@ -484,7 +483,6 @@ class TargetToOrderPlanner:
         }
         target_weights = {canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights}
         symbols = approved & (set(target_weights) | set(positions))
-        decision_id = decision_id or _decision_id(target)
         orders: list[PortfolioOrderRequest] = []
         for symbol in sorted(symbols):
             price = prices.get(symbol) or (positions[symbol].current_price if symbol in positions else 0.0)
@@ -614,17 +612,6 @@ def floor_increment_decimal(value: Decimal, increment: Decimal) -> Decimal:
     perturb broker-exact quantities.
     """
     return (value / increment).to_integral_value(rounding=ROUND_DOWN) * increment
-
-
-def _decision_id(target: TargetPortfolio) -> str:
-    payload = "|".join(
-        (
-            target.strategy_name,
-            target.strategy_version,
-            target.decision_timestamp.isoformat(),
-        )
-    )
-    return hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 
 def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide, salt: str = "") -> str:

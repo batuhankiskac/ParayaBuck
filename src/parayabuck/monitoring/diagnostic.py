@@ -147,7 +147,7 @@ def collect_bundle_data(
 
         jp = Path(journal_path)
         if jp.exists():
-            j = EventJournal(str(jp))
+            j = EventJournal.open_readonly(str(jp))
             events = j.query(limit=200)
             data["recent_events"] = [e.to_dict() for e in events]
         else:

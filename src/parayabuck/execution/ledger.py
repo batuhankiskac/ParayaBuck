@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from parayabuck.core.models import Market, ProtectionState
+from parayabuck.core.models import Market
 from parayabuck.logger import get_logger
 from parayabuck.risk.state import RiskState, SafetyIncident
 from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
@@ -38,15 +38,18 @@ class LegacyLedgerStateError(RuntimeError):
 
 @dataclass(frozen=True)
 class ManagedPosition:
+    """Legacy open-position view: only what the startup guard still reads.
+
+    The legacy single-name/bracket stack is deleted; the engine keeps opening
+    old databases and refuses startup while ``managed_positions`` still claims
+    an open row. Only the symbol (pin set), market, and status (manual
+    intervention gate) are read anywhere — the protective-stop fields were
+    last read by the W4-removed web account snapshot.
+    """
+
     canonical_symbol: str
     market: Market
     status: str
-    protection_state: ProtectionState = ProtectionState.UNPROTECTED
-    current_stop: float | None = None
-    original_stop: float = 0.0
-    original_target: float = 0.0
-    stop_state: str = "pending"
-    target_state: str = "watching"
 
 
 class ExecutionLedger:
@@ -398,12 +401,6 @@ class ExecutionLedger:
             canonical_symbol=str(row[1]),
             market=Market(str(row[2])),
             status=str(row[18]),
-            protection_state=ProtectionState(str(row[17])),
-            current_stop=float(str(row[13])) if row[13] is not None else None,
-            original_stop=float(str(row[11])),
-            original_target=float(str(row[12])),
-            stop_state=str(row[21]),
-            target_state=str(row[22]),
         )
 
     def managed_for_account(self, account_id: str) -> dict[str, ManagedPosition]:
@@ -477,7 +474,6 @@ class ExecutionLedger:
                 "realized_pnl": state.realized_pnl,
                 "unrealized_pnl": state.unrealized_pnl,
                 "fees": state.fees,
-                "consecutive_losses": state.consecutive_losses,
                 "circuit_breaker_reason": state.circuit_breaker_reason,
                 "peak_epoch": int(getattr(state, "peak_epoch", 0) or 0),
             },
@@ -521,7 +517,6 @@ class ExecutionLedger:
                 realized_pnl=float(payload["realized_pnl"]),
                 unrealized_pnl=float(payload["unrealized_pnl"]),
                 fees=float(payload["fees"]),
-                consecutive_losses=int(payload["consecutive_losses"]),
                 circuit_breaker_reason=payload.get("circuit_breaker_reason"),
                 updated_at=datetime.fromisoformat(str(row[1])),
                 peak_epoch=int(payload.get("peak_epoch", 0) or 0),

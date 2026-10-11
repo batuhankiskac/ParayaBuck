@@ -6,6 +6,7 @@ results for each doc live in `research/<name>/` unless noted.
 
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|
+| [`trend_robustness_v2.md`](trend_robustness_v2.md) | 2026-10-11 | No arm (SMA 100–250 ensemble, QLD+SSO two-index split, both) passes the pre-registered gate on 2000–2026; all give up 1.2–2.7 pp CAGR; VT35 unchanged. | current evidence |
 | [`sip_recent_data_clamp_v1.md`](sip_recent_data_clamp_v1.md) | 2026-09-30 | Fix: SIP historical requests (warmup, hourly split-basis verifier) are clamped to now − `sip_embargo_minutes`, and Alpaca Basic's recent-SIP-data error no longer triggers the permanent SIP→IEX history downgrade. | current evidence |
 | [`signal_cross_check_v1.md`](signal_cross_check_v1.md) | 2026-09-30 | Runtime guard: the decision is recomputed on the Alpaca SIP daily bar and a trend disagreement with the IEX stream bar holds the position; historically 0 disagreements in 2,406 sessions (SIP vs Yahoo), ~0.1–0.4 holds/yr under modelled IEX close noise; Stage B unchanged. | current evidence |
 | [`crypto_removal_v1.md`](crypto_removal_v1.md) | 2026-09-30 | Crypto code, config and tests deleted (equity-only); Stage B reproduces S1 exactly (NAV 1,173,537.61, identical hashes); config digest changes. | current evidence |

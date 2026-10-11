@@ -46,6 +46,11 @@ Status per directory (verified 2026-10-01):
   (seeded Monte Carlo); re-ran 2026-10-01 in 6 s and it reproduced `RESULTS.json`
   byte-identically. It overwrites that file.
 
+- **trend_robustness_v2 — runnable from committed code.** `screen.py` reads
+  only the two committed `stress_robustness_v1` CSVs, is deterministic (seeded
+  bootstrap) and runs in about 10 s; it overwrites its `RESULTS.json`. Two runs
+  on 2026-10-11 were byte-identical.
+
 ## Archive-only policy
 
 A harness in this tree is archive-only when the code it needs was deleted or

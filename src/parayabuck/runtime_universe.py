@@ -30,8 +30,6 @@ class ActiveProductUniverse:
     market: Market
     eligible_symbols: frozenset[str]
     observation_symbols: tuple[str, ...]
-    snapshot_id: str
-    config_digest: str = "configured"
 
     def __post_init__(self) -> None:
         eligible = frozenset(canonical_symbol(symbol, self.market) for symbol in self.eligible_symbols)
@@ -40,20 +38,11 @@ class ActiveProductUniverse:
             raise ValueError("Active product universe requires eligible symbols")
         if not observation:
             raise ValueError("Active product universe requires observation symbols")
-        if not isinstance(self.snapshot_id, str) or not self.snapshot_id.strip():
-            raise ValueError("Active product universe snapshot_id must be non-empty")
         object.__setattr__(self, "eligible_symbols", eligible)
         object.__setattr__(self, "observation_symbols", observation)
 
     @classmethod
-    def configured(
-        cls,
-        market: Market,
-        symbols: tuple[str, ...],
-        *,
-        snapshot_id: str,
-        config_digest: str = "configured",
-    ) -> ActiveProductUniverse:
+    def configured(cls, market: Market, symbols: tuple[str, ...]) -> ActiveProductUniverse:
         """Build an explicit static membership snapshot.
 
         This is still a real, fail-closed ``contains`` adapter; it is not the
@@ -65,8 +54,6 @@ class ActiveProductUniverse:
             market=market,
             eligible_symbols=frozenset(canonical),
             observation_symbols=canonical,
-            snapshot_id=snapshot_id,
-            config_digest=config_digest,
         )
 
     def with_observation_symbols(self, symbols: tuple[str, ...]) -> ActiveProductUniverse:
@@ -80,8 +67,6 @@ class ActiveProductUniverse:
             market=self.market,
             eligible_symbols=self.eligible_symbols,
             observation_symbols=symbols,
-            snapshot_id=self.snapshot_id,
-            config_digest=self.config_digest,
         )
 
     def contains(self, symbol: str, market: Market, timestamp: datetime) -> bool:

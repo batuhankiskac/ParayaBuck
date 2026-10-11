@@ -175,7 +175,7 @@ def _engine(portfolio_runtime: Any, historical: Any) -> EngineRuntime:
             # short retry interval keeps the deferred re-run under a second.
             sip_embargo_minutes=0.0,
             retry_interval_seconds=_RETRY_INTERVAL_SECONDS,
-        )
+        ),
     )
     engine = EngineRuntime.__new__(EngineRuntime)
     engine.app_config = app_config
@@ -210,7 +210,7 @@ def _engine(portfolio_runtime: Any, historical: Any) -> EngineRuntime:
 
 
 def _events(engine: EngineRuntime) -> list[_Event]:
-    return [item for item in engine._events.snapshot() if item is not None]
+    return [item for item in engine._events.drain_for_test() if item is not None]
 
 
 def test_minute_stream_defers_the_equity_batch_and_the_loop_reruns_it(
@@ -227,6 +227,10 @@ def test_minute_stream_defers_the_equity_batch_and_the_loop_reruns_it(
     sip = _SipUnavailable()
     portfolio_runtime = _EquityPortfolioRuntime(_history([entry[0] for entry in sessions[-4:-1]]))
     engine = _engine(portfolio_runtime, sip)
+    # The driven session is a day old; keep its decision window open so the
+    # chain's deferred re-run is a live retry, not an expiry (the configured
+    # window must stay below the watchdog grace, so patch the instance).
+    engine._decision_retry_settings = lambda: (timedelta(seconds=_RETRY_INTERVAL_SECONDS), timedelta(days=30))  # type: ignore[method-assign]
 
     thread = threading.Thread(target=engine._decision_loop, name="test-decision-loop", daemon=True)
     thread.start()

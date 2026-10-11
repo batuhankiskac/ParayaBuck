@@ -770,7 +770,7 @@ def test_risk_epoch_reset_refused_with_circuit_breaker(tmp_path: Path) -> None:
     runtime = _epoch_runtime(ledger, broker)
     runtime._circuit_breaker_reason = "ownership_drift"  # type: ignore[attr-defined]
 
-    with pytest.raises(RuntimeError, match="circuit breaker"):
+    with pytest.raises(ValueError, match="circuit breaker"):
         runtime.start_new_risk_epoch()
 
     assert broker.reset_calls == []
@@ -784,7 +784,7 @@ def test_risk_epoch_reset_refused_when_not_running(tmp_path: Path) -> None:
     runtime = _epoch_runtime(ledger, broker)
     runtime._running = False  # type: ignore[attr-defined]
 
-    with pytest.raises(RuntimeError, match="not running"):
+    with pytest.raises(ValueError, match="not running"):
         runtime.start_new_risk_epoch()
 
     assert broker.reset_calls == []

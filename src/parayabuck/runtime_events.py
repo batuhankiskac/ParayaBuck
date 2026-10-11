@@ -30,6 +30,11 @@ class _Event:
 class _EventQueue:
     """Bounded queue with same-bar coalescing and a no-eviction overflow policy."""
 
+    def drain_for_test(self) -> tuple[_Event | None, ...]:
+        """Return the queued items without removing them (tests only)."""
+        with self._condition:
+            return tuple(self._items)
+
     def __init__(self, maxsize: int) -> None:
         self.maxsize = maxsize
         self._items: deque[_Event | None] = deque()
@@ -68,28 +73,29 @@ class _EventQueue:
     def put_market_event(self, event: _Event) -> str:
         """Queue ``event``; returns ``added``, ``coalesced`` or ``overflow``.
 
-        A full queue replaces a queued event for the SAME bar (symbol,
-        timeframe, timestamp) with the newer one. It never evicts a different
-        bar: every queued event is a decision input.
+        A full queue replaces a queued event for the SAME bar (market,
+        symbol, timeframe, timestamp) with the newer one. It never evicts a
+        different bar: every queued event is a decision input.
         """
         with self._condition:
             if len(self._items) < self.maxsize:
                 self._items.append(event)
                 self._condition.notify()
                 return "added"
-            key = (event.bar.symbol, event.bar.timeframe, event.bar.timestamp)
+            key = (event.bar.market, event.bar.symbol, event.bar.timeframe, event.bar.timestamp)
             for index in range(len(self._items) - 1, -1, -1):
                 candidate = self._items[index]
                 if candidate is None:
                     continue
-                if (candidate.bar.symbol, candidate.bar.timeframe, candidate.bar.timestamp) == key:
+                if (
+                    candidate.bar.market,
+                    candidate.bar.symbol,
+                    candidate.bar.timeframe,
+                    candidate.bar.timestamp,
+                ) == key:
                     self._items[index] = event
                     return "coalesced"
             return "overflow"
-
-    def snapshot(self) -> tuple[_Event | None, ...]:
-        with self._condition:
-            return tuple(self._items)
 
     def oldest_received_at(self) -> datetime | None:
         with self._condition:

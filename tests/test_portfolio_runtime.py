@@ -2962,7 +2962,7 @@ def test_engine_run_startup_catch_up_propagates_invariant_failure() -> None:
     runtime = _catch_up_engine()
 
     class _BoomCatchUp(_CatchUpRecorder):
-        def startup_catch_up(self, *, entry_latch=None):
+        def startup_catch_up(self, *, entry_latch=None, account=None):
             raise RuntimeError("catch-up boom")
 
     fake = _BoomCatchUp()
@@ -3020,12 +3020,13 @@ class _CatchUpRecorder:
     def adopt_authoritative_signal_history(self, provider, watermarks) -> int:
         return 0
 
-    def startup_catch_up(self, *, entry_latch: str | None = None) -> object:
+    def startup_catch_up(self, *, entry_latch: str | None = None, account: object = None) -> object:
         self.calls.append(entry_latch)
         return SimpleNamespace(status=self.result_status, decision_id=self.result_decision_id)
 
 
 def _catch_up_engine() -> object:
+    from parayabuck.core.models import AccountSnapshot
     from parayabuck.runtime import EngineRuntime
 
     runtime = EngineRuntime.__new__(EngineRuntime)
@@ -3038,4 +3039,8 @@ def _catch_up_engine() -> object:
     runtime._entry_risk_latch = {Market.EQUITY: None}
     runtime._portfolio_runtimes = ()
     runtime._entry_readiness_reasons = lambda _market: []
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        account=lambda: AccountSnapshot(100_000, 100_000, 100_000, 0.0),
+    )
     return runtime

@@ -214,6 +214,10 @@ def test_startup_catch_up_dispatches_result_to_receipt_writer() -> None:
     engine._entry_risk_latch = {Market.EQUITY: None}
     engine._entry_readiness_reasons = lambda _market: ()
     engine._ordered_buy_position_keys = lambda *_: ()
+    engine.broker = SimpleNamespace(
+        account_id="acct",
+        account=lambda: AccountSnapshot(100_000, 100_000, 100_000, 0.0),
+    )
     result = PortfolioRuntimeResult("equity-catchup", None, None, (), (), "no_orders")
     runtimes = (SimpleNamespace(market=Market.EQUITY, history={}, startup_catch_up=lambda **_: result),)
     engine._portfolio_runtimes = runtimes

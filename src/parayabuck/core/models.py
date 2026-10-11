@@ -66,9 +66,6 @@ class PositionSnapshot:
     # must never sell; a single managed/external flag cannot express a mixed
     # position where a user owns part of the same lot.
     managed_qty: float = 0.0
-    stop_price: float | None = None
-    initial_risk: float | None = None
-    trailing_stop: float | None = None
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.qty):

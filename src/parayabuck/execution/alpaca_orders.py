@@ -25,6 +25,7 @@ from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.trading.requests import MarketOrderRequest
 
 from parayabuck.core.models import Market
+from parayabuck.execution.alerting import emit_execution_alert as _emit_alert
 from parayabuck.execution.alpaca_models import AmbiguousOrderState, DefiniteOrderRejection
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -37,18 +38,6 @@ from parayabuck.logger import get_logger
 log = get_logger("parayabuck.execution.alpaca_orders")
 
 __all__ = ["OrderService"]
-
-
-def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
-    try:
-        from parayabuck.monitoring import alerts
-    except ImportError:
-        log.debug("alerts module unavailable; skipping %s alert", kind)
-        return
-    try:
-        alerts.emit(kind, message=message, **fields)
-    except Exception:
-        log.warning("Alert emission failed for kind=%s (order flow unaffected)", kind, exc_info=True)
 
 
 class OrderService:

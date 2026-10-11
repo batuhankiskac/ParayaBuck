@@ -196,11 +196,11 @@ def test_local_order_provider_failure_blocks_reconciliation() -> None:
         ReconciliationService(broker).reconcile()
 
 
-def test_broker_open_order_without_client_id_blocks_reconciliation() -> None:
+def test_broker_open_order_without_client_id_is_bucketed_unknown() -> None:
     broker = _State().broker()
     broker._get_open_orders = lambda _request: (SimpleNamespace(id="broker-1", client_order_id=""),)
-    with pytest.raises(ReconciliationResultError, match="missing or duplicate client ID"):
-        ReconciliationService(broker).reconcile()
+    report = ReconciliationService(broker).reconcile()
+    assert report["UNKNOWN_ORDER"] == ["broker-1"]
 
 
 def test_unknown_position_still_reports_drift() -> None:

@@ -143,7 +143,16 @@ class SQLiteStore:
 
 
 def migrate_legacy_decision_orders(connection: sqlite3.Connection) -> bool:
-    """Move the legacy journal ``orders`` table before ledger schema creation."""
+    """Drop an unmigrated legacy journal ``orders`` table.
+
+    The 2026-07 decision journal (``client_order_id/timestamp/symbol/state/
+    reason/payload``) has no production reader — forensics reads the current
+    ``portfolio_orders``/``portfolio_fills`` tables (or the portfolio-ledger
+    ``orders`` shape with ``broker_order_id``), never ``decision_orders``.
+    Keeping a write-only ``decision_orders`` copy would preserve rows no code
+    can interpret, so the legacy journal shape is dropped so old databases
+    still open onto the portfolio-ledger schema.
+    """
     columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(orders)")}
     legacy_columns = {
         "client_order_id",
@@ -155,24 +164,6 @@ def migrate_legacy_decision_orders(connection: sqlite3.Connection) -> bool:
     }
     if not legacy_columns.issubset(columns) or "broker_order_id" in columns:
         return False
-    connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS decision_orders (
-            client_order_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
-            state TEXT NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
-            PRIMARY KEY (client_order_id, timestamp, state)
-        )
-        """
-    )
-    connection.execute(
-        """
-        INSERT OR IGNORE INTO decision_orders(
-            client_order_id, timestamp, symbol, state, reason, payload
-        )
-        SELECT client_order_id, timestamp, symbol, state, reason, payload
-        FROM orders
-        """
-    )
     connection.execute("DROP TABLE orders")
     return True
 

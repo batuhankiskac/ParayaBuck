@@ -12,6 +12,7 @@ from alpaca.trading.enums import QueryOrderStatus
 from alpaca.trading.requests import GetOrdersRequest
 
 from parayabuck.core.models import AccountSnapshot, Market
+from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_client import AlpacaClient
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
@@ -25,6 +26,8 @@ from parayabuck.markets.symbols import canonical_symbol, same_symbol
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.execution.alpaca")
+
+_emit_alert = emit_execution_alert
 
 from parayabuck.execution.alpaca_account import AccountService  # noqa: E402
 from parayabuck.execution.alpaca_orders import OrderService  # noqa: E402
@@ -42,22 +45,8 @@ from .alpaca_models import (  # noqa: E402
 _DEAD_ORDER_STATUSES = frozenset({"canceled", "cancelled", "expired", "rejected", "done_for_day"})
 
 
-def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
-    """Emit one execution alert without ever affecting order flow.
-
-    The ``parayabuck.monitoring.alerts`` import is guarded so a missing (or
-    broken) alerts module degrades to a logged no-op instead of failing a
-    submission or a fill.
-    """
-    try:
-        from parayabuck.monitoring import alerts
-    except ImportError:
-        log.debug("alerts module unavailable; skipping %s alert", kind)
-        return
-    try:
-        alerts.emit(kind, message=message, **fields)
-    except Exception:
-        log.warning("Alert emission failed for kind=%s (order flow unaffected)", kind, exc_info=True)
+# Broker order states that can never fill again (``rejected`` never filled).
+_DEAD_ORDER_STATUSES = frozenset({"canceled", "cancelled", "expired", "rejected", "done_for_day"})
 
 
 class AlpacaBroker:
@@ -82,7 +71,6 @@ class AlpacaBroker:
         client: Any | None = None,
     ) -> None:
         self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper, client=client)
-        self._paper = paper
         self._risk_peak = RiskPeakService(
             paper=paper, ledger=ledger, peak_state_path=peak_state_path, runtime_state_dir=runtime_state_dir
         )
@@ -255,7 +243,14 @@ class AlpacaBroker:
         return self._client_adapter.get_open_orders(request)
 
     def working_buy_orders(self) -> tuple[BrokerWorkingBuyOrder, ...]:
-        """Exhaustive broker BUY commitments; an unpriced order stays unknown."""
+        """Exhaustive broker BUY commitments; an unpriced order stays unknown.
+
+        Bot-owned orders carry a ``parayabuck-`` client id. Foreign, manual,
+        or identity-less working BUYs are never raised: when a price is
+        knowable the order reserves capacity conservatively, otherwise it
+        surfaces as unpriced (``reference_price=None``) so admission fails
+        closed via the existing ``committed_buy_unpriced`` path.
+        """
         result: list[BrokerWorkingBuyOrder] = []
         seen: set[str] = set()
         for order in self.working_orders():
@@ -264,45 +259,122 @@ class AlpacaBroker:
             client_id = str(self._field(order, "client_order_id", "") or "").strip()
             symbol = str(self._field(order, "symbol", "") or "").strip()
             if not client_id or client_id in seen or not symbol:
-                raise ValueError("Invalid broker working BUY identity")
+                if client_id and client_id in seen:
+                    raise ValueError("Invalid broker working BUY identity")
+                foreign = self._foreign_working_buy(symbol, client_id or None)
+                if foreign is not None:
+                    result.append(foreign)
+                continue
             seen.add(client_id)
-            market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
-            filled = float(self._field(order, "filled_qty", 0) or 0)
-            raw_qty = self._field(order, "qty", None)
-            quantity = float(raw_qty) if raw_qty is not None else None
-            raw_notional = self._field(order, "notional", None)
-            notional = float(raw_notional) if raw_notional is not None else None
-            prices = [
-                float(value)
-                for field in ("limit_price", "stop_price", "filled_avg_price")
-                if (value := self._field(order, field, None)) is not None
-            ]
-            if (
-                not math.isfinite(filled)
-                or filled < 0
-                or (quantity is not None and (not math.isfinite(quantity) or quantity < filled))
-                or (notional is not None and (not math.isfinite(notional) or notional < 0))
-                or any(not math.isfinite(price) or price <= 0 for price in prices)
-                or (quantity is None and notional is None)
-            ):
-                raise ValueError(f"Invalid broker working BUY quantity or price for {client_id}")
-            average = self._field(order, "filled_avg_price", None)
-            remaining_notional = (
-                max(0.0, notional - filled * float(average))
-                if notional is not None and (filled == 0 or average is not None)
-                else None
-            )
-            result.append(
-                BrokerWorkingBuyOrder(
-                    client_order_id=client_id,
-                    symbol=canonical_symbol(symbol, market),
-                    market=market,
-                    remaining_quantity=max(0.0, quantity - filled) if quantity is not None else None,
-                    reference_price=max(prices) if prices else None,
-                    remaining_notional=remaining_notional,
-                )
-            )
+            parsed = self._parse_working_buy(order, client_id, symbol)
+            if parsed is not None:
+                result.append(parsed)
         return tuple(result)
+
+    def _foreign_working_buy(self, symbol: str, client_id: str | None) -> BrokerWorkingBuyOrder | None:
+        """Conservatively price an identity-less/foreign working BUY.
+
+        ``None`` when the symbol itself is unusable; otherwise a row with
+        ``reference_price=None`` so admission treats it as unpriced and
+        blocks new BUYs instead of crashing or silently ignoring it.
+        """
+        if not symbol:
+            return None
+        try:
+            market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+            canonical = canonical_symbol(symbol, market)
+        except ValueError:
+            log.warning("Skipping working BUY with unusable symbol %r", symbol)
+            return None
+        log.warning(
+            "Foreign working BUY treated as unpriced: symbol=%s client_order_id=%s",
+            canonical,
+            client_id or "<missing>",
+        )
+        return BrokerWorkingBuyOrder(
+            client_order_id=client_id or f"foreign:{canonical}",
+            symbol=canonical,
+            market=market,
+            remaining_quantity=None,
+            reference_price=None,
+            remaining_notional=None,
+        )
+
+    def _parse_working_buy(self, order: Any, client_id: str, symbol: str) -> BrokerWorkingBuyOrder | None:
+        """Parse one bot-owned working BUY; unpriceable rows stay unpriced."""
+        try:
+            market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+            canonical = canonical_symbol(symbol, market)
+        except ValueError:
+            log.warning("Skipping working BUY with unusable symbol %r", symbol)
+            return None
+        try:
+            filled = float(self._field(order, "filled_qty", 0) or 0)
+        except (TypeError, ValueError):
+            filled = math.nan
+        raw_qty = self._field(order, "qty", None)
+        try:
+            quantity = float(raw_qty) if raw_qty is not None else None
+        except (TypeError, ValueError):
+            quantity = math.nan
+        raw_notional = self._field(order, "notional", None)
+        try:
+            notional = float(raw_notional) if raw_notional is not None else None
+        except (TypeError, ValueError):
+            notional = math.nan
+        prices = self._working_buy_prices(order)
+        quantity_ok = quantity is None or (
+            math.isfinite(quantity) and quantity >= 0 and math.isfinite(filled) and filled >= 0
+        )
+        if quantity is not None and quantity_ok and math.isfinite(filled):
+            quantity_ok = filled <= quantity + max(1e-9, quantity * 1e-8)
+        notional_ok = notional is None or (math.isfinite(notional) and notional >= 0)
+        filled_ok = math.isfinite(filled) and filled >= 0
+        if (
+            not filled_ok
+            or not quantity_ok
+            or not notional_ok
+            or any(not math.isfinite(price) or price <= 0 for price in prices)
+            or (quantity is None and notional is None)
+        ):
+            log.warning("Unpriced working BUY treated as unknown commitment: %s", client_id)
+            return BrokerWorkingBuyOrder(
+                client_order_id=client_id,
+                symbol=canonical,
+                market=market,
+                remaining_quantity=None,
+                reference_price=None,
+                remaining_notional=None,
+            )
+        average_raw = self._field(order, "filled_avg_price", None)
+        try:
+            average = float(average_raw) if average_raw is not None else None
+        except (TypeError, ValueError):
+            average = math.nan
+        if average is not None and (not math.isfinite(average) or average <= 0):
+            average = None
+        filled_notional = filled * average if average is not None else 0.0
+        remaining_notional = max(0.0, float(notional) - filled_notional) if notional is not None else None
+        return BrokerWorkingBuyOrder(
+            client_order_id=client_id,
+            symbol=canonical,
+            market=market,
+            remaining_quantity=max(0.0, float(quantity) - filled) if quantity is not None else None,
+            reference_price=max(prices) if prices else None,
+            remaining_notional=remaining_notional,
+        )
+
+    def _working_buy_prices(self, order: Any) -> list[float]:
+        prices: list[float] = []
+        for field in ("limit_price", "stop_price", "filled_avg_price"):
+            value = self._field(order, field, None)
+            if value is None:
+                continue
+            try:
+                prices.append(float(value))
+            except (TypeError, ValueError):
+                prices.append(math.nan)
+        return prices
 
     def working_orders(self) -> tuple[Any, ...]:
         """Complete OPEN order collection for operator slot/order counts."""

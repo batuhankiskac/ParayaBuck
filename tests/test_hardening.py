@@ -50,7 +50,7 @@ def test_market_models_reject_non_finite_values() -> None:
         Bar(aware, "AAPL", "5m", 100, 101, 99, 100, math.nan, Market.EQUITY)
 
 
-def test_execution_ledger_preserves_and_moves_legacy_decision_orders(
+def test_execution_ledger_drops_the_unread_legacy_decision_journal(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "legacy.sqlite3"
@@ -75,13 +75,8 @@ def test_execution_ledger_preserves_and_moves_legacy_decision_orders(
     order_columns = {str(row[1]) for row in ledger.connection.execute("PRAGMA table_info(orders)")}
     assert "broker_order_id" in order_columns
     assert "parent_broker_order_id" in order_columns
-    preserved = ledger.connection.execute(
-        """
-        SELECT client_order_id, state, reason
-        FROM decision_orders
-        """
-    ).fetchall()
-    assert preserved == [("legacy-order", "submitted", "broker_submit")]
+    tables = {str(row[0]) for row in ledger.connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "decision_orders" not in tables
     ledger.close()
 
 

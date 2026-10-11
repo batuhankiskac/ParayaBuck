@@ -26,6 +26,8 @@ Responsibility:
 
 from __future__ import annotations
 
+import math
+import threading
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -198,7 +200,11 @@ class AccountService:
         provider = getattr(self._broker, "bot_tradable_symbols", None)
         if provider is None:
             return None
-        return frozenset(canonical_symbol(str(symbol)) for symbol in provider() or ())
+        try:
+            return frozenset(canonical_symbol(str(symbol)) for symbol in provider() or ())
+        except Exception:
+            log.warning("Bot tradable symbols unavailable; equity positions stay fail-closed", exc_info=True)
+            return None
 
     @staticmethod
     def _price(value: Any, *, symbol: str, tolerate_missing: bool) -> float:
@@ -219,8 +225,14 @@ class AccountService:
         broker._account_id = str(getattr(account, "id", "") or getattr(account, "account_number", ""))
         if self.is_account_blocked(account):
             raise RuntimeError("Alpaca account is blocked from trading")
-        equity = float(account.equity or 0)
-        previous_equity = float(account.last_equity or equity)
+        try:
+            equity = float(account.equity)
+            previous_equity = float(account.last_equity)
+            cash = float(account.cash)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Broker account values are not numeric: {exc}") from exc
+        if not math.isfinite(equity) or not math.isfinite(previous_equity) or not math.isfinite(cash):
+            raise ValueError("Broker account values are non-finite; snapshot unusable, entries refused")
         positions: list[PositionSnapshot] = []
         ledger = getattr(broker, "ledger", None)
         owned_quantities: dict[str, float] = {}
@@ -298,6 +310,18 @@ class AccountService:
                 if managed_qty > 1e-12
                 else "external"
             )
+            raw_available = getattr(raw, "qty_available", None)
+            if raw_available is None:
+                qty_available: float | None = None
+            else:
+                try:
+                    parsed_available = float(raw_available)
+                except (TypeError, ValueError):
+                    parsed_available = math.nan
+                # Non-finite availability cannot size an exit: fall back to
+                # the full position quantity so the SELL is never silently
+                # suppressed.
+                qty_available = parsed_available if math.isfinite(parsed_available) else None
             positions.append(
                 PositionSnapshot(
                     symbol=canonical,
@@ -305,9 +329,7 @@ class AccountService:
                     avg_price=average_price,
                     current_price=current_price,
                     market=market,
-                    qty_available=(
-                        float(raw.qty_available) if getattr(raw, "qty_available", None) is not None else None
-                    ),
+                    qty_available=qty_available,
                     ownership=ownership,
                     managed_qty=managed_qty,
                 )
@@ -323,18 +345,41 @@ class AccountService:
                     "Confirm the broker position, then adopt it explicitly with "
                     "`parayabuck ops rebase-ownership " + canonical + " --broker-qty <qty> --confirm`"
                 )
-        # Account-scoped peak reconciliation
-        broker._ensure_peak_reconciled(broker._account_id or "unknown", equity)
-        old_peak = broker._peak_equity
-        broker._peak_equity = max(broker._peak_equity, equity)
-        if broker._peak_equity != old_peak:
-            broker._save_peak_equity()
+        # Account-scoped peak reconciliation (serialized: the peak is shared
+        # mutable state across the account, trade-update and decision threads).
+        peak_lock = getattr(broker, "_peak_lock", None)
+        if peak_lock is None:
+            peak_lock = threading.Lock()
+            broker._peak_lock = peak_lock
+        with peak_lock:
+            broker._ensure_peak_reconciled(broker._account_id or "unknown", equity)
+            old_peak = broker._peak_equity
+            broker._peak_equity = max(broker._peak_equity, equity)
+            peak_equity = broker._peak_equity
+            if peak_equity != old_peak:
+                try:
+                    broker._save_peak_equity()
+                except (KeyboardInterrupt, SystemExit):
+                    raise
+                except Exception as exc:
+                    # The account was already fetched: keep the in-memory peak
+                    # and the snapshot, retry the sidecar on the next poll.
+                    log.warning("Peak sidecar write failed; keeping the fetched snapshot: %s", exc)
+                    try:
+                        from parayabuck.monitoring import alerts
+
+                        alerts.emit(
+                            "paper_incident",
+                            message="Peak sidecar write failed; snapshot kept, retry next poll",
+                            category="peak_sidecar_write_failed",
+                        )
+                    except Exception:
+                        pass
         daily_pnl = equity - previous_equity
-        cash = float(account.cash or 0)
         snapshot = AccountSnapshot(
             cash=cash,
             equity=equity,
-            peak_equity=broker._peak_equity,
+            peak_equity=peak_equity,
             daily_pnl=daily_pnl,
             positions=tuple(positions),
             realized_pnl=daily_pnl - intraday_unrealized,

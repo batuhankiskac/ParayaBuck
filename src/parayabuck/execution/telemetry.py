@@ -590,13 +590,15 @@ def forward_metrics(
         unrealized_total = unrealized
         fee_total_all = fee_total
         if risk is not None:
-            # The persisted risk_state is the authoritative running PnL; the
-            # fills ledger may predate or postdate it, so report the sum.
+            # The persisted risk_state already carries the running PnL; the
+            # fills ledger only extends it with fills booked after the persist.
+            # Fees are the live fills-ledger sum (bounded below by the
+            # persisted value, which postdates fills the ledger may predate).
             realized_total = risk["realized_pnl"] + realized
             unrealized_total = risk["unrealized_pnl"] + unrealized
-            fee_total_all = risk["fees"] + fee_total
+            fee_total_all = max(risk["fees"], fee_total)
             equity_estimate = (
-                risk["day_start_equity"] + realized_total + unrealized_total - risk["fees"]
+                risk["day_start_equity"] + realized_total + unrealized_total - fee_total_all
                 if risk["day_start_equity"] > 0
                 else None
             )
@@ -1396,7 +1398,6 @@ __all__ = [
     "configured_cost_assumptions",
     "cost_calibration",
     "decision_expected_vs_actual",
-    "execution_measurement",
     "execution_metrics",
     "expected_vs_actual",
     "fill_delay_seconds",

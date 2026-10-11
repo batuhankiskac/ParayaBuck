@@ -139,7 +139,7 @@ def _warmup_runtime(seeded: list[list[Any]]) -> EngineRuntime:
 
 
 class _DownProvider:
-    def get_bars_batch_incremental(self, *_args: Any, **_kwargs: Any) -> Any:
+    def get_bars_batch(self, *_args: Any, **_kwargs: Any) -> Any:
         raise ConnectionError("data API unreachable")
 
 

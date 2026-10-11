@@ -390,9 +390,10 @@ def test_peak_lock_exists_and_serializes(tmp_path: Path) -> None:
         ),
         get_all_positions=lambda: [],
     )
-    assert getattr(broker, "_peak_lock", None) is None
-    broker.account()
     assert getattr(broker, "_peak_lock", None) is not None
+    first_lock = broker._peak_lock
+    broker.account()
+    assert broker._peak_lock is first_lock
 
     errors: list[BaseException] = []
 

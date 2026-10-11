@@ -18,7 +18,6 @@ class UniverseSnapshot:
     symbols: frozenset[str]
     scanner_version: str = ""
     config_digest: str = ""
-    candidate_count: int = 0
     # The STREAMED observation set at the snapshot (live parity): the
     # completeness gate requires these symbols to have a closed bar at the
     # decision timestamp, exactly like the live runtime requires its stream.
@@ -69,7 +68,6 @@ class PointInTimeUniverse:
                     "pinned_symbols": list(snapshot.pinned_symbols),
                     "scanner_version": snapshot.scanner_version,
                     "config_digest": snapshot.config_digest,
-                    "candidate_count": snapshot.candidate_count,
                 }
                 for snapshot in self.snapshots
             ],
@@ -104,7 +102,6 @@ def build_static_equity_point_in_time_universe(
             symbols=frozenset(observation),
             scanner_version=STATIC_EQUITY_UNIVERSE_VERSION,
             config_digest=digest,
-            candidate_count=len(observation),
             observation_set=observation,
             maximum_stream_symbols=config.maximum_stream_symbols,
             pinned_symbols=observation,

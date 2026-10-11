@@ -16,8 +16,8 @@ import pathlib
 
 from parayabuck.web.server import app
 
-BASELINE = pathlib.Path("docs/web_route_contract_before.json")
-OPENAPI_BASELINE = pathlib.Path("docs/web_openapi_before.json")
+BASELINE = pathlib.Path(__file__).resolve().parents[1] / "docs/web_route_contract_before.json"
+OPENAPI_BASELINE = pathlib.Path(__file__).resolve().parents[1] / "docs/web_openapi_before.json"
 
 
 def _route_map(client_app):

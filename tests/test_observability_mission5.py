@@ -6,7 +6,6 @@ import argparse
 import contextlib
 import json
 import sqlite3
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -368,7 +367,7 @@ def test_snapshot_writer_periodic(tmp_path: Path) -> None:
         },
     )
     writer.start()
-    time.sleep(0.3)
+    assert writer._thread is not None and writer._thread.is_alive()
     writer.stop(timeout=1.0)
     assert p.exists()
     data = json.loads(p.read_text(encoding="utf-8"))

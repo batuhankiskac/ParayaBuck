@@ -309,9 +309,8 @@ not keep the engine from starting.
 They write their report, CSVs and universe snapshot under
 `backtest.output_dir` (`reports/`) and **never** touch
 `data/runtime/parayabuck.sqlite3`: a research row must not appear in the live
-decision ledger or in its backups. Explicit persistence (an API caller that
-asks for it) lands in `<backtest.output_dir>/backtest_runs.sqlite3` or a path
-it names.
+decision ledger or in its backups (`run_product_backtest` has no
+persistence path: callers that need rows use `report.write_csvs`/artifacts).
 
 `report.summary["data_feed"]` states the feed the bars actually came from: the
 provider's effective feed for a download (`iex` when a configured SIP request

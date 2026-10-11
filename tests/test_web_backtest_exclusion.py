@@ -45,8 +45,10 @@ def test_engine_rejected_while_backtest_running():
     # Start a long-running backtest in background thread (stub the actual _run)
     original_run = bm._run
 
+    release = threading.Event()
+
     def fake_long_run(argv):
-        time.sleep(0.5)
+        assert release.wait(timeout=5)
         bm._finish(None)
 
     bm._run = fake_long_run  # type: ignore
@@ -57,9 +59,10 @@ def test_engine_rejected_while_backtest_running():
         with pytest.raises(ValueError, match="Web backtest is still running"):
             mgr.start_engine()
         # Wait for backtest to finish, then engine can start (or at least not blocked by backtest)
+        release.set()
         deadline = time.time() + 2.0
         while bm.is_running and time.time() < deadline:
-            time.sleep(0.05)
+            time.sleep(0.01)
         assert not bm.is_running
     finally:
         bm._run = original_run  # type: ignore
@@ -89,8 +92,10 @@ def test_engine_backtest_race_only_one_wins(monkeypatch: pytest.MonkeyPatch, tmp
     # Make backtest's _run long so is_running stays True during race
     orig_run = bm._run
 
+    release = threading.Event()
+
     def fake_run(argv):
-        time.sleep(0.4)
+        assert release.wait(timeout=5)
         bm._finish(None)
 
     bm._run = fake_run  # type: ignore
@@ -118,9 +123,10 @@ def test_engine_backtest_race_only_one_wins(monkeypatch: pytest.MonkeyPatch, tmp
     # The point is no corruption and exclusion is enforced — if backtest won, engine is blocked
     # Clean up
     bm._run = orig_run  # type: ignore
+    release.set()
     deadline = time.time() + 1.0
     while bm.is_running and time.time() < deadline:
-        time.sleep(0.05)
+        time.sleep(0.01)
 
 
 def test_backtest_lock_is_rlock_and_reentrant():

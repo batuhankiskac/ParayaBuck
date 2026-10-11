@@ -74,7 +74,7 @@ def _manager(monkeypatch: pytest.MonkeyPatch, flaky: _FailingRuntime) -> engine_
     monkeypatch.setattr("parayabuck.runtime.EngineRuntime", lambda **kwargs: flaky)
     monkeypatch.setattr(engine_module, "_scan_tracked_secrets", lambda root: None)
     manager = engine_module.EngineManager()
-    manager.config_path = Path("config/settings.yaml")
+    manager.config_path = Path(__file__).resolve().parents[1] / "config/settings.yaml"
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
     return manager
 

@@ -46,6 +46,21 @@ def _wait_for_kind(journal: EventJournal, kind: str, expected: int, timeout: flo
 
 
 # ---------------------------------------------------------------------------
+# dedupe absence probe
+# ---------------------------------------------------------------------------
+
+
+def _wait_for_absence(journal: EventJournal, kind: str, expected: int, timeout: float = 0.2) -> bool:
+    """Hold ``timeout`` seconds asserting no row beyond ``expected`` appears."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if len(journal.query(kind=kind, limit=50)) != expected:
+            return False
+        time.sleep(0.02)
+    return len(journal.query(kind=kind, limit=50)) == expected
+
+
+# ---------------------------------------------------------------------------
 # F44 — observability.journal_path (and the retention/queue knobs) are applied
 # ---------------------------------------------------------------------------
 
@@ -177,11 +192,11 @@ def test_health_hooks_dedupe_repeated_states() -> None:
     observe_module.on_runtime_health_degraded(reason="probe", session_id="s1")
     observe_module.on_runtime_health_degraded(reason="probe", session_id="s1")
     assert _wait_for_kind(journal, "runtime_health_degraded", 1) == ["runtime_health_degraded"]
-    time.sleep(0.3)
+    assert _wait_for_absence(journal, "runtime_health_degraded", 1)
     assert len(journal.query(kind="runtime_health_degraded", limit=50)) == 1
 
     observe_module.on_runtime_health_recovered(session_id="s1")
     observe_module.on_runtime_health_recovered(session_id="s1")
     assert _wait_for_kind(journal, "runtime_health_recovered", 1) == ["runtime_health_recovered"]
-    time.sleep(0.3)
+    assert _wait_for_absence(journal, "runtime_health_recovered", 1)
     assert len(journal.query(kind="runtime_health_recovered", limit=50)) == 1

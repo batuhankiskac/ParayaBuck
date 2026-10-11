@@ -450,7 +450,7 @@ def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:
 
     monkeypatch.setattr(runtime_module, "EngineRuntime", FakeRuntime)
     manager = EngineManager()
-    manager.config_path = Path("config/settings.yaml")
+    manager.config_path = Path(__file__).resolve().parents[1] / "config/settings.yaml"
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
 
     manager.start_engine()
@@ -482,7 +482,7 @@ def test_failed_runtime_start_does_not_leave_closed_runtime_exposed(
 
     monkeypatch.setattr(runtime_module, "EngineRuntime", FailedRuntime)
     manager = EngineManager()
-    manager.config_path = Path("config/settings.yaml")
+    manager.config_path = Path(__file__).resolve().parents[1] / "config/settings.yaml"
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
 
     with pytest.raises(RuntimeError, match="stream startup failed"):

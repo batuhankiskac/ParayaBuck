@@ -141,7 +141,6 @@ def test_product_runner_applies_typed_terminal_lifecycle(tmp_path) -> None:
         _config(tmp_path),
         _bars(),
         market=Market.EQUITY,
-        persist=False,
         persist_artifacts=False,
         terminal_lifecycles=terminal_lifecycles,
     )
@@ -422,8 +421,8 @@ def test_product_cost_multiplier_includes_equity_regulatory_fees(tmp_path) -> No
         ),
     )
 
-    base = run_product_backtest(config, _bars(), market=Market.EQUITY, cost_multiplier=1.0, persist=False)
-    stressed = run_product_backtest(config, _bars(), market=Market.EQUITY, cost_multiplier=2.0, persist=False)
+    base = run_product_backtest(config, _bars(), market=Market.EQUITY, cost_multiplier=1.0)
+    stressed = run_product_backtest(config, _bars(), market=Market.EQUITY, cost_multiplier=2.0)
 
     assert base.result.fee_total > 0
     # Higher fees slightly reduce later order quantities, so the portfolio's
@@ -455,7 +454,7 @@ def test_product_backtest_is_equity_only(tmp_path) -> None:
         load_csv_bars(csv_path, default_market=Market.EQUITY)
     config = _config(tmp_path)
     with pytest.raises(ValueError, match="equity only"):
-        run_product_backtest(config, _bars(), market=Market.CRYPTO, persist=False, persist_artifacts=False)
+        run_product_backtest(config, _bars(), market=Market.CRYPTO, persist_artifacts=False)
     with pytest.raises(ValueError, match="equity only"):
         build_product_universe(config, _bars(), market=Market.CRYPTO)
 
@@ -659,7 +658,6 @@ def test_explicit_zero_starting_equity_is_rejected_not_replaced_by_config(tmp_pa
             _bars(120),
             market=Market.EQUITY,
             initial_cash=0.0,
-            persist=False,
             persist_artifacts=False,
         )
 
@@ -671,7 +669,6 @@ def test_persisted_data_feed_note_never_claims_a_feed_the_run_did_not_get(tmp_pa
         config,
         bars,
         market=Market.EQUITY,
-        persist=False,
         persist_artifacts=False,
     )
     assert unknown.report.summary["data_feed"] == "unknown (no provider feed was reported for this run)"
@@ -681,7 +678,6 @@ def test_persisted_data_feed_note_never_claims_a_feed_the_run_did_not_get(tmp_pa
         config,
         bars,
         market=Market.EQUITY,
-        persist=False,
         persist_artifacts=False,
         data_feed="sip",
     )
@@ -691,7 +687,6 @@ def test_persisted_data_feed_note_never_claims_a_feed_the_run_did_not_get(tmp_pa
         config,
         bars,
         market=Market.EQUITY,
-        persist=False,
         persist_artifacts=False,
         data_feed="iex",
     )
@@ -711,7 +706,7 @@ def test_direct_run_normalizes_unsorted_warmup_like_the_optimizer(tmp_path) -> N
         reverse=True,
     )
     shuffled = warmup_first + [bar for bar in bars if bar.timestamp >= start]
-    kwargs = {"market": Market.EQUITY, "start": start, "persist": False, "persist_artifacts": False}
+    kwargs = {"market": Market.EQUITY, "start": start, "persist_artifacts": False}
 
     baseline = run_product_backtest(config, bars, **kwargs)
     unsorted = run_product_backtest(config, shuffled, **kwargs)
@@ -777,32 +772,6 @@ def test_cli_backtest_never_writes_research_rows_into_the_runtime_decision_db(tm
     assert exit_code == 0
     assert "backtest_runs" not in _table_names(decision_db)
     assert not (tmp_path / "cli-reports" / "backtest_runs.sqlite3").exists()
-
-
-def test_explicit_persistence_writes_to_a_research_db_not_the_decision_db(tmp_path) -> None:
-    # F41: an explicit persistence request still gets its row, but in a
-    # research database beside the run's reports (or an explicit path).
-    config = _config(tmp_path)
-    decision_db = tmp_path / "runtime.sqlite3"
-    research_db = tmp_path / "research" / "runs.sqlite3"
-
-    run = run_product_backtest(config, _bars(220), market=Market.EQUITY, persist=True, persist_db_path=research_db)
-    default_run = run_product_backtest(
-        config,
-        _bars(220),
-        market=Market.EQUITY,
-        persist=True,
-        persist_artifacts=False,
-        output_dir=str(tmp_path / "reports"),
-    )
-
-    default_db = tmp_path / "reports" / "backtest_runs.sqlite3"
-    assert default_db.exists()
-    for database, run_id in ((research_db, run.run_id), (default_db, default_run.run_id)):
-        with contextlib.closing(sqlite3.connect(database)) as connection:
-            rows = connection.execute("SELECT run_id FROM backtest_runs").fetchall()
-        assert run_id in {row[0] for row in rows}
-    assert "backtest_runs" not in _table_names(decision_db)
 
 
 def test_offline_csv_backtest_report_never_claims_the_configured_sip_feed(tmp_path, monkeypatch) -> None:
@@ -914,11 +883,3 @@ def test_price_adjustment_model_states_whether_dividends_were_credited(tmp_path)
         config, _bars(60), market=Market.EQUITY, corporate_actions=[dividend], persist_artifacts=False
     )
     assert "explicit dividend cash flows" in with_actions.report.summary["price_adjustment_model"]
-
-
-def test_product_backtest_passes_the_benchmark_symbol_through(tmp_path) -> None:
-    run = run_product_backtest(
-        _config(tmp_path), _bars(60), market=Market.EQUITY, benchmark_symbol="QQQ", persist_artifacts=False
-    )
-    assert run.result.benchmark_symbol == "QQQ"
-    assert {bar.symbol for bar in run.result.benchmark_bars} == {"QQQ"}

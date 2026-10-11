@@ -40,10 +40,9 @@ _PAPER_AUTO_START_CONFIG: dict[str, Any] = {
 
 
 def _manager(root: Path) -> EngineManager:
-    manager = EngineManager()
-    manager.config_path = root / "settings.yaml"
-    manager.env_path = root / ".env"
-    manager.get_credentials = lambda: ("pk-fake-key", "fake-secret-value")  # type: ignore[method-assign]
+    from tests.helpers import make_manager
+
+    manager = make_manager(root)
     return manager
 
 

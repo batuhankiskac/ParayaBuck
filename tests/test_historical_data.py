@@ -10,7 +10,7 @@ import pytest
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.data.cache import WarmupCache
-from parayabuck.markets.timeframes import is_regular_equity_time, is_session_open
+from parayabuck.markets.timeframes import is_regular_equity_time
 
 
 def _bar(timestamp: datetime, timeframe: str = "5m") -> Bar:
@@ -129,21 +129,60 @@ def _hourly_frame(start: datetime, end: datetime, symbols: list[str]) -> Any:
 
 
 def _regular_hours(start: datetime, end: datetime) -> int:
+    # One batched calendar call, not one per timestamp: ``is_session_open``
+    # resolves each distinct date with its own (uncached, ~50-100 ms)
+    # ``nyse_sessions(date, date)`` lookup, so 730 days of hourly probes
+    # cost ~65 s. The batch call below returns the identical bounds.
+    from parayabuck.markets.nyse_calendar import NEW_YORK, nyse_sessions
+
+    sessions = {
+        day: (market_open, market_close) for day, market_open, market_close in nyse_sessions(start.date(), end.date())
+    }
     count = 0
     timestamp = start
     while timestamp < end:
-        count += is_session_open(timestamp)
+        bounds = sessions.get(timestamp.astimezone(NEW_YORK).date())
+        if bounds is not None:
+            moment = timestamp.astimezone(UTC)
+            count += bounds[0] <= moment < bounds[1]
         timestamp += timedelta(hours=1)
     return count
 
 
-def test_long_window_is_split_into_row_bounded_requests() -> None:
+def _batched_session_calendar(monkeypatch: Any, start: datetime, end: datetime) -> None:
+    """Replace per-timestamp NYSE lookups with one batched calendar call.
+
+    ``is_session_open`` resolves each distinct date with its own uncached
+    ``nyse_sessions(date, date)`` lookup (~50-100 ms); 730 days of hourly
+    rows cost ~65 s per test. The batched bounds are identical (verified
+    date-by-date against ``session_bounds``), so only the lookup shape
+    changes — the row-bounded chunking invariant under test is untouched.
+    """
+    import parayabuck.data.alpaca as alpaca_module
+    from parayabuck.markets.nyse_calendar import NEW_YORK, nyse_sessions
+
+    sessions = {
+        day: (market_open, market_close) for day, market_open, market_close in nyse_sessions(start.date(), end.date())
+    }
+
+    def _fast(timestamp: datetime) -> bool:
+        bounds = sessions.get(timestamp.astimezone(NEW_YORK).date())
+        if bounds is None:
+            return False
+        moment = timestamp.astimezone(UTC)
+        return bounds[0] <= moment < bounds[1]
+
+    monkeypatch.setattr(alpaca_module, "is_session_open", _fast)
+
+
+def test_long_window_is_split_into_row_bounded_requests(monkeypatch: Any) -> None:
     """A window spanning more than 10k bars must be split into multiple
     time-bounded requests instead of being rejected or silently truncated."""
     import parayabuck.data.alpaca as alpaca_module
 
     end = datetime(2026, 1, 1, tzinfo=UTC)
     start = end - timedelta(days=730)  # 2 years of hourly bars: >10k rows
+    _batched_session_calendar(monkeypatch, start, end)
     requests: list[tuple[datetime, datetime]] = []
 
     class FakeStockClient:
@@ -172,7 +211,7 @@ def test_long_window_is_split_into_row_bounded_requests() -> None:
     assert len({bar.timestamp for bar in result}) == expected
 
 
-def test_long_window_split_covers_every_symbol_in_a_multi_symbol_batch() -> None:
+def test_long_window_split_covers_every_symbol_in_a_multi_symbol_batch(monkeypatch: Any) -> None:
     """The row-bounded window split must not truncate any symbol in a
     multi-symbol batch: every symbol receives its full date range."""
     import parayabuck.data.alpaca as alpaca_module
@@ -180,6 +219,7 @@ def test_long_window_split_covers_every_symbol_in_a_multi_symbol_batch() -> None
     end = datetime(2026, 1, 1, tzinfo=UTC)
     start = end - timedelta(days=730)
     symbols = [f"SYM{i:02d}" for i in range(20)]
+    _batched_session_calendar(monkeypatch, start, end)
     requests: list[tuple[datetime, datetime]] = []
 
     class FakeStockClient:

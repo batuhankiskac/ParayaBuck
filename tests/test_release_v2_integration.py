@@ -22,7 +22,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from alpaca.trading.models import Order
 
 from parayabuck.config import load_config
 from parayabuck.core.models import Bar, Market
@@ -32,13 +31,13 @@ from parayabuck.execution.portfolio import (
     PortfolioOrderSide,
     portfolio_risk_limits_from_config,
 )
-from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio import portfolio_strategy_from
 from parayabuck.portfolio.runtime_service import (
     PortfolioRuntime,
     PortfolioRuntimeResult,
     PortfolioStateRepository,
 )
+from tests.fake_client import FakeTradingClient
 from tests.helpers import make_broker
 
 pytestmark = pytest.mark.paper_chaos
@@ -88,63 +87,13 @@ def _daily_bars(
     return bars
 
 
-class _FakeAlpacaClient:
-    """Minimal Alpaca REST surface used by the portfolio execution path."""
-
-    def __init__(self) -> None:
-        self.positions: list[SimpleNamespace] = []
-        self.filled_orders: dict[str, SimpleNamespace] = {}
-        self.open_orders: list[SimpleNamespace] = []
-
-    def get_account(self) -> SimpleNamespace:
-        return SimpleNamespace(
-            id="acct",
-            account_number="acct",
-            account_blocked=False,
-            trading_blocked=False,
-            trade_suspended_by_user=False,
-            equity="100000",
-            last_equity="100000",
-            cash="90000",
-            non_marginable_buying_power="100000",
-        )
-
-    def get_all_positions(self) -> list[SimpleNamespace]:
-        return self.positions
-
-    def get_open_position(self, symbol: str) -> SimpleNamespace:
-        wanted = canonical_symbol(symbol)
-        for position in self.positions:
-            if canonical_symbol(position.symbol) == wanted:
-                return position
-        raise ValueError(f"no open position for {symbol}")
-
-    def get_asset(self, symbol: str) -> SimpleNamespace:
-        return SimpleNamespace(
-            symbol=symbol,
-            tradable=True,
-            min_order_size="0.01",
-            min_trade_increment="0.01",
-            price_increment="0.01",
-            min_order_notional="1.0",
-        )
-
-    def get_orders(self, *_args: object, **_kwargs: object) -> list[SimpleNamespace]:
-        return self.open_orders
-
-    def get(self, path: str, params: dict[str, object] | None = None) -> list[Order]:
-        if path != "/orders":
-            raise ValueError(f"unsupported GET {path}")
-        return [Order.model_construct(**vars(order)) for order in self.open_orders]
-
-    def submit_order(self, request: object) -> SimpleNamespace:
-        return SimpleNamespace(id=f"broker-{getattr(request, 'client_order_id', '')}")
-
-    def get_order_by_client_id(self, client_order_id: str) -> SimpleNamespace | None:
-        return self.filled_orders.get(client_order_id)
+def _client() -> FakeTradingClient:
+    client = FakeTradingClient()
+    client.set_account(equity="100000")
+    return client
 
 
-def _broker(client: _FakeAlpacaClient, repo: PortfolioStateRepository, tmp_path: Path) -> AlpacaBroker:
+def _broker(client: FakeTradingClient, repo: PortfolioStateRepository, tmp_path: Path) -> AlpacaBroker:
     broker = make_broker(
         tmp_path,
         client=client,
@@ -182,7 +131,7 @@ def _runtime(
     )
 
 
-def _fill_orders(result: PortfolioRuntimeResult, repo: PortfolioStateRepository, client: _FakeAlpacaClient) -> None:
+def _fill_orders(result: PortfolioRuntimeResult, repo: PortfolioStateRepository, client: FakeTradingClient) -> None:
     """Apply every BUY order of the latest decision as a broker fill and
     mirror the resulting positions on the fake client."""
     for order in result.orders:
@@ -200,26 +149,18 @@ def _fill_orders(result: PortfolioRuntimeResult, repo: PortfolioStateRepository,
             realized_pnl=0.0,
             unrealized_pnl=0.0,
         )
-        client.filled_orders[order.client_order_id] = SimpleNamespace(
+        client.script_get_order_by_client_id = None
+        client.orders_by_client_id[order.client_order_id] = SimpleNamespace(
             id="broker-" + order.client_order_id,
-            status="filled",
-            qty=str(order.quantity),
-            filled_qty=str(order.quantity),
+            client_order_id=order.client_order_id,
             symbol=order.symbol,
             side="buy",
+            qty=order.quantity,
+            status="filled",
+            filled_qty=order.quantity,
+            filled_avg_price=order.reference_price,
         )
-        client.positions.append(
-            SimpleNamespace(
-                symbol=order.symbol,
-                qty=str(order.quantity),
-                avg_entry_price=str(order.reference_price),
-                current_price=str(order.reference_price),
-                qty_available=str(order.quantity),
-                unrealized_pl="0",
-                unrealized_intraday_pl="0",
-                asset_class="us_equity",
-            )
-        )
+        client.set_position(order.symbol, float(order.quantity))
 
 
 def _decision_count(repo: PortfolioStateRepository, market: Market, digest: str) -> int:
@@ -242,7 +183,7 @@ def test_equity_parameter_promotion_uses_normal_delta_and_restart_idempotency(
     guards are all exercised on one deterministic fake PAPER account.
     """
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    client = _FakeAlpacaClient()
+    client = _client()
     broker = _broker(client, repo, tmp_path)
     bars = _daily_bars(EQUITY_SYMBOLS, 360, Market.EQUITY)
     days = sorted({bar.timestamp for bar in bars})
@@ -359,7 +300,7 @@ def test_equity_runtime_signal_basis_latch_blocks_entries_until_verified(
     """The shared production entry latch applies to the equity runtime
     without new math."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    client = _FakeAlpacaClient()
+    client = _client()
     broker = _broker(client, repo, tmp_path)
     bars = _daily_bars(EQUITY_SYMBOLS, 360, Market.EQUITY)
     days = sorted({bar.timestamp for bar in bars})

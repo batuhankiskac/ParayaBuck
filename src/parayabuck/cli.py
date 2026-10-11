@@ -258,8 +258,6 @@ def main(argv: list[str] | None = None) -> int:
             cost_multiplier=multiplier,
             corporate_actions=corporate_actions,
             data_feed=data_feed,
-            # A research run must never write into the runtime decision ledger.
-            persist=False,
         )
         _print_summary(run.report.summary, run.output_dir)
     return 0

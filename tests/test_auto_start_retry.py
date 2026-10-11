@@ -476,7 +476,7 @@ def _manager_with(monkeypatch: Any, flaky: _FlakyRuntime) -> EngineManager:
         lambda _path: SimpleNamespace(runtime=SimpleNamespace(mode=SimpleNamespace(value="paper"))),
     )
     manager = EngineManager()
-    manager.config_path = Path("config/settings.yaml")
+    manager.config_path = Path(__file__).resolve().parents[1] / "config/settings.yaml"
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
     return manager
 

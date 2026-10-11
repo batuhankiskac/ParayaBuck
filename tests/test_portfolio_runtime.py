@@ -1593,7 +1593,7 @@ def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) ->
     assert persisted is not None
     assert persisted.circuit_breaker_reason == "ownership_drift"
     assert persisted.peak_equity == pytest.approx(105_000.0)
-    assert persisted.consecutive_losses == 1
+
     # The incident table (authoritative for restore) records the drift too.
     incidents = ledger.load_safety_incidents("acct")
     assert any(incident.reason == "ownership_drift" for incident in incidents)

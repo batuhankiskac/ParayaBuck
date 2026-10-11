@@ -310,7 +310,7 @@ def decision_reconstruction(
             try:
                 from parayabuck.monitoring.journal import EventJournal
 
-                j = EventJournal(str(journal_path))
+                j = EventJournal.open_readonly(str(journal_path))
                 result["operational_events"] = [e.to_dict() for e in j.query(decision_id=decision_id, limit=100)]
             except Exception:
                 result["operational_events"] = []

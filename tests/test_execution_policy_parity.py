@@ -128,6 +128,7 @@ def _planned_verdict(
         prices={"SPY": price, "QQQ": price},
         rules={symbol: _rule(symbol) for symbol in (*targets, "SPY")},
         approved_symbols=tuple(targets),
+        decision_id="parity-decision",
     )
     return {order.symbol: order.side for order in orders}
 
@@ -209,6 +210,7 @@ def test_normal_rebalance_produces_equivalent_economic_deltas() -> None:
         prices={"SPY": 100.0},
         rules={"SPY": _rule("SPY")},
         approved_symbols=("SPY",),
+        decision_id="test-decision",
     )
     engine = _engine(policy, qty=100)
     engine._apply_target(_target({"SPY": 0.30}))
@@ -231,6 +233,7 @@ def test_broker_minimum_wins_when_larger() -> None:
         prices={"SPY": 100.0},
         rules={"SPY": _rule("SPY", notional_min=50.0)},
         approved_symbols=("SPY",),
+        decision_id="test-decision",
     )
     # $11 notional: above the $10 policy floor but below the $50 broker min.
     assert orders == ()

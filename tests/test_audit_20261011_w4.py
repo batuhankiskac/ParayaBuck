@@ -121,13 +121,27 @@ def test_mode_toggle_leaves_live(tmp_path: Path) -> None:
 def test_live_arm_digest_survives_mode_flip(tmp_path: Path) -> None:
     manager = _manager(tmp_path)
     raw = yaml.safe_load(manager.config_path.read_text(encoding="utf-8"))
-    pre = manager._digest_config(raw, paper=False)
-    raw["runtime"]["mode"] = "live"
-    raw["live"]["enabled"] = True
     raw["live"]["hard_dollar_cap"] = 5000.0
     raw["live"]["operator_approval_path"] = str(tmp_path / "approval.json")
+    pre = manager._digest_config(raw, paper=False)
+    # The arm→/api/mode toggle flips exactly runtime.mode and live.enabled.
+    raw["runtime"]["mode"] = "live"
+    raw["live"]["enabled"] = True
     post = manager._digest_config(raw, paper=False)
     assert pre == post
+
+
+def test_live_arm_digest_rejects_cap_or_approval_change(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    raw = yaml.safe_load(manager.config_path.read_text(encoding="utf-8"))
+    raw["live"]["hard_dollar_cap"] = 5000.0
+    raw["live"]["operator_approval_path"] = str(tmp_path / "approval.json")
+    armed = manager._digest_config(raw, paper=False)
+    raw["live"]["hard_dollar_cap"] = 6000.0
+    assert manager._digest_config(raw, paper=False) != armed
+    raw["live"]["hard_dollar_cap"] = 5000.0
+    raw["live"]["operator_approval_path"] = str(tmp_path / "other.json")
+    assert manager._digest_config(raw, paper=False) != armed
 
 
 # --- R3D5: contradictory mode flags rejected ---

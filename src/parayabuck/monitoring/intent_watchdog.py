@@ -261,10 +261,20 @@ def evaluate_equity(
     return alarms
 
 
+def degraded_reasons(health: object) -> list[str]:
+    """Active intent-watchdog alarm codes from a RuntimeHealth object or dict."""
+    watchdog = (
+        getattr(health, "intent_watchdog", None) if not isinstance(health, dict) else health.get("intent_watchdog")
+    )
+    reasons = watchdog.get("degraded_reasons") if isinstance(watchdog, dict) else None
+    return [str(reason) for reason in reasons] if isinstance(reasons, list) else []
+
+
 __all__ = [
     "IntentAlarm",
     "IntentWatchdogSettings",
     "LatestDecision",
+    "degraded_reasons",
     "equity_decision_time",
     "evaluate_equity",
     "held_weights",

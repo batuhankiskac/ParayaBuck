@@ -687,9 +687,9 @@ def _dashboard_restart_count() -> int | None:
 
 def _dashboard_degraded_reasons(health: dict[str, Any] | None) -> list[str]:
     """Active intent-watchdog alarm codes from the RuntimeHealth dict."""
-    watchdog = (health or {}).get("intent_watchdog")
-    reasons = watchdog.get("degraded_reasons") if isinstance(watchdog, dict) else None
-    return [str(reason) for reason in reasons] if isinstance(reasons, list) else []
+    from parayabuck.monitoring.intent_watchdog import degraded_reasons
+
+    return degraded_reasons(health)
 
 
 def _dashboard_health(

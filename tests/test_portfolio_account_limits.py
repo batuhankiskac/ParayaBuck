@@ -233,6 +233,7 @@ def test_planner_orders_sells_before_buys() -> None:
         prices={"AAPL": 100.0, "MSFT": 100.0},
         rules=rules,
         approved_symbols=("AAPL", "MSFT"),
+        decision_id="test-decision",
     )
     assert orders
 
@@ -259,6 +260,7 @@ def test_planner_ignores_foreign_crypto_open_orders() -> None:
         prices={"IWM": 200.0},
         rules={"IWM": AssetTradingRules("IWM", Market.EQUITY, 0.01, 0.01, 0.01, 1.0)},
         approved_symbols=("IWM",),
+        decision_id="test-decision",
         open_order_symbols={"BTC/USD", "ETH/USD"},  # working foreign crypto orders only
     )
     assert [order.symbol for order in equity_orders] == ["IWM"]

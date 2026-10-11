@@ -126,7 +126,32 @@ class EventJournal:
         self._stats = JournalStats()
         self._writes_since_cleanup = 0
         self._started = False
+        self._read_only = False
         self._ensure_schema()
+
+    @classmethod
+    def open_readonly(cls, path: str | Path) -> EventJournal:
+        """A query-only handle that never creates the journal file or schema.
+
+        Bypasses ``__init__`` (and its schema ensure) entirely so read paths
+        — forensics, diagnostic bundles — cannot create a missing journal.
+        ``query()`` already opens SQLite in ``mode=ro``; ``emit()`` on this
+        handle is a no-op returning False.
+        """
+        self = cls.__new__(cls)
+        self.path = Path(path)
+        self.queue_size = 1
+        self.retention_days = 0
+        self.max_events = 0
+        self._queue = queue.Queue(maxsize=1)
+        self._writer_thread = None
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+        self._stats = JournalStats()
+        self._writes_since_cleanup = 0
+        self._started = False
+        self._read_only = True
+        return self
 
     # ------------------------------------------------------------------ schema
     def _connect(self) -> sqlite3.Connection:
@@ -317,7 +342,10 @@ class EventJournal:
         """Enqueue event for durable write. Never raises, never blocks trading.
 
         Returns True if queued, False if dropped (queue full).
+        A read-only handle never writes: emit is a no-op returning False.
         """
+        if getattr(self, "_read_only", False):
+            return False
         try:
             # ensure writer started lazily
             if not self._started:

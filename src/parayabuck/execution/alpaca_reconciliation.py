@@ -157,8 +157,13 @@ class ReconciliationService:
         open_by_client: dict[str, Any] = {}
         for order in broker_orders:
             client_id = str(self._field(order, "client_order_id", "") or "").strip()
-            if not client_id or client_id in open_by_client:
-                raise ReconciliationResultError("Broker OPEN list has missing or duplicate client ID")
+            if not client_id:
+                # Foreign/manual broker orders carry no client id: they cannot
+                # back a local recovery, so leave them for the UNKNOWN_ORDER
+                # bucket instead of aborting the whole pass.
+                continue
+            if client_id in open_by_client:
+                raise ReconciliationResultError("Broker OPEN list has duplicate client ID")
             open_by_client[client_id] = order
         lookup = getattr(broker, "_fetch_broker_order", None)
         callback = getattr(broker, "portfolio_fill_recovered", None)
@@ -456,8 +461,15 @@ class ReconciliationService:
         broker_open_ids: set[str] = set()
         for order in current_broker_orders or ():
             client_id = str(self._field(order, "client_order_id", "") or "").strip()
-            if not client_id or client_id in broker_open_ids:
-                raise ReconciliationResultError("Broker OPEN list has missing or duplicate client ID")
+            if not client_id:
+                # A broker OPEN order with no client id is foreign/manual
+                # inventory: bucket it by broker id so the pass completes and
+                # the operator sees exactly which order needs attention.
+                broker_id = str(self._field(order, "id", "") or "").strip()
+                categories["UNKNOWN_ORDER"].append(broker_id or "<no-broker-id>")
+                continue
+            if client_id in broker_open_ids:
+                raise ReconciliationResultError("Broker OPEN list has duplicate client ID")
             broker_open_ids.add(client_id)
         for client_id in sorted(broker_open_ids - local_open_ids):
             categories["UNKNOWN_ORDER"].append(client_id)

@@ -84,7 +84,9 @@ def test_risk_overlay_enforces_account_sleeve_asset_and_cash_caps() -> None:
 
 
 def test_daily_loss_halt_allows_reductions_but_forbids_increases() -> None:
-    account = _account((_position("SPY", 100, 100),), daily_pnl=-500.0)
+    # The limit is a fraction of DAY-START equity (equity - daily_pnl), so the
+    # pinned loss trips under either denominator convention.
+    account = _account((_position("SPY", 100, 100),), daily_pnl=-600.0)
     decision = PortfolioRiskOverlay().apply(
         _target({"SPY": 0.05, "QQQ": 0.10}),
         account,

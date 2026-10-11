@@ -177,7 +177,8 @@ class PortfolioRiskOverlay:
             if not position.is_flat
         }
         gross_before = sum(current_weights.values())
-        daily_loss = max(0.0, -account.daily_pnl / equity)
+        day_start_equity = max(1e-9, equity - account.daily_pnl)
+        daily_loss = max(0.0, -account.daily_pnl / day_start_equity)
         halted_reasons: list[str] = []
         if daily_loss >= self.limits.daily_loss_limit:
             halted_reasons.append("daily_loss_limit")

@@ -40,29 +40,13 @@ class LegacyLedgerStateError(RuntimeError):
 class ManagedPosition:
     canonical_symbol: str
     market: Market
-    strategy: str
-    source_signal_id: str
-    entry_client_order_id: str
-    broker_order_id: str | None
-    owned_qty: float
-    filled_avg_price: float
-    original_stop: float
-    original_target: float
     status: str
-    current_stop: float | None = None
-    entry_filled_qty: float = 0.0
-    exit_filled_qty: float = 0.0
-    realized_pnl: float = 0.0
-    entry_fees: float = 0.0
-    exit_fees: float = 0.0
     protection_state: ProtectionState = ProtectionState.UNPROTECTED
-    protective_stop_client_order_id: str | None = None
-    protective_stop_broker_order_id: str | None = None
+    current_stop: float | None = None
+    original_stop: float = 0.0
+    original_target: float = 0.0
     stop_state: str = "pending"
     target_state: str = "watching"
-    exit_client_order_id: str | None = None
-    exit_broker_order_id: str | None = None
-    updated_at: datetime | None = None
 
 
 class ExecutionLedger:
@@ -70,12 +54,13 @@ class ExecutionLedger:
     runtime sessions, plus the read-only legacy ownership view.
 
     The legacy single-name/bracket tables (``managed_positions``, ``orders``,
-    ``order_events``, ``executions``, ``fee_activities``,
-    ``reconcile_watermarks``, ``protective_orders``) are still created and
-    migrated so an old database keeps opening, but nothing writes them any
-    more: portfolio execution lives in ``PortfolioStateRepository``. Opening a
-    database whose legacy tables still claim an open position or a working
-    order fails closed with :class:`LegacyLedgerStateError`.
+    ``fee_activities``) are still created so an old database keeps opening,
+    but nothing writes them any more: portfolio execution lives in
+    ``PortfolioStateRepository``. Opening a database whose legacy tables still
+    claim an open position or a working order fails closed with
+    :class:`LegacyLedgerStateError`. Old databases keep their dead
+    ``order_events``/``executions``/``reconcile_watermarks``/``protective_orders``
+    tables harmlessly; fresh databases no longer create them.
     """
 
     def __init__(self, path: str, *, store: SQLiteStore | None = None) -> None:
@@ -145,7 +130,6 @@ class ExecutionLedger:
             self._migrate_v4_circuit_breaker_backfill()
             self._migrate_v5_execution_quality_columns()
             self._migrate_v6_watermark()
-            self._migrate_v7_fee_booking_marker()
             self.connection.commit()
 
     def _create_initial_schema(self) -> None:
@@ -171,46 +155,11 @@ class ExecutionLedger:
                     closed_at TEXT,
                     PRIMARY KEY (account_id, canonical_symbol, entry_client_order_id)
                 );
-                CREATE TABLE IF NOT EXISTS order_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    client_order_id TEXT NOT NULL,
-                    broker_order_id TEXT,
-                    event_type TEXT NOT NULL,
-                    broker_timestamp TEXT,
-                    payload TEXT NOT NULL,
-                    UNIQUE(client_order_id, event_type, broker_timestamp, payload)
-                );
-                CREATE TABLE IF NOT EXISTS executions (
-                    client_order_id TEXT PRIMARY KEY,
-                    requested_qty REAL NOT NULL,
-                    filled_qty REAL NOT NULL DEFAULT 0,
-                    average_fill_price REAL,
-                    terminal_state TEXT,
-                    protection_state TEXT NOT NULL DEFAULT 'unprotected',
-                    updated_at TEXT NOT NULL
-                );
                 CREATE TABLE IF NOT EXISTS fee_activities (
                     activity_id TEXT PRIMARY KEY,
                     client_order_id TEXT NOT NULL,
                     fee REAL NOT NULL,
                     occurred_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS reconcile_watermarks (
-                    account_id TEXT NOT NULL,
-                    kind TEXT NOT NULL,
-                    watermark TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (account_id, kind)
-                );
-                CREATE TABLE IF NOT EXISTS protective_orders (
-                    client_order_id TEXT PRIMARY KEY,
-                    entry_client_order_id TEXT NOT NULL,
-                    canonical_symbol TEXT NOT NULL,
-                    kind TEXT NOT NULL,
-                    qty REAL NOT NULL,
-                    trigger_price REAL,
-                    state TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS risk_state (
                     account_id TEXT NOT NULL,
@@ -257,12 +206,6 @@ class ExecutionLedger:
                     target_price REAL,
                     updated_at TEXT NOT NULL
                 );
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_broker_id
-                    ON orders(broker_order_id) WHERE broker_order_id IS NOT NULL;
-                CREATE INDEX IF NOT EXISTS idx_orders_parent
-                    ON orders(parent_broker_order_id);
-                CREATE INDEX IF NOT EXISTS idx_orders_entry
-                    ON orders(entry_client_order_id);
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
                 VALUES (1, CURRENT_TIMESTAMP);
                 """
@@ -416,25 +359,6 @@ class ExecutionLedger:
                 """
         )
 
-    def _migrate_v7_fee_booking_marker(self) -> None:
-        # v7: ``fee_activities.booked`` records whether a recorded fee has
-        # actually been added to its managed lot's ``entry_fees`` /
-        # ``exit_fees``. The activity primary key alone only proves the fee
-        # was SEEN: a fee applied before its fill existed matched 0
-        # ``managed_positions`` rows, and the next pass short-circuited on
-        # the key, so the commission stayed unbooked for good. The DEFAULT is
-        # 1 on purpose -- every row written before this migration was applied
-        # under the old code, and defaulting them to pending would
-        # double-count them on the next pass. New rows are inserted with 0
-        # and flipped to 1 only once the lot update lands.
-        self._ensure_column("fee_activities", "booked", "INTEGER NOT NULL DEFAULT 1")
-        self.connection.execute(
-            """
-                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
-                VALUES (7, CURRENT_TIMESTAMP)
-                """
-        )
-
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
         # Validate and quote identifiers to prevent injection
         if not table.replace("_", "").isalnum() or not table[0].isalpha():
@@ -473,29 +397,13 @@ class ExecutionLedger:
         return ManagedPosition(
             canonical_symbol=str(row[1]),
             market=Market(str(row[2])),
-            strategy=str(row[3]),
-            source_signal_id=str(row[4]),
-            entry_client_order_id=str(row[5]),
-            broker_order_id=str(row[6]) if row[6] else None,
-            owned_qty=float(str(row[7])),
-            entry_filled_qty=float(str(row[8])),
-            exit_filled_qty=float(str(row[9])),
-            filled_avg_price=float(str(row[10])),
+            status=str(row[18]),
+            protection_state=ProtectionState(str(row[17])),
+            current_stop=float(str(row[13])) if row[13] is not None else None,
             original_stop=float(str(row[11])),
             original_target=float(str(row[12])),
-            current_stop=float(str(row[13])) if row[13] is not None else None,
-            realized_pnl=float(str(row[14])),
-            entry_fees=float(str(row[15])),
-            exit_fees=float(str(row[16])),
-            protection_state=ProtectionState(str(row[17])),
-            status=str(row[18]),
-            protective_stop_client_order_id=str(row[19]) if row[19] else None,
-            protective_stop_broker_order_id=str(row[20]) if row[20] else None,
             stop_state=str(row[21]),
             target_state=str(row[22]),
-            exit_client_order_id=str(row[23]) if row[23] else None,
-            exit_broker_order_id=str(row[24]) if row[24] else None,
-            updated_at=datetime.fromisoformat(str(row[25])) if row[25] else None,
         )
 
     def managed_for_account(self, account_id: str) -> dict[str, ManagedPosition]:
@@ -507,9 +415,7 @@ class ExecutionLedger:
                 result[item.canonical_symbol] = item
             else:
                 raise ValueError(
-                    "Single-managed-entry invariant violated for "
-                    f"{item.canonical_symbol}: {previous.entry_client_order_id}, "
-                    f"{item.entry_client_order_id}"
+                    f"Single-managed-entry invariant violated for {item.canonical_symbol} ({item.market.value})"
                 )
         return result
 
@@ -518,7 +424,10 @@ class ExecutionLedger:
 
         ``portfolio_fills`` lives in the same runtime database (written by
         ``PortfolioStateRepository``); an absent table (a ledger-only test
-        database) reads as no fees.
+        database) reads as no fees. A recovery fill with ``fee_observed=0``
+        stores a ``0.0`` placeholder, which is NOT an observed free fill and
+        is excluded so the snapshot agrees with the dashboard's ``unknown``
+        fee-completeness.
         """
         with self._lock:
             exists = self.connection.execute(
@@ -526,17 +435,38 @@ class ExecutionLedger:
             ).fetchone()
             if exists is None:
                 return 0.0
-            row = self.connection.execute(
-                """
-                SELECT COALESCE(SUM(f.fee), 0)
-                FROM portfolio_fills f
-                JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
-                JOIN portfolio_decisions d ON d.decision_id = o.decision_id
-                JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
-                WHERE s.account_id = ?
-                """,
-                (account_id,),
+            has_events = self.connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='portfolio_execution_events'"
             ).fetchone()
+            if has_events is None:
+                row = self.connection.execute(
+                    """
+                    SELECT COALESCE(SUM(f.fee), 0)
+                    FROM portfolio_fills f
+                    JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
+                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                    WHERE s.account_id = ?
+                    """,
+                    (account_id,),
+                ).fetchone()
+            else:
+                row = self.connection.execute(
+                    """
+                    SELECT COALESCE(SUM(f.fee), 0)
+                    FROM portfolio_fills f
+                    JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
+                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                    WHERE s.account_id = ?
+                    AND NOT EXISTS (
+                        SELECT 1 FROM portfolio_execution_events e
+                        WHERE e.client_order_id = f.client_order_id
+                        AND e.fee_observed = 0
+                    )
+                    """,
+                    (account_id,),
+                ).fetchone()
         return float(row[0] if row else 0.0)
 
     def save_risk_state(self, state: RiskState) -> None:

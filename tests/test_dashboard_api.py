@@ -20,7 +20,7 @@ from parayabuck.web.state import WebState
 
 def _repo_config(root: Path, *, mode: str = "paper", live_enabled: bool = False) -> Path:
     """Base a settings file on the repo config, flipping mode/live as asked."""
-    raw = yaml.safe_load(Path("config/settings.yaml").read_text(encoding="utf-8"))
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config/settings.yaml").read_text(encoding="utf-8"))
     raw["runtime"]["mode"] = mode
     raw["runtime"]["decision_db_path"] = str(root / "runtime.sqlite3")
     raw["live"]["enabled"] = live_enabled
@@ -595,8 +595,8 @@ assert len(app_logger.handlers) == baseline_handlers
 # Every read below stays inside a temp dir; the optional batch modules stay
 # unimported so the payload degrades instead of touching the ledger.
 root = Path(tempfile.mkdtemp())
-raw = yaml.safe_load(Path("config/settings.yaml").read_text(encoding="utf-8"))
-raw["runtime"]["decision_db_path"] = str(root / "runtime.sqlite3")
+repo = Path(parayabuck.__file__).resolve().parents[2]
+raw = yaml.safe_load((repo / "config/settings.yaml").read_text(encoding="utf-8"))
 config_path = root / "settings.yaml"
 config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
 sys.modules["parayabuck.execution.telemetry"] = None

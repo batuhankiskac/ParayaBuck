@@ -70,4 +70,15 @@ def web_client(manager: Any, backtest_manager: Any | None = None) -> Any:
     )
 
 
-__all__ = ["make_broker", "web_client"]
+def make_manager(root: Path, *, credentials: tuple[str, str] = ("pk-fake-key", "fake-secret-value")) -> Any:
+    """Stubbed ``EngineManager`` bound to ``root`` settings (no network)."""
+    from parayabuck.web.managers.engine import EngineManager
+
+    manager = EngineManager()
+    manager.config_path = root / "settings.yaml"
+    manager.env_path = root / ".env"
+    manager.get_credentials = lambda: credentials  # type: ignore[method-assign]
+    return manager
+
+
+__all__ = ["make_broker", "make_manager", "web_client"]

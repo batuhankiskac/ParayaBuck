@@ -4,7 +4,7 @@ import yaml
 
 
 def test_compose_port_is_loopback_only():
-    compose = pathlib.Path("docker-compose.yml")
+    compose = pathlib.Path(__file__).resolve().parents[1] / "docker-compose.yml"
     assert compose.exists(), "docker-compose.yml missing"
     data = yaml.safe_load(compose.read_text())
     services = data.get("services", {})
@@ -22,7 +22,7 @@ def test_compose_port_is_loopback_only():
 
 
 def test_compose_has_hardening():
-    compose = pathlib.Path("docker-compose.yml")
+    compose = pathlib.Path(__file__).resolve().parents[1] / "docker-compose.yml"
     text = compose.read_text()
     assert "stop_grace_period" in text
     # ensure restart policy
@@ -30,6 +30,6 @@ def test_compose_has_hardening():
 
 
 def test_web_app_host_guard():
-    text = pathlib.Path("src/parayabuck/web/app.py").read_text()
+    text = (pathlib.Path(__file__).resolve().parents[1] / "src/parayabuck/web/app.py").read_text()
     assert "PARAYABUCK_CONTAINER" in text
     assert "127.0.0.1:8000:8000" in text or "loopback-only" in text.lower()

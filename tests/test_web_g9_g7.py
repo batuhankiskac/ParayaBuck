@@ -24,7 +24,7 @@ from tests.helpers import web_client
 
 def _live_config(root: Path) -> Path:
     """Copy the repo config and flip it to a valid live configuration."""
-    raw = yaml.safe_load(Path("config/settings.yaml").read_text(encoding="utf-8"))
+    raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config/settings.yaml").read_text(encoding="utf-8"))
     raw["runtime"]["mode"] = "live"
     raw["runtime"]["decision_db_path"] = str(root / "runtime.sqlite3")
     raw["live"]["enabled"] = True
@@ -87,12 +87,9 @@ def _write_approval(
 
 
 def _manager(root: Path) -> EngineManager:
-    manager = EngineManager()
-    manager.config_path = root / "settings.yaml"
-    manager.env_path = root / ".env"
-    # Never touch the network in tests: credentials are stubbed per-test and
-    # the broker probe is mocked below where it is exercised.
-    manager.get_credentials = lambda: ("pk-fake-key", "fake-secret-value")  # type: ignore[method-assign]
+    from tests.helpers import make_manager
+
+    manager = make_manager(root)
     return manager
 
 

@@ -547,7 +547,7 @@ def test_settings_payload_extra_forbid():
 
 def test_settings_patch_preserves_omitted(tmp_path, monkeypatch):
     # Create temp config from real canonical config
-    orig_cfg = Path("config/settings.yaml").read_text()
+    orig_cfg = (Path(__file__).resolve().parents[1] / "config/settings.yaml").read_text()
     cfg_path = tmp_path / "settings.yaml"
     cfg_path.write_text(orig_cfg)
     monkeypatch.setenv("CONFIG_PATH", str(cfg_path))
@@ -575,7 +575,7 @@ def test_settings_patch_preserves_omitted(tmp_path, monkeypatch):
 
 
 def test_settings_concurrency_409(tmp_path, monkeypatch):
-    orig_cfg = Path("config/settings.yaml").read_text()
+    orig_cfg = (Path(__file__).resolve().parents[1] / "config/settings.yaml").read_text()
     cfg_path = tmp_path / "settings.yaml"
     cfg_path.write_text(orig_cfg)
     orig_path = manager.config_path
@@ -634,7 +634,7 @@ def test_product_gate_rejects_non_product():
 
 
 def test_container_credential_mutation_rejected(tmp_path, monkeypatch):
-    orig_cfg = Path("config/settings.yaml").read_text()
+    orig_cfg = (Path(__file__).resolve().parents[1] / "config/settings.yaml").read_text()
     cfg_path = tmp_path / "settings.yaml"
     cfg_path.write_text(orig_cfg)
     env_path = tmp_path / ".env"

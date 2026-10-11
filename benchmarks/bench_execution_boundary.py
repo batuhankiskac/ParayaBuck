@@ -207,6 +207,16 @@ def bench_peak(report: Report) -> None:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Execution boundary broker-path latency (no network).")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Where to write the JSON artifact (default: a fresh file under the system temp dir).",
+    )
+    args = parser.parse_args()
     report = Report()
     bench_account_100(report)
     bench_asset_warm(report)
@@ -216,9 +226,13 @@ if __name__ == "__main__":
     bench_submit_recovered(report)
     bench_reconcile_20(report)
     bench_peak(report)
-    report.print_table(scale=1)
+    report.print_table()
     # Write JSON artifact
-    artifact = Path("benchmarks/execution_boundary_mission8.json")
+    artifact = (
+        args.out
+        if args.out is not None
+        else Path(tempfile.mkdtemp(prefix="execution_boundary_")) / "execution_boundary.json"
+    )
     payload = {
         "git_head": _git_head(),
         "python": platform.python_version(),

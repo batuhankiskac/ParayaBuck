@@ -12,4 +12,4 @@ locked by `tests/test_vt35_golden.py` on the same bars. The former
 `equity_1200_2016_2026.csv` (no QLD, in no tag) and were deleted on
 2026-10-06.
 
-Run a benchmark from the repository root with its documented CLI or `--help`.
+Run a benchmark from the repository root as `python benchmarks/bench_X.py` (only `bench_execution_boundary.py` takes an argument: `--out` for its JSON artifact).

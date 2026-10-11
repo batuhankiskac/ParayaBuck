@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import contextlib
 import csv
 import itertools
 import json
 import math
-import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -32,6 +30,7 @@ from parayabuck.execution.portfolio import (
     portfolio_risk_limits_from_config,
 )
 from parayabuck.logger import get_logger
+from parayabuck.markets.nyse_calendar import session_bounds
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES, is_regular_equity_time
 from parayabuck.portfolio import PortfolioStrategy, portfolio_strategy_from, rebalance_policy_for
@@ -55,8 +54,6 @@ _CANONICAL_ACTION_COLUMNS = {
 _CANONICAL_NON_CASH_ACTION_TYPES = {"stock_dividends", "forward_splits", "reverse_splits"}
 _CANONICAL_SPLIT_ACTION_TYPES = {"forward_splits", "reverse_splits"}
 _STOCK_DIVIDEND_ECHO_TOLERANCE = Decimal("1e-5")
-
-_RESEARCH_RUN_DB_NAME = "backtest_runs.sqlite3"
 
 log = get_logger("parayabuck.backtest.product")
 
@@ -115,6 +112,8 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
                 raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
             if timeframe != "1d" and not is_regular_equity_time(timestamp):
                 raise ValueError(f"Equity CSV contains an out-of-session bar: {timestamp.isoformat()}")
+            if timeframe == "1d" and session_bounds(timestamp.astimezone(NEW_YORK).date()) is None:
+                log.warning("Equity CSV contains a non-session bar (holiday): %s", timestamp.isoformat())
             rows.append(
                 Bar(
                     timestamp=timestamp,
@@ -347,21 +346,18 @@ def run_product_backtest(
     market: Market,
     strategy_name: str | None = None,
     parameters: dict[str, object] | None = None,
-    strategy_timeframe: str | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
     initial_cash: float | None = None,
     output_dir: str | None = None,
     cost_multiplier: float = 1.0,
-    persist: bool = False,
-    persist_db_path: str | Path | None = None,
     persist_artifacts: bool = True,
     corporate_actions: list[CorporateAction] | None = None,
     universe: PointInTimeUniverse | None = None,
     data_feed: str | None = None,
     prepared_inputs: tuple[list[Bar], list[Bar], tuple[list[Bar], list[Bar]]] | None = None,
     terminal_lifecycles: Mapping[str, TerminalLifecycle] | None = None,
-    benchmark_symbol: str = "SPY",
+    build_report: bool = True,
 ) -> ProductBacktestResult:
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
@@ -373,7 +369,7 @@ def run_product_backtest(
     strategy = portfolio_strategy_from(
         strategy_name or selection.name,
         parameters if parameters is not None else selection.parameters,
-        timeframe=strategy_timeframe or selection.timeframe,
+        timeframe=selection.timeframe,
     )
     evaluation_start_source = "requested" if start is not None or prepared_inputs is not None else "full history"
     if prepared_inputs is None:
@@ -426,7 +422,6 @@ def run_product_backtest(
         equity_sec_fee_rate=config.backtest.equity_sec_fee_rate,
         equity_use_effective_dated_fees=config.backtest.equity_use_effective_dated_fees,
         equity_regulatory_fee_multiplier=cost_multiplier,
-        benchmark_symbol=benchmark_symbol,
         universe=universe,
         universe_version=universe_hash,
         risk_limits=risk,
@@ -443,11 +438,32 @@ def run_product_backtest(
         corporate_actions=corporate_actions,
         prepared_inputs=prepared,
     )
-    report = build_portfolio_report(
-        result,
-        strategy_name=strategy.name,
-        strategy_version=strategy.version,
-    )
+    if build_report:
+        report = build_portfolio_report(
+            result,
+            strategy_name=strategy.name,
+            strategy_version=strategy.version,
+        )
+    else:
+        report = PortfolioReport(
+            summary={
+                "strategy_name": strategy.name,
+                "strategy_version": strategy.version,
+                "profit_factor": _profit_factor(result.closed_position_events),
+                "number_of_trades": len(result.closed_position_events),
+            },
+            rebalances=(),
+            fills=(),
+            weight_history=(),
+            universe_history=(),
+            monthly_returns={},
+            yearly_returns=(),
+            regime_performance={},
+            rolling_beta=(),
+            per_symbol=(),
+            equity_curve=(),
+            drawdowns=(),
+        )
     report.summary.update(
         {
             "market": market.value,
@@ -516,18 +532,6 @@ def run_product_backtest(
             encoding="utf-8",
         )
     score = ranking_score(result, config.backtest.ranking_metric)
-    if persist:
-        # Research rows must never reach ``runtime.decision_db_path``: that file
-        # is the live decision ledger (and is backed up as one). An explicit
-        # persistence request writes to a research database beside the run's
-        # reports instead.
-        _persist_run(
-            Path(persist_db_path) if persist_db_path is not None else destination.parent / _RESEARCH_RUN_DB_NAME,
-            run_id,
-            strategy.name,
-            report.summary,
-            score,
-        )
     return ProductBacktestResult(run_id, result, report, universe, str(destination), score)
 
 
@@ -609,12 +613,12 @@ def optimize_grid(
             end=train_end,
             initial_cash=initial_cash,
             output_dir=output_dir,
-            persist=False,
             persist_artifacts=False,
             corporate_actions=corporate_actions,
             data_feed=data_feed,
             universe=train_universe,
             prepared_inputs=train_prepared,
+            build_report=False,
         )
         result = run.result
         ranked.append(
@@ -663,7 +667,6 @@ def optimize_grid(
             output_dir=output_dir,
             corporate_actions=corporate_actions,
             data_feed=data_feed,
-            persist=False,
             universe=oos_universe,
             prepared_inputs=oos_prepared,
         )
@@ -679,6 +682,12 @@ def optimize_grid(
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
     payload["output"] = str(path)
     return payload
+
+
+def _profit_factor(closed_position_events: tuple[tuple[datetime, str, float], ...]) -> float | None:
+    wins = sum(pnl for _, _, pnl in closed_position_events if pnl > 0)
+    losses = abs(sum(pnl for _, _, pnl in closed_position_events if pnl < 0))
+    return wins / losses if losses > 0 else None
 
 
 def _price_adjustment_model(corporate_actions: list[CorporateAction] | None) -> str:
@@ -807,35 +816,6 @@ def _validate_optimization_windows(
         raise ValueError("OOS start must be before OOS end")
     if train_end is not None and oos_start is not None and train_end >= oos_start:
         raise ValueError("TRAIN and OOS windows must not overlap")
-
-
-def _persist_run(
-    database_path: str | Path,
-    run_id: str,
-    strategy_name: str,
-    summary: dict[str, object],
-    score: float,
-) -> None:
-    path = Path(database_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # ``with sqlite3.connect`` only manages transactions; closing is manual.
-    with contextlib.closing(sqlite3.connect(path)) as connection, connection:
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS backtest_runs (
-                run_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, strategy_name TEXT NOT NULL,
-                score REAL NOT NULL, summary_json TEXT NOT NULL
-            )"""
-        )
-        connection.execute(
-            "INSERT INTO backtest_runs VALUES (?, ?, ?, ?, ?)",
-            (
-                run_id,
-                datetime.now(UTC).isoformat(),
-                strategy_name,
-                score,
-                json.dumps(summary, sort_keys=True, default=str),
-            ),
-        )
 
 
 __all__ = [

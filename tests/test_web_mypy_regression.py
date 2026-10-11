@@ -6,7 +6,7 @@ import pathlib
 
 
 def test_no_wildcard_web_mypy_ignore() -> None:
-    pyproject = pathlib.Path("pyproject.toml").read_text(encoding="utf-8")
+    pyproject = (pathlib.Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     # A broad ignore for web.* is forbidden; the package must remain strictly typed.
     assert "[[tool.mypy.overrides]]" not in pyproject or 'module = "parayabuck.web.*"' not in pyproject, (
         "Wildcard mypy override for parayabuck.web.* must not exist — "

@@ -25,7 +25,6 @@ T = TypeVar("T")
 class Timing:
     label: str
     samples: tuple[float, ...]
-    unit: str = "s"
 
     @property
     def median(self) -> float:
@@ -47,15 +46,11 @@ class Timing:
     def maximum(self) -> float:
         return max(self.samples)
 
-    @property
-    def variance(self) -> float:
-        return statistics.variance(self.samples) if len(self.samples) > 1 else 0.0
-
-    def row(self, scale: float = 1.0) -> str:
+    def row(self) -> str:
         return (
-            f"{self.label:<44} med={self.median / scale:>10.4f} "
-            f"p95={self.p95 / scale:>10.4f} min={self.minimum / scale:>10.4f} "
-            f"max={self.maximum / scale:>10.4f} n={len(self.samples)}"
+            f"{self.label:<44} med={self.median:>10.4f} "
+            f"p95={self.p95:>10.4f} min={self.minimum:>10.4f} "
+            f"max={self.maximum:>10.4f} n={len(self.samples)}"
         )
 
 
@@ -65,7 +60,6 @@ def timeit(  # noqa: UP047
     label: str,
     warmup: int = 3,
     runs: int = 10,
-    unit: str = "s",
     before_each: Callable[[], None] | None = None,
 ) -> tuple[Timing, T | None]:
     """Time ``fn`` with warmup runs; returns (Timing, last result)."""
@@ -82,7 +76,7 @@ def timeit(  # noqa: UP047
             last = fn()
             elapsed = time.perf_counter() - start
             samples.append(elapsed)
-        timing = Timing(label, tuple(samples), unit=unit)
+        timing = Timing(label, tuple(samples))
         return timing, last
     finally:
         gc.enable()
@@ -95,9 +89,9 @@ class Report:
     def add(self, timing: Timing) -> None:
         self.timings.append(timing)
 
-    def print_table(self, scale: float = 1.0) -> None:
+    def print_table(self) -> None:
         for timing in self.timings:
-            print(timing.row(scale=scale))
+            print(timing.row())
 
 
 def _rusage_rss_bytes() -> int:
@@ -108,17 +102,8 @@ def _rusage_rss_bytes() -> int:
     return raw * 1024
 
 
-def rss_bytes() -> int:
-    """Current process RSS in bytes (macOS/Linux)."""
-    return _rusage_rss_bytes()
-
-
 def peak_rss_bytes() -> int:
     return _rusage_rss_bytes()
-
-
-def force_gc() -> None:
-    gc.collect()
 
 
 def mb(bytes_: int) -> float:

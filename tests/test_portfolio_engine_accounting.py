@@ -543,7 +543,10 @@ def test_on_target_symbol_never_produces_a_zero_quantity_order() -> None:
     decision that trades nothing."""
     epoch = datetime(2024, 1, 1, tzinfo=UTC)
     # Weight 0.1 of a 100_000 book at a 100.0 price is exactly the 100
-    # shares already held, so the target delta is exactly 0.0.
+    # shares already held, so the target delta is exactly 0.0. ``run()``
+    # resets per-run state, so the guard is exercised at the unit level:
+    # an exactly on-target ``_apply_target`` must leave the pending book
+    # empty (no zero-quantity order, hence no fill/commission later).
     strategy = _ScheduleStrategy({0: {"SPY": 0.1}}, epoch)
     engine = PortfolioBacktestEngine(
         strategy,
@@ -558,14 +561,16 @@ def test_on_target_symbol_never_produces_a_zero_quantity_order() -> None:
     engine._positions["SPY"] = _Position("SPY", Market.EQUITY, "1d", 100.0, 100.0, epoch)
     engine._cash = 90_000.0
     engine._last_price["SPY"] = 100.0
-    # Two liquid bars: the decision lands on the first, and the second bar's
-    # fill cycle is where a leaked zero-quantity order would be booked.
-    bars = [_bar(epoch + timedelta(days=offset), "SPY", 100.0, Market.EQUITY, 1_000_000) for offset in (1, 2)]
-    result = engine.run(bars, liquidate_at_end=False)
+    target = TargetPortfolio(
+        strategy_name=strategy.name,
+        strategy_version=strategy.version,
+        decision_timestamp=epoch,
+        weights=(TargetWeight("SPY", 0.1),),
+        cash_weight=0.9,
+        universe_version="test",
+    )
+    engine._apply_target(target)
     assert engine._pending == []
-    assert result.fills == ()
-    assert result.fee_total == 0.0
-    assert result.realized_pnl_events == ()
 
 
 def test_sortino_uses_full_series_downside_deviation_with_zero_target() -> None:

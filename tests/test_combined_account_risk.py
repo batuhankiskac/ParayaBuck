@@ -150,7 +150,7 @@ def test_risk_overlay_enforces_account_limits_with_existing_inventory() -> None:
     assert 1.0 - gross >= config.risk.cash_buffer_pct - _EPS
 
 
-def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
+def test_frozen_equity_sleeve_respects_configured_caps() -> None:
     """9 proposed positions at 10% each are cut to max_positions (8) and stay
     inside the equity sleeve cap (0.98) and the per-asset cap."""
     config = load_config()

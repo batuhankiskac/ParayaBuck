@@ -134,7 +134,6 @@ class EngineManager:
                 backtest_manager = None
         self._backtest_manager = backtest_manager
         self.control_token = secrets.token_urlsafe(32)
-        self._live_request_suffix: str | None = None
         self._live_armed = False
         self._pending_live_arm: LiveArmToken | None = None
         self._live_arm_token: LiveArmToken | None = None
@@ -272,6 +271,9 @@ class EngineManager:
         # Determine current paper mode before mutation for entering_live detection and digest.
         current_paper = self.is_paper_mode()
         # paper_mode is explicit in payload; otherwise derive from live_trading_enabled if provided.
+        if "paper_mode" in fields_set and "live_trading_enabled" in fields_set:
+            if payload.paper_mode == payload.live_trading_enabled:
+                raise ValueError("Contradictory trading mode: paper_mode and live_trading_enabled disagree")
         if "paper_mode" in fields_set:
             target_paper = payload.paper_mode
         elif "live_trading_enabled" in fields_set:
@@ -366,20 +368,22 @@ class EngineManager:
         cfg_raw["risk"] = risk_raw
 
         _yaml_block(cfg_raw, "runtime")
-        # Normalize the pre-v1 risk_monitor_timeframe rename on save so the
-        # operator UI heals configs that still carry the old key.
         runtime_save = dict(cfg_raw["runtime"])
-        if "risk_monitor_timeframe" in runtime_save:
-            runtime_save.setdefault("market_state_timeframe", runtime_save.pop("risk_monitor_timeframe"))
         # PATCH semantics for runtime
         if "paper_mode" in fields_set or "live_trading_enabled" in fields_set:
             runtime_save["mode"] = "paper" if target_paper else "live"
-        if "execution_timeframe" in fields_set:
-            runtime_save["execution_timeframe"] = payload.execution_timeframe
         cfg_raw["runtime"] = runtime_save
         live = _yaml_block(cfg_raw, "live")
         if "paper_mode" in fields_set or "live_trading_enabled" in fields_set:
             live["enabled"] = not target_paper
+            if target_paper and not current_paper:
+                # Leaving LIVE must produce a paper-clean config: doctor
+                # --strict --paper rejects hard_dollar_cap>0, so the cap and
+                # the approval path are cleared unless explicitly re-set.
+                if "live_dollar_cap" not in fields_set:
+                    live["hard_dollar_cap"] = 0.0
+                if "live_operator_approval_path" not in fields_set:
+                    live["operator_approval_path"] = ""
         if "live_dollar_cap" in fields_set:
             live["hard_dollar_cap"] = payload.live_dollar_cap
         if "live_operator_approval_path" in fields_set:
@@ -724,6 +728,11 @@ class EngineManager:
             # AlpacaBroker (and HTTP pool) on the same key.
             runtime_broker = getattr(self.runtime, "broker", None)
             self.broker = runtime_broker
+            if runtime_broker is None:
+                # The cached snapshot belongs to the dropped broker identity:
+                # serving it as fresh would report the old account's equity.
+                self.last_account = None
+                self._last_account_monotonic = 0.0
         if broker is not None and broker is not runtime_broker:
             broker.close()
 
@@ -831,7 +840,14 @@ class EngineManager:
                 try:
                     from parayabuck.execution.alpaca import AlpacaBroker
 
-                    paper = self.is_paper_mode()
+                    # Fail closed: an unreadable config must never select the
+                    # live endpoint for a display poll. is_paper_mode fails
+                    # open (False, for the badge); the display broker fails
+                    # closed (paper=True).
+                    try:
+                        paper = self.is_paper_mode() if self.config_path.exists() else True
+                    except (OSError, ValueError):
+                        paper = True
                     self.broker = AlpacaBroker(key, secret, paper=paper)
                 except Exception as e:
                     log.warning("Could not connect broker: %s", e)
@@ -839,19 +855,9 @@ class EngineManager:
         if self.broker is not None:
             try:
                 acct = self.broker.account()
-                managed: dict[str, Any] = {}
-                runtime = self.runtime
-                runtime_ledger = getattr(runtime, "ledger", None)
-                if runtime_ledger is not None and bool(self.broker.account_id):
-                    try:
-                        managed = runtime_ledger.managed_for_account(self.broker.account_id)
-                    except Exception:
-                        # Ownership detail is display-only; the balances still serve
-                        log.warning("Managed-position lookup failed for the account snapshot", exc_info=True)
                 positions_list = []
                 for p in acct.positions:
                     if not p.is_flat:
-                        owned = managed.get(p.symbol)
                         positions_list.append(
                             {
                                 "symbol": p.symbol,
@@ -867,16 +873,6 @@ class EngineManager:
                                 "market_value": p.market_value,
                                 "unrealized_pnl": p.unrealized_pnl,
                                 "ownership": p.ownership,
-                                "protection_state": (owned.protection_state.value if owned is not None else None),
-                                "stop_price": (
-                                    owned.current_stop or owned.original_stop if owned is not None else None
-                                ),
-                                "target_price": owned.original_target if owned is not None else None,
-                                "stop_order_state": owned.stop_state if owned is not None else None,
-                                "target_exit_state": (owned.target_state if owned is not None else None),
-                                "manual_intervention_required": bool(
-                                    owned is not None and owned.status == "manual_intervention_required"
-                                ),
                             }
                         )
 
@@ -1311,6 +1307,13 @@ class EngineManager:
     def _digest_config(raw: dict[str, Any], *, paper: bool) -> str:
         raw = json.loads(json.dumps(raw))
         _yaml_block(raw, "runtime")["mode"] = "paper" if paper else "live"
+        # The arm→/api/mode toggle and the settings-drawer live entry flip
+        # exactly these fields after the arm is verified; keep them out of the
+        # digest so the verified arm survives its own mode flip. Every live
+        # safety gate (credentials fingerprint, approval file, cap) stays.
+        live = _yaml_block(raw, "live")
+        for _mode_flip_key in ("enabled", "hard_dollar_cap", "operator_approval_path"):
+            live.pop(_mode_flip_key, None)
         encoded = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 
@@ -1422,8 +1425,3 @@ def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> Non
         if name not in seen:
             lines.append(f"{name}={_quote_dotenv_value(value)}")
     atomic_write(path, "\n".join(lines).rstrip() + "\n", 0o600)
-
-
-# Singleton for legacy import path `from parayabuck.web.managers.engine import manager`
-# Used as fallback in routers/websocket.py when WebState not yet bound.
-manager = EngineManager()

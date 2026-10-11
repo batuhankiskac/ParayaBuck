@@ -29,15 +29,7 @@ class RuntimeMode(StrEnum):
 @dataclass(frozen=True)
 class RuntimeConfig:
     mode: RuntimeMode = RuntimeMode.PAPER
-    execution_timeframe: str = "5m"
-    market_state_timeframe: str = "5m"
     decision_db_path: str = DEFAULT_DECISION_DB_PATH
-
-    def __post_init__(self) -> None:
-        if self.execution_timeframe not in TIMEFRAME_MINUTES:
-            raise ValueError("runtime.execution_timeframe is unsupported")
-        if self.market_state_timeframe not in TIMEFRAME_MINUTES:
-            raise ValueError("runtime.market_state_timeframe is unsupported")
 
 
 @dataclass(frozen=True)
@@ -274,14 +266,7 @@ class AlpacaConfig:
 
 @dataclass(frozen=True)
 class DataConfig:
-    equity_session: str = "regular"
-    include_extended_hours: bool = False
-
-    def __post_init__(self) -> None:
-        if self.equity_session != "regular":
-            raise ValueError("Only regular equity sessions are currently trading-enabled")
-        if self.include_extended_hours:
-            raise ValueError("Extended-hours trading is not enabled")
+    """Placeholder ``data:`` block (kept so old configs still parse)."""
 
 
 @dataclass(frozen=True)
@@ -342,7 +327,6 @@ class ObservabilityConfig:
     snapshot writer from it (snapshot_path, snapshot_interval_seconds).
     """
 
-    enabled: bool = True
     snapshot_interval_seconds: float = 30.0
     event_retention_days: int = 30
     event_queue_size: int = 2048
@@ -647,17 +631,31 @@ def load_config(config_path: str | None = None) -> Config:
     _reject_removed_crypto_settings(raw)
     _reject_removed_alerting_settings(raw)
     runtime_raw = _block(raw.get("runtime"))
-    # The pre-v1 ``risk_monitor_timeframe`` key was renamed to
-    # ``market_state_timeframe`` (the cadence observes market state; risk
-    # reactions live in the entry-risk latch). Accept the old key so an
-    # existing operator configuration keeps loading, and normalize it.
-    if "risk_monitor_timeframe" in runtime_raw:
+    for _removed_runtime_key in ("execution_timeframe", "market_state_timeframe", "risk_monitor_timeframe"):
+        if _removed_runtime_key in runtime_raw:
+            warnings.warn(
+                f"runtime.{_removed_runtime_key} is removed and ignored; the strategy owns its signal timeframe",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            runtime_raw.pop(_removed_runtime_key)
+    data_raw = _block(raw.get("data"))
+    for _removed_data_key in ("equity_session", "include_extended_hours"):
+        if _removed_data_key in data_raw:
+            warnings.warn(
+                f"data.{_removed_data_key} is removed and ignored; sessions follow markets/nyse_calendar",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            data_raw.pop(_removed_data_key)
+    observability_raw = _block(raw.get("observability"))
+    if "enabled" in observability_raw:
         warnings.warn(
-            "runtime.risk_monitor_timeframe is deprecated; rename it to runtime.market_state_timeframe (same cadence)",
+            "observability.enabled is removed and ignored; observability is always on",
             DeprecationWarning,
             stacklevel=2,
         )
-        runtime_raw.setdefault("market_state_timeframe", runtime_raw.pop("risk_monitor_timeframe"))
+        observability_raw.pop("enabled")
     if "mode" in runtime_raw:
         raw_mode = str(runtime_raw["mode"]).lower()
         if raw_mode == "backtest":
@@ -751,7 +749,7 @@ def load_config(config_path: str | None = None) -> Config:
         app=AppConfig(**dict(raw.get("app") or {})),
         runtime=RuntimeConfig(**runtime_raw),
         alpaca=AlpacaConfig(**alpaca_raw),
-        data=DataConfig(**dict(raw.get("data") or {})),
+        data=DataConfig(),
         universe=UniverseConfig(equity=equity),
         strategy=StrategyConfig(equity_strategy),
         risk=risk,
@@ -761,7 +759,7 @@ def load_config(config_path: str | None = None) -> Config:
         execution=ExecutionConfig(**_block(raw.get("execution"))),
         backup=BackupConfig(**_block(raw.get("backup"))),
         alerting=AlertingConfig(**_block(raw.get("alerting"))),
-        observability=ObservabilityConfig(**_block(raw.get("observability"))),
+        observability=ObservabilityConfig(**observability_raw),
         intent_watchdog=IntentWatchdogConfig(**_block(raw.get("intent_watchdog"))),
         signal_cross_check=SignalCrossCheckConfig(**_block(raw.get("signal_cross_check"))),
     )

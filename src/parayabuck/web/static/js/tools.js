@@ -95,7 +95,7 @@
         ["Benchmark (" + (s.benchmark_symbol || "—") + ")", pct("benchmark_return"), ""],
         ["En büyük düşüş", fmt.pct(Math.abs(Number(s.max_drawdown || 0)) * 100, 2), "neg"],
         ["Sharpe", fmt.num(s.sharpe, 2), ""],
-        ["İşlem sayısı", fmt.num(s.total_trades, 0), ""],
+        ["İşlem sayısı", fmt.num(s.number_of_trades, 0), ""],
         ["Kazanma oranı", fmt.pct(Number(s.win_rate || 0) * 100, 1), ""],
         ["Bitiş bakiyesi", fmt.money(s.ending_equity), ""]
       ];

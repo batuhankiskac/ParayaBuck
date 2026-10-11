@@ -11,8 +11,6 @@ app:
   log_level: INFO
 runtime:
   mode: paper
-  execution_timeframe: 5m
-  market_state_timeframe: 5m
   decision_db_path: data/runtime/parayabuck.sqlite3
 alpaca:
   data_delayed: false
@@ -22,9 +20,6 @@ alpaca:
   # Historical bars/quotes: SIP for consolidated coverage where the account
   # entitlement allows; falls back to IEX gracefully otherwise.
   stock_historical_feed: sip
-data:
-  equity_session: regular
-  include_extended_hours: false
 universe:
   equity:
     enabled: true

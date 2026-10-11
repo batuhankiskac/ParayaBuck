@@ -26,10 +26,9 @@ class SettingsPayload(BaseModel):
     paper_mode: bool = Field(True, description="Paper mode toggle")
     daily_loss_limit_pct: float = Field(1.5, gt=0, le=100)
     max_drawdown_pct: float = Field(10.0, gt=0, le=100)
-    execution_timeframe: Literal["5m"] = "5m"
     host: Literal["127.0.0.1", "localhost", "::1"] = "127.0.0.1"
     port: int = Field(8000, ge=1, le=65535)
-    open_browser: bool = Field(True)
+    open_browser: bool = True
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     restart_engine: bool = True
     equity_trading_enabled: bool = True
@@ -60,5 +59,5 @@ class BacktestPayload(BaseModel):
     strategy: str = ""
     parameters: dict[str, object] = Field(default_factory=dict)
     years: int = Field(5, ge=1, le=30)
-    days: int = Field(0, ge=0)
+    days: int = Field(0, ge=0, le=366 * 30)
     symbols: str = ""

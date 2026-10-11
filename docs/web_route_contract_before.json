@@ -92,46 +92,6 @@
       "category": "engine"
     },
     {
-      "path": "/api/equity",
-      "methods": [
-        "GET"
-      ],
-      "name": "dashboard_equity",
-      "cls": "APIRoute",
-      "mutating": false,
-      "category": "dashboard"
-    },
-    {
-      "path": "/api/execution",
-      "methods": [
-        "GET"
-      ],
-      "name": "dashboard_execution",
-      "cls": "APIRoute",
-      "mutating": false,
-      "category": "dashboard"
-    },
-    {
-      "path": "/api/explanations",
-      "methods": [
-        "GET"
-      ],
-      "name": "dashboard_explanations",
-      "cls": "APIRoute",
-      "mutating": false,
-      "category": "dashboard"
-    },
-    {
-      "path": "/api/health",
-      "methods": [
-        "GET"
-      ],
-      "name": "dashboard_health",
-      "cls": "APIRoute",
-      "mutating": false,
-      "category": "dashboard"
-    },
-    {
       "path": "/api/live/arming/confirm",
       "methods": [
         "POST"
@@ -160,16 +120,6 @@
       "cls": "APIRoute",
       "mutating": false,
       "category": "safety"
-    },
-    {
-      "path": "/api/metrics",
-      "methods": [
-        "GET"
-      ],
-      "name": "dashboard_metrics",
-      "cls": "APIRoute",
-      "mutating": false,
-      "category": "dashboard"
     },
     {
       "path": "/api/mode",
@@ -237,16 +187,6 @@
         "GET"
       ],
       "name": "dashboard_performance",
-      "cls": "APIRoute",
-      "mutating": false,
-      "category": "dashboard"
-    },
-    {
-      "path": "/api/risk",
-      "methods": [
-        "GET"
-      ],
-      "name": "dashboard_risk",
       "cls": "APIRoute",
       "mutating": false,
       "category": "dashboard"
@@ -330,16 +270,6 @@
       "cls": "APIRoute",
       "mutating": false,
       "category": "status"
-    },
-    {
-      "path": "/api/universe",
-      "methods": [
-        "GET"
-      ],
-      "name": "dashboard_universe",
-      "cls": "APIRoute",
-      "mutating": false,
-      "category": "dashboard"
     },
     {
       "path": "/api/ws-ticket",

@@ -75,7 +75,24 @@ def get_ops_status(config: Any | None = None) -> dict[str, Any]:
         }
 
 
-def query_events(limit: int = 100, **filters: Any) -> list[dict[str, Any]]:
+def _resolve_journal_path(cfg: Any | None) -> str:
+    from parayabuck.monitoring.journal import DEFAULT_JOURNAL_PATH
+
+    if cfg is not None:
+        try:
+            return str(getattr(cfg.observability, "journal_path", DEFAULT_JOURNAL_PATH))
+        except Exception:
+            pass
+    current = _current_config()
+    if current is not None:
+        try:
+            return str(getattr(current.observability, "journal_path", DEFAULT_JOURNAL_PATH))
+        except Exception:
+            pass
+    return DEFAULT_JOURNAL_PATH
+
+
+def query_events(limit: int = 100, config: Any | None = None, **filters: Any) -> list[dict[str, Any]]:
     # Bounded limit <=1000
     try:
         limit = int(limit)
@@ -90,10 +107,23 @@ def query_events(limit: int = 100, **filters: Any) -> list[dict[str, Any]]:
     if isinstance(sev, str) and sev.strip():
         filters["severity"] = sev.strip()
     try:
-        from parayabuck.monitoring.journal import get_journal
+        from parayabuck.monitoring.journal import EventJournal, get_journal
 
-        j = get_journal()
-        events = j.query(limit=limit, **filters)
+        journal_path = _resolve_journal_path(config)
+        journal = None
+        if Path(str(journal_path)).exists():
+            # A read must never create the journal: EventJournal.__init__
+            # ensures the schema (a write), so skip construction entirely
+            # when the configured file is absent.
+            journal = EventJournal(journal_path)
+        else:
+            # No configured file (fresh install, or a test isolation harness
+            # holding the global): read the process global only when its own
+            # file already exists — never constructing a missing default.
+            candidate = get_journal()
+            if Path(str(candidate.path)).exists():
+                journal = candidate
+        events = journal.query(limit=limit, **filters) if journal is not None else []
         # Convert to dict for JSON
         out: list[dict[str, Any]] = []
         for e in events:

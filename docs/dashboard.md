@@ -17,14 +17,7 @@ instead of an error.
 | Endpoint | Contents |
 |---|---|
 | `GET /api/dashboard/overview` | All panels in one payload (`as_of` stamped); polled every 5 s |
-| `GET /api/equity` | Strategy card |
-| `GET /api/risk` | Risk panel |
-| `GET /api/execution` | Open orders and recent fills |
-| `GET /api/universe` | Configured symbols and managed pins |
-| `GET /api/health` | System health panel |
-| `GET /api/explanations` | Per-holding reasons |
-| `GET /api/metrics` | Execution telemetry + runtime metrics |
-| `GET /api/performance?period=1D\|1W\|1M\|3M\|1A\|ALL` | Broker equity history vs VOO (IEX), cached 60 s; display only |
+| `GET /api/performance?period=1D\|1W\|1M\|3M\|1A\|ALL` | Broker equity history vs VOO (IEX), cached 60 s per account; display only |
 | `GET /api/ops/status` | Ops health summary; polled every 10 s |
 | `GET /api/status` | Engine state and full `RuntimeHealth`; polled every 2 s |
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -147,15 +146,12 @@ def test_dashboard_overview_returns_all_panels(tmp_path: Path, monkeypatch: pyte
     overview = svc.get_overview_payload(state)
 
     for panel in (
-        "mode",
         "account",
         "equity",
         "risk",
         "execution",
         "universe",
         "health",
-        "explanations",
-        "metrics",
     ):
         assert panel in overview, panel
     assert "crypto" not in overview
@@ -175,44 +171,6 @@ def test_dashboard_overview_returns_all_panels(tmp_path: Path, monkeypatch: pyte
     ):
         assert field in overview["account"], field
     assert overview["account"]["total_pnl"] == 300.0
-
-
-def test_dashboard_paper_badge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = _repo_config(tmp_path, mode="paper", live_enabled=False)
-    state = _web_state(_stub_manager(config_path))
-
-    mode = svc.get_overview_payload(state)["mode"]
-    assert mode["paper"] is True
-    assert mode["runtime_mode"] == "paper"
-    assert mode["live_enabled"] is False
-    assert mode["live_configured"] is False
-    assert mode["badge"] == "paper"
-
-
-def test_dashboard_live_disabled_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A live-configured deployment whose engine is not trading shows LIVE
-    clearly disabled, driven by config.live.enabled + runtime.mode."""
-    config_path = _repo_config(tmp_path, mode="live", live_enabled=True)
-    state = _web_state(_stub_manager(config_path, engine_state="stopped", paper=False))
-
-    mode = svc.get_overview_payload(state)["mode"]
-    assert mode["paper"] is False
-    assert mode["runtime_mode"] == "live"
-    assert mode["live_enabled"] is True
-    assert mode["live_configured"] is True
-    assert mode["live_active"] is False
-    assert mode["live_disabled"] is True
-    assert mode["badge"] == "live_disabled"
-
-
-def test_dashboard_live_active_badge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = _repo_config(tmp_path, mode="live", live_enabled=True)
-    state = _web_state(_stub_manager(config_path, engine_state="running", paper=False))
-
-    mode = svc.get_overview_payload(state)["mode"]
-    assert mode["badge"] == "live"
-    assert mode["live_active"] is True
-    assert mode["live_disabled"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -366,74 +324,9 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkey
     assert equity["next_rebalance_at"] == "2026-08-11T00:00:00+00:00"
 
 
-def test_dashboard_explanations_derive_structured_reasons(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = _repo_config(tmp_path)
-    positions = [
-        {
-            "symbol": "QLD",
-            "market": "equity",
-            "direction": "LONG",
-            "total_qty": 350,
-            "qty": 350,
-            "market_value": 35050.0,
-            "unrealized_pnl": 50.0,
-        }
-    ]
-    state = _web_state(_stub_manager(config_path, positions=positions))
-    monkeypatch.setattr(svc, "_dashboard_market_decisions", lambda _account_id: {"equity": _equity_decision()})
-
-    explanations = svc.get_overview_payload(state)["explanations"]
-    assert set(explanations) == {"equity"}
-    equity = explanations["equity"]
-    assert equity["strategy_name"] == "equity_leveraged_trend_v1"
-    assert equity["qualified_symbols"] == 2
-    assert equity["selected_symbols"] == ["QLD", "QQQ"]
-    assert equity["hypothesis"].startswith("leveraged index trend")
-    holding = equity["holdings"][0]
-    assert holding["symbol"] == "QLD"
-    assert holding["reason"] == "trend_on_vol_target"
-    assert holding["rank"] == 1
-    assert holding["decision_strategy"] == "equity_leveraged_trend_v1"
-    # No debug dumps: every payload must stay JSON-serializable and small.
-    payload = json.dumps(explanations)
-    assert len(payload) < 4000
-    assert "QLD" in payload
-
-
 # ---------------------------------------------------------------------------
 # Metrics: batch modules consumed lazily with explicit degrade
 # ---------------------------------------------------------------------------
-
-
-def test_dashboard_metrics_degrade_to_unavailable_when_modules_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    config_path = _repo_config(tmp_path)
-    state = _web_state(_stub_manager(config_path))
-    _install_fake_telemetry_module(monkeypatch, telemetry=False)
-    _install_fake_metrics_module(monkeypatch, metrics=False)
-
-    metrics = svc.get_overview_payload(state)["metrics"]
-    assert metrics["telemetry"]["unavailable"] is True
-    assert metrics["runtime_metrics"]["unavailable"] is True
-
-
-def test_dashboard_metrics_consume_batch_modules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = _repo_config(tmp_path)
-    state = _web_state(_stub_manager(config_path))
-    _install_fake_telemetry_module(monkeypatch, telemetry=True)
-    _install_fake_metrics_module(monkeypatch, metrics=True)
-
-    metrics = svc.get_overview_payload(state)["metrics"]
-    assert metrics["telemetry"]["unavailable"] is False
-    assert metrics["telemetry"]["execution_metrics"]["orders"] == 3
-    assert metrics["telemetry"]["forward_metrics"]["decision_count"] == 1
-    assert metrics["telemetry"]["cost_calibration"]["median_slippage_bps"] == 1.0
-    assert metrics["runtime_metrics"]["restart_count"] == 2
-    assert metrics["runtime_metrics"]["drawdown_incidents"] == 1
-    # The health panel surfaces the same restart count source.
-    health = svc.get_overview_payload(state)["health"]
-    assert health["restart_count"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -444,13 +337,11 @@ def test_dashboard_metrics_consume_batch_modules(tmp_path: Path, monkeypatch: py
 @pytest.mark.parametrize(
     ("endpoint", "panel"),
     [
-        ("dashboard_equity", "equity"),
-        ("dashboard_risk", "risk"),
-        ("dashboard_execution", "execution"),
-        ("dashboard_universe", "universe"),
-        ("dashboard_health", "health"),
-        ("dashboard_explanations", "explanations"),
-        ("dashboard_metrics", "metrics"),
+        ("equity", "equity"),
+        ("risk", "risk"),
+        ("execution", "execution"),
+        ("universe", "universe"),
+        ("health", "health"),
     ],
 )
 def test_focused_endpoints_are_slices(
@@ -473,7 +364,7 @@ def test_focused_endpoints_are_slices(
 
 
 def test_panel_endpoint_surfaces_the_overview_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A failing overview must not be reported as a missing panel on all 8 panels."""
+    """A failing overview must not be reported as a missing panel."""
 
     def _boom(**_kwargs: Any) -> dict[str, Any]:
         raise RuntimeError("ledger locked")
@@ -531,11 +422,8 @@ def test_dashboard_overview_route_answers_from_the_bound_state(tmp_path: Path, m
         "execution",
         "universe",
         "health",
-        "explanations",
-        "metrics",
     }
     assert payload["engine_state"] == "stopped"
-    assert payload["mode"]["badge"] == "paper"
     assert payload["account"]["equity"] == 100000.0
 
 
@@ -584,7 +472,10 @@ def handler_homes():
     )
 
 
-assert handler_homes() == ["parayabuck.web.managers.websocket"], handler_homes()
+# D5: no module-level EngineManager singleton remains, so importing the
+# engine no longer pulls in the websocket manager (and its log handler) as
+# an import-time side effect. Nothing may appear here.
+assert handler_homes() == [], handler_homes()
 
 import parayabuck.web.app  # noqa: E402,F401
 import parayabuck.web.services.dashboard as svc  # noqa: E402
@@ -642,11 +533,11 @@ class _State:
 
 
 payload = svc.get_overview_payload(_State())
-assert set(payload) >= {"equity", "risk", "execution", "universe", "health", "explanations", "metrics"}, payload
+assert set(payload) >= {"equity", "risk", "execution", "universe", "health"}, payload
 assert payload["engine_state"] == "stopped"
 assert counts == baseline, f"the dashboard build created {counts}, baseline {baseline}"
 assert len(app_logger.handlers) == baseline_handlers
-assert handler_homes() == ["parayabuck.web.managers.websocket"], handler_homes()
+assert handler_homes() == [], handler_homes()
 '''
 
 

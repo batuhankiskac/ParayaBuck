@@ -135,11 +135,9 @@ class SettingsService:
             return value if isinstance(value, dict) else {}
 
         risk_cfg = _section("risk")
-        runtime_cfg = _section("runtime")
         app_cfg = _section("app")
         strategy_cfg = _section("strategy")
         live_cfg = _section("live")
-
         try:
             current_digest = manager._config_digest(paper=manager.is_paper_mode())
         except Exception:
@@ -151,8 +149,6 @@ class SettingsService:
             "paper_mode": manager.is_paper_mode(),
             "daily_loss_limit_pct": 100 * risk_cfg.get("daily_loss_limit_pct", 0.005),
             "max_drawdown_pct": 100 * risk_cfg.get("max_drawdown_pct", 0.05),
-            "timeframe": runtime_cfg.get("execution_timeframe", "5m"),
-            "execution_timeframe": runtime_cfg.get("execution_timeframe", "5m"),
             "host": app_cfg.get("host", "127.0.0.1"),
             "port": app_cfg.get("port", 8000),
             "open_browser": app_cfg.get("open_browser", True),
@@ -240,11 +236,6 @@ class SettingsService:
                 except Exception:
                     old_max_dd_f = 100 * 0.05
                 if float(payload.max_drawdown_pct) != old_max_dd_f:
-                    has_runtime_change = True
-            if "execution_timeframe" in config_fields_set:
-                runtime_raw = raw_before.get("runtime", {}) if isinstance(raw_before.get("runtime"), dict) else {}
-                old_tf = runtime_raw.get("execution_timeframe") if isinstance(runtime_raw, dict) else None
-                if old_tf is None or payload.execution_timeframe != old_tf:
                     has_runtime_change = True
             if "equity_trading_enabled" in config_fields_set:
                 try:

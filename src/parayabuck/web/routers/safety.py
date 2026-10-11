@@ -64,6 +64,15 @@ def _write_mode(config_path: Any, paper: bool) -> None:
     _yaml_block(raw, "runtime")["mode"] = "paper" if paper else "live"
     if not paper:
         _yaml_block(raw, "live")["enabled"] = True
+    else:
+        # Leaving LIVE must heal the whole live block: doctor --strict --paper
+        # rejects live.enabled=true (self-write) and hard_dollar_cap>0, so a
+        # paper toggle that kept either would refuse its own write or strand
+        # the next restart (ExecStartPre).
+        live = _yaml_block(raw, "live")
+        live["enabled"] = False
+        live["hard_dollar_cap"] = 0.0
+        live["operator_approval_path"] = ""
     text = yaml.safe_dump(raw, sort_keys=False, default_flow_style=False)
     candidate = config_path.with_name(f".{config_path.name}.validate")
     atomic_write(candidate, text)

@@ -673,7 +673,6 @@ def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(tmp_path: 
         now,
         now + timedelta(minutes=1),
     )
-    manager._live_request_suffix = "1234"
     manager.confirm_live_arming("LIVE 1234")
     manager._require_valid_live_arm(*credentials)
 

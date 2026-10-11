@@ -45,26 +45,6 @@
         "operationId": "stop_engine_api_engine_stop_post"
       }
     },
-    "/api/equity": {
-      "get": {
-        "operationId": "dashboard_equity_api_equity_get"
-      }
-    },
-    "/api/execution": {
-      "get": {
-        "operationId": "dashboard_execution_api_execution_get"
-      }
-    },
-    "/api/explanations": {
-      "get": {
-        "operationId": "dashboard_explanations_api_explanations_get"
-      }
-    },
-    "/api/health": {
-      "get": {
-        "operationId": "dashboard_health_api_health_get"
-      }
-    },
     "/api/live/arming/confirm": {
       "post": {
         "operationId": "confirm_live_arming_api_live_arming_confirm_post"
@@ -78,11 +58,6 @@
     "/api/live/prerequisites": {
       "get": {
         "operationId": "live_prerequisites_api_live_prerequisites_get"
-      }
-    },
-    "/api/metrics": {
-      "get": {
-        "operationId": "dashboard_metrics_api_metrics_get"
       }
     },
     "/api/mode": {
@@ -120,11 +95,6 @@
         "operationId": "dashboard_performance_api_performance_get"
       }
     },
-    "/api/risk": {
-      "get": {
-        "operationId": "dashboard_risk_api_risk_get"
-      }
-    },
     "/api/safety/risk-epoch": {
       "post": {
         "operationId": "start_new_risk_epoch_api_safety_risk_epoch_post"
@@ -144,11 +114,6 @@
     "/api/status": {
       "get": {
         "operationId": "get_status_api_status_get"
-      }
-    },
-    "/api/universe": {
-      "get": {
-        "operationId": "dashboard_universe_api_universe_get"
       }
     },
     "/api/ws-ticket": {

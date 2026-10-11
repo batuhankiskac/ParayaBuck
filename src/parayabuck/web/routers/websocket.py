@@ -68,21 +68,16 @@ async def websocket_stream(websocket: WebSocket) -> None:
     state = _web_state(websocket)
     engine_manager = getattr(state, "engine_manager", None) if state is not None else None
     if engine_manager is None:
-        try:
-            from parayabuck.web.managers.engine import manager as engine_manager
-        except Exception:
-            engine_manager = None
+        # No fallback: the process-wide WebState always binds a manager, and
+        # deps.resolve_web_state 503s everywhere else when it is missing.
+        await websocket.close(code=1011)
+        return
     try:
         while True:
-            account_data: dict[str, Any] = {}
-            if engine_manager is not None:
-                account_data = await asyncio.to_thread(engine_manager.fetch_account_snapshot)
-                state, paper = await asyncio.to_thread(
-                    lambda: (engine_manager.current_engine_state(), engine_manager.is_paper_mode())
-                )
-            else:
-                account_data = {}
-                state, paper = "stopped", True
+            account_data = await asyncio.to_thread(engine_manager.fetch_account_snapshot)
+            state, paper = await asyncio.to_thread(
+                lambda: (engine_manager.current_engine_state(), engine_manager.is_paper_mode())
+            )
             status_data = {"state": state, "paper": paper}
             await websocket.send_json({"type": "update", "account": account_data, "status": status_data})
             with suppress(TimeoutError, asyncio.TimeoutError):

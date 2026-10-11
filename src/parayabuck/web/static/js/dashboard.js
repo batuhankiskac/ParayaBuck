@@ -101,7 +101,7 @@
     function renderPositions(positions, equity) {
       const tbody = byId("positionsTableBody");
       setText("activePositionsBadge", positions.length + " pozisyon");
-      if (!positions.length) { PB.emptyRow(tbody, 8, "Henüz açık pozisyon yok"); return; }
+      if (!positions.length) { PB.emptyRow(tbody, 7, "Henüz açık pozisyon yok"); return; }
       const eq = Number(equity) || 0;
       const rows = positions.slice().sort(function (a, b) { return Number(b.market_value || 0) - Number(a.market_value || 0); }).map(function (p) {
         const crypto = p.market === "crypto";
@@ -120,14 +120,9 @@
         const bar = el("span", { className: "bar" }, [el("span")]);
         bar.firstChild.style.width = Math.min(100, Math.max(0, share || 0)) + "%";
         const shareCell = el("div", { className: "weight-cell" }, [el("span", { text: fmt.pct(share) }), bar]);
-        let protection;
-        if (p.manual_intervention_required) protection = el("span", { className: "badge bad", text: "Elle müdahale gerekli" });
-        else if (p.protection_state) protection = el("span", { className: "badge", text: p.protection_state });
-        else protection = el("span", { className: "muted", text: "—" });
-        if (p.stop_price || p.target_price) protection.title = "Stop " + fmt.price(p.stop_price) + " · Hedef " + fmt.price(p.target_price);
         return el("tr", null, [
           cell(sym), cell(qty, "r"), cell(fmt.price(p.avg_price), "r"), cell(fmt.price(p.current_price), "r"),
-          cell(fmt.money(p.market_value), "r"), cell(pnl, "r"), cell(shareCell, "r"), cell(protection)
+          cell(fmt.money(p.market_value), "r"), cell(pnl, "r"), cell(shareCell, "r")
         ]);
       });
       tbody.replaceChildren.apply(tbody, rows);
@@ -502,16 +497,15 @@
         }
         return el("div", { className: "check" }, [el("span", { className: "check-dot " + status }), body, el("span", { className: PB.badgeClass(status), text: c.status })]);
       }));
-      const events = data.recent_events || data.events || [];
+      const events = data.events || [];
       const evBox = byId("opsRecentEvents");
       if (!events.length) evBox.replaceChildren(el("li", { className: "empty-note", text: "Son olay yok" }));
       else evBox.replaceChildren.apply(evBox, events.slice(0, 12).map(function (ev) {
-        return el("li", null, [el("time", { text: fmt.dateTime(ev.at || ev.time || ev.timestamp) }), el("span", { text: (ev.type || ev.code || "olay") + (ev.message ? " — " + ev.message : "") })]);
+        return el("li", null, [el("time", { text: fmt.dateTime(ev.occurred_at) }), el("span", { text: (ev.kind || "olay") + (ev.message ? " — " + ev.message : "") })]);
       }));
-      const exp = data.decision_explanation || data.explanations;
+      const decision = data.decision;
       let text = "Karar açıklaması yok";
-      if (typeof exp === "string") text = exp;
-      else if (exp) { try { text = JSON.stringify(exp, null, 2); } catch (_) { text = String(exp); } }
+      if (decision) { try { text = JSON.stringify(decision, null, 2); } catch (_) { text = String(decision); } }
       setText("opsDecisionExplanation", text);
     }
 
@@ -540,7 +534,14 @@
     async function refreshOps() {
       if (opsBusy) return;
       opsBusy = true;
-      try { renderOps(await api.fetchJson("/api/ops/status")); }
+      try {
+        const status = await api.fetchJson("/api/ops/status");
+        let events = [];
+        let decision = null;
+        try { events = (await api.fetchJson("/api/ops/events?limit=12")).events || []; } catch (_) {}
+        try { decision = (await api.fetchJson("/api/ops/decisions/latest")).decision || null; } catch (_) {}
+        renderOps(Object.assign({}, status, { events: events, decision: decision }));
+      }
       catch (e) { const box = byId("opsChecks"); if (box) box.replaceChildren(el("p", { className: "empty-note", text: "Operasyon durumu alınamadı: " + e.message })); }
       finally { opsBusy = false; }
     }

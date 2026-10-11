@@ -63,7 +63,7 @@ class TestEventQueue:
         assert q.put_market_event(e2) == "added"
         e3 = _make_event("SPY", datetime(2025, 1, 1, tzinfo=UTC))
         assert q.put_market_event(e3) == "overflow"
-        assert [event.bar.symbol for event in q.snapshot()] == ["QQQ", "QLD"]
+        assert [event.bar.symbol for event in q.drain_for_test()] == ["QQQ", "QLD"]
 
     def test_coalescible_replaces_in_place(self):
         q = runtime_mod._EventQueue(maxsize=2)
@@ -71,7 +71,7 @@ class TestEventQueue:
         q.put_market_event(_make_event("AAPL", ts))
         q.put_market_event(_make_event("MSFT", datetime(2025, 1, 2, tzinfo=UTC)))
         assert q.put_market_event(_make_event("AAPL", ts)) == "coalesced"
-        snap = q.snapshot()
+        snap = q.drain_for_test()
         # ordering preserved, first slot still AAPL but updated
         assert snap[0].bar.symbol == "AAPL"
         assert snap[1].bar.symbol == "MSFT"

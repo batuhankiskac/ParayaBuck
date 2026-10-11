@@ -13,28 +13,23 @@ from types import SimpleNamespace
 from parayabuck.config import Config
 from parayabuck.core.models import Bar, Market
 from parayabuck.runtime import EngineRuntime
-from parayabuck.universe import equity_universe_digest
 
 
 def test_static_equity_product_universe_identity_follows_the_configured_symbols() -> None:
-    """The equity market binds a CONFIGURED snapshot whose identity is the
-    static equity policy digest: editing the configured symbols produces a
-    different snapshot identity."""
+    """The equity market binds a CONFIGURED snapshot: editing the configured
+    symbols produces different membership."""
     runtime = EngineRuntime.__new__(EngineRuntime)
     base = Config()
     runtime.app_config = base
 
     bound = runtime._load_product_universe(base.universe.equity.symbols)
-    digest = equity_universe_digest(base.universe.equity)
     assert bound.market == Market.EQUITY
     assert bound.observation_symbols == ("SPY", "QQQ", "QLD")
-    assert bound.snapshot_id == f"equity:configured:{digest}"
-    assert bound.config_digest == digest
 
     narrowed = replace(base.universe.equity, symbols=("SPY", "QQQ"))
     runtime.app_config = replace(base, universe=replace(base.universe, equity=narrowed))
     rebound = runtime._load_product_universe(narrowed.symbols)
-    assert rebound.config_digest != digest
+    assert rebound.eligible_symbols != bound.eligible_symbols
     assert rebound.observation_symbols == ("SPY", "QQQ")
 
 

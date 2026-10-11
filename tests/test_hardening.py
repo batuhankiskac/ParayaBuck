@@ -282,7 +282,7 @@ def test_queue_overflow_never_evicts_a_queued_decision_bar() -> None:
 
     runtime._put_event(_daily(timestamp, "QLD"))
 
-    assert [item.bar.symbol for item in runtime._events.snapshot() if item is not None] == ["SPY", "QQQ"]
+    assert [item.bar.symbol for item in runtime._events.drain_for_test() if item is not None] == ["SPY", "QQQ"]
     assert runtime._circuit_breaker_reason == "final_market_event_queue_overflow"
     assert runtime._dropped_events == 1
 
@@ -295,7 +295,7 @@ def test_full_queue_coalesces_a_repeat_of_the_same_decision_bar() -> None:
 
     assert queue_.put_market_event(_Event(revised, timestamp)) == "coalesced"
     assert queue_.put_market_event(_Event(_daily(timestamp, "QLD"), timestamp)) == "overflow"
-    assert [item.bar.close for item in queue_.snapshot() if item is not None] == [100.5]
+    assert [item.bar.close for item in queue_.drain_for_test() if item is not None] == [100.5]
 
 
 def test_queue_overflow_breaker_marks_runtime_halted() -> None:

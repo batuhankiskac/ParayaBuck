@@ -467,6 +467,9 @@ def test_runtime_defers_the_batch_while_the_sip_bar_is_missing_then_reruns_it(mo
     key = (Market.EQUITY, _STREAM_LABEL)
     deferred_bars, retry_at = engine._deferred_portfolio_batches[key]
     assert deferred_bars == bars and retry_at is not None
+    # The cross-check's retry horizon sits inside the decision window: the
+    # due-runner must re-run it, never expire it as a stale parked batch.
+    engine._decision_retry_settings = lambda: (timedelta(seconds=60), timedelta(days=30))  # type: ignore[method-assign]
     rerun: list[list[Bar]] = []
 
     def _handled(batch: list[Bar], **_kwargs: object) -> bool:

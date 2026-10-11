@@ -133,11 +133,7 @@ def _equity_runtime(
         maximum_allocation=0.50,
         risk_limits=portfolio_risk_limits_from_config(config.risk),
         account_id="paper-account",
-        universe=ActiveProductUniverse.configured(
-            Market.EQUITY,
-            EQUITY_SYMBOLS,
-            snapshot_id="paper-equity",
-        ),
+        universe=ActiveProductUniverse.configured(Market.EQUITY, EQUITY_SYMBOLS),
         universe_version="paper-equity-policy",
     )
 

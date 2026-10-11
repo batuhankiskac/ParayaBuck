@@ -15,6 +15,9 @@ class RiskState:
     realized_pnl: float
     unrealized_pnl: float
     fees: float
+    # Forensic only: no latch, restore, dashboard, or doctor path branches
+    # on this value (production always writes 0 / copies through). Kept in
+    # the schema so old rows still parse.
     consecutive_losses: int
     circuit_breaker_reason: str | None
     updated_at: datetime

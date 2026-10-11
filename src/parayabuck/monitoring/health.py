@@ -158,12 +158,13 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
     )
 
 
-# Per-worker liveness mirrors the runtime's own rules (_is_worker_healthy /
-# _stream_worker_delivering in runtime.py): the trade-update stream heartbeats
-# only at (re)start, the signal-adjustment monitor once per hourly pass, and a
-# market stream proves liveness by delivered bars, only while the NYSE
-# calendar says it must deliver (never on a holiday, never after an early
-# close).
+# Single source of truth for worker-liveness rules (R4A-2): importing the
+# runtime module here would cycle (web/CLI import health without a running
+# engine), so the constants and the staleness predicate live here and the
+# runtime imports them. The trade-update stream heartbeats only at (re)start,
+# the signal-adjustment monitor once per hourly pass, and a market stream
+# proves liveness by delivered bars, only while the NYSE calendar says it
+# must deliver (never on a holiday, never after an early close).
 _EVENT_DRIVEN_WORKERS = frozenset({"pb-trade-updates"})
 _SIGNAL_ADJUSTMENT_WORKER = "pb-signal-adjustment"
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0

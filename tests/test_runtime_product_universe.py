@@ -25,44 +25,33 @@ _CLEAN_RECONCILIATION = {
 
 
 def test_configured_universe_uses_eligible_pool_for_membership() -> None:
-    universe = ActiveProductUniverse.configured(
-        Market.EQUITY,
-        ("SPY", "QQQ", "QLD"),
-        snapshot_id="equity:configured:digest",
-        config_digest="digest",
-    )
+    universe = ActiveProductUniverse.configured(Market.EQUITY, ("SPY", "QQQ", "QLD"))
 
     assert universe.contains("QLD", Market.EQUITY, datetime.now(UTC))
     assert not universe.contains("AAPL", Market.EQUITY, datetime.now(UTC))
     assert universe.observation_symbols == ("SPY", "QQQ", "QLD")
-    assert universe.snapshot_id == "equity:configured:digest"
 
 
 def test_managed_pins_extend_observation_but_not_eligibility() -> None:
-    universe = ActiveProductUniverse.configured(Market.EQUITY, ("SPY", "QLD"), snapshot_id="pins")
+    universe = ActiveProductUniverse.configured(Market.EQUITY, ("SPY", "QLD"))
 
     pinned = universe.with_observation_symbols(("SPY", "QLD", "AAPL"))
 
     assert pinned.observation_symbols == ("SPY", "QLD", "AAPL")
     assert pinned.eligible_symbols == universe.eligible_symbols
-    assert pinned.snapshot_id == universe.snapshot_id
     assert not pinned.contains("AAPL", Market.EQUITY, datetime.now(UTC))
 
 
 def test_configured_universe_rejects_empty_membership() -> None:
     with pytest.raises(ValueError, match="eligible symbols"):
-        ActiveProductUniverse.configured(Market.EQUITY, (), snapshot_id="empty")
+        ActiveProductUniverse.configured(Market.EQUITY, ())
 
 
 def test_start_composition_passes_product_universe_to_runtime(monkeypatch) -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     config = Config()
     strategy = product_strategy_from("equity_leveraged_trend_v1", config.strategy.equity.parameters)
-    universe = ActiveProductUniverse.configured(
-        Market.EQUITY,
-        ("SPY", "AAPL"),
-        snapshot_id="composition-test",
-    )
+    universe = ActiveProductUniverse.configured(Market.EQUITY, ("SPY", "AAPL"))
     runtime.mode = RuntimeMode.PAPER
     runtime.paper = True
     runtime._running = False
@@ -95,6 +84,6 @@ def test_start_composition_passes_product_universe_to_runtime(monkeypatch) -> No
         runtime.start()
 
     assert captured[0]["universe"] is runtime._product_universes_by_market[Market.EQUITY]
-    assert captured[0]["universe"].snapshot_id == universe.snapshot_id
+    assert captured[0]["universe"].eligible_symbols == universe.eligible_symbols
     assert captured[0]["universe_version"]
     assert captured[0].get("allow_static_universe", False) is False

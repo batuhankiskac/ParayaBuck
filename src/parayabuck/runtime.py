@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import hashlib
 import os
 import queue
@@ -51,6 +50,11 @@ from parayabuck.markets.timeframes import (
 from parayabuck.monitoring import alerts
 from parayabuck.monitoring import metrics as runtime_metrics_store
 from parayabuck.monitoring import receipt as paper_receipt
+from parayabuck.monitoring.health import (  # single liveness source of truth (R4A-2)
+    _EVENT_DRIVEN_WORKERS,
+    _SIGNAL_ADJUSTMENT_CHECK_SECONDS,
+    _SIGNAL_ADJUSTMENT_WORKER,
+)
 from parayabuck.monitoring.journal import configure_global_journal
 
 try:
@@ -182,12 +186,6 @@ _WARMUP_RETRY_SECONDS = 600.0
 # its benchmark's is retried at most every 30 minutes, so a recovered provider
 # makes the engine ready again within the same session.
 _WARMUP_RETRY_MAX_SECONDS = 1800.0
-# How often the split-adjustment reconciler compares raw vs split-adjusted
-# daily tails (hourly; a split is applied at most one check after it trades).
-_SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
-# A verification counts as fresh for one check interval plus this slack:
-# the monitor waits a full interval AFTER each pass, so the next success
-# always lands a little past the previous one + 3600 s.
 _SIGNAL_ADJUSTMENT_STALE_SLACK_SECONDS = 300.0
 # Safety margin added ON TOP of the strategy history window so the batched
 # splits fetch always spans the full required signal window (never a short
@@ -409,6 +407,9 @@ class EngineRuntime:
         self._ingestion_lock = threading.Lock()
         self._portfolio_lock = threading.RLock()
         self._state_lock = threading.RLock()
+        # Serializes _threads append/iterate/join (R5A-3): a reset-spawned
+        # stream worker must never miss stop()'s join.
+        self._threads_lock = threading.Lock()
         self._storage_closed = False
         self._state = "stopped"
         self._workers: dict[str, WorkerHealth] = {}
@@ -416,7 +417,6 @@ class EngineRuntime:
         self._coalesced_events = 0
         self._oldest_received_at: datetime | None = None
         self._event_stats_lock = threading.Lock()
-        self._last_account_at: datetime | None = None
         # Immutable AccountSnapshot shared across a processing cycle. The
         # account loop refreshes it every poll interval; the decision path
         # reuses it while it is fresh (<= maximum_account_age_for_entry_seconds)
@@ -425,7 +425,6 @@ class EngineRuntime:
         self._last_account_snapshot_at: datetime | None = None
         self._account_snapshot_lock = threading.Lock()
         self._account_snapshot_generation = 0
-        self._account_snapshot_lease_enabled = True
         self._account_snapshot_active_leases: set[int] = set()
         self._account_snapshot_invalidation_pending = False
         self._last_reconciliation_at: datetime | None = None
@@ -481,14 +480,7 @@ class EngineRuntime:
 
     def _load_product_universe(self, observation_symbols: tuple[str, ...]) -> ActiveProductUniverse:
         """Bind runtime observation membership to the static equity snapshot."""
-
-        policy_digest = equity_universe_digest(self.app_config.universe.equity)
-        return ActiveProductUniverse.configured(
-            Market.EQUITY,
-            observation_symbols,
-            snapshot_id=f"{Market.EQUITY.value}:configured:{policy_digest}",
-            config_digest=policy_digest,
-        )
+        return ActiveProductUniverse.configured(Market.EQUITY, observation_symbols)
 
     def _expected_live_configuration_digests(self) -> tuple[str, ...]:
         risk_limits = portfolio_risk_limits_from_config(self.app_config.risk)
@@ -701,9 +693,9 @@ class EngineRuntime:
         worker = workers.get(name)
         if worker is None or not worker.alive:
             return False
-        if name == "pb-trade-updates":
+        if name in _EVENT_DRIVEN_WORKERS:
             return True
-        if name == "pb-signal-adjustment":
+        if name == _SIGNAL_ADJUSTMENT_WORKER:
             # The monitor heartbeats once per check interval, not per poll.
             ttl = _SIGNAL_ADJUSTMENT_CHECK_SECONDS + max(300.0, heartbeat_ttl)
             return (now - worker.last_heartbeat).total_seconds() <= ttl
@@ -725,7 +717,7 @@ class EngineRuntime:
             enabled = market_enabled.get(market, False)
             symbols = symbols_by_market.get(market, set())
             worker = workers.get(worker_name)
-            not_ready_symbols: set[str] = getattr(self, "_not_ready_symbols", set())
+            not_ready_symbols = self._not_ready_snapshot()
             market_not_ready = symbols & not_ready_symbols
             ready_symbol_count = len(symbols) - len(market_not_ready)
             ready = not enabled or not symbols or ready_symbol_count > 0
@@ -1518,29 +1510,28 @@ class EngineRuntime:
         except Exception:
             pass
         if getattr(self, "_snapshot_writer_started", False) and getattr(self, "_snapshot_writer", None) is not None:
+            # Stop the writer BEFORE publishing the stopped snapshot: the
+            # writer thread loops write_once() until stop() sets its flag, so
+            # a periodic write landing between the two calls would replace
+            # the stopped snapshot with a stale running one.
+            try:
+                self._snapshot_writer.stop(timeout=1.0)  # type: ignore[union-attr]
+            except Exception:
+                pass
             try:
                 self._snapshot_writer.write_stopped()  # type: ignore[union-attr]
             except Exception:
                 pass
-            finally:
-                try:
-                    self._snapshot_writer.stop(timeout=1.0)  # type: ignore[union-attr]
-                except Exception:
-                    pass
-                self._snapshot_writer_started = False
+            self._snapshot_writer_started = False
         try:
             if hasattr(self, "_events") and hasattr(self._events, "put_nowait"):
                 self._events.put_nowait(None)
         except queue.Full:
-            try:
-                with contextlib.suppress(queue.Empty):
-                    if hasattr(self, "_events"):
-                        self._events.get_nowait()
-                with contextlib.suppress(queue.Full):
-                    if hasattr(self, "_events"):
-                        self._events.put_nowait(None)
-            except Exception:
-                pass
+            # The queue never evicts a decision bar: a full queue means the
+            # decision loop is wedged, and it already wakes every 0.5 s on
+            # timeout and checks _running. Dropping the oldest bar to fit
+            # the sentinel would silently lose a session's decision input.
+            pass
         # A start that aborted before launching the stream workers has no
         # socket to stop. getattr default True: partially constructed
         # runtimes (EngineRuntime.__new__ in tests) keep the stop attempt.
@@ -1566,19 +1557,26 @@ class EngineRuntime:
         # once no worker can still be mid-write.
         # getattr defaults: partially constructed runtimes (tests use
         # EngineRuntime.__new__) may stop before start() created the workers.
-        for thread in getattr(self, "_threads", ()):
-            thread.join(timeout=5)
-        alive = [thread.name for thread in getattr(self, "_threads", ()) if thread.is_alive()]
-        reconcile_thread = getattr(self, "_reconcile_thread", None)
-        if reconcile_thread is not None:
-            reconcile_thread.join(timeout=30)
-            if reconcile_thread.is_alive():
-                alive.append(reconcile_thread.name)
-        warmup_thread = getattr(self, "_warmup_retry_thread", None)
-        if warmup_thread is not None:
-            warmup_thread.join(timeout=30)
-            if warmup_thread.is_alive():
-                alive.append(warmup_thread.name)
+        # The spawn locks are held across the read-join so a decision-loop
+        # pass or an in-flight trade-update callback cannot spawn a new
+        # pb-reconcile / pb-warmup-retry AFTER the join and run broker +
+        # ledger I/O after the pools below are closed.
+        with self._reconcile_spawn_lock, self._warmup_retry_spawn_lock:
+            with getattr(self, "_threads_lock", threading.Lock()):
+                threads_snapshot = tuple(getattr(self, "_threads", ()))
+            for thread in threads_snapshot:
+                thread.join(timeout=5)
+            alive = [thread.name for thread in threads_snapshot if thread.is_alive()]
+            reconcile_thread = getattr(self, "_reconcile_thread", None)
+            if reconcile_thread is not None:
+                reconcile_thread.join(timeout=30)
+                if reconcile_thread.is_alive():
+                    alive.append(reconcile_thread.name)
+            warmup_thread = getattr(self, "_warmup_retry_thread", None)
+            if warmup_thread is not None:
+                warmup_thread.join(timeout=30)
+                if warmup_thread.is_alive():
+                    alive.append(warmup_thread.name)
         # The signal-adjustment monitor MUST be joined before the historical
         # data client below is closed: a late verification pass would otherwise
         # hit a dead HTTP session mid-request.
@@ -1591,6 +1589,16 @@ class EngineRuntime:
             self._state = "stop_failed"
             log.error("Runtime workers did not stop cleanly: %s", ", ".join(alive))
             return False
+        # Drain the process-global operational journal AFTER workers joined:
+        # emit() only enqueues, so a clean stop would otherwise leave queued
+        # decision_deferred / circuit_breaker events unwritten. Bounded
+        # timeout; a SIGKILL loss window remains documented. Never fatal.
+        try:
+            from parayabuck.monitoring.journal import get_journal
+
+            get_journal().stop(timeout=2.0)
+        except Exception:
+            log.warning("Operational journal drain failed", exc_info=True)
         # Release broker/data HTTP session pools on every start/stop cycle,
         # only after every worker joined (never under a stuck request).
         for candidate in (
@@ -1786,7 +1794,8 @@ class EngineRuntime:
         snapshot, snapshot_at, generation = self._account_snapshot_cache_state()
         if snapshot is account and snapshot_at is not None:
             return _AccountSnapshotLease(account, generation)
-        if not getattr(self, "_account_snapshot_lease_enabled", False):
+        if snapshot is None and snapshot_at is None:
+            # Test double without cache state: unvalidated lease.
             return _AccountSnapshotLease(account, None)
         if _allow_retry:
             # Invalidation after _fresh_account_snapshot returned but before
@@ -2019,7 +2028,7 @@ class EngineRuntime:
         """
         with getattr(self, "_risk_state_lock", threading.Lock()):
             account_id = self.broker.account_id or "unknown"
-            today = datetime.now(UTC).date()
+            today = datetime.now(UTC).astimezone(NEW_YORK).date()
             self.ledger.save_safety_incident(account_id, reason)
             previous = self.ledger.load_risk_state(account_id, today)
             if previous is None:
@@ -2246,9 +2255,13 @@ class EngineRuntime:
         # stays deferred until the operator's verified reset.
         # The entry-risk latch (daily loss, drawdown) and a market entry halt
         # block new entries everywhere else; a deferred BUY is an entry too.
+        # Warmup gates the same way: signal history is half-seeded, so a
+        # restart fill arriving mid-warmup must not size the dependent BUY
+        # off decision-day reference prices. The post-warmup resume submits it.
         submit_buys = (
             getattr(self, "_circuit_breaker_reason", None) is None
             and not getattr(self, "_reconcile_failed", False)
+            and not getattr(self, "_warming_up", False)
             and getattr(self, "_entry_risk_latch", {}).get(market) is None
             and getattr(self, "_market_entry_halts", {}).get(market) is None
         )
@@ -2806,15 +2819,14 @@ class EngineRuntime:
         if pending is None or now < pending.retry_at:
             return
         client = getattr(self, "_historical", None)
-        fetch = getattr(client, "get_session_daily_bars", None)
-        if not callable(fetch):
+        if client is None:
             self._session_close_fallback = None
             return
         pending.attempts += 1
         close = session_close_utc(pending.session) or pending.retry_at
         start = datetime(pending.session.year, pending.session.month, pending.session.day, tzinfo=NEW_YORK)
         try:
-            bars = fetch(list(pending.symbols), start, close, feed="sip", adjustment="splits")
+            bars = client.get_session_daily_bars(list(pending.symbols), start, close, feed="sip", adjustment="splits")
         except Exception as exc:
             log.warning(
                 "SIP daily-bar fallback for session %s failed (attempt %d): %s",
@@ -2838,7 +2850,16 @@ class EngineRuntime:
                 pending.session.isoformat(),
                 ",".join(sorted(usable)),
             )
-            self._session_close_fallback = None
+            remaining = tuple(symbol for symbol in pending.symbols if symbol not in usable)
+            if not remaining:
+                self._session_close_fallback = None
+                return
+            # Partial provider response: keep the fallback armed for the
+            # missing symbols so their decision input is still replaced.
+            # The attempt budget bounds retries; the next pass re-fetches
+            # only what is still missing.
+            pending.symbols = remaining
+            pending.retry_at = now + _SESSION_CLOSE_FALLBACK_INTERVAL
             return
         if pending.attempts >= _SESSION_CLOSE_FALLBACK_ATTEMPTS:
             log.error(
@@ -2873,14 +2894,7 @@ class EngineRuntime:
             return close
         return datetime.combine(session, clock_time(16, 0), tzinfo=NEW_YORK).astimezone(UTC)
 
-    def _defer_portfolio_batch(
-        self,
-        bars: list[Bar],
-        market: Market,
-        reason: str,
-        *,
-        now: datetime | None = None,
-    ) -> bool:
+    def _defer_portfolio_batch(self, bars: list[Bar], market: Market, reason: str) -> bool:
         """Re-queue a session-close decision batch for a bounded retry.
 
         A RECOVERABLE gate at decision time (an active reconciliation-owned
@@ -2903,7 +2917,7 @@ class EngineRuntime:
         """
         if not bars:
             return False
-        now = now or datetime.now(UTC)
+        now = datetime.now(UTC)
         retry_interval, retry_window = self._decision_retry_settings()
         decision_timestamp = max(bar.timestamp for bar in bars)
         session = decision_timestamp.astimezone(NEW_YORK).date()
@@ -2977,7 +2991,7 @@ class EngineRuntime:
             else position
             for position in account.positions
         )
-        equity = account.cash + sum(abs(position.qty) * position.current_price for position in positions)
+        equity = account.cash + sum(position.qty * position.current_price for position in positions)
         if equity <= 0:
             return account
         delta = equity - account.equity
@@ -3596,11 +3610,13 @@ class EngineRuntime:
                 basis_reason = self._equity_signal_basis_latch(newest) if newest is not None else None
                 if basis_reason is not None:
                     entry_latch = basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
+            if account is None:
+                # Broker I/O stays outside _portfolio_lock (R2A4): the lock
+                # below covers only the in-memory catch-up, matching every
+                # other decision-path fetch in this file.
+                account = self.broker.account()
             with self._portfolio_lock:
-                catch_up_kwargs = {"entry_latch": entry_latch}
-                if account is not None:
-                    catch_up_kwargs["account"] = account
-                result = portfolio_runtime.startup_catch_up(**catch_up_kwargs)
+                result = portfolio_runtime.startup_catch_up(entry_latch=entry_latch, account=account)
             self._record_paper_decision_receipt(portfolio_runtime, result, account)
             self._emit_equity_daily_summary(portfolio_runtime, result, account)
             log.info(
@@ -3609,6 +3625,70 @@ class EngineRuntime:
                 result.status,
                 result.decision_id,
             )
+            if result.status in ("warming_up", "incomplete_strategy_batch"):
+                # A crash lost any parked retry for this session (deferred
+                # batches and the SIP fallback are memory-only). Re-derive the
+                # undecided session directly: when the retry window is still
+                # open and the provider history covers it, seed the missing
+                # tails and decide it now instead of silently expiring it.
+                self._recover_undecided_catch_up_session(portfolio_runtime, result.status, entry_latch, account)
+
+    def _recover_undecided_catch_up_session(
+        self,
+        portfolio_runtime: Any,
+        catch_up_status: str,
+        entry_latch: str | None,
+        account: AccountSnapshot | None,
+    ) -> None:
+        """Re-derive an undecided in-window session after a restart (R3B3).
+
+        `_deferred_portfolio_batches` and `_session_close_fallback` are
+        memory-only, so a crash inside the retry window loses every parked
+        retry. The smaller fix (no new persisted state): when the catch-up
+        reports a transient non-deciding status and the history now covers a
+        session whose retry window is still open, decide that session via the
+        ordinary `process_closed_bars` path. Out-of-window sessions, decided
+        sessions, and sessions without provider history are left alone — the
+        watchdog owns the missing-session alarm for those.
+        """
+        try:
+            history = getattr(portfolio_runtime, "history", {}) or {}
+            required = tuple(getattr(portfolio_runtime, "_required_symbols", lambda: tuple(history))())
+            if not required:
+                return
+            tails = {symbol: history.get(symbol) for symbol in required}
+            if any(not series for series in tails.values()):
+                return
+            newest = max(series[-1].timestamp for series in tails.values() if series)
+            session = newest.astimezone(NEW_YORK).date()
+            _retry_interval, retry_window = self._decision_retry_settings()
+            if datetime.now(UTC) >= self._decision_session_close(session) + retry_window:
+                return
+            decided = getattr(portfolio_runtime, "_session_decided", None)
+            if callable(decided) and decided(newest):
+                return
+            bars = [series[-1] for series in tails.values() if series]
+            with self._portfolio_lock:
+                result = portfolio_runtime.process_closed_bars(
+                    bars,
+                    entry_latch=entry_latch,
+                    decision_origin="startup_catch_up",
+                    **({"account": account} if account is not None else {}),
+                )
+        except Exception:
+            log.warning("Undecided-session recovery after catch-up %s failed", catch_up_status, exc_info=True)
+            return
+        try:
+            self._record_paper_decision_receipt(portfolio_runtime, result, account)
+            self._emit_equity_daily_summary(portfolio_runtime, result, account)
+        except Exception:
+            log.warning("Undecided-session recovery receipt failed", exc_info=True)
+        log.info(
+            "Startup catch-up recovery: market=%s status=%s decision_id=%s",
+            portfolio_runtime.market.value,
+            result.status,
+            result.decision_id,
+        )
 
     def _entry_readiness_reasons(
         self,
@@ -3661,7 +3741,11 @@ class EngineRuntime:
             shared_workers.add(relevant_stream)
         else:
             shared_workers.update(_MARKET_BY_STREAM_WORKER)
-        dead_workers = [name for name, worker in self._workers.items() if name in shared_workers and not worker.alive]
+        dead_workers = [
+            name
+            for name, worker in dict(getattr(self, "_workers", {})).items()
+            if name in shared_workers and not worker.alive
+        ]
         if dead_workers:
             reasons.append("worker_unavailable:" + ",".join(sorted(dead_workers)))
         # One atomic read: writers clear halts under _state_lock on other
@@ -3991,10 +4075,13 @@ class EngineRuntime:
         """
         try:
             client = getattr(self, "_historical", None)
-            method = getattr(client, "get_session_daily_bars", None)
             fetch = (
-                (lambda symbols, start, end: method(symbols, start, end, feed="sip", adjustment="splits"))
-                if callable(method)
+                (
+                    lambda symbols, start, end: client.get_session_daily_bars(
+                        symbols, start, end, feed="sip", adjustment="splits"
+                    )
+                )
+                if client is not None
                 else None
             )
             with getattr(self, "_portfolio_lock", threading.RLock()):
@@ -4060,14 +4147,45 @@ class EngineRuntime:
         the batch handled: a re-queued batch (readiness still blocking, lease
         invalidated again, cross-check still waiting) has already refreshed
         its own ``retry_at`` in place and must survive this pass.
+
+        A batch whose session-close retry window has expired while parked
+        (gate wait, cross-check wait, stalled loop) is expired with the same
+        alert the gate path emits — never re-decided after its documented
+        40-minute-after-close deadline, after the watchdog may already have
+        reported it missing.
         """
         deferred = getattr(self, "_deferred_portfolio_batches", None)
         if not deferred:
             return
         now = now or datetime.now(UTC)
+        _retry_interval, retry_window = self._decision_retry_settings()
         for key, (bars, retry_at) in sorted(deferred.items(), key=lambda item: item[0][1]):
             if retry_at is not None and retry_at > now:
                 continue
+            if bars:
+                session = max(bar.timestamp for bar in bars).astimezone(NEW_YORK).date()
+                deadline = self._decision_session_close(session) + retry_window
+                # A batch parked past the session's decision deadline is
+                # expired, never re-decided after it.
+                if now >= deadline:
+                    deferred.pop(key, None)
+                    market = key[0]
+                    decision_timestamp = max(bar.timestamp for bar in bars)
+                    log.error(
+                        "Decision retry window expired; session NOT decided: market=%s session=%s reason=%s",
+                        market.value,
+                        decision_timestamp.isoformat(),
+                        "retry_window_ended_while_parked",
+                    )
+                    alerts.emit(
+                        "decision_deferred",
+                        message="Session-close decision retry window expired; session not decided",
+                        market=market.value,
+                        decision_timestamp=decision_timestamp.isoformat(),
+                        reason="retry_window_ended_while_parked",
+                        retry_window_ended=deadline.isoformat(),
+                    )
+                    continue
             if self._process_portfolio_timestamp(bars, deferred=True):
                 deferred.pop(key, None)
 
@@ -4221,8 +4339,11 @@ class EngineRuntime:
         # Reached from the decision loop, startup and the retry thread
         # itself: keep check-spawn-assign atomic so overlapping
         # callers cannot start duplicate pb-warmup-retry threads and orphan
-        # the overwritten reference (never joined by stop).
+        # the overwritten reference (never joined by stop). Refuses to spawn
+        # once stopping: stop() holds this same lock across its join.
         with self._warmup_retry_spawn_lock:
+            if not getattr(self, "_running", False):
+                return
             current = getattr(self, "_warmup_retry_thread", None)
             if current is not None and current.is_alive():
                 return
@@ -4240,11 +4361,16 @@ class EngineRuntime:
             self._warmup_retry_thread = thread
             thread.start()
 
+    def _not_ready_snapshot(self) -> frozenset[str]:
+        """Copy the live not-ready set under the state lock (R2A5)."""
+        with getattr(self, "_state_lock", threading.RLock()):
+            return frozenset(getattr(self, "_not_ready_symbols", set()))
+
     def _retry_incomplete_warmup(self) -> None:
         history = self._historical
         if history is None:
             return
-        symbols = sorted(self._not_ready_symbols)
+        symbols = sorted(self._not_ready_snapshot())
         log.info("Retrying incomplete warmup for %d symbols", len(symbols))
         self._warmup_symbols(history, symbols, retry=True)
         self._refresh_readiness()
@@ -4253,7 +4379,7 @@ class EngineRuntime:
         required = {
             symbol for runtime in getattr(self, "_portfolio_runtimes", ()) for symbol in getattr(runtime, "symbols", ())
         }
-        return bool(required) and not (required & self._not_ready_symbols)
+        return bool(required) and not (required & self._not_ready_snapshot())
 
     def _persist_risk_state(self, account: AccountSnapshot) -> None:
         # _account_loop, the trade-update path and the operator resets call
@@ -4261,7 +4387,7 @@ class EngineRuntime:
         # writes must not interleave.
         with getattr(self, "_risk_state_lock", threading.Lock()):
             account_id = self.broker.account_id or "unknown"
-            today = datetime.now(UTC).date()
+            today = datetime.now(UTC).astimezone(NEW_YORK).date()
             self._evaluate_entry_risk_latch(account)
             reason = self._circuit_breaker_reason
             # The circuit_breaker_reason in the session row is kept for
@@ -4481,7 +4607,12 @@ class EngineRuntime:
         # loop: the is_alive() check, the assignment and start() must be one
         # atomic step or two callers can spawn duplicate pb-reconcile threads
         # and orphan the overwritten Thread reference (never joined by stop).
+        # Refuses to spawn once the engine is stopping: stop() holds this
+        # same lock across its join, so a spawn racing the join window can
+        # never orphan a thread that runs broker + ledger I/O after close.
         with self._reconcile_spawn_lock:
+            if not getattr(self, "_running", False):
+                return
             current = self._reconcile_thread
             if current is not None and current.is_alive():
                 log.warning("Periodic reconciliation still running; overlapping scan skipped")
@@ -4509,9 +4640,9 @@ class EngineRuntime:
         Returns the new baseline equity.
         """
         if not self._running:
-            raise RuntimeError("The engine is not running; start it before resetting the risk epoch")
+            raise ValueError("The engine is not running; start it before resetting the risk epoch")
         if self._circuit_breaker_reason is not None:
-            raise RuntimeError(
+            raise ValueError(
                 "Cannot reset the risk epoch while a circuit breaker is active "
                 f"({self._circuit_breaker_reason}); resolve that incident first"
             )
@@ -4525,12 +4656,12 @@ class EngineRuntime:
                 self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("reconciliation_failed")
-                raise RuntimeError(f"Cannot reset the risk epoch before reconciliation succeeds: {exc}") from exc
+                raise ValueError(f"Cannot reset the risk epoch before reconciliation succeeds: {exc}") from exc
             if report.has_drift:
                 self._raise_reconciliation_breaker("reconciliation_failed")
                 self._reconcile_failed = True
                 self._persist_reconciliation_incident("reconciliation_failed")
-                raise RuntimeError(
+                raise ValueError(
                     f"Cannot reset the risk epoch while reconciliation reports drift: {report.drift_categories}"
                 )
             self._last_reconciliation_at = datetime.now(UTC)
@@ -4539,7 +4670,7 @@ class EngineRuntime:
         account_id = self.broker.account_id or "unknown"
         new_baseline = float(account.equity)
         if new_baseline <= 0:
-            raise RuntimeError("Cannot reset the risk epoch with non-positive account equity")
+            raise ValueError("Cannot reset the risk epoch with non-positive account equity")
         self.broker.reset_peak_equity(new_baseline)
         repository = getattr(self, "_portfolio_repository", None)
         if repository is not None:
@@ -4757,14 +4888,15 @@ class EngineRuntime:
             if worker is not None:
                 worker.restart_count = 0
                 worker.last_error = None
-            thread = threading.Thread(
-                target=self._run_stream_worker,
-                args=(worker_name, target),
-                name=worker_name,
-                daemon=True,
-            )
-            self._threads.append(thread)
-            thread.start()
+            with getattr(self, "_threads_lock", threading.Lock()):
+                thread = threading.Thread(
+                    target=self._run_stream_worker,
+                    args=(worker_name, target),
+                    name=worker_name,
+                    daemon=True,
+                )
+                self._threads.append(thread)
+                thread.start()
             deadline = time.monotonic() + 5.0
             while time.monotonic() < deadline:
                 if worker is not None and worker.alive:
@@ -4891,21 +5023,15 @@ class EngineRuntime:
             for symbol_batch in _symbol_batches(group):
                 try:
                     start = _warmup_start(symbol_batch[0], timeframe, requested_bars)
-                    fetcher = getattr(history, "get_bars_batch_incremental", None)
-                    if fetcher is None:
-                        # Fakes/tests without the incremental fetcher use the
-                        # plain download contract unchanged.
-                        signal_bars = history.get_bars_batch(symbol_batch, timeframe, start=start, adjustment="splits")
-                    else:
-                        signal_bars = fetcher(
-                            symbol_batch,
-                            timeframe,
-                            start=start,
-                            adjustment="splits",
-                            scope="runtime_warmup_signal",
-                            config_digest=warmup_digest,
-                            identity=f"{timeframe}:{requested_bars}",
-                        )
+                    signal_bars = history.get_bars_batch_incremental(
+                        symbol_batch,
+                        timeframe,
+                        start=start,
+                        adjustment="splits",
+                        scope="runtime_warmup_signal",
+                        config_digest=warmup_digest,
+                        identity=f"{timeframe}:{requested_bars}",
+                    )
                     for symbol in symbol_batch:
                         signal_tail = signal_bars.get(symbol, [])[-requested_bars:]
                         with self._ingestion_lock, self._portfolio_lock:
@@ -4936,9 +5062,19 @@ class EngineRuntime:
                     )
 
 
+_CATCH_UP_TRANSIENT_STATUSES = frozenset({"warming_up", "incomplete_strategy_batch"})
+
+
 def _catch_up_blocked(runtime: object) -> bool:
-    """True when a runtime's startup catch-up was blocked by a gate."""
-    return str(getattr(runtime, "startup_catch_up_status", None) or "").startswith("blocked:")
+    """True when a runtime's startup catch-up was blocked by a gate.
+
+    Besides the ``blocked:`` gate statuses, transient non-deciding outcomes
+    (``warming_up``, ``incomplete_strategy_batch``) are retried: warmup may
+    have completed since, and no later path re-invokes startup catch-up
+    in-process.
+    """
+    status = str(getattr(runtime, "startup_catch_up_status", None) or "")
+    return status.startswith("blocked:") or status in _CATCH_UP_TRANSIENT_STATUSES
 
 
 def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:

@@ -33,7 +33,7 @@ There is no global strategy timeframe; each strategy declares its own.
 |---|---|---|
 | Signal timeframe | strategy (`primary_timeframe`) | 1d |
 | Decision cadence | strategy (`rebalance_policy`) | `hours:24` (every session) |
-| Stream / execution timeframe | `runtime.execution_timeframe` | 5m |
+| Stream / execution timeframe | strategy signal cadence (VT35: 1d bars) | 1d |
 | Account polling | `engine.account_poll_interval_seconds` | 15 s |
 | Reconciliation | runtime | 60 s |
 

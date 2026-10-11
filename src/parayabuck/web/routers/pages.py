@@ -23,7 +23,7 @@ from parayabuck.web.deps import get_engine_manager
 router = APIRouter(tags=["pages"])
 
 # Cache-busting query for /static assets; bump when the UI bundle changes.
-ASSET_VERSION = "20260930-1"
+ASSET_VERSION = "20261011-1"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))

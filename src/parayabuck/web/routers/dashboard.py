@@ -25,41 +25,6 @@ async def dashboard_overview(request: Request) -> dict[str, Any]:
     return await asyncio.to_thread(svc.get_overview_payload, _require_state(request))
 
 
-@router.get("/api/equity")
-async def dashboard_equity(request: Request) -> dict[str, Any]:
-    return await asyncio.to_thread(svc.get_panel, "equity", _require_state(request))
-
-
-@router.get("/api/risk")
-async def dashboard_risk(request: Request) -> dict[str, Any]:
-    return await asyncio.to_thread(svc.get_panel, "risk", _require_state(request))
-
-
-@router.get("/api/execution")
-async def dashboard_execution(request: Request) -> dict[str, Any]:
-    return await asyncio.to_thread(svc.get_panel, "execution", _require_state(request))
-
-
-@router.get("/api/universe")
-async def dashboard_universe(request: Request) -> dict[str, Any]:
-    return await asyncio.to_thread(svc.get_panel, "universe", _require_state(request))
-
-
-@router.get("/api/health")
-async def dashboard_health(request: Request) -> dict[str, Any]:
-    return await asyncio.to_thread(svc.get_panel, "health", _require_state(request))
-
-
-@router.get("/api/explanations")
-async def dashboard_explanations(request: Request) -> dict[str, Any]:
-    return await asyncio.to_thread(svc.get_panel, "explanations", _require_state(request))
-
-
-@router.get("/api/metrics")
-async def dashboard_metrics(request: Request) -> dict[str, Any]:
-    return await asyncio.to_thread(svc.get_panel, "metrics", _require_state(request))
-
-
 @router.get("/api/performance")
 async def dashboard_performance(request: Request, period: str = "1M") -> dict[str, Any]:
     """Broker equity history plus a VOO benchmark for the performance chart."""

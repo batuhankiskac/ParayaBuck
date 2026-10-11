@@ -74,5 +74,5 @@
     return r.json();
   }
 
-  global.PBApi = { controlFetch, responsePayload, detailText, fetchJson, refreshControlToken, getControlToken: function(){return controlToken;} };
+  global.PBApi = { controlFetch, responsePayload, detailText, fetchJson };
 })(window);

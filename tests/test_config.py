@@ -71,8 +71,8 @@ def test_strategy_and_operational_timeframes_have_explicit_roles(tmp_path: Path)
     path.write_text(yaml.safe_dump(raw))
 
     config = load_config(str(path))
-    assert config.runtime.execution_timeframe == "5m"
-    assert config.runtime.market_state_timeframe == "5m"
+    assert not hasattr(config.runtime, "execution_timeframe")
+    assert not hasattr(config.runtime, "market_state_timeframe")
     assert config.strategy.equity.timeframe == "1d"
 
 
@@ -162,10 +162,10 @@ def test_deprecated_risk_monitor_timeframe_still_loads_and_maps(tmp_path) -> Non
         "strategy:\n  equity:\n    enabled: true\n    name: equity_leveraged_trend_v1\n",
         encoding="utf-8",
     )
-    with pytest.warns(DeprecationWarning, match="risk_monitor_timeframe"):
+    with pytest.warns(DeprecationWarning, match="removed and ignored"):
         config = load_config(str(path))
-    assert config.runtime.market_state_timeframe == "5m"
-    assert config.runtime.execution_timeframe == "5m"
+    assert not hasattr(config.runtime, "market_state_timeframe")
+    assert not hasattr(config.runtime, "execution_timeframe")
 
 
 def test_strategy_supplies_default_timeframe(tmp_path: Path) -> None:

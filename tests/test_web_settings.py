@@ -151,8 +151,6 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_
                 },
                 "runtime": {
                     "mode": "paper",
-                    "execution_timeframe": "5m",
-                    "market_state_timeframe": "5m",
                     "decision_db_path": "data/runtime/parayabuck.sqlite3",
                 },
                 "risk": {
@@ -170,7 +168,6 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
                 max_drawdown_pct=12.0,
-                execution_timeframe="5m",
                 host="127.0.0.1",
                 port=8000,
                 open_browser=True,
@@ -181,7 +178,7 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_
 
     saved = yaml.safe_load(manager.config_path.read_text())
     assert saved["runtime"]["mode"] == "paper"
-    assert saved["runtime"]["execution_timeframe"] == "5m"
+    assert "execution_timeframe" not in saved["runtime"]
     assert "engine" not in saved or "timeframe" not in saved["engine"]
     assert saved["risk"]["daily_loss_limit_pct"] == 0.02
     assert saved["risk"]["max_drawdown_pct"] == 0.12
@@ -195,13 +192,13 @@ def test_settings_save_succeeds_when_automatic_restart_times_out(tmp_path: Path,
     manager = _RestartFailureManagerStub(tmp_path)
     manager.config_path.write_text(yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {}, **_LOADABLE_MARKETS}))
 
-    result = asyncio.run(SettingsService(manager).save_settings(SettingsPayload(execution_timeframe="5m")))
+    result = asyncio.run(SettingsService(manager).save_settings(SettingsPayload(daily_loss_limit_pct=2.0)))
 
     assert result["status"] == "success"
     assert result["engine_restarted"] is False
     assert result["restart_error"] == "Alpaca timed out"
     saved = yaml.safe_load(manager.config_path.read_text())
-    assert saved["runtime"]["execution_timeframe"] == "5m"
+    assert "execution_timeframe" not in saved["runtime"]
     assert "timeframe" not in saved.get("engine", {})
 
 
@@ -224,14 +221,13 @@ def test_settings_save_strips_obsolete_engine_keys_so_config_loads_again(tmp_pat
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
                 max_drawdown_pct=12.0,
-                execution_timeframe="5m",
             )
         )
     )
 
     assert result["status"] == "success"
     saved = yaml.safe_load(manager.config_path.read_text())
-    assert saved["runtime"]["execution_timeframe"] == "5m"
+    assert "execution_timeframe" not in saved["runtime"]
     assert "timeframe" not in saved.get("engine", {})
     assert "warmup_bars" not in saved.get("engine", {})
 
@@ -259,7 +255,6 @@ def test_settings_save_strips_obsolete_risk_keys_so_config_loads_again(tmp_path:
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
                 max_drawdown_pct=12.0,
-                execution_timeframe="5m",
             )
         )
     )

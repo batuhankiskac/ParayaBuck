@@ -136,21 +136,13 @@ def test_required_timeframe_aggregation_is_initialized() -> None:
 
 
 def test_execution_timeframe_remains_independent() -> None:
-    # A daily signal may still execute on 5m; the runtime
-    # config keeps the execution cadence separate from strategy timeframes.
-    config = Config(runtime=RuntimeConfig(execution_timeframe="5m", market_state_timeframe="5m"))
+    # The strategy owns its signal timeframe; the runtime config carries no
+    # execution cadence (the removed runtime keys were never read).
+    config = Config(runtime=RuntimeConfig())
     strategy = portfolio_strategy_from("equity_leveraged_trend_v1")
-    assert config.runtime.execution_timeframe == "5m"
+    assert not hasattr(config.runtime, "execution_timeframe")
     assert strategy.timeframe == "1d"
     assert strategy.spec().rebalance_policy == "hours:24"
-    # The runtime aggregates BOTH the strategy timeframe and the execution
-    # timeframe (aggregator map is built from the union of required cadences).
-    required = {
-        config.runtime.execution_timeframe,
-        config.runtime.market_state_timeframe,
-        strategy.timeframe,
-    }
-    assert required == {"5m", "1d"}
 
 
 def test_paper_runtime_uses_same_strategy_timeframe(tmp_path) -> None:

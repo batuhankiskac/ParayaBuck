@@ -99,7 +99,7 @@ All SQLite DBs use WAL + `busy_timeout=5000`; repository uses `store.lock` + `wi
 
 ## Concurrency
 
-- **Bar pipeline**: stream minutes are aggregated only into the strategy signal cadence (the daily decision bar). A corrected minute revises the still-open candle; a correction of an emitted candle has no consumer. There is no intraday (5m) pipeline: `runtime.execution_timeframe` / `market_state_timeframe` are not read by the engine.
+- **Bar pipeline**: stream minutes are aggregated only into the strategy signal cadence (the daily decision bar). A corrected minute revises the still-open candle; a correction of an emitted candle has no consumer. There is no intraday (5m) pipeline: the removed `runtime.execution_timeframe` / `market_state_timeframe` keys were never read by the engine (old configs carrying them still load with a DeprecationWarning).
 - **Event queue**: `threading.Condition`, bounded `maxsize`. Every event is a decision bar and is never evicted: a full queue coalesces a repeat of the same `(symbol, timeframe, timestamp)` and otherwise overflows, which halts with `final_market_event_queue_overflow`.
 - **Readiness refresh**: `pb-account` re-evaluates readiness every poll once startup has committed (warming_up → running, bounded warmup retry).
 - **EngineRuntime locks**: ` _reconcile_spawn_lock` and `_warmup_retry_spawn_lock` are class-level to protect check-then-spawn; per-instance `_ingestion_lock` shadows class-level fallback for partially constructed test instances. Worker threads: `pb-decisions`, `pb-account`, `pb-trade-updates`, `pb-stocks` (bar stream), `pb-signal-adjustment`, plus on-demand `pb-reconcile` and `pb-warmup-retry`; stop via `Event` + `join`.

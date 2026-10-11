@@ -353,7 +353,12 @@ class EventJournal:
         order: str = "desc",
     ) -> list[OperationalEvent]:
         try:
-            conn = sqlite3.connect(str(self.path), timeout=5.0)
+            limit = max(1, int(limit))
+        except Exception:
+            limit = 100
+        try:
+            # Read-only: a query must never create the journal file.
+            conn = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True, timeout=5.0)
             conn.row_factory = sqlite3.Row
             try:
                 sql = "SELECT * FROM operational_events WHERE 1=1"
@@ -386,7 +391,7 @@ class EventJournal:
                     sql += " AND session_id = ?"
                     params.append(session_id)
                 sql += f" ORDER BY occurred_at {'DESC' if order == 'desc' else 'ASC'} LIMIT ?"
-                params.append(int(limit))
+                params.append(limit)
                 cur = conn.execute(sql, tuple(params))
                 rows = cur.fetchall()
                 events: list[OperationalEvent] = []

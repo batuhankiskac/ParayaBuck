@@ -25,6 +25,7 @@ async def get_ops_status(request: Request) -> dict[str, Any]:
 
 @router.get("/events")
 async def get_ops_events(
+    request: Request,
     limit: int = Query(100, ge=1, le=1000),
     kind: str | None = None,
     severity: str | None = Query(
@@ -46,7 +47,7 @@ async def get_ops_events(
         filters["decision_id"] = decision_id
     if incident_id:
         filters["incident_id"] = incident_id
-    events = await asyncio.to_thread(svc.query_events, limit, **filters)
+    events = await asyncio.to_thread(svc.query_events, limit, await _request_config(request), **filters)
     return {"events": events, "count": len(events)}
 
 

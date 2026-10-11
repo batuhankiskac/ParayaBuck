@@ -450,7 +450,6 @@
         byId("equityTradingCheck").checked = data.equity_trading_enabled !== false;
         byId("maxDailyLoss").value = data.daily_loss_limit_pct || 1.5;
         byId("maxDrawdown").value = data.max_drawdown_pct || 10;
-        byId("timeframe").value = data.timeframe || "5m";
         byId("host").value = data.host || "127.0.0.1";
         byId("port").value = data.port || 8000;
         byId("openBrowser").checked = data.open_browser !== false;
@@ -478,7 +477,6 @@
         equity_trading_enabled: byId("equityTradingCheck").checked,
         daily_loss_limit_pct: parseFloat(byId("maxDailyLoss").value),
         max_drawdown_pct: parseFloat(byId("maxDrawdown").value),
-        execution_timeframe: byId("timeframe").value,
         host: byId("host").value.trim(),
         port: parseInt(byId("port").value, 10),
         open_browser: byId("openBrowser").checked,
@@ -512,11 +510,8 @@
     badgeClass: badgeClass,
     isNum: isNum,
     toast: toast,
-    dialog: dialog,
-    shell: shell,
     onStatus: function (fn) { listeners.status.push(fn); if (shell.status) fn(shell.status); },
     onStream: function (fn) { listeners.stream.push(fn); },
-    refreshStatus: refreshStatus,
     setAccountSuffix: function (suffix) {
       if (suffix && suffix !== shell.accountSuffix) { shell.accountSuffix = suffix; renderMode(); }
     }

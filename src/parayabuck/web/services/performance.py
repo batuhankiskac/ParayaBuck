@@ -35,7 +35,7 @@ PERIODS: dict[str, tuple[str, str, int]] = {
 BenchmarkFetcher = Callable[[Any, datetime, datetime, int], list[tuple[datetime, float]]]
 
 _cache_lock = threading.Lock()
-_cache: dict[tuple[str, bool], tuple[float, dict[str, Any]]] = {}
+_cache: dict[tuple[str, bool, str], tuple[float, dict[str, Any]]] = {}
 
 
 def reset_cache() -> None:
@@ -112,13 +112,16 @@ def portfolio_performance(
         paper = bool(manager.is_paper_mode())
     except Exception:
         paper = True
-    cache_key = (key, paper)
+    # The cache must not survive a credential rotation: broker identity (not
+    # just period+paper) selects the account whose series is served.
+    broker = _ensure_broker(manager)
+    account_id = getattr(broker, "account_id", None) if broker is not None else None
+    cache_key = (key, paper, str(account_id or ""))
     now = clock()
     with _cache_lock:
         cached = _cache.get(cache_key)
         if cached is not None and now < cached[0]:
             return cached[1]
-
     broker_period, broker_timeframe, bench_minutes = PERIODS[key]
     payload: dict[str, Any] = {
         "period": key,
@@ -127,7 +130,6 @@ def portfolio_performance(
         "equity": [],
         "benchmark": [],
     }
-    broker = _ensure_broker(manager)
     history = getattr(broker, "portfolio_history", None)
     if broker is None or not callable(history):
         payload["reason"] = "Broker bağlantısı yok (API anahtarlarını kontrol edin)"

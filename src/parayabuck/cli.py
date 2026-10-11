@@ -223,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     corporate_actions = load_csv_corporate_actions(args.corporate_actions) if args.corporate_actions else None
     if args.command == "optimize":
         grid = _parse_grid(args.grid)
-        parameters = _strategy_parameters(config, market, args.param)
+        parameters = _strategy_parameters(config, args.param)
         payload = optimize_grid(
             config,
             bars,
@@ -242,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(payload, indent=2, default=str))
         return 0
-    parameters = _strategy_parameters(config, market, args.param)
+    parameters = _strategy_parameters(config, args.param)
     multipliers = (1.0, 2.0, 3.0) if args.cost_stress else (1.0,)
     for multiplier in multipliers:
         run = run_product_backtest(
@@ -488,9 +488,9 @@ def _run_doctor(args: argparse.Namespace) -> int:
 
             age_hours = latest_backup_age_hours(config.backup.path)
             if age_hours is None:
-                detail = f"no backup in {config.backup.path}"
+                detail = f"no automatic backup in {config.backup.path}"
             else:
-                detail = f"newest backup {age_hours:.1f}h old (limit {MAX_BACKUP_AGE_HOURS:g}h)"
+                detail = f"newest automatic backup {age_hours:.1f}h old (limit {MAX_BACKUP_AGE_HOURS:g}h)"
             if age_hours is None or age_hours > MAX_BACKUP_AGE_HOURS:
                 add("backup freshness", True, detail, is_blocker=False)
                 checks.append(("backup stale", "WARN", detail))
@@ -1359,7 +1359,7 @@ def _load_bars(
         # run_product_backtest splits warmup from the evaluation window. The
         # session density is anchored at the evaluation start (a 2020 backtest
         # must size its warmup with the 2020 holiday calendar, not today's).
-        warmup_days = _warmup_window_days(config, market, end_date=start)
+        warmup_days = _warmup_window_days(config, end_date=start)
         start_at = start - timedelta(days=warmup_days)
     provider = AlpacaHistoricalData(
         key,
@@ -1435,7 +1435,7 @@ def _load_bars(
     return [bar for symbol in symbols for bar in by_symbol.get(symbol, ())], effective_feed
 
 
-def _warmup_window_days(config: Config, market: Market, end_date: datetime | None = None) -> int:
+def _warmup_window_days(config: Config, end_date: datetime | None = None) -> int:
     """Calendar days of pre-start history for strategy warmup.
 
     ``end_date`` anchors the strategy-warmup span at the evaluation start so
@@ -1467,7 +1467,7 @@ def _candidate_symbols(
     return list(config.universe.equity.symbols)
 
 
-def _strategy_parameters(config: Config, market: Market, raw_overrides: list[str]) -> dict[str, object]:
+def _strategy_parameters(config: Config, raw_overrides: list[str]) -> dict[str, object]:
     selection = config.strategy.equity
     parameters = dict(selection.parameters)
     for item in raw_overrides:

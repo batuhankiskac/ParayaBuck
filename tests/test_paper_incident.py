@@ -324,3 +324,31 @@ def test_dividends_and_cash_fees_bridge_the_equity_residual(tmp_path) -> None:
     assert report.cash_fees == -12.5
     assert report.net_transfers == 0.0
     assert report.equity_residual == 0
+
+
+def test_pre_window_sell_relief_uses_average_cost_not_exit_price() -> None:
+    """R3C-04: buy 10 @100, sell 5 @120 pre-window opens as (5, 100), not (5, 80)."""
+    from parayabuck.monitoring.paper_incident import _opening_inventory
+
+    after = datetime(2026, 3, 1, tzinfo=UTC)
+    orders = [
+        {"client_order_id": "pb-buy", "symbol": "QLD", "side": "buy"},
+        {"client_order_id": "pb-sell", "symbol": "QLD", "side": "sell"},
+    ]
+    fills = [
+        {
+            "client_order_id": "pb-buy",
+            "occurred_at": "2026-02-03T13:30:00+00:00",
+            "activity_id": "f-buy",
+            "quantity": "10",
+            "price": "100",
+        },
+        {
+            "client_order_id": "pb-sell",
+            "occurred_at": "2026-02-04T13:30:00+00:00",
+            "activity_id": "f-sell",
+            "quantity": "5",
+            "price": "120",
+        },
+    ]
+    assert _opening_inventory(fills, orders, after) == {"QLD": (5.0, 100.0)}

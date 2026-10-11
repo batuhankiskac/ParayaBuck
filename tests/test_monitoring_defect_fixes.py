@@ -216,6 +216,35 @@ def test_decision_reconstruction_falls_back_for_legacy_receipt(tmp_path: Path) -
     assert recon["receipt"]["strategy_name"] == "dec-1 equity"
 
 
+def test_decision_reconstruction_uses_the_filename_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """R5E-5: with hundreds of decoys, the V2 filename answers without parsing them all."""
+    from parayabuck.monitoring import forensics as forensics_module
+
+    db = tmp_path / "empty.sqlite3"
+    db.touch()
+    directory = _receipt_dir()
+    for index in range(300):
+        _write_receipt(directory, f"20250101T000000_equity_scheduled_decoy{index}.v2.json", {"padding": "x" * 5000})
+    _write_receipt(
+        directory,
+        "20260924T000000_equity_scheduled_dec-9.json",
+        {"schema_version": 2, "decision_id": "dec-9"},
+    )
+    parses = {"n": 0}
+    real_loads = json.loads
+
+    def _counting_loads(text: str) -> object:
+        parses["n"] += 1
+        return real_loads(text)
+
+    monkeypatch.setattr(forensics_module.json, "loads", _counting_loads)
+
+    recon = decision_reconstruction(str(db), "dec-9")
+
+    assert recon["receipt"]["decision_id"] == "dec-9"
+    assert parses["n"] == 1
+
+
 @pytest.mark.parametrize(
     "canonical",
     [

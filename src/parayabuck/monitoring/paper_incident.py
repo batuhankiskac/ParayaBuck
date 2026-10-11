@@ -437,7 +437,8 @@ def _opening_inventory(
         held = quantity.get(symbol, 0.0)
         if side_of.get(str(fill["client_order_id"]), "").lower() == "sell":
             sold = min(held, traded)
-            cost[symbol] = cost.get(symbol, 0.0) - sold * price
+            average = cost.get(symbol, 0.0) / held if held > 0 else price
+            cost[symbol] = cost.get(symbol, 0.0) - sold * average
             quantity[symbol] = held - sold
         else:
             quantity[symbol] = held + traded

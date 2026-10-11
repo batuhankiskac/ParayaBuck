@@ -1,8 +1,9 @@
-"""Historical V1 equity receipt reader and immutable two-market V2 writer.
+"""Immutable PAPER decision-receipt (V2) writer.
 
-V1 has projected post-order fields and remains available for historical files.
 Ongoing PAPER decisions emit immutable V2 snapshots with explicit intent labels;
-the portfolio SQLite ledger owns later execution truth.
+the portfolio SQLite ledger owns later execution truth. Historical V1 files
+(without a ``decision_id``) are still matched by the forensics reader's
+legacy substring probe; nothing writes V1 anymore.
 """
 
 from __future__ import annotations
@@ -10,142 +11,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
-
-@dataclass(frozen=True)
-class PaperReceipt:
-    decision_timestamp: str
-    config_digest: str
-    strategy_version: str
-    strategy_name: str
-    universe_hash: str
-    universe_size: int
-    observation_set_symbols: tuple[str, ...]
-    selected_symbols: tuple[str, ...]
-    target_weights: dict[str, float]
-    risk_adjusted_weights: dict[str, float]
-    broker_positions_before: dict[str, float]
-    intended_orders: list[dict[str, Any]]
-    submitted_order_ids: list[str]
-    fills: list[dict[str, Any]]
-    positions_after: dict[str, float]
-    actual_gross_exposure: float
-    cash_ratio: float
-    previous_holdings: dict[str, float] = field(default_factory=dict)
-    universe_version: str = ""
-    warnings: list[str] = field(default_factory=list)
-    incidents: list[dict[str, Any]] = field(default_factory=list)
-    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-    def write(self, directory: str | Path) -> Path:
-        directory = Path(directory)
-        directory.mkdir(parents=True, exist_ok=True)
-        # Filename: 2026-08-26_equity_v3.json  (date + market + strategy)
-        date = self.decision_timestamp[:10]
-        filename = f"{date}_equity_{self.strategy_name}.json"
-        path = directory / filename
-        # Atomic write via temp file in same dir — avoid with_suffix collision
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(self.to_dict(), indent=2, sort_keys=True))
-        try:
-            tmp.replace(path)
-        except Exception:
-            # Cross-mount replace can fail; ensure cleanup
-            try:
-                tmp.unlink(missing_ok=True)
-            except Exception:
-                pass
-            raise
-        try:
-            from parayabuck.monitoring import alerts as _alerts
-            from parayabuck.monitoring import metrics as _metrics
-
-            _metrics.record_event("paper_receipt_written")
-            _metrics.record_paper_cycle(
-                {
-                    "decision_timestamp": self.decision_timestamp,
-                    "strategy_name": self.strategy_name,
-                    "strategy_version": self.strategy_version,
-                    "universe_hash": self.universe_hash,
-                    "universe_size": self.universe_size,
-                    "selected_symbols": list(self.selected_symbols),
-                    "target_weights": dict(self.target_weights),
-                    "risk_adjusted_weights": dict(self.risk_adjusted_weights),
-                    "intended_order_count": len(self.intended_orders),
-                    "submitted_order_ids": list(self.submitted_order_ids),
-                    "fill_count": len(self.fills),
-                    "positions_after": dict(self.positions_after),
-                    "actual_gross_exposure": self.actual_gross_exposure,
-                    "cash_ratio": self.cash_ratio,
-                    "receipt_path": str(path),
-                }
-            )
-            _alerts.emit(
-                "paper_receipt",
-                message=f"PAPER receipt written for {self.strategy_name} @ {self.decision_timestamp}",
-                receipt_path=str(path),
-                universe_hash=self.universe_hash,
-                strategy=self.strategy_name,
-            )
-        except Exception:
-            pass
-        return path
-
-
-def build_receipt(
-    *,
-    decision_timestamp: datetime,
-    config_digest: str,
-    strategy_name: str,
-    strategy_version: str,
-    universe_hash: str,
-    universe_size: int,
-    observation_set_symbols: tuple[str, ...],
-    selected_symbols: tuple[str, ...],
-    target_weights: dict[str, float],
-    risk_adjusted_weights: dict[str, float],
-    broker_positions_before: dict[str, float],
-    intended_orders: list[dict[str, Any]],
-    submitted_order_ids: list[str],
-    fills: list[dict[str, Any]],
-    positions_after: dict[str, float],
-    actual_gross_exposure: float,
-    cash_ratio: float,
-    previous_holdings: dict[str, float] | None = None,
-    universe_version: str = "",
-    warnings: list[str] | None = None,
-    incidents: list[dict[str, Any]] | None = None,
-) -> PaperReceipt:
-    return PaperReceipt(
-        decision_timestamp=decision_timestamp.astimezone(UTC).isoformat(),
-        config_digest=config_digest,
-        strategy_version=strategy_version,
-        strategy_name=strategy_name,
-        universe_hash=universe_hash,
-        universe_size=universe_size,
-        observation_set_symbols=observation_set_symbols,
-        selected_symbols=selected_symbols,
-        target_weights=target_weights,
-        risk_adjusted_weights=risk_adjusted_weights,
-        broker_positions_before=broker_positions_before,
-        intended_orders=intended_orders,
-        submitted_order_ids=submitted_order_ids,
-        fills=fills,
-        positions_after=positions_after,
-        actual_gross_exposure=actual_gross_exposure,
-        cash_ratio=cash_ratio,
-        previous_holdings=previous_holdings or dict(broker_positions_before),
-        universe_version=universe_version or universe_hash,
-        warnings=warnings or [],
-        incidents=incidents or [],
-    )
 
 
 def default_receipt_dir() -> Path:
@@ -187,4 +54,52 @@ def write_decision_receipt_v2(payload: dict[str, Any], directory: str | Path) ->
     return path
 
 
-__all__ = ["PaperReceipt", "build_receipt", "default_receipt_dir", "write_decision_receipt_v2"]
+def prune_receipts(
+    directory: str | Path,
+    *,
+    retention_days: float,
+    now: object = None,
+) -> list[Path]:
+    """Delete V2 decision receipts older than ``retention_days`` (oldest first).
+
+    Retention never deletes a receipt younger than the PAPER soak/audit
+    horizon: ``scripts/audit_paper_soak.py`` replays any window from these
+    files, so the default floor keeps two full years plus margin. Pass an
+    explicit smaller window only when the operator accepts losing audit
+    coverage for it. Returns the removed paths.
+    """
+    from datetime import UTC, datetime
+
+    if not isinstance(retention_days, (int, float)) or not retention_days > 0:
+        raise ValueError("retention_days must be a positive number")
+    if retention_days < _MIN_RECEIPT_RETENTION_DAYS:
+        raise ValueError(
+            f"retention_days must keep at least the soak/audit horizon ({_MIN_RECEIPT_RETENTION_DAYS:g} days)"
+        )
+    reference = now.timestamp() if isinstance(now, datetime) else datetime.now(UTC).timestamp()
+    cutoff = reference - float(retention_days) * 86_400
+    root = Path(directory)
+    if not root.is_dir():
+        return []
+    candidates = sorted(
+        (path for path in root.glob("*.v2.json") if path.is_file()),
+        key=lambda path: path.stat().st_mtime,
+    )
+    removed: list[Path] = []
+    for path in candidates:
+        try:
+            old = path.stat().st_mtime < cutoff
+        except OSError:
+            continue
+        if old:
+            path.unlink()
+            removed.append(path)
+    return removed
+
+
+# Floor for prune_receipts: two trading years plus margin, so the soak auditor
+# can always replay its window from the receipt directory.
+_MIN_RECEIPT_RETENTION_DAYS = 800.0
+
+
+__all__ = ["default_receipt_dir", "prune_receipts", "write_decision_receipt_v2"]

@@ -34,7 +34,6 @@ observability only: they never gate or alter trading.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 
@@ -262,15 +261,10 @@ def evaluate_equity(
     return alarms
 
 
-def alarm_codes(alarms: Iterable[IntentAlarm]) -> list[str]:
-    return sorted({alarm.code for alarm in alarms})
-
-
 __all__ = [
     "IntentAlarm",
     "IntentWatchdogSettings",
     "LatestDecision",
-    "alarm_codes",
     "equity_decision_time",
     "evaluate_equity",
     "held_weights",

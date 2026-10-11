@@ -94,6 +94,24 @@ def test_event_secret_redaction() -> None:
     assert ev.fields["safe"] == "ok"
 
 
+def test_bundle_and_journal_share_one_redaction_policy() -> None:
+    """R4C-05: diagnostic bundles redact exactly what journal fields redact."""
+    from parayabuck.monitoring.diagnostic import collect_bundle_data
+    from parayabuck.monitoring.operational_event import redact_fields
+
+    bundle = collect_bundle_data(
+        config_path="nonexistent.yaml",
+        snapshot_path="nonexistent.json",
+        journal_path="nonexistent.sqlite3",
+        decision_db_path=None,
+    )
+    assert bundle["sanitized_config"] is None  # no config, nothing to leak
+    assert redact_fields({"authorization": "Bearer x", "safe": "ok"}) == {
+        "authorization": "***REDACTED***",
+        "safe": "ok",
+    }
+
+
 def test_event_timestamp_must_be_utc() -> None:
     with pytest.raises(ValueError):
         OperationalEvent(

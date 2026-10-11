@@ -301,7 +301,13 @@ one.
 
 `scripts/repair_local_state.py` is a one-shot local repair: it quarantines the
 polluted warmup/observability files and closes interrupted runtime sessions.
-Two guards now bound it, and both are refusals, not warnings:
+It is a dry run by default — `--help` prints usage and exits 0, and without
+`--confirm` it only reports what it would quarantine and rewrite. Pass
+`--confirm` (or `--yes`) to actually move files and write the ledger.
+Paths resolve from `load_config` (`--config`/`CONFIG_PATH`, like the CLI),
+so a custom `runtime.decision_db_path` / `observability.journal_path`
+repairs the real files. Three guards bound it, and all are refusals, not
+warnings:
 
 - it refuses while the engine heartbeat is live (a fresh health snapshot not
   marked `stopped`, or one it cannot read), so it never rewrites state under a
@@ -313,10 +319,11 @@ Two guards now bound it, and both are refusals, not warnings:
   `BROKER_STALE`). Without credentials, with a failing reconcile or with any
   drift, the halt stays active and the script says so. Reset that halt the
   supported way — reconcile, then reset from the dashboard or `ops` — not
-  with this script.
+  with this script. The breaker clear is scoped to the reconciled account:
+  other accounts sharing the session date keep their breaker.
 
 A cleared incident row is first appended to
-`data/runtime/safety_incident_resolutions.jsonl` (when it was raised, when and
+`<ledger-dir>/safety_incident_resolutions.jsonl` (when it was raised, when and
 by what it was resolved): `safety_incidents` only holds active halts, so that
 file is the audit trail.
 

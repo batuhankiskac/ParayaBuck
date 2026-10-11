@@ -196,7 +196,7 @@ def test_fresh_heartbeat_refuses_before_touching_anything(
     ledger = _make_ledger(tmp_path)
     monkeypatch.setattr(repair, "LEDGER", ledger)
 
-    assert repair.main() == 1
+    assert repair.main([]) == 1
     assert "REFUSED" in capsys.readouterr().out
     # Nothing quarantined, nothing deleted, sessions untouched.
     assert offline.quarantine.exists() is False
@@ -388,3 +388,94 @@ def test_reconcile_with_drift_is_not_verified(repair, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(alpaca_module.AlpacaBroker, "reconcile", lambda self: {"MATCH": ["QLD"], "BROKER_STALE": []})
     assert repair._run_broker_reconcile() is True
+
+
+def test_main_without_confirm_is_a_dry_run_with_no_side_effects(
+    repair, offline, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """R2E1: no --confirm means report only — files stay, ledger untouched."""
+    ledger = _make_ledger(tmp_path)
+    monkeypatch.setattr(repair, "LEDGER", ledger)
+
+    assert repair.main([]) == 0
+    assert "DRY RUN" in capsys.readouterr().out
+    assert offline.warmup.exists()
+    assert offline.obs.exists()
+    assert not list(offline.quarantine.glob("quarantine_*"))
+    assert _incidents(ledger) == ["decision_worker_crashed"]
+    assert _open_sessions(ledger) == (1, 1)
+
+
+def test_confirm_quarantines_and_closes_sessions_without_lifting_unverified_halt(
+    repair, offline, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R2E1: --confirm applies the quarantine + session close; the halt stays."""
+    ledger = _make_ledger(tmp_path)
+    monkeypatch.setattr(repair, "LEDGER", ledger)
+
+    assert repair.main(["--confirm"]) == 0
+    assert not offline.warmup.exists()
+    assert not offline.obs.exists()
+    assert _open_sessions(ledger) == (0, 0)
+    assert _incidents(ledger) == ["decision_worker_crashed"]
+
+
+def test_paths_resolve_from_config_not_cwd_literals(repair, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """R3D3: custom decision_db/journal/snapshot paths are the ones repaired."""
+    from types import SimpleNamespace as _NS
+
+    monkeypatch.delenv("ALPACA_API_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_SECRET_KEY", raising=False)
+    custom_ledger = tmp_path / "custom" / "ledger.sqlite3"
+    custom_ledger.parent.mkdir(parents=True, exist_ok=True)
+    custom_ledger.touch()
+    custom_journal = tmp_path / "custom" / "obs.sqlite3"
+    custom_snapshot = tmp_path / "custom" / "health.json"
+    config = _NS(
+        runtime=_NS(decision_db_path=str(custom_ledger)),
+        observability=_NS(journal_path=str(custom_journal), snapshot_path=str(custom_snapshot)),
+    )
+    ledger, obs_files, snapshot = repair._resolve_paths(config)
+    assert ledger == custom_ledger
+    assert obs_files[0] == custom_journal
+    assert snapshot == custom_snapshot
+
+
+def test_breaker_clear_is_scoped_to_the_reconciled_account(
+    repair, offline, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R5E-3: account A reconciling must not lift account B's breaker."""
+    ledger = tmp_path / "parayabuck.sqlite3"
+    con = sqlite3.connect(ledger)
+    con.executescript(_SCHEMA)
+    stamp = "2026-09-01T20:00:00+00:00"
+    con.execute(
+        "INSERT INTO portfolio_runtime_sessions VALUES ('ps1','a','digest','paper',?,NULL,'open')",
+        (stamp,),
+    )
+    con.execute("INSERT INTO runtime_sessions VALUES ('rs1','a','paper','open',?,NULL)", (stamp,))
+    con.execute(
+        "INSERT INTO safety_incidents (account_id, reason, scope, activated_at, updated_at)"
+        " VALUES ('a','decision_worker_crashed','global',?,?)",
+        (stamp, stamp),
+    )
+    for account in ("a", "b"):
+        con.execute(
+            "INSERT INTO risk_state VALUES (?,?,?,?)",
+            (account, "2026-09-30", json.dumps({"circuit_breaker_reason": "decision_worker_crashed"}), stamp),
+        )
+    con.commit()
+    con.close()
+    monkeypatch.setattr(repair, "LEDGER", ledger)
+    monkeypatch.setattr(repair, "_run_broker_reconcile", lambda *a, **k: True)
+
+    assert repair.repair_runtime_db() is True
+    con = sqlite3.connect(ledger)
+    try:
+        breakers = {
+            row[0]: json.loads(row[1]).get("circuit_breaker_reason")
+            for row in con.execute("SELECT account_id, payload FROM risk_state")
+        }
+    finally:
+        con.close()
+    assert breakers == {"a": None, "b": "decision_worker_crashed"}

@@ -27,7 +27,7 @@ def test_span_anchored_at_2020_start_covers_declared_sessions() -> None:
 
     calendar = get_calendar("NYSE")
     end = date(2020, 1, 2)
-    days = bars_to_calendar_days("SPY", "1d", 61, end_date=end)
+    days = bars_to_calendar_days("1d", 61, end_date=end)
     assert _sessions_between(calendar, end - timedelta(days=days), end) >= 61
     # Holiday-heavy boundary: the span is strictly longer than the bar count.
     assert days > 61
@@ -40,7 +40,7 @@ def test_span_is_minimal_for_the_anchor() -> None:
 
     calendar = get_calendar("NYSE")
     end = date(2020, 1, 2)
-    days = bars_to_calendar_days("SPY", "1d", 61, end_date=end)
+    days = bars_to_calendar_days("1d", 61, end_date=end)
     assert _sessions_between(calendar, end - timedelta(days=days), end) == 61
     assert _sessions_between(calendar, end - timedelta(days=days - 1), end) <= 60
 
@@ -52,8 +52,8 @@ def test_span_density_depends_on_anchor_era() -> None:
     from pandas_market_calendars import get_calendar
 
     calendar = get_calendar("NYSE")
-    days_2020 = bars_to_calendar_days("SPY", "1d", 61, end_date=date(2020, 1, 2))
-    days_2026 = bars_to_calendar_days("SPY", "1d", 61, end_date=date(2026, 1, 2))
+    days_2020 = bars_to_calendar_days("1d", 61, end_date=date(2020, 1, 2))
+    days_2026 = bars_to_calendar_days("1d", 61, end_date=date(2026, 1, 2))
     # Both anchors must satisfy their own calendars...
     for days, end in ((days_2020, date(2020, 1, 2)), (days_2026, date(2026, 1, 2))):
         assert _sessions_between(calendar, end - timedelta(days=days), end) == 61
@@ -61,7 +61,7 @@ def test_span_density_depends_on_anchor_era() -> None:
     # calendar density (the spans may legitimately differ).
     assert days_2020 != days_2026 or True  # exact equality is not the point
     # Deterministic: repeated calls with the same anchor agree.
-    assert bars_to_calendar_days("SPY", "1d", 61, end_date=date(2020, 1, 2)) == days_2020
+    assert bars_to_calendar_days("1d", 61, end_date=date(2020, 1, 2)) == days_2020
 
 
 def test_thanksgiving_cluster_boundary() -> None:
@@ -71,7 +71,7 @@ def test_thanksgiving_cluster_boundary() -> None:
 
     calendar = get_calendar("NYSE")
     end = date(2024, 12, 2)  # Monday after Thanksgiving
-    days = bars_to_calendar_days("SPY", "1d", 10, end_date=end)
+    days = bars_to_calendar_days("1d", 10, end_date=end)
     start = end - timedelta(days=days)
     sessions = calendar.schedule(start_date=start, end_date=end)
     # The 2024-11-28 holiday must be excluded: 10 sessions need more than 10
@@ -83,7 +83,7 @@ def test_thanksgiving_cluster_boundary() -> None:
 
 def test_default_anchor_is_today_and_still_valid() -> None:
     """Without an end_date the helper keeps working (live warmup path)."""
-    days = bars_to_calendar_days("SPY", "1d", 61)
+    days = bars_to_calendar_days("1d", 61)
     assert days >= 61
 
 
@@ -93,10 +93,10 @@ def test_intraday_equity_span_scales_by_sessions() -> None:
 
     calendar = get_calendar("NYSE")
     end = date(2021, 1, 4)
-    days = bars_to_calendar_days("SPY", "30m", 20, end_date=end)
+    days = bars_to_calendar_days("30m", 20, end_date=end)
     assert _sessions_between(calendar, end - timedelta(days=days), end) >= 1
     # 390 minutes per session: 780 minutes of bars need 2 sessions.
-    days2 = bars_to_calendar_days("SPY", "30m", 40, end_date=end)
+    days2 = bars_to_calendar_days("30m", 40, end_date=end)
     assert _sessions_between(calendar, end - timedelta(days=days2), end) >= 2
 
 
@@ -116,7 +116,7 @@ def test_default_anchor_follows_the_current_date_in_a_long_lived_process(monkeyp
 
     monkeypatch.setattr(timeframes, "datetime", _Clock)
     # Wed, Tue, Mon: three sessions fit in two calendar days back.
-    assert timeframes.bars_to_calendar_days("SPY", "1d", 3) == 2
+    assert timeframes.bars_to_calendar_days("1d", 3) == 2
     current["now"] = datetime(2026, 10, 5, 15, 0, tzinfo=UTC)  # Monday
     # Mon, Fri, Thu: the weekend stretches the same request to four days.
-    assert timeframes.bars_to_calendar_days("SPY", "1d", 3) == 4
+    assert timeframes.bars_to_calendar_days("1d", 3) == 4

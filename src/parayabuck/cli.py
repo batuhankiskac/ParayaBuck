@@ -1410,7 +1410,6 @@ def _load_bars(
             from parayabuck.markets.timeframes import bars_to_calendar_days
 
             extra_days = bars_to_calendar_days(
-                "SPY",
                 strategy.timeframe,
                 minimum_bars,
                 end_date=start,
@@ -1451,7 +1450,6 @@ def _warmup_window_days(config: Config, end_date: datetime | None = None) -> int
     # daily bars). Bars are converted to a calendar span through the number of
     # trading sessions, not 1 bar == 1 calendar day.
     return bars_to_calendar_days(
-        "SPY",
         strategy.timeframe,
         strategy.minimum_history_bars,
         end_date=end_date,

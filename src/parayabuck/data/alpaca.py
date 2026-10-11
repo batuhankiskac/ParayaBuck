@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -14,11 +14,10 @@ from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.cache import WarmupCache
 from parayabuck.logger import get_logger
+from parayabuck.markets.nyse_calendar import NEW_YORK, nyse_sessions
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
-    NEW_YORK,
     TIMEFRAME_MINUTES,
-    is_session_open,
     weekday_count,
 )
 from parayabuck.utils import is_crypto
@@ -73,42 +72,48 @@ _REQUEST_URL = re.compile(r"https?://\S+")
 _SIP_REPROBE_INTERVAL = timedelta(hours=6)
 
 
-def _floor_to_grid(value: datetime, minutes: int) -> datetime:
-    """Floor a UTC timestamp down to the ``minutes`` grid boundary.
+def _normalize_row_timestamp(raw: object) -> datetime:
+    """Provider row timestamp as UTC (pandas, naive and aware inputs)."""
+    timestamp: Any = raw
+    if hasattr(timestamp, "to_pydatetime"):
+        timestamp = timestamp.to_pydatetime()
+    assert isinstance(timestamp, datetime)
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    normalized: datetime = timestamp.astimezone(UTC)
+    return normalized
 
-    Bars are aligned to the timeframe grid (e.g. hourly bars at ``:00``), so
-    cache reads and head-coverage checks must compare against the floored
-    window start or the first grid-aligned bar is excluded by a raw boundary
-    carrying seconds.
+
+def _session_bounds_for(dates: list[date]) -> dict[date, tuple[datetime, datetime] | None]:
+    """One batched NYSE range lookup for many intraday session dates.
+
+    A per-timestamp ``is_session_open`` call resolves its own uncached
+    single-date schedule (~50-100 ms), so a 730-day hourly window costs tens
+    of seconds on the live warmup path. The batched ``nyse_sessions`` range
+    carries exactly the same bounds; dates missing from the range (a calendar
+    failure) fall back to the degraded per-date lookup, which carries its
+    own fallback.
     """
-    epoch_minutes = int(value.timestamp() // 60)
-    return datetime.fromtimestamp((epoch_minutes - epoch_minutes % minutes) * 60, tz=UTC)
+    unique = sorted(set(dates))
+    if not unique:
+        return {}
+    try:
+        ranged = {
+            day: (market_open, market_close)
+            for day, market_open, market_close in nyse_sessions(min(unique), max(unique))
+        }
+    except Exception:
+        ranged = {}
+    bounds: dict[date, tuple[datetime, datetime] | None] = dict(ranged)
+    for day in unique:
+        if day not in bounds:
+            try:
+                from parayabuck.markets.nyse_calendar import session_bounds
 
-
-def _first_expected_bar(timeframe: str, start: datetime) -> datetime:
-    """The earliest bar timestamp a full fetch could return for ``start``.
-
-    Daily bars keep the window's original bucket hour (they are not aligned
-    to the UTC midnight grid) and sit on regular sessions, so a three-day
-    allowance absorbs weekend/holiday gaps. Intraday bars only exist on
-    regular sessions: for a mid-session start the first bar is the next grid
-    point at/after start; for a pre-market/after-close/weekend start it is
-    the next session's 09:30 ET bar. This is the head-coverage reference for
-    incremental reuse: a cache whose oldest bar is NEWER than this cannot
-    cover the requested window head and must be fully refetched.
-    """
-    if timeframe == "1d":
-        return start + timedelta(days=3)
-    local = start.astimezone(NEW_YORK)
-    minute = local.hour * 60 + local.minute
-    if local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60:
-        return start
-    cursor = local.replace(hour=9, minute=30, second=0, microsecond=0)
-    if cursor <= local:
-        cursor += timedelta(days=1)
-    while cursor.weekday() >= 5:
-        cursor += timedelta(days=1)
-    return cursor.astimezone(UTC)
+                bounds[day] = session_bounds(day)
+            except Exception:
+                bounds[day] = None
+    return bounds
 
 
 class AlpacaHistoricalData:
@@ -147,7 +152,6 @@ class AlpacaHistoricalData:
         # be scheduled per ``_SIP_REPROBE_INTERVAL`` instead of trusting a
         # stale downgrade for the life of the process.
         self._sip_fallback_since: datetime | None = None
-        self._sip_quote_fallback_active = False
         # Alpaca's Basic data plan rejects SIP bar queries whose end reaches
         # into the most recent 15 minutes. Callers wire this from
         # ``signal_cross_check.sip_embargo_minutes`` (the single setting for
@@ -163,9 +167,8 @@ class AlpacaHistoricalData:
         else:
             self._cache = WarmupCache(str(cache))
         # Bumped whenever a window is answered without real provider rows (the
-        # outage cache fallback or an empty response). The incremental path
-        # compares it across its fetches so such rows are never stamped as
-        # written under the current scope digest.
+        # outage cache fallback or an empty response), so the split-basis
+        # verifier never counts cache rows as provider coverage.
         self._provider_fallbacks: int = 0
         self._last_batch_degraded: bool = False
         # Observability counters (measured provider calls).
@@ -176,16 +179,16 @@ class AlpacaHistoricalData:
     def feed_status(self) -> dict[str, object]:
         """Configured and effective equity historical feed for reporting."""
         bars_effective = "iex" if self._sip_fallback_active else self._configured_stock_feed
-        quote_effective = (
-            "iex" if self._sip_quote_fallback_active or self._sip_fallback_active else self._configured_stock_feed
-        )
         fallback_since = getattr(self, "_sip_fallback_since", None)
         return {
             "configured": self._configured_stock_feed,
             "effective": bars_effective,
-            "quote_effective": quote_effective,
+            # Quote and bar coverage share the downgrade: no quote-only path
+            # ever sets a separate flag, so both keys derive from the bar
+            # fallback the health surface already reads.
+            "quote_effective": bars_effective,
             "sip_fallback_active": self._sip_fallback_active,
-            "sip_quote_fallback_active": self._sip_quote_fallback_active,
+            "sip_quote_fallback_active": self._sip_fallback_active,
             # A downgrade is bounded, not permanent: the next SIP request at
             # or after this instant re-probes and restores the configured feed.
             "sip_fallback_since": (fallback_since.isoformat() if isinstance(fallback_since, datetime) else None),
@@ -323,8 +326,7 @@ class AlpacaHistoricalData:
         end: datetime | str | None,
         adjustment: str,
     ) -> tuple[list[str], datetime, datetime]:
-        """Validate and normalize one batch request; shared by the plain and
-        incremental fetch paths so both enforce identical contracts."""
+        """Validate and normalize one batch request."""
         if not symbols:
             return [], datetime.now(UTC), datetime.now(UTC)
         if timeframe not in _TIMEFRAMES:
@@ -340,138 +342,6 @@ class AlpacaHistoricalData:
         if start_at >= end_at:
             raise ValueError("Request window must end after it starts")
         return symbols, start_at, end_at
-
-    def get_bars_batch_incremental(
-        self,
-        symbols: list[str],
-        timeframe: str,
-        start: datetime | str | None = None,
-        end: datetime | str | None = None,
-        adjustment: str = "raw",
-        *,
-        scope: str,
-        config_digest: str,
-        identity: str = "",
-        overlap_timeframes: int = 2,
-    ) -> dict[str, list[Bar]]:
-        """Cache-assisted incremental batch fetch returning the SAME bars a
-        full ``get_bars_batch`` would return, while downloading only the
-        missing tail.
-
-        Validation (fail closed to a full refetch when ANY check fails):
-
-        * scope digest — the cached rows must have been written under the
-          same ``config_digest`` (recorded via ``scope_meta``); a mismatch
-          means the bars may have been produced under a different
-          configuration.
-        * window head coverage — the cache must reach back to the request
-          start; a cache holding only the tail of the window is never
-          silently served as if it were complete history.
-        * tail freshness — a cache whose newest bar is older than the
-          market/timeframe staleness limit is distrustful (a long-dormant
-          or partially-written cache) and is fully refetched.
-
-        When the cache validates, each symbol downloads only
-        ``[last_cached - overlap_timeframes * step, end]``: the overlap
-        re-fetches every bar that could have been forming (and therefore
-        partial) when it was cached, so closed cached RAW bars (immutable)
-        plus the fresh tail equal a full-window download exactly.
-
-        Split- or dividend-adjusted series are NOT immutable: the provider
-        rebases every older bar after a corporate action, so cached adjusted
-        rows may be on a stale basis. Those requests always download the full
-        window. A feed change during the request (an SIP entitlement
-        downgrade) also falls back to a full download on the new feed.
-        """
-        if not symbols:
-            return {}
-        if not scope or not config_digest:
-            raise ValueError("Incremental fetch requires scope and config_digest")
-        symbols, start_at, end_at = self._resolve_batch_request(symbols, timeframe, start, end, adjustment)
-        cache = self._cache
-        if not isinstance(cache, WarmupCache):
-            # Fakes/tests without the real cache degrade to the plain fetch.
-            return self.get_bars_batch(symbols, timeframe, start, end, adjustment=adjustment)
-        # Resolve a due SIP re-probe BEFORE choosing the cache feed name, so
-        # cached rows are read and written under the feed actually queried.
-        self._reprobe_sip_if_due()
-        end_at = self._clamp_recent_end(end_at)
-        feed_name = self._effective_stock_feed_name
-        minutes = TIMEFRAME_MINUTES[timeframe]
-        step = timedelta(minutes=minutes)
-        fallbacks_before = getattr(self, "_provider_fallbacks", 0)
-        # Bars are aligned to the timeframe grid, while request boundaries
-        # carry sub-bucket seconds. Cache reads must use the floored start or
-        # the first (grid-aligned) bar is excluded by ``timestamp >= start``
-        # and silently dropped from a warm reuse. API requests keep the raw
-        # boundary exactly as the plain fetch uses it.
-        grid_start = _floor_to_grid(start_at, minutes)
-
-        full: list[str] = []
-        tail: list[str] = []
-        tail_starts: dict[str, datetime] = {}
-        head_reference = _first_expected_bar(timeframe, grid_start)
-        # The scope checks and the merge below need the same cached window, so
-        # each symbol's bars are materialised once and reused.
-        windows: dict[str, list[Bar]] = {}
-        if adjustment == "raw" and cache.scope_is_valid(scope, config_digest):
-            for symbol in symbols:
-                cached = windows[symbol] = self._cached_window(
-                    cache, symbol, timeframe, feed_name, adjustment, grid_start, end_at
-                )
-                if not cached:
-                    full.append(symbol)
-                    continue
-                if cached[0].timestamp > head_reference:
-                    full.append(symbol)
-                    continue
-                latest = cached[-1].timestamp
-                if self._cache_tail_is_stale(timeframe, latest):
-                    full.append(symbol)
-                    continue
-                tail.append(symbol)
-                tail_starts[symbol] = latest
-        else:
-            full = list(symbols)
-
-        fetched: dict[str, list[Bar]] = {}
-        if full:
-            fetched.update(self.get_bars_batch(full, timeframe, start_at, end_at, adjustment=adjustment))
-        if tail:
-            tail_start = max(grid_start, min(tail_starts.values()) - overlap_timeframes * step)
-            tail_rows = len(tail) * int((end_at - tail_start).total_seconds() // 60 // minutes)
-            if tail_rows > _MAX_ROWS_PER_REQUEST:
-                # Defensive: a tail window that alone exceeds the row budget
-                # (only possible with a huge symbol count) is fetched as a
-                # full window so truncation can never occur.
-                fetched.update(self.get_bars_batch(tail, timeframe, start_at, end_at, adjustment=adjustment))
-            elif tail_start < end_at:
-                fetched.update(self._fetch_window(tail, timeframe, tail_start, end_at, adjustment))
-            else:
-                # Cache already extends to the request end; nothing to fetch.
-                for symbol in tail:
-                    fetched[symbol] = windows[symbol]
-        if self._effective_stock_feed_name != feed_name:
-            # The feed changed mid-request: the cached windows belong to the
-            # old feed and must not be merged with rows from the new one.
-            return self.get_bars_batch(symbols, timeframe, start_at, end_at, adjustment=adjustment)
-        result: dict[str, list[Bar]] = {}
-        for symbol in symbols:
-            window = windows.get(symbol)
-            if window is None:
-                # An invalid scope reaches the cache for the first time here,
-                # after the refetch has refreshed it.
-                window = windows[symbol] = self._cached_window(
-                    cache, symbol, timeframe, feed_name, adjustment, grid_start, end_at
-                )
-            merged = {bar.timestamp: bar for bar in window}
-            merged.update({bar.timestamp: bar for bar in fetched.get(symbol, [])})
-            result[symbol] = [merged[key] for key in sorted(merged)]
-        # Only a refresh the provider actually answered may (re)stamp the
-        # scope: outage-served cache rows can predate this config digest.
-        if getattr(self, "_provider_fallbacks", 0) == fallbacks_before:
-            cache.scope_set(scope, config_digest, identity)
-        return result
 
     @staticmethod
     def _cached_window(
@@ -493,27 +363,14 @@ class AlpacaHistoricalData:
             adjustment=adjustment,
         )
         if timeframe != "1d":
-            return [bar for bar in bars if is_session_open(bar.timestamp)]
+            bounds = _session_bounds_for([bar.timestamp.astimezone(NEW_YORK).date() for bar in bars])
+            kept: list[Bar] = []
+            for bar in bars:
+                window = bounds.get(bar.timestamp.astimezone(NEW_YORK).date())
+                if window is not None and window[0] <= bar.timestamp.astimezone(UTC) < window[1]:
+                    kept.append(bar)
+            return kept
         return bars
-
-    @staticmethod
-    def _cache_tail_is_stale(
-        timeframe: str,
-        latest: datetime,
-        now: datetime | None = None,
-    ) -> bool:
-        """Fail-closed staleness limit for incremental reuse.
-
-        These are generous: the head-coverage check is the primary guard
-        against serving an incomplete window. The tail limit exists to
-        refetch a cache that is so old it may predate data corrections or a
-        partially-written table, and to satisfy the fail-closed contract for
-        cache reuse.
-        """
-        now = now or datetime.now(UTC)
-        if timeframe == "1d":
-            return now - latest > timedelta(days=45)
-        return now - latest > timedelta(days=7)
 
     def _fetch_chunked_windows(
         self,
@@ -753,15 +610,21 @@ class AlpacaHistoricalData:
             self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
             return {symbol: [] for symbol in symbols}
         bars: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
+        intraday_bounds: dict[date, tuple[datetime, datetime] | None] | None = None
+        if timeframe != "1d":
+            intraday_bounds = _session_bounds_for(
+                [
+                    _normalize_row_timestamp(row.timestamp).astimezone(NEW_YORK).date()
+                    for row in frame.reset_index().itertuples(index=False)
+                ]
+            )
         for row in frame.reset_index().sort_values("timestamp").itertuples(index=False):
-            timestamp = row.timestamp
-            if hasattr(timestamp, "to_pydatetime"):
-                timestamp = timestamp.to_pydatetime()
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-            timestamp = timestamp.astimezone(UTC)
-            if timeframe != "1d" and not is_session_open(timestamp):
-                continue
+            timestamp = _normalize_row_timestamp(row.timestamp)
+            if timeframe != "1d":
+                assert intraday_bounds is not None
+                window = intraday_bounds.get(timestamp.astimezone(NEW_YORK).date())
+                if window is None or not (window[0] <= timestamp < window[1]):
+                    continue
             row_symbol = str(getattr(row, "symbol", symbols[0]))
             item = Bar(
                 timestamp=timestamp,

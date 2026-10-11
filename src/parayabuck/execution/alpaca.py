@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,10 +46,6 @@ from .alpaca_models import (  # noqa: E402
 _DEAD_ORDER_STATUSES = frozenset({"canceled", "cancelled", "expired", "rejected", "done_for_day"})
 
 
-# Broker order states that can never fill again (``rejected`` never filled).
-_DEAD_ORDER_STATUSES = frozenset({"canceled", "cancelled", "expired", "rejected", "done_for_day"})
-
-
 class AlpacaBroker:
     """Alpaca execution boundary using the engine's native models."""
 
@@ -83,6 +80,10 @@ class AlpacaBroker:
         self.portfolio_ownership_resolved = portfolio_ownership_resolved
         self.bot_tradable_symbols = bot_tradable_symbols
         self._account_id = ""
+        # Peak read-modify-write is shared mutable state across the account,
+        # trade-update and decision threads: the lock is created here so its
+        # first use is never a racy lazy creation.
+        self._peak_lock = threading.Lock()
         # Immutable snapshot cache: every fresh account() seeds it; callers
         # that tolerate bounded staleness (config-sanctioned entry-gate
         # freshness) may reuse it via snapshot_if_fresh() instead of issuing

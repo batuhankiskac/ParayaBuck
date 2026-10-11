@@ -92,7 +92,7 @@ No circular imports. `repository` does not import `PortfolioRuntime`. `rebalance
 | Ownership adjustments | `portfolio_ownership_adjustments` | `adjustment_id` PK |
 | Ledger identity | `portfolio_ledger_identity` | `singleton` PK (`client_order_salt`, created once) |
 | High-water | `portfolio_high_water` | `account_id` PK (`equity`, `epoch`, `updated_at`) |
-| Warmup bars | `data/cache/warmup.sqlite3` (`bars`, `scope_meta`) | PK `(feed, symbol, market, timeframe, adjustment, timestamp)` |
+| Warmup bars | `data/cache/warmup.sqlite3` (`bars`) | PK `(feed, symbol, market, timeframe, adjustment, timestamp)` |
 | Execution ledger | `ExecutionLedger` (`orders`, `fills`, `managed_positions`, `risk_state`) | SQLite WAL, `busy_timeout=5000` |
 
 All SQLite DBs use WAL + `busy_timeout=5000`; repository uses `store.lock` + `with connection:` for atomic multi-table writes. `WarmupCache._migrate_legacy_schema` handles crash recovery (see below).

@@ -30,7 +30,7 @@ from parayabuck.execution.portfolio import (
     portfolio_risk_limits_from_config,
 )
 from parayabuck.logger import get_logger
-from parayabuck.markets.nyse_calendar import session_bounds
+from parayabuck.markets.nyse_calendar import nyse_sessions, session_bounds
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES, is_regular_equity_time
 from parayabuck.portfolio import PortfolioStrategy, portfolio_strategy_from, rebalance_policy_for
@@ -84,7 +84,65 @@ def _canonical_csv_timeframe(raw_timeframe: object) -> str:
 
 def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
     source = Path(path)
+    parsed = _read_priced_csv_rows(source, default_market=default_market)
+    # One batched NYSE range lookup per load: a per-row session_bounds call
+    # resolves its own uncached single-date schedule (~50-100 ms), so a few
+    # thousand daily rows cost tens of seconds. The batched set carries
+    # exactly the same session dates as the per-row lookups.
+    session_dates: set[object] = set()
+    batched = False
+    daily_dates = sorted(
+        {
+            stamp.astimezone(NEW_YORK).date()
+            for _, stamp, raw, _ in parsed
+            if str(raw.get("timeframe") or "1d") in ("1d", "1Day")
+        }
+    )
+    if daily_dates:
+        try:
+            session_dates = {day for day, _, _ in nyse_sessions(min(daily_dates), max(daily_dates))}
+            batched = True
+        except Exception:
+            # A calendar failure must not stop a backtest: fall through to
+            # the degraded per-date lookup, which carries its own fallback.
+            pass
     rows: list[Bar] = []
+    for row_number, timestamp, raw, market in parsed:
+        timeframe = _canonical_csv_timeframe(raw.get("timeframe") or "1d")
+        raw_volume = str(raw["volume"] or "").strip()
+        if not raw_volume:
+            raise ValueError(f"CSV row {row_number} has no volume for {raw['symbol']}")
+        if timestamp.weekday() >= 5:
+            raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
+        if timeframe != "1d" and not is_regular_equity_time(timestamp):
+            raise ValueError(f"Equity CSV contains an out-of-session bar: {timestamp.isoformat()}")
+        if timeframe == "1d":
+            if batched:
+                in_session = timestamp.astimezone(NEW_YORK).date() in session_dates
+            else:
+                in_session = session_bounds(timestamp.astimezone(NEW_YORK).date()) is not None
+            if not in_session:
+                log.warning("Equity CSV contains a non-session bar (holiday): %s", timestamp.isoformat())
+        rows.append(
+            Bar(
+                timestamp=timestamp,
+                symbol=str(raw["symbol"]),
+                timeframe=timeframe,
+                open=float(raw["open"]),
+                high=float(raw["high"]),
+                low=float(raw["low"]),
+                close=float(raw["close"]),
+                volume=float(raw_volume),
+                market=market,
+            )
+        )
+    return rows
+
+
+def _read_priced_csv_rows(
+    source: Path, *, default_market: Market
+) -> list[tuple[int, datetime, dict[str, str], Market]]:
+    priced: list[tuple[int, datetime, dict[str, str], Market]] = []
     with source.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         # ``volume`` is required: the fill model sizes every order from the
@@ -105,29 +163,8 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
                 # ET), shifting every session lookup by one day. Intraday naive
                 # stamps keep the historical UTC reading.
                 timestamp = timestamp.replace(tzinfo=NEW_YORK if timeframe == "1d" else UTC)
-            raw_volume = str(raw["volume"] or "").strip()
-            if not raw_volume:
-                raise ValueError(f"CSV row {row_number} has no volume for {raw['symbol']}")
-            if timestamp.weekday() >= 5:
-                raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
-            if timeframe != "1d" and not is_regular_equity_time(timestamp):
-                raise ValueError(f"Equity CSV contains an out-of-session bar: {timestamp.isoformat()}")
-            if timeframe == "1d" and session_bounds(timestamp.astimezone(NEW_YORK).date()) is None:
-                log.warning("Equity CSV contains a non-session bar (holiday): %s", timestamp.isoformat())
-            rows.append(
-                Bar(
-                    timestamp=timestamp,
-                    symbol=str(raw["symbol"]),
-                    timeframe=timeframe,
-                    open=float(raw["open"]),
-                    high=float(raw["high"]),
-                    low=float(raw["low"]),
-                    close=float(raw["close"]),
-                    volume=float(raw_volume),
-                    market=market,
-                )
-            )
-    return rows
+            priced.append((row_number, timestamp, raw, market))
+    return priced
 
 
 def _action_value(raw_value: object, *, row_number: int) -> Decimal:

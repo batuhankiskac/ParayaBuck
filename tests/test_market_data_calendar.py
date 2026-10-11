@@ -399,7 +399,6 @@ def _sip_history(get_stock_bars: Any) -> Any:
     history._stock_feed = "sip"
     history._configured_stock_feed = "sip"
     history._sip_fallback_active = False
-    history._sip_quote_fallback_active = False
     history._sip_fallback_since = None
     history._sip_embargo = timedelta(minutes=15)
     history._provider_fallbacks = 0

@@ -263,9 +263,11 @@ def test_concurrent_readiness_access_never_raises() -> None:
     )
     errors: list[BaseException] = []
     stop = threading.Event()
+    started = threading.Barrier(3)
 
     def refresh() -> None:
         try:
+            started.wait(timeout=5.0)
             while not stop.is_set():
                 engine._refresh_readiness()
         except BaseException as exc:  # pragma: no cover - the invariant is no raise
@@ -273,20 +275,25 @@ def test_concurrent_readiness_access_never_raises() -> None:
 
     def read() -> None:
         try:
-            for _ in range(2000):
+            started.wait(timeout=5.0)
+            for _ in range(200):
                 engine._has_ready_symbols()
                 engine._not_ready_snapshot()
                 engine._build_market_health({Market.EQUITY: True}, {Market.EQUITY: {"A"}}, {}, datetime.now(UTC), 45.0)
         except BaseException as exc:  # pragma: no cover
             errors.append(exc)
+        finally:
+            stop.set()
 
     threads = [threading.Thread(target=refresh), threading.Thread(target=read)]
     for thread in threads:
         thread.start()
+    started.wait(timeout=5.0)
     for thread in threads:
-        thread.join(timeout=15.0)
+        thread.join(timeout=10.0)
     stop.set()
     assert errors == []
+    assert not any(thread.is_alive() for thread in threads)
 
 
 # R5A-1: scheduling refuses to spawn once the engine is stopping.

@@ -227,8 +227,14 @@ class AccountService:
             raise RuntimeError("Alpaca account is blocked from trading")
         try:
             equity = float(account.equity)
-            previous_equity = float(account.last_equity)
-            cash = float(account.cash)
+            raw_previous = getattr(account, "last_equity", None)
+            # Alpaca types ``last_equity`` Optional: a missing previous close
+            # reads as flat on the day. Anything present must still parse.
+            previous_equity = equity if raw_previous is None else float(raw_previous)
+            raw_cash = getattr(account, "cash", None)
+            if raw_cash is None:
+                raise ValueError("Broker account has no cash value")
+            cash = float(raw_cash)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Broker account values are not numeric: {exc}") from exc
         if not math.isfinite(equity) or not math.isfinite(previous_equity) or not math.isfinite(cash):
@@ -347,6 +353,8 @@ class AccountService:
                 )
         # Account-scoped peak reconciliation (serialized: the peak is shared
         # mutable state across the account, trade-update and decision threads).
+        # The lock is created in ``AlpacaBroker.__init__``; the fallback below
+        # only serves test doubles that bypass it.
         peak_lock = getattr(broker, "_peak_lock", None)
         if peak_lock is None:
             peak_lock = threading.Lock()

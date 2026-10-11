@@ -90,7 +90,6 @@ def _cache_backed_history(cache_bars: list[Bar], get_stock_bars: Any) -> Any:
     history._stock_feed = "iex"
     history._configured_stock_feed = "iex"
     history._sip_fallback_active = False
-    history._sip_quote_fallback_active = False
     history._stock_client = SimpleNamespace(get_stock_bars=get_stock_bars)
     history._cache = SimpleNamespace(
         get=lambda *args, **kwargs: cache_bars,
@@ -150,29 +149,15 @@ def _regular_hours(start: datetime, end: datetime) -> int:
 
 
 def _batched_session_calendar(monkeypatch: Any, start: datetime, end: datetime) -> None:
-    """Replace per-timestamp NYSE lookups with one batched calendar call.
+    """Pre-warm the batched NYSE range lookup for a 730-day hourly window.
 
-    ``is_session_open`` resolves each distinct date with its own uncached
-    ``nyse_sessions(date, date)`` lookup (~50-100 ms); 730 days of hourly
-    rows cost ~65 s per test. The batched bounds are identical (verified
-    date-by-date against ``session_bounds``), so only the lookup shape
-    changes — the row-bounded chunking invariant under test is untouched.
+    Production resolves the window with one ``nyse_sessions`` range call;
+    pre-warming the process calendar cache keeps these chunking tests fast
+    without touching the lookup shape under test.
     """
-    import parayabuck.data.alpaca as alpaca_module
-    from parayabuck.markets.nyse_calendar import NEW_YORK, nyse_sessions
+    from parayabuck.markets.nyse_calendar import nyse_sessions
 
-    sessions = {
-        day: (market_open, market_close) for day, market_open, market_close in nyse_sessions(start.date(), end.date())
-    }
-
-    def _fast(timestamp: datetime) -> bool:
-        bounds = sessions.get(timestamp.astimezone(NEW_YORK).date())
-        if bounds is None:
-            return False
-        moment = timestamp.astimezone(UTC)
-        return bounds[0] <= moment < bounds[1]
-
-    monkeypatch.setattr(alpaca_module, "is_session_open", _fast)
+    nyse_sessions(start.date(), end.date())
 
 
 def test_long_window_is_split_into_row_bounded_requests(monkeypatch: Any) -> None:
@@ -299,7 +284,6 @@ def test_sip_entitlement_failure_falls_back_to_iex(monkeypatch: Any) -> None:
     history._stock_feed = "sip"
     history._configured_stock_feed = "sip"
     history._sip_fallback_active = False
-    history._sip_quote_fallback_active = False
     history._stock_client = SimpleNamespace(
         get_stock_bars=lambda request: (
             calls.append(("sip", str(request.feed)))
@@ -321,7 +305,6 @@ def test_sip_entitlement_failure_falls_back_to_iex(monkeypatch: Any) -> None:
     assert "not the consolidated" in history.feed_status()["note"]
     # Non-entitlement failures never trigger the fallback.
     history._sip_fallback_active = False
-    history._sip_quote_fallback_active = False
     history._stock_client.get_stock_bars = lambda request: (_ for _ in ()).throw(ConnectionError("connection reset"))
     with pytest.raises(ConnectionError, match="connection reset"):
         history.get_bars_batch(["AAPL"], "1d", start=end - timedelta(days=30), end=end)
@@ -335,7 +318,6 @@ def _sip_history(get_stock_bars: Any, embargo_minutes: float = 15.0) -> Any:
     history._stock_feed = "sip"
     history._configured_stock_feed = "sip"
     history._sip_fallback_active = False
-    history._sip_quote_fallback_active = False
     history._sip_embargo = timedelta(minutes=embargo_minutes)
     history._stock_client = SimpleNamespace(get_stock_bars=get_stock_bars)
     history._cache = SimpleNamespace(
@@ -397,7 +379,6 @@ def test_feed_status_labels_iex_coverage_honestly() -> None:
     history._stock_feed = "iex"
     history._configured_stock_feed = "iex"
     history._sip_fallback_active = False
-    history._sip_quote_fallback_active = False
     status = history.feed_status()
     assert status["configured"] == "iex"
     assert status["effective"] == "iex"
@@ -421,7 +402,6 @@ def test_batch_download_chunks_by_total_rows_not_per_symbol(monkeypatch: Any) ->
     history._stock_feed = "sip"
     history._configured_stock_feed = "sip"
     history._sip_fallback_active = False
-    history._sip_quote_fallback_active = False
     history._stock_client = CappedClient()
     history._cache = SimpleNamespace(
         get=lambda *args, **kwargs: [],
@@ -438,15 +418,9 @@ def test_batch_download_chunks_by_total_rows_not_per_symbol(monkeypatch: Any) ->
         assert rows * 12 <= 10_000
 
 
-# ---------------------------------------------------------------------------
-# incremental (cache-merge) fetch — the live PAPER warmup path
-# ---------------------------------------------------------------------------
-
-_INCREMENTAL_SCOPE = "warmup/unit-test"
-_INCREMENTAL_DIGEST = "digest-a"
-_INCREMENTAL_SYMBOLS = ("QQQ", "SPY")
+_OUTAGE_SYMBOLS = ("QQQ", "SPY")
 # SIP: no 15-minute IEX end clamp, so request bounds are exactly the test's.
-_INCREMENTAL_FEED = "sip"
+_OUTAGE_FEED = "sip"
 
 
 @pytest.fixture
@@ -462,8 +436,8 @@ def warmup_cache(tmp_path: Path) -> Any:
 def _day_grid(start: datetime, end: datetime) -> list[datetime]:
     """Daily bar timestamps on ``[start, end]`` at 00:00 UTC.
 
-    The merge mechanics under test do not depend on the session calendar,
-    so every calendar day carries a bar.
+    The outage-honesty mechanics under test do not depend on the session
+    calendar, so every calendar day carries a bar.
     """
     cursor = start.replace(hour=0, minute=0, second=0, microsecond=0)
     if cursor < start:
@@ -523,24 +497,29 @@ class _FakeStockBars:
         return SimpleNamespace(df=frame)
 
 
-def _incremental_history(cache: Any, provider: Any) -> Any:
+def _plain_history(cache: Any, provider: Any) -> Any:
     import parayabuck.data.alpaca as alpaca_module
 
     history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
-    history._stock_feed = _INCREMENTAL_FEED
-    history._configured_stock_feed = _INCREMENTAL_FEED
+    history._stock_feed = _OUTAGE_FEED
+    history._configured_stock_feed = _OUTAGE_FEED
     history._sip_fallback_active = False
-    history._sip_quote_fallback_active = False
+    history._sip_fallback_since = None
     # No recent-SIP embargo: these tests pin exact request windows.
     history._sip_embargo = timedelta(0)
     history._stock_client = provider
     history._cache = cache
+    history._provider_fallbacks = 0
+    history._last_batch_degraded = False
+    history.provider_calls = 0
+    history.provider_symbols_requested = 0
+    history.provider_bars_returned = 0
     return history
 
 
 def _seed_cache(cache: Any, stamps: list[datetime]) -> None:
-    """Write a scope-valid cache holding exactly ``stamps`` for every symbol."""
-    for symbol in _INCREMENTAL_SYMBOLS:
+    """Write cache rows holding exactly ``stamps`` for every symbol."""
+    for symbol in _OUTAGE_SYMBOLS:
         cache.upsert(
             [
                 Bar(
@@ -556,273 +535,14 @@ def _seed_cache(cache: Any, stamps: list[datetime]) -> None:
                 )
                 for stamp in stamps
             ],
-            feed=_INCREMENTAL_FEED,
+            feed=_OUTAGE_FEED,
             adjustment="raw",
         )
-    cache.scope_set(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST, "unit-test")
 
 
-def _expected_window(
-    start: datetime,
-    end: datetime,
-    *,
-    close_overrides: dict[datetime, float] | None = None,
-) -> dict[str, list[tuple[datetime, float]]]:
-    """The (timestamp, close) pairs a complete download of the window returns."""
-    overrides = close_overrides or {}
-    return {
-        symbol: [(stamp, overrides.get(stamp, 100.0)) for stamp in _day_grid(start, end)]
-        for symbol in _INCREMENTAL_SYMBOLS
-    }
-
-
-def _window_pairs(result: dict[str, list[Bar]]) -> dict[str, list[tuple[datetime, float]]]:
-    return {symbol: [(bar.timestamp, bar.close) for bar in bars] for symbol, bars in result.items()}
-
-
-def _fetch_incremental(history: Any, start: datetime, end: datetime, **kwargs: Any) -> dict[str, list[Bar]]:
-    return history.get_bars_batch_incremental(
-        list(_INCREMENTAL_SYMBOLS),
-        "1d",
-        start=start,
-        end=end,
-        scope=_INCREMENTAL_SCOPE,
-        config_digest=_INCREMENTAL_DIGEST,
-        **kwargs,
-    )
-
-
-def test_incremental_fetch_extends_a_valid_cache_with_a_tail_download_only(warmup_cache: Any) -> None:
-    """A scope-valid, head-covered, fresh cache must download only the tail
-    (plus the overlap bars) and still return the complete window."""
-    provider = _FakeStockBars()
-    history = _incremental_history(warmup_cache, provider)
-    end = _today()
-    start = end - timedelta(days=8)
-
-    first = _fetch_incremental(history, start, end)
-    assert len(provider.requests) == 1, "a cache with no scope row must be fully downloaded"
-    assert provider.requests[0][1] == start
-    assert _window_pairs(first) == _expected_window(start, end)
-
-    later = end + timedelta(days=1)
-    second = _fetch_incremental(history, start, later)
-    assert len(provider.requests) == 2
-    symbols, tail_start, tail_end = provider.requests[-1]
-    assert symbols == sorted(_INCREMENTAL_SYMBOLS)
-    # The overlap re-downloads the two bars before the newest cached bar.
-    assert tail_start == end - timedelta(days=2)
-    assert tail_end == later
-    assert _window_pairs(second) == _expected_window(start, later)
-
-
-def test_incremental_fetch_serves_a_full_cache_hit_without_calling_the_provider(warmup_cache: Any) -> None:
-    """When the cache already reaches the request end there is nothing to
-    download, so the provider must not be called at all."""
-    provider = _FakeStockBars()
-    history = _incremental_history(warmup_cache, provider)
-    end = _today()
-    start = end - timedelta(days=6)
-    _seed_cache(warmup_cache, _day_grid(start, end))
-
-    result = _fetch_incremental(history, start, end, overlap_timeframes=0)
-
-    assert provider.requests == []
-    assert _window_pairs(result) == _expected_window(start, end)
-
-
-def test_incremental_merge_dedups_the_overlap_and_keeps_every_cached_bar(warmup_cache: Any) -> None:
-    """The tail overlaps the cache by design: the merge must produce exactly
-    the cached window extended by the tail — no gaps, no duplicate timestamps
-    (even when the provider answers out of order), the provider wins on a
-    corrected bar, and a symbol the provider omits keeps its cached bars."""
-    end = _today()
-    start = end - timedelta(days=6)
-    correction = end - timedelta(days=2)  # first bar of the overlap tail
-    provider = _FakeStockBars(omit=("SPY",), close_overrides={correction: 100.5}, reverse=True)
-    _seed_cache(warmup_cache, _day_grid(start, end))
-    history = _incremental_history(warmup_cache, provider)
-
-    result = _fetch_incremental(history, start, end)
-
-    assert len(provider.requests) == 1
-    assert provider.requests[0][1] == correction
-    expected = _expected_window(start, end, close_overrides={correction: 100.5})
-    # SPY had no provider rows in the tail: its cached window must survive.
-    expected["SPY"] = _expected_window(start, end)["SPY"]
-    assert _window_pairs(result) == expected
-    qqq = result["QQQ"]
-    assert [bar.timestamp for bar in qqq] == sorted({bar.timestamp for bar in qqq})
-    assert next(bar.close for bar in qqq if bar.timestamp == correction) == 100.5
-
-
-class _FailingStockBars:
-    """Provider outage: every request raises."""
-
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def get_stock_bars(self, request: Any) -> Any:
-        self.calls += 1
-        raise RuntimeError("provider down")
-
-
-class _EmptyStockBars:
-    """Provider answers with no rows at all."""
-
-    def get_stock_bars(self, request: Any) -> Any:
-        import pandas as pd
-
-        return SimpleNamespace(df=pd.DataFrame())
-
-
-def _seed_old_scope_cache(cache: Any, start: datetime, end: datetime) -> None:
-    """Fresh, window-covering rows recorded under a PREVIOUS config digest."""
-    _seed_cache(cache, _day_grid(start, end))
-    cache.scope_set(_INCREMENTAL_SCOPE, "digest-old", "unit-test")
-
-
-def test_normal_incremental_fetch_stamps_the_scope(warmup_cache: Any) -> None:
-    history = _incremental_history(warmup_cache, _FakeStockBars())
-    end = _today()
-
-    _fetch_incremental(history, end - timedelta(days=6), end)
-
-    assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
-
-
-def test_outage_served_cache_rows_are_not_stamped_into_the_new_scope(warmup_cache: Any) -> None:
-    end = _today()
-    start = end - timedelta(days=6)
-    _seed_old_scope_cache(warmup_cache, start, end)
-    provider = _FailingStockBars()
-    history = _incremental_history(warmup_cache, provider)
-
-    result = _fetch_incremental(history, start, end)
-
-    assert provider.calls == 1
-    assert _window_pairs(result) == _expected_window(start, end)
-    assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
-
-
-def test_empty_provider_response_does_not_stamp_the_scope(warmup_cache: Any) -> None:
-    history = _incremental_history(warmup_cache, _EmptyStockBars())
-    end = _today()
-
-    result = _fetch_incremental(history, end - timedelta(days=6), end)
-
-    assert result == {symbol: [] for symbol in _INCREMENTAL_SYMBOLS}
-    assert not warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
-
-
-def test_empty_equity_tail_keeps_a_valid_scope_and_the_next_refresh_stays_incremental(
-    warmup_cache: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Routine live case (weekend/holiday/no new closed bar): a scope-valid
-    RAW equity 1d cache whose tail request returns no rows must stay scope-valid,
-    serve the cached window, and keep the next refresh a tail-only download."""
-    import pandas as pd
-
-    import parayabuck.data.alpaca as alpaca_module
-
-    monkeypatch.setattr(alpaca_module, "StockBarsRequest", lambda **kwargs: SimpleNamespace(**kwargs))
-    requests: list[Any] = []
-
-    def empty_stock_bars(request: Any) -> Any:
-        requests.append(request)
-        return SimpleNamespace(df=pd.DataFrame())
-
-    history = _incremental_history(warmup_cache, SimpleNamespace(get_stock_bars=empty_stock_bars))
-    history._stock_feed = "iex"
-    history._configured_stock_feed = "iex"
-    symbols = ["SPY", "QQQ", "QLD"]
-    end = datetime.now(UTC)
-    start = end - timedelta(days=30)
-    day = start.replace(hour=4, minute=0, second=0, microsecond=0)
-    stamps: list[datetime] = []
-    while day < end - timedelta(hours=1):
-        if day.weekday() < 5:
-            stamps.append(day)
-        day += timedelta(days=1)
-    for symbol in symbols:
-        warmup_cache.upsert(
-            [
-                Bar(
-                    timestamp=stamp,
-                    symbol=symbol,
-                    timeframe="1d",
-                    open=100.0,
-                    high=101.0,
-                    low=99.0,
-                    close=100.0,
-                    volume=1000.0,
-                    market=Market.EQUITY,
-                )
-                for stamp in stamps
-            ],
-            feed="iex",
-            adjustment="raw",
-        )
-    warmup_cache.scope_set(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST, "unit-test")
-
-    def refresh() -> dict[str, list[Bar]]:
-        return history.get_bars_batch_incremental(
-            symbols,
-            "1d",
-            start=start,
-            end=end,
-            adjustment="raw",
-            scope=_INCREMENTAL_SCOPE,
-            config_digest=_INCREMENTAL_DIGEST,
-        )
-
-    first = refresh()
-    assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
-    assert {symbol: [bar.timestamp for bar in bars] for symbol, bars in first.items()} == {
-        symbol: stamps for symbol in symbols
-    }
-    second = refresh()
-
-    assert second == first
-    assert warmup_cache.scope_is_valid(_INCREMENTAL_SCOPE, _INCREMENTAL_DIGEST)
-    assert len(requests) == 2
-    # Both refreshes asked only for the overlap tail, never the full window.
-    for request in requests:
-        assert request.start >= stamps[-1] - timedelta(days=2)
-
-
-def test_split_adjusted_incremental_fetch_always_downloads_the_full_window(warmup_cache: Any) -> None:
-    """A split rebases every older adjusted bar, so cached adjusted rows are
-    never trusted: a scope-valid cache still gets a full-window download and
-    the provider's rebased closes replace the stale cached ones."""
-    end = _today()
-    start = end - timedelta(days=8)
-    history = _incremental_history(warmup_cache, _FakeStockBars())
-    history.get_bars_batch_incremental(
-        list(_INCREMENTAL_SYMBOLS),
-        "1d",
-        start=start,
-        end=end,
-        adjustment="splits",
-        scope=_INCREMENTAL_SCOPE,
-        config_digest=_INCREMENTAL_DIGEST,
-    )
-    first_bar = min(_day_grid(start, end))
-    rebased = _FakeStockBars(close_overrides={first_bar: 100.5})
-    history._stock_client = rebased
-
-    result = history.get_bars_batch_incremental(
-        list(_INCREMENTAL_SYMBOLS),
-        "1d",
-        start=start,
-        end=end,
-        adjustment="splits",
-        scope=_INCREMENTAL_SCOPE,
-        config_digest=_INCREMENTAL_DIGEST,
-    )
-
-    assert [request[1] for request in rebased.requests] == [start]
-    assert next(bar.close for bar in result["QQQ"] if bar.timestamp == first_bar) == 100.5
+# ---------------------------------------------------------------------------
+# outage honesty: cache-served rows are degraded, never provider coverage
+# ---------------------------------------------------------------------------
 
 
 def test_plain_fetch_never_counts_cache_rows_as_provider_coverage(warmup_cache: Any) -> None:
@@ -832,35 +552,33 @@ def test_plain_fetch_never_counts_cache_rows_as_provider_coverage(warmup_cache: 
     start = end - timedelta(days=8)
     grid = _day_grid(start, end)
     _seed_cache(warmup_cache, grid)
-    history = _incremental_history(warmup_cache, _FakeStockBars())
+    history = _plain_history(warmup_cache, _FakeStockBars())
     history._provider_fallbacks = 0
     history._last_batch_degraded = False
 
-    complete = history.get_bars_batch(list(_INCREMENTAL_SYMBOLS), "1d", start, end)
+    complete = history.get_bars_batch(list(_OUTAGE_SYMBOLS), "1d", start, end)
     assert history._last_batch_degraded is False
     assert {symbol: len(bars) for symbol, bars in complete.items()} == {symbol: len(grid) for symbol in complete}
 
     history._stock_client = _FakeStockBars(omit=("SPY",))
-    partial = history.get_bars_batch(list(_INCREMENTAL_SYMBOLS), "1d", start, end)
+    partial = history.get_bars_batch(list(_OUTAGE_SYMBOLS), "1d", start, end)
 
     assert history._last_batch_degraded is True
     assert [bar.timestamp for bar in partial["SPY"]] == grid
 
 
-def test_incremental_fetch_resolves_a_due_sip_reprobe_before_choosing_the_cache_feed(warmup_cache: Any) -> None:
-    """A downgraded client whose SIP re-probe is due queries SIP; the cache
-    must be read under SIP too, not under the stale IEX name (which would
-    discard the valid SIP cache and force a full download)."""
+def test_plain_fetch_resolves_a_due_sip_reprobe(warmup_cache: Any) -> None:
+    """A downgraded client whose SIP re-probe is due queries SIP again."""
+
     end = _today()
     start = end - timedelta(days=8)
     provider = _FakeStockBars()
-    history = _incremental_history(warmup_cache, provider)
-    _fetch_incremental(history, start, end)
+    history = _plain_history(warmup_cache, provider)
+    history.get_bars_batch(list(_OUTAGE_SYMBOLS), "1d", start, end)
     history._stock_feed = "iex"
     history._sip_fallback_active = True
     history._sip_fallback_since = datetime.now(UTC) - timedelta(hours=7)
 
-    _fetch_incremental(history, start, end + timedelta(days=1))
+    history.get_bars_batch(list(_OUTAGE_SYMBOLS), "1d", start, end + timedelta(days=1))
 
     assert history._sip_fallback_active is False
-    assert provider.requests[-1][1] == end - timedelta(days=2)

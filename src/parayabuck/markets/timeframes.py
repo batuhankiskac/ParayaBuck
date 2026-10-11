@@ -93,7 +93,7 @@ def weekday_count(start: datetime, end: datetime) -> int:
     return total_days - weekend_days
 
 
-def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: datetime | date | None = None) -> int:
+def bars_to_calendar_days(timeframe: str, bars: int, end_date: datetime | date | None = None) -> int:
     """Calendar span needed to collect ``bars`` of ``timeframe`` history.
 
     Equity bars only exist on regular trading sessions: 61 daily bars do not
@@ -106,7 +106,7 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
     (e.g. 2020), whose holiday calendar differs from today's, never around
     the current date.
 
-    Results are memoised per (symbol, timeframe, bars, anchor): the NYSE
+    Results are memoised per (timeframe, bars, anchor): the NYSE
     calendar lookup is expensive. ``end_date=None`` resolves to the current
     date BEFORE the memo lookup, so a long-lived process never reuses a span
     anchored on the day it started.
@@ -115,11 +115,11 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: date
     # evaluation start so session density reflects that era's calendar. A
     # datetime is a date, so the anchor keeps whatever the caller passed.
     anchor: date = end_date if end_date is not None else datetime.now(UTC).date()
-    return _bars_to_calendar_days(symbol, timeframe, bars, anchor)
+    return _bars_to_calendar_days(timeframe, bars, anchor)
 
 
 @lru_cache(maxsize=2048)
-def _bars_to_calendar_days(symbol: str, timeframe: str, bars: int, today: date) -> int:
+def _bars_to_calendar_days(timeframe: str, bars: int, today: date) -> int:
     minutes = TIMEFRAME_MINUTES[timeframe]
     bars_per_session = (390 / minutes) if minutes < 1440 else 1
     needed_sessions = max(1, math.ceil(bars / bars_per_session))

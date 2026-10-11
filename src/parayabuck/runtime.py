@@ -264,6 +264,21 @@ class _SessionCloseFallback:
     attempts: int = 0
 
 
+def _stored_signal_series(runtimes: Any, symbol: str) -> list[Any]:
+    """Stored signal bars backing the coverage-hole check (T4).
+
+    The verifier fails closed when the provider omits a stored in-span
+    session: without the stored series a mid-window provider hole would
+    pass, advance the watermark past the hole, and drop a good stored bar.
+    """
+    stored: list[Any] = []
+    for runtime in runtimes or ():
+        series = getattr(getattr(runtime, "history", None), "get", lambda _key: None)(symbol)
+        if series:
+            stored.extend(series)
+    return stored
+
+
 class EngineRuntime:
     """Web-manageable streaming runtime for the ParayaBuck engine."""
 
@@ -3912,7 +3927,7 @@ class EngineRuntime:
             (runtime.strategy.minimum_history_bars + 1 for runtime in runtimes),
             default=1,
         )
-        fallback_span = bars_to_calendar_days("SPY", "1d", required_bars)
+        fallback_span = bars_to_calendar_days("1d", required_bars)
         fallback_oldest = end - timedelta(days=fallback_span)
 
         required_oldest_by_symbol: dict[str, datetime] = {}
@@ -4008,6 +4023,7 @@ class EngineRuntime:
                 adjusted.get(symbol, ()),
                 required_oldest=required_oldest_by_symbol.get(symbol, fallback_oldest),
                 required_newest=required_through,
+                stored=_stored_signal_series(runtimes, symbol),
             )
         ]
         if inadequate:
@@ -4971,36 +4987,6 @@ class EngineRuntime:
                 ",".join(sorted(self._not_ready_symbols)),
             )
 
-    def _warmup_config_digest(self) -> str:
-        """Cache-scope digest for the runtime warmup fetch.
-
-        Gates warm-cache reuse on the identity of everything that determines
-        the warmup window: the enabled strategies (name, parameters, signal
-        timeframe, minimum history). Any change invalidates the scope and fails closed to a
-        full refetch; the head-coverage check inside the incremental fetch
-        additionally guards against a shorter window silently standing in
-        for a longer one.
-        """
-        import json as _json
-
-        payload = {
-            "timeframes": sorted(self.aggregators),
-            # The signal-history adjustment basis is part of the cache
-            # identity: switching it must fail the scope closed to a full
-            # refetch (rows are additionally keyed by adjustment).
-            "signal_adjustment_basis": {"EQUITY": "splits"},
-            "strategies": [
-                {
-                    "name": getattr(runtime.strategy, "name", ""),
-                    "timeframe": getattr(runtime.strategy, "timeframe", None),
-                    "minimum_history_bars": getattr(runtime.strategy, "minimum_history_bars", 0),
-                    "parameters": getattr(runtime.strategy, "parameters", {}),
-                }
-                for runtime in self._portfolio_runtimes
-            ],
-        }
-        return hashlib.sha256(_json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
-
     def _warmup_symbols(self, history: AlpacaHistoricalData, symbols: list[str], *, retry: bool) -> None:
         """Download split-adjusted signal history for ``symbols`` and seed it.
 
@@ -5009,7 +4995,6 @@ class EngineRuntime:
         splits by ``data/adjustment.py``). Bars are seeded into every
         matching portfolio runtime under the ingestion and portfolio locks.
         """
-        warmup_digest = self._warmup_config_digest()
         group = list(symbols)
         for timeframe in sorted(self._strategy_timeframes):
             strategy_requirements = [
@@ -5022,15 +5007,12 @@ class EngineRuntime:
             requested_bars = max(strategy_requirements)
             for symbol_batch in _symbol_batches(group):
                 try:
-                    start = _warmup_start(symbol_batch[0], timeframe, requested_bars)
-                    signal_bars = history.get_bars_batch_incremental(
+                    start = _warmup_start(timeframe, requested_bars)
+                    signal_bars = history.get_bars_batch(
                         symbol_batch,
                         timeframe,
                         start=start,
                         adjustment="splits",
-                        scope="runtime_warmup_signal",
-                        config_digest=warmup_digest,
-                        identity=f"{timeframe}:{requested_bars}",
                     )
                     for symbol in symbol_batch:
                         signal_tail = signal_bars.get(symbol, [])[-requested_bars:]
@@ -5084,8 +5066,8 @@ def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:
     )
 
 
-def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
-    days = bars_to_calendar_days(symbol, timeframe, bars)
+def _warmup_start(timeframe: str, bars: int) -> str:
+    days = bars_to_calendar_days(timeframe, bars)
     return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
 
 

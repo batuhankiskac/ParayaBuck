@@ -30,19 +30,6 @@ class WarmupCache:
             PRIMARY KEY(feed, symbol, market, timeframe, adjustment, timestamp)
         )
     """
-    # Cache-scope validation metadata: incremental cache reuse is only
-    # trusted when the recorded config digest (and strategy identity, where
-    # relevant) still match the caller's. A mismatch fails closed to a full
-    # refetch instead of serving bars computed under a different
-    # configuration.
-    _SCOPE_SCHEMA = """
-        CREATE TABLE IF NOT EXISTS scope_meta (
-            scope TEXT PRIMARY KEY,
-            config_digest TEXT NOT NULL,
-            identity TEXT NOT NULL DEFAULT '',
-            updated_at TEXT NOT NULL
-        )
-    """
 
     def __init__(self, path: str = "data/cache/warmup.sqlite3") -> None:
         self.path = Path(path)
@@ -52,7 +39,6 @@ class WarmupCache:
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.execute("PRAGMA busy_timeout=5000")
         self.connection.execute(self._SCHEMA)
-        self.connection.execute(self._SCOPE_SCHEMA)
         self.connection.commit()
 
     def close(self) -> None:
@@ -234,37 +220,6 @@ class WarmupCache:
                     pass
                 log.warning("WarmupCache.replace_window rollback (%s); cache preserved", exc)
                 return False
-
-    def scope_is_valid(self, scope: str, config_digest: str) -> bool:
-        """Whether a cache scope was last written under ``config_digest``.
-        Fail-closed: a missing row or a digest mismatch means the cached
-        bars may have been produced under a different configuration, so the
-        caller must refetch instead of reusing the cache.
-        """
-        with self._lock:
-            row = self.connection.execute("SELECT config_digest FROM scope_meta WHERE scope=?", (scope,)).fetchone()
-        return bool(row and row[0] == config_digest)
-
-    def scope_set(self, scope: str, config_digest: str, identity: str = "") -> None:
-        """Record that a cache scope was refreshed under ``config_digest``.
-
-        ``identity`` is a human-readable strategy/scope label (e.g. strategy
-        name + timeframe) recorded for auditability; validation is driven by
-        the digest.
-        """
-        with self._lock:
-            self.connection.execute(
-                """
-                INSERT INTO scope_meta (scope, config_digest, identity, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(scope) DO UPDATE SET
-                    config_digest=excluded.config_digest,
-                    identity=excluded.identity,
-                    updated_at=excluded.updated_at
-                """,
-                (scope, config_digest, identity, datetime.now(UTC).isoformat()),
-            )
-            self.connection.commit()
 
 
 __all__ = ["WarmupCache"]

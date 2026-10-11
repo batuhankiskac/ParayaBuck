@@ -598,7 +598,7 @@ def test_warmup_window_covers_strategy_minimum_history_for_equity(
     # spans more calendar days than bars: at least the no-holiday Mon-Fri
     # minimum (ceil(200*7/5)=280) and bounded by a plausible holiday count.
     # The static equity universe adds no scanner lookback on top of it.
-    assert cli_module._warmup_window_days(config) == bars_to_calendar_days("SPY", "1d", 200, end_date=None)
+    assert cli_module._warmup_window_days(config) == bars_to_calendar_days("1d", 200, end_date=None)
 
 
 def test_bars_to_calendar_days_scales_by_session_density() -> None:
@@ -613,14 +613,14 @@ def test_bars_to_calendar_days_scales_by_session_density() -> None:
     # (61 - 1) * 7 / 5 = 84 days of span with no holidays, never fewer.
     # Tuesday 2026-09-29 (Labor Day inside the window) needs exactly 85;
     # a Friday anchor needs 86.
-    assert bars_to_calendar_days("SPY", "1d", 61, end_date=date(2026, 9, 29)) == 85
-    assert bars_to_calendar_days("SPY", "1d", 61, end_date=date(2026, 9, 25)) == 86
+    assert bars_to_calendar_days("1d", 61, end_date=date(2026, 9, 29)) == 85
+    assert bars_to_calendar_days("1d", 61, end_date=date(2026, 9, 25)) == 86
     for anchor in (date(2026, 9, 28), date(2026, 9, 29), date(2026, 7, 1), date(2025, 12, 31)):
-        daily_61 = bars_to_calendar_days("SPY", "1d", 61, end_date=anchor)
+        daily_61 = bars_to_calendar_days("1d", 61, end_date=anchor)
         assert 84 <= daily_61 <= 120
-        assert bars_to_calendar_days("SPY", "1d", 150, end_date=anchor) > 150
+        assert bars_to_calendar_days("1d", 150, end_date=anchor) > 150
         # Intraday equity fits several sessions per calendar day.
-        assert bars_to_calendar_days("SPY", "1h", 150, end_date=anchor) < 60
+        assert bars_to_calendar_days("1h", 150, end_date=anchor) < 60
 
 
 def test_configured_symbol_without_bars_never_blocks_periods(tmp_path) -> None:

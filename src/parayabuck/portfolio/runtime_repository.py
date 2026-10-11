@@ -29,6 +29,7 @@ from parayabuck.portfolio.ownership_rebase import (
     FOREIGN_SELL_KIND,
     SELL,
     SPLIT,
+    SPLIT_ADJUST,
     SPLIT_REBASE_KIND,
     classify_share_change,
     open_position_cost_bases,
@@ -674,37 +675,6 @@ class PortfolioStateRepository:
                 (occurred_at.isoformat(), client_order_id),
             )
 
-    def save_rebalance_execution(
-        self,
-        decision_id: str,
-        account_id: str,
-        market: Market,
-        phase: str,
-        *,
-        buy_orders_json: str = "[]",
-        status: str = "active",
-    ) -> None:
-        with self.store.lock, self.store.connection:
-            self.store.connection.execute(
-                """INSERT INTO portfolio_rebalance_executions(
-                    decision_id, account_id, market, phase, status, buy_orders_json, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(decision_id) DO UPDATE SET
-                    phase = excluded.phase,
-                    status = excluded.status,
-                    buy_orders_json = excluded.buy_orders_json,
-                    updated_at = excluded.updated_at""",
-                (
-                    decision_id,
-                    account_id,
-                    market.value,
-                    phase,
-                    status,
-                    buy_orders_json,
-                    datetime.now(UTC).isoformat(),
-                ),
-            )
-
     def update_rebalance_execution(
         self,
         decision_id: str,
@@ -1130,6 +1100,55 @@ class PortfolioStateRepository:
         received_at: datetime | None = None,
         fee_observed: bool | None = None,
     ) -> bool:
+        # Fail closed on hostile broker facts BEFORE any write: a non-finite
+        # cumulative wedges ownership at inf forever (a later legit update
+        # computes max(inf, cum) = inf), a NaN fee silently drops the
+        # portfolio_fills row (NaN <> NaN breaks the PK) while the order
+        # cumulative still advances, and a non-positive fill price books a
+        # worthless lot that later poisons split corroboration.
+        try:
+            cumulative_value = float(cumulative_filled_quantity)
+        except (TypeError, ValueError):
+            cumulative_value = math.nan
+        try:
+            average_value = None if average_fill_price is None else float(average_fill_price)
+        except (TypeError, ValueError):
+            average_value = math.nan
+        try:
+            fee_value = None if fee is None else float(fee)
+        except (TypeError, ValueError):
+            fee_value = math.nan
+        invalid = not math.isfinite(cumulative_value) or cumulative_value < 0
+        if not invalid and average_value is not None and cumulative_value > 0:
+            invalid = not math.isfinite(average_value) or average_value <= 0
+        observed = fee is not None if fee_observed is None else bool(fee_observed)
+        if not invalid and fee_value is not None and observed:
+            invalid = not math.isfinite(fee_value)
+        if invalid:
+            log.error(
+                "Rejecting non-finite fill facts: client_order_id=%s status=%s cumulative=%r average=%r fee=%r",
+                client_order_id,
+                status,
+                cumulative_filled_quantity,
+                average_fill_price,
+                fee,
+            )
+            try:
+                from parayabuck.monitoring import alerts
+
+                alerts.emit(
+                    "paper_incident",
+                    message=(
+                        f"Rejected non-finite fill facts for {client_order_id} "
+                        f"(cumulative={cumulative_filled_quantity!r} average={average_fill_price!r} "
+                        f"fee={fee!r}); order left unbooked for the operator."
+                    ),
+                    category="invalid_fill_facts",
+                    incident_id=f"invalid_fill_facts:{client_order_id}",
+                )
+            except Exception:
+                log.warning("Alert emission failed for rejected fill facts of %s", client_order_id, exc_info=True)
+            return False
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
                 """SELECT o.cumulative_filled_quantity, o.reference_price, o.side,
@@ -1143,7 +1162,6 @@ class PortfolioStateRepository:
             ).fetchone()
             if row is None:
                 return False
-            # Append raw broker facts first.
             # ``portfolio_orders.cumulative_filled_quantity`` remains
             # the authoritative *net owned* quantity; this journal is solely
             # execution measurement and never drives execution behavior.
@@ -1442,17 +1460,6 @@ class PortfolioStateRepository:
             ).fetchone()
         return str(row[0]) if row is not None and row[0] else None
 
-    def owned_average_cost(self, account_id: str, symbol: str, market: Market) -> float | None:
-        """Average entry price of the CURRENT owned position (FIFO lots).
-
-        The counterpart of the broker position's ``avg_entry_price``: a split
-        divides both by the same ratio, so the pair is what separates a
-        corporate action from a foreign trade. Only fills since the position
-        was last flat count. ``None`` when nothing is open.
-        """
-        bases = self.owned_cost_bases(account_id, symbol, market)
-        return bases[0] if bases else None
-
     def owned_cost_bases(self, account_id: str, symbol: str, market: Market) -> tuple[float, ...]:
         """``(fifo, average_cost)`` entry price of the current owned position,
         or ``()`` when nothing is open (see ``open_position_cost_bases``)."""
@@ -1467,7 +1474,7 @@ class PortfolioStateRepository:
                 (account_id, symbol, market.value),
             ).fetchall()
             adjustments = self.store.connection.execute(
-                """SELECT created_at, sign * (quantity - consumed_quantity)
+                """SELECT created_at, sign * (quantity - consumed_quantity), kind
                    FROM portfolio_ownership_adjustments
                    WHERE account_id = ? AND symbol = ? AND market = ? AND consumed_quantity < quantity""",
                 (account_id, symbol, market.value),
@@ -1476,8 +1483,13 @@ class PortfolioStateRepository:
         for occurred_at, side, quantity, price in fills:
             kind = BUY if str(side).lower() == "buy" else SELL
             events.append((_parse_instant(occurred_at), 0, (kind, float(quantity), float(price))))
-        for created_at, signed_quantity in adjustments:
-            events.append((_parse_instant(created_at), 1, (ADJUST, float(signed_quantity), None)))
+        for created_at, signed_quantity, adjustment_kind in adjustments:
+            # A booked reverse split rescales the open lots (fewer shares,
+            # same total cost); every other reduction depletes like a sale.
+            event_kind = (
+                SPLIT_ADJUST if str(adjustment_kind) == SPLIT_REBASE_KIND and float(signed_quantity) < 0 else ADJUST
+            )
+            events.append((_parse_instant(created_at), 1, (event_kind, float(signed_quantity), None)))
         events.sort(key=lambda item: (item[0], item[1]))
         return open_position_cost_bases(event for _, _, event in events)
 
@@ -1609,15 +1621,17 @@ class PortfolioStateRepository:
 
         Unconditional by design: the operator has read the real position off
         the broker. Read and write share one lock hold, so the resulting
-        owned quantity is exactly ``broker_quantity``. Returns the new owned
-        quantity, or ``None`` when this account owns nothing in the symbol.
+        owned quantity is exactly ``broker_quantity``. A zero-owned symbol
+        adopts a positive broker quantity as an explicit increase (the
+        recovery the surplus alert prescribes); adopting zero from zero is
+        a no-op that still returns the broker quantity.
         """
         if not math.isfinite(broker_quantity) or broker_quantity < 0:
             raise ValueError("Broker quantity must be finite and non-negative")
         with self.store.lock, self.store.connection:
             owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
-            if owned <= 1e-12:
-                return None
+            if abs(broker_quantity - owned) <= 1e-12:
+                return broker_quantity
             self._insert_ownership_adjustment_tx(
                 account_id,
                 symbol,
@@ -1721,6 +1735,12 @@ class PortfolioStateRepository:
         }
 
     def close(self) -> None:
-        if self._owns_store:
+        if not self._owns_store:
+            return
+        try:
             self.store.acquire()
-            self.store.release()
+        except RuntimeError:
+            # The shared store is already closed: cleanup stays a no-op like
+            # ExecutionLedger.close() so retry/double-stop paths never raise.
+            return
+        self.store.release()

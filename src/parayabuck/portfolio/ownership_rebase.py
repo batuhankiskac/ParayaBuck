@@ -62,13 +62,17 @@ FOREIGN_SELL = "foreign_sell"
 UNKNOWN = "unknown"
 
 __all__ = [
+    "ADJUST",
+    "BUY",
     "COST_BASIS_TOLERANCE",
     "FOREIGN_SELL",
     "FOREIGN_SELL_KIND",
     "KNOWN_SPLIT_RATIOS",
     "MATCH",
     "QUANTITY_TOLERANCE",
+    "SELL",
     "SPLIT",
+    "SPLIT_ADJUST",
     "SPLIT_REBASE_KIND",
     "UNKNOWN",
     "ShareChange",
@@ -79,7 +83,12 @@ __all__ = [
 
 BUY = "buy"
 SELL = "sell"
+# ``adjust`` is an audited ownership adjustment (signed quantity, no price).
+# A plain ``adjust`` reduction is a foreign sale or a stale clear and
+# depletes like a sell; ``split_adjust`` is a reverse-split rebase and
+# rescales the open lots (fewer shares, same total cost).
 ADJUST = "adjust"
+SPLIT_ADJUST = "split_adjust"
 
 
 def open_position_cost_bases(events: Iterable[tuple[str, float, float | None]]) -> tuple[float, ...]:
@@ -87,11 +96,13 @@ def open_position_cost_bases(events: Iterable[tuple[str, float, float | None]]) 
 
     ``events`` are chronological ``(kind, quantity, price)`` tuples: ``buy``
     and ``sell`` fills (positive quantity, fill price) and ``adjust`` for an
-    audited ownership adjustment (signed quantity, no price). A reduction
-    depletes like a sell; an addition is a split rebase and rescales the open
-    lots (more shares, same total cost). Lots are discarded whenever the
-    position goes flat. Returns ``(fifo, average_cost)`` — the same value
-    twice when no sell touched the open lots — or ``()`` when nothing is open.
+    audited ownership adjustment (signed quantity, no price). An addition is
+    a split rebase and rescales the open lots (more shares, same total
+    cost); a ``split_adjust`` decrease (a reverse split) rescales them the
+    same way (fewer shares, same total cost). Any other reduction depletes
+    like a sell. Lots are discarded whenever the position goes flat.
+    Returns ``(fifo, average_cost)`` — the same value twice when no sell
+    touched the open lots — or ``()`` when nothing is open.
     """
     lots: list[list[float]] = []  # FIFO [quantity, price]
     quantity = 0.0
@@ -103,6 +114,14 @@ def open_position_cost_bases(events: Iterable[tuple[str, float, float | None]]) 
                 continue
             ratio = (quantity + amount) / quantity
             lots = [[lot_quantity * ratio, lot_price / ratio] for lot_quantity, lot_price in lots]
+            quantity += amount
+            continue
+        if kind == SPLIT_ADJUST and amount < 0 and quantity > 1e-12 and quantity + amount > 1e-12:
+            # Reverse split: fewer shares, same total cost. Rescale the open
+            # lots (price by the inverse ratio) instead of depleting them
+            # like a sale, which would leave the pre-split basis behind.
+            ratio = quantity / (quantity + amount)
+            lots = [[lot_quantity / ratio, lot_price * ratio] for lot_quantity, lot_price in lots]
             quantity += amount
             continue
         if kind == BUY:
@@ -195,8 +214,10 @@ def classify_share_change(
     ``owned_average_cost`` is the repository's average entry price of the
     current position (``owned_average_cost_candidates`` may add the other
     lot method's value); ``broker_average_cost`` is the broker position's
-    ``avg_entry_price``. Both sides are needed to accept a share *increase*
-    as a split; a share decrease is adoptable without them.
+    ``avg_entry_price``. A share *increase* needs both sides to be accepted
+    as a split; a share *decrease* at a standard split ratio needs the
+    broker basis to corroborate it, otherwise it is a foreign sell (an
+    unchanged broker basis proves no corporate action occurred).
     """
     owned = float(owned_quantity)
     broker = float(broker_quantity)
@@ -213,14 +234,22 @@ def classify_share_change(
     # the audit row shows 2 rather than 1.9999998.
     matched = ratio if ratio_match is None else ratio_match
     if broker < owned:
-        if ratio_match is not None:
+        if ratio_match is not None and corroborated:
             return ShareChange(
                 SPLIT,
                 owned,
                 broker,
                 ratio_match,
-                f"{ratio_match:g}-for-1 reverse split"
-                + ("" if corroborated else " (broker cost basis does not corroborate it)"),
+                f"{ratio_match:g}-for-1 reverse split confirmed by the broker average entry price",
+            )
+        if ratio_match is not None:
+            return ShareChange(
+                FOREIGN_SELL,
+                owned,
+                broker,
+                ratio,
+                f"broker holds fewer shares than owned at a {ratio_match:g}x ratio but its average entry price "
+                "does not corroborate a reverse split",
             )
         return ShareChange(
             FOREIGN_SELL,

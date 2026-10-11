@@ -1281,8 +1281,12 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
             )
             return 1
         owned = repository.owned_quantities(account_id, Market.EQUITY).get(symbol, 0.0)
-        if owned <= 1e-12:
+        if owned <= 1e-12 and broker_qty <= 1e-12:
+            print(f"{symbol}: account {account_id} owns nothing and the broker holds nothing; nothing to rebase.")
+            return 0
+        if owned <= 1e-12 and not getattr(args, "confirm", False):
             print(f"{symbol}: account {account_id} owns nothing; nothing to rebase.", file=sys.stderr)
+            print("Re-run with --confirm to adopt the broker quantity as an explicit operator rebase.")
             return 1
         pending = repository.open_orders(account_id)
         if pending:

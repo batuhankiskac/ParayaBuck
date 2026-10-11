@@ -274,7 +274,6 @@ class CrossCheckStep:
 
 @dataclass
 class _PendingCheck:
-    earliest: datetime
     deadline: datetime
     close: datetime
     next_attempt: datetime
@@ -350,7 +349,7 @@ class SignalCrossCheckCoordinator:
         if state is None:
             close = self._session_close(session)
             earliest = max(now, close + self.sip_embargo)
-            state = _PendingCheck(earliest, earliest + self.retry_window, close, earliest)
+            state = _PendingCheck(earliest + self.retry_window, close, earliest)
             self._pending[session] = state
         if now < state.next_attempt:
             return CrossCheckStep("defer", retry_at=state.next_attempt)

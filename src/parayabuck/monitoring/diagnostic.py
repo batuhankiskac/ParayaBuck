@@ -16,46 +16,6 @@ from typing import Any
 
 log = logging.getLogger("parayabuck.monitoring.diagnostic")
 
-_SENSITIVE_KEYS = frozenset(
-    {
-        "api_key",
-        "api_secret",
-        "secret",
-        "password",
-        "webhook_url",
-        "approval_key",
-        "alpaca_api_key",
-        "alpaca_secret_key",
-        "live_approval_key",
-    }
-)
-
-_SENSITIVE_SUBSTRINGS = ("secret", "webhook", "password", "approval_key", "api_key")
-
-
-def _is_sensitive(key: str) -> bool:
-    low = key.lower()
-    if low in _SENSITIVE_KEYS:
-        return True
-    return any(s in low for s in _SENSITIVE_SUBSTRINGS)
-
-
-def _redact(obj: Any) -> Any:
-    if isinstance(obj, dict):
-        out: dict[str, Any] = {}
-        for k, v in obj.items():
-            if _is_sensitive(str(k)):
-                out[k] = "***REDACTED***"
-            else:
-                out[k] = _redact(v)
-        return out
-    if isinstance(obj, list):
-        return [_redact(v) for v in obj]
-    if isinstance(obj, tuple):
-        return tuple(_redact(v) for v in obj)
-    return obj
-
-
 _MAX_SECTION_CHARS = 500_000
 _MAX_SECTION_ROWS = 2_000
 
@@ -250,8 +210,10 @@ def collect_bundle_data(
             # Build sanitized dict via asdict then redact
             from dataclasses import asdict
 
+            from parayabuck.monitoring.operational_event import redact_fields
+
             raw = asdict(cfg)
-            data["sanitized_config"] = _redact(raw)
+            data["sanitized_config"] = redact_fields(raw)
         else:
             data["sanitized_config"] = None
     except Exception as exc:
@@ -292,8 +254,10 @@ def collect_bundle_data(
     except Exception as exc:
         data["database_checks"] = {"error": str(exc)}
 
-    # redact top-level
-    return _redact(data)  # type: ignore[no-any-return]
+    # redact top-level with the single shared policy
+    from parayabuck.monitoring.operational_event import redact_fields
+
+    return redact_fields(data)
 
 
 def _run_doctor_checks(

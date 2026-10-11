@@ -407,9 +407,33 @@ def test_latest_backup_age_hours_reports_the_newest_backup(tmp_path: Path) -> No
     assert abs(age - 48.0) < 1e-6
     assert age > MAX_BACKUP_AGE_HOURS
 
-    keep = empty / "parayabuck-keep-predeploy-20260812T170000000000Z.sqlite3"
-    keep.write_bytes(b"SQLite format 3\x00")
-    _age(keep, 1, now=now)
+    fresh = empty / "parayabuck-20260812T170000000000Z.sqlite3"
+    fresh.write_bytes(b"SQLite format 3\x00")
+    _age(fresh, 1, now=now)
     fresh_age = latest_backup_age_hours(empty, now=now)
     assert fresh_age is not None
     assert abs(fresh_age - 1.0) < 1e-6
+
+
+def test_latest_backup_age_hours_ignores_labelled_keep_snapshots(tmp_path: Path) -> None:
+    """R3D7: a fresh manual keep-* snapshot must not reset the timer clock."""
+    from parayabuck.backup import MAX_BACKUP_AGE_HOURS, latest_backup_age_hours
+
+    empty = tmp_path / "backups"
+    empty.mkdir()
+    now = datetime(2026, 8, 12, 18, 0, tzinfo=UTC)
+    stale = empty / "parayabuck-20260805T180000000000Z.sqlite3"
+    stale.write_bytes(b"SQLite format 3\x00")
+    _age(stale, 48, now=now)
+    keep = empty / "parayabuck-keep-predeploy-20260812T170000000000Z.sqlite3"
+    keep.write_bytes(b"SQLite format 3\x00")
+    _age(keep, 1, now=now)
+
+    age = latest_backup_age_hours(empty, now=now)
+    assert age is not None
+    assert abs(age - 48.0) < 1e-6
+    assert age > MAX_BACKUP_AGE_HOURS
+
+    keep.unlink()
+    stale.unlink()
+    assert latest_backup_age_hours(empty, now=now) is None

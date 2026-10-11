@@ -524,7 +524,7 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
     first = captured_requests[0]
     # The warmup span is anchored at the evaluation start (2022 session
     # density), never at today's date.
-    expected_warmup = timedelta(days=cli_module._warmup_window_days(config, Market.EQUITY, end_date=start))
+    expected_warmup = timedelta(days=cli_module._warmup_window_days(config, end_date=start))
     assert first["start"] == start - expected_warmup
     assert first["end"] == end
     assert first["adjustment"] == "splits"
@@ -599,9 +599,7 @@ def test_warmup_window_covers_strategy_minimum_history_for_equity(
     # spans more calendar days than bars: at least the no-holiday Mon-Fri
     # minimum (ceil(200*7/5)=280) and bounded by a plausible holiday count.
     # The static equity universe adds no scanner lookback on top of it.
-    assert cli_module._warmup_window_days(config, Market.EQUITY) == bars_to_calendar_days(
-        "SPY", "1d", 200, end_date=None
-    )
+    assert cli_module._warmup_window_days(config) == bars_to_calendar_days("SPY", "1d", 200, end_date=None)
 
 
 def test_bars_to_calendar_days_scales_by_session_density() -> None:

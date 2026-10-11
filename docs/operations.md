@@ -296,10 +296,12 @@ preflight (config, mode, live off, credentials, writability, SQLite
 integrity/WAL, tracked `.env`, config digest; online it also checks Alpaca
 PAPER reachability).
 
-It also reports backup freshness: the age of the newest snapshot in
-`backup.path`. That row is a `WARN`, never a blocker — the service runs
-`doctor --strict` as `ExecStartPre`, and a stale backup must not keep the
-engine from starting.
+It also reports backup freshness: the age of the newest *automatic* snapshot in
+`backup.path`. Labelled `parayabuck-keep-*` snapshots do not count: they are
+never pruned, so counting one would report OK for 12 h after every manual
+backup while the 6 h timer stays dead. That row is a `WARN`, never a blocker —
+the service runs `doctor --strict` as `ExecStartPre`, and a stale backup must
+not keep the engine from starting.
 
 ## Offline backtests (research, never runtime)
 
@@ -434,6 +436,14 @@ It also writes an anonymised replay fixture for offline reproduction. Both
 outputs go to the git-ignored `reports/paper_incident/` tree by default
 (`--report`, `--fixture`); keep broker-linked history out of `tests/`, where a
 later `git add -A` would commit it.
+
+Every decision also publishes one immutable JSON receipt under
+`data/runtime/paper_receipts/` (`..._<decision_id>.v2.json`; ~252/yr). The
+audit above replays any window from these files, so retention never drops a
+receipt younger than the soak/audit horizon: `prune_receipts` refuses any
+window below 800 days (two trading years plus margin). Timeline/explain
+lookups hit the filename index first and only scan the directory
+newest-first (bounded) when it misses.
 
 ## Splits and foreign sells
 

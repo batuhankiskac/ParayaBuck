@@ -275,17 +275,20 @@ def prune_backups(
 
 
 def latest_backup_age_hours(backup_dir: str | Path, *, now: datetime | None = None) -> float | None:
-    """Age in hours of the newest backup in ``backup_dir``; None when there is none.
+    """Age in hours of the newest AUTOMATIC backup in ``backup_dir``; None when there is none.
 
     The freshness check behind ``parayabuck doctor``: a backup timer that stopped running weeks
     ago is otherwise indistinguishable from a healthy one until a database
-    loss forces a restore from a stale snapshot.
+    loss forces a restore from a stale snapshot. Only the timer's automatic
+    snapshots count: a labelled ``parayabuck-keep-*`` snapshot is an
+    operator-requested restore point that retention never prunes, so counting
+    it would mask a dead timer for 12 h after every manual backup.
     """
     directory = Path(backup_dir)
     if not directory.is_dir():
         return None
     newest: float | None = None
-    for candidate in directory.glob(BACKUP_GLOB):
+    for candidate in directory.glob(AUTO_BACKUP_GLOB):
         if not candidate.is_file():
             continue
         try:

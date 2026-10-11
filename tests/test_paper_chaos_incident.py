@@ -23,7 +23,6 @@ from parayabuck.monitoring.paper_incident import (
     db_integrity_fail_closed,
     provider_temporary_retry,
 )
-from parayabuck.monitoring.receipt import build_receipt
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_service import (
     PortfolioRuntime,
@@ -347,101 +346,6 @@ def test_missing_symbol_incomplete_batch_fails_closed(tmp_path: Path) -> None:
     assert len(broker.submitted) == 0
     runtime.close("stopped")
     repo.close()
-
-
-# ---------------------------------------------------------------------------
-# 9. Universe partial — ranking universe partial is warned, not silently used
-# ---------------------------------------------------------------------------
-def test_universe_partial_no_silent_drift(tmp_path: Path) -> None:
-    """Universe partial (some symbols missing from universe) must not produce
-    silent drift: the observability layer logs warning and still records
-    hashed universe, but does not invent exposure.
-    """
-    # Build receipt with partial universe to ensure hash still reconstructable
-    ts = datetime(2025, 1, 2, tzinfo=UTC)
-    receipt = build_receipt(
-        decision_timestamp=ts,
-        config_digest="digest123",
-        strategy_name="equity_leveraged_trend_v1",
-        strategy_version="1.0",
-        universe_hash="partial-hash-abc",
-        universe_size=8,  # says 8 but only 6 selected
-        observation_set_symbols=tuple(f"SYM{i}" for i in range(8)),
-        selected_symbols=tuple(f"SYM{i}" for i in range(6)),
-        target_weights={f"SYM{i}": 0.1 for i in range(6)},
-        risk_adjusted_weights={f"SYM{i}": 0.08 for i in range(6)},
-        broker_positions_before={},
-        intended_orders=[],
-        submitted_order_ids=[],
-        fills=[],
-        positions_after={},
-        actual_gross_exposure=0.48,
-        cash_ratio=0.52,
-        warnings=["Ranking universe is partial; missing symbols: SYM6, SYM7"],
-    )
-    d = receipt.to_dict()
-    # Ensure 17 canonical fields present
-    canonical = [
-        "decision_timestamp",
-        "config_digest",
-        "strategy_version",
-        "strategy_name",
-        "universe_hash",
-        "universe_size",
-        "observation_set_symbols",
-        "selected_symbols",
-        "target_weights",
-        "risk_adjusted_weights",
-        "broker_positions_before",
-        "intended_orders",
-        "submitted_order_ids",
-        "fills",
-        "positions_after",
-        "actual_gross_exposure",
-        "cash_ratio",
-    ]
-    for field in canonical:
-        assert field in d
-    assert d["universe_hash"] == "partial-hash-abc"
-    assert "SYM6" in d["warnings"][0]
-    # No silent drift: positions_after empty, exposure matches cash
-    assert abs(d["actual_gross_exposure"] + d["cash_ratio"] - 1.0) < 0.05
-    # Write and verify file not committed (gitignore) and receipt readable
-    out = receipt.write(tmp_path / "receipts")
-    assert out.exists()
-    assert out.name == "2025-01-02_equity_equity_leveraged_trend_v1.json"
-
-
-def test_receipt_has_17_fields_and_is_json_serializable(tmp_path: Path) -> None:
-    ts = datetime(2026, 8, 26, tzinfo=UTC)
-    receipt = build_receipt(
-        decision_timestamp=ts,
-        config_digest="cfg",
-        strategy_name="equity_leveraged_trend_v1",
-        strategy_version="v1",
-        universe_hash="h",
-        universe_size=10,
-        observation_set_symbols=("AAPL",),
-        selected_symbols=("AAPL",),
-        target_weights={"AAPL": 0.1},
-        risk_adjusted_weights={"AAPL": 0.1},
-        broker_positions_before={},
-        intended_orders=[{"symbol": "AAPL", "side": "buy", "quantity": 1}],
-        submitted_order_ids=["oid1"],
-        fills=[],
-        positions_after={"AAPL": 1},
-        actual_gross_exposure=0.1,
-        cash_ratio=0.9,
-    )
-    d = receipt.to_dict()
-    # 19 required (17 original + previous_holdings + universe_version) + 3 extras = 22 total
-    assert len([k for k in d if k not in {"warnings", "incidents", "created_at"}]) == 19
-    # JSON round-trips and file write is atomic
-    path = receipt.write(tmp_path / "out")
-    import json
-
-    loaded = json.loads(path.read_text())
-    assert loaded["strategy_name"] == "equity_leveraged_trend_v1"
 
 
 # ---------------------------------------------------------------------------

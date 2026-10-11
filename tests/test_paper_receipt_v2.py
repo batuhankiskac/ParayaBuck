@@ -227,3 +227,26 @@ def test_startup_catch_up_dispatches_result_to_receipt_writer() -> None:
     )
     engine._run_startup_catch_up()
     assert recorded == [(Market.EQUITY, "equity-catchup")]
+
+
+def test_prune_receipts_keeps_everything_younger_than_retention(tmp_path: Path) -> None:
+    """R5E-5: retention deletes only receipts older than the window."""
+    import os
+    import time
+
+    old = receipt_module.write_decision_receipt_v2(_payload("dold", "equity", "scheduled"), tmp_path)
+    fresh = receipt_module.write_decision_receipt_v2(_payload("dnew", "equity", "scheduled"), tmp_path)
+    now = time.time()
+    os.utime(old, (now - 900 * 86_400, now - 900 * 86_400))
+    removed = receipt_module.prune_receipts(tmp_path, retention_days=800)
+    assert removed == [old]
+    assert not old.exists()
+    assert fresh.exists()
+
+
+def test_prune_receipts_refuses_a_window_below_the_soak_horizon(tmp_path: Path) -> None:
+    """R5E-5: the auditor replays any window from receipts; never prune inside it."""
+    with pytest.raises(ValueError, match="soak/audit horizon"):
+        receipt_module.prune_receipts(tmp_path, retention_days=30)
+    with pytest.raises(ValueError, match="positive"):
+        receipt_module.prune_receipts(tmp_path, retention_days=0)

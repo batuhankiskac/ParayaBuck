@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from parayabuck.monitoring.events import ALERT_KINDS_ORDERED, WARNING_KINDS
+from parayabuck.monitoring.events import WARNING_KINDS
 
 # ---------------------------------------------------------------------------
 # Severity — small stable vocabulary
@@ -62,37 +62,6 @@ _WARNING_KINDS: frozenset[str] = frozenset(
         "runtime_health_degraded",
     }
 )
-
-# ---------------------------------------------------------------------------
-# Vocabulary — canonical alert kinds + lifecycle extensions
-# ---------------------------------------------------------------------------
-
-# Lifecycle-only kinds that answer operator questions not covered by alert
-# kinds. Every entry here is emitted by a real call site; a kind nothing emits
-# would make ``ops events --kind <X>`` answer "never happened" for a question
-# the operator actually has.
-LIFECYCLE_KINDS: tuple[str, ...] = (
-    "runtime_started",
-    "runtime_stopping",
-    # reconciliation lifecycle
-    "reconciliation_succeeded",
-    # account freshness transitions
-    "account_became_stale",
-    "account_recovered",
-    # health
-    "runtime_health_degraded",
-    "runtime_health_recovered",
-    # rebalance phase
-    "rebalance_phase_changed",
-    # decision summary
-    "decision_summary",
-    # portfolio no-trade visibility
-    "portfolio_no_trade",
-)
-
-# Full operational vocabulary = alert kinds + lifecycle kinds (deduplicated, ordered)
-OPERATIONAL_KINDS_ORDERED: tuple[str, ...] = tuple(dict.fromkeys((*ALERT_KINDS_ORDERED, *LIFECYCLE_KINDS)))
-
 
 # ---------------------------------------------------------------------------
 # Secrets redaction
@@ -332,8 +301,6 @@ def create_event(
 
 
 __all__ = [
-    "LIFECYCLE_KINDS",
-    "OPERATIONAL_KINDS_ORDERED",
     "OperationalEvent",
     "Severity",
     "create_event",

@@ -283,30 +283,21 @@ def decision_reconstruction(
     except Exception as exc:
         result["error"] = str(exc)
 
-    # Try to find paper receipt — match the identity fields, never the blob text
-    # The runtime writes receipts via receipt.default_receipt_dir(); read that
-    # same directory instead of a cwd-relative guess.
+    # Paper receipt, cheapest match first: the V2 filename already embeds the
+    # decision id (`..._<decision_id>.v2.json`), so a filename glob answers
+    # without opening any file. Only when that misses do we scan the
+    # directory newest-first with early exit, parsing at most
+    # _RECEIPT_SCAN_MAX files. The runtime writes receipts via
+    # receipt.default_receipt_dir(); read that same directory instead of a
+    # cwd-relative guess.
     from parayabuck.monitoring import receipt as receipt_module
 
     try:
         receipt_dir = receipt_module.default_receipt_dir()
         if receipt_dir.exists():
-            for p in receipt_dir.glob("*.json"):
-                try:
-                    data = json.loads(p.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                if not isinstance(data, dict):
-                    continue
-                if data.get("decision_id") == decision_id or data.get("receipt_id") == decision_id:
-                    result["receipt_path"] = str(p)
-                    result["receipt"] = data
-                    break
-                # V1 receipts carry no id field; fall back to a substring probe
-                if "decision_id" not in data and "receipt_id" not in data and decision_id in json.dumps(data):
-                    result["receipt_path"] = str(p)
-                    result["receipt"] = data
-                    break
+            match = _find_receipt(receipt_dir, decision_id)
+            if match is not None:
+                result["receipt_path"], result["receipt"] = match
     except Exception:
         pass
 
@@ -337,6 +328,42 @@ def decision_reconstruction(
             result["operational_events"] = []
 
     return result
+
+
+_RECEIPT_SCAN_MAX = 2000
+
+
+def _find_receipt(receipt_dir: Path, decision_id: str) -> tuple[str, dict[str, Any]] | None:
+    """(path, payload) for ``decision_id``: filename index first, bounded scan after."""
+    safe = "".join(char for char in decision_id if char.isalnum() or char in ("-", "_"))
+    if safe:
+        for path in sorted(receipt_dir.glob(f"*_{safe}.v2.json")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(data, dict) and (
+                data.get("decision_id") == decision_id or data.get("receipt_id") == decision_id
+            ):
+                return str(path), data
+    newest_first = sorted(
+        (path for path in receipt_dir.glob("*.json") if path.is_file()),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for path in newest_first[:_RECEIPT_SCAN_MAX]:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("decision_id") == decision_id or data.get("receipt_id") == decision_id:
+            return str(path), data
+        # V1 receipts carry no id field; fall back to a substring probe
+        if "decision_id" not in data and "receipt_id" not in data and decision_id in json.dumps(data):
+            return str(path), data
+    return None
 
 
 def _table_exists(conn: sqlite3.Connection, table: str, *, strict: bool = False) -> bool:

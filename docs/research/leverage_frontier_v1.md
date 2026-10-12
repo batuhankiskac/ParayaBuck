@@ -26,7 +26,12 @@ does. Most of those cells also fail G2 (5th-percentile CAGR).
   2017+ lose.
 - **BILLS** add 0.03 pp at 2x costs, against the +0.3 pp required.
 
-Evidence: `research/leverage_frontier_v1/`.
+Evidence: only this document is kept on main. The evidence directory
+`research/leverage_frontier_v1/` and the downloaded inputs
+`data/historical/leverage_frontier_v1_*.csv` were removed from main on
+2026-10-12 and are preserved in tag `archive/research/leverage-frontier-v1-2026-10`
+(commit shas below are from the original branch; on main the pre-registration
+is `a1d8ab6`).
 
 - `PREREGISTRATION.md`, including Amendment A1, was committed in `6429df1`
   before any arm was simulated.

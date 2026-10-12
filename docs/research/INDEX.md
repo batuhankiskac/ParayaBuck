@@ -21,8 +21,7 @@ results for each doc live in `research/<name>/` unless noted.
 
 Other research artifacts still in the tree:
 
-- `data/historical/stress_robustness_v1_*.csv` — inputs to `stress_robustness_v1` (reused by `trend_robustness_v2` and `leverage_frontier_v1`).
-- `data/historical/leverage_frontier_v1_*.csv` — TQQQ/IEF/GLD/GC=F bars and FRED DGS10 for `leverage_frontier_v1`.
+- `data/historical/stress_robustness_v1_*.csv` — inputs to `stress_robustness_v1` (reused by `trend_robustness_v2`).
 - `data/historical/equity_entity_lifetimes_full_v5.csv` and the two `*_v5.manifest.json` files — canonical v5 equity inputs needed to rerun Stage B (`research/paper_config_v2/run_stage_b.py`).
 
 ## Pruned 2026-09-30

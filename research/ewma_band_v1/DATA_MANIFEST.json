@@ -1,0 +1,42 @@
+{
+  "campaign": "ewma_band_v1",
+  "files": {
+    "data/historical/ewma_band_v1_gspc.csv": {
+      "bytes": 1145471,
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "source": "archive/research/signal-ensemble-v1-2026-10 (1e423e2)",
+      "source_path": "data/historical/signal_ensemble_v1_gspc.csv"
+    },
+    "data/historical/ewma_band_v1_index.csv": {
+      "bytes": 4114163,
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "source": "archive/research/e2-confirmation-v1-2026-10 (5ea970f)",
+      "source_path": "data/historical/e2_confirmation_v1_index.csv"
+    },
+    "data/historical/ewma_band_v1_tb3ms.csv": {
+      "bytes": 4439,
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "source": "archive/research/e2-confirmation-v1-2026-10 (5ea970f)",
+      "source_path": "data/historical/e2_confirmation_v1_tb3ms.csv"
+    },
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "committed on main",
+      "source_path": "data/historical/stress_robustness_v1_daily.csv"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "source": "committed on main",
+      "source_path": "data/historical/stress_robustness_v1_dtb3.csv"
+    },
+    "research/ewma_band_v1/E2_INTEGRATION_DEVIATION.json": {
+      "bytes": 16936,
+      "sha256": "7571ed991a08945533b176e5aa4938e5f369cc5a503f142e475821e2e61d99a4",
+      "source": "archive/research/e2-integration-v1-2026-10 (20ce8d3)",
+      "source_path": "research/e2_integration_v1/DEVIATION.json"
+    }
+  },
+  "network": "none; byte copies of tagged or committed files"
+}

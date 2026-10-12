@@ -523,6 +523,26 @@ class PortfolioStateRepository:
             weights = {}
         return datetime.fromisoformat(str(row[0])), weights
 
+    def latest_decision_id(self, account_id: str, market: Market) -> str | None:
+        """Id of the newest persisted decision for ``market`` (any digest)."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT decision_id FROM portfolio_decisions
+                   WHERE account_id = ? AND market = ?
+                   ORDER BY decision_timestamp DESC LIMIT 1""",
+                (account_id, market.value),
+            ).fetchone()
+        return str(row[0]) if row is not None and row[0] is not None else None
+
+    def order_side(self, client_order_id: str) -> str | None:
+        """Persisted side (``buy``/``sell``) of one portfolio order, if known."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT side FROM portfolio_orders WHERE client_order_id = ?",
+                (client_order_id,),
+            ).fetchone()
+        return str(row[0]) if row is not None and row[0] is not None else None
+
     def latest_decision_cross_check(self, account_id: str, market: Market) -> dict[str, Any] | None:
         """``signal_cross_check`` metadata of the newest decision for ``market``.
 

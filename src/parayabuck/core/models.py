@@ -92,6 +92,9 @@ class AccountSnapshot:
     realized_pnl: float = 0.0
     unrealized_pnl: float = 0.0
     fees: float = 0.0
+    # Alpaca ``non_marginable_buying_power`` (None when the broker did not
+    # report it): the LIVE gap-safe BUY cap never spends above it.
+    non_marginable_buying_power: float | None = None
 
     @property
     def drawdown_pct(self) -> float:

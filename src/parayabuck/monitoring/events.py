@@ -6,7 +6,9 @@ from here so the vocabulary cannot drift.
 
 ``ALERT_KINDS`` is the full vocabulary (including ``paper_incident``,
 ``paper_receipt`` and ``daily_summary``). Every accepted kind goes to the
-local log and the operational event journal; nothing is delivered off-host.
+local log and the operational event journal. Off-host delivery is the opt-in
+e-mail channel only (``monitoring.email_alerts``, ``alerting.email``), which
+forwards the subset in ``EMAIL_ALERT_KINDS``.
 """
 
 from __future__ import annotations
@@ -57,6 +59,18 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # A broker FILL activity carried a side outside Alpaca's vocabulary: it is
     # skipped and reported, never fatal for reconciliation.
     "reconciliation_unexpected_fill_side",
+    # A broker-rejected SELL that would exit or reduce the held position:
+    # escalated beyond ``order_rejected`` (e-mailed when e-mail is enabled)
+    # and retried once with a new deterministic client order id.
+    "exit_sell_rejected",
+    # LIVE is configured but the engine cannot start unattended: no valid
+    # standing LIVE authorization, so the owner must re-arm.
+    "live_rearm_required",
+    # The standing LIVE authorization expires soon / has expired.
+    "live_authorization_expiring",
+    "live_authorization_expired",
+    # An off-host delivery (e-mail) failed or was dropped; journal only.
+    "alert_delivery_failed",
 )
 
 ALERT_KINDS: frozenset[str] = frozenset(ALERT_KINDS_ORDERED)
@@ -83,10 +97,40 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "market_data_degraded",
         "session_close_bar_incomplete",
         "reconciliation_unexpected_fill_side",
+        "exit_sell_rejected",
+        "live_rearm_required",
+        "live_authorization_expiring",
+        "live_authorization_expired",
+        "alert_delivery_failed",
+    }
+)
+
+# Kinds forwarded by the opt-in e-mail channel: the engine stopped, halted or
+# failed to start, safety incidents and halts, rejected orders (a rejected
+# exit SELL above all), intent/over-target alarms, reconciliation drift and
+# the LIVE re-arm / standing-authorization notices. ``daily_summary`` is
+# added only when ``alerting.email.daily_summary`` is true.
+EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
+    {
+        "runtime_stopped_unexpected",
+        "runtime_start_failed",
+        "circuit_breaker",
+        "drawdown_halt",
+        "risk_incident",
+        "ambiguous_order",
+        "paper_incident",
+        "order_rejected",
+        "exit_sell_rejected",
+        "intent_alarm",
+        "reconciliation_failure",
+        "live_rearm_required",
+        "live_authorization_expiring",
+        "live_authorization_expired",
     }
 )
 
 __all__ = [
+    "EMAIL_ALERT_KINDS",
     "ALERT_KINDS",
     "ALERT_KINDS_ORDERED",
     "WARNING_KINDS",

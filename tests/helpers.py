@@ -78,6 +78,9 @@ def make_manager(root: Path, *, credentials: tuple[str, str] = ("pk-fake-key", "
     manager.config_path = root / "settings.yaml"
     manager.env_path = root / ".env"
     manager.get_credentials = lambda: credentials  # type: ignore[method-assign]
+    # B3: LIVE reads its own key pair; the stub serves both modes alike.
+    manager.get_live_credentials = lambda: credentials  # type: ignore[method-assign]
+    manager.get_paper_credentials = lambda: credentials  # type: ignore[method-assign]
     return manager
 
 

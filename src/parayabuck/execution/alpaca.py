@@ -78,6 +78,7 @@ class AlpacaBroker:
         self.portfolio_ownership_resolved = portfolio_ownership_resolved
         self.bot_tradable_symbols = bot_tradable_symbols
         self._account_id = ""
+        self._account_number = ""
         # Peak read-modify-write is shared mutable state across the account,
         # trade-update and decision threads: the lock is created here so its
         # first use is never a racy lazy creation.
@@ -170,6 +171,11 @@ class AlpacaBroker:
     @property
     def account_id(self) -> str:
         return self._account_id
+
+    @property
+    def account_number(self) -> str:
+        """Alpaca account number from the last account read ("" before one)."""
+        return str(getattr(self, "_account_number", "") or "")
 
     def portfolio_history(self, period: str, timeframe: str) -> list[tuple[datetime, float]]:
         """Broker equity history for display only; never feeds trading state.

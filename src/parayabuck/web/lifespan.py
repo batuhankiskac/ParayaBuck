@@ -79,6 +79,14 @@ def create_lifespan(state_provider: Any) -> Any:
                 manager = resolved
 
         auto_start_task: asyncio.Task[None] | None = None
+        # Install the opt-in e-mail sink before anything can alert (a failed
+        # auto-start, a LIVE engine waiting for re-arm). Never fatal.
+        configure_alerts = getattr(manager, "configure_alert_delivery", None) if manager is not None else None
+        if callable(configure_alerts):
+            try:
+                configure_alerts()
+            except Exception as exc:  # pragma: no cover - defensive
+                log.warning("Alert delivery configuration failed: %s", exc)
         should_auto_start = (
             getattr(manager, "should_auto_start", lambda: False) if manager is not None else (lambda: False)
         )

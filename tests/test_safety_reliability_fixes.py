@@ -26,6 +26,8 @@ _TEST_APPROVAL_SECRET = "t" * 32
 
 class _BrokerSpy:
     account_id = "acct"
+    # A LIVE account number (paper accounts are "PA..."): B3 environment check.
+    account_number = "123456789"
 
     def __init__(self) -> None:
         self.account_calls = 0

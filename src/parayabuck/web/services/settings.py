@@ -124,7 +124,12 @@ class SettingsService:
 
     async def get_settings(self) -> dict[str, Any]:
         manager = self.manager
-        key, secret = manager.get_credentials()
+        # The drawer shows and edits the PAPER key pair only (B3): in PAPER
+        # mode that is the configured pair, in LIVE mode the PAPER names.
+        reader = manager.get_credentials
+        if not manager.is_paper_mode() and callable(getattr(manager, "get_paper_credentials", None)):
+            reader = manager.get_paper_credentials
+        key, secret = reader()
         cfg_raw: dict[str, Any] = {}
         try:
             if manager.config_path.exists():

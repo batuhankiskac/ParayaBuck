@@ -104,9 +104,10 @@ async def toggle_mode(payload: ModePayload, request: Request) -> dict[str, Any]:
 
     try:
         if not payload.paper:
-            key, secret = manager.get_credentials()
+            # B3: the LIVE arm is bound to the LIVE key pair only.
+            key, secret = manager.get_live_credentials()
             if not key or not secret:
-                raise ValueError("Alpaca credentials are required")
+                raise ValueError("Alpaca LIVE credentials (ALPACA_LIVE_API_KEY / ALPACA_LIVE_SECRET_KEY) are required")
             manager._require_valid_live_arm(key, secret, consume=False)
         # Same lock as the settings drawer, and the same validate-then-replace
         # discipline: an unvalidated write (e.g. live without a dollar cap)

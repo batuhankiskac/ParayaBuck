@@ -397,6 +397,7 @@ class ReconciliationService:
         if not getattr(broker, "_account_id", ""):
             raw_account = broker._client.get_account()
             broker._account_id = str(getattr(raw_account, "id", "") or getattr(raw_account, "account_number", ""))
+            broker._account_number = str(getattr(raw_account, "account_number", "") or "")
             if not broker._account_id:
                 raise ReconciliationResultError("Broker account has no identity")
         broker_orders = broker._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))

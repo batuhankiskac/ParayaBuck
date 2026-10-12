@@ -18,6 +18,10 @@ from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
 # and the web dashboard fall back to this path when config resolution fails,
 # and they must never point at a different database than the writer.
 DEFAULT_DECISION_DB_PATH = "data/runtime/parayabuck.sqlite3"
+# LIVE never shares the PAPER ledger: a LIVE configuration that keeps the
+# PAPER default path is resolved to this separate directory, which also gives
+# LIVE its own runtime-state directory (risk peak sidecar) next to it.
+DEFAULT_LIVE_DECISION_DB_PATH = "data/runtime/live/parayabuck.sqlite3"
 
 
 class RuntimeMode(StrEnum):
@@ -30,6 +34,17 @@ class RuntimeMode(StrEnum):
 class RuntimeConfig:
     mode: RuntimeMode = RuntimeMode.PAPER
     decision_db_path: str = DEFAULT_DECISION_DB_PATH
+
+    def __post_init__(self) -> None:
+        # LIVE and PAPER state must never mix: the PAPER default ledger path
+        # (explicit or implicit) resolves to the separate LIVE default in
+        # live mode. A different explicit path is kept as configured.
+        if self.mode == RuntimeMode.LIVE and _same_path(self.decision_db_path, DEFAULT_DECISION_DB_PATH):
+            object.__setattr__(self, "decision_db_path", DEFAULT_LIVE_DECISION_DB_PATH)
+
+
+def _same_path(first: str, second: str) -> bool:
+    return os.path.normpath(str(first)) == os.path.normpath(str(second))
 
 
 @dataclass(frozen=True)
@@ -86,24 +101,108 @@ class LiveConfig:
     hard_dollar_cap: float = 0.0
     operator_approval_path: str = ""
     operator_approval_key_env: str = "PARAYABUCK_OPERATOR_APPROVAL_KEY"
+    # LIVE-only gap-safe BUY cap (docs/live_readiness_v1.md R1): a BUY batch
+    # is capped so that notional x (1 + margin) fits inside
+    # min(cash, non_marginable_buying_power) minus committed BUYs, so a
+    # gap-up open of up to this fraction never borrows on margin. PAPER
+    # sizing is unchanged (the PAPER soak keeps its identity).
+    buy_gap_margin_pct: float = 0.03
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.hard_dollar_cap) or self.hard_dollar_cap < 0:
             raise ValueError("live.hard_dollar_cap must be non-negative")
+        if not math.isfinite(self.buy_gap_margin_pct) or not 0 <= self.buy_gap_margin_pct < 0.5:
+            raise ValueError("live.buy_gap_margin_pct must be in [0, 0.5)")
         if self.enabled and self.hard_dollar_cap <= 0:
             raise ValueError("Enabled live mode requires a positive hard dollar cap")
         if self.enabled and not self.operator_approval_path:
             raise ValueError("Enabled live mode requires an operator approval file")
 
 
+EMAIL_SECURITY_MODES = ("starttls", "ssl")
+
+
+def _plausible_address(value: str) -> bool:
+    text = str(value).strip()
+    local, _, domain = text.partition("@")
+    return bool(local and domain and "." in domain and not any(char in text for char in "\r\n,; <>"))
+
+
+@dataclass(frozen=True)
+class EmailAlertConfig:
+    """Opt-in e-mail delivery of operator alerts (``alerting.email:``).
+
+    Disabled by default: alerts stay on the host (log + event journal) unless
+    the owner enables this block. SMTP runs over TLS only (STARTTLS, usually
+    port 587, or implicit TLS ``ssl``, usually 465) with the stdlib. The SMTP
+    username and password are read ONLY from the environment
+    (``PARAYABUCK_SMTP_USERNAME`` / ``PARAYABUCK_SMTP_PASSWORD``), never from
+    this file, and are never logged.
+    """
+
+    enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    security: str = "starttls"
+    from_address: str = ""
+    to_addresses: tuple[str, ...] = ()
+    # Also e-mail the one-line daily summary after each session-close decision.
+    daily_summary: bool = True
+    # Per-incident repeat window (same kind + correlation + reason + state).
+    min_interval_minutes: float = 30.0
+    # Hard ceiling across all kinds; extra mails are dropped and journaled.
+    max_per_hour: int = 20
+    timeout_seconds: float = 10.0
+
+    def __post_init__(self) -> None:
+        raw_to = self.to_addresses
+        if isinstance(raw_to, str):
+            raw_to = (raw_to,)
+        recipients = tuple(str(item).strip() for item in (raw_to or ()) if str(item).strip())
+        object.__setattr__(self, "to_addresses", recipients)
+        object.__setattr__(self, "smtp_host", str(self.smtp_host or "").strip())
+        object.__setattr__(self, "from_address", str(self.from_address or "").strip())
+        object.__setattr__(self, "security", str(self.security or "").strip().lower())
+        if self.security not in EMAIL_SECURITY_MODES:
+            raise ValueError("alerting.email.security must be starttls or ssl")
+        if isinstance(self.smtp_port, bool) or not isinstance(self.smtp_port, int) or not 1 <= self.smtp_port <= 65535:
+            raise ValueError("alerting.email.smtp_port must be an integer in 1..65535")
+        for name in ("min_interval_minutes", "timeout_seconds"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"alerting.email.{name} must be non-negative")
+        if self.timeout_seconds <= 0 or self.timeout_seconds > 60:
+            raise ValueError("alerting.email.timeout_seconds must be in (0, 60]")
+        if self.max_per_hour < 1:
+            raise ValueError("alerting.email.max_per_hour must be at least 1")
+        if not self.enabled:
+            return
+        if not self.smtp_host or any(char in self.smtp_host for char in " /\r\n"):
+            raise ValueError("alerting.email.smtp_host is required when e-mail alerts are enabled")
+        if not _plausible_address(self.from_address):
+            raise ValueError("alerting.email.from_address must be one e-mail address")
+        if not self.to_addresses:
+            raise ValueError("alerting.email.to_addresses needs at least one recipient")
+        bad = [item for item in self.to_addresses if not _plausible_address(item)]
+        if bad:
+            raise ValueError(f"alerting.email.to_addresses has an invalid address: {bad[0]}")
+
+
 @dataclass(frozen=True)
 class AlertingConfig:
-    """Local alert sink configuration (log + event journal; nothing off-host)."""
+    """Alert sink configuration: log + event journal always; e-mail opt-in."""
 
     # One-line summary (trend vs SMA, target vs held weight, positions,
     # equity, daily change) after each equity session-close decision,
     # written to the log and the event journal.
     daily_summary: bool = True
+    email: EmailAlertConfig = field(default_factory=EmailAlertConfig)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.email, dict):
+            object.__setattr__(self, "email", EmailAlertConfig(**self.email))
+        elif self.email is None:
+            object.__setattr__(self, "email", EmailAlertConfig())
 
 
 @dataclass(frozen=True)
@@ -670,9 +769,10 @@ def _reject_removed_crypto_settings(raw: dict[str, Any]) -> None:
 
 
 _WEBHOOK_REMOVED = (
-    "Outbound alert delivery was removed on 2026-10-06: alerts stay local "
+    "Webhook alert delivery was removed on 2026-10-06: alerts stay local "
     "(log + event journal; read them with `parayabuck ops events`, "
-    "`parayabuck ops status`, the dashboard or journalctl)"
+    "`parayabuck ops status`, the dashboard or journalctl); the only "
+    "off-host channel is the opt-in alerting.email block"
 )
 _REMOVED_ALERTING_KEYS = ("enabled", "webhook_url", "events")
 
@@ -836,7 +936,10 @@ def load_config(config_path: str | None = None) -> Config:
 
 
 __all__ = [
+    "DEFAULT_DECISION_DB_PATH",
+    "DEFAULT_LIVE_DECISION_DB_PATH",
     "AlertingConfig",
+    "EmailAlertConfig",
     "AlpacaConfig",
     "AppConfig",
     "BacktestConfig",

@@ -321,8 +321,13 @@ def test_removed_alert_delivery_keys_are_rejected(tmp_path: Path, key: str) -> N
 def test_shipped_settings_carry_no_alert_delivery_keys() -> None:
     settings = Path(__file__).resolve().parents[1] / "config" / "settings.yaml"
     alerting = yaml.safe_load(settings.read_text(encoding="utf-8"))["alerting"]
-    assert alerting == {"daily_summary": True}
-    assert load_config(str(settings)).alerting.daily_summary is True
+    # No webhook keys; the only off-host channel (e-mail) ships disabled.
+    assert set(alerting) == {"daily_summary", "email"}
+    assert alerting["daily_summary"] is True
+    assert alerting["email"]["enabled"] is False
+    loaded = load_config(str(settings)).alerting
+    assert loaded.daily_summary is True
+    assert loaded.email.enabled is False
 
 
 def test_decision_retry_window_must_fit_the_watchdog_and_cover_the_cross_check() -> None:

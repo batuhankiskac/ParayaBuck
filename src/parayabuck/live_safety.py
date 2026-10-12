@@ -4,13 +4,84 @@ import hashlib
 import hmac
 import json
 import math
-from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+import os
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 
 class LiveApprovalError(RuntimeError):
     pass
+
+
+# --- Separate LIVE credentials (docs/live_readiness_v1.md B3) ---------------
+#
+# PAPER and LIVE never share key names: LIVE reads only the ALPACA_LIVE_*
+# pair and PAPER only the ALPACA_* pair, so a LIVE engine can never start on
+# a PAPER key (or the reverse) by falling back to the other mode's names.
+PAPER_API_KEY_ENV = "ALPACA_API_KEY"
+PAPER_SECRET_KEY_ENV = "ALPACA_SECRET_KEY"
+LIVE_API_KEY_ENV = "ALPACA_LIVE_API_KEY"
+LIVE_SECRET_KEY_ENV = "ALPACA_LIVE_SECRET_KEY"
+
+
+def credential_env_names(*, live: bool) -> tuple[str, str]:
+    """The (key, secret) environment names of one mode; never the other's."""
+    return (LIVE_API_KEY_ENV, LIVE_SECRET_KEY_ENV) if live else (PAPER_API_KEY_ENV, PAPER_SECRET_KEY_ENV)
+
+
+def mode_credentials(*, live: bool, env: Mapping[str, str | None] | None = None) -> tuple[str, str]:
+    """The stripped (key, secret) pair of one mode from ``env`` (default os.environ)."""
+    source: Mapping[str, str | None] = os.environ if env is None else env
+    key_name, secret_name = credential_env_names(live=live)
+    return str(source.get(key_name) or "").strip(), str(source.get(secret_name) or "").strip()
+
+
+# Alpaca account numbers of paper accounts start with "PA"; paper API key ids
+# start with "PK" and live key ids with "AK". Either positive marker decides;
+# no marker at all is "unknown".
+ACCOUNT_ENVIRONMENT_PAPER = "paper"
+ACCOUNT_ENVIRONMENT_LIVE = "live"
+ACCOUNT_ENVIRONMENT_UNKNOWN = "unknown"
+
+
+def classify_account_environment(account_number: str, api_key: str) -> str:
+    """Paper, live or unknown from the account endpoint's number and the key id.
+
+    Paper evidence: a ``PA`` account number or a ``PK`` key id. Live evidence:
+    an ``AK`` key id, or a non-empty account number that is not ``PA``.
+    Conflicting or missing evidence classifies as unknown.
+    """
+    number = str(account_number or "").strip().upper()
+    key = str(api_key or "").strip().upper()
+    paper = number.startswith("PA") or key.startswith("PK")
+    live = key.startswith("AK") or (bool(number) and not number.startswith("PA"))
+    if paper and not live:
+        return ACCOUNT_ENVIRONMENT_PAPER
+    if live and not paper:
+        return ACCOUNT_ENVIRONMENT_LIVE
+    return ACCOUNT_ENVIRONMENT_UNKNOWN
+
+
+def verify_account_environment(*, live: bool, account_number: str, api_key: str) -> None:
+    """Fail closed when the broker account is not the mode's environment.
+
+    LIVE requires the account endpoint to report a live account (a non-``PA``
+    account number) and no paper marker on the key. PAPER is refused only on
+    unambiguous live evidence (a live ``AK`` key id with no ``PA`` account
+    number), so PAPER behaviour is otherwise unchanged.
+    """
+    environment = classify_account_environment(account_number, api_key)
+    if live and (environment != ACCOUNT_ENVIRONMENT_LIVE or not str(account_number or "").strip()):
+        raise LiveApprovalError(
+            f"LIVE start refused: the configured {LIVE_API_KEY_ENV} does not resolve to a live Alpaca account "
+            f"(account environment: {environment})"
+        )
+    number = str(account_number or "").strip().upper()
+    if not live and str(api_key or "").strip().upper().startswith("AK") and not number.startswith("PA"):
+        raise LiveApprovalError(f"PAPER start refused: the configured {PAPER_API_KEY_ENV} is a LIVE key")
 
 
 @dataclass(frozen=True)
@@ -28,8 +99,14 @@ class LiveStartupProof:
     configuration_digests: tuple[str, ...]
     issued_at: datetime
     expires_at: datetime
+    # "operator_approval": the interactive arm plus the short-lived operator
+    # approval file. "standing": an unattended start authorized by the
+    # standing LIVE authorization (verified again by the runtime).
+    authorization: str = "operator_approval"
 
     def __post_init__(self) -> None:
+        if self.authorization not in {"operator_approval", "standing"}:
+            raise ValueError("Live startup proof authorization must be operator_approval or standing")
         if not self.account_id.strip() or not self.credential_fingerprint.strip():
             raise ValueError("Live startup proof identity must not be empty")
         if not self.configuration_digests or any(not digest.strip() for digest in self.configuration_digests):
@@ -138,4 +215,196 @@ class LiveOperatorApproval:
         return approval
 
 
-__all__ = ["LiveApprovalError", "LiveOperatorApproval", "LiveStartupProof"]
+# --- Standing LIVE authorization (docs/live_readiness_v1.md B2) -------------
+#
+# An explicit, owner-created, time-boxed (at most 30 days) authorization that
+# lets the designated trading host start LIVE unattended after a reboot or a
+# deploy. It is HMAC-signed with the operator approval key and bound to the
+# Alpaca account id, the live configuration digests, a fingerprint of the
+# whole loaded configuration, the hard dollar cap and the trading host. Any
+# change to one of them invalidates it, and the engine then waits for a
+# manual re-arm exactly as without it.
+
+STANDING_AUTHORIZATION_MAX_DAYS = 30
+STANDING_AUTHORIZATION_FILENAME = "live_standing_authorization.json"
+STANDING_AUTHORIZATION_KIND = "standing_live_authorization"
+STANDING_AUTHORIZATION_EXPIRY_WARNING = timedelta(days=3)
+
+
+def standing_authorization_path(operator_approval_path: str) -> Path | None:
+    """The standing authorization file, next to the operator approval file."""
+    if not str(operator_approval_path or "").strip():
+        return None
+    return Path(operator_approval_path).with_name(STANDING_AUTHORIZATION_FILENAME)
+
+
+def config_fingerprint(config: Any) -> str:
+    """Digest of the whole loaded configuration: any settings change invalidates."""
+    payload = json.dumps(asdict(config), sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class StandingLiveAuthorization:
+    """Owner opt-in for unattended LIVE starts on the trading host (<= 30 days)."""
+
+    operator_id: str
+    account_id: str
+    configuration_digests: tuple[str, ...]
+    config_fingerprint: str
+    maximum_dollar_exposure: float
+    trading_host: str
+    approved_at: datetime
+    expires_at: datetime
+    nonce: str
+    signature: str = ""
+
+    def __post_init__(self) -> None:
+        identity = (self.operator_id, self.account_id, self.nonce, self.config_fingerprint, self.trading_host)
+        if not all(str(value).strip() for value in identity):
+            raise ValueError("Standing LIVE authorization identity must not be empty")
+        if not self.configuration_digests or len(set(self.configuration_digests)) != len(self.configuration_digests):
+            raise ValueError("Standing LIVE authorization requires unique configuration digests")
+        if not math.isfinite(self.maximum_dollar_exposure) or self.maximum_dollar_exposure <= 0:
+            raise ValueError("Standing LIVE authorization requires a positive dollar cap")
+        if self.approved_at.tzinfo is None or self.expires_at.tzinfo is None:
+            raise ValueError("Standing LIVE authorization timestamps must be timezone-aware")
+        if self.expires_at <= self.approved_at:
+            raise ValueError("Standing LIVE authorization expiry must follow approval")
+        if self.expires_at - self.approved_at > timedelta(days=STANDING_AUTHORIZATION_MAX_DAYS):
+            raise ValueError(f"Standing LIVE authorization may last at most {STANDING_AUTHORIZATION_MAX_DAYS} days")
+
+    def unsigned_dict(self) -> dict[str, object]:
+        return {
+            "kind": STANDING_AUTHORIZATION_KIND,
+            "operator_id": self.operator_id,
+            "account_id": self.account_id,
+            "configuration_digests": list(self.configuration_digests),
+            "config_fingerprint": self.config_fingerprint,
+            "maximum_dollar_exposure": float(self.maximum_dollar_exposure),
+            "trading_host": self.trading_host,
+            "approved_at": self.approved_at.astimezone(UTC).isoformat(),
+            "expires_at": self.expires_at.astimezone(UTC).isoformat(),
+            "nonce": self.nonce,
+        }
+
+    def calculated_signature(self, secret: str) -> str:
+        if len(secret) < 32:
+            raise ValueError("Operator approval HMAC key must contain at least 32 characters")
+        payload = json.dumps(self.unsigned_dict(), sort_keys=True, separators=(",", ":")).encode()
+        return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+
+    def signed(self, secret: str) -> StandingLiveAuthorization:
+        return replace(self, signature=self.calculated_signature(secret))
+
+    def to_dict(self) -> dict[str, object]:
+        return {**self.unsigned_dict(), "signature": self.signature}
+
+    def remaining(self, now: datetime | None = None) -> timedelta:
+        return self.expires_at - (now or datetime.now(UTC))
+
+    @classmethod
+    def read_signed(cls, path: str | Path, *, secret: str) -> StandingLiveAuthorization:
+        """Parse the file and verify its signature (no binding or expiry checks)."""
+        try:
+            raw = json.loads(Path(path).read_text(encoding="utf-8"))
+            if not isinstance(raw, dict) or raw.get("kind") != STANDING_AUTHORIZATION_KIND:
+                raise ValueError("not a standing LIVE authorization")
+            authorization = cls(
+                operator_id=str(raw.get("operator_id", "")),
+                account_id=str(raw.get("account_id", "")),
+                configuration_digests=tuple(str(item) for item in raw.get("configuration_digests", ())),
+                config_fingerprint=str(raw.get("config_fingerprint", "")),
+                maximum_dollar_exposure=float(raw.get("maximum_dollar_exposure", 0)),
+                trading_host=str(raw.get("trading_host", "")),
+                approved_at=datetime.fromisoformat(str(raw.get("approved_at", ""))),
+                expires_at=datetime.fromisoformat(str(raw.get("expires_at", ""))),
+                nonce=str(raw.get("nonce", "")),
+                signature=str(raw.get("signature", "")),
+            )
+        except FileNotFoundError as exc:
+            raise LiveApprovalError("No standing LIVE authorization exists") from exc
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise LiveApprovalError("Standing LIVE authorization is unreadable or invalid") from exc
+        try:
+            expected = authorization.calculated_signature(secret)
+        except ValueError as exc:
+            raise LiveApprovalError("Operator approval key is missing or too short") from exc
+        if not hmac.compare_digest(authorization.signature, expected):
+            raise LiveApprovalError("Standing LIVE authorization signature is invalid")
+        return authorization
+
+    def verify_binding(
+        self,
+        *,
+        configuration_digests: tuple[str, ...],
+        config_fingerprint: str,
+        hard_dollar_cap: float,
+        trading_host: str,
+        account_id: str | None = None,
+        now: datetime | None = None,
+    ) -> None:
+        """Raise ``LiveApprovalError`` unless every binding still holds."""
+        current = now or datetime.now(UTC)
+        if self.approved_at > current:
+            raise LiveApprovalError("Standing LIVE authorization is not yet valid")
+        if self.expires_at <= current:
+            raise LiveApprovalError("Standing LIVE authorization has expired")
+        if set(self.configuration_digests) != set(configuration_digests):
+            raise LiveApprovalError("Standing LIVE authorization does not match the strategy configuration")
+        if not hmac.compare_digest(self.config_fingerprint, config_fingerprint):
+            raise LiveApprovalError("Standing LIVE authorization does not match the current settings")
+        if not math.isclose(self.maximum_dollar_exposure, float(hard_dollar_cap), rel_tol=0.0, abs_tol=1e-9):
+            raise LiveApprovalError("Standing LIVE authorization does not match live.hard_dollar_cap")
+        if not hmac.compare_digest(self.trading_host, trading_host):
+            raise LiveApprovalError("Standing LIVE authorization was issued for a different trading host")
+        if account_id is not None and self.account_id != account_id:
+            raise LiveApprovalError("Standing LIVE authorization account does not match")
+
+    @classmethod
+    def load_verified(
+        cls,
+        path: str | Path,
+        *,
+        secret: str,
+        configuration_digests: tuple[str, ...],
+        config_fingerprint: str,
+        hard_dollar_cap: float,
+        trading_host: str,
+        account_id: str | None = None,
+        now: datetime | None = None,
+    ) -> StandingLiveAuthorization:
+        authorization = cls.read_signed(path, secret=secret)
+        authorization.verify_binding(
+            configuration_digests=configuration_digests,
+            config_fingerprint=config_fingerprint,
+            hard_dollar_cap=hard_dollar_cap,
+            trading_host=trading_host,
+            account_id=account_id,
+            now=now,
+        )
+        return authorization
+
+
+__all__ = [
+    "ACCOUNT_ENVIRONMENT_LIVE",
+    "ACCOUNT_ENVIRONMENT_PAPER",
+    "ACCOUNT_ENVIRONMENT_UNKNOWN",
+    "LIVE_API_KEY_ENV",
+    "LIVE_SECRET_KEY_ENV",
+    "PAPER_API_KEY_ENV",
+    "PAPER_SECRET_KEY_ENV",
+    "STANDING_AUTHORIZATION_EXPIRY_WARNING",
+    "STANDING_AUTHORIZATION_FILENAME",
+    "STANDING_AUTHORIZATION_MAX_DAYS",
+    "LiveApprovalError",
+    "LiveOperatorApproval",
+    "LiveStartupProof",
+    "StandingLiveAuthorization",
+    "classify_account_environment",
+    "config_fingerprint",
+    "credential_env_names",
+    "mode_credentials",
+    "standing_authorization_path",
+    "verify_account_environment",
+]

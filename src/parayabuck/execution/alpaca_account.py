@@ -233,6 +233,9 @@ class AccountService:
         account: Any = client.get_account()
         # Bind account id
         broker._account_id = str(getattr(account, "id", "") or getattr(account, "account_number", ""))
+        # The human account number ("PA..." on paper) classifies the account
+        # environment for the PAPER/LIVE start check.
+        broker._account_number = str(getattr(account, "account_number", "") or "")
         if self.is_account_blocked(account):
             raise RuntimeError("Alpaca account is blocked from trading")
         try:
@@ -249,6 +252,17 @@ class AccountService:
             raise ValueError(f"Broker account values are not numeric: {exc}") from exc
         if not math.isfinite(equity) or not math.isfinite(previous_equity) or not math.isfinite(cash):
             raise ValueError("Broker account values are non-finite; snapshot unusable, entries refused")
+        # Optional: only the LIVE gap-safe BUY cap reads it; an absent or
+        # unparsable value leaves that cap on cash alone.
+        non_marginable_buying_power: float | None = None
+        try:
+            raw_nmbp = getattr(account, "non_marginable_buying_power", None)
+            if raw_nmbp is not None:
+                parsed_nmbp = float(raw_nmbp)
+                if math.isfinite(parsed_nmbp):
+                    non_marginable_buying_power = parsed_nmbp
+        except (TypeError, ValueError):
+            non_marginable_buying_power = None
         positions: list[PositionSnapshot] = []
         ledger = getattr(broker, "ledger", None)
         owned_quantities: dict[str, float] = {}
@@ -407,6 +421,7 @@ class AccountService:
             realized_pnl=daily_pnl - intraday_unrealized,
             unrealized_pnl=unrealized,
             fees=(ledger.total_fees_for_account(broker._account_id or "unknown") if ledger is not None else 0.0),
+            non_marginable_buying_power=non_marginable_buying_power,
         )
         # One assignment publishes snapshot and timestamp together, so a
         # concurrent snapshot_if_fresh never pairs a new snapshot with an old

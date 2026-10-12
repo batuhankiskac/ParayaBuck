@@ -243,6 +243,57 @@ def _emit_rebalance_phase_safe(
 _no_trade_last: dict[str, str] = {}
 
 
+# R3 (docs/live_readiness_v1.md): a broker-rejected SELL is retried exactly
+# once with this deterministic suffix on its client order id; a retry is
+# never retried again.
+EXIT_SELL_RETRY_SUFFIX = "-retry1"
+
+
+def is_exit_sell_retry(client_order_id: str) -> bool:
+    return str(client_order_id).endswith(EXIT_SELL_RETRY_SUFFIX)
+
+
+def exit_sell_retry_client_order_id(client_order_id: str) -> str:
+    return f"{client_order_id}{EXIT_SELL_RETRY_SUFFIX}"
+
+
+def emit_exit_sell_rejected_safe(
+    *,
+    client_order_id: str,
+    symbol: str,
+    market: str,
+    decision_id: str | None,
+    error: str = "",
+) -> None:
+    """Escalate a rejected SELL that exits/reduces a held position. Never raises."""
+    try:
+        from parayabuck.monitoring import alerts
+
+        final = is_exit_sell_retry(client_order_id)
+        if final:
+            message = (
+                f"SELL of {symbol} rejected again after its one retry ({client_order_id}); the position is "
+                "still held: check the broker and act manually"
+            )
+        else:
+            message = (
+                f"SELL of {symbol} rejected by the broker ({client_order_id}); one retry with a new client "
+                "order id follows at the next safe opportunity"
+            )
+        alerts.emit(
+            "exit_sell_rejected",
+            message=message,
+            client_order_id=client_order_id,
+            symbol=symbol,
+            market=market,
+            decision_id=decision_id or "",
+            state="retry_rejected" if final else "retry_pending",
+            error=error,
+        )
+    except Exception:
+        log.warning("Exit-SELL rejection alert failed for %s", client_order_id, exc_info=True)
+
+
 def _emit_order_rejected_safe(
     *,
     client_order_id: str,
@@ -251,6 +302,7 @@ def _emit_order_rejected_safe(
     decision_id: str,
     reason: str,
     error: str,
+    side: str | None = None,
 ) -> None:
     """Record one broker-rejected order. Never affects the order flow."""
     try:
@@ -266,9 +318,18 @@ def _emit_order_rejected_safe(
             decision_id=decision_id,
             reason=reason,
             error=error,
+            side=side or "",
         )
     except Exception:
         log.warning("Order-rejection alert failed for %s", client_order_id, exc_info=True)
+    if str(side or "").lower() == "sell":
+        emit_exit_sell_rejected_safe(
+            client_order_id=client_order_id,
+            symbol=symbol,
+            market=market,
+            decision_id=decision_id,
+            error=error,
+        )
 
 
 def _emit_no_trade_safe(
@@ -380,6 +441,7 @@ class PortfolioRuntime:
         execution_policy: PortfolioExecutionPolicy | None = None,
         allow_static_universe: bool = False,
         sip_embargo: timedelta = DEFAULT_SIP_EMBARGO,
+        live_buy_gap_margin: float = 0.03,
     ) -> None:
         if mode not in {"paper", "live"}:
             raise ValueError("PortfolioRuntime mode must be paper or live")
@@ -402,6 +464,10 @@ class PortfolioRuntime:
         self.mode = mode
         self.maximum_allocation = maximum_allocation
         self.live_dollar_cap = live_dollar_cap
+        if not math.isfinite(live_buy_gap_margin) or not 0 <= live_buy_gap_margin < 0.5:
+            raise ValueError("live_buy_gap_margin must be in [0, 0.5)")
+        # LIVE-only gap-safe BUY cap (docs/live_readiness_v1.md R1).
+        self.live_buy_gap_margin = float(live_buy_gap_margin)
         self.universe = universe
         self.universe_version = universe_version
         self.account_id = account_id
@@ -2226,6 +2292,7 @@ class PortfolioRuntime:
         if committed is None:
             gross_headroom = cash_headroom = 0.0
         capacity = min(gross_headroom, cash_headroom)
+        gap_headroom: float | None = None
         if self.mode == "live":
             managed = sum(
                 abs(position.managed_qty) * position.current_price
@@ -2233,6 +2300,20 @@ class PortfolioRuntime:
                 if not position.is_flat and position.managed_qty > 1e-12
             )
             capacity = min(capacity, max(0.0, self.live_dollar_cap - managed - (committed or 0.0)))
+            # R1 gap-safe cap: a DAY market BUY sized at the close fills at
+            # the next open. Size it so notional x (1 + margin) still fits in
+            # the non-borrowed buying power, min(cash, non-marginable buying
+            # power) less committed BUYs: a gap-up open of up to the margin
+            # never borrows on a (multiplier >= 1) margin account.
+            spendable = account.cash
+            non_marginable = getattr(account, "non_marginable_buying_power", None)
+            if non_marginable is not None and math.isfinite(non_marginable):
+                spendable = min(spendable, non_marginable)
+            margin = float(getattr(self, "live_buy_gap_margin", 0.03))
+            gap_headroom = max(0.0, (spendable - (committed or 0.0)) / (1.0 + margin))
+            if committed is None:
+                gap_headroom = 0.0
+            capacity = min(capacity, gap_headroom)
         marks = {
             (position.market, canonical_symbol(position.symbol, position.market)): position.current_price
             for position in account.positions
@@ -2254,6 +2335,8 @@ class PortfolioRuntime:
             reason = "gross_headroom_exhausted"
         elif cash_headroom <= 1e-9:
             reason = "cash_headroom_exhausted"
+        elif self.mode == "live" and gap_headroom is not None and gap_headroom <= 1e-9:
+            reason = "gap_safe_headroom_exhausted"
         elif self.mode == "live" and capacity <= 1e-9:
             reason = "live_dollar_cap_exhausted"
         if notional <= 0 or capacity <= 0:
@@ -2437,6 +2520,7 @@ class PortfolioRuntime:
                     decision_id=order.decision_id,
                     reason="broker_rejected",
                     error=str(exc),
+                    side=order.side.value,
                 )
                 continue
             except Exception:
@@ -2460,6 +2544,95 @@ class PortfolioRuntime:
             self.repository.update_order(order.client_order_id, "submitted", broker_order_id)
             submitted.append(broker_order_id)
         return tuple(submitted)
+
+    def retry_rejected_exit_sells(self, account: AccountSnapshot) -> tuple[str, ...]:
+        """Retry each broker-rejected SELL of the newest decision ONCE (R3).
+
+        A SELL exits or reduces a held position, so a rejection must not
+        leave the position held until the next session's decision. The caller
+        invokes this at the next safe opportunity (fresh account snapshot,
+        no halt, no breaker, not warming up). Each rejected SELL row gets at
+        most one retry, with the deterministic client order id
+        ``<original>-retry1`` persisted under the same decision; a rejected
+        retry is escalated and never retried again, so this cannot loop. The
+        retry quantity is re-sized to what the managed position still holds
+        (and the broker says is available), floored to the asset increment,
+        and skipped while any order in the symbol is open. Returns the
+        broker order ids that were submitted.
+        """
+        decision_id = self.repository.latest_decision_id(self.account_id, self.market)
+        if decision_id is None:
+            return ()
+        rejected = [
+            row
+            for row in self.repository.orders_for_decision(decision_id, side=PortfolioOrderSide.SELL.value)
+            if str(row["status"]) == "rejected"
+            and not is_exit_sell_retry(str(row["client_order_id"]))
+            and not self.repository.has_order(exit_sell_retry_client_order_id(str(row["client_order_id"])))
+        ]
+        if not rejected:
+            return ()
+        decision = self.repository.decision_row(decision_id)
+        if decision is None:
+            return ()
+        try:
+            target = TargetPortfolio.from_dict(json.loads(str(decision["target_json"])))
+        except (KeyError, TypeError, ValueError):
+            log.warning("Rejected SELL retry skipped: decision %s target unreadable", decision_id)
+            return ()
+        open_symbols = {
+            canonical_symbol(order.symbol, order.market) for order in self.repository.open_orders(self.account_id)
+        }
+        open_symbols |= {canonical_symbol(str(symbol), self.market) for symbol in self.broker.all_open_order_symbols()}
+        positions = {
+            canonical_symbol(position.symbol, position.market): position
+            for position in account.positions
+            if position.market == self.market and not position.is_flat
+        }
+        retries: list[PortfolioOrderRequest] = []
+        for row in rejected:
+            symbol = canonical_symbol(str(row["symbol"]), self.market)
+            if symbol in open_symbols:
+                continue
+            position = positions.get(symbol)
+            if position is None or position.qty <= 0 or position.managed_qty <= 1e-12:
+                # Nothing managed is held any more: the exit already happened.
+                continue
+            filled = float(str(row.get("cumulative_filled_quantity") or 0.0))
+            remaining = max(0.0, float(str(row["quantity"])) - filled)
+            sellable = position.managed_qty
+            if position.qty_available is not None:
+                sellable = min(sellable, max(0.0, position.qty_available))
+            rules = self.broker.asset_trading_rules(symbol, self.market)
+            quantity = floor_increment(min(remaining, sellable), rules.quantity_increment)
+            price = position.current_price if position.current_price > 0 else float(str(row["reference_price"] or 0.0))
+            if price <= 0 or quantity < rules.minimum_order_size or quantity * price < rules.minimum_order_notional:
+                continue
+            retries.append(
+                PortfolioOrderRequest(
+                    client_order_id=exit_sell_retry_client_order_id(str(row["client_order_id"])),
+                    decision_id=decision_id,
+                    symbol=symbol,
+                    market=self.market,
+                    side=PortfolioOrderSide.SELL,
+                    quantity=quantity,
+                    reference_price=price,
+                    decision_timestamp=target.decision_timestamp,
+                    strategy_name=target.strategy_name,
+                    strategy_version=target.strategy_version,
+                )
+            )
+        if not retries:
+            return ()
+        for retry in retries:
+            log.warning(
+                "Retrying rejected SELL once: market=%s decision=%s client_order_id=%s qty=%s",
+                self._market_name(),
+                decision_id,
+                retry.client_order_id,
+                retry.quantity,
+            )
+        return self._submit_orders(tuple(retries))
 
     def close(self, status: str = "stopped") -> None:
         self.repository.end_session(self.session_id, status)

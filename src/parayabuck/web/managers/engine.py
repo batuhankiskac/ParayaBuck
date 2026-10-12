@@ -23,7 +23,13 @@ import yaml
 from dotenv import dotenv_values
 
 from parayabuck.config import credential_file_mode_warning, load_config
-from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
+from parayabuck.live_safety import (
+    LIVE_API_KEY_ENV,
+    LIVE_SECRET_KEY_ENV,
+    LiveOperatorApproval,
+    LiveStartupProof,
+    credential_env_names,
+)
 from parayabuck.logger import get_logger
 from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
 from parayabuck.utils.io import atomic_write
@@ -67,6 +73,23 @@ def _alert_start_failure(*, reason: str, message: str, auto_start: bool, attempt
         )
     except Exception:  # pragma: no cover - alerting must never mask the failure
         log.exception("Could not emit runtime_start_failed alert")
+
+
+def _alert_live_rearm_required(reason: str) -> None:
+    """Tell the owner LIVE is waiting for a manual re-arm. Never raises."""
+    try:
+        from parayabuck.monitoring.alerts import emit as emit_alert
+
+        emit_alert(
+            "live_rearm_required",
+            message=(
+                "LIVE trading is configured but did not start automatically; a manual re-arm is needed "
+                f"(parayabuck authorize-live, then arm in the dashboard): {reason}"
+            ),
+            reason=reason,
+        )
+    except Exception:  # pragma: no cover - alerting must never mask the refusal
+        log.exception("Could not emit live_rearm_required alert")
 
 
 _START_ENGINE_BLOCKING_STATES: frozenset[str] = _ACTIVE_ENGINE_STATES - {"starting"}
@@ -211,18 +234,49 @@ class EngineManager:
         return self._read_paper_mode() is not False
 
     def get_credentials(self) -> tuple[str | None, str | None]:
-        """The two Alpaca keys; the env file wins over the process environment.
+        """The Alpaca key pair of the CONFIGURED mode (B3: never the other's).
+
+        PAPER (and an unreadable mode, which fails closed to PAPER) reads
+        ``ALPACA_API_KEY``/``ALPACA_SECRET_KEY``; LIVE reads only
+        ``ALPACA_LIVE_API_KEY``/``ALPACA_LIVE_SECRET_KEY`` and never falls
+        back to the PAPER names.
+        """
+        if self._read_paper_mode() is False:
+            return self.get_live_credentials()
+        return self.get_paper_credentials()
+
+    def get_paper_credentials(self) -> tuple[str | None, str | None]:
+        """The PAPER key pair (the settings drawer edits only these)."""
+        return self._read_credentials(live=False)
+
+    def get_live_credentials(self) -> tuple[str | None, str | None]:
+        """The LIVE key pair (arming, LIVE start); never the PAPER names."""
+        return self._read_credentials(live=True)
+
+    def _read_credentials(self, *, live: bool) -> tuple[str | None, str | None]:
+        """One mode's two keys; the env file wins over the process environment.
 
         Read per call (the settings drawer rewrites the file) but only these
         two keys: reloading the whole file with override=True on every poll
         rewrote unrelated process environment variables.
         """
+        key_name, secret_name = credential_env_names(live=live)
         values = dotenv_values(self.env_path) if self.env_path.exists() else {}
         if values:
             self._warn_loose_credential_file()
-        key = values.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY")
-        secret = values.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY")
+        key = values.get(key_name) or os.getenv(key_name)
+        secret = values.get(secret_name) or os.getenv(secret_name)
         return key, secret
+
+    def configure_alert_delivery(self) -> None:
+        """Install the opt-in e-mail alert sink from the current settings. Never raises."""
+        try:
+            from parayabuck.monitoring.email_alerts import configure_email_alerts
+
+            cfg = load_config(str(self.config_path))
+            configure_email_alerts(cfg.alerting.email, mode=cfg.runtime.mode.value)
+        except Exception as exc:
+            log.warning("E-mail alert delivery not configured: %s", exc)
 
     def _warn_loose_credential_file(self) -> None:
         """Log (once per path and mode) a group/other-readable credential file.
@@ -241,7 +295,12 @@ class EngineManager:
             log.warning("%s", warning)
 
     def should_auto_start(self) -> bool:
-        """Auto-start configured paper engines without weakening live safeguards."""
+        """Auto-start configured paper engines without weakening live safeguards.
+
+        LIVE auto-starts only with a valid standing LIVE authorization
+        (docs/live_readiness_v1.md B2); otherwise the engine stays stopped and
+        ``live_rearm_required`` tells the owner a manual re-arm is needed.
+        """
         if not trading_host_authorized():
             log.warning("%s", TRADING_HOST_REFUSAL)
             return False
@@ -250,6 +309,12 @@ class EngineManager:
             app_config = (raw or {}).get("app") or {}
             runtime_config = (raw or {}).get("runtime") or {}
             legacy_live = "mode" not in runtime_config and ((raw or {}).get("alpaca") or {}).get("paper") is False
+            if (
+                str(runtime_config.get("mode", "paper")).lower() == "live"
+                and not legacy_live
+                and app_config.get("auto_start_engine", True)
+            ):
+                return self._live_auto_start_allowed()
             key, secret = self.get_credentials()
             return bool(
                 app_config.get("auto_start_engine", True)
@@ -264,6 +329,59 @@ class EngineManager:
             # the engine off with no explanation.
             log.error("Auto-start decision failed; engine will not start: %s", exc)
             return False
+
+    def _live_auto_start_allowed(self) -> bool:
+        """LIVE unattended start gate: every LIVE guard plus a valid standing
+        authorization. Emits ``live_rearm_required`` when it says no."""
+        reason: str | None = None
+        try:
+            key, secret = self.get_live_credentials()
+            if self.security_warning:
+                reason = "the tracked-secret security check is blocking engine starts"
+            elif os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
+                reason = "PARAYABUCK_ENABLE_LIVE is not YES"
+            elif not key or not secret:
+                reason = f"{LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV} are not set"
+            else:
+                from parayabuck.live_authorization import standing_authorization_status
+
+                status = standing_authorization_status(load_config(str(self.config_path)))
+                if not status.valid:
+                    reason = status.detail
+        except Exception as exc:
+            reason = f"LIVE configuration could not be verified: {exc}"
+        if reason is None:
+            log.warning("LIVE auto-start authorized by the standing LIVE authorization")
+            return True
+        log.warning("LIVE engine not started automatically; manual re-arm required: %s", reason)
+        _alert_live_rearm_required(reason)
+        return False
+
+    def _standing_startup_proof(self, key: str, secret: str) -> LiveStartupProof:
+        """Startup proof for an unattended LIVE start from the standing
+        authorization. The runtime re-verifies it (signature, expiry, config,
+        cap, host, account) before any broker mutation."""
+        from parayabuck.live_authorization import load_standing_authorization
+        from parayabuck.live_safety import LiveApprovalError
+
+        cfg = load_config(str(self.config_path))
+        digests, digest_error = self._resolve_live_configuration_digests()
+        if digests is None:
+            raise ValueError(f"Live configuration could not be verified: {digest_error}")
+        try:
+            authorization = load_standing_authorization(cfg, configuration_digests=digests)
+        except LiveApprovalError as exc:
+            _alert_live_rearm_required(str(exc))
+            raise ValueError(f"LIVE auto-start needs a manual re-arm: {exc}") from exc
+        now = datetime.now(UTC)
+        return LiveStartupProof(
+            account_id=authorization.account_id,
+            credential_fingerprint=self._credential_fingerprint(key, secret),
+            configuration_digests=digests,
+            issued_at=now,
+            expires_at=now + timedelta(minutes=5),
+            authorization="standing",
+        )
 
     def current_engine_state(self) -> str:
         with self._state_lock:
@@ -313,15 +431,17 @@ class EngineManager:
         if entering_live and payload.restart_engine:
             raise ValueError("Saving live mode requires restart_engine=false; start live separately after arming")
         if entering_live:
-            current_key, current_secret = self.get_credentials()
-            if not current_key or not current_secret:
-                raise ValueError("Alpaca credentials are required")
+            live_key, live_secret = self.get_live_credentials()
+            if not live_key or not live_secret:
+                raise ValueError(f"Alpaca LIVE credentials ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) are required")
             self._require_valid_live_arm(
-                current_key,
-                current_secret,
+                live_key,
+                live_secret,
                 consume=False,
             )
-        current_key, current_secret = self.get_credentials()
+        # The drawer edits the PAPER key pair only; LIVE keys live in the
+        # host .env (ALPACA_LIVE_API_KEY / ALPACA_LIVE_SECRET_KEY).
+        current_key, current_secret = self.get_credentials() if current_paper else self.get_paper_credentials()
         # Preserve credentials when fields omitted or empty.
         if "api_key" in fields_set:
             api_key = payload.api_key.strip() or current_key or ""
@@ -553,6 +673,18 @@ class EngineManager:
                 )
             live_startup_proof: LiveStartupProof | None = None
             if live_mode:
+                # B3: LIVE authenticates only with the LIVE key pair.
+                live_key, live_secret = self.get_live_credentials()
+                if not live_key or not live_secret:
+                    raise ValueError(
+                        f"Alpaca LIVE credentials ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) are not configured"
+                    )
+                key, secret = live_key, live_secret
+            if live_mode and auto_start:
+                # Unattended (reboot/deploy) LIVE start: only a valid standing
+                # LIVE authorization may stand in for the interactive arm.
+                live_startup_proof = self._standing_startup_proof(key, secret)
+            elif live_mode:
                 # Keep the fresh interactive confirmation alive until the
                 # neutral proof is constructed; EngineRuntime consumes and
                 # independently verifies that proof before reconciliation.
@@ -947,10 +1079,14 @@ class EngineManager:
             raise ValueError("Stop the engine before requesting live mode")
         if os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
             raise ValueError("PARAYABUCK_ENABLE_LIVE=YES is required for live mode")
-        key, secret = self.get_credentials()
+        key, secret = self.get_live_credentials()
         if not key or not secret:
-            raise ValueError("Alpaca credentials are required before live verification")
+            raise ValueError(
+                f"Alpaca LIVE credentials ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) are required "
+                "before live verification"
+            )
         from parayabuck.execution.alpaca import AlpacaBroker
+        from parayabuck.live_safety import LiveApprovalError, verify_account_environment
 
         live_broker = AlpacaBroker(key, secret, paper=False)
         try:
@@ -958,6 +1094,14 @@ class EngineManager:
             suffix = live_broker.account_suffix
             if not suffix:
                 raise ValueError("Alpaca account identity could not be verified")
+            try:
+                verify_account_environment(
+                    live=True,
+                    account_number=str(getattr(live_broker, "account_number", "") or ""),
+                    api_key=key,
+                )
+            except LiveApprovalError as exc:
+                raise ValueError(str(exc)) from exc
             now = datetime.now(UTC)
             self._pending_live_arm = LiveArmToken(
                 account_id=live_broker.account_id,
@@ -977,7 +1121,7 @@ class EngineManager:
 
     def confirm_live_arming(self, phrase: str) -> None:
         pending = self._pending_live_arm
-        key, secret = self.get_credentials()
+        key, secret = self.get_live_credentials()
         if (
             pending is None
             or key is None
@@ -1038,7 +1182,7 @@ class EngineManager:
 
         self._append_live_config_checks(item, live_cfg, runtime_cfg)
         approval, approval_error, hmac_key, approval_path = self._check_approval_signature(item, live_cfg)
-        key, secret = self.get_credentials()
+        key, secret = self.get_live_credentials()
         # The probe authenticates against the LIVE endpoint, so PAPER keys
         # must never reach it while the live gates are closed (settings-drawer
         # refreshes would otherwise send them on every open).
@@ -1284,9 +1428,9 @@ class EngineManager:
         creds_ok = bool(key and secret)
         item(
             "credentials",
-            "Alpaca credentials configured",
+            "Alpaca LIVE credentials configured",
             creds_ok,
-            "Alpaca API key and secret are required (settings)" if not creds_ok else None,
+            f"{LIVE_API_KEY_ENV} and {LIVE_SECRET_KEY_ENV} are required in the host .env" if not creds_ok else None,
         )
         engine_idle = not self.has_active_runtime()
         item(
@@ -1407,14 +1551,17 @@ def _scan_tracked_secrets(root: Path) -> str | None:
             text = path.read_text(errors="ignore")
         except OSError:
             continue
-        for match in re.finditer(r"(?m)^\s*ALPACA_SECRET_KEY\s*=\s*([^\s#]+)", text):
+        for match in re.finditer(
+            r"(?m)^\s*(?:ALPACA_SECRET_KEY|ALPACA_LIVE_SECRET_KEY|PARAYABUCK_SMTP_PASSWORD)\s*=\s*([^\s#]+)", text
+        ):
             value = match.group(1).strip().strip("'\"").lower()
             if value not in _PLACEHOLDERS and not any(
                 marker in value for marker in ("your_", "example", "placeholder")
             ):
                 return (
                     f"SECURITY BLOCK: tracked file {relative} contains a non-placeholder "
-                    "ALPACA_SECRET_KEY. Rotate the key and remove it from Git history."
+                    "secret (ALPACA_SECRET_KEY, ALPACA_LIVE_SECRET_KEY or PARAYABUCK_SMTP_PASSWORD). "
+                    "Rotate it and remove it from Git history."
                 )
     return None
 

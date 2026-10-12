@@ -22,7 +22,7 @@ from parayabuck.backtest.product import (
     optimize_grid,
     run_product_backtest,
 )
-from parayabuck.config import Config, RuntimeMode, load_config
+from parayabuck.config import DEFAULT_DECISION_DB_PATH, Config, RuntimeMode, load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data import AlpacaHistoricalData
 from parayabuck.execution.alpaca import AlpacaBroker
@@ -65,11 +65,31 @@ def _parser() -> argparse.ArgumentParser:
     )
     doctor = commands.add_parser("doctor", help="read-only deployment preflight (no orders)")
     doctor.add_argument("--strict", action="store_true", help="fail on warnings")
-    doctor.add_argument("--paper", action="store_true", help="require paper mode invariants")
+    doctor_mode = doctor.add_mutually_exclusive_group()
+    doctor_mode.add_argument("--paper", action="store_true", help="require paper mode invariants")
+    doctor_mode.add_argument(
+        "--configured-mode",
+        action="store_true",
+        help="validate the invariants of the configured runtime.mode (paper: exactly --paper; live: LIVE gates)",
+    )
     doctor.add_argument("--offline", action="store_true", help="skip network reachability checks")
     authorize = commands.add_parser("authorize-live", help="create a short-lived account/config-bound live approval")
-    authorize.add_argument("--operator", required=True)
+    authorize.add_argument("--operator", default=None)
     authorize.add_argument("--expires-minutes", type=int, default=15)
+    authorize.add_argument(
+        "--standing-days",
+        type=int,
+        default=None,
+        help=(
+            "instead create a STANDING LIVE authorization (1-30 days) that lets this trading host start "
+            "LIVE unattended after a reboot or deploy; any config, cap, account or host change voids it"
+        ),
+    )
+    authorize.add_argument(
+        "--revoke-standing",
+        action="store_true",
+        help="delete the standing LIVE authorization (LIVE then needs a manual re-arm after every restart)",
+    )
     backtest = commands.add_parser("backtest", help="run a production-strategy backtest")
     _add_backtest_arguments(backtest, include_cost_stress=True)
     optimize = commands.add_parser("optimize", help="grid search on TRAIN and optional OOS data")
@@ -135,6 +155,11 @@ def _parser() -> argparse.ArgumentParser:
     decision_p.add_argument("--json", action="store_true")
     decision_p.add_argument("--db", default=None)
     decision_p.add_argument("--journal", default=None)
+    email_p = ops_sub.add_parser(
+        "test-email",
+        help="validate the alerting.email settings; with --confirm, send ONE test e-mail",
+    )
+    email_p.add_argument("--confirm", action="store_true", help="really send the test e-mail")
     bundle_p = ops_sub.add_parser("bundle", help="sanitized diagnostic bundle")
     bundle_p.add_argument("--output", default=None)
     bundle_p.add_argument("--snapshot", default=None)
@@ -283,20 +308,42 @@ def backtest_main(argv: list[str] | None = None) -> int:
 
 
 def _authorize_live(config: Config, args: argparse.Namespace) -> int:
+    from parayabuck.live_authorization import standing_authorization_file
+
+    if getattr(args, "revoke_standing", False):
+        standing_file = standing_authorization_file(config)
+        if standing_file is None:
+            raise SystemExit("live.operator_approval_path is not configured")
+        if standing_file.exists():
+            standing_file.unlink()
+            print(f"Standing LIVE authorization revoked: {standing_file}")
+        else:
+            print("No standing LIVE authorization to revoke")
+        return 0
+    if not args.operator or not str(args.operator).strip():
+        raise SystemExit("--operator is required")
     if not config.live.enabled or config.live.hard_dollar_cap <= 0:
         raise SystemExit("live.enabled=true and a positive live.hard_dollar_cap are required")
     if not config.live.operator_approval_path:
         raise SystemExit("live.operator_approval_path is required")
-    if not 1 <= args.expires_minutes <= 1440:
+    standing_days = getattr(args, "standing_days", None)
+    if standing_days is not None:
+        from parayabuck.live_safety import STANDING_AUTHORIZATION_MAX_DAYS
+
+        if not 1 <= standing_days <= STANDING_AUTHORIZATION_MAX_DAYS:
+            raise SystemExit(f"--standing-days must be between 1 and {STANDING_AUTHORIZATION_MAX_DAYS}")
+    elif not 1 <= args.expires_minutes <= 1440:
         raise SystemExit("--expires-minutes must be between 1 and 1440")
     from parayabuck.config import load_env_file
+    from parayabuck.live_safety import LIVE_API_KEY_ENV, LIVE_SECRET_KEY_ENV, mode_credentials
 
     load_env_file()
-    key = os.getenv("ALPACA_API_KEY", "")
-    secret = os.getenv("ALPACA_SECRET_KEY", "")
+    # B3: LIVE approvals are bound to the LIVE key pair; the PAPER names are
+    # never used here.
+    key, secret = mode_credentials(live=True)
     hmac_secret = os.getenv(config.live.operator_approval_key_env, "")
     if not key or not secret:
-        raise SystemExit("Live Alpaca credentials are required")
+        raise SystemExit(f"Live Alpaca credentials are required ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV})")
     if len(hmac_secret) < 32:
         # Fail here, BEFORE the live-endpoint broker probe, with the same
         # clean SystemExit style as every other missing prerequisite —
@@ -308,9 +355,40 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         broker.account()  # Read-only identity verification against the live endpoint.
         account_suffix = broker.account_suffix
         account_id = broker.account_id or ""
+        account_number = broker.account_number
     finally:
         # Temporary live-credential verification sessions must be closed.
         broker.close()
+    from parayabuck.live_safety import LiveApprovalError, verify_account_environment
+
+    try:
+        verify_account_environment(live=True, account_number=account_number, api_key=key)
+    except LiveApprovalError as exc:
+        raise SystemExit(str(exc)) from None
+    if not account_id:
+        raise SystemExit("The live Alpaca account identity could not be verified")
+    if standing_days is not None:
+        from parayabuck.live_authorization import create_standing_authorization
+
+        try:
+            standing = create_standing_authorization(
+                config,
+                operator_id=str(args.operator),
+                account_id=account_id,
+                days=standing_days,
+                secret=hmac_secret,
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from None
+        target = standing_authorization_file(config)
+        assert target is not None
+        atomic_write(target, json.dumps(standing.to_dict(), indent=2, sort_keys=True), mode=0o600)
+        print(
+            f"Standing LIVE authorization written for account ...{account_suffix} on this trading host; "
+            f"expires {standing.expires_at.isoformat()}. LIVE now starts automatically after a restart; "
+            "any settings, cap, account or host change voids it."
+        )
+        return 0
     digests: list[str] = []
     for market, selection, symbols, universe_version in (
         (
@@ -484,7 +562,14 @@ def _run_doctor(args: argparse.Namespace) -> int:
                 add(f"strategy equity {sel.name}", False, str(exc))
         else:
             add("strategy equity disabled", True, "skipped")
-        if args.paper:
+        configured_mode = bool(getattr(args, "configured_mode", False))
+        # --configured-mode validates the mode the settings name: PAPER gets
+        # exactly the --paper invariant set, LIVE gets the LIVE gate set.
+        paper_checks = bool(args.paper) or (configured_mode and config.runtime.mode == RuntimeMode.PAPER)
+        live_checks = configured_mode and config.runtime.mode == RuntimeMode.LIVE
+        if configured_mode:
+            add("configured runtime.mode", config.runtime.mode != RuntimeMode.DISABLED, str(config.runtime.mode))
+        if paper_checks:
             add("runtime.mode paper", config.runtime.mode == RuntimeMode.PAPER, str(config.runtime.mode))
             add("live.enabled false", not config.live.enabled, str(config.live.enabled))
             add("live hard_dollar_cap 0", config.live.hard_dollar_cap == 0, str(config.live.hard_dollar_cap))
@@ -496,16 +581,26 @@ def _run_doctor(args: argparse.Namespace) -> int:
             # Informational WARN that does NOT set the warning flag: a loose
             # .env must not fail the --strict ExecStartPre and stop the VM.
             checks.append(("credential file owner-only", "WARN", mode_warning))
-        api_key = os.getenv("ALPACA_API_KEY", "").strip()
-        secret = os.getenv("ALPACA_SECRET_KEY", "").strip()
-        add("credentials present", bool(api_key and secret), "present" if api_key and secret else "missing")
-        if args.paper:
+        from parayabuck.live_safety import credential_env_names, mode_credentials
+
+        live_mode_config = config.runtime.mode == RuntimeMode.LIVE
+        api_key, secret = mode_credentials(live=live_mode_config)
+        key_names = "/".join(credential_env_names(live=live_mode_config))
+        add(
+            "credentials present",
+            bool(api_key and secret),
+            f"present ({key_names})" if api_key and secret else f"missing ({key_names})",
+        )
+        if paper_checks:
             live_env = os.getenv("PARAYABUCK_ENABLE_LIVE", "")
             add(
                 "no live endpoint in --paper",
                 live_env.lower() not in {"1", "true", "yes"},
                 "PARAYABUCK_ENABLE_LIVE not set",
             )
+        if live_checks:
+            _doctor_live_checks(config, add, checks, api_key=api_key, secret=secret)
+        _doctor_email_checks(config, add, checks, required=live_checks)
         for label, path_str in [
             ("runtime data dir writable", str(Path(config.runtime.decision_db_path).parent)),
             ("reports path writable", config.backtest.output_dir),
@@ -615,7 +710,7 @@ def _run_doctor(args: argparse.Namespace) -> int:
             add("package version", True, ver)
         except Exception as exc:
             add("package version", False, str(exc), is_blocker=False)
-        if not args.offline and args.paper and api_key and secret:
+        if not args.offline and paper_checks and api_key and secret:
             broker = None
             try:
                 broker = AlpacaBroker(api_key, secret, paper=True)
@@ -659,6 +754,75 @@ def _run_doctor(args: argparse.Namespace) -> int:
         return 1
     print(f"\nDoctor: {len(checks) - total_fail}/{len(checks)} checks passed — READY")
     return 0
+
+
+def _doctor_live_checks(
+    config: Config,
+    add: Any,
+    checks: list[tuple[str, str, str]],
+    *,
+    api_key: str,
+    secret: str,
+) -> None:
+    """LIVE invariants for ``doctor --configured-mode`` (offline, no orders)."""
+    from parayabuck.live_authorization import standing_authorization_status
+    from parayabuck.live_safety import mode_credentials
+
+    add("live.enabled true", config.live.enabled, str(config.live.enabled))
+    add("live hard_dollar_cap > 0", config.live.hard_dollar_cap > 0, str(config.live.hard_dollar_cap))
+    approval_path = config.live.operator_approval_path
+    add("live.operator_approval_path set", bool(approval_path), approval_path or "missing")
+    add(
+        "PARAYABUCK_ENABLE_LIVE=YES",
+        os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES",
+        "set" if os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES" else "not YES",
+    )
+    hmac_key = os.getenv(config.live.operator_approval_key_env, "")
+    add(
+        "operator approval key >= 32 chars",
+        len(hmac_key) >= 32,
+        config.live.operator_approval_key_env + (" set" if len(hmac_key) >= 32 else " missing or short"),
+    )
+    paper_key, paper_secret = mode_credentials(live=False)
+    distinct = not (api_key and secret and (api_key == paper_key or secret == paper_secret))
+    add("LIVE keys differ from PAPER keys", distinct, "distinct" if distinct else "LIVE and PAPER share a key")
+    add(
+        "LIVE ledger separate from PAPER",
+        os.path.normpath(config.runtime.decision_db_path) != os.path.normpath(DEFAULT_DECISION_DB_PATH),
+        config.runtime.decision_db_path,
+    )
+    status = standing_authorization_status(config)
+    # Informational only: without a standing authorization LIVE simply waits
+    # for a manual re-arm after a restart (never a preflight blocker).
+    label = "WARN" if status.status != "valid" or status.expiring() else "PASS"
+    checks.append(("standing LIVE authorization", label, f"{status.status}: {status.detail}"))
+
+
+def _doctor_email_checks(config: Config, add: Any, checks: list[tuple[str, str, str]], *, required: bool) -> None:
+    """E-mail alert configuration check; never sends anything."""
+    from parayabuck.monitoring.email_alerts import validate_email_setup
+
+    email = config.alerting.email
+    if not email.enabled:
+        if required:
+            add("e-mail alerts enabled (LIVE)", False, "alerting.email.enabled is false; LIVE needs off-host alerts")
+        else:
+            add("e-mail alerts", True, "disabled (alerts stay on this host)")
+        return
+    problems = validate_email_setup(email)
+    detail = (
+        f"{email.security} {email.smtp_host}:{email.smtp_port} -> {len(email.to_addresses)} recipient(s)"
+        if not problems
+        else "; ".join(problems)
+    )
+    if required:
+        add("e-mail alerts valid", not problems, detail)
+    elif problems:
+        # PAPER: a broken mail setup is reported but never keeps the engine
+        # down (informational WARN that does not trip --strict).
+        checks.append(("e-mail alerts", "WARN", detail))
+    else:
+        add("e-mail alerts valid", True, detail)
 
 
 # ---------------------------------------------------------------------------
@@ -710,8 +874,46 @@ def _run_ops(args: argparse.Namespace) -> int:
         return _ops_bundle(args)
     if cmd == "rebase-ownership":
         return _ops_rebase_ownership(args)
+    if cmd == "test-email":
+        return _ops_test_email(args)
     print(f"Unknown ops command: {cmd}", file=sys.stderr)
     return 2
+
+
+def _ops_test_email(args: argparse.Namespace) -> int:
+    """Validate the alerting.email settings; send ONE test e-mail only with --confirm.
+
+    Explicit operator command: it is never run by the engine, the units or the
+    tests. Without --confirm nothing leaves the host.
+    """
+    from parayabuck.monitoring.email_alerts import send_test_email, validate_email_setup
+
+    try:
+        config = load_config(getattr(args, "config", None))
+    except Exception as exc:
+        print(f"Configuration could not be loaded: {exc}", file=sys.stderr)
+        return 1
+    email = config.alerting.email
+    if not email.enabled:
+        print("alerting.email.enabled is false: e-mail alerts are off (nothing to test)")
+        return 1
+    problems = validate_email_setup(email)
+    if problems:
+        for problem in problems:
+            print(f"FAIL {problem}", file=sys.stderr)
+        return 1
+    target = ", ".join(email.to_addresses)
+    if not getattr(args, "confirm", False):
+        print(f"E-mail settings look valid ({email.security} {email.smtp_host}:{email.smtp_port} -> {target}).")
+        print("Nothing was sent. Re-run with --confirm to send one test e-mail.")
+        return 0
+    try:
+        send_test_email(email, mode=config.runtime.mode.value)
+    except Exception as exc:
+        print(f"Test e-mail FAILED: {exc}", file=sys.stderr)
+        return 1
+    print(f"Test e-mail sent to {target}.")
+    return 0
 
 
 def _snapshot_runtime_health(snapshot: object) -> dict[str, Any]:

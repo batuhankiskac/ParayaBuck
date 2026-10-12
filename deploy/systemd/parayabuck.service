@@ -1,5 +1,5 @@
 [Unit]
-Description=ParayaBuck Paper Trading Engine
+Description=ParayaBuck Trading Engine (PAPER; LIVE only when configured and authorized)
 After=network-online.target
 Wants=network-online.target
 
@@ -13,7 +13,12 @@ EnvironmentFile=/opt/parayabuck/.env
 # Alpaca PAPER account. Remove this line and the engine refuses to start
 # (console and backtests keep working). Every other machine must NOT set it.
 Environment=PARAYABUCK_TRADING_HOST=1
-ExecStartPre=/opt/parayabuck/.venv/bin/parayabuck doctor --strict --paper --offline
+# Mode-aware preflight: validates the configured runtime.mode. PAPER gets
+# exactly the --paper invariant set (no live flag, no cap, paper keys); LIVE
+# gets the LIVE gate set (live keys, cap, approval key, e-mail alerts). LIVE
+# still starts only through the engine's own guards (re-arm or a valid
+# standing LIVE authorization).
+ExecStartPre=/opt/parayabuck/.venv/bin/parayabuck doctor --strict --configured-mode --offline
 ExecStart=/opt/parayabuck/.venv/bin/parayabuck web
 Restart=on-failure
 RestartSec=10

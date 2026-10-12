@@ -44,7 +44,12 @@ from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
     portfolio_risk_limits_from_config,
 )
-from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
+from parayabuck.live_safety import (
+    LiveOperatorApproval,
+    LiveStartupProof,
+    StandingLiveAuthorization,
+    verify_account_environment,
+)
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
@@ -487,6 +492,14 @@ class EngineRuntime:
             configure_global_journal(self.app_config.observability)
         except Exception:
             log.warning("observability journal configuration failed", exc_info=True)
+        # Opt-in e-mail alert delivery (alerting.email; disabled by default).
+        # Never fatal: a broken mail setup must not stop the engine.
+        try:
+            from parayabuck.monitoring.email_alerts import configure_email_alerts
+
+            configure_email_alerts(self.app_config.alerting.email, mode=self.mode.value)
+        except Exception:
+            log.warning("e-mail alert configuration failed", exc_info=True)
         self._circuit_breaker_reason: str | None = None
         self._warming_up = False
         self._not_ready_symbols: set[str] = set(self.symbols)
@@ -541,7 +554,9 @@ class EngineRuntime:
             )
         return tuple(digests)
 
-    def _verify_live_startup_proof(self, expected_digests: tuple[str, ...]) -> LiveOperatorApproval:
+    def _verify_live_startup_proof(
+        self, expected_digests: tuple[str, ...]
+    ) -> LiveOperatorApproval | StandingLiveAuthorization:
         proof = self._live_startup_proof
         if not isinstance(proof, LiveStartupProof) or not proof.is_fresh():
             raise RuntimeError("Live startup proof is missing or expired")
@@ -550,17 +565,36 @@ class EngineRuntime:
             raise RuntimeError("Live startup proof does not match the configured credentials")
         if proof.configuration_digests != expected_digests:
             raise RuntimeError("Live startup proof does not match the loaded configuration")
-        secret = os.getenv(self.app_config.live.operator_approval_key_env, "")
-        approval = LiveOperatorApproval.load_verified(
-            self.app_config.live.operator_approval_path,
-            secret=secret,
-            account_id=proof.account_id,
-            configuration_digests=expected_digests,
-        )
+        approval: LiveOperatorApproval | StandingLiveAuthorization
+        if proof.authorization == "standing":
+            # Unattended start (reboot/deploy): the owner's standing LIVE
+            # authorization is re-verified here against the loaded config,
+            # the cap, this host and the account named in the proof.
+            from parayabuck.live_authorization import load_standing_authorization
+
+            approval = load_standing_authorization(
+                self.app_config,
+                account_id=proof.account_id,
+                configuration_digests=expected_digests,
+            )
+        else:
+            secret = os.getenv(self.app_config.live.operator_approval_key_env, "")
+            approval = LiveOperatorApproval.load_verified(
+                self.app_config.live.operator_approval_path,
+                secret=secret,
+                account_id=proof.account_id,
+                configuration_digests=expected_digests,
+            )
         self.broker.account()
         account_id = str(getattr(self.broker, "account_id", "") or "")
         if not account_id or account_id != proof.account_id:
             raise RuntimeError("Live startup proof does not match the verified broker account")
+        # B3: the LIVE key must resolve to a live account (never a paper one).
+        verify_account_environment(
+            live=True,
+            account_number=str(getattr(self.broker, "account_number", "") or ""),
+            api_key=self.api_key,
+        )
         return approval
 
     def health(self) -> RuntimeHealth:
@@ -853,6 +887,104 @@ class EngineRuntime:
         except Exception:
             log.warning("Intent watchdog pass failed", exc_info=True)
 
+    def _maybe_retry_rejected_exit_sells(self, account: AccountSnapshot) -> None:
+        """R3: retry a broker-rejected SELL once at the next safe opportunity.
+
+        Safe means: the engine is running and committed, not warming up, no
+        circuit breaker, no failed reconciliation and no market entry halt
+        (an ambiguous rebalance). The portfolio runtime persists the single
+        retry under a deterministic client id, so this never loops. Never
+        raises; a submit failure schedules a reconciliation.
+        """
+        if not getattr(self, "_running", False) or not getattr(self, "_startup_committed", False):
+            return
+        if getattr(self, "_warming_up", False) or getattr(self, "_circuit_breaker_reason", None) is not None:
+            return
+        if getattr(self, "_reconcile_failed", False):
+            return
+        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+            if getattr(self, "_market_entry_halts", {}).get(portfolio_runtime.market) is not None:
+                continue
+            retry = getattr(portfolio_runtime, "retry_rejected_exit_sells", None)
+            if not callable(retry):
+                continue
+            try:
+                with self._portfolio_lock:
+                    submitted = retry(account)
+                if submitted:
+                    self._invalidate_account_snapshot_after_execution()
+            except Exception as exc:
+                log.exception("Rejected SELL retry failed: market=%s", portfolio_runtime.market.value)
+                alerts.emit(
+                    "exit_sell_rejected",
+                    message=f"Retry of a rejected SELL could not be submitted: {exc}",
+                    market=portfolio_runtime.market.value,
+                    state="retry_failed",
+                    error=str(exc),
+                )
+                try:
+                    self._schedule_reconcile()
+                except Exception:
+                    log.warning("Reconcile after a failed SELL retry could not be scheduled", exc_info=True)
+
+    _STANDING_CHECK_INTERVAL_SECONDS = 3600.0
+
+    def _maybe_check_standing_authorization(self, now: datetime | None = None) -> None:
+        """LIVE only, hourly: e-mail when the standing authorization nears or
+        reaches its expiry (docs/live_readiness_v1.md B2). Never raises and
+        never touches trading: a running engine keeps running; only the next
+        unattended restart needs a fresh authorization."""
+        try:
+            if getattr(self, "mode", None) != RuntimeMode.LIVE:
+                return
+            now_mono = time.monotonic()
+            last = getattr(self, "_standing_check_last_mono", None)
+            if now is None and last is not None and now_mono - last < self._STANDING_CHECK_INTERVAL_SECONDS:
+                return
+            self._standing_check_last_mono = now_mono
+            from parayabuck.live_authorization import STANDING_EXPIRED, standing_authorization_status
+
+            current = now or datetime.now(UTC)
+            status = standing_authorization_status(self.app_config, now=current)
+            authorization = status.authorization
+            if authorization is None:
+                return
+            notices = getattr(self, "_standing_notices", None)
+            if notices is None:
+                notices = set()
+                self._standing_notices: set[str] = notices
+            expires = authorization.expires_at.astimezone(UTC).isoformat()
+            if status.status == STANDING_EXPIRED:
+                key = f"expired:{expires}"
+                if key not in notices:
+                    notices.add(key)
+                    alerts.emit(
+                        "live_authorization_expired",
+                        message=(
+                            "The standing LIVE authorization has expired: after the next restart or deploy "
+                            "LIVE waits for a manual re-arm (parayabuck authorize-live)"
+                        ),
+                        expires_at=expires,
+                        state="expired",
+                    )
+                return
+            if status.expiring(current):
+                days_left = max(0, math.ceil(authorization.remaining(current).total_seconds() / 86400.0))
+                key = f"expiring:{expires}:{days_left}"
+                if key not in notices:
+                    notices.add(key)
+                    alerts.emit(
+                        "live_authorization_expiring",
+                        message=(
+                            f"The standing LIVE authorization expires in {days_left} day(s) ({expires}); "
+                            "renew it with parayabuck authorize-live --standing-days N"
+                        ),
+                        expires_at=expires,
+                        state=f"days_left={days_left}",
+                    )
+        except Exception:
+            log.warning("Standing LIVE authorization check failed", exc_info=True)
+
     def _intent_watchdog_pass(self, now: datetime | None = None) -> list[dict[str, str]]:
         """Compare scheduled intent with the decision DB and account.
 
@@ -1070,7 +1202,7 @@ class EngineRuntime:
             if os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
                 raise RuntimeError("Live runtime requires PARAYABUCK_ENABLE_LIVE=YES")
         expected_live_digests: tuple[str, ...] = ()
-        live_approval: LiveOperatorApproval | None = None
+        live_approval: LiveOperatorApproval | StandingLiveAuthorization | None = None
         if self.mode == RuntimeMode.LIVE:
             expected_live_digests = self._expected_live_configuration_digests()
             live_approval = self._verify_live_startup_proof(expected_live_digests)
@@ -1120,6 +1252,14 @@ class EngineRuntime:
                 error=str(exc),
             )
             raise
+        if self.paper:
+            # B3: a PAPER engine never runs on a LIVE key. Refused only on
+            # unambiguous live evidence; LIVE was verified with its proof.
+            verify_account_environment(
+                live=False,
+                account_number=str(getattr(self.broker, "account_number", "") or ""),
+                api_key=str(getattr(self, "api_key", "") or ""),
+            )
         with self._state_lock:
             self._pin_managed_symbols()
         self._warn_foreign_inventory()
@@ -1161,6 +1301,7 @@ class EngineRuntime:
                         minimum_order_notional=self.app_config.execution.minimum_order_notional,
                     ),
                     sip_embargo=timedelta(minutes=self.app_config.signal_cross_check.sip_embargo_minutes),
+                    live_buy_gap_margin=self.app_config.live.buy_gap_margin_pct,
                 )
             )
         self._portfolio_runtimes = tuple(portfolio_runtimes)
@@ -1930,6 +2071,7 @@ class EngineRuntime:
                             self.broker.account_id or "unknown", account.equity
                         )
                         self._persist_risk_state(account)
+                        self._maybe_retry_rejected_exit_sells(account)
                 except OwnershipDriftError:
                     # Ownership drift is not a transient broker/API error: the
                     # broker holds fewer shares than the repository claims as
@@ -1951,6 +2093,7 @@ class EngineRuntime:
                     worker.last_error = str(exc)
                     log.warning("Account refresh failed: %s", exc)
                 self._maybe_run_intent_watchdog()
+                self._maybe_check_standing_authorization()
                 # The periodic readiness refresh (warming_up -> running
                 # promotion and the bounded warmup retry) runs on this loop:
                 # the decision loop only wakes for the daily decision bar.
@@ -2458,6 +2601,21 @@ class EngineRuntime:
                     symbol=update.symbol,
                     market=Market.EQUITY.value,
                 )
+                # R3: a rejected SELL exits/reduces a held position; escalate
+                # it and let the account loop retry it once.
+                try:
+                    side = portfolio_repository.order_side(update.client_order_id)
+                except Exception:
+                    side = None
+                if side == "sell":
+                    from parayabuck.portfolio.runtime_service import emit_exit_sell_rejected_safe
+
+                    emit_exit_sell_rejected_safe(
+                        client_order_id=update.client_order_id,
+                        symbol=update.symbol,
+                        market=Market.EQUITY.value,
+                        decision_id=None,
+                    )
             # Reuse the account-loop snapshot when it is fresh (one poll
             # interval) instead of issuing a full get_account +
             # get_all_positions round-trip per fill. The fill was already

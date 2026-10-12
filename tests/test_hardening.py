@@ -637,6 +637,7 @@ def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(tmp_path: 
     manager.config_path.write_text(yaml.safe_dump({"alpaca": {"paper": True}, "symbols": ["AAPL"]}))
     credentials = ["key-a", "secret-a"]
     monkeypatch.setattr(manager, "get_credentials", lambda: tuple(credentials))
+    monkeypatch.setattr(manager, "get_live_credentials", lambda: tuple(credentials))
     now = datetime.now(UTC)
     manager._pending_live_arm = LiveArmToken(
         "account-a",

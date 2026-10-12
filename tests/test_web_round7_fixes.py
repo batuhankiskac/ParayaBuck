@@ -138,6 +138,7 @@ def test_toggle_mode_never_writes_a_config_that_fails_to_load(tmp_path: Path) ->
     manager = _manager(tmp_path, yaml.safe_dump({"runtime": {"mode": "paper"}, **_LOADABLE_MARKETS}))
     manager.reset_broker = lambda: None  # type: ignore[method-assign]
     manager.get_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
+    manager.get_live_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
     manager._require_valid_live_arm = lambda *_a, **_k: None  # type: ignore[method-assign]
     before = manager.config_path.read_text(encoding="utf-8")
 

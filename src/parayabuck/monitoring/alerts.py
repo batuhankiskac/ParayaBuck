@@ -2,10 +2,13 @@
 
 ``emit`` is a never-raising notification sink: every accepted event is
 written to the ``parayabuck.monitoring.alerts`` logger (journald on the VM)
-and to the durable operational event journal. Nothing leaves the host —
-outbound webhook delivery was removed on 2026-10-06; the operator reads
-alerts through ``parayabuck ops events``, ``parayabuck ops status``, the
-dashboard and ``journalctl -u parayabuck``.
+and to the durable operational event journal; the operator reads alerts
+through ``parayabuck ops events``, ``parayabuck ops status``, the dashboard
+and ``journalctl -u parayabuck``. Outbound webhook delivery was removed on
+2026-10-06; the only off-host channel is the opt-in e-mail sink
+(``monitoring.email_alerts``, disabled unless ``alerting.email.enabled``),
+which receives each accepted (not throttled) event after it is journaled and
+delivers asynchronously, so it can never block or fail this call.
 
 Repeats are throttled per distinct incident so a broken data provider or
 broker does not flood the log/journal: within the throttle window a repeat of
@@ -147,6 +150,13 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
             emit_journal(ev)
         except Exception:
             log.warning("journal emit failed for alert kind=%s", kind, exc_info=True)
+        # Opt-in off-host copy (e-mail): enqueue only, never blocks or raises.
+        try:
+            from parayabuck.monitoring import email_alerts
+
+            email_alerts.notify(kind, message, dict(fields), throttle_key)
+        except Exception:
+            log.warning("e-mail alert hand-off failed for alert kind=%s", kind, exc_info=True)
     except Exception:  # pragma: no cover - the contract is to never raise
         log.exception("Alert emission failed for kind=%s", kind)
 

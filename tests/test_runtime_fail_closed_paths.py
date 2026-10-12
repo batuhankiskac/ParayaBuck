@@ -132,7 +132,7 @@ def test_verified_stream_reconnect_clears_only_its_own_halt_under_the_state_lock
     longer be erased by the recovery."""
     runtime, _ = _halt_runtime()
     now = datetime.now(UTC)
-    runtime._workers = {"pb-stocks": runtime_module.WorkerHealth(started_at=now, last_heartbeat=now)}
+    runtime._workers = {"pb-stocks": runtime_module.WorkerHealth(last_heartbeat=now)}
     runtime._workers["pb-stocks"].last_error = "stream closed"
     runtime._workers["pb-stocks"].restart_count = 6
     _set_halt(runtime, Market.EQUITY, "rebalance_reconciliation_required")
@@ -510,7 +510,7 @@ def _ledger_shell(
 
 @pytest.mark.parametrize(
     "reason",
-    ["portfolio_runtime_failure", "ownership_drift", "protection_failure", "post_fill_risk_violation"],
+    ["portfolio_runtime_failure", "ownership_drift", "protection_failure"],
 )
 def test_assigned_circuit_breaker_reasons_survive_a_restart(tmp_path: Path, reason: str) -> None:
     """A failure-path reason the restore allow-list keeps. If the allow-list

@@ -157,7 +157,7 @@ def test_shared_worker_failure_emits_one_degraded_and_one_recovered_event() -> N
     now = datetime.now(UTC)
     # "pb-stocks" is the only market-owned worker; any other name is the
     # shared worker whose failure degrades the whole runtime.
-    runtime._workers = {"pb-trade-updates": WorkerHealth(started_at=now, last_heartbeat=now)}  # type: ignore[attr-defined]
+    runtime._workers = {"pb-trade-updates": WorkerHealth(last_heartbeat=now)}  # type: ignore[attr-defined]
 
     class _FlakyWorker:
         def __init__(self) -> None:

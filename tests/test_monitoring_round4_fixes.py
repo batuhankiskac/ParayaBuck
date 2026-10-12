@@ -20,9 +20,7 @@ _NOW = datetime(2026, 9, 28, 15, 0, tzinfo=UTC)
 
 def _worker(heartbeat: datetime, last_event: datetime | None = None) -> dict[str, object]:
     # as persisted in the snapshot JSON: datetimes are ISO strings
-    return json.loads(
-        json.dumps(asdict(WorkerHealth(_NOW - timedelta(hours=3), heartbeat, last_event, None, 0, True)), default=str)
-    )
+    return json.loads(json.dumps(asdict(WorkerHealth(heartbeat, last_event, None, 0, True)), default=str))
 
 
 def test_worker_ages_are_judged_as_of_the_snapshot() -> None:

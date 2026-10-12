@@ -187,10 +187,10 @@ def test_blocking_trade_update_worker_stays_healthy_while_thread_is_alive() -> N
         maximum_queue_age_seconds=30,
     )
     runtime._workers = {
-        "pb-decisions": WorkerHealth(now, now, alive=True),
-        "pb-account": WorkerHealth(now, now, alive=True),
-        "pb-trade-updates": WorkerHealth(stale, stale, alive=True),
-        "pb-stocks": WorkerHealth(stale, stale, last_event_at=now, alive=True),
+        "pb-decisions": WorkerHealth(now, alive=True),
+        "pb-account": WorkerHealth(now, alive=True),
+        "pb-trade-updates": WorkerHealth(stale, alive=True),
+        "pb-stocks": WorkerHealth(stale, last_event_at=now, alive=True),
     }
     runtime._running = True
     runtime._state = "running"
@@ -219,10 +219,10 @@ def test_stale_stock_stream_event_during_the_session_degrades_runtime(monkeypatc
         maximum_queue_age_seconds=30,
     )
     runtime._workers = {
-        "pb-decisions": WorkerHealth(now, now, alive=True),
-        "pb-account": WorkerHealth(now, now, alive=True),
-        "pb-trade-updates": WorkerHealth(now, now, alive=True),
-        "pb-stocks": WorkerHealth(stale, stale, last_event_at=stale, alive=True),
+        "pb-decisions": WorkerHealth(now, alive=True),
+        "pb-account": WorkerHealth(now, alive=True),
+        "pb-trade-updates": WorkerHealth(now, alive=True),
+        "pb-stocks": WorkerHealth(stale, last_event_at=stale, alive=True),
     }
     runtime._running = True
     runtime._state = "running"

@@ -157,7 +157,7 @@ def test_account_loop_survives_a_failed_drift_persist() -> None:
 
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
-    runtime._workers = {"pb-account": WorkerHealth(now, now)}
+    runtime._workers = {"pb-account": WorkerHealth(now)}
     runtime._running = True
     runtime.config = SimpleNamespace(account_poll_interval_seconds=0.0)
     runtime._account_snapshot_cache_state = lambda: (None, None, 0)  # type: ignore[method-assign]
@@ -203,9 +203,9 @@ def test_operator_reset_refuses_while_a_shared_worker_is_stopped(tmp_path: Path)
     runtime._running = True
     runtime._state = "halted"
     runtime._workers = {
-        "pb-decisions": WorkerHealth(now, now, alive=False),
-        "pb-account": WorkerHealth(now, now, alive=True),
-        "pb-stocks": WorkerHealth(now, now, alive=False),
+        "pb-decisions": WorkerHealth(now, alive=False),
+        "pb-account": WorkerHealth(now, alive=True),
+        "pb-stocks": WorkerHealth(now, alive=False),
     }
     runtime._events = SimpleNamespace(empty=lambda: True)
     runtime._not_ready_symbols = set()
@@ -1114,7 +1114,7 @@ def test_operator_reset_restores_a_blip_degraded_runtime(tmp_path: Path, alive: 
     now = datetime.now(UTC)
     # A dead worker is refused up front; this models it exiting between that
     # check and the reset tail.
-    worker = WorkerHealth(now, now, alive=True)
+    worker = WorkerHealth(now, alive=True)
     runtime._workers = {"pb-trade-updates": worker}
     runtime._circuit_breaker_reason = "protection_failure"
     runtime._events = SimpleNamespace(empty=lambda: True)
@@ -1172,7 +1172,7 @@ def test_halt_writers_hold_the_state_lock(monkeypatch: pytest.MonkeyPatch) -> No
     runtime._put_event(SimpleNamespace())
 
     now = datetime.now(UTC)
-    runtime._workers = {"pb-trade-updates": WorkerHealth(now, now, restart_count=5)}
+    runtime._workers = {"pb-trade-updates": WorkerHealth(now, restart_count=5)}
     runtime._running = True
     runtime._stop_event = SimpleNamespace(wait=lambda _s: False)
 

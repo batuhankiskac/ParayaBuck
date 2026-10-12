@@ -203,12 +203,15 @@ def test_reset_retries_transient_catch_up_statuses() -> None:
     assert _catch_up_blocked(SimpleNamespace(startup_catch_up_status="submitted")) is False
 
 
-# R3B3: an undecided in-window session is re-derived after the catch-up reports transient.
-def test_startup_catch_up_rederives_an_undecided_in_window_session(monkeypatch: pytest.MonkeyPatch) -> None:
+# R3B3 / audit-2 Q1A-2: a transient catch-up status is final for the restart.
+# The catch-up and the intent watchdog own warming_up/incomplete outcomes; the
+# removed recovery helper only re-ran the same tails and duplicated the
+# receipt, daily summary and no-trade event for the undecided session.
+def test_transient_startup_catch_up_records_one_outcome(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _engine()
-    engine._running = True
-    engine._warming_up = False
     decided: list[list[Bar]] = []
+    receipts: list[str] = []
+    summaries: list[str] = []
 
     class _Portfolio:
         market = Market.EQUITY
@@ -223,19 +226,18 @@ def test_startup_catch_up_rederives_an_undecided_in_window_session(monkeypatch: 
         def process_closed_bars(self, bars: list[Bar], **_kw: Any) -> SimpleNamespace:
             decided.append(list(bars))
             return SimpleNamespace(
-                status="submitted", decision_id="dec-1", target=None, orders=(), submitted_order_ids=()
+                status="warming_up", decision_id=None, target=None, orders=(), submitted_order_ids=()
             )
 
         def startup_catch_up(self, **_kw: Any) -> SimpleNamespace:
-            self.startup_catch_up_status = "incomplete_strategy_batch"
+            self.startup_catch_up_status = "warming_up"
             return SimpleNamespace(
-                status="incomplete_strategy_batch", decision_id=None, target=None, orders=(), submitted_order_ids=()
+                status="warming_up", decision_id=None, target=None, orders=(), submitted_order_ids=()
             )
 
-    portfolio = _Portfolio()
-    engine._portfolio_runtimes = (portfolio,)
-    engine._record_paper_decision_receipt = lambda *_a, **_k: None  # type: ignore[method-assign]
-    engine._emit_equity_daily_summary = lambda *_a, **_k: None  # type: ignore[method-assign]
+    engine._portfolio_runtimes = (_Portfolio(),)
+    engine._record_paper_decision_receipt = lambda _rt, result, _acct: receipts.append(result.status)  # type: ignore[method-assign]
+    engine._emit_equity_daily_summary = lambda _rt, result, _acct: summaries.append(result.status)  # type: ignore[method-assign]
 
     class _Clock(datetime):
         @classmethod
@@ -245,8 +247,9 @@ def test_startup_catch_up_rederives_an_undecided_in_window_session(monkeypatch: 
 
     monkeypatch.setattr(runtime_module, "datetime", _Clock)
     engine._run_startup_catch_up()
-    assert len(decided) == 1
-    assert {bar.symbol for bar in decided[0]} == set(SYMBOLS)
+    assert decided == []
+    assert receipts == ["warming_up"]
+    assert summaries == ["warming_up"]
 
 
 # R2A5: concurrent refresh-vs-read of the not-ready set never raises.
@@ -313,7 +316,7 @@ def test_gate_survives_a_concurrent_worker_key_insert() -> None:
     from parayabuck.runtime_health import WorkerHealth
 
     engine = _engine()
-    engine._workers = {"pb-decisions": WorkerHealth(datetime.now(UTC), datetime.now(UTC), alive=True)}
+    engine._workers = {"pb-decisions": WorkerHealth(datetime.now(UTC), alive=True)}
     engine.config = EngineConfig()
     engine._last_account_at = datetime.now(UTC)
     engine.health = lambda: SimpleNamespace(queue_age_seconds=0.0)  # type: ignore[method-assign]
@@ -328,7 +331,7 @@ def test_gate_survives_a_concurrent_worker_key_insert() -> None:
 
     def register() -> None:
         for _ in range(200):
-            engine._workers["pb-signal-adjustment"] = WorkerHealth(datetime.now(UTC), datetime.now(UTC), alive=True)
+            engine._workers["pb-signal-adjustment"] = WorkerHealth(datetime.now(UTC), alive=True)
             engine._workers.pop("pb-signal-adjustment", None)
 
     threads = [threading.Thread(target=gate), threading.Thread(target=register)]

@@ -57,12 +57,6 @@ class _EventQueue:
                 self._condition.wait(remaining)
             return self._items.popleft()
 
-    def get_nowait(self) -> _Event | None:
-        with self._condition:
-            if not self._items:
-                raise queue.Empty
-            return self._items.popleft()
-
     def qsize(self) -> int:
         with self._condition:
             return len(self._items)

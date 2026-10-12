@@ -26,7 +26,7 @@ def test_account_loop_refreshes_readiness_once_startup_committed() -> None:
     poll instead of the deleted 5m pipeline."""
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
-    runtime._workers = {"pb-account": WorkerHealth(now, now)}
+    runtime._workers = {"pb-account": WorkerHealth(now)}
     runtime._running = True
     runtime._startup_committed = True
     runtime._warming_up = False
@@ -52,7 +52,7 @@ def test_account_loop_refreshes_readiness_once_startup_committed() -> None:
 def test_account_loop_skips_readiness_before_startup_commits() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
-    runtime._workers = {"pb-account": WorkerHealth(now, now)}
+    runtime._workers = {"pb-account": WorkerHealth(now)}
     runtime._running = True
     runtime._startup_committed = False
     runtime._warming_up = False

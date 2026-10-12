@@ -70,10 +70,10 @@ def _engine(tmp_path: Path, broker: _CountingBroker) -> EngineRuntime:
     runtime._running = True
     now = datetime.now(UTC)
     runtime._workers = {
-        "pb-decisions": WorkerHealth(now, now, alive=True),
-        "pb-trade-updates": WorkerHealth(now, now, alive=True),
-        "pb-account": WorkerHealth(now, now, alive=True),
-        "pb-stocks": WorkerHealth(now, now, alive=True),
+        "pb-decisions": WorkerHealth(now, alive=True),
+        "pb-trade-updates": WorkerHealth(now, alive=True),
+        "pb-account": WorkerHealth(now, alive=True),
+        "pb-stocks": WorkerHealth(now, alive=True),
     }
     runtime._events = SimpleNamespace(qsize=lambda: 0, empty=lambda: True)
     runtime._last_account_at = datetime.now(UTC)

@@ -181,8 +181,8 @@ def _engine(portfolio_runtime: Any, historical: Any) -> EngineRuntime:
     engine.app_config = app_config
     engine.config = app_config.engine
     engine._workers = {
-        "pb-decisions": WorkerHealth(now, now),
-        _STREAM_WORKER_BY_MARKET[Market.EQUITY]: WorkerHealth(now, now),
+        "pb-decisions": WorkerHealth(now),
+        _STREAM_WORKER_BY_MARKET[Market.EQUITY]: WorkerHealth(now),
     }
     engine._events = _EventQueue(app_config.engine.event_queue_capacity)
     engine._ingestion_lock = threading.Lock()

@@ -1,0 +1,752 @@
+{
+  "diff_vs_E2": {
+    "S1_1.0": {
+      "cagr_2017_2021_pp": 0.08257900060251178,
+      "cagr_2022_2026_pp": 0.5384678351384009,
+      "cagr_pp": 0.31828798718229745,
+      "max_dd_pp": -0.9464868299987272
+    },
+    "S1_2.0": {
+      "cagr_2017_2021_pp": -0.0035676799222006395,
+      "cagr_2022_2026_pp": 0.42478498310085655,
+      "cagr_pp": 0.21780097856816116,
+      "max_dd_pp": -0.7589533833955775
+    },
+    "S2_10_1.0": {
+      "cagr_2017_2021_pp": 0.10851510112295237,
+      "cagr_2022_2026_pp": 0.7106138102560111,
+      "cagr_pp": 0.4197154336301745,
+      "max_dd_pp": -1.0492516876767999
+    },
+    "S2_10_2.0": {
+      "cagr_2017_2021_pp": -0.011767111739557912,
+      "cagr_2022_2026_pp": 0.5868372905292851,
+      "cagr_pp": 0.2974615156347227,
+      "max_dd_pp": -0.8951933281614033
+    },
+    "S2_5_1.0": {
+      "cagr_2017_2021_pp": 0.10349887298022331,
+      "cagr_2022_2026_pp": 0.7333877980812975,
+      "cagr_pp": 0.4290259002481811,
+      "max_dd_pp": -1.0591230537344787
+    },
+    "S2_5_2.0": {
+      "cagr_2017_2021_pp": -0.03025743316114049,
+      "cagr_2022_2026_pp": 0.5962581010444667,
+      "cagr_pp": 0.2933404405391693,
+      "max_dd_pp": -0.9101561050371965
+    }
+  },
+  "e2_reference_check": {
+    "1.0": {
+      "expected": 1329642.62,
+      "got": 1329642.62,
+      "match": true
+    },
+    "2.0": {
+      "expected": 1313969.74,
+      "got": 1313969.74,
+      "match": true
+    }
+  },
+  "results": {
+    "E2": {
+      "1.0": {
+        "accounting_ok": true,
+        "bills": {
+          "bil_corporate_action_events": 0,
+          "bil_fills": 0,
+          "decisions": 2406,
+          "decisions_downtrend": 390,
+          "decisions_with_bil_target": 0,
+          "max_target_gross": 0.98
+        },
+        "cagr_2017_2021": 0.4105132303075978,
+        "cagr_2022_2026": 0.20993461275184688,
+        "costs": {
+          "fees": 186.45543252478112,
+          "slippage": 3700.6667548404916,
+          "spread": 1850.3333774202458
+        },
+        "decisions": 2406,
+        "ending_nav": 1329642.6232118441,
+        "etf_pnl": {},
+        "fills": 617,
+        "full": {
+          "cagr": 0.3105015361912611,
+          "max_drawdown": 0.3218846719323063,
+          "sharpe": 1.0976518289856398
+        },
+        "hashes": {
+          "decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "equity_decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "fills_without_client_ids": "6aadd3580ac737c681bebaf59aaf7011be77c450ba71c35cc56aaa10350eaff9"
+        },
+        "invariants": {
+          "active_reservation_count": 0,
+          "all_reservations_released": true,
+          "cash_conserved": true,
+          "cash_reconciliation_error": 0.0,
+          "corporate_action_dividend_cash": 5571.120703989629,
+          "deferred_buy_intent_count": 0,
+          "dividend_cash_event_count": 14,
+          "duplicate_fill_count": 0,
+          "duplicate_fill_keys": [],
+          "duplicate_position_keys": false,
+          "ending_cash": 1329642.6232118441,
+          "ending_cash_nonnegative": true,
+          "fee_counted_once_in_cash_reconciliation": true,
+          "fill_count": 617,
+          "final_position_count": 0,
+          "final_position_count_within_limit": true,
+          "future_data_access_checks": 2406,
+          "gross_at_final_mark": 0.0,
+          "max_observed_position_count": 1,
+          "max_observed_slot_claim_count": 1,
+          "maximum_positions": 8,
+          "maximum_realized_gross_observed": 0.9851545187525154,
+          "maximum_target_gross_observed": 0.98,
+          "maximum_target_name_weight": 0.98,
+          "nav_from_cash_and_marks": 1329642.6232118441,
+          "nav_matches_ledger": true,
+          "no_deferred_buy_intents_at_end": true,
+          "no_future_data_access": true,
+          "position_quantities_reconciled": true,
+          "position_quantity_reconciliation_error": 0.0,
+          "realized_gross_drift_is_recorded_not_corrected": true,
+          "reservation_create_count": 617,
+          "reservation_release_count": 617,
+          "sleeve_targets_within_limits": true,
+          "slot_claim_violation_count": 0,
+          "slot_claim_violation_samples": [],
+          "slot_claims_within_limit": true,
+          "starting_cash": 100000,
+          "target_gross_within_limit": true,
+          "target_name_weights_within_limits": true,
+          "unowned_fill_count": 0,
+          "unowned_fills": []
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "sweep": "none",
+        "traded_notional": {
+          "QLD": 18503309.34730518
+        },
+        "turnover_per_year": 3.8371772418454206
+      },
+      "2.0": {
+        "accounting_ok": true,
+        "bills": {
+          "bil_corporate_action_events": 0,
+          "bil_fills": 0,
+          "decisions": 2406,
+          "decisions_downtrend": 390,
+          "decisions_with_bil_target": 0,
+          "max_target_gross": 0.98
+        },
+        "cagr_2017_2021": 0.40889300216256763,
+        "cagr_2022_2026": 0.20831498245764068,
+        "costs": {
+          "fees": 370.2115201020008,
+          "slippage": 7343.948935436198,
+          "spread": 3671.974467718099
+        },
+        "decisions": 2406,
+        "ending_nav": 1313969.7379699536,
+        "etf_pnl": {},
+        "fills": 618,
+        "full": {
+          "cagr": 0.308878613662378,
+          "max_drawdown": 0.3233430560279843,
+          "sharpe": 1.0933099203754335
+        },
+        "hashes": {
+          "decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "equity_decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "fills_without_client_ids": "9618f2fbaa3a0991dce01a3c6c4506856fb89de2e580c31c6aaa744e8dc32a0e"
+        },
+        "invariants": {
+          "active_reservation_count": 0,
+          "all_reservations_released": true,
+          "cash_conserved": true,
+          "cash_reconciliation_error": 2.3283064365386963e-10,
+          "corporate_action_dividend_cash": 5520.860527144101,
+          "deferred_buy_intent_count": 0,
+          "dividend_cash_event_count": 14,
+          "duplicate_fill_count": 0,
+          "duplicate_fill_keys": [],
+          "duplicate_position_keys": false,
+          "ending_cash": 1313969.7379699536,
+          "ending_cash_nonnegative": true,
+          "fee_counted_once_in_cash_reconciliation": true,
+          "fill_count": 618,
+          "final_position_count": 0,
+          "final_position_count_within_limit": true,
+          "future_data_access_checks": 2406,
+          "gross_at_final_mark": 0.0,
+          "max_observed_position_count": 1,
+          "max_observed_slot_claim_count": 1,
+          "maximum_positions": 8,
+          "maximum_realized_gross_observed": 0.985144554503623,
+          "maximum_target_gross_observed": 0.98,
+          "maximum_target_name_weight": 0.98,
+          "nav_from_cash_and_marks": 1313969.7379699536,
+          "nav_matches_ledger": true,
+          "no_deferred_buy_intents_at_end": true,
+          "no_future_data_access": true,
+          "position_quantities_reconciled": true,
+          "position_quantity_reconciliation_error": 0.0,
+          "realized_gross_drift_is_recorded_not_corrected": true,
+          "reservation_create_count": 618,
+          "reservation_release_count": 618,
+          "sleeve_targets_within_limits": true,
+          "slot_claim_violation_count": 0,
+          "slot_claim_violation_samples": [],
+          "slot_claims_within_limit": true,
+          "starting_cash": 100000,
+          "target_gross_within_limit": true,
+          "target_name_weights_within_limits": true,
+          "unowned_fill_count": 0,
+          "unowned_fills": []
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "sweep": "none",
+        "traded_notional": {
+          "QLD": 18359821.32271893
+        },
+        "turnover_per_year": 3.8369066759754387
+      }
+    },
+    "S1": {
+      "1.0": {
+        "accounting_ok": true,
+        "bills": {
+          "bil_corporate_action_events": 91,
+          "bil_fills": 31,
+          "decisions": 2406,
+          "decisions_downtrend": 390,
+          "decisions_with_bil_target": 390,
+          "max_target_gross": 0.98
+        },
+        "cagr_2017_2021": 0.4113390203136229,
+        "cagr_2022_2026": 0.2153192911032309,
+        "costs": {
+          "fees": 290.09932535499087,
+          "slippage": 5796.185071174178,
+          "spread": 2898.092535587089
+        },
+        "decisions": 2406,
+        "ending_nav": 1360867.2968985834,
+        "etf_pnl": {},
+        "fills": 648,
+        "full": {
+          "cagr": 0.31368441606308406,
+          "max_drawdown": 0.312419803632319,
+          "sharpe": 1.1062555320434608
+        },
+        "hashes": {
+          "decisions": "ee4aeb9564da8770932b8be7b8dd2ba3625e0005323111aa8d122aaa909d38e3",
+          "equity_decisions": "ee4aeb9564da8770932b8be7b8dd2ba3625e0005323111aa8d122aaa909d38e3",
+          "fills_without_client_ids": "6fe33ba4c3c9880f8a6484b986642e02208d607110450708504f019b2127ffac"
+        },
+        "invariants": {
+          "active_reservation_count": 0,
+          "all_reservations_released": true,
+          "cash_conserved": true,
+          "cash_reconciliation_error": 0.0,
+          "corporate_action_dividend_cash": 23252.275399939233,
+          "deferred_buy_intent_count": 0,
+          "dividend_cash_event_count": 31,
+          "duplicate_fill_count": 0,
+          "duplicate_fill_keys": [],
+          "duplicate_position_keys": false,
+          "ending_cash": 1360867.2968985834,
+          "ending_cash_nonnegative": true,
+          "fee_counted_once_in_cash_reconciliation": true,
+          "fill_count": 648,
+          "final_position_count": 0,
+          "final_position_count_within_limit": true,
+          "future_data_access_checks": 2406,
+          "gross_at_final_mark": 0.0,
+          "max_observed_position_count": 1,
+          "max_observed_slot_claim_count": 2,
+          "maximum_positions": 8,
+          "maximum_realized_gross_observed": 0.9915796117656983,
+          "maximum_target_gross_observed": 0.98,
+          "maximum_target_name_weight": 0.98,
+          "nav_from_cash_and_marks": 1360867.2968985834,
+          "nav_matches_ledger": true,
+          "no_deferred_buy_intents_at_end": true,
+          "no_future_data_access": true,
+          "position_quantities_reconciled": true,
+          "position_quantity_reconciliation_error": 0.0,
+          "realized_gross_drift_is_recorded_not_corrected": true,
+          "reservation_create_count": 648,
+          "reservation_release_count": 648,
+          "sleeve_targets_within_limits": true,
+          "slot_claim_violation_count": 0,
+          "slot_claim_violation_samples": [],
+          "slot_claims_within_limit": true,
+          "starting_cash": 100000,
+          "target_gross_within_limit": true,
+          "target_name_weights_within_limits": true,
+          "unowned_fill_count": 0,
+          "unowned_fills": []
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "sweep": "s1",
+        "traded_notional": {
+          "BIL": 10220777.93592337,
+          "QLD": 18760126.046357583
+        },
+        "turnover_per_year": 5.92894159959531
+      },
+      "2.0": {
+        "accounting_ok": true,
+        "bills": {
+          "bil_corporate_action_events": 91,
+          "bil_fills": 31,
+          "decisions": 2406,
+          "decisions_downtrend": 390,
+          "decisions_with_bil_target": 390,
+          "max_target_gross": 0.98
+        },
+        "cagr_2017_2021": 0.4088573253633456,
+        "cagr_2022_2026": 0.21256283228864925,
+        "costs": {
+          "fees": 573.1378456018134,
+          "slippage": 11448.513366255216,
+          "spread": 5724.256683127608
+        },
+        "decisions": 2406,
+        "ending_nav": 1335041.5055562155,
+        "etf_pnl": {},
+        "fills": 649,
+        "full": {
+          "cagr": 0.3110566234480596,
+          "max_drawdown": 0.3157535221940285,
+          "sharpe": 1.099225448670146
+        },
+        "hashes": {
+          "decisions": "ee4aeb9564da8770932b8be7b8dd2ba3625e0005323111aa8d122aaa909d38e3",
+          "equity_decisions": "ee4aeb9564da8770932b8be7b8dd2ba3625e0005323111aa8d122aaa909d38e3",
+          "fills_without_client_ids": "4823a29a5c4dabb39b905113d4468517eb3a15311ad273fc3d7919700c266c6d"
+        },
+        "invariants": {
+          "active_reservation_count": 0,
+          "all_reservations_released": true,
+          "cash_conserved": true,
+          "cash_reconciliation_error": -4.656612873077393e-10,
+          "corporate_action_dividend_cash": 22927.75186340607,
+          "deferred_buy_intent_count": 0,
+          "dividend_cash_event_count": 31,
+          "duplicate_fill_count": 0,
+          "duplicate_fill_keys": [],
+          "duplicate_position_keys": false,
+          "ending_cash": 1335041.5055562155,
+          "ending_cash_nonnegative": true,
+          "fee_counted_once_in_cash_reconciliation": true,
+          "fill_count": 649,
+          "final_position_count": 0,
+          "final_position_count_within_limit": true,
+          "future_data_access_checks": 2406,
+          "gross_at_final_mark": 0.0,
+          "max_observed_position_count": 1,
+          "max_observed_slot_claim_count": 2,
+          "maximum_positions": 8,
+          "maximum_realized_gross_observed": 0.9921644726735686,
+          "maximum_target_gross_observed": 0.98,
+          "maximum_target_name_weight": 0.98,
+          "nav_from_cash_and_marks": 1335041.5055562155,
+          "nav_matches_ledger": true,
+          "no_deferred_buy_intents_at_end": true,
+          "no_future_data_access": true,
+          "position_quantities_reconciled": true,
+          "position_quantity_reconciliation_error": 0.0,
+          "realized_gross_drift_is_recorded_not_corrected": true,
+          "reservation_create_count": 649,
+          "reservation_release_count": 649,
+          "sleeve_targets_within_limits": true,
+          "slot_claim_violation_count": 0,
+          "slot_claim_violation_samples": [],
+          "slot_claims_within_limit": true,
+          "starting_cash": 100000,
+          "target_gross_within_limit": true,
+          "target_name_weights_within_limits": true,
+          "unowned_fill_count": 0,
+          "unowned_fills": []
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "sweep": "s1",
+        "traded_notional": {
+          "BIL": 10101684.613137169,
+          "QLD": 18519552.691005506
+        },
+        "turnover_per_year": 5.931244080029988
+      }
+    },
+    "S2_10": {
+      "1.0": {
+        "accounting_ok": true,
+        "bills": {
+          "bil_corporate_action_events": 91,
+          "bil_fills": 181,
+          "decisions": 2406,
+          "decisions_downtrend": 390,
+          "decisions_with_bil_target": 1002,
+          "max_target_gross": 0.98
+        },
+        "cagr_2017_2021": 0.4115983813188273,
+        "cagr_2022_2026": 0.217040750854407,
+        "costs": {
+          "fees": 330.62728970006395,
+          "slippage": 6626.0197145733755,
+          "spread": 3313.0098572866877
+        },
+        "decisions": 2406,
+        "ending_nav": 1370954.5799263155,
+        "etf_pnl": {},
+        "fills": 798,
+        "full": {
+          "cagr": 0.31469869052756283,
+          "max_drawdown": 0.3113921550555383,
+          "sharpe": 1.109012339981975
+        },
+        "hashes": {
+          "decisions": "0522871e4f5606af853ed7d88761353ab8712b9163502bb76ee2d068d2a09684",
+          "equity_decisions": "0522871e4f5606af853ed7d88761353ab8712b9163502bb76ee2d068d2a09684",
+          "fills_without_client_ids": "43ee93e7e1026bcae245b77c7ba54977981b67306ffcd7e80e94a2f1a72b10d7"
+        },
+        "invariants": {
+          "active_reservation_count": 0,
+          "all_reservations_released": true,
+          "cash_conserved": true,
+          "cash_reconciliation_error": 0.0,
+          "corporate_action_dividend_cash": 28513.95702155269,
+          "deferred_buy_intent_count": 0,
+          "dividend_cash_event_count": 52,
+          "duplicate_fill_count": 0,
+          "duplicate_fill_keys": [],
+          "duplicate_position_keys": false,
+          "ending_cash": 1370954.5799263155,
+          "ending_cash_nonnegative": true,
+          "fee_counted_once_in_cash_reconciliation": true,
+          "fill_count": 798,
+          "final_position_count": 0,
+          "final_position_count_within_limit": true,
+          "future_data_access_checks": 2406,
+          "gross_at_final_mark": 0.0,
+          "max_observed_position_count": 2,
+          "max_observed_slot_claim_count": 2,
+          "maximum_positions": 8,
+          "maximum_realized_gross_observed": 0.9915437465532645,
+          "maximum_target_gross_observed": 0.98,
+          "maximum_target_name_weight": 0.98,
+          "nav_from_cash_and_marks": 1370954.5799263155,
+          "nav_matches_ledger": true,
+          "no_deferred_buy_intents_at_end": true,
+          "no_future_data_access": true,
+          "position_quantities_reconciled": true,
+          "position_quantity_reconciliation_error": 0.0,
+          "realized_gross_drift_is_recorded_not_corrected": true,
+          "reservation_create_count": 798,
+          "reservation_release_count": 798,
+          "sleeve_targets_within_limits": true,
+          "slot_claim_violation_count": 0,
+          "slot_claim_violation_samples": [],
+          "slot_claims_within_limit": true,
+          "starting_cash": 100000,
+          "target_gross_within_limit": true,
+          "target_name_weights_within_limits": true,
+          "unowned_fill_count": 0,
+          "unowned_fills": []
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "sweep": "s2_10",
+        "traded_notional": {
+          "BIL": 14302183.523334121,
+          "QLD": 18827934.203173585
+        },
+        "turnover_per_year": 6.754752284320656
+      },
+      "2.0": {
+        "accounting_ok": true,
+        "bills": {
+          "bil_corporate_action_events": 91,
+          "bil_fills": 179,
+          "decisions": 2406,
+          "decisions_downtrend": 390,
+          "decisions_with_bil_target": 1002,
+          "max_target_gross": 0.98
+        },
+        "cagr_2017_2021": 0.40877533104517205,
+        "cagr_2022_2026": 0.21418335536293354,
+        "costs": {
+          "fees": 649.1989589120747,
+          "slippage": 13013.146096649796,
+          "spread": 6506.573048324898
+        },
+        "decisions": 2406,
+        "ending_nav": 1342823.7403715032,
+        "etf_pnl": {},
+        "fills": 796,
+        "full": {
+          "cagr": 0.31185322881872524,
+          "max_drawdown": 0.31439112274637027,
+          "sharpe": 1.101404241002659
+        },
+        "hashes": {
+          "decisions": "c668bba418907a5983af1811b3d942e6e7756b85b38e2e7384b95e44cae46c4d",
+          "equity_decisions": "c668bba418907a5983af1811b3d942e6e7756b85b38e2e7384b95e44cae46c4d",
+          "fills_without_client_ids": "2c512d0992d9472173e619c9537baa86da8149c8682f844bb6ee0dfecc620a4d"
+        },
+        "invariants": {
+          "active_reservation_count": 0,
+          "all_reservations_released": true,
+          "cash_conserved": true,
+          "cash_reconciliation_error": 0.0,
+          "corporate_action_dividend_cash": 28081.019488179674,
+          "deferred_buy_intent_count": 0,
+          "dividend_cash_event_count": 52,
+          "duplicate_fill_count": 0,
+          "duplicate_fill_keys": [],
+          "duplicate_position_keys": false,
+          "ending_cash": 1342823.7403715032,
+          "ending_cash_nonnegative": true,
+          "fee_counted_once_in_cash_reconciliation": true,
+          "fill_count": 796,
+          "final_position_count": 0,
+          "final_position_count_within_limit": true,
+          "future_data_access_checks": 2406,
+          "gross_at_final_mark": 0.0,
+          "max_observed_position_count": 2,
+          "max_observed_slot_claim_count": 2,
+          "maximum_positions": 8,
+          "maximum_realized_gross_observed": 0.9921161947304058,
+          "maximum_target_gross_observed": 0.98,
+          "maximum_target_name_weight": 0.98,
+          "nav_from_cash_and_marks": 1342823.7403715032,
+          "nav_matches_ledger": true,
+          "no_deferred_buy_intents_at_end": true,
+          "no_future_data_access": true,
+          "position_quantities_reconciled": true,
+          "position_quantity_reconciliation_error": 0.0,
+          "realized_gross_drift_is_recorded_not_corrected": true,
+          "reservation_create_count": 796,
+          "reservation_release_count": 796,
+          "sleeve_targets_within_limits": true,
+          "slot_claim_violation_count": 0,
+          "slot_claim_violation_samples": [],
+          "slot_claims_within_limit": true,
+          "starting_cash": 100000,
+          "target_gross_within_limit": true,
+          "target_name_weights_within_limits": true,
+          "unowned_fill_count": 0,
+          "unowned_fills": []
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "sweep": "s2_10",
+        "traded_notional": {
+          "BIL": 13964590.968300559,
+          "QLD": 18568307.051439375
+        },
+        "turnover_per_year": 6.7251724471986245
+      }
+    },
+    "S2_5": {
+      "1.0": {
+        "accounting_ok": true,
+        "bills": {
+          "bil_corporate_action_events": 91,
+          "bil_fills": 298,
+          "decisions": 2406,
+          "decisions_downtrend": 390,
+          "decisions_with_bil_target": 1065,
+          "max_target_gross": 0.98
+        },
+        "cagr_2017_2021": 0.4115482190374,
+        "cagr_2022_2026": 0.21726849073265986,
+        "costs": {
+          "fees": 346.4588873026522,
+          "slippage": 6974.90352783945,
+          "spread": 3487.451763919725
+        },
+        "decisions": 2406,
+        "ending_nav": 1371883.8822293626,
+        "etf_pnl": {},
+        "fills": 915,
+        "full": {
+          "cagr": 0.3147917951937429,
+          "max_drawdown": 0.3112934413949615,
+          "sharpe": 1.1092630864464514
+        },
+        "hashes": {
+          "decisions": "86546fcf95897bbba02aa78ff9fc44c545037ae5c809260b81e2570fc19cafbd",
+          "equity_decisions": "86546fcf95897bbba02aa78ff9fc44c545037ae5c809260b81e2570fc19cafbd",
+          "fills_without_client_ids": "9e8818ae47c01957efccb502e85b023ea76dd24e4b31ee8fb7c36d8617ec1c76"
+        },
+        "invariants": {
+          "active_reservation_count": 0,
+          "all_reservations_released": true,
+          "cash_conserved": true,
+          "cash_reconciliation_error": 0.0,
+          "corporate_action_dividend_cash": 29830.0869994779,
+          "deferred_buy_intent_count": 0,
+          "dividend_cash_event_count": 52,
+          "duplicate_fill_count": 0,
+          "duplicate_fill_keys": [],
+          "duplicate_position_keys": false,
+          "ending_cash": 1371883.8822293626,
+          "ending_cash_nonnegative": true,
+          "fee_counted_once_in_cash_reconciliation": true,
+          "fill_count": 915,
+          "final_position_count": 0,
+          "final_position_count_within_limit": true,
+          "future_data_access_checks": 2406,
+          "gross_at_final_mark": 0.0,
+          "max_observed_position_count": 2,
+          "max_observed_slot_claim_count": 2,
+          "maximum_positions": 8,
+          "maximum_realized_gross_observed": 0.9915210828280289,
+          "maximum_target_gross_observed": 0.98,
+          "maximum_target_name_weight": 0.98,
+          "nav_from_cash_and_marks": 1371883.8822293626,
+          "nav_matches_ledger": true,
+          "no_deferred_buy_intents_at_end": true,
+          "no_future_data_access": true,
+          "position_quantities_reconciled": true,
+          "position_quantity_reconciliation_error": 0.0,
+          "realized_gross_drift_is_recorded_not_corrected": true,
+          "reservation_create_count": 915,
+          "reservation_release_count": 915,
+          "sleeve_targets_within_limits": true,
+          "slot_claim_violation_count": 0,
+          "slot_claim_violation_samples": [],
+          "slot_claims_within_limit": true,
+          "starting_cash": 100000,
+          "target_gross_within_limit": true,
+          "target_name_weights_within_limits": true,
+          "unowned_fill_count": 0,
+          "unowned_fills": []
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "sweep": "s2_5",
+        "traded_notional": {
+          "BIL": 16041749.18848163,
+          "QLD": 18832787.050885644
+        },
+        "turnover_per_year": 7.108838934868274
+      },
+      "2.0": {
+        "accounting_ok": true,
+        "bills": {
+          "bil_corporate_action_events": 91,
+          "bil_fills": 298,
+          "decisions": 2406,
+          "decisions_downtrend": 390,
+          "decisions_with_bil_target": 1065,
+          "max_target_gross": 0.98
+        },
+        "cagr_2017_2021": 0.4085904278309562,
+        "cagr_2022_2026": 0.21427756346808535,
+        "costs": {
+          "fees": 683.3564567551427,
+          "slippage": 13751.063473171153,
+          "spread": 6875.531736585576
+        },
+        "decisions": 2406,
+        "ending_nav": 1342420.1481430903,
+        "etf_pnl": {},
+        "fills": 916,
+        "full": {
+          "cagr": 0.3118120180677697,
+          "max_drawdown": 0.31424149497761233,
+          "sharpe": 1.101298080854946
+        },
+        "hashes": {
+          "decisions": "2b1b50897ccbbce5308591b96c51c2e52f010a0ac47ea7248afef5c02d598020",
+          "equity_decisions": "2b1b50897ccbbce5308591b96c51c2e52f010a0ac47ea7248afef5c02d598020",
+          "fills_without_client_ids": "17277666d0895072bcee6a409eadb053cb5e4d86d23074101ebef7b1b6252a20"
+        },
+        "invariants": {
+          "active_reservation_count": 0,
+          "all_reservations_released": true,
+          "cash_conserved": true,
+          "cash_reconciliation_error": 0.0,
+          "corporate_action_dividend_cash": 29358.909770839688,
+          "deferred_buy_intent_count": 0,
+          "dividend_cash_event_count": 52,
+          "duplicate_fill_count": 0,
+          "duplicate_fill_keys": [],
+          "duplicate_position_keys": false,
+          "ending_cash": 1342420.1481430903,
+          "ending_cash_nonnegative": true,
+          "fee_counted_once_in_cash_reconciliation": true,
+          "fill_count": 916,
+          "final_position_count": 0,
+          "final_position_count_within_limit": true,
+          "future_data_access_checks": 2406,
+          "gross_at_final_mark": 0.0,
+          "max_observed_position_count": 2,
+          "max_observed_slot_claim_count": 2,
+          "maximum_positions": 8,
+          "maximum_realized_gross_observed": 0.992085385474024,
+          "maximum_target_gross_observed": 0.98,
+          "maximum_target_name_weight": 0.98,
+          "nav_from_cash_and_marks": 1342420.1481430903,
+          "nav_matches_ledger": true,
+          "no_deferred_buy_intents_at_end": true,
+          "no_future_data_access": true,
+          "position_quantities_reconciled": true,
+          "position_quantity_reconciliation_error": 0.0,
+          "realized_gross_drift_is_recorded_not_corrected": true,
+          "reservation_create_count": 916,
+          "reservation_release_count": 916,
+          "sleeve_targets_within_limits": true,
+          "slot_claim_violation_count": 0,
+          "slot_claim_violation_samples": [],
+          "slot_claims_within_limit": true,
+          "starting_cash": 100000,
+          "target_gross_within_limit": true,
+          "target_name_weights_within_limits": true,
+          "unowned_fill_count": 0,
+          "unowned_fills": []
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "sweep": "s2_5",
+        "traded_notional": {
+          "BIL": 15814708.862326056,
+          "QLD": 18562981.174010802
+        },
+        "turnover_per_year": 7.108671970329326
+      }
+    }
+  },
+  "window": [
+    "2017-01-03",
+    "2026-07-30"
+  ]
+}

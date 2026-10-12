@@ -520,14 +520,17 @@ def test_serving_module_builds_exactly_one_engine_manager_and_app() -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_dashboard_import_and_build_construct_no_extra_singletons() -> None:
+def test_dashboard_import_and_build_construct_no_extra_singletons(tmp_path: Path) -> None:
     """Importing or serving the dashboard must not build a second engine
     manager, FastAPI app or WebSocket log handler: each of those attaches a
     git scan, a route table and a logging fan-out to the process."""
     repo = Path(__file__).resolve().parents[1]
+    # The subprocess is outside the in-process isolation fixture, and the
+    # copied settings.yaml holds relative data/runtime paths; running it from
+    # tmp_path keeps those paths off the operator's runtime state.
     result = subprocess.run(
         [sys.executable, "-c", _NO_DUPLICATE_SINGLETONS, str(repo / "src")],
-        cwd=str(repo),
+        cwd=str(tmp_path),
         env={**os.environ, "PYTHONPATH": str(repo / "src"), "PYTHONDONTWRITEBYTECODE": "1"},
         capture_output=True,
         text=True,

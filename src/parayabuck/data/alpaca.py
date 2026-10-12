@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -618,7 +618,15 @@ class AlpacaHistoricalData:
                     for row in frame.reset_index().itertuples(index=False)
                 ]
             )
-        for row in frame.reset_index().sort_values("timestamp").itertuples(index=False):
+        # Rows are keyed by the REQUESTED symbol: a provider row for a symbol
+        # nobody asked for (a successor ticker after a corporate action) is
+        # dropped, never leaked into the answer or the chunked merge.
+        requested = {canonical_symbol(symbol, Market.EQUITY): symbol for symbol in symbols}
+        unrequested: set[str] = set()
+        invalid: dict[str, int] = {}
+        # A stable sort keeps the provider's order among same-instant rows so
+        # the de-duplication below is deterministically last-wins.
+        for row in frame.reset_index().sort_values("timestamp", kind="stable").itertuples(index=False):
             timestamp = _normalize_row_timestamp(row.timestamp)
             if timeframe != "1d":
                 assert intraday_bounds is not None
@@ -626,18 +634,50 @@ class AlpacaHistoricalData:
                 if window is None or not (window[0] <= timestamp < window[1]):
                     continue
             row_symbol = str(getattr(row, "symbol", symbols[0]))
-            item = Bar(
-                timestamp=timestamp,
-                symbol=row_symbol,
-                timeframe=timeframe,
-                open=float(row.open),
-                high=float(row.high),
-                low=float(row.low),
-                close=float(row.close),
-                volume=float(row.volume),
-                market=Market.EQUITY,
+            try:
+                key = requested.get(canonical_symbol(row_symbol, Market.EQUITY))
+            except ValueError:
+                key = None
+            if key is None:
+                unrequested.add(row_symbol)
+                continue
+            # One hostile row (NaN, inf, high < low) must not abort every
+            # other symbol's window: skip it, and the per-symbol completeness
+            # and history-adequacy gates fail that symbol closed.
+            try:
+                item = Bar(
+                    timestamp=timestamp,
+                    symbol=row_symbol,
+                    timeframe=timeframe,
+                    open=float(row.open),
+                    high=float(row.high),
+                    low=float(row.low),
+                    close=float(row.close),
+                    volume=float(row.volume),
+                    market=Market.EQUITY,
+                )
+            except (TypeError, ValueError):
+                invalid[key] = invalid.get(key, 0) + 1
+                continue
+            bars[key].append(item)
+        if unrequested:
+            log.warning(
+                "Historical API returned %s rows for unrequested symbols %s; dropped",
+                timeframe,
+                ",".join(sorted(unrequested)),
             )
-            bars.setdefault(row_symbol, []).append(item)
+        if invalid:
+            log.warning(
+                "Historical API returned invalid %s rows (%s); skipped",
+                timeframe,
+                ", ".join(f"{symbol}={count}" for symbol, count in sorted(invalid.items())),
+            )
+        # Same-instant rows (a republished or corrected bar) keep the LAST
+        # one, exactly as the chunked merge does, so the in-memory seed and
+        # the cache upsert can never read different closes for one session.
+        for symbol, items in bars.items():
+            deduped = {bar.timestamp: bar for bar in items}
+            bars[symbol] = [deduped[key] for key in sorted(deduped)]
         total = sum(len(items) for items in bars.values())
         fetched = [bar for items in bars.values() for bar in items]
         # A partial provider window must never evict good cached bars: only
@@ -736,21 +776,48 @@ class AlpacaHistoricalData:
         return bool(expected <= 0 or unique / expected >= min_pct)
 
     @staticmethod
+    def _expected_session_slots(timeframe: str, start_at: datetime, end_at: datetime) -> dict[date, int] | None:
+        """Completed bar slots per NYSE session inside ``[start_at, end_at]``.
+
+        Holidays carry no bars, so the window is measured against the
+        exchange calendar, never Mon-Fri weekdays. A daily bar is labelled
+        00:00 New York on its session date and only counts once the session
+        has closed inside the window. ``None`` when the calendar fails.
+        """
+        minutes = TIMEFRAME_MINUTES[timeframe]
+        try:
+            sessions = nyse_sessions(start_at.astimezone(NEW_YORK).date(), end_at.astimezone(NEW_YORK).date())
+        except Exception:
+            return None
+        slots: dict[date, int] = {}
+        for day, market_open, market_close in sessions:
+            if timeframe == "1d":
+                if start_at <= datetime.combine(day, time(0), NEW_YORK) and market_close <= end_at:
+                    slots[day] = 1
+                continue
+            low, high = max(market_open, start_at), min(market_close, end_at)
+            count = int((high - low).total_seconds() // (minutes * 60)) if high > low else 0
+            if count > 0:
+                slots[day] = count
+        return slots
+
+    @staticmethod
     def _window_is_complete(
         bars: list[Bar], start_at: datetime, end_at: datetime, cached: list[Bar] | None = None
     ) -> bool:
         """Whether fetched rows may atomically replace the cached window.
 
-        The fetched instants must span the window, hold at least as many
-        unique timestamps as trading days imply, AND contain every session
-        the cache already holds in it — a provider hole must keep the
-        write to an upsert so cached bars survive.
+        The fetched rows must contain every session the cache already holds
+        in the window (a provider hole must keep the write to an upsert so
+        cached bars survive) AND cover the window's NYSE sessions: every
+        completed session for daily bars, the first and last session plus
+        ``MIN_CACHE_COVERAGE_PCT`` of the session bar slots for intraday
+        bars (thin names legitimately skip minutes). A calendar failure
+        fails closed to an upsert.
         """
         if not bars:
             return False
         stamps = sorted({bar.timestamp for bar in bars})
-        if stamps[0] > start_at or stamps[-1] < end_at:
-            return False
         if cached:
             cached_stamps = {bar.timestamp for bar in cached}
             if not cached_stamps.issubset(set(stamps)):
@@ -759,8 +826,17 @@ class AlpacaHistoricalData:
         minutes = TIMEFRAME_MINUTES.get(timeframe, 0)
         if minutes <= 0:
             return True
-        bars_per_day = max(1, 390 // minutes)
-        return len(stamps) >= max(1, weekday_count(start_at, end_at) * bars_per_day)
+        expected = AlpacaHistoricalData._expected_session_slots(timeframe, start_at, end_at)
+        if expected is None:
+            return False
+        if not expected:
+            return True
+        days = {stamp.astimezone(NEW_YORK).date() for stamp in stamps}
+        if timeframe == "1d":
+            return set(expected).issubset(days)
+        if min(expected) not in days or max(expected) not in days:
+            return False
+        return len(stamps) >= MIN_CACHE_COVERAGE_PCT * sum(expected.values())
 
     @staticmethod
     def _parse_datetime(value: datetime | str | None) -> datetime | None:

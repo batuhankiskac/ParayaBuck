@@ -30,6 +30,21 @@ class WarmupCache:
             PRIMARY KEY(feed, symbol, market, timeframe, adjustment, timestamp)
         )
     """
+    _COLUMNS = (
+        "feed",
+        "symbol",
+        "market",
+        "timeframe",
+        "adjustment",
+        "timestamp",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "retrieved_at",
+    )
+    _PRIMARY_KEY = ("feed", "symbol", "market", "timeframe", "adjustment", "timestamp")
 
     def __init__(self, path: str = "data/cache/warmup.sqlite3") -> None:
         self.path = Path(path)
@@ -38,8 +53,31 @@ class WarmupCache:
         self._lock = threading.Lock()
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.execute("PRAGMA busy_timeout=5000")
+        self._drop_stale_schema()
         self.connection.execute(self._SCHEMA)
         self.connection.commit()
+
+    def _drop_stale_schema(self) -> None:
+        """Drop a ``bars`` table whose columns or primary key are not current.
+
+        An older layout (for example the pre-market-key primary key) still
+        answers ``get`` but makes every ``upsert`` fail its ``ON CONFLICT``
+        clause, pinning warmup in "batch skipped". The cache is derived,
+        re-fetchable data, so a stale table is dropped and rebuilt empty.
+        """
+        info = self.connection.execute("PRAGMA table_info(bars)").fetchall()
+        if not info:
+            return
+        columns = {row[1] for row in info}
+        primary_key = tuple(row[1] for row in sorted((row for row in info if row[5]), key=lambda row: row[5]))
+        if columns == set(self._COLUMNS) and primary_key == self._PRIMARY_KEY:
+            return
+        log.warning(
+            "Warmup cache %s has a stale bars schema (primary key %s); dropping it to rebuild from the provider",
+            self.path,
+            ",".join(primary_key) or "none",
+        )
+        self.connection.execute("DROP TABLE bars")
 
     def close(self) -> None:
         with self._lock:

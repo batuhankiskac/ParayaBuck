@@ -1221,6 +1221,11 @@ class PortfolioStateRepository:
                 except (TypeError, ValueError):
                     delay_seconds = None
             order_created_at = _latest_timestamp(created_at)
+            # The stored cumulative average belongs to the stored cumulative
+            # quantity: a late or duplicate event with a lower cumulative must
+            # not overwrite it (mirroring the max() guard on quantity), or the
+            # next real delta is priced from a stale average.
+            stored_average = average_fill_price if fill_delta > 0 or row[7] is None else None
             self.store.connection.execute(
                 f"""UPDATE portfolio_orders SET status = {_NON_REGRESSING_STATUS_SQL},
                    broker_order_id = ?, cumulative_filled_quantity = ?,
@@ -1231,7 +1236,7 @@ class PortfolioStateRepository:
                     status,
                     broker_order_id,
                     max(previous, cumulative_filled_quantity),
-                    average_fill_price,
+                    stored_average,
                     client_order_id,
                 ),
             )
@@ -1616,6 +1621,7 @@ class PortfolioStateRepository:
         *,
         kind: str = "operator_rebase",
         note: str = "",
+        broker_average_cost: float | None = None,
     ) -> float | None:
         """Operator-verified adoption of the broker's share count.
 
@@ -1625,6 +1631,12 @@ class PortfolioStateRepository:
         adopts a positive broker quantity as an explicit increase (the
         recovery the surplus alert prescribes); adopting zero from zero is
         a no-op that still returns the broker quantity.
+
+        A decrease is booked as a reverse split (``split_rebase``: the open
+        lots are rescaled, not sold) when the caller passes that ``kind``
+        explicitly, or when ``broker_average_cost`` corroborates a standard
+        split ratio exactly as the automatic reconcile path requires.
+        Otherwise it depletes the lots like a sale.
         """
         if not math.isfinite(broker_quantity) or broker_quantity < 0:
             raise ValueError("Broker quantity must be finite and non-negative")
@@ -1632,6 +1644,18 @@ class PortfolioStateRepository:
             owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
             if abs(broker_quantity - owned) <= 1e-12:
                 return broker_quantity
+            if kind == "operator_rebase" and 1e-12 < broker_quantity < owned and broker_average_cost is not None:
+                bases = self.owned_cost_bases(account_id, symbol, market)
+                change = classify_share_change(
+                    owned,
+                    broker_quantity,
+                    owned_average_cost=bases[0] if bases else None,
+                    broker_average_cost=broker_average_cost,
+                    owned_average_cost_candidates=bases[1:],
+                )
+                if change.kind == SPLIT:
+                    kind = SPLIT_REBASE_KIND
+                    note = note or f"operator rebase: {change.reason}; owned {owned:g} -> {broker_quantity:g}"
             self._insert_ownership_adjustment_tx(
                 account_id,
                 symbol,

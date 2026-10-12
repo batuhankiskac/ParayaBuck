@@ -87,13 +87,10 @@ def validate_strategy_timeframe(strategy: PortfolioStrategy, configured: str) ->
         )
 
 
-def rebalance_policy_for(strategy: PortfolioStrategy, parameters: dict[str, object] | None = None) -> RebalancePolicy:
-    """Map a portfolio strategy to its rebalance policy.
-
-    Equity strategies default to monthly unless the ``rebalance_frequency``
-    parameter asks for another supported frequency.
-    """
-    frequency_value = dict(parameters or strategy.parameters).get("rebalance_frequency", "monthly")
+def rebalance_policy_for(strategy: PortfolioStrategy) -> RebalancePolicy:
+    """Map a portfolio strategy to the rebalance policy its
+    ``rebalance_frequency`` parameter declares (``monthly`` when absent)."""
+    frequency_value = strategy.parameters.get("rebalance_frequency", "monthly")
     if not isinstance(frequency_value, str):
         raise ValueError("rebalance_frequency must be a string")
     frequency = frequency_value

@@ -21,10 +21,6 @@ def _canonical_key(symbol: str) -> str:
         return symbol
 
 
-def _float_mapping(raw: dict[str, Any], key: str) -> dict[str, float]:
-    return {str(symbol): float(value) for symbol, value in dict(raw.get(key, {})).items()}
-
-
 class RebalanceReason(StrEnum):
     SCHEDULED = "scheduled"
     RISK_OFF = "risk_off"
@@ -278,72 +274,6 @@ class PortfolioState:
     last_observed_equity: float | None = None
     risk_session_date: str | None = None
     schema_version: int = 3
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "schema_version": self.schema_version,
-            "strategy_name": self.strategy_name,
-            "strategy_version": self.strategy_version,
-            "holdings": self.holdings,
-            "avg_prices": self.avg_prices,
-            "last_target": self.last_target,
-            "last_rebalance_at": (self.last_rebalance_at.isoformat() if self.last_rebalance_at else None),
-            "rebalance_count": self.rebalance_count,
-            "universe_version": self.universe_version,
-            "universe_snapshot_id": self.universe_snapshot_id,
-            "cash": self.cash,
-            "realized_pnl": self.realized_pnl,
-            "entry_fees": self.entry_fees,
-            "realized_pnl_accumulators": self.realized_pnl_accumulators,
-            "last_prices": self.last_prices,
-            "pending_target": self.pending_target,
-            "pending_orders": list(self.pending_orders),
-            "last_processed_bar": self.last_processed_bar,
-            "peak_equity": self.peak_equity,
-            "day_start_equity": self.day_start_equity,
-            "last_observed_equity": self.last_observed_equity,
-            "risk_session_date": self.risk_session_date,
-        }
-
-    @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> PortfolioState:
-        holdings = _float_mapping(raw, "holdings")
-        avg_prices = _float_mapping(raw, "avg_prices")
-        last_target = _float_mapping(raw, "last_target")
-        entry_fees = _float_mapping(raw, "entry_fees")
-        last_prices = _float_mapping(raw, "last_prices")
-        pending_target = _float_mapping(raw, "pending_target")
-        raw_pending = raw.get("pending_orders", ())
-        pending_orders = tuple(dict(item) for item in raw_pending if isinstance(item, dict))
-        realized_pnl_accumulators = _float_mapping(raw, "realized_pnl_accumulators")
-        last_rebalance = raw.get("last_rebalance_at")
-        raw_cash = raw.get("cash")
-        return cls(
-            strategy_name=str(raw.get("strategy_name", "")),
-            strategy_version=str(raw.get("strategy_version", "")),
-            holdings=holdings,
-            avg_prices=avg_prices,
-            last_target=last_target,
-            last_rebalance_at=(datetime.fromisoformat(str(last_rebalance)) if last_rebalance else None),
-            rebalance_count=int(raw.get("rebalance_count", 0)),
-            universe_version=str(raw.get("universe_version", "")),
-            universe_snapshot_id=str(raw.get("universe_snapshot_id", "")),
-            cash=float(raw_cash) if raw_cash is not None else None,
-            realized_pnl=float(raw.get("realized_pnl", 0.0)),
-            entry_fees=entry_fees,
-            realized_pnl_accumulators=realized_pnl_accumulators,
-            last_prices=last_prices,
-            pending_target=pending_target,
-            pending_orders=pending_orders,
-            last_processed_bar=(str(raw["last_processed_bar"]) if raw.get("last_processed_bar") else None),
-            peak_equity=(float(raw["peak_equity"]) if raw.get("peak_equity") is not None else None),
-            day_start_equity=(float(raw["day_start_equity"]) if raw.get("day_start_equity") is not None else None),
-            last_observed_equity=(
-                float(raw["last_observed_equity"]) if raw.get("last_observed_equity") is not None else None
-            ),
-            risk_session_date=(str(raw["risk_session_date"]) if raw.get("risk_session_date") else None),
-            schema_version=int(raw.get("schema_version", 1)),
-        )
 
 
 __all__ = [

@@ -109,10 +109,20 @@ def first_valid(a):
 
 # ----------------------------------------------------------------------------- features / wants
 def sma(a, n):
-    a = np.atleast_2d(a)
-    cs = np.cumsum(a, axis=1)
+    """n-session mean ending at t (inclusive); NaN unless all n values exist.
+
+    NaN inputs (e.g. VIX before 1990-01-02 on the 1988-based ^GSPC calendar) are masked so they do not
+    propagate through the cumulative sum. (Post-run fix: the first --run used a plain cumsum, which
+    made every G8 VIX SMA60 NaN and X2 identical to C0 on ^GSPC; see the report.)"""
+    a = np.atleast_2d(a).astype(float)
+    ok = ~np.isnan(a)
+    z = np.zeros((a.shape[0], 1))
+    cs = np.concatenate([z, np.cumsum(np.where(ok, a, 0.0), axis=1)], axis=1)
+    cn = np.concatenate([z, np.cumsum(ok, axis=1)], axis=1)
     out = np.full_like(a, np.nan)
-    out[:, n - 1:] = (cs[:, n - 1:] - np.concatenate([np.zeros((a.shape[0], 1)), cs[:, :-n]], axis=1)) / n
+    s = cs[:, n:] - cs[:, :-n]
+    k = cn[:, n:] - cn[:, :-n]
+    out[:, n - 1:] = np.where(k == n, s / n, np.nan)
     return out
 
 

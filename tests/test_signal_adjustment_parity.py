@@ -383,7 +383,7 @@ def test_signal_adjustment_does_not_race_startup_warmup(monkeypatch) -> None:
     engine, _equity = _engine_with_equity_runtime(("AAA",))
     fake = FakeHistory(raw={}, splits={"AAA": [_bar("AAA", _TS0, 50.0)]})
     engine._historical = fake
-    worker = WorkerHealth(datetime.now(UTC), datetime.now(UTC))
+    worker = WorkerHealth(datetime.now(UTC))
     engine._warming_up = True
     engine._signal_adjustment_monitor_pass(worker)
     assert fake.calls == []  # startup-race guard held

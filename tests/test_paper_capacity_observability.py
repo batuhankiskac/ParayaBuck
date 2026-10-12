@@ -101,6 +101,16 @@ def test_effective_slot_claims(
     assert not any("crypto" in key for key in result)
 
 
+def test_symbol_less_broker_order_is_skipped_not_fatal() -> None:
+    """One malformed (symbol-less) OPEN order must not blank the read-only
+    capacity sample; the decision path's open-order reads skip it too."""
+    result = _capacity((("QLD", Market.EQUITY),), (), (("", "buy"), ("QQQ", "buy")))
+    assert result["effective_global_slot_claims"] == 2
+    assert result["working_opening_order_count"] == 1
+    assert result["broker_working_order_count"] == 2
+    assert [claim["symbol"] for claim in result["slot_claims"]] == ["QLD", "QQQ"]
+
+
 def test_local_nonterminal_sell_reservation_matches_admission_conservatism() -> None:
     result = _capacity((), (("QLD", Market.EQUITY, "sell"),))
     assert result["effective_global_slot_claims"] == 1

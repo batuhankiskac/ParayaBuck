@@ -11,7 +11,6 @@ from datetime import datetime
 
 @dataclass
 class WorkerHealth:
-    started_at: datetime
     last_heartbeat: datetime
     last_event_at: datetime | None = None
     last_error: str | None = None

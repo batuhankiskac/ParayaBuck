@@ -10,7 +10,7 @@ NOW = datetime(2026, 9, 26, 5, 30, tzinfo=UTC)
 
 def _healthy(name: str, heartbeat_age: timedelta) -> bool:
     runtime = EngineRuntime.__new__(EngineRuntime)
-    workers = {name: WorkerHealth(NOW - timedelta(hours=3), NOW - heartbeat_age, alive=True)}
+    workers = {name: WorkerHealth(NOW - heartbeat_age, alive=True)}
     return runtime._is_worker_healthy(workers, name, NOW, 45.0)
 
 

@@ -708,7 +708,7 @@ def test_stream_worker_restart_limit_alerts_once_not_per_retry(monkeypatch: Any)
     restart_count, which re-arms the edge."""
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
-    worker = WorkerHealth(started_at=now, last_heartbeat=now, restart_count=5, alive=True)
+    worker = WorkerHealth(last_heartbeat=now, restart_count=5, alive=True)
     runtime._workers = {"pb-stocks": worker}
     runtime._running = True
     runtime._state = "running"
@@ -753,7 +753,7 @@ def test_stream_worker_backoff_is_interrupted_by_stop_event() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
     # restart_count=3 -> next failure backs off 2 ** 3 = 8 s.
-    worker = WorkerHealth(started_at=now, last_heartbeat=now, restart_count=3, alive=True)
+    worker = WorkerHealth(last_heartbeat=now, restart_count=3, alive=True)
     runtime._workers = {"pb-stocks": worker}
     runtime._running = True
     runtime._state = "running"
@@ -779,7 +779,7 @@ def test_stream_worker_backoff_is_interrupted_by_stop_event() -> None:
 def _trade_update_worker_runtime() -> tuple[EngineRuntime, WorkerHealth]:
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
-    worker = WorkerHealth(started_at=now, last_heartbeat=now, alive=True)
+    worker = WorkerHealth(last_heartbeat=now, alive=True)
     runtime._workers = {"pb-trade-updates": worker}
     runtime._running = True
     runtime._state = "running"

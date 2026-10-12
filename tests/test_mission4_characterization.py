@@ -87,8 +87,8 @@ class TestEventQueue:
         q = runtime_mod._EventQueue(maxsize=3)
         q.put_nowait(_make_event("AAPL", datetime(2025, 1, 1, tzinfo=UTC)))
         q.put_nowait(_make_event("MSFT", datetime(2025, 1, 2, tzinfo=UTC)))
-        assert q.get_nowait().bar.symbol == "AAPL"
-        assert q.get_nowait().bar.symbol == "MSFT"
+        assert q.get(timeout=0).bar.symbol == "AAPL"
+        assert q.get(timeout=0).bar.symbol == "MSFT"
 
 
 # ---------------------------------------------------------------------------

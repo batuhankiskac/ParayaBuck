@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import math
 import os
 import queue
 import sqlite3
@@ -31,7 +32,12 @@ from parayabuck.execution.alpaca import (
     OwnershipDriftError,
     ProtectionReconciliationError,
 )
-from parayabuck.execution.alpaca_reconciliation import ReconciliationReport, ReconciliationResultError
+from parayabuck.execution.alpaca_reconciliation import (
+    _TERMINAL_BROKER_STATUSES,
+    _WORKING_BROKER_STATUSES,
+    ReconciliationReport,
+    ReconciliationResultError,
+)
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
@@ -156,7 +162,9 @@ def _is_transient_network_error(exc: BaseException) -> bool:
     return is_network_failure(exc)
 
 
-_DATABASE_ERROR_TOKENS = ("database", "locked", "integrity", "sqlite")
+# No bare "locked": it substring-matches "blocked" (the broker's
+# account-blocked error). Every SQLite lock message contains "database".
+_DATABASE_ERROR_TOKENS = ("database", "integrity", "sqlite")
 
 
 def _is_database_error(exc: BaseException) -> bool:
@@ -178,6 +186,21 @@ def _is_database_error(exc: BaseException) -> bool:
         current = current.__cause__ or current.__context__
     message = str(exc).lower()
     return any(token in message for token in _DATABASE_ERROR_TOKENS)
+
+
+# Stream events stored verbatim as an order's row status: the broker states
+# reconcile accepts plus the TradingStream fill event names. Anything else
+# (``calculated`` aside, which is resolved by its cumulative fill) is left to
+# reconciliation instead of pinning a row in a status nothing recognizes.
+_STREAM_ORDER_STATUSES = _TERMINAL_BROKER_STATUSES | _WORKING_BROKER_STATUSES | {"fill", "partial_fill"}
+# Bounded retry of a transient SQLite lock while booking a stream fill: the
+# booking is one rolled-back-on-failure transaction, so a retry is safe.
+_TRADE_UPDATE_LOCK_ATTEMPTS = 3
+_TRADE_UPDATE_LOCK_BACKOFF_SECONDS = 0.5
+
+
+def _is_transient_database_lock(exc: BaseException) -> bool:
+    return isinstance(exc, sqlite3.OperationalError) and "locked" in str(exc).lower()
 
 
 _WARMUP_SYMBOL_BATCH_SIZE = 8
@@ -602,7 +625,10 @@ class EngineRuntime:
         for order in broker_orders:
             symbol = str(self.broker._field(order, "symbol", "") or "")
             if not symbol:
-                raise ValueError("Broker OPEN order missing symbol")
+                # A malformed (e.g. foreign, symbol-less) order cannot be
+                # keyed to a slot; skip it as the decision path's open-order
+                # reads do instead of blanking the whole read-only sample.
+                continue
             # A foreign crypto order in the shared account still claims a
             # slot; it is only classified here, never managed.
             market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
@@ -633,7 +659,6 @@ class EngineRuntime:
             "positions_count": open_positions,
             "effective_slots": effective_global,
             "broker_working_order_count": len(broker_orders),
-            "position_count": open_positions,
             "effective_global_slot_claims": effective_global,
             "global_slot_cap": global_cap,
             "global_slots_available": max(0, global_cap - effective_global),
@@ -642,7 +667,6 @@ class EngineRuntime:
                 {"market": market.value, "symbol": symbol, "sources": sorted(sources)}
                 for (market, symbol), sources in sorted(claims.items(), key=lambda item: (item[0][0].value, item[0][1]))
             ],
-            "target_gross_pct": limits.maximum_gross * 100,
             "realized_gross_pct": admission.realized_gross / equity * 100 if has_equity else None,
             "available_gross_buy_headroom": admission.gross_headroom,
             "committed_buy_notional": admission.committed_buy_notional,
@@ -1199,7 +1223,7 @@ class EngineRuntime:
         with self._state_lock:
             for thread in self._threads:
                 now = datetime.now(UTC)
-                self._workers[thread.name] = WorkerHealth(now, now)
+                self._workers[thread.name] = WorkerHealth(now)
         self._stream_workers_launched = True
         for thread in self._threads:
             thread.start()
@@ -1219,7 +1243,7 @@ class EngineRuntime:
         # FULL-WINDOW provider authority rather than replacing with tails.
         if stocks:
             with self._state_lock:
-                self._workers["pb-signal-adjustment"] = WorkerHealth(datetime.now(UTC), datetime.now(UTC))
+                self._workers["pb-signal-adjustment"] = WorkerHealth(datetime.now(UTC))
             self._signal_adjustment_thread = threading.Thread(
                 target=self._signal_adjustment_loop,
                 name="pb-signal-adjustment",
@@ -1765,7 +1789,7 @@ class EngineRuntime:
         try:
             account: AccountSnapshot = self.broker.account()
         except Exception as exc:
-            # Provider/broker temporary -> bounded retry 5 attempts; DB errors fail closed immediately is handled elsewhere
+            # No retry here: record the incident category and fail closed for this cycle.
             if _is_database_error(exc):
                 automate_incident_recovery(
                     IncidentCategory.DATABASE_ERROR,
@@ -2170,9 +2194,6 @@ class EngineRuntime:
         persistent_reasons = {
             "ambiguous_order_state",
             "protection_failure",
-            "protection_mismatch",
-            "ledger_mismatch",
-            "post_fill_risk_violation",
             "final_market_event_queue_overflow",
             "ownership_drift",
             "reconciliation_failed",
@@ -2272,12 +2293,18 @@ class EngineRuntime:
         # Warmup gates the same way: signal history is half-seeded, so a
         # restart fill arriving mid-warmup must not size the dependent BUY
         # off decision-day reference prices. The post-warmup resume submits it.
+        # An unverified equity signal basis (e.g. a split the provider has
+        # not yet confirmed) latches entries on the decision and catch-up
+        # paths; the same latch gates the deferred BUY here so the fill-driven,
+        # startup and reset resumes cannot size it off an unverified basis.
+        # Checked last: its verification may hit the provider (deduplicated).
         submit_buys = (
             getattr(self, "_circuit_breaker_reason", None) is None
             and not getattr(self, "_reconcile_failed", False)
             and not getattr(self, "_warming_up", False)
             and getattr(self, "_entry_risk_latch", {}).get(market) is None
             and getattr(self, "_market_entry_halts", {}).get(market) is None
+            and (market != Market.EQUITY or self._equity_signal_basis_latch() is None)
         )
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             if portfolio_runtime.market != market:
@@ -2333,32 +2360,92 @@ class EngineRuntime:
                 break
             self._advance_portfolio_rebalance(portfolio_runtime.market, account=account)
 
+    def _calculated_stream_status(self, portfolio_repository: Any, update: TradeUpdate) -> str:
+        """Final row status of a stream ``calculated`` event, as reconcile maps it.
+
+        ``calculated`` means done for the day: fully filled reads ``filled``,
+        anything less ``done_for_day``. An order that is no longer open keeps
+        ``calculated``, which the caller leaves to reconciliation instead of
+        rewriting a final row.
+        """
+        account_id = getattr(self.broker, "account_id", None) or "unknown"
+        for order in portfolio_repository.open_orders(account_id):
+            if order.client_order_id != update.client_order_id:
+                continue
+            ordered = float(order.quantity)
+            filled = float(update.filled_qty)
+            if not math.isfinite(filled):
+                return "calculated"
+            if ordered <= 0:
+                return "filled" if filled > 0 else "done_for_day"
+            return "filled" if filled >= ordered - max(1e-9, ordered * 1e-8) else "done_for_day"
+        return "calculated"
+
+    async def _apply_trade_update_with_lock_retry(
+        self, portfolio_repository: Any, update: TradeUpdate, status: str
+    ) -> None:
+        """Book one stream update, retrying a transient SQLite lock boundedly.
+
+        Only ``database is locked``-class ``OperationalError`` is retried; the
+        last attempt's failure (and any other error) propagates to the
+        callback's fail-closed halt.
+        """
+        for attempt in range(_TRADE_UPDATE_LOCK_ATTEMPTS):
+            try:
+                await asyncio.to_thread(
+                    portfolio_repository.apply_trade_update,
+                    client_order_id=update.client_order_id,
+                    broker_order_id=update.broker_order_id,
+                    status=status,
+                    cumulative_filled_quantity=update.filled_qty,
+                    average_fill_price=update.average_fill_price,
+                    occurred_at=update.timestamp,
+                    activity_id=(
+                        update.activity_id or f"{update.client_order_id}:{update.event}:{update.timestamp.isoformat()}"
+                    ),
+                    fee=update.fee,
+                    realized_pnl=0.0,
+                    unrealized_pnl=0.0,
+                    source=update.source,
+                    received_at=update.received_at,
+                    fee_observed=update.fee_observed,
+                )
+                return
+            except Exception as exc:
+                if not _is_transient_database_lock(exc) or attempt == _TRADE_UPDATE_LOCK_ATTEMPTS - 1:
+                    raise
+                log.warning(
+                    "Trade update booking for %s hit a database lock (attempt %d/%d); retrying",
+                    update.client_order_id,
+                    attempt + 1,
+                    _TRADE_UPDATE_LOCK_ATTEMPTS,
+                )
+                await asyncio.sleep(_TRADE_UPDATE_LOCK_BACKOFF_SECONDS * (attempt + 1))
+
     async def _handle_trade_update(self, update: TradeUpdate) -> None:
         portfolio_repository = getattr(self, "_portfolio_repository", None)
         if portfolio_repository is not None and portfolio_repository.has_order(update.client_order_id):
+            status = str(update.event).lower()
+            if status == "calculated":
+                status = await asyncio.to_thread(self._calculated_stream_status, portfolio_repository, update)
+            if status not in _STREAM_ORDER_STATUSES:
+                # Unknown vocabulary (restated, order_cancel_rejected, a
+                # ``calculated`` for an order no longer open, ...) must neither
+                # pin the row open nor mark it terminal: reconciliation reads
+                # the broker's authoritative state and books any fill.
+                log.warning(
+                    "Trade update event %r for %s not booked; reconciliation scheduled",
+                    update.event,
+                    update.client_order_id,
+                )
+                self._schedule_reconcile()
+                return
             # Book the fill BEFORE the account snapshot: a SELL fill that
             # brings the broker position below the repository-owned quantity
             # would otherwise trip the fail-closed ownership-drift check
             # against the pre-fill owned quantity, aborting the handler and
             # losing the fill.
-            await asyncio.to_thread(
-                portfolio_repository.apply_trade_update,
-                client_order_id=update.client_order_id,
-                broker_order_id=update.broker_order_id,
-                status=update.event,
-                cumulative_filled_quantity=update.filled_qty,
-                average_fill_price=update.average_fill_price,
-                occurred_at=update.timestamp,
-                activity_id=(
-                    update.activity_id or f"{update.client_order_id}:{update.event}:{update.timestamp.isoformat()}"
-                ),
-                fee=update.fee,
-                realized_pnl=0.0,
-                unrealized_pnl=0.0,
-                source=update.source,
-                received_at=update.received_at,
-                fee_observed=update.fee_observed,
-            )
+            await self._apply_trade_update_with_lock_retry(portfolio_repository, update, status)
             # A rejected portfolio order is an operator-visible event: the
             # dependent rebalance replans smaller (or absent) buys, so the
             # rejection is not silent.
@@ -2432,8 +2519,7 @@ class EngineRuntime:
                     client_order_id=update.client_order_id,
                     error=str(exc),
                 )
-            event = str(update.event).lower()
-            if event == "partial_fill" or is_terminal_order_status(event):
+            if status == "partial_fill" or is_terminal_order_status(status):
                 # A terminal order must not release its ledger slot while this
                 # cache still proves only the pre-event position state. This
                 # also covers a terminal SELL cancellation/rejection: the next
@@ -3408,6 +3494,12 @@ class EngineRuntime:
             return False
         try:
             timestamp = max(bar.timestamp for bar in bars)
+            # Session-key match, like the runtime's duplicate detection: an
+            # equity session decided under its other daily label (provider
+            # 00:00 ET vs stream 09:30 ET) is decided, not deferrable.
+            session_decided = getattr(portfolio_runtime, "_session_decided", None)
+            if callable(session_decided):
+                return not session_decided(timestamp)
             return not portfolio_runtime.repository.has_decision(
                 portfolio_runtime.account_id,
                 portfolio_runtime.configuration_digest,
@@ -3639,70 +3731,6 @@ class EngineRuntime:
                 result.status,
                 result.decision_id,
             )
-            if result.status in ("warming_up", "incomplete_strategy_batch"):
-                # A crash lost any parked retry for this session (deferred
-                # batches and the SIP fallback are memory-only). Re-derive the
-                # undecided session directly: when the retry window is still
-                # open and the provider history covers it, seed the missing
-                # tails and decide it now instead of silently expiring it.
-                self._recover_undecided_catch_up_session(portfolio_runtime, result.status, entry_latch, account)
-
-    def _recover_undecided_catch_up_session(
-        self,
-        portfolio_runtime: Any,
-        catch_up_status: str,
-        entry_latch: str | None,
-        account: AccountSnapshot | None,
-    ) -> None:
-        """Re-derive an undecided in-window session after a restart (R3B3).
-
-        `_deferred_portfolio_batches` and `_session_close_fallback` are
-        memory-only, so a crash inside the retry window loses every parked
-        retry. The smaller fix (no new persisted state): when the catch-up
-        reports a transient non-deciding status and the history now covers a
-        session whose retry window is still open, decide that session via the
-        ordinary `process_closed_bars` path. Out-of-window sessions, decided
-        sessions, and sessions without provider history are left alone — the
-        watchdog owns the missing-session alarm for those.
-        """
-        try:
-            history = getattr(portfolio_runtime, "history", {}) or {}
-            required = tuple(getattr(portfolio_runtime, "_required_symbols", lambda: tuple(history))())
-            if not required:
-                return
-            tails = {symbol: history.get(symbol) for symbol in required}
-            if any(not series for series in tails.values()):
-                return
-            newest = max(series[-1].timestamp for series in tails.values() if series)
-            session = newest.astimezone(NEW_YORK).date()
-            _retry_interval, retry_window = self._decision_retry_settings()
-            if datetime.now(UTC) >= self._decision_session_close(session) + retry_window:
-                return
-            decided = getattr(portfolio_runtime, "_session_decided", None)
-            if callable(decided) and decided(newest):
-                return
-            bars = [series[-1] for series in tails.values() if series]
-            with self._portfolio_lock:
-                result = portfolio_runtime.process_closed_bars(
-                    bars,
-                    entry_latch=entry_latch,
-                    decision_origin="startup_catch_up",
-                    **({"account": account} if account is not None else {}),
-                )
-        except Exception:
-            log.warning("Undecided-session recovery after catch-up %s failed", catch_up_status, exc_info=True)
-            return
-        try:
-            self._record_paper_decision_receipt(portfolio_runtime, result, account)
-            self._emit_equity_daily_summary(portfolio_runtime, result, account)
-        except Exception:
-            log.warning("Undecided-session recovery receipt failed", exc_info=True)
-        log.info(
-            "Startup catch-up recovery: market=%s status=%s decision_id=%s",
-            portfolio_runtime.market.value,
-            result.status,
-            result.decision_id,
-        )
 
     def _entry_readiness_reasons(
         self,
@@ -3823,6 +3851,25 @@ class EngineRuntime:
                 error=error,
             )
 
+    def _equity_signal_basis_symbols(self) -> tuple[str, ...]:
+        """Equity symbols whose signal basis gates entries, sorted.
+
+        Only the symbols an equity strategy reads at a decision
+        (``_required_symbols``, the ``decision_symbols`` narrowing): a
+        benchmark the strategy never reads (SPY) must not latch entries — or
+        freeze exits via a basis hold — by missing a provider bar. Falls back
+        to the whole equity universe when no runtime narrows it.
+        """
+        universe = tuple(getattr(self, "_symbols_by_market", {}).get(Market.EQUITY, ()))
+        required: set[str] = set()
+        for runtime in getattr(self, "_portfolio_runtimes", ()):
+            if getattr(runtime, "market", None) != Market.EQUITY:
+                continue
+            reader = getattr(runtime, "_required_symbols", None)
+            required.update(reader() if callable(reader) else getattr(runtime, "history", {}) or universe)
+        narrowed = sorted(symbol for symbol in universe if symbol in required)
+        return tuple(narrowed) if narrowed else tuple(sorted(universe))
+
     def _equity_signal_basis_verified(self, decision_timestamp: datetime | None = None) -> bool:
         """Fresh verification (last hour) AND — when a decision timestamp is
         given — PER-SYMBOL watermarks covering that timestamp's New York
@@ -3849,7 +3896,7 @@ class EngineRuntime:
         watermarks = state.get("verified_through_by_symbol")
         if not isinstance(watermarks, dict):
             return False
-        for symbol in self._symbols_by_market.get(Market.EQUITY, ()):
+        for symbol in self._equity_signal_basis_symbols():
             verified = watermarks.get(symbol)
             if not isinstance(verified, datetime) or not covers_session(verified, decision_timestamp):
                 return False
@@ -3911,7 +3958,7 @@ class EngineRuntime:
         ]
         if history_client is None or not runtimes:
             return True
-        symbols = sorted(self._symbols_by_market.get(Market.EQUITY, ()))
+        symbols = list(self._equity_signal_basis_symbols())
         if not symbols:
             return True
         end = datetime.now(UTC)
@@ -4725,10 +4772,7 @@ class EngineRuntime:
         recoverable = {
             "ambiguous_order_state",
             "protection_failure",
-            "protection_mismatch",
-            "ledger_mismatch",
             "ownership_drift",
-            "post_fill_risk_violation",
             "final_market_event_queue_overflow",
             "reconciliation_failed",
             "reconciliation_bug_suspected",

@@ -1554,7 +1554,6 @@ def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) ->
     runtime._risk_state_lock = threading.Lock()
     runtime._workers = {
         "pb-account": WorkerHealth(
-            started_at=datetime.now(UTC),
             last_heartbeat=datetime.now(UTC),
             last_event_at=datetime.now(UTC),
             last_error=None,
@@ -2367,10 +2366,10 @@ def _health_runtime() -> object:
     runtime._running = True
     now = datetime.now(UTC)
     runtime._workers = {
-        "pb-decisions": WorkerHealth(now, now, alive=True),
-        "pb-trade-updates": WorkerHealth(now, now, alive=True),
-        "pb-account": WorkerHealth(now, now, alive=True),
-        "pb-stocks": WorkerHealth(now, now, now, alive=True),
+        "pb-decisions": WorkerHealth(now, alive=True),
+        "pb-trade-updates": WorkerHealth(now, alive=True),
+        "pb-account": WorkerHealth(now, alive=True),
+        "pb-stocks": WorkerHealth(now, now, alive=True),
     }
     runtime._events = SimpleNamespace(qsize=lambda: 0, empty=lambda: True)
     runtime._last_account_at = datetime.now(UTC)

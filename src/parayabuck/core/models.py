@@ -19,16 +19,6 @@ class Market(StrEnum):
     CRYPTO = "crypto"
 
 
-class ProtectionState(StrEnum):
-    UNPROTECTED = "unprotected"
-    REQUESTED = "requested"
-    ACTIVE = "active"
-    PARTIALLY_PROTECTED = "partially_protected"
-    OVER_PROTECTED = "over_protected"
-    TRIGGERED_UNFILLED = "triggered_unfilled"
-    FAILED = "failed"
-
-
 @dataclass(frozen=True)
 class Bar:
     timestamp: datetime
@@ -70,6 +60,8 @@ class PositionSnapshot:
     def __post_init__(self) -> None:
         if not math.isfinite(self.qty):
             raise ValueError("Position qty must be finite")
+        if not math.isfinite(self.avg_price) or not math.isfinite(self.current_price):
+            raise ValueError("Position prices must be finite")
         if not math.isfinite(self.managed_qty) or self.managed_qty < -1e-12 or self.managed_qty > abs(self.qty) + 1e-12:
             raise ValueError("managed_qty must be finite, non-negative, and no greater than abs(qty)")
 

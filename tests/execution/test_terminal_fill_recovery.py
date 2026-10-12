@@ -51,7 +51,6 @@ def _record(repo: PortfolioStateRepository, decision_id: str, client_order_id: s
             decision_timestamp=_DECISION_AT,
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=side == PortfolioOrderSide.SELL,
         ),
         "submitting",
     )

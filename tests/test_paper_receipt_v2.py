@@ -156,7 +156,6 @@ def test_final_buy_observation_uses_actual_admitted_order_and_is_best_effort() -
         datetime(2026, 9, 24, tzinfo=UTC),
         "equity_leveraged_trend_v1",
         "1.0",
-        False,
     )
     admission = BuyAdmission(account, (order,), 120, 100, 1000, 1000, None)
     captured: list[tuple[object, ...]] = []

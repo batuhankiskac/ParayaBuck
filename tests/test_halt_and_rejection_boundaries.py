@@ -199,7 +199,7 @@ class _HoldBroker:
     def asset_trading_rules(self, symbol: str, market: Market) -> Any:
         from parayabuck.execution.portfolio import AssetTradingRules
 
-        return AssetTradingRules(symbol, market, 1.0, 0.01, 0.01, 1.0)
+        return AssetTradingRules(1.0, 0.01, 1.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()
@@ -425,7 +425,7 @@ class _RejectingRuntimeBroker:
     def asset_trading_rules(self, symbol: str, market: Market) -> Any:
         from parayabuck.execution.portfolio import AssetTradingRules
 
-        return AssetTradingRules(symbol, market, 1.0, 0.01, 0.01, 1.0)
+        return AssetTradingRules(1.0, 0.01, 1.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()
@@ -500,7 +500,6 @@ def test_definite_rejection_is_booked_rejected_and_the_batch_continues(tmp_path:
             decision_timestamp=SESSION_LABEL,
             strategy_name="test",
             strategy_version="v1",
-            risk_reducing=False,
         )
         for symbol in ("SPY", "AAPL")
     )
@@ -594,7 +593,6 @@ def test_buy_ready_phase_is_persisted_while_the_buy_is_withheld(tmp_path: Path) 
         decision_timestamp=SESSION_LABEL,
         strategy_name="test",
         strategy_version="v1",
-        risk_reducing=True,
     )
     target = _cash_target()
     repository.record_decision_with_orders(

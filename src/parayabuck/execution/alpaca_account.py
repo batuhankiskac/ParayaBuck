@@ -33,6 +33,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
+from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_models import OwnershipDriftError
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -69,7 +70,7 @@ class AccountService:
         )
 
     @staticmethod
-    def classify_market(asset: Any, is_crypto_fn: Any = is_crypto) -> Market:
+    def classify_market(asset: Any) -> Market:
         """CRYPTO when the asset class says so *or* the symbol says so.
 
         Alpaca populates ``asset_class`` inconsistently, so a crypto pair
@@ -85,7 +86,7 @@ class AccountService:
             except Exception:
                 pass
         try:
-            return Market.CRYPTO if is_crypto_fn(str(getattr(asset, "symbol", ""))) else Market.EQUITY
+            return Market.CRYPTO if is_crypto(str(getattr(asset, "symbol", ""))) else Market.EQUITY
         except Exception:
             return Market.EQUITY
 
@@ -163,26 +164,21 @@ class AccountService:
     @staticmethod
     def _alert_ownership_rebase(canonical: str, market: Market, owned_before: float, broker_qty: float) -> None:
         """One alert per rebase episode; the audit row is the durable record."""
-        try:
-            from parayabuck.monitoring import alerts
-
-            alerts.emit(
-                "paper_incident",
-                message=(
-                    f"Ownership rebased onto the broker share count for {canonical}: "
-                    f"owned {owned_before:g} -> broker {broker_qty:g}. Verify the corporate "
-                    "action or the foreign trade on the broker; the adjustment is listed "
-                    "as a reconciliation anomaly."
-                ),
-                category="ownership_rebased",
-                incident_id=f"ownership_rebased:{market.value}:{canonical}:{datetime.now(UTC):%Y-%m-%d}",
-                symbol=canonical,
-                market=market.value,
-                previous_owned_quantity=owned_before,
-                broker_quantity=broker_qty,
-            )
-        except Exception:
-            log.warning("Alert emission failed for the ownership rebase of %s", canonical, exc_info=True)
+        emit_execution_alert(
+            "paper_incident",
+            message=(
+                f"Ownership rebased onto the broker share count for {canonical}: "
+                f"owned {owned_before:g} -> broker {broker_qty:g}. Verify the corporate "
+                "action or the foreign trade on the broker; the adjustment is listed "
+                "as a reconciliation anomaly."
+            ),
+            category="ownership_rebased",
+            incident_id=f"ownership_rebased:{market.value}:{canonical}:{datetime.now(UTC):%Y-%m-%d}",
+            symbol=canonical,
+            market=market.value,
+            previous_owned_quantity=owned_before,
+            broker_quantity=broker_qty,
+        )
 
     # -- snapshot cache --------------------------------------------------
 
@@ -208,11 +204,25 @@ class AccountService:
 
     @staticmethod
     def _price(value: Any, *, symbol: str, tolerate_missing: bool) -> float:
+        """A finite broker mark; a foreign position reads a bad one as ``0.0``.
+
+        A bot-traded symbol fails closed on a missing, unparseable or
+        non-finite mark (same contract as non-finite equity/cash) instead of
+        letting NaN reach the planner and halt the decision there.
+        """
         if value is None:
             if tolerate_missing:
                 return 0.0
             raise ValueError(f"Broker position {symbol} has no price")
-        return float(value)
+        try:
+            price = float(value)
+        except (TypeError, ValueError):
+            price = math.nan
+        if math.isfinite(price):
+            return price
+        if tolerate_missing:
+            return 0.0
+        raise ValueError(f"Broker position {symbol} has a non-finite price; snapshot unusable, entries refused")
 
     # -- main entry ------------------------------------------------------
 
@@ -261,10 +271,19 @@ class AccountService:
             return open_sell_orders
 
         for raw in raw_positions:
-            unrealized += float(raw.unrealized_pl or 0)
-            intraday_unrealized += float(raw.unrealized_intraday_pl or 0)
             market = self.classify_market(raw)
             canonical = canonical_symbol(str(raw.symbol), market)
+            try:
+                position_unrealized = float(raw.unrealized_pl or 0)
+                position_intraday = float(raw.unrealized_intraday_pl or 0)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Broker position {canonical} PnL is not numeric: {exc}") from exc
+            if not math.isfinite(position_unrealized) or not math.isfinite(position_intraday):
+                # A NaN PnL would be persisted into risk_state and served to
+                # strict-JSON readers: fail closed like non-finite equity/cash.
+                raise ValueError(f"Broker position {canonical} PnL is non-finite; snapshot unusable, entries refused")
+            unrealized += position_unrealized
+            intraday_unrealized += position_intraday
             position_key = (market, canonical)
             if position_key in seen_position_keys:
                 raise OwnershipDriftError(
@@ -324,10 +343,10 @@ class AccountService:
                     parsed_available = float(raw_available)
                 except (TypeError, ValueError):
                     parsed_available = math.nan
-                # Non-finite availability cannot size an exit: fall back to
-                # the full position quantity so the SELL is never silently
-                # suppressed.
-                qty_available = parsed_available if math.isfinite(parsed_available) else None
+                # Non-finite or negative availability cannot size an exit: fall
+                # back to the full position quantity so the SELL is never
+                # silently suppressed (the planner clamps negatives to zero).
+                qty_available = parsed_available if math.isfinite(parsed_available) and parsed_available >= 0 else None
             positions.append(
                 PositionSnapshot(
                     symbol=canonical,
@@ -360,7 +379,7 @@ class AccountService:
             peak_lock = threading.Lock()
             broker._peak_lock = peak_lock
         with peak_lock:
-            broker._ensure_peak_reconciled(broker._account_id or "unknown", equity)
+            broker._ensure_peak_reconciled(broker._account_id or "unknown")
             old_peak = broker._peak_equity
             broker._peak_equity = max(broker._peak_equity, equity)
             peak_equity = broker._peak_equity
@@ -373,16 +392,11 @@ class AccountService:
                     # The account was already fetched: keep the in-memory peak
                     # and the snapshot, retry the sidecar on the next poll.
                     log.warning("Peak sidecar write failed; keeping the fetched snapshot: %s", exc)
-                    try:
-                        from parayabuck.monitoring import alerts
-
-                        alerts.emit(
-                            "paper_incident",
-                            message="Peak sidecar write failed; snapshot kept, retry next poll",
-                            category="peak_sidecar_write_failed",
-                        )
-                    except Exception:
-                        pass
+                    emit_execution_alert(
+                        "paper_incident",
+                        message="Peak sidecar write failed; snapshot kept, retry next poll",
+                        category="peak_sidecar_write_failed",
+                    )
         daily_pnl = equity - previous_equity
         snapshot = AccountSnapshot(
             cash=cash,

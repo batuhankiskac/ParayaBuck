@@ -71,7 +71,6 @@ def _order(decision_id: str, market: Market, symbol: str, quantity: float) -> Po
         decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
         strategy_name="test",
         strategy_version="1",
-        risk_reducing=False,
     )
 
 

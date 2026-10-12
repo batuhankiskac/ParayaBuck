@@ -145,7 +145,6 @@ def _buy(symbol: str = "TSLA", quantity: float = 80, market: Market = Market.EQU
         decision_timestamp=datetime(2026, 1, 1, tzinfo=UTC),
         strategy_name="fixed_target",
         strategy_version="1",
-        risk_reducing=False,
     )
 
 

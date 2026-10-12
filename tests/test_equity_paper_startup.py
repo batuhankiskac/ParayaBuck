@@ -71,7 +71,7 @@ class _PaperBroker:
         )
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-        return AssetTradingRules(symbol, market, 0.001, 0.001, 0.001, 10.0)
+        return AssetTradingRules(0.001, 0.001, 10.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()

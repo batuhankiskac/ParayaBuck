@@ -30,7 +30,6 @@ def _submitted_order(tmp_path) -> tuple[PortfolioStateRepository, PortfolioOrder
         decision_timestamp=_AT,
         strategy_name="monotonic",
         strategy_version="1",
-        risk_reducing=False,
     )
     repo.record_order(order, "submitting")
     return repo, order

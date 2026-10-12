@@ -88,12 +88,9 @@ class _SimBroker:
         from parayabuck.execution.portfolio import AssetTradingRules
 
         return AssetTradingRules(
-            symbol=symbol,
-            market=market,
             minimum_order_size=1.0,
             minimum_order_notional=1.0,
             quantity_increment=1.0,
-            price_increment=0.01,
         )
 
     def all_open_order_symbols(self) -> set[str]:

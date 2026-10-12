@@ -23,23 +23,19 @@ class PortfolioOrderSide(StrEnum):
 
 @dataclass(frozen=True)
 class AssetTradingRules:
-    symbol: str
-    market: Market
     minimum_order_size: float
     quantity_increment: float
-    price_increment: float
     minimum_order_notional: float
 
     def __post_init__(self) -> None:
         values = (
             self.minimum_order_size,
             self.quantity_increment,
-            self.price_increment,
             self.minimum_order_notional,
         )
         if any(not math.isfinite(value) or value < 0 for value in values):
             raise ValueError("Asset trading rules must be finite and non-negative")
-        if self.quantity_increment <= 0 or self.price_increment <= 0:
+        if self.quantity_increment <= 0:
             raise ValueError("Asset increments must be positive")
 
 
@@ -55,7 +51,6 @@ class PortfolioOrderRequest:
     decision_timestamp: datetime
     strategy_name: str
     strategy_version: str
-    risk_reducing: bool
 
 
 @dataclass(frozen=True)
@@ -541,7 +536,6 @@ class TargetToOrderPlanner:
                     decision_timestamp=target.decision_timestamp,
                     strategy_name=target.strategy_name,
                     strategy_version=target.strategy_version,
-                    risk_reducing=side == PortfolioOrderSide.SELL,
                 )
             )
         return tuple(

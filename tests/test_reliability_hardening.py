@@ -172,7 +172,6 @@ def test_crash_consistency_decision_order_atomic(tmp_path: Path) -> None:
         decision_timestamp=ts,
         strategy_name="test",
         strategy_version="1",
-        risk_reducing=False,
     )
     order2 = PortfolioOrderRequest(
         client_order_id="c2",
@@ -185,7 +184,6 @@ def test_crash_consistency_decision_order_atomic(tmp_path: Path) -> None:
         decision_timestamp=ts,
         strategy_name="test",
         strategy_version="1",
-        risk_reducing=False,
     )
     decision_id = repo.record_decision_with_orders(
         session_id, "acct1", "digest1", target, risk, Market.EQUITY, (order1, order2)
@@ -239,7 +237,6 @@ def test_crash_consistency_decision_order_atomic(tmp_path: Path) -> None:
         decision_timestamp=ts2,
         strategy_name="test",
         strategy_version="1",
-        risk_reducing=False,
     )
     order4 = PortfolioOrderRequest(
         client_order_id="c4",
@@ -252,7 +249,6 @@ def test_crash_consistency_decision_order_atomic(tmp_path: Path) -> None:
         decision_timestamp=ts2,
         strategy_name="test",
         strategy_version="1",
-        risk_reducing=False,
     )
     decision_id2 = repo.record_decision_with_orders(
         session_id, "acct1", "digest1", target2, risk2, Market.EQUITY, (order3, order4)

@@ -66,7 +66,7 @@ def _position(
 
 
 def _rule(symbol: str) -> AssetTradingRules:
-    return AssetTradingRules(symbol, Market.EQUITY, 0.01, 0.01, 0.01, 1.0)
+    return AssetTradingRules(0.01, 0.01, 1.0)
 
 
 def test_risk_overlay_enforces_account_sleeve_asset_and_cash_caps() -> None:

@@ -59,7 +59,6 @@ def _order(
         decision_timestamp=when,
         strategy_name="vt35",
         strategy_version="1",
-        risk_reducing=False,
     )
     repo.record_order(order, "submitted")
     return client_order_id
@@ -296,7 +295,7 @@ def _account_broker(repo: PortfolioStateRepository, *, quantity: float, average:
         portfolio_owned_quantities=lambda: repo.owned_quantities(ACCOUNT, Market.EQUITY),
         portfolio_open_orders=lambda: (),
         portfolio_ownership_resolved=resolver,
-        _ensure_peak_reconciled=lambda account_id, equity: None,
+        _ensure_peak_reconciled=lambda account_id: None,
         _peak_equity=0.0,
         _save_peak_equity=lambda: None,
         _snapshot_cache=None,
@@ -440,7 +439,6 @@ def test_rebase_cli_refuses_while_orders_are_open(tmp_path: Path, capsys: pytest
             decision_timestamp=T0,
             strategy_name="vt35",
             strategy_version="1",
-            risk_reducing=True,
         ),
         "submitted",
     )

@@ -66,7 +66,6 @@ def _order(
         decision_timestamp=NOW,
         strategy_name="synthetic",
         strategy_version="1",
-        risk_reducing=side == PortfolioOrderSide.SELL,
     )
 
 
@@ -254,7 +253,7 @@ def test_production_overlay_and_band_suppressed_exit_cannot_open_seventh_slot() 
         maximum_allocation=0.10,
         mode="paper",
     )
-    rules = {symbol: AssetTradingRules(symbol, Market.EQUITY, 0.01, 0.01, 0.01, 1.0) for symbol in tradable}
+    rules = {symbol: AssetTradingRules(0.01, 0.01, 1.0) for symbol in tradable}
     planned = TargetToOrderPlanner().plan(
         risk.target,
         account,
@@ -293,7 +292,7 @@ def test_band_eligible_sell_does_not_release_slot_at_order_planning() -> None:
         weights=(TargetWeight("GDDY", 0.025), TargetWeight("NEW1", 0.025)),
         cash_weight=0.95,
     )
-    rules = {symbol: AssetTradingRules(symbol, Market.EQUITY, 0.01, 0.01, 0.01, 1.0) for symbol in tradable}
+    rules = {symbol: AssetTradingRules(0.01, 0.01, 1.0) for symbol in tradable}
     planned = TargetToOrderPlanner().plan(
         target,
         account,

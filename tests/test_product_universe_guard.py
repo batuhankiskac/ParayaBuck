@@ -124,7 +124,7 @@ def test_runtime_service_rejects_missing_universe_before_opening_session(tmp_pat
             return AccountSnapshot(100_000, 100_000, 100_000, 0.0)
 
         def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-            return AssetTradingRules(symbol, market, 0.01, 0.01, 0.01, 1.0)
+            return AssetTradingRules(0.01, 0.01, 1.0)
 
         def all_open_order_symbols(self) -> set[str]:
             return set()

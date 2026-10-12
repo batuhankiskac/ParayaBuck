@@ -86,7 +86,7 @@ class _SimBroker:
         )
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-        return AssetTradingRules(symbol, market, 1.0, 1.0, 0.01, 10.0)
+        return AssetTradingRules(1.0, 1.0, 10.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set(self.open_symbols)
@@ -416,7 +416,6 @@ def test_crash_before_ack_but_broker_filled_recovers_real_fill(tmp_path) -> None
         decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
         strategy_name="fixed_target",
         strategy_version="1.0.0",
-        risk_reducing=False,
     )
     repository.record_order(entry, "submitted")
     repository.apply_trade_update(
@@ -700,7 +699,6 @@ def test_local_nonterminal_order_suppresses_deferred_planner_when_broker_is_empt
             decision_timestamp=sell.decision_timestamp,
             strategy_name="fixed_target",
             strategy_version="1.0.0",
-            risk_reducing=False,
         ),
         "submitted",
     )

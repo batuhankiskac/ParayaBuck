@@ -63,7 +63,7 @@ def _target(targets: dict[str, float], timestamp: datetime | None = None) -> Tar
 
 
 def _rule(symbol: str, *, notional_min: float = 1.0) -> AssetTradingRules:
-    return AssetTradingRules(symbol, Market.EQUITY, 0.01, 0.01, 0.01, notional_min)
+    return AssetTradingRules(0.01, 0.01, notional_min)
 
 
 def _account(*, qty: float, price: float = 100.0, equity: float = 100_000.0) -> AccountSnapshot:

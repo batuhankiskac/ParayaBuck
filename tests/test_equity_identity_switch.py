@@ -51,7 +51,7 @@ def _target(weights: dict[str, float]) -> TargetPortfolio:
 
 
 def _rules(*symbols: str) -> dict[str, AssetTradingRules]:
-    return {symbol: AssetTradingRules(symbol, Market.EQUITY, 0.01, 0.01, 0.01, 1.0) for symbol in symbols}
+    return {symbol: AssetTradingRules(0.01, 0.01, 1.0) for symbol in symbols}
 
 
 def _plan(

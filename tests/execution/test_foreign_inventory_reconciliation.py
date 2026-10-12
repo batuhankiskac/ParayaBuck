@@ -146,7 +146,6 @@ def _owned_fill(repo: PortfolioStateRepository, quantity: float, price: float) -
             decision_timestamp=T0,
             strategy_name="vt35",
             strategy_version="1",
-            risk_reducing=False,
         ),
         "submitted",
     )

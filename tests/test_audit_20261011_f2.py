@@ -101,7 +101,7 @@ def test_f2_plan_requires_decision_id() -> None:
             account,
             market=Market.EQUITY,
             prices={"SPY": 100.0},
-            rules={"SPY": AssetTradingRules("SPY", Market.EQUITY, 0.01, 0.01, 0.01, 1.0)},
+            rules={"SPY": AssetTradingRules(0.01, 0.01, 1.0)},
             approved_symbols=("SPY",),
         )
 
@@ -113,7 +113,7 @@ def test_f2_plan_with_explicit_decision_id() -> None:
         account,
         market=Market.EQUITY,
         prices={"SPY": 100.0},
-        rules={"SPY": AssetTradingRules("SPY", Market.EQUITY, 0.01, 0.01, 0.01, 1.0)},
+        rules={"SPY": AssetTradingRules(0.01, 0.01, 1.0)},
         approved_symbols=("SPY",),
         decision_id="f2-decision",
     )

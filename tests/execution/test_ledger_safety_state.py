@@ -121,7 +121,6 @@ def _record_fill(repo: PortfolioStateRepository, account_id: str, client_order_i
             decision_timestamp=_AT,
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=False,
         ),
         "submitted",
     )

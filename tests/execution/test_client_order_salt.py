@@ -64,7 +64,7 @@ class _Broker:
         return AccountSnapshot(100_000.0, 100_000.0, 100_000.0, 0.0)
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-        return AssetTradingRules(symbol, market, 1.0, 1.0, 0.01, 10.0)
+        return AssetTradingRules(1.0, 1.0, 10.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()
@@ -139,7 +139,6 @@ def test_decision_with_legacy_ids_keeps_legacy_form(tmp_path) -> None:
         _DAY,
         "fixed",
         "1",
-        False,
     )
     assert (
         repository.record_decision_with_orders(session, "acct", "digest", target, risk, Market.EQUITY, (legacy,))

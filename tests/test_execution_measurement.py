@@ -63,7 +63,6 @@ def _order(repo: PortfolioStateRepository) -> tuple[str, PortfolioOrderRequest]:
         decision_timestamp=timestamp,
         strategy_name="measurement",
         strategy_version="1",
-        risk_reducing=False,
     )
     repo.record_order(order, "submitting")
     return decision_id, order

@@ -47,7 +47,7 @@ class _Broker:
         return AccountSnapshot(100_000, 100_000, 100_000, 0.0)
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-        return AssetTradingRules(symbol, market, 0.01, 0.01, 0.01, 1.0)
+        return AssetTradingRules(0.01, 0.01, 1.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()
@@ -474,7 +474,6 @@ def test_portfolio_buy_fill_is_managed_and_full_exit_returns_to_external(
                 decision_timestamp=order.decision_timestamp,
                 strategy_name=order.strategy_name,
                 strategy_version=order.strategy_version,
-                risk_reducing=True,
             ),
             "submitting",
         )
@@ -591,7 +590,6 @@ def test_partial_exit_keeps_ownership_until_fully_flat(tmp_path) -> None:
             decision_timestamp=order.decision_timestamp,
             strategy_name=order.strategy_name,
             strategy_version=order.strategy_version,
-            risk_reducing=True,
         ),
         "submitting",
     )
@@ -818,7 +816,6 @@ def test_owned_quantities_are_isolated_per_account(tmp_path) -> None:
         decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
         strategy_name="eq",
         strategy_version="1",
-        risk_reducing=False,
     )
     paper_decision = repo.record_decision_with_orders(
         paper,
@@ -921,7 +918,6 @@ def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=True,
         ),
         "submitting",
     )
@@ -1201,7 +1197,6 @@ def test_ownership_drift_is_exempt_while_an_open_order_is_working(tmp_path) -> N
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=True,
         ),
         "submitted",
     )
@@ -1299,7 +1294,6 @@ def test_portfolio_open_buy_does_not_exempt_ownership_drift(tmp_path) -> None:
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=False,
         ),
         "submitted",
     )
@@ -1344,7 +1338,6 @@ def test_portfolio_open_sell_only_exempts_the_explained_quantity(tmp_path) -> No
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=True,
         ),
         "submitted",
     )
@@ -1622,7 +1615,6 @@ def _owned_equity_entry(repo: PortfolioStateRepository, *, quantity: float, symb
         decision_timestamp=decision_timestamp,
         strategy_name="equity",
         strategy_version="1",
-        risk_reducing=False,
     )
     repo.record_order(entry, "submitting")
     repo.apply_trade_update(
@@ -1692,7 +1684,6 @@ def test_operations_snapshot_is_isolated_between_two_accounts(tmp_path) -> None:
                 decision_timestamp=timestamp,
                 strategy_name="equity",
                 strategy_version="1",
-                risk_reducing=False,
             ),
             "submitted",
         )
@@ -1722,7 +1713,6 @@ def test_operations_snapshot_is_isolated_between_two_accounts(tmp_path) -> None:
                     decision_timestamp=timestamp,
                     strategy_name="equity",
                     strategy_version="1",
-                    risk_reducing=False,
                 ),
                 "submitted",
             )
@@ -1767,7 +1757,6 @@ def test_negative_net_ownership_is_an_invariant_violation(tmp_path) -> None:
             decision_timestamp=datetime(2025, 1, 2, tzinfo=UTC),
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=True,
         ),
         "submitted",
     )
@@ -1831,7 +1820,6 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=True,
         ),
         "submitted",
     )
@@ -1914,7 +1902,6 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=True,
         ),
         "submitted",
     )
@@ -2770,7 +2757,6 @@ def test_startup_catch_up_rebalance_in_progress_defers(tmp_path) -> None:
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             strategy_name="equity_dynamic_trend_1d_v1",
             strategy_version="1.0.0",
-            risk_reducing=True,
         ),
         "submitting",
     )

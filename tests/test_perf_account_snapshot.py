@@ -25,7 +25,7 @@ class _CountingBroker:
     def asset_trading_rules(self, symbol: str, market: Market):
         from parayabuck.execution.portfolio import AssetTradingRules
 
-        return AssetTradingRules(symbol, market, 0.01, 0.01, 0.01, 1.0)
+        return AssetTradingRules(0.01, 0.01, 1.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()

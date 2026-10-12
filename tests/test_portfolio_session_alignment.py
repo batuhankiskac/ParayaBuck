@@ -47,7 +47,7 @@ class _Broker:
         self.rules_requested.append(symbol)
         if symbol == "SPY":
             raise AssertionError("SPY is never targeted or held; its rules must not be fetched")
-        return AssetTradingRules(symbol, market, 0.01, 0.01, 0.01, 1.0)
+        return AssetTradingRules(0.01, 0.01, 1.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()

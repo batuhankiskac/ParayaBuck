@@ -1,0 +1,90 @@
+{
+  "campaign": "gold_riskoff_oos_v1",
+  "downloaded_utc": "2026-10-12T15:24:48+00:00",
+  "end_clip": "1998-12-31",
+  "files": {
+    "data/historical/gold_riskoff_oos_v1_index.csv": {
+      "source": "Yahoo Finance chart API v8 (query1.finance.yahoo.com), interval=1d",
+      "notes": "price indices (no dividends); OHLC as served; rows with a null field dropped; clipped to <= 1998-12-31. ^IXIC has open=high=low=close (no intraday data) before 1985.",
+      "sha256": "66593f8d7c770f4488ebb9b5c461194799351340e94ff7b60c149ff60435cdc1",
+      "symbols": {
+        "^IXIC": {
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?period1=0&period2=1791818682&interval=1d",
+          "retrieved_utc": "2026-10-12T15:24:44+00:00",
+          "response_sha256": "5f884c68476f70626d5097860fb599e6b406de23ce235d17eca69b9e11d2c9c9",
+          "rows": 7052,
+          "rows_dropped_null": 0,
+          "first": "1971-02-05",
+          "last": "1998-12-31"
+        },
+        "^NDX": {
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?period1=0&period2=1791818682&interval=1d",
+          "retrieved_utc": "2026-10-12T15:24:44+00:00",
+          "response_sha256": "15ef8af0be57e1c8a5c410b2a20164178bf11128645316c21a3035fd22ca0e9d",
+          "rows": 3351,
+          "rows_dropped_null": 0,
+          "first": "1985-10-01",
+          "last": "1998-12-31"
+        },
+        "^GSPC": {
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=0&period2=1791818682&interval=1d",
+          "retrieved_utc": "2026-10-12T15:24:46+00:00",
+          "response_sha256": "5fa3546c04581b21a13bacaf4c88ee9714db07a3e4fd10852568d069093a0d0f",
+          "rows": 7330,
+          "rows_dropped_null": 0,
+          "first": "1970-01-02",
+          "last": "1998-12-31"
+        }
+      }
+    },
+    "data/historical/gold_riskoff_oos_v1_gold.csv": {
+      "source": "Deutsche Bundesbank time-series API (api.statistiken.bundesbank.de), dataflow BBEX3",
+      "series": {
+        "D.XAU.DEM.EA.AC.C01": {
+          "url": "https://api.statistiken.bundesbank.de/rest/download/BBEX3/D.XAU.DEM.EA.AC.C01?format=csv&lang=en",
+          "retrieved_utc": "2026-10-12T15:24:46+00:00",
+          "response_sha256": "32317d855f9d2767de29aa13ec9c8884570591e2efb463a8852a323122440dbb",
+          "title": "Gold price in Frankfurt am Main / Frankfurt Stock Exchange fixing / 1 kg of fine gold = DM ... / up to the end of 1998",
+          "observations_kept": 7622,
+          "first": "1968-06-18",
+          "last": "1998-12-30"
+        },
+        "D.USD.DEM.AA.AC.000": {
+          "url": "https://api.statistiken.bundesbank.de/rest/download/BBEX3/D.USD.DEM.AA.AC.000?format=csv&lang=en",
+          "retrieved_utc": "2026-10-12T15:24:48+00:00",
+          "response_sha256": "c3b9d5773d04e752d1b265ff2f8a929097262c5039f57766bb6f293d5cc418de",
+          "title": "Exchange rates on the Frankfurt exchange / USD 1 = DEM ... / United States",
+          "observations_kept_on_gold_dates": 7622
+        }
+      },
+      "notes": "rows = Frankfurt dates with a gold fixing; '.' (no value) rows dropped. USD per troy oz = frankfurt_dem_per_kg / dem_per_usd / 32.1507466.",
+      "sha256": "2df02751ae052f14e86a850662d0d91ec6cf5ca4013c2396ef28cb42c0b0de9c",
+      "rows": 7622,
+      "first": "1968-06-18",
+      "last": "1998-12-30"
+    },
+    "data/historical/gold_riskoff_oos_v1_pinksheet.csv": {
+      "url": "https://thedocs.worldbank.org/en/doc/5d903e848db1d1b83e0ec8f744e55570-0350012021/related/CMO-Historical-Data-Monthly.xlsx",
+      "retrieved_utc": "2026-10-12T15:24:48+00:00",
+      "response_sha256": "bd89b83eeceadaecb803018c104f76b316d2df3fae28ef7afde48021100c7e11",
+      "sheet": "Monthly Prices",
+      "column_header": "Gold",
+      "header_cell": "BR5",
+      "use": "validation only (monthly London PM fix average); never an arm input",
+      "sha256": "7deea4f098ed8e011dfaf9708bc8476b10578b2a640f87b53454635f90c0c638",
+      "rows": 468,
+      "first": "1960-01",
+      "last": "1998-12"
+    }
+  },
+  "unavailable_gold_sources": {
+    "https://api.statistiken.bundesbank.de/rest/download/BBEX3/D.XAU.USD.EA.AC.C05": "HTTP 404 (also C06, C07, C08)",
+    "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GOLDPMGBD228NLBM": "HTTP 404 (also GOLDAMGBD228NLBM)",
+    "https://prices.lbma.org.uk/json/gold_pm.json": "HTTP 403 Cloudflare bot block (not circumvented)",
+    "Yahoo GC=F": "starts 2000-08-30"
+  },
+  "dividends": "no free daily dividend series covering 1975-1998 found (Yahoo ^SP500TR starts 1988-01-04, ^XCMP 2003-09-25); arms run on price indices",
+  "reused_committed_inputs": {
+    "data/historical/stress_robustness_v1_dtb3.csv": "see research/stress_robustness_v1/DATA_MANIFEST.json"
+  }
+}

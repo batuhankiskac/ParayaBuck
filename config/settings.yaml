@@ -98,6 +98,14 @@ engine:
   account_poll_interval_seconds: 15
   maximum_account_age_for_entry_seconds: 30
   event_queue_capacity: 1024
+  # Consecutive transient reconciliation failures before the reconciliation
+  # breaker is raised; a blocked session-close decision is retried every
+  # decision_retry_interval_seconds until decision_retry_window_minutes after
+  # the NYSE close (must stay below intent_watchdog.equity_decision_grace_minutes
+  # and cover the signal_cross_check embargo + retry window).
+  reconcile_failure_threshold: 3
+  decision_retry_interval_seconds: 60
+  decision_retry_window_minutes: 40
 execution:
   # Shared order-existence policy for backtest, paper and live: a rebalance
   # band below which drift produces no order, and the minimum order notional.

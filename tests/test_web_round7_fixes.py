@@ -185,10 +185,15 @@ def test_toggle_mode_waits_for_the_settings_lock(tmp_path: Path) -> None:
 # --- F2: production risk limits round-trip through the settings schema -----
 
 
-def test_settings_schema_accepts_production_risk_limits_up_to_100() -> None:
+def test_settings_schema_accepts_production_risk_limits_below_100() -> None:
     payload = SettingsPayload(daily_loss_limit_pct=20, max_drawdown_pct=75)
     assert (payload.daily_loss_limit_pct, payload.max_drawdown_pct) == (20, 75)
-    SettingsPayload(daily_loss_limit_pct=100, max_drawdown_pct=100)
+    SettingsPayload(daily_loss_limit_pct=99.9, max_drawdown_pct=99.9)
+    # A 100 % latch can never trip (Q3E-7): rejected like RiskLimits does.
+    with pytest.raises(ValidationError):
+        SettingsPayload(daily_loss_limit_pct=100)
+    with pytest.raises(ValidationError):
+        SettingsPayload(max_drawdown_pct=100)
     with pytest.raises(ValidationError):
         SettingsPayload(daily_loss_limit_pct=100.1)
     with pytest.raises(ValidationError):
@@ -230,12 +235,22 @@ def test_saving_production_risk_limits_round_trips(tmp_path: Path) -> None:
 # --- F3: 422 detail arrays render as text ----------------------------------
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def _js_runtime() -> list[str] | None:
+    """Command prefix of an installed JS runtime that evaluates a script string."""
+    if shutil.which("node"):
+        return ["node", "-e"]
+    if shutil.which("deno"):
+        return ["deno", "eval"]
+    return None
+
+
+@pytest.mark.skipif(_js_runtime() is None, reason="no JS runtime (node/deno) is installed")
 def test_detail_text_joins_fastapi_validation_messages() -> None:
+    source = (WEB / "static" / "js" / "api.js").read_text(encoding="utf-8")
     script = (
         "globalThis.window = globalThis;"
         "globalThis.document = { querySelector: () => null };"
-        f"require({json.dumps(str(WEB / 'static' / 'js' / 'api.js'))});"
+        f"(0, eval)({json.dumps(source)});"
         "const t = window.PBApi.detailText;"
         "console.log(JSON.stringify(["
         "t({detail: [{loc: ['body', 'max_drawdown_pct'], msg: 'Input should be less than or equal to 100'},"
@@ -244,7 +259,9 @@ def test_detail_text_joins_fastapi_validation_messages() -> None:
         "t({}, 'fb'),"
         "t({detail: []}, 'fb')]));"
     )
-    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=30, check=True)
+    runtime = _js_runtime()
+    assert runtime is not None
+    out = subprocess.run([*runtime, script], capture_output=True, text=True, timeout=30, check=True)
 
     assert json.loads(out.stdout) == [
         "max_drawdown_pct: Input should be less than or equal to 100; port: bad",
@@ -252,6 +269,29 @@ def test_detail_text_joins_fastapi_validation_messages() -> None:
         "fb",
         "fb",
     ]
+
+
+def test_detail_text_contract_is_pinned_without_a_js_runtime() -> None:
+    """Python-level pin of the detailText join contract (runs everywhere).
+
+    The behavioural test above needs a JS runtime; this one fails if the
+    array join, the ``body`` loc filter, the ``loc: msg`` shape, the empty
+    -array fallback or the object stringify is dropped from api.js.
+    """
+    source = (WEB / "static" / "js" / "api.js").read_text(encoding="utf-8")
+    start = source.index("function detailText(payload, fallback)")
+    body = source[start : source.index("async function fetchJson", start)]
+    for fragment in (
+        "Array.isArray(detail)",
+        'p !== "body"',
+        '.join(".")',
+        'loc ? loc + ": " + msg : msg',
+        'parts.length ? parts.join("; ") : fallback',
+        "JSON.stringify(detail)",
+        "detail ? String(detail) : fallback",
+    ):
+        assert fragment in body, fragment
+    assert "detailText" in source[source.index("global.PBApi") :]
 
 
 def test_every_error_site_uses_detail_text() -> None:

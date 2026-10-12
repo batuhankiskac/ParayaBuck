@@ -49,8 +49,6 @@ def _stub_manager(
             self.runtime = None
             self.broker = None
             self.security_warning = None
-            self.log_queues: set[Any] = set()
-            self._log_queues_lock = threading.Lock()
             self._state_lock = threading.Lock()
             self._paper = paper
 
@@ -84,54 +82,12 @@ def _web_state(manager: Any) -> WebState:
     return WebState(engine_manager=manager, backtest_manager=BacktestManager())
 
 
-def _install_fake_telemetry_module(monkeypatch: pytest.MonkeyPatch, *, telemetry: bool) -> None:
-    """Install (or block) the batch modules the dashboard consumes lazily."""
-    import types
-
-    if telemetry:
-        fake = types.ModuleType("parayabuck.execution.telemetry")
-
-        def execution_metrics(db_path: str | Path | None = None) -> dict[str, Any]:
-            return {"available": True, "orders": 3, "fills": 5}
-
-        def forward_metrics(db_path: str | Path | None = None) -> dict[str, Any]:
-            return {"available": True, "decision_count": 1}
-
-        def cost_calibration(db_path: str | Path | None = None, config: object | None = None) -> dict[str, Any]:
-            return {"available": True, "median_slippage_bps": 1.0}
-
-        fake.execution_metrics = execution_metrics
-        fake.forward_metrics = forward_metrics
-        fake.cost_calibration = cost_calibration
-        monkeypatch.setitem(sys.modules, "parayabuck.execution.telemetry", fake)
-    else:
-        monkeypatch.setitem(sys.modules, "parayabuck.execution.telemetry", None)
+def _block_telemetry_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "parayabuck.execution.telemetry", None)
 
 
-def _install_fake_metrics_module(monkeypatch: pytest.MonkeyPatch, *, metrics: bool) -> None:
-    import types
-
-    if metrics:
-        fake = types.ModuleType("parayabuck.monitoring.metrics")
-
-        def runtime_metrics(
-            database_path: str | Path | None = None, *, account_id: str | None = None
-        ) -> dict[str, Any]:
-            return {
-                "available": True,
-                "restart_count": 2,
-                "data_provider_failures": 1,
-                "reconciliation_failures": 0,
-                "daily_loss_incidents": 0,
-                "drawdown_incidents": 1,
-                "circuit_breaker_events": 1,
-                "entry_block_duration_seconds": 60.0,
-            }
-
-        fake.runtime_metrics = runtime_metrics
-        monkeypatch.setitem(sys.modules, "parayabuck.monitoring.metrics", fake)
-    else:
-        monkeypatch.setitem(sys.modules, "parayabuck.monitoring.metrics", None)
+def _block_metrics_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "parayabuck.monitoring.metrics", None)
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +123,6 @@ def test_dashboard_overview_returns_all_panels(tmp_path: Path, monkeypatch: pyte
         "unrealized_pnl",
         "total_pnl",
         "drawdown",
-        "last_reconciliation_at",
     ):
         assert field in overview["account"], field
     assert overview["account"]["total_pnl"] == 300.0
@@ -250,20 +205,22 @@ def test_dashboard_universe_and_health_panels(tmp_path: Path, monkeypatch: pytes
     assert equity["observation_set"]
     assert equity["observation_set_size"] == len(equity["observation_set"])
     assert equity["scanner_status"] == "static"
-    assert "pinned_symbols" in equity
+    assert "pinned_symbols" not in equity
 
     assert set(overview["universe"]) == {"equity"}
 
     health = overview["health"]
     assert "workers" in health
-    assert "queue" in health
     assert "account_freshness" in health
     assert "reconciliation" in health
     assert "scanner" not in health  # the universe refresh loop was removed
     assert "database" in health
     assert "last_heartbeat" in health
     assert "restart_count" in health
-    assert health["database"]["path"].endswith("runtime.sqlite3")
+    assert set(health["database"]) == {"exists", "size_bytes"}
+    # Keys without a frontend reader are no longer emitted (Q4D-01).
+    assert "queue" not in health and "entry_risk_latch" not in health
+    assert "maximum_age_for_entry_seconds" not in health["account_freshness"]
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +261,6 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkey
             "qty": 350,
             "market_value": 35050.0,
             "unrealized_pnl": 50.0,
-            "protection_state": "protected",
         }
     ]
     state = _web_state(_stub_manager(config_path, positions=positions))
@@ -314,14 +270,15 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkey
     holding = equity["holdings"][0]
     assert holding["symbol"] == "QLD"
     assert holding["reason"] == "trend_on_vol_target"
-    assert holding["rank"] == 1
-    assert holding["of_qualified"] == 2
+    assert "rank" not in holding and "of_qualified" not in holding and "protection_state" not in holding
     assert holding["target_weight_pct"] == 50.0
     assert holding["current_weight_pct"] == pytest.approx(35.05)
     assert "realized_vol_22d" not in holding
     assert equity["last_decision_at"] == "2026-08-10T00:00:00+00:00"
-    # hours:24 cadence: next boundary = decision + 24 hours
-    assert equity["next_rebalance_at"] == "2026-08-11T00:00:00+00:00"
+    # hours:24 cadence: the next NYSE session's close. The decision bar is
+    # stamped 2026-08-09 in New York (a Sunday), so the next session is
+    # Monday 2026-08-10, closing 16:00 EDT.
+    assert equity["next_rebalance_at"] == "2026-08-10T20:00:00+00:00"
 
 
 # ---------------------------------------------------------------------------
@@ -330,41 +287,12 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkey
 
 
 # ---------------------------------------------------------------------------
-# Focused endpoints return slices of the overview payload
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("endpoint", "panel"),
-    [
-        ("equity", "equity"),
-        ("risk", "risk"),
-        ("execution", "execution"),
-        ("universe", "universe"),
-        ("health", "health"),
-    ],
-)
-def test_focused_endpoints_are_slices(
-    endpoint: str, panel: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    config_path = _repo_config(tmp_path)
-    state = _web_state(_stub_manager(config_path))
-    _install_fake_telemetry_module(monkeypatch, telemetry=True)
-    _install_fake_metrics_module(monkeypatch, metrics=True)
-
-    overview = svc.get_overview_payload(state)
-    slice_payload = svc.get_panel(panel, state)
-    assert slice_payload == overview[panel]
-    assert isinstance(slice_payload, dict)
-
-
-# ---------------------------------------------------------------------------
 # Failure reporting: the real cause must reach the operator
 # ---------------------------------------------------------------------------
 
 
-def test_panel_endpoint_surfaces_the_overview_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A failing overview must not be reported as a missing panel."""
+def test_overview_surfaces_the_payload_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failing overview reports its real cause, not an empty payload."""
 
     def _boom(**_kwargs: Any) -> dict[str, Any]:
         raise RuntimeError("ledger locked")
@@ -372,7 +300,6 @@ def test_panel_endpoint_surfaces_the_overview_failure(monkeypatch: pytest.Monkey
     monkeypatch.setattr(svc, "_dashboard_payload", _boom)
 
     assert svc.get_overview_payload() == {"unavailable": True, "error": "ledger locked"}
-    assert svc.get_panel("equity") == {"unavailable": True, "error": "ledger locked"}
 
 
 def test_market_decisions_failure_reaches_the_operator(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -400,8 +327,8 @@ def test_dashboard_overview_route_answers_from_the_bound_state(tmp_path: Path, m
     from parayabuck.web.managers.backtest import BacktestManager
     from parayabuck.web.state import WebState
 
-    _install_fake_telemetry_module(monkeypatch, telemetry=False)
-    _install_fake_metrics_module(monkeypatch, metrics=False)
+    _block_telemetry_module(monkeypatch)
+    _block_metrics_module(monkeypatch)
     config_path = _repo_config(tmp_path)
     engine_manager = _stub_manager(config_path)
     state = WebState(

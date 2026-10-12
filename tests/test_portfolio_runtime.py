@@ -12,7 +12,7 @@ import pytest
 from alpaca.trading.models import Order
 
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
-from parayabuck.config import Config
+from parayabuck.config import Config, RiskLimits
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger
@@ -2303,7 +2303,9 @@ def test_entry_risk_latch_evaluates_from_account_poll(tmp_path) -> None:
         incidents.append((account_id, reason))
 
     runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime.app_config = Config()
+    # Pinned tight latch limits (the code defaults follow the shipped 0.20 /
+    # 0.75 catastrophe brakes).
+    runtime.app_config = Config(risk=RiskLimits(daily_loss_limit_pct=0.005, max_drawdown_pct=0.05))
     runtime.broker = SimpleNamespace(account_id="acct")
     runtime.ledger = SimpleNamespace(save_safety_incident=_save, clear_safety_incident=_clear)
     runtime._entry_risk_latch = {Market.EQUITY: None}

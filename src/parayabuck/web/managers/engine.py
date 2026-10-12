@@ -22,7 +22,7 @@ from typing import Any
 import yaml
 from dotenv import dotenv_values
 
-from parayabuck.config import load_config
+from parayabuck.config import credential_file_mode_warning, load_config
 from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
 from parayabuck.logger import get_logger
 from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
@@ -113,17 +113,6 @@ class EngineManager:
         self._last_account_monotonic = 0.0
         self._account_cache_ttl_seconds = 5.0
         self._account_lock = threading.Lock()
-        # Share bounded log queues with websocket manager so the single
-        # WebSocketLogHandler fans out to queues created via either path.
-        try:
-            from parayabuck.web.managers.websocket import log_queues as _shared_q
-            from parayabuck.web.managers.websocket import log_queues_lock as _shared_lock
-
-            self.log_queues = _shared_q
-            self._log_queues_lock = _shared_lock
-        except Exception:
-            self.log_queues: set[tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]] = set()  # type: ignore[no-redef]
-            self._log_queues_lock = threading.Lock()
         self._state_lock = threading.RLock()
         if backtest_manager is None:
             try:
@@ -174,7 +163,12 @@ class EngineManager:
         with self._state_lock:
             self._ticket_store = ticket_store
 
-    def is_paper_mode(self) -> bool:
+    def _read_paper_mode(self) -> bool | None:
+        """Tri-state mode read: True/False from a readable config, None otherwise.
+
+        None means the mode is unknown (missing, unreadable or corrupt file);
+        each caller picks its own fail-safe direction for that case.
+        """
         try:
             if self.config_path.exists():
                 modified_ns = self.config_path.stat().st_mtime_ns
@@ -183,6 +177,8 @@ class EngineManager:
                     return cached[1]
                 with open(self.config_path, encoding="utf-8") as f:
                     cfg = yaml.safe_load(f) or {}
+                if not isinstance(cfg, dict):
+                    raise yaml.YAMLError("settings root is not a mapping")
                 runtime = cfg.get("runtime") or {}
                 runtime_mode = runtime.get("mode")
                 if runtime_mode is None and (cfg.get("alpaca") or {}).get("paper") is False:
@@ -193,11 +189,26 @@ class EngineManager:
                     paper = str(runtime_mode or "paper").lower() != "live"
                 self._paper_mode_cache = (modified_ns, paper)
                 return paper
-        except (OSError, yaml.YAMLError) as exc:
-            # A config we cannot read must not silently present live mode as
-            # paper: surface it so the operator notices the corruption.
+        except (OSError, yaml.YAMLError, AttributeError) as exc:
             log.error("Could not read paper-mode flag from %s: %s", self.config_path, exc)
-        return False
+        return None
+
+    def is_paper_mode(self) -> bool:
+        """Badge/mode flag: an unknown mode is shown as NOT paper.
+
+        A config we cannot read must not silently present live mode as
+        paper, so the operator notices the corruption. Never use this to
+        pick a broker endpoint: see :meth:`display_broker_paper`.
+        """
+        return self._read_paper_mode() is True
+
+    def display_broker_paper(self) -> bool:
+        """Endpoint for the display poll: fails closed to PAPER when unknown.
+
+        An unreadable or corrupt config must never send credentials to the
+        live endpoint for a read-only display poll.
+        """
+        return self._read_paper_mode() is not False
 
     def get_credentials(self) -> tuple[str | None, str | None]:
         """The two Alpaca keys; the env file wins over the process environment.
@@ -207,9 +218,27 @@ class EngineManager:
         rewrote unrelated process environment variables.
         """
         values = dotenv_values(self.env_path) if self.env_path.exists() else {}
+        if values:
+            self._warn_loose_credential_file()
         key = values.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY")
         secret = values.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY")
         return key, secret
+
+    def _warn_loose_credential_file(self) -> None:
+        """Log (once per path and mode) a group/other-readable credential file.
+
+        A warning only, never a refusal: the VM must not fail to start on it.
+        """
+        warning = credential_file_mode_warning(self.env_path)
+        if warning is None:
+            return
+        try:
+            key = (str(self.env_path), self.env_path.stat().st_mode)
+        except OSError:
+            return
+        if getattr(self, "_credential_mode_warned", None) != key:
+            self._credential_mode_warned = key
+            log.warning("%s", warning)
 
     def should_auto_start(self) -> bool:
         """Auto-start configured paper engines without weakening live safeguards."""
@@ -840,15 +869,7 @@ class EngineManager:
                 try:
                     from parayabuck.execution.alpaca import AlpacaBroker
 
-                    # Fail closed: an unreadable config must never select the
-                    # live endpoint for a display poll. is_paper_mode fails
-                    # open (False, for the badge); the display broker fails
-                    # closed (paper=True).
-                    try:
-                        paper = self.is_paper_mode() if self.config_path.exists() else True
-                    except (OSError, ValueError):
-                        paper = True
-                    self.broker = AlpacaBroker(key, secret, paper=paper)
+                    self.broker = AlpacaBroker(key, secret, paper=self.display_broker_paper())
                 except Exception as e:
                     log.warning("Could not connect broker: %s", e)
 
@@ -872,7 +893,6 @@ class EngineManager:
                                 "current_price": p.current_price,
                                 "market_value": p.market_value,
                                 "unrealized_pnl": p.unrealized_pnl,
-                                "ownership": p.ownership,
                             }
                         )
 

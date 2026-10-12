@@ -274,7 +274,9 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         raise SystemExit("live.operator_approval_path is required")
     if not 1 <= args.expires_minutes <= 1440:
         raise SystemExit("--expires-minutes must be between 1 and 1440")
-    load_dotenv()
+    from parayabuck.config import load_env_file
+
+    load_env_file()
     key = os.getenv("ALPACA_API_KEY", "")
     secret = os.getenv("ALPACA_SECRET_KEY", "")
     hmac_secret = os.getenv(config.live.operator_approval_key_env, "")
@@ -451,9 +453,14 @@ def _run_doctor(args: argparse.Namespace) -> int:
             add("runtime.mode paper", config.runtime.mode == RuntimeMode.PAPER, str(config.runtime.mode))
             add("live.enabled false", not config.live.enabled, str(config.live.enabled))
             add("live hard_dollar_cap 0", config.live.hard_dollar_cap == 0, str(config.live.hard_dollar_cap))
-        env_path = Path(os.getenv("ENV_PATH") or ".env")
-        load_dotenv(env_path, override=False)
-        load_dotenv(Path(".env"), override=False)
+        from parayabuck.config import credential_file_mode_warning, dotenv_path, load_env_file
+
+        load_env_file()
+        mode_warning = credential_file_mode_warning(dotenv_path()) if dotenv_path().is_file() else None
+        if mode_warning is not None:
+            # Informational WARN that does NOT set the warning flag: a loose
+            # .env must not fail the --strict ExecStartPre and stop the VM.
+            checks.append(("credential file owner-only", "WARN", mode_warning))
         api_key = os.getenv("ALPACA_API_KEY", "").strip()
         secret = os.getenv("ALPACA_SECRET_KEY", "").strip()
         add("credentials present", bool(api_key and secret), "present" if api_key and secret else "missing")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import shutil
 import threading
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
@@ -21,6 +22,14 @@ _ACTIVE_ENGINE_STATES = frozenset(
 )
 _BACKTEST_ALLOWED_ENGINE_STATES = frozenset({"stopped", "error"})
 _MAX_OPERATOR_ERROR_LENGTH = 1000
+# Input bounds: one request must not build a giant argv (local DoS).
+_MAX_PARAMETERS = 64
+_MAX_SERIALIZED_PARAMETERS = 16384
+_MAX_SYMBOLS_LENGTH = 4096
+_MAX_STRATEGY_LENGTH = 128
+# Retained reports/web-* run directories; the oldest are deleted on start.
+_RETAINED_WEB_RUNS = 20
+_WEB_RUN_ID = re.compile(r"web-\d{8}T\d{6}Z-[0-9a-f]{8}")
 
 
 class BacktestManager:
@@ -40,6 +49,7 @@ class BacktestManager:
         self.summary: dict[str, Any] | None = None
         self.universe: dict[str, Any] | None = None
         self._engine_state_provider = engine_state_provider
+        self.reports_root = Path("reports")
 
     def bind_engine_state_provider(self, provider: Callable[[], str]) -> None:
         self._engine_state_provider = provider
@@ -74,7 +84,7 @@ class BacktestManager:
             if engine_state not in _BACKTEST_ALLOWED_ENGINE_STATES:
                 raise ValueError("The trading engine state could not be verified; refusing to start a Web backtest")
             self.run_id = f"web-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
-            self.output_dir = str(Path("reports") / self.run_id)
+            self.output_dir = str(self.reports_root / self.run_id)
             self.started_at = datetime.now(UTC).isoformat()
             self.finished_at = None
             self.error = None
@@ -84,6 +94,7 @@ class BacktestManager:
             try:
                 # Validate all user input before publishing a running state.
                 argv = self._build_argv(payload, self.output_dir)
+                self._prune_web_runs()
                 thread = self._thread_factory(target=self._run, args=(argv,), daemon=True, name="web-backtest")
                 self._thread = thread
                 self.state = "running"
@@ -93,6 +104,26 @@ class BacktestManager:
                 self._terminalize_start_failure(exc)
                 raise
             return self.run_id
+
+    def _prune_web_runs(self) -> None:
+        """Keep the newest ``_RETAINED_WEB_RUNS - 1`` web runs before a new one.
+
+        Only directories named like a Web run id are touched; the run ids
+        start with a UTC timestamp, so name order is age order.
+        """
+        try:
+            runs = sorted(
+                entry
+                for entry in self.reports_root.iterdir()
+                if entry.is_dir() and not entry.is_symlink() and _WEB_RUN_ID.fullmatch(entry.name)
+            )
+        except OSError:
+            return
+        for stale in runs[: max(0, len(runs) - (_RETAINED_WEB_RUNS - 1))]:
+            try:
+                shutil.rmtree(stale)
+            except OSError as exc:
+                log.warning("Could not prune old Web backtest report %s: %s", stale, exc)
 
     def _resolve_engine_state(self) -> str:
         if self._engine_state_provider is not None:
@@ -111,6 +142,8 @@ class BacktestManager:
         market = payload.get("market") or "equity"
         argv += ["--market", market]
         symbols = (payload.get("symbols") or "").strip()
+        if len(symbols) > _MAX_SYMBOLS_LENGTH:
+            raise ValueError("Symbols list is too long")
         if symbols:
             argv += ["--symbols", symbols]
         end = datetime.now(UTC)
@@ -118,14 +151,23 @@ class BacktestManager:
         start = end - timedelta(days=days or int(payload.get("years") or 5) * 365)
         argv += ["--start", start.date().isoformat(), "--end", end.date().isoformat()]
         strategy = (payload.get("strategy") or "").strip()
+        if len(strategy) > _MAX_STRATEGY_LENGTH:
+            raise ValueError("Strategy name is too long")
         if strategy:
             argv += ["--strategy", strategy]
-        for name, value in sorted(dict(payload.get("parameters") or {}).items()):
+        parameters = dict(payload.get("parameters") or {})
+        if len(parameters) > _MAX_PARAMETERS:
+            raise ValueError(f"Too many parameters (at most {_MAX_PARAMETERS})")
+        total = 0
+        for name, value in sorted(parameters.items()):
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(name)):
                 raise ValueError(f"Invalid parameter name: {name!r}")
             serialized = json.dumps(value)
             if len(serialized) > 4096:
                 raise ValueError(f"Parameter value too large for {name!r}")
+            total += len(serialized)
+            if total > _MAX_SERIALIZED_PARAMETERS:
+                raise ValueError("Parameters are too large in total")
             argv += ["--param", f"{name}={serialized}"]
         return argv
 

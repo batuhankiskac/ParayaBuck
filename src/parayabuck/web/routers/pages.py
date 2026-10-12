@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from parayabuck.web.deps import get_engine_manager
+from parayabuck.web.security import is_trusted_client
 
 router = APIRouter(tags=["pages"])
 
@@ -30,6 +31,13 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 def _control_token(request: Request) -> str:
+    """The control token, embedded only for peers the token endpoint trusts.
+
+    The Host header is client-supplied; a remote peer must not read the
+    token out of the HTML when ``/api/control-token`` refuses it.
+    """
+    if not is_trusted_client(request.client.host if request.client is not None else None):
+        return ""
     return str(getattr(get_engine_manager(request), "control_token", ""))
 
 

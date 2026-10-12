@@ -90,5 +90,3 @@ logging.getLogger("parayabuck").addHandler(_ws_log_handler)
 
 # Expose for EngineManager delegation / tests
 ticket_store = _ticket_store
-log_queues = _log_queues
-log_queues_lock = _log_queues_lock

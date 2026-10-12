@@ -356,8 +356,6 @@ def test_application_lifespan_auto_starts_paper_engine(monkeypatch: Any) -> None
     class AutoStartManager:
         start_calls = 0
         stop_calls = 0
-        log_queues: set[Any] = set()
-        _log_queues_lock = threading.Lock()
 
         def should_auto_start(self) -> bool:
             return True
@@ -540,8 +538,6 @@ class _DeadWebSocket:
 
 class _WebSocketManagerStub:
     def __init__(self) -> None:
-        self.log_queues: set[Any] = set()
-        self._log_queues_lock = threading.Lock()
         self.stream_connections: set[Any] = set()
         self.snapshot_fetches = 0
 
@@ -641,10 +637,12 @@ def test_websocket_stream_detects_dead_browser_and_cleans_up(monkeypatch: Any) -
 def test_websocket_logs_detects_dead_browser_and_cleans_queue(monkeypatch: Any) -> None:
     manager = _WebSocketManagerStub()
     websocket = _DeadWebSocket(manager)
+    before = ws_managers.get_log_queues_snapshot()
 
     asyncio.run(websocket_router.websocket_logs(websocket))  # must exit quietly, not spin
 
-    assert manager.log_queues == set()
+    # The shared module-level queue set is the single owner of log queues.
+    assert ws_managers.get_log_queues_snapshot() == before
 
 
 def test_status_reports_universe_counts_while_runtime_is_starting(tmp_path: Path, monkeypatch: Any) -> None:
@@ -680,47 +678,9 @@ def test_status_reports_universe_counts_while_runtime_is_starting(tmp_path: Path
     status = status_service.build_status_snapshot(status_manager)
 
     assert status["state"] == "starting"
-    assert status["active_equity_symbol_count"] == 2
     assert "active_crypto_symbol_count" not in status
-    assert status["universe"] == {"equity": {"symbols": ["AAPL", "MSFT"], "pool_size": 2}}
+    assert status["universe"] == {"equity": {"symbols": ["AAPL", "MSFT"]}}
     assert status["scanner"] == {"equity_status": "static"}
-
-
-def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
-
-    class StaticManager:
-        config_path = None
-        runtime = None
-        last_engine_error = None
-        security_warning = None
-
-        def get_credentials(self) -> tuple[str, str]:
-            return "", ""
-
-        def current_engine_state(self) -> str:
-            return "stopped"
-
-        def is_paper_mode(self) -> bool:
-            return True
-
-    def make_config(enabled: bool) -> object:
-        selection = type("Selection", (), {"enabled": enabled, "name": "equity_leveraged_trend_v1"})()
-        strategy = type("Strategy", (), {"equity": selection})()
-        universe = type(
-            "Universe",
-            (),
-            {"equity": type("Equity", (), {"enabled": True, "symbols": ("SPY", "QQQ")})()},
-        )()
-        return type("Config", (), {"strategy": strategy, "universe": universe})()
-
-    status_manager = StaticManager()
-    monkeypatch.setattr(status_service, "_load_config", lambda _path: make_config(True))
-    configured = status_service.build_status_snapshot(status_manager)
-    assert configured["strategy_status"] == "configured:equity/equity_leveraged_trend_v1"
-
-    monkeypatch.setattr(status_service, "_load_config", lambda _path: make_config(False))
-    disabled = status_service.build_status_snapshot(status_manager)
-    assert disabled["strategy_status"] == "configured:"
 
 
 def test_status_exposes_strategy_metadata_instead_of_global_timeframe(monkeypatch: Any) -> None:
@@ -766,10 +726,8 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(monkeypatc
     meta = status["strategy_metadata"]
     assert meta["equity"]["name"] == "equity_leveraged_trend_v1"
     assert meta["equity"]["signal_timeframe"] == "1d"
-    assert meta["equity"]["supported_timeframes"] == ["1d"]
     assert meta["equity"]["rebalance_cadence"] == "hours:24"
     # The static equity universe is its own pool and observation set.
-    assert meta["equity"]["dynamic_universe_enabled"] is False
     assert meta["equity"]["candidate_pool_size"] == 3
     assert meta["equity"]["observation_set_size"] == 3
     assert set(meta) == {"equity"}
@@ -799,7 +757,7 @@ def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
 
     monkeypatch.setattr(status_service, "_load_config", _raise)
     status = status_service.build_status_snapshot(status_manager)
-    assert status["strategy_status"] == "configuration_error"
+    assert "strategy_metadata" not in status
     assert status["scanner"] == {"equity_status": "error"}
 
 

@@ -86,3 +86,10 @@ Primary comparison: E2 vs SPY, liquidated, progressive regime, USD CAGR, 2000-03
   `TURPPDMMINMEI` (OECD, domestic manufacturing PPI) as a proxy.
 - `data/historical/after_tax_tr_v1_manifest.json`: sources, retrieval time, sha256.
 - `download_data.py` made them (network, once); `after_tax.py` is offline and deterministic.
+
+## Amendment A1 (2026-10-12, before any after-tax result)
+
+The first `--run` stopped with a missing Yi-ÜFE month (2003-01): the CBRT page gives no monthly change
+for the first month of the 2003 = 100 series, so the committed file had no 2003-01 row. The chain is now
+anchored at 2003-01 = 100 and the FRED proxy (1999-01 → 2002-12) is ratio-linked there. The raw pages are
+byte-identical (same sha256); only the anchor month changed. No after-tax number had been produced.

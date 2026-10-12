@@ -11,9 +11,9 @@ Sources
     (TRL); divided by 1,000,000 to TRY (5083 sayili Kanun redenomination 2005-01-01).
     Days without a bulletin (weekends, holidays) are absent.
   * Yi-UFE monthly % changes from the CBRT "Uretici Fiyatlari" page (TUIK series,
-    2003=100), 2003-01 .. latest. Chained from 100 at 2002-12.
-  * 2000-01 .. 2002-11 splice: FRED TURPPDMMINMEI (OECD MEI, Turkey domestic
-    producer prices, manufacturing), ratio-linked at 2002-12. Pre-2003 indexation
+    2003=100), 2003-02 .. latest (the page gives no change for 2003-01). Chained from 100 at 2003-01.
+  * 1999-01 .. 2002-12 splice: FRED TURPPDMMINMEI (OECD MEI, Turkey domestic
+    producer prices, manufacturing), ratio-linked at 2003-01. Pre-2003 indexation
     in the model therefore uses a proxy (documented in PREREGISTRATION.md).
 
 Raw responses are cached under --cache (a scratch dir), never committed.
@@ -115,22 +115,24 @@ def main() -> None:
     fred_raw = fetch(FRED_URL, ua=False)
     (cache / "fred.csv").write_bytes(fred_raw)
     fred = {r["observation_date"][:7]: float(r["TURPPDMMINMEI"]) for r in csv.DictReader(fred_raw.decode().splitlines())}
-    idx = {"2002-12": 100.0}
+    # The page lists no monthly change for 2003-01 (first month of the 2003=100 series), so the
+    # chain is anchored at 2003-01 = 100 and the pre-2003 proxy is ratio-linked there.
+    idx = {"2003-01": 100.0}
     lvl = 100.0
     for ym, pct in ch.items():
-        if ym < "2003-01":
+        if ym < "2003-02":
             continue
         lvl *= 1 + pct / 100
         idx[ym] = lvl
-    base = fred["2002-12"]
+    base = fred["2003-01"]
     for ym, v in fred.items():
-        if "1999-01" <= ym < "2002-12":
+        if "1999-01" <= ym < "2003-01":
             idx[ym] = 100.0 * v / base
     with OUT_UFE.open("w", newline="") as fh:
         w = csv.writer(fh, lineterminator="\n")
         w.writerow(["month", "yiufe_index", "source"])
         for ym in sorted(idx):
-            src = "TCMB/TUIK Yi-UFE monthly % chained" if ym > "2002-12" else ("anchor" if ym == "2002-12" else "FRED TURPPDMMINMEI ratio-linked")
+            src = "TCMB/TUIK Yi-UFE monthly % chained" if ym > "2003-01" else ("anchor" if ym == "2003-01" else "FRED TURPPDMMINMEI ratio-linked")
             w.writerow([ym, f"{idx[ym]:.6f}", src])
 
     def sha(p) -> str:
@@ -148,7 +150,7 @@ def main() -> None:
                 "sha256": sha(OUT_FX),
             },
             str(OUT_UFE.relative_to(ROOT)): {
-                "source": "Yi-UFE (2003=100) monthly % changes from the CBRT 'Uretici Fiyatlari' page; 2000-01..2002-11 FRED TURPPDMMINMEI ratio-linked at 2002-12",
+                "source": "Yi-UFE (2003=100) monthly % changes from the CBRT 'Uretici Fiyatlari' page; 1999-01..2002-12 FRED TURPPDMMINMEI ratio-linked at 2003-01",
                 "urls": [UFE_URL, FRED_URL],
                 "rows": len(idx), "first": min(idx), "last": max(idx),
                 "raw_ufe_page_sha256": sha(ufe_raw), "raw_fred_sha256": sha(fred_raw),

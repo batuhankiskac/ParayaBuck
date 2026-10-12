@@ -337,18 +337,21 @@ dominates the ETF sweep and needs no code change.
 
 ## Evidence
 
-Evidence was committed on this branch in two steps:
+Evidence was committed on this branch in three steps; the last one holds
+everything and is the commit to tag:
 
 - **Pre-registration (`f323a4c`).** `PREREGISTRATION.md`, `screen.py`, the
   vendored engine, `DATA_MANIFEST.json` and
   `data/historical/tbill_sweep_v1_*.csv` (byte copies of tagged files).
-- **Final evidence commit.** `RESULTS.json`, `SUMMARY.txt`,
-  `posthoc_alpaca_breakeven.py` / `POSTHOC.json`, and the Stage B runner,
-  shim, configs, runs and `STAGE_B_RESULTS.json`.
+- **Screen results (`291bb33`).** `RESULTS.json` and `SUMMARY.txt`.
+- **Evidence (`8702583`).** Adds `posthoc_alpaca_breakeven.py` /
+  `POSTHOC.json` and the Stage B runner, shim, configs, runs and
+  `STAGE_B_RESULTS.json`.
 
-The setup steps are in the docstring of `adapt_harness.py`. Everything was
-removed from the tree in the following commit and is to be preserved in tag
-`archive/research/tbill-sweep-v1-2026-10`.
+The setup steps are in the docstring of `adapt_harness.py`. Everything under
+`research/tbill_sweep_v1/` and `data/historical/tbill_sweep_v1_*` was removed
+from the tree in the following commit. It is to be preserved in tag
+`archive/research/tbill-sweep-v1-2026-10` (on `8702583`).
 
 ## Decision
 

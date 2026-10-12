@@ -17,7 +17,9 @@ This is a finding about EWMA, not about TimesFM. The margin is small. Under
 the pre-registration a passing arm is **not promoted** here; promotion needs a
 separate pre-registered step. **VT35 is unchanged.**
 
-Evidence is in `research/timesfm_v1/`:
+This document is the only record kept on main. The evidence directory
+`research/timesfm_v1/` was removed from main on 2026-10-12 and is preserved
+in tag `archive/research/timesfm-v1-2026-10`:
 
 - `PREREGISTRATION.md`, committed in `e0efb9f` before any market forecast
   was run or any arm was simulated;

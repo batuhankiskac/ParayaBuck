@@ -51,14 +51,6 @@ Status per directory (verified 2026-10-01):
   bootstrap) and runs in about 10 s; it overwrites its `RESULTS.json`. Two runs
   on 2026-10-11 were byte-identical.
 
-- **timesfm_v1 — runnable from committed code.** `screen.py` reads the two
-  committed `stress_robustness_v1` CSVs plus the committed TimesFM forecast
-  cache (`forecasts.csv`, `forecasts.meta.json`, `g9_verify.json`). It needs
-  only numpy, runs in about 1 s and overwrites its `RESULTS.json`; two runs
-  on 2026-10-12 were byte-identical. `generate_forecasts.py` regenerates the
-  cache. It needs a separate venv with `timesfm[torch]==3.0.2` and the pinned
-  `google/timesfm-2.5-200m-pytorch` checkpoint, and takes about 7 min on CPU.
-
 ## Archive-only policy
 
 A harness in this tree is archive-only when the code it needs was deleted or

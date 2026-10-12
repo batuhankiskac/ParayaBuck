@@ -1,0 +1,36 @@
+timesfm_v1 screen | common window 2000-04-03 -> 2026-09-29 (6662 sessions)
+harness C0 vs trend_robustness_v2 C0: m1 dCAGR 0.0000pp dDD 0.0000pp m2 dCAGR 0.0000pp dDD -0.0000pp (tol 0.01pp) PASS
+cache check PASS (6663 dates) | G9 PASS (n=50, max rel 0.0e+00)
+
+m=2 historical:
+arm      CAGR    maxDD Calmar Sharpe    2017+       P1       P2       P3  holdout turnov trades invest
+C0     13.56%   46.12%   0.29   0.62   30.73%   -2.45%   12.95%   30.73%   35.18%   6.49   1489  73.0%
+V1     13.42%   44.07%   0.30   0.61   30.68%   -2.39%   12.48%   30.68%   33.81%   7.30   1664  73.0%
+V0     13.67%   43.69%   0.31   0.63   29.74%   -1.53%   13.20%   29.74%   33.37%   6.30   1730  73.0%
+D1      8.07%   74.52%   0.11   0.42   22.84%  -13.16%   17.45%   22.84%   39.09%  13.68   2209  77.8%
+D2      7.44%   62.74%   0.12   0.42   26.51%   -9.51%    6.24%   26.51%   31.74%  16.08   1527  61.9%
+SPY     8.22%   55.20%   0.15   0.51   15.23%   -4.04%   14.36%   15.23%   17.82%   0.00      0      -
+
+m=1 key numbers (CAGR / maxDD / Calmar):
+C0     13.85%   45.77%   0.30
+V1     13.75%   43.72%   0.31
+V0     13.95%   43.35%   0.32
+D1      8.66%   72.58%   0.12
+D2      8.13%   59.05%   0.14
+
+gates (m=2; G6 = G1-G3 at m=1; G9 only for TimesFM arms):
+V1: G1=PASS G2=PASS G3=FAIL G4=PASS G5p=FAIL G6=FAIL G7=PASS G8=PASS G9=PASS -> FAIL
+V0: G1=PASS G2=PASS G3=PASS G4=PASS G5p=PASS G6=PASS G7=PASS G8=PASS G9=n/a -> PASS_ALL
+D1: G1=FAIL G2=FAIL G3=FAIL G4=FAIL G5p=FAIL G6=FAIL G7=FAIL G8=PASS G9=PASS -> FAIL
+D2: G1=FAIL G2=FAIL G3=FAIL G4=FAIL G5p=FAIL G6=FAIL G7=FAIL G8=FAIL G9=PASS -> FAIL
+V1 vs V0 (m=2): CAGR   13.42% vs   13.67%, Calmar 0.304 vs 0.313 -> V1 does not beat V0
+selected: V0
+
+report-only: vol forecast accuracy vs vol20(t+20) (annualized variance)
+  full (n=6643): vol20 MSE 0.14163 QLIKE 0.4003 | vol_ewma MSE 0.11570 QLIKE 0.3178 | vol_tfm MSE 0.12188 QLIKE 0.3479
+  holdout (n=242): vol20 MSE 0.01460 QLIKE 0.4206 | vol_ewma MSE 0.01129 QLIKE 0.2730 | vol_tfm MSE 0.01226 QLIKE 0.3076
+report-only: direction (log QQQ TR)
+  h20 full (n=6643): hit 58.4% vs up-rate 62.3% | up-calls 79.3% precision 63.1%
+  h20 holdout (n=242): hit 57.0% vs up-rate 57.9% | up-calls 97.5% precision 57.6%
+  h60 full (n=6603): hit 61.6% vs up-rate 67.9% | up-calls 77.6% precision 69.0%
+  h60 holdout (n=202): hit 68.8% vs up-rate 68.8% | up-calls 100.0% precision 68.8%

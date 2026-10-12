@@ -1,7 +1,8 @@
 """Application lifespan isolation — paper auto-start with retry cancellation.
 
 Extracted from web/server.py lines 1390-1418. Preserves:
-* paper-only auto-start (no LIVE arm weakening),
+* paper auto-start; LIVE auto-starts only with a valid standing LIVE
+  authorization (the manager's gate; no LIVE arm weakening),
 * bounded retry cancellation on shutdown (pending sleep cancelled promptly,
   in-flight start still allowed to finish),
 * stop_engine on to_thread during shutdown to release Alpaca sockets.

@@ -23,6 +23,19 @@ from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import RebalanceReason, TargetPortfolio, TargetWeight
 
+# The only parameters the rule reads. Anything else is a typo whose intended
+# change would never apply while it still perturbed the configuration digest.
+_PARAMETER_KEYS = frozenset(
+    {"signal_symbol", "hold_symbol", "sma_bars", "vol_target", "vol_window", "rebalance_frequency"}
+)
+# Sane ranges: an SMA longer than ~4 years of sessions is permanent cash on
+# any realistic history, an annualized vol target above 100% pins the weight
+# at 1.0 (volatility targeting silently off), and a vol window beyond one
+# trading year no longer measures current turbulence.
+_MAX_SMA_BARS = 1000
+_MAX_VOL_TARGET = 1.0
+_MAX_VOL_WINDOW = 252
+
 
 class EquityLeveragedTrendV1(PortfolioStrategy):
     """Hold ``hold_symbol`` while ``signal_symbol`` closes above its SMA, else cash."""
@@ -47,6 +60,12 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         super().__init__(merged)
 
     def _validate_parameters(self) -> None:
+        unknown = sorted(set(self.parameters) - _PARAMETER_KEYS)
+        if unknown:
+            raise ValueError(
+                f"equity_leveraged_trend_v1 does not accept parameter(s) {', '.join(unknown)}; "
+                f"supported: {', '.join(sorted(_PARAMETER_KEYS))}"
+            )
         if self.parameters.get("rebalance_frequency") != "hours:24":
             raise ValueError("equity_leveraged_trend_v1 decides every session: rebalance_frequency must be hours:24")
         for key in ("signal_symbol", "hold_symbol"):
@@ -55,15 +74,19 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
                 raise ValueError(f"{key} must be a symbol")
             self.parameters[key] = canonical_symbol(value, Market.EQUITY)
         sma = self.parameters.get("sma_bars")
-        if isinstance(sma, bool) or not isinstance(sma, int) or sma < 0:
-            raise ValueError("sma_bars must be a non-negative integer")
+        # SMA(1) equals the last close, so the strict ``close > sma`` test could
+        # never signal an uptrend: 1 would silently mean always-cash.
+        if isinstance(sma, bool) or not isinstance(sma, int) or sma < 0 or sma == 1 or sma > _MAX_SMA_BARS:
+            raise ValueError(f"sma_bars must be a non-negative integer: 0 (buy-and-hold) or 2..{_MAX_SMA_BARS}")
         target = self.parameters.get("vol_target")
-        if isinstance(target, bool) or not isinstance(target, (int, float)) or not 0 <= target <= 5:
-            raise ValueError("vol_target must be a number in [0, 5] (0 disables volatility targeting)")
+        if isinstance(target, bool) or not isinstance(target, (int, float)) or not 0 <= target <= _MAX_VOL_TARGET:
+            raise ValueError(
+                f"vol_target must be a number in [0, {_MAX_VOL_TARGET:g}] (0 disables volatility targeting)"
+            )
         self.parameters["vol_target"] = float(target)
         window = self.parameters.get("vol_window")
-        if isinstance(window, bool) or not isinstance(window, int) or window < 2:
-            raise ValueError("vol_window must be an integer of at least 2")
+        if isinstance(window, bool) or not isinstance(window, int) or not 2 <= window <= _MAX_VOL_WINDOW:
+            raise ValueError(f"vol_window must be an integer in [2, {_MAX_VOL_WINDOW}]")
 
     @property
     def signal_symbol(self) -> str:

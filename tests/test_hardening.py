@@ -91,8 +91,6 @@ def _bar(
 def test_canonical_crypto_symbols_and_adapters() -> None:
     legacy = normalize_symbol("btcusd", Market.CRYPTO)
     assert legacy.canonical == "BTC/USD"
-    assert legacy.market_data_symbol == "BTC/USD"
-    assert legacy.trading_symbol == "BTC/USD"
     assert legacy.asset_lookup_symbol == "BTCUSD"
     assert same_symbol("BTCUSD", "btc/usd")
     assert canonical_symbol("aapl") == "AAPL"

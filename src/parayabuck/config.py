@@ -513,7 +513,13 @@ class Config:
 def _strategy_from_raw(
     defaults: MarketStrategyConfig, enabled_default: bool, raw: dict[str, Any]
 ) -> MarketStrategyConfig:
-    """Merge one ``strategy.<market>`` YAML block over the packaged defaults."""
+    """Merge one ``strategy.<market>`` YAML block over the packaged defaults.
+
+    A ``parameters`` block for the default strategy is merged key by key over
+    the packaged parameters: a partial block (say only ``sma_bars``) must keep
+    the packaged values of the omitted keys instead of silently falling back
+    to the strategy class's different built-in defaults (``vol_target: 0``).
+    """
     base = {
         "enabled": enabled_default,
         "name": defaults.name,
@@ -522,7 +528,15 @@ def _strategy_from_raw(
         "maximum_allocation": defaults.maximum_allocation,
         "parameters": defaults.parameters,
     }
-    return MarketStrategyConfig(**{**base, **dict(raw)})
+    merged = {**base, **dict(raw)}
+    if "parameters" in raw:
+        if raw["parameters"] is not None and not isinstance(raw["parameters"], dict):
+            raise ValueError("strategy parameters must be a mapping")
+        parameters = _block(raw["parameters"])
+        if merged["name"] == defaults.name:
+            parameters = {**defaults.parameters, **parameters}
+        merged["parameters"] = dict(parameters)
+    return MarketStrategyConfig(**merged)
 
 
 def _resolved_timeframe(strategy: MarketStrategyConfig) -> MarketStrategyConfig:

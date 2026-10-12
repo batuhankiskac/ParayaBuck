@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import asdict, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
@@ -421,6 +421,9 @@ class PortfolioRuntime:
         # when the provider rebased (data/adjustment.py). The runtime keeps
         # no cumulative factor math — the provider is the sole authority.
         self.signal_verified_through_by_symbol: dict[str, datetime] = {}
+        # Newest New York session per symbol for which a FINAL provider bar
+        # was adopted (partial provider bars are never adopted).
+        self.provider_final_session_by_symbol: dict[str, date] = {}
         self.signal_last_verified_at: datetime | None = None
         self.configuration_digest = configuration_digest(
             strategy,
@@ -825,26 +828,6 @@ class PortfolioRuntime:
         self.startup_catch_up_status = f"recovered_session:{result.status}" if recovering_session else result.status
         return result
 
-    def update_symbols(self, symbols: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        """Replace ephemeral members without changing the approved policy identity."""
-        updated = tuple(dict.fromkeys(canonical_symbol(symbol, self.market) for symbol in symbols))
-        if not updated:
-            raise ValueError("PortfolioRuntime requires an active universe")
-        current = set(self.symbols)
-        desired = set(updated)
-        added = tuple(sorted(desired - current))
-        removed = tuple(sorted(current - desired))
-        for symbol in added:
-            self.history[symbol] = []
-        for symbol in removed:
-            self.history.pop(symbol, None)
-        # New members arrive unverified: warmup seeding is followed by the
-        # normal batched provider verification before any decision.
-        self.signal_verified_through_by_symbol = {}
-        self.signal_last_verified_at = None
-        self.symbols = updated
-        return added, removed
-
     def _append_signal_bar(self, bar: Bar) -> None:
         """Append one completed bar to the strategy's signal history.
 
@@ -857,7 +840,11 @@ class PortfolioRuntime:
         An equity tail on the SAME New York session (a provider bar labeled
         00:00 ET, adopted while that session was still forming) is REPLACED
         by the completed stream bar labeled 09:30 ET: one session is one
-        signal bar, and the decision bar must be the history tail.
+        signal bar, and the decision bar must be the history tail. A tail the
+        provider verification already ADOPTED as that session's FINAL bar is
+        the splits-basis authority: it keeps its values and only takes the
+        stream label, because the RAW stream bar would mix an as-traded close
+        into rebased history on a split day.
         """
         symbol = canonical_symbol(bar.symbol, bar.market)
         series = self.history[symbol]
@@ -869,7 +856,11 @@ class PortfolioRuntime:
             and series
             and signal_session_date(series[-1].timestamp) == signal_session_date(bar.timestamp)
         ):
-            series[-1] = bar
+            adopted_through = getattr(self, "provider_final_session_by_symbol", {}).get(symbol)
+            if adopted_through is not None and signal_session_date(series[-1].timestamp) <= adopted_through:
+                series[-1] = replace(series[-1], timestamp=bar.timestamp)
+            else:
+                series[-1] = bar
             return
         series.append(bar)
 
@@ -904,6 +895,10 @@ class PortfolioRuntime:
             ]
             if not provider:
                 continue
+            newest_final = max(signal_session_date(bar.timestamp) for bar in provider)
+            adopted = self.__dict__.setdefault("provider_final_session_by_symbol", {})
+            if adopted.get(symbol) is None or newest_final > adopted[symbol]:
+                adopted[symbol] = newest_final
             merged, changed = merge_provider_authority(tuple(series), provider)
             if changed:
                 self.history[symbol] = list(merged)
@@ -1950,6 +1945,18 @@ class PortfolioRuntime:
             resolved = self._resolve_stuck_submission_rows(decision_id, buys, "buy")
             if resolved is None or any(str(item["status"]) == "submitting" for item in resolved):
                 return None
+            buys = resolved
+        # A BUY the broker already accepted (a crash landed between its
+        # submit and the phase flip below) is suppressed by the re-plan as an
+        # open order. Such a working BUY keeps the rebalance in
+        # ``buy_pending`` instead of completing it, so the pending phase and
+        # its stuck-BUY alert keep tracking the order to a terminal status.
+        # An ambiguous row (its submit raised) keeps the completion path and
+        # its dedicated alert (``_alert_completed_with_ambiguous_buys``).
+        working_buy = any(
+            not is_terminal_order_status(str(item["status"])) and str(item["status"]) not in _AMBIGUOUS_ORDER_STATUSES
+            for item in buys
+        )
         account = account or self.broker.account()
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
@@ -1997,6 +2004,8 @@ class PortfolioRuntime:
             if order.side == PortfolioOrderSide.BUY
         )
         replan_needs_sell = any(order.side == PortfolioOrderSide.SELL for order in planned)
+        if not buy_orders and working_buy:
+            return self._enter_buy_pending(decision_id, risk, (), ())
         if not buy_orders:
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
             self._alert_completed_with_ambiguous_buys(decision_id)
@@ -2032,6 +2041,8 @@ class PortfolioRuntime:
                 # disappeared. Keep the deferred phase retryable until a fresh
                 # account snapshot permits the replacement opening.
                 return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_waiting_for_slot")
+            if working_buy:
+                return self._enter_buy_pending(decision_id, risk, (), ())
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
             self._alert_completed_with_ambiguous_buys(decision_id)
             _emit_rebalance_phase_safe(
@@ -2055,6 +2066,16 @@ class PortfolioRuntime:
             self.repository.record_order(order, "submitting")
             self._record_buy_admission_observation(decision_id, admission, buy_orders, linked=(order,))
             submitted += self._submit_orders((order,))
+        return self._enter_buy_pending(decision_id, risk, buy_orders, submitted)
+
+    def _enter_buy_pending(
+        self,
+        decision_id: str,
+        risk: RiskOverlayDecision,
+        buy_orders: tuple[PortfolioOrderRequest, ...],
+        submitted: tuple[str, ...],
+    ) -> PortfolioRuntimeResult:
+        """Flip a deferred rebalance to ``buy_pending`` once its BUYs are working."""
         self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BUY_PENDING)
         _emit_rebalance_phase_safe(
             decision_id,
@@ -2239,13 +2260,18 @@ class PortfolioRuntime:
             sized: tuple[PortfolioOrderRequest, ...] = ()
         else:
             scale = min(1.0, capacity / notional)
+            # One rules lookup per symbol for the whole sizing pass.
+            rules = {
+                (order.symbol, order.market): self.broker.asset_trading_rules(order.symbol, order.market)
+                for order in buy_orders
+            }
             sized = tuple(
                 PortfolioOrderRequest(
                     **{
                         **asdict(order),
                         "quantity": floor_increment(
                             order.quantity * scale,
-                            self.broker.asset_trading_rules(order.symbol, order.market).quantity_increment,
+                            rules[(order.symbol, order.market)].quantity_increment,
                         ),
                     }
                 )
@@ -2254,9 +2280,9 @@ class PortfolioRuntime:
             sized = tuple(
                 order
                 for order in sized
-                if order.quantity >= self.broker.asset_trading_rules(order.symbol, order.market).minimum_order_size
+                if order.quantity >= rules[(order.symbol, order.market)].minimum_order_size
                 and order.quantity * prices[order.client_order_id]
-                >= self.broker.asset_trading_rules(order.symbol, order.market).minimum_order_notional
+                >= rules[(order.symbol, order.market)].minimum_order_notional
             )
             if not sized and reason is None:
                 reason = "below_broker_minimum_after_sizing"

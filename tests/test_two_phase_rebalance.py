@@ -708,8 +708,14 @@ def test_local_nonterminal_order_suppresses_deferred_planner_when_broker_is_empt
 
     resumed = runtime.advance_rebalance()
 
-    assert resumed is not None and resumed.status == "rebalance_complete"
+    # The working local BUY is suppressed from the re-plan (no duplicate
+    # submit) and keeps the rebalance tracking it in buy_pending instead of
+    # completing it (audit-2 Q3A-1).
+    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    assert resumed.submitted_order_ids == ()
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+    state = repository.current_rebalance_execution(runtime.account_id, Market.EQUITY)
+    assert state is not None and state.phase == "buy_pending"
 
 
 def test_process_closed_bars_exposes_deferred_buys_advanced_in_same_cycle(tmp_path) -> None:

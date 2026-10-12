@@ -161,18 +161,6 @@ def test_adopt_authoritative_history_updates_verification_state() -> None:
     assert runtime.adopt_authoritative_signal_history({"AAA": provider}, {"AAA": dates[-1]}) == 0
 
 
-def test_hot_swap_between_splits_resets_verification_state() -> None:
-    runtime = _bare_runtime()
-    runtime.adopt_authoritative_signal_history({"AAA": [_bar("AAA", _TS0, 50.0)]}, {"AAA": _TS0})
-    assert runtime.signal_last_verified_at is not None
-    added, removed = runtime.update_symbols(("AAA", "BBB"))
-    assert added == ("BBB",) and removed == ()
-    # Membership changed while splits may have happened: fail conservative.
-    assert runtime.signal_verified_through_by_symbol == {}
-    assert runtime.signal_last_verified_at is None
-    assert "AAA" in runtime.history and "BBB" in runtime.history
-
-
 class FakeHistory:
     """Fake provider that HONORS the requested [start, end] window like the
     real API: only bars inside it are returned, and the first daily bar can
@@ -629,11 +617,12 @@ def test_merge_keeps_one_bar_per_session_across_label_conventions() -> None:
     assert [bar.timestamp for bar in merged_tail] == [*provider_days[:-1], stream_labels[-1]]
 
 
-def test_decision_bar_replaces_same_session_provider_tail_after_latch(monkeypatch) -> None:
-    """Latch adoption lands the provider's (04:00 UTC) bar for the decision
-    session BEFORE the stream decision bar (13:30 UTC) is appended; the
-    append must replace it so the session appears once and the decision bar
-    is the history tail."""
+def test_decision_bar_relabels_same_session_provider_tail_after_latch(monkeypatch) -> None:
+    """Latch adoption lands the provider's FINAL (04:00 UTC) bar for the
+    decision session BEFORE the stream decision bar (13:30 UTC) is appended.
+    The session appears once with the stream label, but the adopted
+    splits-basis values win: the RAW stream close must not overwrite them
+    (audit-2 Q3C-2)."""
     monkeypatch.setattr(
         "parayabuck.runtime.alerts",
         type("A", (), {"emit": staticmethod(lambda kind, **kw: None)}),
@@ -649,7 +638,7 @@ def test_decision_bar_replaces_same_session_provider_tail_after_latch(monkeypatc
     equity._append_signal_bar(_bar("AAA", _PROD_DECISION_TS, 41.0))
     history = equity.history["AAA"]
     assert [bar.timestamp for bar in history] == [*sessions[:-1], _PROD_DECISION_TS]
-    assert history[-1].close == 41.0
+    assert history[-1].close == 40.0
 
 
 # --------------------------------------------------------------------------- #

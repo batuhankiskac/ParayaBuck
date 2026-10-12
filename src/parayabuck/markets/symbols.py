@@ -61,8 +61,6 @@ _KNOWN_CRYPTO_BASES = {
 class SymbolIdentity:
     canonical: str
     market: Market
-    market_data_symbol: str
-    trading_symbol: str
     asset_lookup_symbol: str
 
 
@@ -78,7 +76,7 @@ def normalize_symbol(symbol: str, market: Market | None = None) -> SymbolIdentit
     if inferred_market == Market.EQUITY:
         if "/" in value:
             raise ValueError(f"Equity symbol cannot contain '/': {symbol!r}")
-        return SymbolIdentity(value, Market.EQUITY, value, value, value)
+        return SymbolIdentity(value, Market.EQUITY, value)
 
     if "/" in value:
         parts = value.split("/")
@@ -99,8 +97,6 @@ def normalize_symbol(symbol: str, market: Market | None = None) -> SymbolIdentit
     return SymbolIdentity(
         canonical=canonical,
         market=Market.CRYPTO,
-        market_data_symbol=canonical,
-        trading_symbol=canonical,
         asset_lookup_symbol=f"{base}{quote}",
     )
 

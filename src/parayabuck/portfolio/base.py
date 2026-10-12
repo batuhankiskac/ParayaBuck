@@ -121,18 +121,6 @@ class StrategySpec:
     rebalance_policy: str
     minimum_history_bars: int
 
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "name": self.name,
-            "version": self.version,
-            "market": self.market.value,
-            "display_name": self.display_name,
-            "primary_timeframe": self.primary_timeframe,
-            "supported_timeframes": list(self.supported_timeframes),
-            "rebalance_policy": self.rebalance_policy,
-            "minimum_history_bars": self.minimum_history_bars,
-        }
-
 
 class PortfolioStrategy(ABC):
     """Produces target portfolios from point-in-time market state.

@@ -293,7 +293,7 @@ Two kinds of row never come back after a restart:
   row is cleared and a `circuit_breaker` alert records the migration.
 
 Every other reason (`ownership_drift`, `protection_failure`,
-`post_fill_risk_violation`, …) is restored on restart and needs its own
+`reconciliation_failed`, …) is restored on restart and needs its own
 verified reset. A reset verifies one reason at a time (plus the migrated set
 above): after resetting, check `ops status` for remaining rows and resolve each
 one.

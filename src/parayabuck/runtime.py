@@ -3931,9 +3931,9 @@ class EngineRuntime:
           is monotonic (``max`` timestamp, updated only on adequate coverage)
           and restored only via ``adopt_authoritative_signal_history``; a
           failed or partial provider response never advances or partially
-          overwrites watermarks (fail-closed). Membership changes
-          (``PortfolioRuntime.update_symbols``) reset watermarks conservatively
-          so new symbols must be verified before entries.
+          overwrites watermarks (fail-closed). A membership refresh recreates
+          the runtimes, so watermarks start empty and new symbols must be
+          verified before entries.
         * Bounded retries — provider fetch is retried at most once on
           transient network errors (``_is_transient_network_error``) with a
           short backoff; adequacy failures (empty/partial/missing bars) are

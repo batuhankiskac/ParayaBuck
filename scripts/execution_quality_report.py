@@ -15,13 +15,18 @@ no ``above_model``/``below_model`` verdict. The backtest-aligned comparison
 is ``scripts/execution_shadow_report.py``.
 
 Usage:
-    .venv/bin/python scripts/execution_quality_report.py [--db PATH] [--config PATH]
+    .venv/bin/python scripts/execution_quality_report.py [--db PATH] [--config PATH] [--account-id ID]
+
+Execution and forward metrics are scoped to ``--account-id``, defaulting to
+the account of the newest runtime session; a ledger with no session keeps the
+whole-database view.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -36,6 +41,7 @@ from parayabuck.execution.telemetry import (  # noqa: E402
     forward_metrics,
     latest_decision_ids,
 )
+from parayabuck.monitoring.forensics import current_account_id  # noqa: E402
 
 _CONFIG_PATH = ROOT / "config" / "settings.yaml"
 
@@ -57,11 +63,30 @@ def _print_summary(title: str, summary: dict[str, object]) -> None:
     )
 
 
-def main() -> int:
+def resolve_account_id(db_path: Path, explicit: str | None) -> str | None:
+    """The account the metrics are scoped to: the explicit one, else the
+    newest runtime session's account; None (whole database) when unknown."""
+    if explicit:
+        return explicit
+    if not db_path.is_file():
+        return None
+    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        return current_account_id(conn)
+    finally:
+        conn.close()
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", default=None, help="runtime database path (default: config)")
     parser.add_argument("--config", default=str(_CONFIG_PATH), help="settings.yaml path")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--account-id",
+        default=None,
+        help="scope execution/forward metrics to this account (default: newest runtime session's account)",
+    )
+    args = parser.parse_args(argv)
 
     config = load_config(args.config)
     db_path = Path(args.db or config.runtime.decision_db_path)
@@ -73,6 +98,9 @@ def main() -> int:
     if not calibration.get("available", False):
         print(f"\nNo runtime database at {db_path}; nothing to report (empty state, exit 0).")
         return 0
+
+    account_id = resolve_account_id(db_path, args.account_id)
+    print(f"account: {account_id or 'all (no runtime session recorded)'}")
 
     configured = calibration["configured"]
     print("\nConfigured cost assumptions (backtest model, REPORT ONLY):")
@@ -114,7 +142,7 @@ def main() -> int:
     print(f"  backtest-aligned metric: {comparison.get('backtest_aligned_metric')}")
     print(f"  policy: {calibration.get('policy')}")
 
-    metrics = execution_metrics(db_path)
+    metrics = execution_metrics(db_path, account_id=account_id)
     if metrics.get("available", False):
         orders = metrics["orders"]
         print("\nExecution metrics:")
@@ -127,7 +155,7 @@ def main() -> int:
             f"by_market={json.dumps(metrics['fees'].get('by_market'))}"
         )
 
-    forward = forward_metrics(db_path)
+    forward = forward_metrics(db_path, account_id=account_id)
     if forward.get("available", False):
         strategy = forward["strategy"]
         print("\nForward metrics:")

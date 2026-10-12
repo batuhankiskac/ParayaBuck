@@ -72,7 +72,10 @@ auto-start logs the refusal and the dashboard stays `stopped`.
 
 The file named by `EnvironmentFile=` (template: `/opt/parayabuck/.env`; on the
 current VM, `.env` in the checkout) is mode `0600` and holds every secret. The
-config loader also reads `.env` from the working directory.
+config loader also reads `.env`, but only from the path in `ENV_PATH` or from
+the working directory — never from a parent directory. If that credential file
+is accessible by group or other users, `doctor` prints a WARN line with the
+`chmod 600` fix (the start is not refused).
 
 | Variable | Required | Notes |
 |---|---|---|

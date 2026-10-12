@@ -420,6 +420,58 @@ def test_rebase_cli_confirm_writes_the_audited_adjustment(tmp_path: Path, capsys
     ]
 
 
+def test_rebase_cli_books_a_corroborated_reverse_split_as_a_split_rebase(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Q1C-1: the broker's average cost passed on the CLI lets a 1:2 decrease
+    be rescaled as a split instead of depleting the lots like a sale."""
+    repo = _repo(tmp_path)
+    _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
+
+    exit_code = _cli(
+        tmp_path,
+        SYMBOL,
+        "--broker-qty",
+        "50",
+        "--broker-average-cost",
+        str(ENTRY_PRICE * 2),
+        "--db",
+        str(tmp_path / "runtime.sqlite3"),
+        "--account-id",
+        ACCOUNT,
+        "--confirm",
+    )
+
+    assert exit_code == 0
+    assert _owned(repo) == pytest.approx(50.0)
+    assert [(row["kind"], row["sign"]) for row in repo.ownership_adjustments(ACCOUNT)] == [("split_rebase", -1.0)]
+
+
+@pytest.mark.parametrize("cost", ["0", "-5", "nan", "inf"])
+def test_rebase_cli_rejects_an_invalid_broker_average_cost(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], cost: str
+) -> None:
+    repo = _repo(tmp_path)
+    _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
+
+    exit_code = _cli(
+        tmp_path,
+        SYMBOL,
+        "--broker-qty",
+        "50",
+        f"--broker-average-cost={cost}",
+        "--db",
+        str(tmp_path / "runtime.sqlite3"),
+        "--account-id",
+        ACCOUNT,
+        "--confirm",
+    )
+
+    assert exit_code == 2
+    assert "Invalid --broker-average-cost" in capsys.readouterr().err
+    assert _owned(repo) == pytest.approx(100.0)
+
+
 def test_rebase_cli_refuses_while_orders_are_open(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     repo = _repo(tmp_path)
     decision_target = TargetPortfolio("vt35", "1", T0, (), 1.0)

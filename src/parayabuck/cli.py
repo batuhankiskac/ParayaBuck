@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from dotenv import load_dotenv
 
 from parayabuck.backtest.product import (
     load_csv_bars,
@@ -151,6 +150,13 @@ def _parser() -> argparse.ArgumentParser:
         type=float,
         required=True,
         help="share count read off the broker position (the operator verifies it)",
+    )
+    rebase_p.add_argument(
+        "--broker-average-cost",
+        type=float,
+        default=None,
+        help="average entry price read off the broker position; lets a decrease that matches a "
+        "standard reverse-split ratio be booked as a split rescale instead of a sale",
     )
     rebase_p.add_argument("--account-id", default=None, help="defaults to the latest runtime session's account")
     rebase_p.add_argument("--note", default="", help="audit note recorded with the adjustment")
@@ -1306,6 +1312,15 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
     if not isfinite(broker_qty) or broker_qty < 0:
         print(f"Invalid --broker-qty {args.broker_qty!r}: must be finite and >= 0", file=sys.stderr)
         return 2
+    broker_average_cost = getattr(args, "broker_average_cost", None)
+    if broker_average_cost is not None:
+        broker_average_cost = float(broker_average_cost)
+        if not isfinite(broker_average_cost) or broker_average_cost <= 0:
+            print(
+                f"Invalid --broker-average-cost {args.broker_average_cost!r}: must be finite and > 0",
+                file=sys.stderr,
+            )
+            return 2
     db_path = getattr(args, "db", None)
     if not db_path:
         # A write command must never fall back to the default config: that
@@ -1359,6 +1374,7 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
             Market.EQUITY,
             broker_qty,
             note=note,
+            broker_average_cost=broker_average_cost,
         )
         log.warning(
             "Operator ownership rebase: account=%s symbol=%s owned=%s -> %s",
@@ -1389,7 +1405,9 @@ def _load_bars(
     """
     if args.data:
         return load_csv_bars(args.data, default_market=market), None
-    load_dotenv()
+    from parayabuck.config import load_env_file
+
+    load_env_file()
     key = os.getenv("ALPACA_API_KEY", "")
     secret = os.getenv("ALPACA_SECRET_KEY", "")
     if not key or not secret:

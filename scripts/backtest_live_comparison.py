@@ -34,6 +34,7 @@ from parayabuck.execution.portfolio import (  # noqa: E402
     PortfolioRiskOverlay,
     portfolio_risk_limits_from_config,
 )
+from parayabuck.markets.nyse_calendar import nyse_sessions  # noqa: E402
 from parayabuck.markets.timeframes import NEW_YORK  # noqa: E402
 from parayabuck.portfolio.base import PortfolioContext  # noqa: E402
 from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1  # noqa: E402
@@ -67,6 +68,19 @@ def reference_target_weight(
 
 def session_of(timestamp: datetime) -> date:
     return timestamp.astimezone(NEW_YORK).date()
+
+
+def session_bars(bars: dict[str, list[Bar]]) -> dict[str, list[Bar]]:
+    """Only the bars dated on an NYSE session.
+
+    A provider or CSV bar on a holiday is not a session: kept, it would be
+    taken as a reference decision close, a fill session, or a missed session.
+    """
+    days = {session_of(bar.timestamp) for series in bars.values() for bar in series}
+    if not days:
+        return bars
+    sessions = {day for day, _, _ in nyse_sessions(min(days), max(days))}
+    return {symbol: [bar for bar in series if session_of(bar.timestamp) in sessions] for symbol, series in bars.items()}
 
 
 def _parse(value: str) -> datetime:
@@ -113,7 +127,11 @@ def reference_decision(
     overlay: PortfolioRiskOverlay,
     allocation: float,
 ) -> dict[str, Any]:
-    """What the backtest decides on ``session``'s completed official close."""
+    """What the backtest decides on ``session``'s completed official close.
+
+    ``bars`` must already be restricted to NYSE sessions (:func:`session_bars`;
+    :func:`compare` does it), so a holiday bar is never the trailing session.
+    """
     history = {
         symbol: tuple(bar for bar in series if session_of(bar.timestamp) <= session) for symbol, series in bars.items()
     }
@@ -155,6 +173,7 @@ def compare(
     band: float,
 ) -> dict[str, Any]:
     overlay = PortfolioRiskOverlay(risk_limits)
+    bars = session_bars(bars)
     rows = []
     for decision in live:
         session = session_of(decision["decision_timestamp"])

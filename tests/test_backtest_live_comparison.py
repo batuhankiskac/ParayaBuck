@@ -15,6 +15,7 @@ import pytest
 from parayabuck.config import load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.execution.portfolio import PortfolioRiskLimits, PortfolioRiskOverlay, portfolio_risk_limits_from_config
+from parayabuck.markets.nyse_calendar import nyse_sessions
 from parayabuck.markets.timeframes import NEW_YORK
 from parayabuck.portfolio.equity_leveraged_trend import EquityLeveragedTrendV1
 
@@ -29,11 +30,9 @@ BAND = 0.005
 
 
 def _sessions(count: int) -> list[date]:
-    day, out = date(2025, 1, 2), []
-    while len(out) < count:
-        if day.weekday() < 5:
-            out.append(day)
-        day += timedelta(days=1)
+    """``count`` real NYSE sessions from 2025-01-02 (weekday holidays skipped)."""
+    out = [day for day, _, _ in nyse_sessions(date(2025, 1, 2), date(2026, 12, 31))][:count]
+    assert len(out) == count
     return out
 
 
@@ -205,3 +204,31 @@ def test_full_strength_weight_is_capped_at_the_allocation(fixture) -> None:  # t
     row = result["sessions"][0]
     assert row["reference"]["target_weight"] == pytest.approx(ALLOCATION)
     assert "target_weight_gap" not in row["flags"]
+
+
+def test_a_holiday_bar_is_never_a_reference_or_fill_session(tmp_path: Path) -> None:
+    """Q2E1 tooling: a provider bar on Thanksgiving 2025 is skipped, so the
+    pre-holiday decision fills on the next real session and the holiday is
+    neither a reference decision close nor a missed session."""
+    sessions = _sessions(230)
+    before = date(2025, 11, 26)
+    holiday = date(2025, 11, 27)
+    assert before in sessions and holiday not in sessions
+    index = sessions.index(before)
+    bars = _bars(sorted([*sessions, holiday]))
+    db = _db(
+        tmp_path,
+        [
+            ("d1", _at(before, 9, 30), _target(0.5, "uptrend")),
+            ("d2", _at(holiday, 9, 30), _target(0.5, "uptrend")),
+            ("d3", _at(sessions[index + 1], 9, 30), _target(0.5, "uptrend")),
+        ],
+        [],
+    )
+    result = report.compare(
+        report.load_live(db), bars, EquityLeveragedTrendV1({"vol_target": 0.35}), _limits(), ALLOCATION, BAND
+    )
+    first, second, _third = result["sessions"]
+    assert first["reference"]["fill_session"] == sessions[index + 1].isoformat()
+    assert second["flags"] == ["missing_reference_bar"]
+    assert result["sessions_without_live_decision"] == []

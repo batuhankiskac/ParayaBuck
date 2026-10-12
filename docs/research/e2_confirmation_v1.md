@@ -27,7 +27,9 @@ five markets and periods where E2 had never been evaluated:
   disappear. Seven windows now point the same way: E2 ≥ C0 in 6 of 7, with a
   median of +0.55 pp. Both bootstraps put the structural edge at about zero.
 
-Evidence: `research/e2_confirmation_v1/` on branch `research/e2-confirmation-v1`.
+Evidence: `research/e2_confirmation_v1/` and `data/historical/e2_confirmation_v1_*.csv`,
+removed from main on 2026-10-12 and preserved in tag
+`archive/research/e2-confirmation-v1-2026-10`.
 
 - `PREREGISTRATION.md`, `screen.py`, `download_data.py`, `validate_data.py`,
   `VALIDATION.json`, `DATA_MANIFEST.json` and

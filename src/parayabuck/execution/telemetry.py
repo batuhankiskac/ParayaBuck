@@ -28,7 +28,7 @@ import sqlite3
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, overload
 
 from parayabuck.portfolio.runtime_models import _AMBIGUOUS_ORDER_STATUSES, is_terminal_order_status
 
@@ -62,9 +62,23 @@ def _to_float(value: object, default: float = 0.0) -> float:
     return default
 
 
-def _open_readonly(db_path: str | Path) -> sqlite3.Connection | None:
-    """Open the runtime database read-only, or ``None`` when it is absent."""
+@overload
+def _open_readonly(db_path: str | Path, *, missing_ok: Literal[True] = True) -> sqlite3.Connection | None: ...
+
+
+@overload
+def _open_readonly(db_path: str | Path, *, missing_ok: Literal[False]) -> sqlite3.Connection: ...
+
+
+def _open_readonly(db_path: str | Path, *, missing_ok: bool = True) -> sqlite3.Connection | None:
+    """Open the runtime database read-only.
+
+    An absent database is ``None`` by default (the empty-safe reports); with
+    ``missing_ok=False`` anything but a regular file raises ``ValueError``.
+    """
     path = Path(db_path)
+    if not missing_ok and not path.resolve().is_file():
+        raise ValueError("runtime database path is not a regular file")
     # No exists() TOCTOU — try connect directly, handle missing file via OperationalError
     try:
         # Encode path for URI: escape ? and # which would be parsed as query/fragment
@@ -76,6 +90,8 @@ def _open_readonly(db_path: str | Path) -> sqlite3.Connection | None:
         # Only suppress "no such file/table" missing-DB case; re-raise corruption/I/O errors
         msg = str(exc).lower()
         if "unable to open" in msg or "no such file" in msg or "no such table" in msg:
+            if not missing_ok:
+                raise ValueError("runtime database path is not a regular file") from exc
             return None
         raise
 
@@ -107,6 +123,23 @@ def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
         return set()
     quoted = '"' + table.replace('"', '""') + '"'
     return {str(row[1]) for row in connection.execute(f"PRAGMA table_info({quoted})")}
+
+
+def _account_order_filter(account_id: str | None, order_alias: str = "o") -> tuple[str, tuple[object, ...]]:
+    """SQL predicate keeping only portfolio orders of one account's lineage.
+
+    ``None`` keeps every order (the historical whole-database report). One
+    database can hold several accounts after a credential rotation, so a
+    scoped report reaches the account through the order's decision session,
+    mirroring ``PortfolioStateRepository.operations_snapshot``.
+    """
+    if account_id is None:
+        return "1=1", ()
+    return (
+        f"{order_alias}.decision_id IN (SELECT d.decision_id FROM portfolio_decisions d "
+        "JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id WHERE s.account_id = ?)",
+        (account_id,),
+    )
 
 
 def _unduplicated_activity_fees(connection: sqlite3.Connection) -> list[float]:
@@ -200,6 +233,12 @@ def fill_delay_seconds(occurred_at: str, submitted_at: str | None) -> float | No
         submitted = datetime.fromisoformat(submitted_at)
     except (TypeError, ValueError):
         return None
+    # A naive stamp (legacy/imported rows) is UTC by the repo convention;
+    # mixing it with an aware one must not raise out of the reports.
+    if occurred.tzinfo is None:
+        occurred = occurred.replace(tzinfo=UTC)
+    if submitted.tzinfo is None:
+        submitted = submitted.replace(tzinfo=UTC)
     delay = (occurred - submitted).total_seconds()
     return delay if delay >= 0 else None
 
@@ -220,10 +259,15 @@ def _empty_state() -> dict[str, object]:
 def execution_metrics(
     db_path: str | Path,
     *,
+    account_id: str | None = None,
     _connection: sqlite3.Connection | None = None,
 ) -> dict[str, object]:
     """Orders / fills / rejects / fill latency / slippage / fees over the
     runtime ledger, with per-market breakdowns. Pure, read-only, empty-safe.
+
+    ``account_id`` scopes the portfolio orders and fills to that account;
+    ``None`` reports every account in the database. The historical legacy
+    tables carry no portfolio lineage and are never scoped.
 
     ``_connection`` (private) lets a caller share one already-open read-only
     connection across several reports; the caller owns its lifecycle.
@@ -233,6 +277,7 @@ def execution_metrics(
     if connection is None:
         return _empty_state()
     try:
+        account_filter, account_params = _account_order_filter(account_id)
         orders_cols = _columns(connection, "orders")
         by_market: dict[str, dict[str, int]] = {}
         by_strategy: dict[str, int] = {}
@@ -279,9 +324,8 @@ def execution_metrics(
                 open_orders += 1
         for row in _query(
             connection,
-            """
-            SELECT market, status FROM portfolio_orders
-            """,
+            f"SELECT o.market, o.status FROM portfolio_orders o WHERE {account_filter}",
+            account_params,
         ):
             market = str(row[0] or "unknown")
             status = str(row[1] or "unknown")
@@ -318,7 +362,9 @@ def execution_metrics(
                        o.created_at, {delay_expr}
                 FROM portfolio_fills f
                 JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
+                WHERE {account_filter}
                 """,
+                account_params,
             ):
                 price, fee, occurred_at, reference, side, market, created_at, stored_delay = row
                 market_key = str(market or "unknown")
@@ -485,10 +531,15 @@ def _turnover_and_churn_by_market(
 def forward_metrics(
     db_path: str | Path,
     *,
+    account_id: str | None = None,
     _connection: sqlite3.Connection | None = None,
 ) -> dict[str, object]:
     """Strategy / execution / portfolio forward-looking quality metrics over
     the persisted decisions, orders, fills and risk state. Read-only.
+
+    ``account_id`` scopes decisions, orders, fills and the risk-state anchor
+    to that account, so the equity estimate never blends one account's risk
+    row with another's fills; ``None`` reports the whole database.
 
     ``_connection`` (private) lets a caller share one already-open read-only
     connection; the caller owns its lifecycle.
@@ -498,17 +549,25 @@ def forward_metrics(
     if connection is None:
         return _empty_state()
     try:
+        account_filter, account_params = _account_order_filter(account_id)
+        decision_filter = (
+            "1=1"
+            if account_id is None
+            else "session_id IN (SELECT session_id FROM portfolio_runtime_sessions WHERE account_id = ?)"
+        )
         decisions_by_market: dict[str, list[tuple[str, str, str, str]]] = {}
         decision_count = 0
         rebalance_orders = 0
         if _table_exists(connection, "portfolio_decisions"):
             for row in _query(
                 connection,
-                """
+                f"""
                 SELECT decision_id, decision_timestamp, market, strategy_name, target_json
                 FROM portfolio_decisions
+                WHERE {decision_filter}
                 ORDER BY decision_timestamp
                 """,
+                account_params,
             ):
                 decision_id, timestamp, market, strategy, target_json = row
                 decisions_by_market.setdefault(str(market), []).append(
@@ -516,7 +575,7 @@ def forward_metrics(
                 )
                 decision_count += 1
         if _table_exists(connection, "portfolio_orders"):
-            rows = _query(connection, "SELECT COUNT(*) FROM portfolio_orders")
+            rows = _query(connection, f"SELECT COUNT(*) FROM portfolio_orders o WHERE {account_filter}", account_params)
             rebalance_orders = int(rows[0][0]) if rows else 0
 
         turnover_by_market, candidate_pool_by_market, churn_by_market = _turnover_and_churn_by_market(
@@ -526,7 +585,9 @@ def forward_metrics(
         execution: dict[str, int] = {}
         if _table_exists(connection, "portfolio_orders"):
             status_counts: dict[str, int] = {}
-            for (status,) in _query(connection, "SELECT status FROM portfolio_orders"):
+            for (status,) in _query(
+                connection, f"SELECT o.status FROM portfolio_orders o WHERE {account_filter}", account_params
+            ):
                 status_counts[str(status)] = status_counts.get(str(status), 0) + 1
             execution = status_counts
         submitted = int(execution.get("submitted", 0) + execution.get("submitting", 0))
@@ -552,10 +613,14 @@ def forward_metrics(
         unrealized = 0.0
         fee_total = 0.0
         if _table_exists(connection, "portfolio_fills"):
-            for row in _query(
-                connection,
-                "SELECT realized_pnl, unrealized_pnl, fee FROM portfolio_fills",
-            ):
+            fills_sql = (
+                "SELECT realized_pnl, unrealized_pnl, fee FROM portfolio_fills"
+                if account_id is None
+                else f"""SELECT f.realized_pnl, f.unrealized_pnl, f.fee FROM portfolio_fills f
+                    JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
+                    WHERE {account_filter}"""
+            )
+            for row in _query(connection, fills_sql, account_params):
                 realized += float(row[0] or 0.0)
                 unrealized += float(row[1] or 0.0)
                 fee_total += float(row[2] or 0.0)
@@ -564,10 +629,12 @@ def forward_metrics(
         if _table_exists(connection, "risk_state"):
             rows = _query(
                 connection,
-                """
+                f"""
                 SELECT payload FROM risk_state
+                WHERE {"1=1" if account_id is None else "account_id = ?"}
                 ORDER BY session_date DESC, updated_at DESC LIMIT 1
                 """,
+                account_params,
             )
             if rows:
                 row = rows[0]

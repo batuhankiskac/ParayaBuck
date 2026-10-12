@@ -179,7 +179,6 @@ def _record_fill(repo: PortfolioStateRepository, account_id: str, client_id: str
             decision_timestamp=_AT,
             strategy_name="eq",
             strategy_version="1",
-            risk_reducing=False,
         ),
         "submitted",
     )
@@ -502,7 +501,5 @@ def test_unpriced_working_buy_blocks_new_buy(tmp_path: Path) -> None:
         == 50000.0
     )
     assert OpenPortfolioOrder("x", "MSFT", Market.EQUITY, "buy", 50, 0, "", 100).quantity == 50
-    req = PortfolioOrderRequest(
-        "c", "d", "QLD", Market.EQUITY, PortfolioOrderSide.BUY, 1.0, 100.0, _AT, "eq", "1", False
-    )
+    req = PortfolioOrderRequest("c", "d", "QLD", Market.EQUITY, PortfolioOrderSide.BUY, 1.0, 100.0, _AT, "eq", "1")
     assert req.quantity == 1.0

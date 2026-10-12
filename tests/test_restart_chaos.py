@@ -110,7 +110,7 @@ class _SimBroker:
         )
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-        return AssetTradingRules(symbol, market, 1.0, 1.0, 0.01, 10.0)
+        return AssetTradingRules(1.0, 1.0, 10.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set(self.open_symbols)
@@ -562,7 +562,6 @@ def test_restart_crash_after_submitting_broker_filled_recovers_real_fill(
         decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
         strategy_name="fixed_target",
         strategy_version="1.0.0",
-        risk_reducing=False,
     )
     repository.record_order(entry, "submitted")
     repository.apply_trade_update(

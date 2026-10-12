@@ -21,6 +21,7 @@ from typing import Any
 
 from parayabuck.backtest.portfolio_engine import OrderSide, PortfolioBacktestEngine, equity_regulatory_fee
 from parayabuck.core.models import Bar, Market
+from parayabuck.execution.telemetry import _columns, _open_readonly, _table_exists
 
 _EPSILON = 1e-9
 _BPS = 10_000.0
@@ -149,28 +150,6 @@ def dataset_metadata(path: str | Path, bars: Iterable[Bar], *, feed_identity: st
         "bar_count": len(rows),
         "markets": sorted({bar.market.value for bar in rows}),
     }
-
-
-def _open_readonly(path: str | Path) -> sqlite3.Connection:
-    source = Path(path).resolve()
-    if not source.is_file():
-        raise ValueError("runtime database path is not a regular file")
-    connection = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA query_only=ON")
-    return connection
-
-
-def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
-    return (
-        connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone() is not None
-    )
-
-
-def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
-    if not _table_exists(connection, table):
-        return set()
-    return {str(row[1]) for row in connection.execute(f'PRAGMA table_info("{table}")')}
 
 
 def _parse_timestamp(value: object) -> datetime | None:
@@ -584,7 +563,8 @@ def run_shadow_comparator(
     # Use the engine's existing duplicate/canonical-symbol contract before the
     # comparator applies its independent, golden-locked schedule loop.
     local_bars = tuple(PortfolioBacktestEngine._deduplicate(list(bars)))
-    connection = _open_readonly(db_path)
+    connection = _open_readonly(db_path, missing_ok=False)
+    connection.row_factory = sqlite3.Row
     try:
         orders = _load_orders(connection, as_of=as_of)
         records: list[dict[str, object]] = []

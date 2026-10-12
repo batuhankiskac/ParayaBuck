@@ -64,7 +64,6 @@ def _portfolio_request() -> PortfolioOrderRequest:
         decision_timestamp=datetime(2026, 1, 2, 14, 0, tzinfo=UTC),
         strategy_name="test",
         strategy_version="v1",
-        risk_reducing=False,
     )
 
 
@@ -81,11 +80,8 @@ def test_portfolio_submit_done_for_day_lookup_reraises_the_submit_failure(tmp_pa
         ),
     )
     broker.asset_trading_rules = lambda symbol, market: AssetTradingRules(  # type: ignore[method-assign]
-        symbol=symbol,
-        market=market,
         minimum_order_size=1.0,
         quantity_increment=1.0,
-        price_increment=0.01,
         minimum_order_notional=1.0,
     )
     broker._has_open_order = lambda _symbol: False  # type: ignore[method-assign]

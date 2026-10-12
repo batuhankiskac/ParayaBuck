@@ -41,7 +41,6 @@ def _order(quantity: float = 2.0, reference_price: float = 100.0) -> PortfolioOr
         decision_timestamp=_AT,
         strategy_name="eq",
         strategy_version="1",
-        risk_reducing=False,
     )
 
 

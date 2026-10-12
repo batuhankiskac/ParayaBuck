@@ -53,7 +53,7 @@ class _Broker:
         )
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-        return AssetTradingRules(symbol, market, 1.0, 1.0, 0.01, 10.0)
+        return AssetTradingRules(1.0, 1.0, 10.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()
@@ -242,7 +242,6 @@ def _order(
         decision_timestamp=when,
         strategy_name="vt35",
         strategy_version="1",
-        risk_reducing=False,
     )
     repo.record_order(order, "submitted")
     return client_order_id

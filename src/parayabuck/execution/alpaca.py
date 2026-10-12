@@ -35,15 +35,13 @@ from parayabuck.execution.alpaca_orders import OrderService  # noqa: E402
 from parayabuck.execution.alpaca_reconciliation import ReconciliationService  # noqa: E402
 
 from .alpaca_models import (  # noqa: E402
+    DEAD_BROKER_ORDER_STATUSES,
     AmbiguousOrderState,
     DefiniteOrderRejection,
     OwnershipDriftError,
     ProtectionReconciliationError,
     RiskStatePersistenceError,
 )
-
-# Broker order states that can never fill again (``rejected`` never filled).
-_DEAD_ORDER_STATUSES = frozenset({"canceled", "cancelled", "expired", "rejected", "done_for_day"})
 
 
 class AlpacaBroker:
@@ -214,16 +212,8 @@ class AlpacaBroker:
             # order would be refused by the broker after planning.
             minimum = max(minimum, 1.0)
             quantity_increment = max(quantity_increment, 1.0)
-        price_increment = float(getattr(asset, "price_increment", None) or 0.01)
         minimum_notional = float(getattr(asset, "min_order_notional", None) or 1.0)
-        return AssetTradingRules(
-            canonical_symbol(symbol, market),
-            market,
-            minimum,
-            quantity_increment,
-            price_increment,
-            minimum_notional,
-        )
+        return AssetTradingRules(minimum, quantity_increment, minimum_notional)
 
     def all_open_order_symbols(self) -> set[str]:
         """Broker-wide open order symbols (managed and manual).
@@ -250,11 +240,14 @@ class AlpacaBroker:
         or identity-less working BUYs are never raised: when a price is
         knowable the order reserves capacity conservatively, otherwise it
         surfaces as unpriced (``reference_price=None``) so admission fails
-        closed via the existing ``committed_buy_unpriced`` path.
+        closed via the existing ``committed_buy_unpriced`` path. Every
+        identity-less row gets its own synthesized id (registered in ``seen``),
+        so two manual BUYs on one symbol never collide into a duplicate-ID
+        error that would halt the runtime.
         """
         result: list[BrokerWorkingBuyOrder] = []
         seen: set[str] = set()
-        for order in self.working_orders():
+        for index, order in enumerate(self.working_orders()):
             if self._normalized_field(order, "side") != "buy":
                 continue
             client_id = str(self._field(order, "client_order_id", "") or "").strip()
@@ -262,8 +255,10 @@ class AlpacaBroker:
             if not client_id or client_id in seen or not symbol:
                 if client_id and client_id in seen:
                     raise ValueError("Invalid broker working BUY identity")
-                foreign = self._foreign_working_buy(symbol, client_id or None)
+                broker_id = str(self._field(order, "id", "") or "").strip()
+                foreign = self._foreign_working_buy(symbol, client_id or None, broker_id or str(index), seen)
                 if foreign is not None:
+                    seen.add(foreign.client_order_id)
                     result.append(foreign)
                 continue
             seen.add(client_id)
@@ -272,12 +267,16 @@ class AlpacaBroker:
                 result.append(parsed)
         return tuple(result)
 
-    def _foreign_working_buy(self, symbol: str, client_id: str | None) -> BrokerWorkingBuyOrder | None:
+    def _foreign_working_buy(
+        self, symbol: str, client_id: str | None, broker_ref: str, seen: set[str]
+    ) -> BrokerWorkingBuyOrder | None:
         """Conservatively price an identity-less/foreign working BUY.
 
         ``None`` when the symbol itself is unusable; otherwise a row with
         ``reference_price=None`` so admission treats it as unpriced and
-        blocks new BUYs instead of crashing or silently ignoring it.
+        blocks new BUYs instead of crashing or silently ignoring it. A row
+        without a client id is keyed ``foreign:{symbol}:{broker_ref}`` (the
+        broker order id, else its list position), unique against ``seen``.
         """
         if not symbol:
             return None
@@ -292,8 +291,13 @@ class AlpacaBroker:
             canonical,
             client_id or "<missing>",
         )
+        synthesized = client_id or f"foreign:{canonical}:{broker_ref}"
+        suffix = 1
+        while synthesized in seen:
+            synthesized = f"foreign:{canonical}:{broker_ref}:{suffix}"
+            suffix += 1
         return BrokerWorkingBuyOrder(
-            client_order_id=client_id or f"foreign:{canonical}",
+            client_order_id=synthesized,
             symbol=canonical,
             market=market,
             remaining_quantity=None,
@@ -421,7 +425,7 @@ class AlpacaBroker:
                         fill_recovered(*recovered)
                     return True
                 continue
-            if status not in _DEAD_ORDER_STATUSES:
+            if status not in DEAD_BROKER_ORDER_STATUSES:
                 # The exit is genuinely still working at the broker; keep
                 # ownership until it completes.
                 return True
@@ -516,7 +520,7 @@ class AlpacaBroker:
             # The order filled but its fill could not be extracted; keep the
             # row non-terminal so ownership is not silently released.
             return outcome("submitted")
-        if status in _DEAD_ORDER_STATUSES:
+        if status in DEAD_BROKER_ORDER_STATUSES:
             self._recover_terminal_partial_fill(broker_order, client_order_id, broker_order_id, status)
             return outcome(status)
         return outcome("submitted")
@@ -524,10 +528,18 @@ class AlpacaBroker:
     def _fill_from_broker_order(
         self, order: Any, client_order_id: str, broker_order_id: str
     ) -> tuple[str, str, float, float, datetime, str, float | None] | None:
-        """Extract the real fill from a filled Alpaca order."""
-        filled_qty = float(self._field(order, "filled_qty", 0) or 0)
-        avg_price = float(self._field(order, "filled_avg_price", 0) or 0)
-        if filled_qty <= 0 or avg_price <= 0:
+        """Extract the real fill from a filled Alpaca order.
+
+        ``None`` when the fill facts are missing, unparseable or non-finite:
+        the caller then leaves the row non-terminal instead of guessing.
+        """
+        try:
+            filled_qty = float(self._field(order, "filled_qty", 0) or 0)
+            avg_price = float(self._field(order, "filled_avg_price", 0) or 0)
+        except (TypeError, ValueError):
+            log.warning("Unparseable broker fill facts for %s; fill not extracted", client_order_id)
+            return None
+        if not math.isfinite(filled_qty) or not math.isfinite(avg_price) or filled_qty <= 0 or avg_price <= 0:
             return None
         # A partially filled order that then died has no ``filled_at``; fall
         # back to its last update rather than parsing ``None``.
@@ -650,8 +662,27 @@ class AlpacaBroker:
                     lookup_error = lookup_exc
                 if recovered is not None:
                     status = self._normalized_field(recovered, "status")
-                    if status in _DEAD_ORDER_STATUSES:
-                        filled = float(self._field(recovered, "filled_qty", 0) or 0)
+                    if status in DEAD_BROKER_ORDER_STATUSES:
+                        try:
+                            filled = float(self._field(recovered, "filled_qty", 0) or 0)
+                        except (TypeError, ValueError):
+                            filled = math.nan
+                        if not math.isfinite(filled):
+                            # Unreadable fill facts on a dead order: the fill
+                            # outcome is unknown, so the write stays ambiguous.
+                            _emit_alert(
+                                "ambiguous_order",
+                                message=(
+                                    f"Terminal broker order {client_order_id} has unreadable fill facts "
+                                    f"after submit error: {submit_exc}"
+                                ),
+                                client_order_id=client_order_id,
+                                reason="broker_fill_facts_unreadable",
+                            )
+                            raise AmbiguousOrderState(
+                                f"Terminal broker order {client_order_id} has unreadable filled_qty "
+                                f"after submit error: {submit_exc}"
+                            ) from submit_exc
                         if filled > 0:
                             # The order died after a partial fill: the fill is
                             # real and must be booked, and the real terminal
@@ -720,9 +751,9 @@ class AlpacaBroker:
     def _field(value: Any, name: str, default: Any = None) -> Any:
         return AlpacaClient._field(value, name, default)
 
-    def _ensure_peak_reconciled(self, account_id: str, current_equity: float) -> None:
+    def _ensure_peak_reconciled(self, account_id: str) -> None:
         svc = self._get_peak_service()
-        svc.ensure_reconciled(account_id, current_equity)
+        svc.ensure_reconciled(account_id)
 
     def _save_peak_equity(self) -> None:
         svc = self._get_peak_service()
@@ -730,9 +761,13 @@ class AlpacaBroker:
         svc.save_peak_equity(str(acct) if acct else None)
 
     def reset_peak_equity(self, equity: float) -> None:
-        svc = self._get_peak_service()
-        acct = svc.peak_account_id or self._account_id
-        svc.reset_peak_equity(equity, str(acct) if acct else None)
+        # Same lock as the account() peak read-modify-write: an operator reset
+        # must never interleave with a concurrent poll and be lost (or lose
+        # the poll's higher peak).
+        with self._peak_lock:
+            svc = self._get_peak_service()
+            acct = svc.peak_account_id or self._account_id
+            svc.reset_peak_equity(equity, str(acct) if acct else None)
 
 
 __all__ = [

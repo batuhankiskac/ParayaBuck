@@ -148,7 +148,7 @@ class TestProductUniverseFailClosed:
             def asset_trading_rules(self, s, m):
                 from parayabuck.execution.portfolio import AssetTradingRules
 
-                return AssetTradingRules(s, m, 0.01, 0.01, 0.01, 1.0)
+                return AssetTradingRules(0.01, 0.01, 1.0)
 
             def all_open_order_symbols(self):
                 return set()

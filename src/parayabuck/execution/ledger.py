@@ -403,19 +403,6 @@ class ExecutionLedger:
             status=str(row[18]),
         )
 
-    def managed_for_account(self, account_id: str) -> dict[str, ManagedPosition]:
-        rows = self.managed_entries_for_account(account_id)
-        result: dict[str, ManagedPosition] = {}
-        for item in rows:
-            previous = result.get(item.canonical_symbol)
-            if previous is None:
-                result[item.canonical_symbol] = item
-            else:
-                raise ValueError(
-                    f"Single-managed-entry invariant violated for {item.canonical_symbol} ({item.market.value})"
-                )
-        return result
-
     def total_fees_for_account(self, account_id: str) -> float:
         """Observed broker fees of this account's portfolio fills.
 
@@ -424,7 +411,9 @@ class ExecutionLedger:
         database) reads as no fees. A recovery fill with ``fee_observed=0``
         stores a ``0.0`` placeholder, which is NOT an observed free fill and
         is excluded so the snapshot agrees with the dashboard's ``unknown``
-        fee-completeness.
+        fee-completeness. The exclusion is per fill (its own journal event,
+        keyed by ``activity_id``), never per order: a later unobserved
+        recovery event on the same order must not erase an observed fee.
         """
         with self._lock:
             exists = self.connection.execute(
@@ -459,6 +448,7 @@ class ExecutionLedger:
                     AND NOT EXISTS (
                         SELECT 1 FROM portfolio_execution_events e
                         WHERE e.client_order_id = f.client_order_id
+                        AND e.dedup_identity = f.activity_id
                         AND e.fee_observed = 0
                     )
                     """,

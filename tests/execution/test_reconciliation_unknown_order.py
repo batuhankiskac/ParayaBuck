@@ -64,7 +64,7 @@ class _TradingBroker:
         return AccountSnapshot(100_000.0 - value, 100_000.0, 100_000.0, 0.0, self.positions)
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-        return AssetTradingRules(symbol, market, 1.0, 1.0, 0.01, 10.0)
+        return AssetTradingRules(1.0, 1.0, 10.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()

@@ -225,7 +225,7 @@ class RiskPeakService:
         except Exception as exc:
             raise RiskStatePersistenceError(f"persisted peak query failed for {account_id}: {exc}") from exc
 
-    def ensure_reconciled(self, account_id: str, current_equity: float) -> None:
+    def ensure_reconciled(self, account_id: str) -> None:
         if not account_id:
             account_id = "unknown"
         existing = self._peak_account_id

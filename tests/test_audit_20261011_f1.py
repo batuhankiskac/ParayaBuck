@@ -194,9 +194,9 @@ def test_peak_lock_exists_before_first_account_call(tmp_path) -> None:
     seen: list[int] = []
     original = broker._ensure_peak_reconciled
 
-    def _spy(account_id: str, equity: float) -> None:
+    def _spy(account_id: str) -> None:
         seen.append(id(broker._peak_lock))
-        return original(account_id, equity)
+        return original(account_id)
 
     broker._ensure_peak_reconciled = _spy  # type: ignore[method-assign]
     broker._client = SimpleNamespace(

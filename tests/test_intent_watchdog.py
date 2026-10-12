@@ -391,7 +391,7 @@ def test_repository_latest_decision_target_reads_persisted_weights(tmp_path, mon
             return _account()
 
         def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-            return AssetTradingRules(symbol, market, 0.01, 0.01, 0.01, 1.0)
+            return AssetTradingRules(0.01, 0.01, 1.0)
 
         def all_open_order_symbols(self) -> set[str]:
             return set()

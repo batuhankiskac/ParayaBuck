@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+# The one canonical broker-terminal order vocabulary. Dead states can never
+# fill again (``rejected`` never filled); terminal adds ``filled``.
+DEAD_BROKER_ORDER_STATUSES = frozenset({"canceled", "cancelled", "expired", "rejected", "done_for_day"})
+TERMINAL_BROKER_ORDER_STATUSES = DEAD_BROKER_ORDER_STATUSES | {"filled"}
+
 
 class RiskStatePersistenceError(RuntimeError):
     """Peak equity sidecar is present but unreadable or invalid.
@@ -40,6 +45,8 @@ class DefiniteOrderRejection(RuntimeError):
 
 
 __all__ = [
+    "DEAD_BROKER_ORDER_STATUSES",
+    "TERMINAL_BROKER_ORDER_STATUSES",
     "AmbiguousOrderState",
     "DefiniteOrderRejection",
     "OwnershipDriftError",

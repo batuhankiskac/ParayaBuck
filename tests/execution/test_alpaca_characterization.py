@@ -118,14 +118,9 @@ def test_ownership_fully_managed(tmp_path: Path) -> None:
     broker = _broker_with_fake(tmp_path, fake)
     # Simulate ledger and repo both claim 4
     broker.portfolio_owned_quantities = lambda: {"IWM": 4.0}
-    # Also need ledger managed: create ledger entry
     if broker.ledger is not None:
-        # Use ledger to record a position? Simpler: mock managed_for_account
-        orig = broker.ledger.managed_for_account
-        broker.ledger.managed_for_account = lambda acct: {}  # type: ignore[assignment]
         snap = broker.account()
         assert any(p.ownership == "managed" and p.managed_qty == 4.0 for p in snap.positions)
-        broker.ledger.managed_for_account = orig
 
 
 def test_ownership_external_when_no_managed(tmp_path: Path) -> None:
@@ -134,7 +129,6 @@ def test_ownership_external_when_no_managed(tmp_path: Path) -> None:
     broker = _broker_with_fake(tmp_path, fake)
     broker.portfolio_owned_quantities = lambda: {}
     if broker.ledger is not None:
-        broker.ledger.managed_for_account = lambda acct: {}  # type: ignore[assignment]
         snap = broker.account()
         assert any(p.ownership == "external" for p in snap.positions)
 
@@ -204,7 +198,6 @@ def test_broker_shortfall_with_working_sell_explains(tmp_path: Path) -> None:
     )
     broker.portfolio_open_orders = lambda: [fake_open]  # type: ignore[assignment]
     if broker.ledger is not None:
-        broker.ledger.managed_for_account = lambda acct: {}  # type: ignore[assignment]
         # With SELL covering shortfall, should NOT raise
         snap = broker.account()
         assert snap is not None
@@ -220,7 +213,6 @@ def test_broker_shortfall_manual_does_not_explain(tmp_path: Path) -> None:
     broker.portfolio_open_orders = lambda: []  # type: ignore[assignment]
     fake.open_orders = [SimpleNamespace(symbol="IWM", side="sell", status="open", qty="2", filled_qty="0")]
     if broker.ledger is not None:
-        broker.ledger.managed_for_account = lambda acct: {}  # type: ignore[assignment]
         with pytest.raises(OwnershipDriftError):
             broker.account()
 
@@ -282,7 +274,6 @@ def test_submit_portfolio_order_accepted(tmp_path: Path) -> None:
         decision_timestamp=__import__("datetime").datetime.now(__import__("datetime").UTC),
         strategy_name="test",
         strategy_version="1",
-        risk_reducing=False,
     )
     # Mock _has_open_order to return False (no open order)
     broker._has_open_order = lambda sym: False  # type: ignore[attr-defined]
@@ -326,7 +317,6 @@ def test_submit_ambiguous_when_lookup_fails(tmp_path: Path) -> None:
         decision_timestamp=__import__("datetime").datetime.now(__import__("datetime").UTC),
         strategy_name="test",
         strategy_version="1",
-        risk_reducing=False,
     )
     broker._has_open_order = lambda sym: False  # type: ignore[attr-defined]
     broker.asset_trading_rules = lambda sym, m: SimpleNamespace(
@@ -360,7 +350,6 @@ def test_submit_recovers_when_lookup_finds_order(tmp_path: Path) -> None:
         decision_timestamp=__import__("datetime").datetime.now(__import__("datetime").UTC),
         strategy_name="test",
         strategy_version="1",
-        risk_reducing=False,
     )
     broker._has_open_order = lambda sym: False  # type: ignore[attr-defined]
     broker.asset_trading_rules = lambda sym, m: SimpleNamespace(
@@ -401,7 +390,6 @@ def test_reconcile_idempotent(tmp_path: Path) -> None:
     broker = _broker_with_fake(tmp_path, fake)
     broker.portfolio_owned_quantities = lambda: {"IWM": 10}
     if broker.ledger is not None:
-        broker.ledger.managed_for_account = lambda acct: {}  # type: ignore[assignment]
         # First reconcile
         result1 = broker.reconcile()
         # Second reconcile with same broker truth should be identical and not duplicate
@@ -419,7 +407,6 @@ def test_protection_underprotected_triggers(tmp_path: Path) -> None:
     broker = _broker_with_fake(tmp_path, fake)
     broker.portfolio_owned_quantities = lambda: {"IWM": 10}
     if broker.ledger is not None:
-        broker.ledger.managed_for_account = lambda acct: {}  # type: ignore[assignment]
         fake.open_orders = []  # no protection
         result = broker.reconcile()
         # Should have some protection-related handling, but we just ensure no crash
@@ -456,7 +443,6 @@ def test_submit_portfolio_order_refuses_non_equity(tmp_path: Path) -> None:
         decision_timestamp=datetime(2026, 1, 1, tzinfo=UTC),
         strategy_name="s",
         strategy_version="1",
-        risk_reducing=False,
     )
     with pytest.raises(ValueError, match="equity-only"):
         broker.submit_portfolio_order(order)

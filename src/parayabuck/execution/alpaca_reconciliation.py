@@ -30,16 +30,17 @@ from alpaca.trading.enums import QueryOrderStatus
 from alpaca.trading.requests import GetOrdersRequest
 
 from parayabuck.core.models import AccountSnapshot, Market
+from parayabuck.execution.alerting import emit_execution_alert
+from parayabuck.execution.alpaca_models import TERMINAL_BROKER_ORDER_STATUSES
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.execution.alpaca_reconciliation")
 
-# Broker order states mapped onto the local order row. Terminal states are
-# kept verbatim; ``calculated`` (done for the day, settlement pending) is
-# resolved from the cumulative fill below.
-_TERMINAL_BROKER_STATUSES = frozenset({"filled", "canceled", "cancelled", "expired", "rejected", "done_for_day"})
+# Broker order states mapped onto the local order row. Terminal states
+# (``TERMINAL_BROKER_ORDER_STATUSES``) are kept verbatim; ``calculated`` (done
+# for the day, settlement pending) is resolved from the cumulative fill below.
 # Valid Alpaca states in which the order may still fill (or is merely paused
 # or under review); the row stays working with the broker's own status.
 _WORKING_BROKER_STATUSES = frozenset(
@@ -193,17 +194,30 @@ class ReconciliationService:
             if symbol != canonical_symbol(local.symbol, local.market) or side != str(local.side).lower():
                 raise ReconciliationResultError(f"Broker order contract mismatch for {client_id}")
             status = str(self._normalized_field(order, "status") or "").lower()
-            quantity = float(self._field(order, "filled_qty", 0) or 0)
+            if (
+                status != "partially_filled"
+                and status != "calculated"
+                and status not in TERMINAL_BROKER_ORDER_STATUSES
+                and status not in _WORKING_BROKER_STATUSES
+            ):
+                # A broker state this code does not know: book nothing for
+                # this order (its row stays as is, so any fill it hides still
+                # surfaces as ownership or OPEN-ID drift) and let the rest of
+                # the pass proceed instead of halting on vocabulary alone.
+                self._flag_unrecognized_status(client_id, status)
+                continue
+            try:
+                quantity = float(self._field(order, "filled_qty", 0) or 0)
+                average_raw = self._field(order, "filled_avg_price", None)
+                average = float(average_raw) if average_raw is not None else None
+            except (TypeError, ValueError) as exc:
+                raise ReconciliationResultError(f"Unparseable broker fill facts for {client_id}") from exc
             if status == "partially_filled":
                 local_status = "partial_fill"
-            elif status in _TERMINAL_BROKER_STATUSES or status in _WORKING_BROKER_STATUSES:
-                local_status = status
             elif status == "calculated":
                 local_status = self._calculated_status(order, quantity)
             else:
-                raise ReconciliationResultError(f"Unrecognized broker order status for {client_id}: {status}")
-            average_raw = self._field(order, "filled_avg_price", None)
-            average = float(average_raw) if average_raw is not None else None
+                local_status = status
             local_quantity = float(local.quantity)
             if isfinite(quantity) and quantity > local_quantity + max(1e-9, local_quantity * 1e-8):
                 local_quantity = self._adopt_broker_order_quantity(broker, order, client_id, quantity, local_quantity)
@@ -238,6 +252,23 @@ class ReconciliationService:
                 None,
                 status=local_status,
             )
+
+    @staticmethod
+    def _flag_unrecognized_status(client_id: str, status: str) -> None:
+        """Log and alert one order skipped for an unknown broker status."""
+        log.error(
+            "Unrecognized broker order status %r for %s; order left unchanged for the operator",
+            status,
+            client_id,
+        )
+        emit_execution_alert(
+            "paper_incident",
+            message=f"Broker order {client_id} reports unrecognized status {status!r}; order left unchanged",
+            category="unrecognized_broker_order_status",
+            incident_id=f"unrecognized_broker_order_status:{client_id}:{status}",
+            client_order_id=client_id,
+            broker_status=status,
+        )
 
     def _calculated_status(self, order: Any, filled: float) -> str:
         """Final local status of a ``calculated`` order (done for the day).
@@ -297,22 +328,17 @@ class ReconciliationService:
             status,
             round(age),
         )
-        try:
-            from parayabuck.monitoring import alerts
-
-            # One incident per order: the row is terminal afterwards, and the
-            # alert throttle keys paper_incident by its incident id.
-            alerts.emit(
-                "paper_incident",
-                message="Portfolio order never accepted by the broker was canceled",
-                category="unknown_order_canceled",
-                incident_id=f"unknown_order_canceled:{client_id}",
-                client_order_id=client_id,
-                previous_status=status,
-                age_seconds=round(age),
-            )
-        except Exception:
-            log.warning("Alert emission failed for unknown order %s", client_id, exc_info=True)
+        # One incident per order: the row is terminal afterwards, and the
+        # alert throttle keys paper_incident by its incident id.
+        emit_execution_alert(
+            "paper_incident",
+            message="Portfolio order never accepted by the broker was canceled",
+            category="unknown_order_canceled",
+            incident_id=f"unknown_order_canceled:{client_id}",
+            client_order_id=client_id,
+            previous_status=status,
+            age_seconds=round(age),
+        )
 
     def _adopt_broker_order_quantity(
         self, broker: Any, order: Any, client_id: str, filled: float, local_quantity: float

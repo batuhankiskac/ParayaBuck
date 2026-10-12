@@ -223,8 +223,8 @@ def test_planner_orders_sells_before_buys() -> None:
         (("AAPL", 0.05), ("MSFT", 0.05)),  # sell AAPL down, buy MSFT
     )
     rules = {
-        "AAPL": AssetTradingRules("AAPL", Market.EQUITY, 0.01, 0.01, 0.01, 1.0),
-        "MSFT": AssetTradingRules("MSFT", Market.EQUITY, 0.01, 0.01, 0.01, 1.0),
+        "AAPL": AssetTradingRules(0.01, 0.01, 1.0),
+        "MSFT": AssetTradingRules(0.01, 0.01, 1.0),
     }
     orders = planner.plan(
         target,
@@ -258,7 +258,7 @@ def test_planner_ignores_foreign_crypto_open_orders() -> None:
         _account(),
         market=Market.EQUITY,
         prices={"IWM": 200.0},
-        rules={"IWM": AssetTradingRules("IWM", Market.EQUITY, 0.01, 0.01, 0.01, 1.0)},
+        rules={"IWM": AssetTradingRules(0.01, 0.01, 1.0)},
         approved_symbols=("IWM",),
         decision_id="test-decision",
         open_order_symbols={"BTC/USD", "ETH/USD"},  # working foreign crypto orders only
@@ -276,7 +276,7 @@ class _Broker:
         return AccountSnapshot(100_000, 100_000, 100_000, 0.0)
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
-        return AssetTradingRules(symbol, market, 0.01, 0.01, 0.01, 1.0)
+        return AssetTradingRules(0.01, 0.01, 1.0)
 
     def all_open_order_symbols(self) -> set[str]:
         return set()

@@ -538,7 +538,6 @@ def test_hostile_durable_buy_remainder_halts_the_decision(tmp_path: Path) -> Non
         decision_timestamp=T0,
         strategy_name="other",
         strategy_version="1",
-        risk_reducing=False,
     )
     repository.record_order(hostile, "submitted")
     with repository.store.lock, repository.store.connection:

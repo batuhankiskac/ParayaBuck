@@ -113,7 +113,6 @@ def _make_order(symbol: str, side: PortfolioOrderSide, client_id: str) -> Portfo
         decision_timestamp=datetime.now(UTC),
         strategy_name="bench",
         strategy_version="1",
-        risk_reducing=False,
     )
 
 

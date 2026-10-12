@@ -164,7 +164,6 @@ def _admission(exempt: tuple[str, ...]):  # type: ignore[no-untyped-def]
                 decision_timestamp=order.decision_timestamp,
                 strategy_name="historical-replay",
                 strategy_version="2",
-                risk_reducing=order.side == shared.OrderSide.SELL,
             )
             for order in orders
         )

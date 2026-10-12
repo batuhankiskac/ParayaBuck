@@ -32,8 +32,8 @@ from parayabuck.execution.alpaca import (
     OwnershipDriftError,
     ProtectionReconciliationError,
 )
+from parayabuck.execution.alpaca_models import TERMINAL_BROKER_ORDER_STATUSES
 from parayabuck.execution.alpaca_reconciliation import (
-    _TERMINAL_BROKER_STATUSES,
     _WORKING_BROKER_STATUSES,
     ReconciliationReport,
     ReconciliationResultError,
@@ -192,7 +192,7 @@ def _is_database_error(exc: BaseException) -> bool:
 # reconcile accepts plus the TradingStream fill event names. Anything else
 # (``calculated`` aside, which is resolved by its cumulative fill) is left to
 # reconciliation instead of pinning a row in a status nothing recognizes.
-_STREAM_ORDER_STATUSES = _TERMINAL_BROKER_STATUSES | _WORKING_BROKER_STATUSES | {"fill", "partial_fill"}
+_STREAM_ORDER_STATUSES = TERMINAL_BROKER_ORDER_STATUSES | _WORKING_BROKER_STATUSES | {"fill", "partial_fill"}
 # Bounded retry of a transient SQLite lock while booking a stream fill: the
 # booking is one rolled-back-on-failure transaction, so a retry is safe.
 _TRADE_UPDATE_LOCK_ATTEMPTS = 3

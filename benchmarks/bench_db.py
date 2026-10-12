@@ -54,7 +54,6 @@ def _order(timestamp: datetime, symbol: str, decision_id: str) -> PortfolioOrder
         decision_timestamp=timestamp,
         strategy_name="equity_leveraged_trend_v1",
         strategy_version="2.0.0",
-        risk_reducing=False,
     )
 
 

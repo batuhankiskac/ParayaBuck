@@ -1,0 +1,18 @@
+{
+  "retrieved_utc": "2026-10-12T15:27:01+00:00",
+  "files": {
+    "data/historical/signal_ensemble_v1_gspc.csv": {
+      "source": "Yahoo Finance chart API v8 (query1.finance.yahoo.com), interval=1d, events=history",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=-631152000&period2=946684800&interval=1d&events=history",
+      "symbol": "^GSPC",
+      "notes": "S&P 500 price index (no dividends). Timestamps converted to America/New_York dates; rows after 1999-12-31 dropped; OHLC as returned (float repr). Yahoo's opens are placeholders in old years: O=H=L=C on every bar 1950-1961; from 1962 the open frequently equals the previous close. signal_ensemble_v1 fills every G8 trade at the previous close (see PREREGISTRATION.md).",
+      "rows": 12582,
+      "first": "1950-01-03",
+      "last": "1999-12-31",
+      "bars_with_open_eq_high_eq_low_eq_close": 3051,
+      "null_closes_dropped": 0,
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "raw_response_sha256": "5e6389a3eb90d0279d212cc5113f01958a84e8999837db3b570d5d70d81ddec7"
+    }
+  }
+}

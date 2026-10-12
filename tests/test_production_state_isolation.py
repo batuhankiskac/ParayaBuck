@@ -89,3 +89,20 @@ def test_the_isolated_test_config_never_names_production_state(isolated_config_p
     assert paths, "the shipped config no longer carries any path"
     for path in paths:
         assert protected_state_path(path) is None, path
+
+
+def test_the_ops_health_read_never_targets_the_operator_snapshot() -> None:
+    """A config without ``observability.snapshot_path`` defaults to the relative
+    ``data/runtime/health_snapshot.json``. The ops status read model must not
+    resolve to that file, or every such test reads the operator's snapshot on a
+    checkout where it exists and silently skips it on a fresh clone."""
+    from parayabuck.config import Config
+    from parayabuck.web.services import ops as ops_svc
+
+    config = Config()
+    assert protected_state_path(config.observability.snapshot_path) is not None
+
+    payload = ops_svc.get_ops_status(config)
+
+    assert "error" not in payload, payload
+    assert protected_state_path(payload["snapshot_path"]) is None, payload["snapshot_path"]

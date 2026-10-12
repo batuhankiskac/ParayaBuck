@@ -21,6 +21,7 @@ import yaml
 from parayabuck.data import cache as cache_module
 from parayabuck.data.cache import WarmupCache
 from parayabuck.execution import risk_peak as risk_peak_module
+from parayabuck.monitoring import health as health_module
 from parayabuck.monitoring import journal as journal_module
 from parayabuck.monitoring import receipt as receipt_module
 from parayabuck.monitoring import snapshot as snapshot_module
@@ -453,6 +454,22 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(snapshot_module.SnapshotWriter, "__init__", _patched_snapshot_init)
     except Exception:
         pass
+
+    # Health read model: the web ops status, the CLI status and the diagnostic
+    # bundle call evaluate_health with the config's snapshot path, whose default
+    # is the relative data/runtime/health_snapshot.json. A test whose config
+    # omits observability.snapshot_path then read the operator's snapshot, and
+    # only on a checkout where that file exists, so the leak hid on a fresh
+    # clone. Point any production snapshot path at the isolated one that the
+    # SnapshotWriter redirect above writes.
+    orig_evaluate_health = health_module.evaluate_health
+
+    def _patched_evaluate_health(*, snapshot_path=DEFAULT_SNAPSHOT_PATH, **kwargs):  # type: ignore[no-untyped-def]
+        if protected_state_path(snapshot_path) is not None:
+            snapshot_path = iso_snapshot
+        return orig_evaluate_health(snapshot_path=snapshot_path, **kwargs)
+
+    monkeypatch.setattr(health_module, "evaluate_health", _patched_evaluate_health)
 
     try:
         monkeypatch.setattr(receipt_module, "default_receipt_dir", lambda: iso_receipt_dir)

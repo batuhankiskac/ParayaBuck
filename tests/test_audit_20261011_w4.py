@@ -34,7 +34,10 @@ def _write_config(path: Path, **overrides: Any) -> Path:
         "app": {"host": "127.0.0.1", "port": 8000, "open_browser": True, "log_level": "INFO"},
         "runtime": {"mode": "paper", "decision_db_path": str(path.parent / "runtime.sqlite3")},
         "risk": {"daily_loss_limit_pct": 0.015, "max_drawdown_pct": 0.10},
-        "observability": {"journal_path": str(path.parent / "journal.sqlite3")},
+        "observability": {
+            "journal_path": str(path.parent / "journal.sqlite3"),
+            "snapshot_path": str(path.parent / "health_snapshot.json"),
+        },
         "live": {"enabled": False, "hard_dollar_cap": 0.0, "operator_approval_path": ""},
         **_LOADABLE_MARKETS,
     }

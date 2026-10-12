@@ -76,6 +76,7 @@ Alarms clear by themselves (`intent_recovered`) once reality matches intent.
 | Reason | Meaning | Action |
 |---|---|---|
 | `NO_TARGET_CHANGE` | Target unchanged | Normal |
+| `UNKNOWN` | No evidence names a cause (summary event pruned, or an unrecognised reason) | Not an all-clear: check `ops timeline --decision <id>`, `ops status` and the service log |
 | `REBALANCE_BAND` / `MIN_NOTIONAL` | Drift under 0.5% or order under $10 | Normal; do not lower the thresholds to force trades |
 | `ENTRY_LATCH` | Daily-loss or drawdown latch, or `signal_adjustment_unverified` | Wait for recovery; drawdown needs a risk-epoch reset after review |
 | `ACCOUNT_STALE` | Account snapshot > 30 s old | See below |

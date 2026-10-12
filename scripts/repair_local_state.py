@@ -222,6 +222,9 @@ def backup_ledger(qdir: Path, ledger: str | Path | None = None):
     print("[6] Backing up parayabuck.sqlite3 (ledger) — NOT moving, only copying...")
     if not ledger_path.exists():
         print(f"  Ledger not found at {ledger_path}, skip backup")
+        # Never fall through: the sqlite backup API would create an empty
+        # ledger at this path, which the repair step then fails on.
+        return None
     dst = qdir / "runtime" / f"parayabuck.sqlite3.backup.{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
     # Use sqlite backup API for safety while WAL open
     try:

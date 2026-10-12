@@ -191,15 +191,17 @@ def collect_bundle_data(
     except Exception as exc:
         data["forensics_error"] = str(exc)
 
-    # alert stats
-    try:
-        from parayabuck.monitoring import alerts
-        from parayabuck.monitoring.journal import journal_stats
-
-        data["alert_stats"] = alerts.alert_stats()
-        data["journal_stats"] = journal_stats()
-    except Exception as exc:
-        data["alert_stats"] = {"error": str(exc)}
+    # alert/journal stats — the copy the ENGINE persisted into its snapshot
+    # (same source as `ops status`). This bundle process's own counters are
+    # always near-zero and would suggest nothing fired during an incident.
+    snapshot = data.get("runtime_snapshot")
+    usable = isinstance(snapshot, dict) and not snapshot.get("corrupt")
+    for key, snapshot_key in (("alert_stats", "alerts"), ("journal_stats", "observability")):
+        persisted = snapshot.get(snapshot_key) if usable and isinstance(snapshot, dict) else None
+        if isinstance(persisted, dict):
+            data[key] = {**persisted, "source": "engine_snapshot"}
+        else:
+            data[key] = {"unavailable": True, "reason": "no engine snapshot counters"}
 
     # sanitized config
     try:
@@ -238,7 +240,7 @@ def collect_bundle_data(
     try:
         checks: dict[str, Any] = {}
         if dbp is not None and dbp.exists():
-            conn = sqlite3.connect(str(dbp), timeout=2.0)
+            conn = sqlite3.connect(f"file:{dbp}?mode=ro", uri=True, timeout=2.0)
             try:
                 cur = conn.execute("PRAGMA integrity_check")
                 row = cur.fetchone()
@@ -293,7 +295,7 @@ def _run_doctor_checks(
         _add("decision_db", "UNKNOWN", "no decision DB — fresh install")
     else:
         try:
-            conn = sqlite3.connect(str(dbp), timeout=2.0)
+            conn = sqlite3.connect(f"file:{dbp}?mode=ro", uri=True, timeout=2.0)
             try:
                 cur = conn.execute("PRAGMA integrity_check")
                 val = str(cur.fetchone()[0])
@@ -327,8 +329,6 @@ def _run_doctor_checks(
             snapshot_data = data
             written_at = data.get("written_at") or data.get("as_of")
             if written_at:
-                from datetime import datetime
-
                 dt = datetime.fromisoformat(str(written_at))
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=UTC)
@@ -411,6 +411,21 @@ def _run_doctor_checks(
         _add(check.code, str(check.status), check.summary, action=check.action)
     journal_check = _check_observability(persisted_journal_state(merged))
     _add(journal_check.code, str(journal_check.status), journal_check.summary, action=journal_check.action)
+    # The journal file this doctor was pointed at (`--journal`, else the
+    # configured path): presence and last-write age, checked without opening
+    # it so a missing file is never created.
+    jp = Path(str(journal_path))
+    try:
+        if jp.exists():
+            # WAL mode: recent writes land in the -wal sidecar first.
+            wal = Path(f"{jp}-wal")
+            mtime = max(jp.stat().st_mtime, wal.stat().st_mtime if wal.exists() else 0.0)
+            age = max(0.0, datetime.now(UTC).timestamp() - mtime)
+            _add("journal_file", "OK", f"{jp} last written {age:.0f}s ago", path=str(jp))
+        else:
+            _add("journal_file", "UNKNOWN", f"no journal file at {jp}", path=str(jp))
+    except OSError as exc:
+        _add("journal_file", "UNKNOWN", f"journal file unreadable: {exc}", path=str(jp))
 
     # receipt writable
     try:

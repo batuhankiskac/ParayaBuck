@@ -31,6 +31,7 @@ from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_r
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.monitoring.operational_event import Severity
 from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
 from parayabuck.universe import equity_universe_digest
@@ -96,12 +97,20 @@ def _parser() -> argparse.ArgumentParser:
     doctor_p.add_argument("--json", action="store_true")
     doctor_p.add_argument("--snapshot", default=None)
     doctor_p.add_argument("--db", default=None)
-    doctor_p.add_argument("--journal", default=None)
+    doctor_p.add_argument("--journal", default=None, help="journal file to check (default: configured path)")
     events_p = ops_sub.add_parser("events", help="query operational event journal")
     events_p.add_argument("--since", default=None, help="since time (ISO or 30m,2h,1d)")
     events_p.add_argument("--until", default=None, help="until time (ISO or relative)")
     events_p.add_argument("--kind", default=None)
-    events_p.add_argument("--severity", default=None)
+    # The journal matches severity exactly against the upper-case vocabulary,
+    # so the flag is normalised and validated instead of silently matching
+    # nothing on `--severity warning`.
+    events_p.add_argument(
+        "--severity",
+        default=None,
+        type=lambda value: value.strip().upper(),
+        choices=[str(level) for level in Severity],
+    )
     events_p.add_argument("--market", default=None)
     events_p.add_argument("--decision", default=None)
     events_p.add_argument("--order", default=None)
@@ -408,7 +417,27 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
         raise SystemExit(f"Backup failed integrity check: {destination}")
     print(f"Backup written: {destination}")
     print(f"Retention: {retention_days:g} day(s); older automatic backups pruned")
+    _prune_decision_receipts()
     return 0
+
+
+def _prune_decision_receipts() -> None:
+    """Receipt retention, owned by the backup timer (one file per decision).
+
+    Prunes at the soak/audit floor only, so the auditor can always replay its
+    window. Best effort: a receipt-prune failure never fails a verified backup.
+    """
+    from parayabuck.monitoring import receipt as receipt_module
+
+    try:
+        removed = receipt_module.prune_receipts(
+            receipt_module.default_receipt_dir(), retention_days=receipt_module.MIN_RECEIPT_RETENTION_DAYS
+        )
+    except Exception as exc:
+        log.warning("decision receipt prune failed: %s", exc)
+        print(f"Receipt prune failed (backup unaffected): {exc}", file=sys.stderr)
+        return
+    print(f"Receipts: {len(removed)} older than {receipt_module.MIN_RECEIPT_RETENTION_DAYS:g} day(s) pruned")
 
 
 def _run_doctor(args: argparse.Namespace) -> int:
@@ -902,7 +931,7 @@ def _ops_events(args: argparse.Namespace) -> int:
         else:
             print("No event journal found — fresh install (no events)")
         return 0
-    j = EventJournal(journal_path)
+    j = EventJournal.open_readonly(journal_path)
     events = j.query(
         since=since,
         until=until,
@@ -956,7 +985,7 @@ def _ops_timeline(args: argparse.Namespace) -> int:
         from parayabuck.monitoring.journal import EventJournal
 
         if Path(journal_path).exists():
-            j = EventJournal(journal_path)
+            j = EventJournal.open_readonly(journal_path)
             if decision_id:
                 events = j.query(decision_id=decision_id, limit=limit)
             elif order_id:
@@ -1063,13 +1092,14 @@ def _ops_explain(args: argparse.Namespace) -> int:
             import sqlite3
 
             if Path(str(db_path)).exists():
-                conn = sqlite3.connect(str(db_path), timeout=2.0)
+                from parayabuck.monitoring.forensics import latest_decision_row
+
+                conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0)
                 conn.row_factory = sqlite3.Row
                 try:
-                    cur = conn.execute(
-                        "SELECT decision_id, decision_timestamp, market, strategy_name FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 1"
-                    )
-                    row = cur.fetchone()
+                    # Scoped to the current account: after a credential
+                    # rotation the old account's decision is not "latest".
+                    row = latest_decision_row(conn, "decision_id, decision_timestamp, market, strategy_name")
                     if row:
                         decision_id = row["decision_id"]
                         # --json keeps stdout a single parseable document.
@@ -1090,7 +1120,11 @@ def _ops_explain(args: argparse.Namespace) -> int:
             return 1
     # Reconstruct
     try:
-        from parayabuck.monitoring.forensics import decision_reconstruction, map_no_trade_reason
+        from parayabuck.monitoring.forensics import (
+            UNKNOWN_NO_TRADE_REASON,
+            decision_reconstruction,
+            map_no_trade_reason,
+        )
         from parayabuck.monitoring.journal import EventJournal
 
         recon = decision_reconstruction(db_path, decision_id, journal_path=journal_path)
@@ -1101,7 +1135,7 @@ def _ops_explain(args: argparse.Namespace) -> int:
         # Also query decision_summary events
         summary_events = []
         if Path(str(journal_path)).exists():
-            j = EventJournal(str(journal_path))
+            j = EventJournal.open_readonly(str(journal_path))
             summary_events = [e for e in j.query(decision_id=decision_id, limit=20) if e.kind == "decision_summary"]
         # Determine no-trade reason
         no_trade_reason = None
@@ -1124,8 +1158,13 @@ def _ops_explain(args: argparse.Namespace) -> int:
                         detail = str(tj)[:500]
                 except Exception:
                     pass
-            if not no_trade_reason:
-                no_trade_reason = "NO_TARGET_CHANGE"
+            if not no_trade_reason or no_trade_reason == UNKNOWN_NO_TRADE_REASON:
+                # No evidence names a cause (summary event pruned, target JSON
+                # carries no recognised reason): say so, with the surfaces
+                # checked, instead of the "Normal" NO_TARGET_CHANGE.
+                no_trade_reason = UNKNOWN_NO_TRADE_REASON
+                checked = "checked: journal decision_summary (none), decision target reason (none recognised)"
+                detail = f"{checked}; {detail}" if detail else checked
         # Build explanation
         if getattr(args, "json", False):
             payload = {

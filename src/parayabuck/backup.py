@@ -21,13 +21,11 @@ from pathlib import Path
 BACKUP_PREFIX = "parayabuck-"
 BACKUP_SUFFIX = ".sqlite3"
 # A labelled backup (the pre-deploy snapshot the runbook requires) is
-# published as ``parayabuck-keep-<label>-<stamp>.sqlite3``. It matches
-# BACKUP_GLOB (so it stays a valid restore candidate) but not
-# AUTO_BACKUP_GLOB, so retention pruning can never delete it while a late
-# rollback may still need it.
+# published as ``parayabuck-keep-<label>-<stamp>.sqlite3``. It does not
+# match AUTO_BACKUP_GLOB, so retention pruning can never delete it while a
+# late rollback may still need it.
 KEEP_PREFIX = f"{BACKUP_PREFIX}keep-"
 AUTO_BACKUP_GLOB = f"{BACKUP_PREFIX}[0-9]*{BACKUP_SUFFIX}"
-BACKUP_GLOB = f"{BACKUP_PREFIX}*{BACKUP_SUFFIX}"
 # Freshness bound for the 6 h backup timer: two consecutive missed runs mean
 # the backup path is broken, and a later database loss would force a restore
 # from a stale snapshot. Checked by `parayabuck doctor`.
@@ -304,7 +302,6 @@ def latest_backup_age_hours(backup_dir: str | Path, *, now: datetime | None = No
 
 __all__ = [
     "AUTO_BACKUP_GLOB",
-    "BACKUP_GLOB",
     "BACKUP_PREFIX",
     "BACKUP_SUFFIX",
     "KEEP_PREFIX",

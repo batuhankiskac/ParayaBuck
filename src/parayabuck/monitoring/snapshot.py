@@ -119,9 +119,6 @@ class SnapshotWriter:
         self._stop = threading.Event()
         self._started = False
         self._lock = threading.Lock()
-        self._last_write_at: datetime | None = None
-        self._write_count = 0
-        self._failed = 0
 
     def start(self) -> None:
         with self._lock:
@@ -180,17 +177,10 @@ class SnapshotWriter:
             snap = build_snapshot()
 
         try:
-            ok = write_snapshot_atomic(self.path, snap)
+            return write_snapshot_atomic(self.path, snap)
         except Exception:
             log.warning("snapshot write failed (isolated)", exc_info=True)
-            ok = False
-        with self._lock:
-            if ok:
-                self._last_write_at = datetime.now(UTC)
-                self._write_count += 1
-            else:
-                self._failed += 1
-        return ok
+            return False
 
     def write_stopped(self) -> None:
         """Attempt to write stopped state on clean shutdown (best effort)."""
@@ -199,16 +189,6 @@ class SnapshotWriter:
             write_snapshot_atomic(self.path, snap)
         except Exception:
             log.warning("snapshot stopped write failed", exc_info=True)
-
-    def stats(self) -> dict[str, Any]:
-        with self._lock:
-            return {
-                "snapshot_write_count": self._write_count,
-                "snapshot_failed": self._failed,
-                "snapshot_last_write_at": self._last_write_at.isoformat() if self._last_write_at else None,
-                "snapshot_path": str(self.path),
-                "snapshot_interval": self.interval,
-            }
 
 
 __all__ = [

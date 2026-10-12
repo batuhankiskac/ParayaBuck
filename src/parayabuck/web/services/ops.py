@@ -107,22 +107,17 @@ def query_events(limit: int = 100, config: Any | None = None, **filters: Any) ->
     if isinstance(sev, str) and sev.strip():
         filters["severity"] = sev.strip()
     try:
-        from parayabuck.monitoring.journal import EventJournal, get_journal
+        from parayabuck.monitoring.journal import EventJournal, current_journal_path
 
-        journal_path = _resolve_journal_path(config)
-        journal = None
-        if Path(str(journal_path)).exists():
-            # A read must never create the journal: EventJournal.__init__
-            # ensures the schema (a write), so skip construction entirely
-            # when the configured file is absent.
-            journal = EventJournal(journal_path)
-        else:
-            # No configured file (fresh install, or a test isolation harness
-            # holding the global): read the process global only when its own
-            # file already exists — never constructing a missing default.
-            candidate = get_journal()
-            if Path(str(candidate.path)).exists():
-                journal = candidate
+        # A read must never create the journal: EventJournal.__init__ ensures
+        # the schema (a write), so only a read-only handle on an existing file
+        # is opened. With no configured file (fresh install, or a test
+        # isolation harness holding the global) the process global's path is
+        # read when that file exists — never constructing a missing default.
+        journal_path = Path(str(_resolve_journal_path(config)))
+        if not journal_path.exists():
+            journal_path = current_journal_path()
+        journal = EventJournal.open_readonly(journal_path) if journal_path.exists() else None
         events = journal.query(limit=limit, **filters) if journal is not None else []
         # Convert to dict for JSON
         out: list[dict[str, Any]] = []
@@ -173,9 +168,10 @@ def get_timeline(decision_id: str, config: Any | None = None) -> dict[str, Any]:
     try:
         from parayabuck.monitoring.forensics import decision_reconstruction
 
-        # decision_reconstruction expects (db_path, decision_id)
-        db_path = _resolve_db_path(config if config is not None else _current_config())
-        return decision_reconstruction(db_path, decision_id)
+        cfg = config if config is not None else _current_config()
+        db_path = _resolve_db_path(cfg)
+        # The configured journal, read-only: never the default file, never created.
+        return decision_reconstruction(db_path, decision_id, journal_path=_resolve_journal_path(cfg))
     except Exception as exc:  # pragma: no cover
         log.warning("timeline reconstruction failed: %s", exc)
         return {"error": str(exc), "decision_id": decision_id, "unavailable": True}
@@ -193,7 +189,11 @@ def get_latest_decision(config: Any | None = None) -> dict[str, Any]:
             cur = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='portfolio_decisions'")
             if cur.fetchone() is None:
                 return {"decision": None, "unavailable": True, "reason": "no decisions table"}
-            row = conn.execute("SELECT * FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 1").fetchone()
+            from parayabuck.monitoring.forensics import latest_decision_row
+
+            # Scoped to the current account so a pre-rotation account's
+            # decision is never served as the latest one.
+            row = latest_decision_row(conn)
             if not row:
                 return {"decision": None, "unavailable": True, "reason": "no decisions yet"}
             data = dict(row)

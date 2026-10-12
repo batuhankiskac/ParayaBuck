@@ -72,9 +72,9 @@ def prune_receipts(
 
     if not isinstance(retention_days, (int, float)) or not retention_days > 0:
         raise ValueError("retention_days must be a positive number")
-    if retention_days < _MIN_RECEIPT_RETENTION_DAYS:
+    if retention_days < MIN_RECEIPT_RETENTION_DAYS:
         raise ValueError(
-            f"retention_days must keep at least the soak/audit horizon ({_MIN_RECEIPT_RETENTION_DAYS:g} days)"
+            f"retention_days must keep at least the soak/audit horizon ({MIN_RECEIPT_RETENTION_DAYS:g} days)"
         )
     reference = now.timestamp() if isinstance(now, datetime) else datetime.now(UTC).timestamp()
     cutoff = reference - float(retention_days) * 86_400
@@ -97,9 +97,10 @@ def prune_receipts(
     return removed
 
 
-# Floor for prune_receipts: two trading years plus margin, so the soak auditor
-# can always replay its window from the receipt directory.
-_MIN_RECEIPT_RETENTION_DAYS = 800.0
+# Floor for prune_receipts and the window `parayabuck backup` prunes with: two
+# trading years plus margin, so the soak auditor can always replay its window
+# from the receipt directory.
+MIN_RECEIPT_RETENTION_DAYS = 800.0
 
 
-__all__ = ["default_receipt_dir", "prune_receipts", "write_decision_receipt_v2"]
+__all__ = ["MIN_RECEIPT_RETENTION_DAYS", "default_receipt_dir", "prune_receipts", "write_decision_receipt_v2"]

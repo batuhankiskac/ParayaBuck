@@ -186,8 +186,11 @@ def placeholder_open(o, h, lo, c):
             or o > h * (1 + 1e-9) or o < lo * (1 - 1e-9))
 
 
-def load_market(key):
+def load_market(key, prev_close_open_before=None, last_override=None):
+    """prev_close_open_before / last_override are used only by the report-only M1 open-rule
+    sensitivity (added after the pre-registration commit; no gate uses them)."""
     sym, first, meas_from, last = MARKETS[key]
+    last = last_override or last
     rows = []
     with INDEX.open() as fh:
         for r in csv.DictReader(fh):
@@ -203,7 +206,7 @@ def load_market(key):
         if k == 0:
             o[k] = cl
             continue
-        if placeholder_open(op, h, lo, cl):
+        if placeholder_open(op, h, lo, cl) or (prev_close_open_before is not None and d < prev_close_open_before):
             o[k] = c[k - 1]
             filled += 1
             filled_by_year[d[:4]] += 1
@@ -262,8 +265,8 @@ def instrument(o, c, y):
     return so, sc
 
 
-def hist_market(key):
-    days, o, c, y, start, info = load_market(key)
+def hist_market(key, **kw):
+    days, o, c, y, start, info = load_market(key, **kw)
     so, sc = instrument(o, c, y)
     vol = trv2.vol_n(sc)
     sig = signals(c, bill_level(y))
@@ -312,7 +315,7 @@ def hist_market(key):
 
 
 # ----------------------------------------------------------------------------- bootstrap (K5)
-def bootstrap_market(key, rng):
+def bootstrap_market(key, rng, **kw):
     """Stationary block bootstrap (mean block 20) over the market's measured-window sessions.
 
     A path draws BOOT_L sessions; each session contributes its overnight factor
@@ -320,7 +323,7 @@ def bootstrap_market(key, rng):
     previous close, jointly. Signals run on the resampled price level, the
     instrument on the resampled factors. Sessions START..BOOT_L are measured
     (2,520 = 10 years at 252/yr)."""
-    days, o, c, y, start, _ = load_market(key)
+    days, o, c, y, start, _ = load_market(key, **kw)
     pool = np.arange(start, len(days))
     npool = len(pool)
     diffs, cagr_acc = [], {a: [] for a in ARMS}
@@ -409,6 +412,28 @@ def main() -> None:
                       "p25_diff": float(np.percentile(pooled, 25)), "p75_diff": float(np.percentile(pooled, 75))}
     g = gates(hist, boot["pooled"]["median_diff"])
 
+    # ---- report-only additions made after the pre-registration commit (no gate uses them)
+    srng = np.random.default_rng(SEED + 1)
+    meds = [float(np.median(pooled[srng.integers(0, len(pooled), len(pooled))])) for _ in range(1000)]
+    boot["pooled"]["median_mc_se_report_only"] = float(np.std(meds, ddof=1))
+    boot["pooled"]["median_mc_p5_p95_report_only"] = [float(np.percentile(meds, 5)), float(np.percentile(meds, 95))]
+    alt = {"prev_close_open_before": "1985-01-01"}  # gold_riskoff_oos_v1's ^IXIC open rule
+    sens = {"rule": "M1 ^IXIC opens before 1985-01-01 := previous close (gold_riskoff_oos_v1 convention)"}
+    for name, kw in (("M1_full_window", alt), ("M1_1975_1998_gold_window", {**alt, "last_override": "1998-12-30"}),
+                     ("M1_1975_1998_campaign_rule", {"last_override": "1998-12-30"})):
+        h = hist_market("M1", **kw)
+        sens[name] = {f"m{m}": {a: {"cagr": h[f"m{m}"][a]["cagr"], "max_dd": h[f"m{m}"][a]["max_dd"]} for a in ARMS}
+                      for m in (2, 1)}
+    rng2 = np.random.default_rng(SEED)
+    alt_d = []
+    for k in MARKETS:
+        d, s = bootstrap_market(k, rng2, **(alt if k == "M1" else {}))
+        alt_d.append(d)
+        if k == "M1":
+            sens["M1_bootstrap_median_diff"] = s["median_diff"]
+    sens["pooled_bootstrap_median_diff"] = float(np.median(np.concatenate(alt_d)))
+    out_sens = sens
+
     combined = {}
     for name, v in PRIOR.items():
         combined[name] = {**v, "source": "signal_ensemble_v1 (calibrated, m=2)"}
@@ -434,6 +459,7 @@ def main() -> None:
                               "(DTB3, TB3MS before 1954-01-04)"},
         "historical": hist, "bootstrap_m2_block20": boot, "gates": g,
         "combined_with_signal_ensemble_v1": {"windows": combined, "summary": combined_summary},
+        "m1_open_rule_sensitivity_report_only": out_sens,
         "status": "complete",
     }
     OUT.write_text(json.dumps(trv2.rnd(out), indent=2, sort_keys=True) + "\n")
@@ -490,6 +516,17 @@ def main() -> None:
     L.append("")
     L.append(f"combined with signal_ensemble_v1 (report-only): E2 >= C0 in {combined_summary['E2_cagr_ge_C0']}/"
              f"{nwin} windows, median dCAGR {combined_summary['median_cagr_diff'] * 100:+.2f} pp")
+    L.append("")
+    L.append("report-only, added after pre-registration:")
+    s = boot["pooled"]
+    L.append(f"  pooled median Monte Carlo s.e. {s['median_mc_se_report_only'] * 100:.3f} pp "
+             f"(5-95%: {s['median_mc_p5_p95_report_only'][0] * 100:+.3f} .. {s['median_mc_p5_p95_report_only'][1] * 100:+.3f} pp)")
+    L.append(f"  M1 open-rule sensitivity ({out_sens['rule']}):")
+    for name in ("M1_full_window", "M1_1975_1998_gold_window", "M1_1975_1998_campaign_rule"):
+        v = out_sens[name]["m2"]
+        L.append(f"    {name}: m=2 C0 {p(v['C0']['cagr'])}/{p(v['C0']['max_dd'])}  E2 {p(v['E2']['cagr'])}/{p(v['E2']['max_dd'])}")
+    L.append(f"    bootstrap with this rule: M1 median {out_sens['M1_bootstrap_median_diff'] * 100:+.3f} pp, "
+             f"pooled {out_sens['pooled_bootstrap_median_diff'] * 100:+.3f} pp")
     SUMMARY.write_text("\n".join(L) + "\n")
     print("\n".join(L))
 

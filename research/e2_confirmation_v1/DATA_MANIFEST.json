@@ -1,0 +1,96 @@
+{
+  "campaign": "e2_confirmation_v1",
+  "downloaded_utc": "2026-10-12T15:49:31+00:00",
+  "files": {
+    "data/historical/e2_confirmation_v1_index.csv": {
+      "source": "Yahoo Finance chart API v8 (query1.finance.yahoo.com), interval=1d, events=history",
+      "notes": "price indices (no dividends); timestamps converted to exchange-local dates with the response gmtoffset; rows with a null close dropped; null open/high/low kept as empty; OHLC as served (float repr); clipped per symbol to clip_end.",
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "symbols": {
+        "^IXIC": {
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?period1=-1577923200&period2=946857600&interval=1d&events=history",
+          "retrieved_utc": "2026-10-12T15:49:27+00:00",
+          "raw_response_sha256": "b025e7f884637a4dea97bfae0f90155682003350bd3982f6c710966c889c49c3",
+          "exchange_timezone": "America/New_York",
+          "gmtoffset_s": -14400,
+          "rows": 7304,
+          "rows_dropped_null_close": 0,
+          "duplicate_dates_kept_last": 0,
+          "first": "1971-02-05",
+          "last": "1999-12-31",
+          "clip_end": "1999-12-31"
+        },
+        "^GSPC": {
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=-1577923200&period2=-410054400&interval=1d&events=history",
+          "retrieved_utc": "2026-10-12T15:49:27+00:00",
+          "raw_response_sha256": "e84a41d43b658ce0fa9cf987bcc857fff1d196fcf1cd9a33a5014f8963d3b90f",
+          "exchange_timezone": "America/New_York",
+          "gmtoffset_s": -14400,
+          "rows": 7250,
+          "rows_dropped_null_close": 0,
+          "duplicate_dates_kept_last": 0,
+          "first": "1927-12-30",
+          "last": "1956-12-31",
+          "clip_end": "1956-12-31"
+        },
+        "^N225": {
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EN225?period1=-1577923200&period2=1790899200&interval=1d&events=history",
+          "retrieved_utc": "2026-10-12T15:49:29+00:00",
+          "raw_response_sha256": "7d56c377457e388eb8183b50c47277e3eac1138b466514b8262fd794aa07a3ff",
+          "exchange_timezone": "Asia/Tokyo",
+          "gmtoffset_s": 32400,
+          "rows": 15175,
+          "rows_dropped_null_close": 625,
+          "duplicate_dates_kept_last": 0,
+          "first": "1965-01-05",
+          "last": "2026-09-29",
+          "clip_end": "2026-09-29"
+        },
+        "^GDAXI": {
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGDAXI?period1=-1577923200&period2=1790899200&interval=1d&events=history",
+          "retrieved_utc": "2026-10-12T15:49:29+00:00",
+          "raw_response_sha256": "8df2287b0a37f7de27e1e034d885e085d7d918ac53e167717ba307b2a8894c52",
+          "exchange_timezone": "Europe/Berlin",
+          "gmtoffset_s": 7200,
+          "rows": 9799,
+          "rows_dropped_null_close": 168,
+          "duplicate_dates_kept_last": 0,
+          "first": "1987-12-30",
+          "last": "2026-09-29",
+          "clip_end": "2026-09-29"
+        },
+        "^FTSE": {
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EFTSE?period1=-1577923200&period2=1790899200&interval=1d&events=history",
+          "retrieved_utc": "2026-10-12T15:49:30+00:00",
+          "raw_response_sha256": "877aef39a087c0fbc30ac68127a49a35e83dc22d2d6e4853cdcadfb989be3d46",
+          "exchange_timezone": "Europe/London",
+          "gmtoffset_s": 3600,
+          "rows": 10797,
+          "rows_dropped_null_close": 183,
+          "duplicate_dates_kept_last": 0,
+          "first": "1984-01-03",
+          "last": "2026-09-29",
+          "clip_end": "2026-09-29"
+        }
+      }
+    },
+    "data/historical/e2_confirmation_v1_tb3ms.csv": {
+      "source": "FRED fredgraph CSV, series TB3MS (3-Month Treasury Bill Secondary Market Rate, monthly average, percent)",
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=TB3MS",
+      "retrieved_utc": "2026-10-12T15:49:31+00:00",
+      "raw_response_sha256": "631bc444a8c5370c3a2df12f484a67ae7b9a68c00fe8a33215895fb49c8cc08c",
+      "raw_header": [
+        "observation_date",
+        "TB3MS"
+      ],
+      "rows": 276,
+      "first": "1934-01-01",
+      "last": "1956-12-01",
+      "clip_end": "1956-12-31"
+    }
+  },
+  "reused_committed_inputs": {
+    "data/historical/stress_robustness_v1_dtb3.csv": "DTB3 daily 1954-01-04 -> 2026-09-28; see research/stress_robustness_v1/DATA_MANIFEST.json"
+  }
+}

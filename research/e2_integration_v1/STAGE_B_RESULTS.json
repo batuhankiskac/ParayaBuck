@@ -1,0 +1,478 @@
+{
+  "decisions_in_market_share": {
+    "E2": 0.8379052369077307,
+    "VT35": 0.8283458021612635
+  },
+  "differing_decisions": [
+    {
+      "decision_date": "2019-02-04",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-02-05",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-02-06",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-02-07",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-02-08",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-02-11",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-02-12",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-02-13",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-02-14",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-02-21",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-03-07",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-03-08",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-05-31",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2019-06-03",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2022-03-28",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2022-03-30",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2022-03-31",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2022-04-01",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2022-04-05",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2023-01-26",
+      "don_up": false,
+      "e2_in": false,
+      "sma_up": true,
+      "tsm_up": false,
+      "votes": 1,
+      "vt35_in": true
+    },
+    {
+      "decision_date": "2023-01-27",
+      "don_up": false,
+      "e2_in": false,
+      "sma_up": true,
+      "tsm_up": false,
+      "votes": 1,
+      "vt35_in": true
+    },
+    {
+      "decision_date": "2023-01-31",
+      "don_up": false,
+      "e2_in": false,
+      "sma_up": true,
+      "tsm_up": false,
+      "votes": 1,
+      "vt35_in": true
+    },
+    {
+      "decision_date": "2025-05-01",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2025-05-02",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2025-05-05",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2025-05-06",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2025-05-07",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2025-05-08",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    },
+    {
+      "decision_date": "2025-05-09",
+      "don_up": true,
+      "e2_in": true,
+      "sma_up": false,
+      "tsm_up": true,
+      "votes": 2,
+      "vt35_in": false
+    }
+  ],
+  "episodes": {
+    "E2": 13,
+    "VT35": 18
+  },
+  "episodes_only_e2": [
+    [
+      "2019-02-04",
+      "2020-03-09"
+    ],
+    [
+      "2022-03-28",
+      "2022-04-06"
+    ],
+    [
+      "2023-02-01",
+      "2023-03-10"
+    ],
+    [
+      "2025-05-01",
+      "2026-03-20"
+    ]
+  ],
+  "episodes_only_vt35": [
+    [
+      "2019-02-15",
+      "2019-02-21"
+    ],
+    [
+      "2019-02-22",
+      "2019-03-07"
+    ],
+    [
+      "2019-03-11",
+      "2019-05-31"
+    ],
+    [
+      "2019-06-04",
+      "2020-03-09"
+    ],
+    [
+      "2022-03-29",
+      "2022-03-30"
+    ],
+    [
+      "2022-04-04",
+      "2022-04-05"
+    ],
+    [
+      "2023-01-26",
+      "2023-01-30"
+    ],
+    [
+      "2023-01-31",
+      "2023-03-10"
+    ],
+    [
+      "2025-05-12",
+      "2026-03-20"
+    ]
+  ],
+  "first_decision_trend_state": {
+    "E2": "uptrend",
+    "VT35": "uptrend"
+  },
+  "results": {
+    "E2": {
+      "1.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.4105132303075978,
+        "cagr_2022_2026": 0.20993461275184688,
+        "costs": {
+          "fees": 186.45543252478112,
+          "slippage": 3700.6667548404916,
+          "spread": 1850.3333774202458
+        },
+        "decisions": 2406,
+        "ending_nav": 1329642.6232118441,
+        "fills": 617,
+        "full": {
+          "cagr": 0.3105015361912611,
+          "max_drawdown": 0.3218846719323063,
+          "sharpe": 1.0976518289856398
+        },
+        "hashes": {
+          "decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "equity_decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "fills_without_client_ids": "6aadd3580ac737c681bebaf59aaf7011be77c450ba71c35cc56aaa10350eaff9"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "traded_notional": {
+          "QLD": 18503309.34730518
+        },
+        "turnover_per_year": 3.8371772418454206
+      },
+      "2.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.40889300216256763,
+        "cagr_2022_2026": 0.20831498245764068,
+        "costs": {
+          "fees": 370.2115201020008,
+          "slippage": 7343.948935436198,
+          "spread": 3671.974467718099
+        },
+        "decisions": 2406,
+        "ending_nav": 1313969.7379699536,
+        "fills": 618,
+        "full": {
+          "cagr": 0.308878613662378,
+          "max_drawdown": 0.3233430560279843,
+          "sharpe": 1.0933099203754335
+        },
+        "hashes": {
+          "decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "equity_decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "fills_without_client_ids": "9618f2fbaa3a0991dce01a3c6c4506856fb89de2e580c31c6aaa744e8dc32a0e"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "traded_notional": {
+          "QLD": 18359821.32271893
+        },
+        "turnover_per_year": 3.8369066759754387
+      }
+    },
+    "VT35": {
+      "1.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.37235349915898874,
+        "cagr_2022_2026": 0.21311647896040986,
+        "costs": {
+          "fees": 193.53327623361884,
+          "slippage": 3697.0066324377112,
+          "spread": 1848.5033162188556
+        },
+        "decisions": 2406,
+        "ending_nav": 1173537.6055919928,
+        "fills": 615,
+        "full": {
+          "cagr": 0.2935086068944388,
+          "max_drawdown": 0.27698049367809163,
+          "sharpe": 1.0542177752957769
+        },
+        "hashes": {
+          "decisions": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+          "equity_decisions": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+          "fills_without_client_ids": "8c00d14fb567edb96a4fd159a9339bdab080e5814a8178a5ab34d237eb74a9f0"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.0.0"
+        ],
+        "traded_notional": {
+          "QLD": 18485014.9661138
+        },
+        "turnover_per_year": 4.2354000355910815
+      },
+      "2.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.37031512341018535,
+        "cagr_2022_2026": 0.21129440924788723,
+        "costs": {
+          "fees": 383.7021334039093,
+          "slippage": 7324.763890922694,
+          "spread": 3662.381945461347
+        },
+        "decisions": 2406,
+        "ending_nav": 1156890.1814972837,
+        "fills": 616,
+        "full": {
+          "cagr": 0.2915786973255359,
+          "max_drawdown": 0.27842838976058915,
+          "sharpe": 1.0489447921010406
+        },
+        "hashes": {
+          "decisions": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+          "equity_decisions": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+          "fills_without_client_ids": "aad1def2b801a3574cfaad7ea9f88bb4b36faf5a0a7dc650e2de1e17e305c542"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.0.0"
+        ],
+        "traded_notional": {
+          "QLD": 18311871.26148058
+        },
+        "turnover_per_year": 4.236764148295677
+      }
+    }
+  },
+  "s1_reference_check": {
+    "expected": {
+      "cagr": 0.2935,
+      "ending_nav": 1173537.61,
+      "fills": 615,
+      "max_drawdown": 0.277
+    },
+    "match": true,
+    "vt35_1x_ending_nav": 1173537.6055919928,
+    "vt35_1x_fills": 615
+  },
+  "window": [
+    "2017-01-03",
+    "2026-07-30"
+  ]
+}

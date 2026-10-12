@@ -43,6 +43,12 @@ strategy:
   # and dividend/gold sleeve identities were removed; they are recoverable
   # from git history (tag archive/research/profit-max-v1-2026-09 records the
   # evidence). LIVE remains disabled.
+  # 2026-10-12 (e2_integration_v1, owner-approved exception to the failed
+  # signal_ensemble_v1 bootstrap gate): the in-trend test is the 2-of-3 vote
+  # E2 of QQQ close > SMA200, QQQ 252-session price return > 0 and QQQ close
+  # > midpoint of its 126-session max/min; sizing unchanged. Needs 253
+  # sessions of QQQ history (strategy version 1.1.0). `trend_rule: sma`
+  # without tsm_bars/donchian_bars restores VT35 (version 1.0.0) exactly.
   equity:
     enabled: true
     name: equity_leveraged_trend_v1
@@ -58,6 +64,9 @@ strategy:
       vol_target: 0.35
       vol_window: 20
       rebalance_frequency: hours:24
+      trend_rule: majority_sma_tsm_don
+      tsm_bars: 252
+      donchian_bars: 126
 risk:
   # 2026-09-25 (profit_max_v1): limits widened for the single-ETF equity
   # identity. The per-asset cap admits the whole equity allocation in QLD,

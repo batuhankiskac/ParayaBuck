@@ -9,7 +9,7 @@ How the running PAPER bot behaves and how to watch it. Deployment is in
 | When (ET) | What happens |
 |---|---|
 | Regular session | 5m IEX bars stream for SPY, QQQ, QLD; the account is polled every 15 s and reconciled every 60 s |
-| ≥ 16:00 | The session's daily bar is flushed; VT35 decides on completed bars only (QQQ close vs 200-session SMA, QLD 20-session vol). A daily bar for a session still trading is dropped from the signal history (`Ignored unfinished equity daily bar` in the log) |
+| ≥ 16:00 | The session's daily bar is flushed; VT35 decides on completed bars only (E2 vote on QQQ: close vs 200-session SMA, 252-session return > 0, close vs 126-session channel midpoint; QLD 20-session vol). A daily bar for a session still trading is dropped from the signal history (`Ignored unfinished equity daily bar` in the log) |
 | Right after the decision | Decision persisted; SELLs, then BUYs, submitted as DAY market orders sized against a fresh account snapshot; one `daily_summary` alert. A decision blocked by a recoverable gate is re-queued instead (`decision_deferred`) and re-decided every 60 s until 40 min after the close |
 | Next open (09:30) | Alpaca fills the queued orders |
 | Close + 45 min / next open + 30 min | Intent watchdog checks that a decision exists and that the target is held (below) |

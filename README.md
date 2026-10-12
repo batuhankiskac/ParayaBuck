@@ -5,8 +5,8 @@ overlay and one execution path shared by backtest, PAPER and LIVE.
 
 | | |
 |---|---|
-| Strategy | **VT35** — `equity_leveraged_trend_v1` (Leveraged Index Trend v1) |
-| Rule | Hold QLD (2x Nasdaq-100) while QQQ's completed daily close is above its 200-session SMA, at weight `min(1, 0.35 / 20-session annualized QLD volatility)`; cash otherwise |
+| Strategy | **VT35** with the E2 trend vote — `equity_leveraged_trend_v1` 1.1.0 (Leveraged Index Trend v1) |
+| Rule | Hold QLD (2x Nasdaq-100) while at least two of three QQQ trend votes hold on the completed daily close (close > 200-session SMA; 252-session return > 0; close > midpoint of the 126-session max/min), at weight `min(1, 0.35 / 20-session annualized QLD volatility)`; cash otherwise |
 | Timing | Decided on the completed session bar after the NYSE close (16:00 ET; 13:00 ET on early-close days); DAY market orders fill at the next regular open |
 | Allocation | Equity 0.98 of account equity; 0.02 cash buffer |
 | Universe | Static `[SPY, QQQ, QLD]` (QQQ signal, QLD holding, SPY benchmark) |
@@ -17,7 +17,8 @@ The bot is equity-only. Crypto support was removed on 2026-09-30
 crypto found in the shared account is never traded and raises a `risk_incident`
 alert at startup. Earlier equity identities are recoverable from git history
 only. Evidence for VT35: `docs/research/profit_max_v1.md`,
-`docs/research/paper_config_v2.md`. Backtest returns do not imply live returns.
+`docs/research/paper_config_v2.md`; for the E2 trend vote:
+`docs/research/e2_integration_v1.md`. Backtest returns do not imply live returns.
 
 > **Never run the engine on the laptop.** The laptop and the VM share one
 > Alpaca PAPER key; two runners corrupt the ledger (2026-09-25 incident). This

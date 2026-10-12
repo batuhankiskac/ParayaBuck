@@ -65,10 +65,12 @@ def _bars(days: int = 420) -> list[Bar]:
 
 def _config(tmp_path) -> Config:
     base = Config()
+    # Reduced-window VT35 rule: the shipped E2 vote needs 253 bars.
     parameters = {
         **base.strategy.equity.parameters,
         "sma_bars": 5,
         "vol_target": 0.0,
+        "trend_rule": "sma",
     }
     return replace(
         base,
@@ -586,9 +588,10 @@ def test_load_bars_returns_the_single_window_download_for_a_deficient_symbol(tmp
 def test_warmup_window_covers_strategy_minimum_history_for_equity(
     tmp_path,
 ) -> None:
-    # The SHIPPED DEFAULT strategy (equity_leveraged_trend_v1) declares
-    # minimum_history_bars=200 daily bars — not the reduced-window fixture
-    # config used by the other backtest tests.
+    # The SHIPPED DEFAULT strategy (equity_leveraged_trend_v1, E2 vote)
+    # declares minimum_history_bars=253 daily bars (252-session momentum plus
+    # its base close) — not the reduced-window fixture config used by the
+    # other backtest tests.
     base = Config()
     config = replace(
         base,
@@ -596,9 +599,9 @@ def test_warmup_window_covers_strategy_minimum_history_for_equity(
     )
     # The warmup window counts REAL NYSE sessions (holiday-aware), so it
     # spans more calendar days than bars: at least the no-holiday Mon-Fri
-    # minimum (ceil(200*7/5)=280) and bounded by a plausible holiday count.
+    # minimum and bounded by a plausible holiday count.
     # The static equity universe adds no scanner lookback on top of it.
-    assert cli_module._warmup_window_days(config) == bars_to_calendar_days("1d", 200, end_date=None)
+    assert cli_module._warmup_window_days(config) == bars_to_calendar_days("1d", 253, end_date=None)
 
 
 def test_bars_to_calendar_days_scales_by_session_density() -> None:

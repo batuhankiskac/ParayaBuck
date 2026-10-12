@@ -8,6 +8,11 @@ using the production strategy class, and the fill it would have modeled
 (next session open). It then reports the live inputs, target weight and
 fills next to it. See docs/research/execution_model_audit_v1.md.
 
+Each decision is re-decided with the parameters it recorded (its
+``parameters``), so sessions decided under VT35's SMA rule are not compared
+with the E2 vote after the switch (docs/research/e2_integration_v1.md);
+decisions without recorded parameters use the configured strategy.
+
     python scripts/backtest_live_comparison.py --db data/runtime/parayabuck.sqlite3 \
         --bars path/to/daily_sip.csv [--config config/settings.yaml] [--json-output out.json]
 
@@ -120,6 +125,21 @@ def load_live(db: str | Path) -> list[dict[str, Any]]:
         con.close()
 
 
+def decision_strategy(target: dict[str, Any], configured: EquityLeveragedTrendV1) -> EquityLeveragedTrendV1:
+    """The strategy as configured when ``target`` was decided.
+
+    A decision records its full parameter set; one without parameters (or
+    with a set this code no longer accepts) is compared with ``configured``.
+    """
+    recorded = target.get("parameters")
+    if not isinstance(recorded, dict) or not recorded or recorded == configured.parameters:
+        return configured
+    try:
+        return EquityLeveragedTrendV1(dict(recorded))
+    except ValueError:
+        return configured
+
+
 def reference_decision(
     strategy: EquityLeveragedTrendV1,
     bars: dict[str, list[Bar]],
@@ -157,6 +177,8 @@ def reference_decision(
         "signal_close": target.metadata["signal_close"],
         "signal_sma": target.metadata["signal_sma"],
         "realized_volatility": target.metadata["realized_volatility"],
+        "trend_rule": strategy.trend_rule,
+        "trend_signals": target.metadata.get("trend_signals"),
         "strategy_weight": sum(weight.weight for weight in target.weights),
         "target_weight": reference_target_weight(overlay, target, strategy.hold_symbol, allocation),
         "fill_session": session_of(later[0].timestamp).isoformat() if later else None,
@@ -177,7 +199,7 @@ def compare(
     rows = []
     for decision in live:
         session = session_of(decision["decision_timestamp"])
-        ref = reference_decision(strategy, bars, session, overlay, allocation)
+        ref = reference_decision(decision_strategy(decision["target"], strategy), bars, session, overlay, allocation)
         meta = decision["target"].get("metadata", {})
         live_weight = sum(
             float(w["weight"]) for w in decision["target"].get("weights", ()) if w["symbol"] == strategy.hold_symbol
@@ -192,6 +214,7 @@ def compare(
                 "signal_close": meta.get("signal_close"),
                 "signal_sma": meta.get("signal_sma"),
                 "realized_volatility": meta.get("realized_volatility"),
+                "trend_signals": meta.get("trend_signals"),
                 "target_weight": live_weight,
             },
             "reference": ref,

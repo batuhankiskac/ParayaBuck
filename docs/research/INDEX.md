@@ -1,11 +1,14 @@
 # Research index
 
-Current production identity: **VT35** (`equity_leveraged_trend_v1`, QLD while
-QQQ > 200-session SMA, 35% vol target), PAPER only. Supporting code, data and
+Current production identity: **VT35 with the E2 trend vote**
+(`equity_leveraged_trend_v1` 1.1.0, QLD while at least two of QQQ > 200-session
+SMA, QQQ 252-session return > 0 and QQQ > 126-session channel midpoint hold,
+35% vol target), PAPER only. Supporting code, data and
 results for each doc live in `research/<name>/` unless noted.
 
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|
+| [`e2_integration_v1.md`](e2_integration_v1.md) | 2026-10-12 | E2 shipped as `equity_leveraged_trend_v1` 1.1.0 (`trend_rule: majority_sma_tsm_don`; owner-approved exception to the failed bootstrap gates) with price-only TSM (zero hurdle) and DON, since production has no total-return or T-bill series (−0.15 pp vs research E2 on 2000–2026); Stage B 2017–2026 at 1x: 31.05% CAGR / 32.19% max DD vs VT35 29.35% / 27.70% (S1 reproduced exactly). | current evidence |
 | [`vix_filter_v1.md`](vix_filter_v1.md) | 2026-10-12 | No VIX overlay on VT35 (cash while VIX > 30, VIX/SMA60 > 1.5, or VIX > VIX3M; or VXN-implied vol sizing) passes under base and calibrated financing plus a ^GSPC+^VIX 1990–1999 check: all lose 0.7–3.2 pp CAGR and bootstrap median; the spike and term-structure filters cut the 2020 drawdown (27.6% → 12.7%) but whipsaw elsewhere; VIX > 30 deepens max DD to 56.2%; VT35 unchanged. | current evidence |
 | [`e2_confirmation_v1.md`](e2_confirmation_v1.md) | 2026-10-12 | `signal_ensemble_v1`'s E2 (2-of-3 SMA200/TSM252/DON126) vs C0 on ^IXIC 1975–99, ^GSPC 1935–56, ^N225, ^GDAXI, ^FTSE: passes K1–K4 (E2 ≥ C0 in 4/5, median +0.37 pp) but fails K5 (pooled block-20 bootstrap median −0.001 pp); E2 closed, VT35 unchanged. | current evidence |
 | [`signal_ensemble_v1.md`](signal_ensemble_v1.md) | 2026-10-12 | No mixed-type trend arm (SMA200 / 252-day TSM / 126-day Donchian: 2-of-3 majority, proportional, TSM alone, Donchian alone) passes on 2000–2026 under base and calibrated financing plus a ^GSPC 1957–1999 out-of-sample check; majority E2 (+1.4 pp CAGR, same DD) misses only the block-20 bootstrap gate by 0.05 pp; VT35 unchanged. | current evidence |

@@ -354,7 +354,7 @@ def test_unknown_parameter_key_fails_config_loading(tmp_path: Path) -> None:
 
 
 def test_shipped_parameters_are_unchanged() -> None:
-    """Q3E-6: the merge leaves the shipped VT35 parameters exactly as written."""
+    """Q3E-6: the merge leaves the shipped parameters exactly as written."""
     assert load_config(str(SHIPPED)).strategy.equity.parameters == {
         "signal_symbol": "QQQ",
         "hold_symbol": "QLD",
@@ -362,6 +362,9 @@ def test_shipped_parameters_are_unchanged() -> None:
         "vol_target": 0.35,
         "vol_window": 20,
         "rebalance_frequency": "hours:24",
+        "trend_rule": "majority_sma_tsm_don",
+        "tsm_bars": 252,
+        "donchian_bars": 126,
     }
 
 

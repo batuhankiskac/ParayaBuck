@@ -30,7 +30,7 @@
       not_attempted: "Henüz denenmedi"
     };
     const STRATEGY_DESC = {
-      equity_leveraged_trend_v1: "QQQ 200 günlük ortalamasının üzerindeyken QLD (2x Nasdaq-100) tutar; piyasa dalgalandıkça payı küçültür, trend bozulunca nakde geçer. Her işlem günü kontrol eder."
+      equity_leveraged_trend_v1: "QQQ'da üç trend sinyalinden en az ikisi (200 günlük ortalamanın üzeri, 252 günlük getiri pozitif, 126 günlük kanal ortasının üzeri) olumluyken QLD (2x Nasdaq-100) tutar; piyasa dalgalandıkça payı küçültür, trend bozulunca nakde geçer. Her işlem günü kontrol eder."
     };
     const PERIOD_LABEL = { "1D": "son 1 gün", "1W": "son 1 hafta", "1M": "son 1 ay", "3M": "son 3 ay", "1A": "son 1 yıl", "ALL": "tüm zamanlar" };
 

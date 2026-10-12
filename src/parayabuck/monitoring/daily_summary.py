@@ -28,6 +28,20 @@ def _qty(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".") or "0"
 
 
+def _trend_votes(signals: object) -> str | None:
+    """``"2/3 (SMA+ TSM- DON+)"`` from E2 vote metadata; ``None`` without it."""
+    if not isinstance(signals, dict):
+        return None
+    marks = []
+    for key in ("sma", "tsm", "don"):
+        entry = signals.get(key)
+        vote = entry.get("up") if isinstance(entry, dict) else None
+        marks.append(f"{key.upper()}{'+' if vote is True else '-' if vote is False else '?'}")
+    count = signals.get("votes_up")
+    total = f"{count}/3" if isinstance(count, int) and not isinstance(count, bool) else "?/3"
+    return f"{total} ({' '.join(marks)})"
+
+
 def build_equity_daily_summary(
     target: TargetPortfolio,
     account: AccountSnapshot | None,
@@ -88,6 +102,11 @@ def build_equity_daily_summary(
         trend_part += f" vs {sma_label} {sma:.2f}"
     if distance_pct is not None:
         trend_part += f" ({distance_pct:+.2f}%)"
+    votes = _trend_votes(metadata.get("trend_signals"))
+    if votes is not None:
+        # E2 (trend_rule majority_sma_tsm_don): the state is the 2-of-3 vote,
+        # so the SMA distance alone does not explain it.
+        trend_part += f" votes {votes}"
     trend_part += f" {trend_state}"
     held_text = f"{held_weight * 100:.1f}%" if held_weight is not None else "n/a"
     weight_part = f"{hold_symbol or 'hold'} target {target_weight * 100:.1f}% held {held_text}"
@@ -119,6 +138,7 @@ def build_equity_daily_summary(
         "signal_close": close,
         "signal_sma": sma,
         "signal_sma_distance_pct": distance_pct,
+        "trend_votes": votes,
         "hold_symbol": hold_symbol,
         "target_weight": target_weight,
         "held_weight": held_weight,

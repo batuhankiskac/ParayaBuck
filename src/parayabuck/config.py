@@ -61,12 +61,16 @@ def _default_equity_strategy() -> MarketStrategyConfig:
         # Defaults mirror the shipped identity (config/settings.yaml): a
         # deleted yaml key must not silently select an unvalidated strategy.
         maximum_allocation=0.98,
+        # ``tsm_bars``/``donchian_bars`` are left to the strategy class
+        # (252/126) so a YAML block selecting ``trend_rule: sma`` (VT35) does
+        # not inherit majority-only keys it would reject.
         parameters={
             "signal_symbol": "QQQ",
             "hold_symbol": "QLD",
             "sma_bars": 200,
             "vol_target": 0.35,
             "vol_window": 20,
+            "trend_rule": "majority_sma_tsm_don",
         },
     )
 

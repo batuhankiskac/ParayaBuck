@@ -36,6 +36,10 @@ PRODUCTION_EQUITY_PARAMETERS = {
     "vol_target": 0.35,
     "vol_window": 20,
     "rebalance_frequency": "hours:24",
+    # 2026-10-12 (e2_integration_v1): E2 2-of-3 trend vote.
+    "trend_rule": "majority_sma_tsm_don",
+    "tsm_bars": 252,
+    "donchian_bars": 126,
 }
 
 

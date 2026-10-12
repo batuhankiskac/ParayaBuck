@@ -62,9 +62,10 @@ probe can tell a dead engine from one that is still retrying.
 
 ## Alerts
 
-Alerts are local only (2026-10-06: the VM sends nothing to the operator).
 Every alert is written to the service log and to the operational event
-journal; nothing is POSTed anywhere. Read them on the VM:
+journal. The shipped config sends nothing off the VM; the owner can opt in to
+e-mail delivery of the important kinds (`alerting.email`, see "E-mail alerts"
+in `docs/deployment.md`). Read the local copy on the VM:
 
 ```bash
 parayabuck ops events --since 24h [--kind K] [--severity WARNING]   # the journal
@@ -102,10 +103,22 @@ fails trading, and no health check depends on alert delivery.
 | `session_close_bar_incomplete` | A session closed with stream minutes missing: the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision | warning |
 | `reconciliation_unexpected_fill_side` | A broker FILL activity carried a side outside Alpaca's vocabulary; it is skipped and the cursor advanced, never fatal | warning |
 | `paper_receipt` | Per-decision receipt (high volume) | info |
+| `exit_sell_rejected` | The broker rejected a SELL (an exit or a reduction of QLD). The engine retries it **once** at the next safe account poll (running, not warming up, no breaker or entry halt, no open order in the symbol) with the client id `<original>-retry1`, re-sized to the managed quantity still held; a rejected retry is alerted again (`state=retry_rejected`) and never retried | warning |
+| `live_rearm_required` | LIVE is configured but did not start by itself (no valid standing LIVE authorization, or a LIVE gate is closed) | warning |
+| `live_authorization_expiring` / `live_authorization_expired` | The standing LIVE authorization ends within 3 days (one per day) / has ended | warning |
+| `alert_delivery_failed` | An alert e-mail failed or was dropped (rate limit, full queue); local only, never e-mailed | warning |
 
-`alerting.enabled`, `alerting.webhook_url` and `alerting.events` were removed
-with outbound delivery and are rejected on load with a pointer to this
-section; `alerting.daily_summary` is the only alerting key.
+E-mail (opt-in) forwards `runtime_stopped_unexpected`, `runtime_start_failed`,
+`circuit_breaker`, `drawdown_halt`, `risk_incident`, `ambiguous_order`,
+`paper_incident`, `order_rejected`, `exit_sell_rejected`, `intent_alarm`,
+`reconciliation_failure`, the three LIVE notices and, when
+`alerting.email.daily_summary` is true, `daily_summary`. Delivery is
+asynchronous and bounded (same incident at most every 30 min, at most 20 mails
+an hour); it never blocks or fails trading.
+
+`alerting.enabled`, `alerting.webhook_url` and `alerting.events` (the webhook
+removed on 2026-10-06) are rejected on load with a pointer to this section;
+the alerting keys are `alerting.daily_summary` and the `alerting.email` block.
 
 ### Engine start failures
 

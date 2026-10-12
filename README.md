@@ -47,7 +47,8 @@ static equity symbols -> VT35 target portfolio -> risk overlay -> order planner
   signal history, so a mid-session restart never decides on a partial bar.
 - Operator visibility: loopback dashboard, `/readyz`, `parayabuck ops ...`,
   local alerts (log + event journal + health surfaces) including a one-line
-  daily summary and an intent watchdog; nothing is sent off the VM.
+  daily summary and an intent watchdog; opt-in e-mail delivery of the
+  important alerts (`alerting.email`, off in the shipped config).
 - State: SQLite under `data/runtime/`, online verified backups.
 
 ## Install

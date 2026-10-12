@@ -22,7 +22,8 @@ curl -s http://127.0.0.1:8000/readyz | python3 -m json.tool
 sudo journalctl -u parayabuck --since "1 hour ago" --no-pager | tail -n 100
 ```
 
-Alerts are local only: nothing is sent off the VM. Every alert is in the
+Alerts are local unless the owner enabled e-mail (`alerting.email`, see
+`docs/deployment.md`). Every alert is in the
 journal (`ops events`, filter with `--kind`/`--severity`) and in the service
 log (`journalctl -u parayabuck -g 'ALERT '`); `ops status` prints how many the
 engine emitted and how many repeats it throttled.

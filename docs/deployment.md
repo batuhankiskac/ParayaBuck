@@ -16,15 +16,15 @@ console, settings and backtests work and the engine refuses to start — see
 
 | Item | Value |
 |---|---|
-| Entry point | `parayabuck web` — serves the loopback console **and** runs the engine in-process (auto-starts in `paper` mode when `app.auto_start_engine` is on, credentials are present and this machine is the designated trading host) |
+| Entry point | `parayabuck web` — serves the loopback console **and** runs the engine in-process (auto-starts in `paper` mode when `app.auto_start_engine` is on, credentials are present and this machine is the designated trading host; in `live` mode only with a valid standing LIVE authorization, see "LIVE runbook") |
 | Trading host | `Environment=PARAYABUCK_TRADING_HOST=1` in the unit. Without it the process serves the console and backtests but refuses to start the engine on the shared account |
 | Bind | `127.0.0.1:8000` (`app.host/port`); reach it through an SSH tunnel: `ssh -L 8000:127.0.0.1:8000 <vm>` |
 | Working directory | Must be the repo root: `CONFIG_PATH=./config/settings.yaml` and every `data/runtime/...` path are cwd-relative |
-| Preflight | `ExecStartPre=parayabuck doctor --strict --paper --offline` — the unit refuses to start on a bad config, non-paper mode, live enabled, missing credentials, unwritable config dir, failed SQLite `integrity_check` or a tracked `.env` |
+| Preflight | `ExecStartPre=parayabuck doctor --strict --configured-mode --offline` — validates the mode `runtime.mode` names. PAPER gets exactly the old `--paper` set: the unit refuses to start on a bad config, live enabled, a dollar cap, `PARAYABUCK_ENABLE_LIVE`, missing PAPER credentials, unwritable config dir, failed SQLite `integrity_check` or a tracked `.env`. LIVE gets the LIVE set (see "LIVE runbook") |
 | Stop | `SIGTERM` stops the engine gracefully (worker joins, ledger close, socket release); `TimeoutStopSec=120` covers the worst-case join sequence |
 | Liveness / readiness | `GET /healthz` (always 200 while the process serves) / `GET /readyz` (200 ready, 503 not; see `docs/operations.md`) |
 | Backups | `parayabuck-backup.timer` runs `parayabuck backup` every 6 h (10 min after boot) |
-| Alerts | Local only: the log (`journalctl -u parayabuck`) and the event journal (`parayabuck ops events`). Nothing is sent off the VM (2026-10-06) |
+| Alerts | Always local: the log (`journalctl -u parayabuck`) and the event journal (`parayabuck ops events`). Off-host delivery is opt-in e-mail only (`alerting.email`, disabled in the shipped config; see "E-mail alerts") |
 
 ## Units (`deploy/systemd/`)
 
@@ -79,8 +79,10 @@ is accessible by group or other users, `doctor` prints a WARN line with the
 
 | Variable | Required | Notes |
 |---|---|---|
-| `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` | yes | PAPER keys |
+| `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` | yes | PAPER keys. PAPER never reads the LIVE names |
+| `ALPACA_LIVE_API_KEY`, `ALPACA_LIVE_SECRET_KEY` | live only | LIVE keys. LIVE never reads the PAPER names, and a LIVE start is refused when the key resolves to a paper account |
 | `PARAYABUCK_ENABLE_LIVE` | yes | `NO` |
+| `PARAYABUCK_SMTP_USERNAME`, `PARAYABUCK_SMTP_PASSWORD` | e-mail only | SMTP login for `alerting.email` (Gmail: the address and a 16-character App Password). Never put them in `config/settings.yaml`; they are never logged |
 | `PARAYABUCK_TRADING_HOST` | no | `1` designates the single runner. Set it in the unit's `[Service]` block, not here: a laptop `.env` must never carry it |
 | `CONFIG_PATH` | no | default `./config/settings.yaml` |
 | `OPEN_BROWSER` | no | `0` on the VM |
@@ -89,9 +91,10 @@ is accessible by group or other users, `doctor` prints a WARN line with the
 
 ### Where alerts go
 
-Alerts never leave the VM. Every alert kind is written to the service log and
-to the operational event journal (`data/runtime/observability.sqlite3`),
-throttled per incident. Read them with:
+Every alert kind is written to the service log and to the operational event
+journal (`data/runtime/observability.sqlite3`), throttled per incident. With
+the shipped config nothing leaves the VM; the owner can opt in to e-mail (next
+section). Read the local copy with:
 
 ```bash
 .venv/bin/parayabuck ops status                 # health checks + alert counters the engine published
@@ -100,9 +103,67 @@ sudo journalctl -u parayabuck -g 'ALERT ' --since today
 ```
 
 or on the dashboard through the SSH tunnel. No surface turns `DEGRADED`
-because nothing is delivered off-host. `alerting.enabled`,
-`alerting.webhook_url` and `alerting.events` are rejected on load; only
-`alerting.daily_summary` remains.
+because of alert delivery. `alerting.enabled`, `alerting.webhook_url` and
+`alerting.events` (the webhook removed on 2026-10-06) are still rejected on
+load; the alerting keys are `alerting.daily_summary` and the `alerting.email`
+block.
+
+### E-mail alerts (opt-in)
+
+Disabled by default. When enabled, the engine e-mails the alerts that need the
+owner: engine stopped/halted/start failed, safety incidents and halts
+(`circuit_breaker`, `drawdown_halt`, `risk_incident`, `ambiguous_order`,
+`paper_incident`), `order_rejected` and `exit_sell_rejected`, `intent_alarm`,
+`reconciliation_failure`, `live_rearm_required`,
+`live_authorization_expiring`/`live_authorization_expired`, and the daily
+summary (`alerting.email.daily_summary`). SMTP runs over TLS only (STARTTLS on
+587 or implicit TLS on 465), in a background thread with a 10 s timeout: a slow
+or broken mail server never blocks or stops trading. The same incident is
+mailed at most once per `min_interval_minutes` (30) and at most
+`max_per_hour` (20) mails leave per hour. A failed or dropped mail is recorded
+locally as `alert_delivery_failed` (`parayabuck ops events --kind
+alert_delivery_failed`).
+
+Setup with Gmail (the owner does this; nothing here needs a developer):
+
+1. Turn on 2-Step Verification for the Google account that will send the
+   mails, then open <https://myaccount.google.com/apppasswords>, create an app
+   password named `ParayaBuck` and copy the 16 characters.
+2. On the VM, add two lines to the env file (`sudo nano <env file>`, keep it
+   `chmod 600`):
+
+   ```bash
+   PARAYABUCK_SMTP_USERNAME=sender@gmail.com
+   PARAYABUCK_SMTP_PASSWORD=your_app_password_here   # the 16 letters, no spaces
+   ```
+
+3. In `config/settings.yaml`:
+
+   ```yaml
+   alerting:
+     daily_summary: true
+     email:
+       enabled: true
+       smtp_host: smtp.gmail.com
+       smtp_port: 587
+       security: starttls
+       from_address: sender@gmail.com
+       to_addresses: [owner@example.com]
+       daily_summary: true
+   ```
+
+4. Check without sending, then send one test mail, then restart:
+
+   ```bash
+   .venv/bin/parayabuck doctor --strict --configured-mode --offline   # "e-mail alerts valid"
+   .venv/bin/parayabuck ops test-email                                # validates, sends nothing
+   .venv/bin/parayabuck ops test-email --confirm                      # sends ONE test e-mail
+   sudo systemctl restart parayabuck
+   ```
+
+Other providers work the same way (`security: ssl` with port 465 for implicit
+TLS). In PAPER a broken e-mail setup is a `WARN` row and never stops the
+engine; in LIVE `doctor --configured-mode` requires valid e-mail alerts.
 
 ### Changing API keys on the VM
 
@@ -128,7 +189,7 @@ sudo -u parayabuck python3 -m venv .venv
 sudo -u parayabuck .venv/bin/pip install -r requirements.lock
 sudo -u parayabuck .venv/bin/pip install -e . --no-deps
 sudo install -m 0600 -o parayabuck -g parayabuck /dev/null .env   # then fill it
-sudo -u parayabuck .venv/bin/parayabuck doctor --strict --paper --offline
+sudo -u parayabuck .venv/bin/parayabuck doctor --strict --configured-mode --offline
 sudo cp deploy/systemd/parayabuck*.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now parayabuck.service parayabuck-backup.timer
@@ -214,7 +275,7 @@ git merge --ff-only bundle/main
 # when requirements.lock changed: the lock is a closed closure, so every
 # transitive dependency is pinned there — reinstall the whole file
 .venv/bin/pip install -r requirements.lock   # skip when the lock is unchanged
-.venv/bin/parayabuck doctor --strict --paper --offline
+.venv/bin/parayabuck doctor --strict --configured-mode --offline
 sudo systemctl restart parayabuck
 ```
 
@@ -258,6 +319,66 @@ engine. A change to the configuration digest (strategy, universe, risk,
 allocation) starts a new decision identity; note it in the operations log.
 
 Then add a row to `docs/OPERATIONS_LOG.md` with the deployed sha.
+
+### Mode-aware preflight (hosts installed before 2026-10-12)
+
+The installed unit is hand-edited, so a bundle never changes its
+`ExecStartPre`. The old `doctor --strict --paper --offline` line keeps working
+for PAPER (it applies the identical PAPER checks); switch to the mode-aware
+line once, before LIVE is ever configured:
+
+```bash
+sudo systemctl edit --full parayabuck
+#   ExecStartPre=<checkout>/.venv/bin/parayabuck doctor --strict --configured-mode --offline
+sudo systemctl daemon-reload
+systemctl cat parayabuck | grep ExecStartPre
+```
+
+## LIVE runbook
+
+LIVE stays disabled in the shipped config. These steps are for the day the
+owner funds the Alpaca LIVE account; run them on the trading host only.
+
+1. **Keys.** Add `ALPACA_LIVE_API_KEY` / `ALPACA_LIVE_SECRET_KEY` (from the
+   LIVE dashboard, keys starting `AK`) to the env file. Keep the PAPER pair;
+   the two pairs are never mixed. Also set `PARAYABUCK_ENABLE_LIVE=YES` and a
+   random `PARAYABUCK_OPERATOR_APPROVAL_KEY` (at least 32 characters).
+2. **E-mail.** Enable e-mail alerts (section above). LIVE preflight refuses
+   to start without them.
+3. **Settings.** `runtime.mode: live`, `live.enabled: true`,
+   `live.hard_dollar_cap: <deposit x 0.98>`,
+   `live.operator_approval_path: data/runtime/live_approval.json`. LIVE keeps
+   its own ledger: a LIVE config that names the PAPER default
+   `data/runtime/parayabuck.sqlite3` uses `data/runtime/live/parayabuck.sqlite3`
+   instead (its own risk-peak sidecar sits next to it). `live.buy_gap_margin_pct`
+   (0.03) keeps each BUY small enough that a gap-up open of 3 % never borrows.
+4. **Preflight.** `.venv/bin/parayabuck doctor --strict --configured-mode --offline`
+   must say READY.
+5. **Authorize.** Two ways, chosen by the owner:
+   - *Manual re-arm (default).* `parayabuck authorize-live --operator <name>
+     --expires-minutes 30`, then arm in the dashboard (mode chip, type
+     `LIVE <suffix>`) and press Start. After **every** reboot, deploy or crash
+     LIVE stays stopped and the owner gets a `live_rearm_required` e-mail;
+     positions stay open until the re-arm.
+   - *Standing authorization (opt-in, at most 30 days).*
+     `parayabuck authorize-live --operator <name> --standing-days 14` writes
+     `live_standing_authorization.json` next to the approval file (HMAC-signed
+     with the approval key). While it is valid, the trading host starts LIVE
+     by itself after a reboot or deploy. It is bound to the LIVE account id,
+     the strategy digests, the whole settings file, the dollar cap and this
+     machine: any settings edit (even the log level), a cap change, another
+     account or another host voids it and LIVE falls back to manual re-arm
+     (with the e-mail). Three days before it ends the owner gets
+     `live_authorization_expiring` (one per day), and `live_authorization_expired`
+     when it ends; a running engine keeps running, only the next restart needs
+     a fresh authorization. Revoke it at any time with
+     `parayabuck authorize-live --revoke-standing`.
+6. **Every LIVE start** still checks, in the engine: `live.enabled`, the cap,
+   `PARAYABUCK_ENABLE_LIVE=YES`, the trading-host flag, the approval or
+   standing HMAC, the account id, and that the LIVE key is a live account
+   (`PA...` paper accounts are refused).
+7. Go back to PAPER by setting `runtime.mode: paper` (the dashboard mode chip
+   clears the cap and approval path) and restarting.
 
 ## Rollback
 

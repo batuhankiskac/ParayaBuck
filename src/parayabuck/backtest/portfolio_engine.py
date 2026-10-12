@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime
 from enum import StrEnum
 from itertools import pairwise
+from types import EllipsisType
 
 from parayabuck.backtest.regulatory_fees import rates_for_trade_date
 from parayabuck.backtest.stats import sample_stddev
@@ -272,7 +273,7 @@ class PortfolioBacktestEngine:
         *,
         starting_equity: float = 100_000.0,
         slippage_bps: float = 2.0,
-        spread_bps: float = 0.0,
+        spread_bps: float = 2.0,
         commission: float = 0.0,
         equity_taf_per_share: float = 0.0,
         equity_taf_cap: float = 0.0,
@@ -298,24 +299,26 @@ class PortfolioBacktestEngine:
             raise TypeError("PortfolioBacktestEngine requires a PortfolioStrategy")
         if strategy.market != Market.EQUITY:
             raise ValueError("PortfolioBacktestEngine supports equity strategies only")
-        if starting_equity <= 0:
-            raise ValueError("Starting equity must be positive")
+        if not math.isfinite(starting_equity) or starting_equity <= 0:
+            raise ValueError("Starting equity must be positive and finite")
         if not 0 < max_participation_pct <= 1:
             raise ValueError("Participation ratio must be in (0, 1]")
         if liquidity_lookback_bars <= 0:
             raise ValueError("Liquidity lookback must be positive")
-        if not 0 <= turnover_band < 1:
-            raise ValueError("Turnover band must be in [0, 1)")
-        if minimum_order_notional < 0:
-            raise ValueError("Minimum order notional must be non-negative")
         if not 0 < maximum_allocation <= 1:
             raise ValueError("Maximum allocation must be in (0, 1]")
         if execution_policy is not None:
-            # One shared order-existence policy: the configured band and
-            # notional floor are authoritative over any legacy constructor
-            # defaults so BACKTEST and PAPER/LIVE cannot drift apart.
+            # One shared order-existence policy (validated by the policy
+            # itself): the configured band and notional floor are
+            # authoritative over any legacy constructor defaults so BACKTEST
+            # and PAPER/LIVE cannot drift apart.
             turnover_band = execution_policy.rebalance_band_pct
             minimum_order_notional = execution_policy.minimum_order_notional
+        else:
+            if not 0 <= turnover_band < 1:
+                raise ValueError("Turnover band must be in [0, 1)")
+            if not math.isfinite(minimum_order_notional) or minimum_order_notional < 0:
+                raise ValueError("Minimum order notional must be finite and non-negative")
         cost_inputs = (
             slippage_bps,
             spread_bps,
@@ -946,7 +949,8 @@ class PortfolioBacktestEngine:
             is PortfolioStrategy.requires_intermediate_risk_rebalance
         ):
             return
-        context = self._build_context(timestamp)
+        observation_symbols = self._effective_observation_symbols(timestamp)
+        context = self._build_context(timestamp, observation_symbols)
         # Fail-closed product universe guard: a missing or version-less PIT
         # universe must halt the decision instead of silently treating every
         # symbol as in-universe via the permissive PortfolioContext.in_universe
@@ -969,6 +973,23 @@ class PortfolioBacktestEngine:
             require_product_universe(context, allow_static_context=True)
         if not self.strategy.supports(context):
             return
+        declared = getattr(self.strategy, "decision_symbols", None)
+        # LIVE PARITY warmup gate: ``supports`` only checks the longest series
+        # (possibly the unread SPY benchmark), while the live runtime keeps
+        # every symbol the strategy reads in ``warming_up`` until that symbol
+        # alone has the minimum history (``PortfolioRuntime._required_symbols``).
+        # Context history is trimmed to at least ``minimum_history_bars``, so
+        # its length is exact up to the minimum.
+        if declared is not None:
+            wanted_history = {canonical_symbol(symbol, self.strategy.market) for symbol in declared}
+            warming_required = tuple(symbol for symbol in context.history if symbol in wanted_history)
+        else:
+            warming_required = ()
+        if any(
+            len(context.history[symbol]) < self.strategy.minimum_history_bars
+            for symbol in (warming_required or tuple(context.history))
+        ):
+            return
         # LIVE PARITY completeness gate: decisions require a closed bar for
         # every STREAMED OBSERVATION symbol the strategy actually reads (what
         # the live runtime streams), not for every pool member. A halted/absent
@@ -978,8 +999,7 @@ class PortfolioBacktestEngine:
         # benchmark) must not hold a decision back, mirroring
         # ``PortfolioRuntime._required_symbols`` — managed positions and
         # pending orders always stay mandatory so they are priced correctly.
-        expected_symbols = self._effective_observation_symbols(timestamp)
-        declared = getattr(self.strategy, "decision_symbols", None)
+        expected_symbols = observation_symbols
         if expected_symbols is not None and declared is not None:
             wanted = {canonical_symbol(symbol, self.strategy.market) for symbol in declared}
             managed = {
@@ -1094,7 +1114,14 @@ class PortfolioBacktestEngine:
             unrealized_pnl=sum(position.unrealized_pnl for position in positions),
         )
 
-    def _build_context(self, timestamp: datetime) -> PortfolioContext:
+    def _build_context(
+        self,
+        timestamp: datetime,
+        visible_symbols: tuple[str, ...] | None | EllipsisType = ...,
+    ) -> PortfolioContext:
+        # ``visible_symbols`` is the already-resolved
+        # ``_effective_observation_symbols(timestamp)`` (``_decide`` resolves
+        # it once per decision); ``...`` resolves it here.
         # Strategies read only trailing windows of each symbol's history (the
         # largest in-tree read is the equity beta window + 1 = 274 bars), so
         # the per-symbol context history is trimmed to a safe upper bound of
@@ -1110,7 +1137,8 @@ class PortfolioBacktestEngine:
         # trailing window, so the benchmark dict must stay full to preserve
         # every aligned pair (and therefore the exact scores).
         benchmark_key = canonical_symbol(self.benchmark_symbol, self.strategy.market)
-        visible_symbols = self._effective_observation_symbols(timestamp)
+        if isinstance(visible_symbols, EllipsisType):
+            visible_symbols = self._effective_observation_symbols(timestamp)
         visible = set(visible_symbols) if visible_symbols is not None else None
         history: dict[str, tuple[Bar, ...]] = {}
         prices: dict[str, float] = {}

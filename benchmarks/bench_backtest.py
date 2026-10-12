@@ -49,7 +49,11 @@ def run(report: Report) -> None:
 
 
 if __name__ == "__main__":
+    import argparse
+
     from benchmarks.harness import mb, peak_rss_bytes
+
+    argparse.ArgumentParser(description="VT35 product backtest timing on the committed golden bars.").parse_args()
 
     baseline_rss = peak_rss_bytes()
     report = Report()

@@ -322,6 +322,30 @@ provider's effective feed for a download (`iex` when a configured SIP request
 hit an entitlement downgrade) and `unknown` for `--data <csv>`, with a
 `data_feed_note` caveat. A CSV run can never claim the SIP tape.
 
+Decision-input parity with live: a daily CSV row on an NYSE non-session date
+(holiday) is dropped with a `non-session bar (holiday); dropped` warning, so
+no decision is ever taken on a session that never traded; a decision waits
+until every symbol the strategy reads (`decision_symbols`, QQQ/QLD for VT35)
+has `minimum_history_bars` bars, exactly like the live `warming_up` gate, and
+the default evaluation window (no `--start`) opens on the first session those
+symbols can decide on — a short SPY benchmark series delays neither.
+
+Known modelling differences (accepted, not bugs):
+
+- **Rotation timing.** The engine fills every order of a decision at the next
+  bar's open, SELLs before BUYs, so a rotation's BUY leg spends the same-open
+  SELL proceeds with no gap. Live submits the SELLs first and plans the BUY
+  only after they are terminal, off a fresh account snapshot, normally a
+  session later at a different open. VT35 holds a single symbol (QLD or
+  cash), so it never co-plans both legs and is unaffected; a multi-symbol
+  strategy's rotation cost/timing in a backtest is optimistic by that gap.
+- **Liquidity model constants.** The participation cap
+  (`max_participation_pct`, 10 % of the average daily volume) and its volume
+  lookback (`liquidity_lookback_bars`, the last 20 bars with volume) are fixed
+  engine constants with no config key, so they are not part of the
+  configuration digest; they bind only when an order exceeds 10 % of a thin
+  symbol's average volume.
+
 ## State, backup and restore
 
 | Path | What | If lost |

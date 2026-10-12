@@ -7,7 +7,9 @@ tmp DB so absolute numbers reflect real schema/index behavior.
 
 from __future__ import annotations
 
+import argparse
 import sys
+import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -23,9 +25,6 @@ from parayabuck.execution.portfolio import (
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_service import PortfolioStateRepository
 from parayabuck.storage import SQLiteStore
-
-ROOT = Path(__file__).resolve().parents[1]
-DB = ROOT / "data" / "smoke" / "bench_db.sqlite3"
 
 _SYMBOLS = ("SPY", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "GOOGL")
 
@@ -60,9 +59,10 @@ def _order(timestamp: datetime, symbol: str, decision_id: str) -> PortfolioOrder
 
 
 def run(report: Report) -> None:
-    DB.unlink(missing_ok=True)
-    store = SQLiteStore(str(DB))
-    repo = PortfolioStateRepository(str(DB), store=store)
+    # A fresh throwaway directory per run: never under the repository.
+    db = Path(tempfile.mkdtemp(prefix="bench_db_")) / "bench_db.sqlite3"
+    store = SQLiteStore(str(db))
+    repo = PortfolioStateRepository(str(db), store=store)
 
     session_id = repo.begin_session("account-1", "digest-bench", "paper")
     timestamp = datetime(2026, 8, 1, tzinfo=UTC)
@@ -82,9 +82,9 @@ def run(report: Report) -> None:
 
     def fresh_db() -> None:
         nonlocal store, repo, session_id
-        DB.unlink(missing_ok=True)
-        store = SQLiteStore(str(DB))
-        repo = PortfolioStateRepository(str(DB), store=store)
+        db.unlink(missing_ok=True)
+        store = SQLiteStore(str(db))
+        repo = PortfolioStateRepository(str(db), store=store)
         session_id = repo.begin_session("account-1", "digest-bench", "paper")
 
     def record_decision() -> None:
@@ -168,6 +168,9 @@ def run(report: Report) -> None:
 
 
 if __name__ == "__main__":
+    argparse.ArgumentParser(
+        description="Portfolio-state repository hot-operation timings (temp SQLite DB)."
+    ).parse_args()
     report = Report()
     run(report)
     report.print_table()

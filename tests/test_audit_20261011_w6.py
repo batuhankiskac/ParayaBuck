@@ -1,9 +1,9 @@
 """W6 audit regression tests (2026-10-11 workstream).
 
 Covers the backtest/live-parity fixes owned by W6: the decision-symbol
-completeness gate (E01/E05), the single-run engine state reset (E02), the
-decision-time signed-trade-weight record (R2E2) and the NYSE-holiday CSV
-guard (R2E3).
+completeness gate (E01/E05), the single-run engine state reset (E02) and the
+NYSE-holiday CSV guard (R2E3). The decision-time signed-trade-weight record
+(R2E2) is pinned in ``tests/test_portfolio_engine_accounting.py``.
 """
 
 from __future__ import annotations
@@ -105,7 +105,7 @@ def test_engine_rerun_starts_from_a_fresh_book() -> None:
     assert [fill.qty for fill in second.fills] == [fill.qty for fill in first.fills]
 
 
-def test_signed_trade_weights_keep_decision_time_intent(tmp_path) -> None:
+def test_holiday_csv_bar_warns_and_is_dropped(tmp_path) -> None:
     path = tmp_path / "holiday.csv"
     path.write_text(
         "timestamp,symbol,timeframe,open,high,low,close,volume,market\n"
@@ -127,5 +127,5 @@ def test_signed_trade_weights_keep_decision_time_intent(tmp_path) -> None:
         bars = load_csv_bars(path, default_market=Market.EQUITY)
     finally:
         logger.removeHandler(probe)
-    assert len(bars) == 1
+    assert bars == []
     assert any("non-session bar" in message for message in records)

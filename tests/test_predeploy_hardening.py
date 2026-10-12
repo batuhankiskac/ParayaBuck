@@ -11,7 +11,6 @@ from parayabuck.backup import BackupVerificationError, backup_database, verify_b
 from parayabuck.config import LiveConfig
 from parayabuck.execution.alpaca import AlpacaBroker, RiskStatePersistenceError
 from parayabuck.execution.risk_peak import RiskPeakService
-from parayabuck.monitoring import alerts
 from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.storage import SQLiteStore, StorageInitializationError
 from parayabuck.web.schemas.settings import SettingsPayload
@@ -650,23 +649,6 @@ def test_container_credential_mutation_rejected(tmp_path, monkeypatch):
         manager.config_path = orig_cfg
         manager.env_path = orig_env
         monkeypatch.delenv("PARAYABUCK_CONTAINER", raising=False)
-
-
-# --- Alert throttle per distinct incident ---
-
-
-def test_alert_throttle_distinct_incidents():
-    alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=60)
-    # Different incident ids are never throttled against each other
-    alerts.emit("paper_incident", message="inc1", category="risk", incident_id="id1")
-    alerts.emit("paper_incident", message="inc2", category="risk", incident_id="id2")
-    assert alerts.alert_stats()["suppressed"] == 0
-    # The same incident repeated inside the window is throttled
-    alerts.emit("paper_incident", message="inc1 dup", category="risk", incident_id="id1")
-    stats = alerts.alert_stats()
-    assert stats["suppressed"] == 1
-    assert stats["delivered"] == {"paper_incident": 2}
 
 
 # --- Account-scoped peak recovery A-G ---

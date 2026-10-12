@@ -33,7 +33,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.nyse_calendar import nyse_sessions, session_bounds
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES, is_regular_equity_time
-from parayabuck.portfolio import PortfolioStrategy, portfolio_strategy_from, rebalance_policy_for
+from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
 
 _MAX_OPTIMIZATION_COMBINATIONS = 256
 _CSV_TIMEFRAME_ALIASES = {"1d": "1d", "1Day": "1d"}
@@ -122,7 +122,10 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
             else:
                 in_session = session_bounds(timestamp.astimezone(NEW_YORK).date()) is not None
             if not in_session:
-                log.warning("Equity CSV contains a non-session bar (holiday): %s", timestamp.isoformat())
+                # Live never sees a bar on a non-session (holiday) date, so a
+                # backtest must not decide on one either: drop it, loudly.
+                log.warning("Equity CSV contains a non-session bar (holiday); dropped: %s", timestamp.isoformat())
+                continue
         rows.append(
             Bar(
                 timestamp=timestamp,
@@ -307,7 +310,6 @@ def build_product_universe(
     market: Market,
     end: datetime | None = None,
     timeframe: str | None = None,
-    observation_strategy: PortfolioStrategy | None = None,
 ) -> PointInTimeUniverse:
     """Build the point-in-time universe for a product backtest.
 
@@ -315,9 +317,7 @@ def build_product_universe(
     its first bar.
 
     ``timeframe`` defaults to the configured strategy's timeframe and must be
-    passed when a run overrides the strategy. ``observation_strategy`` may
-    supply that already-resolved requested strategy; it is validated against
-    the requested market and timeframe.
+    passed when a run overrides the strategy.
     """
     _require_equity(market)
     selection = config.strategy.equity
@@ -332,13 +332,6 @@ def build_product_universe(
         timeframe=selection.timeframe,
     )
     selected_timeframe = timeframe or strategy.timeframe
-    if observation_strategy is not None:
-        if observation_strategy.market != market:
-            raise ValueError(f"observation_strategy market must match the requested market ({market.value})")
-        if observation_strategy.timeframe != selected_timeframe:
-            raise ValueError(
-                f"observation_strategy timeframe must match the selected backtest timeframe ({selected_timeframe})"
-            )
     available = [
         bar
         for bar in bars
@@ -347,19 +340,29 @@ def build_product_universe(
     return build_static_equity_point_in_time_universe(available, config.universe.equity)
 
 
-def default_evaluation_start(bars: list[Bar], config: Config, minimum_history_bars: int) -> datetime | None:
-    """First session on which every configured universe symbol has a full warmup.
+def default_evaluation_start(
+    bars: list[Bar],
+    config: Config,
+    minimum_history_bars: int,
+    decision_symbols: tuple[str, ...] | None = None,
+) -> datetime | None:
+    """First session on which every symbol the strategy reads has a full warmup.
 
     ``bars`` are already filtered to the run's market/timeframe/end. Returns
     the timestamp of the ``minimum_history_bars``-th bar of the latest-starting
-    configured symbol, so the evaluation window opens on the first close the
-    strategy can decide on. ``None`` (evaluate everything, with a warning) when
-    a configured symbol is absent or shorter than its warmup.
+    required symbol, so the evaluation window opens on the first close the
+    strategy can decide on. The required symbols are the strategy's declared
+    ``decision_symbols`` (live warms up on those alone, so a short benchmark
+    series the strategy never reads cannot delay the window); ``None`` falls
+    back to every configured universe symbol. Returns ``None`` (evaluate
+    everything, with a warning) when a required symbol is absent or shorter
+    than its warmup.
     """
     by_symbol: dict[str, set[datetime]] = {}
     for bar in bars:
         by_symbol.setdefault(canonical_symbol(bar.symbol, bar.market), set()).add(bar.timestamp)
-    symbols = [canonical_symbol(symbol, Market.EQUITY) for symbol in config.universe.equity.symbols]
+    configured = decision_symbols if decision_symbols else config.universe.equity.symbols
+    symbols = list(dict.fromkeys(canonical_symbol(symbol, Market.EQUITY) for symbol in configured))
     required = max(1, minimum_history_bars)
     starts: list[datetime] = []
     for symbol in symbols:
@@ -419,7 +422,9 @@ def run_product_backtest(
             # Without an explicit start the bars before the strategy can first
             # decide are warmup, not forced-cash evaluation sessions that
             # dilute CAGR/Sharpe.
-            start = default_evaluation_start(available, config, strategy.minimum_history_bars)
+            start = default_evaluation_start(
+                available, config, strategy.minimum_history_bars, strategy.decision_symbols
+            )
             if start is not None:
                 evaluation_start_source = f"first bar + {strategy.minimum_history_bars}-bar strategy warmup"
         filtered = [bar for bar in available if start is None or bar.timestamp >= start]
@@ -433,7 +438,6 @@ def run_product_backtest(
                 market=market,
                 end=end,
                 timeframe=strategy.timeframe,
-                observation_strategy=strategy,
             )
         prepared = None
     else:
@@ -601,27 +605,35 @@ def optimize_grid(
     selection = config.strategy.equity
     baseline = dict(base_parameters or selection.parameters)
     keys = tuple(sorted(grid))
-    observation_strategy = portfolio_strategy_from(
+    strategy_timeframe = portfolio_strategy_from(
         strategy_name or selection.name,
         parameters=baseline,
         timeframe=selection.timeframe,
-    )
-    strategy_timeframe = observation_strategy.timeframe
+    ).timeframe
     if train_start is None:
         # Same warmup rule as ``run_product_backtest``: bars before the
-        # longest candidate's first decidable session are warmup.
-        longest_history = max(
+        # longest candidate's first decidable session are warmup, over the
+        # symbols any candidate reads (every configured symbol as soon as
+        # one candidate does not narrow its decision symbols).
+        candidates = [
             portfolio_strategy_from(
                 strategy_name or selection.name,
                 parameters={**baseline, **dict(zip(keys, values, strict=True))},
                 timeframe=selection.timeframe,
-            ).minimum_history_bars
+            )
             for values in itertools.product(*(grid[key] for key in keys))
+        ]
+        declared = [candidate.decision_symbols for candidate in candidates]
+        decision_symbols = (
+            None
+            if any(symbols is None for symbols in declared)
+            else tuple(dict.fromkeys(symbol for symbols in declared if symbols is not None for symbol in symbols))
         )
         train_start = default_evaluation_start(
             [bar for bar in bars if bar.market == market and bar.timeframe == strategy_timeframe],
             config,
-            longest_history,
+            max(candidate.minimum_history_bars for candidate in candidates),
+            decision_symbols,
         )
     # The eligible pool and requested baseline observation basis are
     # trial-invariant: build them once per window and reuse them so candidate
@@ -632,7 +644,6 @@ def optimize_grid(
         market=market,
         end=train_end,
         timeframe=strategy_timeframe,
-        observation_strategy=observation_strategy,
     )
     # The per-trial bar preprocessing (window filter, dedup, sort) is likewise
     # trial-invariant: prepare it once per window and reuse it.
@@ -689,7 +700,6 @@ def optimize_grid(
             market=market,
             end=oos_end,
             timeframe=strategy_timeframe,
-            observation_strategy=observation_strategy,
         )
         oos_prepared = _prepared_window(bars, market, strategy_timeframe, oos_start, oos_end)
         oos = run_product_backtest(
@@ -860,6 +870,7 @@ __all__ = [
     "build_product_universe",
     "default_evaluation_start",
     "load_csv_bars",
+    "load_csv_corporate_actions",
     "optimize_grid",
     "ranking_score",
     "run_product_backtest",

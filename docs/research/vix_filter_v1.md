@@ -25,8 +25,9 @@ bootstrap median.
   and 4.3 pp/yr since 2017, because it under-sizes calm bull markets. It also
   cannot pass (G8 not available).
 
-Evidence: `research/vix_filter_v1/` and `data/historical/vix_filter_v1_*.csv`
-on branch `research/vix-filter-v1`.
+Evidence: `research/vix_filter_v1/` and `data/historical/vix_filter_v1_*.csv`,
+removed from main on 2026-10-12 and preserved in tag
+`archive/research/vix-filter-v1-2026-10`.
 
 - `PREREGISTRATION.md`, `screen.py`, `fetch_data.py`, the data,
   `DATA_MANIFEST.json` and `VALIDATION.json` were committed in `e8f0424`

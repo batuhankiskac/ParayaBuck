@@ -498,6 +498,17 @@ def get_journal(path: str | Path | None = None) -> EventJournal:
         return _global_journal
 
 
+def current_journal_path() -> Path:
+    """Path of the process-global journal, without constructing it.
+
+    The default path when no global was installed yet. Read paths use this so
+    they look where this process writes, yet never create a journal file.
+    """
+    with _global_lock:
+        journal = _global_journal
+    return journal.path if journal is not None else Path(DEFAULT_JOURNAL_PATH)
+
+
 def configure_global_journal(observability: ObservabilityConfig) -> EventJournal | None:
     """Install the process-global journal from the ``observability:`` config block.
 
@@ -539,18 +550,33 @@ def emit_journal(event: OperationalEvent, *, path: str | Path | None = None) -> 
         return False
 
 
+def _zero_journal_stats() -> dict[str, object]:
+    return {
+        "event_journal_written": 0,
+        "event_journal_failed": 0,
+        "event_journal_dropped": 0,
+        "event_journal_queue_depth": 0,
+        "event_journal_last_success_at": None,
+        "event_journal_last_failure_at": None,
+    }
+
+
 def journal_stats(path: str | Path | None = None) -> dict[str, object]:
+    """Process-local counters of the global journal; zeros when none was built.
+
+    Counters live in memory, so a journal this process never constructed (or
+    a different path) has nothing to report. Reading stats must never
+    construct one either: ``EventJournal.__init__`` creates the file and its
+    schema, which would materialise the default journal from a read path.
+    """
     try:
-        return get_journal(path).stats()
+        with _global_lock:
+            journal = _global_journal
+        if journal is None or (path is not None and str(path) != str(journal.path)):
+            return _zero_journal_stats()
+        return journal.stats()
     except Exception:
-        return {
-            "event_journal_written": 0,
-            "event_journal_failed": 0,
-            "event_journal_dropped": 0,
-            "event_journal_queue_depth": 0,
-            "event_journal_last_success_at": None,
-            "event_journal_last_failure_at": None,
-        }
+        return _zero_journal_stats()
 
 
 __all__ = [
@@ -561,6 +587,7 @@ __all__ = [
     "EventJournal",
     "SCHEMA_VERSION",
     "configure_global_journal",
+    "current_journal_path",
     "emit_journal",
     "get_journal",
     "journal_stats",

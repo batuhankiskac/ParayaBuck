@@ -13,12 +13,21 @@ economic action, no silent drift, and safe fail-closed behavior.
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
 
 
-def main() -> int:
+def _parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(
+        description="Run the offline paper-safety chaos gate (pytest -m paper_chaos). No broker, no orders."
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    # Parse first: `--help` (or a bad flag) exits before any test runs.
+    _parser().parse_args(argv)
     root = Path(__file__).resolve().parents[1]
     python = root / ".venv" / "bin" / "python"
     executable = str(python if python.exists() else Path(sys.executable))

@@ -249,10 +249,10 @@ maximum events and queue size come from the `observability:` block in
 
 ```bash
 parayabuck ops status [--json]            # overall health, trading state, per-check lines
-parayabuck ops doctor [--json]            # exit 0 ok, 1 degraded, 2 critical
-parayabuck ops events --since 2h [--kind K] [--severity S] [--decision ID] [--order ID]
+parayabuck ops doctor [--json] [--journal PATH]   # exit 0 ok, 1 degraded, 2 critical
+parayabuck ops events --since 2h [--kind K] [--severity DEBUG|INFO|WARNING|CRITICAL] [--decision ID] [--order ID]
 parayabuck ops timeline --decision ID | --order ID
-parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not trade
+parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not trade (latest = current account)
 parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys or secrets)
 parayabuck ops rebase-ownership SYMBOL --broker-qty QTY [--account-id ID] [--note TEXT]
     # adopt the broker's share count for one symbol; dry run unless --confirm
@@ -289,7 +289,12 @@ has written nothing of its own. No persisted copy at all is `UNKNOWN`, not OK.
 newest write failure or drop is more recent than its last successful write. A
 burst it has since written past reads `OK (recovered; …)` instead of pinning
 DEGRADED until the next restart. There is no `alerts` check: alerts are local,
-so there is no delivery to verify.
+so there is no delivery to verify. `ops doctor` adds a `journal_file` check on
+the file given by `--journal` (else the configured path): its presence and
+last-write age, `UNKNOWN` when absent. `ops bundle` ships the same persisted
+copies as `alert_stats.json` / `journal_stats.json` (`source:
+engine_snapshot`), or `unavailable` without a snapshot. `--severity` is
+case-insensitive and rejects values outside the vocabulary.
 
 `parayabuck doctor [--strict] [--paper] [--offline]` is the deployment
 preflight (config, mode, live off, credentials, writability, SQLite
@@ -417,7 +422,7 @@ decision **only when the deployment is genuinely cold**.
 
 ```bash
 .venv/bin/python scripts/audit_paper_soak.py \
-  --db data/runtime/parayabuck.sqlite3 --journal data/runtime/operational.sqlite3 \
+  --db data/runtime/parayabuck.sqlite3 --journal data/runtime/observability.sqlite3 \
   --start 2026-09-03T12:00:00Z
 ```
 
@@ -440,7 +445,9 @@ Every decision also publishes one immutable JSON receipt under
 `data/runtime/paper_receipts/` (`..._<decision_id>.v2.json`; ~252/yr). The
 audit above replays any window from these files, so retention never drops a
 receipt younger than the soak/audit horizon: `prune_receipts` refuses any
-window below 800 days (two trading years plus margin). Timeline/explain
+window below 800 days (two trading years plus margin). `parayabuck backup`
+(the 6 h timer) prunes receipts at exactly that 800-day floor after each
+verified backup; a receipt-prune failure is logged and never fails the backup. Timeline/explain
 lookups hit the filename index first and only scan the directory
 newest-first (bounded) when it misses.
 

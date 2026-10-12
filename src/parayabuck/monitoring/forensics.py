@@ -71,7 +71,7 @@ def _orders_with_status(
     lowered = tuple(sorted(wanted))
     placeholders = ",".join("?" * len(lowered))
     try:
-        conn = sqlite3.connect(str(db_path), timeout=2.0)
+        conn = _connect_readonly(db_path)
         conn.row_factory = sqlite3.Row
         try:
             if not _table_exists(conn, "portfolio_orders", strict=strict):
@@ -96,7 +96,7 @@ def unresolved_orders(db_path: str | Path | None, *, include_terminal: bool = Fa
         return []
     # Raw SQL fallback
     try:
-        conn = sqlite3.connect(str(db_path), timeout=2.0)
+        conn = _connect_readonly(db_path)
         conn.row_factory = sqlite3.Row
         try:
             if not _table_exists(conn, "portfolio_orders"):
@@ -149,7 +149,7 @@ def find_stuck_rebalances(
     product_markets = {Market.EQUITY.value}
     stuck: list[dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(str(db_path), timeout=2.0)
+        conn = _connect_readonly(db_path)
         conn.row_factory = sqlite3.Row
         try:
             if not _table_exists(conn, "portfolio_rebalance_executions", strict=strict):
@@ -193,7 +193,7 @@ def runtime_session_forensics(db_path: str | Path | None) -> dict[str, Any]:
     if db_path is None or not Path(str(db_path)).exists():
         return {"sessions": [], "unclean": [], "unclean_since_clean": [], "current": None}
     try:
-        conn = sqlite3.connect(str(db_path), timeout=2.0)
+        conn = _connect_readonly(db_path)
         conn.row_factory = sqlite3.Row
         try:
             for table in ("portfolio_runtime_sessions", "runtime_sessions"):
@@ -240,7 +240,7 @@ def decision_reconstruction(
         return {"decision_id": decision_id, "error": "no decision DB"}
     result: dict[str, Any] = {"decision_id": decision_id}
     try:
-        conn = sqlite3.connect(str(db_path), timeout=2.0)
+        conn = _connect_readonly(db_path)
         conn.row_factory = sqlite3.Row
         try:
             if _table_exists(conn, "portfolio_decisions"):
@@ -302,28 +302,17 @@ def decision_reconstruction(
         pass
 
     # Operational events correlated. An explicit journal that is missing yields
-    # no events — never the cwd-relative default journal (which get_journal()
-    # would even create).
-    if journal_path is not None:
-        result["operational_events"] = []
-        if Path(str(journal_path)).exists():
-            try:
-                from parayabuck.monitoring.journal import EventJournal
+    # no events — never the cwd-relative default journal. Without an explicit
+    # path the process-global journal's path is read. Both are opened
+    # read-only: a reconstruction must never create a journal file.
+    from parayabuck.monitoring.journal import EventJournal, current_journal_path
 
-                j = EventJournal.open_readonly(str(journal_path))
-                result["operational_events"] = [e.to_dict() for e in j.query(decision_id=decision_id, limit=100)]
-            except Exception:
-                result["operational_events"] = []
-    else:
-        # Try default journal
+    events_path = Path(str(journal_path)) if journal_path is not None else current_journal_path()
+    result["operational_events"] = []
+    if events_path.exists():
         try:
-            from parayabuck.monitoring.journal import get_journal
-
-            j = get_journal()
-            if Path(str(j.path)).exists():
-                result["operational_events"] = [e.to_dict() for e in j.query(decision_id=decision_id, limit=100)]
-            else:
-                result["operational_events"] = []
+            j = EventJournal.open_readonly(events_path)
+            result["operational_events"] = [e.to_dict() for e in j.query(decision_id=decision_id, limit=100)]
         except Exception:
             result["operational_events"] = []
 
@@ -366,6 +355,48 @@ def _find_receipt(receipt_dir: Path, decision_id: str) -> tuple[str, dict[str, A
     return None
 
 
+def _connect_readonly(db_path: str | Path) -> sqlite3.Connection:
+    """Read-only ledger connection: forensics never writes the live WAL DB."""
+    return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0)
+
+
+def current_account_id(conn: sqlite3.Connection) -> str | None:
+    """Account of the newest runtime session in this ledger; None when unknown.
+
+    The engine records its session (with the broker account) at start, before
+    any decision, so after a credential rotation this names the new account.
+    """
+    try:
+        if not _table_exists(conn, "portfolio_runtime_sessions"):
+            return None
+        row = conn.execute(
+            "SELECT account_id FROM portfolio_runtime_sessions "
+            "WHERE account_id IS NOT NULL AND account_id != '' "
+            "ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        return str(row[0]) if row is not None and row[0] else None
+    except sqlite3.Error:
+        return None
+
+
+def latest_decision_row(conn: sqlite3.Connection, columns: str = "*") -> Any:
+    """Newest ``portfolio_decisions`` row of the current account (None when none).
+
+    Scoped to :func:`current_account_id` so a pre-rotation account's decision
+    is never served as current; unscoped only when the account is unknown.
+    """
+    account_id = current_account_id(conn)
+    decision_columns = {str(info[1]) for info in conn.execute("PRAGMA table_info(portfolio_decisions)")}
+    if account_id is not None and "account_id" in decision_columns:
+        return conn.execute(
+            f"SELECT {columns} FROM portfolio_decisions WHERE account_id = ? ORDER BY decision_timestamp DESC LIMIT 1",
+            (account_id,),
+        ).fetchone()
+    return conn.execute(
+        f"SELECT {columns} FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 1"
+    ).fetchone()
+
+
 def _table_exists(conn: sqlite3.Connection, table: str, *, strict: bool = False) -> bool:
     try:
         cur = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,))
@@ -401,21 +432,32 @@ _NO_TRADE_PATTERNS: dict[str, str] = {
 }
 
 
+# No evidence named a cause. Distinct from NO_TARGET_CHANGE ("Normal"): a
+# pruned summary event or an unrecognised reason must not read as all-clear.
+UNKNOWN_NO_TRADE_REASON = "UNKNOWN"
+
+
 def map_no_trade_reason(detail: str | None) -> str:
-    """Map ad-hoc no-trade strings into canonical vocabulary (preserves original)."""
+    """Map ad-hoc no-trade strings into canonical vocabulary (preserves original).
+
+    Empty or unrecognised input maps to ``UNKNOWN``, never to a normal cause.
+    """
     if not detail:
-        return "NO_TARGET_CHANGE"
+        return UNKNOWN_NO_TRADE_REASON
     lower = detail.lower()
     for key, canon in _NO_TRADE_PATTERNS.items():
         if key in lower:
             return canon
-    return "NO_TARGET_CHANGE"
+    return UNKNOWN_NO_TRADE_REASON
 
 
 __all__ = [
+    "UNKNOWN_NO_TRADE_REASON",
     "ambiguous_orders",
+    "current_account_id",
     "decision_reconstruction",
     "find_stuck_rebalances",
+    "latest_decision_row",
     "map_no_trade_reason",
     "runtime_session_forensics",
     "submitting_orders",

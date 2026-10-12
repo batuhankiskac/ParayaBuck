@@ -1,0 +1,90 @@
+{
+  "bootstrap_pool_first": {
+    "C0": "1999-03-11",
+    "X1": "1999-03-11",
+    "X2": "1999-03-11",
+    "X3": "2006-07-17",
+    "X4": "2001-01-23"
+  },
+  "gspc": {
+    "dtb3_nan_in_window": 0,
+    "first": "1988-01-04",
+    "g8_first_measured_session": "1990-03-28",
+    "g8_window_sessions": 2468,
+    "last": "1999-12-31",
+    "nonpositive_close": 0,
+    "placeholder_opens_in_g8_window": 1957,
+    "placeholder_opens_total": 2304,
+    "rows": 3033,
+    "vix_days_forward_filled_in_window": 0
+  },
+  "qqq_days": {
+    "first": "1999-03-10",
+    "last": "2026-09-29",
+    "n": 6932
+  },
+  "vix": {
+    "first": "1990-01-02",
+    "first_qqq_day_with_level": "1999-03-10",
+    "fred_cross_check": {
+      "common_dates": 9252,
+      "fred_dates_missing_in_yahoo": 32,
+      "max_abs_diff": 2.610001,
+      "series": "VIXCLS",
+      "share_abs_diff_le_0p01": 0.998703,
+      "share_abs_diff_le_0p5": 0.999676,
+      "yahoo_dates_missing_in_fred": 3
+    },
+    "last": "2026-09-29",
+    "level_rows_on_non_qqq_days_after_qqq_start": 2,
+    "max": 82.690002,
+    "max_calendar_gap_days": 7,
+    "min": 9.14,
+    "nonpositive": 0,
+    "qqq_days_forward_filled": 0,
+    "qqq_days_without_level_after_first": 0,
+    "rows": 9255
+  },
+  "vix3m": {
+    "first": "2006-07-17",
+    "first_qqq_day_with_level": "2006-07-17",
+    "last": "2026-09-29",
+    "level_rows_on_non_qqq_days_after_qqq_start": 0,
+    "max": 72.980003,
+    "max_calendar_gap_days": 5,
+    "min": 11.03,
+    "nonpositive": 0,
+    "qqq_days_forward_filled": 0,
+    "qqq_days_without_level_after_first": 0,
+    "rows": 5083
+  },
+  "vxn": {
+    "first": "2001-01-23",
+    "first_qqq_day_with_level": "2001-01-23",
+    "fred_cross_check": {
+      "common_dates": 6449,
+      "fred_dates_missing_in_yahoo": 3,
+      "max_abs_diff": 12.319998,
+      "series": "VXNCLS",
+      "share_abs_diff_le_0p01": 0.892697,
+      "share_abs_diff_le_0p5": 0.899209,
+      "yahoo_dates_missing_in_fred": 10
+    },
+    "last": "2026-09-29",
+    "level_rows_on_non_qqq_days_after_qqq_start": 0,
+    "max": 82.489998,
+    "max_calendar_gap_days": 7,
+    "min": 10.31,
+    "nonpositive": 0,
+    "qqq_days_forward_filled": 0,
+    "qqq_days_without_level_after_first": 0,
+    "rows": 6459
+  },
+  "windows": {
+    "C0": "2000-03-06",
+    "X1": "2000-03-06",
+    "X2": "2000-03-06",
+    "X3": "2006-07-18",
+    "X4": "2001-01-24"
+  }
+}

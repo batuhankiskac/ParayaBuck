@@ -58,7 +58,9 @@ def _default_equity_strategy() -> MarketStrategyConfig:
         enabled=True,
         name="equity_leveraged_trend_v1",
         timeframe="1d",
-        maximum_allocation=0.50,
+        # Defaults mirror the shipped identity (config/settings.yaml): a
+        # deleted yaml key must not silently select an unvalidated strategy.
+        maximum_allocation=0.98,
         parameters={
             "signal_symbol": "QQQ",
             "hold_symbol": "QLD",
@@ -154,12 +156,15 @@ class ExecutionConfig:
 
 @dataclass(frozen=True)
 class RiskLimits:
-    max_position_pct: float = 0.10
-    cash_buffer_pct: float = 0.40
-    max_gross_exposure_pct: float = 0.60
-    max_positions: int = 5
-    daily_loss_limit_pct: float = 0.005
-    max_drawdown_pct: float = 0.05
+    # Defaults mirror the shipped identity (config/settings.yaml, VT35
+    # paper_config_v2): a deleted yaml key must not install the pre-VT35
+    # 0.5 % daily latch, which trips near-daily on a 2x ETF.
+    max_position_pct: float = 0.98
+    cash_buffer_pct: float = 0.02
+    max_gross_exposure_pct: float = 0.98
+    max_positions: int = 8
+    daily_loss_limit_pct: float = 0.20
+    max_drawdown_pct: float = 0.75
 
     def __post_init__(self) -> None:
         ratios = (
@@ -170,6 +175,10 @@ class RiskLimits:
         )
         if any(not math.isfinite(value) or value <= 0 or value > 1 for value in ratios):
             raise ValueError("Risk ratios must be in (0, 1]")
+        # A 100 % loss or drawdown latch can never trip: reject it instead of
+        # shipping a safety control that cannot fire.
+        if self.daily_loss_limit_pct >= 1 or self.max_drawdown_pct >= 1:
+            raise ValueError("risk.daily_loss_limit_pct and risk.max_drawdown_pct must be below 1")
         if self.max_positions <= 0 or not math.isfinite(self.cash_buffer_pct) or not 0 <= self.cash_buffer_pct < 1:
             raise ValueError("Invalid risk limits")
 
@@ -201,6 +210,9 @@ class EngineConfig:
             raise ValueError("Engine timing and capacity values must be positive")
         if self.reconcile_failure_threshold < 1:
             raise ValueError("engine.reconcile_failure_threshold must be at least 1")
+        # A retry cadence longer than the retry window never retries.
+        if self.decision_retry_interval_seconds > self.decision_retry_window_minutes * 60:
+            raise ValueError("engine.decision_retry_interval_seconds must not exceed decision_retry_window_minutes")
 
     @property
     def timing_capacity_values_invalid(self) -> bool:
@@ -267,6 +279,39 @@ class AlpacaConfig:
 @dataclass(frozen=True)
 class DataConfig:
     """Placeholder ``data:`` block (kept so old configs still parse)."""
+
+
+def dotenv_path() -> Path:
+    """The one credential file: ``ENV_PATH`` or ``.env`` in the working directory.
+
+    Never an upward search: a path-less ``load_dotenv()`` walks up from the
+    CWD and would honor a planted ancestor ``.env`` (credentials, CONFIG_PATH).
+    """
+    return Path(os.getenv("ENV_PATH") or ".env")
+
+
+def load_env_file(*, override: bool = False) -> None:
+    """Load :func:`dotenv_path` (a missing file is a no-op)."""
+    path = dotenv_path()
+    if path.is_file():
+        load_dotenv(path, override=override)
+
+
+def credential_file_mode_warning(path: Path) -> str | None:
+    """Warning text when the credential file is group- or world-readable.
+
+    New files are written ``0o600``; a pre-existing looser file is reported
+    (not refused, so a VM restart never fails on it).
+    """
+    try:
+        mode = path.stat().st_mode
+    except OSError:
+        return None
+    if mode & 0o077:
+        return (
+            f"Credential file {path} is accessible by group/other users (mode {mode & 0o777:o}); run chmod 600 {path}"
+        )
+    return None
 
 
 @dataclass(frozen=True)
@@ -637,7 +682,7 @@ def _reject_removed_alerting_settings(raw: dict[str, Any]) -> None:
 
 
 def load_config(config_path: str | None = None) -> Config:
-    load_dotenv()
+    load_env_file()
     path = Path(config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml")
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
@@ -662,6 +707,13 @@ def load_config(config_path: str | None = None) -> Config:
                 stacklevel=2,
             )
             data_raw.pop(_removed_data_key)
+    if data_raw:
+        # The block has no keys left; a typo must not vanish silently.
+        warnings.warn(
+            f"Unknown data settings are ignored: {', '.join(sorted(map(str, data_raw)))}",
+            UserWarning,
+            stacklevel=2,
+        )
     observability_raw = _block(raw.get("observability"))
     if "enabled" in observability_raw:
         warnings.warn(

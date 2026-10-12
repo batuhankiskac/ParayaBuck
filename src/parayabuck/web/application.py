@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from parayabuck.web.lifespan import create_lifespan
-from parayabuck.web.security import build_protect_middleware
+from parayabuck.web.security import build_protect_middleware, install_ticket_log_redaction
 from parayabuck.web.state import WebState
 
 
@@ -52,6 +52,7 @@ def create_app(state: WebState | None = None) -> FastAPI:
         return token
 
     app.middleware("http")(build_protect_middleware(_token_provider))
+    install_ticket_log_redaction()
 
     base_dir = Path(__file__).resolve().parent
     app.mount("/static", StaticFiles(directory=str(base_dir / "static")), name="static")

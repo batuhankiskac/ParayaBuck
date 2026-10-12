@@ -87,10 +87,13 @@ from typing import Any
 import yaml
 from fastapi import HTTPException
 
+from parayabuck.config import RiskLimits
 from parayabuck.logger import get_logger
 from parayabuck.utils.io import atomic_write
 from parayabuck.web.managers.engine import _atomic_update_credentials
 from parayabuck.web.schemas.settings import SettingsPayload
+
+_RISK_DEFAULTS = RiskLimits()
 
 log = get_logger("parayabuck.web.settings_service")
 
@@ -147,8 +150,9 @@ class SettingsService:
             "secret_key": "",
             "has_credentials": bool(key and secret),
             "paper_mode": manager.is_paper_mode(),
-            "daily_loss_limit_pct": 100 * risk_cfg.get("daily_loss_limit_pct", 0.005),
-            "max_drawdown_pct": 100 * risk_cfg.get("max_drawdown_pct", 0.05),
+            # An absent key shows the value load_config applies (RiskLimits).
+            "daily_loss_limit_pct": 100 * risk_cfg.get("daily_loss_limit_pct", _RISK_DEFAULTS.daily_loss_limit_pct),
+            "max_drawdown_pct": 100 * risk_cfg.get("max_drawdown_pct", _RISK_DEFAULTS.max_drawdown_pct),
             "host": app_cfg.get("host", "127.0.0.1"),
             "port": app_cfg.get("port", 8000),
             "open_browser": app_cfg.get("open_browser", True),
@@ -158,7 +162,6 @@ class SettingsService:
             "live_dollar_cap": live_cfg.get("hard_dollar_cap", 0.0),
             "live_operator_approval_path": live_cfg.get("operator_approval_path", ""),
             "config_digest": current_digest,
-            "config_version": current_digest,
         }
 
     async def save_settings(self, payload: SettingsPayload) -> dict[str, Any]:
@@ -215,26 +218,27 @@ class SettingsService:
 
             if "daily_loss_limit_pct" in config_fields_set:
                 old_daily_loss: float = (
-                    100 * float(raw_before.get("risk", {}).get("daily_loss_limit_pct", 0.005))
+                    100
+                    * float(raw_before.get("risk", {}).get("daily_loss_limit_pct", _RISK_DEFAULTS.daily_loss_limit_pct))
                     if isinstance(raw_before.get("risk", {}), dict)
-                    else 100 * 0.005
+                    else 100 * _RISK_DEFAULTS.daily_loss_limit_pct
                 )
                 try:
                     old_daily_loss_f = float(old_daily_loss)
                 except Exception:
-                    old_daily_loss_f = 100 * 0.005
+                    old_daily_loss_f = 100 * _RISK_DEFAULTS.daily_loss_limit_pct
                 if float(payload.daily_loss_limit_pct) != old_daily_loss_f:
                     has_runtime_change = True
             if "max_drawdown_pct" in config_fields_set:
                 old_max_dd: float = (
-                    100 * float(raw_before.get("risk", {}).get("max_drawdown_pct", 0.05))
+                    100 * float(raw_before.get("risk", {}).get("max_drawdown_pct", _RISK_DEFAULTS.max_drawdown_pct))
                     if isinstance(raw_before.get("risk", {}), dict)
-                    else 100 * 0.05
+                    else 100 * _RISK_DEFAULTS.max_drawdown_pct
                 )
                 try:
                     old_max_dd_f = float(old_max_dd)
                 except Exception:
-                    old_max_dd_f = 100 * 0.05
+                    old_max_dd_f = 100 * _RISK_DEFAULTS.max_drawdown_pct
                 if float(payload.max_drawdown_pct) != old_max_dd_f:
                     has_runtime_change = True
             if "equity_trading_enabled" in config_fields_set:

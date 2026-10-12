@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 from requests.exceptions import RequestException
 
-from parayabuck.config import Config, EngineConfig
+from parayabuck.config import Config, EngineConfig, RiskLimits
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.risk.state import RiskState
@@ -656,6 +656,9 @@ class _EpochRepository:
 
 def _epoch_runtime(ledger: ExecutionLedger, broker: _EpochBroker) -> EngineRuntime:
     runtime = _runtime_with_ledger(ledger)
+    # Pinned tight latch limits: the code defaults follow the shipped 0.75
+    # drawdown brake, which a 6 % drawdown does not trip.
+    runtime.app_config = Config(risk=RiskLimits(daily_loss_limit_pct=0.005, max_drawdown_pct=0.05))
     runtime.broker = broker  # type: ignore[attr-defined]
     runtime._running = True  # type: ignore[attr-defined]
     runtime._portfolio_repository = _EpochRepository()  # type: ignore[attr-defined]

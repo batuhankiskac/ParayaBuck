@@ -61,18 +61,27 @@ def _write_mode(config_path: Any, paper: bool) -> None:
     if config_path.exists():
         with open(config_path, encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
-    _yaml_block(raw, "runtime")["mode"] = "paper" if paper else "live"
-    if not paper:
-        _yaml_block(raw, "live")["enabled"] = True
+    runtime = _yaml_block(raw, "runtime")
+    # Same predicate as the settings drawer twin (EngineManager): a missing
+    # runtime.mode with legacy alpaca.paper=false is a live configuration.
+    current_mode = runtime.get("mode")
+    if current_mode is None:
+        currently_live = (raw.get("alpaca") or {}).get("paper") is False
     else:
-        # Leaving LIVE must heal the whole live block: doctor --strict --paper
-        # rejects live.enabled=true (self-write) and hard_dollar_cap>0, so a
-        # paper toggle that kept either would refuse its own write or strand
-        # the next restart (ExecStartPre).
-        live = _yaml_block(raw, "live")
+        currently_live = str(current_mode).lower() == "live"
+    runtime["mode"] = "paper" if paper else "live"
+    live = _yaml_block(raw, "live")
+    if not paper:
+        live["enabled"] = True
+    else:
         live["enabled"] = False
-        live["hard_dollar_cap"] = 0.0
-        live["operator_approval_path"] = ""
+        if currently_live:
+            # Leaving LIVE must heal the whole live block: doctor --strict
+            # --paper rejects hard_dollar_cap>0, so a paper toggle that kept
+            # it would strand the next restart (ExecStartPre). A paper->paper
+            # no-op keeps a cap/approval staged for the next LIVE arming.
+            live["hard_dollar_cap"] = 0.0
+            live["operator_approval_path"] = ""
     text = yaml.safe_dump(raw, sort_keys=False, default_flow_style=False)
     candidate = config_path.with_name(f".{config_path.name}.validate")
     atomic_write(candidate, text)

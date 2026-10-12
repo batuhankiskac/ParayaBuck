@@ -21,13 +21,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from parayabuck.config import DEFAULT_DECISION_DB_PATH, load_config
+from parayabuck.config import DEFAULT_DECISION_DB_PATH, RiskLimits, load_config
 from parayabuck.logger import get_logger
 
 log = get_logger("parayabuck.web.services.dashboard")
 
 
 _DASHBOARD_DEFAULT_DB = Path(DEFAULT_DECISION_DB_PATH)
+# Display fallbacks when no config is available: the code defaults.
+_RISK_DEFAULTS = RiskLimits()
 
 
 @dataclass(frozen=True)
@@ -280,7 +282,10 @@ def _dashboard_next_rebalance_at(last_decision_at: str | None, policy: str | Non
     Derived from the persisted decision timestamp and the strategy's declared
     rebalance policy (monthly / weekly / hours:N). It is an EXPECTED boundary
     (the decision runs on the first completed bar of the period), not a
-    guarantee.
+    guarantee. A whole-day ``hours:N`` cadence (VT35: ``hours:24``) decides
+    once per NYSE session, so it advances N/24 sessions on the NYSE calendar
+    to that session's close (weekends, holidays and 13:00 ET early closes
+    included) instead of adding wall-clock hours.
     """
     if not last_decision_at or not policy:
         return None
@@ -293,6 +298,8 @@ def _dashboard_next_rebalance_at(last_decision_at: str | None, policy: str | Non
             hours = int(policy.removeprefix("hours:"))
         except ValueError:
             return None
+        if hours > 0 and hours % 24 == 0:
+            return _next_session_close(last, hours // 24)
         return (last + timedelta(hours=hours)).isoformat()
     if policy == "weekly":
         days_ahead = 7 - last.weekday()
@@ -305,6 +312,26 @@ def _dashboard_next_rebalance_at(last_decision_at: str | None, policy: str | Non
         else:
             month += 1
         return datetime(year, month, 1, tzinfo=UTC).isoformat()
+    return None
+
+
+def _next_session_close(last: datetime, sessions: int) -> str | None:
+    """Close (UTC ISO) of the ``sessions``-th NYSE session after ``last``'s session."""
+    from parayabuck.markets.nyse_calendar import NEW_YORK, session_close_utc
+
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=UTC)
+    day = last.astimezone(NEW_YORK).date()
+    remaining = sessions
+    # Two weeks per session is far beyond any NYSE closure run.
+    for _ in range(14 * sessions):
+        day += timedelta(days=1)
+        close = session_close_utc(day)
+        if close is None:
+            continue
+        remaining -= 1
+        if remaining == 0:
+            return close.isoformat()
     return None
 
 
@@ -367,14 +394,11 @@ def _dashboard_market_card(
     target = dict((decision or {}).get("target") or {})
     weights = {str(weight.get("symbol")): weight for weight in target.get("weights", [])}
     metadata = dict(target.get("metadata") or {})
-    selected = [str(symbol) for symbol in metadata.get("selected_symbols", ())]
-    qualified = int(metadata.get("qualified_symbols") or 0)
     hypothesis = str(metadata.get("hypothesis") or "")
     holdings: list[dict[str, Any]] = []
     for position in positions:
         symbol = str(position.get("symbol", ""))
         weight = weights.get(symbol)
-        rank = selected.index(symbol) + 1 if symbol in selected else None
         holdings.append(
             {
                 "symbol": symbol,
@@ -384,11 +408,8 @@ def _dashboard_market_card(
                 "current_weight_pct": (float(position.get("market_value") or 0.0) / equity) * 100,
                 "target_weight_pct": (float((weight or {}).get("weight") or 0.0) * 100 if weight else None),
                 "reason": (weight or {}).get("reason") if weight else None,
-                "rank": rank,
-                "of_qualified": qualified if rank is not None else None,
                 "hypothesis": hypothesis,
                 "unrealized_pnl": position.get("unrealized_pnl"),
-                "protection_state": position.get("protection_state"),
             }
         )
     return {
@@ -423,6 +444,10 @@ def _dashboard_market_card(
     }
 
 
+# Active incidents are rare; the cap only bounds the 5 s poll read.
+_DASHBOARD_INCIDENT_LIMIT = 50
+
+
 def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Active safety incidents + latest risk-state row for the account."""
     account_id = _dashboard_account_id()
@@ -435,9 +460,9 @@ def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]], dict[str, Any] | Non
             SELECT reason, scope, activated_at, updated_at
             FROM safety_incidents
             WHERE account_id = ?
-            ORDER BY activated_at DESC, id DESC
+            ORDER BY activated_at DESC, id DESC LIMIT ?
             """,
-            (account_id,),
+            (account_id, _DASHBOARD_INCIDENT_LIMIT),
         ).fetchall()
         risk_rows = connection.execute(
             """
@@ -508,22 +533,24 @@ def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, 
     positions = account.get("positions", [])
     equity_value = sum(float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "equity")
     daily_pnl = float(account.get("daily_pnl") or 0.0)
-    drawdown = float(account.get("drawdown") or 0.0)
     limits = getattr(cfg, "risk", None) if cfg is not None else None
     incidents, risk_state = _dashboard_ledger_risk()
     capacity = _dashboard_buy_capacity()
     return {
         "gross_exposure_pct": (gross / equity) * 100,
-        "gross_exposure_limit_pct": (float(getattr(limits, "max_gross_exposure_pct", 0.60) or 0.0) * 100),
+        "gross_exposure_limit_pct": (
+            float(getattr(limits, "max_gross_exposure_pct", _RISK_DEFAULTS.max_gross_exposure_pct) or 0.0) * 100
+        ),
         "cash_pct": (cash / equity) * 100,
-        "cash_buffer_limit_pct": (float(getattr(limits, "cash_buffer_pct", 0.40) or 0.0) * 100),
+        "cash_buffer_limit_pct": (
+            float(getattr(limits, "cash_buffer_pct", _RISK_DEFAULTS.cash_buffer_pct) or 0.0) * 100
+        ),
         "equity_exposure_pct": (equity_value / equity) * 100,
-        "max_position_pct": (float(getattr(limits, "max_position_pct", 0.10) or 0.0) * 100),
-        "max_positions": int(getattr(limits, "max_positions", 0) or 0),
         "daily_pnl": daily_pnl,
-        "daily_loss_limit_pct": (float(getattr(limits, "daily_loss_limit_pct", 0.005) or 0.0) * 100),
-        "drawdown": drawdown,
-        "max_drawdown_pct": (float(getattr(limits, "max_drawdown_pct", 0.05) or 0.0) * 100),
+        "daily_loss_limit_pct": (
+            float(getattr(limits, "daily_loss_limit_pct", _RISK_DEFAULTS.daily_loss_limit_pct) or 0.0) * 100
+        ),
+        "max_drawdown_pct": (float(getattr(limits, "max_drawdown_pct", _RISK_DEFAULTS.max_drawdown_pct) or 0.0) * 100),
         "entry_risk_latch": dict((health or {}).get("entry_risk_latch") or {}),
         "circuit_breaker": (health or {}).get("circuit_breaker_reason"),
         "safety_incidents": incidents,
@@ -634,18 +661,16 @@ def _dashboard_execution() -> dict[str, Any]:
     }
 
 
-def _dashboard_universe(cfg: Any, health: dict[str, Any] | None) -> dict[str, Any]:
-    """Universe panel: static equity symbols and pins."""
+def _dashboard_universe(cfg: Any) -> dict[str, Any]:
+    """Universe panel: the static equity symbols."""
     if cfg is None:
         return {"unavailable": True, "reason": "config unavailable"}
-    market_health = dict((health or {}).get("markets") or {})
     equity_universe = cfg.universe.equity
     equity_symbols = tuple(equity_universe.symbols) if equity_universe.enabled else ()
     return {
         "equity": {
             "observation_set": list(equity_symbols),
             "observation_set_size": len(equity_symbols),
-            "pinned_symbols": list(dict(market_health.get("equity") or {}).get("managed_pins") or ()),
             "scanner_status": "static" if equity_universe.enabled else "disabled",
         },
     }
@@ -658,15 +683,13 @@ def _dashboard_database_state() -> dict[str, Any]:
     except OSError:
         size = None
     return {
-        "path": str(path),
         "exists": path.exists(),
         "size_bytes": size,
-        "wal_file_present": Path(f"{path}-wal").exists(),
     }
 
 
 def _dashboard_restart_count() -> int | None:
-    """Fallback restart count when the runtime_metrics payload omits it.
+    """Restart count on the build's shared read-only connection.
 
     Delegates the formula to ``monitoring.metrics.runtime_session_restart_count``
     so the dashboard can never drift from the authoritative accounting.
@@ -693,21 +716,16 @@ def _dashboard_degraded_reasons(health: dict[str, Any] | None) -> list[str]:
 
 
 def _dashboard_health(
-    cfg: Any,
     health: dict[str, Any] | None,
     account: dict[str, Any],
-    *,
-    runtime_metrics_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """System health panel: workers, queue, freshness, reconciliation, DB."""
+    """System health panel: workers, freshness, reconciliation, DB."""
     workers = dict((health or {}).get("workers") or {})
     heartbeats = [str(worker.get("last_heartbeat")) for worker in workers.values() if worker.get("last_heartbeat")]
-    engine_cfg = getattr(cfg, "engine", None) if cfg is not None else None
-    if runtime_metrics_payload is None:
-        runtime_metrics_payload = _runtime_metrics_payload(_dashboard_account_id())
-    restart_count = runtime_metrics_payload.get("restart_count")
-    if restart_count is None:
-        restart_count = _dashboard_restart_count()
+    # Only the restart count is read from the ledger here: one COUNT on the
+    # build's shared connection, not a full runtime_metrics() pass over a
+    # second connection.
+    restart_count = _dashboard_restart_count()
     return {
         "engine_state": _manager_engine_state(),
         "healthy": (health or {}).get("healthy"),
@@ -716,18 +734,10 @@ def _dashboard_health(
         # Intent-watchdog alarm codes, the same list /readyz fails readiness
         # on: the badge must not read "Sağlıklı" while a session went undecided.
         "degraded_reasons": _dashboard_degraded_reasons(health),
-        "queue": {
-            "size": (health or {}).get("queue_size"),
-            "age_seconds": (health or {}).get("queue_age_seconds"),
-            "dropped_events": (health or {}).get("dropped_events"),
-            "coalesced_events": (health or {}).get("coalesced_events"),
-        },
         "markets": dict((health or {}).get("markets") or {}),
         "account_freshness": {
             "age_seconds": account.get("age_seconds"),
-            "stale": account.get("stale"),
             "source": account.get("source"),
-            "maximum_age_for_entry_seconds": getattr(engine_cfg, "maximum_account_age_for_entry_seconds", None),
         },
         "reconciliation": {
             "last_at": (health or {}).get("last_reconciliation_at"),
@@ -735,24 +745,7 @@ def _dashboard_health(
         },
         "database": _dashboard_database_state(),
         "last_heartbeat": max(heartbeats) if heartbeats else None,
-        "entry_risk_latch": dict((health or {}).get("entry_risk_latch") or {}),
     }
-
-
-def _runtime_metrics_payload(account_id: str) -> dict[str, Any]:
-    """Authoritative runtime metrics (restarts, sessions) for the dashboard."""
-    try:
-        from parayabuck.monitoring.metrics import runtime_metrics
-
-        return dict(runtime_metrics(_dashboard_db_path(), account_id=account_id))
-    except ImportError:
-        return {
-            "unavailable": True,
-            "reason": "parayabuck.monitoring.metrics is not available",
-        }
-    except Exception as exc:
-        log.warning("Dashboard runtime metrics failed: %s", exc)
-        return {"unavailable": True, "reason": f"runtime metrics error: {exc}"}
 
 
 # Display-only dashboard snapshot cache: the browser polls all 9 dashboard
@@ -820,9 +813,6 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
     account = _dashboard_account()
     account_id = _dashboard_account_id()
     decisions = _dashboard_market_decisions(account_id)
-    # runtime_metrics is consumed by BOTH the health panel and the metrics
-    # panel; compute it once per build instead of twice.
-    runtime_metrics_payload = _runtime_metrics_payload(account_id)
     meta: dict[str, Any] = {}
     if cfg is not None:
         try:
@@ -851,7 +841,6 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
             "age_seconds": account.get("age_seconds"),
             "stale": account.get("stale"),
             "source": account.get("source"),
-            "last_reconciliation_at": (health or {}).get("last_reconciliation_at"),
         },
         "equity": _dashboard_safe_panel(
             "equity",
@@ -867,10 +856,10 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
         ),
         "risk": _dashboard_safe_panel("risk", lambda: _dashboard_risk(cfg, health, account)),
         "execution": _dashboard_safe_panel("execution", _dashboard_execution),
-        "universe": _dashboard_safe_panel("universe", lambda: _dashboard_universe(cfg, health)),
+        "universe": _dashboard_safe_panel("universe", lambda: _dashboard_universe(cfg)),
         "health": _dashboard_safe_panel(
             "health",
-            lambda: _dashboard_health(cfg, health, account, runtime_metrics_payload=runtime_metrics_payload),
+            lambda: _dashboard_health(health, account),
         ),
     }
 
@@ -921,16 +910,3 @@ def get_overview_payload(state: Any | None = None) -> dict[str, Any]:
     except Exception as exc:
         log.exception("Dashboard overview payload failed: %s", exc)
         return {"unavailable": True, "error": str(exc)}
-
-
-def get_panel(key: str, state: Any | None = None) -> dict[str, Any]:
-    """Legacy slice accessor: the dead /api/<panel> routes are gone, so every
-    panel is read from the overview payload instead."""
-    payload = get_overview_payload(state)
-    if isinstance(payload, dict) and payload.get("unavailable"):
-        # The overview itself failed — hand its real cause back instead of
-        # masking it as a missing panel.
-        return payload
-    if isinstance(payload, dict) and key in payload:
-        return payload[key]  # type: ignore[no-any-return]
-    return {"unavailable": True, "error": f"panel {key} not found"}

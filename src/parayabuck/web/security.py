@@ -10,7 +10,9 @@ static Cache-Control are also preserved here.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
+import re
 import secrets
 import threading
 import time
@@ -24,6 +26,10 @@ from starlette.requests import Request
 _TRUSTED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 _CONTROL_TOKEN_HEADER = "x-parayabuck-control-token"
 _CONTROL_TOKEN_PATH = "/api/control-token"
+# Read-only routes that still require a trusted (loopback) peer: the control
+# token itself, and the live checklist, whose messages name the configured
+# approval path and HMAC key env variable.
+_PEER_GATED_GET_PATHS = frozenset({_CONTROL_TOKEN_PATH, "/api/live/prerequisites"})
 
 
 def _trusted_browser_origin_for_middleware(origin: str | None) -> bool:
@@ -73,6 +79,37 @@ def is_trusted_client(client_host: str | None) -> bool:
     return os.getenv("PARAYABUCK_CONTAINER") == "YES" and not trading_host_authorized() and address.is_private
 
 
+_TICKET_QUERY = re.compile(r"(ticket=)[^&\s\"']+")
+_UVICORN_LOGGERS = ("uvicorn.error", "uvicorn.access")
+
+
+class TicketRedactionFilter(logging.Filter):
+    """Redact single-use WebSocket ``?ticket=`` values from server log lines.
+
+    uvicorn logs WebSocket handshakes (``uvicorn.error``) and requests
+    (``uvicorn.access``) with the full query string; a logged ticket could be
+    replayed within its TTL. Only string arguments are rewritten, so the
+    access formatter still receives its positional args.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = _TICKET_QUERY.sub(r"\1[redacted]", record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _TICKET_QUERY.sub(r"\1[redacted]", arg) if isinstance(arg, str) else arg for arg in record.args
+            )
+        return True
+
+
+def install_ticket_log_redaction() -> None:
+    """Attach :class:`TicketRedactionFilter` to the uvicorn loggers once."""
+    for name in _UVICORN_LOGGERS:
+        logger = logging.getLogger(name)
+        if not any(isinstance(existing, TicketRedactionFilter) for existing in logger.filters):
+            logger.addFilter(TicketRedactionFilter())
+
+
 def validate_control_token(provided: str | None, expected: str | None) -> bool:
     if not isinstance(provided, str) or not provided:
         return False
@@ -87,7 +124,8 @@ def build_protect_middleware(
     """Return an ``@app.middleware("http")``-compatible callable that enforces
 
     * loopback-only Host header (``testserver`` allowed under pytest),
-    * loopback-only peer address for the control token and mutating methods,
+    * loopback-only peer address for the control token, the live checklist
+      and mutating methods,
     * loopback-only Origin for mutating methods,
     * ``x-parayabuck-control-token`` for mutating methods,
     * security headers (CSP, Referrer-Policy, nosniff) and ``no-store`` for
@@ -102,7 +140,7 @@ def build_protect_middleware(
         if not is_trusted_host(request.headers.get("host") or ""):
             return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
         mutating = request.method not in {"GET", "HEAD", "OPTIONS"}
-        if (mutating or request.url.path == _CONTROL_TOKEN_PATH) and not is_trusted_client(
+        if (mutating or request.url.path in _PEER_GATED_GET_PATHS) and not is_trusted_client(
             request.client.host if request.client is not None else None
         ):
             return JSONResponse(status_code=403, content={"detail": "Untrusted client address"})

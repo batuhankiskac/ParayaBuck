@@ -24,8 +24,9 @@ class SettingsPayload(BaseModel):
     api_key: str = Field("", description="Alpaca API Key")
     secret_key: str = Field("", description="Alpaca Secret Key")
     paper_mode: bool = Field(True, description="Paper mode toggle")
-    daily_loss_limit_pct: float = Field(1.5, gt=0, le=100)
-    max_drawdown_pct: float = Field(10.0, gt=0, le=100)
+    # Below 100 %: a 100 % latch can never trip (RiskLimits rejects it).
+    daily_loss_limit_pct: float = Field(1.5, gt=0, lt=100)
+    max_drawdown_pct: float = Field(10.0, gt=0, lt=100)
     host: Literal["127.0.0.1", "localhost", "::1"] = "127.0.0.1"
     port: int = Field(8000, ge=1, le=65535)
     open_browser: bool = True
@@ -34,7 +35,7 @@ class SettingsPayload(BaseModel):
     equity_trading_enabled: bool = True
     live_trading_enabled: bool = False
     live_dollar_cap: float = Field(0.0, ge=0)
-    live_operator_approval_path: str = ""
+    live_operator_approval_path: str = Field("", max_length=4096)
     expected_config_digest: str | None = Field(default=None, description="Optimistic concurrency digest")
 
 
@@ -56,8 +57,8 @@ class WebSocketTicketPayload(BaseModel):
 class BacktestPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     market: Literal["equity"] = "equity"
-    strategy: str = ""
-    parameters: dict[str, object] = Field(default_factory=dict)
+    strategy: str = Field("", max_length=128)
+    parameters: dict[str, object] = Field(default_factory=dict, max_length=64)
     years: int = Field(5, ge=1, le=30)
     days: int = Field(0, ge=0, le=366 * 30)
-    symbols: str = ""
+    symbols: str = Field("", max_length=4096)

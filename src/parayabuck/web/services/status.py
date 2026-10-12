@@ -11,7 +11,6 @@ from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from parayabuck.core.models import Market
 from parayabuck.logger import get_logger
 
 log = get_logger("parayabuck.web.services.status")
@@ -56,10 +55,8 @@ def strategy_metadata(cfg: Any) -> dict[str, Any]:
             "display_name": spec.display_name,
             "version": spec.version,
             "signal_timeframe": spec.primary_timeframe,
-            "supported_timeframes": list(spec.supported_timeframes),
             "rebalance_cadence": spec.rebalance_policy,
             "minimum_history_bars": spec.minimum_history_bars,
-            "dynamic_universe_enabled": False,
             "candidate_pool_size": len(equity_symbols),
             "observation_set_size": len(equity_symbols),
         }
@@ -77,18 +74,12 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
         "paper": manager.is_paper_mode(),
         "has_credentials": bool(key),
         "security_warning": getattr(manager, "security_warning", None),
-        "active_equity_symbol_count": 0,
     }
     cfg: Any = None
     try:
         cfg = _load_config(str(manager.config_path))
-        configured: list[str] = []
-        if cfg.strategy.equity.enabled:
-            configured.append(f"equity/{cfg.strategy.equity.name}")
-        result["strategy_status"] = "configured:" + ",".join(configured)
         result["strategy_metadata"] = strategy_metadata(cfg)
     except Exception:
-        result["strategy_status"] = "configuration_error"
         result["scanner"] = {"equity_status": "error"}
     retry_attempt = getattr(manager, "_retry_attempt", 0)
     retry_next_at = getattr(manager, "_retry_next_at", None)
@@ -111,7 +102,6 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
             health = None
         if health is not None:
             result["runtime"] = asdict(health)
-            result["strategy_status"] = health.strategy_status
             repository = getattr(runtime, "_portfolio_repository", None)
             if repository is not None:
                 account_id = getattr(runtime.broker, "account_id", None) or "unknown"
@@ -119,24 +109,13 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
                     result["operations"] = repository.operations_snapshot(account_id)
                 except Exception:
                     pass
-                result["ownership_drift_active"] = health.circuit_breaker_reason == "ownership_drift"
-                try:
-                    result["reconciliation_anomalies"] = list(repository.ownership_adjustments(account_id))
-                except Exception:
-                    result["reconciliation_anomalies"] = []
-            result["active_equity_symbol_count"] = len(
-                getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
-            )
 
     if cfg is not None:
         equity_symbols = _equity_symbols(cfg)
-        if runtime is None:
-            result["active_equity_symbol_count"] = len(equity_symbols)
         result["scanner"] = {"equity_status": _equity_status(cfg)}
         result["universe"] = {
             "equity": {
                 "symbols": list(equity_symbols),
-                "pool_size": len(equity_symbols),
             },
         }
     return result

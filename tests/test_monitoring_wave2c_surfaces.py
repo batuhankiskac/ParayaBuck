@@ -22,7 +22,6 @@ import io
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -321,12 +320,7 @@ def test_ops_status_api_carries_the_watchdog_check(tmp_path: Path) -> None:
 def _dashboard_panel(runtime_health: dict[str, Any]) -> dict[str, Any]:
     from parayabuck.web.services import dashboard as svc
 
-    return svc._dashboard_health(
-        SimpleNamespace(engine=SimpleNamespace(maximum_account_age_for_entry_seconds=30)),
-        runtime_health,
-        {},
-        runtime_metrics_payload={"restart_count": 0},
-    )
+    return svc._dashboard_health(runtime_health, {})
 
 
 def test_dashboard_health_panel_publishes_degraded_reasons() -> None:

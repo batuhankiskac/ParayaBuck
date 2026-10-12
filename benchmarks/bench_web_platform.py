@@ -93,7 +93,11 @@ def run(report: Report):
 
 
 if __name__ == "__main__":
+    import argparse
+
     from benchmarks.harness import mb, peak_rss_bytes
+
+    argparse.ArgumentParser(description="Web platform import, endpoint and BacktestManager timings.").parse_args()
 
     baseline_rss = peak_rss_bytes()
     report = Report()

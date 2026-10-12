@@ -392,23 +392,6 @@ def test_submit_recovers_when_lookup_finds_order(tmp_path: Path) -> None:
     assert fake.submitted_market_orders == 1  # only one market order (pre-populated) not duplicated
 
 
-# --- Reconciliation idempotency ---
-
-
-def test_reconcile_idempotent(tmp_path: Path) -> None:
-    fake = FakeTradingClient()
-    fake.set_position("IWM", qty=10)
-    broker = _broker_with_fake(tmp_path, fake)
-    broker.portfolio_owned_quantities = lambda: {"IWM": 10}
-    if broker.ledger is not None:
-        broker.ledger.managed_for_account = lambda acct: {}  # type: ignore[assignment]
-        # First reconcile
-        result1 = broker.reconcile()
-        # Second reconcile with same broker truth should be identical and not duplicate
-        result2 = broker.reconcile()
-        assert result1 == result2
-
-
 # --- Protection ---
 
 

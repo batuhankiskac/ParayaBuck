@@ -9,7 +9,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from alpaca.trading.models import Order
 
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 from parayabuck.config import Config
@@ -23,7 +22,6 @@ from parayabuck.execution.portfolio import (
     PortfolioRiskLimits,
     RiskOverlayDecision,
 )
-from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import NEW_YORK, session_close_utc
 from parayabuck.portfolio import runtime_service
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
@@ -36,6 +34,7 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioStateRepository,
     configuration_digest,
 )
+from tests.fake_client import FakeTradingClient
 from tests.helpers import make_broker
 
 
@@ -279,95 +278,8 @@ def test_portfolio_fill_chain_is_idempotent_and_keeps_pnl_fee_slippage_separate(
 EQUITY_UNIVERSE = ("AAPL", "MSFT", "NVDA", "SPY")
 
 
-class _FakeAlpacaClient:
-    """Minimal Alpaca REST surface used by the portfolio execution path."""
-
-    def __init__(self) -> None:
-        self.positions: list[SimpleNamespace] = []
-        self.submitted: list[object] = []
-        self.open_orders: list[SimpleNamespace] = []
-        self.filled_orders: dict[str, SimpleNamespace] = {}
-
-    def get_order_by_client_id(self, client_order_id: str) -> SimpleNamespace | None:
-        return self.filled_orders.get(client_order_id)
-
-    def get_order_by_id(self, order_id: str) -> SimpleNamespace | None:
-        for order in self.filled_orders.values():
-            if order.id == order_id:
-                return order
-        return None
-
-    def get_account(self) -> SimpleNamespace:
-        return SimpleNamespace(
-            id="acct",
-            account_number="acct",
-            account_blocked=False,
-            trading_blocked=False,
-            trade_suspended_by_user=False,
-            equity="100000",
-            last_equity="100000",
-            cash="90000",
-            non_marginable_buying_power="100000",
-        )
-
-    def get_all_positions(self) -> list[SimpleNamespace]:
-        return self.positions
-
-    def get_open_position(self, symbol: str) -> SimpleNamespace:
-        # Alpaca resolves a position regardless of symbol spelling.
-        wanted = canonical_symbol(symbol)
-        for position in self.positions:
-            if canonical_symbol(position.symbol) == wanted:
-                return position
-        raise ValueError(f"no open position for {symbol}")
-
-    def get_asset(self, symbol: str) -> SimpleNamespace:
-        return SimpleNamespace(
-            symbol=symbol,
-            tradable=True,
-            min_order_size="0.01",
-            min_trade_increment="0.01",
-            price_increment="0.01",
-            min_order_notional="1.0",
-        )
-
-    def get_orders(self, *_args: object, **_kwargs: object) -> list[SimpleNamespace]:
-        return self.open_orders
-
-    def _request(self, method: str, path: str, data: dict[str, object] | None = None) -> list[dict[str, object]]:
-        assert method == "GET" and path == "/account/activities/FILL"
-        return []
-
-    def get(self, path: str, params: dict[str, object] | None = None) -> list[Order]:
-        if path != "/orders":
-            raise ValueError(f"unsupported GET {path}")
-        query = params or {}
-        symbols = query.get("symbols")
-        wanted = {value.replace("/", "") for value in symbols.split(",")} if isinstance(symbols, str) else set()
-        orders: list[Order] = []
-        for index, raw in enumerate(self.open_orders):
-            if wanted and raw.symbol.replace("/", "") not in wanted:
-                continue
-            fields = dict(vars(raw))
-            fields["id"] = str(getattr(raw, "id", "") or f"fake-open-order-{index}")
-            orders.append(Order.model_construct(**fields))
-        direction = str(query.get("direction", "desc"))
-        if direction == "asc":
-            orders.reverse()
-        cursor_key = "before_order_id" if direction == "desc" else "after_order_id"
-        cursor = query.get(cursor_key)
-        if cursor is not None:
-            cursor_index = next((i for i, order in enumerate(orders) if str(order.id) == str(cursor)), None)
-            orders = orders[cursor_index + 1 :] if cursor_index is not None else []
-        return orders[: int(query.get("limit", 50))]
-
-    def submit_order(self, request: object) -> SimpleNamespace:
-        self.submitted.append(request)
-        return SimpleNamespace(id=f"broker-{getattr(request, 'client_order_id', '')}")
-
-
 def _portfolio_broker(
-    client: _FakeAlpacaClient,
+    client: FakeTradingClient,
     repo: PortfolioStateRepository,
     tmp_path: Path,
     *,
@@ -409,7 +321,7 @@ def test_portfolio_buy_fill_is_managed_and_full_exit_returns_to_external(
     mutable), and a fully exited position must revert to ``external``.
     """
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     broker = _portfolio_broker(client, repo, tmp_path)
     runtime = PortfolioRuntime(
         _fixture_strategy(),
@@ -499,7 +411,7 @@ def test_portfolio_buy_fill_is_managed_and_full_exit_returns_to_external(
 def test_portfolio_ownership_survives_runtime_restart(tmp_path) -> None:
     """Ownership derives from the persisted repository, not process memory."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     first = PortfolioRuntime(
         _fixture_strategy(),
         EQUITY_UNIVERSE,
@@ -551,7 +463,7 @@ def test_partial_exit_keeps_ownership_until_fully_flat(tmp_path) -> None:
     """A partial SELL reduces the net position but ownership persists until the
     last share is gone; only a full exit reverts the symbol to external."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     runtime = PortfolioRuntime(
         _fixture_strategy(),
         EQUITY_UNIVERSE,
@@ -616,7 +528,7 @@ def test_mixed_position_splits_managed_and_external_quantity(tmp_path) -> None:
     expose managed_qty=2/external_qty=10 so the planner can only sell 2."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     repo.begin_session("acct", "digest", "paper")
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="AAPL",
@@ -645,7 +557,7 @@ def test_duplicate_canonical_broker_positions_fail_closed(tmp_path) -> None:
     from parayabuck.execution.alpaca import OwnershipDriftError
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="AAPL",
@@ -681,7 +593,7 @@ def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
     _owned_equity_entry(repo, quantity=0.5)
     assert repo.owned_quantities("acct") == {"QLD": 0.5}
 
-    client = _FakeAlpacaClient()  # no positions, no open orders
+    client = FakeTradingClient()  # no positions, no open orders
     broker = _portfolio_broker(client, repo, tmp_path)
     broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
 
@@ -694,7 +606,7 @@ def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
 def test_reconcile_keeps_ownership_when_broker_still_holds_the_position(tmp_path) -> None:
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="QLD",
@@ -721,7 +633,7 @@ def test_reconcile_submits_no_stop_for_portfolio_owned_position(tmp_path) -> Non
     unprotected position is a clean MATCH on every cycle, not an incident."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="QLD",
@@ -741,7 +653,7 @@ def test_reconcile_submits_no_stop_for_portfolio_owned_position(tmp_path) -> Non
         assert report["MATCH"] == ["QLD"]
         assert all(not symbols for bucket, symbols in report.items() if bucket != "MATCH")
 
-    assert client.submitted == []
+    assert client.submitted_market_orders == client.submitted_stops == 0
     assert client.open_orders == []
     assert repo.owned_quantities("acct") == {"QLD": 0.5}
     assert broker.ledger is not None
@@ -753,7 +665,7 @@ def test_reconcile_counts_only_remaining_qty_of_partially_filled_stop(tmp_path) 
     remainder: the filled portion must not be counted as protection, and
     reconcile must keep the remainder (not churn it)."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="QQQ",
@@ -783,7 +695,7 @@ def test_reconcile_counts_only_remaining_qty_of_partially_filled_stop(tmp_path) 
 
     broker.reconcile()
 
-    assert client.submitted == []  # no re-submission of the working remainder
+    assert client.submitted_market_orders == client.submitted_stops == 0  # no re-submission of the working remainder
     assert client.open_orders  # the still-working stop is kept
 
 
@@ -925,7 +837,7 @@ def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None
         ),
         "submitting",
     )
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     # The broker already reflects the partial fill.
     client.positions = [
         SimpleNamespace(
@@ -1205,7 +1117,7 @@ def test_ownership_drift_is_exempt_while_an_open_order_is_working(tmp_path) -> N
         ),
         "submitted",
     )
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="QLD",
@@ -1233,7 +1145,7 @@ def test_manual_open_buy_does_not_exempt_ownership_drift(tmp_path) -> None:
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="QLD",
@@ -1259,7 +1171,7 @@ def test_manual_open_sell_does_not_exempt_ownership_drift(tmp_path) -> None:
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="QLD",
@@ -1303,7 +1215,7 @@ def test_portfolio_open_buy_does_not_exempt_ownership_drift(tmp_path) -> None:
         ),
         "submitted",
     )
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="QLD",
@@ -1360,7 +1272,7 @@ def test_portfolio_open_sell_only_exempts_the_explained_quantity(tmp_path) -> No
         realized_pnl=0.0,
         unrealized_pnl=0.0,
     )
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     # Shortfall is 0.35 - 0.25 = 0.10; the working SELL remainder is 0.05,
     # which cannot explain the discrepancy: drift stays fail-closed.
     client.positions = [
@@ -1483,7 +1395,7 @@ def test_ownership_drift_below_repository_quantity_is_fail_closed(tmp_path) -> N
 
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="QLD",
@@ -1506,7 +1418,7 @@ def test_flat_position_with_stale_ownership_does_not_raise_drift(tmp_path) -> No
     halt: the heal books the missing exit leg and clears ownership."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
-    broker = _portfolio_broker(_FakeAlpacaClient(), repo, tmp_path)
+    broker = _portfolio_broker(FakeTradingClient(), repo, tmp_path)
     snapshot = broker.account()
     assert snapshot.positions == ()
 
@@ -1643,7 +1555,7 @@ def test_portfolio_ownership_splits_mixed_position(tmp_path) -> None:
     """2 portfolio-managed + 10 manual on one symbol: managed 2, external 10."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=2, symbol="GE")
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     client.positions = [
         SimpleNamespace(
             symbol="GE",
@@ -1793,7 +1705,7 @@ def test_stale_flat_position_records_adjustment_not_fake_fill(tmp_path) -> None:
     ownership adjustment instead of a synthetic precise SELL fill."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
-    client = _FakeAlpacaClient()  # flat, no filled orders
+    client = FakeTradingClient()  # flat, no filled orders
     broker = _portfolio_broker(client, repo, tmp_path)
     broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
 
@@ -1835,9 +1747,9 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
         ),
         "submitted",
     )
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     # Alpaca confirms the exit order filled at 97.50 while the stream was down.
-    client.filled_orders["pbp-exit-sell"] = SimpleNamespace(
+    filled_exit = SimpleNamespace(
         id="broker-exit",
         client_order_id="pbp-exit-sell",
         symbol="QLD",
@@ -1847,6 +1759,8 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
         filled_avg_price="97.5",
         filled_at="2025-01-01T15:00:00+00:00",
     )
+    client.script_get_order_by_client_id = {"pbp-exit-sell": filled_exit}.get
+    client.script_get_order_by_id = {"broker-exit": filled_exit}.get
     broker = _portfolio_broker(client, repo, tmp_path)
 
     def recover_fill(
@@ -1919,7 +1833,7 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
         "submitted",
     )
     # Reconcile runs while the broker is flat and no fill is visible yet.
-    client = _FakeAlpacaClient()
+    client = FakeTradingClient()
     broker = _portfolio_broker(client, repo, tmp_path)
     broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
     broker.reconcile()

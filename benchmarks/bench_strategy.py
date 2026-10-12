@@ -92,6 +92,9 @@ def run(report: Report) -> None:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    argparse.ArgumentParser(description="VT35 strategy decide() timings on synthetic contexts.").parse_args()
     report = Report()
     run(report)
     report.print_table()

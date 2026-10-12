@@ -273,7 +273,6 @@ def main() -> int:
         market=Market.EQUITY,
         end=rh.EQUITY_END,
         timeframe=strategy.timeframe,
-        observation_strategy=strategy,
     )
     filtered, warmup, (ordered, decision_bars) = _prepared_window(
         bars, Market.EQUITY, strategy.timeframe, rh.EQUITY_START, rh.EQUITY_END

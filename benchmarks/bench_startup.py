@@ -7,7 +7,9 @@ prefix of the process-start path.
 
 from __future__ import annotations
 
+import argparse
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -31,6 +33,8 @@ def _constructor(tmp_path: Path) -> EngineRuntime:
 
 
 def run(report: Report) -> None:
+    # A fresh throwaway directory per run: never under the repository.
+    scratch = Path(tempfile.mkdtemp(prefix="bench_startup_"))
     timing, _ = timeit(
         lambda: load_config(str(CONFIG)),
         label="config load",
@@ -40,15 +44,15 @@ def run(report: Report) -> None:
     report.add(timing)
 
     timing, _ = timeit(
-        lambda: SQLiteStore(str(ROOT / "data" / "smoke" / "bench_open.sqlite3")),
+        lambda: SQLiteStore(str(scratch / "bench_open.sqlite3")),
         label="SQLiteStore open (tmp db)",
         warmup=3,
         runs=10,
-        before_each=lambda: Path(ROOT / "data" / "smoke" / "bench_open.sqlite3").unlink(missing_ok=True),
+        before_each=lambda: (scratch / "bench_open.sqlite3").unlink(missing_ok=True),
     )
     report.add(timing)
 
-    tmp = ROOT / "data" / "smoke" / "bench_runtime"
+    tmp = scratch / "bench_runtime"
     tmp.mkdir(parents=True, exist_ok=True)
     timing, runtime = timeit(
         lambda: _constructor(tmp),
@@ -63,6 +67,9 @@ def run(report: Report) -> None:
 
 
 if __name__ == "__main__":
+    argparse.ArgumentParser(
+        description="Startup-path timings: config load, SQLite open, runtime construction."
+    ).parse_args()
     report = Report()
     run(report)
     report.print_table()

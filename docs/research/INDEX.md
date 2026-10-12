@@ -6,6 +6,7 @@ results for each doc live in `research/<name>/` unless noted.
 
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|
+| [`gold_riskoff_oos_v1.md`](gold_riskoff_oos_v1.md) | 2026-10-12 | Out-of-sample test (1975–1998, Bundesbank Frankfurt gold fix, price indices) of `leverage_frontier_v1`'s gold-in-risk-off arm fails every gate: on ^IXIC GOLD 14.3% vs CASH 17.4% CAGR, max DD 57.9% vs 44.3%, bootstrap median 19.3% vs 19.8%; also loses on ^NDX and ^GSPC; gold risk-off closed; VT35 unchanged. | current evidence |
 | [`leverage_frontier_v1.md`](leverage_frontier_v1.md) | 2026-10-12 | No leverage (1–3x) × vol-target (30–50%, none) cell passes on 2000–2026: every cell clearing +1 pp CAGR fails the bootstrap tail gate (P(DD>70%)), under base and calibrated financing; risk-off BILLS/BOND10/GOLD all fail (GOLD +2.3 pp but DD +4.3 pp); VT35 unchanged. | current evidence |
 | [`timesfm_v1.md`](timesfm_v1.md) | 2026-10-12 | No TimesFM 2.5 arm (vol forecast, trend replacement, exit filter) passes the pre-registered gate on 2000–2026; the TimesFM vol arm loses to plain EWMA vol, and the direction arms lose 5.5–6.1 pp CAGR. The EWMA comparator V0 passes (+0.11 pp CAGR, max DD 46.1% → 43.7%) but is not promoted; VT35 unchanged. | current evidence |
 | [`trend_robustness_v2.md`](trend_robustness_v2.md) | 2026-10-11 | No arm (SMA 100–250 ensemble, QLD+SSO two-index split, both) passes the pre-registered gate on 2000–2026; all give up 1.2–2.7 pp CAGR; VT35 unchanged. | current evidence |
@@ -21,7 +22,8 @@ results for each doc live in `research/<name>/` unless noted.
 
 Other research artifacts still in the tree:
 
-- `data/historical/stress_robustness_v1_*.csv` — inputs to `stress_robustness_v1` (reused by `trend_robustness_v2`).
+- `data/historical/stress_robustness_v1_*.csv` — inputs to `stress_robustness_v1` (reused by `trend_robustness_v2`; DTB3 also by `gold_riskoff_oos_v1`).
+- `data/historical/gold_riskoff_oos_v1_*.csv` — inputs to `gold_riskoff_oos_v1` (indices, Frankfurt gold fix, Pink Sheet validation series).
 - `data/historical/equity_entity_lifetimes_full_v5.csv` and the two `*_v5.manifest.json` files — canonical v5 equity inputs needed to rerun Stage B (`research/paper_config_v2/run_stage_b.py`).
 
 ## Pruned 2026-09-30

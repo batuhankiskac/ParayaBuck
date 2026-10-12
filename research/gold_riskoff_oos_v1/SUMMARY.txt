@@ -1,0 +1,42 @@
+gold_riskoff_oos_v1 | decision: FAIL: gold risk-off closed, not revisited
+
+P ^IXIC window 1974-12-31 -> 1998-12-30 | index B&H  16.14% / DD  35.96%
+  calibrated_m2  CASH  17.37% DD  44.26% | GOLD  14.32% DD  57.86% | BILLS  19.21% DD  39.34%
+  calibrated_m1  CASH  17.60% DD  43.90% | GOLD  14.77% DD  57.29% | BILLS  19.68% DD  38.52%
+  base_m2        CASH  18.00% DD  44.08% | GOLD  14.94% DD  57.73% | BILLS  19.86% DD  39.15%
+  base_m1        CASH  18.24% DD  43.72% | GOLD  15.39% DD  57.16% | BILLS  20.33% DD  38.32%
+  boot calibrated_m2 CASH med  19.83% P<0   2.20% P(DD>50)  17.38% | GOLD med  19.26% P<0   4.16% P(DD>50)  44.98% | BILLS med  21.54% P<0   1.14% P(DD>50)  10.96% | INDEX med  16.21% P<0   1.08% P(DD>50)   6.68%
+  boot base_m2       CASH med  20.46% P<0   1.96% P(DD>50)  16.36% | GOLD med  19.90% P<0   3.74% P(DD>50)  43.76% | BILLS med  22.15% P<0   0.96% P(DD>50)  10.20% | INDEX med  16.21% P<0   1.08% P(DD>50)   6.68%
+  boot calibrated_m1 CASH med  20.07% P<0   2.06% P(DD>50)  16.16% | GOLD med  19.77% P<0   3.70% P(DD>50)  42.38% | BILLS med  22.01% P<0   0.94% P(DD>50)   9.16% | INDEX med  16.21% P<0   1.08% P(DD>50)   6.68%
+  subperiods (cal m2): CASH 1975_1980  20.17% 1981_1998  16.45% | GOLD 1975_1980  14.62% 1981_1998  14.22% | BILLS 1975_1980  21.05% 1981_1998  18.60%
+  1987 (cal m2): CASH yr  14.38% Oct -11.58% | GOLD yr  19.46% Oct -10.40% | BILLS yr  15.66% Oct -11.44%
+  risk-off episodes 60, sessions share  25.67%, gold up in 21
+  GOLD same-date alignment (cal m2):  14.15% DD  58.65%
+
+S1 ^NDX window 1986-07-16 -> 1998-12-30 | index B&H  22.31% / DD  39.93%
+  calibrated_m2  CASH  15.61% DD  43.03% | GOLD  13.87% DD  50.42% | BILLS  16.37% DD  41.52%
+  calibrated_m1  CASH  15.99% DD  42.62% | GOLD  14.56% DD  49.71% | BILLS  17.08% DD  40.68%
+  base_m2        CASH  16.19% DD  42.77% | GOLD  14.45% DD  50.19% | BILLS  16.96% DD  41.25%
+  base_m1        CASH  16.58% DD  42.36% | GOLD  15.14% DD  49.48% | BILLS  17.67% DD  40.41%
+  boot calibrated_m2 CASH med  20.74% P<0   4.14% P(DD>50)  44.74% | GOLD med  19.54% P<0   6.08% P(DD>50)  58.86% | BILLS med  21.57% P<0   3.34% P(DD>50)  40.42% | INDEX med  22.42% P<0   0.34% P(DD>50)  13.00%
+  subperiods (cal m2): CASH 1981_1998  15.61% | GOLD 1981_1998  13.87% | BILLS 1981_1998  16.37%
+  1987 (cal m2): CASH yr  33.20% Oct -17.30% | GOLD yr  33.03% Oct -19.40% | BILLS yr  34.62% Oct -17.19%
+  risk-off episodes 43, sessions share  22.06%, gold up in 18
+  GOLD same-date alignment (cal m2):  14.37% DD  47.55%
+
+S2 ^GSPC window 1974-12-31 -> 1998-12-30 | index B&H  12.79% / DD  33.51%
+  calibrated_m2  CASH  11.35% DD  39.74% | GOLD   9.34% DD  58.13% | BILLS  12.91% DD  34.20%
+  calibrated_m1  CASH  11.64% DD  38.72% | GOLD   9.90% DD  56.88% | BILLS  13.49% DD  33.00%
+  base_m2        CASH  11.96% DD  38.94% | GOLD   9.93% DD  57.44% | BILLS  13.53% DD  33.14%
+  base_m1        CASH  12.25% DD  37.91% | GOLD  10.51% DD  56.17% | BILLS  14.12% DD  32.71%
+  boot calibrated_m2 CASH med   9.65% P<0  11.90% P(DD>50)  27.92% | GOLD med   8.96% P<0  16.46% P(DD>50)  51.76% | BILLS med  10.93% P<0   8.54% P(DD>50)  20.46% | INDEX med  12.80% P<0   0.74% P(DD>50)   1.64%
+  subperiods (cal m2): CASH 1975_1980   3.56% 1981_1998  14.07% | GOLD 1975_1980   3.67% 1981_1998  11.29% | BILLS 1975_1980   5.14% 1981_1998  15.62%
+  1987 (cal m2): CASH yr  40.77% Oct -13.06% | GOLD yr  46.54% Oct -11.90% | BILLS yr  42.30% Oct -12.92%
+  risk-off episodes 78, sessions share  24.78%, gold up in 33
+  GOLD same-date alignment (cal m2):   8.73% DD  60.85%
+
+H1: fail  {"pass": false, "gold": 0.1432, "cash": 0.1737}
+H2: fail  {"pass": false, "gold": 0.5786, "cash": 0.4426}
+H3: fail  {"pass": false, "gold": 0.1926, "cash": 0.1983}
+H4: fail  {"S1": {"pass": false, "gold": 0.1387, "cash": 0.1561}, "S2": {"pass": false, "gold": 0.0934, "cash": 0.1135}, "pass": false}
+H5: fail  {"calibrated_m1": {"pass": false, "gold": 0.1477, "cash": 0.176}, "base_m2": {"pass": false, "gold": 0.1494, "cash": 0.18}, "base_m1": {"pass": false, "gold": 0.1539, "cash": 0.1824}, "pass": false}

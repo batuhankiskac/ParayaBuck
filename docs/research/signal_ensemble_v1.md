@@ -26,7 +26,9 @@ historically, but no arm survives every gate:
 No arm lifts the block-20 bootstrap median above SPY's 8.68%. The short-trend
 weakness is unchanged.
 
-Evidence: `research/signal_ensemble_v1/` on branch `research/signal-ensemble-v1`.
+Evidence: `research/signal_ensemble_v1/` and `data/historical/signal_ensemble_v1_gspc.csv`,
+removed from main on 2026-10-12 and preserved in tag
+`archive/research/signal-ensemble-v1-2026-10`.
 
 - `PREREGISTRATION.md`, `screen.py`, the ^GSPC data and `DATA_MANIFEST.json`
   were committed in `44d6823` before any arm other than C0 was simulated.

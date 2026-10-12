@@ -23,7 +23,6 @@ results for each doc live in `research/<name>/` unless noted.
 Other research artifacts still in the tree:
 
 - `data/historical/stress_robustness_v1_*.csv` — inputs to `stress_robustness_v1` (reused by `trend_robustness_v2`; DTB3 also by `gold_riskoff_oos_v1`).
-- `data/historical/gold_riskoff_oos_v1_*.csv` — inputs to `gold_riskoff_oos_v1` (indices, Frankfurt gold fix, Pink Sheet validation series).
 - `data/historical/equity_entity_lifetimes_full_v5.csv` and the two `*_v5.manifest.json` files — canonical v5 equity inputs needed to rerun Stage B (`research/paper_config_v2/run_stage_b.py`).
 
 ## Pruned 2026-09-30

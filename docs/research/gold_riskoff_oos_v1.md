@@ -17,7 +17,8 @@ never used. The result reverses:
 - **T-bills** in the risk-off state beat zero cash on every index (+0.8 to
   +1.8 pp). They are report-only.
 
-Evidence is in `research/gold_riskoff_oos_v1/`:
+Evidence (removed from main on 2026-10-12 and preserved in tag
+`archive/research/gold-riskoff-oos-v1-2026-10`) was in `research/gold_riskoff_oos_v1/`:
 
 - `PREREGISTRATION.md`, `screen.py`, `download_data.py`, `VALIDATION.json`,
   `DATA_MANIFEST.json` and the data files

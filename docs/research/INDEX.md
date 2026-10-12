@@ -6,6 +6,7 @@ results for each doc live in `research/<name>/` unless noted.
 
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|
+| [`leverage_frontier_v1.md`](leverage_frontier_v1.md) | 2026-10-12 | No leverage (1–3x) × vol-target (30–50%, none) cell passes on 2000–2026: every cell clearing +1 pp CAGR fails the bootstrap tail gate (P(DD>70%)), under base and calibrated financing; risk-off BILLS/BOND10/GOLD all fail (GOLD +2.3 pp but DD +4.3 pp); VT35 unchanged. | current evidence |
 | [`timesfm_v1.md`](timesfm_v1.md) | 2026-10-12 | No TimesFM 2.5 arm (vol forecast, trend replacement, exit filter) passes the pre-registered gate on 2000–2026; the TimesFM vol arm loses to plain EWMA vol, and the direction arms lose 5.5–6.1 pp CAGR. The EWMA comparator V0 passes (+0.11 pp CAGR, max DD 46.1% → 43.7%) but is not promoted; VT35 unchanged. | current evidence |
 | [`trend_robustness_v2.md`](trend_robustness_v2.md) | 2026-10-11 | No arm (SMA 100–250 ensemble, QLD+SSO two-index split, both) passes the pre-registered gate on 2000–2026; all give up 1.2–2.7 pp CAGR; VT35 unchanged. | current evidence |
 | [`sip_recent_data_clamp_v1.md`](sip_recent_data_clamp_v1.md) | 2026-09-30 | Fix: SIP historical requests (warmup, hourly split-basis verifier) are clamped to now − `sip_embargo_minutes`, and Alpaca Basic's recent-SIP-data error no longer triggers the permanent SIP→IEX history downgrade. | current evidence |
@@ -15,12 +16,13 @@ results for each doc live in `research/<name>/` unless noted.
 | [`crypto_sleeve_decision_v1.md`](crypto_sleeve_decision_v1.md) | 2026-09-29 | Crypto 0.05 sleeve adds ~+1 pp/yr (t ≈ 0.8) with more drawdown and large ops burden; remove (config-disable first). | current evidence |
 | [`execution_model_audit_v1.md`](execution_model_audit_v1.md) | 2026-09-29 | Stage B and live share the execution model (decide at close, fill next open); no backtest bug; live gaps are inputs (IEX close, missed sessions, latch fixed in ebcae9c). | current evidence; superseded in part (§1 live column and §4 predate waves 2a/2b: early-close flush, deferred-decision retry, forming-bar catch-up fix) |
 | [`rule_variants_v1.md`](rule_variants_v1.md) | 2026-09-29 | No VT35 rule variant (exit buffers, min hold, staging, gold, T-bill parking) passes the pre-registered gate; nothing to Stage B. | current evidence |
-| [`stress_robustness_v1.md`](stress_robustness_v1.md) | 2026-09-29 | VT35 passes the small-LIVE bar on 1999–2026 history (13.1% vs SPY 8.3% CAGR, DD 47% vs 55%) but loses to SPY under short-persistence bootstrap; its BIL/SGOV adoption was later overruled by `paper_config_v2`. | current evidence |
+| [`stress_robustness_v1.md`](stress_robustness_v1.md) | 2026-09-29 | VT35 passes the small-LIVE bar on 1999–2026 history (13.8% vs SPY 8.3% CAGR, DD 49.6% vs 55.2%) but loses to SPY under short-persistence bootstrap; its BIL/SGOV adoption was later overruled by `paper_config_v2`. | current evidence |
 | [`profit_max_v1.md`](profit_max_v1.md) | 2026-09-25 (re-run 2026-09-28) | VT35 chosen as PAPER equity identity: Stage B 28.98% CAGR / 29.2% max DD vs VOO 14.5%, 2017–2026. | current evidence |
 
 Other research artifacts still in the tree:
 
-- `data/historical/stress_robustness_v1_*.csv` — inputs to `stress_robustness_v1`.
+- `data/historical/stress_robustness_v1_*.csv` — inputs to `stress_robustness_v1` (reused by `trend_robustness_v2` and `leverage_frontier_v1`).
+- `data/historical/leverage_frontier_v1_*.csv` — TQQQ/IEF/GLD/GC=F bars and FRED DGS10 for `leverage_frontier_v1`.
 - `data/historical/equity_entity_lifetimes_full_v5.csv` and the two `*_v5.manifest.json` files — canonical v5 equity inputs needed to rerun Stage B (`research/paper_config_v2/run_stage_b.py`).
 
 ## Pruned 2026-09-30

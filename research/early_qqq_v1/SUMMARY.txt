@@ -1,0 +1,56 @@
+early_qqq_v1 | I5: deliver the early leg in the unlevered fund | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production R2
+harness: PASS (24 pre-tax checks, 0 outside 0.01 pp; simulator identity True; 18 after-tax anchors, 0 outside 0.01 pp)
+early path: 164 sessions of 6680 (2.46%), mean w 0.562, mean DTB3 2.13%
+
+[base] m=2: arm  CAGR   maxDD  Calmar 2017+   P1     P2     P3   turn/yr switch/yr | m=1 CAGR maxDD | boot med, dmed vs C0, share>=C0
+  C0    15.48%   46.76%  0.331   32.71%   -0.06%   14.30%   32.71%    5.99     0.00 |   15.75%   46.41% |    7.89%   +0.000pp 100.0%
+  A1    15.34%   47.20%  0.325   32.70%   -0.31%   14.16%   32.70%    7.66     1.17 |   15.69%   46.59% |    7.70%   -0.200pp   0.4%
+  A2    14.99%   49.13%  0.305   32.34%   -0.64%   13.82%   32.34%    7.66     1.17 |   15.34%   48.54% |    7.41%   -0.506pp  33.4%
+  A3    15.39%   48.46%  0.318   32.21%   -0.02%   14.49%   32.21%    7.67     1.17 |   15.74%   47.87% |    7.58%   -0.250pp  41.5%
+
+[calibrated] m=2: arm  CAGR   maxDD  Calmar 2017+   P1     P2     P3   turn/yr switch/yr | m=1 CAGR maxDD | boot med, dmed vs C0, share>=C0
+  C0    14.90%   46.88%  0.318   31.96%   -0.41%   13.62%   31.96%    5.99     0.00 |   15.17%   46.54% |    7.43%   +0.000pp 100.0%
+  A1    14.76%   47.29%  0.312   31.96%   -0.65%   13.49%   31.96%    7.66     1.17 |   15.11%   46.68% |    7.25%   -0.174pp   0.9%
+  A2    14.42%   49.21%  0.293   31.60%   -0.98%   13.15%   31.60%    7.66     1.17 |   14.77%   48.62% |    6.97%   -0.477pp  34.1%
+  A3    14.80%   48.61%  0.305   31.46%   -0.38%   13.80%   31.46%    7.67     1.17 |   15.16%   48.01% |    7.09%   -0.270pp  40.9%
+
+turnover split (base, m=2): arm | by instrument (per year) | full: entries, exits, resizes, switches per year
+  C0  {'QLD': 5.991521730435626} | 3.0, 3.0, 55.9, 0.00
+  A1  {'QLD': 5.968939533490137, 'QQQ': 1.692867845330663} | 3.0, 3.0, 54.8, 1.17
+  A2  {'QLD': 5.968939533490137, 'SPY': 1.6936861996738144} | 3.0, 3.0, 54.9, 1.17
+  A3  {'QLD': 5.968939533490137, 'SSO': 1.696851322504799} | 3.0, 3.0, 55.3, 1.17
+
+OOS (calibrated, m=2), six windows: arm | median dCAGR | windows dCAGR >= -0.5pp | windows dDD <= +3pp | max dDD | pooled boot median dCAGR
+  A1  |  -0.120pp | 6/6 | 6/6 |  +1.40pp |  -0.114pp
+  A2  |  -0.116pp | 6/6 | 6/6 |  +1.36pp |  -0.108pp
+  A3  |  -0.177pp | 5/6 | 4/6 |  +3.23pp |  +0.050pp
+
+gates vs C0 (R2): arm | G1b G1c G2b G2c G3b G3c G4 G5b G5c G6b G6c G7 G8 G9 | T1 T2 T3 | E1 | all
+  A1  | F F P P P P F F F F F F F P | F F F | P | FAIL
+  A2  | F F F F P P F F F F F F F P | F F F | - | FAIL
+  A3  | F F F F P P F F F F P F P P | F F F | - | FAIL
+
+ETF drawdown generalisation (E1): 21/21 quality-passing (excluded: ['EWC']); share dDD <= +3pp 100.0%, median dDD +0.42pp, median dCAGR -0.147pp, share dCAGR > 0 0.0% -> E1 PASS
+analytic bounds: pre-tax saving of the swap +0.0236 pp/yr (cap-side upper bound +0.0000 pp on 14 sessions)
+
+after tax at $100k, liquidated, base financing, m=2 (progressive): arm | 2000-2026 pre/prog/DD, 2010- pre/prog/DD, 2017- pre/prog/DD | d vs C0 (prog)
+  C0  |   15.47%/  10.16%/  46.76% |   22.16%/  14.71%/  43.78% |   32.53%/  22.89%/  36.24% | +0.000pp +0.000pp +0.000pp
+  A1  |   15.33%/  10.06%/  47.20% |   22.10%/  14.66%/  44.03% |   32.52%/  22.88%/  36.31% | -0.105pp -0.049pp -0.011pp
+  A2  |   14.99%/   9.80%/  49.13% |   21.82%/  14.43%/  44.32% |   32.16%/  22.59%/  38.00% | -0.365pp -0.273pp -0.294pp
+  A3  |   15.39%/  10.10%/  48.46% |   21.79%/  14.39%/  43.76% |   32.03%/  22.47%/  38.52% | -0.058pp -0.316pp -0.419pp
+
+B1-recent (progressive, fixed 2015-09..2026-09 TRY calendar): arm | median CAGR | median d vs C0 | share > 0
+  C0  |    3.54% |   +0.000pp |   0.0%
+  A1  |    3.26% |   -0.261pp |   1.4%
+  A2  |    3.00% |   -0.549pp |  30.1%
+  A3  |    3.06% |   -0.391pp |  36.7%
+
+B2 (flat 20%, losses carried forward): arm | median CAGR | median d vs C0 | share > 0
+  C0  |    3.92% |   +0.000pp |   0.0%
+  A1  |    3.66% |   -0.273pp |   0.8%
+  A2  |    3.21% |   -0.583pp |  29.9%
+  A3  |    3.50% |   -0.428pp |  36.9%
+
+real funds (QQQ/QLD adjusted closes, 2011-01-03 -> 2026-09-21): C0   22.16% CAGR   40.21% DD, A1   22.13% CAGR   40.21% DD -> dCAGR -0.031pp, dDD -0.00pp
+
+VERDICT: worth integrating = False (no candidate passes every gate)

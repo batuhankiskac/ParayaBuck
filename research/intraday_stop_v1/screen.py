@@ -361,38 +361,50 @@ def arm_stats(dates, res, wants, start, extras, early_active=None):
     return st
 
 
-def stop_episodes(dates, nav_arm, nav_ctl, res, cooldown, opens):
+def stop_episodes(dates, nav_arm, nav_ctl, res, cooldown, opens, start):
     """Per-stop attribution (report-only, base financing, m = 2).
 
-    A stop at session i = start+k is attributed over the closes [i-1, i+cooldown+1] (the stop
-    fill, the flat sessions and the first session in which the arm is back on R2's target), as
-    the difference between the arm's and the control's NAV return over that span."""
+    A stop at session i = start+k is attributed over a tile of NAV indices that starts at k (the
+    close of i-1) and ends at min(k + cooldown + 2, the next stop's index): the stop fill, the
+    flat sessions and the re-entry session, or fewer when another stop follows immediately. Tiles
+    are disjoint, so the product of (1 + delta) over them reproduces the arm's total relative gain
+    exactly (the weights of the two arms coincide outside the tiles). delta is the multiplicative
+    relative gain, (arm return factor)/(control return factor) - 1; delta_arith is the difference
+    of the two simple returns over the same span."""
     stop, fill = res["stop"][0], res["fill"][0]
     reentry = res["reentry"][0]
+    ks = np.flatnonzero(stop)
+    last = len(nav_arm) - 1
     eps = []
-    for k in np.flatnonzero(stop):
+    for j, k in enumerate(ks):
         k = int(k)
-        j = min(k + cooldown + 2, len(nav_arm) - 1)
-        ra = float(nav_arm[j] / nav_arm[k] - 1)
-        rc = float(nav_ctl[j] / nav_ctl[k] - 1)
+        hard_end = min(k + cooldown + 2, last)
+        e = min(int(ks[j + 1]), hard_end) if j + 1 < len(ks) else hard_end
+        ra = float(nav_arm[e] / nav_arm[k] - 1)
+        rc = float(nav_ctl[e] / nav_ctl[k] - 1)
         rk = int(reentry[k])
-        eps.append({"session": dates[k + 1], "stop_fill": float(fill[k]),
+        open_r = float(opens[start + rk]) if rk >= 0 else None
+        eps.append({"session": dates[k + 1], "tile_end": dates[e], "stop_fill": float(fill[k]),
                     "reentry_session": dates[rk + 1] if rk >= 0 else None,
-                    "reentry_open": float(opens[rk + 1]) if rk >= 0 else None,
+                    "reentry_open": open_r,
                     "sessions_flat": (rk - k) if rk >= 0 else None,
-                    "reentered_above": bool(rk >= 0 and float(opens[rk + 1]) > float(fill[k])),
-                    "arm_return": ra, "r2_return": rc, "delta": ra - rc})
+                    "reentered_above": bool(open_r is not None and open_r > float(fill[k])),
+                    "arm_return": ra, "r2_return": rc, "delta": (1 + ra) / (1 + rc) - 1,
+                    "delta_arith": ra - rc})
     return eps
 
 
-def stop_summary(eps, dates):
+def stop_summary(eps, dates, nav_arm, nav_ctl):
     d = np.array([e["delta"] for e in eps]) if eps else np.array([0.0])
     yrs = trv2.calendar_years(dates[0], dates[-1])
+    prod = float(np.prod([1 + e["delta"] for e in eps])) if eps else 1.0
     return {"n_stops": len(eps), "stops_per_year": len(eps) / yrs,
             "delta_sum": float(d.sum()), "delta_median": float(np.median(d)),
             "n_saves": int((d > 0).sum()), "saves_sum": float(d[d > 0].sum()),
             "n_whipsaws": int((d < 0).sum()), "whipsaw_sum": float(d[d < 0].sum()),
             "n_reentered_above_fill": int(sum(1 for e in eps if e["reentered_above"])),
+            "product_of_1_plus_delta": prod,
+            "actual_relative_gain": float(nav_arm[-1] / nav_ctl[-1]),
             "biggest_saves": sorted(eps, key=lambda e: -e["delta"])[:5],
             "biggest_whipsaws": sorted(eps, key=lambda e: e["delta"])[:5]}
 
@@ -435,8 +447,8 @@ def run_main_full(arms, m_list=(1, 2, 4), slip=SLIP):
             if arm == "C0":
                 continue
             _, cd = STOP[arm]
-            eps = stop_episodes(dates, engines[2][arm]["nav"][0], ctl, engines[2][arm], cd, o)
-            md_out["m2"][arm]["stop_summary"] = stop_summary(eps, dates)
+            eps = stop_episodes(dates, engines[2][arm]["nav"][0], ctl, engines[2][arm], cd, o, START)
+            md_out["m2"][arm]["stop_summary"] = stop_summary(eps, dates, engines[2][arm]["nav"][0], ctl)
             md_out["m2"][arm]["stop_episodes"] = eps
         out[md] = md_out
     return out
@@ -939,7 +951,7 @@ def after_tax_bootstrap(n_paths=TAX_BOOT_PATHS, capital=TAX_CAPITAL, slip=SLIP):
                 res[mode][arm]["stops"].append(r["stops"] / r["years"])
     out = {}
     for mode in ("progressive", "flat"):
-        med = float(np.median(res[mode]["R2"]["cagr"]))
+        med = float(np.median(res[mode]["C0"]["cagr"]))
         e = {"tax_kind": mode, "n_paths": n_paths, "calendar_start": fixed_dates[0],
              "calendar_end": fixed_dates[-1], "seed": SEED, "block": BLOCK, "capital_usd": capital,
              "anchor_R2_cagr_median": {"reference": REF_R2_BOOT[mode], "reproduced": med,

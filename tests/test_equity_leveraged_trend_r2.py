@@ -377,9 +377,7 @@ def test_daily_summary_shows_the_early_re_entry_state() -> None:
     assert "early_reentry" not in message  # the phrase replaces the raw state token
     assert fields["early_reentry"] == "early re-entry 0.5x"
     assert fields["trend_state"] == "early_reentry"
-    downtrend = _strategy(vol_target=0.35).decide(
-        _context([100.0 - 0.1 * step for step in range(FIRST_DECIDABLE)])
-    )
+    downtrend = _strategy(vol_target=0.35).decide(_context([100.0 - 0.1 * step for step in range(FIRST_DECIDABLE)]))
     message, fields = build_equity_daily_summary(downtrend, None, status="submitted", decision_id="d2")
     assert "early re-entry" not in message and "downtrend" in message
     assert fields["early_reentry"] is None

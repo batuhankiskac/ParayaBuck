@@ -1,0 +1,73 @@
+{
+  "campaign": "riskoff_rotation_v3",
+  "files": [
+    {
+      "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+      "sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0"
+    },
+    {
+      "path": "data/historical/ewma_band_v1_gspc.csv",
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be"
+    },
+    {
+      "path": "data/historical/ewma_band_v1_index.csv",
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+    },
+    {
+      "path": "data/historical/ewma_band_v1_tb3ms.csv",
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf"
+    },
+    {
+      "path": "data/historical/gold_riskoff_oos_v1_gold.csv",
+      "sha256": "2df02751ae052f14e86a850662d0d91ec6cf5ca4013c2396ef28cb42c0b0de9c"
+    },
+    {
+      "path": "data/historical/gold_riskoff_oos_v1_index.csv",
+      "sha256": "66593f8d7c770f4488ebb9b5c461194799351340e94ff7b60c149ff60435cdc1"
+    },
+    {
+      "path": "data/historical/leverage_frontier_v1_daily.csv",
+      "sha256": "a6e276fb87cfae706031c756c823c7549a34f042a88c8b2c4c10a9eaa15c5ceb"
+    },
+    {
+      "path": "data/historical/leverage_frontier_v1_dgs10.csv",
+      "sha256": "68fa5881666126c7b9a4fb1b2affd93d61e543d25278a2db2ac246e4d2dc0345"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_gcf.csv",
+      "sha256": "8cf5ebb7056fadf9180804d8e5f029e0095fa845dfc8d9053721d9c276092629"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_gs10.csv",
+      "sha256": "40323f225e613a19a4eec7eef20523dec10764de21c70cd1416a7379fb7f13b6"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_ief.csv",
+      "sha256": "eb200f6924d68da013a029df1375537236adf5ccd4b1db41a59bbd9535dedb52"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_irltlt_dem.csv",
+      "sha256": "37a569bef54ee10a5fe4b0c4b2218cb62a17994ada631ed0f442b0f7e24f5e31"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_irltlt_gbp.csv",
+      "sha256": "b14ffe0232b2e0df9ea1fb56efa75354dce53967ff90470a6a9c040c00dac2e3"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_irltlt_jpy.csv",
+      "sha256": "12ae6267ae2ae67135bdb2ad17696d91c07e8142a5d3615f182e1626b640128c"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_tlt.csv",
+      "sha256": "c15f73e612f4583bf05146452fe95780647a16212444a3583e1a9fb95ff8e0d2"
+    },
+    {
+      "path": "data/historical/stress_robustness_v1_daily.csv",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+    },
+    {
+      "path": "data/historical/stress_robustness_v1_dtb3.csv",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c"
+    }
+  ]
+}

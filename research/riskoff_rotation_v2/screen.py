@@ -601,7 +601,7 @@ def _gold_splice(days):
     gold_level_arr = gro.gold_level(days, fix, alignment="next")
     g_on0, g_id0 = gro.gold_factors(gold_level_arr)
     arr_lf = _lf_arr_for_days(days)
-    g_on1, g_id1 = lf.gold_factors(days, arr_lf)
+    g_on1, g_id1, _ = lf.gold_factors(days, arr_lf)
     g_on = np.where(np.isnan(g_on0), g_on1, g_on0)
     g_id = np.where(np.isnan(g_id0), g_id1, g_id0)
     return g_on, g_id, fix
@@ -781,7 +781,7 @@ def boot_window(days, o, c, y, start, y10, rng):
         gold_w = np.where(gold_active, gold_vt_w, 0.0)
 
         # C0 sim
-        nav_c0 = trv2.simulate_multi(eq_o[:, None, :], eq_c[:, None, :], eq_target[:, None, :], COST_PER_SIDE * 2, start)[0]
+        nav_c0 = trv2.simulate_multi(eq_o[:, None, :], eq_c[:, None, :], eq_target[:, None, :], COST_PER_SIDE * 2, START)[0]
         c0_acc.append((nav_c0[:, -1] / nav_c0[:, 0]) ** (252 / (nav_c0.shape[1] - 1)))
 
         # R4 sim
@@ -792,7 +792,7 @@ def boot_window(days, o, c, y, start, y10, rng):
         tot = wants_r4.sum(axis=1, keepdims=True)
         f = np.where(tot > CAP, CAP / np.where(tot > 0, tot, 1.0), 1.0)
         wants_r4 = wants_r4 * f
-        nav_r4 = trv2.simulate_multi(opens_r4, closes_r4, wants_r4, COST_PER_SIDE * 2, start)[0]
+        nav_r4 = trv2.simulate_multi(opens_r4, closes_r4, wants_r4, COST_PER_SIDE * 2, START)[0]
         r4_acc.append((nav_r4[:, -1] / nav_r4[:, 0]) ** (252 / (nav_r4.shape[1] - 1)))
 
     c0 = np.concatenate(c0_acc)

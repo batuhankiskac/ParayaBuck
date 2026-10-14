@@ -27,6 +27,8 @@ new here.
 
 from __future__ import annotations
 
+import bisect
+from collections import defaultdict
 import csv
 import importlib.util
 import json
@@ -565,7 +567,7 @@ def harness():
     wq = wants_for(e2, v20)
     act = np.atleast_2d(e2)
     nav_a = simulate_two(o[None, :], c[None, :], wq, act, COST_PER_SIDE * 2, START)[0][0]
-    nav_b = trv2.simulate_multi(o, c, wq[:, None, :], COST_PER_SIDE * 2, START)[0]
+    nav_b = trv2.simulate_multi(o, c, wq[:, None, :], COST_PER_SIDE * 2, START)[0][0]
     nav_c = simulate_band(o, c, wq, COST_PER_SIDE * 2, START, C0_BAND)[0][0]
     sim_equal = bool(np.array_equal(nav_a, nav_b)) and bool(np.array_equal(nav_a, nav_c))
     ok = (bad == 0) and sim_equal
@@ -844,11 +846,17 @@ CORE_KEYS = [f"{g}_{md}" for g in ("G1", "G2", "G3") for md in FIN]
 
 
 # ============================================================================= after tax
-def _share_books(qa, qb):
-    """One Turkish tax base: the bill book's realised gains feed the same annual dicts as the QLD book."""
-    for k in ("year_gain", "year_div", "year_wht", "gain_by_reason", "pos_gain_by_reason",
-              "neg_gain_by_reason"):
+def _share_books(qa, qb, taxable=True):
+    """One Turkish tax base: the bill book's realised gains feed the same annual dicts as the QLD book.
+
+    taxable=False is a report-only diagnostic (not a pre-registered arm): the bill book keeps its own
+    year_gain/year_div/year_wht, so BIL*'s gains are recorded but never taxed -- the upper bound on
+    what the sleeve would be worth if real BIL's monthly distributions were treated as dividends
+    instead of a taxed-on-sale capital gain."""
+    for k in ("gain_by_reason", "pos_gain_by_reason", "neg_gain_by_reason"):
         setattr(qb, k, getattr(qa, k))
+    for k in ("year_gain", "year_div", "year_wht"):
+        setattr(qb, k, getattr(qa, k) if taxable else defaultdict(float))
 
 
 def _sell_pro_rata(need, idx, books, cashbox, cost, reason):
@@ -869,7 +877,7 @@ def _sell_pro_rata(need, idx, books, cashbox, cost, reason):
     return n
 
 
-def tax_run(capital, i0, i1, days, mkt, oq, cq, ob, cb, wq, act, use_bill, mode):
+def tax_run(capital, i0, i1, days, mkt, oq, cq, ob, cb, wq, act, use_bill, mode, bill_taxable=True):
     """Two-book after-tax strategy run (QLD* + optional BIL*).
 
     The session loop, trade rules, fee accounting, tax assessment, instalment funding and
@@ -878,6 +886,8 @@ def tax_run(capital, i0, i1, days, mkt, oq, cq, ob, cb, wq, act, use_bill, mode)
     whose gains enter the same annual net realised gain. mode in {"pre_tax", "progressive",
     "flat"}. Opened `days[i0-1]` must exist."""
     days = list(days)
+    if not isinstance(i0, int):
+        i0, i1 = bisect.bisect_left(days, i0), bisect.bisect_right(days, i1) - 1
     oq, cq, wq, act = (np.asarray(x, dtype=float).flatten() for x in (oq, cq, wq, act))
     ob = np.asarray(ob, dtype=float).flatten() if use_bill else np.zeros(len(days))
     cb = np.asarray(cb, dtype=float).flatten() if use_bill else np.ones(len(days))
@@ -893,7 +903,7 @@ def tax_run(capital, i0, i1, days, mkt, oq, cq, ob, cb, wq, act, use_bill, mode)
         qa = te.BaseAccount(mkt, rg, 0.0, cashbox)
         qb = te.BaseAccount(mkt, rg, 0.0, cashbox)
         pays = te.instalments(days, i0, i1)
-    _share_books(qa, qb)
+    _share_books(qa, qb, bill_taxable)
     cashbox["v"] = float(capital)  # the account constructors reset the shared cashbox
 
     nav = np.empty(i1 - i0 + 2)
@@ -1048,6 +1058,12 @@ def after_tax_stage(legs, o, c, bo, bc, days):
                            "trades_per_year": res["strategy_trades"] / res["years"],
                            "sells_per_year": res["sells"] / res["years"],
                            "tax_funding_sales": res["tax_funding_sales"]}
+            if USE_BILL[arm]:
+                res = tax_run(TAX_CAPITAL, a, b, days, mkt, o, c, bo, bc, w[0], act[0],
+                              True, "progressive", bill_taxable=False)
+                r["progressive_bill_untaxed"] = {
+                    "cagr": res["cagr_usd_liquidated"], "max_dd": res["max_dd_nav_usd"],
+                    "tax_usd": res["tax_total_usd_at_payment_fx"], "note": "report-only diagnostic"}
             out["windows"][wn][arm] = r
         # anchors: C0 single-leg must reproduce vt_level_tax_v1
         ref = TAX_ANCHORS[wn]
@@ -1091,7 +1107,7 @@ def after_tax_bootstrap(n_paths=TAX_BOOT_PATHS, capital=TAX_CAPITAL):
     carried forward): block-20 stationary bootstrap, 10-year paths on the fixed 2015-09 -> 2026-09
     calendar with its fixed FX. Reports median delta CAGR and share > 0 for RS-R2 and RS-C0."""
     all_days, arr, y, fixed_dates = tax_boot_calendar()
-    fixed_fx = np.array([_fx_by_date()[d] for d in fixed_dates], dtype=float)
+    fixed_fx = fx_at(fixed_dates)
     base_mkt = te.load_market(FX_CSV, UFE_CSV, all_days)
     ufe = base_mkt.ufe
     q = arr["QQQ"]
@@ -1164,7 +1180,9 @@ def after_tax_bootstrap(n_paths=TAX_BOOT_PATHS, capital=TAX_CAPITAL):
 _FX_CACHE = {}
 
 
-def _fx_by_date():
+def fx_at(dates):
+    """CBRT USD/TRY forex buying, forward-filled to `dates` -- the same alignment te.load_market
+    applies (bisect_right - 1). Identical to vt_level_tax_v1's fixed FX on its own calendar."""
     if not _FX_CACHE:
         fd, fv = [], []
         with FX_CSV.open() as fh:
@@ -1173,7 +1191,8 @@ def _fx_by_date():
                 fv.append(float(r["usdtry_forex_buying"]))
         _FX_CACHE["dates"] = fd
         _FX_CACHE["fx"] = fv
-    return dict(zip(_FX_CACHE["dates"], _FX_CACHE["fx"]))
+    fd, fv = _FX_CACHE["dates"], _FX_CACHE["fx"]
+    return np.array([fv[bisect.bisect_right(fd, d) - 1] for d in dates], dtype=float)
 
 
 # ----------------------------------------------------------------------------- smoke (synthetic only)
@@ -1256,7 +1275,7 @@ def main() -> None:
 
     # after-tax anchors and cross-check (real data, but not a candidate arm)
     days, o, c, legs, bo, bc = tax_inputs()
-    tax = after_tax_stage2(legs, o, c, bo, bc, days)
+    tax = after_tax_stage(legs, o, c, bo, bc, days)
     for wn, v in tax["anchors"].items():
         print(f"tax anchor {wn}: pre_tax {v['pre_tax']['diff_pp']:+.5f} progressive "
               f"{v['progressive']['diff_pp']:+.5f} maxDD {v['progressive_max_dd']['diff_pp']:+.5f} pp")
@@ -1433,6 +1452,14 @@ def main() -> None:
                      f"{r['progressive']['trades_per_year']:8.2f} {r['progressive']['sells_per_year']:8.2f}")
     L.append("  RS beats R2 after tax in all three windows: " +
              " ".join(f"{wn}={'Y' if beats_r2[wn] else 'N'}" for wn in TAX_WINDOWS) + f" -> {after_tax_ok and all(beats_r2.values())}")
+    L.append("  report-only diagnostic, after-tax CAGR with the BIL* book NOT taxed (upper bound for a"
+             " dividend-treated bill sleeve): window | S2 untaxed | RS untaxed | C0 | R2 | R2 untaxed-bill vs R2")
+    for wn in TAX_WINDOWS:
+        w = tax["windows"][wn]
+        L.append(f"    {wn:20s} S2 {p(w['S2']['progressive_bill_untaxed']['cagr'])} RS "
+                 f"{p(w['RS']['progressive_bill_untaxed']['cagr'])} | C0 {p(w['C0']['progressive']['cagr'])} "
+                 f"R2 {p(w['R2']['progressive']['cagr'])} | RS-R2 "
+                 f"{(w['RS']['progressive_bill_untaxed']['cagr'] - w['R2']['progressive']['cagr']) * 100:+.2f}pp")
     L.append("")
     L.append(f"after-tax bootstrap (block-20, {TAX_BOOT_PATHS} paths, {TAX_BOOT_LO}..{TAX_BOOT_HI}, fixed FX, $100k):")
     for label, res in (("B1-recent progressive", b1), ("B2 flat 20%", b2)):

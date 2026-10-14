@@ -58,7 +58,7 @@ G6 return at m=1; G9 turnover <= 2 x C0).
 OOS reduced G7 (pre-registered because relative rotation needs two aligned
 indices): windows (1) ^IXIC vs ^GSPC 1975-01-02 -> 1999-12-31 (measured from
 1975 on common US trading days; GSPC leg from ewma_band_v1_gspc, IXIC leg
-from ewma_band_v1_index) and (2) ^GDAXI vs ^FTSE 1989-01-02 -> 2026-09-29
+from ewma_band_v1_index) and (2) ^GDAXI vs ^FTSE 1989-01-11 -> 2026-09-29
 (common European trading days). Gate: pooled median delta >=0, all windows
 with delta >= -0.5 pp, all windows with max-DD delta <= +3 pp and worst
 +8 pp.

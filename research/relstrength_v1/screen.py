@@ -54,7 +54,7 @@ GAP_SPLIT = 0.05
 ARMS = ("C0", "Q1", "Q2", "Q3", "Q4")
 CANDIDATES = ("Q1", "Q2", "Q3", "Q4")
 OOS_PAIRS = (("IXIC_GSPC", "^IXIC", "^GSPC", "1975-01-02", "1999-12-31"),
-              ("GDAXI_FTSE", "^GDAXI", "^FTSE", "1989-01-02", "2026-09-29"))
+              ("GDAXI_FTSE", "^GDAXI", "^FTSE", "1989-01-11", "2026-09-29"))
 
 
 def seg(dates, nav, a, b):
@@ -358,31 +358,52 @@ def placeholder_open(o, h, lo, c):
             or o > h * (1 + 1e-9) or o < lo * (1 - 1e-9))
 
 
-def load_pair(symQ, symS, meas_from, last_date):
-    rowsQ = {}; rowsS = {}
+def _gspc_rows():
+    out = {}
+    with GSPC.open() as fh:
+        for r in csv.DictReader(fh):
+            out[r["date"]] = r
+    return out
+
+
+def _index_rows(sym):
+    out = {}
     with INDEX.open() as fh:
         for r in csv.DictReader(fh):
-            if r["symbol"] == symQ:
-                rowsQ[r["date"]] = r
-            if r["symbol"] == symS:
-                rowsS[r["date"]] = r
+            if r["symbol"] == sym:
+                out[r["date"]] = r
+    return out
+
+
+def _series_rows(sym):
+    if sym == "^GSPC":
+        return _gspc_rows()
+    return _index_rows(sym)
+
+
+def _to_series(rows, dates):
+    c = np.array([float(rows[d]["close"]) for d in dates])
+    o = np.empty_like(c)
+    for k, d in enumerate(dates):
+        r = rows[d]
+        if "high" in r:
+            f = lambda x: None if x == "" else float(x)
+            op, h, lo, cl = f(r["open"]), f(r["high"]), f(r["low"]), float(r["close"])
+            o[k] = cl if k == 0 else (c[k-1] if placeholder_open(op, h, lo, cl) else op)
+        else:
+            op = float(r["open"]); cl = float(r["close"])
+            o[k] = cl if k == 0 else (c[k-1] if op <= 0 else op)
+    return o, c
+
+
+def load_pair(symQ, symS, meas_from, last_date):
+    rowsQ = _series_rows(symQ)
+    rowsS = _series_rows(symS)
     d3, tb = load_rates()
     days = sorted(set(rowsQ) & set(rowsS))
     days = [d for d in days if ("1900-01-01" <= d <= last_date)]
-    # filter start not here; keep all for warmup
-    cQ = np.array([float(rowsQ[d]["close"]) for d in days])
-    cS = np.array([float(rowsS[d]["close"]) for d in days])
-    oQ = np.empty_like(cQ); oS = np.empty_like(cS)
-    for k, d in enumerate(days):
-        r = rowsQ[d]
-        f = lambda x: None if x == "" else float(x)
-        op, h, lo, cl = f(r["open"]), f(r["high"]), f(r["low"]), float(r["close"])
-        oQ[k] = cl if k == 0 else (cQ[k-1] if placeholder_open(op, h, lo, cl) else op)
-    for k, d in enumerate(days):
-        r = rowsS[d]
-        f = lambda x: None if x == "" else float(x)
-        op, h, lo, cl = f(r["open"]), f(r["high"]), f(r["low"]), float(r["close"])
-        oS[k] = cl if k == 0 else (cS[k-1] if placeholder_open(op, h, lo, cl) else op)
+    oQ, cQ = _to_series(rowsQ, days)
+    oS, cS = _to_series(rowsS, days)
     y = rate_on(days, d3, tb)
     start = next(i for i, d in enumerate(days) if d >= meas_from)
     assert start >= START

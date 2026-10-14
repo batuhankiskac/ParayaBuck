@@ -1,0 +1,22 @@
+relstrength_v1 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production E2 1.1.0
+harness: PASS
+
+[base] m=2: arm CAGR maxDD Calmar 2017+ turn/yr | boot median diff | m=1 CAGR
+  C0      14.67%   49.56% 0.296   32.44%  5.97 | +0.000pp |   14.95%
+  Q1      13.44%   48.72% 0.276   29.66%  8.00 | -0.890pp |   13.80%
+  Q2      12.99%   45.75% 0.284   28.53%  7.81 | -0.832pp |   13.34%
+  Q3      11.97%   55.85% 0.214   23.59% 17.52 | -1.492pp |   12.75%
+  Q4      10.55%   56.25% 0.188   23.89% 18.09 | -1.514pp |   11.35%
+
+[calibrated] m=2: arm CAGR maxDD Calmar 2017+ turn/yr | boot median diff | m=1 CAGR
+  C0      14.10%   49.65% 0.284   31.69%  5.97 | +0.000pp |   14.38%
+  Q1      12.86%   48.83% 0.263   28.92%  8.00 | -0.901pp |   13.23%
+  Q2      12.42%   45.85% 0.271   27.81%  7.81 | -0.836pp |   12.77%
+  Q3      11.37%   55.99% 0.203   22.87% 17.52 | -1.542pp |   12.15%
+  Q4       9.96%   56.39% 0.177   23.17% 18.09 | -1.568pp |   10.76%
+
+gates:
+  Q1    G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G4=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G7=F G8=F G9=P -> FAIL
+  Q2    G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G4=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G7=F G8=F G9=P -> FAIL
+  Q3    G1_base=F G1_calibrated=F G2_base=F G2_calibrated=F G3_base=F G3_calibrated=F G4=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G7=F G8=F G9=F -> FAIL
+  Q4    G1_base=F G1_calibrated=F G2_base=F G2_calibrated=F G3_base=F G3_calibrated=F G4=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G7=F G8=F G9=F -> FAIL

@@ -397,7 +397,7 @@ def run_main(arms, extras=False, m_list=(1, 2)):
                     w = build_short_wants(arm, votes, inp["vol_ql"], short_vol_use, inp["vol_low"])
                     opens = np.stack([ql_o, sho], axis=0)
                     closes = np.stack([ql_c, shc], axis=0)
-                    nav, turn, ntr = simulate_multi(opens, closes, w, cost, START)
+                    nav, turn, ntr = trv2.simulate_multi(opens, closes, w, cost, START)
                     codes_p = None
                     traded_p = None
                     armw = w[0] if w.ndim == 3 else w
@@ -522,7 +522,7 @@ def boot_main(arms):
                         sho, shc = ipsq_o, ipsq_c
                     opens_all = np.stack([so, sho], axis=1)
                     closes_all = np.stack([scl, shc], axis=1)
-                    nav, turn, _ = simulate_multi(opens_all, closes_all, w, COST_PER_SIDE * 2, start)
+                    nav, turn, _ = trv2.simulate_multi(opens_all, closes_all, w, COST_PER_SIDE * 2, start)
                 k = nav.shape[1] - 1
                 cg[(md, arm)].append((nav[:, -1] / nav[:, 0]) ** (252 / k) - 1)
                 tv[(md, arm)].append(turn / (k / 252))
@@ -672,7 +672,7 @@ def oos_window(days, o, c, y, start, arms):
                 sho, shc = psq_o, psq_c
             opens = np.stack([ql_o, sho], axis=0)
             closes = np.stack([ql_c, shc], axis=0)
-            nav, turn, ntr = simulate_multi(opens, closes, w, cost, start)
+            nav, turn, ntr = trv2.simulate_multi(opens, closes, w, cost, start)
             nav = nav[0]; turn = turn[0]
             cg = float(trv2.cagr(nav[0], nav[-1], years))
             dd = float(trv2.max_dd(nav)[0])
@@ -733,7 +733,7 @@ def boot_oos_market(key, rng, arms):
                     sho, shc = ipsq_o, ipsq_c
                 opens_all = np.stack([so, sho], axis=1)
                 closes_all = np.stack([sc, shc], axis=1)
-                nav = simulate_multi(opens_all, closes_all, w, COST_PER_SIDE * 2, START)[0]
+                nav = trv2.simulate_multi(opens_all, closes_all, w, COST_PER_SIDE * 2, START)[0]
             k = nav.shape[1] - 1
             acc[arm].append((nav[:, -1] / nav[:, 0]) ** (252 / k) - 1)
     return {a: np.concatenate(v) for a, v in acc.items()}

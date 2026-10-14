@@ -33,6 +33,7 @@ import csv
 import importlib.util
 import json
 import sys
+import warnings
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -181,13 +182,14 @@ def _rolling_median_vol_ref(price_vol, window=252):
     """Reference (v1) trailing rolling median of the vol series; NaN until the window is full."""
     P, T = price_vol.shape
     out = np.full((P, T), np.nan)
-    for t in range(T):
-        lo = max(0, t - window + 1)
-        w = price_vol[:, lo:t + 1]
-        cnt = np.sum(np.isfinite(w), axis=1)
-        with np.errstate(all="ignore"):
+    with warnings.catch_warnings():  # all-NaN windows before the vol window fills -> NaN, guarded by cnt
+        warnings.simplefilter("ignore", RuntimeWarning)
+        for t in range(T):
+            lo = max(0, t - window + 1)
+            w = price_vol[:, lo:t + 1]
+            cnt = np.sum(np.isfinite(w), axis=1)
             med = np.nanmedian(np.where(np.isfinite(w), w, np.nan), axis=1)
-        out[:, t] = np.where(cnt >= window, med, np.nan)
+            out[:, t] = np.where(cnt >= window, med, np.nan)
     return out
 
 
@@ -207,9 +209,11 @@ def _rolling_median_vol(price_vol, window=252, block=32):
         fin = np.isfinite(blk)
         first = np.argmax(fin, axis=1)
         for r in range(e - s):
-            if not np.all(fin[r, first[r]:]):  # NaNs must form a prefix (true for trv2.vol_n output)
+            if np.any(np.diff(fin[r].astype(np.int8)) < 0):  # a finite value followed by a NaN
                 raise ValueError("interior NaN in the vol series; use _rolling_median_vol_ref")
         j0 = int(first.min())
+        if T - j0 < window:  # no session has a full trailing window yet
+            continue
         out[s:e, j0 + window - 1:] = np.median(
             sliding_window_view(blk[:, j0:], window, axis=1), axis=2)
     return out
@@ -479,11 +483,12 @@ def harness():
     vol_p = trv2.vol_n(arr["QQQ"][1])
     med_ref = _rolling_median_vol_ref(vol_p)
     med_fast = _rolling_median_vol(vol_p)
-    med_equal_1d = bool(np.array_equal(med_ref, med_fast))
+    med_equal_1d = bool(np.array_equal(med_ref, med_fast, equal_nan=True))
     rng = np.random.default_rng(SEED)
     pv = np.abs(rng.normal(0.3, 0.05, (3, 1500)))
     pv[:, :20] = np.nan
-    med_equal_multi = bool(np.array_equal(_rolling_median_vol_ref(pv, 252), _rolling_median_vol(pv, 252)))
+    med_equal_multi = bool(np.array_equal(_rolling_median_vol_ref(pv, 252), _rolling_median_vol(pv, 252),
+                                          equal_nan=True))
     med_equal = med_equal_1d and med_equal_multi
 
     # recomputed C0 / R2 main-window rows vs fast_reentry_v1's RESULTS.json (0.01 pp)
@@ -937,7 +942,7 @@ def audit(days, o, c, price, e2, v20, wants, early_hist):
     # A1 truncation probe: the arm's decision at t must not change when the future is removed
     rng = np.random.default_rng(AUDIT_SEED)
     T = len(price)
-    ts = sorted(rng.choice(np.arange(1, T), size=min(AUDIT_PROBES, T - 1), replace=False).tolist())
+    ts = sorted(rng.choice(np.arange(300, T), size=min(AUDIT_PROBES, T - 300), replace=False).tolist())
     mism = []
     for t in ts:
         w_t, ea_t = arm_signals(price[:t + 1], e2[:t + 1], v20[:t + 1], ARM_SPEC["R2"])

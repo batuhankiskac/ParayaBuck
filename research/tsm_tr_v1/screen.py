@@ -202,15 +202,17 @@ def don_up(c, n=DON_N):
     return up
 
 
-def variant_up(price, tr, bills, spec):
+def variant_up(price, tr, rates, spec):
     """Production E2's 2-of-3 vote with substituted TSM/DON inputs.
 
     spec = (tsm_series, hurdle, don_series) as in e2_integration_v1/deviation.py: tsm_series is
-    "price" or "tr", don_series is "price" or "tr", and `bills` is the cumulative hurdle level
-    (`tr`/`price` are the level series). SMA is always on the price close. TSM compares the
-    n-session return of its series with the n-session bill return, so hurdle 0.0 with a flat
-    bill series is "return > 0"."""
-    tsm_series, _, don_series = spec
+    "price" or "tr", don_series is "price" or "tr", and `hurdle` is "dtb3" (the cumulative level
+    of the `rates` series) or a flat annual rate (0.0, 0.02). SMA is always on the price close.
+    TSM compares the n-session return of its series with the n-session bill return, so hurdle 0.0
+    on a flat bill level is "return > 0"."""
+    tsm_series, hurdle, don_series = spec
+    T = np.atleast_2d(np.asarray(price, dtype=float)).shape[1]
+    bills = (bill_level(rates) if hurdle == "dtb3" else flat_bills(T, float(hurdle)))
     tsm_in = tr if tsm_series == "tr" else price
     don_in = tr if don_series == "tr" else price
     s = trv2.sma_up(price, SMA_N).astype(int)
@@ -221,8 +223,7 @@ def variant_up(price, tr, bills, spec):
 
 def e2_up(price):
     """Production E2 vote on the price close: at least 2 of SMA200, TSM252 (> 0), DON126."""
-    return variant_up(price, price, flat_bills(np.asarray(np.atleast_2d(price)).shape[1], 0.0),
-                      VARIANTS["P0"])
+    return variant_up(price, price, np.zeros(np.atleast_2d(np.asarray(price)).shape[1]), VARIANTS["P0"])
 
 
 # ----------------------------------------------------------------------------- production sizing
@@ -295,12 +296,12 @@ def early_path(price, e2_on, vol_instr, comps=None):
     return raw * fcap, early_hist
 
 
-def arm_legs(price, tr, bills, vol_instr, arm, comps=None):
+def arm_legs(price, tr, rates, vol_instr, arm, comps=None):
     """(QLD* targets [1,T], effective-on [1,T], vote [1,T]) of one arm.
 
     The variant supplies the 2-of-3 vote; ARM_EARLY arms add production's early re-entry path,
     so effective-on = the variant's vote OR its early path."""
-    vote = variant_up(price, tr, bills, VARIANTS[ARM_VARIANT[arm]])
+    vote = variant_up(price, tr, rates, VARIANTS[ARM_VARIANT[arm]])
     if not ARM_EARLY[arm]:
         return wants_for(vote, vol_instr), np.atleast_2d(vote), np.atleast_2d(vote)
     w, ea = early_path(price, vote, vol_instr, comps)
@@ -428,7 +429,7 @@ def main_inputs(spread):
     q = arr["QQQ"]
     o, c = trv2.synthetic_2x(q[0], q[1], q[2], y + spread, EXP_Q)
     return {"days": days, "arr": arr, "y": y, "o": o, "c": c, "price": q[1],
-            "tr": tr_level(q[1], q[2])[0], "bills": bill_level(y)[0], "vol": trv2.vol_n(c)[0]}
+            "tr": tr_level(q[1], q[2])[0], "rates": y, "vol": trv2.vol_n(c)[0]}
 
 
 def decision_changes(dates, vote, on_eff, base_vote, base_on):
@@ -457,11 +458,11 @@ def run_main(arms, extras=False, m_list=(1, 2)):
     res = {}
     for md, spread in FIN.items():
         mi = main_inputs(spread)
-        days, price, tr, bills, o, c = (mi["days"], mi["price"], mi["tr"], mi["bills"], mi["o"], mi["c"])
+        days, price, tr, rates, o, c = (mi["days"], mi["price"], mi["tr"], mi["rates"], mi["o"], mi["c"])
         v20 = mi["vol"]
         dates = days[START - 1:]
         comps = early_components(price)
-        legs = {arm: arm_legs(price, tr, bills, v20, arm, comps) for arm in arms}
+        legs = {arm: arm_legs(price, tr, rates, v20, arm, comps) for arm in arms}
         res[md] = {}
         for m in m_list:
             hm, navs = {}, {}
@@ -500,7 +501,7 @@ def e2_only_stats(m_list=(1, 2)):
         o, c, v20 = mi["o"], mi["c"], mi["vol"]
         for m in m_list:
             for name, spec in specs.items():
-                vote = variant_up(mi["price"], mi["tr"], mi["bills"], spec)
+                vote = variant_up(mi["price"], mi["tr"], mi["rates"], spec)
                 nav, turn, _, _, _ = simulate_band(o, c, wants_for(vote, v20), COST_PER_SIDE * m,
                                                    START, C0_BAND)
                 years = trv2.calendar_years(mi["days"][START - 1], mi["days"][-1])
@@ -525,7 +526,7 @@ def harness():
     dev = json.loads(DEVIATION.read_text())
     e2o = e2_only_stats((1, 2))
     for name, arm in REF_VARIANT_ARM.items():
-        for (md, m), x in ((k, v) for k, v in e2o.items() if k[0] == name):
+        for (nm, md, m), x in ((k, v) for k, v in e2o.items() if k[0] == name):
             r = dev[f"{md}_m{m}"]["arms"][arm]
             for k in ("cagr", "max_dd", "turnover_annual"):
                 d = (x[k] - r[k]) * (100 if k != "turnover_annual" else 1)
@@ -534,7 +535,7 @@ def harness():
                     bad += 1
     # production-vote identity: the variant machinery with P0's spec == the direct construction
     mi = main_inputs(0.0)
-    vote_p0 = variant_up(mi["price"], mi["tr"], mi["bills"], VARIANTS["P0"])
+    vote_p0 = variant_up(mi["price"], mi["tr"], mi["rates"], VARIANTS["P0"])
     p2 = np.atleast_2d(mi["price"])
     t_price = np.zeros(p2.shape, dtype=bool)
     t_price[:, TSM_N:] = p2[:, TSM_N:] / p2[:, :-TSM_N] > 1.0
@@ -606,13 +607,12 @@ def boot_main(arms):
         qo = np.concatenate([one, qc[:, :-1] * r_on_tr], axis=1)
         pc = np.concatenate([one, np.cumprod(r_on_p * r_id, axis=1)], axis=1)
         yyp = np.concatenate([yy, yy[:, -1:]], axis=1)
-        bills = bill_level(yyp)
         comps = early_components(pc)
         for md in FIN:
             so, scl = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp + FIN[md], EXP_Q)
             vol_instr = trv2.vol_n(scl)
             for arm in arms:
-                w, _, _ = arm_legs(pc, qc, bills, vol_instr, arm, comps)
+                w, _, _ = arm_legs(pc, qc, yyp, vol_instr, arm, comps)
                 nav, turn, _, _, _ = simulate_band(so, scl, w, COST_PER_SIDE * 2, start, C0_BAND)
                 k = nav.shape[1] - 1
                 cg[(md, arm)].append((nav[:, -1] / nav[:, 0]) ** (252 / k) - 1)
@@ -716,14 +716,13 @@ def oos_window(days, o, c, y, start, arms):
     so, sc = trv2.synthetic_2x(o, c, np.zeros_like(c), y + EXTRA_FIN, EXP_Q)
     vol_instr = trv2.vol_n(sc)
     comps = early_components(c)
-    bills = bill_level(y[None, :])
     dates = days[start - 1:]
     years = trv2.calendar_years(dates[0], dates[-1])
-    vote_p0 = variant_up(c, c, bills, VARIANTS["P0"])
+    vote_p0 = variant_up(c, c, y, VARIANTS["P0"])
     res = {"window": {"start": dates[1], "end": dates[-1], "sessions": len(dates) - 1},
            "mean_rate_off": float(y[start - 1:-1][~vote_p0[0, start - 1:-1]].mean())}
     for arm in arms:
-        w, _, _ = arm_legs(c, c, bills, vol_instr, arm, comps)
+        w, _, _ = arm_legs(c, c, y, vol_instr, arm, comps)
         nav, turn, _, codes, traded = simulate_band(so, sc, w, COST_PER_SIDE * 2, start, C0_BAND)
         nav = nav[0]
         ev = event_stats(dates, codes[0], traded[0])
@@ -756,12 +755,11 @@ def boot_oos_market(key, rng, arms):
         oo = np.concatenate([np.ones((P, 1)), cc[:, :-1] * r_on], axis=1)
         yy = y[idx - 1]
         yyp = np.concatenate([yy, yy[:, -1:]], axis=1)
-        bills = bill_level(yyp)
         so, sc = trv2.synthetic_2x(oo, cc, np.zeros_like(cc), yyp + EXTRA_FIN, EXP_Q)
         vol_instr = trv2.vol_n(sc)
         comps = early_components(cc)
         for arm in arms:
-            w, _, _ = arm_legs(cc, cc, bills, vol_instr, arm, comps)
+            w, _, _ = arm_legs(cc, cc, yyp, vol_instr, arm, comps)
             nav = simulate_band(so, sc, w, COST_PER_SIDE * 2, START, C0_BAND)[0]
             k = nav.shape[1] - 1
             acc[arm].append((nav[:, -1] / nav[:, 0]) ** (252 / k) - 1)
@@ -953,9 +951,9 @@ def tax_inputs():
     q = arr["QQQ"]
     o, c = trv2.synthetic_2x(q[0], q[1], q[2], y, EXP_Q)  # base financing, as vt_level_tax_v1
     price, v20 = q[1], trv2.vol_n(c)[0]
-    tr, bills = tr_level(q[1], q[2])[0], bill_level(y)[0]
+    tr = tr_level(q[1], q[2])[0]
     comps = early_components(price)
-    legs = {a: arm_legs(price, tr, bills, v20, a, comps) for a in ARMS}
+    legs = {a: arm_legs(price, tr, y, v20, a, comps) for a in ARMS}
     return days, o, c, legs
 
 
@@ -1064,13 +1062,12 @@ def after_tax_bootstrap(n_paths=TAX_BOOT_PATHS, capital=TAX_CAPITAL):
         qo = np.concatenate([one, qc[:, :-1] * r_on_tr], axis=1)
         pc = np.concatenate([one, np.cumprod(r_on_p * r_id, axis=1)], axis=1)
         yyp = np.concatenate([yy, yy[:, -1:]], axis=1)
-        bills = bill_level(yyp)
         so, sc = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp + 0.0, EXP_Q)
         vol = trv2.vol_n(sc)
         comps = early_components(pc)
         mkt = te.Market(fixed_dates, fixed_fx, ufe)
         for arm in ARMS:
-            w = arm_legs(pc, qc, bills, vol, arm, comps)[0]
+            w = arm_legs(pc, qc, yyp, vol, arm, comps)[0]
             for mode in ("progressive", "flat"):
                 r = tax_run(capital, i0, i1, fixed_dates, mkt, so[0], sc[0], w[0], mode)
                 if not (r["terminal_usd_liquidated"] > 0) or r["terminal_usd_liquidated"] != r["terminal_usd_liquidated"]:
@@ -1135,12 +1132,12 @@ def smoke():
     days = [(d0 + timedelta(days=k)).isoformat() for k in range(n)]
     div = np.where(np.arange(n) % 63 == 0, 0.002 * price, 0.0)  # quarterly synthetic dividends
     so, sc = trv2.synthetic_2x(o, price, div, y, EXP_Q)
-    tr, bills = tr_level(price, div)[0], bill_level(y[None, :])[0]
+    tr = tr_level(price, div)[0]
     v20 = trv2.vol_n(sc)[0]
     comps = early_components(price)
     checks, outs = {}, {}
     for arm in ARMS:
-        w, act, vote = arm_legs(price, tr, bills, v20, arm, comps)
+        w, act, vote = arm_legs(price, tr, y, v20, arm, comps)
         assert w.shape == (1, n) and np.all(w <= CAP + 1e-12) and np.all(w >= 0), arm
         assert not np.any(np.atleast_2d(vote) & np.atleast_2d(act) & ~np.atleast_2d(vote)), arm
         nav, turn, _, _, _ = simulate_band(so[None, :], sc[None, :], w, COST_PER_SIDE * 2, START, C0_BAND)

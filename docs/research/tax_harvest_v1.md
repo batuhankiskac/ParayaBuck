@@ -35,7 +35,7 @@ campaign in this series (+0.04 pp pre-tax CAGR, +0.10 to +0.28 pp after tax, boo
   5.31 pp), H2 15.51 → 10.30 (drag 5.21 pp), H1 15.25 → 9.29 (drag 5.96 pp).
 - **Not tax advice.** The model has no wash-sale-style rule (so the H1 round trip is legal in the
   model), uses trade-date tax years (H1b is the settlement-date-robust twin), FIFO lots, and the
-  frozen 2026 tariff; see *Assumptions*.
+  frozen 2026 tariff; the assumptions are listed under *Method* and *Caveats*.
 
 ## Method
 

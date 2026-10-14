@@ -1,0 +1,94 @@
+{
+  "per_instrument": {
+    "XLB": {
+      "median_delta": 0.007623301524521342,
+      "paths": 2000
+    },
+    "XLE": {
+      "median_delta": 0.010324026701710287,
+      "paths": 2000
+    },
+    "XLF": {
+      "median_delta": 0.010829452024096797,
+      "paths": 2000
+    },
+    "XLI": {
+      "median_delta": 0.007422857786412496,
+      "paths": 2000
+    },
+    "XLK": {
+      "median_delta": 0.005746867024959579,
+      "paths": 2000
+    },
+    "XLP": {
+      "median_delta": 0.005142939525493051,
+      "paths": 2000
+    },
+    "XLU": {
+      "median_delta": 0.007192558419905959,
+      "paths": 2000
+    },
+    "XLV": {
+      "median_delta": 0.006555293424862163,
+      "paths": 2000
+    },
+    "XLY": {
+      "median_delta": 0.009674777929532308,
+      "paths": 2000
+    },
+    "EWJ": {
+      "median_delta": 0.013243381717964742,
+      "paths": 2000
+    },
+    "EWG": {
+      "median_delta": 0.008609334046478734,
+      "paths": 2000
+    },
+    "EWU": {
+      "median_delta": 0.009326953958964379,
+      "paths": 2000
+    },
+    "EWA": {
+      "median_delta": 0.010066139812856312,
+      "paths": 2000
+    },
+    "EWH": {
+      "median_delta": 0.00993314705624232,
+      "paths": 2000
+    },
+    "EWS": {
+      "median_delta": 0.01075642406930244,
+      "paths": 2000
+    },
+    "EWL": {
+      "median_delta": 0.007469596001392298,
+      "paths": 2000
+    },
+    "EFA": {
+      "median_delta": 0.010021112622243256,
+      "paths": 2000
+    },
+    "EEM": {
+      "median_delta": 0.006464793365803079,
+      "paths": 2000
+    },
+    "SPY": {
+      "median_delta": 0.006156645668762395,
+      "paths": 2000
+    },
+    "DIA": {
+      "median_delta": 0.006260667563028455,
+      "paths": 2000
+    },
+    "IWM": {
+      "median_delta": 0.00968270484121403,
+      "paths": 2000
+    }
+  },
+  "pooled": {
+    "median_delta": 0.008384849108318437,
+    "share_pos": 0.6728333333333333,
+    "paths": 42000
+  },
+  "F3": true
+}

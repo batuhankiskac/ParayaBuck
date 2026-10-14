@@ -1,0 +1,9 @@
+riskoff_rotation_v4 verdict: FAIL (F2 only; F1/F3/F4 pass)
+
+Fresh real-ETF independent confirmation of v3 L2.
+F1 median Δ CAGR +1.01 pp, 95% instruments positive (pass)
+F2 max-DD improvement <=+3pp in 76.2% (need 80%) (fail)
+F3 pooled block-20 bootstrap median Δ +0.838 pp (42k paths) (pass)
+F4 doubled cost: median +0.426 pp, 61.9% positive (pass)
+
+After-tax (report-only): not evaluated for defensive lots; main-window pre-tax L2 vs C0 +0.82 pp CAGR.

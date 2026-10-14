@@ -233,11 +233,18 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--harness", action="store_true")
     ap.add_argument("--run", action="store_true")
+    ap.add_argument("--bootstrap", action="store_true")
     args=ap.parse_args()
     if args.harness:
         h=harness()
         OUT.parent and None
         print(json.dumps(h, indent=2, default=str))
+        return
+    if args.bootstrap:
+        r = run_bootstrap_all()
+        Path("research/riskoff_rotation_v4/BOOTSTRAP.json").write_text if False else None
+        (HERE / "BOOTSTRAP.json").write_text(__import__("json").dumps(r, indent=2, default=str))
+        print("written", HERE / "BOOTSTRAP.json")
         return
     if not args.run:
         print("use --harness or --run")
@@ -278,6 +285,144 @@ def main():
     print("F4", f4, "median", np.median(dc2), "pos", np.mean(dc2>=0))
     OUT.write_text(json.dumps(res, indent=2, default=str))
     print("written", OUT)
+
+# ---------- bootstrap
+def _ief_gld_factors(d):
+    ief_on = np.ones(len(d["days"]))
+    ief_id = np.ones(len(d["days"]))
+    gld_on = np.ones(len(d["days"]))
+    gld_id = np.ones(len(d["days"]))
+    ief_on[1:] = d["ief_open"][1:]/d["ief_close"][:-1]
+    ief_id[1:] = d["ief_close"][1:]/d["ief_open"][1:]
+    gld_on[1:] = d["gld_open"][1:]/d["gld_close"][:-1]
+    gld_id[1:] = d["gld_close"][1:]/d["gld_open"][1:]
+    return ief_on, ief_id, gld_on, gld_id
+
+def boot_instrument(sym, total_paths=PATHS):
+    d = aligned(sym)
+    days = d["days"]
+    T = len(days)
+    global DAYS_GLOBAL
+    DAYS_GLOBAL = days
+    v3.DAYS_GLOBAL = days
+    Lp = min(WARM + MEASURED, T - EXT - 10)
+    if Lp < 500:
+        Lp = max(300, T-EXT-10)
+    ief_on, ief_id, gld_on, gld_id = _ief_gld_factors(d)
+    rng = np.random.default_rng(SEED)
+    pool = np.arange(1, T)
+    npool = T-1
+    start = trv2.SMA_MAX + 1 + EXT
+    deltas = []
+    done = 0
+    EQUITY_OPEN=d["eq_open"]; EQUITY_CLOSE=d["eq_close"]; EQUITY_DIV=d["eq_div"]; Y=d["y"]
+    IEF_OPEN=d["ief_open"]; IEF_CLOSE=d["ief_close"]
+    GLD_OPEN=d["gld_open"]; GLD_CLOSE=d["gld_close"]
+    while done < total_paths:
+        P = min(CHUNK, total_paths-done)
+        pos = np.empty((P, Lp), dtype=np.int64)
+        pos[:,0] = rng.integers(0, npool, P)
+        jump = rng.random((P,Lp)) < 1.0/BLOCK
+        fresh = rng.integers(0, npool, (P,Lp))
+        for t in range(1,Lp):
+            pos[:,t] = np.where(jump[:,t], fresh[:,t], (pos[:,t-1]+1)%npool)
+        pre = np.stack([(pos[:,0]-k)%npool for k in range(EXT,0,-1)], axis=1)
+        pos = np.concatenate([pre,pos], axis=1)
+        idx = pool[pos]  # [P, EXT+Lp]
+
+        prev = EQUITY_CLOSE[np.clip(idx-1,0,T-1)]
+        r_on_tr = (EQUITY_OPEN[idx] + EQUITY_DIV[idx])/prev
+        r_on_p = EQUITY_OPEN[idx]/prev
+        r_id = EQUITY_CLOSE[idx]/EQUITY_OPEN[idx]
+        one = np.ones((P,1))
+        qc = np.concatenate([one, np.cumprod(r_on_tr*r_id, axis=1)], axis=1)
+        qo = np.concatenate([one, qc[:,:-1]*r_on_tr], axis=1)
+        pc = np.concatenate([one, np.cumprod(r_on_p*r_id, axis=1)], axis=1)
+        up = v3.e2_up_nd(pc)
+        up = np.atleast_2d(up)
+        if up.shape[0]==1 and P>1: up=np.broadcast_to(up,(P,up.shape[1]))
+        yy = Y[np.clip(idx-1,0,T-1)]
+        yyp = np.concatenate([yy, yy[:,-1:]], axis=1)
+        eo, ec = lf.synthetic_L(qo, qc, np.zeros_like(qc), yyp, 2.0, EXPENSE, FIN_EXTRA)
+        eq_vol = trv2.vol_n(ec)
+        eq_target = up.astype(float)*np.minimum(CAP, trv2.vt_of(eq_vol))
+
+        def build_close(on_arr, id_arr):
+            g_on = on_arr[idx]; g_id = id_arr[idx]
+            gp = np.concatenate([np.ones((P,1)), g_on], axis=1)
+            gp2 = np.concatenate([np.ones((P,1)), g_id], axis=1)
+            return lf.levels(gp, gp2)[1]
+        def build_open(on_arr, id_arr):
+            g_on = on_arr[idx]; g_id = id_arr[idx]
+            gp = np.concatenate([np.ones((P,1)), g_on], axis=1)
+            gp2 = np.concatenate([np.ones((P,1)), g_id], axis=1)
+            return lf.levels(gp, gp2)[0]
+        bond_close = build_close(ief_on, ief_id)
+        gold_close = build_close(gld_on, gld_id)
+        bond_open = build_open(ief_on, ief_id)
+        gold_open = build_open(gld_on, gld_id)
+
+        bond_vol = trv2.vol_n(bond_close)
+        gold_vol = trv2.vol_n(gold_close)
+        bond_ret = v3.ret252_path(bond_close)
+        gold_ret = v3.ret252_path(gold_close)
+        bills_gross = 1.0 + yy/252.0
+        bills_close = np.concatenate([np.ones((P,1)), np.cumprod(bills_gross, axis=1)], axis=1)
+        bills_ret = v3.ret252_path(bills_close)
+        bond_trend = v3.trend_up_path_nd(bond_close)
+        gold_trend = v3.trend_up_path_nd(gold_close)
+
+        gold_nan = np.isnan(gold_ret); bond_nan = np.isnan(bond_ret)
+        chosen_bond = np.where(gold_nan & ~bond_nan, True,
+                  np.where(bond_nan & ~gold_nan, False,
+                  np.where(~bond_nan & ~gold_nan, bond_ret >= gold_ret, False)))
+        chosen_ret = np.where(chosen_bond, bond_ret, gold_ret)
+        # monthly choice on off
+        chosen_bond_eff = v3.monthly_choice_2d(chosen_bond, up, idx)
+        chosen_ret_eff = np.where(chosen_bond_eff, bond_ret, gold_ret)
+        sel_cond_eff = ~np.isnan(chosen_ret_eff) & ~np.isnan(bills_ret) & (chosen_ret_eff > bills_ret)
+
+        bond_vt_w = np.where(~np.isnan(bond_vol), np.minimum(1.0, 0.10/np.where(bond_vol>0,bond_vol,1.0)), 0.0)
+        gold_vt_w = np.where(~np.isnan(gold_vol), np.minimum(1.0, 0.10/np.where(gold_vol>0,gold_vol,1.0)), 0.0)
+        bond_active = (~up) & chosen_bond_eff & sel_cond_eff
+        gold_active = (~up) & (~chosen_bond_eff) & sel_cond_eff
+        bond_w = np.where(bond_active, bond_vt_w, 0.0)
+        gold_w = np.where(gold_active, gold_vt_w, 0.0)
+        wantsL = np.stack([eq_target, bond_w, gold_w], axis=1)
+        wantsL = v3.cap_total_path(wantsL)
+        opensL = np.stack([eo, bond_open, gold_open], axis=1)
+        closesL = np.stack([ec, bond_close, gold_close], axis=1)
+
+        # C0 wants
+        wantsC = eq_target[:, None, :]
+        opensC = eo[:, None, :]
+        closesC = ec[:, None, :]
+
+        navL = v3.simulate_lows(opensL, closesL, wantsL, COST_PER_SIDE*2, start)[0]
+        navC = trv2.simulate_multi(opensC, closesC, wantsC, COST_PER_SIDE*2, start)[0]
+        k = navL.shape[1]-1
+        cagrL = (navL[:,-1]/navL[:,0])**(252.0/k)-1.0
+        cagrC = (navC[:,-1]/navC[:,0])**(252.0/k)-1.0
+        deltas.extend(list(cagrL-cagrC))
+        done += P
+        print(sym, "bootstrap", done, "/", total_paths, flush=True)
+    return np.array(deltas, dtype=float)
+
+def run_bootstrap_all():
+    pooled=[]
+    per={}
+    for sym in EQUITY_ETFS:
+        dv = boot_instrument(sym, total_paths=PATHS)
+        per[sym] = {"median_delta": float(np.median(dv)), "share_pos": float(np.mean(dv>=0)), "paths": int(len(dv))}
+        pooled.extend(list(dv))
+        print("DONE", sym, per[sym], flush=True)
+    pooled = np.array(pooled, dtype=float)
+    res = {
+        "per_instrument": per,
+        "pooled": {"median_delta": float(np.median(pooled)), "share_pos": float(np.mean(pooled>=0)), "paths": int(len(pooled))},
+        "F3": bool(np.median(pooled) >= 0),
+    }
+    return res
 
 if __name__ == "__main__":
     main()

@@ -783,12 +783,14 @@ def main() -> None:
         nav, turn, ntr, codes, traded = simulate_band(o0, c0v, w, COST_PER_SIDE * 2, START, C0_BAND)
         st = arm_stats(dates0, nav[0], turn[0], ntr[0], codes[0], traded[0], w, START, False)
         impact_dd_pp = (float(st["max_dd"]) - s3_dd) * 100.0  # DD increase if this September stays invested
+        calmar_loss_vs_S3 = s3_calmar - float(st["calmar"])  # Calmar gain attributable to this September
         event_records.append({
-            "year": y,
+            "year": str(y),
             "cagr": float(st["cagr"]),
             "max_dd": float(st["max_dd"]),
             "calmar": float(st["calmar"]),
             "dd_increase_vs_S3_pp": impact_dd_pp,
+            "calmar_gain_vs_removed_pp_notional": calmar_loss_vs_S3,
         })
     event_records.sort(key=lambda r: -r["dd_increase_vs_S3_pp"])
 

@@ -1,0 +1,37 @@
+seasonal_placebo_v1 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production E2 1.1.0
+harness: PASS
+
+C0 base m=2: CAGR   14.67% maxDD   49.56% Calmar 0.296
+
+12 cash months (base m=2): month CAGR maxDD Calmar 2017+ bootMedD pooledOOSD post9D top9gates rankPooled rankPost9
+  m01   15.39%   43.87% 0.351   30.03% +0.474pp -1.395pp +0.322pp gates6/9 rankPooled11 rankPost4
+  m02   13.91%   49.56% 0.281   34.01% +0.252pp -0.692pp -1.508pp gates5/9 rankPooled6 rankPost10
+  m03   14.86%   43.04% 0.345   34.08% -0.217pp -0.234pp -0.315pp gates6/9 rankPooled4 rankPost7
+  m04   12.77%   45.29% 0.282   28.58% -0.908pp -1.240pp +0.203pp gates2/9 rankPooled10 rankPost5
+  m05   12.61%   44.72% 0.282   24.66% -1.863pp -0.738pp +1.002pp gates2/9 rankPooled7 rankPost2
+  m06   13.04%   49.49% 0.263   24.43% -0.420pp -0.229pp +0.532pp gates3/9 rankPooled3 rankPost3
+  m07   11.25%   45.87% 0.245   28.58% -1.764pp -0.981pp -0.236pp gates2/9 rankPooled8 rankPost6
+  m08   14.23%   53.75% 0.265   28.04% -0.410pp +1.019pp +1.039pp gates3/9 rankPooled1 rankPost1
+  m09   14.38%   41.95% 0.343   33.49% +1.059pp +0.810pp -0.357pp gates9/9 rankPooled2 rankPost8
+  m10   11.90%   49.56% 0.240   30.71% -2.361pp -0.385pp -0.621pp gates3/9 rankPooled5 rankPost9
+  m11   11.19%   49.56% 0.226   26.60% -2.854pp -1.182pp -1.752pp gates2/9 rankPooled9 rankPost11
+  m12   13.70%   41.41% 0.331   28.04% -0.721pp -2.156pp -2.522pp gates2/9 rankPooled12 rankPost12
+
+Event dependence (S3): C0 DD 49.56% S3 DD 41.95% gain 7.62 pp
+Top Septembers by DD increase if removed:
+  2000: +7.62 pp DD
+  1999: +0.00 pp DD
+  2001: +0.00 pp DD
+  2002: +0.00 pp DD
+  2003: +0.00 pp DD
+  2004: +0.00 pp DD
+  2005: +0.00 pp DD
+  2006: +0.00 pp DD
+  top1 removed cumulative DD gain vs C0: 0.00 pp (years ['2000'])
+  top2 removed cumulative DD gain vs C0: 0.00 pp (years ['2000', '1999'])
+  top3 removed cumulative DD gain vs C0: 0.00 pp (years ['2000', '1999', '2001'])
+
+Random placebo n=1000 seed 20261014: S3 deltaCalmar percentile 86.9% ; deltaCAGR p50 -1.31 pp (S3 -0.29 pp); deltaMaxDD p50 -2.96 pp (S3 -7.62 pp)
+
+September ranks: mainDC 3 calmar 3 boot 1 pooledOOS 2 post1999nonUS 8
+Credible: False  (pooled<=2: True, post9<=2: False, randomCalmar>=95: False, bestRemoved DDgain>=3pp: False)

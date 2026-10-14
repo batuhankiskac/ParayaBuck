@@ -1,0 +1,301 @@
+{
+  "study": "tax_asym_v1",
+  "inputs": [
+    {
+      "path": "data/historical/after_tax_tr_v1_usdtry_cbrt.csv",
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "bytes": 172726,
+      "date_range": [
+        "2000-01-03",
+        "2026-10-09"
+      ],
+      "source": "CBRT USD buying rate CSV",
+      "url": "CBRT USD buying rate CSV"
+    },
+    {
+      "path": "data/historical/after_tax_tr_v1_yiufe.csv",
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "bytes": 17845,
+      "date_range": [
+        "1999-01",
+        "2026-09"
+      ],
+      "source": "FRED TURPPDMMINMEI (YI-UFE) monthly index",
+      "url": "FRED TURPPDMMINMEI (YI-UFE) monthly index"
+    },
+    {
+      "path": "data/historical/leverage_frontier_v1_daily.csv",
+      "sha256": "a6e276fb87cfae706031c756c823c7549a34f042a88c8b2c4c10a9eaa15c5ceb",
+      "bytes": 1203337,
+      "date_range": [
+        "2000-08-30",
+        "2026-09-29"
+      ],
+      "source": "Yahoo Finance QQQ/SPY/TQQQ etc",
+      "url": "Yahoo Finance QQQ/SPY/TQQQ etc"
+    },
+    {
+      "path": "data/historical/leverage_frontier_v1_dgs10.csv",
+      "sha256": "68fa5881666126c7b9a4fb1b2affd93d61e543d25278a2db2ac246e4d2dc0345",
+      "bytes": 268887,
+      "source": "FRED DGS10",
+      "url": "FRED DGS10"
+    },
+    {
+      "path": "data/historical/stress_robustness_v1_daily.csv",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "bytes": 2671225,
+      "date_range": [
+        "1999-01-04",
+        "2026-09-29"
+      ],
+      "source": "project historical input",
+      "url": "project historical input"
+    },
+    {
+      "path": "data/historical/stress_robustness_v1_dtb3.csv",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "bytes": 301157,
+      "source": "FRED DTB3",
+      "url": "FRED DTB3"
+    },
+    {
+      "path": "data/historical/ewma_band_v1_gspc.csv",
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "bytes": 1145471,
+      "date_range": [
+        "1950-01-03",
+        "1999-12-31"
+      ],
+      "source": "Yahoo Finance ^GSPC",
+      "url": "Yahoo Finance ^GSPC"
+    },
+    {
+      "path": "data/historical/ewma_band_v1_index.csv",
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "bytes": 4114163,
+      "date_range": [
+        "1927-12-30",
+        "2026-09-29"
+      ],
+      "source": "Yahoo Finance ^IXIC (via ewma_band_v1)",
+      "url": "Yahoo Finance ^IXIC (via ewma_band_v1)"
+    },
+    {
+      "path": "data/historical/ewma_band_v1_tb3ms.csv",
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "bytes": 4439,
+      "source": "FRED TB3MS",
+      "url": "FRED TB3MS"
+    },
+    {
+      "path": "data/historical/range_vol_v2_eem.csv",
+      "sha256": "2a7d0a7f3cd9c2e3c70abb3e366de7589141b5d1f82dd1c382f5fe2cba36aa99",
+      "bytes": 596570,
+      "date_range": [
+        "2003-04-14",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_efa.csv",
+      "sha256": "61f525b17d70aa947aba6e6e1033cc2f626b815e7d8a9c05663ad1dd64bd345d",
+      "bytes": 628462,
+      "date_range": [
+        "2001-08-27",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_ewa.csv",
+      "sha256": "09b6942f6660cc90306d5dc4cca54c6fd6a67e783517b6b9cb48f07094f49187",
+      "bytes": 722723,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_ewc.csv",
+      "sha256": "51321cb9cc1f45f59023ec63d055535f4f2e2af4b5ed0bbe1b1e6dffa3e6518e",
+      "bytes": 720836,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_ewg.csv",
+      "sha256": "79ebfa1f9df848ae208f983ebcf41f0a71b9acf5decf6a3983886ebf3a4710f5",
+      "bytes": 726336,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_ewh.csv",
+      "sha256": "d1e7a96c6b72d0a041ea362d42b9159bc42da7993d13f5947e6b5ae5972b3aee",
+      "bytes": 723938,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_ewj.csv",
+      "sha256": "846ef8ec8b7206498f668f6e7df5d4d1a75afb61b4bf5059b25c279f704c4457",
+      "bytes": 709683,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_ewl.csv",
+      "sha256": "344b8a554ad668e88df543ab0c8e8ed5c5ff350b756e2ba9813f3fd992d69780",
+      "bytes": 722468,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_ews.csv",
+      "sha256": "92ad902cba58e1f3d4cffcb02fa6ead636b468437b014a60e7cb82611f75a12e",
+      "bytes": 723102,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_ewu.csv",
+      "sha256": "8f0d1914103a55f47329264d2aecc5845f76791b0aa37cc1c7bd1d4b1529e9f8",
+      "bytes": 719067,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_xlb.csv",
+      "sha256": "687e99eaaad489c85847fdfc84d8136545ab929b50e0f784eaf186ca8568a59a",
+      "bytes": 695202,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_xle.csv",
+      "sha256": "7c06aac6ddbf7b8fef6dc1ba5d4022e1c22bf1f6f1e7a8685730f9b0542e17f1",
+      "bytes": 686299,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_xlf.csv",
+      "sha256": "f6c34092978d4d1da1fc0ee96a395019c0d8fcb893694faf584d1ddf9367182e",
+      "bytes": 719917,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_xli.csv",
+      "sha256": "c9039b8828807c489e1d64381e53f48a5dca5d0e77775cae515f30264508a7b8",
+      "bytes": 681238,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_xlk.csv",
+      "sha256": "0916e3134092de2ca9049c9b317e1170980057ff8b0a5159b76e24fb6424fa61",
+      "bytes": 683909,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_xlp.csv",
+      "sha256": "5a08680540fc09205024f5ebb997c24ffdb98d967a0aed10c616b2144e2d0670",
+      "bytes": 682473,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_xlu.csv",
+      "sha256": "614e80d03bcbfd99af27a87981a3cb463d72654ce22f0c0bdb07052c8bea8421",
+      "bytes": 694082,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_xlv.csv",
+      "sha256": "02e5df03723d01930af4ae348409d88cc7fbaf9513d7049e628777399e5533f7",
+      "bytes": 682218,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    },
+    {
+      "path": "data/historical/range_vol_v2_xly.csv",
+      "sha256": "abfd815334cae8cbeb25329e16041d994289eb5804103a8d7ef1930ee55b0ba6",
+      "bytes": 688977,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "source": "Yahoo Finance (adjusted OHLCV)",
+      "url": "Yahoo Finance (adjusted OHLCV)"
+    }
+  ]
+}

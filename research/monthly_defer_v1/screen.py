@@ -1788,9 +1788,11 @@ def main() -> None:
     L.append("pre-tax main window (m = 2):")
     L.append("  arm   CAGR base  CAGR cal   maxDD base  maxDD cal   m=1 base  Calmar  P1/P2/P3 cagr           turn/yr  sells/yr  deferrals")
     for arm in ARMS + (ANCHOR_ARM,):
-        src = pre if arm in ARMS else pre["H2_anchor"]
-        b2, c2 = src["base"]["m2"][arm], src["calibrated"]["m2"][arm]
-        b1 = src["base"]["m1"][arm]
+        if arm in ARMS:
+            b2, c2, b1 = pre["base"]["m2"][arm], pre["calibrated"]["m2"][arm], pre["base"]["m1"][arm]
+        else:
+            b2, c2, b1 = (pre["H2_anchor"]["base"]["m2"], pre["H2_anchor"]["calibrated"]["m2"],
+                          pre["H2_anchor"]["base"]["m1"])
         sp = b2["subperiods"]
         L.append(f"  {arm:5s} {fmt_pct(b2['cagr'])} {fmt_pct(c2['cagr'])} {fmt_pct(b2['max_dd'])} "
                  f"{fmt_pct(c2['max_dd'])} {fmt_pct(b1['cagr'])} {b2['calmar']:6.3f} "

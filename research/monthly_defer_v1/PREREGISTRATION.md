@@ -206,4 +206,14 @@ those lots).
   `share >= 0` vs `share > 0` convention in one reproduction check, and the bootstrap deferral-mask
   column alignment (the resampled price arrays carry one extra leading column). None of these
   touches a pre-registered rule; the gates' `share > 0` convention is implemented exactly as written
-  above, and the pre-registered `RESULTS.json` was produced by the frozen file committed here.
+  above, and `RESULTS.json` was produced by the frozen rules below (A2 covers a SUMMARY-printing-only
+  fix made after the pre-registration commit).
+- **A2 (2026-10-14, after commit `693ebc0f`, before the runs whose results are reported).** The first
+  `--run` finished every computation and wrote `RESULTS.json`, then aborted with a `KeyError` while
+  *building the SUMMARY text*: the H2-anchor row of the pre-tax table was read through the
+  candidate-arm accessor. The fix is confined to `main()`'s SUMMARY construction (no computation,
+  no parameter, no gate, no output field). Proof that it is inert: `RESULTS.json` has the same
+  SHA-256 before and after (`2a5a1aa69c25434d588802fefdb467ab4c88b610a817f3f3e0579a39bfec31a6` — the
+  crashed run had already written it), and the two full runs after the fix are byte-identical to
+  each other and to it. This amendment and the fix were committed on top of the results commit
+  (`0bd37b2e`), so that commit's `screen.py` differs from `main()`'s printer only.

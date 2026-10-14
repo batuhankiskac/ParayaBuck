@@ -1,0 +1,34 @@
+{
+  "inputs": [
+    {
+      "file": "data/historical/stress_robustness_v1_daily.csv",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "lines": 23048,
+      "source": "existing stress_robustness_v1"
+    },
+    {
+      "file": "data/historical/stress_robustness_v1_dtb3.csv",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "lines": 18977,
+      "source": "existing stress_robustness_v1"
+    },
+    {
+      "file": "data/historical/overnight_hold_v1_spy.csv",
+      "sha256": "cd2c177a86291d0c171f5d5fe5f90e55cf8ccca1d16a69cf0a80f242f6edead5",
+      "lines": 8485,
+      "source": "Yahoo chart API"
+    },
+    {
+      "file": "data/historical/overnight_hold_v1_dia.csv",
+      "sha256": "1f587f1f7ae4381bfa3a00316de9cf3564f7d6e8092f023a516fc04ca9c70cb4",
+      "lines": 7229,
+      "source": "Yahoo chart API"
+    },
+    {
+      "file": "data/historical/overnight_hold_v1_iwm.csv",
+      "sha256": "43054c017ce783afe3bc144083f57e7ee5b54fa29a195fb1b14c8ffa81a7e6c4",
+      "lines": 6635,
+      "source": "Yahoo chart API"
+    }
+  ]
+}

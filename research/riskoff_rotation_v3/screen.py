@@ -92,6 +92,8 @@ def trend_up(close):
 
 
 def monthly_choice_1d(chosen_bond, up, days):
+    chosen_bond = np.ravel(chosen_bond)
+    up = np.ravel(up)
     out = np.zeros(len(days), dtype=bool)
     choice = None  # None / True bond / False gold
     month = None
@@ -108,6 +110,9 @@ def monthly_choice_1d(chosen_bond, up, days):
 
 def monthly_choice_2d(chosen_bond, up, idx):
     P, T = chosen_bond.shape
+    if idx.shape[1] < T:
+        pad = np.repeat(idx[:, -1:], T - idx.shape[1], axis=1)
+        idx = np.concatenate([idx, pad], axis=1)
     out = np.zeros((P, T), dtype=bool)
     choice = np.full(P, -1, dtype=np.int8)  # -1 none,0 bond,1 gold
     month = np.full(P, "", dtype=object)

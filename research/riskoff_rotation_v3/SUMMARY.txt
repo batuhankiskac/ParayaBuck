@@ -1,0 +1,13 @@
+riskoff_rotation_v2 | main window 2000-03-09 -> 2026-09-29 (6679 sessions)
+harness: PASS
+
+main: arm CAGR maxDD 2017+ turn/yr | boot20 median diff
+  base C0    14.67%  49.56%   32.44%  5.97 |    7.16% +0.000pp
+  calibrated C0    14.10%  49.65%   31.69%  5.97 |    6.73% +0.000pp
+  base L1    15.11%  41.91%   32.74% 12.54 |    8.14% +0.598pp
+  calibrated L1    14.53%  42.13%   31.99% 12.54 |    7.70% +0.596pp
+  base L2    15.49%  44.22%   33.32% 11.43 |    8.31% +0.780pp
+  calibrated L2    14.91%  44.43%   32.58% 11.43 |    7.87% +0.777pp
+  base L3    14.53%  44.58%   32.83% 10.19 |    7.83% +0.340pp
+  calibrated L3    13.96%  44.67%   32.08% 10.19 |    7.38% +0.339pp
+

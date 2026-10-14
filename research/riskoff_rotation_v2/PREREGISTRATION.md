@@ -1,40 +1,18 @@
 # riskoff_rotation_v2 pre-registration (confirmation + audit of v1)
 
 ## Question
-Does R4 (when E2 is off, hold the better of BOND10*/GOLD by 252-session return
-when it beats the T-bill 252-session return, sized min(1, 0.10/vol20)) survive an
-audit and OOS confirmation?
+Does R4 survive an audit and OOS confirmation?
 
-## Audit fixes carried into this screen
-a) R1 and R2 turnover near-identical (~12.46/yr) is expected: both deploy a
-single unlevered defensive leg at 0.98 whenever off-E2, so rebalance sizes are
-similar; they remain distinct in trades (1578 vs 1607).
-b) Bootstrap draws are now consumed in chunk-outer order with a 20-session mean
-block, 3-session back-extension, seed 20261011, 5,000 ten-year paths, matching
-ewma_band_v1 exactly (C0 median confirmed byte-identical).
-c) No look-ahead: trend/selection/vol use closes <= decision close; defensive fills
-at the next session (bond is all intraday, so open = previous close; gold proxy
-and GLD open used where present; otherwise previous close). Costs charged on
-every defensive switch at 4 bps x m in simulate_multi.
-d) GOLD proxy continuity: GC=F daily, with no >5% suspicious roll gaps observed
-(18 market-move days). BOND10* par-bond construction vs IEF/TLT 2002-2024:
-correlation ~0.96 (IEF), ~0.90 (TLT); CAGR ~0.68-0.93 pp lower. Accepted as
-trend-proxy instrument; proxy bias documented.
+Audit:
+a) R1/R2 turnover near-identical (~12.46/yr) is expected: both deploy one unlevered defensive leg at 0.98 off-E2; trades differ (1578 vs 1607).
+b) Bootstrap draws consumed chunk-outer with 20-session mean block, 3-session back-extension, seed 20261011, 5000 ten-year paths; C0 median bit-identical to ewma_band_v1 (7.16% base / 6.73% calibrated).
+c) No look-ahead: trend/selection/vol use closes <= decision close; defensive fills at the next session open (bond synthetic intraday: open = previous close; GLD/GC open where present; otherwise previous close); costs on every switch.
+d) GOLD proxy (GC=F): 18 market-move days >5%, accepted as market moves. BOND10* vs IEF 2002-2024: corr 0.96, CAGR 0.67 pp lower; vs TLT: corr 0.90, CAGR 0.94 pp lower. Accepted as trend-proxy instrument.
 
-## Arms
-Only C0 and R4 run here. C0 = production E2 exactly. R4 = exact v1 R4 definition.
+Arms: C0 = production E2 exactly; R4 = exact v1 R4 (better of BOND10*/GOLD by 252-session return if > T-bill 252-session return, sized min(1,0.10/vol20), cap 0.98).
 
-## Data / mechanics
-Same as v1, main window 2000-03-09 -> 2026-09-29, synthetic QLD*, base and
-calibrated financing (+0.75%/yr), cost 4 bps x m, m=1 and m=2.
+Data: main window as v1; OOS: ^GSPC 1957-1999 (GS10 monthly yield, 1-month lag; gold pre-1975 NaN, BOND10*/bills selection fallback), M1 ^IXIC 1975-1999, M3 ^N225, M4 ^GDAXI, M5 ^FTSE measured from 2001-01-02 (local monthly 10y yields with 1-month lag: Japan IRLTLT01JPM156N, Germany IRLTLT01DEM156N, UK IRLTLT01GBM156N; gold in USD via GC=F/GLD; US DTB3 T-bill proxy for hurdle).
 
-## Gates
-Main window G1-G6 recomputed after fixes (G1 both financings at m=2; G2 DD; G3
-2017+; G4 >=2/3 sub-periods; G5 bootstrap median delta >=0 both financings; G6
-G1 at m=1). G9 replaced by turnover-cost stress: R4 still satisfies G1 (both
-financings, m=2) when R4 costs doubled to 8 bps x m. OOS G7/G8 on usable windows
-only: ^GSPC 1957-1999 and M1 ^IXIC 1975-1999; gold pre-1975 is NaN, selection
-falls back to BOND10*/bills. M3-M5 are not runnable with daily bond and gold at
-a quality needed, so are excluded. G7: median delta CAGR >=0 across usable
-windows, delta CAGR >= -0.5 pp in all but one, delta DD <= +3 pp in all but one,
-never > +8 pp. G8: pooled bootstrap median delta >=0 across usable windows.
+Gates: G1-G6 main re-computed after fixes. G9 replaced by turnover-cost stress: R4 still satisfies G1 both financings m=2 at 8 bps x m. G7 across all 5 usable windows (median CAGR delta >=0; >= -0.5 pp in all but one; DD diff <= +3 pp in all but one; never > +8 pp). G8 pooled bootstrap median delta >=0.
+
+Smoke test only before commit.

@@ -45,7 +45,7 @@ WARM, MEASURED = lf.WARM, lf.MEASURED
 EXT = 3
 TOL = 1e-4
 SUBPERIODS = (("P1", None, "2008-12-31"), ("P2", "2008-12-31", "2016-12-31"), ("P3", "2016-12-31", None))
-ARMS = ("C0", "R1", "R2", "R3", "R4")
+ARMS = ("C0", "R4")
 
 
 def e2_up(price):
@@ -540,12 +540,74 @@ def load_ixic_window():
         y10[idx] = last if last is not None else np.nan
     return days, o, c, y, start, np.array(y10, dtype=float)
 
+def _monthly_yield_to_daily(days, path, col):
+    import datetime as _dt
+    import csv as _csv
+    raw = {}
+    with open(path, newline="") as fh:
+        for r in _csv.DictReader(fh):
+            v = r.get(col, r.get(col.upper()))
+            if v in (None, "", "."):
+                continue
+            raw[r["observation_date"]] = float(v) / 100.0
+    lagged = []
+    for dstr, val in raw.items():
+        dd = _dt.date.fromisoformat(dstr)
+        y = dd.year + (1 if dd.month == 12 else 0)
+        m = 1 if dd.month == 12 else dd.month + 1
+        pub = _dt.date(y, m, 1).isoformat()
+        lagged.append((pub, val))
+    lagged.sort()
+    out = [np.nan] * len(days)
+    j = 0
+    last = None
+    for idx, d in enumerate(days):
+        while j < len(lagged) and lagged[j][0] <= d:
+            last = lagged[j][1]
+            j += 1
+        out[idx] = last if last is not None else np.nan
+    return np.array(out, dtype=float)
 
-def _prepare_window_arrays(days, o, c, y, y10):
-    # GOLD factors
+def load_modern_market(key, yield_path, yield_col):
+    days, o, c, y, start0 = ewma.load_market(key)
+    y10 = _monthly_yield_to_daily(days, yield_path, yield_col)
+    meas_from = "2001-01-02"
+    try:
+        start = next(i for i, d in enumerate(days) if d >= meas_from)
+    except StopIteration:
+        start = start0
+    if start < start0:
+        start = start0
+    return days, o, c, y, start, y10
+
+def _lf_arr_for_days(days):
+    pos = {d: i for i, d in enumerate(days)}
+    T = len(days)
+    new = defaultdict(dict)
+    with open(ROOT / "data/historical/leverage_frontier_v1_daily.csv") as fh:
+        for r in csv.DictReader(fh):
+            new[r["symbol"]][r["date"]] = (float(r["open"]), float(r["close"]), float(r["dividend"]))
+    arr = {}
+    for s in ("GLD", "GC=F"):
+        a = np.full((3, T), np.nan)
+        for d, v in new[s].items():
+            if d in pos:
+                a[:, pos[d]] = v
+        arr[s] = a
+    return arr
+
+def _gold_splice(days):
     fix = gro.load_gold_fixings()
     gold_level_arr = gro.gold_level(days, fix, alignment="next")
-    g_on, g_id = gro.gold_factors(gold_level_arr)
+    g_on0, g_id0 = gro.gold_factors(gold_level_arr)
+    arr_lf = _lf_arr_for_days(days)
+    g_on1, g_id1 = lf.gold_factors(days, arr_lf)
+    g_on = np.where(np.isnan(g_on0), g_on1, g_on0)
+    g_id = np.where(np.isnan(g_id0), g_id1, g_id0)
+    return g_on, g_id, fix
+def _prepare_window_arrays(days, o, c, y, y10):
+    # GOLD factors
+    g_on, g_id, fix = _gold_splice(days)
     # bond factors
     bond_gross = lf.bond10_gross(y10)
     bond_on = np.where(np.isnan(bond_gross), np.nan, 1.0)
@@ -634,9 +696,7 @@ def boot_window(days, o, c, y, start, y10, rng):
     c0_acc = []
     r4_acc = []
     # factor arrays by session
-    fix = gro.load_gold_fixings()
-    gold_level_arr = gro.gold_level(days, fix, alignment="next")
-    g_on_arr, g_id_arr = gro.gold_factors(gold_level_arr)
+    g_on_arr, g_id_arr, fix = _gold_splice(days)
     bond_gross = lf.bond10_gross(y10)
     bond_on_arr = np.where(np.isnan(bond_gross), np.nan, 1.0)
     bond_id_arr = bond_gross.copy()
@@ -766,16 +826,31 @@ def main():
     idd, io, ic, iy, istart, iy10 = load_ixic_window()
     oos_ixic = run_oos_window(idd, io, ic, iy, istart, iy10)
     oos = {"GSPC": oos_gspc, "M1": oos_ixic}
-
-    # OOS bootstrap
-    print("running OOS bootstrap GSPC...")
+    modern_boot_c0 = []
+    modern_boot_r4 = []
     rng = np.random.default_rng(SEED)
+    modern_specs = [
+        ("M3", ROOT / "data/historical/riskoff_rotation_v2_irltlt_jpy.csv", "IRLTLT01JPM156N"),
+        ("M4", ROOT / "data/historical/riskoff_rotation_v2_irltlt_dem.csv", "IRLTLT01DEM156N"),
+        ("M5", ROOT / "data/historical/riskoff_rotation_v2_irltlt_gbp.csv", "IRLTLT01GBM156N"),
+    ]
+    for key, yp, yc in modern_specs:
+        print(f"running OOS {key}...")
+        md, mo, mc, my, mstart, my10 = load_modern_market(key, yp, yc)
+        oos[key] = run_oos_window(md, mo, mc, my, mstart, my10)
+        print(f"running OOS bootstrap {key}...")
+        c0x, r4x = boot_window(md, mo, mc, my, mstart, my10, rng)
+        modern_boot_c0.append(c0x)
+        modern_boot_r4.append(r4x)
+    # override oos (already includes modern above)
+    print("running OOS bootstrap GSPC...")
     c0g, r4g = boot_window(gd, go, gc, gy, gstart, gy10, rng)
     print("running OOS bootstrap IXIC...")
     c0i, r4i = boot_window(idd, io, ic, iy, istart, iy10, rng)
-    pooled_c0 = np.concatenate([c0g, c0i])
-    pooled_r4 = np.concatenate([r4g, r4i])
+    pooled_c0 = np.concatenate([c0g, c0i] + modern_boot_c0)
+    pooled_r4 = np.concatenate([r4g, r4i] + modern_boot_r4)
     dd = pooled_r4 - pooled_c0
+
     oos_boot = {"pooled": {"R4": {"diff_vs_C0_median": float(np.median(dd)),
                                    "diff_vs_C0_mean": float(np.mean(dd)),
                                    "share_ge_C0": float(np.mean(dd >= 0)),

@@ -24,6 +24,34 @@
     {
       "path": "data/historical/gold_riskoff_oos_v1_index.csv",
       "sha256": "66593f8d7c770f4488ebb9b5c461194799351340e94ff7b60c149ff60435cdc1"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_gcf.csv",
+      "sha256": "b7ce2f201bcf7340dc7f79c224866b8b505a006ba1b72bca26c7250e5f3ef542"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_gs10.csv",
+      "sha256": "40323f225e613a19a4eec7eef20523dec10764de21c70cd1416a7379fb7f13b6"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_ief.csv",
+      "sha256": "5b1fb935bba1f69aa6080714d9f3e7610b40334e7540c432b42f55a428f07cda"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_irltlt_dem.csv",
+      "sha256": "37a569bef54ee10a5fe4b0c4b2218cb62a17994ada631ed0f442b0f7e24f5e31"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_irltlt_gbp.csv",
+      "sha256": "b14ffe0232b2e0df9ea1fb56efa75354dce53967ff90470a6a9c040c00dac2e3"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_irltlt_jpy.csv",
+      "sha256": "12ae6267ae2ae67135bdb2ad17696d91c07e8142a5d3615f182e1626b640128c"
+    },
+    {
+      "path": "data/historical/riskoff_rotation_v2_tlt.csv",
+      "sha256": "158c050b68cc1a472a8f112c96de9119b8d7c5e2faf3b0d64e87095af06e1911"
     }
   ]
 }

@@ -1,0 +1,86 @@
+vt_level_tax_v1 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production E2 1.1.0
+harness: PASS (max |diff| 0.000000 pp vs e2_integration_v1 production E2; band sim == simulate_multi True; EWMA identity rel diff 6.7e-16)
+
+[base] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | m=1 CAGR
+  C0      14.67%   49.56% 0.296   32.44%   -1.10%   13.26%   32.44%  5.97 |    7.16% +0.000pp |   14.95%
+  VT30    13.80%   44.16% 0.313   30.45%   -0.59%   11.84%   30.45%  6.28 |    7.10% -0.108pp |   14.09%
+  VT40    15.17%   54.49% 0.278   34.10%   -1.73%   13.95%   34.10%  5.83 |    7.07% -0.142pp |   15.44%
+  VT45    15.14%   59.04% 0.257   34.72%   -2.33%   14.01%   34.72%  5.68 |    6.81% -0.470pp |   15.41%
+  VT50    15.03%   62.66% 0.240   35.46%   -2.99%   13.73%   35.46%  5.61 |    6.51% -0.763pp |   15.29%
+  NOVT    12.13%   81.40% 0.149   35.37%   -9.36%   12.69%   35.37%  5.80 |    4.26% -2.844pp |   12.39%
+
+[calibrated] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | m=1 CAGR
+  C0      14.10%   49.65% 0.284   31.69%   -1.44%   12.59%   31.69%  5.97 |    6.73% +0.000pp |   14.38%
+  VT30    13.27%   44.24% 0.300   29.76%   -0.91%   11.21%   29.76%  6.28 |    6.69% -0.075pp |   13.55%
+  VT40    14.58%   54.58% 0.267   33.32%   -2.08%   13.26%   33.32%  5.82 |    6.61% -0.164pp |   14.84%
+  VT45    14.53%   59.13% 0.246   33.89%   -2.69%   13.31%   33.89%  5.68 |    6.31% -0.502pp |   14.79%
+  VT50    14.42%   62.75% 0.230   34.63%   -3.35%   13.03%   34.63%  5.61 |    6.04% -0.811pp |   14.67%
+  NOVT    11.53%   81.48% 0.141   34.56%   -9.72%   12.00%   34.56%  5.80 |    3.75% -2.907pp |   11.79%
+
+trades (base, m=2): arm | full window: round trips/yr, resizes/yr, sells/yr, turnover/yr (entries+exits / resizes) | 2017+: round trips/yr, sells/yr, turnover/yr
+  C0     2.94  51.51  27.41  5.97 (4.27 / 1.70) |  1.23  32.42  3.75
+  VT30   2.94  72.67  38.29  6.28 (3.82 / 2.46) |  1.23  45.35  4.49
+  VT40   2.94  36.45  19.88  5.83 (4.64 / 1.19) |  1.23  22.98  3.27
+  VT45   2.94  24.28  14.34  5.68 (4.91 / 0.77) |  1.23  17.44  2.93
+  VT50   2.94  17.28  11.22  5.61 (5.09 / 0.52) |  1.23  13.03  2.68
+  NOVT   2.94   1.09   3.88  5.80 (5.79 / 0.01) |  1.23   2.77  2.42
+
+OOS (calibrated, m=2): window | arm CAGR / maxDD
+  GSPC 1957-01-02->1999-12-31 | C0 9.98%/38.99%  VT30 9.53%/37.77%  VT40 10.24%/39.19%  VT45 10.32%/39.27%  VT50 10.37%/39.27%  NOVT 10.38%/39.27%
+  M1   1975-01-02->1999-12-31 | C0 20.68%/38.62%  VT30 19.50%/38.63%  VT40 21.59%/38.67%  VT45 22.13%/38.74%  VT50 22.56%/38.81%  NOVT 23.13%/38.90%
+  M2   1935-01-08->1956-12-31 | C0 11.26%/62.52%  VT30 11.19%/60.34%  VT40 11.46%/63.69%  VT45 11.92%/63.03%  VT50 12.30%/62.67%  NOVT 13.89%/59.64%
+  M3   1966-01-19->2026-09-29 | C0 6.33%/67.16%  VT30 6.25%/66.71%  VT40 6.64%/63.92%  VT45 6.99%/60.93%  VT50 7.17%/60.13%  NOVT 7.20%/59.68%
+  M4   1989-01-03->2026-09-29 | C0 9.41%/58.61%  VT30 8.83%/54.59%  VT40 9.72%/61.56%  VT45 9.94%/63.86%  VT50 10.10%/66.24%  NOVT 10.24%/70.58%
+  M5   1985-01-02->2026-09-29 | C0 -0.05%/82.74%  VT30 0.00%/81.57%  VT40 0.04%/82.93%  VT45 0.01%/83.41%  VT50 -0.06%/83.63%  NOVT -0.01%/83.67%
+OOS pooled bootstrap (M1..M5, 10,000 paths) median(arm-C0): VT30 -0.098pp  VT40 +0.083pp  VT45 +0.134pp  VT50 +0.179pp  NOVT +0.279pp
+
+gates (G1_base G1_calibrated G2_base G2_calibrated G3_base G3_calibrated G5_base G5_calibrated G6_base G6_calibrated G4 G7 G8 G9 TAIL):
+  VT30  G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=F G8=F G9=P TAIL=P plateau=P -> FAIL
+  VT40  G1_base=P G1_calibrated=P G2_base=F G2_calibrated=F G3_base=P G3_calibrated=P G5_base=F G5_calibrated=F G6_base=P G6_calibrated=P G4=P G7=P G8=P G9=P TAIL=F plateau=P -> FAIL
+  VT45  G1_base=P G1_calibrated=P G2_base=F G2_calibrated=F G3_base=P G3_calibrated=P G5_base=F G5_calibrated=F G6_base=P G6_calibrated=P G4=P G7=P G8=P G9=P TAIL=F plateau=F -> FAIL
+  VT50  G1_base=P G1_calibrated=P G2_base=F G2_calibrated=F G3_base=P G3_calibrated=P G5_base=F G5_calibrated=F G6_base=P G6_calibrated=P G4=P G7=P G8=P G9=P TAIL=F plateau=F -> FAIL
+  NOVT  G1_base=F G1_calibrated=F G2_base=F G2_calibrated=F G3_base=P G3_calibrated=P G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=F G8=P G9=P TAIL=F plateau=F -> FAIL
+
+after-tax ($100k, progressive Turkish regime, liquidated): window | arm | pre-tax CAGR -> after-tax CAGR, max DD, trades/yr, tax paid USD
+  2000_03_to_2026_09 (C0 pre-tax 14.67%)
+    C0      14.67% ->    9.53% (-5.137pp) DD   49.56% trades/yr  58.1 tax 646,780
+    VT30    13.80% ->    8.82% (-5.848pp) DD   44.47% trades/yr  79.0 tax 551,854
+    VT40    15.16% ->   10.14% (-4.534pp) DD   54.49% trades/yr  43.0 tax 737,575
+    VT45    15.14% ->   10.37% (-4.303pp) DD   59.04% trades/yr  30.8 tax 752,558
+    VT50    15.03% ->   10.45% (-4.221pp) DD   62.66% trades/yr  23.9 tax 721,169
+    NOVT    12.13% ->    8.11% (-6.566pp) DD   81.40% trades/yr   7.6 tax 365,438
+  2010_01_to_end (C0 pre-tax 21.89%)
+    C0      21.89% ->   14.50% (-7.388pp) DD   44.69% trades/yr  59.9 tax 534,273
+    VT30    20.61% ->   13.50% (-8.388pp) DD   44.37% trades/yr  84.2 tax 465,210
+    VT40    22.77% ->   15.46% (-6.430pp) DD   45.13% trades/yr  40.3 tax 609,503
+    VT45    22.97% ->   15.83% (-6.052pp) DD   45.32% trades/yr  29.2 tax 623,763
+    VT50    23.10% ->   16.23% (-5.652pp) DD   45.32% trades/yr  22.7 tax 623,336
+    NOVT    22.51% ->   16.05% (-5.834pp) DD   45.36% trades/yr   7.5 tax 571,436
+  2017_01_to_end (C0 pre-tax 32.26%)
+    C0      32.26% ->   22.69% (-9.563pp) DD   37.61% trades/yr  67.4 tax 352,698
+    VT30    30.26% ->   20.95% (-11.306pp) DD   35.30% trades/yr  93.1 tax 305,598
+    VT40    33.90% ->   24.41% (-7.846pp) DD   39.38% trades/yr  47.4 tax 408,080
+    VT45    34.51% ->   25.36% (-6.896pp) DD   40.53% trades/yr  35.1 tax 427,796
+    VT50    35.24% ->   26.50% (-5.757pp) DD   40.38% trades/yr  24.9 tax 444,176
+    NOVT    35.17% ->   27.01% (-5.243pp) DD   42.00% trades/yr   4.5 tax 437,007
+
+after-tax bootstrap (block-20, 1000 paths, 2015-09 calendar, no non-positive liquidations)
+  B1_recent progressive: C0 median after-tax CAGR  3.08%
+    VT30  median dCAGR  -0.155pp share>0 0.431 p05  -2.176 p95  +1.352 median dDD  -3.64pp
+    VT40  median dCAGR  -0.088pp share>0 0.463 p05  -1.270 p95  +1.794 median dDD  +2.72pp
+    VT45  median dCAGR  -0.291pp share>0 0.412 p05  -2.401 p95  +2.987 median dDD  +4.93pp
+    VT50  median dCAGR  -0.506pp share>0 0.393 p05  -3.390 p95  +3.838 median dDD  +6.63pp
+    NOVT  median dCAGR  -2.146pp share>0 0.314 p05  -8.805 p95  +5.958 median dDD +12.92pp
+  B2_flat 20%: C0 median after-tax CAGR  3.52%
+    VT30  median dCAGR  -0.047pp share>0 0.478 p05  -2.154 p95  +1.359 median dDD  -3.86pp
+    VT40  median dCAGR  -0.153pp share>0 0.428 p05  -1.275 p95  +1.652 median dDD  +2.91pp
+    VT45  median dCAGR  -0.436pp share>0 0.385 p05  -2.480 p95  +2.822 median dDD  +5.30pp
+    VT50  median dCAGR  -0.694pp share>0 0.371 p05  -3.491 p95  +3.678 median dDD  +7.19pp
+    NOVT  median dCAGR  -2.484pp share>0 0.308 p05  -8.991 p95  +6.153 median dDD +13.66pp
+
+selection: "none" (rule: G1-G8 pre-tax AND tail gate AND after-tax CAGR > C0 in all three windows AND B1-recent/B2 median +0.3pp with share>0 >= 60% AND plateau neighbour passes G1-G3)
+  VT30  pre_tax_G1_G8=F tail=P after_tax_all_windows=F B1=F B2=F plateau=P -> candidate=False
+  VT40  pre_tax_G1_G8=F tail=F after_tax_all_windows=P B1=F B2=F plateau=P -> candidate=False
+  VT45  pre_tax_G1_G8=F tail=F after_tax_all_windows=P B1=F B2=F plateau=F -> candidate=False
+  VT50  pre_tax_G1_G8=F tail=F after_tax_all_windows=P B1=F B2=F plateau=F -> candidate=False
+  NOVT  pre_tax_G1_G8=F tail=F after_tax_all_windows=F B1=F B2=F plateau=P -> candidate=False

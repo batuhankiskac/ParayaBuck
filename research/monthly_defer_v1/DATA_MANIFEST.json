@@ -1,0 +1,244 @@
+{
+  "campaign": "monthly_defer_v1",
+  "files": {
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "restored_from": "research/vt_level_tax_v1",
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "restored_from": "research/vt_level_tax_v1",
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/ewma_band_v1_gspc.csv": {
+      "bytes": 1145471,
+      "restored_from": "archive/research/ewma-band-v1-2026-10",
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/ewma_band_v1_index.csv": {
+      "bytes": 4114163,
+      "restored_from": "archive/research/ewma-band-v1-2026-10",
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/ewma_band_v1_tb3ms.csv": {
+      "bytes": 4439,
+      "restored_from": "archive/research/ewma-band-v1-2026-10",
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v1_dia.csv": {
+      "bytes": 697668,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "1300f2a61255d5699a349794179f09ead15703e2813025e6b64a2df16d91b14e",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v1_iwm.csv": {
+      "bytes": 655363,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "c6ff89f0fb18506a9869de2d92b609c37815cc8fe634d064bb29218638573580",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v1_spy.csv": {
+      "bytes": 776843,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "80c8bee68dcd3e1a8ee5fb3cf6828afc6cdc018aaf7b7395dbdac7b22e0ea0a4",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_eem.csv": {
+      "bytes": 596570,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "2a7d0a7f3cd9c2e3c70abb3e366de7589141b5d1f82dd1c382f5fe2cba36aa99",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_efa.csv": {
+      "bytes": 628462,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "61f525b17d70aa947aba6e6e1033cc2f626b815e7d8a9c05663ad1dd64bd345d",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_ewa.csv": {
+      "bytes": 722723,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "09b6942f6660cc90306d5dc4cca54c6fd6a67e783517b6b9cb48f07094f49187",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_ewc.csv": {
+      "bytes": 720836,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "51321cb9cc1f45f59023ec63d055535f4f2e2af4b5ed0bbe1b1e6dffa3e6518e",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_ewg.csv": {
+      "bytes": 726336,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "79ebfa1f9df848ae208f983ebcf41f0a71b9acf5decf6a3983886ebf3a4710f5",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_ewh.csv": {
+      "bytes": 723938,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "d1e7a96c6b72d0a041ea362d42b9159bc42da7993d13f5947e6b5ae5972b3aee",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_ewj.csv": {
+      "bytes": 709683,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "846ef8ec8b7206498f668f6e7df5d4d1a75afb61b4bf5059b25c279f704c4457",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_ewl.csv": {
+      "bytes": 722468,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "344b8a554ad668e88df543ab0c8e8ed5c5ff350b756e2ba9813f3fd992d69780",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_ews.csv": {
+      "bytes": 723102,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "92ad902cba58e1f3d4cffcb02fa6ead636b468437b014a60e7cb82611f75a12e",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_ewu.csv": {
+      "bytes": 719067,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "8f0d1914103a55f47329264d2aecc5845f76791b0aa37cc1c7bd1d4b1529e9f8",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_xlb.csv": {
+      "bytes": 695202,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "687e99eaaad489c85847fdfc84d8136545ab929b50e0f784eaf186ca8568a59a",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_xle.csv": {
+      "bytes": 686299,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "7c06aac6ddbf7b8fef6dc1ba5d4022e1c22bf1f6f1e7a8685730f9b0542e17f1",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_xlf.csv": {
+      "bytes": 719917,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "f6c34092978d4d1da1fc0ee96a395019c0d8fcb893694faf584d1ddf9367182e",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_xli.csv": {
+      "bytes": 681238,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "c9039b8828807c489e1d64381e53f48a5dca5d0e77775cae515f30264508a7b8",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_xlk.csv": {
+      "bytes": 683909,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "0916e3134092de2ca9049c9b317e1170980057ff8b0a5159b76e24fb6424fa61",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_xlp.csv": {
+      "bytes": 682473,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "5a08680540fc09205024f5ebb997c24ffdb98d967a0aed10c616b2144e2d0670",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_xlu.csv": {
+      "bytes": 694082,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "614e80d03bcbfd99af27a87981a3cb463d72654ce22f0c0bdb07052c8bea8421",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_xlv.csv": {
+      "bytes": 682218,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "02e5df03723d01930af4ae348409d88cc7fbaf9513d7049e628777399e5533f7",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/range_vol_v2_xly.csv": {
+      "bytes": 688977,
+      "restored_from": "research/range_vol_v2",
+      "sha256": "abfd815334cae8cbeb25329e16041d994289eb5804103a8d7ef1930ee55b0ba6",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "restored_from": "research/vt_level_tax_v1",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "restored_from": "research/vt_level_tax_v1",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "source": "reused from existing research data",
+      "used_by": "research/monthly_defer_v1/screen.py"
+    },
+    "research/ewma_band_v1/screen.py": {
+      "bytes": 33874,
+      "sha256": "d262a5b9390328fcf6d469ae8eee1cacbd0b9f1bfd260bd6d12c1c0fdd16a290",
+      "source": "reused from existing research data",
+      "used_by": "copied OOS loaders"
+    },
+    "research/fast_reentry_v1/RESULTS.json": {
+      "bytes": 208316,
+      "sha256": "65a3bc1e941ca0bf3956651e19073ca0e5ceed59db1d7078869f75f354294f14",
+      "source": "reused from existing research data",
+      "used_by": "reference anchors (main window, sub-periods, pre-tax bootstrap, six OOS windows)"
+    },
+    "research/fast_reentry_v1/screen.py": {
+      "bytes": 38072,
+      "sha256": "5870806b34a4a5ac9fb3c707f3737b363334d533f78c358bf4fb2ab006a01ac5",
+      "source": "reused from existing research data",
+      "used_by": "copied logic (production R2 signal, simulate_band) and reference anchors"
+    },
+    "research/monthly_defer_v1/tax_engine.py": {
+      "bytes": 13413,
+      "sha256": "8efc33232378b93068adac681928fc51f69f8b13e994bec7be8acd227d14edf3",
+      "source": "reused from existing research data",
+      "used_by": "imported (Turkish after-tax engine, byte copy of research/tax_harvest_v2/tax_engine.py, sha256 8efc33232378b93068adac681928fc51f69f8b13e994bec7be8acd227d14edf3)"
+    },
+    "research/tax_harvest_v2/RESULTS.json": {
+      "sha256": "aeaa447cc6bf6496c41f46afaaae8130f80af380 (branch research/tax_harvest_v2, file tree entry)",
+      "source": "branch research/tax_harvest_v2 (not checked out: the documented H2 anchor values were transcribed into screen.py's REF_H2 and the reproduction is asserted in --harness)",
+      "used_by": "reference anchors (H2 anchor arm)"
+    },
+    "research/trend_robustness_v2/screen.py": {
+      "bytes": 25032,
+      "sha256": "c2a70719029b912d33c22af79c43037663fd7accf9cb9bebaa67c1cdc0fbcd12",
+      "source": "reused from existing research data",
+      "used_by": "imported (engine helpers; its main() is never run)"
+    }
+  },
+  "note": "Offline study: no network download. Every input is an existing committed research file, restored on this branch from the named branch/tag. 'reused from existing research data' means the file was checked out of this repository unchanged; no new market data was fetched."
+}

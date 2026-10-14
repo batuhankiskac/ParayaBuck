@@ -162,10 +162,17 @@ def monthly_curve_raw_to_avail(raw_dict):
 
 # ----------------------------------------------------------------------------- condition (raw -> bool)
 def credit_up_from_raw_daily(raw):
+    import pandas as pd
     r = np.atleast_2d(raw)
-    sma_bool = trv2.sma_up(r, 200)  # True where raw > SMA
-    valid = ~np.isnan(r)
-    out = valid & (~sma_bool)
+    P, T = r.shape
+    out = np.zeros((P, T), dtype=bool)
+    for p in range(P):
+        s = pd.Series(r[p])
+        sf = s.ffill()
+        sma = sf.rolling(window=200, min_periods=200).mean()
+        valid = ~np.isnan(r[p])
+        sma_bool = (sf > sma).fillna(False).to_numpy()
+        out[p] = valid & (~sma_bool)
     return out[0] if np.asarray(raw).ndim == 1 else out
 
 
@@ -332,8 +339,8 @@ def boot_main(arms):
         qc = np.concatenate([one, np.cumprod(r_on_tr * r_id, axis=1)], axis=1)
         qo = np.concatenate([one, qc[:, :-1] * r_on_tr], axis=1)
         pc = np.concatenate([one, np.cumprod(r_on_p * r_id, axis=1)], axis=1)
-        baa_s = baa_raw0[idx]
-        curve_s = curve_raw0[idx]
+        baa_s = np.concatenate([np.full((P, 1), np.nan), baa_raw0[idx]], axis=1)
+        curve_s = np.concatenate([np.full((P, 1), np.nan), curve_raw0[idx]], axis=1)
         credit_s = credit_up_from_raw_daily(baa_s)
         curve_bool_s = curve_inv20_from_raw(curve_s)
         yyp = np.concatenate([yy, yy[:, -1:]], axis=1)

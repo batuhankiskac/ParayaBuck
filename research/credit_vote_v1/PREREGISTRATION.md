@@ -70,3 +70,10 @@ sampled by day and condition recomputed on the sampled path.
 
 `screen.py --harness` verified C0 reproduction before this commit.
 
+
+## Amendments
+
+- 2026-10-14: `credit_up_from_raw_daily` now uses a pandas forward-filled rolling
+  200-session mean instead of `trv2.sma_up` (cumsum-based) because `cumsum`
+  propagated leading NaNs from the aligned BAA10Y series and left the SMA NaN
+  for the entire sample (bug caught in the first run; no gate or arm changed).

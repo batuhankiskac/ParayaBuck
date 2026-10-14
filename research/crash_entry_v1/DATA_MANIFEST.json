@@ -1,0 +1,86 @@
+{
+  "campaign": "crash_entry_v1",
+  "note": "All inputs are offline byte copies of already-committed research data or of files restored from the branches/tags named below. No network access and no download was needed for this study.",
+  "files": {
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "content": "QQQ/SPY/QLD daily open, close, dividend",
+      "date_range": "1993-01-29 .. 2026-09-29 (QQQ/SPY intersection; QQQ from 1999-03-10)",
+      "source": "reused from existing research data (trend_robustness_v2 / ewma_band_v1 harness)",
+      "source_path": "data/historical/stress_robustness_v1_daily.csv"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "content": "FRED DTB3 3-month T-bill secondary market rate, daily",
+      "date_range": "1954-01-04 .. 2026-09-29",
+      "source": "reused from existing research data",
+      "source_path": "data/historical/stress_robustness_v1_dtb3.csv"
+    },
+    "data/historical/ewma_band_v1_gspc.csv": {
+      "bytes": 1145471,
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "content": "^GSPC daily close",
+      "date_range": "1927-12-30 .. 1999-12-31",
+      "source": "restored from tag archive/research/ewma-band-v1-2026-10 (data/historical/ewma_band_v1_gspc.csv)",
+      "used_by": "out-of-sample window ^GSPC 1957-1999"
+    },
+    "data/historical/ewma_band_v1_index.csv": {
+      "bytes": 4114163,
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "content": "multi-index OHLC (^IXIC, ^GSPC, ^N225, ^GDAXI, ^FTSE)",
+      "date_range": "1900 .. 2026-09-29",
+      "source": "restored from tag archive/research/ewma-band-v1-2026-10",
+      "used_by": "out-of-sample windows M1..M5"
+    },
+    "data/historical/ewma_band_v1_tb3ms.csv": {
+      "bytes": 4439,
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "content": "FRED TB3MS monthly 3-month T-bill rate (for pre-1954 OOS windows)",
+      "date_range": "1934-01 .. 2026-09",
+      "source": "restored from tag archive/research/ewma-band-v1-2026-10",
+      "used_by": "out-of-sample financing before DTB3"
+    },
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "content": "USD/TRY CBRT buying rate, daily",
+      "date_range": "2000-01-03 .. 2026-10-09",
+      "source": "restored from branch research/vt_level_tax_v1 (path data/historical/after_tax_tr_v1_usdtry_cbrt.csv); SHA-256 verified against that branch's DATA_MANIFEST.json",
+      "used_by": "after-tax stage and the clean after-tax bootstrap calendar"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "content": "Turkish Yi-UFE (PPI) index, monthly",
+      "date_range": "1999-01 .. 2026-09",
+      "source": "restored from branch research/vt_level_tax_v1; SHA-256 verified against that branch's DATA_MANIFEST.json",
+      "used_by": "after-tax indexation"
+    },
+    "research/trend_robustness_v2/screen.py": {
+      "bytes": 25032,
+      "sha256": "c2a70719029b912d33c22af79c43037663fd7accf9cb9bebaa67c1cdc0fbcd12",
+      "content": "pre-tax engine helpers (load, synthetic_2x, sma_up, vol_n, vt_of, metrics, calendar_years, rnd)",
+      "source": "tracked on the branch (imported, its main() is never run)"
+    },
+    "research/fast_reentry_v1/RESULTS.json": {
+      "bytes": 208316,
+      "sha256": "65a3bc1e941ca0bf3956651e19073ca0e5ceed59db1d7078869f75f354294f14",
+      "content": "main-window C0 (production E2) and R2 rows used as the harness reproduction reference",
+      "source": "restored from branch research/fast_reentry_v1 (tracked file on that branch at commit 64ec38e5); the R2 row is the control's reference (15.48% / 14.90% / 46.76% / m=1 15.75%)",
+      "used_by": "harness only"
+    },
+    "research/crash_entry_v1/E2_INTEGRATION_DEVIATION.json": {
+      "bytes": 16936,
+      "sha256": "7571ed991a08945533b176e5aa4938e5f369cc5a503f142e475821e2e61d99a4",
+      "content": "e2_integration_v1 production-E2 deviation reference rows",
+      "source": "byte copy of research/ewma_band_v1/E2_INTEGRATION_DEVIATION.json (tag archive/research/ewma-band-v1-2026-10)"
+    }
+  },
+  "published_references_hardcoded": {
+    "after_tax_E2": "vt_level_tax_v1 C0 anchors (research/vt_level_tax_v1/screen.py::TAX_ANCHORS): 0.146715 / 0.218852 / 0.322564 pre-tax, 0.095340 / 0.144968 / 0.226932 progressive",
+    "after_tax_R2": "fast_reentry_v2 R2 row (tag archive/research/fast-reentry-v2-2026-10, RESULTS.json after_tax_100k): 0.154732 / 0.221587 / 0.325330 pre-tax, 0.101600 / 0.147059 / 0.228861 progressive, published as 10.16% / 14.71% / 22.89% after tax"
+  },
+  "network": "none; all files are byte copies of committed research data or of files restored from the branches/tags named above"
+}

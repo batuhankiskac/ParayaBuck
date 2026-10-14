@@ -4,16 +4,15 @@
 Modes
   --harness  C0 (production E2) only: reproduces e2_integration_v1's production-E2
              deviation row (2000-03-09 -> 2026-09-29, base/calibrated x m=1/m=2)
-             to 0.01 pp, checks that the band simulator at 0.5 pp equals
-             trend_robustness_v2.simulate_multi bit for bit, and checks the
-             windowed-EWMA identity against a direct computation. Simulates no
-             other arm.
+             to 0.01 pp and checks that the band simulator at 0.5 pp equals
+             trend_robustness_v2.simulate_multi bit for bit. Simulates no other arm.
   --run      re-runs the harness, stops if it fails, then runs every arm
-             (C0, W1, B25, B50, B100, WB25, WB50, WB100) on the main window,
-             the main block-20 bootstrap, the out-of-sample windows (^GSPC
-             1957-1999 and e2_confirmation_v1's M1..M5), the pooled OOS
-             bootstrap, the gates, the band selection and the report-only
-             statistics. Writes RESULTS.json and SUMMARY.txt.
+             (C0, R1, R2, R3, R4) on the main window, the main block-20
+             bootstrap, the out-of-sample windows (^GSPC 1957-1999 and
+             e2_confirmation_v1's M1..M5), the pooled OOS bootstrap, the gates
+             and the report-only statistics (time in market, trades per year,
+             per-episode P&L of the early positions). Writes RESULTS.json and
+             SUMMARY.txt.
 
 Engine helpers (synthetic 2x, SMA, vol20, vt, metrics) are imported from
 research/trend_robustness_v2/screen.py (its main() is never run). The ^GSPC and
@@ -28,6 +27,7 @@ import csv
 import importlib.util
 import json
 import sys
+import warnings
 from collections import defaultdict
 from pathlib import Path
 
@@ -50,11 +50,8 @@ SUMMARY = HERE / "SUMMARY.txt"
 
 # ----------------------------------------------------------------------------- pre-registered constants
 SMA_N, TSM_N, DON_N = 200, 252, 126
-LAMBDA, EWMA_N, EWMA_SEED = 0.94, 252, 20  # windowed RiskMetrics EWMA: 252 returns, seeded by the first 20
+SMA_FAST, LAG_FAST, MED_WINDOW = 50, 20, 252  # early-path SMA, momentum lag, vol-median window
 C0_BAND = trv2.BAND  # 0.005
-BANDS = {"25": 0.025, "50": 0.05, "100": 0.10}  # B_x / WB_x resize bands (pp x 10 in the key)
-GRID = ("25", "50", "100")
-NEIGHBOURS = {"25": ("50",), "50": ("25", "100"), "100": ("50",)}
 CAP = trv2.CAP
 COST_PER_SIDE = trv2.COST_PER_SIDE
 EXP_Q = trv2.EXP_Q
@@ -85,8 +82,8 @@ CANDIDATES = ("R1", "R2", "R3", "R4")
 
 
 def arm_spec(arm):
-    """All arms use production vol20 sizing and the 0.5 pp resize band."""
-    return "vol20", C0_BAND
+    """Resize band of an arm: every arm uses production vol20 sizing and the 0.5 pp band."""
+    return C0_BAND
 
 
 # ----------------------------------------------------------------------------- signals (production E2)
@@ -116,47 +113,7 @@ def e2_up(price):
     return (s + t + d) >= 2
 
 
-# ----------------------------------------------------------------------------- volatility
-def ewma_vol(c, lam=LAMBDA, n=EWMA_N, seed=EWMA_SEED):
-    """Windowed RiskMetrics EWMA vol of the instrument's daily simple returns, annualized.
-
-    At close t the window is the n returns ending at t: s2 is seeded with the mean of
-    the first `seed` squared returns of the window, then s2 = lam*s2 + (1-lam)*r^2 over
-    the remaining n-seed returns; vol = sqrt(252*s2). NaN for t < n.
-    Computed through the infinite recursion (seeded at index `seed`) with the exact
-    identity s_w[t] = lam^K*seed_w[t] + s_inf[t] - lam^K*s_inf[t-K], K = n - seed."""
-    c = np.atleast_2d(c)
-    P, T = c.shape
-    r2 = np.full((P, T), np.nan)
-    r2[:, 1:] = (c[:, 1:] / c[:, :-1] - 1) ** 2
-    K = n - seed
-    s_inf = np.full((P, T), np.nan)
-    s_inf[:, seed] = r2[:, 1:seed + 1].mean(axis=1)
-    for t in range(seed + 1, T):
-        s_inf[:, t] = lam * s_inf[:, t - 1] + (1 - lam) * r2[:, t]
-    cs = np.concatenate([np.zeros((P, 1)), np.cumsum(np.nan_to_num(r2), axis=1)], axis=1)
-    out = np.full((P, T), np.nan)
-    lk = lam ** K
-    for_t = np.arange(n, T)
-    seed_w = (cs[:, for_t - n + seed + 1] - cs[:, for_t - n + 1]) / seed  # mean r2[t-n+1 .. t-n+seed]
-    out[:, n:] = np.sqrt(252 * (lk * seed_w + s_inf[:, n:] - lk * s_inf[:, n - K:T - K]))
-    return out
-
-
-def ewma_vol_direct(c, lam=LAMBDA, n=EWMA_N, seed=EWMA_SEED):
-    """Reference implementation (1-D), as a production strategy would compute it from n+1 closes."""
-    c = np.asarray(c, dtype=float)
-    out = np.full(len(c), np.nan)
-    for t in range(n, len(c)):
-        closes = c[t - n:t + 1]
-        r = closes[1:] / closes[:-1] - 1
-        s2 = float(np.mean(r[:seed] ** 2))
-        for x in r[seed:]:
-            s2 = lam * s2 + (1 - lam) * x * x
-        out[t] = np.sqrt(252 * s2)
-    return out
-
-
+# ----------------------------------------------------------------------------- production sizing
 def wants_for(e2, vol):
     """[P, T] QLD* targets: E2 vote x vt(vol), total capped at 0.98 as trend_robustness_v2.build_wants."""
     raw = np.atleast_2d(e2.astype(float) * trv2.vt_of(vol))
@@ -171,7 +128,9 @@ def _rolling_median_vol(price_vol, window=252):
         lo = max(0, t - window + 1)
         w = price_vol[:, lo:t + 1]
         cnt = np.sum(np.isfinite(w), axis=1)
-        med = np.nanmedian(w, axis=1)
+        with warnings.catch_warnings():  # all-NaN rows before the vol window fills -> NaN, guarded by cnt
+            warnings.simplefilter("ignore", RuntimeWarning)
+            med = np.nanmedian(w, axis=1)
         out[:, t] = np.where(cnt >= window, med, np.nan)
     return out
 
@@ -187,26 +146,27 @@ def _rolling_max(price, window=252):
 
 def early_components(price):
     price = np.atleast_2d(np.asarray(price, dtype=float))
-    sma50_up = trv2.sma_up(price, 50)
+    sma50_up = trv2.sma_up(price, SMA_FAST)
     vol_p = trv2.vol_n(price)
-    med_p = _rolling_median_vol(vol_p, 252)
+    med_p = _rolling_median_vol(vol_p, MED_WINDOW)
     close_lag20 = np.full_like(price, np.nan)
-    close_lag20[:, 20:] = price[:, :-20]
+    close_lag20[:, LAG_FAST:] = price[:, :-LAG_FAST]
     lag_cond = price > close_lag20
     don = don_up(price)
-    rmax = _rolling_max(price, 252)
+    rmax = _rolling_max(price, MED_WINDOW)
     return sma50_up, vol_p, med_p, lag_cond, don, rmax
 
 
-def arm_signals(price, e2_on, vol_instr, arm):
+def arm_signals(price, e2_on, vol_instr, arm, comps=None):
     """Return (target weights [P,T], early_active [P,T]) for a fast-reentry arm.
 
-    Early logic is stateful and evaluated at the close; e2_on is production E2's vote."""
+    Early logic is stateful and evaluated at the close; e2_on is production E2's vote.
+    `comps` is the (path-independent) early_components(price) tuple; computed if not given."""
     price = np.atleast_2d(np.asarray(price, dtype=float))
     e2_on = np.atleast_2d(np.asarray(e2_on, dtype=bool))
     vol_instr = np.atleast_2d(np.asarray(vol_instr, dtype=float))
     P, T = price.shape
-    sma50_up, vol_p, med_p, lag_cond, don, rmax = early_components(price)
+    sma50_up, vol_p, med_p, lag_cond, don, rmax = early_components(price) if comps is None else comps
 
     early_active = np.zeros(P, dtype=bool)
     eligible_until = np.full(P, -10 ** 9, dtype=int)
@@ -379,17 +339,45 @@ def arm_stats(dates, nav, turn, ntr, codes, traded, wants, start, extras, early_
 
 
 # ----------------------------------------------------------------------------- main window
+def early_episodes(dates, nav, nav_c0, early_aligned):
+    """Per-episode P&L of the early positions (report-only, base financing, m = 2).
+
+    early_aligned[k] is the early path's decision at the close of dates[k], so the episode holds the
+    early position over the sessions k0+1 .. k1+1. The P&L span runs from the close of dates[k0] to
+    the close of the reconciliation session (the next open after the early path stops driving the
+    target), where the early-driven position is either sold to cash or merged into production E2's
+    position. That includes the exit fill and the overnight gap the early position earned, so the
+    product of (1 + delta) over episodes reproduces the arm's total relative gain. `c0_return` is
+    production E2's NAV return over the identical span."""
+    ea = np.asarray(early_aligned, dtype=bool)
+    n = min(len(ea), len(nav) - 1, len(nav_c0) - 1)
+    idx = np.flatnonzero(ea[:n])
+    eps = []
+    if idx.size:
+        cut = np.flatnonzero(np.diff(idx) > 1)
+        for s, e in zip(np.concatenate([[0], cut + 1]), np.concatenate([cut, [idx.size - 1]])):
+            k0, k1 = int(idx[s]), int(idx[e])
+            i1 = min(k1 + 2, len(nav) - 1)
+            ra = float(nav[i1] / nav[k0] - 1)
+            rc = float(nav_c0[i1] / nav_c0[k0] - 1)
+            eps.append({"entry_decision": dates[k0], "last_early_decision": dates[k1],
+                        "first_fill_session": dates[k0 + 1], "last_held_session": dates[k1 + 1],
+                        "reconciliation_session": dates[i1], "sessions_held": k1 + 1 - k0,
+                        "arm_return": ra, "c0_return": rc, "delta": ra - rc})
+    return eps
+
+
 def main_inputs(spread):
     days, arr, y = trv2.load()
     q = arr["QQQ"]
     o, c = trv2.synthetic_2x(q[0], q[1], q[2], y + spread, EXP_Q)
-    return days, arr, o, c, e2_up(q[1])[0], trv2.vol_n(c)[0], ewma_vol(c)[0]
+    return days, arr, o, c, e2_up(q[1])[0], trv2.vol_n(c)[0]
 
 
 def run_main(arms, extras=False, m_list=(1, 2)):
     res = {}
     for md, spread in FIN.items():
-        days, arr, o, c, e2, v20, vew = main_inputs(spread)
+        days, arr, o, c, e2, v20 = main_inputs(spread)
         dates = days[START - 1:]
         # price close at QQQ
         q = arr["QQQ"]
@@ -397,18 +385,26 @@ def run_main(arms, extras=False, m_list=(1, 2)):
         e2_arr = e2  # 1-D
         wants_by_arm = {}
         early_by_arm = {}
+        comps = early_components(price)
         for arm in arms:
-            w, ea = arm_signals(price, e2_arr, v20, arm)
+            w, ea = arm_signals(price, e2_arr, v20, arm, comps)
             wants_by_arm[arm] = w[0]
             early_by_arm[arm] = ea
         res[md] = {}
         for m in m_list:
             hm = {}
+            navs = {}
             for arm in arms:
-                band = arm_spec(arm)[1]
+                band = arm_spec(arm)
                 nav, turn, ntr, codes, traded = simulate_band(o, c, wants_by_arm[arm], COST_PER_SIDE * m, START, band)
+                navs[arm] = nav[0]
                 hm[arm] = arm_stats(dates, nav[0], turn[0], ntr[0], codes[0], traded[0], wants_by_arm[arm], START,
                                     extras and m == 2, early_active=early_by_arm[arm])
+            if extras and m == 2 and "C0" in arms:
+                for arm in arms:
+                    if arm != "C0":
+                        hm[arm]["early_episodes"] = early_episodes(
+                            dates, navs[arm], navs["C0"], early_by_arm[arm][0][START - 1:])
             res[md][f"m{m}"] = hm
         res["window"] = {"start": dates[1], "end": dates[-1], "sessions": len(dates) - 1}
     return res
@@ -426,20 +422,14 @@ def harness():
                 checks[f"{md}_m{m}_{k}"] = {"reference": r[k], "reproduced": x[k], "diff_pp": (x[k] - r[k]) * 100}
     ok_dev = all(abs(v["diff_pp"]) <= TOL * 100 for v in checks.values())
     # band simulator at 0.5 pp == trend_robustness_v2.simulate_multi (bit for bit), base m=2
-    days, arr, o, c, e2, v20, vew = main_inputs(0.0)
+    days, arr, o, c, e2, v20 = main_inputs(0.0)
     w = wants_for(e2, v20)
     nav_b = simulate_band(o, c, w, COST_PER_SIDE * 2, START, C0_BAND)[0]
     nav_m = trv2.simulate_multi(o, c, w[:, None, :], COST_PER_SIDE * 2, START)[0]
     sim_equal = bool(np.array_equal(nav_b, nav_m))
-    # windowed EWMA identity vs direct computation on the main-window instrument
-    direct = ewma_vol_direct(c)
-    mask = ~np.isnan(direct)
-    rel = float(np.max(np.abs(vew[mask] / direct[mask] - 1)))
-    same_nan = bool(np.array_equal(np.isnan(direct), np.isnan(vew)))
-    ok = ok_dev and sim_equal and rel < 1e-9 and same_nan
+    ok = ok_dev and sim_equal
     return {"window": h["window"], "deviation_checks": checks, "tolerance_pp": TOL * 100,
             "band_simulator_equals_simulate_multi": sim_equal,
-            "ewma_identity_max_rel_diff_vs_direct": rel, "ewma_nan_pattern_equal": same_nan,
             "pass": bool(ok)}
 
 
@@ -481,12 +471,13 @@ def boot_main(arms):
         pc = np.concatenate([one, np.cumprod(r_on_p * r_id, axis=1)], axis=1)
         e2 = e2_up(pc)
         yyp = np.concatenate([yy, yy[:, -1:]], axis=1)
+        comps = early_components(pc)
         for md in FIN:
             so, scl = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp + FIN[md], EXP_Q)
             vol_instr = trv2.vol_n(scl)
             for arm in arms:
-                w, _ = arm_signals(pc, e2, vol_instr, arm)
-                band = arm_spec(arm)[1]
+                w, _ = arm_signals(pc, e2, vol_instr, arm, comps)
+                band = arm_spec(arm)
                 nav, turn, _, _, _ = simulate_band(so, scl, w, COST_PER_SIDE * 2, start, band)
                 k = nav.shape[1] - 1
                 cg[(md, arm)].append((nav[:, -1] / nav[:, 0]) ** (252 / k) - 1)
@@ -602,12 +593,13 @@ def oos_window(days, o, c, y, start, arms):
     so, sc = trv2.synthetic_2x(o, c, np.zeros_like(c), y + EXTRA_FIN, EXP_Q)
     e2 = e2_up(c)
     vol_instr = trv2.vol_n(sc)
-    wants_by_arm = {arm: arm_signals(c, e2, vol_instr, arm)[0] for arm in arms}
+    comps = early_components(c)
+    wants_by_arm = {arm: arm_signals(c, e2, vol_instr, arm, comps)[0] for arm in arms}
     dates = days[start - 1:]
     years = trv2.calendar_years(dates[0], dates[-1])
     res = {"window": {"start": dates[1], "end": dates[-1], "sessions": len(dates) - 1}}
     for arm in arms:
-        band = arm_spec(arm)[1]
+        band = arm_spec(arm)
         nav, turn, ntr, codes, traded = simulate_band(so, sc, wants_by_arm[arm], COST_PER_SIDE * 2, start, band)
         nav = nav[0]
         cg = float(trv2.cagr(nav[0], nav[-1], years))
@@ -643,9 +635,10 @@ def boot_oos_market(key, rng, arms):
         e2 = e2_up(cc)
         so, sc = trv2.synthetic_2x(oo, cc, np.zeros_like(cc), yyp + EXTRA_FIN, EXP_Q)
         vol_instr = trv2.vol_n(sc)
+        comps = early_components(cc)
         for arm in arms:
-            w, _ = arm_signals(cc, e2, vol_instr, arm)
-            band = arm_spec(arm)[1]
+            w, _ = arm_signals(cc, e2, vol_instr, arm, comps)
+            band = arm_spec(arm)
             nav = simulate_band(so, sc, w, COST_PER_SIDE * 2, START, band)[0]
             k = nav.shape[1] - 1
             acc[arm].append((nav[:, -1] / nav[:, 0]) ** (252 / k) - 1)
@@ -672,7 +665,7 @@ def historical_gates(main, boot, arm):
     wins = [p for p in ("P1", "P2", "P3") if a2["subperiods"][p]["cagr"] > c2["subperiods"][p]["cagr"]]
     r["G4"] = bool(len(wins) >= 2)
     r["G4_wins"] = wins
-    kind, band = arm_spec(arm)
+    band = arm_spec(arm)
     lim = c2["turnover_annual"] * (1.0 if band > C0_BAND else 2.0)
     r["G9"] = bool(a2["turnover_annual"] <= lim)
     return r
@@ -706,13 +699,12 @@ def main() -> None:
     hc = harness()
     for k, v in hc["deviation_checks"].items():
         print(f"harness {k}: ref {v['reference']:.8f} repro {v['reproduced']:.8f} diff {v['diff_pp']:+.6f} pp")
-    print(f"harness band simulator == simulate_multi: {hc['band_simulator_equals_simulate_multi']}; "
-          f"EWMA identity max rel diff {hc['ewma_identity_max_rel_diff_vs_direct']:.3e}")
+    print(f"harness band simulator == simulate_multi: {hc['band_simulator_equals_simulate_multi']}")
     print(f"harness {'PASS' if hc['pass'] else 'FAIL'}")
     if mode == "--harness" or not hc["pass"]:
         sys.exit(0 if hc["pass"] else 1)
 
-    main_res = run_main(ARMS, extras=True)
+    main_res = run_main(ARMS, extras=True, m_list=(1, 2, 4))
     print("main window done")
     cg, tv = boot_main(ARMS)
     boot = boot_summary(cg, tv, ARMS, FIN)
@@ -749,9 +741,12 @@ def main() -> None:
 
     out = {
         "campaign": "fast_reentry_v1",
-        "params": {"arms": list(ARMS), "sma_n": SMA_N, "tsm_n": TSM_N, "don_n": DON_N, "ewma_lambda": LAMBDA,
-                   "ewma_window_returns": EWMA_N, "ewma_seed_returns": EWMA_SEED, "c0_band": C0_BAND,
-                   "bands": BANDS, "cap": CAP, "cost_per_side_m1": COST_PER_SIDE, "expense": EXP_Q,
+        "params": {"arms": list(ARMS), "sma_n": SMA_N, "tsm_n": TSM_N, "don_n": DON_N, "c0_band": C0_BAND,
+                   "early_path": {"sma_fast": SMA_FAST, "momentum_lag": LAG_FAST, "vol_window": trv2.VOL_N,
+                                  "vol_median_window": MED_WINDOW, "r4_drawdown": 0.20, "r4_window": TSM_N,
+                                  "r2_weight": 0.5},
+                   "cap": CAP, "cost_per_side_m1": COST_PER_SIDE, "expense": EXP_Q,
+                   "main_window_cost_multipliers": [1, 2, 4],
                    "financing_spread": FIN, "bootstrap_main": {"seed": SEED, "paths": PATHS, "block": BLOCK,
                                                                "warmup": WARM, "back_extension": EXT,
                                                                "measured": MEASURED, "m": 2},
@@ -776,8 +771,7 @@ def main() -> None:
     L = [f"fast_reentry_v1 | main window {w['start']} -> {w['end']} ({w['sessions']} sessions) | C0 = production E2 1.1.0",
          f"harness: {'PASS' if hc['pass'] else 'FAIL'} (max |diff| "
          f"{max(abs(v['diff_pp']) for v in hc['deviation_checks'].values()):.6f} pp vs e2_integration_v1 production E2; "
-         f"band sim == simulate_multi {hc['band_simulator_equals_simulate_multi']}; EWMA identity rel diff "
-         f"{hc['ewma_identity_max_rel_diff_vs_direct']:.1e})", ""]
+         f"band sim == simulate_multi {hc['band_simulator_equals_simulate_multi']})", ""]
     for md in FIN:
         L.append(f"[{md}] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | m=1 CAGR")
         for arm in ARMS:
@@ -808,10 +802,28 @@ def main() -> None:
     L.append("gates (" + " ".join(GATE_KEYS) + "):")
     for arm in CANDIDATES:
         g = gates[arm]
-        pl = f" plateau={'P' if g.get('plateau') else 'F'}" if "plateau" in g else ""
         L.append(f"  {arm:5s} " + " ".join(f"{k}={'P' if g[k] else 'F'}" for k in GATE_KEYS) +
-                 f"{pl} -> {'PASS' if g['pass_all'] else 'FAIL'}")
-    L.append(f"band x* = {xstar} ({xrule}); WB = {wb}; eligible {eligible}; selected: {sel}")
+                 f" -> {'PASS' if g['pass_all'] else 'FAIL'}")
+    L.append("")
+    L.append("cost stress (report only, not gated): arm | m=1 / m=2 / m=4 base CAGR, m=4 max DD")
+    for arm in ARMS:
+        r = main_res["base"]
+        L.append(f"  {arm:5s} {p(r['m1'][arm]['cagr']).strip()} / {p(r['m2'][arm]['cagr']).strip()} / "
+                 f"{p(r['m4'][arm]['cagr']).strip()} | {p(r['m4'][arm]['max_dd']).strip()}")
+    L.append("")
+    L.append("early path (base, m=2): arm | early share of sessions | episodes | sum(arm-C0) over episodes | "
+             "median episode delta | best episode | worst episode")
+    for arm in CANDIDATES:
+        a = main_res["base"]["m2"][arm]
+        eps = a["early_episodes"]
+        d = np.array([e["delta"] for e in eps]) if eps else np.array([0.0])
+        best = max(eps, key=lambda e: e["delta"]) if eps else None
+        worst = min(eps, key=lambda e: e["delta"]) if eps else None
+        fmt = lambda e: f"{e['entry_decision']}->{e['last_held_session']} {e['delta'] * 100:+.2f}pp"
+        L.append(f"  {arm:5s} {a['early_time_in_market'] * 100:6.2f}% {len(eps):4d} {d.sum() * 100:+8.2f}pp "
+                 f"{np.median(d) * 100:+8.2f}pp | {fmt(best) if best else '-'} | {fmt(worst) if worst else '-'}")
+    L.append("")
+    L.append(f"eligible {eligible}; selected: {sel}")
     SUMMARY.write_text("\n".join(L) + "\n")
     print("\n".join(L))
 

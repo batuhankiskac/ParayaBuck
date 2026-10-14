@@ -253,16 +253,11 @@ def _rolling_median_vol(price_vol, window=MED_WINDOW, block=32):
     return out
 
 
-def _rolling_max(price, window=MED_WINDOW):
-    P, T = price.shape
-    out = np.full((P, T), np.nan)
-    for t in range(T):
-        lo = max(0, t - window + 1)
-        out[:, t] = np.nanmax(price[:, lo:t + 1], axis=1)
-    return out
-
-
 def early_components(price):
+    """The four path-independent early-entry conditions: SMA50, price vol20, its trailing
+    252-session median, and 20-session momentum. `fast_reentry_v1`'s tuple also carried the
+    Donchian vote and the 252-session running max; neither is used by the R2 or E2 branch of
+    `r2_state`/`arm_signals`, so they are not computed here."""
     price = np.atleast_2d(np.asarray(price, dtype=float))
     sma50_up = trv2.sma_up(price, SMA_FAST)
     vol_p = trv2.vol_n(price)
@@ -270,51 +265,51 @@ def early_components(price):
     close_lag20 = np.full_like(price, np.nan)
     close_lag20[:, LAG_FAST:] = price[:, :-LAG_FAST]
     lag_cond = price > close_lag20
-    don = don_up(price)
-    rmax = _rolling_max(price, MED_WINDOW)
-    return sma50_up, vol_p, med_p, lag_cond, don, rmax
+    return sma50_up, vol_p, med_p, lag_cond
 
 
-def arm_signals(price, e2_on, vol_instr, arm, comps=None):
-    """Target weights [P, T] for R2 (E2 + early re-entry) or production E2 ("C0").
-
-    Copied from research/fast_reentry_v1/screen.py; only the R2 and C0 branches are reachable."""
+def r2_state(price, e2_on, comps=None):
+    """(on_eff, factor) of production R2's path: the E2 vote plus the half-weight early
+    re-entry leg. Model-independent -- the entry/exit conditions use the *price* series only,
+    so one call serves both financing models. `fast_reentry_v1.arm_signals`' R2 branch,
+    separated from the sizing so the session loop runs once per path."""
     price = np.atleast_2d(np.asarray(price, dtype=float))
     e2_on = np.atleast_2d(np.asarray(e2_on, dtype=bool))
-    vol_instr = np.atleast_2d(np.asarray(vol_instr, dtype=float))
     P, T = price.shape
-    sma50_up, vol_p, med_p, lag_cond, don, rmax = early_components(price) if comps is None else comps
-
+    sma50_up, vol_p, med_p, lag_cond = early_components(price) if comps is None else comps
     early_active = np.zeros(P, dtype=bool)
     on_eff = np.zeros((P, T), dtype=bool)
-    early_hist = np.zeros((P, T), dtype=bool)
     factor = np.zeros((P, T), dtype=float)
-    is_R2 = (arm == "R2")
-
     for t in range(T):
-        e2t = e2_on[:, t].copy()
+        e2t = e2_on[:, t]
         early_active = np.where(e2t, False, early_active)
-        if is_R2:
-            exit_cond = ~sma50_up[:, t]
-            entry_cond = (sma50_up[:, t] & np.isfinite(med_p[:, t])
-                          & (vol_p[:, t] < med_p[:, t]) & lag_cond[:, t])
-        else:
-            exit_cond = np.zeros(P, dtype=bool)
-            entry_cond = np.zeros(P, dtype=bool)
+        exit_cond = ~sma50_up[:, t]
+        entry_cond = (sma50_up[:, t] & np.isfinite(med_p[:, t])
+                      & (vol_p[:, t] < med_p[:, t]) & lag_cond[:, t])
         early_active = np.where(early_active & exit_cond & (~e2t), False, early_active)
         can_enter = (~early_active) & (~e2t) & np.isfinite(med_p[:, t])
         early_active = np.where(can_enter & entry_cond, True, early_active)
-        active = e2t | early_active
-        f = np.where(e2t, 1.0, np.where(early_active, 0.5 if is_R2 else 1.0, 0.0))
-        f = np.where(active, f, 0.0)
-        on_eff[:, t] = active
-        early_hist[:, t] = early_active
-        factor[:, t] = f
+        on_eff[:, t] = e2t | early_active
+        factor[:, t] = np.where(e2t, 1.0, np.where(early_active, 0.5, 0.0))
+    return on_eff, factor
 
-    vt = trv2.vt_of(vol_instr)
-    raw = on_eff.astype(float) * factor * vt
+
+def sized_wants(on_eff, factor, vol_instr):
+    """`fast_reentry_v1.arm_signals`' sizing: min(1, 0.35/vol20) x the path factor, total cap 0.98."""
+    vt = trv2.vt_of(np.atleast_2d(np.asarray(vol_instr, dtype=float)))
+    raw = np.atleast_2d(np.asarray(on_eff, dtype=float)) * np.atleast_2d(factor) * vt
     fcap = np.where(raw > CAP, CAP / np.where(raw > 0, raw, 1.0), 1.0)
-    return raw * fcap, early_hist
+    return raw * fcap
+
+
+def arm_signals(price, e2_on, vol_instr, arm, comps=None):
+    """Target weights [P, T] for R2 (E2 + early re-entry) or production E2 ("C0")."""
+    if arm == "R2":
+        on_eff, factor = r2_state(price, e2_on, comps)
+    else:
+        on_eff = np.atleast_2d(np.asarray(e2_on, dtype=bool)).copy()
+        factor = np.ones_like(on_eff, dtype=float)
+    return sized_wants(on_eff, factor, vol_instr), None
 
 
 def simulate_band(opens, closes, wants, cost, start, band):
@@ -612,9 +607,12 @@ def main_inputs(spread):
 
 
 def wants_of(price, e2, vol_instr, comps=None):
-    """(E2 wants, R2 wants) for one price series."""
-    return (arm_signals(price, e2, vol_instr, "C0", comps)[0][0],
-            arm_signals(price, e2, vol_instr, "R2", comps)[0][0])
+    """(E2 wants [P, T], R2 wants [P, T]) for one price series; one state loop for the pair."""
+    comps = early_components(price) if comps is None else comps
+    on_eff, factor = r2_state(price, e2, comps)
+    e2_arr = np.atleast_2d(np.asarray(e2, dtype=bool))
+    return (sized_wants(e2_arr, np.ones_like(factor), vol_instr),
+            sized_wants(on_eff, factor, vol_instr))
 
 
 def usd_market(days):
@@ -820,6 +818,7 @@ def boot_e1(n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS, capitals=("100k", "1M"))
     i0, i1 = TAX_BOOT_I0, len(fixed_dates) - 1
     pre = {(md, a): [] for md in FIN for a in ARMS}
     at = {cl: {mode: {a: [] for a in ARMS} for mode in ("progressive", "flat")} for cl in capitals}
+    anchor_e2 = {"progressive": [], "flat": []}   # pure-E2 targets, $100k (engine-fidelity anchor)
     for pidx in range(max(n_pre, n_tax)):
         pos = np.empty((1, L), dtype=np.int64)
         pos[:, 0] = rng.integers(0, npool, 1)
@@ -844,26 +843,33 @@ def boot_e1(n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS, capitals=("100k", "1M"))
         comps = early_components(pc)
         so, sc = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp + FIN["base"], EXP_Q)
         so_c, sc_c = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp + FIN["calibrated"], EXP_Q)
-        w_c0, w_r2 = wants_of(pc, e2, trv2.vol_n(sc)[0], comps)
-        w_c0c, w_r2c = wants_of(pc, e2, trv2.vol_n(sc_c)[0], comps)
-        legs = {"base": (so[0], sc[0], w_c0, w_r2), "calibrated": (so_c[0], sc_c[0], w_c0c, w_r2c)}
+        # one state loop per path; the sizing differs per financing model only
+        on_eff, factor = r2_state(pc, e2, comps)
+        w_r2 = sized_wants(on_eff, factor, trv2.vol_n(sc)[0])[0]
+        w_r2c = sized_wants(on_eff, factor, trv2.vol_n(sc_c)[0])[0]
+        w_e2 = sized_wants(np.atleast_2d(e2), np.ones_like(factor), trv2.vol_n(sc)[0])[0]
+        legs = {"base": (so[0], sc[0], w_r2), "calibrated": (so_c[0], sc_c[0], w_r2c)}
         if pidx < n_pre:
-            for md, (o_, c_, wc_, wr_) in legs.items():
+            for md, (o_, c_, want) in legs.items():
                 for arm in ARMS:
-                    r = engine_run(PRE_CAPITAL, i0, i1, fixed_dates, mkt, o_, c_,
-                                   wc_ if arm == "C0" else wr_, e2, arm, "pre_tax", m=M)
+                    r = engine_run(PRE_CAPITAL, i0, i1, fixed_dates, mkt, o_, c_, want, e2,
+                                   arm, "pre_tax", m=M)
                     k = len(r["_nav"]) - 1
                     pre[(md, arm)].append((r["_nav"][-1] / r["_nav"][0]) ** (252 / k) - 1)
         if pidx < n_tax:
-            o_, c_, wc_, wr_ = legs["base"]
+            o_, c_, want = legs["base"]
             for cap_label in capitals:
                 for mode in ("progressive", "flat"):
                     for arm in ARMS:
                         r = engine_run(TAX_CAPITALS[cap_label], i0, i1, fixed_dates, mkt, o_, c_,
-                                       wc_ if arm == "C0" else wr_, e2, arm, mode, m=M)
+                                       want, e2, arm, mode, m=M)
                         if not (r["terminal_usd_liquidated"] > 0) or r["terminal_usd_liquidated"] != r["terminal_usd_liquidated"]:
                             raise RuntimeError(f"non-positive/NaN terminal on path {pidx} arm {arm} {mode} {cap_label}")
                         at[cap_label][mode][arm].append(r["cagr_usd_liquidated"])
+                    # anchor label only: pure E2 targets (the reference bootstrap's "C0")
+                    r = engine_run(TAX_CAPITALS[GATE_CAPITAL], i0, i1, fixed_dates, mkt, o_, c_,
+                                   w_e2, e2, "C0", mode, m=M)
+                    anchor_e2[mode].append(r["cagr_usd_liquidated"])
         if (pidx + 1) % 500 == 0:
             print(f"  E1 path {pidx + 1}/{max(n_pre, n_tax)}", flush=True)
 
@@ -896,6 +902,7 @@ def boot_e1(n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS, capitals=("100k", "1M"))
                         "p05_delta_cagr_pp": float(np.percentile(d, 5) * 100),
                         "p95_delta_cagr_pp": float(np.percentile(d, 95) * 100)}
             out["tax"][cl][mode] = e
+    out["anchor_e2_100k"] = {mode: {"cagr_median": float(np.median(v))} for mode, v in anchor_e2.items()}
     return out
 
 
@@ -933,7 +940,7 @@ def boot_oos_market(key, rng, arms):
                                arm, "pre_tax", m=M, rule_index=False)
                 k = len(r["_nav"]) - 1
                 acc[arm].append((r["_nav"][-1] / r["_nav"][0]) ** (252 / k) - 1)
-    return {a: np.concatenate(v) for a, v in acc.items()}
+    return {a: np.array(v, dtype=float) for a, v in acc.items()}
 
 
 # ----------------------------------------------------------------------------- smoke / harness
@@ -994,8 +1001,16 @@ def smoke():
     checks["rolling_median_fast_equals_ref"] = bool(np.array_equal(
         _rolling_median_vol(pv), _rolling_median_vol_ref(pv), equal_nan=True))
 
+    # 2b. the split state/sizing helpers == the reference arm_signals (R2 want series)
+    w_ref = arm_signals(price, e2, v20, "R2")[0][0]
+    on_eff, factor = r2_state(price, e2, early_components(price))
+    checks["r2_state_sizing_matches_arm_signals"] = bool(
+        np.array_equal(w_ref, sized_wants(on_eff, factor, v20)[0]))
+    checks["wants_of_matches_arm_signals"] = bool(
+        np.array_equal(wants_of(price, e2, v20)[1][0], w_ref))
+
     # 3. C0 engine == the reference simulate_band (base, m = 2)
-    ref_nav, _, _ = simulate_band(so[None, :], sc[None, :], w_r2[None, :], COST_PER_SIDE * 2, START, C0_BAND)
+    ref_nav, _, _ = simulate_band(so[None, :], sc[None, :], w_r2, COST_PER_SIDE * 2, START, C0_BAND)
     c0 = engine_run(1.0, START, n - 1, days, mkt, so, sc, w_r2, e2, "C0", "pre_tax")
     checks["c0_engine_equals_simulate_band"] = bool(np.max(np.abs(c0["_nav"] - ref_nav[0])) < 1e-9)
 
@@ -1112,9 +1127,13 @@ def harness(run_boot=True):
     if run_boot:
         b = boot_e1(n_pre=TAX_BOOT_PATHS, n_tax=TAX_BOOT_PATHS, capitals=("100k",))
         for mode in ("progressive", "flat"):
-            boot[mode] = {a: b["tax"]["100k"][mode][a]["cagr_median"] for a in ("C0", "R2")}
-            for a in ("C0", "R2"):
-                if abs(boot[mode][a] - BOOT_ANCHOR[mode][a]) > 0.0010:
+            # this study's control ("C0") *is* production R2 (E2 + the early path); the reference
+            # bootstrap's "C0" is pure E2, tracked here by the anchor_e2 label.
+            boot[mode] = {"C0": b["tax"]["100k"][mode]["C0"]["cagr_median"],
+                          "R2": b["tax"]["100k"][mode]["C0"]["cagr_median"],
+                          "E2": b["anchor_e2_100k"][mode]["cagr_median"]}
+            for label, ref_key in (("E2", "C0"), ("C0", "R2")):
+                if abs(boot[mode][label] - BOOT_ANCHOR[mode][ref_key]) > 0.0010:
                     bad += 1
         boot["pre_base"] = {a: b["pre"]["base"][a]["cagr_median"] for a in ARMS}
         boot["pre_cal"] = {a: b["pre"]["calibrated"][a]["cagr_median"] for a in ARMS}
@@ -1373,10 +1392,11 @@ def main() -> None:
                   f"prog {x['progressive']['diff_pp']:+.5f} dd {x['progressive_max_dd']['diff_pp']:+.5f} pp")
     if hs["bootstrap_control"]:
         for mode_ in ("progressive", "flat"):
-            for arm in ("C0", "R2"):
+            for arm, ref_key in (("E2", "C0"), ("C0", "R2")):
                 b = hs["bootstrap_control"][mode_][arm]
-                ref = BOOT_ANCHOR[mode_][arm]
-                print(f"boot anchor {mode_} {arm}: ref {ref:.6f} repro {b:.6f} diff {(b - ref) * 100:+.3f} pp")
+                ref = BOOT_ANCHOR[mode_][ref_key]
+                print(f"boot anchor {mode_} {arm} (ref {ref_key}): ref {ref:.6f} repro {b:.6f} "
+                      f"diff {(b - ref) * 100:+.3f} pp")
     print(f"harness {'PASS' if hs['pass'] else 'FAIL'} ({hs['n_outside_tolerance']} outside tolerance)")
     if mode == "--harness" or not hs["pass"]:
         sys.exit(0 if hs["pass"] else 1)

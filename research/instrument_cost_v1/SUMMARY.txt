@@ -1,0 +1,37 @@
+instrument_cost_v1 | real funds 2010-02-11 -> 2026-09-29 (4183 sessions); measured from 2011-02-11 | Q = production R2 on real QLD,
+harness: pre-tax PASS (max |diff| 0.000044 pp vs published C0/R2), after-tax anchors PASS (max |diff| 0.000049 pp)
+
+[m=2] historical: arm CAGR maxDD Calmar turn/yr trades/yr | 2010win CAGR/DD | 2017win CAGR/DD | boot20 median, median(arm-Q)
+  Q        22.20%   37.88% 0.586  5.84   60.1 | 22.20%/37.88% | 32.07%/31.14% | 23.86% +0.000pp
+  T        22.23%   34.76% 0.640  4.47  114.6 | 22.23%/34.76% | 31.30%/31.04% | 23.48% -0.354pp
+  Qstar    22.45%   38.09% 0.589  5.84   60.1 | 22.45%/38.09% | 32.53%/31.01% | - (not bootstrapped)
+  T_alt    25.60%   43.76% 0.585  6.99  123.3 | 25.60%/43.76% | 37.78%/32.89% | 26.89% +3.022pp
+
+[m=1] historical: arm CAGR maxDD Calmar turn/yr trades/yr | 2010win CAGR/DD | 2017win CAGR/DD | boot20 median, median(arm-Q)
+  Q        22.49%   37.41% 0.601  5.84   60.1 | 22.49%/37.41% | 32.28%/30.87% | 23.86% +0.000pp
+  T        22.45%   34.48% 0.651  4.47  114.6 | 22.45%/34.48% | 31.47%/30.86% | 23.48% -0.354pp
+  Qstar    22.74%   37.63% 0.604  5.84   60.1 | 22.74%/37.63% | 32.74%/30.75% | - (not bootstrapped)
+  T_alt    25.95%   43.37% 0.598  6.99  123.3 | 25.95%/43.37% | 38.08%/32.70% | 26.89% +3.022pp
+
+tracking (full window): fund | k | fund CAGR | k x QQQ daily CAGR | drag pp/yr
+  QLD   2   33.09%   36.94%  -3.849
+  TQQQ  3   42.87%   50.15%  -7.275
+vs synthetic model (full window): fund | real CAGR | base synthetic | diff | calibrated synthetic | diff
+  QLD     33.09%   33.65%  -0.553   32.65%  +0.442
+  TQQQ    42.87%   44.53%  -1.654   42.38%  +0.492
+liquidity (report only): fund | avg $vol | CS spread mean (median, share>0) | tick floor at last close | mean daily range
+  QLD          242.6M    56.25bps (0.00, 0.480)   1.05bps   2.79%
+  TQQQ       2,019.8M    84.82bps (0.00, 0.482)   1.29bps   4.20%
+  QQQ       10,404.5M    29.09bps (nan, nan)   0.14bps   1.42%
+
+after tax ($100k, progressive 2026 tariff, liquidated, m=2): window | arm | pre-tax -> after-tax CAGR (DD) | trades/yr | tax USD
+  2010_to_end  Q    22.20% ->   14.63% (  43.53%)   60.8      458,084 terminal      845,120
+  2010_to_end  T    22.23% ->   15.04% (  39.37%)  115.0      464,933 terminal      893,939
+  2017_to_end  Q    32.06% ->   22.53% (  36.21%)   70.3      347,988 terminal      724,367
+  2017_to_end  T    31.29% ->   22.04% (  36.94%)  119.6      322,684 terminal      696,912
+
+B1-recent progressive: Q median 13.59% T median 13.66% median dCAGR +0.061pp share>0 0.544 p05 -0.851 p95 +0.876 median dDD  -0.78pp
+B2 flat 20%: Q median 14.05% T median 14.88% median dCAGR +0.736pp share>0 0.965 p05 +0.094 p95 +1.441 median dDD  -1.49pp
+
+gates: GT1_window_2010_m2=P GT2_window_2010_m2=P GT1_window_2017_m2=F GT2_window_2017_m2=P GT3_bootstrap=F GT4_2010_to_end=P GT4_2017_to_end=F GT5_B1_median=P GT5_B1_share=F GT5_B2_median=P GT5_B2_share=P GT6_turnover=P -> FAIL
+selected: none

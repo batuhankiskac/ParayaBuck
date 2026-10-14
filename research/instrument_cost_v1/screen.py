@@ -72,6 +72,7 @@ W17_START = "2017-01-03"
 FUNDS = ("QQQ", "QLD", "TQQQ")
 LEVER = {"QLD": 2.0, "TQQQ": 3.0}
 ARMS = ("Q", "T", "Qstar", "T_alt")
+BOOT_ARMS = ("Q", "T", "T_alt")
 CANDIDATES = ("T",)
 
 DATA = {s: ROOT / f"data/historical/instrument_cost_v1_{s.lower()}.csv" for s in FUNDS}
@@ -231,7 +232,7 @@ def corwin_schultz(hi, lo):
 
 def tracking(days, arr):
     qqq_tr = arr["QQQ"]["tr_close"]
-    r = qqq_tr[1:] / qqq_tr[:-1]
+    r = qqq_tr[1:] / qqq_tr[:-1] - 1.0   # daily total return (gross ratio - 1)
     out = {"windows": {}, "by_year": {}, "liquidity": {}}
     for s in ("QLD", "TQQQ"):
         k = LEVER[s]
@@ -249,16 +250,21 @@ def tracking(days, arr):
             w[yr] = {"fund": float(f), "bench": float(b), "drag_pp": float((f - b) * 100),
                      "partial": bool(i0 == 0)}
         out["by_year"][s] = w
+        cs = corwin_schultz(arr[s]["high"], arr[s]["low"])
         out["liquidity"][s] = {
             "avg_dollar_volume": float(np.mean(arr[s]["close"] * arr[s]["volume"])),
             "median_dollar_volume": float(np.median(arr[s]["close"] * arr[s]["volume"])),
-            "corwin_schultz_spread_mean": float(np.mean(corwin_schultz(arr[s]["high"], arr[s]["low"]))),
-            "corwin_schultz_spread_median": float(np.median(corwin_schultz(arr[s]["high"], arr[s]["low"]))),
+            "corwin_schultz_spread_mean": float(np.mean(cs)),
+            "corwin_schultz_spread_median": float(np.median(cs)),
+            "corwin_schultz_share_positive": float(np.mean(cs > 0)),
+            "corwin_schultz_mean_over_positive": float(np.mean(cs[cs > 0])) if np.any(cs > 0) else 0.0,
+            "spread_tick_floor_bps_at_last_close": float(0.01 / arr[s]["close"][-1] * 1e4),
             "mean_daily_range_pct": float(np.mean((arr[s]["high"] - arr[s]["low"]) / arr[s]["close"]) * 100),
         }
     out["liquidity"]["QQQ"] = {
         "avg_dollar_volume": float(np.mean(arr["QQQ"]["close"] * arr["QQQ"]["volume"])),
         "corwin_schultz_spread_mean": float(np.mean(corwin_schultz(arr["QQQ"]["high"], arr["QQQ"]["low"]))),
+        "spread_tick_floor_bps_at_last_close": float(0.01 / arr["QQQ"]["close"][-1] * 1e4),
         "mean_daily_range_pct": float(np.mean((arr["QQQ"]["high"] - arr["QQQ"]["low"]) / arr["QQQ"]["close"]) * 100),
     }
     # dividend yield (last 3 years), report only
@@ -280,11 +286,18 @@ def tracking(days, arr):
         cagr_real = trv2.cagr(1.0, arr[s]["tr_close"][-1] / arr[s]["tr_close"][0], yrs)
         if s == "QLD":
             cagr_syn = trv2.cagr(1.0, syn_c[s][-1] / syn_c[s][0], yrs)
+            so3c, sc3c = synthetic_L(arr["QQQ"]["open"], arr["QQQ"]["close"], arr["QQQ"]["dividend"], y, 2.0,
+                                     trv2.EXP_Q, 0.0075)
         else:
             so3, sc3 = synthetic_L(arr["QQQ"]["open"], arr["QQQ"]["close"], arr["QQQ"]["dividend"], y, 3.0, 0.0084)
             cagr_syn = trv2.cagr(1.0, sc3[-1] / sc3[0], yrs)
-        out["vs_synthetic"][s] = {"cagr_real": float(cagr_real), "cagr_synthetic": float(cagr_syn),
-                                  "diff_pp": float((cagr_real - cagr_syn) * 100)}
+            so3c, sc3c = synthetic_L(arr["QQQ"]["open"], arr["QQQ"]["close"], arr["QQQ"]["dividend"], y, 3.0,
+                                     0.0084, 0.0075)
+        cagr_cal = trv2.cagr(1.0, sc3c[-1] / sc3c[0], yrs)
+        out["vs_synthetic"][s] = {"cagr_real": float(cagr_real), "cagr_synthetic_base": float(cagr_syn),
+                                  "diff_base_pp": float((cagr_real - cagr_syn) * 100),
+                                  "cagr_synthetic_calibrated": float(cagr_cal),
+                                  "diff_calibrated_pp": float((cagr_real - cagr_cal) * 100)}
     return out
 
 
@@ -951,8 +964,7 @@ def gates_for(hist, boot, at, b1, b2, arm="T"):
             g[f"GT2_{wn}_m{m}"] = bool(a[wn]["max_dd"] <= q[wn]["max_dd"] + 0.01)
     g["GT3_bootstrap"] = bool(boot[arm]["diff_vs_Q_median"] >= 0)
     for wn in AT_WINDOWS:
-        g[f"GT4_{wn}"] = bool(at[wn][arm]["progressive"]["cagr_usd_liquidated"]
-                              > at[wn]["Q"]["progressive"]["cagr_usd_liquidated"])
+        g[f"GT4_{wn}"] = bool(at[wn][arm]["cagr_usd_liquidated"] > at[wn]["Q"]["cagr_usd_liquidated"])
     for label, res in (("B1", b1), ("B2", b2)):
         g[f"GT5_{label}_median"] = bool(res["delta_cagr_median_pp"] >= 0)
         g[f"GT5_{label}_share"] = bool(res["share_delta_gt_0"] >= 0.55)
@@ -990,7 +1002,7 @@ def main() -> None:
     hist[M_REPORT] = historical(days, arr, M_REPORT)[0]
     print("historical done")
     cg, tv = boot_main(days, arr)
-    boot = boot_summary(cg, tv, ARMS)
+    boot = boot_summary(cg, tv, BOOT_ARMS)
     print("bootstrap done")
     trk = tracking(days, arr)
     print("tracking done")
@@ -1039,8 +1051,8 @@ def main() -> None:
         "harness_pretax": hp, "harness_aftertax": ha,
         "historical_m2": hist[M_GATED], "historical_m1": hist[M_REPORT],
         "bootstrap_main_block20_m2": boot,
-        "bootstrap_raw": {"median_cagr": {a: float(np.median(cg[a])) for a in ARMS},
-                          "median_turnover": {a: float(np.median(tv[a])) for a in ARMS}},
+        "bootstrap_raw": {"median_cagr": {a: float(np.median(cg[a])) for a in BOOT_ARMS},
+                          "median_turnover": {a: float(np.median(tv[a])) for a in BOOT_ARMS}},
         "tracking": trk, "early_diag": diag,
         "after_tax_windows": {wn: {a: at_view(wn, a) for a in ("Q", "T")} for wn in AT_WINDOWS},
         "after_tax_bootstrap_B1_recent": b1, "after_tax_bootstrap_B2_flat": b2,
@@ -1057,22 +1069,29 @@ def main() -> None:
     for m in (M_GATED, M_REPORT):
         L.append(f"[m={m}] historical: arm CAGR maxDD Calmar turn/yr trades/yr | 2010win CAGR/DD | 2017win CAGR/DD | boot20 median, median(arm-Q)")
         for a in ARMS:
-            x, b = hist[m][a], boot[a]
+            x = hist[m][a]
+            b = boot.get(a)
+            bt = f"| {p(b['cagr_median']).strip()} {b['diff_vs_Q_median'] * 100:+.3f}pp" if b else "| - (not bootstrapped)"
             L.append(f"  {a:6s} {p(x['cagr'])} {p(x['max_dd'])} {x['calmar']:5.3f} {x['turnover_annual']:5.2f} "
                      f"{x['events_full']['trades_per_year']:6.1f} | {p(x['window_2010']['cagr']).strip()}/{p(x['window_2010']['max_dd']).strip()} "
                      f"| {p(x['window_2017']['cagr']).strip()}/{p(x['window_2017']['max_dd']).strip()} "
-                     f"| {p(b['cagr_median']).strip()} {b['diff_vs_Q_median'] * 100:+.3f}pp")
+                     f"{bt}")
         L.append("")
     L.append("tracking (full window): fund | k | fund CAGR | k x QQQ daily CAGR | drag pp/yr")
     for s, v in trk["windows"].items():
         L.append(f"  {s:5s} {v['k']:.0f} {p(v['fund_cagr'])} {p(v['bench_cagr'])} {v['drag_pp_per_year']:+7.3f}")
-    L.append("vs synthetic model: fund | real CAGR | synthetic CAGR | diff pp")
+    L.append("vs synthetic model (full window): fund | real CAGR | base synthetic | diff | calibrated synthetic | diff")
     for s, v in trk["vs_synthetic"].items():
-        L.append(f"  {s:5s} {p(v['cagr_real'])} {p(v['cagr_synthetic'])} {v['diff_pp']:+7.3f}")
-    L.append("liquidity: fund | avg $vol | CS spread (mean) | mean daily range")
+        L.append(f"  {s:5s} {p(v['cagr_real'])} {p(v['cagr_synthetic_base'])} {v['diff_base_pp']:+7.3f} "
+                 f"{p(v['cagr_synthetic_calibrated'])} {v['diff_calibrated_pp']:+7.3f}")
+    L.append("liquidity (report only): fund | avg $vol | CS spread mean (median, share>0) | tick floor at last close | mean daily range")
     for s, v in trk["liquidity"].items():
         cs = v.get("corwin_schultz_spread_mean", float("nan"))
-        L.append(f"  {s:5s} {v['avg_dollar_volume'] / 1e6:12,.1f}M {cs * 1e4:8.2f}bps {v['mean_daily_range_pct']:6.2f}%")
+        md = v.get("corwin_schultz_spread_median", float("nan"))
+        sh = v.get("corwin_schultz_share_positive", float("nan"))
+        tk = v.get("spread_tick_floor_bps_at_last_close", float("nan"))
+        L.append(f"  {s:5s} {v['avg_dollar_volume'] / 1e6:12,.1f}M {cs * 1e4:8.2f}bps ({md * 1e4:.2f}, {sh:.3f}) "
+                 f"{tk:6.2f}bps {v['mean_daily_range_pct']:6.2f}%")
     L.append("")
     L.append("after tax ($100k, progressive 2026 tariff, liquidated, m=2): window | arm | pre-tax -> after-tax CAGR (DD) | trades/yr | tax USD")
     for wn, d in out["after_tax_windows"].items():

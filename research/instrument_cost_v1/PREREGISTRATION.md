@@ -176,4 +176,38 @@ either way unless T passes.
 
 ## Amendments
 
-(none at commit time; any post-commit change to `screen.py` is listed here)
+The pre-registration above is unchanged: same arms, same parameters, same gates,
+same selection rule. The following changes to `screen.py` were made after the
+pre-registration commit (`238e6b66`) and before the first completed `--run`; none
+of them changes a gated metric, an arm parameter or a gate.
+
+1. **Crash fix, `boot_summary` arm list.** The historical table reports the
+   report-only `Q*` arm, which is not in the bootstrap arm set, so `--run` raised
+   `KeyError: 'Qstar'` after the bootstrap. The bootstrap summary is now computed
+   for `BOOT_ARMS = ("Q", "T", "T_alt")` and `Q*` prints as "not bootstrapped".
+
+2. **Crash fix, `gates_for` after-tax lookup.** GT4 read
+   `at[wn][arm]["progressive"][...]`, but `run_window` returns the engine result
+   dict directly; the nested key does not exist. Now
+   `at[wn][arm]["cagr_usd_liquidated"]`. Gate definition unchanged.
+
+3. **Report-only fix, per-year tracking benchmark.** The `k x QQQ` daily-reset
+   benchmark compounded `1 + k*r` with `r` already a gross ratio (it must be
+   `1 + k*(r-1)`), which overflowed float64 after a few years. Only the
+   report-only `tracking` block is affected; gates, arms and windows are
+   untouched.
+
+4. **Report-only addition.** `tracking` now also reports the real fund against the
+   *calibrated* synthetic (base financing + 0.75 pp), and the liquidity block adds
+   the Corwin-Schultz share-of-positive-days / mean-over-positive and the
+   one-tick/price spread floor, because the raw Corwin-Schultz mean is dominated
+   by its unbounded positive tail on these high-volume ETFs.
+
+5. **Note on the pre-registered justification (c) for T's vol convention.** The
+   claim that deriving the weight from TQQQ's own vol20 "lands at the same place
+   up to vol-estimation noise" is **wrong**, and the report says so: production's
+   `CAP = 0.98` clamps the QLD arm's weight in calm windows while the TQQQ arm's
+   weight is never clamped, so `mean(vt_TQQQ)/mean(vt_QLD) = 0.82`, not 2/3, and
+   the report-only `T_alt` arm therefore runs about 22% more notional exposure.
+   The candidate arm T itself is unaffected (its realized weight is exactly 2/3 of
+   Q's: `mean(wants_T/wants_Q) = 0.6667`).

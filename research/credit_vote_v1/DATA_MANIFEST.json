@@ -1,0 +1,109 @@
+{
+  "inputs": [
+    {
+      "date_range": "2000? QQQ/SPY/QLD daily bars",
+      "file": "stress_robustness_v1_daily.csv",
+      "notes": null,
+      "path": "data/historical/stress_robustness_v1_daily.csv",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "committed main (research/stress_robustness_v1); no network"
+    },
+    {
+      "date_range": "1954-01-04 to 2026-09-28",
+      "file": "stress_robustness_v1_dtb3.csv",
+      "notes": null,
+      "path": "data/historical/stress_robustness_v1_dtb3.csv",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "source": "committed main"
+    },
+    {
+      "date_range": "1950-01-03 to 1999-12-31",
+      "file": "ewma_band_v1_gspc.csv",
+      "notes": null,
+      "path": "data/historical/ewma_band_v1_gspc.csv",
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "source": "archive/research/ewma-band-v1-2026-10 (byte copy of signal_ensemble_v1_gspc.csv)"
+    },
+    {
+      "date_range": "multi-market index bars",
+      "file": "ewma_band_v1_index.csv",
+      "notes": null,
+      "path": "data/historical/ewma_band_v1_index.csv",
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "source": "archive/research/ewma-band-v1-2026-10 (byte copy of e2_confirmation_v1_index.csv)"
+    },
+    {
+      "date_range": "1934-01-01 to 1956-12-01",
+      "file": "ewma_band_v1_tb3ms.csv",
+      "notes": null,
+      "path": "data/historical/ewma_band_v1_tb3ms.csv",
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "source": "archive/research/ewma-band-v1-2026-10"
+    },
+    {
+      "date_range": "1986-01-02 to 2026-10-09",
+      "file": "credit_vote_v1_BAA10Y.csv",
+      "notes": null,
+      "path": "data/historical/credit_vote_v1_BAA10Y.csv",
+      "sha256": "6195eb1ae14558e5aa3e73ceff2d33a0cc3c81ceb15f08ceac44c3624f86e3e3",
+      "source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAA10Y"
+    },
+    {
+      "date_range": "1919-01-01 to 2026-09-01",
+      "file": "credit_vote_v1_BAA.csv",
+      "notes": null,
+      "path": "data/historical/credit_vote_v1_BAA.csv",
+      "sha256": "3396297d0b2f8f4e8bb467207286c33c04d97bfe37b25bc5a97da6bafc615e93",
+      "source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAA"
+    },
+    {
+      "date_range": "1919-01-01 to 2026-09-01",
+      "file": "credit_vote_v1_AAA.csv",
+      "notes": null,
+      "path": "data/historical/credit_vote_v1_AAA.csv",
+      "sha256": "15248259177710745867656c413bb2bae549c6485ca3acb7eed348a812f497ac",
+      "source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=AAA"
+    },
+    {
+      "date_range": "1962-01-02 to 2026-10-09",
+      "file": "credit_vote_v1_DGS10.csv",
+      "notes": null,
+      "path": "data/historical/credit_vote_v1_DGS10.csv",
+      "sha256": "5ec8d94ff0d1971760ded0dcd2965b2fd4d6d1086cee1df587010cb7a12c49f3",
+      "source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
+    },
+    {
+      "date_range": "1953-04-01 to 2026-09-01",
+      "file": "credit_vote_v1_GS10.csv",
+      "notes": null,
+      "path": "data/historical/credit_vote_v1_GS10.csv",
+      "sha256": "40323f225e613a19a4eec7eef20523dec10764de21c70cd1416a7379fb7f13b6",
+      "source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS10"
+    },
+    {
+      "date_range": "1934-01-01 to 2026-09-01",
+      "file": "credit_vote_v1_TB3MS.csv",
+      "notes": null,
+      "path": "data/historical/credit_vote_v1_TB3MS.csv",
+      "sha256": "631bc444a8c5370c3a2df12f484a67ae7b9a68c00fe8a33215895fb49c8cc08c",
+      "source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=TB3MS"
+    },
+    {
+      "date_range": "1982-01-04 to 2026-10-13",
+      "file": "credit_vote_v1_T10Y3M.csv",
+      "notes": null,
+      "path": "data/historical/credit_vote_v1_T10Y3M.csv",
+      "sha256": "dc70a9120f89e56eb609877317bce274e0848b5d24e2fc53ed37f1eeca265e17",
+      "source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=T10Y3M"
+    },
+    {
+      "date_range": null,
+      "file": "E2_INTEGRATION_DEVIATION.json",
+      "notes": null,
+      "path": "research/ewma_band_v1/E2_INTEGRATION_DEVIATION.json",
+      "sha256": "7571ed991a08945533b176e5aa4938e5f369cc5a503f142e475821e2e61d99a4",
+      "source": "archive/research/ewma-band-v1-2026-10 (byte copy)"
+    }
+  ],
+  "study": "credit_vote_v1"
+}

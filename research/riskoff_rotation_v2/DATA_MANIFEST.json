@@ -1,0 +1,29 @@
+{
+  "campaign": "riskoff_rotation_v2",
+  "files": [
+    {
+      "path": "data/historical/stress_robustness_v1_daily.csv",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+    },
+    {
+      "path": "data/historical/stress_robustness_v1_dtb3.csv",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c"
+    },
+    {
+      "path": "data/historical/leverage_frontier_v1_dgs10.csv",
+      "sha256": "68fa5881666126c7b9a4fb1b2affd93d61e543d25278a2db2ac246e4d2dc0345"
+    },
+    {
+      "path": "data/historical/leverage_frontier_v1_daily.csv",
+      "sha256": "a6e276fb87cfae706031c756c823c7549a34f042a88c8b2c4c10a9eaa15c5ceb"
+    },
+    {
+      "path": "data/historical/gold_riskoff_oos_v1_gold.csv",
+      "sha256": "2df02751ae052f14e86a850662d0d91ec6cf5ca4013c2396ef28cb42c0b0de9c"
+    },
+    {
+      "path": "data/historical/gold_riskoff_oos_v1_index.csv",
+      "sha256": "66593f8d7c770f4488ebb9b5c461194799351340e94ff7b60c149ff60435cdc1"
+    }
+  ]
+}

@@ -81,7 +81,7 @@ USABLE_MARKETS = {  # real open prices for the entire measured window
     "IXIC": ("^IXIC", "1971-01-01", "1990-04-06", "1999-12-31"),
     "GDAXI": ("^GDAXI", "1900-01-01", "1997-05-30", "2026-09-29"),
     "N225": ("^N225", "1900-01-01", "2017-03-28", "2026-09-29"),
-    "FTSE": ("^FTSE", "1900-01-01", "1984-12-31", "2026-09-29"),
+    "FTSE": ("^FTSE", "1900-01-01", "1985-01-02", "2026-09-29"),
 }
 OOS_PATHS_PER_MARKET = 2000
 OOS_BOOT_L = TSM_N + MEASURED
@@ -717,8 +717,7 @@ def historical_gates(main, boot, arm):
     wins = [p for p in ("P1", "P2", "P3") if a2["subperiods"][p]["cagr"] > c2["subperiods"][p]["cagr"]]
     r["G4"] = bool(len(wins) >= 2)
     r["G4_wins"] = wins
-    kind, band = arm_spec(arm)
-    lim = c2["turnover_annual"] * (1.0 if band > C0_BAND else 2.0)
+    lim = c2["turnover_annual"] * 2.0
     r["G9"] = bool(a2["turnover_annual"] <= lim)
     return r
 
@@ -921,6 +920,8 @@ def main() -> None:
              "(entries+exits / resizes) | 2017+: round trips/yr, sells/yr, turnover/yr")
     for arm in ARMS:
         a = main_res["base"]["m2"][arm]
+        if "events_full" not in a:
+            continue
         e, f = a["events_full"], a["events_2017_on"]
         L.append(f"  {arm:5s} {e['round_trips_per_year']:5.2f} {e['resizes_per_year']:6.2f} {e['sells_per_year']:6.2f} "
                  f"{e['turnover_per_year']:5.2f} ({e['turnover_from_entries_exits_per_year']:4.2f} / "

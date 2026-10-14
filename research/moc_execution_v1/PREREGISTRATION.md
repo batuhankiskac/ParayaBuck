@@ -26,7 +26,7 @@ cost 4 bps x m, `simulate_band` / `trv2.simulate_multi` equality must hold.
 stress_robustness_v1 daily + dtb3 (committed); ewma_band_v1 index (real-open
 OOS windows). Usable OOS windows (all opens in the measured window are real):
 IXIC 1990-04-06..1999-12-31, GDAXI 1997-05-30..2026-09-29,
-N225 2017-03-28..2026-09-29, FTSE 1984-12-31..2026-09-29. ^GSPC
+N225 2017-03-28..2026-09-29, FTSE 1985-01-02..2026-09-29. ^GSPC
 pre-1957 and ^IXIC pre-1984 windows are **not** usable for an open-vs-close
 comparison (placeholder opens) and are excluded; G7/G8 reduced from 6 to 4
 windows with pass thresholds n_c >= 3 and n_d >= 3.

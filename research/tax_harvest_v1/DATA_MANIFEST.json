@@ -1,0 +1,69 @@
+{
+  "campaign": "tax_harvest_v1",
+  "note": "Offline study: no network download. Every input is an existing committed research file, restored on this branch from the named branch/tag. 'reused from existing research data' means the file was checked out of this repository unchanged; no new market data was fetched.",
+  "files": {
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "reused from existing research data",
+      "restored_from": "research/vt_level_tax_v1",
+      "used_by": "trend_robustness_v2.load() -> QQQ/SPY/QLD open, close, dividend bars"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "source": "reused from existing research data",
+      "restored_from": "research/vt_level_tax_v1",
+      "used_by": "trend_robustness_v2.load() -> DTB3 financing rate"
+    },
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "source": "reused from existing research data",
+      "restored_from": "research/vt_level_tax_v1",
+      "source_url": "CBRT USD/TRY forex buying rate (as recorded by after_tax_tr_v1)",
+      "used_by": "tax_engine.load_market -> USD/TRY conversion of gains and tax payments"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "source": "reused from existing research data",
+      "restored_from": "research/vt_level_tax_v1",
+      "source_url": "TUIK Yi-UFE monthly index (as recorded by after_tax_tr_v1)",
+      "used_by": "tax_engine -> Yi-UFE indexation of the acquisition month"
+    },
+    "research/trend_robustness_v2/screen.py": {
+      "bytes": null,
+      "sha256": "c2a70719029b912d33c22af79c43037663fd7accf9cb9bebaa67c1cdc0fbcd12",
+      "source": "reused from existing research code (on main)",
+      "used_by": "imported module: load, synthetic_2x, sma_up, vol_n, vt_of, max_dd, calendar_years, BAND, CAP, COST_PER_SIDE, EXP_Q"
+    },
+    "research/tax_harvest_v1/tax_engine.py": {
+      "bytes": 13413,
+      "sha256": "8efc33232378b93068adac681928fc51f69f8b13e994bec7be8acd227d14edf3",
+      "source": "byte copy of research/r2_tbill_combo_v1/tax_engine.py (branch research/r2_tbill_combo_v1, tag archive/research/r2-tbill-combo-v1-2026-10)",
+      "source_sha256": "8efc33232378b93068adac681928fc51f69f8b13e994bec7be8acd227d14edf3",
+      "used_by": "Market, Regime, BaseAccount, FlatAccount, instalments (the Turkish after-tax engine, itself the byte-faithful copy of vt_level_tax_v1/screen.py's corrected engine)"
+    },
+    "research/fast_reentry_v1/screen.py": {
+      "sha256": "5870806b34a4a5ac9fb3c707f3737b363334d533f78c358bf4fb2ab006a01ac5",
+      "source": "reused from existing research code (branch research/fast_reentry_v1)",
+      "used_by": "source of the copied R2 signal (e2_up / early_components / arm_signals) and of simulate_band (identity check)"
+    },
+    "research/fast_reentry_v1/RESULTS.json": {
+      "sha256": "65a3bc1e941ca0bf3956651e19073ca0e5ceed59db1d7078869f75f354294f14",
+      "source": "reused from existing research data",
+      "used_by": "reference numbers only (REF_R2): main_window R2 cagr/max_dd/turnover, m = 1/2, base/calibrated"
+    },
+    "research/r2_tbill_combo_v1/RESULTS.json": {
+      "sha256": "1949eab6bca77b7c6ba2169c65d749ebd9db3a18ce7cbd7f971e76a0469f9080",
+      "source": "reused from existing research data (tag archive/research/r2-tbill-combo-v1-2026-10)",
+      "used_by": "reference numbers only: after-tax anchors of R2 and C0 at $100k on the three windows and the control's clean-bootstrap medians"
+    },
+    "research/vt_level_tax_v1/RESULTS.json": {
+      "sha256": "8903f32d7a5a7a81efefa6d49f5f332df41342e5e6a334422f01634cd7b64383",
+      "source": "reused from existing research data (branch research/vt_level_tax_v1)",
+      "used_by": "reference numbers only (after-tax anchors of C0); the r2_tbill_combo_v1 anchors used in code are anchored on this file"
+    }
+  }
+}

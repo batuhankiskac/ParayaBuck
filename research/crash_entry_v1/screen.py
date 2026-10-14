@@ -663,7 +663,7 @@ def boot_main(arms):
             so, scl = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp + FIN[md], EXP_Q)
             vol_instr = trv2.vol_n(scl)
             for arm in arms:
-                w = arm_wants(pc, e2, vol_instr, arm, cache)
+                w = arm_wants(pc, e2, vol_instr, arm, cache)[0]
                 nav, turn, _, _, _ = simulate_band(so, scl, w, COST_PER_SIDE * 2, start, C0_BAND)
                 k = nav.shape[1] - 1
                 cg[(md, arm)].append((nav[:, -1] / nav[:, 0]) ** (252 / k) - 1)
@@ -1078,7 +1078,7 @@ def after_tax_bootstrap(arms, n_paths=TAX_BOOT_PATHS, capital=TAX_CAPITAL, seed=
         so, sc = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp, EXP_Q)  # base financing
         vol_instr = trv2.vol_n(sc)
         cache = {}
-        wants = {a: arm_wants(pc, e2, vol_instr, a, cache)[0] for a in arms}
+        wants = {a: arm_wants(pc, e2, vol_instr, a, cache)[0][0] for a in arms}
         te.init(fixed_days, {a: (so[0], sc[0]) for a in arms}, wants)
         i1 = len(fixed_days) - 1
         for a in arms:
@@ -1093,8 +1093,9 @@ def after_tax_bootstrap(arms, n_paths=TAX_BOOT_PATHS, capital=TAX_CAPITAL, seed=
                 out[a][key + "_dd"].append(r["max_dd_nav_usd"])
     res = {"n_paths": n_paths, "seed": seed, "calendar": [fixed_days[0], fixed_days[-1]],
            "calendar_sessions": len(fixed_days), "measured_sessions": TAX_BOOT_MEASURED,
-           "financing": "base (DTB3), m = 2", "arms": {}}
-    c0b1, c0b2 = np.array(out[arms[0]]["b1"]), np.array(out[arms[0]]["b2"])
+           "financing": "base (DTB3), m = 2", "control": "C0", "arms": {}}
+    c0b1, c0b2 = np.array(out["C0"]["b1"]), np.array(out["C0"]["b2"])
+    c0b1dd, c0b2dd = np.array(out["C0"]["b1_dd"]), np.array(out["C0"]["b2_dd"])
     for a in arms:
         b1, b2 = np.array(out[a]["b1"]), np.array(out[a]["b2"])
         d1, d2 = b1 - c0b1, b2 - c0b2
@@ -1104,8 +1105,8 @@ def after_tax_bootstrap(arms, n_paths=TAX_BOOT_PATHS, capital=TAX_CAPITAL, seed=
             "b1_p05": float(np.percentile(d1, 5)), "b1_p95": float(np.percentile(d1, 95)),
             "b2_median_delta": float(np.median(d2)), "b2_share_gt_0": float(np.mean(d2 > 0)),
             "b2_p05": float(np.percentile(d2, 5)), "b2_p95": float(np.percentile(d2, 95)),
-            "b1_median_dd": float(np.median(np.array(out[a]["b1_dd"]) - np.array(out[arms[0]]["b1_dd"]))),
-            "b2_median_dd": float(np.median(np.array(out[a]["b2_dd"]) - np.array(out[arms[0]]["b2_dd"]))),
+            "b1_median_dd": float(np.median(np.array(out[a]["b1_dd"]) - c0b1dd)),
+            "b2_median_dd": float(np.median(np.array(out[a]["b2_dd"]) - c0b2dd)),
         }
     return res
 
@@ -1196,6 +1197,55 @@ def period_report(episodes):
             "share_positive": float(np.mean([e["delta"] > 0 for e in episodes])) if episodes else 0.0}
 
 
+GAP_WINDOWS = {"2020_covid": ("2020-02-01", "2020-06-30"), "2008_crisis": ("2008-09-01", "2009-06-30")}
+
+
+def crash_gap_report(dates, price, early_state, arm="K1", window=("2020-02-01", "2020-06-30")):
+    """Why the crash path did or did not fire in a window, condition by condition.
+
+    All arrays are aligned to `dates` (the measured sessions); `early_state` is production R2's
+    own early-path state. Reports when the drawdown gate opens and closes, when each of the other
+    entry conditions first holds, the first session on which ALL of them hold with E2 and the R2
+    early path off (an actual crash entry), how many such sessions exist, and when E2's vote and
+    the R2 early path first turn on (a false -> true transition).
+    """
+    cr = ARM_SPEC[arm]["crash"]
+    csma, cvol, crmax, cvmax, clag = crash_components(price, cr["sma"], cr["lag"], cr["high"], cr["volmax"])
+    e2 = e2_up(price)[0]
+    ea = np.asarray(early_state, dtype=bool)
+    dd_ok = np.isfinite(crmax[0]) & (price <= (1.0 - cr["dd"]) * crmax[0])
+    vol_ok = np.isfinite(cvmax[0]) & (cvol[0] < cr["vol_ratio"] * cvmax[0])
+    sma_ok, lag_ok = csma[0], clag[0]
+    idle = (~e2) & (~ea)  # both production paths off: the crash path's context
+    triggers = sma_ok & dd_ok & vol_ok & lag_ok
+    idx = [i for i, d in enumerate(dates) if window[0] <= d <= window[1]]
+    first = lambda m: next((dates[i] for i in idx if m[i]), None)
+    last = lambda m: next((dates[i] for i in reversed(idx) if m[i]), None)
+
+    def turn_on(flag):
+        for i in idx:
+            if flag[i] and (i == 0 or not flag[i - 1]):
+                return dates[i]
+        return None
+
+    lows = price[idx]
+    return {
+        "window": list(window), "sessions": len(idx),
+        "first_drawdown_ge_20pct": first(dd_ok), "last_drawdown_ge_20pct": last(dd_ok),
+        "sessions_drawdown_ge_20pct": int(sum(1 for i in idx if dd_ok[i])),
+        "first_vol_below_ratio": first(vol_ok),
+        "first_vol_below_ratio_while_drawdown": first(vol_ok & dd_ok),
+        "first_close_above_sma20_while_drawdown": first(sma_ok & dd_ok),
+        "first_close_above_close10_while_drawdown": first(lag_ok & dd_ok),
+        "first_crash_entry_conditions_met": first(triggers & idle),
+        "sessions_crash_entry_conditions_met": int(sum(1 for i in idx if triggers[i])),
+        "sessions_crash_entry_conditions_met_while_both_paths_off": int(sum(1 for i in idx if triggers[i] and idle[i])),
+        "sessions_both_production_paths_off": int(sum(1 for i in idx if idle[i])),
+        "e2_first_turn_on": turn_on(e2), "r2_early_first_turn_on": turn_on(ea),
+        "min_close_in_window": float(lows.min()), "max_close_in_window": float(lows.max()),
+    }
+
+
 def after_tax_gates(tax, bootax, arm):
     """After-tax legs of the pre-registered rule: beat C0 in all three windows; B1/B2 median >= 0
     with a share of positive paths >= GATE_B_SHARE."""
@@ -1270,6 +1320,9 @@ def main() -> None:
         g.update(oos_gates(oos, oos_boot["pooled"], arm))
         gates[arm] = g
     crash_report = {a: period_report(main_res["base"]["m2"][a]["crash_episodes"]) for a in CANDIDATES}
+    al = slice(START - 1, None)
+    gap = {name: crash_gap_report(ctx["base"]["dates"], price_b[al], ctx["base"]["early"]["C0"][al], "K1", w)
+           for name, w in GAP_WINDOWS.items()}
     loo = {a: leave_one_episode_out(ctx["base"]["dates"], o_b, c_b, ctx["base"]["wants"]["C0"],
                                     ctx["base"]["wants"][a], main_res["base"]["m2"][a]["crash_episodes"])
            for a in CANDIDATES}
@@ -1312,6 +1365,7 @@ def main() -> None:
                    "after_tax_windows": {k: list(v) for k, v in TAX_WINDOWS.items()},
                    "after_tax_anchor_tolerance_pp": TAX_ANCHOR_TOL_PP,
                    "gate_b_share": GATE_B_SHARE,
+                   "gap_windows": {k: list(v) for k, v in GAP_WINDOWS.items()},
                    "signals": "production E2 1.1.0 on price closes: SMA200, 252-session price return > 0, "
                               "close > 126-session max/min midpoint; 2 of 3"},
         "harness_check": hc,
@@ -1322,6 +1376,7 @@ def main() -> None:
         "oos_bootstrap_block20_m2": oos_boot,
         "gates_g1_g9_and_tax": gates,
         "crash_path_report": crash_report,
+        "crash_gap_report": gap,
         "leave_one_episode_out": loo,
         "after_tax_100k": tax,
         "after_tax_bootstrap_b1_b2": bootax,
@@ -1384,6 +1439,17 @@ def main() -> None:
             L.append(f"  {arm:3s} {name:16s} {z['episodes']:2d} {z['sessions']:4d} {z['sum_delta'] * 100:+7.2f}pp "
                      f"best {f(z['best'])} worst {f(z['worst'])}")
     L.append("")
+    L.append("why the crash path fired / did not fire (K1, measured sessions): window | dd>=20% first..last "
+             "(sessions) | vol<ratio*vmax40 first (while dd>=20%) | first all entry conditions | sessions with "
+             "all conditions (both production paths off) | E2 turn-on | R2 early turn-on")
+    for name, z in gap.items():
+        L.append(f"  {name:12s} {z['first_drawdown_ge_20pct']} .. {z['last_drawdown_ge_20pct']} "
+                 f"({z['sessions_drawdown_ge_20pct']:3d}) | {z['first_vol_below_ratio']} "
+                 f"({z['first_vol_below_ratio_while_drawdown']}) | {z['first_crash_entry_conditions_met']} | "
+                 f"{z['sessions_crash_entry_conditions_met']:3d} "
+                 f"({z['sessions_crash_entry_conditions_met_while_both_paths_off']}) | {z['e2_first_turn_on']} | "
+                 f"{z['r2_early_first_turn_on']}")
+    L.append("")
     L.append("leave one episode out (base, m=2, C0 CAGR "
              f"{loo['K1']['c0_cagr'] * 100:.2f}%): arm | episode | episode delta | CAGR with it flat | vs C0")
     for arm in CANDIDATES:
@@ -1428,8 +1494,8 @@ def main() -> None:
     for arm in tax_arms:
         b = bootax["arms"][arm]
         L.append(f"  {arm:3s} {b['b1_median_delta'] * 100:+7.3f}pp {b['b1_share_gt_0'] * 100:5.1f}% "
-                 f"{b['b1_p05']:+.2f}/{b['b1_p95']:+.2f} | {b['b2_median_delta'] * 100:+7.3f}pp "
-                 f"{b['b2_share_gt_0'] * 100:5.1f}% {b['b2_p05']:+.2f}/{b['b2_p95']:+.2f}")
+                 f"{b['b1_p05'] * 100:+.2f}/{b['b1_p95'] * 100:+.2f} | {b['b2_median_delta'] * 100:+7.3f}pp "
+                 f"{b['b2_share_gt_0'] * 100:5.1f}% {b['b2_p05'] * 100:+.2f}/{b['b2_p95'] * 100:+.2f}")
     L.append(f"  (C0 B1 median after-tax CAGR {bootax['arms']['C0']['b1_cagr_median'] * 100:.2f}%, "
              f"B2 {bootax['arms']['C0']['b2_cagr_median'] * 100:.2f}%)")
     L.append("")

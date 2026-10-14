@@ -1,0 +1,1387 @@
+{
+ "config": {
+  "capitals": [
+   10000.0,
+   100000.0,
+   1000000.0
+  ],
+  "cost_multiplier_m": 2,
+  "spread": 0.0,
+  "windows": {
+   "2000_03_to_2026_09": [
+    "2000-03-09",
+    "2026-09-29"
+   ],
+   "2017_01_to_end": [
+    "2017-01-03",
+    "2026-09-29"
+   ]
+  }
+ },
+ "harness_check": {
+  "C0_cagr": 0.1467490906037361,
+  "C0_max_dd": 0.4956428339322493
+ },
+ "windows": {
+  "2000_03_to_2026_09": {
+   "usd_10000": {
+    "pre_tax": {
+     "C0": {
+      "cagr_try_liquidated": 0.35518092226959275,
+      "cagr_try_unliquidated": 0.35522100334115514,
+      "cagr_usd_liquidated": 0.1467151751521223,
+      "cagr_usd_unliquidated": 0.1467490906037361,
+      "capital_usd": 10000.0,
+      "ending_nav_usd": 379729.47446101333,
+      "fees_usd": 5417.506619099122,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 3875174.8854172234,
+      "max_dd_nav_usd": 0.4956428339322493,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 12920102.500895035
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 1884512.3714344176,
+       "resize": 11035590.129460618
+      },
+      "strategy_trades": 1525,
+      "tax_by_year_try": {
+       "2000": 0.0,
+       "2001": 0.0,
+       "2002": 0.0,
+       "2003": 0.0,
+       "2004": 0.0,
+       "2005": 0.0,
+       "2006": 0.0,
+       "2007": 0.0,
+       "2008": 0.0,
+       "2009": 0.0,
+       "2010": 0.0,
+       "2011": 0.0,
+       "2012": 0.0,
+       "2013": 0.0,
+       "2014": 0.0,
+       "2015": 0.0,
+       "2016": 0.0,
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 379431.30329313996,
+      "terminal_usd_unliquidated": 379729.47446101333,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.36477463224310025,
+      "cagr_try_unliquidated": 0.36481499705993214,
+      "cagr_usd_liquidated": 0.154833096996982,
+      "cagr_usd_unliquidated": 0.15486725254569333,
+      "capital_usd": 10000.0,
+      "delta_cagr_pp_vs_C0": 0.811792184485971,
+      "ending_nav_usd": 457978.23827124736,
+      "fees_usd": 9785.644041878391,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 4417718.546498033,
+      "max_dd_nav_usd": 0.44215690739495217,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -13853.756565101623,
+       "GOLD": 1447735.680365795,
+       "QLD": 15065688.602668593
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 1433881.9238006934,
+       "liquidation": 2272843.468616544,
+       "resize": 12792845.13405205
+      },
+      "strategy_trades": 1622,
+      "tax_by_year_try": {
+       "2000": 0.0,
+       "2001": 0.0,
+       "2002": 0.0,
+       "2003": 0.0,
+       "2004": 0.0,
+       "2005": 0.0,
+       "2006": 0.0,
+       "2007": 0.0,
+       "2008": 0.0,
+       "2009": 0.0,
+       "2010": 0.0,
+       "2011": 0.0,
+       "2012": 0.0,
+       "2013": 0.0,
+       "2014": 0.0,
+       "2015": 0.0,
+       "2016": 0.0,
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 457618.6246111286,
+      "terminal_usd_unliquidated": 457978.23827124736,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     }
+    },
+    "progressive": {
+     "C0": {
+      "cagr_try_liquidated": 0.3123872317622436,
+      "cagr_try_unliquidated": 0.3182842323596622,
+      "cagr_usd_liquidated": 0.11050438329463597,
+      "cagr_usd_unliquidated": 0.11549425583624195,
+      "capital_usd": 10000.0,
+      "ending_nav_usd": 182275.08343907777,
+      "fees_usd": 3489.5801643273044,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 2124222.459751682,
+      "max_dd_nav_usd": 0.4956428339322493,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 6865105.826780771
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 901959.474854501,
+       "resize": 5911503.051162013,
+       "tax": 51643.30076425677
+      },
+      "strategy_trades": 1542,
+      "tax_by_year_try": {
+       "2000": 0.0,
+       "2001": 0.0,
+       "2002": 0.0,
+       "2003": 292.44707731189277,
+       "2004": 0.0,
+       "2005": 0.0,
+       "2006": 248.5077573730423,
+       "2007": 376.87363683115706,
+       "2008": 0.0,
+       "2009": 209.89865569230577,
+       "2010": 273.86283164970786,
+       "2011": 534.6790005920927,
+       "2012": 185.73773162926568,
+       "2013": 23.188731022338406,
+       "2014": 5043.846537464964,
+       "2015": 2464.7449337300586,
+       "2016": 0.0,
+       "2017": 59.8216706468211,
+       "2018": 24795.70808692441,
+       "2019": 6848.398044571297,
+       "2020": 65719.62605398256,
+       "2021": 66361.6571771253,
+       "2022": 0.0,
+       "2023": 71478.7116581587,
+       "2024": 488562.3223988102,
+       "2025": 328660.3065268476
+      },
+      "tax_funding_sales": 8,
+      "tax_total_try": 2056000.5279856473,
+      "tax_total_usd_at_payment_fx": 63794.7492857486,
+      "terminal_usd_liquidated": 161813.0614532307,
+      "terminal_usd_unliquidated": 182275.08343907777,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.3156871016236775,
+      "cagr_try_unliquidated": 0.32181848843711713,
+      "cagr_usd_liquidated": 0.11329663839795923,
+      "cagr_usd_unliquidated": 0.1184848418239075,
+      "capital_usd": 10000.0,
+      "delta_cagr_pp_vs_C0": 0.279225510332326,
+      "ending_nav_usd": 195708.7318735512,
+      "fees_usd": 5991.729537462781,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 2174482.21008971,
+      "max_dd_nav_usd": 0.4737784713577079,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -9750.191153055894,
+       "GOLD": 703494.382191983,
+       "QLD": 7159881.438209291
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 693744.1910389272,
+       "liquidation": 967740.2217324907,
+       "resize": 6142793.874046644,
+       "tax": 49347.34243015565
+      },
+      "strategy_trades": 1641,
+      "tax_by_year_try": {
+       "2000": 2.5439867343104194,
+       "2001": 274.6679089037948,
+       "2002": 165.88726981069996,
+       "2003": 485.87345751875625,
+       "2004": 105.40093181512397,
+       "2005": 38.40917916428798,
+       "2006": 281.04436700284424,
+       "2007": 401.0077966800371,
+       "2008": 207.18999843409756,
+       "2009": 305.05906933643564,
+       "2010": 307.5410468811542,
+       "2011": 890.1393395994305,
+       "2012": 230.5950245189519,
+       "2013": 26.921577533552615,
+       "2014": 5994.887474245698,
+       "2015": 2861.6168728809625,
+       "2016": 0.0,
+       "2017": 61.31764455487151,
+       "2018": 25604.69856957651,
+       "2019": 7044.244868425005,
+       "2020": 69454.11877297911,
+       "2021": 68513.50446904707,
+       "2022": 6632.831232290551,
+       "2023": 75559.78503936704,
+       "2024": 481450.29176864575,
+       "2025": 439520.0139786434
+      },
+      "tax_funding_sales": 8,
+      "tax_total_try": 2290938.6540223686,
+      "tax_total_usd_at_payment_fx": 70987.2721120324,
+      "terminal_usd_liquidated": 172973.80495357522,
+      "terminal_usd_unliquidated": 195708.7318735512,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     }
+    }
+   },
+   "usd_100000": {
+    "pre_tax": {
+     "C0": {
+      "cagr_try_liquidated": 0.35518092226959275,
+      "cagr_try_unliquidated": 0.35522100334115514,
+      "cagr_usd_liquidated": 0.1467151751521223,
+      "cagr_usd_unliquidated": 0.1467490906037361,
+      "capital_usd": 100000.0,
+      "ending_nav_usd": 3797294.7446101326,
+      "fees_usd": 54175.06619099119,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 38751748.854172215,
+      "max_dd_nav_usd": 0.4956428339322496,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 129201025.00895035
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 18845123.714344162,
+       "resize": 110355901.2946062
+      },
+      "strategy_trades": 1525,
+      "tax_by_year_try": {
+       "2000": 0.0,
+       "2001": 0.0,
+       "2002": 0.0,
+       "2003": 0.0,
+       "2004": 0.0,
+       "2005": 0.0,
+       "2006": 0.0,
+       "2007": 0.0,
+       "2008": 0.0,
+       "2009": 0.0,
+       "2010": 0.0,
+       "2011": 0.0,
+       "2012": 0.0,
+       "2013": 0.0,
+       "2014": 0.0,
+       "2015": 0.0,
+       "2016": 0.0,
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 3794313.032931399,
+      "terminal_usd_unliquidated": 3797294.7446101326,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.3647746322431,
+      "cagr_try_unliquidated": 0.36481499705993214,
+      "cagr_usd_liquidated": 0.15483309699698178,
+      "cagr_usd_unliquidated": 0.15486725254569333,
+      "capital_usd": 100000.0,
+      "delta_cagr_pp_vs_C0": 0.8117921844859488,
+      "ending_nav_usd": 4579782.382712468,
+      "fees_usd": 97856.44041878385,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 44177185.46498025,
+      "max_dd_nav_usd": 0.44215690739495217,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -138537.56565101683,
+       "GOLD": 14477356.803657942,
+       "QLD": 150656886.02668568
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 14338819.238006925,
+       "liquidation": 22728434.686165366,
+       "resize": 127928451.34052032
+      },
+      "strategy_trades": 1622,
+      "tax_by_year_try": {
+       "2000": 0.0,
+       "2001": 0.0,
+       "2002": 0.0,
+       "2003": 0.0,
+       "2004": 0.0,
+       "2005": 0.0,
+       "2006": 0.0,
+       "2007": 0.0,
+       "2008": 0.0,
+       "2009": 0.0,
+       "2010": 0.0,
+       "2011": 0.0,
+       "2012": 0.0,
+       "2013": 0.0,
+       "2014": 0.0,
+       "2015": 0.0,
+       "2016": 0.0,
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 4576186.246111279,
+      "terminal_usd_unliquidated": 4579782.382712468,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     }
+    },
+    "progressive": {
+     "C0": {
+      "cagr_try_liquidated": 0.29446658701701733,
+      "cagr_try_unliquidated": 0.3017390404322289,
+      "cagr_usd_liquidated": 0.09534044839844125,
+      "cagr_usd_unliquidated": 0.10149418961097534,
+      "capital_usd": 100000.0,
+      "ending_nav_usd": 1303295.5594305699,
+      "fees_usd": 28609.12642814496,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 15918967.062415998,
+      "max_dd_nav_usd": 0.4956428339322496,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 50958273.806499936
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 6441762.453934304,
+       "resize": 43933407.79938638,
+       "tax": 583103.5531792471
+      },
+      "strategy_trades": 1543,
+      "tax_by_year_try": {
+       "2000": 0.0,
+       "2001": 0.0,
+       "2002": 0.0,
+       "2003": 4616.05165892224,
+       "2004": 0.0,
+       "2005": 0.0,
+       "2006": 3422.897151273185,
+       "2007": 5570.007849550864,
+       "2008": 0.0,
+       "2009": 2357.839641226203,
+       "2010": 3454.038354756598,
+       "2011": 7836.397556074177,
+       "2012": 2062.804970509966,
+       "2013": 226.08212630084202,
+       "2014": 77214.20251802485,
+       "2015": 44384.416321713434,
+       "2016": 0.0,
+       "2017": 511.5963527029587,
+       "2018": 291976.5230473313,
+       "2019": 106781.02473857837,
+       "2020": 669990.4270286536,
+       "2021": 666533.3709274163,
+       "2022": 0.0,
+       "2023": 816462.4738334436,
+       "2024": 4592056.484262591,
+       "2025": 3273118.636435234
+      },
+      "tax_funding_sales": 8,
+      "tax_total_try": 19332187.586398743,
+      "tax_total_usd_at_payment_fx": 646779.7058519451,
+      "terminal_usd_liquidated": 1123105.2077256732,
+      "terminal_usd_unliquidated": 1303295.5594305699,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.2948860747639188,
+      "cagr_try_unliquidated": 0.30247082384094925,
+      "cagr_usd_liquidated": 0.09569540688203393,
+      "cagr_usd_unliquidated": 0.10211340371435762,
+      "capital_usd": 100000.0,
+      "delta_cagr_pp_vs_C0": 0.03549584835926822,
+      "ending_nav_usd": 1322895.3349942227,
+      "fees_usd": 48032.34795564157,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 15509243.269142665,
+      "max_dd_nav_usd": 0.49805066317852387,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -80336.2642973613,
+       "GOLD": 4983783.71572335,
+       "QLD": 50437919.75847732
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 4903447.451425988,
+       "liquidation": 6531090.304515645,
+       "resize": 43369365.454391256,
+       "tax": 537463.9995704205
+      },
+      "strategy_trades": 1642,
+      "tax_by_year_try": {
+       "2000": 25.43986734310092,
+       "2001": 5167.6860763957175,
+       "2002": 2461.678310169717,
+       "2003": 7327.625790476503,
+       "2004": 1127.9904599108559,
+       "2005": 363.3813139415848,
+       "2006": 3808.4755994462585,
+       "2007": 5722.549703601082,
+       "2008": 2024.2287325992947,
+       "2009": 3204.656321485082,
+       "2010": 3825.015973468789,
+       "2011": 11911.970304309152,
+       "2012": 2551.1845406619,
+       "2013": 254.107405171937,
+       "2014": 85240.81926826813,
+       "2015": 48583.445128914595,
+       "2016": 0.0,
+       "2017": 499.9505346438346,
+       "2018": 284725.96036657185,
+       "2019": 103349.85813457197,
+       "2020": 676060.4868489204,
+       "2021": 652325.2847511484,
+       "2022": 88100.892918862,
+       "2023": 812461.6208413802,
+       "2024": 4290773.663515833,
+       "2025": 4265167.330453125
+      },
+      "tax_funding_sales": 9,
+      "tax_total_try": 20603822.30415508,
+      "tax_total_usd_at_payment_fx": 690083.7212331936,
+      "terminal_usd_liquidated": 1132811.9798077666,
+      "terminal_usd_unliquidated": 1322895.3349942227,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     }
+    }
+   },
+   "usd_1000000": {
+    "pre_tax": {
+     "C0": {
+      "cagr_try_liquidated": 0.35518092226959275,
+      "cagr_try_unliquidated": 0.35522100334115514,
+      "cagr_usd_liquidated": 0.1467151751521223,
+      "cagr_usd_unliquidated": 0.1467490906037361,
+      "capital_usd": 1000000.0,
+      "ending_nav_usd": 37972947.44610134,
+      "fees_usd": 541750.6619099122,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 387517488.5417221,
+      "max_dd_nav_usd": 0.4956428339322495,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 1292010250.0895038
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 188451237.14344168,
+       "resize": 1103559012.946062
+      },
+      "strategy_trades": 1525,
+      "tax_by_year_try": {
+       "2000": 0.0,
+       "2001": 0.0,
+       "2002": 0.0,
+       "2003": 0.0,
+       "2004": 0.0,
+       "2005": 0.0,
+       "2006": 0.0,
+       "2007": 0.0,
+       "2008": 0.0,
+       "2009": 0.0,
+       "2010": 0.0,
+       "2011": 0.0,
+       "2012": 0.0,
+       "2013": 0.0,
+       "2014": 0.0,
+       "2015": 0.0,
+       "2016": 0.0,
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 37943130.329314,
+      "terminal_usd_unliquidated": 37972947.44610134,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.36477463224310025,
+      "cagr_try_unliquidated": 0.36481499705993214,
+      "cagr_usd_liquidated": 0.154833096996982,
+      "cagr_usd_unliquidated": 0.15486725254569333,
+      "capital_usd": 1000000.0,
+      "delta_cagr_pp_vs_C0": 0.811792184485971,
+      "ending_nav_usd": 45797823.82712474,
+      "fees_usd": 978564.4041878398,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 441771854.64980346,
+      "max_dd_nav_usd": 0.4421569073949525,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -1385375.6565101643,
+       "GOLD": 144773568.0365795,
+       "QLD": 1506568860.2668595
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 143388192.38006932,
+       "liquidation": 227284346.86165404,
+       "resize": 1279284513.4052055
+      },
+      "strategy_trades": 1622,
+      "tax_by_year_try": {
+       "2000": 0.0,
+       "2001": 0.0,
+       "2002": 0.0,
+       "2003": 0.0,
+       "2004": 0.0,
+       "2005": 0.0,
+       "2006": 0.0,
+       "2007": 0.0,
+       "2008": 0.0,
+       "2009": 0.0,
+       "2010": 0.0,
+       "2011": 0.0,
+       "2012": 0.0,
+       "2013": 0.0,
+       "2014": 0.0,
+       "2015": 0.0,
+       "2016": 0.0,
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 45761862.46111286,
+      "terminal_usd_unliquidated": 45797823.82712474,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     }
+    },
+    "progressive": {
+     "C0": {
+      "cagr_try_liquidated": 0.28271301168300944,
+      "cagr_try_unliquidated": 0.2902347242166863,
+      "cagr_usd_liquidated": 0.0853949105176186,
+      "cagr_usd_unliquidated": 0.09175956763738835,
+      "capital_usd": 1000000.0,
+      "ending_nav_usd": 10295539.722466378,
+      "fees_usd": 242061.40166021278,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 127634059.80074538,
+      "max_dd_nav_usd": 0.4956428339322495,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 407467579.2497548
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 50868429.799910076,
+       "resize": 351484463.4896626,
+       "tax": 5114685.960182113
+      },
+      "strategy_trades": 1543,
+      "tax_by_year_try": {
+       "2000": 0.0,
+       "2001": 0.0,
+       "2002": 0.0,
+       "2003": 70799.07532171701,
+       "2004": 0.0,
+       "2005": 0.0,
+       "2006": 53597.43213657207,
+       "2007": 84523.77786497443,
+       "2008": 0.0,
+       "2009": 39616.55949493835,
+       "2010": 53807.7081007971,
+       "2011": 113271.9208551376,
+       "2012": 37067.895167640825,
+       "2013": 2887.0611395218384,
+       "2014": 816568.8146398761,
+       "2015": 498368.60878432443,
+       "2016": 0.0,
+       "2017": 5615.612227985124,
+       "2018": 2621552.789447977,
+       "2019": 1096396.3483366203,
+       "2020": 5745995.420286795,
+       "2021": 5709665.463829886,
+       "2022": 0.0,
+       "2023": 7715279.710123925,
+       "2024": 38504436.20476853,
+       "2025": 28235625.910453454
+      },
+      "tax_funding_sales": 11,
+      "tax_total_try": 163442086.53232688,
+      "tax_total_usd_at_payment_fx": 5767264.677084578,
+      "terminal_usd_liquidated": 8814700.507515203,
+      "terminal_usd_unliquidated": 10295539.722466378,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.27898755898267824,
+      "cagr_try_unliquidated": 0.28691586018539583,
+      "cagr_usd_liquidated": 0.08224253943890925,
+      "cagr_usd_unliquidated": 0.0889512402130519,
+      "capital_usd": 1000000.0,
+      "delta_cagr_pp_vs_C0": -0.31523710787093595,
+      "ending_nav_usd": 9614793.260584919,
+      "fees_usd": 385602.13002153253,
+      "fx_end": 48.9131,
+      "fx_start": 0.579062,
+      "indexation_relief_try": 115124650.467135,
+      "max_dd_nav_usd": 0.51117257987003,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -607379.221558019,
+       "GOLD": 36890900.382455334,
+       "QLD": 372729284.1830253
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 36283521.160897315,
+       "liquidation": 47436447.10925579,
+       "resize": 320876570.3308647,
+       "tax": 4416266.742904801
+      },
+      "strategy_trades": 1644,
+      "tax_by_year_try": {
+       "2000": 290.0586472352561,
+       "2001": 66172.33908927534,
+       "2002": 38995.43600243444,
+       "2003": 108528.07648304412,
+       "2004": 19303.661448724135,
+       "2005": 5158.970376545181,
+       "2006": 55985.005866471765,
+       "2007": 82017.91903930201,
+       "2008": 32384.213899159855,
+       "2009": 50070.983101532605,
+       "2010": 54356.33051768242,
+       "2011": 161845.80079563457,
+       "2012": 43143.15134304656,
+       "2013": 3142.84183594502,
+       "2014": 827859.3613642269,
+       "2015": 501725.2081943176,
+       "2016": 0.0,
+       "2017": 4916.123431728228,
+       "2018": 2380622.9525817535,
+       "2019": 986899.563134663,
+       "2020": 5468506.039831333,
+       "2021": 5191378.526155259,
+       "2022": 862889.4222465116,
+       "2023": 7376284.5939531885,
+       "2024": 33382301.032958236,
+       "2025": 34930159.164638095
+      },
+      "tax_funding_sales": 11,
+      "tax_total_try": 163453994.70899647,
+      "tax_total_usd_at_payment_fx": 5839629.693555295,
+      "terminal_usd_liquidated": 8159388.910452172,
+      "terminal_usd_unliquidated": 9614793.260584919,
+      "window": [
+       "2000-03-09",
+       "2026-09-29"
+      ],
+      "years": 26.559890485968516
+     }
+    }
+   }
+  },
+  "2017_01_to_end": {
+   "usd_10000": {
+    "pre_tax": {
+     "C0": {
+      "cagr_try_liquidated": 0.7325456664261143,
+      "cagr_try_unliquidated": 0.7326853046513337,
+      "cagr_usd_liquidated": 0.3225641360916629,
+      "cagr_usd_unliquidated": 0.32267073097818244,
+      "capital_usd": 10000.0,
+      "ending_nav_usd": 152672.08378539933,
+      "fees_usd": 1693.5016955333758,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 1556959.0277091288,
+      "max_dd_nav_usd": 0.3252200650539002,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 5166501.359226817
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 757677.3730157105,
+       "resize": 4408823.986211107
+      },
+      "strategy_trades": 651,
+      "tax_by_year_try": {
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 152552.20261581521,
+      "terminal_usd_unliquidated": 152672.08378539933,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.7441567512190437,
+      "cagr_try_unliquidated": 0.7442973252644869,
+      "cagr_usd_liquidated": 0.3314276279036419,
+      "cagr_usd_unliquidated": 0.3315349371622498,
+      "capital_usd": 10000.0,
+      "delta_cagr_pp_vs_C0": 0.8863491811978985,
+      "ending_nav_usd": 162942.06813121404,
+      "fees_usd": 2426.776996047054,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 1568356.7606125453,
+      "max_dd_nav_usd": 0.34739222683196913,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -1794.3817242605437,
+       "GOLD": 513862.81170572963,
+       "QLD": 5330153.70738898
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 512068.42998146906,
+       "liquidation": 808645.0061750723,
+       "resize": 4521508.701213908
+      },
+      "strategy_trades": 678,
+      "tax_by_year_try": {
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 162814.12276479407,
+      "terminal_usd_unliquidated": 162942.06813121404,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     }
+    },
+    "progressive": {
+     "C0": {
+      "cagr_try_liquidated": 0.6484172066775318,
+      "cagr_try_unliquidated": 0.6667226763782665,
+      "cagr_usd_liquidated": 0.2583434428976856,
+      "cagr_usd_unliquidated": 0.27231719157840284,
+      "capital_usd": 10000.0,
+      "ending_nav_usd": 104583.95106954113,
+      "fees_usd": 1340.391101389365,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 1191807.4697001057,
+      "max_dd_nav_usd": 0.3589375202118441,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 3842690.340268477
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 517796.34515571897,
+       "resize": 3303151.6754139224,
+       "tax": 21742.31969883549
+      },
+      "strategy_trades": 657,
+      "tax_by_year_try": {
+       "2017": 9.359455756056372,
+       "2018": 7499.74171096824,
+       "2019": 2966.6644159347043,
+       "2020": 30667.680130114422,
+       "2021": 30580.51382653529,
+       "2022": 0.0,
+       "2023": 32983.66691598411,
+       "2024": 242957.6060366293,
+       "2025": 153700.87997694884
+      },
+      "tax_funding_sales": 4,
+      "tax_total_try": 1019384.0022026493,
+      "tax_total_usd_at_payment_fx": 28526.739628484684,
+      "terminal_usd_liquidated": 93911.25393236184,
+      "terminal_usd_unliquidated": 104583.95106954113,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.6564743504131207,
+      "cagr_try_unliquidated": 0.6756389207556215,
+      "cagr_usd_liquidated": 0.26449398169762794,
+      "cagr_usd_unliquidated": 0.2791235374488952,
+      "capital_usd": 10000.0,
+      "delta_cagr_pp_vs_C0": 0.6150538799942318,
+      "ending_nav_usd": 110166.40798353055,
+      "fees_usd": 1926.3302158518525,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 1190614.6394631509,
+      "max_dd_nav_usd": 0.3802239366662815,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -1794.1585103738762,
+       "GOLD": 386175.0949749595,
+       "QLD": 3923473.255203605
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 384380.9364645856,
+       "liquidation": 545129.7051957436,
+       "resize": 3358807.2798895133,
+       "tax": 19536.27011834836
+      },
+      "strategy_trades": 684,
+      "tax_by_year_try": {
+       "2017": 9.359455756056372,
+       "2018": 7499.74171096824,
+       "2019": 2941.015933826681,
+       "2020": 31688.98212397955,
+       "2021": 30747.454452670405,
+       "2022": 3298.272912022391,
+       "2023": 34139.99333909653,
+       "2024": 232260.68406329936,
+       "2025": 200061.8167541874
+      },
+      "tax_funding_sales": 4,
+      "tax_total_try": 1109933.7900887188,
+      "tax_total_usd_at_payment_fx": 30583.571468935286,
+      "terminal_usd_liquidated": 98482.05981495921,
+      "terminal_usd_unliquidated": 110166.40798353055,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     }
+    }
+   },
+   "usd_100000": {
+    "pre_tax": {
+     "C0": {
+      "cagr_try_liquidated": 0.7325456664261145,
+      "cagr_try_unliquidated": 0.7326853046513337,
+      "cagr_usd_liquidated": 0.3225641360916631,
+      "cagr_usd_unliquidated": 0.32267073097818266,
+      "capital_usd": 100000.0,
+      "ending_nav_usd": 1526720.837853995,
+      "fees_usd": 16935.01695533375,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 15569590.277091306,
+      "max_dd_nav_usd": 0.3252200650539001,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 51665013.59226823
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 7576773.73015712,
+       "resize": 44088239.86211111
+      },
+      "strategy_trades": 651,
+      "tax_by_year_try": {
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 1525522.0261581538,
+      "terminal_usd_unliquidated": 1526720.837853995,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.7441567512190437,
+      "cagr_try_unliquidated": 0.7442973252644869,
+      "cagr_usd_liquidated": 0.3314276279036419,
+      "cagr_usd_unliquidated": 0.3315349371622498,
+      "capital_usd": 100000.0,
+      "delta_cagr_pp_vs_C0": 0.8863491811978763,
+      "ending_nav_usd": 1629420.6813121403,
+      "fees_usd": 24267.76996047054,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 15683567.606125455,
+      "max_dd_nav_usd": 0.34739222683196946,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -17943.817242605495,
+       "GOLD": 5138628.1170572955,
+       "QLD": 53301537.07388978
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 5120684.29981469,
+       "liquidation": 8086450.061750706,
+       "resize": 45215087.012139075
+      },
+      "strategy_trades": 678,
+      "tax_by_year_try": {
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 1628141.2276479404,
+      "terminal_usd_unliquidated": 1629420.6813121403,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     }
+    },
+    "progressive": {
+     "C0": {
+      "cagr_try_liquidated": 0.6072690506473422,
+      "cagr_try_unliquidated": 0.6313311550876795,
+      "cagr_usd_liquidated": 0.22693239470055948,
+      "cagr_usd_unliquidated": 0.24530055491034375,
+      "capital_usd": 100000.0,
+      "ending_nav_usd": 848425.1142555446,
+      "fees_usd": 11777.85026512879,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 10254781.505256046,
+      "max_dd_nav_usd": 0.37605150679596433,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 32584404.03576128
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 4194447.06067664,
+       "resize": 28056465.190856617,
+       "tax": 333491.7842280261
+      },
+      "strategy_trades": 657,
+      "tax_by_year_try": {
+       "2017": 93.59455756055982,
+       "2018": 122359.38801386612,
+       "2019": 58137.00046294872,
+       "2020": 415462.0734185773,
+       "2021": 412504.4365781946,
+       "2022": 0.0,
+       "2023": 503044.95000483695,
+       "2024": 2882771.4480724446,
+       "2025": 2010823.9006720462
+      },
+      "tax_funding_sales": 4,
+      "tax_total_try": 11968147.003267745,
+      "tax_total_usd_at_payment_fx": 352698.139415068,
+      "terminal_usd_liquidated": 734027.6187866803,
+      "terminal_usd_unliquidated": 848425.1142555446,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.612824700035214,
+      "cagr_try_unliquidated": 0.6379684747689618,
+      "cagr_usd_liquidated": 0.2311733811146468,
+      "cagr_usd_unliquidated": 0.25036725020175665,
+      "capital_usd": 100000.0,
+      "delta_cagr_pp_vs_C0": 0.4240986414087322,
+      "ending_nav_usd": 882675.3829359334,
+      "fees_usd": 16928.55989907837,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 10190659.341485702,
+      "max_dd_nav_usd": 0.3968408107892767,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -17941.585103738937,
+       "GOLD": 3279572.2318607764,
+       "QLD": 33017853.753819466
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 3261630.6467570374,
+       "liquidation": 4358959.45863986,
+       "resize": 28348001.66914514,
+       "tax": 310892.6260344639
+      },
+      "strategy_trades": 685,
+      "tax_by_year_try": {
+       "2017": 93.59455756055982,
+       "2018": 122359.38801386612,
+       "2019": 57688.149025011095,
+       "2020": 428599.5628764636,
+       "2021": 413812.8477495342,
+       "2022": 51132.888178499044,
+       "2023": 513176.7609057545,
+       "2024": 2759502.2301031956,
+       "2025": 2693391.1068812544
+      },
+      "tax_funding_sales": 4,
+      "tax_total_try": 13048623.330729786,
+      "tax_total_usd_at_payment_fx": 377737.7539303826,
+      "terminal_usd_liquidated": 759134.4870360717,
+      "terminal_usd_unliquidated": 882675.3829359334,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     }
+    }
+   },
+   "usd_1000000": {
+    "pre_tax": {
+     "C0": {
+      "cagr_try_liquidated": 0.7325456664261143,
+      "cagr_try_unliquidated": 0.7326853046513337,
+      "cagr_usd_liquidated": 0.3225641360916629,
+      "cagr_usd_unliquidated": 0.32267073097818244,
+      "capital_usd": 1000000.0,
+      "ending_nav_usd": 15267208.37853993,
+      "fees_usd": 169350.16955333774,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 155695902.77091292,
+      "max_dd_nav_usd": 0.32522006505390033,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 516650135.92268157
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 75767737.30157104,
+       "resize": 440882398.6211105
+      },
+      "strategy_trades": 651,
+      "tax_by_year_try": {
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 15255220.261581518,
+      "terminal_usd_unliquidated": 15267208.37853993,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.7441567512190437,
+      "cagr_try_unliquidated": 0.7442973252644869,
+      "cagr_usd_liquidated": 0.3314276279036419,
+      "cagr_usd_unliquidated": 0.3315349371622498,
+      "capital_usd": 1000000.0,
+      "delta_cagr_pp_vs_C0": 0.8863491811978985,
+      "ending_nav_usd": 16294206.813121406,
+      "fees_usd": 242677.6996047056,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 156835676.06125447,
+      "max_dd_nav_usd": 0.34739222683196935,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -179438.17242605612,
+       "GOLD": 51386281.17057296,
+       "QLD": 533015370.7388979
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 51206842.99814691,
+       "liquidation": 80864500.6175071,
+       "resize": 452150870.1213908
+      },
+      "strategy_trades": 678,
+      "tax_by_year_try": {
+       "2017": 0.0,
+       "2018": 0.0,
+       "2019": 0.0,
+       "2020": 0.0,
+       "2021": 0.0,
+       "2022": 0.0,
+       "2023": 0.0,
+       "2024": 0.0,
+       "2025": 0.0
+      },
+      "tax_funding_sales": 0,
+      "tax_total_try": 0.0,
+      "tax_total_usd_at_payment_fx": 0.0,
+      "terminal_usd_liquidated": 16281412.276479408,
+      "terminal_usd_unliquidated": 16294206.813121406,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     }
+    },
+    "progressive": {
+     "C0": {
+      "cagr_try_liquidated": 0.5921195764940406,
+      "cagr_try_unliquidated": 0.617639437928323,
+      "cagr_usd_liquidated": 0.2153678214924346,
+      "cagr_usd_unliquidated": 0.2348487818763727,
+      "capital_usd": 1000000.0,
+      "ending_nav_usd": 7815134.877573656,
+      "fees_usd": 111754.99914397868,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 96521005.31131028,
+      "max_dd_nav_usd": 0.38107550832402104,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "QLD": 305084852.6692926
+      },
+      "realised_gain_try_by_reason": {
+       "liquidation": 38613855.86603307,
+       "resize": 262919296.01105356,
+       "tax": 3551700.7922060173
+      },
+      "strategy_trades": 657,
+      "tax_by_year_try": {
+       "2017": 935.9455756056395,
+       "2018": 1447425.8504790647,
+       "2019": 763746.4010110719,
+       "2020": 4348099.8862794675,
+       "2021": 4318695.68624035,
+       "2022": 0.0,
+       "2023": 5812322.073890503,
+       "2024": 29150104.912657965,
+       "2025": 21350011.723322514
+      },
+      "tax_funding_sales": 4,
+      "tax_total_try": 121775129.69043708,
+      "tax_total_usd_at_payment_fx": 3667300.426127187,
+      "terminal_usd_liquidated": 6693064.361893558,
+      "terminal_usd_unliquidated": 7815134.877573656,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     },
+     "L2": {
+      "cagr_try_liquidated": 0.5951113520701823,
+      "cagr_try_unliquidated": 0.6221325920277863,
+      "cagr_usd_liquidated": 0.21765163724223946,
+      "cagr_usd_unliquidated": 0.2382786969343358,
+      "capital_usd": 1000000.0,
+      "delta_cagr_pp_vs_C0": 0.22838157498048517,
+      "ending_nav_usd": 8029299.235680956,
+      "fees_usd": 160092.53763230782,
+      "fx_end": 48.9131,
+      "fx_start": 3.5192,
+      "indexation_relief_try": 95246788.54529491,
+      "max_dd_nav_usd": 0.40176407582066076,
+      "neg_gain_try_by_reason": {},
+      "pos_gain_try_by_reason": {},
+      "realised_gain_try_by_instrument": {
+       "BOND": -179415.85103738867,
+       "GOLD": 30534573.060761664,
+       "QLD": 306747897.43290424
+      },
+      "realised_gain_try_by_reason": {
+       "defensive": 30355157.209724277,
+       "liquidation": 39615019.583123624,
+       "resize": 263802191.38785622,
+       "tax": 3330686.461924421
+      },
+      "strategy_trades": 686,
+      "tax_by_year_try": {
+       "2017": 935.9455756056395,
+       "2018": 1447425.8504790647,
+       "2019": 758616.6540827522,
+       "2020": 4547960.739002129,
+       "2021": 4322634.236201344,
+       "2022": 709160.2509732454,
+       "2023": 6118324.378758057,
+       "2024": 27818506.81248959,
+       "2025": 29055856.368881986
+      },
+      "tax_funding_sales": 4,
+      "tax_total_try": 133784886.92882767,
+      "tax_total_usd_at_payment_fx": 3956235.762472327,
+      "terminal_usd_liquidated": 6816661.898265683,
+      "terminal_usd_unliquidated": 8029299.235680956,
+      "window": [
+       "2017-01-03",
+       "2026-09-29"
+      ],
+      "years": 9.74674880219028
+     }
+    }
+   }
+  }
+ }
+}

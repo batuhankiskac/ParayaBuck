@@ -459,7 +459,6 @@ def run_strategy(arm, regime_name, capital, a, b, mkt, days, arr, y, y10):
         "realised_gain_try_by_instrument": {k: float(v) for k, v in sorted(gain_by_instrument.items())},
         "pos_gain_try_by_reason": {},
         "neg_gain_try_by_reason": {},
-        "tax_by_year_try": {},
         "indexation_relief_try": float(sum(a.index_relief_try for a in accounts)),
         "_nav": nav,
     }

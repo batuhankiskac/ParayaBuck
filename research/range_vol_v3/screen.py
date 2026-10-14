@@ -476,7 +476,8 @@ RSTAR = None  # compute at first run_main call
 def run_main(arms, extras=False, m_list=(1, 2)):
     global RSTAR
     if RSTAR is None:
-        res = {}
+        RSTAR = compute_rstar_qqq()
+    res = {}
     for md, spread in FIN.items():
         days, arr, o, c, e2, v20, oq, hq, lq, cq, y = main_inputs(spread)
         dates = days[START - 1:]
@@ -562,10 +563,10 @@ def bootstrap_instrument(o_arr, h_arr, l_arr, c_arr, y_arr, RSTAR, n_paths, arms
         pos = np.concatenate([pre, pos], axis=1)            # [P, L+EXT]
         idx = pool[pos]                                      # [P, nSess]
         yy = y[idx - 1]
-        prev = q[1][idx - 1]
-        r_on_tr = (q[0][idx] + q[2][idx]) / prev
-        r_on_p = q[0][idx] / prev
-        r_id = q[1][idx] / q[0][idx]
+        prev = cq[idx - 1]
+        r_on_p = oq[idx] / prev
+        r_on_tr = r_on_p
+        r_id = cq[idx] / oq[idx]
         one = np.ones((P, 1))
         nSess = idx.shape[1]
         qc = np.concatenate([one, np.cumprod(r_on_tr * r_id, axis=1)], axis=1)   # [P, nSess+1]
@@ -932,6 +933,94 @@ CORE_KEYS = [f"{g}_{md}" for g in ("G1", "G2", "G3") for md in FIN]
 
 
 # ----------------------------------------------------------------------------- main
+
+ETF_ARMS = ("C0", "G3x", "F1", "F2", "F3")
+OOS_PATHS_ETF = 2000
+
+def load_etf(path):
+    rows = []
+    with open(path) as fh:
+        for r in csv.DictReader(fh):
+            rows.append(r)
+    rows.sort(key=lambda r: r["date"])
+    dates = [r["date"] for r in rows]
+    o = np.array([float(r["open"]) for r in rows])
+    h = np.array([float(r["high"]) for r in rows])
+    l = np.array([float(r["low"]) for r in rows])
+    c = np.array([float(r["close"]) for r in rows])
+    a = np.array([float(r["adjclose"]) for r in rows])
+    return dates, o, h, l, c, a
+
+
+def etf_quality_ok(h, l, o):
+    n = len(h)
+    bad = 0
+    for i in range(n):
+        if h[i] == l[i]:
+            bad += 1
+        else:
+            op = o[i]
+            if (not np.isfinite(op)) or op <= 0 or op < l[i] - 1e-12 or op > h[i] + 1e-12:
+                bad += 1
+    return (bad / n) <= 0.05
+
+
+def etf_main(path):
+    dates, o, h, l, c, adj = load_etf(path)
+    if not etf_quality_ok(h, l, o):
+        return None
+    if len(dates) < START + 5:
+        return None
+    scale = adj / c
+    o_s = o * scale
+    h_s = h * scale
+    l_s = l * scale
+    c_s = adj.copy()
+    d3, tb = load_rates()
+    y = rate_on(dates, d3, tb)
+    start = START
+    so, sc = trv2.synthetic_2x(o_s, c_s, np.zeros_like(c_s), y + EXTRA_FIN, EXP_Q)
+    e2 = e2_up(c_s)
+    RSTAR = compute_rstar_qqq()
+    vol_map = {}
+    vol_map["vol20"] = trv2.vol_n(sc)[0]
+    for kind in ("yz20", "g3x", "f1", "f2", "f3"):
+        vol_map[kind] = qqq_scaled_vol(o_s, h_s, l_s, c_s, kind, R_star=RSTAR)
+    wants = {}
+    for arm in ETF_ARMS:
+        kind, _ = arm_spec(arm)
+        wants[kind] = wants_for(e2, vol_map[kind if kind != "vol20" else "vol20"])[0]
+    dates_m = dates[start - 1:]
+    out = {}
+    out["window"] = {"start": dates_m[1] if len(dates_m)>1 else dates_m[0], "end": dates_m[-1], "sessions": len(dates_m)-1}
+    out["quality_ok"] = True
+    for arm in ETF_ARMS:
+        kind, band = arm_spec(arm)
+        nav, turn, ntr, codes, traded = simulate_band(so, sc, wants[kind], COST_PER_SIDE * 2, start, band)
+        arm_st = arm_stats(dates_m, nav[0], turn[0], ntr[0], codes[0], traded[0], wants[kind], start, False)
+        out[arm] = arm_st
+    return out
+
+
+def etf_bootstrap(path, arms, rng):
+    dates, o, h, l, c, adj = load_etf(path)
+    if not etf_quality_ok(h, l, o):
+        return None
+    if len(dates) < START + 10:
+        return None
+    scale = adj / c
+    o_s = o * scale
+    h_s = h * scale
+    l_s = l * scale
+    c_s = adj.copy()
+    d3, tb = load_rates()
+    y = rate_on(dates, d3, tb)
+    RSTAR = compute_rstar_qqq()
+    cg, _ = bootstrap_instrument(o_s, h_s, l_s, c_s, y, RSTAR, OOS_PATHS_ETF, arms, rng)
+    # cg keyed by (financing, arm); financing loops FIN, identical paths; take first financing
+    md0 = list(FIN.keys())[0]
+    return {a: cg[(md0, a)] for a in arms}
+
 def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode not in ("--harness", "--run"):
@@ -948,124 +1037,132 @@ def main() -> None:
 
     main_res = run_main(ARMS, extras=True)
     print("main window done")
+    RSTAR = main_res.get("_rstar", compute_rstar_qqq())
+    print("R* (QQQ 1999-03..2009-12) =", RSTAR)
+
     cg, tv = boot_main(ARMS)
     boot = boot_summary(cg, tv, ARMS, FIN)
     print("main bootstrap done")
-    oos = {"GSPC": oos_window(*load_gspc(), ARMS)}
-    for k in MARKETS:
-        oos[k] = oos_window(*load_market(k), ARMS)
-    rng = np.random.default_rng(SEED)
-    per = {k: boot_oos_market(k, rng, ARMS) for k in MARKETS}
-    pooled = {a: np.concatenate([per[k][a] for k in MARKETS]) for a in ARMS}
-    oos_boot = {"per_market": {}, "pooled": {}}
-    for k in MARKETS:
-        oos_boot["per_market"][k] = {a: {"median_diff": float(np.median(per[k][a] - per[k]["C0"])),
-                                         "cagr_median": float(np.median(per[k][a]))} for a in ARMS}
-    for a in ARMS:
-        d = pooled[a] - pooled["C0"]
-        oos_boot["pooled"][a] = {"diff_vs_C0_median": float(np.median(d)), "diff_vs_C0_mean": float(np.mean(d)),
-                                 "share_ge_C0": float(np.mean(d >= 0)), "paths": int(len(d))}
-    print("OOS done")
 
+    # ETF OOS
+    quality_etfs = []
+    oos_new = {}
+    for path in sorted(str(p) for p in Path("data/historical").glob("range_vol_v2_*.csv")):
+        name = Path(path).stem.replace("range_vol_v2_", "").upper()
+        res = etf_main(path)
+        if res is None:
+            continue
+        # exclude EWC by quality already; name EWC maybe quality fail
+        quality_etfs.append(name)
+        oos_new[name] = res
+    print("ETF main done:", len(quality_etfs))
+
+    rng = np.random.default_rng(SEED)
+    per_etf = {}
+    for name in quality_etfs:
+        path = f"data/historical/range_vol_v2_{name.lower()}.csv"
+        cg_e = etf_bootstrap(path, ETF_ARMS, rng)
+        if cg_e is None:
+            continue
+        per_etf[name] = cg_e
+    pooled_etf = {a: np.concatenate([per_etf[n][a] for n in per_etf]) for a in ETF_ARMS}
+    oos_boot_etf = {"per_market": {}, "pooled": {}}
+    for name in per_etf:
+        oos_boot_etf["per_market"][name] = {a: {"cagr_median": float(np.median(per_etf[name][a])),
+                                                "median": float(np.median(per_etf[name][a]))} for a in ETF_ARMS}
+    for a in ETF_ARMS:
+        d = pooled_etf[a] - pooled_etf["C0"]
+        oos_boot_etf["pooled"][a] = {"diff_vs_C0_median": float(np.median(d)),
+                                     "diff_vs_C0_mean": float(np.mean(d)),
+                                     "share_ge_C0": float(np.mean(d >= 0)),
+                                     "paths": int(len(d))}
+
+    # Gates for F-arms
     gates = {}
     for arm in CANDIDATES:
         g = historical_gates(main_res, boot, arm)
-        g.update(oos_gates(oos, oos_boot["pooled"], arm))
-        g["pass_all"] = bool(all(g[k] for k in GATE_KEYS))
-        g["core_G1_G3"] = bool(all(g[k] for k in CORE_KEYS))
+        g["pass_all_main"] = bool(all(g[k] for k in (["G1_base","G2_base","G3_base","G1_calibrated","G2_calibrated","G3_calibrated","G6_base","G6_calibrated"] if False else ["G1_base","G2_base","G3_base","G5_base","G6_base","G1_calibrated","G2_calibrated","G3_calibrated","G5_calibrated","G6_calibrated","G4","G9"])))
+        # simplified all G1-G6/G9 (available keys)
+        g["pass_all"] = bool(all(g[k] for k in [k for k in g.keys() if k.startswith(("G1","G2","G3","G5","G6","G4","G9"))]))
         gates[arm] = g
-    # plateau eligibility (B_x and WB_x families)
-    for fam in ("B", "WB"):
-        for x in GRID:
-            arm = f"{fam}{x}"
-            nb = [f"{fam}{n}" for n in NEIGHBOURS[x]]
-            gates[arm]["plateau"] = bool(any(gates[n]["core_G1_G3"] for n in nb))
-            gates[arm]["plateau_neighbours"] = {n: gates[n]["core_G1_G3"] for n in nb}
-    h2 = main_res["base"]["m2"]
-    key = lambda a: (h2[a]["cagr"], h2[a]["calmar"])
-    b_ok = [f"B{x}" for x in GRID if gates[f"B{x}"]["pass_all"] and gates[f"B{x}"]["plateau"]]
-    if b_ok:
-        xstar, xrule = max(b_ok, key=key)[1:], "best passing plateau-eligible B_x"
+    # ETF G7'/G8'
+    for arm in CANDIDATES:
+        deltas = np.array([oos_new[n][arm]["cagr"] - oos_new[n]["C0"]["cagr"] for n in oos_new])
+        dds = np.array([oos_new[n][arm]["max_dd"] - oos_new[n]["C0"]["max_dd"] for n in oos_new])
+        med = float(np.median(deltas))
+        share_pos = float(np.mean(deltas > 0))
+        dd_share = float(np.mean(dds <= 0.03))
+        pooled_med = float(np.median(pooled_etf[arm] - pooled_etf["C0"]))
+        gates[arm]["G7p"] = bool(med >= 0 and share_pos >= 0.6 and dd_share >= 0.8)
+        gates[arm]["G7p_detail"] = {"median_delta_cagr": med, "share_positive": share_pos,
+                                    "dd_within_3pp_share": dd_share, "n_instruments": len(deltas)}
+        gates[arm]["G8p"] = bool(pooled_med >= 0)
+        gates[arm]["G8p_pooled_median_delta"] = pooled_med
+        gates[arm]["pass_all_final"] = bool(gates[arm]["pass_all"] and gates[arm]["G7p"] and gates[arm]["G8p"])
+
+    # selection among passing F arms by pooled median
+    passing = [a for a in CANDIDATES if gates[a].get("pass_all_final", False)]
+    if passing:
+        # highest pooled median
+        medians = {a: gates[a]["G8p_pooled_median_delta"] for a in passing}
+        best = max(passing, key=lambda a: medians[a])
+        # tie within 0.03 pp prefer simpler F3>F1>F2
+        best_med = medians[best]
+        close = [a for a in passing if abs(medians[a]-best_med) <= 0.0003]
+        if len(close) > 1:
+            for pref in ("F3","F1","F2"):
+                if pref in close:
+                    best = pref
+                    break
+        selected = best
     else:
-        xstar, xrule = max((f"B{x}" for x in GRID), key=key)[1:], "fallback: highest m=2 base CAGR among B_x"
-    wb = f"WB{xstar}"
-    eligible = []
-    if gates["W1"]["pass_all"]:
-        eligible.append("W1")
-    eligible += b_ok
-    if gates[wb]["pass_all"] and gates[wb]["plateau"]:
-        eligible.append(wb)
-    sel = max(eligible, key=key) if eligible else "none"
-    selection = {"band_x_star": xstar, "band_rule_applied": xrule, "WB": wb, "eligible": eligible, "selected": sel,
-                 "rule": "x* = passing plateau-eligible B_x with highest m=2 base CAGR (tie Calmar), else the B_x "
-                         "with the highest m=2 base CAGR; WB = WB_{x*}; selected = highest m=2 base CAGR among "
-                         "passing W1, passing plateau-eligible B_x and passing plateau-eligible WB"}
+        selected = "none"
+    selection = {"passing": passing, "selected": selected, "median_deltas": {a: gates[a]["G8p_pooled_median_delta"] for a in CANDIDATES}}
 
     out = {
-        "campaign": "ewma_band_v1",
-        "params": {"arms": list(ARMS), "sma_n": SMA_N, "tsm_n": TSM_N, "don_n": DON_N, "ewma_lambda": LAMBDA,
-                   "ewma_window_returns": EWMA_N, "ewma_seed_returns": EWMA_SEED, "c0_band": C0_BAND,
-                   "bands": BANDS, "cap": CAP, "cost_per_side_m1": COST_PER_SIDE, "expense": EXP_Q,
-                   "financing_spread": FIN, "bootstrap_main": {"seed": SEED, "paths": PATHS, "block": BLOCK,
-                                                               "warmup": WARM, "back_extension": EXT,
-                                                               "measured": MEASURED, "m": 2},
-                   "bootstrap_oos": {"seed": SEED, "paths_per_market": OOS_PATHS_PER_MARKET, "block": BLOCK,
-                                     "returns_per_path": OOS_BOOT_L, "m": 2},
-                   "signals": "production E2 1.1.0 on price closes: SMA200, 252-session price return > 0, "
-                              "close > 126-session max/min midpoint; 2 of 3"},
+        "campaign": "range_vol_v3",
+        "params": {"arms": list(ARMS), "etf_arms": list(ETF_ARMS), "sma_n": SMA_N, "tsm_n": TSM_N, "don_n": DON_N,
+                   "c0_band": C0_BAND, "cap": CAP, "cost_per_side_m1": COST_PER_SIDE, "expense": EXP_Q,
+                   "financing_spread": FIN, "extra_financing": EXTRA_FIN, "start": START,
+                   "bootstrap_main": {"seed": SEED, "paths": PATHS, "block": BLOCK, "warmup": WARM,
+                                      "back_extension": EXT, "measured": MEASURED, "m": 2},
+                   "bootstrap_etf": {"paths_per_instrument": OOS_PATHS_ETF, "block": BLOCK, "m": 2},
+                   "rstar_qqq_1999_03_2009_12": RSTAR,
+                   "signals": "production E2 1.1.0 on QQQ price close"},
         "harness_check": hc,
         "main_window": main_res,
         "bootstrap_main_block20_m2": boot,
-        "oos": oos,
-        "oos_bootstrap_block20_m2": oos_boot,
+        "oos_new": oos_new,
+        "oos_new_bootstrap_block20_m2": oos_boot_etf,
+        "quality_etfs": quality_etfs,
         "gates": gates,
         "selection": selection,
         "status": "complete",
     }
     OUT.write_text(json.dumps(trv2.rnd(out), indent=2, sort_keys=True) + "\n")
 
-    # ------------------------------------------------------------------ SUMMARY
+    # SUMMARY
     p = lambda x: f"{x * 100:7.2f}%"
     w = main_res["window"]
-    L = [f"ewma_band_v1 | main window {w['start']} -> {w['end']} ({w['sessions']} sessions) | C0 = production E2 1.1.0",
-         f"harness: {'PASS' if hc['pass'] else 'FAIL'} (max |diff| "
-         f"{max(abs(v['diff_pp']) for v in hc['deviation_checks'].values()):.6f} pp vs e2_integration_v1 production E2; "
-         f"band sim == simulate_multi {hc['band_simulator_equals_simulate_multi']}; EWMA identity rel diff "
-         f"{hc['ewma_identity_max_rel_diff_vs_direct']:.1e})", ""]
+    L = [f"range_vol_v3 | main window {w['start']} -> {w['end']} ({w['sessions']} sessions) | C0 = production E2 1.1.0",
+         f"harness: {'PASS' if hc['pass'] else 'FAIL'}; R* = {RSTAR:.6f}", ""]
     for md in FIN:
-        L.append(f"[{md}] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | m=1 CAGR")
+        L.append(f"[{md}] m=2: arm CAGR maxDD Calmar 2017+ turn/yr | boot20 median, median(arm-C0) | m=1 CAGR")
         for arm in ARMS:
             a = main_res[md]["m2"][arm]
             b = boot[md][arm]
             sp = a["subperiods"]
             L.append(f"  {arm:5s} {p(a['cagr'])} {p(a['max_dd'])} {a['calmar']:5.3f} {p(a['2017_end']['cagr'])} "
-                     f"{p(sp['P1']['cagr'])} {p(sp['P2']['cagr'])} {p(sp['P3']['cagr'])} {a['turnover_annual']:5.2f} | "
-                     f"{p(b['cagr_median'])} {b['diff_vs_C0_median'] * 100:+.3f}pp | {p(main_res[md]['m1'][arm]['cagr'])}")
+                     f"{a['turnover_annual']:5.2f} | {p(b['cagr_median'])} {b['diff_vs_C0_median'] * 100:+.3f}pp | {p(main_res[md]['m1'][arm]['cagr'])}")
         L.append("")
-    L.append("trades (base, m=2): arm | full window: round trips/yr, resizes/yr, sells/yr, turnover/yr "
-             "(entries+exits / resizes) | 2017+: round trips/yr, sells/yr, turnover/yr")
-    for arm in ARMS:
-        a = main_res["base"]["m2"][arm]
-        e, f = a["events_full"], a["events_2017_on"]
-        L.append(f"  {arm:5s} {e['round_trips_per_year']:5.2f} {e['resizes_per_year']:6.2f} {e['sells_per_year']:6.2f} "
-                 f"{e['turnover_per_year']:5.2f} ({e['turnover_from_entries_exits_per_year']:4.2f} / "
-                 f"{e['turnover_from_resizes_per_year']:4.2f}) | {f['round_trips_per_year']:5.2f} "
-                 f"{f['sells_per_year']:6.2f} {f['turnover_per_year']:5.2f}")
+    L.append("ETF pooled bootstrap median Δ vs C0: " + "  ".join(f"{a} {oos_boot_etf['pooled'][a]['diff_vs_C0_median']*100:+.3f}pp" for a in ETF_ARMS))
+    L.append("ETF main median Δ CAGR: " + "  ".join(f"{a} {np.median([oos_new[n][a]['cagr']-oos_new[n]['C0']['cagr'] for n in oos_new])*100:+.3f}pp ({sum(1 for n in oos_new if oos_new[n][a]['cagr']>oos_new[n]['C0']['cagr'])}/{len(oos_new)})" for a in ETF_ARMS))
     L.append("")
-    L.append("OOS (calibrated, m=2): window | arm CAGR / maxDD")
-    for k, v in oos.items():
-        L.append(f"  {k:4s} {v['window']['start']}->{v['window']['end']} | " +
-                 "  ".join(f"{a} {p(v[a]['cagr']).strip()}/{p(v[a]['max_dd']).strip()}" for a in ARMS))
-    L.append("OOS pooled bootstrap (M1..M5, 10,000 paths) median(arm-C0): " +
-             "  ".join(f"{a} {oos_boot['pooled'][a]['diff_vs_C0_median'] * 100:+.3f}pp" for a in CANDIDATES))
-    L.append("")
-    L.append("gates (" + " ".join(GATE_KEYS) + "):")
+    L.append("gates:")
     for arm in CANDIDATES:
         g = gates[arm]
-        pl = f" plateau={'P' if g.get('plateau') else 'F'}" if "plateau" in g else ""
-        L.append(f"  {arm:5s} " + " ".join(f"{k}={'P' if g[k] else 'F'}" for k in GATE_KEYS) +
-                 f"{pl} -> {'PASS' if g['pass_all'] else 'FAIL'}")
-    L.append(f"band x* = {xstar} ({xrule}); WB = {wb}; eligible {eligible}; selected: {sel}")
+        L.append(f"  {arm:5s} main_pass={g['pass_all']} G7p={g['G7p']} G8p={g['G8p']} G8p_med={g['G8p_pooled_median_delta']*100:+.3f}pp -> {'PASS' if g.get('pass_all_final') else 'FAIL'}")
+    L.append(f"selected: {selected}")
     SUMMARY.write_text("\n".join(L) + "\n")
     print("\n".join(L))
 

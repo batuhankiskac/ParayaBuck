@@ -1,0 +1,29 @@
+range_vol_v3 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production E2 1.1.0
+harness: PASS; R* = 1.127456
+
+[base] m=2: arm CAGR maxDD Calmar 2017+ turn/yr | boot20 median, median(arm-C0) | m=1 CAGR
+  C0      14.67%   49.56% 0.296   32.44%  5.97 |    7.50% +0.000pp |   14.95%
+  YZ20    14.80%   46.84% 0.316   31.66%  5.44 |    7.92% +0.419pp |   15.05%
+  G3x     14.99%   48.49% 0.309   32.72%  5.39 |    7.79% +0.288pp |   15.23%
+  F1      14.53%   48.53% 0.299   31.09%  5.49 |    7.78% +0.252pp |   14.78%
+  F2      14.44%   48.53% 0.297   31.18%  5.49 |    7.72% +0.264pp |   14.69%
+  F3      15.09%   48.24% 0.313   32.94%  5.36 |    7.78% +0.297pp |   15.33%
+  F4      15.23%   52.63% 0.289   33.87%  5.37 |    7.53% +0.030pp |   15.47%
+
+[calibrated] m=2: arm CAGR maxDD Calmar 2017+ turn/yr | boot20 median, median(arm-C0) | m=1 CAGR
+  C0      14.10%   49.65% 0.284   31.69%  5.97 |    7.05% +0.000pp |   14.38%
+  YZ20    14.23%   46.92% 0.303   30.92%  5.44 |    7.48% +0.417pp |   14.48%
+  G3x     14.40%   48.57% 0.296   31.95%  5.39 |    7.37% +0.283pp |   14.65%
+  F1      13.95%   48.62% 0.287   30.35%  5.49 |    7.36% +0.248pp |   14.21%
+  F2      13.86%   48.61% 0.285   30.44%  5.49 |    7.27% +0.261pp |   14.11%
+  F3      14.50%   48.33% 0.300   32.16%  5.36 |    7.33% +0.284pp |   14.74%
+  F4      14.63%   52.72% 0.277   33.07%  5.37 |    7.07% +0.003pp |   14.87%
+
+ETF pooled bootstrap median Δ vs C0: C0 +0.000pp  G3x +0.203pp  F1 +0.177pp  F2 +0.203pp  F3 +0.061pp
+ETF main median Δ CAGR: C0 +0.000pp (0/18)  G3x +0.317pp (16/18)  F1 +0.016pp (9/18)  F2 +0.026pp (10/18)  F3 +0.327pp (15/18)
+
+gates:
+  F1    main_pass=False G7p=False G8p=True G8p_med=+0.177pp -> FAIL
+  F2    main_pass=False G7p=False G8p=True G8p_med=+0.203pp -> FAIL
+  F3    main_pass=True G7p=False G8p=True G8p_med=+0.061pp -> FAIL
+selected: none

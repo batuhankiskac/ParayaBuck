@@ -1,0 +1,62 @@
+{
+  "study": "tax_asym_v3",
+  "note": "No data was downloaded for this study. Every input is an existing committed research file; SHA-256 recorded here. REFERENCE_E2_DEVIATION.json is the byte-identical copy of archive/research/e2-integration-v1-2026-10:research/e2_integration_v1/DEVIATION.json, committed inside this study so the harness does not depend on the untracked research/ewma_band_v1/ working copy.",
+  "inputs": [
+    {
+      "file": "data/historical/stress_robustness_v1_daily.csv",
+      "source": "repository history (stress_robustness_v1 daily QQQ/SPY/QLD bars)",
+      "date_range": "2000-01-03..2026-09-29",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "used_for": "QQQ open/close/dividend; the pre-tax control row"
+    },
+    {
+      "file": "data/historical/stress_robustness_v1_dtb3.csv",
+      "source": "FRED DTB3",
+      "date_range": "1954-01-04..2026-10-09",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "used_for": "financing rate of the synthetic QLD*"
+    },
+    {
+      "file": "data/historical/after_tax_tr_v1_usdtry_cbrt.csv",
+      "source": "CBRT forex buying rate (copied from after_tax_tr_v1, the series tax_asym_v1/v2 used)",
+      "date_range": "2000-01-03..2026-10-09",
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "used_for": "USD/TRY in the progressive regime"
+    },
+    {
+      "file": "data/historical/after_tax_tr_v1_yiufe.csv",
+      "source": "FRED TURPPDMMINMEI ratio-linked + TCMB Yi-UFE (copied from after_tax_tr_v1)",
+      "date_range": "1999-01..2026-09",
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "used_for": "Yi-UFE indexation and tariff bracket scaling"
+    },
+    {
+      "file": "data/historical/leverage_frontier_v1_daily.csv",
+      "source": "repository history (leverage_frontier_v1 extra symbols; read by leverage_frontier_v1.load_all)",
+      "date_range": "2000-01-03..2026-09-29",
+      "sha256": "a6e276fb87cfae706031c756c823c7549a34f042a88c8b2c4c10a9eaa15c5ceb",
+      "used_for": "required by the imported lf.load_all() loader (unused columns)"
+    },
+    {
+      "file": "data/historical/leverage_frontier_v1_dgs10.csv",
+      "source": "FRED DGS10 (leverage_frontier_v1)",
+      "date_range": "1962-01-02..2026-10-09",
+      "sha256": "68fa5881666126c7b9a4fb1b2affd93d61e543d25278a2db2ac246e4d2dc0345",
+      "used_for": "required by the imported lf.load_all() loader (unused)"
+    },
+    {
+      "file": "research/tax_asym_v3/REFERENCE_E2_DEVIATION.json",
+      "source": "git show archive/research/e2-integration-v1-2026-10:research/e2_integration_v1/DEVIATION.json (byte-identical)",
+      "date_range": "2000-03-09..2026-09-29",
+      "sha256": "7571ed991a08945533b176e5aa4938e5f369cc5a503f142e475821e2e61d99a4",
+      "used_for": "harness reference row E2_prod_price_h0 (base/calibrated x m=1/m=2)"
+    },
+    {
+      "file": "research/tax_asym_v2/RESULTS.json",
+      "source": "committed output of the study being re-run (commit c668e0c0)",
+      "date_range": "n/a",
+      "sha256": "b211fcc2cbc7bf6afab31b473a6bae730b382a40881932c6ca7fc5b0815fcd17",
+      "used_for": "--verify replication target for the per-path C0 arrays"
+    }
+  ]
+}

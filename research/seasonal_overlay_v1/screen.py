@@ -766,8 +766,7 @@ def main() -> None:
     L = [f"seasonal_overlay_v1 | main window {w['start']} -> {w['end']} ({w['sessions']} sessions) | C0 = production E2 1.1.0",
          f"harness: {'PASS' if hc['pass'] else 'FAIL'} (max |diff| "
          f"{max(abs(v['diff_pp']) for v in hc['deviation_checks'].values()):.6f} pp vs e2_integration_v1 production E2; "
-         f"band sim == simulate_multi {hc['band_simulator_equals_simulate_multi']}; EWMA identity rel diff "
-         f"{hc['ewma_identity_max_rel_diff_vs_direct']:.1e})", ""]
+         f"band sim == simulate_multi {hc['band_simulator_equals_simulate_multi']})", ""]
     for md in FIN:
         L.append(f"[{md}] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | m=1 CAGR")
         for arm in ARMS:

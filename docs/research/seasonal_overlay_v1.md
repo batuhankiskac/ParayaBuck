@@ -43,7 +43,7 @@ and M3 loses (−1.04 pp, Japanese market); M2 is roughly flat (−0.15 pp).
 
 Why only S3: the other seasonal tilts are pro-cyclical with the drawdowns.
 - S1 (Sell in May) misses the summer rallies and rebalances into the Halloween low; it loses
-  4.15 pp CAGR and runs a −1.9 pp bootstrap. Classic calendar effect does not survive
+  4.45 pp CAGR and runs a −1.9 pp bootstrap. Classic calendar effect does not survive
   transaction costs / overlap with trend.
 - S2 (seasonal vol target) hits the 2017+ / max-DD tests (G3, G2 fail): lower target in
   May–Oct sizes down into rallies and the higher Nov–Apr target sizes up into crashes.

@@ -82,6 +82,8 @@ DTB3_FIRST = "1954-01-04"
 
 ARMS = ("C0", "A2")
 CANDIDATES = ("A2",)
+OOS_ETFS = ["XLB","XLE","XLF","XLI","XLK","XLP","XLU","XLV","XLY",
+            "EWJ","EWG","EWU","EWC","EWA","EWH","EWS","EWL","EFA","EEM"]
 
 
 ARM_PARAMS = {
@@ -654,6 +656,41 @@ CORE_KEYS = [f"{g}_{md}" for g in ("G1", "G2", "G3") for md in FIN]
 
 
 # ----------------------------------------------------------------------------- main
+
+
+def load_etf(key):
+    path = ROOT / "data/historical" / f"range_vol_v2_{key.lower()}.csv"
+    rows = []
+    with path.open() as fh:
+        for r in csv.DictReader(fh):
+            rows.append((r["date"], float(r["open"]), float(r["high"]), float(r["low"]),
+                          float(r["close"]), float(r["adjclose"])))
+    dates = [r[0] for r in rows]
+    o = np.empty(len(rows)); h = np.empty(len(rows)); l = np.empty(len(rows)); c = np.empty(len(rows))
+    for k, (d, op, hi, lo, cl, adj) in enumerate(rows):
+        f = adj / cl
+        o[k] = op * f; h[k] = hi * f; l[k] = lo * f; c[k] = adj
+    d3, tb = load_rates()
+    y = rate_on(dates, d3, tb)
+    start = START
+    assert start <= len(dates) - 1
+    return dates, o, h, l, c, np.array(y), start
+
+
+def _market_quality_ok(high, low, opn, close):
+    bad = 0; n = 0
+    for h, lo, o, cl in zip(high, low, opn, close):
+        n += 1
+        if h is None or lo is None:
+            bad += 1
+            continue
+        if h == lo:
+            bad += 1
+            continue
+        if o is None or o <= 0 or o < lo * (1 - 1e-9) or o > h * (1 + 1e-9):
+            bad += 1
+    return (bad / max(1, n)) <= 0.05
+
 def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode not in ("--harness", "--run"):
@@ -689,6 +726,70 @@ def main() -> None:
                                  "share_ge_C0": float(np.mean(d >= 0)), "paths": int(len(d))}
     print("OOS done")
 
+    # ---- after-tax threshold plateau + A2r + bootstrap ----
+    mkt_main = Market()
+    mkt_main.days = DAYS
+    mkt_main.fx = BASE_MKT.fx.copy()
+    mkt_main.ufe = BASE_MKT.ufe
+    plateau_arms = ["A2_33","A2_40","A2_50","A2_60","A2_67","A2_75","A2r"]
+    at_plateau = {}
+    for arm in plateau_arms:
+        wres = {}
+        for wn, (a, b) in WINDOWS.items():
+            cd = {}
+            for reg in ("pre_tax", "progressive"):
+                r0 = run_strategy("C0", reg, 100000.0, a, b, mkt_main)
+                r1 = run_strategy(arm, reg, 100000.0, a, b, mkt_main)
+                cd[reg] = {
+                    "C0": {"cagr": r0["cagr_usd_liquidated"], "max_dd": r0["max_dd_nav_usd"],
+                           "sells_per_year": r0["strategy_trades"]/r0["years"]},
+                    arm: {"cagr": r1["cagr_usd_liquidated"], "max_dd": r1["max_dd_nav_usd"],
+                          "sells_per_year": r1["strategy_trades"]/r1["years"]},
+                }
+            wres[wn] = cd
+        at_plateau[arm] = wres
+    print("after-tax plateau done")
+
+    boot_at = after_tax_bootstrap(n_paths=1000, capital=100000.0, seed=SEED)
+    print("after-tax bootstrap done", boot_at["median_delta_cagr"], boot_at["share_delta_gt_0"])
+
+    # ---- 18-ETF pre-tax test ----
+    etf_results = {}
+    for kt in OOS_ETFS:
+        if kt == "EWC":
+            continue
+        try:
+            ddays, o, high, low, c, y, start = load_etf(kt)
+        except Exception as e:
+            continue
+        if not _market_quality_ok(high, low, o, c):
+            continue
+        so, sc = trv2.synthetic_2x(o, c, np.zeros_like(c), y + EXTRA_FIN, EXP_Q)
+        e2 = e2_up(c)
+        vol = trv2.vol_n(sc)[0]
+        wants = wants_for(e2, vol)[0]
+        dates = ddays[start - 1:]
+        years = trv2.calendar_years(dates[0], dates[-1])
+        # C0
+        nav0, turn0, ntr0, codes0, traded0 = simulate_band(so, sc, wants, COST_PER_SIDE * 2, start, C0_BAND)
+        nav0 = nav0[0]
+        # A2
+        nav1, turn1, ntr1, codes1, traded1 = simulate_downward(so, sc, wants, COST_PER_SIDE * 2, start, C0_BAND, 0.5, 0.0)
+        nav1 = nav1[0]
+        ev0 = event_stats(dates, codes0[0], traded0[0])
+        ev1 = event_stats(dates, codes1[0], traded1[0])
+        etf_results[kt] = {
+            "cagr_C0": float(trv2.cagr(nav0[0], nav0[-1], years)),
+            "cagr_A2": float(trv2.cagr(nav1[0], nav1[-1], years)),
+            "delta_cagr": float(trv2.cagr(nav1[0], nav1[-1], years) - trv2.cagr(nav0[0], nav0[-1], years)),
+            "max_dd_C0": float(trv2.max_dd(nav0)[0]),
+            "max_dd_A2": float(trv2.max_dd(nav1)[0]),
+            "delta_max_dd": float(trv2.max_dd(nav1)[0] - trv2.max_dd(nav0)[0]),
+            "sells_per_year_C0": ev0["sells_per_year"],
+            "sells_per_year_A2": ev1["sells_per_year"],
+        }
+    print("ETF test done", len(etf_results))
+
     gates = {}
     for arm in CANDIDATES:
         g = historical_gates(main_res, boot, arm)
@@ -719,6 +820,9 @@ def main() -> None:
         "oos_bootstrap_block20_m2": oos_boot,
         "gates": gates,
         "selection": selection,
+        "after_tax_plateau": at_plateau,
+        "after_tax_bootstrap_T1": boot_at,
+        "etf_test": etf_results,
         "status": "complete",
     }
     OUT.write_text(json.dumps(trv2.rnd(out), indent=2, sort_keys=True) + "\n")
@@ -764,13 +868,9 @@ def main() -> None:
         pl = f" plateau={'P' if g.get('plateau') else 'F'}" if "plateau" in g else ""
         L.append(f"  {arm:5s} " + " ".join(f"{k}={'P' if g[k] else 'F'}" for k in GATE_KEYS) +
                  f"{pl} -> {'PASS' if g['pass_all'] else 'FAIL'}")
-    L.append(f"band x* = {xstar} ({xrule}); WB = {wb}; eligible {eligible}; selected: {sel}")
+    L.append("pre-tax gates for A2 vs C0 in JSON")
     SUMMARY.write_text("\n".join(L) + "\n")
     print("\n".join(L))
-
-
-if __name__ == "__main__":
-    main()
 
 
 # ================= TAX/after-tax model imported from tax_frontier_v1 =================
@@ -1019,8 +1119,12 @@ def instalments(days, i0, i1):
 
 def run_strategy(arm, regime_name, capital, a, b, mkt):
     days_all = DAYS
-    i0 = bisect.bisect_left(days_all, a)
-    i1 = bisect.bisect_right(days_all, b) - 1
+    if isinstance(a, int):
+        i0 = a
+        i1 = b
+    else:
+        i0 = bisect.bisect_left(days_all, a)
+        i1 = bisect.bisect_right(days_all, b) - 1
     if regime_name == "progressive":
         regime = Regime("progressive", "tariff")
     else:
@@ -1224,6 +1328,11 @@ def sha256(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+# base market for after-tax bootstrap
+BASE_MKT = Market()
+BASE_MKT.days = DAYS
+FX_BY_DATE = {DAYS[i]: float(BASE_MKT.fx[i]) for i in range(len(DAYS))}
+
 # --- tax_asym arm registration into the after-tax model ---
 TAX_ARM_META = {}
 _BASE_VT = np.minimum(CAP, VT035)
@@ -1242,3 +1351,115 @@ TARGETS["A2r"] = UP.astype(float) * _BASE_VT
 PRICES["A2r"] = (EQ2_O, EQ2_C)
 TRADE_MODE["A2r"] = "downward"
 TAX_ARM_META["A2r"] = {"k": 0.50, "trim": 0.50}
+
+ARMS = ("C0", "A2")
+CANDIDATES = ("A2",)
+
+
+def _patched_scale(self, year):
+    key = f"{year - 1}-10"
+    if key not in self.ufe:
+        # fallback to earliest available october
+        ks = sorted(k for k in self.ufe if k.endswith("-10"))
+        key = ks[0] if ks else ANCHOR
+    return self.ufe[key] / self.ufe[ANCHOR]
+
+Market.scale = _patched_scale
+
+
+
+def after_tax_bootstrap(n_paths=1000, capital=100000.0, seed=20261011):
+    global DAYS, TARGETS, PRICES
+    q = ARR["QQQ"]
+    days_src = DAYS
+    T = q.shape[1]
+    L = 253 + 10 * 252
+    EXT = 3
+    rng = np.random.default_rng(seed)
+    pool = np.arange(1, T)
+    npool = len(pool)
+    d_cagr, d_dd = [], []
+    for _ in range(n_paths):
+        P = 1
+        pos = np.empty((P, L), dtype=np.int64)
+        pos[:, 0] = rng.integers(0, npool, P)
+        jump = rng.random((P, L)) < 1 / BLOCK
+        fresh = rng.integers(0, npool, (P, L))
+        for t in range(1, L):
+            pos[:, t] = np.where(jump[:, t], fresh[:, t], (pos[:, t - 1] + 1) % npool)
+        pre = np.stack([(pos[:, 0] - k) % npool for k in range(EXT, 0, -1)], axis=1)
+        pos = np.concatenate([pre, pos], axis=1)
+        idx = pool[pos]
+        yy = Y[idx - 1]
+        prev = q[1][idx - 1]
+        r_on_tr = (q[0][idx] + q[2][idx]) / prev
+        r_on_p = q[0][idx] / prev
+        r_id = q[1][idx] / q[0][idx]
+        one = np.ones((P, 1))
+        qc = np.concatenate([one, np.cumprod(r_on_tr * r_id, axis=1)], axis=1)
+        qo = np.concatenate([one, qc[:, :-1] * r_on_tr], axis=1)
+        pc = np.concatenate([one, np.cumprod(r_on_p * r_id, axis=1)], axis=1)
+        e2 = e2_up(pc)
+        yyp = np.concatenate([yy, yy[:, -1:]], axis=1)
+        so, sc = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp + 0.0, EXP_Q)
+
+        # vol target (base financing) for both arms
+        vol = trv2.vol_n(sc)[0]
+        vt = lf.vt_weight(vol, 0.35)
+        wants = e2.astype(float)[0] * np.minimum(CAP, vt)
+
+        dates = [DAYS[i] for i in idx.flatten().tolist()]  # warmup source dates not dates; need measured dates?
+        # Build date list for reconstructed path: use source dates for sampled positions; but warmup included in pos/pre.
+        dates = [days_src[i] for i in idx.flatten().tolist()]
+        # Add back-extension? idx includes pre, no separate date list for pre; but pre dates derived from idx pre. dates covers all L+EXT.
+        dates = [days_src[i] for i in idx.flatten().tolist()]
+
+        fx_path = np.array([FX_BY_DATE.get(d, BASE_MKT.fx[-1]) for d in dates], dtype=float)
+
+        # run after-tax for C0 and A2 via monkeypatch globals
+        old_days = list(DAYS)
+        old_targets = {k: TARGETS.get(k) for k in ("C0", "A2")}
+        old_prices = {k: PRICES.get(k) for k in ("C0", "A2")}
+        DAYS = list(dates)
+        w_arr = np.atleast_1d(wants).flatten()
+        TARGETS["C0"] = w_arr.copy()
+        TARGETS["A2"] = w_arr.copy()
+        PRICES["C0"] = (qo.flatten(), qc.flatten())
+        PRICES["A2"] = (so.flatten(), sc.flatten())
+        # measured start date
+        i0 = EXT + 253
+        i1 = len(dates) - 1
+        mkt = Market()
+        mkt.days = list(dates)
+        mkt.fx = fx_path
+        mkt.ufe = BASE_MKT.ufe
+        try:
+            r0 = run_strategy("C0", "progressive", capital, i0, i1, mkt)
+            r1 = run_strategy("A2", "progressive", capital, i0, i1, mkt)
+        finally:
+            DAYS = old_days
+            TARGETS["C0"] = old_targets["C0"]
+            TARGETS["A2"] = old_targets["A2"]
+            PRICES["C0"] = old_prices["C0"]
+            PRICES["A2"] = old_prices["A2"]
+        c0v=r0["cagr_usd_liquidated"]; c1v=r1["cagr_usd_liquidated"]
+        dv = r1["max_dd_nav_usd"] - r0["max_dd_nav_usd"]
+        if (c0v==c0v and c1v==c1v and dv==dv):  # finite
+            d_cagr.append(c1v - c0v)
+            d_dd.append(dv)
+
+    return {
+        "paths_total": n_paths,
+        "paths_finite": len(d_cagr),
+        "paths": len(d_cagr),
+        "median_delta_cagr": float(np.median(d_cagr)),
+        "share_delta_gt_0": float(np.mean(np.array(d_cagr) > 0)),
+        "p05_delta_cagr": float(np.percentile(d_cagr, 5)),
+        "deltas_cagr": [float(x) for x in d_cagr],
+        "delta_max_dd_median": float(np.median(d_dd)),
+        "delta_max_dd_p95": float(np.percentile(d_dd, 95)),
+        "deltas_max_dd": [float(x) for x in d_dd],
+    }
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,148 @@
+{
+  "downloaded_utc": "2026-10-14T12:59:02+00:00",
+  "file": "data/historical/riskoff_rotation_v4_etfs.csv",
+  "source": "Yahoo Finance chart API v8",
+  "sha256": "53a694a5801ae9c647f10ce6cc7b9c9711dc5bec7285e51d3df823b9276a7922",
+  "symbols": {
+    "XLB": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/XLB?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "XLE": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/XLE?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "XLF": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/XLF?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "XLI": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/XLI?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "XLK": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/XLK?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "XLP": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/XLP?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "XLU": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/XLU?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "XLV": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/XLV?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "XLY": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/XLY?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "EWJ": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/EWJ?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "EWG": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/EWG?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "EWU": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/EWU?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "EWA": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/EWA?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "EWH": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/EWH?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "EWS": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/EWS?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "EWL": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/EWL?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "EFA": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/EFA?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6319,
+      "first": "2001-08-27",
+      "last": "2026-10-13"
+    },
+    "EEM": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/EEM?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 5913,
+      "first": "2003-04-14",
+      "last": "2026-10-13"
+    },
+    "SPY": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/SPY?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "DIA": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/DIA?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6987,
+      "first": "1999-01-04",
+      "last": "2026-10-13"
+    },
+    "IWM": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/IWM?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6634,
+      "first": "2000-05-26",
+      "last": "2026-10-13"
+    },
+    "IEF": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/IEF?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 6091,
+      "first": "2002-07-30",
+      "last": "2026-10-13"
+    },
+    "GLD": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/GLD?period1=915148800&period2=1791982726&interval=1d&events=div%7Csplit",
+      "rows": 5509,
+      "first": "2004-11-18",
+      "last": "2026-10-13"
+    }
+  },
+  "quality_rule": "range_vol_v2 _market_quality_ok ratio <=0.05",
+  "tbill_source": "data/historical/stress_robustness_v1_dtb3.csv (DTB3)"
+}

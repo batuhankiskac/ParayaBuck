@@ -160,4 +160,11 @@ failure.
 
 ## Amendments
 
-(none)
+- **A1 (2026-10-14, after this commit and before any candidate arm was simulated on real data).**
+  The committed `screen.py` referenced an undefined `DTB3` name in the new out-of-sample loaders,
+  so `--run` aborted with a `NameError` as soon as it reached the OOS stage. One line was added —
+  `DTB3 = ROOT / "data/historical/stress_robustness_v1_dtb3.csv"`, the same file `trv2.load()`
+  already reads for financing — and that is the only difference between the committed
+  pre-registration code and the code that produced `RESULTS.json`. No arm, parameter, window,
+  data input or gate was changed; the smoke and harness checks and the reference anchors were
+  re-run unchanged after the fix and pass as before.

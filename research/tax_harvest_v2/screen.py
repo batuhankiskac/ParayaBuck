@@ -112,6 +112,7 @@ EPISODE_WINDOW = 20             # report: last 20 Dec sessions + first 20 Jan se
 GSPC = ROOT / "data/historical/ewma_band_v1_gspc.csv"
 INDEX = ROOT / "data/historical/ewma_band_v1_index.csv"
 TB3MS = ROOT / "data/historical/ewma_band_v1_tb3ms.csv"
+DTB3 = ROOT / "data/historical/stress_robustness_v1_dtb3.csv"
 OOS_GSPC_FIRST, OOS_GSPC_LAST = "1957-01-02", "1999-12-31"
 EXTRA_FIN = 0.0075
 DTB3_FIRST = "1954-01-04"

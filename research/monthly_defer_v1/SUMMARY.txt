@@ -1,0 +1,154 @@
+monthly_defer_v1 (I2: Yi-UFE month-boundary deferral of downward vol resizes) | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | control = production R2
+harness PASS (0 checks outside tolerance); overlay 'none' == fast_reentry simulate_band max|diff| 1.31e-13; H2 anchor reproduced (pre-tax base m2 0.155137 vs 0.155137)
+
+pre-tax main window (m = 2):
+  arm   CAGR base  CAGR cal   maxDD base  maxDD cal   m=1 base  Calmar  P1/P2/P3 cagr           turn/yr  sells/yr  deferrals
+  C0      15.47%   14.89%   46.76%   46.88%   15.75%  0.331   -0.06%/  14.30%/  32.71%     5.99     29.56          0
+  A1      15.74%   15.15%   46.45%   46.58%   15.99%  0.339    0.49%/  14.77%/  32.43%     5.47     18.26        594
+  A2      16.26%   15.65%   50.03%   50.15%   16.48%  0.325   -0.59%/  15.21%/  34.96%     4.59      4.22       1662
+  A3      15.55%   14.97%   47.32%   47.44%   15.82%  0.329    0.13%/  14.47%/  32.57%     5.70     19.54        498
+  H2      15.51%   14.93%   46.25%   46.38%   15.79%  0.335    0.09%/  14.20%/  32.75%     5.95     28.65         51
+
+pre-tax bootstrap (block-20, 5000 paths, m = 2) median delta vs R2:
+  base        A1: -0.255pp (37.9%)  A2: -1.000pp (35.8%)  A3: -0.048pp (41.9%)
+  calibrated  A1: -0.261pp (37.7%)  A2: -1.034pp (35.1%)  A3: -0.050pp (41.5%)
+
+after tax, progressive 2026 tariff, liquidated, $10k (base financing, m = 2):
+  window                 arm     pre-tax   after-tax  d vs R2   maxDD    tax USD     sells/yr  defers
+  2000_03_to_2026_09   C0       15.47%   11.69%    +0.00pp   46.76%      77,027     30.65       0
+  2000_03_to_2026_09   A1       15.74%   12.09%    +0.41pp   46.45%      82,393     19.13     609
+  2000_03_to_2026_09   A2       16.26%   12.88%    +1.19pp   50.03%      96,127      4.86    1874
+  2000_03_to_2026_09   A3       15.55%   11.85%    +0.16pp   47.32%      78,861     20.44     514
+  2000_03_to_2026_09   H2*           --   11.80%    +0.12pp   46.25%          --        --      53
+  2010_01_to_end       C0       22.16%   17.03%    +0.00pp   41.00%      51,767     31.35       0
+  2010_01_to_end       A1       22.13%   17.21%    +0.18pp   40.80%      51,090     19.77     360
+  2010_01_to_end       A2       23.12%   18.32%    +1.29pp   41.56%      58,650      5.20    1221
+  2010_01_to_end       A3       22.12%   17.08%    +0.05pp   40.79%      51,299     20.96     309
+  2010_01_to_end       H2*           --   17.13%    +0.10pp   41.35%          --        --      32
+  2017_01_to_end       C0       32.53%   26.04%    +0.00pp   34.52%      29,255     35.60       0
+  2017_01_to_end       A1       32.25%   26.12%    +0.08pp   33.45%      28,102     21.65     256
+  2017_01_to_end       A2       34.75%   28.80%    +2.77pp   35.15%      35,607      4.21     772
+  2017_01_to_end       A3       32.39%   26.03%    -0.01pp   33.53%      28,965     22.98     218
+  2017_01_to_end       H2*           --   26.26%    +0.23pp   33.37%          --        --      19
+
+after tax, progressive 2026 tariff, liquidated, $100k (base financing, m = 2):
+  window                 arm     pre-tax   after-tax  d vs R2   maxDD    tax USD     sells/yr  defers
+  2000_03_to_2026_09   C0       15.47%   10.16%    +0.00pp   46.76%     766,160     30.69       0
+  2000_03_to_2026_09   A1       15.74%   10.67%    +0.51pp   46.45%     826,311     19.20     610
+  2000_03_to_2026_09   A2       16.26%   11.63%    +1.47pp   50.03%     966,169      4.97    1874
+  2000_03_to_2026_09   A3       15.55%   10.39%    +0.23pp   47.32%     788,308     20.52     515
+  2000_03_to_2026_09   H2*           --   10.30%    +0.14pp   46.25%          --        --      53
+  2010_01_to_end       C0       22.16%   14.71%    +0.00pp   43.78%     553,536     31.35       0
+  2010_01_to_end       A1       22.13%   14.98%    +0.28pp   43.50%     549,125     19.89     360
+  2010_01_to_end       A2       23.12%   16.25%    +1.54pp   44.24%     620,406      5.32    1221
+  2010_01_to_end       A3       22.12%   14.82%    +0.12pp   43.60%     549,080     21.02     309
+  2010_01_to_end       H2*           --   14.84%    +0.13pp   44.07%          --        --      32
+  2017_01_to_end       C0       32.53%   22.89%    +0.00pp   36.24%     360,297     35.60       0
+  2017_01_to_end       A1       32.25%   23.15%    +0.26pp   34.88%     349,365     21.85     257
+  2017_01_to_end       A2       34.75%   26.18%    +3.30pp   35.77%     427,592      4.31     772
+  2017_01_to_end       A3       32.39%   23.06%    +0.17pp   34.98%     355,600     23.19     219
+  2017_01_to_end       H2*           --   23.16%    +0.27pp   34.86%          --        --      19
+
+after tax, progressive 2026 tariff, liquidated, $1M (base financing, m = 2):
+  window                 arm     pre-tax   after-tax  d vs R2   maxDD    tax USD     sells/yr  defers
+  2000_03_to_2026_09   C0       15.47%    9.19%    +0.00pp   46.76%   6,793,740     30.84       0
+  2000_03_to_2026_09   A1       15.74%    9.79%    +0.60pp   46.45%   7,411,003     19.28     614
+  2000_03_to_2026_09   A2       16.26%   10.94%    +1.74pp   50.03%   8,850,490      5.12    1876
+  2000_03_to_2026_09   A3       15.55%    9.47%    +0.27pp   47.32%   7,027,893     20.59     519
+  2000_03_to_2026_09   H2*           --    9.35%    +0.16pp   46.25%          --        --      53
+  2010_01_to_end       C0       22.16%   13.62%    +0.00pp   45.37%   5,338,307     31.47       0
+  2010_01_to_end       A1       22.13%   13.94%    +0.31pp   45.06%   5,295,081     19.95     364
+  2010_01_to_end       A2       23.12%   15.26%    +1.63pp   45.79%   5,914,270      5.43    1221
+  2010_01_to_end       A3       22.12%   13.77%    +0.15pp   45.19%   5,291,555     21.08     313
+  2010_01_to_end       H2*           --   13.76%    +0.14pp   45.63%          --        --      32
+  2017_01_to_end       C0       32.53%   21.72%    +0.00pp   36.75%   3,742,184     35.70       0
+  2017_01_to_end       A1       32.25%   22.04%    +0.31pp   35.40%   3,625,994     21.85     257
+  2017_01_to_end       A2       34.75%   25.30%    +3.58pp   36.10%   4,388,539      4.31     772
+  2017_01_to_end       A3       32.39%   21.96%    +0.24pp   35.50%   3,689,595     23.19     219
+  2017_01_to_end       H2*           --   22.01%    +0.28pp   35.37%          --        --      19
+
+cost stress m = 4 (doubled cost), after tax at $100k, base financing:
+  window                 arm     pre-tax m4  after-tax m4  d vs R2   maxDD    turn/yr
+  2000_03_to_2026_09   C0       14.92%    9.73%    +0.00pp   47.44%     5.99
+  2000_03_to_2026_09   A1       15.23%   10.27%    +0.54pp   47.09%     5.47
+  2000_03_to_2026_09   A2       15.83%   11.30%    +1.57pp   50.53%     4.59
+  2000_03_to_2026_09   A3       15.02%    9.97%    +0.24pp   47.97%     5.70
+  2010_01_to_end       C0       21.55%   14.23%    +0.00pp   44.56%     6.20
+  2010_01_to_end       A1       21.55%   14.53%    +0.30pp   44.23%     5.82
+  2010_01_to_end       A2       22.63%   15.85%    +1.62pp   44.95%     4.96
+  2010_01_to_end       A3       21.53%   14.36%    +0.13pp   44.38%     5.94
+  2017_01_to_end       C0       32.09%   22.54%    +0.00pp   36.72%     4.12
+  2017_01_to_end       A1       31.84%   22.83%    +0.29pp   35.35%     3.77
+  2017_01_to_end       A2       34.45%   25.95%    +3.41pp   36.22%     2.71
+  2017_01_to_end       A3       31.97%   22.74%    +0.20pp   35.45%     3.83
+
+OOS windows (calibrated, m = 2):
+  window              arm     CAGR       maxDD      d CAGR    d maxDD
+  GSPC_1957_1999      C0        9.89%   39.63%                        
+  GSPC_1957_1999      A1        9.88%   40.91%     -0.01pp     +1.29pp
+  GSPC_1957_1999      A2        9.99%   40.95%     +0.10pp     +1.33pp
+  GSPC_1957_1999      A3        9.92%   39.60%     +0.03pp     -0.02pp
+  M1                  C0       21.18%   40.97%                        
+  M1                  A1       21.81%   40.97%     +0.63pp     +0.00pp
+  M1                  A2       21.97%   40.57%     +0.79pp     -0.40pp
+  M1                  A3       21.38%   40.97%     +0.20pp     +0.00pp
+  M2                  C0       11.70%   58.33%                        
+  M2                  A1       11.97%   58.57%     +0.27pp     +0.24pp
+  M2                  A2       13.28%   56.27%     +1.58pp     -2.07pp
+  M2                  A3       11.70%   58.49%     +0.00pp     +0.16pp
+  M3                  C0        6.40%   65.03%                        
+  M3                  A1        6.50%   65.69%     +0.09pp     +0.67pp
+  M3                  A2        6.96%   64.02%     +0.55pp     -1.00pp
+  M3                  A3        6.39%   64.83%     -0.01pp     -0.20pp
+  M4                  C0        9.47%   58.10%                        
+  M4                  A1        9.36%   59.98%     -0.11pp     +1.87pp
+  M4                  A2        9.66%   62.43%     +0.19pp     +4.33pp
+  M4                  A3        9.51%   59.03%     +0.04pp     +0.93pp
+  M5                  C0       -0.59%   85.45%                        
+  M5                  A1       -0.61%   85.80%     -0.02pp     +0.35pp
+  M5                  A2       -0.50%   85.66%     +0.08pp     +0.21pp
+  M5                  A3       -0.57%   85.46%     +0.01pp     +0.01pp
+  per-arm median d CAGR and worst d max DD over the six windows (G7):
+    A1     median d CAGR  +0.042pp | max d max DD   +1.87pp | n(dCAGR >= -0.5pp) 6/6 | n(dDD <= +3pp) 6/6 -> PASS
+    A2     median d CAGR  +0.369pp | max d max DD   +4.33pp | n(dCAGR >= -0.5pp) 6/6 | n(dDD <= +3pp) 5/6 -> PASS
+    A3     median d CAGR  +0.019pp | max d max DD   +0.93pp | n(dCAGR >= -0.5pp) 6/6 | n(dDD <= +3pp) 6/6 -> PASS
+
+instruments (G10): 21 quality-passing ETFs, own E2+R2, own 2x leg, calibrated, m = 2:
+  arm     median d CAGR  n dDD<=+3pp  share  worst d maxDD (instrument)
+  A1           +0.039pp       21/21   100.0%     +2.18pp (EWA) PASS
+  A2           +0.365pp       16/21    76.2%     +8.19pp (EWG) FAIL
+  A3           +0.018pp       21/21   100.0%     +1.33pp (XLU) PASS
+  excluded by the range_vol_v2 quality rule: EWC (bad 5.6%)
+
+per-year NAV log-ratio delta vs R2 (main window, base, m = 2, pre-tax), worst 5 and best 3:
+  A1     worst 2018:-1.86  2020:-1.66  2026:-0.60  2019:-0.55  2003:-0.32 | best 2004:+1.67  2009:+1.68  2007:+1.75 | sum +6.076 pp
+  A2     worst 2010:-5.23  2022:-4.66  2000:-4.46  2008:-4.33  2002:-2.77 | best 2019:+3.83  2021:+5.17  2009:+9.64 | sum +18.062 pp
+  A3     worst 2026:-0.74  2020:-0.68  2000:-0.56  2019:-0.54  2001:-0.36 | best 2021:+0.75  2009:+0.77  2007:+1.27 | sum +1.860 pp
+  Yi-UFE months in the window whose index fell versus the previous month (deferral loses there): 50
+
+clean after-tax bootstrap (block-20, 1000 paths, 2015-09-01..2026-09-30, fixed calendar):
+  capital mode         arm     median CAGR  median d vs R2   mean d   share>0   p05 / p95  defers/10y
+  100k    progressive  C0        3.52%               --       --        --          --         0.0
+  100k    progressive  A1        3.67%        +0.160pp   +0.131     56.6% -1.44/+1.63       291.0
+  100k    progressive  A2        3.32%        -0.016pp   +0.098     49.8% -4.18/+5.08       848.0
+  100k    progressive  A3        3.62%        +0.122pp   +0.145     70.3% -0.26/+0.61       245.0
+  100k    flat         C0        3.97%               --       --        --          --         0.0
+  100k    flat         A1        3.81%        -0.024pp   -0.054     48.8% -1.63/+1.41       289.0
+  100k    flat         A2        3.56%        -0.438pp   -0.238     43.4% -4.44/+4.88       861.0
+  100k    flat         A3        3.96%        +0.042pp   +0.049     57.7% -0.33/+0.45       242.0
+
+  1M      progressive  C0        2.35%               --       --        --          --         0.0
+  1M      progressive  A1        2.52%        +0.224pp   +0.194     58.9% -1.35/+1.70       291.0
+  1M      progressive  A2        2.31%        +0.185pp   +0.320     53.3% -3.97/+5.32       854.5
+  1M      progressive  A3        2.50%        +0.150pp   +0.175     75.3% -0.25/+0.64       245.5
+  1M      flat         C0        3.97%               --       --        --          --         0.0
+  1M      flat         A1        3.81%        -0.024pp   -0.054     48.8% -1.63/+1.41       289.0
+  1M      flat         A2        3.56%        -0.438pp   -0.238     43.4% -4.44/+4.88       861.0
+  1M      flat         A3        3.96%        +0.042pp   +0.049     57.7% -0.33/+0.45       242.0
+
+gates (all must pass): G1-G3/G5/G6 both financings, G4, G7 (six OOS windows), G8 (pooled OOS bootstrap), G9 (turnover <= 2x R2), G10 (ETF drawdown), T1 (after-tax $100k, three windows), T2/T3 (B1-recent / B2 bootstrap):
+  A1     G4=P G9=P G7=P G8=P G10=P T1=P T2=P T3=F G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=F G5_calibrated=F G6_base=P G6_calibrated=P -> FAIL
+  A2     G4=P G9=P G7=P G8=P G10=F T1=P T2=F T3=F G1_base=P G1_calibrated=P G2_base=F G2_calibrated=F G3_base=P G3_calibrated=P G5_base=F G5_calibrated=F G6_base=P G6_calibrated=P -> FAIL
+  A3     G4=P G9=P G7=P G8=P G10=P T1=P T2=P T3=P G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=F G5_calibrated=F G6_base=P G6_calibrated=P -> FAIL
+selected arm: none (eligible [])
+VERDICT: FAIL

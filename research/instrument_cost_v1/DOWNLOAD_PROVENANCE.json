@@ -1,0 +1,29 @@
+{
+  "source": "Yahoo Finance chart API v8 (query1.finance.yahoo.com)",
+  "tickers": {
+    "QLD": {
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-14",
+      "path": "data/historical/instrument_cost_v1_qld.csv",
+      "rows": 4221,
+      "sha256": "4c493a7a7622cc47da324488431be1b7497604639261088d0370684fdc636062",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/QLD?period1=1262304000&period2=1794000000&interval=1d&events=div%2Csplit"
+    },
+    "QQQ": {
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-14",
+      "path": "data/historical/instrument_cost_v1_qqq.csv",
+      "rows": 4221,
+      "sha256": "91310df77781817140aaf69333d36c12cded6a4ddd598c5ab9302b8e98e4e389",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=1262304000&period2=1794000000&interval=1d&events=div%2Csplit"
+    },
+    "TQQQ": {
+      "first_date": "2010-02-11",
+      "last_date": "2026-10-14",
+      "path": "data/historical/instrument_cost_v1_tqqq.csv",
+      "rows": 4194,
+      "sha256": "9a4dc064af518c4dc41b5a7f304070a6335276f90b068513d7f508e2b84e308f",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/TQQQ?period1=1262304000&period2=1794000000&interval=1d&events=div%2Csplit"
+    }
+  }
+}

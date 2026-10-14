@@ -1,0 +1,95 @@
+{
+  "campaign": "instrument_cost_v1",
+  "files": {
+    "data/historical/instrument_cost_v1_qld.csv": {
+      "bytes": 348346,
+      "filter": "analysed on 2010-02-11..2026-09-29 (joint QQQ/QLD/TQQQ sessions)",
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-14",
+      "rows": 4221,
+      "sha256": "4c493a7a7622cc47da324488431be1b7497604639261088d0370684fdc636062",
+      "source": "Yahoo Finance chart API v8",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/QLD?period1=1262304000&period2=1794000000&interval=1d&events=div%2Csplit"
+    },
+    "data/historical/instrument_cost_v1_qqq.csv": {
+      "bytes": 375694,
+      "filter": "analysed on 2010-02-11..2026-09-29 (joint QQQ/QLD/TQQQ sessions)",
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-14",
+      "rows": 4221,
+      "sha256": "91310df77781817140aaf69333d36c12cded6a4ddd598c5ab9302b8e98e4e389",
+      "source": "Yahoo Finance chart API v8",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=1262304000&period2=1794000000&interval=1d&events=div%2Csplit"
+    },
+    "data/historical/instrument_cost_v1_tqqq.csv": {
+      "bytes": 351491,
+      "filter": "analysed on 2010-02-11..2026-09-29 (joint QQQ/QLD/TQQQ sessions)",
+      "first_date": "2010-02-11",
+      "last_date": "2026-10-14",
+      "rows": 4194,
+      "sha256": "9a4dc064af518c4dc41b5a7f304070a6335276f90b068513d7f508e2b84e308f",
+      "source": "Yahoo Finance chart API v8",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/TQQQ?period1=1262304000&period2=1794000000&interval=1d&events=div%2Csplit"
+    }
+  },
+  "generated": "2026-10-14",
+  "network": "used only by research/instrument_cost_v1/download_data.py (Yahoo chart API v8, public market data; LF line endings, hashes are of the committed bytes)",
+  "references": {
+    "research/fast_reentry_v1/RESULTS.json": {
+      "bytes": 208316,
+      "sha256": "65a3bc1e941ca0bf3956651e19073ca0e5ceed59db1d7078869f75f354294f14",
+      "used_by": "published pre-tax C0/R2 reference rows"
+    },
+    "research/fast_reentry_v1/screen.py": {
+      "bytes": 38072,
+      "sha256": "5870806b34a4a5ac9fb3c707f3737b363334d533f78c358bf4fb2ab006a01ac5",
+      "used_by": "pre-tax engine (imported)"
+    },
+    "research/r2_tbill_combo_v1/RESULTS.json": {
+      "bytes": 172571,
+      "sha256": "1949eab6bca77b7c6ba2169c65d749ebd9db3a18ce7cbd7f971e76a0469f9080",
+      "used_by": "published after-tax C0/R2 anchors"
+    },
+    "research/trend_robustness_v2/screen.py": {
+      "bytes": 25032,
+      "sha256": "c2a70719029b912d33c22af79c43037663fd7accf9cb9bebaa67c1cdc0fbcd12",
+      "used_by": "synthetic 2x, vol, metrics (imported)"
+    },
+    "research/vt_level_tax_v1/RESULTS.json": {
+      "bytes": 560138,
+      "sha256": "8903f32d7a5a7a81efefa6d49f5f332df41342e5e6a334422f01634cd7b64383",
+      "used_by": "source of the copied after-tax engine + C0 anchors"
+    },
+    "research/vt_level_tax_v1/screen.py": {
+      "bytes": 69734,
+      "sha256": "53b6db125c2bccf478bf8fdd4ccd9cf736b158c4d6fd2fab8562a9fed22fb398",
+      "used_by": "after-tax engine copied verbatim"
+    }
+  },
+  "reused_inputs": {
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "source": "reused from existing research data",
+      "used_by": "CBRT USD/TRY buying rate (after tax)"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "source": "reused from existing research data",
+      "used_by": "Yi-UFE monthly index (after tax)"
+    },
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "reused from existing research data",
+      "used_by": "cross-check of the downloaded QQQ/QLD closes"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "source": "reused from existing research data",
+      "used_by": "DTB3 for the report-only synthetic comparison"
+    }
+  }
+}

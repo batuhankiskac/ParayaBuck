@@ -62,3 +62,10 @@ Unchanged from v1: synthetic daily-reset 2x, decide at close, fill next open,
 
 Among candidates passing all gates, pick higher G8' median Δ vs C0; tie within
 0.02 pp prefer G1x (no fitted scaling). If none pass, production E2 unchanged.
+
+## Amendment A1 (2026-10-14, before any v2 non-control run)
+
+v1's Yang-Zhang estimator produced all-NaN vol because `_rvar(on, n)`'s first
+window contained the leading NaN overnight return and cumsum propagated NaN.
+A1 fixes `range_vol_yz` to align the overnight leg to sessions 1..T-1 and
+emit finite values from session n. This is a bug fix, not a parameter change.

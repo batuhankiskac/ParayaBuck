@@ -155,13 +155,20 @@ def range_vol_yz(high, low, opn, close, n=20):
     on[:, 1:] = np.log(opn[:, 1:] / close[:, :-1])
     oc = np.log(close / opn)
     rs = np.log(high / close) * np.log(high / opn) + np.log(low / close) * np.log(low / opn)
-    var_on = _rvar(on, n)
-    var_oc = _rvar(oc, n)
-    mean_rs = _rmean(rs, n)
+    # on has a leading NaN at session 0; compute both variances on the aligned trailing slice
+    # (sessions 1..T-1) and keep them aligned to trailing windows ending at sessions n..T-1.
+    on_v = on[:, 1:]
+    oc_v = oc[:, 1:]
+    rs_v = rs[:, 1:]
+    var_on = _rvar(on_v, n)[:, n - 1:]
+    var_oc = _rvar(oc_v, n)[:, n - 1:]
+    mean_rs = _rmean(rs_v, n)[:, n - 1:]
     k = 0.34 / (1.34 + (n + 1.0) / (n - 1.0))
     var = var_on + k * var_oc + (1.0 - k) * mean_rs
     var = np.where(var < 0, 0.0, var)
-    return np.sqrt(252.0 * var)
+    out = np.full((P, T), np.nan)
+    out[:, n:] = np.sqrt(252.0 * var)
+    return out
 
 
 def range_vol_gk_gap(high, low, opn, close, n=20):
@@ -202,7 +209,8 @@ def range_vol_park_scaled(high, low, close, n=20):
         cc_vol = np.sqrt(252.0 * var_cc)
         park_mean = sp / cnt
         park_vol = np.sqrt(252.0 * park_mean)
-        ratio = np.where(park_vol > 0, cc_vol / park_vol, 1.0)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = np.where(park_vol > 0, cc_vol / park_vol, 1.0)
         ratio_prev[:, t] = ratio
     out = pv20 * ratio_prev
     return out
@@ -550,14 +558,17 @@ def oos_window(days, o, high, low, c, y, start, arms):
     vmap["cc_20"] = trv2.vol_n(c[np.newaxis, :])[0] * 2.0
     vmap["yz_20"] = range_vol_yz(high[np.newaxis, :], low[np.newaxis, :], o[np.newaxis, :], c[np.newaxis, :], 20)[0] * 2.0
     vmap["park_scaled_20"] = range_vol_park_scaled(high[np.newaxis, :], low[np.newaxis, :], c[np.newaxis, :], 20)[0] * 2.0
-    wants = {arm: wants_for(e2, vmap[vol_key(*arm_spec(arm)[:2])])[0] for arm in arms}
+    wants = {}
+    for arm in arms:
+        kind, n, _ = arm_spec(arm)
+        wants[arm] = wants_for(e2, vmap[vol_key(kind, n)])[0]
     dates = days[start - 1:]
     years = trv2.calendar_years(dates[0], dates[-1])
     res = {"window": {"start": dates[1], "end": dates[-1], "sessions": len(dates) - 1}}
     for arm in arms:
         kind, n, band = arm_spec(arm)
         key = vol_key(kind, n)
-        nav, turn, ntr, codes, traded = simulate_band(so, sc, wants[key], COST_PER_SIDE * 2, start, band)
+        nav, turn, ntr, codes, traded = simulate_band(so, sc, wants[arm], COST_PER_SIDE * 2, start, band)
         nav = nav[0]
         cg = float(trv2.cagr(nav[0], nav[-1], years))
         dd = float(trv2.max_dd(nav)[0])
@@ -628,7 +639,7 @@ def historical_gates(main, boot_vs_control, arm, control):
     wins = [p for p in ("P1", "P2", "P3") if a2["subperiods"][p]["cagr"] > c2["subperiods"][p]["cagr"]]
     r["G4"] = bool(len(wins) >= 2)
     r["G4_wins"] = wins
-    kind, band = arm_spec(arm)
+    kind, n, band = arm_spec(arm)
     lim = c2["turnover_annual"] * (1.0 if band > C0_BAND else 2.0)
     r["G9"] = bool(a2["turnover_annual"] <= lim)
     return r
@@ -760,8 +771,13 @@ def main() -> None:
         L.append(f"[{md}] m=2: arm CAGR maxDD 2017+ turn/yr | boot vs C0 medD | vs C0q medD")
         for arm in ARMS_MAIN:
             a = main_res[md]["m2"][arm]
+            if arm in boot_c0[md]:
+                b0 = f"{boot_c0[md][arm]['diff_vs_C0_median']*100:+.3f}pp"
+                bq = f"{boot_c0q[md][arm]['diff_vs_C0_median']*100:+.3f}pp"
+            else:
+                b0 = "   --  "; bq = "   --  "
             L.append(f"  {arm:11s} {p(a['cagr'])} {p(a['max_dd'])} {p(a['2017_end']['cagr'])} {a['turnover_annual']:5.2f} | "
-                     f"{boot_c0[md][arm]['diff_vs_C0_median']*100:+.3f}pp | {boot_c0q[md][arm]['diff_vs_C0_median']*100:+.3f}pp")
+                     f"{b0} | {bq}")
     L.append("")
     L.append("quality-passing ETFs: " + ", ".join(passing_etfs))
     for arm in CANDIDATES:

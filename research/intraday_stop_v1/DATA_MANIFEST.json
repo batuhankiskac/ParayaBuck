@@ -1,0 +1,338 @@
+{
+  "campaign": "intraday_stop_v1",
+  "files": {
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "date_range": [
+        "2000-01-03",
+        "2026-10-09"
+      ],
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "source": "byte copy of existing research data (CBRT USD/TRY forex buying)",
+      "source_path": "data/historical/after_tax_tr_v1_usdtry_cbrt.csv",
+      "used_by": "after-tax engine: USD/TRY"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "date_range": [
+        "1999-01",
+        "2026-09"
+      ],
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "source": "byte copy of existing research data (TUIK Yi-UFE)",
+      "source_path": "data/historical/after_tax_tr_v1_yiufe.csv",
+      "used_by": "after-tax engine: Yi-UFE indexation and tariff-bracket scaling"
+    },
+    "data/historical/ewma_band_v1_tb3ms.csv": {
+      "bytes": 4439,
+      "date_range": [
+        "1934-01-01",
+        "1956-12-01"
+      ],
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "source": "byte copy of existing research data (FRED TB3MS)",
+      "source_path": "data/historical/ewma_band_v1_tb3ms.csv",
+      "used_by": "T-bill rate before 1954-01-04 (ETF OOS financing)"
+    },
+    "data/historical/range_vol_v1_dia.csv": {
+      "bytes": 697668,
+      "date_range": [
+        "1998-01-20",
+        "2026-10-12"
+      ],
+      "sha256": "1300f2a61255d5699a349794179f09ead15703e2813025e6b64a2df16d91b14e",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v1)",
+      "source_path": "data/historical/range_vol_v1_dia.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v1_iwm.csv": {
+      "bytes": 655363,
+      "date_range": [
+        "2000-05-26",
+        "2026-10-12"
+      ],
+      "sha256": "c6ff89f0fb18506a9869de2d92b609c37815cc8fe634d064bb29218638573580",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v1)",
+      "source_path": "data/historical/range_vol_v1_iwm.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v1_spy.csv": {
+      "bytes": 776843,
+      "date_range": [
+        "1993-01-29",
+        "2026-10-12"
+      ],
+      "sha256": "80c8bee68dcd3e1a8ee5fb3cf6828afc6cdc018aaf7b7395dbdac7b22e0ea0a4",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v1)",
+      "source_path": "data/historical/range_vol_v1_spy.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_eem.csv": {
+      "bytes": 596570,
+      "date_range": [
+        "2003-04-14",
+        "2026-10-13"
+      ],
+      "sha256": "2a7d0a7f3cd9c2e3c70abb3e366de7589141b5d1f82dd1c382f5fe2cba36aa99",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_eem.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_efa.csv": {
+      "bytes": 628462,
+      "date_range": [
+        "2001-08-27",
+        "2026-10-13"
+      ],
+      "sha256": "61f525b17d70aa947aba6e6e1033cc2f626b815e7d8a9c05663ad1dd64bd345d",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_efa.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_ewa.csv": {
+      "bytes": 722723,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "sha256": "09b6942f6660cc90306d5dc4cca54c6fd6a67e783517b6b9cb48f07094f49187",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_ewa.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_ewc.csv": {
+      "bytes": 720836,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "sha256": "51321cb9cc1f45f59023ec63d055535f4f2e2af4b5ed0bbe1b1e6dffa3e6518e",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_ewc.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_ewg.csv": {
+      "bytes": 726336,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "sha256": "79ebfa1f9df848ae208f983ebcf41f0a71b9acf5decf6a3983886ebf3a4710f5",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_ewg.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_ewh.csv": {
+      "bytes": 723938,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "sha256": "d1e7a96c6b72d0a041ea362d42b9159bc42da7993d13f5947e6b5ae5972b3aee",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_ewh.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_ewj.csv": {
+      "bytes": 709683,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "sha256": "846ef8ec8b7206498f668f6e7df5d4d1a75afb61b4bf5059b25c279f704c4457",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_ewj.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_ewl.csv": {
+      "bytes": 722468,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "sha256": "344b8a554ad668e88df543ab0c8e8ed5c5ff350b756e2ba9813f3fd992d69780",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_ewl.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_ews.csv": {
+      "bytes": 723102,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "sha256": "92ad902cba58e1f3d4cffcb02fa6ead636b468437b014a60e7cb82611f75a12e",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_ews.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_ewu.csv": {
+      "bytes": 719067,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "sha256": "8f0d1914103a55f47329264d2aecc5845f76791b0aa37cc1c7bd1d4b1529e9f8",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_ewu.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_xlb.csv": {
+      "bytes": 695202,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "sha256": "687e99eaaad489c85847fdfc84d8136545ab929b50e0f784eaf186ca8568a59a",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_xlb.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_xle.csv": {
+      "bytes": 686299,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "sha256": "7c06aac6ddbf7b8fef6dc1ba5d4022e1c22bf1f6f1e7a8685730f9b0542e17f1",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_xle.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_xlf.csv": {
+      "bytes": 719917,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "sha256": "f6c34092978d4d1da1fc0ee96a395019c0d8fcb893694faf584d1ddf9367182e",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_xlf.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_xli.csv": {
+      "bytes": 681238,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "sha256": "c9039b8828807c489e1d64381e53f48a5dca5d0e77775cae515f30264508a7b8",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_xli.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_xlk.csv": {
+      "bytes": 683909,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "sha256": "0916e3134092de2ca9049c9b317e1170980057ff8b0a5159b76e24fb6424fa61",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_xlk.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_xlp.csv": {
+      "bytes": 682473,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "sha256": "5a08680540fc09205024f5ebb997c24ffdb98d967a0aed10c616b2144e2d0670",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_xlp.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_xlu.csv": {
+      "bytes": 694082,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "sha256": "614e80d03bcbfd99af27a87981a3cb463d72654ce22f0c0bdb07052c8bea8421",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_xlu.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_xlv.csv": {
+      "bytes": 682218,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "sha256": "02e5df03723d01930af4ae348409d88cc7fbaf9513d7049e628777399e5533f7",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_xlv.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/range_vol_v2_xly.csv": {
+      "bytes": 688977,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "sha256": "abfd815334cae8cbeb25329e16041d994289eb5804103a8d7ef1930ee55b0ba6",
+      "source": "byte copy of existing research data (Yahoo chart API adjusted OHLC, recorded by range_vol_v2)",
+      "source_path": "data/historical/range_vol_v2_xly.csv",
+      "used_by": "reduced OOS instrument (adjusted OHLC + own E2/R2 + 2x synthetic + stop)"
+    },
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "date_range": [
+        "1999-03-10",
+        "2026-09-29"
+      ],
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "byte copy of existing research data (Yahoo chart API OHLC+dividend, recorded by stress_robustness_v1)",
+      "source_path": "data/historical/stress_robustness_v1_daily.csv",
+      "used_by": "QQQ open/high/low/close/dividend: synthetic QLD*, the E2/R2 signal closes and the modelled intraday low; real QLD bars for the low cross-check"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "date_range": [
+        "1954-01-04",
+        "2026-09-28"
+      ],
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "source": "byte copy of existing research data (FRED DTB3)",
+      "source_path": "data/historical/stress_robustness_v1_dtb3.csv",
+      "used_by": "QLD* financing (base and calibrated), after-tax bootstrap rates"
+    },
+    "research/fast_reentry_v1/RESULTS.json": {
+      "bytes": 208316,
+      "sha256": "65a3bc1e941ca0bf3956651e19073ca0e5ceed59db1d7078869f75f354294f14",
+      "source": "byte copy from the study's own branch (git checkout <branch> -- <path>)",
+      "source_path": "research/fast_reentry_v1/RESULTS.json",
+      "used_by": "C0 reference: main_window.{base,calibrated}.{m1,m2}.R2"
+    },
+    "research/fast_reentry_v1/screen.py": {
+      "bytes": 38072,
+      "sha256": "5870806b34a4a5ac9fb3c707f3737b363334d533f78c358bf4fb2ab006a01ac5",
+      "source": "byte copy from the study's own branch (git checkout <branch> -- <path>)",
+      "source_path": "research/fast_reentry_v1/screen.py",
+      "used_by": "production R2 (E2 + early path), band engine, seg/event_stats/g_return, OOS loaders (imported)"
+    },
+    "research/r2_tbill_combo_v1/RESULTS.json": {
+      "bytes": 172571,
+      "sha256": "1949eab6bca77b7c6ba2169c65d749ebd9db3a18ce7cbd7f971e76a0469f9080",
+      "source": "byte copy from the study's own branch (git checkout <branch> -- <path>)",
+      "source_path": "research/r2_tbill_combo_v1/RESULTS.json",
+      "used_by": "C0 after-tax reference: after_tax_100k.windows.*.R2 and after_tax_bootstrap.*.R2"
+    },
+    "research/r2_tbill_combo_v1/tax_engine.py": {
+      "bytes": 13413,
+      "sha256": "8efc33232378b93068adac681928fc51f69f8b13e994bec7be8acd227d14edf3",
+      "source": "byte copy from the study's own branch (git checkout <branch> -- <path>)",
+      "source_path": "research/r2_tbill_combo_v1/tax_engine.py",
+      "used_by": "Turkish after-tax engine (BaseAccount/FlatAccount/Regime/Market/instalments/run_strategy)"
+    },
+    "research/trend_robustness_v2/screen.py": {
+      "bytes": 25032,
+      "sha256": "c2a70719029b912d33c22af79c43037663fd7accf9cb9bebaa67c1cdc0fbcd12",
+      "source": "byte copy from the study's own branch (git checkout <branch> -- <path>)",
+      "source_path": "research/trend_robustness_v2/screen.py",
+      "used_by": "synthetic_2x, vol_n, metrics helpers (imported, main() never run)"
+    }
+  },
+  "network": "none for this campaign: every input is a byte copy of an existing committed research file (public market data originally fetched from the Yahoo chart API / FRED / CBRT by the upstream studies)"
+}

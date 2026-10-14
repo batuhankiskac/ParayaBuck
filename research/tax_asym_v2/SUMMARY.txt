@@ -1,0 +1,4 @@
+tax_asym_v2 after-tax bootstrap
+B1_recent: A2 median dCAGR +1.045pp share>0 0.575 p05 -6.924; A1 median -1.373pp share 0.423
+B1_early: A2 median dCAGR +0.391pp share>0 0.533 p05 -7.161; A1 median -2.211pp share 0.385
+B2_flat: A2 median dCAGR +1.856pp share>0 0.615 p05 -6.483; A1 median -0.699pp share 0.465

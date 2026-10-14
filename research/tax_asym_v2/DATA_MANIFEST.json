@@ -1,0 +1,29 @@
+{
+  "study": "tax_asym_v2",
+  "inputs": [
+    {
+      "file": "data/historical/stress_robustness_v1_daily.csv",
+      "source": "repository history (stress_robustness_v1 daily QQQ/SPY bars)",
+      "date_range": "2000-01-03..2026-09-29",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+    },
+    {
+      "file": "data/historical/stress_robustness_v1_dtb3.csv",
+      "source": "FRED DTB3",
+      "date_range": "1954-01-04..2026-10-09",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c"
+    },
+    {
+      "file": "data/historical/tax_asym_v2_usdtry_cbrt.csv",
+      "source": "CBRT forex buying, copied from after_tax_tr_v1",
+      "date_range": "2000-01-03..2026-10-09",
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684"
+    },
+    {
+      "file": "data/historical/tax_asym_v2_yiufe.csv",
+      "source": "FRED TURPPDMMINMEI ratio-linked + TCMB Yi-UFE, copied from after_tax_tr_v1",
+      "date_range": "1999-01..2026-09",
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c"
+    }
+  ]
+}

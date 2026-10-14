@@ -1,0 +1,75 @@
+r2_tbill_combo_v1 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production E2 1.1.0
+harness: PASS (36 reproduction checks, 0 outside 0.01 pp; two-leg == simulate_multi == band True); tax anchors max |diff| 0.00005 pp; tax single-leg cross-check 0.000000 pp
+
+[base] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 totTurn qldTurn billTurn turn/yr | m=1 CAGR maxDD | boot20 med, dmed vs C0, share>=C0
+  C0    14.67%   49.56% 0.296   32.44%   -1.10%   13.26%   32.44%  5.97  5.97  0.00  5.97 |   14.95%   49.25% |    7.16%  +0.000pp      --
+  R2    15.48%   46.76% 0.331   32.71%   -0.06%   14.30%   32.71%  5.99  5.99  0.00  5.99 |   15.75%   46.41% |    7.89%  +0.683pp   68.92%
+  S2    14.88%   45.99% 0.324   32.73%   -0.21%   12.53%   32.73% 11.42  5.97  5.45 11.42 |   15.41%   45.30% |    7.37%  +0.181pp   75.62%
+  RS    15.67%   43.08% 0.364   32.95%    0.83%   13.57%   32.95% 11.43  5.99  5.44 11.43 |   16.20%   42.35% |    7.96%  +0.716pp   69.82%
+
+[calibrated] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 totTurn qldTurn billTurn turn/yr | m=1 CAGR maxDD | boot20 med, dmed vs C0, share>=C0
+  C0    14.10%   49.65% 0.284   31.69%   -1.44%   12.59%   31.69%  5.97  5.97  0.00  5.97 |   14.38%   49.33% |    6.73%  +0.000pp      --
+  R2    14.90%   46.88% 0.318   31.96%   -0.41%   13.62%   31.96%  5.99  5.99  0.00  5.99 |   15.17%   46.54% |    7.43%  +0.655pp   68.16%
+  S2    14.31%   46.09% 0.311   31.98%   -0.55%   11.86%   31.98% 11.42  5.97  5.45 11.42 |   14.83%   45.39% |    6.94%  +0.180pp   75.60%
+  RS    15.09%   43.21% 0.349   32.20%    0.47%   12.89%   32.20% 11.43  5.99  5.44 11.43 |   15.61%   42.48% |    7.51%  +0.691pp   69.22%
+
+trades (base, m=2): arm | full: round trips/yr, resizes/yr, sells/yr, bill trades, bill sells | 2017+
+  C0   2.94  51.51  27.41     0     0 | 2017+  1.23  32.42 turn  3.75 bill sessions    0.00%
+  R2   2.97  55.95  29.56     0     0 | 2017+  1.54  34.27 turn  4.02 bill sessions    0.00%
+  S2   2.94  51.51  27.41   469   401 | 2017+  1.23  32.42 turn  3.75 bill sessions   46.88%
+  RS   2.97  55.95  29.56   504   436 | 2017+  1.54  34.27 turn  4.02 bill sessions   46.88%
+
+OOS (calibrated, m=2): window | arm CAGR / maxDD
+  GSPC 1957-01-02->1999-12-31 | C0 9.98%/38.99%  R2 9.89%/39.63%  S2 11.61%/33.41%  RS 11.35%/34.62%
+  M1   1975-01-02->1999-12-31 | C0 20.68%/38.62%  R2 21.18%/40.97%  S2 22.52%/35.69%  RS 22.80%/36.24%
+  M2   1935-01-08->1956-12-31 | C0 11.26%/62.52%  R2 11.70%/58.33%  S2 10.97%/63.73%  RS 11.33%/59.80%
+  M3   1966-01-19->2026-09-29 | C0 6.33%/67.16%  R2 6.40%/65.03%  S2 7.22%/60.28%  RS 7.18%/60.92%
+  M4   1989-01-03->2026-09-29 | C0 9.41%/58.61%  R2 9.47%/58.10%  S2 9.75%/58.24%  RS 9.74%/57.74%
+  M5   1985-01-02->2026-09-29 | C0 -0.05%/82.74%  R2 -0.59%/85.45%  S2 0.07%/83.67%  RS -0.54%/86.38%
+OOS pooled bootstrap (M1..M5, 10,000 paths) median(arm-C0): C0 +0.000pp  R2 +0.360pp  S2 +0.496pp  RS +0.686pp
+
+gates vs C0 (G1_base G1_calibrated G2_base G2_calibrated G3_base G3_calibrated G5_base G5_calibrated G6_base G6_calibrated G4 G7 G8 G9):
+  R2  G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=P G8=P G9=P -> PASS
+  S2  G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=P G8=P G9=P -> PASS
+  RS  G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=P G8=P G9=P -> PASS
+RS vs R2: G1 (both financings) base=P calibrated=P -> PASS; G5R median base +0.064pp calibrated +0.064pp -> PASS
+
+cost stress (report only, not gated): arm | m=1 / m=2 / m=4 base CAGR, m=4 max DD
+  C0  14.95% / 14.67% / 14.13% | 50.19%
+  R2  15.75% / 15.48% / 14.92% | 47.44%
+  S2  15.41% / 14.88% / 13.84% | 47.35%
+  RS  16.20% / 15.67% / 14.61% | 44.53%
+
+early path (base, m=2): arm | share of sessions | episodes | sum(arm-C0) | median delta | best | worst
+  R2    2.46%   32   +19.72pp    +0.24pp | 2001-10-31->2001-12-05 +8.58pp | 2022-12-13->2022-12-15 -3.10pp
+  RS    2.46%   32   +18.88pp    +0.19pp | 2001-10-31->2001-12-05 +8.68pp | 2022-12-13->2022-12-15 -3.13pp
+
+after tax ($100k, base financing, m=2, liquidation at the end; progressive 2026 tariff):
+  window | arm | pre-tax CAGR | after-tax CAGR | maxDD | tax USD | trades/yr | sells/yr
+  2000_03_to_2026_09   C0    14.67%    9.53%   49.56%      646,780    58.10    28.50
+  2000_03_to_2026_09   R2    15.47%   10.16%   46.76%      766,160    62.65    30.69
+  2000_03_to_2026_09   S2    14.88%    9.44%   46.09%      686,519    75.98    38.59
+  2000_03_to_2026_09   RS    15.66%    9.90%   45.69%      781,884    81.85    41.75
+  2010_01_to_end       C0    21.89%   14.50%   44.69%      534,273    59.90    30.16
+  2010_01_to_end       R2    22.16%   14.71%   43.78%      553,536    62.17    31.35
+  2010_01_to_end       S2    21.68%   14.15%   45.35%      546,529    77.82    40.49
+  2010_01_to_end       RS    21.93%   14.34%   44.39%      565,253    80.74    42.04
+  2017_01_to_end       C0    32.26%   22.69%   37.61%      352,698    67.41    33.65
+  2017_01_to_end       R2    32.53%   22.89%   36.24%      360,297    70.90    35.60
+  2017_01_to_end       S2    32.54%   22.55%   36.98%      380,709    86.29    44.73
+  2017_01_to_end       RS    32.77%   22.68%   35.84%      387,822    90.39    46.89
+  RS beats R2 after tax in all three windows: 2000_03_to_2026_09=N 2010_01_to_end=N 2017_01_to_end=N -> False
+  report-only diagnostic, after-tax CAGR with the BIL* book NOT taxed (upper bound for a dividend-treated bill sleeve): window | S2 untaxed | RS untaxed | C0 | R2 | R2 untaxed-bill vs R2
+    2000_03_to_2026_09   S2    9.70% RS   10.30% | C0    9.53% R2   10.16% | RS-R2 +0.14pp
+    2010_01_to_end       S2   14.32% RS   14.51% | C0   14.50% R2   14.71% | RS-R2 -0.20pp
+    2017_01_to_end       S2   22.95% RS   23.10% | C0   22.69% R2   22.89% | RS-R2 +0.21pp
+
+after-tax bootstrap (block-20, 1000 paths, 2015-09-01..2026-09-30, fixed FX, $100k):
+  B1-recent progressive  RS median 2.23%, C0 3.08%, R2 3.52%, S2 2.20%
+    RS - C0: median -0.616 pp, mean -0.664, share>0   31.00%, p05 -2.907, p95 +1.547
+    RS - R2: median -1.077 pp, mean -1.116, share>0    1.50%, p05 -2.094, p95 -0.254
+  B2 flat 20%            RS median 2.34%, C0 3.52%, R2 3.97%, S2 2.13%
+    RS - C0: median -1.018 pp, mean -1.054, share>0   21.90%, p05 -3.270, p95 +1.006
+    RS - R2: median -1.511 pp, mean -1.522, share>0    0.00%, p05 -2.275, p95 -0.787
+
+VERDICT: RS FAIL (gates vs C0 PASS, vs R2 PASS, after tax FAIL)

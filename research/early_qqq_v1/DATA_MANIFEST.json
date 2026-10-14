@@ -1,0 +1,359 @@
+{
+  "campaign": "early_qqq_v1",
+  "created": "2026-10-14",
+  "files": {
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "date_range": [
+        "2000-01-03",
+        "2026-10-09"
+      ],
+      "role": "Turkish tax: USD/TRY at the trade date",
+      "rows": 6676,
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "source": "CBRT USD/TRY forex buying (via after_tax_tr_v1)"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "role": "Turkish tax: indexation (GVK muk. 81) and bracket deflation",
+      "rows": 333,
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "source": "TUIK Yi-UFE monthly index (via after_tax_tr_v1)"
+    },
+    "data/historical/early_qqq_v1_qld.csv": {
+      "bytes": 519027,
+      "date_range": [
+        "2006-06-21",
+        "2026-09-21"
+      ],
+      "line_endings": "LF",
+      "role": "real QLD adjusted closes; real-fund evaluation surface",
+      "rows": 5094,
+      "sha256": "7f0a10a13ccaa6b03e3ec044454ece76504f1b9891463bd4d6c58ec0039bcd17",
+      "source": "Yahoo chart API v8 (query1.finance.yahoo.com), downloaded 2026-10-14 by this study"
+    },
+    "data/historical/early_qqq_v1_qqq.csv": {
+      "bytes": 661613,
+      "date_range": [
+        "2000-01-03",
+        "2026-09-21"
+      ],
+      "line_endings": "LF",
+      "role": "real QQQ adjusted closes; real-fund evaluation surface",
+      "rows": 6719,
+      "sha256": "ca8120475b778825df718dd284de5b58093f11960a86ae7ada6fc2b13a47ca71",
+      "source": "Yahoo chart API v8 (query1.finance.yahoo.com), downloaded 2026-10-14 by this study"
+    },
+    "data/historical/ewma_band_v1_gspc.csv": {
+      "bytes": 1145471,
+      "date_range": [
+        "1950-01-03",
+        "1999-12-31"
+      ],
+      "role": "OOS window ^GSPC 1957-01-02..1999-12-31",
+      "rows": 12582,
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "source": "ewma_band_v1 copy of ^GSPC daily closes"
+    },
+    "data/historical/ewma_band_v1_index.csv": {
+      "bytes": 4114163,
+      "date_range": [
+        "1971-02-05",
+        "2026-09-29"
+      ],
+      "role": "OOS windows M1 ^IXIC, M2 ^GSPC, M3 ^N225, M4 ^GDAXI, M5 ^FTSE",
+      "rows": 50325,
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "source": "ewma_band_v1 copy of long index history"
+    },
+    "data/historical/ewma_band_v1_tb3ms.csv": {
+      "bytes": 4439,
+      "role": "pre-1954 OOS risk-free rate",
+      "rows": 276,
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "source": "FRED TB3MS (via ewma_band_v1)"
+    },
+    "data/historical/range_vol_v1_dia.csv": {
+      "bytes": 697668,
+      "date_range": [
+        "1998-01-20",
+        "2026-10-12"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 7227,
+      "sha256": "1300f2a61255d5699a349794179f09ead15703e2813025e6b64a2df16d91b14e",
+      "source": "range_vol_v1 (Yahoo chart API, via range_vol_v1)"
+    },
+    "data/historical/range_vol_v1_iwm.csv": {
+      "bytes": 655363,
+      "date_range": [
+        "2000-05-26",
+        "2026-10-12"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6633,
+      "sha256": "c6ff89f0fb18506a9869de2d92b609c37815cc8fe634d064bb29218638573580",
+      "source": "range_vol_v1 (Yahoo chart API, via range_vol_v1)"
+    },
+    "data/historical/range_vol_v1_spy.csv": {
+      "bytes": 776843,
+      "date_range": [
+        "1993-01-29",
+        "2026-10-12"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 8483,
+      "sha256": "80c8bee68dcd3e1a8ee5fb3cf6828afc6cdc018aaf7b7395dbdac7b22e0ea0a4",
+      "source": "range_vol_v1 (Yahoo chart API, via range_vol_v1)"
+    },
+    "data/historical/range_vol_v2_eem.csv": {
+      "bytes": 596570,
+      "date_range": [
+        "2003-04-14",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 5913,
+      "sha256": "2a7d0a7f3cd9c2e3c70abb3e366de7589141b5d1f82dd1c382f5fe2cba36aa99",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_efa.csv": {
+      "bytes": 628462,
+      "date_range": [
+        "2001-08-27",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6319,
+      "sha256": "61f525b17d70aa947aba6e6e1033cc2f626b815e7d8a9c05663ad1dd64bd345d",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_ewa.csv": {
+      "bytes": 722723,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 7693,
+      "sha256": "09b6942f6660cc90306d5dc4cca54c6fd6a67e783517b6b9cb48f07094f49187",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_ewc.csv": {
+      "bytes": 720836,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 7693,
+      "sha256": "51321cb9cc1f45f59023ec63d055535f4f2e2af4b5ed0bbe1b1e6dffa3e6518e",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_ewg.csv": {
+      "bytes": 726336,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 7693,
+      "sha256": "79ebfa1f9df848ae208f983ebcf41f0a71b9acf5decf6a3983886ebf3a4710f5",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_ewh.csv": {
+      "bytes": 723938,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 7693,
+      "sha256": "d1e7a96c6b72d0a041ea362d42b9159bc42da7993d13f5947e6b5ae5972b3aee",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_ewj.csv": {
+      "bytes": 709683,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 7693,
+      "sha256": "846ef8ec8b7206498f668f6e7df5d4d1a75afb61b4bf5059b25c279f704c4457",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_ewl.csv": {
+      "bytes": 722468,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 7693,
+      "sha256": "344b8a554ad668e88df543ab0c8e8ed5c5ff350b756e2ba9813f3fd992d69780",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_ews.csv": {
+      "bytes": 723102,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 7693,
+      "sha256": "92ad902cba58e1f3d4cffcb02fa6ead636b468437b014a60e7cb82611f75a12e",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_ewu.csv": {
+      "bytes": 719067,
+      "date_range": [
+        "1996-03-18",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 7693,
+      "sha256": "8f0d1914103a55f47329264d2aecc5845f76791b0aa37cc1c7bd1d4b1529e9f8",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_xlb.csv": {
+      "bytes": 695202,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6994,
+      "sha256": "687e99eaaad489c85847fdfc84d8136545ab929b50e0f784eaf186ca8568a59a",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_xle.csv": {
+      "bytes": 686299,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6994,
+      "sha256": "7c06aac6ddbf7b8fef6dc1ba5d4022e1c22bf1f6f1e7a8685730f9b0542e17f1",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_xlf.csv": {
+      "bytes": 719917,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6994,
+      "sha256": "f6c34092978d4d1da1fc0ee96a395019c0d8fcb893694faf584d1ddf9367182e",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_xli.csv": {
+      "bytes": 681238,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6994,
+      "sha256": "c9039b8828807c489e1d64381e53f48a5dca5d0e77775cae515f30264508a7b8",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_xlk.csv": {
+      "bytes": 683909,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6994,
+      "sha256": "0916e3134092de2ca9049c9b317e1170980057ff8b0a5159b76e24fb6424fa61",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_xlp.csv": {
+      "bytes": 682473,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6994,
+      "sha256": "5a08680540fc09205024f5ebb997c24ffdb98d967a0aed10c616b2144e2d0670",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_xlu.csv": {
+      "bytes": 694082,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6994,
+      "sha256": "614e80d03bcbfd99af27a87981a3cb463d72654ce22f0c0bdb07052c8bea8421",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_xlv.csv": {
+      "bytes": 682218,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6994,
+      "sha256": "02e5df03723d01930af4ae348409d88cc7fbaf9513d7049e628777399e5533f7",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/range_vol_v2_xly.csv": {
+      "bytes": 688977,
+      "date_range": [
+        "1998-12-22",
+        "2026-10-13"
+      ],
+      "role": "ETF OHLC + adjusted close; 21-ETF drawdown generalisation (EWC excluded by the quality rule)",
+      "rows": 6994,
+      "sha256": "abfd815334cae8cbeb25329e16041d994289eb5804103a8d7ef1930ee55b0ba6",
+      "source": "range_vol_v2 (Yahoo chart API, via range_vol_v2)"
+    },
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "date_range": [
+        "1999-03-10",
+        "2026-09-29"
+      ],
+      "role": "QQQ/SPY/QLD daily open/high/low/close/dividend/adjclose bars; main-window and bootstrap prices",
+      "rows": 23047,
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "stress_robustness_v1 (Yahoo, via Yahoo chart API)"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "role": "3-month T-bill secondary market rate; financing leg of every synthetic L-x instrument",
+      "rows": 18976,
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "source": "FRED DTB3 (via stress_robustness_v1)"
+    }
+  },
+  "network_access": "Yahoo chart API v8 only (public market data), for the two real-fund series; every other input is restored byte-identical from the branches named below",
+  "restored_from_branches": {
+    "heritage copies": [
+      "research/ewma_band_v1 (archive/research/ewma-band-v1-2026-10)",
+      "research/leverage_frontier_v1 (commit 238e6b66)",
+      "research/riskoff_rotation_v3",
+      "research/gold_riskoff_oos_v1 (commit f582e0a7)"
+    ],
+    "research/fast_reentry_v1": [
+      "research/fast_reentry_v1"
+    ],
+    "research/r2_tbill_combo_v1": [
+      "research/r2_tbill_combo_v1 (screen.py + tax_engine.py base)"
+    ],
+    "research/vt_level_tax_v1": [
+      "research/vt_level_tax_v1",
+      "data/historical/after_tax_tr_v1_*.csv",
+      "data/historical/leverage_frontier_v1_*.csv",
+      "research/tax_frontier_v1",
+      "research/tax_asym_v2"
+    ]
+  }
+}

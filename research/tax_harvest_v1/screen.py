@@ -80,7 +80,7 @@ TAX_BOOT_I0 = TAX_BOOT_EXT + 253
 DEC_TAIL = 10            # H2/H2b: last 10 sessions of December
 YEAR_END = "12"
 
-OVERLAY = {"R2": "none", "H1": "H1", "H1b": "H1b", "H2": "H2", "H2b": "H2b", "H3": "H3"}
+OVERLAY = {"C0": "none", "R2": "none", "H1": "H1", "H1b": "H1b", "H2": "H2", "H2b": "H2b", "H3": "H3"}
 ARMS = ("R2", "H1", "H1b", "H2", "H2b", "H3")
 CONTROL = "R2"
 CANDIDATES = ("H1", "H1b", "H2", "H2b", "H3")
@@ -339,6 +339,7 @@ def tax_run_overlay(capital, i0, i1, days, mkt, oq, cq, wq, overlay, mode, m=M):
     nav[0] = capital
     trades = q_sells = tax_sales = harvests = deferrals = 0
     turnover = 0.0
+    deferrals_by_year = defaultdict(int)
     harvest_log, defer_log = [], []
     prev_tgt = None
 
@@ -408,6 +409,7 @@ def tax_run_overlay(capital, i0, i1, days, mkt, oq, cq, wq, overlay, mode, m=M):
             if veto:
                 trade = False
                 deferrals += 1
+                deferrals_by_year[int(days[i][:4])] += 1
                 defer_log.append({"fill_session": days[i], "target": float(tgt), "held": float(w)})
 
         if trade:
@@ -450,6 +452,8 @@ def tax_run_overlay(capital, i0, i1, days, mkt, oq, cq, wq, overlay, mode, m=M):
         "ending_nav_usd": float(mtm), "max_dd_nav_usd": maxdd,
         "cagr_usd_liquidated": float((liq / capital) ** (1 / yrs) - 1),
         "terminal_usd_liquidated": float(liq),
+        "cagr_usd_unliquidated": float((mtm / capital) ** (1 / yrs) - 1),
+        "terminal_usd_unliquidated": float(mtm),
         "tax_total_try": float(sum(qa.tax_paid_try.values()) + liq_tax),
         "tax_total_usd_at_payment_fx": float(qa.tax_paid_usd + (liq_tax / fx1 if fx1 != 0 else liq_tax)),
         "tax_assessed_try_by_year": {int(k): float(v) for k, v in sorted(qa.tax_due.items())},
@@ -458,7 +462,8 @@ def tax_run_overlay(capital, i0, i1, days, mkt, oq, cq, wq, overlay, mode, m=M):
         "sells": int(q_sells + tax_sales),
         "turnover_annual": float(turnover / yrs),
         "harvests": int(harvests), "harvest_log": harvest_log,
-        "deferrals": int(deferrals), "deferral_log": defer_log[:60],
+        "deferrals": int(deferrals), "deferrals_by_year": {int(k): int(v) for k, v in sorted(deferrals_by_year.items())},
+        "deferral_log": defer_log[:60],
         "fees_usd": float(qa.fees),
         "indexation_relief_try": float(qa.index_relief_try),
         "realised_gain_try_by_reason": {k: float(v) for k, v in sorted(qa.gain_by_reason.items())},
@@ -594,7 +599,7 @@ def harness(run_boot=True):
             for m in (1, 2):
                 r = tax_run_overlay(1.0, START, len(days_) - 1, days_, mkt, o_, c_,
                                     wants, "none", "pre_tax", m=m)
-                for key, val in (("cagr", ref[(md, m)][0]), ("max_dd", ref[(md, m)][1]),
+                for key, val in (("cagr_usd_unliquidated", ref[(md, m)][0]), ("max_dd_nav_usd", ref[(md, m)][1]),
                                  ("turnover_annual", ref[(md, m)][2])):
                     got = float(r[key])
                     checks[f"{arm}_{md}_m{m}_{key}"] = {"reference": val, "reproduced": got,
@@ -630,7 +635,7 @@ def harness(run_boot=True):
 
 
 # ----------------------------------------------------------------------------- clean after-tax bootstrap
-def after_tax_bootstrap(capitals=("100k", "1M"), arms=ARMS):
+def after_tax_bootstrap(capital_names=("100k", "1M"), arms=ARMS):
     """Block-20 stationary bootstrap (tax_asym_v2 / vt_level_tax_v1 design, as re-used by
     r2_tbill_combo_v1): 1,000 ten-year paths on the fixed 2015-09 -> 2026-09 calendar with its
     fixed FX / Yi-UFE. Modes: progressive (B1-recent) and flat 20% (B2). Every arm shares the
@@ -647,7 +652,7 @@ def after_tax_bootstrap(capitals=("100k", "1M"), arms=ARMS):
     i0, i1 = TAX_BOOT_I0, len(fixed_dates) - 1
     mkt = te.Market(fixed_dates, fixed_fx, ufe)
     res = {cl: {mode: {a: {"cagr": [], "maxdd": [], "sells": [], "harvests": []} for a in arms}
-                for mode in ("progressive", "flat")} for cl in capitals}
+                for mode in ("progressive", "flat")} for cl in capital_names}
     for pidx in range(TAX_BOOT_PATHS):
         P = 1
         pos = np.empty((P, L), dtype=np.int64)
@@ -674,12 +679,13 @@ def after_tax_bootstrap(capitals=("100k", "1M"), arms=ARMS):
         vol = trv2.vol_n(sc)
         comps = early_components(pc)
         w_r2, _ = arm_signals(pc, e2, vol, "R2", comps)
-        w_r2 = w_r2[0]
+        w_c0, _ = arm_signals(pc, e2, vol, "C0", comps)
+        wants_of = {"C0": w_c0[0], "R2": w_r2[0]}
         for arm in arms:
-            for cap_label in capitals:
+            for cap_label in capital_names:
                 for mode in ("progressive", "flat"):
-                    r = tax_run_overlay(capitals[cap_label], i0, i1, fixed_dates, mkt, so[0], sc[0],
-                                        w_r2, OVERLAY[arm], mode)
+                    r = tax_run_overlay(TAX_CAPITALS[cap_label], i0, i1, fixed_dates, mkt, so[0], sc[0],
+                                        wants_of.get(arm, w_r2[0]), OVERLAY[arm], mode)
                     if not (r["terminal_usd_liquidated"] > 0) or r["terminal_usd_liquidated"] != r["terminal_usd_liquidated"]:
                         raise RuntimeError(f"non-positive/NaN terminal on path {pidx} arm {arm} {mode} {cap_label}")
                     d = res[cap_label][mode][arm]
@@ -690,12 +696,12 @@ def after_tax_bootstrap(capitals=("100k", "1M"), arms=ARMS):
         if (pidx + 1) % 100 == 0:
             print(f"  bootstrap path {pidx + 1}/{TAX_BOOT_PATHS}", flush=True)
     out = {}
-    for cap_label in capitals:
+    for cap_label in capital_names:
         out[cap_label] = {}
         for mode in ("progressive", "flat"):
             e = {"tax_kind": mode, "n_paths": TAX_BOOT_PATHS, "calendar_start": fixed_dates[0],
                  "calendar_end": fixed_dates[-1], "seed": SEED, "block": BLOCK,
-                 "capital_usd": capitals[cap_label]}
+                 "capital_usd": TAX_CAPITALS[cap_label]}
             for ctrl in ("C0", "R2"):
                 if ctrl not in arms:
                     continue
@@ -952,6 +958,7 @@ def main() -> None:
     L.append("tax assessed per calendar year (TRY, $100k, 2000-03 -> 2026-09, progressive); "
              "d = arm - R2 (negative = tax deferred out of that year):")
     base_yr = win["100k"]["2000_03_to_2026_09"][CONTROL]["tax_assessed_try_by_year"]
+    L.append("  (last year of each row lumps the terminal liquidation and any unsettled instalment)")
     for arm in CANDIDATES:
         ay = win["100k"]["2000_03_to_2026_09"][arm]["tax_assessed_try_by_year"]
         rows = []
@@ -959,10 +966,11 @@ def main() -> None:
             d = ay.get(y, 0.0) - base_yr.get(y, 0.0)
             if abs(d) > 1.0:
                 rows.append((y, d))
-        deferred = sum(-d for _, d in rows if d < 0)
-        saved = sum(d for _, d in rows)
-        L.append(f"  {arm:4s} net total d {saved:+14,.0f} TRY | deferred out of harvest/December years "
-                 f"{deferred:14,.0f} TRY | per-year: " + ", ".join(f"{y}:{d:+,.0f}" for y, d in rows[:14]))
+        pushed_later = sum(-d for _, d in rows if d < 0)
+        pulled_earlier = sum(d for _, d in rows if d > 0)
+        L.append(f"  {arm:4s} net total d {sum(d for _, d in rows):+14,.0f} TRY | tax pushed later "
+                 f"{pushed_later:14,.0f} TRY | tax pulled earlier {pulled_earlier:14,.0f} TRY | "
+                 f"per-year: " + ", ".join(f"{y}:{d:+,.0f}" for y, d in rows[:12]))
     L.append("")
     L.append("H1 harvest events ($100k, 2000 window): session, year, realised gain TRY, year gain before/after")
     for arm in ("H1", "H1b", "H3"):

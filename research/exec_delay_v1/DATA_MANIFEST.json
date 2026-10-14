@@ -1,0 +1,30 @@
+{
+  "inputs": [
+    {
+      "path": "data/historical/ewma_band_v1_gspc.csv",
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "bytes": 1145471
+    },
+    {
+      "path": "data/historical/ewma_band_v1_index.csv",
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "bytes": 4114163
+    },
+    {
+      "path": "data/historical/ewma_band_v1_tb3ms.csv",
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "bytes": 4439
+    },
+    {
+      "path": "data/historical/stress_robustness_v1_daily.csv",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "bytes": 2671225
+    },
+    {
+      "path": "data/historical/stress_robustness_v1_dtb3.csv",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "bytes": 301157
+    }
+  ],
+  "notes": "Reused from ewma_band_v1 / stress_robustness_v1; no new downloads."
+}

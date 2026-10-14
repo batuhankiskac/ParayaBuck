@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""ewma_band_v1 screen (see PREREGISTRATION.md). Offline; reads data/historical only.
+"""vt_level_tax_v1 screen (see PREREGISTRATION.md). Offline; reads data/historical only.
+
+Question: is production E2's vol target 0.35 the right level, pre-tax and after
+Turkish tax? Arms (fixed, see PREREGISTRATION.md): C0 = E2 at 0.35, VT30/VT40/
+VT45/VT50 = E2 at 0.30/0.40/0.45/0.50, NOVT = E2 with no vol target. Everything
+else is production E2 1.1.0.
 
 Modes
   --harness  C0 (production E2) only: reproduces e2_integration_v1's production-E2
@@ -8,18 +13,24 @@ Modes
              trend_robustness_v2.simulate_multi bit for bit, and checks the
              windowed-EWMA identity against a direct computation. Simulates no
              other arm.
-  --run      re-runs the harness, stops if it fails, then runs every arm
-             (C0, W1, B25, B50, B100, WB25, WB50, WB100) on the main window,
-             the main block-20 bootstrap, the out-of-sample windows (^GSPC
-             1957-1999 and e2_confirmation_v1's M1..M5), the pooled OOS
-             bootstrap, the gates, the band selection and the report-only
-             statistics. Writes RESULTS.json and SUMMARY.txt.
+  --run      re-runs the harness, stops if it fails, then runs every arm on the
+             main window, the main block-20 bootstrap, the out-of-sample windows
+             (^GSPC 1957-1999 and e2_confirmation_v1's M1..M5), the pooled OOS
+             bootstrap, the pre-tax gates G1-G9 plus leverage_frontier_v1's tail
+             gate, the after-tax windows at $100k (Turkish progressive regime) and
+             the clean after-tax bootstraps B1-recent (progressive) and B2 (flat),
+             then applies the pre-registered selection rule. Writes RESULTS.json
+             and SUMMARY.txt.
 
-Engine helpers (synthetic 2x, SMA, vol20, vt, metrics) are imported from
-research/trend_robustness_v2/screen.py (its main() is never run). The ^GSPC and
-M1..M5 loaders are copied from signal_ensemble_v1 / e2_confirmation_v1 (tags
-archive/research/signal-ensemble-v1-2026-10, archive/research/e2-confirmation-v1-2026-10)
-with paths pointing at the byte-identical copies data/historical/ewma_band_v1_*.
+Pre-tax engine helpers (synthetic 2x, SMA, vol20, vt, metrics, bootstrap, OOS
+loaders) are the ewma_band_v1 screen, built on research/trend_robustness_v2/
+screen.py (its main() is never run); the ^GSPC and M1..M5 loaders are copied from
+signal_ensemble_v1 / e2_confirmation_v1 with paths pointing at the byte-identical
+copies data/historical/ewma_band_v1_*. The second half of this file is the
+after-tax engine: the tax model, accounts and USD/TRY + Yi-UFE handling imported
+from research/tax_frontier_v1/screen.py, and the clean bootstrap from
+research/tax_asym_v2/screen.py (see PREREGISTRATION.md "Amendments" for the one
+substantive fix: C0 runs on the same synthetic QLD* as the other arms).
 """
 
 from __future__ import annotations
@@ -82,8 +93,6 @@ DTB3_FIRST = "1954-01-04"
 
 ARMS = ("C0", "VT30", "VT40", "VT45", "VT50", "NOVT")
 CANDIDATES = ("VT30", "VT40", "VT45", "VT50", "NOVT")
-OOS_ETFS = ["XLB","XLE","XLF","XLI","XLK","XLP","XLU","XLV","XLY",
-            "EWJ","EWG","EWU","EWC","EWA","EWH","EWS","EWL","EFA","EEM"]
 
 
 ARM_PARAMS = {
@@ -443,7 +452,7 @@ def boot_main(arms):
             wants = {arm: wants_for(e2, trv2.vol_n(scl), ARM_VT[arm]) for arm in arms}
             for arm in arms:
                 pp = ARM_PARAMS[arm]
-                kind, band = pp["kind"], pp["band"]
+                kind, band = arm, pp["band"]
                 if pp["mode"] == "downward":
                     nav, turn, _, _, _ = simulate_downward(so, scl, wants[kind], COST_PER_SIDE * 2, start, band, pp["k"], pp["trim"])
                 else:
@@ -571,7 +580,7 @@ def oos_window(days, o, c, y, start, arms):
     res = {"window": {"start": dates[1], "end": dates[-1], "sessions": len(dates) - 1}}
     for arm in arms:
         pp = ARM_PARAMS[arm]
-        kind, band = pp["kind"], pp["band"]
+        kind, band = arm, pp["band"]
         if pp["mode"] == "downward":
             nav, turn, ntr, codes, traded = simulate_downward(so, sc, wants[kind], COST_PER_SIDE * 2, start, band, pp["k"], pp["trim"])
         else:
@@ -612,7 +621,7 @@ def boot_oos_market(key, rng, arms):
         wants = {arm: wants_for(e2, trv2.vol_n(sc), ARM_VT[arm]) for arm in arms}
         for arm in arms:
             pp = ARM_PARAMS[arm]
-            kind, band = pp["kind"], pp["band"]
+            kind, band = arm, pp["band"]
             if pp["mode"] == "downward":
                 nav = simulate_downward(so, sc, wants[kind], COST_PER_SIDE * 2, START, band, pp["k"], pp["trim"])[0]
             else:
@@ -669,39 +678,6 @@ CORE_KEYS = [f"{g}_{md}" for g in ("G1", "G2", "G3") for md in FIN]
 
 # ----------------------------------------------------------------------------- main
 
-
-def load_etf(key):
-    path = ROOT / "data/historical" / f"range_vol_v2_{key.lower()}.csv"
-    rows = []
-    with path.open() as fh:
-        for r in csv.DictReader(fh):
-            rows.append((r["date"], float(r["open"]), float(r["high"]), float(r["low"]),
-                          float(r["close"]), float(r["adjclose"])))
-    dates = [r[0] for r in rows]
-    o = np.empty(len(rows)); h = np.empty(len(rows)); l = np.empty(len(rows)); c = np.empty(len(rows))
-    for k, (d, op, hi, lo, cl, adj) in enumerate(rows):
-        f = adj / cl
-        o[k] = op * f; h[k] = hi * f; l[k] = lo * f; c[k] = adj
-    d3, tb = load_rates()
-    y = rate_on(dates, d3, tb)
-    start = START
-    assert start <= len(dates) - 1
-    return dates, o, h, l, c, np.array(y), start
-
-
-def _market_quality_ok(high, low, opn, close):
-    bad = 0; n = 0
-    for h, lo, o, cl in zip(high, low, opn, close):
-        n += 1
-        if h is None or lo is None:
-            bad += 1
-            continue
-        if h == lo:
-            bad += 1
-            continue
-        if o is None or o <= 0 or o < lo * (1 - 1e-9) or o > h * (1 + 1e-9):
-            bad += 1
-    return (bad / max(1, n)) <= 0.05
 
 def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -796,7 +772,32 @@ def main() -> None:
         if idx<len(target_order)-1: nbrs.append(target_order[idx+1][0])
         gates[nm]["plateau"] = bool(any(gates[n]["core_G1_G3"] if n in gates else (n=="C0") for n in nbrs))
         gates[nm]["plateau_neighbours"] = {n: (gates[n]["core_G1_G3"] if n in gates else True) for n in nbrs}
-    selection = {"selected": "none"}
+    # ---- pre-registered selection (see PREREGISTRATION.md) ----
+    PRE_TAX_KEYS = [f"{g}_{md}" for g in ("G1", "G2", "G3", "G5", "G6") for md in FIN] + ["G4", "G7", "G8"]
+    sel_detail = {}
+    for nm in CANDIDATES:
+        g = gates[nm]
+        pre = bool(all(g[k] for k in PRE_TAX_KEYS))
+        tail = bool(g["TAIL"])
+        at = {}
+        for wn in WINDOWS:
+            a_ = at_windows[wn][nm][nm]["cagr"]
+            c_ = at_windows[wn][nm]["C0"]["cagr"]
+            at[wn] = bool(a_ > c_)
+        b = {}
+        for label, res in (("B1_recent", boot_recent), ("B2_flat", boot_flat)):
+            d = res[f"{nm}_vs_C0"]
+            b[label] = {"median_delta_pp": d["delta_cagr_median_pp"], "share_gt_0": d["share_delta_gt_0"],
+                        "pass": bool(d["delta_cagr_median_pp"] >= 0.30 and d["share_delta_gt_0"] >= 0.60)}
+        plat = True if g["plateau"] is None else bool(g["plateau"])
+        ok = pre and tail and all(at.values()) and all(x["pass"] for x in b.values()) and plat
+        sel_detail[nm] = {"pre_tax_G1_G8": pre, "tail_gate": tail, "after_tax_beats_C0_all_windows": at,
+                          "B": b, "plateau": plat, "candidate": bool(ok)}
+    selected = [nm for nm in CANDIDATES if sel_detail[nm]["candidate"]]
+    selection = {"selected": selected[0] if selected else "none", "candidates": selected,
+                 "rule": "G1-G8 pre-tax AND tail gate AND after-tax CAGR > C0 in all three windows AND "
+                         "B1-recent/B2 median +0.3pp with share>0 >= 60% AND plateau neighbour passes G1-G3",
+                 "detail": sel_detail}
 
     out = {
         "campaign": "vt_level_tax_v1",
@@ -820,9 +821,6 @@ def main() -> None:
         "after_tax_bootstrap_B1_recent": boot_recent,
         "after_tax_bootstrap_B2_flat": boot_flat,
         "selection": selection,
-        "after_tax_plateau": at_plateau,
-        "after_tax_bootstrap_T1": boot_at,
-        "etf_test": etf_results,
         "status": "complete",
     }
     OUT.write_text(json.dumps(trv2.rnd(out), indent=2, sort_keys=True) + "\n")
@@ -830,7 +828,7 @@ def main() -> None:
     # ------------------------------------------------------------------ SUMMARY
     p = lambda x: f"{x * 100:7.2f}%"
     w = main_res["window"]
-    L = [f"ewma_band_v1 | main window {w['start']} -> {w['end']} ({w['sessions']} sessions) | C0 = production E2 1.1.0",
+    L = [f"vt_level_tax_v1 | main window {w['start']} -> {w['end']} ({w['sessions']} sessions) | C0 = production E2 1.1.0",
          f"harness: {'PASS' if hc['pass'] else 'FAIL'} (max |diff| "
          f"{max(abs(v['diff_pp']) for v in hc['deviation_checks'].values()):.6f} pp vs e2_integration_v1 production E2; "
          f"band sim == simulate_multi {hc['band_simulator_equals_simulate_multi']}; EWMA identity rel diff "
@@ -868,26 +866,47 @@ def main() -> None:
         pl = f" plateau={'P' if g.get('plateau') else 'F'}" if "plateau" in g else ""
         L.append(f"  {arm:5s} " + " ".join(f"{k}={'P' if g[k] else 'F'}" for k in GATE_KEYS) +
                  f"{pl} -> {'PASS' if g['pass_all'] else 'FAIL'}")
-    L.append("pre-tax gates for A2 vs C0 in JSON")
+    L.append("")
+    L.append("after-tax ($100k, progressive Turkish regime, liquidated): window | arm | pre-tax CAGR -> "
+             "after-tax CAGR, max DD, trades/yr, tax paid USD")
+    for wn, d in at_windows.items():
+        c0p = d["C0"]["C0_pre_tax"]
+        L.append(f"  {wn} (C0 pre-tax {p(c0p['cagr']).strip()})")
+        for arm in ARMS:
+            x, xp = d[arm][arm], d[arm][arm + "_pre_tax"]
+            L.append(f"    {arm:5s} {p(xp['cagr'])} -> {p(x['cagr'])} ({(x['cagr'] - c0p['cagr']) * 100:+.3f}pp) "
+                     f"DD {p(x['max_dd'])} trades/yr {x['trades_per_year']:5.1f} tax {x['tax_usd']:,.0f}")
+    L.append("")
+    L.append("after-tax bootstrap (block-20, 1000 paths, 2015-09 calendar, no non-positive liquidations)")
+    for label, res in (("B1_recent progressive", boot_recent), ("B2_flat 20%", boot_flat)):
+        L.append(f"  {label}: C0 median after-tax CAGR {res['C0']['cagr'] and float(np.median(res['C0']['cagr'])) * 100:5.2f}%")
+        for arm in CANDIDATES:
+            dd = res[f"{arm}_vs_C0"]
+            L.append(f"    {arm:5s} median dCAGR {dd['delta_cagr_median_pp']:+7.3f}pp share>0 {dd['share_delta_gt_0']:.3f} "
+                     f"p05 {dd['p05_delta_cagr_pp']:+7.3f} p95 {dd['p95_delta_cagr_pp']:+7.3f} "
+                     f"median dDD {dd['delta_maxdd_median_pp']:+6.2f}pp")
+    L.append("")
+    L.append("selection: " + json.dumps(selection["selected"]) +
+             " (rule: " + selection["rule"] + ")")
+    for nm in CANDIDATES:
+        q = selection["detail"][nm]
+        L.append(f"  {nm:5s} pre_tax_G1_G8={'P' if q['pre_tax_G1_G8'] else 'F'} tail={'P' if q['tail_gate'] else 'F'} "
+                 f"after_tax_all_windows={'P' if all(q['after_tax_beats_C0_all_windows'].values()) else 'F'} "
+                 f"B1={'P' if q['B']['B1_recent']['pass'] else 'F'} B2={'P' if q['B']['B2_flat']['pass'] else 'F'} "
+                 f"plateau={'P' if q['plateau'] else 'F'} -> candidate={q['candidate']}")
     SUMMARY.write_text("\n".join(L) + "\n")
     print("\n".join(L))
 
 
-# ================= TAX/after-tax model imported from tax_frontier_v1 =================
-#!/usr/bin/env python3
-"""tax_frontier_v1: which E2-family rule maximizes after-tax return."""
+# ================= after-tax engine (tax_frontier_v1 + tax_asym_v2) =================
+# Tax model, accounts (BaseAccount/FlatAccount, Turkish progressive tariff with
+# Yi-UFE indexation), USD/TRY + Yi-UFE handling, run_strategy, and the clean
+# after-tax bootstrap. Imported from research/tax_frontier_v1/screen.py and
+# research/tax_asym_v2/screen.py; the only substantive change is C0's instrument
+# in the bootstrap (see PREREGISTRATION.md, Amendment 3).
 
-import argparse
 import bisect
-import csv
-import hashlib
-import importlib.util
-import json
 import math
-from collections import defaultdict
-from pathlib import Path
-
-import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -1138,7 +1157,6 @@ def run_strategy(arm, regime_name, capital, a, b, mkt):
 
     opens_arr, closes_arr = PRICES[arm]
     wants_arr = TARGETS[arm]
-    mode = TRADE_MODE[arm]
 
     cashbox = {"v": float(capital)}
     account = BaseAccount(mkt, regime, 0.0, cashbox)
@@ -1151,8 +1169,6 @@ def run_strategy(arm, regime_name, capital, a, b, mkt):
     tax_sales = 0
 
     prev_tgt = None
-    prev_quarter = None
-    quarter_first = False
 
     for i in range(i0, i1 + 1):
         # year boundary assess
@@ -1192,66 +1208,8 @@ def run_strategy(arm, regime_name, capital, a, b, mkt):
         tgt = 0.0 if math.isnan(tgt) else tgt
         resize_target = tgt
 
-        # quarter boundary
-        qk = (days_all[i][:4], (int(days_all[i][5:7]) - 1) // 3)
-        if qk != prev_quarter:
-            quarter_first = True
-            prev_quarter = qk
-        else:
-            quarter_first = False
-
-        trend_flip = (prev_tgt is not None) and ((tgt == 0) != (prev_tgt == 0))
-
-        # trade decision
-        trade = False
-        if mode == "prod":
-            trade = abs(tgt - w) > BAND
-        elif mode == "flip":
-            if prev_tgt is None:
-                trade = abs(tgt - w) > 1e-12
-            else:
-                trade = (tgt == 0) != (prev_tgt == 0)
-        elif mode == "hold":
-            if prev_tgt is None:
-                trade = abs(tgt - w) > 1e-12
-            else:
-                trade = abs(tgt - prev_tgt) > 1e-12
-        elif mode == "quarter":
-            if trend_flip:
-                trade = True
-            elif quarter_first:
-                trade = abs(tgt - w) > BAND
-            else:
-                # entries handled by trend_flip; downward drift only if flip
-                trade = False
-            if account.units == 0 and tgt > 0:
-                trade = True
-            if account.units > 0 and tgt == 0:
-                trade = True
-        elif mode == "downward":
-            meta = TAX_ARM_META.get(arm, {})
-            kk = meta.get("k", 0.5)
-            trim = meta.get("trim", 0.0)
-            if tgt > w + BAND:
-                trade = True
-                resize_target = tgt
-            elif tgt < w - BAND:
-                _trim_case = (tgt > 0) and (tgt < kk * max(w, 1e-12))
-                if prev_tgt is not None and prev_tgt > 0 and tgt == 0:
-                    trade = True
-                    resize_target = tgt
-                elif _trim_case:
-                    trade = True
-                    if trim > 0:
-                        resize_target = tgt + trim * (w - tgt)
-                    else:
-                        resize_target = tgt
-            if account.units == 0 and tgt > 0:
-                trade = True
-                resize_target = tgt
-            if account.units > 0 and tgt == 0:
-                trade = True
-                resize_target = 0.0
+        # trade decision (all arms use the production resize rule)
+        trade = abs(tgt - w) > BAND
 
         if account.units == 0 and tgt > 1e-12 and prev_tgt is None:
             trade = True
@@ -1281,8 +1239,6 @@ def run_strategy(arm, regime_name, capital, a, b, mkt):
 
     # liquidation
     end_y = int(days_all[i1][:4])
-    for _ in range(0):
-        pass
     if account.units > 0:
         account.sell(i1, float(closes_arr[i1]), account.units, account.units * float(closes_arr[i1]) * COST, "liquidation")
     liq_tax = account.assess(end_y) + account.outstanding()
@@ -1330,34 +1286,12 @@ def run_strategy(arm, regime_name, capital, a, b, mkt):
     }
 
 
-def sha256(p: Path) -> str:
-    return hashlib.sha256(p.read_bytes()).hexdigest()
-
-
 # base market for after-tax bootstrap
 BASE_MKT = Market()
 BASE_MKT.days = DAYS
 FX_BY_DATE = {DAYS[i]: float(BASE_MKT.fx[i]) for i in range(len(DAYS))}
 
 # --- tax_asym arm registration into the after-tax model ---
-TAX_ARM_META = {}
-_BASE_VT = np.minimum(CAP, VT035)
-for _arm, _k in (("A2_33", 0.33), ("A2_40", 0.40), ("A2_50", 0.50), ("A2_60", 0.60), ("A2_67", 0.67), ("A2_75", 0.75)):
-    TARGETS[_arm] = UP.astype(float) * _BASE_VT
-    PRICES[_arm] = (EQ2_O, EQ2_C)
-    TRADE_MODE[_arm] = "downward"
-    TAX_ARM_META[_arm] = {"k": _k, "trim": 0.0}
-# default name A2 maps to 50%
-TRADE_MODE["A2"] = "downward"
-TARGETS["A2"] = UP.astype(float) * _BASE_VT
-PRICES["A2"] = (EQ2_O, EQ2_C)
-TAX_ARM_META["A2"] = {"k": 0.50, "trim": 0.0}
-# partial trim variant
-TARGETS["A2r"] = UP.astype(float) * _BASE_VT
-PRICES["A2r"] = (EQ2_O, EQ2_C)
-TRADE_MODE["A2r"] = "downward"
-TAX_ARM_META["A2r"] = {"k": 0.50, "trim": 0.50}
-
 ARMS = ("C0", "VT30", "VT40", "VT45", "VT50", "NOVT")
 CANDIDATES = ("VT30", "VT40", "VT45", "VT50", "NOVT")
 
@@ -1374,9 +1308,6 @@ Market.scale = _patched_scale
 
 
 # ================= Clean after-tax bootstraps (tax_asym_v2) =================
-import bisect as _bisect
-
-(BASE_DAYS,) = (lf.load_all()[0],)
 
 FIXED_NEED = 2776   # EXT(3)+WARM(253)+MEASURED(10*252=2520)
 FIXED_EXT = 3
@@ -1409,17 +1340,6 @@ def make_fixed_calendar(lo, hi, need):
     if len(sub) < need:
         raise RuntimeError(f"fixed calendar {lo}..{hi} has only {len(sub)} days, need {need}")
     return list(sub[:need])
-
-
-def _run_one_path_market(capital, fixed_dates, fixed_fx, tax_kind, rng_local=None):
-    """Returns dict arm -> run_strategy result for C0,A1,A2."""
-    q = ARR["QQQ"]
-    Tsrc = q.shape[1]
-    L = FIXED_L
-    EXT = FIXED_EXT
-    rng = np.random.default_rng() if rng_local is None else rng_local
-    # We expect rng passed per path externally; here create deterministic not used.
-    pass
 
 
 def after_tax_bootstrap_variant(n_paths=1000, capital=100000.0, seed=20261011,
@@ -1476,7 +1396,6 @@ def after_tax_bootstrap_variant(n_paths=1000, capital=100000.0, seed=20261011,
             if tgt is None:
                 return np.ones_like(vol)
             return np.minimum(CAP, lf.vt_weight(vol, tgt))
-        vtmap = {0.30: 0.30, 0.35: 0.35, 0.40: 0.40, 0.45: 0.45, 0.50: 0.50, None: None}
         wants = {}
         wants["C0"] = e2.astype(float)[0] * _vt(0.35)
         wants["VT30"] = e2.astype(float)[0] * _vt(0.30)
@@ -1492,11 +1411,7 @@ def after_tax_bootstrap_variant(n_paths=1000, capital=100000.0, seed=20261011,
         DAYS = list(fixed_dates)
         for arm in FIXED_ARMS:
             TARGETS[arm] = np.atleast_1d(wants[arm]).flatten().copy()
-            if arm == "NOVT":
-                PRICES[arm] = (so.flatten(), sc.flatten())
-            else:
-                PRICES[arm] = (so.flatten(), sc.flatten())
-        PRICES["C0"] = (qo.flatten(), qc.flatten())
+            PRICES[arm] = (so.flatten(), sc.flatten())
 
         i0 = FIXED_I0
         i1 = len(fixed_dates) - 1
@@ -1573,11 +1488,7 @@ def after_tax_bootstrap_variant(n_paths=1000, capital=100000.0, seed=20261011,
 
 
 def run_strategy_flat(arm, capital, i0, i1, dates, opens_arr, closes_arr, wants_arr, mkt):
-    # Flat tax variant using FlatAccount, analogous to run_strategy but minimal: resize on production band
-    # We'll leverage run_strategy? Instead use BaseAccount flat by calling a simplified engine.
-    # Simpler: delegate to run_strategy with a custom regime? Need flat assess. Use monkeypatch account class.
-    # We'll replicate essential loop from run_strategy but with flat account and prod resize.
-    import types
+    """B2 engine: the run_strategy session loop with a flat-tax account instead of the tariff regime."""
     days_all = dates
     opens_arr = np.asarray(opens_arr, float).flatten()
     closes_arr = np.asarray(closes_arr, float).flatten()
@@ -1591,8 +1502,6 @@ def run_strategy_flat(arm, capital, i0, i1, dates, opens_arr, closes_arr, wants_
     trades = 0
     tax_sales = 0
     prev_tgt = None
-    prev_quarter = None
-    # instalments: pay tax at year boundary
     for i in range(i0, i1 + 1):
         # year boundary assess previous year
         if i > i0 and int(days_all[i][:4]) != int(days_all[i - 1][:4]):
@@ -1623,35 +1532,10 @@ def run_strategy_flat(arm, capital, i0, i1, dates, opens_arr, closes_arr, wants_
         tgt = 0.0 if (tgt!=tgt) else tgt
         resize_target = tgt
 
-        k_down = 0.5
-        if arm == "A1":
-            if prev_tgt is None:
-                trade = abs(tgt - w) > 1e-12
-            else:
-                trade = (tgt == 0) != (prev_tgt == 0)
-            if account.units == 0 and tgt > 1e-12: trade = True
-            if account.units > 1e-12 and tgt <= 0: trade = True
-        elif arm == "A2":
-            trade = False
-            resize_target = tgt
-            if tgt > w + BAND:
-                trade = True; resize_target = tgt
-            elif tgt < w - BAND:
-                trim_case = (tgt > 0) and (tgt < k_down * max(w,1e-12))
-                if prev_tgt is not None and prev_tgt > 0 and tgt == 0:
-                    trade = True; resize_target = tgt
-                elif trim_case:
-                    trade = True; resize_target = tgt
-            if account.units == 0 and tgt > 1e-12:
-                trade = True; resize_target = tgt
-            if account.units > 1e-12 and tgt <= 0:
-                trade = True; resize_target = 0.0
-            # if no trade, keep resize_target maybe tgt but unused
-        else:
-            trade = abs(tgt - w) > BAND
-            if account.units == 0 and tgt > 1e-12: trade = True
-            if account.units > 1e-12 and tgt <= 0: trade = True
-        resize_target = tgt if not trade else resize_target
+        trade = abs(tgt - w) > BAND
+        if account.units == 0 and tgt > 1e-12: trade = True
+        if account.units > 1e-12 and tgt <= 0: trade = True
+        resize_target = tgt
 
         if trade:
             drift = abs(resize_target - w)
@@ -1679,13 +1563,7 @@ def run_strategy_flat(arm, capital, i0, i1, dates, opens_arr, closes_arr, wants_
     mtm = nav[-1]
     fx0 = mkt.fx[i0-1]
     fx1v = mkt.fx[i1]
-    yrs = trv2.calendar_years(days_all[i0-1] if isinstance(i0,int) else days_all[i0], days_all[i1])
-    try:
-        yrs = trv2.calendar_years(days_all[i0-1], days_all[i1]) if False else trv2.calendar_years(days_all[0], days_all[-1])*0 + ( (i1-i0+1)/252.0 )
-    except Exception:
-        yrs = (i1-i0+1)/252.0
-    # use calendar years properly: days span
-    yrs = trv2.calendar_years(days_all[i0], days_all[i1]) if False else trv2.calendar_years(days_all[i0-1] if i0>0 else days_all[i0], days_all[i1])
+    yrs = trv2.calendar_years(days_all[i0 - 1], days_all[i1])
     tax_total_try = sum(account.tax_paid_try.values()) + liq_tax
     tax_total_usd = account.tax_paid_usd + (liq_tax/fx1v if fx1v!=0 else liq_tax)
     cg = lambda v0, v1: (v1/v0)**(1.0/yrs)-1 if yrs>0 else float('nan')
@@ -1708,35 +1586,6 @@ def run_strategy_flat(arm, capital, i0, i1, dates, opens_arr, closes_arr, wants_
 
 # Flat account uses COST from module global
 COST = trv2.COST_PER_SIDE * M
-
-
-def main_run_after_tax():
-    calendars = {
-        "recent": ("2015-09-01", "2026-09-30"),
-        "early": ("2005-09-01", "2016-09-30"),
-    }
-    results = {}
-    for name, (lo, hi) in calendars.items():
-        print(f"B1 progressive {name} ...", flush=True)
-        r = after_tax_bootstrap_variant(n_paths=1000, capital=100000.0, seed=SEED, cal_lo=lo, cal_hi=hi, tax_kind="progressive")
-        results[f"B1_{name}"] = r
-        print(name, r["A2_vs_C0"]["delta_cagr_median_pp"], r["A2_vs_C0"]["share_delta_gt_0"])
-    # B2 flat tax on recent calendar (calendar only, tax flat)
-    print("B2 flat ...", flush=True)
-    r = after_tax_bootstrap_variant(n_paths=1000, capital=100000.0, seed=SEED, cal_lo="2015-09-01", cal_hi="2026-09-30", tax_kind="flat")
-    results["B2_flat"] = r
-    print("B2", r["A2_vs_C0"]["delta_cagr_median_pp"], r["A2_vs_C0"]["share_delta_gt_0"])
-
-    out = {"status": "complete", "results": results}
-    OUT.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n")
-    # summary
-    L = ["tax_asym_v2 after-tax bootstrap"]
-    for k, v in results.items():
-        a = v["A2_vs_C0"]; b = v["A1_vs_C0"]
-        L.append(f"{k}: A2 median dCAGR {a['delta_cagr_median_pp']:+.3f}pp share>0 {a['share_delta_gt_0']:.3f} "
-                f"p05 {a['p05_delta_cagr_pp']:+.3f}; A1 median {b['delta_cagr_median_pp']:+.3f}pp share {b['share_delta_gt_0']:.3f}")
-    SUMMARY.write_text("\n".join(L) + "\n")
-    print("\n".join(L))
 
 
 if __name__ == "__main__":

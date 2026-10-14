@@ -27,3 +27,29 @@ must also pass G1-G3.
 
 ## Selection
 A target != 0.35 is candidate only if all above. Plateau neighbour passes G1-G3.
+
+## Amendments (before any non-control arm was simulated on real data)
+The pre-registration above is unchanged: same arms, same gates, same selection
+rule. Three implementation defects found while resuming the interrupted run
+(after the pre-registration commit, before the first real `--run`) were fixed:
+
+1. Arm lookup. The merged screen keyed the per-arm target arrays by
+   `ARM_PARAMS[arm]["kind"]` (= "vol20" for every arm), a KeyError leftover from
+   the ewma_band_v1 harness. Fixed to index by arm name. No effect on the
+   pre-registered arms or on C0.
+
+2. Undefined name. `main()` still referenced a removed `etf_results` key and the
+   vestigial ETF loader helpers from ewma_band_v1; the key and the dead helpers
+   were deleted (the ETF cross-check is not part of this pre-registration).
+
+3. After-tax bootstrap control instrument (substantive). In tax_asym_v2's
+   bootstrap the control arm C0 was run on the *unlevered* QQQ total-return
+   series (`qo/qc`) while every other arm ran on the 2x synthetic QLD* (`so/sc`),
+   so any leveraged candidate beats C0 by construction (its C0 median max-DD is
+   ~35%, not ~50%). Here C0 runs on the same synthetic QLD* (base financing) as
+   the candidate arms, so the after-tax delta isolates the vol target. This
+   changes the after-tax deltas versus tax_asym_v2 and is why the B1-recent/B2
+   numbers are not comparable with that study's.
+
+Also removed: the unused `sha256`, `_run_one_path_market`, `main_run_after_tax`,
+and the tax_asym A2* arm registrations / non-production trade modes.

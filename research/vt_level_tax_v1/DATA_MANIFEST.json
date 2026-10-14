@@ -43,6 +43,20 @@
       "source": "reused from existing research data",
       "source_path": "data/historical/after_tax_tr_v1_yiufe.csv"
     },
+    "data/historical/leverage_frontier_v1_daily.csv": {
+      "bytes": 1203337,
+      "sha256": "a6e276fb87cfae706031c756c823c7549a34f042a88c8b2c4c10a9eaa15c5ceb",
+      "source": "reused from existing research data",
+      "source_path": "data/historical/leverage_frontier_v1_daily.csv",
+      "used_by": "leverage_frontier_v1.load_all (TQQQ/IEF/GLD/GC=F bars), imported for vt_weight and synthetic_L"
+    },
+    "data/historical/leverage_frontier_v1_dgs10.csv": {
+      "bytes": 268887,
+      "sha256": "68fa5881666126c7b9a4fb1b2affd93d61e543d25278a2db2ac246e4d2dc0345",
+      "source": "reused from existing research data",
+      "source_path": "data/historical/leverage_frontier_v1_dgs10.csv",
+      "used_by": "leverage_frontier_v1.load_all (DGS10, report-only)"
+    },
     "research/ewma_band_v1/E2_INTEGRATION_DEVIATION.json": {
       "bytes": 16936,
       "sha256": "7571ed991a08945533b176e5aa4938e5f369cc5a503f142e475821e2e61d99a4",

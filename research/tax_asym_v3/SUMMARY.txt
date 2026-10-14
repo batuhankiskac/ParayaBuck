@@ -1,0 +1,19 @@
+tax_asym_v3 — corrected-C0 rerun of tax_asym_v2's after-tax bootstrap
+verdict: FAIL (plateau n/a)
+arm      | B1_recent med/sh | B1_early med/sh | B2_flat med/sh
+A2       | +0.096/0.519 | -0.245/0.448 | -0.121/0.481  -> FAIL
+A2_40    | -0.261/0.465 | -0.720/0.385 | -0.514/0.420  -> FAIL
+A2_60    | +0.182/0.542 | -0.165/0.456 | -0.070/0.477  -> FAIL
+B1_recent: C0 median CAGR 3.079% median max DD 58.08%
+B1_early: C0 median CAGR 3.120% median max DD 57.84%
+B2_flat: C0 median CAGR 3.520% median max DD 56.85%
+pretax: C0 median CAGR 7.157% median max DD 53.54%
+B1_recent A2: median ΔmaxDD +4.41 pp [p05 -0.51, p95 +10.59]; ΔCAGR p05 -2.718 p95 +4.520
+pretax (same paths) A2: median ΔCAGR -0.341 pp share>0 0.437
+B1_recent A2_40: median ΔmaxDD +5.89 pp [p05 +0.32, p95 +12.63]; ΔCAGR p05 -3.527 p95 +5.147
+pretax (same paths) A2_40: median ΔCAGR -0.866 pp share>0 0.378
+B1_recent A2_60: median ΔmaxDD +3.17 pp [p05 -0.79, p95 +7.75]; ΔCAGR p05 -2.004 p95 +3.097
+pretax (same paths) A2_60: median ΔCAGR -0.253 pp share>0 0.429
+verification B1_recent: v2 replica C0 arrays bit-identical True/True (A2 Δ +1.045 vs published +1.045 pp); C0 median CAGR 2.278% (unlevered) vs 3.079% (2x); median max DD 34.93% vs 58.08%
+verification B1_early: v2 replica C0 arrays bit-identical True/True (A2 Δ +0.391 vs published +0.391 pp); C0 median CAGR 2.449% (unlevered) vs 3.120% (2x); median max DD 34.49% vs 57.84%
+verification B2_flat: v2 replica C0 arrays bit-identical True/True (A2 Δ +1.856 vs published +1.856 pp); C0 median CAGR 1.662% (unlevered) vs 3.520% (2x); median max DD 35.43% vs 56.85%

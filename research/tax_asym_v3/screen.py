@@ -17,11 +17,12 @@ Modes
              checks simulate_band at 0.5 pp equals trend_robustness_v2.simulate_multi
              bit for bit, and checks that the after-tax engine's pre-tax C0 NAV equals
              the pre-tax engine's C0 NAV (same sessions, same trades).
-  --verify   C0/A2 only, B1-recent: re-runs the bootstrap with `tax_asym_v2`'s C0
-             pricing (unlevered QQQ) and asserts the per-path C0 arrays equal
-             tax_asym_v2/RESULTS.json exactly (replication), then re-runs it with the
-             corrected 2x C0 and reports the C0 median CAGR / max DD of both. This is
-             the numerical verification of the Amendment 3 claim.
+  --verify   C0/A2 only: for B1-recent, B1-early and B2-flat, re-runs the bootstrap
+             with `tax_asym_v2`'s C0 pricing (unlevered QQQ) and asserts the
+             per-path C0 arrays equal tax_asym_v2/RESULTS.json exactly
+             (replication), then reports the C0 median CAGR / max DD and A2's Δ
+             under both pricings. This is the numerical verification of the
+             Amendment 3 claim.
   --smoke    deterministic random-walk prices, 3 paths, no real market data, no output
              files: exercises the whole run path (signals, both tax engines, gates).
   --run      re-runs --harness, stops if it fails, then runs the four pre-registered
@@ -861,46 +862,58 @@ def after_tax_gate(results, arm):
 
 
 # ----------------------------------------------------------------------------- verification
-def verify_c0_unlevered(n_paths=BOOT_PATHS):
-    """Amendment 3 check: (1) re-run B1-recent with tax_asym_v2's C0 pricing (unlevered QQQ) and
-    compare the per-path C0 arrays with tax_asym_v2/RESULTS.json; (2) re-run it with the corrected
-    2x C0 and report C0's median CAGR / max DD under both pricings."""
+VARIANTS = (("B1_recent", "progressive", CAL_RECENT), ("B1_early", "progressive", CAL_EARLY),
+            ("B2_flat", "flat", CAL_RECENT), ("pretax", "pretax", CAL_RECENT))
+
+
+def run_variants(arms=ARMS):
+    results = {}
+    for name, kind, cal in VARIANTS:
+        print(f"{name} ...", flush=True)
+        results[name] = after_tax_bootstrap_variant(n_paths=BOOT_PATHS, tax_kind=kind,
+                                                    cal_lo=cal[0], cal_hi=cal[1], arms=arms)
+    return results
+
+
+def verify_c0_unlevered(corrected, arms=("C0", "A2")):
+    """Amendment 3 check. For every gated variant, re-run the bootstrap with tax_asym_v2's C0
+    pricing (`c0_on_1x=True`, C0 trading unlevered QQQ) and compare the per-path C0 CAGR and
+    max-DD arrays plus the A2 summary with tax_asym_v2/RESULTS.json; `corrected` holds this
+    study's own (2x C0) variant results, whose C0 level and A2 deltas are reported alongside."""
     v2 = json.loads(V2_RESULTS.read_text())["results"]
-    replica = after_tax_bootstrap_variant(n_paths=n_paths, tax_kind="progressive",
-                                          cal_lo=CAL_RECENT[0], cal_hi=CAL_RECENT[1],
-                                          arms=("C0", "A2"), c0_on_1x=True)
-    exact = {}
-    for kind in ("cagr", "maxdd"):
-        a = np.array(replica["C0"][kind], dtype=float)
-        b = np.array(v2["B1_recent"]["C0"][kind], dtype=float)
-        exact[f"C0_{kind}_max_abs_diff"] = float(np.max(np.abs(a - b))) if a.shape == b.shape else None
-        exact[f"C0_{kind}_bit_identical"] = bool(a.shape == b.shape and np.array_equal(a, b))
-    rep_a2 = replica["A2_vs_C0"]
-    pub_a2 = v2["B1_recent"]["A2_vs_C0"]
-    a2_match = {
-        "replica_median_pp": rep_a2["delta_cagr_median_pp"],
-        "v2_published_median_pp": pub_a2["delta_cagr_median_pp"],
-        "replica_share": rep_a2["share_delta_gt_0"],
-        "v2_published_share": pub_a2["share_delta_gt_0"],
-        "median_abs_diff_pp": abs(rep_a2["delta_cagr_median_pp"] - pub_a2["delta_cagr_median_pp"]),
-    }
-    corrected = after_tax_bootstrap_variant(n_paths=n_paths, tax_kind="progressive",
-                                           cal_lo=CAL_RECENT[0], cal_hi=CAL_RECENT[1],
-                                           arms=("C0", "A2"), c0_on_1x=False)
-    unl = np.array(replica["C0"]["maxdd"], dtype=float)
-    cor = np.array(corrected["C0"]["maxdd"], dtype=float)
-    return {
-        "replica_bit_identical": exact,
-        "replica_A2_vs_C0": a2_match,
-        "C0_unlevered": {"median_cagr": float(np.median(replica["C0"]["cagr"])),
-                         "median_max_dd": float(np.median(unl))},
-        "C0_corrected_2x": {"median_cagr": float(np.median(corrected["C0"]["cagr"])),
-                            "median_max_dd": float(np.median(cor))},
-        "A2_vs_C0_unlevered_median_pp": rep_a2["delta_cagr_median_pp"],
-        "A2_vs_C0_corrected_median_pp": corrected["A2_vs_C0"]["delta_cagr_median_pp"],
-        "A2_vs_C0_corrected_share": corrected["A2_vs_C0"]["share_delta_gt_0"],
-        "A2_vs_C0_corrected_median_dd_pp": corrected["A2_vs_C0"]["delta_maxdd_median_pp"],
-    }
+    out = {}
+    for name, kind, cal in VARIANTS:
+        if name == "pretax":
+            continue
+        replica = after_tax_bootstrap_variant(n_paths=BOOT_PATHS, tax_kind=kind,
+                                              cal_lo=cal[0], cal_hi=cal[1],
+                                              arms=arms, c0_on_1x=True)
+        ident = {}
+        for stat in ("cagr", "maxdd"):
+            a = np.array(replica["C0"][stat], dtype=float)
+            b = np.array(v2[name]["C0"][stat], dtype=float)
+            ident[f"C0_{stat}_max_abs_diff"] = float(np.max(np.abs(a - b))) if a.shape == b.shape else None
+            ident[f"C0_{stat}_bit_identical"] = bool(a.shape == b.shape and np.array_equal(a, b))
+        rep, pub = replica["A2_vs_C0"], v2[name]["A2_vs_C0"]
+        cor = corrected[name]
+        out[name] = {
+            "replica_bit_identical": ident,
+            "replica_A2_vs_C0": {"replica_median_pp": rep["delta_cagr_median_pp"],
+                                 "v2_published_median_pp": pub["delta_cagr_median_pp"],
+                                 "replica_share": rep["share_delta_gt_0"],
+                                 "v2_published_share": pub["share_delta_gt_0"],
+                                 "median_abs_diff_pp": abs(rep["delta_cagr_median_pp"] - pub["delta_cagr_median_pp"])},
+            "C0_unlevered": {"median_cagr": float(np.median(replica["C0"]["cagr"])),
+                             "median_max_dd": float(np.median(replica["C0"]["maxdd"]))},
+            "C0_corrected_2x": {"median_cagr": float(np.median(cor["C0"]["cagr"])),
+                                "median_max_dd": float(np.median(cor["C0"]["maxdd"]))},
+            "A2_vs_C0_unlevered_median_pp": rep["delta_cagr_median_pp"],
+            "A2_vs_C0_unlevered_share": rep["share_delta_gt_0"],
+            "A2_vs_C0_corrected_median_pp": cor["A2_vs_C0"]["delta_cagr_median_pp"],
+            "A2_vs_C0_corrected_share": cor["A2_vs_C0"]["share_delta_gt_0"],
+            "A2_vs_C0_corrected_median_dd_pp": cor["A2_vs_C0"]["delta_maxdd_median_pp"],
+        }
+    return out
 
 
 # ----------------------------------------------------------------------------- smoke (synthetic prices)
@@ -938,17 +951,9 @@ def main_run():
     if not hc["pass"]:
         raise SystemExit("harness failed")
 
-    verification = verify_c0_unlevered(BOOT_PATHS)
+    results = run_variants(ARMS)
+    verification = verify_c0_unlevered(results)
     print("verification done")
-
-    results = {}
-    for name, kind, cal in (("B1_recent", "progressive", CAL_RECENT),
-                            ("B1_early", "progressive", CAL_EARLY),
-                            ("B2_flat", "flat", CAL_RECENT),
-                            ("pretax", "pretax", CAL_RECENT)):
-        print(f"{name} ...", flush=True)
-        results[name] = after_tax_bootstrap_variant(n_paths=BOOT_PATHS, tax_kind=kind,
-                                                    cal_lo=cal[0], cal_hi=cal[1])
 
     gates = {arm: after_tax_gate({k: results[k] for k in GATE_WINDOWS}, arm) for arm in CANDIDATES}
     a2_pass = gates["A2"]["pass"]
@@ -995,13 +1000,15 @@ def main_run():
         p = results["pretax"][f"{arm}_vs_C0"]
         L.append(f"pretax (same paths) {arm}: median ΔCAGR {p['delta_cagr_median_pp']:+.3f} pp "
                  f"share>0 {p['share_delta_gt_0']:.3f}")
-    v = verification
-    L.append(f"verification: v2 replica C0 arrays bit-identical "
-             f"{v['replica_bit_identical']['C0_cagr_bit_identical']}/"
-             f"{v['replica_bit_identical']['C0_maxdd_bit_identical']}; "
-             f"C0 median CAGR {v['C0_unlevered']['median_cagr']*100:.3f}% (unlevered) vs "
-             f"{v['C0_corrected_2x']['median_cagr']*100:.3f}% (2x); median max DD "
-             f"{v['C0_unlevered']['median_max_dd']*100:.2f}% vs {v['C0_corrected_2x']['median_max_dd']*100:.2f}%")
+    for name, v in verification.items():
+        L.append(f"verification {name}: v2 replica C0 arrays bit-identical "
+                 f"{v['replica_bit_identical']['C0_cagr_bit_identical']}/"
+                 f"{v['replica_bit_identical']['C0_maxdd_bit_identical']} "
+                 f"(A2 Δ {v['replica_A2_vs_C0']['replica_median_pp']:+.3f} vs published "
+                 f"{v['replica_A2_vs_C0']['v2_published_median_pp']:+.3f} pp); "
+                 f"C0 median CAGR {v['C0_unlevered']['median_cagr']*100:.3f}% (unlevered) vs "
+                 f"{v['C0_corrected_2x']['median_cagr']*100:.3f}% (2x); median max DD "
+                 f"{v['C0_unlevered']['median_max_dd']*100:.2f}% vs {v['C0_corrected_2x']['median_max_dd']*100:.2f}%")
     SUMMARY.write_text("\n".join(L) + "\n")
     print("\n".join(L))
 
@@ -1015,7 +1022,8 @@ if __name__ == "__main__":
         print(json.dumps({k: v for k, v in h.items() if k != "deviation_checks"}, indent=1))
         sys.exit(0 if h["pass"] else 1)
     elif mode == "--verify":
-        print(json.dumps(verify_c0_unlevered(BOOT_PATHS), indent=1))
+        cor = run_variants(("C0", "A2"))
+        print(json.dumps(verify_c0_unlevered(cor), indent=1))
     elif mode == "--smoke":
         print(json.dumps(smoke(), indent=1))
     elif mode == "--run":

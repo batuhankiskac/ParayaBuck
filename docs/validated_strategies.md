@@ -9,11 +9,13 @@ file.
 > change, however small, is a new unvalidated strategy that needs separate
 > validation and approval before it runs on PAPER.
 
-## VT35 with the E2 trend vote — `equity_leveraged_trend_v1` 1.1.0 (Leveraged Index Trend v1)
+## VT35 with the E2 trend vote and the R2 early re-entry path — `equity_leveraged_trend_v1` 1.2.0 (Leveraged Index Trend v1)
 
 Module `src/parayabuck/portfolio/equity_leveraged_trend.py`. PAPER identity
 since 2026-09-25; E2 trend vote since 2026-10-12
-(`docs/research/e2_integration_v1.md`).
+(`docs/research/e2_integration_v1.md`); R2 early re-entry since 2026-10-14
+(`docs/research/fast_reentry_integration_v1.md`, research
+`docs/research/fast_reentry_v1.md`/`fast_reentry_v2.md`).
 
 Hold QLD (2x Nasdaq-100) while QQQ is in trend, at weight `min(1, 0.35 /
 annualized 20-session realized QLD volatility)` of the equity allocation; the
@@ -24,11 +26,20 @@ completed split-adjusted daily closes:
 - **TSM:** 252-session price return > 0;
 - **DON:** close > midpoint of the max/min of the last 126 closes.
 
-The target is all cash out of trend, with insufficient history for any vote
-(253 sessions are needed), or when QLD is unavailable. Decided every session
-on completed bars after the NYSE close (13:00 ET on early-close days); orders
-fill at the next open. `trend_rule: sma` without `tsm_bars`/`donchian_bars`
-restores plain VT35 (strategy version 1.0.0) exactly.
+While the vote is OFF, the strategy may hold `early_reentry_weight` of that
+weight in QLD when QQQ's completed close is above its 50-session SMA, its
+20-session annualized vol is below that series' 252-session median and the
+close is above the close 20 sessions earlier; the path ends below the 50-session
+SMA, and the vote overrides it whenever it turns on.
+
+The target is all cash out of trend (and between early episodes), with
+insufficient history for any vote (253 sessions are needed for the vote, 397
+when the early path is configured), or when QLD is unavailable. Decided every
+session on completed bars after the NYSE close (13:00 ET on early-close days);
+orders fill at the next open. `trend_rule: sma` without
+`tsm_bars`/`donchian_bars`/`early_reentry_weight` restores plain VT35 (strategy
+version 1.0.0) exactly, and dropping `early_reentry_weight` alone restores E2
+(strategy version 1.1.0, 253-session minimum history).
 
 | Parameter | Value |
 |---|---|
@@ -40,6 +51,7 @@ restores plain VT35 (strategy version 1.0.0) exactly.
 | `trend_rule` | `majority_sma_tsm_don` (`sma` = plain VT35) |
 | `tsm_bars` | 252 |
 | `donchian_bars` | 126 |
+| `early_reentry_weight` | 0.5 (fraction of the production weight while the vote is off) |
 | `rebalance_frequency` | `hours:24` (daily; the only accepted value) |
 | `strategy.equity.maximum_allocation` | 0.98 |
 | `universe.equity.symbols` | `[SPY, QQQ, QLD]` (SPY = benchmark) |
@@ -73,6 +85,7 @@ moves more than tighter latches would allow.
 | 2026-09-29 | Allocation and per-asset cap 0.93 → 0.98; crypto sleeve disabled | `docs/research/paper_config_v2.md` (29.35% CAGR, 27.7% max DD) |
 | 2026-09-30 | Crypto code removed; VT35 results unchanged | `docs/research/crypto_removal_v1.md` |
 | 2026-10-12 | E2 2-of-3 trend vote (owner-approved exception to the failed signal_ensemble_v1 bootstrap gate) | `docs/research/e2_integration_v1.md` (Stage B 2017–2026: 31.05% CAGR, 32.2% max DD vs VT35 29.35% / 27.7%) |
+| 2026-10-14 | R2 early re-entry path at half weight while the vote is off (owner-directed; research pass with the confirmation study's plateau gate failed, no Stage B replay yet) | `docs/research/fast_reentry_integration_v1.md` (main window 2000–2026 m = 2: 15.48% CAGR / 46.8% max DD vs E2 14.67% / 49.6%) |
 
 Earlier equity identities and the crypto strategies are removed and not
 selectable; they are recoverable only from git history (see

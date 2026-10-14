@@ -1,16 +1,20 @@
 # Research index
 
-Current production identity: **VT35 with the E2 trend vote**
-(`equity_leveraged_trend_v1` 1.1.0, QLD while at least two of QQQ > 200-session
-SMA, QQQ 252-session return > 0 and QQQ > 126-session channel midpoint hold,
-35% vol target), PAPER only. Supporting code, data and
+Current production identity: **VT35 with the E2 trend vote and the R2 early
+re-entry path** (`equity_leveraged_trend_v1` 1.2.0: hold QLD at
+`min(1, 0.35 / 20-session vol)` while at least two of QQQ > 200-session SMA,
+QQQ 252-session return > 0 and QQQ > 126-session channel midpoint hold;
+half that weight while the vote is off but QQQ > SMA50, its 20-session
+annualized vol is below its 252-session median and QQQ > its close 20 sessions
+back), PAPER only. Supporting code, data and
 results for each doc live in `research/<name>/` unless noted (from 2026-10-12 on,
 in the archive tag named in the row).
 
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|
-| [`fast_reentry_v2.md`](fast_reentry_v2.md) | 2026-10-14 | Confirmation of R2: 21 independent ETFs pass (median +0.30 pp, 15/21 positive, DD within +3 pp on 17/21, pooled bootstrap +0.23 pp); all six one-parameter neighbours beat C0 on CAGR (+0.36 to +1.08 pp); after tax (corrected engine, $100k) +0.63 / +0.21 / +0.20 pp on 2000 / 2010 / 2017 windows; formally FAILS the plateau gate because the SMA40 neighbour's max DD is C0 + 1.77 pp (limit +1 pp). Strongest candidate of the wave; not integrated, no Stage B yet. Evidence: tag `archive/research/fast-reentry-v2-2026-10`. | current evidence (candidate, owner decision) |
-| [`fast_reentry_v1.md`](fast_reentry_v1.md) | 2026-10-14 | Early re-entry while E2 is off: R2 (half production weight when QQQ > SMA50, vol20 < its 252-session median and 20-session return > 0; exit below SMA50) passes G1–G9: 15.48% vs 14.67% CAGR, DD 46.8% vs 49.6%, bootstrap +0.68 pp, OOS median +0.07 pp, same turnover; 95% of the gain from three episodes (2001-10, 2002-11, 2023-01); full-weight R1 fails OOS DD. Evidence: tag `archive/research/fast-reentry-v1-2026-10`. | current evidence |
+| [`fast_reentry_integration_v1.md`](fast_reentry_integration_v1.md) | 2026-10-14 | R2 shipped as `equity_leveraged_trend_v1` 1.2.0 (`early_reentry_weight: 0.5`): half the production weight while the E2 vote is off and QQQ > SMA50 with vol20 below its 252-session median and 20-session momentum > 0, exited below SMA50 or on E2's vote; the 126-session replay reproduces the full-history state (0 mismatches for 63–378-session windows on QQQ 2000–2026, 164 active sessions) and minimum history becomes 397 sessions. Shipped on the owner's instruction ahead of a Stage B replay; v2's pre-registered plateau gate failed (SMA-40 neighbour max DD C0 + 1.77 pp) and the three largest of 32 episodes are 95.3% of the measured gain. | current evidence |
+| [`fast_reentry_v2.md`](fast_reentry_v2.md) | 2026-10-14 | Confirmation of R2: 21 independent ETFs pass (median +0.30 pp, 15/21 positive, DD within +3 pp on 17/21, pooled bootstrap +0.23 pp); all six one-parameter neighbours beat C0 on CAGR (+0.36 to +1.08 pp); after tax (corrected engine, $100k) +0.63 / +0.21 / +0.20 pp on 2000 / 2010 / 2017 windows; formally FAILS the plateau gate because the SMA40 neighbour's max DD is C0 + 1.77 pp (limit +1 pp). Strongest candidate of the wave; R2 integrated on the owner's decision (no Stage B; see `fast_reentry_integration_v1`). Evidence: tag `archive/research/fast-reentry-v2-2026-10`. | current evidence (candidate; R2 shipped, see `fast_reentry_integration_v1`) |
+| [`fast_reentry_v1.md`](fast_reentry_v1.md) | 2026-10-14 | Early re-entry while E2 is off: R2 (half production weight when QQQ > SMA50, vol20 < its 252-session median and 20-session return > 0; exit below SMA50) passes G1–G9: 15.48% vs 14.67% CAGR, DD 46.8% vs 49.6%, bootstrap +0.68 pp, OOS median +0.07 pp, same turnover; 95% of the gain from three episodes (2001-10, 2002-11, 2023-01); full-weight R1 fails OOS DD. Evidence: tag `archive/research/fast-reentry-v1-2026-10`. | current evidence (R2 shipped, see `fast_reentry_integration_v1`) |
 | [`tax_asym_v3.md`](tax_asym_v3.md) | 2026-10-14 | Confirms `tax_asym_v2`'s bootstrap priced C0 on unlevered QQQ; rerun with a 2x C0: A2 and its 40/60% neighbours fail every after-tax variant (median Δ −0.72 to +0.18 pp, wins 38–54% of paths) and the pre-tax bootstrap; A2 closed. Evidence: tag `archive/research/tax-asym-v3-2026-10`. | current evidence |
 | [`vt_level_tax_v1.md`](vt_level_tax_v1.md) | 2026-10-14 | Vol target 0.30–0.50 and none on E2, pre- and after tax: higher targets win on real history after tax (0.40: +0.61 / +0.96 / +1.72 pp) but fail DD, the pre-tax bootstrap, the tail gate and the clean after-tax bootstrap (all medians negative); 0.35 stays. Found the unlevered-C0 bug in `tax_asym_v2`. Evidence: tag `archive/research/vt-level-tax-v1-2026-10`. | current evidence |
 | [`tax_asym_v2.md`](tax_asym_v2.md) | 2026-10-14 | Clean after-tax bootstrap of `tax_frontier_v1`'s A2 (real TRY calendar 2016–26 and 2006–16, plus a flat 20% tax; market returns resampled): median after-tax Δ +1.05 / +0.39 / +1.86 pp but A2 wins only 53–62% of paths (gate 65%) with much deeper drawdowns; A2 closed. Evidence: tag `archive/research/tax-asym-v2-2026-10`. | invalid: C0 was priced on unlevered QQQ (see `tax_asym_v3`) |

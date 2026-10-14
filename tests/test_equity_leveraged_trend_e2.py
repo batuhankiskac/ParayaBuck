@@ -199,7 +199,7 @@ def test_exactly_minimum_history_bars_decides() -> None:
     assert target.metadata["trend_state"] == "uptrend"
 
 
-def test_shipped_windows_need_253_sessions() -> None:
+def test_the_vote_without_the_early_path_needs_253_sessions() -> None:
     strategy = portfolio_strategy_from("equity_leveraged_trend_v1", {"trend_rule": "majority_sma_tsm_don"})
     assert (strategy.sma_bars, strategy.tsm_bars, strategy.donchian_bars) == (200, 252, 126)
     assert strategy.minimum_history_bars == 253
@@ -309,6 +309,12 @@ def test_sma_rule_decides_exactly_like_vt35_on_a_long_series(explicit: bool) -> 
         {"trend_rule": "majority_sma_tsm_don", "donchian_bars": 1},
         {"trend_rule": "majority_sma_tsm_don", "donchian_bars": 1001},
         {"trend_rule": "majority_sma_tsm_don", "donchian_bars": "126"},
+        {"trend_rule": "majority_sma_tsm_don", "early_reentry_weight": 0.0},
+        {"trend_rule": "majority_sma_tsm_don", "early_reentry_weight": 1.5},
+        {"trend_rule": "majority_sma_tsm_don", "early_reentry_weight": "0.5"},
+        {"trend_rule": "majority_sma_tsm_don", "early_reentry_weight": True},
+        {"trend_rule": "majority_sma_tsm_don", "early_reentry_weight": None},
+        {"trend_rule": "sma", "early_reentry_weight": 0.5},
     ],
 )
 def test_invalid_vote_parameters_are_rejected(parameters: dict[str, object]) -> None:
@@ -332,8 +338,12 @@ def test_shipped_config_selects_the_vote() -> None:
     strategy = portfolio_strategy_from(selection.name, selection.parameters)
     assert strategy.trend_rule == "majority_sma_tsm_don"
     assert (strategy.tsm_bars, strategy.donchian_bars) == (252, 126)
-    assert strategy.minimum_history_bars == 253
-    assert strategy.version == "1.1.0"
+    # 2026-10-14 (fast_reentry_integration_v1): the shipped config also selects
+    # the R2 early re-entry path, which needs 397 sessions (its 126-session
+    # replay starts on a session whose 252-session vol median is defined).
+    assert strategy.early_reentry_weight == 0.5
+    assert strategy.minimum_history_bars == 397
+    assert strategy.version == "1.2.0"
 
 
 def test_config_with_the_sma_rule_restores_vt35(tmp_path: Path) -> None:
@@ -351,11 +361,16 @@ def test_config_without_parameters_keeps_the_shipped_vote(tmp_path: Path) -> Non
     selection = load_config(str(_write_config(tmp_path, None))).strategy.equity
     strategy = portfolio_strategy_from(selection.name, selection.parameters)
     assert strategy.trend_rule == "majority_sma_tsm_don"
-    assert strategy.minimum_history_bars == 253
+    assert strategy.early_reentry_weight == 0.5
+    assert strategy.minimum_history_bars == 397
+    assert strategy.version == "1.2.0"
 
 
 def test_config_rejects_a_majority_key_under_the_sma_rule(tmp_path: Path) -> None:
     path = _write_config(tmp_path, {"trend_rule": "sma", "tsm_bars": 252})
+    with pytest.raises(ValueError, match="only apply to trend_rule"):
+        load_config(str(path))
+    path = _write_config(tmp_path, {"trend_rule": "sma", "early_reentry_weight": 0.5})
     with pytest.raises(ValueError, match="only apply to trend_rule"):
         load_config(str(path))
 

@@ -78,7 +78,9 @@ def _default_equity_strategy() -> MarketStrategyConfig:
         maximum_allocation=0.98,
         # ``tsm_bars``/``donchian_bars`` are left to the strategy class
         # (252/126) so a YAML block selecting ``trend_rule: sma`` (VT35) does
-        # not inherit majority-only keys it would reject.
+        # not inherit majority-only keys it would reject; that rule-specific
+        # inheritance is dropped by ``_inheritable_default_parameters`` for the
+        # keys the shipped identity must mirror (``early_reentry_weight``).
         parameters={
             "signal_symbol": "QQQ",
             "hold_symbol": "QLD",
@@ -86,6 +88,8 @@ def _default_equity_strategy() -> MarketStrategyConfig:
             "vol_target": 0.35,
             "vol_window": 20,
             "trend_rule": "majority_sma_tsm_don",
+            # 2026-10-14 (R2, docs/research/fast_reentry_integration_v1.md).
+            "early_reentry_weight": 0.5,
         },
     )
 
@@ -658,6 +662,24 @@ class Config:
         return self.universe.equity.symbols if self.universe.equity.enabled else ()
 
 
+def _inheritable_default_parameters(defaults: MarketStrategyConfig, parameters: dict[str, object]) -> dict[str, object]:
+    """The packaged defaults an explicit YAML block may inherit.
+
+    A block that switches ``equity_leveraged_trend_v1`` off its majority rule
+    must not inherit that rule's packaged parameters: ``trend_rule: sma``
+    (VT35) rejects them. Only packaged values are dropped — a key the block
+    itself sets is still the strategy's to validate.
+    """
+    inherited = dict(defaults.parameters)
+    if defaults.name == "equity_leveraged_trend_v1":
+        from parayabuck.portfolio.equity_leveraged_trend import MAJORITY_ONLY_PARAMETERS, TREND_RULE_MAJORITY
+
+        if parameters.get("trend_rule", inherited.get("trend_rule")) != TREND_RULE_MAJORITY:
+            for key in MAJORITY_ONLY_PARAMETERS:
+                inherited.pop(key, None)
+    return inherited
+
+
 def _strategy_from_raw(
     defaults: MarketStrategyConfig, enabled_default: bool, raw: dict[str, Any]
 ) -> MarketStrategyConfig:
@@ -682,7 +704,7 @@ def _strategy_from_raw(
             raise ValueError("strategy parameters must be a mapping")
         parameters = _block(raw["parameters"])
         if merged["name"] == defaults.name:
-            parameters = {**defaults.parameters, **parameters}
+            parameters = {**_inheritable_default_parameters(defaults, parameters), **parameters}
         merged["parameters"] = dict(parameters)
     return MarketStrategyConfig(**merged)
 

@@ -49,6 +49,13 @@ strategy:
   # > midpoint of its 126-session max/min; sizing unchanged. Needs 253
   # sessions of QQQ history (strategy version 1.1.0). `trend_rule: sma`
   # without tsm_bars/donchian_bars restores VT35 (version 1.0.0) exactly.
+  # 2026-10-14 (fast_reentry_integration_v1, R2): while the E2 vote is off,
+  # hold half the production weight when QQQ close > SMA50, its 20-session
+  # annualized vol < the 252-session median and close > close 20 sessions ago;
+  # exit below SMA50 or when E2 turns on. Needs 397 sessions of QQQ history
+  # (strategy version 1.2.0). See docs/research/fast_reentry_v1.md and
+  # fast_reentry_v2.md (candidate pass; plateau gate failed) plus
+  # docs/research/fast_reentry_integration_v1.md.
   equity:
     enabled: true
     name: equity_leveraged_trend_v1
@@ -67,6 +74,7 @@ strategy:
       trend_rule: majority_sma_tsm_don
       tsm_bars: 252
       donchian_bars: 126
+      early_reentry_weight: 0.5
 risk:
   # 2026-09-25 (profit_max_v1): limits widened for the single-ETF equity
   # identity. The per-asset cap admits the whole equity allocation in QLD,

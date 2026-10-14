@@ -50,6 +50,8 @@ PRODUCTION_EQUITY = {
     "trend_rule": "majority_sma_tsm_don",
     "tsm_bars": 252,
     "donchian_bars": 126,
+    # 2026-10-14 (fast_reentry_integration_v1): R2 early re-entry path.
+    "early_reentry_weight": 0.5,
 }
 
 EQUITY_SYMBOLS = ("QQQ", "QLD")
@@ -156,14 +158,15 @@ def test_equity_startup_contract_offline(tmp_path: Path) -> None:
     equity_runtime = _equity_runtime(repository, broker, config)
     assert equity_runtime.universe is not None and not equity_runtime.allow_static_universe
 
-    # Warmup: seed 300 daily bars into the strategy history.
-    equity_bars = _bars(EQUITY_SYMBOLS, 360)
+    # Warmup: seed 397+ daily bars (the R2 early path's minimum) into the
+    # strategy history.
+    equity_bars = _bars(EQUITY_SYMBOLS, 500)
     by_day = {
         timestamp: [bar for bar in equity_bars if bar.timestamp == timestamp]
         for timestamp in sorted({bar.timestamp for bar in equity_bars})
     }
     days = sorted(by_day)
-    equity_runtime.seed([bar for day in days[:300] for bar in by_day[day]])
+    equity_runtime.seed([bar for day in days[:420] for bar in by_day[day]])
     assert all(
         len(series) >= equity_runtime.strategy.minimum_history_bars for series in equity_runtime.history.values()
     )

@@ -7,7 +7,8 @@ It replaces ``benchmarks/parity.py``, whose dataset was pruned: any change to
 the strategy, risk overlay, fill or cost model that moves a VT35 trade moves
 these numbers. Update them only for an intended behaviour change.
 
-The shipped config selects the E2 trend vote (``docs/research/e2_integration_v1.md``);
+The shipped config selects the E2 trend vote plus the R2 early re-entry path
+(``docs/research/e2_integration_v1.md``, ``docs/research/fast_reentry_integration_v1.md``);
 the VT35 golden pins the ``trend_rule: sma`` rule, unchanged since before E2,
 and the E2 golden pins the shipped rule on the same fixture.
 """
@@ -23,6 +24,7 @@ import pytest
 from parayabuck.backtest.product import load_csv_bars, run_product_backtest
 from parayabuck.config import load_config
 from parayabuck.core.models import Market
+from parayabuck.portfolio.equity_leveraged_trend import MAJORITY_ONLY_PARAMETERS
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "vt35_golden_bars.csv"
@@ -32,8 +34,7 @@ def _config(tmp_path, *, vt35: bool):
     config = load_config(str(ROOT / "config" / "settings.yaml"))
     equity = config.strategy.equity
     if vt35:
-        majority_only = {"tsm_bars", "donchian_bars"}
-        parameters = {key: value for key, value in equity.parameters.items() if key not in majority_only}
+        parameters = {key: value for key, value in equity.parameters.items() if key not in MAJORITY_ONLY_PARAMETERS}
         parameters["trend_rule"] = "sma"
         equity = replace(equity, parameters=parameters)
     return replace(
@@ -75,20 +76,22 @@ def test_vt35_golden_backtest_is_unchanged(tmp_path) -> None:
 def test_e2_golden_backtest_is_unchanged(tmp_path) -> None:
     config = _config(tmp_path, vt35=False)
     assert config.strategy.equity.parameters["trend_rule"] == "majority_sma_tsm_don"
+    assert config.strategy.equity.parameters["early_reentry_weight"] == 0.5
     bars = load_csv_bars(FIXTURE, default_market=Market.EQUITY)
 
     run = run_product_backtest(config, bars, market=Market.EQUITY, persist_artifacts=False)
     result = run.result
 
-    # No --start: the 253-session warmup (252-session momentum plus its base
-    # close) is excluded, so evaluation opens on the fixture's 253rd session.
-    assert result.start_date == "2020-01-02T00:00:00-05:00"
+    # No --start: the 397-session warmup (the R2 replay's first 252-session vol
+    # median plus its 126-session window) is excluded, so evaluation opens on
+    # the fixture's 397th session.
+    assert result.start_date == "2020-07-29T00:00:00-04:00"
     assert result.end_date == "2022-12-30T00:00:00-05:00"
-    assert len(result.rebalances) == 756
-    assert len(result.fills) == 230
+    assert len(result.rebalances) == 612
+    assert len(result.fills) == 187
     assert {fill.symbol for fill in result.fills} == {"QLD"}
-    assert result.ending_equity == pytest.approx(174_227.06, abs=0.01)
-    assert result.cagr == pytest.approx(0.203702, abs=1e-6)
-    assert result.max_drawdown == pytest.approx(0.278088, abs=1e-6)
-    assert result.benchmark_return == pytest.approx(0.177179, abs=1e-6)
-    assert _fill_digest(result.fills) == "f5a2fffd6b6bdd3dcae3fd812a5f7c9286fa4d0760036cd3f3a91061389b4362"
+    assert result.ending_equity == pytest.approx(149_267.49, abs=0.01)
+    assert result.cagr == pytest.approx(0.179857, abs=1e-6)
+    assert result.max_drawdown == pytest.approx(0.253766, abs=1e-6)
+    assert result.benchmark_return == pytest.approx(0.176273, abs=1e-6)
+    assert _fill_digest(result.fills) == "973ae38617bfc0c6a0204e5a4bce7e8f0d3c6de78ca0a5d419ffef35c04edef1"

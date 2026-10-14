@@ -44,6 +44,8 @@ _PRODUCTION_EQUITY_PARAMETERS = {
     "trend_rule": "majority_sma_tsm_don",
     "tsm_bars": 252,
     "donchian_bars": 126,
+    # 2026-10-14 (fast_reentry_integration_v1): R2 early re-entry path.
+    "early_reentry_weight": 0.5,
 }
 
 

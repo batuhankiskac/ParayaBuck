@@ -5,8 +5,8 @@ overlay and one execution path shared by backtest, PAPER and LIVE.
 
 | | |
 |---|---|
-| Strategy | **VT35** with the E2 trend vote — `equity_leveraged_trend_v1` 1.1.0 (Leveraged Index Trend v1) |
-| Rule | Hold QLD (2x Nasdaq-100) while at least two of three QQQ trend votes hold on the completed daily close (close > 200-session SMA; 252-session return > 0; close > midpoint of the 126-session max/min), at weight `min(1, 0.35 / 20-session annualized QLD volatility)`; cash otherwise |
+| Strategy | **VT35** with the E2 trend vote and the R2 early re-entry path — `equity_leveraged_trend_v1` 1.2.0 (Leveraged Index Trend v1) |
+| Rule | Hold QLD (2x Nasdaq-100) while at least two of three QQQ trend votes hold on the completed daily close (close > 200-session SMA; 252-session return > 0; close > midpoint of the 126-session max/min), at weight `min(1, 0.35 / 20-session annualized QLD volatility)`; while the vote is off, hold half that weight when QQQ > SMA50, its 20-session annualized vol is under its 252-session median and QQQ > its close 20 sessions back; cash otherwise |
 | Timing | Decided on the completed session bar after the NYSE close (16:00 ET; 13:00 ET on early-close days); DAY market orders fill at the next regular open |
 | Allocation | Equity 0.98 of account equity; 0.02 cash buffer |
 | Universe | Static `[SPY, QQQ, QLD]` (QQQ signal, QLD holding, SPY benchmark) |
@@ -18,7 +18,9 @@ crypto found in the shared account is never traded and raises a `risk_incident`
 alert at startup. Earlier equity identities are recoverable from git history
 only. Evidence for VT35: `docs/research/profit_max_v1.md`,
 `docs/research/paper_config_v2.md`; for the E2 trend vote:
-`docs/research/e2_integration_v1.md`. Backtest returns do not imply live returns.
+`docs/research/e2_integration_v1.md`; for the R2 early re-entry path:
+`docs/research/fast_reentry_integration_v1.md`. Backtest returns do not imply
+live returns.
 
 > **Never run the engine on the laptop.** The laptop and the VM share one
 > Alpaca PAPER key; two runners corrupt the ledger (2026-09-25 incident). This
@@ -90,8 +92,9 @@ that New York session date. Without `--data` the run downloads
 `universe.equity.symbols` with the configured Alpaca credentials: `--start`
 plus the strategy warmup before it, or the last 5 years when `--start` is
 omitted. Without `--start` the evaluation window opens on the first session on
-which every configured symbol has the strategy's minimum history (200 sessions
-for VT35); the earlier bars are warmup and do not count toward CAGR/Sharpe.
+which every configured symbol has the strategy's minimum history (397 sessions
+for the shipped identity, 200 for VT35 without the vote); the earlier bars are
+warmup and do not count toward CAGR/Sharpe.
 `--cost-stress` repeats at 1x/2x/3x costs; regulatory fees follow the
 effective-dated schedule. Reports include CAGR, Sharpe, Sortino, max drawdown,
 Calmar, costs, exposure, SPY comparison and `rejected_notional` per decision

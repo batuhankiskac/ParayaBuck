@@ -40,8 +40,10 @@ There is no global strategy timeframe; each strategy declares its own.
 VT35's spec: `name="equity_leveraged_trend_v1"`, `display_name="Leveraged index
 trend v1"`, market equity, `supported_timeframes=("1d",)`, `hours:24`,
 `minimum_history_bars = max(sma_bars, vol_window + 1)` = 200 under
-`trend_rule: sma`; the shipped E2 vote (`trend_rule: majority_sma_tsm_don`,
-strategy version 1.1.0) adds `tsm_bars + 1` and `donchian_bars`, so 253.
+`trend_rule: sma`; the E2 vote (`trend_rule: majority_sma_tsm_don`, strategy
+version 1.1.0) adds `tsm_bars + 1` and `donchian_bars`, so 253, and the shipped
+R2 early re-entry path (`early_reentry_weight: 0.5`, strategy version 1.2.0)
+needs the replay's first 252-session vol median, so 397.
 
 Rules:
 

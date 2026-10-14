@@ -10,8 +10,10 @@ fills next to it. See docs/research/execution_model_audit_v1.md.
 
 Each decision is re-decided with the parameters it recorded (its
 ``parameters``), so sessions decided under VT35's SMA rule are not compared
-with the E2 vote after the switch (docs/research/e2_integration_v1.md);
-decisions without recorded parameters use the configured strategy.
+with the E2 vote after the switch (docs/research/e2_integration_v1.md), nor
+are pre-R2 sessions compared with the early re-entry path
+(docs/research/fast_reentry_integration_v1.md); decisions without recorded
+parameters use the configured strategy.
 
     python scripts/backtest_live_comparison.py --db data/runtime/parayabuck.sqlite3 \
         --bars path/to/daily_sip.csv [--config config/settings.yaml] [--json-output out.json]
@@ -179,6 +181,7 @@ def reference_decision(
         "realized_volatility": target.metadata["realized_volatility"],
         "trend_rule": strategy.trend_rule,
         "trend_signals": target.metadata.get("trend_signals"),
+        "early_reentry": target.metadata.get("early_reentry"),
         "strategy_weight": sum(weight.weight for weight in target.weights),
         "target_weight": reference_target_weight(overlay, target, strategy.hold_symbol, allocation),
         "fill_session": session_of(later[0].timestamp).isoformat() if later else None,
@@ -215,6 +218,7 @@ def compare(
                 "signal_sma": meta.get("signal_sma"),
                 "realized_volatility": meta.get("realized_volatility"),
                 "trend_signals": meta.get("trend_signals"),
+                "early_reentry": meta.get("early_reentry"),
                 "target_weight": live_weight,
             },
             "reference": ref,

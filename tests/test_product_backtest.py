@@ -26,6 +26,7 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
 from parayabuck.markets.timeframes import bars_to_calendar_days
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
+from parayabuck.portfolio.equity_leveraged_trend import MAJORITY_ONLY_PARAMETERS
 from parayabuck.universe import STATIC_EQUITY_UNIVERSE_VERSION
 
 
@@ -65,9 +66,11 @@ def _bars(days: int = 420) -> list[Bar]:
 
 def _config(tmp_path) -> Config:
     base = Config()
-    # Reduced-window VT35 rule: the shipped E2 vote needs 253 bars.
+    # Reduced-window VT35 rule: the shipped E2 vote needs 253 bars and the R2
+    # early path 397, and the SMA rule rejects their majority-only keys
+    # (``MAJORITY_ONLY_PARAMETERS``, ``docs/research/fast_reentry_integration_v1.md``).
     parameters = {
-        **base.strategy.equity.parameters,
+        **{key: value for key, value in base.strategy.equity.parameters.items() if key not in MAJORITY_ONLY_PARAMETERS},
         "sma_bars": 5,
         "vol_target": 0.0,
         "trend_rule": "sma",
@@ -588,9 +591,10 @@ def test_load_bars_returns_the_single_window_download_for_a_deficient_symbol(tmp
 def test_warmup_window_covers_strategy_minimum_history_for_equity(
     tmp_path,
 ) -> None:
-    # The SHIPPED DEFAULT strategy (equity_leveraged_trend_v1, E2 vote)
-    # declares minimum_history_bars=253 daily bars (252-session momentum plus
-    # its base close) — not the reduced-window fixture config used by the
+    # The SHIPPED DEFAULT strategy (equity_leveraged_trend_v1, E2 vote plus
+    # the R2 early re-entry path) declares minimum_history_bars=397 daily bars
+    # (the replay's first 252-session vol median needs 271 closes, plus its
+    # 126-session window) — not the reduced-window fixture config used by the
     # other backtest tests.
     base = Config()
     config = replace(
@@ -601,7 +605,7 @@ def test_warmup_window_covers_strategy_minimum_history_for_equity(
     # spans more calendar days than bars: at least the no-holiday Mon-Fri
     # minimum and bounded by a plausible holiday count.
     # The static equity universe adds no scanner lookback on top of it.
-    assert cli_module._warmup_window_days(config) == bars_to_calendar_days("1d", 253, end_date=None)
+    assert cli_module._warmup_window_days(config) == bars_to_calendar_days("1d", 397, end_date=None)
 
 
 def test_bars_to_calendar_days_scales_by_session_density() -> None:

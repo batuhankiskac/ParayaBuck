@@ -147,6 +147,7 @@ def test_shipped_paper_config_has_integrated_cap8_with_other_limits_unchanged() 
     assert config.strategy.equity.parameters["sma_bars"] == 200
     assert config.strategy.equity.parameters["vol_target"] == 0.35
     assert config.strategy.equity.parameters["vol_window"] == 20
+    assert config.strategy.equity.parameters["early_reentry_weight"] == 0.5
     assert config.symbols == ("SPY", "QQQ", "QLD")
     assert config.execution.rebalance_band_pct == 0.005
 

@@ -42,6 +42,14 @@ def _trend_votes(signals: object) -> str | None:
     return f"{total} ({' '.join(marks)})"
 
 
+def _early_reentry(entry: object) -> str | None:
+    """``"early re-entry 0.5x"`` while R2's early path is active; ``None`` otherwise."""
+    if not isinstance(entry, dict) or entry.get("active") is not True:
+        return None
+    weight = _number(entry.get("weight"))
+    return f"early re-entry {weight:g}x" if weight is not None else "early re-entry"
+
+
 def build_equity_daily_summary(
     target: TargetPortfolio,
     account: AccountSnapshot | None,
@@ -107,7 +115,13 @@ def build_equity_daily_summary(
         # E2 (trend_rule majority_sma_tsm_don): the state is the 2-of-3 vote,
         # so the SMA distance alone does not explain it.
         trend_part += f" votes {votes}"
-    trend_part += f" {trend_state}"
+    early = _early_reentry(metadata.get("early_reentry"))
+    if early is not None:
+        # R2 (early_reentry_weight): the state name is the phrase plus the
+        # weight factor, so it replaces the raw state token.
+        trend_part += f" {early}"
+    else:
+        trend_part += f" {trend_state}"
     held_text = f"{held_weight * 100:.1f}%" if held_weight is not None else "n/a"
     weight_part = f"{hold_symbol or 'hold'} target {target_weight * 100:.1f}% held {held_text}"
     positions_part = (
@@ -139,6 +153,7 @@ def build_equity_daily_summary(
         "signal_sma": sma,
         "signal_sma_distance_pct": distance_pct,
         "trend_votes": votes,
+        "early_reentry": early,
         "hold_symbol": hold_symbol,
         "target_weight": target_weight,
         "held_weight": held_weight,

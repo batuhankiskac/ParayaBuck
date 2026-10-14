@@ -100,6 +100,7 @@ RULE = {
     "A2": {"band": True, "budget": True, "override": 0.15},
     "A3": {"band": True, "budget": True, "override": 0.10},
 }
+RULE["R2"] = RULE["C0"]  # alias: the reference-anchor harness runs label production R2 explicitly
 B_UP = C0_BAND                                   # entries / exits / up-resizes keep 0.5 pp
 GAIN_TIERS = ((0.01, 0.005), (0.05, 0.03), (math.inf, 0.08))  # g_frac ceiling -> B_down
 BUDGET_CEILING_TRY = 1_000_000.0                 # x scale(year) = the year's 35 % bracket floor
@@ -112,6 +113,10 @@ TAX_WINDOWS = {
 }
 TAX_CAPITALS = {"10k": 10_000.0, "100k": 100_000.0, "1M": 1_000_000.0}
 GATE_CAPITAL = "100k"
+# The pre-tax runs of the main window and of bootstrap E1 use the gate capital, so that the
+# bracket-budget state is evaluated at the same account scale as the after-tax gate runs (the
+# pre-tax *return* statistics are scale-free). See PREREGISTRATION.md section 4.1 item 7.
+PRE_CAPITAL = TAX_CAPITALS[GATE_CAPITAL]
 TAX_BOOT_PATHS = 1_000
 TAX_BOOT_LO, TAX_BOOT_HI = "2015-09-01", "2026-09-30"
 TAX_BOOT_L = 253 + 10 * 252  # 2,773 sessions (253 warm-up + 2,520 measured)
@@ -616,7 +621,8 @@ def usd_market(days):
     """R-USD instantiation market: fx = 1 and a flat Yİ-ÜFE (no indexation, scale = 1)."""
     days = list(days)
     years = sorted({int(d[:4]) for d in days})
-    ufe = {f"{y}-{mo:02d}": 1.0 for y in range(years[0] - 1, years[-1] + 2) for mo in range(1, 13)}
+    ufe = {f"{y}-{mo:02d}": 1.0 for y in range(min(years[0], 2025) - 1, max(years[-1], 2026) + 2)
+           for mo in range(1, 13)}
     return te.Market(days, np.ones(len(days)), ufe)
 
 
@@ -844,8 +850,8 @@ def boot_e1(n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS, capitals=("100k", "1M"))
         if pidx < n_pre:
             for md, (o_, c_, wc_, wr_) in legs.items():
                 for arm in ARMS:
-                    r = engine_run(1.0, i0, i1, fixed_dates, mkt, o_, c_, wc_ if arm == "C0" else wr_,
-                                   e2, arm, "pre_tax", m=M)
+                    r = engine_run(PRE_CAPITAL, i0, i1, fixed_dates, mkt, o_, c_,
+                                   wc_ if arm == "C0" else wr_, e2, arm, "pre_tax", m=M)
                     k = len(r["_nav"]) - 1
                     pre[(md, arm)].append((r["_nav"][-1] / r["_nav"][0]) ** (252 / k) - 1)
         if pidx < n_tax:
@@ -1031,6 +1037,14 @@ def smoke():
     checks["progressive_tax_nonzero_in_uptrend"] = bool(prog_bites)
     checks["flat_tax_bites_in_uptrend"] = bool(flat_bites)
 
+    # 4c. the bracket budget is reachable: at a large account scale (fx = 1, flat Yi-UFE) a
+    # realized rule gain above the nominal ceiling must postpone a downsize that the band passed.
+    mk_u = usd_market(days)
+    big = engine_run(1e9, START, n - 1, days, mk_u, so, sc, w_r2, e2, "A2", "pre_tax")
+    checks["budget_fires_at_large_capital"] = bool(big["blocked_budget"] > 0)
+    checks["A1_has_no_budget"] = bool(
+        engine_run(1e9, START, n - 1, days, mk_u, so, sc, w_r2, e2, "A1", "pre_tax")["blocked_budget"] == 0)
+
     # 5. finite, positive, and after tax <= pre-tax
     for arm in ARMS:
         want = w_c0 if arm == "C0" else w_r2
@@ -1125,10 +1139,11 @@ def run() -> dict:
         for m in (1, 2, M_STRESS):
             pre[md][f"m{m}"] = {}
             for arm in ARMS:
-                r = engine_run(1.0, START, T, d_, mkt, o_, c_, W[arm], e_, arm, "pre_tax", m=m)
+                r = engine_run(PRE_CAPITAL, START, T, d_, mkt, o_, c_, W[arm], e_, arm, "pre_tax", m=m)
                 pre[md][f"m{m}"][arm] = pre_stats(d_, START, T, r)
         for arm in ARMS:
-            r = engine_run(1.0, START, T, d_, usd_mkt, o_, c_, W[arm], e_, arm, "pre_tax", m=M, rule_index=False)
+            r = engine_run(PRE_CAPITAL, START, T, d_, usd_mkt, o_, c_, W[arm], e_, arm, "pre_tax", m=M,
+                           rule_index=False)
             pre_usd[md][arm] = pre_stats(d_, START, T, r, real_days=d_)
     pre["window"] = {"start": days[START], "end": days[-1], "sessions": T - START + 1,
                      "years": float(trv2.calendar_years(days[START - 1], days[-1]))}

@@ -120,11 +120,20 @@ session's own sale does not gate itself).
    stay comparable with the reference bootstrap anchors), while the arm's **decision** state
    uses the same indexed rule gain as B1. The B2 column is therefore a lower bound on the
    indexation channel, not a different rule.
+7. **Account scale of the decision state (added in Amendment A1).** The bracket budget is a
+   *nominal TRY* threshold, so it is capital-dependent by construction (the model's tariff
+   brackets are fixed TRY amounts, exactly as in every after-tax study here). The pre-tax runs
+   of the main window and of bootstrap E1 therefore use the gate capital **$100k**, the same
+   account scale as the after-tax gate runs, so that the pre-tax and after-tax trade paths of
+   an arm coincide (the pre-tax *return* statistics are scale-free: with no tax the NAV path
+   scales linearly). The OOS/instrument stages keep a unit-NAV account, where the budget is
+   inert by construction (item 5).
 
 ## 5. Mechanics, stages and cost
 
 - Pre-tax main window: base and calibrated financing, m ∈ {1, 2}; m = 4 reported only
-  (cost stress).
+  (cost stress). The account is funded with $100k (see 4.1 item 7); the reported CAGR, max DD
+  and turnover are the scale-free NAV-path statistics.
 - Pre-tax R-USD row: base and calibrated, m = 2 (report-only).
 - Six OOS windows (`ewma_band_v1`/`e2_confirmation_v1`): ^GSPC 1957-01-02 → 1999-12-31 and
   M1 ^IXIC 1975–1999, M2 ^GSPC 1935–1956, M3 ^N225, M4 ^GDAXI, M5 ^FTSE; calibrated
@@ -215,4 +224,20 @@ files must be byte-identical.
 
 ## 10. Amendments
 
-None yet.
+**A1 (before the pre-registration commit, recorded for transparency).** While testing the
+first working version of `screen.py` I ran a *sanity probe* of the pre-tax main window for all
+four arms on real data (base financing, m = 2, unit capital) before noticing that the bracket
+budget, being a nominal TRY threshold, is inert at a unit-NAV account. The probe returned
+C0 14.675 % / DD 49.56 %, A1 = A2 = A3 15.683 % / DD 47.46 % (band blocks 1,293, budget
+blocks 0). That probe is an unregistered look at candidate-arm results before the pre-
+registration commit and is disclosed here; no arm definition, parameter, gate, threshold or
+selection rule was changed as a result of it, and the full `--run` is the pre-registered one.
+The one change made is item 4.1(7) below, a *mechanics* fix (pre-tax runs at the gate capital
+$100k) required for the pre-tax and after-tax trade paths of an arm to be the same strategy;
+it changes no gate and no arm parameter, and it is what makes the budget active on the
+pre-tax path at all (at unit capital it fired 0 times).
+
+**A2.** `--smoke` uses no market data and now proves, in addition to the identity checks, that
+the bracket budget is *reachable*: at a large account scale (fx = 1, flat Yİ-ÜFE, $1e9) arm A2
+postpones 20 downsizes that the band would have filled, while A1 (no budget) postpones none.
+The smoke was strengthened before the full run; it changes no gated quantity.

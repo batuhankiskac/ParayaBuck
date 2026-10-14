@@ -1,0 +1,28 @@
+tax_hedge_v1 summary
+
+H1 pre-tax main: CAGR 14.02% maxDD 48.76% sells/yr 167.73 both-leg-days 69.7%
+H2 pre-tax main: CAGR 14.35% maxDD 48.62% sells/yr 74.25 both-leg-days 56.4%
+
+== 2000_03_to_2026_09
+  H1 usd_10000: after-tax CAGR 10.57% tax/yr $2,177 sells/yr 168.34
+  H2 usd_10000: after-tax CAGR 11.12% tax/yr $2,221 sells/yr 76.05
+  H1 usd_100000: after-tax CAGR 9.09% tax/yr $22,767 sells/yr 168.41
+  H2 usd_100000: after-tax CAGR 9.76% tax/yr $23,202 sells/yr 75.87
+  H1 usd_1000000: after-tax CAGR 7.99% tax/yr $202,282 sells/yr 168.60
+  H2 usd_1000000: after-tax CAGR 8.87% tax/yr $211,618 sells/yr 76.05
+
+== 2010_01_to_end
+  H1 usd_10000: after-tax CAGR 16.23% tax/yr $2,808 sells/yr 192.12
+  H2 usd_10000: after-tax CAGR 16.79% tax/yr $2,679 sells/yr 80.56
+  H1 usd_100000: after-tax CAGR 14.05% tax/yr $31,122 sells/yr 192.24
+  H2 usd_100000: after-tax CAGR 14.62% tax/yr $29,274 sells/yr 79.61
+  H1 usd_1000000: after-tax CAGR 12.74% tax/yr $297,482 sells/yr 192.36
+  H2 usd_1000000: after-tax CAGR 13.54% tax/yr $284,245 sells/yr 79.79
+
+== 2017_01_to_end
+  H1 usd_10000: after-tax CAGR 24.60% tax/yr $2,723 sells/yr 189.19
+  H2 usd_10000: after-tax CAGR 25.94% tax/yr $2,655 sells/yr 88.54
+  H1 usd_100000: after-tax CAGR 21.61% tax/yr $34,013 sells/yr 189.29
+  H2 usd_100000: after-tax CAGR 23.18% tax/yr $33,422 sells/yr 88.44
+  H1 usd_1000000: after-tax CAGR 20.36% tax/yr $356,828 sells/yr 189.19
+  H2 usd_1000000: after-tax CAGR 22.08% tax/yr $349,531 sells/yr 88.03

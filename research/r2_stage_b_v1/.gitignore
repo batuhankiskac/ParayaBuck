@@ -1,0 +1,6 @@
+# Byte copies of tagged harness files: rebuilt by the setup commands in
+# docs/research/r2_stage_b_v1.md (git archive from the tags, then
+# adapt_harness.py). Not committed, exactly as in e2_integration_v1.
+archive/
+stage_b/research/physical_availability_clock_v2/
+stage_b/research/sleeve_candidates_v2/

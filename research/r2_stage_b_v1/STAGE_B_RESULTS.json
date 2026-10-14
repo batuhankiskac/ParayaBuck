@@ -1,0 +1,1491 @@
+{
+  "accounting_ok": {
+    "E2": {
+      "1.0": true,
+      "2.0": true
+    },
+    "R2": {
+      "1.0": true,
+      "2.0": true
+    },
+    "VT35": {
+      "1.0": true,
+      "2.0": true
+    }
+  },
+  "arm_configs": {
+    "E2": "configs/E2.yaml (shipped settings minus early_reentry_weight) + --drop-early-reentry (1.1.0)",
+    "R2": "configs/R2.yaml (shipped config/settings.yaml verbatim, early_reentry_weight: 0.5) (1.2.0)",
+    "VT35": "configs/VT35.yaml (variant 1.0.0)"
+  },
+  "bars": {
+    "comparison": "data/historical/substitute_v5_plus_warmup_bars_qqq_spy_qld.csv (Yahoo warm-up extension 2014-01-02 .. 2015-12-31 + the substitute rows)",
+    "reproduction": "data/historical/substitute_v5_bars_qqq_spy_qld.csv (2016-01-04 .. 2026-07-31)"
+  },
+  "calendar_years_1x": {
+    "E2": {
+      "2017": 0.6564654150430327,
+      "2018": 0.051717566562734074,
+      "2019": 0.44718760283317116,
+      "2020": 0.540697252589736,
+      "2021": 0.43295653667348577,
+      "2022": -0.20339217768549955,
+      "2023": 0.534266715320223,
+      "2024": 0.3782085555769983,
+      "2025": 0.25983438465066633,
+      "2026": 0.12565275638662343
+    },
+    "R2": {
+      "2017": 0.6564654150430327,
+      "2018": 0.051717566562734074,
+      "2019": 0.44718760283317116,
+      "2020": 0.540697252589736,
+      "2021": 0.43295653667348577,
+      "2022": -0.2214130712083494,
+      "2023": 0.6045134405770698,
+      "2024": 0.3782085555769976,
+      "2025": 0.25983438465066566,
+      "2026": 0.12565275638662388
+    },
+    "VT35": {
+      "2017": 0.6564654150430327,
+      "2018": 0.051717566562734074,
+      "2019": 0.26204537259373817,
+      "2020": 0.5406972525897413,
+      "2021": 0.4329565366734873,
+      "2022": -0.19713019909830953,
+      "2023": 0.6246544976946495,
+      "2024": 0.3782085555769952,
+      "2025": 0.19471604107978502,
+      "2026": 0.1256527563866221
+    }
+  },
+  "decisions_in_market_share": {
+    "E2": 0.8379052369077307,
+    "R2": 0.8536990856192851,
+    "VT35": 0.8283458021612635
+  },
+  "determinism": {
+    "1.0": {
+      "audit_identical": true,
+      "audit_sha256": "ec27218dc392145b5d8b281e3b6ed6d1b0f6208ff100a49b312a5634f5814148",
+      "payload_identical": true
+    },
+    "2.0": {
+      "audit_identical": true,
+      "audit_sha256": "5c38757beeb72b9faa910e34954cd2004878adf8f6b0ba5d03ade0a978570f8c",
+      "payload_identical": true
+    }
+  },
+  "engine": "production portfolio backtest engine via the archived paper_config_v2 Stage B runner",
+  "in_market_episodes": {
+    "E2": 13,
+    "R2": 16,
+    "VT35": 18
+  },
+  "invariants": {
+    "E2": {
+      "active_reservation_count": 0,
+      "all_reservations_released": true,
+      "cash_conserved": true,
+      "cash_reconciliation_error": 0.0,
+      "corporate_action_dividend_cash": 5571.120703989629,
+      "deferred_buy_intent_count": 0,
+      "dividend_cash_event_count": 14,
+      "duplicate_fill_count": 0,
+      "duplicate_fill_keys": [],
+      "duplicate_position_keys": false,
+      "ending_cash": 1329642.6232118441,
+      "ending_cash_nonnegative": true,
+      "fee_counted_once_in_cash_reconciliation": true,
+      "fill_count": 617,
+      "final_position_count": 0,
+      "final_position_count_within_limit": true,
+      "future_data_access_checks": 2406,
+      "gross_at_final_mark": 0.0,
+      "max_observed_position_count": 1,
+      "max_observed_slot_claim_count": 1,
+      "maximum_positions": 8,
+      "maximum_realized_gross_observed": 0.9851545187525154,
+      "maximum_target_gross_observed": 0.98,
+      "maximum_target_name_weight": 0.98,
+      "nav_from_cash_and_marks": 1329642.6232118441,
+      "nav_matches_ledger": true,
+      "no_deferred_buy_intents_at_end": true,
+      "no_future_data_access": true,
+      "position_quantities_reconciled": true,
+      "position_quantity_reconciliation_error": 0.0,
+      "realized_gross_drift_is_recorded_not_corrected": true,
+      "reservation_create_count": 617,
+      "reservation_release_count": 617,
+      "sleeve_targets_within_limits": true,
+      "slot_claim_violation_count": 0,
+      "slot_claim_violation_samples": [],
+      "slot_claims_within_limit": true,
+      "starting_cash": 100000,
+      "target_gross_within_limit": true,
+      "target_name_weights_within_limits": true,
+      "unowned_fill_count": 0,
+      "unowned_fills": []
+    },
+    "R2": {
+      "active_reservation_count": 0,
+      "all_reservations_released": true,
+      "cash_conserved": true,
+      "cash_reconciliation_error": 0.0,
+      "corporate_action_dividend_cash": 5686.690895416181,
+      "deferred_buy_intent_count": 0,
+      "dividend_cash_event_count": 14,
+      "duplicate_fill_count": 0,
+      "duplicate_fill_keys": [],
+      "duplicate_position_keys": false,
+      "ending_cash": 1359064.1796735846,
+      "ending_cash_nonnegative": true,
+      "fee_counted_once_in_cash_reconciliation": true,
+      "fill_count": 644,
+      "final_position_count": 0,
+      "final_position_count_within_limit": true,
+      "future_data_access_checks": 2406,
+      "gross_at_final_mark": 0.0,
+      "max_observed_position_count": 1,
+      "max_observed_slot_claim_count": 1,
+      "maximum_positions": 8,
+      "maximum_realized_gross_observed": 0.9851545187525154,
+      "maximum_target_gross_observed": 0.98,
+      "maximum_target_name_weight": 0.98,
+      "nav_from_cash_and_marks": 1359064.1796735846,
+      "nav_matches_ledger": true,
+      "no_deferred_buy_intents_at_end": true,
+      "no_future_data_access": true,
+      "position_quantities_reconciled": true,
+      "position_quantity_reconciliation_error": 0.0,
+      "realized_gross_drift_is_recorded_not_corrected": true,
+      "reservation_create_count": 644,
+      "reservation_release_count": 644,
+      "sleeve_targets_within_limits": true,
+      "slot_claim_violation_count": 0,
+      "slot_claim_violation_samples": [],
+      "slot_claims_within_limit": true,
+      "starting_cash": 100000,
+      "target_gross_within_limit": true,
+      "target_name_weights_within_limits": true,
+      "unowned_fill_count": 0,
+      "unowned_fills": []
+    },
+    "VT35": {
+      "active_reservation_count": 0,
+      "all_reservations_released": true,
+      "cash_conserved": true,
+      "cash_reconciliation_error": -2.3283064365386963e-10,
+      "corporate_action_dividend_cash": 5061.907342478539,
+      "deferred_buy_intent_count": 0,
+      "dividend_cash_event_count": 14,
+      "duplicate_fill_count": 0,
+      "duplicate_fill_keys": [],
+      "duplicate_position_keys": false,
+      "ending_cash": 1173537.6055919928,
+      "ending_cash_nonnegative": true,
+      "fee_counted_once_in_cash_reconciliation": true,
+      "fill_count": 615,
+      "final_position_count": 0,
+      "final_position_count_within_limit": true,
+      "future_data_access_checks": 2406,
+      "gross_at_final_mark": 0.0,
+      "max_observed_position_count": 1,
+      "max_observed_slot_claim_count": 1,
+      "maximum_positions": 8,
+      "maximum_realized_gross_observed": 0.9943480176393822,
+      "maximum_target_gross_observed": 0.98,
+      "maximum_target_name_weight": 0.98,
+      "nav_from_cash_and_marks": 1173537.6055919928,
+      "nav_matches_ledger": true,
+      "no_deferred_buy_intents_at_end": true,
+      "no_future_data_access": true,
+      "position_quantities_reconciled": true,
+      "position_quantity_reconciliation_error": 0.0,
+      "realized_gross_drift_is_recorded_not_corrected": true,
+      "reservation_create_count": 615,
+      "reservation_release_count": 615,
+      "sleeve_targets_within_limits": true,
+      "slot_claim_violation_count": 0,
+      "slot_claim_violation_samples": [],
+      "slot_claims_within_limit": true,
+      "starting_cash": 100000,
+      "target_gross_within_limit": true,
+      "target_name_weights_within_limits": true,
+      "unowned_fill_count": 0,
+      "unowned_fills": []
+    }
+  },
+  "max_drawdown_episodes": {
+    "E2": {
+      "depth": 0.3218846719323062,
+      "peak": "2021-11-19",
+      "trough": "2023-03-13"
+    },
+    "R2": {
+      "depth": 0.306879731458811,
+      "peak": "2021-11-19",
+      "trough": "2023-03-13"
+    },
+    "VT35": {
+      "depth": 0.2769804936780914,
+      "peak": "2020-02-19",
+      "trough": "2020-04-09"
+    }
+  },
+  "r2_vs_e2": {
+    "differing_decisions": [
+      {
+        "date": "2022-07-25",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.019211839380876228,
+          "sma50": 292.8976,
+          "vol20": 0.24866734863997267,
+          "vol20_median252": 0.25202288884771495
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.350691345251
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-07-26",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.0065652248247565215,
+          "sma50": 292.962,
+          "vol20": 0.2578597795012337,
+          "vol20_median252": 0.2522947094362187
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.338412716201
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-07-27",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.08206954926994414,
+          "sma50": 293.0594,
+          "vol20": 0.2710835481687937,
+          "vol20_median252": 0.25272409540394103
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.322187198029
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-07-28",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.09164904862579282,
+          "sma50": 293.2868,
+          "vol20": 0.27153277766479916,
+          "vol20_median252": 0.254759414450472
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.321658695648
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-07-29",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.12551733980305402,
+          "sma50": 293.4726,
+          "vol20": 0.26794553207767907,
+          "vol20_median252": 0.25720125975048813
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.326118000325
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-01",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.11746358061886353,
+          "sma50": 293.9552,
+          "vol20": 0.26897210120501797,
+          "vol20_median252": 0.25825183425127307
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.324910365986
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-02",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.09537914691943139,
+          "sma50": 294.4502,
+          "vol20": 0.2671143260137358,
+          "vol20_median252": 0.26016427406348897
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.327133133551
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-03",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.11804016620498614,
+          "sma50": 295.13439999999997,
+          "vol20": 0.2788517284774209,
+          "vol20_median252": 0.2624168403847233
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.313427133929
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-04",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.09973557529324006,
+          "sma50": 295.7528,
+          "vol20": 0.2726455929256199,
+          "vol20_median252": 0.26330227499560976
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.320603525542
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-05",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.0893854748603351,
+          "sma50": 296.443,
+          "vol20": 0.27634521891365477,
+          "vol20_median252": 0.2635635861824866
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.316420153627
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-08",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.109569609742596,
+          "sma50": 297.032,
+          "vol20": 0.2609624840566091,
+          "vol20_median252": 0.2635635861824866
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.336089317332
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-09",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.10774175517048623,
+          "sma50": 297.387,
+          "vol20": 0.2622693610395067,
+          "vol20_median252": 0.2635635861824866
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.333828556544
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-10",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.14101172763871883,
+          "sma50": 297.72360000000003,
+          "vol20": 0.2725534358119971,
+          "vol20_median252": 0.2640622823583606
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.321070349056
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-11",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.13049848257578378,
+          "sma50": 298.0396,
+          "vol20": 0.27594212665457,
+          "vol20_median252": 0.26480952348688813
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.317270636907
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-12",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.13197656490903475,
+          "sma50": 298.5274,
+          "vol20": 0.2767393427997762,
+          "vol20_median252": 0.2653378610805004
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.315955192266
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-15",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.15086385625431942,
+          "sma50": 298.901,
+          "vol20": 0.27116086485885404,
+          "vol20_median252": 0.26611068750960964
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.322250439054
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-16",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.11391216895742518,
+          "sma50": 299.4226,
+          "vol20": 0.25814864432735657,
+          "vol20_median252": 0.26611068750960964
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.338048317431
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-17",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.0840180840180842,
+          "sma50": 299.848,
+          "vol20": 0.26180106858835217,
+          "vol20_median252": 0.26611068750960964
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.333387783794
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-18",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.07124731602576606,
+          "sma50": 300.2362,
+          "vol20": 0.25905689676479676,
+          "vol20_median252": 0.26611068750960964
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.336938078119
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-19",
+        "don_up": true,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.06910824861750386,
+          "sma50": 300.54060000000004,
+          "vol20": 0.2612611342720015,
+          "vol20_median252": 0.26611068750960964
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.333890994286
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2022-08-22",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.046924434675458926,
+          "sma50": 300.83979999999997,
+          "vol20": 0.28042671797586805,
+          "vol20_median252": 0.2669130525732721
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.31109553127
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-23",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.067024492985019,
+          "sma50": 301.345,
+          "vol20": 0.2684643681366435,
+          "vol20_median252": 0.26752992904570744
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.325337505283
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-24",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.026726638636289435,
+          "sma50": 302.137,
+          "vol20": 0.22583941156054016,
+          "vol20_median252": 0.26752992904570744
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.386856701971
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-25",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.034763241987024296,
+          "sma50": 303.0304,
+          "vol20": 0.23139555332943426,
+          "vol20_median252": 0.26752992904570744
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.377841399662
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-26",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": -0.025423191529829414,
+          "sma50": 303.5232,
+          "vol20": 0.2682048050524384,
+          "vol20_median252": 0.26807516856505875
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.32649587747
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-08-29",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": -0.03444666476353586,
+          "sma50": 304.1836,
+          "vol20": 0.2699594297166685,
+          "vol20_median252": 0.26827484820359615
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.324445922579
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-12-13",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.011245795964125449,
+          "sma50": 278.1262,
+          "vol20": 0.24104026502259748,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.361011613526
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2022-12-14",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": -0.009951967932547712,
+          "sma50": 278.2138,
+          "vol20": 0.23741597638122136,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.366602601442
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2023-01-17",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.016793672577557928,
+          "sma50": 277.3336,
+          "vol20": 0.22138148005557373,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.39228844618
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2023-01-18",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.013236098450319034,
+          "sma50": 277.6814,
+          "vol20": 0.22388076822161324,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.388727347948
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2023-01-20",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.04874972174816339,
+          "sma50": 278.19259999999997,
+          "vol20": 0.23720152233393121,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.361177493943
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2023-01-23",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.056719692814042766,
+          "sma50": 278.58099999999996,
+          "vol20": 0.243867307013384,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.352167680317
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2023-01-24",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.08100914679862048,
+          "sma50": 279.082,
+          "vol20": 0.22258722437963113,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.389278414342
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2023-01-25",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.07618940754039505,
+          "sma50": 279.1816,
+          "vol20": 0.22361490094733713,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.387261216736
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2023-01-26",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.11290689733667203,
+          "sma50": 279.2892,
+          "vol20": 0.2197247277948732,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.396069912139
+          ]
+        ],
+        "sma_up": true,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2023-01-27",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.1390234525182621,
+          "sma50": 279.5056,
+          "vol20": 0.2087478673647984,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.41597396032
+          ]
+        ],
+        "sma_up": true,
+        "tsm_up": false,
+        "votes_up": 1
+      },
+      {
+        "date": "2023-01-30",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.08943852274433262,
+          "sma50": 279.5232,
+          "vol20": 0.21821810837630462,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.397216630542
+          ]
+        ],
+        "sma_up": false,
+        "tsm_up": false,
+        "votes_up": 0
+      },
+      {
+        "date": "2023-01-31",
+        "don_up": false,
+        "e2_state": "downtrend",
+        "e2_weights": [],
+        "early_reentry": {
+          "above_sma50": true,
+          "active": true,
+          "momentum20": 0.10642932251765069,
+          "sma50": 279.7068,
+          "vol20": 0.22050013156774365,
+          "vol20_median252": 0.31963166032127943
+        },
+        "r2_state": "early_reentry",
+        "r2_weights": [
+          [
+            "QLD",
+            0.39230583486
+          ]
+        ],
+        "sma_up": true,
+        "tsm_up": false,
+        "votes_up": 1
+      }
+    ],
+    "early_episodes": [
+      {
+        "delta_pp": 0.771966529727286,
+        "e2_entry_session": "2023-02-01",
+        "e2_span_return": 0.0,
+        "early_first_decision": "2022-07-25",
+        "early_last_decision": "2022-08-29",
+        "early_sessions": 26,
+        "exit_session": "2022-08-30",
+        "fill_session": "2022-08-31",
+        "r2_span_return": 0.00771966529727286
+      },
+      {
+        "delta_pp": -3.0109271176468444,
+        "e2_entry_session": "2023-02-01",
+        "e2_span_return": 0.0,
+        "early_first_decision": "2022-12-13",
+        "early_last_decision": "2022-12-14",
+        "early_sessions": 2,
+        "exit_session": "2022-12-15",
+        "fill_session": "2022-12-16",
+        "r2_span_return": -0.030109271176468444
+      },
+      {
+        "delta_pp": -1.8377950479350424,
+        "e2_entry_session": "2023-02-01",
+        "e2_span_return": 0.0,
+        "early_first_decision": "2023-01-17",
+        "early_last_decision": "2023-01-18",
+        "early_sessions": 2,
+        "exit_session": "2023-01-19",
+        "fill_session": "2023-01-20",
+        "r2_span_return": -0.018377950479350424
+      },
+      {
+        "delta_pp": 6.609233061252762,
+        "e2_entry_session": "2023-02-01",
+        "e2_span_return": 0.02145806627079172,
+        "early_first_decision": "2023-01-20",
+        "early_last_decision": "2023-01-31",
+        "early_sessions": 8,
+        "exit_session": "2023-02-01",
+        "fill_session": "2023-02-02",
+        "r2_span_return": 0.08755039688331934
+      }
+    ],
+    "early_sessions": 38,
+    "episode_count": 4,
+    "median_delta_pp": -0.5329142591038782,
+    "sum_delta_pp": 2.532477425398161,
+    "terminal_ending_nav": {
+      "1.0": {
+        "cagr_pp": 0.3000867854419109,
+        "e2": 1329642.6232118441,
+        "max_dd_pp": -1.5004940473495099,
+        "r2": 1359064.1796735846,
+        "r2_minus_e2": 29421.556461740518,
+        "r2_over_e2": 0.022127416757046214
+      },
+      "2.0": {
+        "cagr_pp": 0.28906226938332225,
+        "e2": 1313969.7379699536,
+        "max_dd_pp": -1.4435447759700626,
+        "r2": 1342001.2858307522,
+        "r2_minus_e2": 28031.54786079866,
+        "r2_over_e2": 0.021333480559534435
+      }
+    }
+  },
+  "reproduction": {
+    "E2": {
+      "1.0": {
+        "actual_ending_nav": 1329642.6232118441,
+        "actual_fills": 617,
+        "decisions_hash": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+        "decisions_match": true,
+        "expected_decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+        "expected_ending_nav": 1329642.62,
+        "expected_fees": 186.45543252478112,
+        "expected_fills": 617,
+        "expected_fills_hash": "6aadd3580ac737c681bebaf59aaf7011be77c450ba71c35cc56aaa10350eaff9",
+        "fees": 186.45543252478112,
+        "fees_match": true,
+        "fills_hash": "6aadd3580ac737c681bebaf59aaf7011be77c450ba71c35cc56aaa10350eaff9",
+        "fills_match": true,
+        "nav_match": true,
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ]
+      },
+      "2.0": {
+        "actual_ending_nav": 1313969.7379699536,
+        "actual_fills": 618,
+        "decisions_hash": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+        "expected_ending_nav": 1313969.74,
+        "expected_fills": 618,
+        "fees": 370.2115201020008,
+        "fills_hash": "9618f2fbaa3a0991dce01a3c6c4506856fb89de2e580c31c6aaa744e8dc32a0e",
+        "nav_match": true,
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ]
+      }
+    },
+    "VT35": {
+      "1.0": {
+        "actual_ending_nav": 1173537.6055919928,
+        "actual_fills": 615,
+        "decisions_hash": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+        "decisions_match": true,
+        "expected_decisions": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+        "expected_ending_nav": 1173537.61,
+        "expected_fees": 193.53,
+        "expected_fills": 615,
+        "expected_fills_hash": "8c00d14fb567edb96a4fd159a9339bdab080e5814a8178a5ab34d237eb74a9f0",
+        "fees": 193.53327623361884,
+        "fees_match": true,
+        "fills_hash": "8c00d14fb567edb96a4fd159a9339bdab080e5814a8178a5ab34d237eb74a9f0",
+        "fills_match": true,
+        "nav_match": true,
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.0.0"
+        ]
+      }
+    }
+  },
+  "results": {
+    "E2": {
+      "1.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.4105132303075978,
+        "cagr_2022_2026": 0.20993461275184688,
+        "costs": {
+          "fees": 186.45543252478112,
+          "slippage": 3700.6667548404916,
+          "spread": 1850.3333774202458
+        },
+        "decisions": 2406,
+        "ending_nav": 1329642.6232118441,
+        "fills": 617,
+        "full": {
+          "cagr": 0.3105015361912611,
+          "max_drawdown": 0.3218846719323063,
+          "sharpe": 1.0976518289856398
+        },
+        "hashes": {
+          "decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "equity_decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "fills_without_client_ids": "6aadd3580ac737c681bebaf59aaf7011be77c450ba71c35cc56aaa10350eaff9"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "traded_notional": {
+          "QLD": 18503309.34730518
+        },
+        "turnover_per_year": 3.8371772418454206
+      },
+      "2.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.40889300216256763,
+        "cagr_2022_2026": 0.20831498245764068,
+        "costs": {
+          "fees": 370.2115201020008,
+          "slippage": 7343.948935436198,
+          "spread": 3671.974467718099
+        },
+        "decisions": 2406,
+        "ending_nav": 1313969.7379699536,
+        "fills": 618,
+        "full": {
+          "cagr": 0.308878613662378,
+          "max_drawdown": 0.3233430560279843,
+          "sharpe": 1.0933099203754335
+        },
+        "hashes": {
+          "decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "equity_decisions": "ec634c459fa40af3e868bcda50427099a44dc895c32a1c16c36fbe725ecc65eb",
+          "fills_without_client_ids": "9618f2fbaa3a0991dce01a3c6c4506856fb89de2e580c31c6aaa744e8dc32a0e"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.1.0"
+        ],
+        "traded_notional": {
+          "QLD": 18359821.32271893
+        },
+        "turnover_per_year": 3.8369066759754387
+      }
+    },
+    "R2": {
+      "1.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.4105132303075978,
+        "cagr_2022_2026": 0.21574367180309673,
+        "costs": {
+          "fees": 205.08163691187292,
+          "slippage": 3969.0683461014505,
+          "spread": 1984.5341730507253
+        },
+        "decisions": 2406,
+        "ending_nav": 1359064.1796735846,
+        "fills": 644,
+        "full": {
+          "cagr": 0.3135024040456802,
+          "max_drawdown": 0.3068797314588112,
+          "sharpe": 1.102070835400057
+        },
+        "hashes": {
+          "decisions": "d69d8557b91596e464d95ae94377f88bc3894cb70d353751ae7053c1777bb914",
+          "equity_decisions": "d69d8557b91596e464d95ae94377f88bc3894cb70d353751ae7053c1777bb914",
+          "fills_without_client_ids": "4f365dabdbd83156595a3290129540a14b1e035bf0b63a4643c001d6484b34c5"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.2.0"
+        ],
+        "traded_notional": {
+          "QLD": 19845316.00868998
+        },
+        "turnover_per_year": 4.057304591842789
+      },
+      "2.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.40889300216256763,
+        "cagr_2022_2026": 0.21390981941927723,
+        "costs": {
+          "fees": 406.98344013840074,
+          "slippage": 7872.792802981665,
+          "spread": 3936.3964014908324
+        },
+        "decisions": 2406,
+        "ending_nav": 1342001.2858307522,
+        "fills": 645,
+        "full": {
+          "cagr": 0.31176923635621123,
+          "max_drawdown": 0.3089076082682837,
+          "sharpe": 1.0974600378701673
+        },
+        "hashes": {
+          "decisions": "d69d8557b91596e464d95ae94377f88bc3894cb70d353751ae7053c1777bb914",
+          "equity_decisions": "d69d8557b91596e464d95ae94377f88bc3894cb70d353751ae7053c1777bb914",
+          "fills_without_client_ids": "697fb96151c93972af8db1033de95b4020476f1fa75e684253d268a6467cfb63"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.2.0"
+        ],
+        "traded_notional": {
+          "QLD": 19681928.26650259
+        },
+        "turnover_per_year": 4.057242420364148
+      }
+    },
+    "VT35": {
+      "1.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.37235349915898874,
+        "cagr_2022_2026": 0.21311647896040986,
+        "costs": {
+          "fees": 193.53327623361884,
+          "slippage": 3697.0066324377112,
+          "spread": 1848.5033162188556
+        },
+        "decisions": 2406,
+        "ending_nav": 1173537.6055919928,
+        "fills": 615,
+        "full": {
+          "cagr": 0.2935086068944388,
+          "max_drawdown": 0.27698049367809163,
+          "sharpe": 1.0542177752957769
+        },
+        "hashes": {
+          "decisions": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+          "equity_decisions": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+          "fills_without_client_ids": "8c00d14fb567edb96a4fd159a9339bdab080e5814a8178a5ab34d237eb74a9f0"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.0.0"
+        ],
+        "traded_notional": {
+          "QLD": 18485014.9661138
+        },
+        "turnover_per_year": 4.2354000355910815
+      },
+      "2.0": {
+        "accounting_ok": true,
+        "cagr_2017_2021": 0.37031512341018535,
+        "cagr_2022_2026": 0.21129440924788723,
+        "costs": {
+          "fees": 383.7021334039093,
+          "slippage": 7324.763890922694,
+          "spread": 3662.381945461347
+        },
+        "decisions": 2406,
+        "ending_nav": 1156890.1814972837,
+        "fills": 616,
+        "full": {
+          "cagr": 0.2915786973255359,
+          "max_drawdown": 0.27842838976058915,
+          "sharpe": 1.0489447921010406
+        },
+        "hashes": {
+          "decisions": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+          "equity_decisions": "c9adec34e823b0a745297c28408cccef374852160b14d792a31dbb3ae1b04829",
+          "fills_without_client_ids": "aad1def2b801a3574cfaad7ea9f88bb4b36faf5a0a7dc650e2de1e17e305c542"
+        },
+        "strategy": [
+          "equity_leveraged_trend_v1",
+          "1.0.0"
+        ],
+        "traded_notional": {
+          "QLD": 18311871.26148058
+        },
+        "turnover_per_year": 4.236764148295677
+      }
+    }
+  },
+  "warmup_extension": {
+    "e2_reproduces_on_combined_bars": true,
+    "qqq_sessions_before_start_combined": 756,
+    "qqq_sessions_before_start_substitute_only": 252,
+    "r2_without_extension": {
+      "decisions": 2262,
+      "ending_nav": 956118.4870488117,
+      "first_strategy_decision": "2017-07-31"
+    },
+    "required_history_bars": 397,
+    "vt35_reproduces_on_combined_bars": true
+  },
+  "window": [
+    "2017-01-03",
+    "2026-07-30"
+  ]
+}

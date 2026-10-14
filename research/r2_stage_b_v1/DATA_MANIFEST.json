@@ -1,0 +1,211 @@
+{
+  "date": "2026-10-14",
+  "derived_outputs": {
+    "STAGE_B_RESULTS.json": {
+      "bytes": 42621,
+      "sha256": "88f7bc9bbfc3bc04266e119583cd8a74bfaa9fc0e554a5f2cc44deedf7b1272b"
+    }
+  },
+  "engine": "this worktree src (R2 shipped in equity_leveraged_trend_v1 1.2.0) driven by the archived paper_config_v2 Stage B runner copied to stage_b/",
+  "inputs": {
+    ".gitignore": {
+      "bytes": 304,
+      "sha256": "d09eb1296f0351ad210a070db110fe437a184c1fd9bedd475e87a65c5a8586cb"
+    },
+    "adapt_harness.py": {
+      "bytes": 5471,
+      "sha256": "0211e78f485083524acf0af6cd375991271c797850fa54065a91324700440e7c"
+    },
+    "build_warmup_extension.py": {
+      "bytes": 5616,
+      "sha256": "4e73e3bdb5c086505423b8766cbe08502434a607ab444b5c6cbea4dbfb8eac1b"
+    },
+    "evaluate_r2_stage_b.py": {
+      "bytes": 15225,
+      "sha256": "952ce2f0e6e9b8c577438e6e61a27d1719401005fcf586287f63e2adb2936fe3"
+    },
+    "repo:data/historical/stress_robustness_v1_daily.csv": {
+      "basis_check": "on the 2,659 sessions shared with substitute_v5_bars_qqq_spy_qld.csv the QQQ close matches the Alpaca SIP split-adjusted close with a median relative difference of 2.2e-08 (worst 9.3e-04)",
+      "bytes": 2671225,
+      "columns": "symbol,date,open,high,low,close,adjclose,volume,dividend (close = split-adjusted price; adjclose = total return, NOT used)",
+      "date_range": [
+        "1999-01-04",
+        "2026-09-29"
+      ],
+      "rows": 23047,
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "Yahoo Finance daily OHLC rows committed in this repository (downloaded by an earlier study; no fetch performed here). The fast_reentry research used this file as its production price basis.",
+      "symbols_used_in_extension": [
+        "QLD",
+        "QQQ",
+        "SPY"
+      ]
+    },
+    "stage_b/configs/E2.yaml": {
+      "bytes": 9511,
+      "sha256": "93ea91056031da037c1bda40aa5c2ea194113efb8d6356f4321e43bad11ab1c7"
+    },
+    "stage_b/configs/R2.yaml": {
+      "bytes": 9330,
+      "sha256": "eda80f7c31bbcd0e8d2fba8d13b2d1f14daf0854c36b71357c30b7fb5aa75adb"
+    },
+    "stage_b/configs/VT35.yaml": {
+      "bytes": 8252,
+      "sha256": "ea9cb5696df228e8e3e2accaee8ed67879e611b1d8980cce0ecee948b1f0a306"
+    },
+    "stage_b/data/historical/equity_entity_lifetimes_full_v5.csv": {
+      "bytes": 2320175,
+      "sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+      "source": "this worktree data/historical/equity_entity_lifetimes_full_v5.csv (committed on main)"
+    },
+    "stage_b/data/historical/substitute_v5_actions_qqq_spy_qld.csv": {
+      "bytes": 10758,
+      "sha256": "edaf08ade79d6f7a4a87eaceb4e6665bf145ea154b675f969f995653ff76c6b5",
+      "source": "tag archive/research/e2-integration-v1-2026-10: corporate actions of profit_max_v1 (same source)"
+    },
+    "stage_b/data/historical/substitute_v5_bars_qqq_spy_qld.csv": {
+      "bytes": 617769,
+      "date_range": [
+        "2016-01-04",
+        "2026-07-31"
+      ],
+      "rows": 7977,
+      "sha256": "08ce87ef17a4fed6e0ee7b69abb9ca76f704d093d04573d6d5d739c37473ae2f",
+      "source": "tag archive/research/e2-integration-v1-2026-10: the QQQ/SPY/QLD rows of data/historical/profit_max_v1_daily_split_sip.csv (Alpaca SIP split-adjusted; origin tag archive/research/profit-max-v1-2026-09)"
+    },
+    "stage_b/data/historical/substitute_v5_plus_warmup_bars_qqq_spy_qld.csv": {
+      "bytes": 736028,
+      "date_range": [
+        "2014-01-02",
+        "2026-07-31"
+      ],
+      "rows": 9489,
+      "sha256": "fdc08320a50615531d6316c26b95036022bf0a6ce2ef2aa65feffeb4a984189d",
+      "source": "derived: warm-up extension rows + the unmodified substitute rows"
+    },
+    "stage_b/data/historical/warmup_yahoo_2014_2015_bars_qqq_qld_spy.csv": {
+      "bytes": 118320,
+      "date_range": [
+        "2014-01-02",
+        "2015-12-31"
+      ],
+      "rows": 1512,
+      "sha256": "82413c0495352110f5b564a9e0f61d3963d79244843107bede19c8c19125645d",
+      "source": "derived by build_warmup_extension.py from data/historical/stress_robustness_v1_daily.csv (Yahoo)"
+    },
+    "stage_b/research/paper_config_v2/run_stage_b.py": {
+      "bytes": 20248,
+      "sha256": "ec25832f062537acd5af9876ca809d7d5e3b82ca8adf32dc476fa3c00d0875da"
+    }
+  },
+  "network_downloads": "none: every input is committed in this repository or restored from an archive tag; no external fetch was performed",
+  "network_policy_if_needed": "public market/macro data only (Yahoo chart API, FRED CSV)",
+  "runner_provenance": "tag archive/research/e2-integration-v1-2026-10 (research/e2_integration_v1): the paper_config_v2 runner of tag archive/research/signal-ensemble-v1-2026-10 with the harness modules of tag archive/research/sleeve-candidates-v2-v3-2026-09, patched by adapt_harness.py (imports only; execution model untouched)",
+  "runs": {
+    "E2_1.0.json.gz": {
+      "bytes": 29624,
+      "sha256": "6287861fb50194fb387cb605c162af988047249ccfe81ad8dd785488cc1452c2"
+    },
+    "E2_1.0_audit.json.gz": {
+      "bytes": 233645,
+      "sha256": "8544431fe53710e6ab3b77e4ac4bc19f0acbbf83aa662e1ef5d01ee8ed53db64"
+    },
+    "E2_2.0.json.gz": {
+      "bytes": 29623,
+      "sha256": "0b4a577173b4dbe66ae6bfa8506b83744bc8e44a10615d898234cf91bfa674ce"
+    },
+    "E2_2.0_audit.json.gz": {
+      "bytes": 233849,
+      "sha256": "09b119cbdf2080f9948641d5a9edcdc342b04f31361e2cd03ca30f99192b0b86"
+    },
+    "E2x_1.0.json.gz": {
+      "bytes": 29625,
+      "sha256": "925f529b9bad2ce1748397d296704e24623b486429bda272197c97446597b45b"
+    },
+    "E2x_1.0_audit.json.gz": {
+      "bytes": 233646,
+      "sha256": "4e6b05c5da78a19ee944746ef5ff3252b2a30cf5221f0c24695c2bc8e3efb4e2"
+    },
+    "E2x_2.0.json.gz": {
+      "bytes": 29622,
+      "sha256": "58da458d594f63ff624be4d84d2f962dcfe9d49b4c5075a4e443f304af2e94d7"
+    },
+    "E2x_2.0_audit.json.gz": {
+      "bytes": 233850,
+      "sha256": "9eb7a171c2f53b79a38113eac7d2d172a9862d830ea224c807c9b0cec4200c8d"
+    },
+    "R2_1.0.json.gz": {
+      "bytes": 29922,
+      "sha256": "66d544ab199f24a2de59f858191f61b92ff2cdd7e34f34967741203020673ebb"
+    },
+    "R2_1.0_audit.json.gz": {
+      "bytes": 323246,
+      "sha256": "cecc20047774a0070a58cb63c54d1f10c5ee842d004ef356e457d2ce66162055"
+    },
+    "R2_2.0.json.gz": {
+      "bytes": 29993,
+      "sha256": "2b57b3d435b9f9652108ef1a1374de10c44008a26a800ddb72a21457d7a3f890"
+    },
+    "R2_2.0_audit.json.gz": {
+      "bytes": 323409,
+      "sha256": "5d9fb1a445efd294ecc45f984b52fc4b332b6bdefd50d84d72578f1a617c1d15"
+    },
+    "R2noext_1.0.json.gz": {
+      "bytes": 28681,
+      "sha256": "3d4aec5b07a003bf7773384b9202eb99097c7c29388470b7ca3199e58bf0b194"
+    },
+    "R2noext_1.0_audit.json.gz": {
+      "bytes": 307830,
+      "sha256": "891cdc3f39d4be67e85b8ecbdfed28710a76289acacd4af049b993e22483429b"
+    },
+    "R2rep_1.0.json.gz": {
+      "bytes": 29927,
+      "sha256": "d877f7ad1479bb74a3966fb45f182f9e889a26c0a2b3b4106f0092c2d64e2b71"
+    },
+    "R2rep_1.0_audit.json.gz": {
+      "bytes": 323249,
+      "sha256": "54bfcf857e5697b41dee06ed16c2597321a1665b0f2fcb2d8ec18185fe029bab"
+    },
+    "R2rep_2.0.json.gz": {
+      "bytes": 29994,
+      "sha256": "118f1c98aae78986ce48770cf69156551121661060cee5afb44ac3e9b2ee52db"
+    },
+    "R2rep_2.0_audit.json.gz": {
+      "bytes": 323412,
+      "sha256": "84c4fb94ee3bbdb2730a259a3f400a0dd6b741053ebb9071e5a9b424619a2493"
+    },
+    "VT35_1.0.json.gz": {
+      "bytes": 29514,
+      "sha256": "5a3dc968e96e1fb4ca17f06c177e2a34fcfbaa1e1234daa14d8c706c48d43300"
+    },
+    "VT35_1.0_audit.json.gz": {
+      "bytes": 171434,
+      "sha256": "2e75227c6985c0626c949b024e8e9200149c66d17aa11595a8be74636405456d"
+    },
+    "VT35_2.0.json.gz": {
+      "bytes": 29540,
+      "sha256": "d9df1d72d9e1bcebcdc2bde822b3ca4d296afd8a2d4c44d4a285290c8be3cdae"
+    },
+    "VT35_2.0_audit.json.gz": {
+      "bytes": 171495,
+      "sha256": "54d18ce66c6b5b12891c47b3deacadedf49612786dd71fffe755f1fc1f809da1"
+    },
+    "VT35x_1.0.json.gz": {
+      "bytes": 29515,
+      "sha256": "0afa3c2a6feaa39a6b9a214cb604f315c20c024a50db394d853abb5bbf259176"
+    },
+    "VT35x_1.0_audit.json.gz": {
+      "bytes": 171435,
+      "sha256": "e9a6421f24b6d5ec820e51152647dacf455cd79cfc35bd73e252043588a8c758"
+    },
+    "VT35x_2.0.json.gz": {
+      "bytes": 29541,
+      "sha256": "d79a86e058af53d789d0e47baf9d022894ec367079cc07918a12ed2bd1a4e43a"
+    },
+    "VT35x_2.0_audit.json.gz": {
+      "bytes": 171496,
+      "sha256": "1627edeb20fff3bdf2bd8a1567417fe8021b06e86b798cb64db2886e8cb38d2a"
+    }
+  },
+  "study": "r2_stage_b_v1"
+}

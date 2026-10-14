@@ -1,0 +1,3076 @@
+{
+  "bootstrap_main_block20_m2": {
+    "base": {
+      "C0": {
+        "cagr_median": 0.071616,
+        "cagr_p5": -0.077196,
+        "diff_vs_C0_mean": 0.0,
+        "diff_vs_C0_median": 0.0,
+        "diff_vs_C0_p25": 0.0,
+        "diff_vs_C0_p75": 0.0,
+        "share_ge_C0": 1.0,
+        "turnover_median": 8.657813
+      },
+      "Y1": {
+        "cagr_median": 0.065565,
+        "cagr_p5": -0.066661,
+        "diff_vs_C0_mean": -0.004678,
+        "diff_vs_C0_median": -0.004457,
+        "diff_vs_C0_p25": -0.02674,
+        "diff_vs_C0_p75": 0.017216,
+        "share_ge_C0": 0.4476,
+        "turnover_median": 5.036806
+      },
+      "Y2": {
+        "cagr_median": 0.099216,
+        "cagr_p5": -0.064453,
+        "diff_vs_C0_mean": 0.026324,
+        "diff_vs_C0_median": 0.025578,
+        "diff_vs_C0_p25": -0.001183,
+        "diff_vs_C0_p75": 0.052061,
+        "share_ge_C0": 0.7386,
+        "turnover_median": 4.908116
+      },
+      "Y3": {
+        "cagr_median": 0.065552,
+        "cagr_p5": -0.066486,
+        "diff_vs_C0_mean": -0.004719,
+        "diff_vs_C0_median": -0.004653,
+        "diff_vs_C0_p25": -0.02667,
+        "diff_vs_C0_p75": 0.017216,
+        "share_ge_C0": 0.4478,
+        "turnover_median": 5.037974
+      },
+      "Y4": {
+        "cagr_median": 0.090117,
+        "cagr_p5": -0.066663,
+        "diff_vs_C0_mean": 0.015299,
+        "diff_vs_C0_median": 0.014672,
+        "diff_vs_C0_p25": -0.002801,
+        "diff_vs_C0_p75": 0.032044,
+        "share_ge_C0": 0.7138,
+        "turnover_median": 5.996844
+      }
+    },
+    "calibrated": {
+      "C0": {
+        "cagr_median": 0.06726,
+        "cagr_p5": -0.080271,
+        "diff_vs_C0_mean": 0.0,
+        "diff_vs_C0_median": 0.0,
+        "diff_vs_C0_p25": 0.0,
+        "diff_vs_C0_p75": 0.0,
+        "share_ge_C0": 1.0,
+        "turnover_median": 8.657828
+      },
+      "Y1": {
+        "cagr_median": 0.061816,
+        "cagr_p5": -0.069619,
+        "diff_vs_C0_mean": -0.004111,
+        "diff_vs_C0_median": -0.003907,
+        "diff_vs_C0_p25": -0.026087,
+        "diff_vs_C0_p75": 0.017698,
+        "share_ge_C0": 0.4522,
+        "turnover_median": 5.036457
+      },
+      "Y2": {
+        "cagr_median": 0.094539,
+        "cagr_p5": -0.06809,
+        "diff_vs_C0_mean": 0.025687,
+        "diff_vs_C0_median": 0.024998,
+        "diff_vs_C0_p25": -0.001647,
+        "diff_vs_C0_p75": 0.051312,
+        "share_ge_C0": 0.7328,
+        "turnover_median": 4.908117
+      },
+      "Y3": {
+        "cagr_median": 0.061775,
+        "cagr_p5": -0.069453,
+        "diff_vs_C0_mean": -0.004152,
+        "diff_vs_C0_median": -0.004034,
+        "diff_vs_C0_p25": -0.025996,
+        "diff_vs_C0_p75": 0.017666,
+        "share_ge_C0": 0.4526,
+        "turnover_median": 5.037999
+      },
+      "Y4": {
+        "cagr_median": 0.085397,
+        "cagr_p5": -0.070348,
+        "diff_vs_C0_mean": 0.015064,
+        "diff_vs_C0_median": 0.014449,
+        "diff_vs_C0_p25": -0.002974,
+        "diff_vs_C0_p75": 0.03178,
+        "share_ge_C0": 0.7134,
+        "turnover_median": 5.997303
+      }
+    }
+  },
+  "campaign": "vote_hysteresis_v1",
+  "gates": {
+    "Y1": {
+      "G1_base": false,
+      "G1_calibrated": false,
+      "G2_base": true,
+      "G2_calibrated": true,
+      "G3_base": true,
+      "G3_calibrated": true,
+      "G4": false,
+      "G4_wins": [],
+      "G5_base": false,
+      "G5_calibrated": false,
+      "G6_base": false,
+      "G6_calibrated": false,
+      "G7": false,
+      "G7_detail": {
+        "cagr_diff": {
+          "GSPC": -0.027865,
+          "M1": -0.041412,
+          "M2": -0.013104,
+          "M3": -0.008298,
+          "M4": -0.03044,
+          "M5": -0.008574
+        },
+        "max_dd_diff": {
+          "GSPC": 0.086552,
+          "M1": -0.030488,
+          "M2": -0.002427,
+          "M3": 0.005501,
+          "M4": 0.018314,
+          "M5": 0.043117
+        },
+        "max_dd_diff_max": 0.086552,
+        "median_cagr_diff": -0.020484,
+        "windows_cagr_ge_minus_0_5pp": 0,
+        "windows_dd_within_3pp": 4
+      },
+      "G8": false,
+      "G8_pooled_median_diff": -0.00862,
+      "G9": true,
+      "core_G1_G3": false,
+      "pass_all": false
+    },
+    "Y2": {
+      "G1_base": false,
+      "G1_calibrated": false,
+      "G2_base": false,
+      "G2_calibrated": false,
+      "G3_base": false,
+      "G3_calibrated": false,
+      "G4": false,
+      "G4_wins": [
+        "P2"
+      ],
+      "G5_base": true,
+      "G5_calibrated": true,
+      "G6_base": false,
+      "G6_calibrated": false,
+      "G7": false,
+      "G7_detail": {
+        "cagr_diff": {
+          "GSPC": -0.000614,
+          "M1": -0.021039,
+          "M2": -0.042173,
+          "M3": -0.005704,
+          "M4": -0.026791,
+          "M5": 0.01459
+        },
+        "max_dd_diff": {
+          "GSPC": 0.13049,
+          "M1": 0.149547,
+          "M2": 0.161057,
+          "M3": 0.176158,
+          "M4": 0.116413,
+          "M5": -0.143719
+        },
+        "max_dd_diff_max": 0.176158,
+        "median_cagr_diff": -0.013372,
+        "windows_cagr_ge_minus_0_5pp": 2,
+        "windows_dd_within_3pp": 1
+      },
+      "G8": true,
+      "G8_pooled_median_diff": 0.003497,
+      "G9": true,
+      "core_G1_G3": false,
+      "pass_all": false
+    },
+    "Y3": {
+      "G1_base": false,
+      "G1_calibrated": false,
+      "G2_base": true,
+      "G2_calibrated": true,
+      "G3_base": true,
+      "G3_calibrated": true,
+      "G4": false,
+      "G4_wins": [],
+      "G5_base": false,
+      "G5_calibrated": false,
+      "G6_base": false,
+      "G6_calibrated": false,
+      "G7": false,
+      "G7_detail": {
+        "cagr_diff": {
+          "GSPC": -0.027865,
+          "M1": -0.041412,
+          "M2": -0.013104,
+          "M3": -0.008298,
+          "M4": -0.029091,
+          "M5": -0.008574
+        },
+        "max_dd_diff": {
+          "GSPC": 0.086552,
+          "M1": -0.030488,
+          "M2": -0.002427,
+          "M3": 0.005501,
+          "M4": -0.001058,
+          "M5": 0.043117
+        },
+        "max_dd_diff_max": 0.086552,
+        "median_cagr_diff": -0.020484,
+        "windows_cagr_ge_minus_0_5pp": 0,
+        "windows_dd_within_3pp": 4
+      },
+      "G8": false,
+      "G8_pooled_median_diff": -0.00862,
+      "G9": true,
+      "core_G1_G3": false,
+      "pass_all": false
+    },
+    "Y4": {
+      "G1_base": false,
+      "G1_calibrated": false,
+      "G2_base": true,
+      "G2_calibrated": true,
+      "G3_base": false,
+      "G3_calibrated": false,
+      "G4": false,
+      "G4_wins": [
+        "P2"
+      ],
+      "G5_base": true,
+      "G5_calibrated": true,
+      "G6_base": false,
+      "G6_calibrated": false,
+      "G7": false,
+      "G7_detail": {
+        "cagr_diff": {
+          "GSPC": -0.019821,
+          "M1": -0.036388,
+          "M2": 0.014309,
+          "M3": -0.008197,
+          "M4": 0.001351,
+          "M5": 0.00778
+        },
+        "max_dd_diff": {
+          "GSPC": 0.108709,
+          "M1": 0.150108,
+          "M2": -0.03651,
+          "M3": 0.117844,
+          "M4": -0.055544,
+          "M5": -0.013062
+        },
+        "max_dd_diff_max": 0.150108,
+        "median_cagr_diff": -0.003423,
+        "windows_cagr_ge_minus_0_5pp": 3,
+        "windows_dd_within_3pp": 3
+      },
+      "G8": true,
+      "G8_pooled_median_diff": 0.001669,
+      "G9": true,
+      "core_G1_G3": false,
+      "pass_all": false
+    }
+  },
+  "harness_check": {
+    "band_simulator_equals_simulate_multi": true,
+    "deviation_checks": {
+      "base_m1_cagr": {
+        "diff_pp": 0.0,
+        "reference": 0.149491,
+        "reproduced": 0.149491
+      },
+      "base_m1_max_dd": {
+        "diff_pp": 0.0,
+        "reference": 0.492471,
+        "reproduced": 0.492471
+      },
+      "base_m2_cagr": {
+        "diff_pp": 0.0,
+        "reference": 0.146749,
+        "reproduced": 0.146749
+      },
+      "base_m2_max_dd": {
+        "diff_pp": 0.0,
+        "reference": 0.495643,
+        "reproduced": 0.495643
+      },
+      "calibrated_m1_cagr": {
+        "diff_pp": 0.0,
+        "reference": 0.143772,
+        "reproduced": 0.143772
+      },
+      "calibrated_m1_max_dd": {
+        "diff_pp": 0.0,
+        "reference": 0.493331,
+        "reproduced": 0.493331
+      },
+      "calibrated_m2_cagr": {
+        "diff_pp": 0.0,
+        "reference": 0.141043,
+        "reproduced": 0.141043
+      },
+      "calibrated_m2_max_dd": {
+        "diff_pp": 0.0,
+        "reference": 0.496498,
+        "reproduced": 0.496498
+      }
+    },
+    "ewma_identity_max_rel_diff_vs_direct": 0.0,
+    "ewma_nan_pattern_equal": true,
+    "pass": true,
+    "tolerance_pp": 0.01,
+    "window": {
+      "end": "2026-09-29",
+      "sessions": 6679,
+      "start": "2000-03-09"
+    }
+  },
+  "main_window": {
+    "base": {
+      "m1": {
+        "C0": {
+          "2000_2002": {
+            "cagr": -0.171626,
+            "max_dd": 0.431917,
+            "total_return": -0.411362
+          },
+          "2007_2009": {
+            "cagr": 0.144291,
+            "max_dd": 0.366355,
+            "total_return": 0.499583
+          },
+          "2017_end": {
+            "cagr": 0.326357,
+            "max_dd": 0.323295,
+            "total_return": 14.687069
+          },
+          "cagr": 0.149491,
+          "calmar": 0.303553,
+          "end": "2026-09-29",
+          "ending_multiple": 40.45985,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2007-05-04",
+            "years": 7.101985
+          },
+          "max_dd": 0.492471,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2007-05-04",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 7.101985,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.663217,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.008584,
+              "from": "2000-03-08",
+              "max_dd": 0.492471,
+              "to": "2008-12-31",
+              "total_return": -0.073186
+            },
+            "P2": {
+              "cagr": 0.136528,
+              "from": "2008-12-31",
+              "max_dd": 0.38435,
+              "to": "2016-12-30",
+              "total_return": 1.78285
+            },
+            "P3": {
+              "cagr": 0.326357,
+              "from": "2016-12-30",
+              "max_dd": 0.323295,
+              "to": "2026-09-29",
+              "total_return": 14.687069
+            }
+          },
+          "trades": 1525,
+          "turnover_annual": 5.96894,
+          "years": {
+            "2000": -0.281323,
+            "2001": -0.121085,
+            "2002": -0.068104,
+            "2003": 0.461654,
+            "2004": 0.059943,
+            "2005": -0.055507,
+            "2006": 0.066502,
+            "2007": 0.267706,
+            "2008": -0.204137,
+            "2009": 0.486324,
+            "2010": 0.120575,
+            "2011": -0.21804,
+            "2012": 0.092198,
+            "2013": 0.696042,
+            "2014": 0.327918,
+            "2015": -0.121476,
+            "2016": -0.011248,
+            "2017": 0.690981,
+            "2018": 0.050511,
+            "2019": 0.450953,
+            "2020": 0.538497,
+            "2021": 0.44052,
+            "2022": -0.206035,
+            "2023": 0.541883,
+            "2024": 0.387743,
+            "2025": 0.26863,
+            "2026": 0.274196
+          }
+        },
+        "Y1": {
+          "2000_2002": {
+            "cagr": -0.116721,
+            "max_dd": 0.325394,
+            "total_return": -0.294833
+          },
+          "2007_2009": {
+            "cagr": 0.065616,
+            "max_dd": 0.325879,
+            "total_return": 0.210522
+          },
+          "2017_end": {
+            "cagr": 0.324093,
+            "max_dd": 0.255026,
+            "total_return": 14.427931
+          },
+          "cagr": 0.131051,
+          "calmar": 0.319768,
+          "end": "2026-09-29",
+          "ending_multiple": 26.331581,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2004-01-16",
+            "years": 3.805613
+          },
+          "max_dd": 0.40983,
+          "max_dd_episode": {
+            "peak": "2015-07-20",
+            "recovered": "2017-06-02",
+            "trough": "2016-06-17",
+            "years_peak_to_recovery": 1.869952,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.61642,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.010103,
+              "from": "2000-03-08",
+              "max_dd": 0.331324,
+              "to": "2008-12-31",
+              "total_return": -0.085627
+            },
+            "P2": {
+              "cagr": 0.081166,
+              "from": "2008-12-31",
+              "max_dd": 0.40983,
+              "to": "2016-12-30",
+              "total_return": 0.866577
+            },
+            "P3": {
+              "cagr": 0.324093,
+              "from": "2016-12-30",
+              "max_dd": 0.255026,
+              "to": "2026-09-29",
+              "total_return": 14.427931
+            }
+          },
+          "trades": 1231,
+          "turnover_annual": 3.866856,
+          "years": {
+            "2000": -0.294833,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 0.323116,
+            "2004": -0.02759,
+            "2005": -0.112455,
+            "2006": 0.082744,
+            "2007": 0.267711,
+            "2008": -0.172729,
+            "2009": 0.154263,
+            "2010": 0.046965,
+            "2011": -0.251899,
+            "2012": 0.141621,
+            "2013": 0.696042,
+            "2014": 0.26457,
+            "2015": -0.127489,
+            "2016": -0.033557,
+            "2017": 0.690981,
+            "2018": 0.050511,
+            "2019": 0.429034,
+            "2020": 0.614026,
+            "2021": 0.44052,
+            "2022": -0.190575,
+            "2023": 0.516485,
+            "2024": 0.387743,
+            "2025": 0.204303,
+            "2026": 0.274196
+          }
+        },
+        "Y2": {
+          "2000_2002": {
+            "cagr": -0.216878,
+            "max_dd": 0.514996,
+            "total_return": -0.497448
+          },
+          "2007_2009": {
+            "cagr": 0.093705,
+            "max_dd": 0.457881,
+            "total_return": 0.309003
+          },
+          "2017_end": {
+            "cagr": 0.269493,
+            "max_dd": 0.417744,
+            "total_return": 9.234334
+          },
+          "cagr": 0.144748,
+          "calmar": 0.252873,
+          "end": "2026-09-29",
+          "ending_multiple": 36.251711,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2010-04-13",
+            "years": 10.045175
+          },
+          "max_dd": 0.572415,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2010-04-13",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 10.045175,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.621183,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.058378,
+              "from": "2000-03-08",
+              "max_dd": 0.572415,
+              "to": "2008-12-31",
+              "total_return": -0.411565
+            },
+            "P2": {
+              "cagr": 0.251641,
+              "from": "2008-12-31",
+              "max_dd": 0.335645,
+              "to": "2016-12-30",
+              "total_return": 5.019641
+            },
+            "P3": {
+              "cagr": 0.269493,
+              "from": "2016-12-30",
+              "max_dd": 0.417744,
+              "to": "2026-09-29",
+              "total_return": 9.234334
+            }
+          },
+          "trades": 1797,
+          "turnover_annual": 3.415371,
+          "years": {
+            "2000": -0.304222,
+            "2001": -0.080908,
+            "2002": -0.214128,
+            "2003": 0.442359,
+            "2004": 0.094593,
+            "2005": -0.055504,
+            "2006": -0.06484,
+            "2007": 0.267706,
+            "2008": -0.337652,
+            "2009": 0.558961,
+            "2010": 0.364989,
+            "2011": -0.062521,
+            "2012": 0.324837,
+            "2013": 0.802361,
+            "2014": 0.328533,
+            "2015": 0.055886,
+            "2016": -0.099153,
+            "2017": 0.690981,
+            "2018": -0.029061,
+            "2019": 0.450953,
+            "2020": 0.487443,
+            "2021": 0.44052,
+            "2022": -0.324855,
+            "2023": 0.615805,
+            "2024": 0.387743,
+            "2025": 0.010409,
+            "2026": 0.310761
+          }
+        },
+        "Y3": {
+          "2000_2002": {
+            "cagr": -0.116721,
+            "max_dd": 0.325394,
+            "total_return": -0.294833
+          },
+          "2007_2009": {
+            "cagr": 0.065616,
+            "max_dd": 0.325879,
+            "total_return": 0.210522
+          },
+          "2017_end": {
+            "cagr": 0.324093,
+            "max_dd": 0.255026,
+            "total_return": 14.427931
+          },
+          "cagr": 0.131051,
+          "calmar": 0.319768,
+          "end": "2026-09-29",
+          "ending_multiple": 26.331581,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2004-01-16",
+            "years": 3.805613
+          },
+          "max_dd": 0.40983,
+          "max_dd_episode": {
+            "peak": "2015-07-20",
+            "recovered": "2017-06-02",
+            "trough": "2016-06-17",
+            "years_peak_to_recovery": 1.869952,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.61642,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.010103,
+              "from": "2000-03-08",
+              "max_dd": 0.331324,
+              "to": "2008-12-31",
+              "total_return": -0.085627
+            },
+            "P2": {
+              "cagr": 0.081166,
+              "from": "2008-12-31",
+              "max_dd": 0.40983,
+              "to": "2016-12-30",
+              "total_return": 0.866577
+            },
+            "P3": {
+              "cagr": 0.324093,
+              "from": "2016-12-30",
+              "max_dd": 0.255026,
+              "to": "2026-09-29",
+              "total_return": 14.427931
+            }
+          },
+          "trades": 1231,
+          "turnover_annual": 3.866856,
+          "years": {
+            "2000": -0.294833,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 0.323116,
+            "2004": -0.02759,
+            "2005": -0.112455,
+            "2006": 0.082744,
+            "2007": 0.267711,
+            "2008": -0.172729,
+            "2009": 0.154263,
+            "2010": 0.046965,
+            "2011": -0.251899,
+            "2012": 0.141621,
+            "2013": 0.696042,
+            "2014": 0.26457,
+            "2015": -0.127489,
+            "2016": -0.033557,
+            "2017": 0.690981,
+            "2018": 0.050511,
+            "2019": 0.429034,
+            "2020": 0.614026,
+            "2021": 0.44052,
+            "2022": -0.190575,
+            "2023": 0.516485,
+            "2024": 0.387743,
+            "2025": 0.204303,
+            "2026": 0.274196
+          }
+        },
+        "Y4": {
+          "2000_2002": {
+            "cagr": -0.144364,
+            "max_dd": 0.377714,
+            "total_return": -0.355198
+          },
+          "2007_2009": {
+            "cagr": 0.102327,
+            "max_dd": 0.433672,
+            "total_return": 0.34027
+          },
+          "2017_end": {
+            "cagr": 0.304697,
+            "max_dd": 0.382068,
+            "total_return": 12.361106
+          },
+          "cagr": 0.148297,
+          "calmar": 0.329994,
+          "end": "2026-09-29",
+          "ending_multiple": 39.357667,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2004-01-16",
+            "years": 3.805613
+          },
+          "max_dd": 0.449392,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2004-01-16",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 3.805613,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.653349,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.015235,
+              "from": "2000-03-08",
+              "max_dd": 0.449392,
+              "to": "2008-12-31",
+              "total_return": -0.126581
+            },
+            "P2": {
+              "cagr": 0.164175,
+              "from": "2008-12-31",
+              "max_dd": 0.420317,
+              "to": "2016-12-30",
+              "total_return": 2.372597
+            },
+            "P3": {
+              "cagr": 0.304697,
+              "from": "2016-12-30",
+              "max_dd": 0.382068,
+              "to": "2026-09-29",
+              "total_return": 12.361106
+            }
+          },
+          "trades": 1573,
+          "turnover_annual": 4.644921,
+          "years": {
+            "2000": -0.2313,
+            "2001": -0.098981,
+            "2002": -0.06903,
+            "2003": 0.447599,
+            "2004": 0.064112,
+            "2005": -0.041658,
+            "2006": 0.040303,
+            "2007": 0.267706,
+            "2008": -0.304237,
+            "2009": 0.519541,
+            "2010": 0.193034,
+            "2011": -0.301107,
+            "2012": 0.137928,
+            "2013": 0.696042,
+            "2014": 0.328533,
+            "2015": 0.008703,
+            "2016": 0.029204,
+            "2017": 0.690981,
+            "2018": 0.037196,
+            "2019": 0.450953,
+            "2020": 0.48514,
+            "2021": 0.44052,
+            "2022": -0.283488,
+            "2023": 0.615805,
+            "2024": 0.387743,
+            "2025": 0.204727,
+            "2026": 0.267921
+          }
+        }
+      },
+      "m2": {
+        "C0": {
+          "2000_2002": {
+            "cagr": -0.173013,
+            "max_dd": 0.434445,
+            "total_return": -0.414133
+          },
+          "2007_2009": {
+            "cagr": 0.141633,
+            "max_dd": 0.369757,
+            "total_return": 0.489133
+          },
+          "2017_end": {
+            "cagr": 0.324369,
+            "max_dd": 0.32522,
+            "total_return": 14.459401
+          },
+          "cagr": 0.146749,
+          "calmar": 0.296078,
+          "end": "2026-09-29",
+          "ending_multiple": 37.972947,
+          "events_2017_on": {
+            "counts": {
+              "entries": 12,
+              "exits": 12,
+              "resize_down": 304,
+              "resize_up": 322
+            },
+            "resizes_per_year": 64.226545,
+            "round_trips_per_year": 1.23118,
+            "sells_per_year": 32.421067,
+            "trades_per_year": 66.688904,
+            "turnover_from_entries_exits_per_year": 1.560927,
+            "turnover_from_resizes_per_year": 2.188135,
+            "turnover_per_year": 3.749062,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 79,
+              "exits": 78,
+              "resize_down": 650,
+              "resize_up": 718
+            },
+            "resizes_per_year": 51.506236,
+            "round_trips_per_year": 2.936759,
+            "sells_per_year": 27.409752,
+            "trades_per_year": 57.417405,
+            "turnover_from_entries_exits_per_year": 4.267882,
+            "turnover_from_resizes_per_year": 1.701058,
+            "turnover_per_year": 5.96894,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2007-05-30",
+            "years": 7.173169
+          },
+          "max_dd": 0.495643,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2007-05-30",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 7.173169,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.654113,
+          "stage_b_window": {
+            "cagr": 0.314182,
+            "from": "2016-12-30",
+            "max_dd": 0.32522,
+            "to": "2026-07-30",
+            "total_return": 12.699016
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.010974,
+              "from": "2000-03-08",
+              "max_dd": 0.495643,
+              "to": "2008-12-31",
+              "total_return": -0.092695
+            },
+            "P2": {
+              "cagr": 0.132621,
+              "from": "2008-12-31",
+              "max_dd": 0.38914,
+              "to": "2016-12-30",
+              "total_return": 1.707249
+            },
+            "P3": {
+              "cagr": 0.324369,
+              "from": "2016-12-30",
+              "max_dd": 0.32522,
+              "to": "2026-09-29",
+              "total_return": 14.459401
+            }
+          },
+          "time_in_market": 0.743075,
+          "trades": 1525,
+          "turnover_annual": 5.96894,
+          "years": {
+            "2000": -0.283075,
+            "2001": -0.121863,
+            "2002": -0.069399,
+            "2003": 0.456336,
+            "2004": 0.054848,
+            "2005": -0.056987,
+            "2006": 0.064813,
+            "2007": 0.266378,
+            "2008": -0.207228,
+            "2009": 0.483276,
+            "2010": 0.115432,
+            "2011": -0.222635,
+            "2012": 0.086686,
+            "2013": 0.695365,
+            "2014": 0.326367,
+            "2015": -0.123476,
+            "2016": -0.017249,
+            "2017": 0.690974,
+            "2018": 0.048256,
+            "2019": 0.449417,
+            "2020": 0.534577,
+            "2021": 0.438952,
+            "2022": -0.207454,
+            "2023": 0.539083,
+            "2024": 0.386551,
+            "2025": 0.266533,
+            "2026": 0.272101
+          }
+        },
+        "Y1": {
+          "2000_2002": {
+            "cagr": -0.11724,
+            "max_dd": 0.326169,
+            "total_return": -0.295998
+          },
+          "2007_2009": {
+            "cagr": 0.064325,
+            "max_dd": 0.327804,
+            "total_return": 0.206117
+          },
+          "2017_end": {
+            "cagr": 0.322427,
+            "max_dd": 0.255206,
+            "total_return": 14.239832
+          },
+          "cagr": 0.129302,
+          "calmar": 0.314151,
+          "end": "2026-09-29",
+          "ending_multiple": 25.271419,
+          "events_2017_on": {
+            "counts": {
+              "entries": 8,
+              "exits": 8,
+              "resize_down": 282,
+              "resize_up": 292
+            },
+            "resizes_per_year": 58.891433,
+            "round_trips_per_year": 0.820787,
+            "sells_per_year": 29.753511,
+            "trades_per_year": 60.533006,
+            "turnover_from_entries_exits_per_year": 1.141517,
+            "turnover_from_resizes_per_year": 2.004304,
+            "turnover_per_year": 3.145821,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 42,
+              "exits": 41,
+              "resize_down": 558,
+              "resize_up": 590
+            },
+            "resizes_per_year": 43.22307,
+            "round_trips_per_year": 1.543681,
+            "sells_per_year": 22.552804,
+            "trades_per_year": 46.348083,
+            "turnover_from_entries_exits_per_year": 2.437145,
+            "turnover_from_resizes_per_year": 1.429711,
+            "turnover_per_year": 3.866856,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2004-01-16",
+            "years": 3.805613
+          },
+          "max_dd": 0.411591,
+          "max_dd_episode": {
+            "peak": "2015-07-20",
+            "recovered": "2017-06-02",
+            "trough": "2016-06-17",
+            "years_peak_to_recovery": 1.869952,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.610274,
+          "stage_b_window": {
+            "cagr": 0.312221,
+            "from": "2016-12-30",
+            "max_dd": 0.255206,
+            "to": "2026-07-30",
+            "total_return": 12.50445
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.011377,
+              "from": "2000-03-08",
+              "max_dd": 0.332557,
+              "to": "2008-12-31",
+              "total_return": -0.09595
+            },
+            "P2": {
+              "cagr": 0.078806,
+              "from": "2008-12-31",
+              "max_dd": 0.411591,
+              "to": "2016-12-30",
+              "total_return": 0.834243
+            },
+            "P3": {
+              "cagr": 0.322427,
+              "from": "2016-12-30",
+              "max_dd": 0.255206,
+              "to": "2026-09-29",
+              "total_return": 14.239832
+            }
+          },
+          "time_in_market": 0.686779,
+          "trades": 1231,
+          "turnover_annual": 3.866856,
+          "years": {
+            "2000": -0.295998,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 0.320932,
+            "2004": -0.030144,
+            "2005": -0.113846,
+            "2006": 0.081877,
+            "2007": 0.266383,
+            "2008": -0.174383,
+            "2009": 0.153575,
+            "2010": 0.044014,
+            "2011": -0.254644,
+            "2012": 0.136751,
+            "2013": 0.695365,
+            "2014": 0.263136,
+            "2015": -0.128821,
+            "2016": -0.036493,
+            "2017": 0.690974,
+            "2018": 0.048256,
+            "2019": 0.427574,
+            "2020": 0.610328,
+            "2021": 0.438952,
+            "2022": -0.191269,
+            "2023": 0.515354,
+            "2024": 0.386551,
+            "2025": 0.20238,
+            "2026": 0.272101
+          }
+        },
+        "Y2": {
+          "2000_2002": {
+            "cagr": -0.217588,
+            "max_dd": 0.516107,
+            "total_return": -0.498728
+          },
+          "2007_2009": {
+            "cagr": 0.09176,
+            "max_dd": 0.459861,
+            "total_return": 0.302015
+          },
+          "2017_end": {
+            "cagr": 0.267959,
+            "max_dd": 0.418855,
+            "total_return": 9.114396
+          },
+          "cagr": 0.143185,
+          "calmar": 0.249459,
+          "end": "2026-09-29",
+          "ending_multiple": 34.959652,
+          "events_2017_on": {
+            "counts": {
+              "entries": 5,
+              "exits": 5,
+              "resize_down": 356,
+              "resize_up": 365
+            },
+            "resizes_per_year": 73.973385,
+            "round_trips_per_year": 0.512992,
+            "sells_per_year": 37.037992,
+            "trades_per_year": 74.999368,
+            "turnover_from_entries_exits_per_year": 0.540928,
+            "turnover_from_resizes_per_year": 2.482422,
+            "turnover_per_year": 3.023349,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 24,
+              "exits": 23,
+              "resize_down": 844,
+              "resize_up": 906
+            },
+            "resizes_per_year": 65.888826,
+            "round_trips_per_year": 0.865967,
+            "sells_per_year": 32.643207,
+            "trades_per_year": 67.658412,
+            "turnover_from_entries_exits_per_year": 1.263188,
+            "turnover_from_resizes_per_year": 2.152182,
+            "turnover_per_year": 3.415371,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2010-04-14",
+            "years": 10.047912
+          },
+          "max_dd": 0.573982,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2010-04-14",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 10.047912,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.616345,
+          "stage_b_window": {
+            "cagr": 0.257251,
+            "from": "2016-12-30",
+            "max_dd": 0.418855,
+            "to": "2026-07-30",
+            "total_return": 7.962655
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.059932,
+              "from": "2000-03-08",
+              "max_dd": 0.573982,
+              "to": "2008-12-31",
+              "total_return": -0.420072
+            },
+            "P2": {
+              "cagr": 0.250086,
+              "from": "2008-12-31",
+              "max_dd": 0.337955,
+              "to": "2016-12-30",
+              "total_return": 4.960096
+            },
+            "P3": {
+              "cagr": 0.267959,
+              "from": "2016-12-30",
+              "max_dd": 0.418855,
+              "to": "2026-09-29",
+              "total_return": 9.114396
+            }
+          },
+          "time_in_market": 0.820632,
+          "trades": 1797,
+          "turnover_annual": 3.415371,
+          "years": {
+            "2000": -0.305313,
+            "2001": -0.081141,
+            "2002": -0.2147,
+            "2003": 0.437731,
+            "2004": 0.092733,
+            "2005": -0.056984,
+            "2006": -0.066381,
+            "2007": 0.266378,
+            "2008": -0.339524,
+            "2009": 0.556667,
+            "2010": 0.363091,
+            "2011": -0.06445,
+            "2012": 0.323814,
+            "2013": 0.802276,
+            "2014": 0.327915,
+            "2015": 0.054535,
+            "2016": -0.101359,
+            "2017": 0.690974,
+            "2018": -0.030382,
+            "2019": 0.449417,
+            "2020": 0.484045,
+            "2021": 0.438952,
+            "2022": -0.325671,
+            "2023": 0.614002,
+            "2024": 0.386551,
+            "2025": 0.008699,
+            "2026": 0.309311
+          }
+        },
+        "Y3": {
+          "2000_2002": {
+            "cagr": -0.11724,
+            "max_dd": 0.326169,
+            "total_return": -0.295998
+          },
+          "2007_2009": {
+            "cagr": 0.064325,
+            "max_dd": 0.327804,
+            "total_return": 0.206117
+          },
+          "2017_end": {
+            "cagr": 0.322427,
+            "max_dd": 0.255206,
+            "total_return": 14.239832
+          },
+          "cagr": 0.129302,
+          "calmar": 0.314151,
+          "end": "2026-09-29",
+          "ending_multiple": 25.271419,
+          "events_2017_on": {
+            "counts": {
+              "entries": 8,
+              "exits": 8,
+              "resize_down": 282,
+              "resize_up": 292
+            },
+            "resizes_per_year": 58.891433,
+            "round_trips_per_year": 0.820787,
+            "sells_per_year": 29.753511,
+            "trades_per_year": 60.533006,
+            "turnover_from_entries_exits_per_year": 1.141517,
+            "turnover_from_resizes_per_year": 2.004304,
+            "turnover_per_year": 3.145821,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 42,
+              "exits": 41,
+              "resize_down": 558,
+              "resize_up": 590
+            },
+            "resizes_per_year": 43.22307,
+            "round_trips_per_year": 1.543681,
+            "sells_per_year": 22.552804,
+            "trades_per_year": 46.348083,
+            "turnover_from_entries_exits_per_year": 2.437145,
+            "turnover_from_resizes_per_year": 1.429711,
+            "turnover_per_year": 3.866856,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2004-01-16",
+            "years": 3.805613
+          },
+          "max_dd": 0.411591,
+          "max_dd_episode": {
+            "peak": "2015-07-20",
+            "recovered": "2017-06-02",
+            "trough": "2016-06-17",
+            "years_peak_to_recovery": 1.869952,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.610274,
+          "stage_b_window": {
+            "cagr": 0.312221,
+            "from": "2016-12-30",
+            "max_dd": 0.255206,
+            "to": "2026-07-30",
+            "total_return": 12.50445
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.011377,
+              "from": "2000-03-08",
+              "max_dd": 0.332557,
+              "to": "2008-12-31",
+              "total_return": -0.09595
+            },
+            "P2": {
+              "cagr": 0.078806,
+              "from": "2008-12-31",
+              "max_dd": 0.411591,
+              "to": "2016-12-30",
+              "total_return": 0.834243
+            },
+            "P3": {
+              "cagr": 0.322427,
+              "from": "2016-12-30",
+              "max_dd": 0.255206,
+              "to": "2026-09-29",
+              "total_return": 14.239832
+            }
+          },
+          "time_in_market": 0.686779,
+          "trades": 1231,
+          "turnover_annual": 3.866856,
+          "years": {
+            "2000": -0.295998,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 0.320932,
+            "2004": -0.030144,
+            "2005": -0.113846,
+            "2006": 0.081877,
+            "2007": 0.266383,
+            "2008": -0.174383,
+            "2009": 0.153575,
+            "2010": 0.044014,
+            "2011": -0.254644,
+            "2012": 0.136751,
+            "2013": 0.695365,
+            "2014": 0.263136,
+            "2015": -0.128821,
+            "2016": -0.036493,
+            "2017": 0.690974,
+            "2018": 0.048256,
+            "2019": 0.427574,
+            "2020": 0.610328,
+            "2021": 0.438952,
+            "2022": -0.191269,
+            "2023": 0.515354,
+            "2024": 0.386551,
+            "2025": 0.20238,
+            "2026": 0.272101
+          }
+        },
+        "Y4": {
+          "2000_2002": {
+            "cagr": -0.145285,
+            "max_dd": 0.379436,
+            "total_return": -0.357148
+          },
+          "2007_2009": {
+            "cagr": 0.099964,
+            "max_dd": 0.436408,
+            "total_return": 0.331651
+          },
+          "2017_end": {
+            "cagr": 0.302941,
+            "max_dd": 0.383646,
+            "total_return": 12.186932
+          },
+          "cagr": 0.146164,
+          "calmar": 0.323588,
+          "end": "2026-09-29",
+          "ending_multiple": 37.462049,
+          "events_2017_on": {
+            "counts": {
+              "entries": 9,
+              "exits": 9,
+              "resize_down": 318,
+              "resize_up": 329
+            },
+            "resizes_per_year": 66.38111,
+            "round_trips_per_year": 0.923385,
+            "sells_per_year": 33.549649,
+            "trades_per_year": 68.227879,
+            "turnover_from_entries_exits_per_year": 1.099889,
+            "turnover_from_resizes_per_year": 2.265205,
+            "turnover_per_year": 3.365095,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 52,
+              "exits": 51,
+              "resize_down": 712,
+              "resize_up": 758
+            },
+            "resizes_per_year": 55.346614,
+            "round_trips_per_year": 1.920189,
+            "sells_per_year": 28.727528,
+            "trades_per_year": 59.224642,
+            "turnover_from_entries_exits_per_year": 2.803236,
+            "turnover_from_resizes_per_year": 1.841686,
+            "turnover_per_year": 4.644921,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2006-01-06",
+            "years": 5.779603
+          },
+          "max_dd": 0.451699,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2006-01-06",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 5.779603,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.646374,
+          "stage_b_window": {
+            "cagr": 0.292551,
+            "from": "2016-12-30",
+            "max_dd": 0.383646,
+            "to": "2026-07-30",
+            "total_return": 10.685317
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.017094,
+              "from": "2000-03-08",
+              "max_dd": 0.451699,
+              "to": "2008-12-31",
+              "total_return": -0.141015
+            },
+            "P2": {
+              "cagr": 0.161328,
+              "from": "2008-12-31",
+              "max_dd": 0.422582,
+              "to": "2016-12-30",
+              "total_return": 2.307215
+            },
+            "P3": {
+              "cagr": 0.302941,
+              "from": "2016-12-30",
+              "max_dd": 0.383646,
+              "to": "2026-09-29",
+              "total_return": 12.186932
+            }
+          },
+          "time_in_market": 0.762988,
+          "trades": 1573,
+          "turnover_annual": 4.644921,
+          "years": {
+            "2000": -0.232688,
+            "2001": -0.099499,
+            "2002": -0.069632,
+            "2003": 0.442881,
+            "2004": 0.061078,
+            "2005": -0.04316,
+            "2006": 0.038656,
+            "2007": 0.266378,
+            "2008": -0.306539,
+            "2009": 0.516368,
+            "2010": 0.189121,
+            "2011": -0.304052,
+            "2012": 0.133963,
+            "2013": 0.695365,
+            "2014": 0.327915,
+            "2015": 0.007063,
+            "2016": 0.025099,
+            "2017": 0.690974,
+            "2018": 0.035586,
+            "2019": 0.449417,
+            "2020": 0.481748,
+            "2021": 0.438952,
+            "2022": -0.284816,
+            "2023": 0.614002,
+            "2024": 0.386551,
+            "2025": 0.202741,
+            "2026": 0.265836
+          }
+        }
+      }
+    },
+    "calibrated": {
+      "m1": {
+        "C0": {
+          "2000_2002": {
+            "cagr": -0.172071,
+            "max_dd": 0.43269,
+            "total_return": -0.412252
+          },
+          "2007_2009": {
+            "cagr": 0.139586,
+            "max_dd": 0.36786,
+            "total_return": 0.481122
+          },
+          "2017_end": {
+            "cagr": 0.318919,
+            "max_dd": 0.324441,
+            "total_return": 13.850282
+          },
+          "cagr": 0.143772,
+          "calmar": 0.29143,
+          "end": "2026-09-29",
+          "ending_multiple": 35.439379,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2007-05-31",
+            "years": 7.175907
+          },
+          "max_dd": 0.493331,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2007-05-31",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 7.175907,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.644225,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.011977,
+              "from": "2000-03-08",
+              "max_dd": 0.493331,
+              "to": "2008-12-31",
+              "total_return": -0.100778
+            },
+            "P2": {
+              "cagr": 0.129806,
+              "from": "2008-12-31",
+              "max_dd": 0.386672,
+              "to": "2016-12-30",
+              "total_return": 1.6539
+            },
+            "P3": {
+              "cagr": 0.318919,
+              "from": "2016-12-30",
+              "max_dd": 0.324441,
+              "to": "2026-09-29",
+              "total_return": 13.850282
+            }
+          },
+          "trades": 1525,
+          "turnover_annual": 5.968913,
+          "years": {
+            "2000": -0.282221,
+            "2001": -0.121197,
+            "2002": -0.06823,
+            "2003": 0.454919,
+            "2004": 0.054288,
+            "2005": -0.061062,
+            "2006": 0.061313,
+            "2007": 0.259211,
+            "2008": -0.205125,
+            "2009": 0.479768,
+            "2010": 0.114216,
+            "2011": -0.222113,
+            "2012": 0.085344,
+            "2013": 0.683648,
+            "2014": 0.318424,
+            "2015": -0.127013,
+            "2016": -0.016162,
+            "2017": 0.678631,
+            "2018": 0.044832,
+            "2019": 0.441719,
+            "2020": 0.530727,
+            "2021": 0.430813,
+            "2022": -0.20639,
+            "2023": 0.5322,
+            "2024": 0.3782,
+            "2025": 0.261339,
+            "2026": 0.268544
+          }
+        },
+        "Y1": {
+          "2000_2002": {
+            "cagr": -0.117031,
+            "max_dd": 0.325959,
+            "total_return": -0.29553
+          },
+          "2007_2009": {
+            "cagr": 0.062089,
+            "max_dd": 0.327521,
+            "total_return": 0.198516
+          },
+          "2017_end": {
+            "cagr": 0.316915,
+            "max_dd": 0.255221,
+            "total_return": 13.63181
+          },
+          "cagr": 0.125766,
+          "calmar": 0.305404,
+          "end": "2026-09-29",
+          "ending_multiple": 23.251555,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2007-07-06",
+            "years": 7.27447
+          },
+          "max_dd": 0.411801,
+          "max_dd_episode": {
+            "peak": "2015-07-20",
+            "recovered": "2017-06-08",
+            "trough": "2016-06-17",
+            "years_peak_to_recovery": 1.886379,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.59782,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.013197,
+              "from": "2000-03-08",
+              "max_dd": 0.332113,
+              "to": "2008-12-31",
+              "total_return": -0.110523
+            },
+            "P2": {
+              "cagr": 0.075259,
+              "from": "2008-12-31",
+              "max_dd": 0.411801,
+              "to": "2016-12-30",
+              "total_return": 0.786566
+            },
+            "P3": {
+              "cagr": 0.316915,
+              "from": "2016-12-30",
+              "max_dd": 0.255221,
+              "to": "2026-09-29",
+              "total_return": 13.63181
+            }
+          },
+          "trades": 1231,
+          "turnover_annual": 3.866826,
+          "years": {
+            "2000": -0.29553,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 0.318632,
+            "2004": -0.032257,
+            "2005": -0.117545,
+            "2006": 0.077572,
+            "2007": 0.259215,
+            "2008": -0.173677,
+            "2009": 0.151846,
+            "2010": 0.0415,
+            "2011": -0.255531,
+            "2012": 0.134524,
+            "2013": 0.683648,
+            "2014": 0.255561,
+            "2015": -0.13288,
+            "2016": -0.038085,
+            "2017": 0.678631,
+            "2018": 0.044832,
+            "2019": 0.420303,
+            "2020": 0.605921,
+            "2021": 0.430813,
+            "2022": -0.190895,
+            "2023": 0.50909,
+            "2024": 0.3782,
+            "2025": 0.197486,
+            "2026": 0.268544
+          }
+        },
+        "Y2": {
+          "2000_2002": {
+            "cagr": -0.217653,
+            "max_dd": 0.516272,
+            "total_return": -0.498845
+          },
+          "2007_2009": {
+            "cagr": 0.088976,
+            "max_dd": 0.459426,
+            "total_return": 0.292061
+          },
+          "2017_end": {
+            "cagr": 0.262099,
+            "max_dd": 0.419143,
+            "total_return": 8.66788
+          },
+          "cagr": 0.138605,
+          "calmar": 0.241531,
+          "end": "2026-09-29",
+          "ending_multiple": 31.424167,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2010-04-22",
+            "years": 10.069815
+          },
+          "max_dd": 0.57386,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2010-04-22",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 10.069815,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.602128,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.062109,
+              "from": "2000-03-08",
+              "max_dd": 0.57386,
+              "to": "2008-12-31",
+              "total_return": -0.431806
+            },
+            "P2": {
+              "cagr": 0.243689,
+              "from": "2008-12-31",
+              "max_dd": 0.338717,
+              "to": "2016-12-30",
+              "total_return": 4.720524
+            },
+            "P3": {
+              "cagr": 0.262099,
+              "from": "2016-12-30",
+              "max_dd": 0.419143,
+              "to": "2026-09-29",
+              "total_return": 8.66788
+            }
+          },
+          "trades": 1797,
+          "turnover_annual": 3.415352,
+          "years": {
+            "2000": -0.305536,
+            "2001": -0.081104,
+            "2002": -0.214664,
+            "2003": 0.435115,
+            "2004": 0.087054,
+            "2005": -0.061415,
+            "2006": -0.069927,
+            "2007": 0.259211,
+            "2008": -0.338853,
+            "2009": 0.551982,
+            "2010": 0.356057,
+            "2011": -0.068185,
+            "2012": 0.315457,
+            "2013": 0.789139,
+            "2014": 0.318998,
+            "2015": 0.048859,
+            "2016": -0.1041,
+            "2017": 0.678631,
+            "2018": -0.034899,
+            "2019": 0.441719,
+            "2020": 0.479873,
+            "2021": 0.430813,
+            "2022": -0.325636,
+            "2023": 0.605615,
+            "2024": 0.3782,
+            "2025": 0.004181,
+            "2026": 0.304535
+          }
+        },
+        "Y3": {
+          "2000_2002": {
+            "cagr": -0.117031,
+            "max_dd": 0.325959,
+            "total_return": -0.29553
+          },
+          "2007_2009": {
+            "cagr": 0.062089,
+            "max_dd": 0.327521,
+            "total_return": 0.198516
+          },
+          "2017_end": {
+            "cagr": 0.316915,
+            "max_dd": 0.255221,
+            "total_return": 13.63181
+          },
+          "cagr": 0.125766,
+          "calmar": 0.305404,
+          "end": "2026-09-29",
+          "ending_multiple": 23.251555,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2007-07-06",
+            "years": 7.27447
+          },
+          "max_dd": 0.411801,
+          "max_dd_episode": {
+            "peak": "2015-07-20",
+            "recovered": "2017-06-08",
+            "trough": "2016-06-17",
+            "years_peak_to_recovery": 1.886379,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.59782,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.013197,
+              "from": "2000-03-08",
+              "max_dd": 0.332113,
+              "to": "2008-12-31",
+              "total_return": -0.110523
+            },
+            "P2": {
+              "cagr": 0.075259,
+              "from": "2008-12-31",
+              "max_dd": 0.411801,
+              "to": "2016-12-30",
+              "total_return": 0.786566
+            },
+            "P3": {
+              "cagr": 0.316915,
+              "from": "2016-12-30",
+              "max_dd": 0.255221,
+              "to": "2026-09-29",
+              "total_return": 13.63181
+            }
+          },
+          "trades": 1231,
+          "turnover_annual": 3.866826,
+          "years": {
+            "2000": -0.29553,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 0.318632,
+            "2004": -0.032257,
+            "2005": -0.117545,
+            "2006": 0.077572,
+            "2007": 0.259215,
+            "2008": -0.173677,
+            "2009": 0.151846,
+            "2010": 0.0415,
+            "2011": -0.255531,
+            "2012": 0.134524,
+            "2013": 0.683648,
+            "2014": 0.255561,
+            "2015": -0.13288,
+            "2016": -0.038085,
+            "2017": 0.678631,
+            "2018": 0.044832,
+            "2019": 0.420303,
+            "2020": 0.605921,
+            "2021": 0.430813,
+            "2022": -0.190895,
+            "2023": 0.50909,
+            "2024": 0.3782,
+            "2025": 0.197486,
+            "2026": 0.268544
+          }
+        },
+        "Y4": {
+          "2000_2002": {
+            "cagr": -0.144903,
+            "max_dd": 0.378723,
+            "total_return": -0.356341
+          },
+          "2007_2009": {
+            "cagr": 0.097689,
+            "max_dd": 0.43518,
+            "total_return": 0.323388
+          },
+          "2017_end": {
+            "cagr": 0.297326,
+            "max_dd": 0.383208,
+            "total_return": 11.643289
+          },
+          "cagr": 0.14246,
+          "calmar": 0.316212,
+          "end": "2026-09-29",
+          "ending_multiple": 34.375434,
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2006-01-06",
+            "years": 5.779603
+          },
+          "max_dd": 0.450519,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2006-01-06",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 5.779603,
+            "years_underwater_so_far": null
+          },
+          "sharpe": 0.634231,
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.018727,
+              "from": "2000-03-08",
+              "max_dd": 0.450519,
+              "to": "2008-12-31",
+              "total_return": -0.153513
+            },
+            "P2": {
+              "cagr": 0.157091,
+              "from": "2008-12-31",
+              "max_dd": 0.422093,
+              "to": "2016-12-30",
+              "total_return": 2.211944
+            },
+            "P3": {
+              "cagr": 0.297326,
+              "from": "2016-12-30",
+              "max_dd": 0.383208,
+              "to": "2026-09-29",
+              "total_return": 11.643289
+            }
+          },
+          "trades": 1573,
+          "turnover_annual": 4.644895,
+          "years": {
+            "2000": -0.232349,
+            "2001": -0.099139,
+            "2002": -0.069247,
+            "2003": 0.440796,
+            "2004": 0.058153,
+            "2005": -0.047406,
+            "2006": 0.035121,
+            "2007": 0.259211,
+            "2008": -0.305271,
+            "2009": 0.512772,
+            "2010": 0.185999,
+            "2011": -0.304964,
+            "2012": 0.13046,
+            "2013": 0.683648,
+            "2014": 0.318998,
+            "2015": 0.002238,
+            "2016": 0.02372,
+            "2017": 0.678631,
+            "2018": 0.031497,
+            "2019": 0.441719,
+            "2020": 0.477596,
+            "2021": 0.430813,
+            "2022": -0.283916,
+            "2023": 0.605615,
+            "2024": 0.3782,
+            "2025": 0.197744,
+            "2026": 0.262223
+          }
+        }
+      },
+      "m2": {
+        "C0": {
+          "2000_2002": {
+            "cagr": -0.173457,
+            "max_dd": 0.435215,
+            "total_return": -0.415018
+          },
+          "2007_2009": {
+            "cagr": 0.136938,
+            "max_dd": 0.371254,
+            "total_return": 0.470801
+          },
+          "2017_end": {
+            "cagr": 0.316942,
+            "max_dd": 0.326363,
+            "total_return": 13.63476
+          },
+          "cagr": 0.141043,
+          "calmar": 0.284076,
+          "end": "2026-09-29",
+          "ending_multiple": 33.261074,
+          "events_2017_on": {
+            "counts": {
+              "entries": 12,
+              "exits": 12,
+              "resize_down": 304,
+              "resize_up": 322
+            },
+            "resizes_per_year": 64.226545,
+            "round_trips_per_year": 1.23118,
+            "sells_per_year": 32.421067,
+            "trades_per_year": 66.688904,
+            "turnover_from_entries_exits_per_year": 1.560918,
+            "turnover_from_resizes_per_year": 2.18812,
+            "turnover_per_year": 3.749038,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 79,
+              "exits": 78,
+              "resize_down": 650,
+              "resize_up": 718
+            },
+            "resizes_per_year": 51.506236,
+            "round_trips_per_year": 2.936759,
+            "sells_per_year": 27.409752,
+            "trades_per_year": 57.417405,
+            "turnover_from_entries_exits_per_year": 4.267853,
+            "turnover_from_resizes_per_year": 1.70106,
+            "turnover_per_year": 5.968913,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2007-07-02",
+            "years": 7.263518
+          },
+          "max_dd": 0.496498,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2007-07-02",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 7.263518,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.635122,
+          "stage_b_window": {
+            "cagr": 0.30683,
+            "from": "2016-12-30",
+            "max_dd": 0.326363,
+            "to": "2026-07-30",
+            "total_return": 11.982167
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.014358,
+              "from": "2000-03-08",
+              "max_dd": 0.496498,
+              "to": "2008-12-31",
+              "total_return": -0.119706
+            },
+            "P2": {
+              "cagr": 0.125921,
+              "from": "2008-12-31",
+              "max_dd": 0.391444,
+              "to": "2016-12-30",
+              "total_return": 1.581803
+            },
+            "P3": {
+              "cagr": 0.316942,
+              "from": "2016-12-30",
+              "max_dd": 0.326363,
+              "to": "2026-09-29",
+              "total_return": 13.63476
+            }
+          },
+          "time_in_market": 0.743075,
+          "trades": 1525,
+          "turnover_annual": 5.968913,
+          "years": {
+            "2000": -0.28397,
+            "2001": -0.121975,
+            "2002": -0.069525,
+            "2003": 0.449625,
+            "2004": 0.04922,
+            "2005": -0.062533,
+            "2006": 0.059632,
+            "2007": 0.257892,
+            "2008": -0.208212,
+            "2009": 0.476733,
+            "2010": 0.109103,
+            "2011": -0.226684,
+            "2012": 0.079866,
+            "2013": 0.682976,
+            "2014": 0.316884,
+            "2015": -0.129,
+            "2016": -0.022133,
+            "2017": 0.678624,
+            "2018": 0.042589,
+            "2019": 0.440193,
+            "2020": 0.526827,
+            "2021": 0.429255,
+            "2022": -0.207808,
+            "2023": 0.529416,
+            "2024": 0.377016,
+            "2025": 0.259254,
+            "2026": 0.266457
+          }
+        },
+        "Y1": {
+          "2000_2002": {
+            "cagr": -0.117549,
+            "max_dd": 0.326733,
+            "total_return": -0.296693
+          },
+          "2007_2009": {
+            "cagr": 0.060802,
+            "max_dd": 0.329442,
+            "total_return": 0.194155
+          },
+          "2017_end": {
+            "cagr": 0.315258,
+            "max_dd": 0.255401,
+            "total_return": 13.45342
+          },
+          "cagr": 0.124025,
+          "calmar": 0.299899,
+          "end": "2026-09-29",
+          "ending_multiple": 22.315408,
+          "events_2017_on": {
+            "counts": {
+              "entries": 8,
+              "exits": 8,
+              "resize_down": 282,
+              "resize_up": 292
+            },
+            "resizes_per_year": 58.891433,
+            "round_trips_per_year": 0.820787,
+            "sells_per_year": 29.753511,
+            "trades_per_year": 60.533006,
+            "turnover_from_entries_exits_per_year": 1.14151,
+            "turnover_from_resizes_per_year": 2.004279,
+            "turnover_per_year": 3.145789,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 42,
+              "exits": 41,
+              "resize_down": 558,
+              "resize_up": 590
+            },
+            "resizes_per_year": 43.22307,
+            "round_trips_per_year": 1.543681,
+            "sells_per_year": 22.552804,
+            "trades_per_year": 46.348083,
+            "turnover_from_entries_exits_per_year": 2.437125,
+            "turnover_from_resizes_per_year": 1.429701,
+            "turnover_per_year": 3.866826,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2007-07-12",
+            "years": 7.290897
+          },
+          "max_dd": 0.413556,
+          "max_dd_episode": {
+            "peak": "2015-07-20",
+            "recovered": "2017-07-19",
+            "trough": "2016-06-17",
+            "years_peak_to_recovery": 1.998631,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.591675,
+          "stage_b_window": {
+            "cagr": 0.30513,
+            "from": "2016-12-30",
+            "max_dd": 0.255401,
+            "to": "2026-07-30",
+            "total_return": 11.821305
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.014467,
+              "from": "2000-03-08",
+              "max_dd": 0.336773,
+              "to": "2008-12-31",
+              "total_return": -0.120564
+            },
+            "P2": {
+              "cagr": 0.072912,
+              "from": "2008-12-31",
+              "max_dd": 0.413556,
+              "to": "2016-12-30",
+              "total_return": 0.755618
+            },
+            "P3": {
+              "cagr": 0.315258,
+              "from": "2016-12-30",
+              "max_dd": 0.255401,
+              "to": "2026-09-29",
+              "total_return": 13.45342
+            }
+          },
+          "time_in_market": 0.686779,
+          "trades": 1231,
+          "turnover_annual": 3.866826,
+          "years": {
+            "2000": -0.296693,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 0.316455,
+            "2004": -0.034799,
+            "2005": -0.118928,
+            "2006": 0.07671,
+            "2007": 0.257896,
+            "2008": -0.17533,
+            "2009": 0.15116,
+            "2010": 0.038564,
+            "2011": -0.258262,
+            "2012": 0.129684,
+            "2013": 0.682976,
+            "2014": 0.254138,
+            "2015": -0.134204,
+            "2016": -0.041007,
+            "2017": 0.678624,
+            "2018": 0.042589,
+            "2019": 0.418852,
+            "2020": 0.602241,
+            "2021": 0.429255,
+            "2022": -0.191589,
+            "2023": 0.507965,
+            "2024": 0.377016,
+            "2025": 0.195574,
+            "2026": 0.266457
+          }
+        },
+        "Y2": {
+          "2000_2002": {
+            "cagr": -0.218362,
+            "max_dd": 0.51738,
+            "total_return": -0.500122
+          },
+          "2007_2009": {
+            "cagr": 0.087039,
+            "max_dd": 0.4614,
+            "total_return": 0.285164
+          },
+          "2017_end": {
+            "cagr": 0.260573,
+            "max_dd": 0.420251,
+            "total_return": 8.554582
+          },
+          "cagr": 0.13705,
+          "calmar": 0.238174,
+          "end": "2026-09-29",
+          "ending_multiple": 30.304173,
+          "events_2017_on": {
+            "counts": {
+              "entries": 5,
+              "exits": 5,
+              "resize_down": 356,
+              "resize_up": 365
+            },
+            "resizes_per_year": 73.973385,
+            "round_trips_per_year": 0.512992,
+            "sells_per_year": 37.037992,
+            "trades_per_year": 74.999368,
+            "turnover_from_entries_exits_per_year": 0.540922,
+            "turnover_from_resizes_per_year": 2.482396,
+            "turnover_per_year": 3.023318,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 24,
+              "exits": 23,
+              "resize_down": 844,
+              "resize_up": 906
+            },
+            "resizes_per_year": 65.888826,
+            "round_trips_per_year": 0.865967,
+            "sells_per_year": 32.643207,
+            "trades_per_year": 67.658412,
+            "turnover_from_entries_exits_per_year": 1.263179,
+            "turnover_from_resizes_per_year": 2.152173,
+            "turnover_per_year": 3.415352,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2010-10-15",
+            "years": 10.551677
+          },
+          "max_dd": 0.575422,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2010-10-15",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 10.551677,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.59729,
+          "stage_b_window": {
+            "cagr": 0.24994,
+            "from": "2016-12-30",
+            "max_dd": 0.420251,
+            "to": "2026-07-30",
+            "total_return": 7.475655
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.063657,
+              "from": "2000-03-08",
+              "max_dd": 0.575422,
+              "to": "2008-12-31",
+              "total_return": -0.44002
+            },
+            "P2": {
+              "cagr": 0.242144,
+              "from": "2008-12-31",
+              "max_dd": 0.341016,
+              "to": "2016-12-30",
+              "total_return": 4.663939
+            },
+            "P3": {
+              "cagr": 0.260573,
+              "from": "2016-12-30",
+              "max_dd": 0.420251,
+              "to": "2026-09-29",
+              "total_return": 8.554582
+            }
+          },
+          "time_in_market": 0.820632,
+          "trades": 1797,
+          "turnover_annual": 3.415352,
+          "years": {
+            "2000": -0.306626,
+            "2001": -0.081336,
+            "2002": -0.215235,
+            "2003": 0.43051,
+            "2004": 0.085207,
+            "2005": -0.062886,
+            "2006": -0.07146,
+            "2007": 0.257892,
+            "2008": -0.340722,
+            "2009": 0.549698,
+            "2010": 0.354172,
+            "2011": -0.070102,
+            "2012": 0.314441,
+            "2013": 0.789054,
+            "2014": 0.318384,
+            "2015": 0.047516,
+            "2016": -0.106293,
+            "2017": 0.678624,
+            "2018": -0.036213,
+            "2019": 0.440193,
+            "2020": 0.476491,
+            "2021": 0.429255,
+            "2022": -0.326451,
+            "2023": 0.603823,
+            "2024": 0.377016,
+            "2025": 0.002481,
+            "2026": 0.303092
+          }
+        },
+        "Y3": {
+          "2000_2002": {
+            "cagr": -0.117549,
+            "max_dd": 0.326733,
+            "total_return": -0.296693
+          },
+          "2007_2009": {
+            "cagr": 0.060802,
+            "max_dd": 0.329442,
+            "total_return": 0.194155
+          },
+          "2017_end": {
+            "cagr": 0.315258,
+            "max_dd": 0.255401,
+            "total_return": 13.45342
+          },
+          "cagr": 0.124025,
+          "calmar": 0.299899,
+          "end": "2026-09-29",
+          "ending_multiple": 22.315408,
+          "events_2017_on": {
+            "counts": {
+              "entries": 8,
+              "exits": 8,
+              "resize_down": 282,
+              "resize_up": 292
+            },
+            "resizes_per_year": 58.891433,
+            "round_trips_per_year": 0.820787,
+            "sells_per_year": 29.753511,
+            "trades_per_year": 60.533006,
+            "turnover_from_entries_exits_per_year": 1.14151,
+            "turnover_from_resizes_per_year": 2.004279,
+            "turnover_per_year": 3.145789,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 42,
+              "exits": 41,
+              "resize_down": 558,
+              "resize_up": 590
+            },
+            "resizes_per_year": 43.22307,
+            "round_trips_per_year": 1.543681,
+            "sells_per_year": 22.552804,
+            "trades_per_year": 46.348083,
+            "turnover_from_entries_exits_per_year": 2.437125,
+            "turnover_from_resizes_per_year": 1.429701,
+            "turnover_per_year": 3.866826,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2007-07-12",
+            "years": 7.290897
+          },
+          "max_dd": 0.413556,
+          "max_dd_episode": {
+            "peak": "2015-07-20",
+            "recovered": "2017-07-19",
+            "trough": "2016-06-17",
+            "years_peak_to_recovery": 1.998631,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.591675,
+          "stage_b_window": {
+            "cagr": 0.30513,
+            "from": "2016-12-30",
+            "max_dd": 0.255401,
+            "to": "2026-07-30",
+            "total_return": 11.821305
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.014467,
+              "from": "2000-03-08",
+              "max_dd": 0.336773,
+              "to": "2008-12-31",
+              "total_return": -0.120564
+            },
+            "P2": {
+              "cagr": 0.072912,
+              "from": "2008-12-31",
+              "max_dd": 0.413556,
+              "to": "2016-12-30",
+              "total_return": 0.755618
+            },
+            "P3": {
+              "cagr": 0.315258,
+              "from": "2016-12-30",
+              "max_dd": 0.255401,
+              "to": "2026-09-29",
+              "total_return": 13.45342
+            }
+          },
+          "time_in_market": 0.686779,
+          "trades": 1231,
+          "turnover_annual": 3.866826,
+          "years": {
+            "2000": -0.296693,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 0.316455,
+            "2004": -0.034799,
+            "2005": -0.118928,
+            "2006": 0.07671,
+            "2007": 0.257896,
+            "2008": -0.17533,
+            "2009": 0.15116,
+            "2010": 0.038564,
+            "2011": -0.258262,
+            "2012": 0.129684,
+            "2013": 0.682976,
+            "2014": 0.254138,
+            "2015": -0.134204,
+            "2016": -0.041007,
+            "2017": 0.678624,
+            "2018": 0.042589,
+            "2019": 0.418852,
+            "2020": 0.602241,
+            "2021": 0.429255,
+            "2022": -0.191589,
+            "2023": 0.507965,
+            "2024": 0.377016,
+            "2025": 0.195574,
+            "2026": 0.266457
+          }
+        },
+        "Y4": {
+          "2000_2002": {
+            "cagr": -0.145823,
+            "max_dd": 0.380442,
+            "total_return": -0.358287
+          },
+          "2007_2009": {
+            "cagr": 0.095336,
+            "max_dd": 0.437909,
+            "total_return": 0.314878
+          },
+          "2017_end": {
+            "cagr": 0.29558,
+            "max_dd": 0.384782,
+            "total_return": 11.478473
+          },
+          "cagr": 0.140338,
+          "calmar": 0.30992,
+          "end": "2026-09-29",
+          "ending_multiple": 32.71979,
+          "events_2017_on": {
+            "counts": {
+              "entries": 9,
+              "exits": 9,
+              "resize_down": 318,
+              "resize_up": 329
+            },
+            "resizes_per_year": 66.38111,
+            "round_trips_per_year": 0.923385,
+            "sells_per_year": 33.549649,
+            "trades_per_year": 68.227879,
+            "turnover_from_entries_exits_per_year": 1.099882,
+            "turnover_from_resizes_per_year": 2.265187,
+            "turnover_per_year": 3.365069,
+            "years": 9.746749
+          },
+          "events_full": {
+            "counts": {
+              "entries": 52,
+              "exits": 51,
+              "resize_down": 712,
+              "resize_up": 758
+            },
+            "resizes_per_year": 55.346614,
+            "round_trips_per_year": 1.920189,
+            "sells_per_year": 28.727528,
+            "trades_per_year": 59.224642,
+            "turnover_from_entries_exits_per_year": 2.803216,
+            "turnover_from_resizes_per_year": 1.841679,
+            "turnover_per_year": 4.644895,
+            "years": 26.55989
+          },
+          "longest_underwater": {
+            "from_peak": "2000-03-27",
+            "to": "2006-01-09",
+            "years": 5.787817
+          },
+          "max_dd": 0.452822,
+          "max_dd_episode": {
+            "peak": "2000-03-27",
+            "recovered": "2006-01-09",
+            "trough": "2003-03-31",
+            "years_peak_to_recovery": 5.787817,
+            "years_underwater_so_far": null
+          },
+          "sessions_target_below_10pp_in_trend": 0,
+          "sharpe": 0.627256,
+          "stage_b_window": {
+            "cagr": 0.285265,
+            "from": "2016-12-30",
+            "max_dd": 0.384782,
+            "to": "2026-07-30",
+            "total_return": 10.069374
+          },
+          "start": "2000-03-08",
+          "subperiods": {
+            "P1": {
+              "cagr": -0.02058,
+              "from": "2000-03-08",
+              "max_dd": 0.452822,
+              "to": "2008-12-31",
+              "total_return": -0.167502
+            },
+            "P2": {
+              "cagr": 0.154262,
+              "from": "2008-12-31",
+              "max_dd": 0.424452,
+              "to": "2016-12-30",
+              "total_return": 2.149676
+            },
+            "P3": {
+              "cagr": 0.29558,
+              "from": "2016-12-30",
+              "max_dd": 0.384782,
+              "to": "2026-09-29",
+              "total_return": 11.478473
+            }
+          },
+          "time_in_market": 0.762988,
+          "trades": 1573,
+          "turnover_annual": 4.644895,
+          "years": {
+            "2000": -0.233735,
+            "2001": -0.099657,
+            "2002": -0.069849,
+            "2003": 0.436101,
+            "2004": 0.055135,
+            "2005": -0.048899,
+            "2006": 0.033482,
+            "2007": 0.257892,
+            "2008": -0.307569,
+            "2009": 0.509613,
+            "2010": 0.18211,
+            "2011": -0.307892,
+            "2012": 0.12652,
+            "2013": 0.682976,
+            "2014": 0.318384,
+            "2015": 0.000609,
+            "2016": 0.019636,
+            "2017": 0.678624,
+            "2018": 0.029896,
+            "2019": 0.440193,
+            "2020": 0.474221,
+            "2021": 0.429255,
+            "2022": -0.285244,
+            "2023": 0.603823,
+            "2024": 0.377016,
+            "2025": 0.195769,
+            "2026": 0.260147
+          }
+        }
+      }
+    },
+    "window": {
+      "end": "2026-09-29",
+      "sessions": 6679,
+      "start": "2000-03-09"
+    }
+  },
+  "oos": {
+    "GSPC": {
+      "C0": {
+        "cagr": 0.099822,
+        "calmar": 0.256,
+        "max_dd": 0.38993,
+        "resizes_per_year": 10.860984,
+        "round_trips_per_year": 2.790831,
+        "sells_per_year": 8.09341,
+        "turnover_annual": 5.722351
+      },
+      "Y1": {
+        "cagr": 0.071957,
+        "calmar": 0.151017,
+        "max_dd": 0.476482,
+        "resizes_per_year": 9.465568,
+        "round_trips_per_year": 1.558214,
+        "sells_per_year": 6.186342,
+        "turnover_annual": 3.339085
+      },
+      "Y2": {
+        "cagr": 0.099208,
+        "calmar": 0.19063,
+        "max_dd": 0.52042,
+        "resizes_per_year": 12.32617,
+        "round_trips_per_year": 0.627937,
+        "sells_per_year": 6.814279,
+        "turnover_annual": 1.628737
+      },
+      "Y3": {
+        "cagr": 0.071957,
+        "calmar": 0.151017,
+        "max_dd": 0.476482,
+        "resizes_per_year": 9.465568,
+        "round_trips_per_year": 1.558214,
+        "sells_per_year": 6.186342,
+        "turnover_annual": 3.339085
+      },
+      "Y4": {
+        "cagr": 0.080001,
+        "calmar": 0.160438,
+        "max_dd": 0.498639,
+        "resizes_per_year": 11.395893,
+        "round_trips_per_year": 1.790783,
+        "sells_per_year": 7.442216,
+        "turnover_annual": 3.82294
+      },
+      "window": {
+        "end": "1999-12-31",
+        "sessions": 10828,
+        "start": "1957-01-02"
+      }
+    },
+    "M1": {
+      "C0": {
+        "cagr": 0.206775,
+        "calmar": 0.535465,
+        "max_dd": 0.38616,
+        "resizes_per_year": 18.960519,
+        "round_trips_per_year": 2.600071,
+        "sells_per_year": 12.440341,
+        "turnover_annual": 5.470064
+      },
+      "Y1": {
+        "cagr": 0.165363,
+        "calmar": 0.464932,
+        "max_dd": 0.355672,
+        "resizes_per_year": 17.400476,
+        "round_trips_per_year": 1.320036,
+        "sells_per_year": 10.520288,
+        "turnover_annual": 3.042457
+      },
+      "Y2": {
+        "cagr": 0.185737,
+        "calmar": 0.346713,
+        "max_dd": 0.535707,
+        "resizes_per_year": 22.200608,
+        "round_trips_per_year": 0.560015,
+        "sells_per_year": 12.000329,
+        "turnover_annual": 1.712347
+      },
+      "Y3": {
+        "cagr": 0.165363,
+        "calmar": 0.464932,
+        "max_dd": 0.355672,
+        "resizes_per_year": 17.400476,
+        "round_trips_per_year": 1.320036,
+        "sells_per_year": 10.520288,
+        "turnover_annual": 3.042457
+      },
+      "Y4": {
+        "cagr": 0.170387,
+        "calmar": 0.317728,
+        "max_dd": 0.536269,
+        "resizes_per_year": 19.640538,
+        "round_trips_per_year": 1.920053,
+        "sells_per_year": 12.120332,
+        "turnover_annual": 4.205371
+      },
+      "window": {
+        "end": "1999-12-31",
+        "sessions": 6319,
+        "start": "1975-01-02"
+      }
+    },
+    "M2": {
+      "C0": {
+        "cagr": 0.112648,
+        "calmar": 0.180176,
+        "max_dd": 0.625214,
+        "resizes_per_year": 20.334631,
+        "round_trips_per_year": 2.547515,
+        "sells_per_year": 12.646594,
+        "turnover_annual": 5.499065
+      },
+      "Y1": {
+        "cagr": 0.099545,
+        "calmar": 0.159838,
+        "max_dd": 0.622786,
+        "resizes_per_year": 16.422375,
+        "round_trips_per_year": 1.455723,
+        "sells_per_year": 9.553182,
+        "turnover_annual": 3.408115
+      },
+      "Y2": {
+        "cagr": 0.070476,
+        "calmar": 0.089633,
+        "max_dd": 0.786271,
+        "resizes_per_year": 26.293997,
+        "round_trips_per_year": 0.955318,
+        "sells_per_year": 14.284282,
+        "turnover_annual": 2.849622
+      },
+      "Y3": {
+        "cagr": 0.099545,
+        "calmar": 0.159838,
+        "max_dd": 0.622786,
+        "resizes_per_year": 16.422375,
+        "round_trips_per_year": 1.455723,
+        "sells_per_year": 9.553182,
+        "turnover_annual": 3.408115
+      },
+      "Y4": {
+        "cagr": 0.126958,
+        "calmar": 0.215657,
+        "max_dd": 0.588703,
+        "resizes_per_year": 21.699371,
+        "round_trips_per_year": 1.455723,
+        "sells_per_year": 12.646594,
+        "turnover_annual": 3.617516
+      },
+      "window": {
+        "end": "1956-12-31",
+        "sessions": 5502,
+        "start": "1935-01-08"
+      }
+    },
+    "M3": {
+      "C0": {
+        "cagr": 0.063306,
+        "calmar": 0.094263,
+        "max_dd": 0.671595,
+        "resizes_per_year": 30.842528,
+        "round_trips_per_year": 3.080958,
+        "sells_per_year": 17.974999,
+        "turnover_annual": 6.523299
+      },
+      "Y1": {
+        "cagr": 0.055008,
+        "calmar": 0.081242,
+        "max_dd": 0.677095,
+        "resizes_per_year": 24.49938,
+        "round_trips_per_year": 1.449862,
+        "sells_per_year": 13.460655,
+        "turnover_annual": 3.46967
+      },
+      "Y2": {
+        "cagr": 0.057602,
+        "calmar": 0.067947,
+        "max_dd": 0.847753,
+        "resizes_per_year": 37.103297,
+        "round_trips_per_year": 1.03797,
+        "sells_per_year": 19.424861,
+        "turnover_annual": 3.165118
+      },
+      "Y3": {
+        "cagr": 0.055008,
+        "calmar": 0.081242,
+        "max_dd": 0.677095,
+        "resizes_per_year": 24.49938,
+        "round_trips_per_year": 1.449862,
+        "sells_per_year": 13.460655,
+        "turnover_annual": 3.46967
+      },
+      "Y4": {
+        "cagr": 0.05511,
+        "calmar": 0.069809,
+        "max_dd": 0.789439,
+        "resizes_per_year": 33.165603,
+        "round_trips_per_year": 1.762901,
+        "sells_per_year": 18.370416,
+        "turnover_annual": 4.30965
+      },
+      "window": {
+        "end": "2026-09-29",
+        "sessions": 14922,
+        "start": "1966-01-19"
+      }
+    },
+    "M4": {
+      "C0": {
+        "cagr": 0.094116,
+        "calmar": 0.160581,
+        "max_dd": 0.586096,
+        "resizes_per_year": 40.383125,
+        "round_trips_per_year": 2.914793,
+        "sells_per_year": 22.390906,
+        "turnover_annual": 6.060218
+      },
+      "Y1": {
+        "cagr": 0.063676,
+        "calmar": 0.105353,
+        "max_dd": 0.604409,
+        "resizes_per_year": 33.44062,
+        "round_trips_per_year": 1.642883,
+        "sells_per_year": 18.098212,
+        "turnover_annual": 3.912796
+      },
+      "Y2": {
+        "cagr": 0.067325,
+        "calmar": 0.095835,
+        "max_dd": 0.702508,
+        "resizes_per_year": 49.922446,
+        "round_trips_per_year": 0.84794,
+        "sells_per_year": 25.729668,
+        "turnover_annual": 3.078647
+      },
+      "Y3": {
+        "cagr": 0.065025,
+        "calmar": 0.111146,
+        "max_dd": 0.585038,
+        "resizes_per_year": 33.043148,
+        "round_trips_per_year": 1.642883,
+        "sells_per_year": 17.886227,
+        "turnover_annual": 3.896487
+      },
+      "Y4": {
+        "cagr": 0.095467,
+        "calmar": 0.179939,
+        "max_dd": 0.530551,
+        "resizes_per_year": 43.589397,
+        "round_trips_per_year": 1.801872,
+        "sells_per_year": 23.371336,
+        "turnover_annual": 4.404589
+      },
+      "window": {
+        "end": "2026-09-29",
+        "sessions": 9546,
+        "start": "1989-01-03"
+      }
+    },
+    "M5": {
+      "C0": {
+        "cagr": -0.000486,
+        "calmar": -0.000587,
+        "max_dd": 0.827401,
+        "resizes_per_year": 13.606742,
+        "round_trips_per_year": 4.527596,
+        "sells_per_year": 10.803945,
+        "turnover_annual": 8.849882
+      },
+      "Y1": {
+        "cagr": -0.00906,
+        "calmar": -0.010407,
+        "max_dd": 0.870518,
+        "resizes_per_year": 10.396701,
+        "round_trips_per_year": 2.587197,
+        "sells_per_year": 7.354348,
+        "turnover_annual": 5.174673
+      },
+      "Y2": {
+        "cagr": 0.014105,
+        "calmar": 0.02063,
+        "max_dd": 0.683682,
+        "resizes_per_year": 18.637404,
+        "round_trips_per_year": 1.485243,
+        "sells_per_year": 10.684167,
+        "turnover_annual": 3.379706
+      },
+      "Y3": {
+        "cagr": -0.00906,
+        "calmar": -0.010407,
+        "max_dd": 0.870518,
+        "resizes_per_year": 10.396701,
+        "round_trips_per_year": 2.587197,
+        "sells_per_year": 7.354348,
+        "turnover_annual": 5.174673
+      },
+      "Y4": {
+        "cagr": 0.007294,
+        "calmar": 0.008957,
+        "max_dd": 0.814338,
+        "resizes_per_year": 15.810651,
+        "round_trips_per_year": 2.539286,
+        "sells_per_year": 10.300879,
+        "turnover_annual": 5.243556
+      },
+      "window": {
+        "end": "2026-09-29",
+        "sessions": 10544,
+        "start": "1985-01-02"
+      }
+    }
+  },
+  "oos_bootstrap_block20_m2": {
+    "per_market": {
+      "M1": {
+        "C0": {
+          "cagr_median": 0.219256,
+          "median_diff": 0.0
+        },
+        "Y1": {
+          "cagr_median": 0.19078,
+          "median_diff": -0.027243
+        },
+        "Y2": {
+          "cagr_median": 0.212137,
+          "median_diff": -0.007838
+        },
+        "Y3": {
+          "cagr_median": 0.19078,
+          "median_diff": -0.027254
+        },
+        "Y4": {
+          "cagr_median": 0.208825,
+          "median_diff": -0.009706
+        }
+      },
+      "M2": {
+        "C0": {
+          "cagr_median": 0.052076,
+          "median_diff": 0.0
+        },
+        "Y1": {
+          "cagr_median": 0.03997,
+          "median_diff": -0.011515
+        },
+        "Y2": {
+          "cagr_median": 0.055926,
+          "median_diff": 0.005515
+        },
+        "Y3": {
+          "cagr_median": 0.039923,
+          "median_diff": -0.011485
+        },
+        "Y4": {
+          "cagr_median": 0.058194,
+          "median_diff": 0.006924
+        }
+      },
+      "M3": {
+        "C0": {
+          "cagr_median": 0.012765,
+          "median_diff": 0.0
+        },
+        "Y1": {
+          "cagr_median": 0.008673,
+          "median_diff": -0.002333
+        },
+        "Y2": {
+          "cagr_median": 0.010621,
+          "median_diff": -0.00016
+        },
+        "Y3": {
+          "cagr_median": 0.008673,
+          "median_diff": -0.002333
+        },
+        "Y4": {
+          "cagr_median": 0.012789,
+          "median_diff": 0.000715
+        }
+      },
+      "M4": {
+        "C0": {
+          "cagr_median": 0.035996,
+          "median_diff": 0.0
+        },
+        "Y1": {
+          "cagr_median": 0.030514,
+          "median_diff": -0.004775
+        },
+        "Y2": {
+          "cagr_median": 0.039548,
+          "median_diff": 0.007145
+        },
+        "Y3": {
+          "cagr_median": 0.030514,
+          "median_diff": -0.004775
+        },
+        "Y4": {
+          "cagr_median": 0.03796,
+          "median_diff": 0.002467
+        }
+      },
+      "M5": {
+        "C0": {
+          "cagr_median": -0.005543,
+          "median_diff": 0.0
+        },
+        "Y1": {
+          "cagr_median": -0.002402,
+          "median_diff": 0.001973
+        },
+        "Y2": {
+          "cagr_median": 0.00476,
+          "median_diff": 0.011699
+        },
+        "Y3": {
+          "cagr_median": -0.002402,
+          "median_diff": 0.001973
+        },
+        "Y4": {
+          "cagr_median": 0.00148,
+          "median_diff": 0.0075
+        }
+      }
+    },
+    "pooled": {
+      "C0": {
+        "diff_vs_C0_mean": 0.0,
+        "diff_vs_C0_median": 0.0,
+        "paths": 10000,
+        "share_ge_C0": 1.0
+      },
+      "Y1": {
+        "diff_vs_C0_mean": -0.008209,
+        "diff_vs_C0_median": -0.00862,
+        "paths": 10000,
+        "share_ge_C0": 0.3863
+      },
+      "Y2": {
+        "diff_vs_C0_mean": 0.003242,
+        "diff_vs_C0_median": 0.003497,
+        "paths": 10000,
+        "share_ge_C0": 0.5381
+      },
+      "Y3": {
+        "diff_vs_C0_mean": -0.00821,
+        "diff_vs_C0_median": -0.00862,
+        "paths": 10000,
+        "share_ge_C0": 0.3864
+      },
+      "Y4": {
+        "diff_vs_C0_mean": 0.001297,
+        "diff_vs_C0_median": 0.001669,
+        "paths": 10000,
+        "share_ge_C0": 0.5297
+      }
+    }
+  },
+  "params": {
+    "arms": [
+      "C0",
+      "Y1",
+      "Y2",
+      "Y3",
+      "Y4"
+    ],
+    "bands": {
+      "100": 0.1,
+      "25": 0.025,
+      "50": 0.05
+    },
+    "bootstrap_main": {
+      "back_extension": 3,
+      "block": 20,
+      "m": 2,
+      "measured": 2520,
+      "paths": 5000,
+      "seed": 20261011,
+      "warmup": 250
+    },
+    "bootstrap_oos": {
+      "block": 20,
+      "m": 2,
+      "paths_per_market": 2000,
+      "returns_per_path": 2772,
+      "seed": 20261011
+    },
+    "c0_band": 0.005,
+    "cap": 0.98,
+    "cost_per_side_m1": 0.0004,
+    "don_n": 126,
+    "ewma_lambda": 0.94,
+    "ewma_seed_returns": 20,
+    "ewma_window_returns": 252,
+    "expense": 0.0095,
+    "financing_spread": {
+      "base": 0.0,
+      "calibrated": 0.0075
+    },
+    "signals": "production E2 1.1.0 on price closes: SMA200, 252-session price return > 0, close > 126-session max/min midpoint; 2 of 3",
+    "sma_n": 200,
+    "tsm_n": 252
+  },
+  "selection": {
+    "note": "No band selection: all arms use C0 band; candidate selection is by gates only.",
+    "selected": "none"
+  },
+  "status": "complete"
+}

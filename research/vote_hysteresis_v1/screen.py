@@ -135,65 +135,60 @@ def sma_value(price, n=SMA_N):
 
 
 def hysteresis_on(votes, price=None, arm="C0"):
-    """Convert per-session vote counts [P,T] into an on/off state according to arm thresholds."""
+    """Convert per-session vote counts into an on/off state according to arm thresholds."""
     v = np.atleast_2d(np.asarray(votes))
     P, T = v.shape
     orig_1d = (np.asarray(votes).ndim == 1)
     sma = None
+    price2 = None
     if price is not None:
         sma = sma_value(price, SMA_N)
-        sma = np.atleast_2d(np.asarray(sma))
+        sma = np.atleast_2d(np.asarray(sma, dtype=float))
+        price2 = np.atleast_2d(np.asarray(price, dtype=float))
+    state = np.zeros(P, dtype=bool)
+    consec = np.zeros(P, dtype=int)
     on = np.zeros((P, T), dtype=bool)
-    for p in range(P):
-        state = False
-        consec = 0
-        for t in range(T):
-            vt = v[p, t]
-            if isinstance(vt, (np.generic,)):
-                vt = int(vt) if not np.isnan(vt) else 0
-            else:
-                try:
-                    vt = int(vt)
-                except (TypeError, ValueError):
-                    vt = 0
-            if arm == "C0":
-                state = (vt >= 2)
-            elif arm == "Y1":
-                if (not state) and vt == 3:
-                    state = True
-                elif state and vt <= 1:
-                    state = False
-            elif arm == "Y2":
-                if (not state) and vt >= 2:
-                    state = True
-                elif state and vt == 0:
-                    state = False
-            elif arm == "Y3":
-                if (not state) and vt == 3:
-                    state = True
-                elif state:
-                    exitc = vt <= 1
-                    if sma is not None:
-                        sv = sma[p, t]
-                        pv = np.asarray(price)[p, t] if np.asarray(price).ndim == 2 else np.asarray(price)[t]
-                        if not np.isnan(sv) and float(pv) < 0.95 * float(sv):
-                            exitc = True
-                    if exitc:
-                        state = False
-            elif arm == "Y4":
-                if (not state) and vt >= 2:
-                    state = True
-                elif state:
-                    if vt <= 1:
-                        consec += 1
-                    else:
-                        consec = 0
-                    if consec >= 3:
-                        state = False
-                        consec = 0
-            else:
-                raise ValueError(arm)
-            on[p, t] = state
+    for t in range(T):
+        vt = v[:, t].astype(int)
+        old_state = state.copy()
+        if arm == "C0":
+            state = (vt >= 2)
+        elif arm == "Y1":
+            turn_on = (~old_state) & (vt == 3)
+            turn_off = old_state & (vt <= 1)
+            state = old_state.copy()
+            state[turn_on] = True
+            state[turn_off] = False
+        elif arm == "Y2":
+            turn_on = (~old_state) & (vt >= 2)
+            turn_off = old_state & (vt == 0)
+            state = old_state.copy()
+            state[turn_on] = True
+            state[turn_off] = False
+        elif arm == "Y3":
+            turn_on = (~old_state) & (vt == 3)
+            turn_off = old_state & (vt <= 1)
+            if sma is not None:
+                sma_t = sma[:, t]
+                price_t = price2[:, t]
+                valid = ~np.isnan(sma_t)
+                price_exit = valid & (price_t < 0.95 * sma_t)
+                turn_off = turn_off | (old_state & price_exit)
+            state = old_state.copy()
+            state[turn_on] = True
+            state[turn_off] = False
+        elif arm == "Y4":
+            consec = np.where(old_state & (vt <= 1), consec + 1, np.where(old_state, 0, 0))
+            consec = np.where(~old_state, 0, consec)
+            turn_on = (~old_state) & (vt >= 2)
+            turn_off = old_state & (consec >= 3)
+            state = old_state.copy()
+            state[turn_on] = True
+            state[turn_off] = False
+            consec = np.where(~state, 0, consec)
+        else:
+            raise ValueError(arm)
+        on[:, t] = state
     if orig_1d:
         return on[0]
     return on
@@ -339,7 +334,11 @@ def arm_stats(dates, nav, turn, ntr, codes, traded, wants, start, extras):
         st["stage_b_window"] = seg(dates, nav, *STAGE_B_WINDOW)
         st["events_full"] = event_stats(dates, codes, traded)
         st["events_2017_on"] = event_stats(dates, codes, traded, "2016-12-31")
-        tgt = wants[start - 1:-1]
+        w = np.asarray(wants)
+        if w.ndim == 1:
+            tgt = w[start - 1:-1]
+        else:
+            tgt = w[:, start - 1:-1].ravel()
         st["time_in_market"] = float((tgt > 0).mean())
         st["sessions_target_below_10pp_in_trend"] = int(np.sum((tgt > 0) & (tgt < 0.10)))
     return st

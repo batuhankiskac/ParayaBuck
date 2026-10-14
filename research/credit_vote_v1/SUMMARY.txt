@@ -1,0 +1,22 @@
+credit_vote_v1 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production E2 1.1.0
+harness: PASS
+
+[base] m=2: arm CAGR maxDD Calmar 2017+ turn/yr | boot20 median diff
+  C0      14.67%   49.56% 0.296   32.44%  5.97 | +0.000pp
+  K1       9.45%   46.47% 0.203   16.77%  7.23 | -2.563pp
+  K2      11.42%   44.82% 0.255   24.70%  7.14 | -0.756pp
+  K3       9.79%   48.05% 0.204   20.49%  5.74 | -1.213pp
+  K4      11.57%   58.86% 0.197   27.84%  7.24 | -0.016pp
+
+[calibrated] m=2: arm CAGR maxDD Calmar 2017+ turn/yr | boot20 median diff
+  C0      14.10%   49.65% 0.284   31.69%  5.97 | +0.000pp
+  K1       9.08%   46.91% 0.193   16.29%  7.23 | -2.381pp
+  K2      10.89%   44.87% 0.243   24.02%  7.14 | -0.717pp
+  K3       9.33%   48.12% 0.194   19.99%  5.74 | -1.184pp
+  K4      11.02%   58.94% 0.187   27.14%  7.24 | -0.010pp
+
+gates:
+  K1    G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=F G8=P G9=P -> FAIL
+  K2    G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=F G8=P G9=P -> FAIL
+  K3    G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=P G8=P G9=P -> FAIL
+  K4    G1_base=F G1_calibrated=F G2_base=F G2_calibrated=F G3_base=F G3_calibrated=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=F G8=P G9=P -> FAIL

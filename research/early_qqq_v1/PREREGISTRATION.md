@@ -175,5 +175,25 @@ beta), so G2/G9/E1 are expected to pass and G1/G5 to be the binding pre-tax gate
 
 ## 7. Amendments
 
-- None. No arm had been simulated on real data when this file was committed. Any later change is
-  appended here with its reason and cannot change a gate or a parameter that was already used.
+1. **`arm_stats` report-only NaN fix** (after the pre-registration commit, before the first
+   completed `--run`). `time_in_market` and `early_time_in_market` sliced the per-arm target arrays,
+   which `arm_state` returns with a leading singleton path axis; the slice took zero rows and
+   produced `NaN` plus a numpy "mean of empty slice" warning. Fixed by flattening before slicing.
+   Report-only statistics; no arm, gate, parameter or simulated path changed.
+2. **`--harness` restricted to the control.** The first version of `--harness` called
+   `run_main(ARMS)`, which would have simulated the candidate arms on the main window before the
+   pre-registration commit. It now runs `run_main(("C0",))` and the E2-only reference only (the
+   committed version is the restricted one). No gate or parameter change.
+3. **Line endings of the two downloaded real-fund inputs.** The Yahoo CSVs were first written with
+   CRLF; they were rewritten with LF and the `DATA_MANIFEST.json` hashes updated, so the manifest
+   matches the committed bytes. No data value changed.
+4. **`gates` key error and the E1 applicability flag** (after the first `--run` crashed at the very
+   end, after every simulation had completed). The gate table was indexed with all four arms while
+   entries were built for the candidates plus A3, so the final assembly raised `KeyError: 'C0'`; C0
+   now has an explicit `{"control": true}` gate entry and the T1–T3 loop covers the three evaluated
+   arms. The adoption flag `pass_all_with_tax_and_etf` was only defined for A1; E1 is the drawdown
+   generalisation of the *unlevered early leg in the underlying's own ETF*, which is A1's
+   construction, so it is recorded as not applicable for A2/A3 and binds on A1 alone (this is the
+   pre-registered E1 reading: the ETF test varies the underlying, not the delivery basis).
+5. None of the gates, arms, parameters, windows or the selection rule were changed after any arm was
+   simulated on real data.

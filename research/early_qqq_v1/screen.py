@@ -372,12 +372,11 @@ def arm_stats(dates, nav, turn, turn_by, ntr, nsw, codes, traded, targets, start
         st["stage_b_window"] = seg(dates, nav, *STAGE_B_WINDOW)
         st["events_full"] = event_stats(dates, codes, traded)
         st["events_2017_on"] = event_stats(dates, codes, traded, "2016-12-31")
-        tgt = sum(targets.values())[start - 1:-1]
+        tgt = np.asarray(sum(targets.values())).reshape(-1)[start - 1:-1]
         st["time_in_market"] = float((tgt > 0).mean())
         if early_active is not None:
-            ea = np.atleast_2d(early_active)
-            sl = slice(start - 1, start - 1 + len(tgt))
-            st["early_time_in_market"] = float(ea[0, sl].mean())
+            ea = np.asarray(early_active).reshape(-1)
+            st["early_time_in_market"] = float(ea[start - 1:start - 1 + len(tgt)].mean())
     return st
 
 
@@ -1255,6 +1254,7 @@ def main() -> None:
         gates[arm].update(oos_gates(oos, oos_boot["pooled"], arm))
         gates[arm]["pass_all"] = bool(all(gates[arm][k] for k in GATE_KEYS))
         gates[arm]["candidate"] = bool(arm in CANDIDATES)
+    gates["C0"] = {"control": True}
     print("gates done", flush=True)
 
     etf = etf_stage()
@@ -1271,18 +1271,20 @@ def main() -> None:
     beats = {wn: {a: bool(tax["windows"][wn][a]["progressive"]["cagr"] > tax["windows"][wn]["C0"]["progressive"]["cagr"])
                   for a in ARMS} for wn in TAX_WINDOWS}
     b1, b2 = tax_boot["progressive"], tax_boot["flat"]
-    for a in ARMS:
+    for a in CANDIDATES + ("A3",):
         gates[a]["T1_beats_C0_all_windows"] = bool(all(beats[wn][a] for wn in TAX_WINDOWS))
         gates[a]["T2_B1_recent"] = bool(b1[f"{a}_vs_C0"]["median_delta_cagr_pp"] >= 0
                                         and b1[f"{a}_vs_C0"]["share_gt_0"] >= 0.55)
         gates[a]["T3_B2_flat"] = bool(b2[f"{a}_vs_C0"]["median_delta_cagr_pp"] >= 0
                                       and b2[f"{a}_vs_C0"]["share_gt_0"] >= 0.55)
         gates[a]["T1_detail"] = beats
+        # E1 is the drawdown generalisation of A1's construction (the unlevered early leg in the
+        # underlying's own ETF); it is defined for A1 and reported for the others as not applicable
         gates[a]["E1_etf_drawdown"] = bool(etf["E1"]) if a == "A1" else None
         gates[a]["pass_all_with_tax"] = bool(gates[a]["pass_all"] and gates[a]["T1_beats_C0_all_windows"]
                                              and gates[a]["T2_B1_recent"] and gates[a]["T3_B2_flat"])
-        if a == "A1":
-            gates[a]["pass_all_with_tax_and_etf"] = bool(gates[a]["pass_all_with_tax"] and etf["E1"])
+        gates[a]["pass_all_with_tax_and_etf"] = bool(gates[a]["pass_all_with_tax"]
+                                                     and (etf["E1"] if a == "A1" else True))
     adopted = [a for a in CANDIDATES if gates[a].get("pass_all_with_tax_and_etf")]
     if len(adopted) > 1:
         adopted = [max(adopted, key=lambda a: b1[f"{a}_vs_C0"]["median_delta_cagr_pp"])]
@@ -1357,7 +1359,7 @@ def main() -> None:
     L.append(f"OOS (calibrated, m=2), six windows: arm | median dCAGR | windows dCAGR >= -0.5pp | "
              f"windows dDD <= +3pp | max dDD | pooled boot median dCAGR")
     for arm in ARMS:
-        d = gates[arm]["G7_detail"] if arm in gates else None
+        d = gates.get(arm, {}).get("G7_detail")
         if d is None:
             continue
         L.append(f"  {arm:3s} | {d['median_cagr_diff'] * 100:+7.3f}pp | {d['windows_cagr_ge_minus_0_5pp']}/6 | "

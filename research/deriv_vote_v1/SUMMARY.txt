@@ -1,0 +1,134 @@
+deriv_vote_v1 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production R2 (E2 + half-weight early path) | verdict FAIL
+harness: PASS (max |diff| 0.000000 pp vs e2_integration_v1; v1 R2 reproduction PASS; components PASS; band sim == simulate_multi True)
+after-tax anchors: windows PASS, clean bootstraps PASS
+
+[base] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | OOS median dCAGR | m=1 CAGR
+  C0     15.48%   46.76% 0.331   32.71%   -0.06%   14.30%   32.71%  5.99 |    7.89% +0.000pp | +0.000pp |   15.75%
+  C1     15.80%   41.16% 0.384   30.88%    0.44%   16.68%   30.88%  4.95 |    9.42% +1.271pp | -0.785pp |   16.03%
+  C2     15.14%   37.79% 0.401   29.13%   -0.15%   17.15%   29.13%  3.26 |   10.19% +2.030pp | -2.613pp |   15.29%
+  C3     17.01%   34.76% 0.489   31.28%    0.31%   20.53%   31.28%  3.73 |   10.60% +2.357pp | -2.140pp |   17.19%
+  C4     14.34%   46.76% 0.307   31.04%   -0.59%   12.98%   31.04%  6.91 |    7.74% -0.130pp | -0.070pp |   14.66%
+
+[calibrated] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | OOS median dCAGR | m=1 CAGR
+  C0     14.90%   46.88% 0.318   31.96%   -0.41%   13.62%   31.96%  5.99 |    7.43% +0.000pp | +0.000pp |   15.17%
+  C1     15.19%   41.36% 0.367   30.12%    0.07%   15.96%   30.12%  4.95 |    8.96% +1.252pp | -0.785pp |   15.42%
+  C2     14.57%   38.14% 0.382   28.40%   -0.50%   16.48%   28.40%  3.26 |    9.71% +2.022pp | -2.613pp |   14.72%
+  C3     16.41%   34.88% 0.470   30.52%   -0.06%   19.80%   30.52%  3.73 |   10.09% +2.326pp | -2.140pp |   16.59%
+  C4     13.77%   46.88% 0.294   30.30%   -0.93%   12.32%   30.30%  6.91 |    7.28% -0.126pp | -0.070pp |   14.08%
+
+votes (main window): arm | vote share | flips/yr (on / off) | 2017+ flips/yr
+  C0    74.31%   5.87 ( 2.94 /  2.94) |   2.47
+  C1    77.66%   3.77 ( 1.88 /  1.88) |   1.85
+  C2    71.09%   1.13 ( 0.56 /  0.56) |   0.82
+  C3    74.91%   1.73 ( 0.87 /  0.87) |   1.03
+  C4    73.35%   7.30 ( 3.65 /  3.65) |   3.90
+
+trades (base, m=2): arm | round trips/yr, resizes/yr, sells/yr, turnover/yr | 2017+ sells/yr, turnover/yr
+  C0    2.97  55.95  29.56  5.99 |  34.27  4.02
+  C1    2.30  63.18  33.06  4.95 |  38.47  3.49
+  C2    1.36  61.30  32.15  3.26 |  38.99  3.18
+  C3    1.58  63.44  33.32  3.73 |  40.01  3.38
+  C4    3.35  55.72  29.82  6.91 |  34.58  4.93
+
+OOS (calibrated, m=2): window | arm CAGR / maxDD
+  GSPC 1957-01-02->1999-12-31 | C0 9.89%/39.63%  C1 9.13%/53.67%  C2 6.60%/51.77%  C3 7.80%/52.11%  C4 9.99%/39.63%
+  M1   1975-01-02->1999-12-31 | C0 21.18%/40.97%  C1 17.38%/49.68%  C2 13.76%/64.44%  C3 15.91%/62.90%  C4 21.05%/40.97%
+  M2   1935-01-08->1956-12-31 | C0 11.70%/58.33%  C1 11.03%/62.54%  C2 11.60%/55.69%  C3 11.22%/63.33%  C4 11.33%/61.37%
+  M3   1966-01-19->2026-09-29 | C0 6.40%/65.03%  C1 5.60%/81.13%  C2 3.70%/86.67%  C3 4.22%/85.97%  C4 6.41%/67.11%
+  M4   1989-01-03->2026-09-29 | C0 9.47%/58.10%  C1 6.36%/67.17%  C2 6.95%/63.72%  C3 7.07%/59.00%  C4 9.35%/56.01%
+  M5   1985-01-02->2026-09-29 | C0 -0.59%/85.45%  C1 1.43%/64.33%  C2 1.15%/75.59%  C3 1.38%/71.13%  C4 -0.60%/85.55%
+OOS pooled bootstrap median(arm-C0): C1 -0.055pp  C2 -0.181pp  C3 +0.178pp  C4 -0.048pp
+
+gates G1-G9, gate I and the after-tax gates (G1_base G1_calibrated G2_base G2_calibrated G3_base G3_calibrated G5_base G5_calibrated G6_base G6_calibrated G4 G7 G8 G9 G_I T_after_tax):
+  C1   G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=F G8=F G9=P G_I=F T_after_tax=F -> FAIL
+  C2   G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=F G7=F G8=F G9=P G_I=F T_after_tax=F -> FAIL
+  C3   G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=F G8=P G9=P G_I=F T_after_tax=F -> FAIL
+  C4   G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=F G8=F G9=P G_I=F T_after_tax=F -> FAIL
+
+after tax ($100k, base financing, m=2, progressive 2026 tariff, liquidated): window | arm | pre-tax -> after-tax CAGR, max DD, tax USD, sells/yr
+  2000_03_to_2026_09     C0    15.47% ->  10.16%  DD 46.76%  tax     766,160 USD  sells/yr 30.38
+  2000_03_to_2026_09     C1    15.79% ->  10.10%  DD 49.68%  tax     758,771 USD  sells/yr 33.92
+  2000_03_to_2026_09     C2    15.14% ->   9.69%  DD 53.12%  tax     658,013 USD  sells/yr 32.98
+  2000_03_to_2026_09     C3    17.01% ->  11.10%  DD 49.15%  tax     954,383 USD  sells/yr 34.15
+  2000_03_to_2026_09     C4    14.34% ->   9.25%  DD 46.76%  tax     605,666 USD  sells/yr 30.61
+  2010_01_to_end         C0    22.16% ->  14.71%  DD 43.78%  tax     553,536 USD  sells/yr 30.88
+  2010_01_to_end         C1    22.44% ->  14.57%  DD 48.98%  tax     540,965 USD  sells/yr 34.88
+  2010_01_to_end         C2    22.49% ->  14.72%  DD 52.76%  tax     536,190 USD  sells/yr 33.14
+  2010_01_to_end         C3    24.27% ->  16.05%  DD 48.52%  tax     667,637 USD  sells/yr 35.06
+  2010_01_to_end         C4    20.59% ->  13.44%  DD 45.32%  tax     451,331 USD  sells/yr 30.76
+  2017_01_to_end         C0    32.53% ->  22.89%  DD 36.24%  tax     360,297 USD  sells/yr 35.19
+  2017_01_to_end         C1    30.70% ->  21.73%  DD 41.37%  tax     310,344 USD  sells/yr 39.60
+  2017_01_to_end         C2    28.95% ->  20.66%  DD 39.36%  tax     265,393 USD  sells/yr 39.91
+  2017_01_to_end         C3    31.10% ->  22.13%  DD 39.62%  tax     313,610 USD  sells/yr 40.94
+  2017_01_to_end         C4    30.86% ->  21.62%  DD 36.16%  tax     317,530 USD  sells/yr 35.50
+
+gain by reason (2000 window, progressive): arm | trims TRY | exits TRY | tax-sale TRY | liquid TRY | trim share | exit share
+  C0      54.83m    -3.23m   0.69m     7.50m   91.7%   -5.4%
+  C1      54.43m   -11.06m   0.90m     7.25m  105.7%  -21.5%
+  C2      40.20m    -2.92m   0.51m     6.49m   90.8%   -6.6%
+  C3      60.89m    -4.75m   0.87m     9.23m   91.9%   -7.2%
+  C4      43.61m    -2.51m   0.53m     6.00m   91.6%   -5.3%
+
+clean after-tax bootstrap (block-20, 1000 paths, 2015-09-01..2026-09-30, fixed FX, $100k): mode | arm | median | median delta vs C0 | share > 0 | p05 / p95
+  B1-recent  C0     3.52%  +0.000pp    0.0%  +0.00 /  +0.00
+  B1-recent  C1     4.66%  +0.957pp   65.6%  -2.97 /  +5.33
+  B1-recent  C2     5.51%  +1.756pp   69.5%  -3.84 /  +7.43
+  B1-recent  C3     5.54%  +1.878pp   72.5%  -3.11 /  +7.24
+  B1-recent  C4     3.28%  -0.132pp   45.3%  -1.97 /  +1.73
+
+  B2 flat20% C0     3.97%  +0.000pp    0.0%  +0.00 /  +0.00
+  B2 flat20% C1     5.33%  +0.860pp   65.7%  -3.09 /  +5.34
+  B2 flat20% C2     5.92%  +1.560pp   69.5%  -3.95 /  +7.32
+  B2 flat20% C3     6.02%  +1.701pp   73.6%  -2.97 /  +6.97
+  B2 flat20% C4     3.76%  -0.108pp   44.9%  -1.98 /  +1.70
+
+after-tax gate detail:
+  C1   T_2000_03_to_2026_09=F T_2010_01_to_end=F T_2017_01_to_end=F  B_B1_recent_median=P B_B1_recent_share=P B_B2_flat_median=P B_B2_flat_share=P -> FAIL
+  C2   T_2000_03_to_2026_09=F T_2010_01_to_end=P T_2017_01_to_end=F  B_B1_recent_median=P B_B1_recent_share=P B_B2_flat_median=P B_B2_flat_share=P -> FAIL
+  C3   T_2000_03_to_2026_09=P T_2010_01_to_end=P T_2017_01_to_end=F  B_B1_recent_median=P B_B1_recent_share=P B_B2_flat_median=P B_B2_flat_share=P -> FAIL
+  C4   T_2000_03_to_2026_09=F T_2010_01_to_end=F T_2017_01_to_end=F  B_B1_recent_median=F B_B1_recent_share=F B_B2_flat_median=F B_B2_flat_share=F -> FAIL
+
+gate I (21 instruments, calibrated m=2, each vs its own C0): arm | median dCAGR | share>0 | DD<=+3pp | pooled boot median | pass
+  C1    +0.897pp   71.4%   66.7%  +0.767pp -> FAIL
+  C2    +0.756pp   57.1%   57.1%  +1.380pp -> FAIL
+  C3    +0.269pp   52.4%   42.9%  +1.438pp -> FAIL
+  C4    -0.162pp   38.1%   95.2%  -0.090pp -> FAIL
+  excluded by quality rule: EWC
+
+per-instrument dCAGR (calibrated m=2, sorted by C1): instrument | C1 | C2 | C3 | C4
+  XLP  C1  +4.679pp (dDD  -7.85pp)  C2  +2.944pp (dDD -13.56pp)  C3  +3.608pp (dDD  -8.62pp)  C4  -1.079pp (dDD  +1.62pp)
+  XLU  C1  +3.291pp (dDD  +0.35pp)  C2  +4.045pp (dDD -11.02pp)  C3  +5.029pp (dDD  -4.36pp)  C4  -0.360pp (dDD  -1.16pp)
+  SPY  C1  +3.098pp (dDD -20.37pp)  C2  +2.175pp (dDD -20.69pp)  C3  +2.443pp (dDD -16.80pp)  C4  -1.114pp (dDD  +0.50pp)
+  EWJ  C1  +2.575pp (dDD  -6.27pp)  C2  +3.048pp (dDD -23.34pp)  C3  +3.592pp (dDD -21.90pp)  C4  +0.198pp (dDD  -1.31pp)
+  XLB  C1  +1.746pp (dDD  -3.73pp)  C2  -0.673pp (dDD  +5.28pp)  C3  +0.269pp (dDD  +7.12pp)  C4  -0.369pp (dDD  -0.00pp)
+  XLV  C1  +1.524pp (dDD  -2.95pp)  C2  +1.959pp (dDD  -2.50pp)  C3  +2.928pp (dDD  -2.62pp)  C4  +0.332pp (dDD  -0.35pp)
+  EWH  C1  +1.485pp (dDD  +1.85pp)  C2  -1.034pp (dDD  +8.66pp)  C3  -0.327pp (dDD +11.42pp)  C4  +0.696pp (dDD  -1.96pp)
+  DIA  C1  +1.355pp (dDD  -0.60pp)  C2  +1.515pp (dDD  -4.23pp)  C3  +0.353pp (dDD  +5.13pp)  C4  -1.103pp (dDD  +1.79pp)
+  XLE  C1  +1.107pp (dDD -13.51pp)  C2  +2.947pp (dDD -22.91pp)  C3  +2.711pp (dDD -21.98pp)  C4  +0.556pp (dDD  -3.38pp)
+  IWM  C1  +1.032pp (dDD  +1.79pp)  C2  +0.143pp (dDD +13.87pp)  C3  -0.143pp (dDD +15.78pp)  C4  +0.890pp (dDD  -2.59pp)
+  XLK  C1  +0.897pp (dDD  -4.94pp)  C2  +1.137pp (dDD -13.71pp)  C3  +1.483pp (dDD -13.63pp)  C4  -0.331pp (dDD  +0.00pp)
+  XLF  C1  +0.853pp (dDD  +6.03pp)  C2  +2.065pp (dDD  +1.70pp)  C3  +2.327pp (dDD  -0.26pp)  C4  +0.854pp (dDD  -5.64pp)
+  EWG  C1  +0.566pp (dDD  -6.30pp)  C2  +0.756pp (dDD  +0.05pp)  C3  -0.278pp (dDD  +3.38pp)  C4  +0.247pp (dDD  -1.22pp)
+  EWU  C1  +0.379pp (dDD  -0.09pp)  C2  -1.564pp (dDD  +8.22pp)  C3  -0.800pp (dDD  +8.69pp)  C4  -0.162pp (dDD  -0.22pp)
+  EWL  C1  +0.149pp (dDD  +2.47pp)  C2  -1.962pp (dDD  +8.66pp)  C3  -1.958pp (dDD  +8.61pp)  C4  -0.121pp (dDD  -2.27pp)
+  EEM  C1  -0.427pp (dDD +11.56pp)  C2  -0.884pp (dDD +14.19pp)  C3  -1.194pp (dDD +18.46pp)  C4  -0.324pp (dDD  +1.05pp)
+  XLY  C1  -0.688pp (dDD +13.31pp)  C2  -1.313pp (dDD +14.57pp)  C3  -2.003pp (dDD +21.70pp)  C4  +0.103pp (dDD  -2.30pp)
+  EWS  C1  -0.808pp (dDD  +9.65pp)  C2  -3.482pp (dDD +26.14pp)  C3  -1.557pp (dDD +17.35pp)  C4  -0.824pp (dDD  +8.41pp)
+  EFA  C1  -1.960pp (dDD  +3.32pp)  C2  -1.762pp (dDD  +4.70pp)  C3  -1.710pp (dDD +10.23pp)  C4  -0.018pp (dDD  +0.51pp)
+  EWA  C1  -2.351pp (dDD  +6.94pp)  C2  -1.110pp (dDD  -0.78pp)  C3  -2.248pp (dDD +10.26pp)  C4  -0.543pp (dDD  +1.89pp)
+  XLI  C1  -2.630pp (dDD  +4.39pp)  C2  +0.886pp (dDD  -4.94pp)  C3  +0.906pp (dDD  -2.41pp)  C4  -0.500pp (dDD  +0.18pp)
+
+early path (base, m=2): arm | early share | episodes | sum(arm-C0) | median episode d
+  C1     3.70%   26   +19.60pp    +0.00pp
+  C2     7.88%   32    -2.28pp    -0.00pp
+  C3     5.85%   24   +18.02pp    +0.00pp
+  C4     2.95%   43    -7.27pp    +0.00pp
+
+audit (per arm): look-ahead, trailing-window recompute, fill timing, cost linearity, invariants
+  C0   True True True True True -> PASS
+  C1   True True True True True -> PASS
+  C2   True True True True True -> PASS
+  C3   True True True True True -> PASS
+  C4   True True True True True -> PASS
+
+eligible []; selected: none

@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime
 from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
+from functools import lru_cache
 
 from parayabuck.config import DownsizeGainBand, ExecutionConfig, RiskLimits
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
+from parayabuck.data.adjustment import signal_session_date
 from parayabuck.logger import get_logger
+from parayabuck.markets.nyse_calendar import nyse_sessions
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.utils import is_crypto
@@ -86,12 +90,17 @@ class PortfolioExecutionPolicy:
     units the sell would consume. Entries, exits to zero and up-resizes keep
     ``rebalance_band_pct``. The code default is inactive; the packaged
     configuration ships the schedule, mirroring the shipped YAML (the same
-    split R2's ``early_reentry_weight`` uses).
+    split R2's ``early_reentry_weight`` uses). ``december_deferral_sessions``
+    (H2, ``docs/research/band_h2_combo_v1.md``) postpones the same case out of
+    the year end entirely: a downward resize whose fill session falls in the
+    last N NYSE sessions of December waits for the first January decision.
+    Zero (the code default) disables it; the packaged configuration ships 10.
     """
 
     rebalance_band_pct: float = 0.005
     minimum_order_notional: float = 10.0
     downsize_gain_band: DownsizeGainBand | None = None
+    december_deferral_sessions: int = 0
 
     def __post_init__(self) -> None:
         if not 0 <= self.rebalance_band_pct < 1:
@@ -100,6 +109,12 @@ class PortfolioExecutionPolicy:
             raise ValueError("minimum_order_notional must be finite and non-negative")
         if self.downsize_gain_band is not None and not isinstance(self.downsize_gain_band, DownsizeGainBand):
             raise ValueError("downsize_gain_band must be a schedule or None")
+        if (
+            isinstance(self.december_deferral_sessions, bool)
+            or not isinstance(self.december_deferral_sessions, int)
+            or self.december_deferral_sessions < 0
+        ):
+            raise ValueError("december_deferral_sessions must be a non-negative integer")
 
 
 @dataclass(frozen=True)
@@ -119,6 +134,32 @@ class GainBandHold:
             "band": float(self.band),
             "gap": float(self.gap),
         }
+
+
+@dataclass(frozen=True)
+class DecemberDeferralHold:
+    """One downsize the December deferral window postponed, at one decision."""
+
+    symbol: str
+    target_weight: float
+    current_weight: float
+    sessions: int
+
+    def as_metadata(self) -> dict[str, object]:
+        """Round-trippable decision-metadata entry (``TargetPortfolio.metadata``)."""
+        return {
+            "symbol": self.symbol,
+            "target_weight": float(self.target_weight),
+            "current_weight": float(self.current_weight),
+            "sessions": int(self.sessions),
+        }
+
+
+# Metadata key naming the symbols whose downsize the December deferral window
+# postponed to the first January decision (H2,
+# ``docs/research/band_h2_combo_v1.md``). Read by the intent watchdog, which
+# must tolerate the deliberately held weight, and by the summaries.
+DECEMBER_DEFERRAL_KEY = "december_deferral"
 
 
 # Metadata key naming the symbols whose current target the RISK layer produced
@@ -156,6 +197,56 @@ def gain_band_bypass_metadata(
     merged = set(existing) if isinstance(existing, (tuple, list)) else set()
     merged.update(symbols)
     return {**metadata, GAIN_BAND_BYPASS_KEY: tuple(sorted(merged))}
+
+
+@lru_cache(maxsize=32)
+def _december_season_sessions(year: int) -> tuple[date, ...]:
+    """NYSE November/December session dates of ``year``, ascending.
+
+    November is included because the fill session of the last November session
+    is the first December one, and both sides must be classified by the same
+    list. An unavailable calendar returns ``()``: the deferral then never
+    applies and the ordinary rule executes, exactly like the gain band's
+    constant-band fallback (a tax-timing rule must not be able to stop a sell).
+    """
+    try:
+        return tuple(day for day, _, _ in nyse_sessions(date(year, 11, 1), date(year, 12, 31)))
+    except Exception:
+        log.warning("December deferral window unavailable for %s; the ordinary rule applies", year, exc_info=True)
+        return ()
+
+
+def in_december_deferral_window(decision_timestamp: datetime, sessions: int) -> bool:
+    """Whether this decision's FILL session is one of the last ``sessions``
+    NYSE sessions of December (H2, ``docs/research/band_h2_combo_v1.md``).
+
+    The research arm tests the FILL session of the resize (``research/
+    band_h2_combo_v1/screen.py``: ``december_tail`` at 436-450, the window at
+    589, and the arm branch ``if spec["defer"] and i in dec_tail and tgt < w``
+    at 663), which is the session after the decision session because the engine
+    decides on the completed close and trades at the next open
+    (``docs/research/gain_band_integration_v1.md``, timing note). The successor
+    is taken from the same ``parayabuck.markets.nyse_calendar`` schedule the
+    runtime uses, so the backtest and PAPER/LIVE share one window.
+    """
+    if sessions <= 0:
+        return False
+    session = signal_session_date(decision_timestamp)
+    if session.month < 11:
+        # January to October: the fill session cannot be in December.
+        return False
+    season = _december_season_sessions(session.year)
+    index = bisect_right(season, session)
+    if index >= len(season):
+        # The fill session is in January: nothing left to defer.
+        return False
+    fill = season[index]
+    if fill.month != 12:
+        # A November fill is never part of the December window.
+        return False
+    # Every December session from the fill session on is exactly the tail,
+    # so the fill is inside the window iff at most `sessions` remain.
+    return index >= len(season) - sessions
 
 
 @dataclass(frozen=True)
@@ -250,12 +341,29 @@ def record_gain_band_holds(target: TargetPortfolio, holds: Sequence[GainBandHold
     )
 
 
+def record_december_deferral_holds(target: TargetPortfolio, holds: Sequence[DecemberDeferralHold]) -> TargetPortfolio:
+    """Attach the downsizes the December window postponed to the decision metadata.
+
+    Same contract as :func:`record_gain_band_holds`, on the deferral's own key:
+    the record is persisted with the decision, the intent watchdog reads it so
+    the deliberately held weight is not a failed order, and the summaries show
+    it. Only non-empty hold lists add the key.
+    """
+    if not holds:
+        return target
+    return replace(
+        target,
+        metadata={**target.metadata, DECEMBER_DEFERRAL_KEY: tuple(hold.as_metadata() for hold in holds)},
+    )
+
+
 def portfolio_execution_policy_from_config(execution: ExecutionConfig) -> PortfolioExecutionPolicy:
     """Single semantic mapping shared by backtest, paper and live."""
     return PortfolioExecutionPolicy(
         rebalance_band_pct=execution.rebalance_band_pct,
         minimum_order_notional=execution.minimum_order_notional,
         downsize_gain_band=execution.downsize_gain_band,
+        december_deferral_sessions=execution.december_downsize_deferral_sessions,
     )
 
 
@@ -624,6 +732,7 @@ class TargetToOrderPlanner:
         client_order_salt: str = "",
         open_lots: Mapping[str, Sequence[Sequence[float]]] | None = None,
         gain_band_holds: list[GainBandHold] | None = None,
+        december_deferral_holds: list[DecemberDeferralHold] | None = None,
     ) -> tuple[PortfolioOrderRequest, ...]:
         """Build rebalance orders from a target.
 
@@ -637,10 +746,10 @@ class TargetToOrderPlanner:
         ``open_lots`` maps a symbol to the bot's own (managed) open lots,
         oldest first, as ``(quantity, fee-inclusive unit cost)``; it is the
         only input of the ``downsize_gain_band`` policy and is ignored by every
-        other decision. ``gain_band_holds`` is an optional diagnostics sink:
-        one :class:`GainBandHold` is appended per suppressed downsize, which
-        the caller records with the decision (metadata / summary) instead of
-        silently dropping the order.
+        other decision. ``gain_band_holds`` and ``december_deferral_holds`` are
+        optional diagnostics sinks: one hold is appended per suppressed or
+        postponed downsize, which the caller records with the decision
+        (metadata / summary) instead of silently dropping the order.
         """
         _validate_unique_account_positions(account)
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
@@ -694,16 +803,28 @@ class TargetToOrderPlanner:
             # backtest, paper OR live. This keeps turnover/cost parity between
             # the historical simulator and the live broker path.
             #
-            # The gain-scaled band (A1u) can only widen the band of a downward
-            # resize between two positive weights, so that case must not be
-            # skipped here: its own band is only known after the units the
-            # sell would consume are known. A reduction the risk overlay
-            # produced (or any risk-reduction-only decision) is not the
-            # strategy's own trim: it keeps the constant band and executes.
+            # The December window (H2) is tested FIRST, exactly as the research
+            # composition K does: an in-window downsize is postponed whatever
+            # its size, so the band never gets a say in December. Both cases
+            # cover the same shape — a downward resize between two positive
+            # weights — and must not be skipped here: whether they bind is only
+            # known after the units the sell would consume are known. A
+            # reduction the risk overlay produced (or any risk-reduction-only
+            # decision) is not the strategy's own trim: it keeps the constant
+            # band, executes, and is never deferred.
+            deferral_sessions = self.policy.december_deferral_sessions
+            deferral_case = (
+                deferral_sessions > 0
+                and 0.0 < target_weight < current_weight
+                and symbol not in risk_reduced
+                and gap >= self.policy.rebalance_band_pct
+                and in_december_deferral_window(target.decision_timestamp, deferral_sessions)
+            )
             gain_band_case = (
                 self.policy.downsize_gain_band is not None
                 and 0.0 < target_weight < current_weight
                 and symbol not in risk_reduced
+                and not deferral_case
             )
             if gap < self.policy.rebalance_band_pct and not gain_band_case:
                 continue
@@ -713,6 +834,12 @@ class TargetToOrderPlanner:
                 # inventory in a mixed position is never a sellable source.
                 delta = -min(abs(delta), managed_qty)
                 if abs(delta) <= 1e-12:
+                    continue
+                if deferral_case:
+                    if december_deferral_holds is not None:
+                        december_deferral_holds.append(
+                            DecemberDeferralHold(symbol, target_weight, current_weight, deferral_sessions)
+                        )
                     continue
                 if gain_band_case:
                     verdict = downsize_gain_band_verdict(
@@ -870,8 +997,10 @@ def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide, sa
 
 
 __all__ = [
+    "DECEMBER_DEFERRAL_KEY",
     "GAIN_BAND_BYPASS_KEY",
     "AssetTradingRules",
+    "DecemberDeferralHold",
     "DownsizeGainBandVerdict",
     "GainBandHold",
     "PortfolioExecutionPolicy",
@@ -887,6 +1016,8 @@ __all__ = [
     "floor_increment_decimal",
     "gain_band_bypass_metadata",
     "gain_band_bypass_symbols",
+    "in_december_deferral_window",
     "portfolio_execution_policy_from_config",
+    "record_december_deferral_holds",
     "record_gain_band_holds",
 ]

@@ -1031,12 +1031,19 @@ class EngineRuntime:
                 if raw is not None and callable(gain_band_reader)
                 else None
             )
+            deferral_reader = getattr(portfolio_runtime.repository, "latest_decision_december_deferral", None)
+            december_deferral = (
+                deferral_reader(portfolio_runtime.account_id, portfolio_runtime.market)
+                if raw is not None and callable(deferral_reader)
+                else None
+            )
             latest = (
                 LatestDecision(
                     raw[0],
                     raw[1],
                     cross_check if isinstance(cross_check, dict) else None,
                     gain_band if isinstance(gain_band, tuple) else None,
+                    december_deferral if isinstance(december_deferral, tuple) else None,
                 )
                 if raw is not None
                 else None

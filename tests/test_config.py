@@ -154,8 +154,9 @@ def test_shipped_paper_config_has_integrated_cap8_with_other_limits_unchanged() 
 
 def test_shipped_execution_block_pins_the_a1u_downsize_gain_band() -> None:
     """The shipped execution policy ships A1u's schedule (docs/research/
-    gain_band_v3.md), and the packaged default mirrors it so a deleted key
-    cannot silently restore the constant band."""
+    gain_band_v3.md) and the H2 December window (docs/research/
+    band_h2_combo_v1.md), and the packaged defaults mirror both so a deleted
+    key cannot silently restore the constant band or drop the deferral."""
     config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
 
     assert config.execution.downsize_gain_band == DownsizeGainBand(
@@ -163,6 +164,8 @@ def test_shipped_execution_block_pins_the_a1u_downsize_gain_band() -> None:
         bands=(0.005, 0.03, 0.08),
     )
     assert config.execution.downsize_gain_band == ExecutionConfig().downsize_gain_band
+    assert config.execution.december_downsize_deferral_sessions == 10
+    assert config.execution.december_downsize_deferral_sessions == ExecutionConfig().december_downsize_deferral_sessions
 
 
 def test_downsize_gain_band_config_validation(tmp_path: Path) -> None:

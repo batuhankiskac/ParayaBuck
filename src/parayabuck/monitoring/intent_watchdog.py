@@ -28,7 +28,10 @@ show:
   A downsize the A1u gain-scaled band deliberately did NOT trade
   (``metadata["gain_band"]``) widens that residual by the recorded band, since
   holding above the target IS the recorded intent there; an exit to zero is
-  never a band case and still alarms.
+  never a band case and still alarms. A downsize the December window postponed
+  (``metadata["december_deferral"]``, H2) is tolerated without limit while its
+  target stays positive, because the whole resize is deliberately held until
+  the first January decision re-plans it; an exit to zero is never deferred.
 
 Everything here is pure and deterministic given ``now``; the exchange
 schedule comes from :mod:`parayabuck.markets.nyse_calendar` — the one
@@ -93,6 +96,10 @@ class LatestDecision:
     # ``gain_band`` metadata of the decision: one mapping per downsize the A1u
     # gain-scaled band suppressed (None/absent when the band touched nothing).
     gain_band: tuple[dict[str, object], ...] | None = None
+    # ``december_deferral`` metadata of the decision: one mapping per downsize
+    # the December window postponed (H2, ``docs/research/band_h2_combo_v1.md``);
+    # None/absent when nothing was deferred.
+    december_deferral: tuple[dict[str, object], ...] | None = None
 
     @property
     def signal_source_hold(self) -> bool:
@@ -204,6 +211,31 @@ def _recorded_bands(latest: LatestDecision, market: Market) -> dict[str, float]:
     return bands
 
 
+def _deferred_symbols(latest: LatestDecision, market: Market) -> frozenset[str]:
+    """Canonical symbols the latest decision postponed through the December window.
+
+    ``metadata["december_deferral"]`` is the planner's own record of the
+    downsizes H2 deliberately did not trade (``DecemberDeferralHold``). A row
+    is used only when it carries a symbol; malformed rows are ignored, never
+    fatal.
+    """
+    entries = latest.december_deferral
+    if not isinstance(entries, (tuple, list)):
+        return frozenset()
+    symbols: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        raw_symbol = entry.get("symbol")
+        if not isinstance(raw_symbol, str):
+            continue
+        try:
+            symbols.add(canonical_symbol(raw_symbol, market))
+        except ValueError:
+            symbols.add(raw_symbol)
+    return frozenset(symbols)
+
+
 def _over_target(
     market: Market,
     latest: LatestDecision,
@@ -215,6 +247,7 @@ def _over_target(
         return []
     held = held_weights(account, market)
     bands = _recorded_bands(latest, market)
+    deferred = _deferred_symbols(latest, market)
     targets: dict[str, float] = {}
     for raw_symbol, weight in latest.weights.items():
         try:
@@ -226,6 +259,13 @@ def _over_target(
     for symbol in sorted(set(held) | set(targets)):
         actual = held.get(symbol, 0.0)
         target = targets.get(symbol, 0.0)
+        # A December deferral holds the WHOLE downsize by construction, so any
+        # excess over a POSITIVE target is the recorded intent until the first
+        # January decision re-plans it (H2, ``docs/research/
+        # band_h2_combo_v1.md``). An exit to zero is never a deferral case
+        # (and never recorded), so an unfilled exit still alarms.
+        if target > 1e-9 and symbol in deferred:
+            continue
         # A recorded band only justifies a holding above a POSITIVE target: the
         # band never applies to an exit, so a target of zero keeps the constant
         # tolerance and an unfilled exit still alarms.

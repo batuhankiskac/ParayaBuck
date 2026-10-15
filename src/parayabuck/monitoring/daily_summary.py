@@ -72,6 +72,32 @@ def _gain_band(entry: object) -> str | None:
     return "; ".join(described) if described else None
 
 
+def _december_deferral(entry: object) -> str | None:
+    """``"december deferral held (0.88 -> 0.90, 10 sessions)"`` per postponed downsize.
+
+    ``entry`` is the ``december_deferral`` metadata tuple written by the
+    planner: one mapping per symbol whose December downsize waited for the
+    first January decision (H2). ``None`` when the key is absent, so every
+    decision the window did not touch formats exactly as before.
+    """
+    entries = (entry,) if isinstance(entry, dict) else entry
+    if not isinstance(entries, (tuple, list)):
+        return None
+    described: list[str] = []
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        target, current = _number(item.get("target_weight")), _number(item.get("current_weight"))
+        sessions = item.get("sessions")
+        if target is None or current is None or not isinstance(sessions, int) or isinstance(sessions, bool):
+            continue
+        symbol = f" {item['symbol']}" if len(entries) > 1 and item.get("symbol") else ""
+        described.append(
+            f"december deferral held{symbol} ({target * 100:.1f}% -> {current * 100:.1f}%, {sessions} sessions)"
+        )
+    return "; ".join(described) if described else None
+
+
 def build_equity_daily_summary(
     target: TargetPortfolio,
     account: AccountSnapshot | None,
@@ -149,6 +175,11 @@ def build_equity_daily_summary(
         # A1u: the target wanted a smaller position and the gain-scaled band
         # kept it; say so instead of letting the held weight look unexplained.
         trend_part += f" {held_by_band}"
+    deferred = _december_deferral(metadata.get("december_deferral"))
+    if deferred is not None:
+        # H2: the year-end window kept the position until the first January
+        # decision; the held weight is intended, not a failed order.
+        trend_part += f" {deferred}"
     held_text = f"{held_weight * 100:.1f}%" if held_weight is not None else "n/a"
     weight_part = f"{hold_symbol or 'hold'} target {target_weight * 100:.1f}% held {held_text}"
     positions_part = (
@@ -182,6 +213,7 @@ def build_equity_daily_summary(
         "trend_votes": votes,
         "early_reentry": early,
         "gain_band": held_by_band,
+        "december_deferral": deferred,
         "hold_symbol": hold_symbol,
         "target_weight": target_weight,
         "held_weight": held_weight,

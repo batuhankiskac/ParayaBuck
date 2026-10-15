@@ -566,6 +566,19 @@ class PortfolioStateRepository:
             return None
         return tuple(dict(entry) for entry in entries if isinstance(entry, dict))
 
+    def latest_decision_december_deferral(self, account_id: str, market: Market) -> tuple[dict[str, Any], ...] | None:
+        """``december_deferral`` metadata of the newest decision for ``market``.
+
+        One mapping per downsize the December deferral window deliberately
+        postponed (``DecemberDeferralHold.as_metadata``). Read-only
+        observability for the intent watchdog, which must not call a recorded
+        hold a failed order; None when the newest decision carries no record.
+        """
+        entries = self._latest_decision_metadata(account_id, market).get("december_deferral")
+        if not isinstance(entries, (tuple, list)):
+            return None
+        return tuple(dict(entry) for entry in entries if isinstance(entry, dict))
+
     def _latest_decision_metadata(self, account_id: str, market: Market) -> dict[str, Any]:
         """Parsed ``metadata`` of the newest decision for ``market`` ({} if none)."""
         with self.store.lock:

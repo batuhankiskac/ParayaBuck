@@ -91,7 +91,11 @@ The portfolio/risk layer alone:
   an embedded USD FIFO gain fraction of `≤ 1 % / ≤ 5 % / > 5 %`, measured over
   the bot's own open lots (backtest: the engine's own fills; PAPER/LIVE: the
   persisted fill ledger). An unavailable or inconsistent lot book falls back to
-  0.5 pp, and the decision records the hold
+  0.5 pp, and the decision records the hold. With
+  `execution.december_downsize_deferral_sessions` (H2) the same resize is also
+  postponed when its fill session is one of the last 10 NYSE sessions of
+  December, whatever its size, and re-evaluated at every later decision; exits,
+  entries, up-resizes and risk-driven reductions are never deferred
   (`docs/research/gain_band_integration_v1.md`);
 - latches entries on daily-loss / drawdown breaches (production; backtests
   record shadow events and keep trading); a drawdown halt persists until an

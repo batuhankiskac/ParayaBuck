@@ -291,11 +291,15 @@ class ExecutionConfig:
     ``config/settings.yaml``, like the R2 strategy parameter): a deleted or
     renamed YAML key must not silently drop a shipped order-existence rule.
     Set the key explicitly to ``null`` to restore the constant band.
+    ``december_downsize_deferral_sessions`` (H2,
+    ``docs/research/band_h2_combo_v1.md``) defaults to the shipped 10 for the
+    same reason; ``0`` disables the deferral.
     """
 
     rebalance_band_pct: float = 0.005
     minimum_order_notional: float = 10.0
     downsize_gain_band: DownsizeGainBand | None = DownsizeGainBand()
+    december_downsize_deferral_sessions: int = 10
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.rebalance_band_pct) or not 0 <= self.rebalance_band_pct < 1:
@@ -305,6 +309,12 @@ class ExecutionConfig:
         schedule = self.downsize_gain_band
         if schedule is not None and not isinstance(schedule, DownsizeGainBand):
             raise ValueError("execution.downsize_gain_band must be a schedule or null")
+        if (
+            isinstance(self.december_downsize_deferral_sessions, bool)
+            or not isinstance(self.december_downsize_deferral_sessions, int)
+            or self.december_downsize_deferral_sessions < 0
+        ):
+            raise ValueError("execution.december_downsize_deferral_sessions must be a non-negative integer")
 
 
 @dataclass(frozen=True)
@@ -806,7 +816,9 @@ def _execution_from_raw(value: Any) -> ExecutionConfig:
 
     Absent key: the packaged default (the shipped A1u schedule). Present with
     ``null``: the rule is explicitly disabled. Present as a mapping: that
-    schedule (an empty block keeps the shipped thresholds/bands).
+    schedule (an empty block keeps the shipped thresholds/bands). The December
+    deferral window is a plain integer in the same block and needs no special
+    handling: absent keeps the shipped 10, ``0`` disables it.
     """
     block = _block(value)
     if "downsize_gain_band" not in block:

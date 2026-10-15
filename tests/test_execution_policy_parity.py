@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -19,6 +20,7 @@ from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.execution.portfolio import (
     GAIN_BAND_BYPASS_KEY,
     AssetTradingRules,
+    DecemberDeferralHold,
     GainBandHold,
     PortfolioExecutionPolicy,
     PortfolioOrderSide,
@@ -33,6 +35,13 @@ from parayabuck.portfolio.runtime_service import configuration_digest
 # the older lot deep in profit (60 % gain fraction on a 20-share sell).
 GAIN_BAND = DownsizeGainBand()
 GAIN_BAND_LOTS = ((60.0, 40.0), (40.0, 99.5))
+
+# H2 (docs/research/band_h2_combo_v1.md): three real adjacent NYSE sessions.
+# 2025-12-16 and 2025-12-17 fill inside the last-10-December window, 2025-12-15
+# fills just before it.
+DECEMBER_INSIDE = datetime(2025, 12, 16, tzinfo=ZoneInfo("America/New_York"))
+DECEMBER_BEFORE = datetime(2025, 12, 15, tzinfo=ZoneInfo("America/New_York"))
+DECEMBER_WINDOW = 10
 
 
 class _FixedTargetStrategy(PortfolioStrategy):
@@ -108,6 +117,7 @@ def _engine(
     price: float = 100.0,
     equity: float = 100_000.0,
     lots: tuple[tuple[float, float], ...] = (),
+    timestamp: datetime | None = None,
 ) -> PortfolioBacktestEngine:
     strategy = _FixedTargetStrategy({})
     engine = PortfolioBacktestEngine(
@@ -145,11 +155,13 @@ def _planned_verdict(
     lots: tuple[tuple[float, float], ...] = (),
     holds: list[GainBandHold] | None = None,
     metadata: Mapping[str, object] | None = None,
+    timestamp: datetime | None = None,
+    deferrals: list[DecemberDeferralHold] | None = None,
 ) -> dict[str, PortfolioOrderSide]:
     """Planner order-existence verdict: symbol -> side for produced orders."""
     account = _account(qty=qty, price=price, equity=equity)
     orders = TargetToOrderPlanner(policy).plan(
-        _target(targets, metadata=metadata),
+        _target(targets, timestamp, metadata=metadata),
         account,
         market=Market.EQUITY,
         prices={"SPY": price, "QQQ": price},
@@ -158,6 +170,7 @@ def _planned_verdict(
         decision_id="parity-decision",
         open_lots={"SPY": lots} if lots else {},
         gain_band_holds=holds,
+        december_deferral_holds=deferrals,
     )
     return {order.symbol: order.side for order in orders}
 
@@ -171,10 +184,11 @@ def _backtest_verdict(
     equity: float = 100_000.0,
     lots: tuple[tuple[float, float], ...] = (),
     metadata: Mapping[str, object] | None = None,
+    timestamp: datetime | None = None,
 ) -> dict[str, OrderSide]:
     """Backtest target-application verdict: symbol -> side for produced orders."""
-    engine = _engine(policy, qty=qty, price=price, equity=equity, lots=lots)
-    engine._apply_target(_target(targets, metadata=metadata))
+    engine = _engine(policy, qty=qty, price=price, equity=equity, lots=lots, timestamp=timestamp)
+    engine._apply_target(_target(targets, timestamp, metadata=metadata))
     return {order.symbol: order.side for order in engine._pending}
 
 
@@ -187,9 +201,14 @@ def _assert_parity(
     equity: float = 100_000.0,
     lots: tuple[tuple[float, float], ...] = (),
     metadata: Mapping[str, object] | None = None,
+    timestamp: datetime | None = None,
 ) -> None:
-    planned = _planned_verdict(policy, targets, qty=qty, price=price, equity=equity, lots=lots, metadata=metadata)
-    backtest = _backtest_verdict(policy, targets, qty=qty, price=price, equity=equity, lots=lots, metadata=metadata)
+    planned = _planned_verdict(
+        policy, targets, qty=qty, price=price, equity=equity, lots=lots, metadata=metadata, timestamp=timestamp
+    )
+    backtest = _backtest_verdict(
+        policy, targets, qty=qty, price=price, equity=equity, lots=lots, metadata=metadata, timestamp=timestamp
+    )
     assert set(planned) == set(backtest), (planned, backtest)
     for symbol in planned:
         assert planned[symbol].value == backtest[symbol].value, (symbol, planned, backtest)
@@ -365,6 +384,118 @@ def test_gain_band_bypass_parity_for_a_risk_reduced_target() -> None:
     _assert_parity(policy, {"SPY": 0.06}, qty=100, lots=GAIN_BAND_LOTS)
     assert _planned_verdict(policy, {"SPY": 0.06}, qty=100, lots=GAIN_BAND_LOTS) == {}
     assert _backtest_verdict(policy, {"SPY": 0.06}, qty=100, lots=GAIN_BAND_LOTS) == {}
+
+
+def test_configuration_digest_includes_the_december_deferral_window() -> None:
+    """H2 changes order existence in December, so the window belongs to the
+    digest an operator authorizes; changing or dropping it must differ."""
+    strategy = _FixedTargetStrategy({"SPY": 0.10})
+    arguments = (strategy, "paper", 0.50, "universe-v1")
+    without = configuration_digest(*arguments, execution_policy=PortfolioExecutionPolicy())
+    with_window = configuration_digest(
+        *arguments, execution_policy=PortfolioExecutionPolicy(december_deferral_sessions=DECEMBER_WINDOW)
+    )
+    other_window = configuration_digest(
+        *arguments, execution_policy=PortfolioExecutionPolicy(december_deferral_sessions=5)
+    )
+    assert len({without, with_window, other_window}) == 3
+
+
+def test_december_deferral_parity_planner_and_backtest_agree() -> None:
+    """The same (target, current, decision session) triple produces the same
+    order-existence verdict through production planning and through backtest
+    target application: a downsize is postponed inside the fill window and
+    executes just before it."""
+    policy = PortfolioExecutionPolicy(
+        rebalance_band_pct=0.005, minimum_order_notional=10.0, december_deferral_sessions=DECEMBER_WINDOW
+    )
+    # 100 shares @ $100 on $100k = 0.10 weight; a 0.08 target is a 2 pp downsize.
+    for timestamp in (DECEMBER_INSIDE, DECEMBER_BEFORE):
+        _assert_parity(policy, {"SPY": 0.08}, qty=100, timestamp=timestamp)
+    assert _planned_verdict(policy, {"SPY": 0.08}, qty=100, timestamp=DECEMBER_INSIDE) == {}
+    assert _backtest_verdict(policy, {"SPY": 0.08}, qty=100, timestamp=DECEMBER_INSIDE) == {}
+    assert _planned_verdict(policy, {"SPY": 0.08}, qty=100, timestamp=DECEMBER_BEFORE) == {
+        "SPY": PortfolioOrderSide.SELL
+    }
+    assert _backtest_verdict(policy, {"SPY": 0.08}, qty=100, timestamp=DECEMBER_BEFORE) == {"SPY": OrderSide.SELL}
+
+
+def test_december_deferral_parity_for_exits_up_resizes_and_risk_reductions() -> None:
+    """The window never touches an exit to zero, an entry, an up-resize or a
+    target the risk layer lowered, on either path."""
+    policy = PortfolioExecutionPolicy(
+        rebalance_band_pct=0.005, minimum_order_notional=10.0, december_deferral_sessions=DECEMBER_WINDOW
+    )
+    marked = {GAIN_BAND_BYPASS_KEY: ("SPY",)}
+    for targets, metadata in (
+        ({"SPY": 0.0}, None),
+        ({"SPY": 0.20}, None),
+        ({"SPY": 0.08}, marked),
+    ):
+        _assert_parity(policy, targets, qty=100, metadata=metadata, timestamp=DECEMBER_INSIDE)
+    assert _planned_verdict(policy, {"SPY": 0.0}, qty=100, timestamp=DECEMBER_INSIDE) == {
+        "SPY": PortfolioOrderSide.SELL
+    }
+    assert _backtest_verdict(policy, {"SPY": 0.0}, qty=100, timestamp=DECEMBER_INSIDE) == {"SPY": OrderSide.SELL}
+    assert _planned_verdict(policy, {"SPY": 0.20}, qty=100, timestamp=DECEMBER_INSIDE) == {
+        "SPY": PortfolioOrderSide.BUY
+    }
+    assert _backtest_verdict(policy, {"SPY": 0.20}, qty=100, timestamp=DECEMBER_INSIDE) == {"SPY": OrderSide.BUY}
+    assert _planned_verdict(policy, {"SPY": 0.08}, qty=100, metadata=marked, timestamp=DECEMBER_INSIDE) == {
+        "SPY": PortfolioOrderSide.SELL
+    }
+    assert _backtest_verdict(policy, {"SPY": 0.08}, qty=100, timestamp=DECEMBER_INSIDE, metadata=marked) == {
+        "SPY": OrderSide.SELL
+    }
+
+
+def test_december_deferral_hold_is_reported_by_both_paths() -> None:
+    """Both paths record the same postponed downsize, and the in-window hold
+    wins over the band (the research composition tests the window first)."""
+    policy = PortfolioExecutionPolicy(downsize_gain_band=GAIN_BAND, december_deferral_sessions=DECEMBER_WINDOW)
+    deferrals: list[DecemberDeferralHold] = []
+    holds: list[GainBandHold] = []
+    assert (
+        _planned_verdict(
+            policy,
+            {"SPY": 0.08},
+            qty=100,
+            lots=GAIN_BAND_LOTS,
+            holds=holds,
+            timestamp=DECEMBER_INSIDE,
+            deferrals=deferrals,
+        )
+        == {}
+    )
+    assert [(hold.symbol, hold.sessions) for hold in deferrals] == [("SPY", DECEMBER_WINDOW)]
+    assert holds == []
+    engine = _engine(policy, qty=100, lots=GAIN_BAND_LOTS)
+    engine._apply_target(_target({"SPY": 0.08}, DECEMBER_INSIDE))
+    assert engine._pending == []
+    assert list(engine._december_deferral_holds) == deferrals
+    assert engine._gain_band_holds == []
+    # Out of the window the band decides and records the same hold in both.
+    holds = []
+    deferrals = []
+    assert (
+        _planned_verdict(
+            policy,
+            {"SPY": 0.08},
+            qty=100,
+            lots=GAIN_BAND_LOTS,
+            holds=holds,
+            timestamp=DECEMBER_BEFORE,
+            deferrals=deferrals,
+        )
+        == {}
+    )
+    assert [(hold.symbol, hold.band) for hold in holds] == [("SPY", 0.08)]
+    assert deferrals == []
+    engine = _engine(policy, qty=100, lots=GAIN_BAND_LOTS)
+    engine._apply_target(_target({"SPY": 0.08}, DECEMBER_BEFORE))
+    assert engine._pending == []
+    assert list(engine._gain_band_holds) == holds
+    assert engine._december_deferral_holds == []
 
 
 def test_live_authorization_digest_includes_execution_policy() -> None:

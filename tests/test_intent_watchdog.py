@@ -250,6 +250,72 @@ def test_over_target_still_alarms_for_an_unfilled_exit_with_a_band_record() -> N
     assert "QLD held 98.0% vs target 0.0%" in alarms[0].message
 
 
+# --------------------------------------------------------------------------- #
+# (e) equity target exceeded by a recorded December deferral (H2)
+# --------------------------------------------------------------------------- #
+
+
+def _deferral_hold(symbol: str = "QLD", sessions: int = 10) -> tuple[dict[str, object], ...]:
+    """One ``metadata["december_deferral"]`` entry, as the planner writes it."""
+    return ({"symbol": symbol, "target_weight": 0.40, "current_weight": 0.80, "sessions": sessions},)
+
+
+def _deferred_decision(entries: tuple[dict[str, object], ...] | None) -> LatestDecision:
+    return LatestDecision(_utc(2026, 12, 16, 13, 30), {"QLD": 0.40}, None, None, entries)
+
+
+def test_over_target_tolerates_a_recorded_december_deferral() -> None:
+    """The December window holds the WHOLE downsize: a position far above its
+    target is the recorded intent until the first January decision re-plans it,
+    whatever the gap. Without the record the same account is a failed trim."""
+    late = _utc(2026, 12, 17, 15, 5)
+    held = _account((_qld(80_000.0),))
+    assert (
+        evaluate_equity(late, _deferred_decision(_deferral_hold()), held, running_since=None, settings=_SETTINGS) == []
+    )
+    assert _codes(evaluate_equity(late, _deferred_decision(None), held, running_since=None, settings=_SETTINGS)) == [
+        "equity_position_over_target"
+    ]
+
+
+def test_over_target_still_alarms_for_an_unfilled_exit_with_a_deferral_record() -> None:
+    """An exit to zero is never a deferral case, so a cash decision whose DAY
+    SELL did not fill alarms even when the metadata names that symbol."""
+    cash = LatestDecision(_utc(2026, 12, 16, 13, 30), {}, None, None, _deferral_hold())
+    alarms = evaluate_equity(
+        _utc(2026, 12, 17, 15, 5), cash, _account((_qld(98_000.0),)), running_since=None, settings=_SETTINGS
+    )
+    assert _codes(alarms) == ["equity_position_over_target"]
+    assert "QLD held 98.0% vs target 0.0%" in alarms[0].message
+
+
+def test_over_target_ignores_a_deferral_record_malformed_or_for_another_symbol() -> None:
+    """Only a well-formed record for the same symbol is tolerated: a foreign
+    symbol, a missing symbol and a non-mapping row change nothing."""
+    late = _utc(2026, 12, 17, 15, 5)
+    held = _account((_qld(80_000.0),))
+    for entries in (
+        ({"symbol": "QQQ", "sessions": 10},),
+        ({"target_weight": 0.40, "sessions": 10},),
+        ("QLD",),
+    ):
+        decision = LatestDecision(_utc(2026, 12, 16, 13, 30), {"QLD": 0.40}, None, None, entries)  # type: ignore[arg-type]
+        assert _codes(evaluate_equity(late, decision, held, running_since=None, settings=_SETTINGS)) == [
+            "equity_position_over_target"
+        ]
+
+
+def test_over_target_tolerates_band_and_deferral_records_together() -> None:
+    """A decision that held one symbol through the band and another through the
+    deferral keeps both tolerances: each record only speaks for its symbol."""
+    late = _utc(2026, 12, 17, 15, 5)
+    account = _account((_qld(80_000.0), PositionSnapshot("SPY", 470.0, 100.0, 100.0, Market.EQUITY, managed_qty=470.0)))
+    decision = LatestDecision(
+        _utc(2026, 12, 16, 13, 30), {"QLD": 0.40, "SPY": 0.40}, None, _band_hold("SPY"), _deferral_hold("QLD")
+    )
+    assert evaluate_equity(late, decision, account, running_since=None, settings=_SETTINGS) == []
+
+
 @pytest.mark.parametrize(
     ("early_close_session", "next_session"),
     [
@@ -322,15 +388,22 @@ class _Repo:
         self,
         latest: tuple[datetime, dict[str, float]] | None,
         gain_band: tuple[dict[str, object], ...] | None = None,
+        december_deferral: tuple[dict[str, object], ...] | None = None,
     ) -> None:
         self.latest = latest
         self.gain_band = gain_band
+        self.december_deferral = december_deferral
 
     def latest_decision_target(self, account_id: str, market: Market) -> tuple[datetime, dict[str, float]] | None:
         return self.latest
 
     def latest_decision_gain_band(self, account_id: str, market: Market) -> tuple[dict[str, object], ...] | None:
         return self.gain_band
+
+    def latest_decision_december_deferral(
+        self, account_id: str, market: Market
+    ) -> tuple[dict[str, object], ...] | None:
+        return self.december_deferral
 
 
 def _engine(repo: _Repo, *, enabled: bool = True) -> EngineRuntime:
@@ -402,6 +475,25 @@ def test_runtime_pass_reads_the_recorded_gain_band_hold(emitted) -> None:
     # Only the blind engine alarmed, and it did so through the operator path.
     assert [kind for kind, _ in emitted] == ["intent_alarm"]
     assert emitted[0][1]["category"] == "equity_position_over_target"
+
+
+def test_runtime_pass_reads_the_recorded_december_deferral(emitted) -> None:
+    """The persisted deferral reaches the check through the repository reader:
+    an account 40 pp above a target the window deliberately held raises no
+    alarm, while the same account without the record is the everyday failed
+    trim."""
+    latest = (_utc(2026, 12, 16, 13, 30), {"QLD": 0.40})
+    held = _account((_qld(80_000.0),))
+    recorded = _engine(_Repo(latest, None, _deferral_hold()))
+    recorded._last_account_snapshot = held
+    assert recorded._intent_watchdog_pass(_utc(2026, 12, 17, 15, 5)) == []
+    assert recorded.intent_watchdog_status()["degraded_reasons"] == []
+
+    blind = _engine(_Repo(latest))
+    blind._last_account_snapshot = held
+    alarms = blind._intent_watchdog_pass(_utc(2026, 12, 17, 15, 5))
+    assert [alarm["code"] for alarm in alarms] == ["equity_position_over_target"]
+    assert [kind for kind, _ in emitted] == ["intent_alarm"]
 
 
 def test_runtime_pass_is_inert_when_disabled_or_before_startup(emitted) -> None:

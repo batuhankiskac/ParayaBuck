@@ -5,9 +5,12 @@ in `config/settings.yaml`, consumed by backtest, PAPER and LIVE through
 `PortfolioExecutionPolicy`. It is a **tax-timing device**: a discretionary
 downward resize that would realise an embedded gain is postponed, so the number
 of taxable FIFO realisations falls (research: ~31/yr → ~6-11/yr) while turnover
-and exposure stay ~unchanged. This doc records what shipped, the lot interface,
-the fail-safe, where the production rule differs from the research engine, and
-what is still missing (a Stage B replay; nothing is deployed).
+and exposure stay ~unchanged. **H2 ships with it** —
+`execution.december_downsize_deferral_sessions` postpones a downsize whose fill
+session falls in the last 10 NYSE sessions of December (see §H2). This doc
+records what shipped, the lot interface, the fail-safe, where the production
+rule differs from the research engine, and what is still missing (a Stage B
+replay; nothing is deployed).
 
 - **Rule.** Only a downward resize between two positive weights
   (`0 < target_weight < current_weight`) may be held: it fills only when
@@ -113,8 +116,9 @@ indexation) and differs from A1 on 0.78 % of the main-path sessions.
   validation, digest) plus the parity and digest additions in
   `tests/test_execution_policy_parity.py`, the shipped-config pins in
   `tests/test_config.py`, and the product-backtest goldens
-  (`tests/test_vt35_golden.py`: every identity is pinned twice, band off — the
-  pre-A1u numbers, unchanged — and band on).
+  (`tests/test_vt35_golden.py`: every identity is pinned three times — band and
+  deferral off (the pre-A1u numbers, unchanged), band only, and the shipped
+  policy with both rules).
 
 ## Differences from the research engine
 
@@ -158,6 +162,19 @@ the two lower-exposure identities never reach their caps, so their numbers stand
 unchanged. The 2017–2026 Stage B replay is still missing, and the band-on VT35
 path diverges from the pre-fix one on 2020-02-04 onward, so no band-on golden is
 a research number.
+
+H2 is pinned on the same fixture as a third variant per identity (the shipped
+policy: band and deferral together). The fixture spans four Decembers
+(2019–2022), so the window postpones 9 QLD downsizes per identity; those
+downsizes stop counting as band holds (`suppressed` falls by the same order),
+because the window is tested first — the research's own `blocked_band` /
+`deferred` counter split:
+
+| Identity | Policy | Fills | Held | Deferred | CAGR | Max DD |
+|---|---|---:|---:|---:|---:|---:|
+| VT35 (`trend_rule: sma`) | shipped (band + H2) | 119 | 132 | 9 | 26.28 % | 28.22 % |
+| E2 1.1.0 (no early path) | shipped (band + H2) | 122 | 129 | 9 | 20.81 % | 27.81 % |
+| shipped 1.2.0 (E2 + R2) | shipped (band + H2) | 89 | 119 | 9 | 17.88 % | 25.34 % |
 
 ## Review fixes (2026-10-15)
 
@@ -225,13 +242,117 @@ engine's bypass, the PAPER path end to end including the persisted
 `tests/test_execution_policy_parity.py` (planner vs backtest for a marked
 target, with the unmarked control held by both).
 
+## H2: the December downsize deferral (2026-10-15)
+
+**H2 ships together with the band**, as the research decision
+`band_h2_combo_v1` adopted the pair `K = A1u + H2` (`docs/research/band_h2_combo_v1.md`,
+evidence in tag `archive/research/band-h2-combo-v1-2026-10`): on top of the band
+the December deferral keeps its standalone contribution (+0.139 / +0.133 /
++0.271 pp after tax on the 2000 / 2010 / 2017 windows; bootstrap **+0.042 pp on
+61.0 %** of B1-recent and **+0.025 pp on 59.5 %** of B2-flat paths) and repairs
+the one cell that killed the A1u-only campaign (E3 block-10 flat: 58.3 % of
+paths positive vs the 55 % floor, where A1u scored 53.7 %). It is a *tax-timing*
+device for the same object as the band — which downward resizes fill — so it is
+implemented in the same shared execution policy and the two are composed exactly
+as pre-registered: **the December window is tested first, the band decides
+otherwise**.
+
+- **Rule.** A downward resize between two positive weights
+  (`0 < target_weight < current_weight`) whose FILL session is one of the last
+  `execution.december_downsize_deferral_sessions` (shipped: **10**) NYSE
+  sessions of December is postponed; the ordinary rule — including the band —
+  is re-evaluated at every later decision, so the resize executes from the
+  first January decision on. Exits to zero, entries and up-resizes are never
+  deferred, and neither is any reduction the risk layer produced
+  (`metadata["gain_band_bypass"]`): a halt or a cap is exactly when the runtime
+  must be able to de-risk. The rule carries no state between sessions — the
+  held weight simply keeps drifting above the target and the next decision
+  re-plans it.
+- **Research convention (fill session, exchange calendar).** The research arm
+  tests the **fill** session: `december_tail(days, i0, i1, tail)`
+  (`research/band_h2_combo_v1/screen.py:436-450`) keeps the last
+  `DEC_TAIL = 10` December sessions of the price calendar per year
+  (`screen.py:165`), the arm's window is built at `screen.py:589`, and the
+  branch that defers is
+  `if spec["defer"] and i in dec_tail and tgt < w` (`screen.py:663`), tested
+  *before* the band as the K composition requires (`screen.py:662-668`; the
+  smoke identity `simulate_band_overlay` uses the same test at
+  `screen.py:474-475`). The
+  research engine decides on the completed close of session `i-1` and trades at
+  session `i`'s open, so `i` is the fill session; production and the backtest
+  decide on the completed close and fill at the next open, so the shared
+  predicate maps the decision session to its successor — on the one NYSE
+  calendar the engine already uses (`parayabuck.markets.nyse_calendar`) — and
+  tests that successor:
+  `execution.portfolio.in_december_deferral_window(decision_timestamp, sessions)`.
+  Both order-existence sites call it with the decision timestamp
+  (`TargetToOrderPlanner.plan`, `PortfolioBacktestEngine._apply_target`), so the
+  window is identical in BACKTEST, PAPER and LIVE. Two consequences worth
+  stating: a decision taken on the **last December session is not deferred**
+  (its fill is already in January, so deferring it would only delay the sell to
+  the second January session), and the window holds exactly `sessions`
+  decisions, all of them in December. "Last 10" counts **NYSE sessions** — a
+  13:00 ET early close (24 December 2024) is a session, an observed holiday
+  (24 December 2021, 25 December 2024) is not — and an unavailable calendar
+  yields **no** deferral, i.e. the ordinary rule executes
+  (`_december_season_sessions`). One convention difference is worth naming: the
+  window comes from the exchange calendar, not from the bars present, so on a
+  dataset that is missing a December session the research arm's own price
+  calendar would classify that decision differently from production (the
+  committed fixtures and every daily provider series are session-complete).
+- **Shipped selection.** `config/settings.yaml` and the packaged default
+  (`config.py::ExecutionConfig.december_downsize_deferral_sessions = 10`) both
+  carry 10, for the same reason as the band's schedule: a deleted or renamed
+  YAML key must not silently drop a shipped order-existence rule. `0` disables
+  the deferral (and every decision is then byte-identical to the band-only
+  policy). `portfolio_execution_policy_from_config` is again the single mapping,
+  so the window is inside `configuration_digest` (live operator authorization)
+  and the raw-config digest.
+- **Observability.** A postponed resize is recorded per decision exactly like a
+  band hold, on its own key: the planner appends a
+  `DecemberDeferralHold(symbol, target_weight, current_weight, sessions)` to the
+  caller's sink, the runtime service writes `metadata["december_deferral"]`
+  (persisted in `portfolio_decisions.target_json`), the backtest engine attaches
+  it to the `RebalanceRecord` (`december_deferral_holds`), and the daily summary
+  appends `december deferral held (88.0% -> 90.0%, 10 sessions)`. The paper
+  observability receipt marks the symbol
+  (`symbols[symbol]["december_deferral_sessions"]`, printed by the PAPER
+  telemetry line), and a decision whose only intended order was the postponed
+  resize reports `DECEMBER_DEFERRAL_HOLD` instead of `NO_TARGET_CHANGE`
+  (`GAIN_BAND_HOLD` still wins if both records are present; the metadata carries
+  both either way). Decisions the window does not touch carry no key at all.
+- **Watchdog.** The deferral holds the *whole* resize, so no gap is evidence of
+  a failed order while it stands: `_over_target` skips a symbol named by the
+  latest decision's `metadata["december_deferral"]` whenever its target is
+  positive (`PortfolioStateRepository.latest_decision_december_deferral` →
+  `runtime.py::_intent_watchdog_pass`). A target of zero keeps the constant
+  tolerance, so an unfilled exit still alarms and still emails; once the first
+  January decision re-plans the sell, the record is gone and a missed fill
+  alarms again. That is the review fix from the band applied to a device with an
+  unbounded hold.
+- **Tests.** `tests/test_december_deferral_h2.py` (the window against the real
+  NYSE calendar for 2019/2020/2021/2022/2024/2025 — exactly 10 decisions per
+  year, holidays skipped, the 2024 early close counted, the last December
+  session excluded — deferral of a downsize, no deferral of exits / entries /
+  up-resizes / risk reductions, execution from the first January decision,
+  composition with the band inside and outside the window, the counter split,
+  config validation and digest, metadata/summary/receipt, and the PAPER path
+  end to end including a restart-replay ledger), plus
+  `tests/test_execution_policy_parity.py` (planner vs backtest inside and
+  outside the window, exits/up-resizes/risk reductions, the shared hold sink,
+  digest) and `tests/test_intent_watchdog.py` (the deferral tolerance, a
+  malformed/foreign record, an unfilled exit still alarming, band and deferral
+  records side by side, the repository reader through the runtime pass).
+
 ## Decision
 
 A1u ships as an execution-policy option, enabled in the shipped configuration,
-on the owner's instruction and after the v3 evidence described above. It is
-fail-safe to R2, part of both digests, and observable per decision. The review
-fixes above are part of this revision: a downsize the risk layer produced keeps
-the constant band, and a band-held position no longer reads as a failed order.
-Next steps if the owner takes it further: a Stage B replay on the production
-engine over 2017-2026 (the goldens above are the only production-engine
-evidence so far), and the LIVE readiness review.
+on the owner's instruction and after the v3 evidence described above; H2 ships
+with it as the adopted composition `K = A1u + H2` (`docs/research/band_h2_combo_v1.md`).
+Both are fail-safe (A1u to the constant band, H2 to the ordinary rule), part of
+both digests, and observable per decision. The review fixes above are part of
+this revision: a downsize the risk layer produced keeps the constant band and is
+never deferred, and a held position no longer reads as a failed order. Next
+steps if the owner takes it further: a Stage B replay on the production engine
+over 2017-2026 (the goldens above are the only production-engine evidence so
+far), and the LIVE readiness review.

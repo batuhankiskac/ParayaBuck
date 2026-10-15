@@ -13,6 +13,8 @@ from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.data.adjustment import signal_session_date
 from parayabuck.execution.alpaca_models import DefiniteOrderRejection
 from parayabuck.execution.portfolio import (
+    DECEMBER_DEFERRAL_KEY,
+    DecemberDeferralHold,
     GainBandHold,
     PortfolioExecutionPolicy,
     PortfolioOrderRequest,
@@ -23,6 +25,7 @@ from parayabuck.execution.portfolio import (
     TargetToOrderPlanner,
     floor_increment,
     gain_band_bypass_metadata,
+    record_december_deferral_holds,
     record_gain_band_holds,
     reserve_opening_order_slots,
 )
@@ -427,6 +430,23 @@ def _emit_no_trade_safe(
         pass
 
 
+def _downsize_hold_reason(target: TargetPortfolio, orders: tuple[Any, ...] | list[Any]) -> str | None:
+    """Decision-summary reason when every intended order was a held downsize.
+
+    ``GAIN_BAND_HOLD`` (A1u) is preferred when a decision recorded both a band
+    hold and a December deferral; the persisted metadata carries both records
+    either way, and the daily summary names each of them.
+    """
+    if orders:
+        return None
+    metadata = target.metadata or {}
+    if metadata.get("gain_band"):
+        return "GAIN_BAND_HOLD"
+    if metadata.get(DECEMBER_DEFERRAL_KEY):
+        return "DECEMBER_DEFERRAL_HOLD"
+    return None
+
+
 class PortfolioRuntime:
     def __init__(
         self,
@@ -639,11 +659,20 @@ class PortfolioRuntime:
             planned_delta[order.symbol] = planned_delta.get(order.symbol, 0.0) + signed_quantity
         target_weights = {weight.symbol: weight.weight for weight in target.weights}
         symbols = sorted(set(current_positions) | set(target_weights) | set(planned_delta))
+        # H2: a symbol this decision deliberately held through the December
+        # window has no planned delta; the receipt says why (the telemetry log
+        # prints this mapping as planned_delta=).
+        raw_deferred = target.metadata.get(DECEMBER_DEFERRAL_KEY)
+        deferred: dict[str, object] = {}
+        for entry in raw_deferred if isinstance(raw_deferred, (tuple, list)) else ():
+            if isinstance(entry, dict) and entry.get("symbol"):
+                deferred[str(entry["symbol"])] = entry.get("sessions")
         details = {
             symbol: {
                 "target_weight": float(target_weights.get(symbol, 0.0)),
                 "current_position": float(current_positions.get(symbol, 0.0)),
                 "planned_order_delta": float(planned_delta.get(symbol, 0.0)),
+                **({"december_deferral_sessions": deferred[symbol]} if symbol in deferred else {}),
             }
             for symbol in symbols
         }
@@ -1499,6 +1528,7 @@ class PortfolioRuntime:
         # second decision's orders are silently dropped by the repository.
         decision_id = _decision_id(self.account_id, self.configuration_digest, timestamp, self.market)
         gain_band_holds: list[GainBandHold] = []
+        december_deferral_holds: list[DecemberDeferralHold] = []
         planned = self.planner.plan(
             risk.target,
             account,
@@ -1512,9 +1542,12 @@ class PortfolioRuntime:
             client_order_salt=self.repository.client_order_salt(decision_id),
             open_lots=self._managed_open_lots(held_symbols | targeted_symbols),
             gain_band_holds=gain_band_holds,
+            december_deferral_holds=december_deferral_holds,
         )
         if gain_band_holds:
             risk = replace(risk, target=record_gain_band_holds(risk.target, gain_band_holds))
+        if december_deferral_holds:
+            risk = replace(risk, target=record_december_deferral_holds(risk.target, december_deferral_holds))
         if not any(order.side == PortfolioOrderSide.SELL for order in planned):
             planned = reserve_opening_order_slots(
                 planned,
@@ -1579,9 +1612,7 @@ class PortfolioRuntime:
                 planned=orders,
                 submitted=submitted,
                 no_trade_reason=(
-                    hold_reason.upper()
-                    if hold_reason is not None
-                    else ("GAIN_BAND_HOLD" if not orders and risk.target.metadata.get("gain_band") else None)
+                    hold_reason.upper() if hold_reason is not None else _downsize_hold_reason(risk.target, orders)
                 ),
             )
             return PortfolioRuntimeResult(
@@ -2098,6 +2129,7 @@ class PortfolioRuntime:
                 prices.setdefault(symbol, float(str(reference)))
         rules = {symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols}
         gain_band_holds: list[GainBandHold] = []
+        december_deferral_holds: list[DecemberDeferralHold] = []
         planned = self.planner.plan(
             risk.target,
             account,
@@ -2118,9 +2150,12 @@ class PortfolioRuntime:
                 | {canonical_symbol(weight.symbol, self.market) for weight in risk.target.weights}
             ),
             gain_band_holds=gain_band_holds,
+            december_deferral_holds=december_deferral_holds,
         )
         if gain_band_holds:
             risk = replace(risk, target=record_gain_band_holds(risk.target, gain_band_holds))
+        if december_deferral_holds:
+            risk = replace(risk, target=record_december_deferral_holds(risk.target, december_deferral_holds))
         buy_orders = tuple(
             PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id})
             for order in planned

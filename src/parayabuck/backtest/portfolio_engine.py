@@ -14,6 +14,7 @@ from parayabuck.backtest.stats import sample_stddev
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
 from parayabuck.execution.portfolio import (
+    DecemberDeferralHold,
     GainBandHold,
     PortfolioExecutionPolicy,
     PortfolioRiskLimits,
@@ -21,6 +22,7 @@ from parayabuck.execution.portfolio import (
     downsize_gain_band_verdict,
     gain_band_bypass_metadata,
     gain_band_bypass_symbols,
+    in_december_deferral_window,
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -126,6 +128,10 @@ class RebalanceRecord:
     # a target weight was not traded down. Empty whenever the policy is
     # inactive or the band did not bind.
     gain_band_holds: tuple[GainBandHold, ...] = ()
+    # Downsizes this decision postponed out of the December window (H2,
+    # ``PortfolioExecutionPolicy.december_deferral_sessions``): the second
+    # user-visible reason a target weight was not traded down.
+    december_deferral_holds: tuple[DecemberDeferralHold, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -368,7 +374,13 @@ class PortfolioBacktestEngine:
         # a downward resize between two positive weights is suppressed on the
         # same (target, current, lots) triple in backtest and production.
         self.downsize_gain_band = execution_policy.downsize_gain_band if execution_policy is not None else None
+        # Shared H2 December deferral window: the same predicate the planner
+        # reads, on the same decision session.
+        self.december_deferral_sessions = (
+            execution_policy.december_deferral_sessions if execution_policy is not None else 0
+        )
         self._gain_band_holds: list[GainBandHold] = []
+        self._december_deferral_holds: list[DecemberDeferralHold] = []
         self.universe = universe
         self.universe_version = universe_version or EQUITY_UNIVERSE_VERSION
         self.allow_static_universe = bool(allow_static_universe)
@@ -462,6 +474,7 @@ class PortfolioBacktestEngine:
         self._current_pre_trade_weights: dict[str, float] = {}
         self._expected_turnover = 0.0
         self._gain_band_holds = []
+        self._december_deferral_holds = []
         self.state = PortfolioState(strategy_name=self.strategy.name, strategy_version=self.strategy.version)
         if prepared_inputs is not None:
             ordered, decision_bars = prepared_inputs
@@ -1266,6 +1279,7 @@ class PortfolioBacktestEngine:
         self._current_pre_trade_weights = {}
         self._expected_turnover = 0.0
         self._gain_band_holds = []
+        self._december_deferral_holds = []
         # Symbols whose target the risk layer produced (overlay cap/scale/halt
         # or a risk-reduction-only construction): their downsize is risk
         # enforcement, so it keeps the constant band.
@@ -1279,15 +1293,27 @@ class PortfolioBacktestEngine:
             current_weight = current_qty * price / equity if equity > 0 else 0.0
             self._current_pre_trade_weights[symbol] = current_weight
             gap = abs(target_weight - current_weight)
-            # Shared A1u policy: the gain-scaled band can only widen the band of
-            # a downward resize between two positive weights, so that case is
-            # evaluated after the units the sell consumes are known. A target
-            # the risk layer produced keeps the constant band (parity with the
-            # planner): a risk-driven sell must not be tax-deferred.
+            # Shared H2 policy, tested FIRST exactly as the research
+            # composition K does: an in-window downsize is postponed whatever
+            # its size, so the band never gets a say in December. Both cases
+            # cover the same shape — a downward resize between two positive
+            # weights — and are evaluated after the units the sell consumes are
+            # known. A target the risk layer produced keeps the constant band
+            # and executes (parity with the planner): a risk-driven sell must
+            # not be tax-deferred.
+            deferral_sessions = self.december_deferral_sessions
+            deferral_case = (
+                deferral_sessions > 0
+                and 0.0 < target_weight < current_weight
+                and symbol not in risk_reduced
+                and gap >= self.turnover_band
+                and in_december_deferral_window(target.decision_timestamp, deferral_sessions)
+            )
             gain_band_case = (
                 self.downsize_gain_band is not None
                 and 0.0 < target_weight < current_weight
                 and symbol not in risk_reduced
+                and not deferral_case
             )
             if gap < self.turnover_band and not gain_band_case:
                 continue
@@ -1299,6 +1325,11 @@ class PortfolioBacktestEngine:
                 # (and a commission charged for no shares).
                 continue
             if abs(delta) * price < self.minimum_order_notional:
+                continue
+            if deferral_case:
+                self._december_deferral_holds.append(
+                    DecemberDeferralHold(symbol, target_weight, current_weight, deferral_sessions)
+                )
                 continue
             if gain_band_case and delta < 0:
                 position_lots = current_position.lots if current_position is not None else None
@@ -1386,6 +1417,7 @@ class PortfolioBacktestEngine:
                 risk_overlay_halted=bool(target.metadata.get("risk_overlay_halted", False)),
                 risk_overlay_reasons=overlay_reasons,
                 gain_band_holds=tuple(self._gain_band_holds),
+                december_deferral_holds=tuple(self._december_deferral_holds),
             )
         )
         self._weight_history.append((decision, {weight.symbol: weight.weight for weight in target.weights}))
@@ -1780,6 +1812,7 @@ class PortfolioBacktestEngine:
                     risk_overlay_halted=record.risk_overlay_halted,
                     risk_overlay_reasons=record.risk_overlay_reasons,
                     gain_band_holds=record.gain_band_holds,
+                    december_deferral_holds=record.december_deferral_holds,
                 )
             )
         return tuple(enriched)

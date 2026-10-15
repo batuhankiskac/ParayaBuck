@@ -231,3 +231,21 @@ of them changed. Three changes were needed to make `--run` work at all, and they
    zero-vol session, the opposite of the rule). `ladder_state` tallies the sessions where the rule
    fired, and the tally is reported per bootstrap and in `RESULTS.json` under `degeneracy`.
    `--smoke` pins the contract: a non-finite metric reaches the fallback and yields exactly 0.5.
+
+4. **Resumed-session fixes (report-only paths), before any result file existed.** The run was
+   paused and resumed; on resume the worktree held uncommitted fixes and the first complete run
+   had still not written `RESULTS.json`/`SUMMARY.txt`. Fixed then, with no candidate result
+   observed: (a) `summary_text(res, hs)` had been extracted from `main()` while `main()` still
+   used the removed locals, and three report lookups used `RESULTS.json` key names instead of the
+   `run()` return names (`cost_stress_m4`→`cost`, `R2_rolling_starts`→`r2roll`); (b) **G5** read a
+   `{arm}_vs_C0` cell from the pre-tax block of `boot()`, whose actual shape is one cell per arm
+   (`pre[md][arm]`) — the gate's rule, statistic and tolerance are unchanged; (c) **P1** is now
+   recorded as not-applicable for L2/L3 (the pre-registered plateau check covers L1 and L4, the two
+   "steps" arms) instead of raising; (d) the leave-one-episode-out span is taken from
+   `W[CONTROL]` (the control's own target series, identical to production R2's by construction and
+   asserted in `--smoke`/`--harness`) rather than a separately recomputed R2 series. No arm,
+   parameter, stage, seed, threshold or gate changed; `--harness` (71 checks, 0 outside tolerance)
+   passes and pins the control against every published K cell, so a wrong key or a wrong draw
+   cannot pass silently. Determinism: `--run` executed twice end-to-end after these fixes and the
+   two `RESULTS.json` files are byte-identical (SHA-256
+   `a33e7e652b3a09f7c166b3a224603a4f7b2ceda19b898375b2b2b1fed5711537`).

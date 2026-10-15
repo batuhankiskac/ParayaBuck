@@ -1,0 +1,79 @@
+ladder_v1 | early-leg conviction ladder on production K | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | control = production K (A1u + H2) | arms = C0 + L1 + L2 + L3 + L4 (C0 + survey E1-E4) | R2 = pre-K reference
+harness PASS (0 outside tolerance) | control C0 == every published K cell | R2 reference row == every published R2 cell
+ADOPTED: C0 -- no candidate passed every gate; production K stands
+
+Pre-tax main window (m = 2 unless stated; R2 = the pre-K production rule, reference only):
+arm    CAGR base  CAGR cal  maxDD base  maxDD cal  Calmar    2017+                P1/P2/P3     m=1   turn  boot d base  boot d cal
+C0        15.76%    15.18%      46.67%     46.79%   0.338   33.23%    0.29 / 14.27 / 33.23  16.02%   5.46       +0.000      +0.000
+L1        16.28%    15.68%      45.41%     45.57%   0.358   33.18%    0.86 / 15.29 / 33.18  16.54%   5.51       +0.344      +0.326
+L2        16.37%    15.77%      43.41%     43.57%   0.377   33.07%    1.18 / 15.29 / 33.07  16.62%   5.55       +0.351      +0.333
+L3        16.26%    15.67%      45.04%     45.19%   0.361   33.21%    0.78 / 15.29 / 33.21  16.52%   5.51       +0.283      +0.265
+L4        16.16%    15.57%      46.20%     46.34%   0.350   33.59%    0.70 / 14.68 / 33.59  16.42%   5.58       +0.169      +0.161
+R2        15.48%    14.90%      46.76%     46.88%   0.331   32.71%   -0.06 / 14.30 / 32.71  15.75%   5.99       +0.007      +0.012
+
+After tax at $100k (progressive 2026 tariff, liquidated; base financing, m = 2):
+arm    2000 pre   2000 AT   d vs C0   2010 AT   d vs C0   2017 AT   d vs C0   maxDD 00    tax 00  sells/yr
+C0       15.76%    10.75%    +0.000    15.24%    +0.000    23.97%    +0.000     46.67%      831k     10.66
+L1       16.28%    11.13%    +0.373    15.26%    +0.025    23.83%    -0.139     45.41%      926k     10.84
+L2       16.36%    11.20%    +0.446    15.21%    -0.023    23.75%    -0.221     44.24%      945k     10.73
+L3       16.26%    11.11%    +0.356    15.28%    +0.040    23.86%    -0.112     45.04%      922k     10.88
+L4       16.16%    11.06%    +0.303    15.45%    +0.210    24.20%    +0.229     46.20%      898k     11.26
+R2       15.47%    10.16%    -0.593    14.71%    -0.529    22.89%    -1.086     46.76%      766k     30.69
+
+After tax at other capitals (report-only; arm - C0 in pp on the 2000 window):
+arm           10k         30k        300k          1M
+L1         +0.412      +0.366      +0.389      +0.419
+L2         +0.486      +0.431      +0.465      +0.499
+L3         +0.395      +0.350      +0.370      +0.400
+L4         +0.333      +0.300      +0.319      +0.328
+
+m = 4 cost stress, after tax $100k, 2000 window (arm - C0 in pp): L1 +0.367, L2 +0.436, L3 +0.349, L4 +0.290
+
+Clean bootstrap (seed 20261011, block 20, $100k; B1-recent = progressive, B2 = flat 20 %):
+arm     B1 med  B1 d pp  B1 share   B2 med  B2 d pp  B2 share   pre d base   pre d cal
+C0       3.858    0.000     1.000    4.038    0.000     1.000        0.000       0.000
+L1       3.976    0.197     0.575    4.333    0.244     0.589        0.344       0.326
+L2       3.978    0.174     0.567    4.338    0.238     0.582        0.351       0.333
+L3       3.949    0.114     0.548    4.282    0.155     0.566        0.283       0.265
+L4       3.803    0.046     0.531    4.221    0.074     0.552        0.169       0.161
+R2       3.516   -0.286     0.250    3.968   -0.131     0.360        0.007       0.012
+
+degeneracy sessions (undefined metric, fell back to 0.5): bootstrap {'L1_undefined_metric_sessions': 0, 'L2_undefined_metric_sessions': 0, 'L3_undefined_metric_sessions': 0, 'L4_undefined_metric_sessions': 0} | OOS bootstrap {'M1': {'L1_undefined_metric_sessions': 0, 'L2_undefined_metric_sessions': 0, 'L3_undefined_metric_sessions': 0, 'L4_undefined_metric_sessions': 0}, 'M2': {'L1_undefined_metric_sessions': 0, 'L2_undefined_metric_sessions': 0, 'L3_undefined_metric_sessions': 0, 'L4_undefined_metric_sessions': 0}, 'M3': {'L1_undefined_metric_sessions': 17, 'L2_undefined_metric_sessions': 17, 'L3_undefined_metric_sessions': 17, 'L4_undefined_metric_sessions': 17}, 'M4': {'L1_undefined_metric_sessions': 0, 'L2_undefined_metric_sessions': 0, 'L3_undefined_metric_sessions': 0, 'L4_undefined_metric_sessions': 0}, 'M5': {'L1_undefined_metric_sessions': 0, 'L2_undefined_metric_sessions': 0, 'L3_undefined_metric_sessions': 0, 'L4_undefined_metric_sessions': 0}}
+
+Out-of-sample windows (calibrated, m = 2, R-USD; dCAGR / dDD vs C0 in pp):
+window                          L1              L2              L3              L4
+GSPC_1957_1999       -0.07/ -0.57   -0.12/ -0.60   -0.01/ -0.74   +0.18/ +0.65
+M1                   +0.54/ +1.56   +0.53/ +1.16   +0.59/ +1.54   +0.56/ +2.78
+M2                   +0.42/ -2.16   +0.34/ -2.27   +0.42/ -1.98   +0.27/ -0.67
+M3                   +0.03/ +1.24   -0.03/ +1.32   +0.14/ +0.75   +0.20/ -1.05
+M4                   -0.05/ -0.25   +0.09/ -0.51   -0.19/ -0.02   +0.20/ -0.12
+M5                   -0.11/ +1.01   -0.12/ +1.07   +0.01/ +0.57   -0.03/ -0.30
+median dCAGR                 -0.01           +0.03           +0.08           +0.20
+
+Pooled OOS bootstrap (M1-M5, 2,000 paths each): L1 med +0.206 pp share 0.591 | L2 med +0.210 pp share 0.589 | L3 med +0.203 pp share 0.592 | L4 med +0.135 pp share 0.596
+
+Gates (all must pass):
+arm    G1  G2  G3  G4  G5  G6  G7  G8  G9  A1  A2  P1  verdict  failed
+L1      P   P   P   P   P   P   F   P   P   F   P   P     FAIL  G7,A1
+L2      P   P   P   P   P   P   P   P   P   F   P   P     FAIL  A1
+L3      P   P   P   P   P   P   P   P   P   F   F   P     FAIL  A1,A2
+L4      P   P   P   P   P   P   P   P   P   P   F   P     FAIL  A2
+
+Plateau check (pre-registered cuts 0.5/1.5 vs the two alternatives):
+  L1 pre-registered: pre-tax base m=2 delta +0.514 pp, after-tax 2000 delta +0.373 pp -> P1 PASS
+    cuts_0.25_1.0: pre-tax +0.656 pp, after-tax +0.501 pp
+    cuts_1.0_2.0: pre-tax +0.660 pp, after-tax +0.499 pp
+  L4 pre-registered: pre-tax base m=2 delta +0.398 pp, after-tax 2000 delta +0.303 pp -> P1 PASS
+    cuts_0.25_1.0: pre-tax +0.533 pp, after-tax +0.426 pp
+    cuts_1.0_2.0: pre-tax +0.257 pp, after-tax +0.207 pp
+
+Early path: 32 episodes; arm - C0 summed over episodes (pp): L1 +14.26, L2 +15.95, L3 +12.67, L4 +8.42
+Leave-one-episode-out (the arm's early leg replaced by C0's inside the episode) - remaining pre-tax dCAGR vs C0:
+  2001-10-31 [2001-10-31 -> 2001-12-05]: L1 -0.084 pp, L2 +0.030 pp, L3 -0.057 pp, L4 -0.018 pp
+  2002-11-04 [2002-11-04 -> 2002-12-02]: L1 +0.088 pp, L2 +0.202 pp, L3 +0.094 pp, L4 +0.098 pp
+  2023-01-20 [2023-01-20 -> 2023-02-01]: L1 -0.023 pp, L2 +0.071 pp, L3 +0.001 pp, L4 -0.057 pp
+
+E5 decision traces (main path, pre-tax, $100k): L1 differs from C0 in 56 sessions (0.84 %) | L2 differs from C0 in 53 sessions (0.79 %) | L3 differs from C0 in 55 sessions (0.82 %) | L4 differs from C0 in 43 sessions (0.64 %)
+
+Rolling January after-tax starts 2001-2021 (report-only; median arm - C0 in pp): L1 +0.032, L2 -0.025, L3 +0.053, L4 +0.260
+  shares > 0: L1 0.762, L2 0.429, L3 0.762, L4 1.000

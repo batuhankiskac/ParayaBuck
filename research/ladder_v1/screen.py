@@ -1777,7 +1777,10 @@ def stage_episodes(c0_cagr, arms, cuts=None):
         loo[tag] = {"found": True, "span": [days[s], days[e]]}
         for a in CANDIDATES:
             W2 = W[a].copy()
-            W2[:, s:e + 1] = w_r2[:, s:e + 1]     # the arm's early leg == the control's there
+            # the arm's early-leg weight inside the episode becomes the control's (C0's target
+            # series is production R2's, asserted in --smoke), so the remaining delta is the
+            # ladder's edge without this episode's decisions
+            W2[:, s:e + 1] = W[CONTROL][:, s:e + 1]
             r2_ = engine_run(PRE_CAPITAL, START, T, days, mkt, o, c, W2, e2, "R2", "pre_tax")
             st = pre_stats(days, START, T, r2_)
             d = (st["cagr"] - c0_cagr) * 100
@@ -1888,10 +1891,10 @@ def gates_ladder(res, boot_ref, oosb, plateau):
         # G5 (both): pre-tax clean bootstrap median delta >= 0
         r["G5_detail"] = {}
         for md in ("base", "calibrated"):
-            b = boot_ref["pre"][md]
-            r["G5_detail"][md] = {"median_delta_pp": b[f"{arm}_vs_{CONTROL}"]["diff_vs_C0_median_pp"],
-                                  "share_gt_0": b[f"{arm}_vs_{CONTROL}"]["share_gt_0"],
-                                  "pass": bool(b[f"{arm}_vs_{CONTROL}"]["diff_vs_C0_median_pp"] >= G5_MIN_MEDIAN_PP)}
+            b = boot_ref["pre"][md][arm]     # boot()'s pre block carries the delta per arm
+            r["G5_detail"][md] = {"median_delta_pp": b["diff_vs_C0_median_pp"],
+                                  "share_gt_0": b["share_gt_0"],
+                                  "pass": bool(b["diff_vs_C0_median_pp"] >= G5_MIN_MEDIAN_PP)}
         r["G5"] = bool(all(v["pass"] for v in r["G5_detail"].values()))
         # G7: six OOS windows
         det = {k: {"delta_cagr_pp": res["oos"][k][arm]["delta_cagr_pp"],
@@ -1926,9 +1929,13 @@ def gates_ladder(res, boot_ref, oosb, plateau):
                                     "pass": bool(d["median_delta_cagr_pp"] >= A2_MIN_MEDIAN_PP
                                                  and d["share_gt_0"] >= A2_MIN_SHARE)}
         r["A2"] = bool(all(v["pass"] for v in r["A2_detail"].values()))
-        # P1: the plateau check
-        r["P1_detail"] = plateau[arm]
-        r["P1"] = bool(plateau[arm]["pass"])
+        # P1: the plateau check (pre-registered for the two "steps" arms only)
+        if arm in plateau:
+            r["P1_detail"] = plateau[arm]
+            r["P1"] = bool(plateau[arm]["pass"])
+        else:
+            r["P1_detail"] = {"applicable": False, "why": "no pre-registered cut-set to perturb"}
+            r["P1"] = True
         r["pass"] = bool(all(r[k] for k in ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9",
                                             "A1", "A2", "P1")))
         r["failed"] = [k for k in ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "A1", "A2", "P1")
@@ -2008,8 +2015,9 @@ def main() -> None:
         sys.exit(0 if hs["pass"] else 1)
 
     res = run(boot_ref=hs["boot_ref"])
-    g = res["gates"]["arms"]
-    pre, win, oos, oosb, boot_ref = res["pre"], res["windows"], res["oos"], res["oosb"], res["boot_ref"]
+    pre, pre_usd = res["pre"], res["pre_usd"]
+    win, cost, oos, oosb = res["windows"], res["cost"], res["oos"], res["oosb"]
+    boot_ref, r2roll, ep = res["boot_ref"], res["r2roll"], res["episodes"]
 
     out = {
         "campaign": "ladder_v1",
@@ -2074,65 +2082,85 @@ def main() -> None:
     }
     OUT.write_text(json.dumps(trv2.rnd(out), indent=2, sort_keys=True) + "\n")
 
-    # ------------------------------------------------------------------ SUMMARY
+    L = summary_text(res, hs)
+    SUMMARY.write_text("\n".join(L) + "\n")
+    print("\n".join(L))
+
+
+
+def summary_text(res, hs):
+    """The SUMMARY.txt block: pure formatting of the run's own cells (nothing is recomputed)."""
     p = fmt_pct
+    pre, win, oos, oosb = res["pre"], res["windows"], res["oos"], res["oosb"]
+    boot_ref = res["boot_ref"]
     w = pre["window"]
-    hdr = (f"ladder_v1 | early-leg conviction ladder on production K | main window "
-           f"{w['start']} -> {w['end']} ({w['sessions']} sessions) | control = production K "
-           f"(A1u + H2) | arms = C0 + L1 + L2 + L3 + L4 (C0 + survey E1-E4) | R2 = pre-K reference")
-    L = [hdr,
+    L = [f"ladder_v1 | early-leg conviction ladder on production K | main window "
+         f"{w['start']} -> {w['end']} ({w['sessions']} sessions) | control = production K "
+         f"(A1u + H2) | arms = C0 + L1 + L2 + L3 + L4 (C0 + survey E1-E4) | R2 = pre-K reference",
          f"harness {'PASS' if hs['pass'] else 'FAIL'} ({hs['n_outside_tolerance']} outside tolerance)"
          f"{'' if hs['pass'] else ': ' + ', '.join(hs['fails'])}"
-         f" | control C0 == published K cells | R2 reference row == published R2 cells",
+         f" | control C0 == every published K cell | R2 reference row == every published R2 cell",
          f"ADOPTED: {res['gates']['adopted']} -- {res['gates']['reason']}", "",
-         "Pre-tax main window (m = 2 unless stated; R2 = pre-K production rule, reference only):",
+         "Pre-tax main window (m = 2 unless stated; R2 = the pre-K production rule, reference only):",
          f"{'arm':<5}{'CAGR base':>11}{'CAGR cal':>10}{'maxDD base':>12}{'maxDD cal':>11}"
-         f"{'Calmar':>8}{'2017+':>9}{'P1/P2/P3':>26}{'m=1':>8}{'turn':>7}{'boot d base':>13}{'boot d cal':>12}"]
+         f"{'Calmar':>8}{'2017+':>9}{'P1/P2/P3':>24}{'m=1':>8}{'turn':>7}{'boot d base':>13}{'boot d cal':>12}"]
     for arm in list(ARMS) + ["R2"]:
         b, cc = pre["base"]["m2"][arm], pre["calibrated"]["m2"][arm]
         sub = " / ".join(f"{b['subperiods'][k]['cagr'] * 100:.2f}" for k in ("P1", "P2", "P3"))
-        g5b = (boot_ref["pre"]["base"][f"{arm}_vs_{CONTROL}"]["diff_vs_C0_median_pp"] if arm != CONTROL else 0.0)
-        g5c = (boot_ref["pre"]["calibrated"][f"{arm}_vs_{CONTROL}"]["diff_vs_C0_median_pp"] if arm != CONTROL else 0.0)
+        if arm == CONTROL:
+            g5b = g5c = 0.0
+        else:
+            g5b = boot_ref["pre"]["base"][arm]["diff_vs_C0_median_pp"]
+            g5c = boot_ref["pre"]["calibrated"][arm]["diff_vs_C0_median_pp"]
         L.append(f"{arm:<5}{p(b['cagr']):>11}{p(cc['cagr']):>10}{p(b['max_dd']):>12}{p(cc['max_dd']):>11}"
-                 f"{b['calmar']:>8.3f}{p(b['2017_end']['cagr']):>9}{sub:>26}"
+                 f"{b['calmar']:>8.3f}{p(b['2017_end']['cagr']):>9}{sub:>24}"
                  f"{p(pre['base']['m1'][arm]['cagr']):>8}{b['turnover_annual']:>7.2f}"
                  f"{g5b:>+13.3f}{g5c:>+12.3f}")
     L += ["", "After tax at $100k (progressive 2026 tariff, liquidated; base financing, m = 2):",
           f"{'arm':<5}{'2000 pre':>10}{'2000 AT':>10}{'d vs C0':>10}{'2010 AT':>10}{'d vs C0':>10}"
-          f"{'2017 AT':>10}{'d vs C0':>10}{'maxDD 00':>11}{'sells/yr':>10}"]
+          f"{'2017 AT':>10}{'d vs C0':>10}{'maxDD 00':>11}{'tax 00':>10}{'sells/yr':>10}"]
     for arm in list(ARMS) + ["R2"]:
         cells = [win[GATE_CAPITAL][wn][arm] for wn in TAX_WINDOWS]
         c0 = [win[GATE_CAPITAL][wn][CONTROL] for wn in TAX_WINDOWS]
         L.append(f"{arm:<5}{p(cells[0]['pre_tax_cagr']):>10}{p(cells[0]['after_tax_cagr']):>10}"
                  f"{(cells[0]['after_tax_cagr'] - c0[0]['after_tax_cagr']) * 100:>+10.3f}"
-                 f"{p(cells[1]['after_tax_cagr']):>10}{(cells[1]['after_tax_cagr'] - c0[1]['after_tax_cagr']) * 100:>+10.3f}"
-                 f"{p(cells[2]['after_tax_cagr']):>10}{(cells[2]['after_tax_cagr'] - c0[2]['after_tax_cagr']) * 100:>+10.3f}"
-                 f"{p(cells[0]['after_tax_max_dd']):>11}{cells[0]['sells_per_year']:>10.2f}")
-    L += ["", "After tax at other capitals (report-only; arm - C0 in pp):",
+                 f"{p(cells[1]['after_tax_cagr']):>10}"
+                 f"{(cells[1]['after_tax_cagr'] - c0[1]['after_tax_cagr']) * 100:>+10.3f}"
+                 f"{p(cells[2]['after_tax_cagr']):>10}"
+                 f"{(cells[2]['after_tax_cagr'] - c0[2]['after_tax_cagr']) * 100:>+10.3f}"
+                 f"{p(cells[0]['after_tax_max_dd']):>11}{cells[0]['tax_usd'] / 1000:>9.0f}k"
+                 f"{cells[0]['sells_per_year']:>10.2f}")
+    L += ["", "After tax at other capitals (report-only; arm - C0 in pp on the 2000 window):",
           f"{'arm':<5}" + "".join(f"{cl:>12}" for cl in ("10k", "30k", "300k", "1M"))]
     for arm in CANDIDATES:
         L.append(f"{arm:<5}" + "".join(
             f"{(win[cl]['2000_03_to_2026_09'][arm]['after_tax_cagr'] - win[cl]['2000_03_to_2026_09'][CONTROL]['after_tax_cagr']) * 100:>+12.3f}"
             for cl in ("10k", "30k", "300k", "1M")))
+    cp = res["cost"]["2000_03_to_2026_09"]
+    L += ["", "m = 4 cost stress, after tax $100k, 2000 window (arm - C0 in pp): "
+          + ", ".join(f"{a} {(cp[a]['after_tax_cagr'] - cp[CONTROL]['after_tax_cagr']) * 100:+.3f}"
+                      for a in CANDIDATES)]
     L += ["", f"Clean bootstrap (seed {SEED}, block {BLOCK}, $100k; B1-recent = progressive, B2 = flat 20 %):",
           f"{'arm':<5}{'B1 med':>9}{'B1 d pp':>9}{'B1 share':>10}{'B2 med':>9}{'B2 d pp':>9}{'B2 share':>10}"
-          f"{'pre d base pp':>15}{'pre d cal pp':>14}"]
+          f"{'pre d base':>13}{'pre d cal':>12}"]
     for arm in list(ARMS) + ["R2"]:
         row = f"{arm:<5}"
         for mode in ("progressive", "flat"):
-            m_ = boot_ref["tax"][GATE_CAPITAL][mode][arm]["cagr_median"]
-            row += f"{m_ * 100:>9.3f}"
+            row += f"{boot_ref['tax'][GATE_CAPITAL][mode][arm]['cagr_median'] * 100:>9.3f}"
             if arm == CONTROL:
                 row += f"{0.0:>9.3f}{1.0:>10.3f}"
             else:
                 d = boot_ref["tax"][GATE_CAPITAL][mode][f"{arm}_vs_{CONTROL}"]
                 row += f"{d['median_delta_cagr_pp']:>9.3f}{d['share_gt_0']:>10.3f}"
         if arm == CONTROL:
-            row += f"{0.0:>15.3f}{0.0:>14.3f}"
+            row += f"{0.0:>13.3f}{0.0:>12.3f}"
         else:
-            row += (f"{boot_ref['pre']['base'][f'{arm}_vs_{CONTROL}']['diff_vs_C0_median_pp']:>15.3f}"
-                    f"{boot_ref['pre']['calibrated'][f'{arm}_vs_{CONTROL}']['diff_vs_C0_median_pp']:>14.3f}")
+            row += (f"{boot_ref['pre']['base'][arm]['diff_vs_C0_median_pp']:>13.3f}"
+                    f"{boot_ref['pre']['calibrated'][arm]['diff_vs_C0_median_pp']:>12.3f}")
         L.append(row)
+    L += ["", f"degeneracy sessions (undefined metric, fell back to 0.5): "
+          f"bootstrap {boot_ref['degeneracy']} | OOS bootstrap "
+          + str({k: v for k, v in oosb["degeneracy"].items() if v})]
     L += ["", "Out-of-sample windows (calibrated, m = 2, R-USD; dCAGR / dDD vs C0 in pp):",
           f"{'window':<18}" + "".join(f"{a:>16}" for a in CANDIDATES)]
     for wn in OOS_WINDOWS:
@@ -2140,34 +2168,36 @@ def main() -> None:
             f"{oos[wn][a]['delta_cagr_pp']:>+8.2f}/{oos[wn][a]['delta_max_dd_pp']:>+6.2f}"
             for a in CANDIDATES))
     L.append(f"{'median dCAGR':<18}" + "".join(
-        f"{np.median([oos[wn][a]['delta_cagr_pp'] for wn in OOS_WINDOWS]):>+16.2f}" for a in CANDIDATES))
+        f"{np.median([oos[wn][a]['delta_cagr_pp'] for wn in OOS_WINDOWS]):>+16.2f}"
+        for a in CANDIDATES))
     L.append("")
     L.append("Pooled OOS bootstrap (M1-M5, 2,000 paths each): " + " | ".join(
-        f"{a} med {oosb['pooled'][a]['diff_vs_C0_median_pp']:+.3f} pp share {oosb['pooled'][a]['share_gt_0']:.3f}"
-        for a in CANDIDATES))
+        f"{a} med {oosb['pooled'][a]['diff_vs_C0_median_pp']:+.3f} pp "
+        f"share {oosb['pooled'][a]['share_gt_0']:.3f}" for a in CANDIDATES))
     L += ["", "Gates (all must pass):",
           f"{'arm':<5}{'G1':>4}{'G2':>4}{'G3':>4}{'G4':>4}{'G5':>4}{'G6':>4}{'G7':>4}{'G8':>4}{'G9':>4}"
           f"{'A1':>4}{'A2':>4}{'P1':>4}{'verdict':>9}  failed"]
     for arm in CANDIDATES:
-        r_ = g[arm]
+        r_ = res["gates"]["arms"][arm]
         L.append(f"{arm:<5}" + "".join(f"{'  P' if r_[k] else '  F':>4}"
                                        for k in ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9",
                                                  "A1", "A2", "P1"))
                  + f"{'PASS' if r_['pass'] else 'FAIL':>9}  {','.join(r_['failed'])}")
-    L += ["", "Plateau check (pre-registered cuts 0.5/1.5 vs the alternatives):"]
-    for arm in ("L1", "L4"):
+    L += ["", "Plateau check (pre-registered cuts 0.5/1.5 vs the two alternatives):"]
+    for arm in sorted(res["plateau"]["pre_registered"]):
         v = res["plateau"]["pre_registered"][arm]
         L.append(f"  {arm} pre-registered: pre-tax base m=2 delta {v['pre_tax_base_m2_delta_pp']:+.3f} pp, "
                  f"after-tax 2000 delta {v['after_tax_2000_delta_pp']:+.3f} pp -> P1 "
-                 f"{'PASS' if g[arm]['P1'] else 'FAIL'}")
+                 f"{'PASS' if res['gates']['arms'][arm]['P1'] else 'FAIL'}")
         for tag in res["plateau"]["alt"]:
             a_ = res["plateau"]["alt"][tag][arm]
             L.append(f"    {tag}: pre-tax {a_['pre_tax_base_m2_delta_pp']:+.3f} pp, "
                      f"after-tax {a_['after_tax_2000_delta_pp']:+.3f} pp")
     ep = res["episodes"]
-    L += ["", f"Early path: {ep['n_episodes']} episodes; arm - C0 sum over episodes (pp): "
+    L += ["", f"Early path: {ep['n_episodes']} episodes; arm - C0 summed over episodes (pp): "
           + ", ".join(f"{a} {ep['sum_delta_pp'][a]:+.2f}" for a in CANDIDATES),
-          "Leave-one-episode-out (the arm's early leg replaced by C0's inside the episode):"]
+          "Leave-one-episode-out (the arm's early leg replaced by C0's inside the episode) -"
+          " remaining pre-tax dCAGR vs C0:"]
     for tag, v in ep["leave_one_out"].items():
         if not v.get("found"):
             L.append(f"  {tag}: episode not found")
@@ -2175,10 +2205,16 @@ def main() -> None:
         L.append(f"  {tag} [{v['span'][0]} -> {v['span'][1]}]: " + ", ".join(
             f"{a} {v[a]['delta_cagr_vs_C0_pp']:+.3f} pp" for a in CANDIDATES))
     L += ["", "E5 decision traces (main path, pre-tax, $100k): " + " | ".join(
-        f"{a} differs {res['e5'][f'{a}_vs_{CONTROL}']['sessions_decision_differs']} sessions "
-        f"({res['e5'][f'{a}_vs_{CONTROL}']['share_decision_differs'] * 100:.2f} %)" for a in CANDIDATES)]
-    SUMMARY.write_text("\n".join(L) + "\n")
-    print("\n".join(L))
+        f"{a} differs from C0 in {res['e5'][f'{a}_vs_{CONTROL}']['sessions_decision_differs']} sessions "
+        f"({res['e5'][f'{a}_vs_{CONTROL}']['share_decision_differs'] * 100:.2f} %)"
+        for a in CANDIDATES)]
+    L += ["", "Rolling January after-tax starts 2001-2021 (report-only; median arm - C0 in pp): "
+          + ", ".join(f"{a} {np.median([res['r2roll'][str(y)][a]['delta_after_tax_pp'] for y in range(2001, 2022)]):+.3f}"
+                      for a in CANDIDATES),
+          "  shares > 0: " + ", ".join(
+              f"{a} {np.mean([res['r2roll'][str(y)][a]['delta_after_tax_pp'] > 0 for y in range(2001, 2022)]):.3f}"
+              for a in CANDIDATES)]
+    return L
 
 
 if __name__ == "__main__":

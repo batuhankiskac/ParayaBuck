@@ -1,0 +1,338 @@
+{
+ "campaign": "exit_timing_v1",
+ "files": {
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "bytes": 172726,
+   "date_range": [
+    "2000-01-03",
+    "2026-10-09"
+   ],
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "CBRT USD/TRY forex buying rate (as recorded by after_tax_tr_v1)",
+   "used_by": "USD/TRY conversion of gains, tax payments and the rule-gain probe"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "bytes": 17845,
+   "date_range": null,
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "TUIK Yi-UFE monthly index (as recorded by after_tax_tr_v1)",
+   "used_by": "Yi-UFE indexation of the acquisition month and the deflated bracket ceilings"
+  },
+  "data/historical/ewma_band_v1_gspc.csv": {
+   "bytes": 1145471,
+   "date_range": [
+    "1950-01-03",
+    "1999-12-31"
+   ],
+   "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "^GSPC daily bars 1957-01-02..1999-12-31 (as recorded by ewma_band_v1)",
+   "used_by": "G7 window ^GSPC 1957-1999"
+  },
+  "data/historical/ewma_band_v1_index.csv": {
+   "bytes": 4114163,
+   "date_range": null,
+   "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "^IXIC/^GSPC/^N225/^GDAXI/^FTSE OHLC (as recorded by ewma_band_v1)",
+   "used_by": "G7 windows M1-M5"
+  },
+  "data/historical/ewma_band_v1_tb3ms.csv": {
+   "bytes": 4439,
+   "date_range": [
+    "1934-01-01",
+    "1956-12-01"
+   ],
+   "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "FRED TB3MS (as recorded by ewma_band_v1)",
+   "used_by": "G7: TB3MS pre-1954 T-bill rate for the M2 window"
+  },
+  "data/historical/range_vol_v1_dia.csv": {
+   "bytes": 697668,
+   "date_range": [
+    "1998-01-20",
+    "2026-10-12"
+   ],
+   "sha256": "1300f2a61255d5699a349794179f09ead15703e2813025e6b64a2df16d91b14e",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "DIA adjusted OHLC (as recorded by range_vol_v1)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v1_iwm.csv": {
+   "bytes": 655363,
+   "date_range": [
+    "2000-05-26",
+    "2026-10-12"
+   ],
+   "sha256": "c6ff89f0fb18506a9869de2d92b609c37815cc8fe634d064bb29218638573580",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "IWM adjusted OHLC (as recorded by range_vol_v1)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v1_spy.csv": {
+   "bytes": 776843,
+   "date_range": [
+    "1993-01-29",
+    "2026-10-12"
+   ],
+   "sha256": "80c8bee68dcd3e1a8ee5fb3cf6828afc6cdc018aaf7b7395dbdac7b22e0ea0a4",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "SPY adjusted OHLC (as recorded by range_vol_v1)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_eem.csv": {
+   "bytes": 596570,
+   "date_range": [
+    "2003-04-14",
+    "2026-10-13"
+   ],
+   "sha256": "2a7d0a7f3cd9c2e3c70abb3e366de7589141b5d1f82dd1c382f5fe2cba36aa99",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EEM adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_efa.csv": {
+   "bytes": 628462,
+   "date_range": [
+    "2001-08-27",
+    "2026-10-13"
+   ],
+   "sha256": "61f525b17d70aa947aba6e6e1033cc2f626b815e7d8a9c05663ad1dd64bd345d",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EFA adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_ewa.csv": {
+   "bytes": 722723,
+   "date_range": [
+    "1996-03-18",
+    "2026-10-13"
+   ],
+   "sha256": "09b6942f6660cc90306d5dc4cca54c6fd6a67e783517b6b9cb48f07094f49187",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EWA adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_ewc.csv": {
+   "bytes": 720836,
+   "date_range": [
+    "1996-03-18",
+    "2026-10-13"
+   ],
+   "sha256": "51321cb9cc1f45f59023ec63d055535f4f2e2af4b5ed0bbe1b1e6dffa3e6518e",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EWC adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "quality rule record only; EXCLUDED from E1 (5.6 % invalid/flat bars)"
+  },
+  "data/historical/range_vol_v2_ewg.csv": {
+   "bytes": 726336,
+   "date_range": [
+    "1996-03-18",
+    "2026-10-13"
+   ],
+   "sha256": "79ebfa1f9df848ae208f983ebcf41f0a71b9acf5decf6a3983886ebf3a4710f5",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EWG adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_ewh.csv": {
+   "bytes": 723938,
+   "date_range": [
+    "1996-03-18",
+    "2026-10-13"
+   ],
+   "sha256": "d1e7a96c6b72d0a041ea362d42b9159bc42da7993d13f5947e6b5ae5972b3aee",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EWH adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_ewj.csv": {
+   "bytes": 709683,
+   "date_range": [
+    "1996-03-18",
+    "2026-10-13"
+   ],
+   "sha256": "846ef8ec8b7206498f668f6e7df5d4d1a75afb61b4bf5059b25c279f704c4457",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EWJ adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_ewl.csv": {
+   "bytes": 722468,
+   "date_range": [
+    "1996-03-18",
+    "2026-10-13"
+   ],
+   "sha256": "344b8a554ad668e88df543ab0c8e8ed5c5ff350b756e2ba9813f3fd992d69780",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EWL adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_ews.csv": {
+   "bytes": 723102,
+   "date_range": [
+    "1996-03-18",
+    "2026-10-13"
+   ],
+   "sha256": "92ad902cba58e1f3d4cffcb02fa6ead636b468437b014a60e7cb82611f75a12e",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EWS adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_ewu.csv": {
+   "bytes": 719067,
+   "date_range": [
+    "1996-03-18",
+    "2026-10-13"
+   ],
+   "sha256": "8f0d1914103a55f47329264d2aecc5845f76791b0aa37cc1c7bd1d4b1529e9f8",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "EWU adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_xlb.csv": {
+   "bytes": 695202,
+   "date_range": [
+    "1998-12-22",
+    "2026-10-13"
+   ],
+   "sha256": "687e99eaaad489c85847fdfc84d8136545ab929b50e0f784eaf186ca8568a59a",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "XLB adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_xle.csv": {
+   "bytes": 686299,
+   "date_range": [
+    "1998-12-22",
+    "2026-10-13"
+   ],
+   "sha256": "7c06aac6ddbf7b8fef6dc1ba5d4022e1c22bf1f6f1e7a8685730f9b0542e17f1",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "XLE adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_xlf.csv": {
+   "bytes": 719917,
+   "date_range": [
+    "1998-12-22",
+    "2026-10-13"
+   ],
+   "sha256": "f6c34092978d4d1da1fc0ee96a395019c0d8fcb893694faf584d1ddf9367182e",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "XLF adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_xli.csv": {
+   "bytes": 681238,
+   "date_range": [
+    "1998-12-22",
+    "2026-10-13"
+   ],
+   "sha256": "c9039b8828807c489e1d64381e53f48a5dca5d0e77775cae515f30264508a7b8",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "XLI adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_xlk.csv": {
+   "bytes": 683909,
+   "date_range": [
+    "1998-12-22",
+    "2026-10-13"
+   ],
+   "sha256": "0916e3134092de2ca9049c9b317e1170980057ff8b0a5159b76e24fb6424fa61",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "XLK adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_xlp.csv": {
+   "bytes": 682473,
+   "date_range": [
+    "1998-12-22",
+    "2026-10-13"
+   ],
+   "sha256": "5a08680540fc09205024f5ebb997c24ffdb98d967a0aed10c616b2144e2d0670",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "XLP adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_xlu.csv": {
+   "bytes": 694082,
+   "date_range": [
+    "1998-12-22",
+    "2026-10-13"
+   ],
+   "sha256": "614e80d03bcbfd99af27a87981a3cb463d72654ce22f0c0bdb07052c8bea8421",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "XLU adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_xlv.csv": {
+   "bytes": 682218,
+   "date_range": [
+    "1998-12-22",
+    "2026-10-13"
+   ],
+   "sha256": "02e5df03723d01930af4ae348409d88cc7fbaf9513d7049e628777399e5533f7",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "XLV adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/range_vol_v2_xly.csv": {
+   "bytes": 688977,
+   "date_range": [
+    "1998-12-22",
+    "2026-10-13"
+   ],
+   "sha256": "abfd815334cae8cbeb25329e16041d994289eb5804103a8d7ef1930ee55b0ba6",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "XLY adjusted OHLC (as recorded by range_vol_v2)",
+   "used_by": "E1 after-tax ETF (R-INDEX)"
+  },
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "bytes": 2671225,
+   "date_range": null,
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "Yahoo/Nasdaq daily bars QQQ/SPY/QLD (as recorded by stress_robustness_v1)",
+   "used_by": "trend_robustness_v2.load() -> QQQ/SPY/QLD open, close, dividend bars (main window and both bootstraps)"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "bytes": 301157,
+   "date_range": [
+    "1954-01-04",
+    "2026-09-28"
+   ],
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+   "source": "reused committed research data (unchanged from band_h2_combo_v1 / gain_band_v3)",
+   "source_url": "FRED DTB3 (as recorded by stress_robustness_v1)",
+   "used_by": "trend_robustness_v2.load() -> DTB3 financing rate; also the OOS T-bill fallback"
+  },
+  "research/band_h2_combo_v1/RESULTS.json": {
+   "bytes": 260050,
+   "sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
+   "source": "published evidence of the K campaign (the control's own cells: pre-tax m = 1/2/4, the R-USD rows, the three after-tax windows at $100k with their postponement counters, the m = 4 cost stress, the clean-bootstrap medians)",
+   "source_url": "branch research/band_h2_combo_v1, commit cfd24f83",
+   "used_by": "--harness: the REF_K / TAX_ANCHOR_K / REF_K_COST_M4 / REF_K_DEFERRALS / BOOT_ANCHOR_K constants are asserted against these cells before any arm is read"
+  },
+  "research/exit_timing_v1/H2_ANCHORS.json": {
+   "bytes": 4394,
+   "sha256": "8d8cd644fe3526e814cb0718cfa2bcd30cb6a91689a93685f723e3b6893f3074",
+   "source": "published evidence of tax_harvest_v2, copied by hand from its tagged RESULTS.json",
+   "source_url": "tag archive/research/tax-harvest-v2-2026-10 : research/tax_harvest_v2/RESULTS.json",
+   "used_by": "reference_checks -> H2 anchor comparison"
+  },
+  "research/gain_band_v3/RESULTS.json": {
+   "bytes": 297446,
+   "sha256": "7b4acb8b0ca80878b11f85664b8b438c8129be18f015cc5fc661bc371e7aa278",
+   "source": "published evidence of the parent campaign (committed in this worktree)",
+   "source_url": "branch research/gain_band_v3, commit 5d094812",
+   "used_by": "reference_checks -> cell-by-cell comparison of every A1u cell this run produces"
+  }
+ },
+ "note": "Offline study: no network download. Every price/FX/CPI input is an existing committed research file, unchanged from band_h2_combo_v1 (which checked it out of gain_band_v3 unchanged); SHA-256 values were re-computed in this worktree. The TRY/Yi-UFE calendar starts 2000-01 / 1999-01, so no after-tax stage starts before 2000-03-09. Three further entries are published evidence (not inputs).",
+ "verified_on": "2026-10-16"
+}

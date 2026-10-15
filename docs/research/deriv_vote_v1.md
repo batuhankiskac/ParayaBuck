@@ -14,7 +14,7 @@ loses return exactly where the survey's risk list said it would.
   is out of sample by −2.14 pp CAGR with drawdowns 21.9 pp deeper.
 - **The pre-tax win is real but it is a 2000–2002 effect plus 2010–2016**, and the 2017+
   failure is one year: **2025**. Excluding 2025, the 2017+ CAGR of C1/C2/C3 is 30.7 / 29.1 /
-  30.4 % against R2's 29.5 % — all three would pass G3; with 2025 they lose 1.6–2.8 pp,
+  30.4 % against R2's 29.5 % — all three would pass G3; with 2025 they lose 1.4–3.6 pp,
   because the crossover exits the 2025 selloff on **2025-04-04** where E2 exits on
   **2025-03-06** (−24.15 % against −5.34 % over 2025-03-05 → 2025-05-01) and C2 re-enters only
   on 2025-06-24 where E2 re-enters on 2025-05-01.

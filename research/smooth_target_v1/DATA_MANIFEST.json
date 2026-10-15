@@ -1,0 +1,237 @@
+{
+  "campaign": "smooth_target_v1",
+  "note": "No new data and no network access: every input is a byte copy of an already-committed research file (SHA-256 below), restored per the common protocol. Files under data/historical/ that carry a study prefix are the input copies of that study, reused unchanged.",
+  "files": {
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "content": "CBRT USD/TRY forex buying rate, daily",
+      "date_range": "1990-01 .. 2026-09",
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "source": "branch research/vt_level_tax_v1 (unchanged since after_tax_tr_v1)",
+      "used_by": "after-tax conversion legs and the fixed bootstrap FX calendar"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "content": "YI-UFE (TURKSTAT PPI) monthly index",
+      "date_range": "1990-01 .. 2026-09",
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "source": "branch research/vt_level_tax_v1",
+      "used_by": "indexation relief and tariff-bracket deflation"
+    },
+    "data/historical/ewma_band_v1_gspc.csv": {
+      "bytes": 1145471,
+      "content": "^GSPC daily close",
+      "date_range": "1927-12-30 .. 1999-12-31",
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "source": "byte copy from tag archive/research/ewma-band-v1-2026-10",
+      "used_by": "OOS window ^GSPC 1957-1999"
+    },
+    "data/historical/ewma_band_v1_index.csv": {
+      "bytes": 4114163,
+      "content": "multi-index OHLC (^IXIC, ^GSPC, ^N225, ^GDAXI, ^FTSE)",
+      "date_range": "1900 .. 2026-09-29",
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "source": "byte copy from tag archive/research/ewma-band-v1-2026-10",
+      "used_by": "OOS windows M1..M5"
+    },
+    "data/historical/ewma_band_v1_tb3ms.csv": {
+      "bytes": 4439,
+      "content": "FRED TB3MS monthly 3-month T-bill rate",
+      "date_range": "1934-01 .. 2026-09",
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "source": "byte copy from tag archive/research/ewma-band-v1-2026-10",
+      "used_by": "pre-1954 OOS financing proxy"
+    },
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "content": "QQQ/SPY/QLD daily open, close, dividend",
+      "date_range": "1993-01-29 .. 2026-09-29",
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "already-committed research data (trend_robustness_v2 / fast_reentry_v1 harness)",
+      "used_by": "main window, main bootstrap and the clean after-tax bootstrap bars"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "content": "FRED DTB3 3-month T-bill secondary market rate, daily",
+      "date_range": "1954-01-04 .. 2026-09-29",
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "source": "already-committed research data",
+      "used_by": "financing, idle-cash and bootstrap rates"
+    },
+    "research/smooth_target_v1/tax_engine.py": {
+      "bytes": 14015,
+      "content": "after-tax engine (Turkish progressive tariff + flat 20 % B2 account)",
+      "sha256": "7a5d54aa0eca110d94c367113ac13c909407d34af54567703714ab7060f62776",
+      "source": "byte copy of research/deriv_vote_v1/tax_engine.py, itself the engine of research/vt_level_tax_v1/screen.py as vendored by research/fast_reentry_v2"
+    },
+    "research/smooth_target_v1/E2_INTEGRATION_DEVIATION.json": {
+      "bytes": 16936,
+      "content": "production E2 reference row (no early path)",
+      "sha256": "7571ed991a08945533b176e5aa4938e5f369cc5a503f142e475821e2e61d99a4",
+      "source": "byte copy from research/fast_reentry_v2/E2_INTEGRATION_DEVIATION.json",
+      "used_by": "harness anchor for the E2 vote and mechanics"
+    },
+    "research/fast_reentry_v1/RESULTS.json": {
+      "bytes": 208316,
+      "content": "R2's main-window rows (CAGR, max DD, turnover, base/calibrated x m=1/m=2)",
+      "sha256": "65a3bc1e941ca0bf3956651e19073ca0e5ceed59db1d7078869f75f354294f14",
+      "source": "branch research/fast_reentry_v1 (restored per protocol)",
+      "used_by": "harness anchor: C0 must reproduce R2 exactly"
+    },
+    "research/r2_tbill_combo_v1/RESULTS.json": {
+      "bytes": 172571,
+      "content": "R2's after-tax rows and B1/B2 medians",
+      "sha256": "1949eab6bca77b7c6ba2169c65d749ebd9db3a18ce7cbd7f971e76a0469f9080",
+      "source": "tag archive/research/r2-tbill-combo-v1-2026-10",
+      "used_by": "harness anchor: after-tax 10.16/14.71/22.89 %, B1 3.5155 %, B2 3.9678 %"
+    },
+    "research/trend_robustness_v2/screen.py": {
+      "bytes": 25032,
+      "content": "engine helpers (synthetic 2x, SMA, vol20, vt, metrics)",
+      "sha256": "c2a70719029b912d33c22af79c43037663fd7accf9cb9bebaa67c1cdc0fbcd12",
+      "source": "on main",
+      "used_by": "imported, main() never run"
+    },
+    "data/historical/range_vol_v1_spy.csv": {
+      "bytes": 776843,
+      "content": "SPY daily OHLC + adjclose",
+      "sha256": "80c8bee68dcd3e1a8ee5fb3cf6828afc6cdc018aaf7b7395dbdac7b22e0ea0a4",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v1)",
+      "used_by": "gate I instrument SPY"
+    },
+    "data/historical/range_vol_v1_dia.csv": {
+      "bytes": 697668,
+      "content": "DIA daily OHLC + adjclose",
+      "sha256": "1300f2a61255d5699a349794179f09ead15703e2813025e6b64a2df16d91b14e",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v1)",
+      "used_by": "gate I instrument DIA"
+    },
+    "data/historical/range_vol_v1_iwm.csv": {
+      "bytes": 655363,
+      "content": "IWM daily OHLC + adjclose",
+      "sha256": "c6ff89f0fb18506a9869de2d92b609c37815cc8fe634d064bb29218638573580",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v1)",
+      "used_by": "gate I instrument IWM"
+    },
+    "data/historical/range_vol_v2_eem.csv": {
+      "bytes": 596570, "content": "EEM daily OHLC + adjclose",
+      "sha256": "2a7d0a7f3cd9c2e3c70abb3e366de7589141b5d1f82dd1c382f5fe2cba36aa99",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EEM"
+    },
+    "data/historical/range_vol_v2_efa.csv": {
+      "bytes": 628462, "content": "EFA daily OHLC + adjclose",
+      "sha256": "61f525b17d70aa947aba6e6e1033cc2f626b815e7d8a9c05663ad1dd64bd345d",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EFA"
+    },
+    "data/historical/range_vol_v2_ewa.csv": {
+      "bytes": 722723, "content": "EWA daily OHLC + adjclose",
+      "sha256": "09b6942f6660cc90306d5dc4cca54c6fd6a67e783517b6b9cb48f07094f49187",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EWA"
+    },
+    "data/historical/range_vol_v2_ewc.csv": {
+      "bytes": 720836, "content": "EWC daily OHLC + adjclose",
+      "sha256": "51321cb9cc1f45f59023ec63d055535f4f2e2af4b5ed0bbe1b1e6dffa3e6518e",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EWC (excluded by the pre-existing quality rule)"
+    },
+    "data/historical/range_vol_v2_ewg.csv": {
+      "bytes": 726336, "content": "EWG daily OHLC + adjclose",
+      "sha256": "79ebfa1f9df848ae208f983ebcf41f0a71b9acf5decf6a3983886ebf3a4710f5",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EWG"
+    },
+    "data/historical/range_vol_v2_ewh.csv": {
+      "bytes": 723938, "content": "EWH daily OHLC + adjclose",
+      "sha256": "d1e7a96c6b72d0a041ea362d42b9159bc42da7993d13f5947e6b5ae5972b3aee",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EWH"
+    },
+    "data/historical/range_vol_v2_ewj.csv": {
+      "bytes": 709683, "content": "EWJ daily OHLC + adjclose",
+      "sha256": "846ef8ec8b7206498f668f6e7df5d4d1a75afb61b4bf5059b25c279f704c4457",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EWJ"
+    },
+    "data/historical/range_vol_v2_ewl.csv": {
+      "bytes": 722468, "content": "EWL daily OHLC + adjclose",
+      "sha256": "344b8a554ad668e88df543ab0c8e8ed5c5ff350b756e2ba9813f3fd992d69780",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EWL"
+    },
+    "data/historical/range_vol_v2_ews.csv": {
+      "bytes": 723102, "content": "EWS daily OHLC + adjclose",
+      "sha256": "92ad902cba58e1f3d4cffcb02fa6ead636b468437b014a60e7cb82611f75a12e",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EWS"
+    },
+    "data/historical/range_vol_v2_ewu.csv": {
+      "bytes": 719067, "content": "EWU daily OHLC + adjclose",
+      "sha256": "8f0d1914103a55f47329264d2aecc5845f76791b0aa37cc1c7bd1d4b1529e9f8",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument EWU"
+    },
+    "data/historical/range_vol_v2_xlb.csv": {
+      "bytes": 695202, "content": "XLB daily OHLC + adjclose",
+      "sha256": "687e99eaaad489c85847fdfc84d8136545ab929b50e0f784eaf186ca8568a59a",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument XLB"
+    },
+    "data/historical/range_vol_v2_xle.csv": {
+      "bytes": 686299, "content": "XLE daily OHLC + adjclose",
+      "sha256": "7c06aac6ddbf7b8fef6dc1ba5d4022e1c22bf1f6f1e7a8685730f9b0542e17f1",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument XLE"
+    },
+    "data/historical/range_vol_v2_xlf.csv": {
+      "bytes": 719917, "content": "XLF daily OHLC + adjclose",
+      "sha256": "f6c34092978d4d1da1fc0ee96a395019c0d8fcb893694faf584d1ddf9367182e",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument XLF"
+    },
+    "data/historical/range_vol_v2_xli.csv": {
+      "bytes": 681238, "content": "XLI daily OHLC + adjclose",
+      "sha256": "c9039b8828807c489e1d64381e53f48a5dca5d0e77775cae515f30264508a7b8",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument XLI"
+    },
+    "data/historical/range_vol_v2_xlk.csv": {
+      "bytes": 683909, "content": "XLK daily OHLC + adjclose",
+      "sha256": "0916e3134092de2ca9049c9b317e1170980057ff8b0a5159b76e24fb6424fa61",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument XLK"
+    },
+    "data/historical/range_vol_v2_xlp.csv": {
+      "bytes": 682473, "content": "XLP daily OHLC + adjclose",
+      "sha256": "5a08680540fc09205024f5ebb997c24ffdb98d967a0aed10c616b2144e2d0670",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument XLP"
+    },
+    "data/historical/range_vol_v2_xlu.csv": {
+      "bytes": 694082, "content": "XLU daily OHLC + adjclose",
+      "sha256": "614e80d03bcbfd99af27a87981a3cb463d72654ce22f0c0bdb07052c8bea8421",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument XLU"
+    },
+    "data/historical/range_vol_v2_xlv.csv": {
+      "bytes": 682218, "content": "XLV daily OHLC + adjclose",
+      "sha256": "02e5df03723d01930af4ae348409d88cc7fbaf9513d7049e628777399e5533f7",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument XLV"
+    },
+    "data/historical/range_vol_v2_xly.csv": {
+      "bytes": 688977, "content": "XLY daily OHLC + adjclose",
+      "sha256": "abfd815334cae8cbeb25329e16041d994289eb5804103a8d7ef1930ee55b0ba6",
+      "source": "byte copy from tag archive/research/fast-reentry-v2-2026-10 (range_vol_v2)",
+      "used_by": "gate I instrument XLY"
+    }
+  },
+  "reference_anchors": {
+    "C0_pre_tax_main_window": "research/fast_reentry_v1/RESULTS.json main_window[*].R2 (15.48 % base / 14.90 % calibrated, max DD 46.76 %, m=1 15.75 %, turnover 5.9915)",
+    "C0_after_tax_100k": "research/r2_tbill_combo_v1/RESULTS.json after_tax_100k.windows[*].R2.progressive.cagr (10.16 / 14.71 / 22.89 %)",
+    "C0_after_tax_bootstrap": "research/r2_tbill_combo_v1/RESULTS.json after_tax_bootstrap[*].R2.cagr_median (progressive 3.5155 %, flat 3.9678 %)",
+    "reference_arm_not_run": "gain_band_v2 A1 from docs/research/gain_band_v2.md (reported only, never re-run here)"
+  }
+}

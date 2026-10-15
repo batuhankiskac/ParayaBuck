@@ -1,0 +1,53 @@
+fast_reentry_v1 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production E2 1.1.0
+harness: PASS (max |diff| 0.000000 pp vs e2_integration_v1 production E2; band sim == simulate_multi True)
+
+[base] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | m=1 CAGR
+  C0      14.67%   49.56% 0.296   32.44%   -1.10%   13.26%   32.44%  5.97 |    7.16% +0.000pp |   14.95%
+  R1      16.17%   44.55% 0.363   32.91%    0.78%   15.31%   32.91%  6.04 |    8.36% +1.147pp |   16.45%
+  R2      15.48%   46.76% 0.331   32.71%   -0.06%   14.30%   32.71%  5.99 |    7.89% +0.683pp |   15.75%
+  R3      15.01%   48.77% 0.308   31.61%   -1.37%   15.58%   31.61%  5.85 |    7.57% +0.338pp |   15.27%
+  R4      14.64%   52.32% 0.280   32.44%   -1.72%   13.95%   32.44%  5.92 |    7.53% +0.054pp |   14.91%
+
+[calibrated] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | m=1 CAGR
+  C0      14.10%   49.65% 0.284   31.69%   -1.44%   12.59%   31.69%  5.97 |    6.73% +0.000pp |   14.38%
+  R1      15.58%   44.71% 0.348   32.15%    0.42%   14.62%   32.15%  6.04 |    7.86% +1.098pp |   15.86%
+  R2      14.90%   46.88% 0.318   31.96%   -0.41%   13.62%   31.96%  5.99 |    7.43% +0.655pp |   15.17%
+  R3      14.43%   48.89% 0.295   30.86%   -1.71%   14.89%   30.86%  5.85 |    7.12% +0.324pp |   14.69%
+  R4      14.07%   52.44% 0.268   31.69%   -2.07%   13.27%   31.69%  5.92 |    7.08% +0.045pp |   14.34%
+
+trades (base, m=2): arm | full window: round trips/yr, resizes/yr, sells/yr, turnover/yr (entries+exits / resizes) | 2017+: round trips/yr, sells/yr, turnover/yr
+  C0     2.94  51.51  27.41  5.97 (4.27 / 1.70) |  1.23  32.42  3.75
+  R1     2.97  55.95  29.78  6.04 (4.23 / 1.80) |  1.54  34.58  4.28
+  R2     2.97  55.95  29.56  5.99 (3.84 / 2.15) |  1.54  34.27  4.02
+  R3     2.90  54.41  28.61  5.85 (4.08 / 1.77) |  1.64  33.24  4.28
+  R4     2.90  53.61  28.31  5.92 (4.18 / 1.74) |  1.23  32.42  3.75
+
+OOS (calibrated, m=2): window | arm CAGR / maxDD
+  GSPC 1957-01-02->1999-12-31 | C0 9.98%/38.99%  R1 9.75%/40.37%  R2 9.89%/39.63%  R3 11.00%/37.97%  R4 9.98%/38.99%
+  M1   1975-01-02->1999-12-31 | C0 20.68%/38.62%  R1 21.61%/43.22%  R2 21.18%/40.97%  R3 21.67%/36.56%  R4 20.68%/38.62%
+  M2   1935-01-08->1956-12-31 | C0 11.26%/62.52%  R1 12.04%/56.59%  R2 11.70%/58.33%  R3 11.58%/60.94%  R4 11.63%/62.52%
+  M3   1966-01-19->2026-09-29 | C0 6.33%/67.16%  R1 6.39%/67.32%  R2 6.40%/65.03%  R3 6.66%/70.53%  R4 6.39%/66.08%
+  M4   1989-01-03->2026-09-29 | C0 9.41%/58.61%  R1 9.47%/57.60%  R2 9.47%/58.10%  R3 9.04%/58.13%  R4 9.54%/57.60%
+  M5   1985-01-02->2026-09-29 | C0 -0.05%/82.74%  R1 -1.16%/87.87%  R2 -0.59%/85.45%  R3 -0.57%/86.44%  R4 0.26%/80.77%
+OOS pooled bootstrap (M1..M5, 10,000 paths) median(arm-C0): R1 +0.613pp  R2 +0.360pp  R3 +0.309pp  R4 +0.000pp
+
+gates (G1_base G1_calibrated G2_base G2_calibrated G3_base G3_calibrated G5_base G5_calibrated G6_base G6_calibrated G4 G7 G8 G9):
+  R1    G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=F G8=P G9=P -> FAIL
+  R2    G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=P G8=P G9=P -> PASS
+  R3    G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=F G7=F G8=P G9=P -> FAIL
+  R4    G1_base=F G1_calibrated=F G2_base=F G2_calibrated=F G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=F G6_calibrated=F G4=F G7=P G8=P G9=P -> FAIL
+
+cost stress (report only, not gated): arm | m=1 / m=2 / m=4 base CAGR, m=4 max DD
+  C0    14.95% / 14.67% / 14.13% | 50.19%
+  R1    16.45% / 16.17% / 15.61% | 45.30%
+  R2    15.75% / 15.48% / 14.92% | 47.44%
+  R3    15.27% / 15.01% / 14.47% | 49.44%
+  R4    14.91% / 14.64% / 14.10% | 52.91%
+
+early path (base, m=2): arm | early share of sessions | episodes | sum(arm-C0) over episodes | median episode delta | best episode | worst episode
+  R1      2.46%   32   +38.85pp    +0.46pp | 2001-10-31->2001-12-05 +17.58pp | 2022-12-13->2022-12-15 -6.16pp
+  R2      2.46%   32   +19.72pp    +0.24pp | 2001-10-31->2001-12-05 +8.58pp | 2022-12-13->2022-12-15 -3.10pp
+  R3      1.51%   33    +9.25pp    +0.23pp | 2009-04-02->2009-04-30 +7.60pp | 2022-08-10->2022-08-22 -6.03pp
+  R4      1.03%   13    +0.15pp    -0.10pp | 2002-11-04->2002-12-02 +6.77pp | 2001-05-16->2001-06-13 -5.37pp
+
+eligible ['R2']; selected: R2

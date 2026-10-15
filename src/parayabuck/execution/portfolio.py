@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 
-from parayabuck.config import RiskLimits
+from parayabuck.config import DownsizeGainBand, ExecutionConfig, RiskLimits
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
+from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.utils import is_crypto
+
+log = get_logger("parayabuck.execution.portfolio")
 
 
 class PortfolioOrderSide(StrEnum):
@@ -76,16 +79,147 @@ class PortfolioExecutionPolicy:
     turnover, and ``minimum_order_notional`` is the floor for a produced
     order (production also enforces the broker-authoritative minimum, which
     is at least as large).
+
+    ``downsize_gain_band`` (A1u, ``docs/research/gain_band_v3.md``) widens that
+    band for one case only: a downward resize between two positive weights,
+    whose band becomes ``B_down(g_frac)`` of the USD FIFO gain fraction of the
+    units the sell would consume. Entries, exits to zero and up-resizes keep
+    ``rebalance_band_pct``. The code default is inactive; the packaged
+    configuration ships the schedule, mirroring the shipped YAML (the same
+    split R2's ``early_reentry_weight`` uses).
     """
 
     rebalance_band_pct: float = 0.005
     minimum_order_notional: float = 10.0
+    downsize_gain_band: DownsizeGainBand | None = None
 
     def __post_init__(self) -> None:
         if not 0 <= self.rebalance_band_pct < 1:
             raise ValueError("rebalance_band_pct must be in [0, 1)")
         if not math.isfinite(self.minimum_order_notional) or self.minimum_order_notional < 0:
             raise ValueError("minimum_order_notional must be finite and non-negative")
+        if self.downsize_gain_band is not None and not isinstance(self.downsize_gain_band, DownsizeGainBand):
+            raise ValueError("downsize_gain_band must be a schedule or None")
+
+
+@dataclass(frozen=True)
+class GainBandHold:
+    """One downsize the gain-scaled band suppressed, at one decision."""
+
+    symbol: str
+    g_frac: float
+    band: float
+    gap: float
+
+    def as_metadata(self) -> dict[str, object]:
+        """Round-trippable decision-metadata entry (``TargetPortfolio.metadata``)."""
+        return {
+            "symbol": self.symbol,
+            "g_frac": float(self.g_frac),
+            "band": float(self.band),
+            "gap": float(self.gap),
+        }
+
+
+@dataclass(frozen=True)
+class DownsizeGainBandVerdict:
+    """Outcome of applying the downsize-gain-band schedule to one candidate order."""
+
+    applied: bool
+    band: float
+    gap: float
+    g_frac: float | None = None
+    # "" when the schedule decided (or did not apply at all); otherwise why the
+    # schedule could not be evaluated and the constant band was used instead.
+    fallback: str = ""
+
+
+def downsize_gain_fraction(
+    lots: Sequence[Sequence[float]],
+    units: float,
+    price: float,
+) -> float | None:
+    """USD FIFO gain fraction of the ``units`` a sell at ``price`` would consume.
+
+    ``lots`` are the bot's own open lots, oldest first, as
+    ``(quantity, fee-inclusive unit cost)``. The per-lot gain is
+    ``units_from_lot * (price - unit_cost)``; the total is floored at zero
+    (the research arm A1u has no per-lot floor: a loss lot offsets a gain lot,
+    and any ``g_frac <= 1 %`` selects the same first tier anyway). Returns
+    ``None`` when the lots do not cover the sale, so the caller falls back to
+    the constant band.
+    """
+    if price <= 0 or units <= 0:
+        return 0.0
+    remaining = units
+    gain = 0.0
+    for lot_quantity, lot_cost in lots:
+        if remaining <= 0:
+            break
+        take = min(remaining, lot_quantity)
+        gain += take * (price - lot_cost)
+        remaining -= take
+    if remaining > 1e-9:
+        return None
+    return max(0.0, gain) / (units * price)
+
+
+def downsize_gain_band_verdict(
+    schedule: DownsizeGainBand | None,
+    *,
+    target_weight: float,
+    current_weight: float,
+    units: float,
+    price: float,
+    lots: Sequence[Sequence[float]] | None,
+    managed_qty: float,
+    base_band: float,
+) -> DownsizeGainBandVerdict:
+    """Decide which band applies to one planned resize.
+
+    The schedule only ever replaces the band of a downward resize between two
+    positive weights (``0 < target_weight < current_weight``). Anything else,
+    an unavailable lot book, or a lot book that does not add up to the managed
+    quantity keeps ``base_band`` — exactly the constant-band behaviour.
+    """
+    gap = abs(target_weight - current_weight)
+    if schedule is None or not 0.0 < target_weight < current_weight:
+        return DownsizeGainBandVerdict(False, base_band, gap)
+    if not lots:
+        return DownsizeGainBandVerdict(False, base_band, gap, None, "lots_unavailable")
+    tolerance = max(1e-6 * abs(managed_qty), 1e-9)
+    if abs(sum(lot_quantity for lot_quantity, _ in lots) - managed_qty) > tolerance:
+        return DownsizeGainBandVerdict(False, base_band, gap, None, "lot_book_mismatch")
+    g_frac = downsize_gain_fraction(lots, units, price)
+    if g_frac is None:
+        return DownsizeGainBandVerdict(False, base_band, gap, None, "lot_book_too_small")
+    return DownsizeGainBandVerdict(True, schedule.band_for(g_frac), gap, g_frac)
+
+
+def record_gain_band_holds(target: TargetPortfolio, holds: Sequence[GainBandHold]) -> TargetPortfolio:
+    """Attach the downsizes the gain band suppressed to the decision metadata.
+
+    The record is persisted with the decision (``portfolio_decisions`` →
+    ``target_json``) and read back by the daily summary, so an operator can see
+    that the band, not a strategy signal, kept the position. Only non-empty
+    hold lists add the key: every decision without a suppressed downsize keeps
+    byte-identical metadata.
+    """
+    if not holds:
+        return target
+    return replace(
+        target,
+        metadata={**target.metadata, "gain_band": tuple(hold.as_metadata() for hold in holds)},
+    )
+
+
+def portfolio_execution_policy_from_config(execution: ExecutionConfig) -> PortfolioExecutionPolicy:
+    """Single semantic mapping shared by backtest, paper and live."""
+    return PortfolioExecutionPolicy(
+        rebalance_band_pct=execution.rebalance_band_pct,
+        minimum_order_notional=execution.minimum_order_notional,
+        downsize_gain_band=execution.downsize_gain_band,
+    )
 
 
 @dataclass(frozen=True)
@@ -436,6 +570,8 @@ class TargetToOrderPlanner:
         open_order_symbols: set[str] | None = None,
         open_order_sides: Mapping[str, set[str] | frozenset[str]] | None = None,
         client_order_salt: str = "",
+        open_lots: Mapping[str, Sequence[Sequence[float]]] | None = None,
+        gain_band_holds: list[GainBandHold] | None = None,
     ) -> tuple[PortfolioOrderRequest, ...]:
         """Build rebalance orders from a target.
 
@@ -445,6 +581,14 @@ class TargetToOrderPlanner:
         timestamp never produce the same broker idempotency key.
         ``client_order_salt`` is the per-ledger salt that keeps those ids
         distinct from ids another ledger derives for the same decision.
+
+        ``open_lots`` maps a symbol to the bot's own (managed) open lots,
+        oldest first, as ``(quantity, fee-inclusive unit cost)``; it is the
+        only input of the ``downsize_gain_band`` policy and is ignored by every
+        other decision. ``gain_band_holds`` is an optional diagnostics sink:
+        one :class:`GainBandHold` is appended per suppressed downsize, which
+        the caller records with the decision (metadata / summary) instead of
+        silently dropping the order.
         """
         _validate_unique_account_positions(account)
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
@@ -490,10 +634,17 @@ class TargetToOrderPlanner:
             target_qty = target_weights.get(symbol, 0.0) * account.equity / price
             current_weight = current_qty * price / account.equity if account.equity > 0 else 0.0
             target_weight = target_weights.get(symbol, 0.0)
+            gap = abs(target_weight - current_weight)
             # Shared execution policy: sub-band drift produces no order in
             # backtest, paper OR live. This keeps turnover/cost parity between
             # the historical simulator and the live broker path.
-            if abs(target_weight - current_weight) < self.policy.rebalance_band_pct:
+            #
+            # The gain-scaled band (A1u) can only widen the band of a downward
+            # resize between two positive weights, so that case must not be
+            # skipped here: its own band is only known after the units the
+            # sell would consume are known.
+            gain_band_case = self.policy.downsize_gain_band is not None and 0.0 < target_weight < current_weight
+            if gap < self.policy.rebalance_band_pct and not gain_band_case:
                 continue
             delta = target_qty - current_qty
             if delta < 0:
@@ -502,6 +653,34 @@ class TargetToOrderPlanner:
                 delta = -min(abs(delta), managed_qty)
                 if abs(delta) <= 1e-12:
                     continue
+                if gain_band_case:
+                    verdict = downsize_gain_band_verdict(
+                        self.policy.downsize_gain_band,
+                        target_weight=target_weight,
+                        current_weight=current_weight,
+                        units=abs(delta),
+                        price=price,
+                        lots=(open_lots or {}).get(symbol),
+                        managed_qty=managed_qty,
+                        base_band=self.policy.rebalance_band_pct,
+                    )
+                    if not verdict.applied:
+                        # FAIL-SAFE: without a consistent lot book the resize is
+                        # decided by the constant band, i.e. exactly as before.
+                        log.info(
+                            "Downsize gain band unavailable for %s (%s); using the %.4f band",
+                            symbol,
+                            verdict.fallback,
+                            self.policy.rebalance_band_pct,
+                        )
+                    if gap < verdict.band:
+                        if verdict.applied and gap >= self.policy.rebalance_band_pct and gain_band_holds is not None:
+                            gain_band_holds.append(
+                                GainBandHold(symbol, verdict.g_frac or 0.0, verdict.band, verdict.gap)
+                            )
+                        continue
+            elif gap < self.policy.rebalance_band_pct:
+                continue
             if delta > 0 and position is not None and managed_qty <= 1e-12:
                 # Never grow a manually opened position; the risk overlay
                 # already excludes purely external symbols, this is defense
@@ -631,6 +810,8 @@ def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide, sa
 
 __all__ = [
     "AssetTradingRules",
+    "DownsizeGainBandVerdict",
+    "GainBandHold",
     "PortfolioExecutionPolicy",
     "PortfolioOrderRequest",
     "PortfolioOrderSide",
@@ -638,6 +819,10 @@ __all__ = [
     "PortfolioRiskOverlay",
     "RiskOverlayDecision",
     "TargetToOrderPlanner",
+    "downsize_gain_band_verdict",
+    "downsize_gain_fraction",
     "floor_increment",
     "floor_increment_decimal",
+    "portfolio_execution_policy_from_config",
+    "record_gain_band_holds",
 ]

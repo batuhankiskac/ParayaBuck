@@ -84,6 +84,15 @@ The portfolio/risk layer alone:
   per-asset weight, position count, gross exposure and the cash buffer against
   the current full account;
 - sells before it buys and sizes buys against a fresh account snapshot;
+- applies the shared order-existence policy (`PortfolioExecutionPolicy`,
+  `execution.*`): no order below the 0.5 pp rebalance band or the $10 notional
+  floor, and — with `execution.downsize_gain_band` (A1u) — a downward resize
+  between two positive weights is held until its drift exceeds 0.5 / 3 / 8 pp at
+  an embedded USD FIFO gain fraction of `≤ 1 % / ≤ 5 % / > 5 %`, measured over
+  the bot's own open lots (backtest: the engine's own fills; PAPER/LIVE: the
+  persisted fill ledger). An unavailable or inconsistent lot book falls back to
+  0.5 pp, and the decision records the hold
+  (`docs/research/gain_band_integration_v1.md`);
 - latches entries on daily-loss / drawdown breaches (production; backtests
   record shadow events and keep trading); a drawdown halt persists until an
   operator risk-epoch reset;

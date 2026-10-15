@@ -79,6 +79,7 @@ __all__ = [
     "classify_share_change",
     "known_split_ratio",
     "open_position_cost_bases",
+    "open_position_lots",
 ]
 
 BUY = "buy"
@@ -91,18 +92,11 @@ ADJUST = "adjust"
 SPLIT_ADJUST = "split_adjust"
 
 
-def open_position_cost_bases(events: Iterable[tuple[str, float, float | None]]) -> tuple[float, ...]:
-    """Average entry price of the CURRENT position, under FIFO and average cost.
+def _replay_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[list[list[float]], float, float]:
+    """Replay ownership events into ``(open FIFO lots, quantity, average cost total)``.
 
-    ``events`` are chronological ``(kind, quantity, price)`` tuples: ``buy``
-    and ``sell`` fills (positive quantity, fill price) and ``adjust`` for an
-    audited ownership adjustment (signed quantity, no price). An addition is
-    a split rebase and rescales the open lots (more shares, same total
-    cost); a ``split_adjust`` decrease (a reverse split) rescales them the
-    same way (fewer shares, same total cost). Any other reduction depletes
-    like a sell. Lots are discarded whenever the position goes flat.
-    Returns ``(fifo, average_cost)`` — the same value twice when no sell
-    touched the open lots — or ``()`` when nothing is open.
+    ``lots`` are ``[quantity, unit cost]`` pairs, oldest first, exactly as
+    :func:`open_position_cost_bases` and :func:`open_position_lots` need them.
     """
     lots: list[list[float]] = []  # FIFO [quantity, price]
     quantity = 0.0
@@ -146,6 +140,40 @@ def open_position_cost_bases(events: Iterable[tuple[str, float, float | None]]) 
                 lots.pop(0)
         if quantity <= 1e-9:
             lots, quantity, cost = [], 0.0, 0.0
+    return lots, quantity, cost
+
+
+def open_position_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[tuple[float, float], ...]:
+    """FIFO open lots of the current position as ``(quantity, unit cost)``.
+
+    Same replay as :func:`open_position_cost_bases` (one buy appends a lot, a
+    sell or reducing adjustment consumes the oldest lots, a split rebase
+    rescales them, a flat position clears them), but the whole lot list is
+    returned oldest first instead of two averages. A ``buy`` event's ``price``
+    is the lot's effective per-unit cost, so the A1u caller passes the fill
+    price plus the buy's fees (the research engine's ``usd_price_with_fee``).
+    Returns ``()`` when nothing is open.
+    """
+    lots, quantity, _ = _replay_lots(events)
+    if quantity <= 1e-9:
+        return ()
+    return tuple((lot_quantity, lot_price) for lot_quantity, lot_price in lots if lot_quantity > 1e-12)
+
+
+def open_position_cost_bases(events: Iterable[tuple[str, float, float | None]]) -> tuple[float, ...]:
+    """Average entry price of the CURRENT position, under FIFO and average cost.
+
+    ``events`` are chronological ``(kind, quantity, price)`` tuples: ``buy``
+    and ``sell`` fills (positive quantity, fill price) and ``adjust`` for an
+    audited ownership adjustment (signed quantity, no price). An addition is
+    a split rebase and rescales the open lots (more shares, same total
+    cost); a ``split_adjust`` decrease (a reverse split) rescales them the
+    same way (fewer shares, same total cost). Any other reduction depletes
+    like a sell. Lots are discarded whenever the position goes flat.
+    Returns ``(fifo, average_cost)`` — the same value twice when no sell
+    touched the open lots — or ``()`` when nothing is open.
+    """
+    lots, quantity, cost = _replay_lots(events)
     if quantity <= 1e-9:
         return ()
     fifo_quantity = sum(lot_quantity for lot_quantity, _ in lots)

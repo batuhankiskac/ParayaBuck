@@ -33,6 +33,7 @@ from parayabuck.portfolio.ownership_rebase import (
     SPLIT_REBASE_KIND,
     classify_share_change,
     open_position_cost_bases,
+    open_position_lots,
 )
 from parayabuck.portfolio.runtime_models import (
     _TERMINAL_ORDER_STATUSES,
@@ -1485,12 +1486,22 @@ class PortfolioStateRepository:
             ).fetchone()
         return str(row[0]) if row is not None and row[0] else None
 
-    def owned_cost_bases(self, account_id: str, symbol: str, market: Market) -> tuple[float, ...]:
-        """``(fifo, average_cost)`` entry price of the current owned position,
-        or ``()`` when nothing is open (see ``open_position_cost_bases``)."""
+    def _owned_events(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+    ) -> list[tuple[datetime, str, float, float | None, float]]:
+        """Chronological ownership events of one symbol for one account.
+
+        ``(occurred_at, kind, quantity, price, fee)`` for every fill and every
+        outstanding ownership adjustment, ordered the way the FIFO replay
+        consumes them: fills before adjustments at the same instant, matching
+        ``open_position_cost_bases``' documented replay.
+        """
         with self.store.lock:
             fills = self.store.connection.execute(
-                """SELECT f.occurred_at, o.side, f.quantity, f.price
+                """SELECT f.occurred_at, o.side, f.quantity, f.price, f.fee
                    FROM portfolio_fills f
                    JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
@@ -1504,19 +1515,51 @@ class PortfolioStateRepository:
                    WHERE account_id = ? AND symbol = ? AND market = ? AND consumed_quantity < quantity""",
                 (account_id, symbol, market.value),
             ).fetchall()
-        events: list[tuple[datetime, int, tuple[str, float, float | None]]] = []
-        for occurred_at, side, quantity, price in fills:
+        events: list[tuple[tuple[datetime, int], tuple[str, float, float | None, float]]] = []
+        for occurred_at, side, quantity, price, fee in fills:
             kind = BUY if str(side).lower() == "buy" else SELL
-            events.append((_parse_instant(occurred_at), 0, (kind, float(quantity), float(price))))
+            instant = _parse_instant(occurred_at)
+            events.append(((instant, 0), (kind, float(quantity), float(price), float(fee or 0.0))))
         for created_at, signed_quantity, adjustment_kind in adjustments:
             # A booked reverse split rescales the open lots (fewer shares,
             # same total cost); every other reduction depletes like a sale.
             event_kind = (
                 SPLIT_ADJUST if str(adjustment_kind) == SPLIT_REBASE_KIND and float(signed_quantity) < 0 else ADJUST
             )
-            events.append((_parse_instant(created_at), 1, (event_kind, float(signed_quantity), None)))
-        events.sort(key=lambda item: (item[0], item[1]))
-        return open_position_cost_bases(event for _, _, event in events)
+            events.append(
+                ((_parse_instant(created_at), 1), (event_kind, float(signed_quantity), None, 0.0)),
+            )
+        events.sort(key=lambda item: item[0])
+        return [(occurred_at, *event) for (occurred_at, _), event in events]
+
+    def owned_cost_bases(self, account_id: str, symbol: str, market: Market) -> tuple[float, ...]:
+        """``(fifo, average_cost)`` entry price of the current owned position,
+        or ``()`` when nothing is open (see ``open_position_cost_bases``)."""
+        return open_position_cost_bases(
+            (kind, quantity, price) for _, kind, quantity, price, _ in self._owned_events(account_id, symbol, market)
+        )
+
+    def owned_fifo_lots(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+    ) -> tuple[tuple[float, float], ...]:
+        """FIFO open lots of the bot's own units: ``(quantity, unit cost)``, oldest first.
+
+        The unit cost of a bought lot is the fill price plus that fill's fees
+        per unit — the cost basis the research engine's lot book carries
+        (``docs/research/gain_band_v3.md``, arm A1u) — so the downsize-gain-band
+        policy reads the same gain fraction in PAPER/LIVE as in the backtest.
+        Returns ``()`` when nothing is open.
+        """
+        events: list[tuple[str, float, float | None]] = []
+        for _, kind, quantity, price, fee in self._owned_events(account_id, symbol, market):
+            if kind == BUY and price is not None and quantity > 0:
+                events.append((kind, quantity, price + fee / quantity))
+            else:
+                events.append((kind, quantity, price))
+        return open_position_lots(events)
 
     def reconcile_broker_quantity(
         self,

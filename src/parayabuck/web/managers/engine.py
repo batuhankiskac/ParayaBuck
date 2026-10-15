@@ -1334,7 +1334,10 @@ class EngineManager:
     ) -> tuple[tuple[str, ...] | None, str | None]:
         try:
             cfg = load_config(str(self.config_path))
-            from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
+            from parayabuck.execution.portfolio import (
+                portfolio_execution_policy_from_config,
+                portfolio_risk_limits_from_config,
+            )
             from parayabuck.portfolio import product_strategy_from
             from parayabuck.portfolio.runtime_service import configuration_digest
             from parayabuck.universe import equity_universe_digest
@@ -1362,10 +1365,7 @@ class EngineManager:
                         selection.maximum_allocation,
                         universe_version,
                         portfolio_risk_limits_from_config(cfg.risk),
-                        PortfolioExecutionPolicy(
-                            rebalance_band_pct=cfg.execution.rebalance_band_pct,
-                            minimum_order_notional=cfg.execution.minimum_order_notional,
-                        ),
+                        portfolio_execution_policy_from_config(cfg.execution),
                     )
                 )
             return tuple(digests), None

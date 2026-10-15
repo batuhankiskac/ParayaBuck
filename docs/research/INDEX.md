@@ -1,18 +1,22 @@
 # Research index
 
-Current production identity: **VT35 with the E2 trend vote and the R2 early
-re-entry path** (`equity_leveraged_trend_v1` 1.2.0: hold QLD at
+Current production identity: **VT35 with the E2 trend vote, the R2 early
+re-entry path and the A1u gain-scaled downsize band**
+(`equity_leveraged_trend_v1` 1.2.0: hold QLD at
 `min(1, 0.35 / 20-session vol)` while at least two of QQQ > 200-session SMA,
 QQQ 252-session return > 0 and QQQ > 126-session channel midpoint hold;
 half that weight while the vote is off but QQQ > SMA50, its 20-session
 annualized vol is below its 252-session median and QQQ > its close 20 sessions
-back), PAPER only. Supporting code, data and
+back; a downward resize between two positive weights fills only when its drift
+exceeds 0.5 / 3 / 8 pp at an embedded USD FIFO gain fraction of ≤ 1 % / ≤ 5 % /
+> 5 %), PAPER only. Supporting code, data and
 results for each doc live in `research/<name>/` unless noted (from 2026-10-12 on,
 in the archive tag named in the row).
 
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|
-| [`gain_band_v3.md`](gain_band_v3.md) | 2026-10-15 | Confirmation of the gain-scaled downsize band on new evidence: after tax on 21 ETFs with the real TRY calendar (median +0.10 to +0.12 pp, 81–95% positive), 21/21 rolling January starts positive (median +0.54 to +1.12 pp), pre-tax non-inferiority (≥ −0.04 pp; margin chosen after v2, disclosed) all pass; formally FAILS one of four fresh bootstraps (block-10 flat 20% tax: median +0.03 pp but 53–54% of paths positive vs 55%). The USD-only implementable arm A1u matches A1 (+0.46 / +0.40 / +0.82 pp after tax at $100k; decisions differ on 0.8% of sessions). Candidate for owner decision. Evidence: tag `archive/research/gain-band-v3-2026-10`. | current evidence (candidate) |
+| [`gain_band_integration_v1.md`](gain_band_integration_v1.md) | 2026-10-15 | A1u shipped as `execution.downsize_gain_band` (0.5 / 3 / 8 pp at a USD FIFO gain fraction of ≤ 1 % / ≤ 5 % / > 5 %, entries/exits/up-resizes unchanged, fail-safe to the constant band, in both authorization digests, per-decision metadata and a daily-summary line). The packaged default mirrors the YAML (R2's `d5309d1f` precedent) and `null` disables it. No Stage B replay; goldens pinned twice (band off = the pre-A1u numbers, band on = the new ones). Research arm A1u: after tax +0.117 pp median on 21 ETFs, 21/21 rolling starts positive, pre-tax ≈ 0 with +0.43 pp max DD, but v3 failed its E3 flat-tax bootstrap cell. Evidence: tag `archive/research/gain-band-v3-2026-10` plus this worktree. | current evidence |
+| [`gain_band_v3.md`](gain_band_v3.md) | 2026-10-15 | Confirmation of the gain-scaled downsize band on new evidence: after tax on 21 ETFs with the real TRY calendar (median +0.10 to +0.12 pp, 81–95% positive), 21/21 rolling January starts positive (median +0.54 to +1.12 pp), pre-tax non-inferiority (≥ −0.04 pp; margin chosen after v2, disclosed) all pass; formally FAILS one of four fresh bootstraps (block-10 flat 20% tax: median +0.03 pp but 53–54% of paths positive vs 55%). The USD-only implementable arm A1u matches A1 (+0.46 / +0.40 / +0.82 pp after tax at $100k; decisions differ on 0.8% of sessions). A1u was shipped as `execution.downsize_gain_band` on the owner's instruction (see `gain_band_integration_v1`). Evidence: tag `archive/research/gain-band-v3-2026-10`. | current evidence (A1u shipped, see `gain_band_integration_v1`) |
 | [`breadth_vote_v1.md`](breadth_vote_v1.md) | 2026-10-15 | Breadth / cross-index trend vote (idea_survey_v3 I1; panel QQQ/SPY/IWM) inside R2: no arm passes. SPY agrees with QQQ's vote 91% of sessions, so breadth adds little; best arm B4 (5-vote majority: 15.65%, DD 46.45%, bootstrap +0.74 pp) loses after tax since 2017 (−1.00 pp), fails G3/G4, the OOS DD clause and the ETF DD gate; exits are not the tax base (resizes are). Evidence: tag `archive/research/breadth-vote-v1-2026-10`. | current evidence |
 | [`deriv_vote_v1.md`](deriv_vote_v1.md) | 2026-10-15 | Derivative trend votes (idea_survey_v3 I2: golden cross, all-derivative, mixed 2-of-4, risk-adjusted TSM hurdle) inside R2: flips fall 5.9 → 1.1–3.8/yr but the Turkish tax base does not shrink (trims, driven by the vol target, are ~91% of realised gain); best arm C3 (17.01% pre-tax, DD 34.8%, B1/B2 +1.9/+1.7 pp) fails the OOS windows (median −2.1 pp), 2017+ and after tax since 2017 (−0.76 pp). Evidence: tag `archive/research/deriv-vote-v1-2026-10`. | current evidence |
 | [`idea_survey_v3.md`](idea_survey_v3.md) | 2026-10-15 | Survey (no backtests) of five more untested ideas for R2 after tax: breadth vote (→ `breadth_vote_v1`), derivative votes (→ `deriv_vote_v1`), partial-adjustment target path, early-leg conviction ladder, loss-pool gain harvesting. Evidence: tag `archive/research/idea-survey-v3-2026-10`. | current evidence |

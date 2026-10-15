@@ -246,19 +246,65 @@ class BacktestConfig:
 
 
 @dataclass(frozen=True)
+class DownsizeGainBand:
+    """Gain-scaled downsize band (A1u, ``docs/research/gain_band_v3.md``).
+
+    A downward resize between two positive weights fills only when the drift
+    exceeds the band of the tier selected by the embedded USD gain fraction
+    ``g_frac`` of the units the sell would consume: ``bands[0]`` while
+    ``g_frac <= thresholds[0]``, then one band per threshold, and ``bands[-1]``
+    above the last threshold. Entries, exits to zero and up-resizes are never
+    affected. The schedule is a tax-timing rule: it postpones discretionary
+    resizes that would realise an embedded gain.
+    """
+
+    thresholds: tuple[float, ...] = (0.01, 0.05)
+    bands: tuple[float, ...] = (0.005, 0.03, 0.08)
+
+    def __post_init__(self) -> None:
+        if len(self.bands) != len(self.thresholds) + 1:
+            raise ValueError("execution.downsize_gain_band needs one more band than thresholds")
+        if any(not math.isfinite(value) or not 0 < value < 1 for value in self.thresholds):
+            raise ValueError("execution.downsize_gain_band thresholds must be in (0, 1)")
+        if any(left >= right for left, right in zip(self.thresholds, self.thresholds[1:], strict=False)):
+            raise ValueError("execution.downsize_gain_band thresholds must be strictly increasing")
+        if any(not math.isfinite(value) or not 0 <= value < 1 for value in self.bands):
+            raise ValueError("execution.downsize_gain_band bands must be in [0, 1)")
+        if any(left > right for left, right in zip(self.bands, self.bands[1:], strict=False)):
+            raise ValueError("execution.downsize_gain_band bands must be non-decreasing")
+
+    def band_for(self, g_frac: float) -> float:
+        """``B_down(g_frac)``: the band of the tier ``g_frac`` falls into."""
+        for threshold, band in zip(self.thresholds, self.bands, strict=False):
+            if g_frac <= threshold:
+                return band
+        return self.bands[-1]
+
+
+@dataclass(frozen=True)
 class ExecutionConfig:
     """Shared order-existence policy: identical semantics for backtest, paper
     and live. Values change order behavior, so they are part of the
-    configuration digest and the live operator authorization digest."""
+    configuration digest and the live operator authorization digest.
+
+    ``downsize_gain_band`` defaults to the shipped A1u schedule (mirroring
+    ``config/settings.yaml``, like the R2 strategy parameter): a deleted or
+    renamed YAML key must not silently drop a shipped order-existence rule.
+    Set the key explicitly to ``null`` to restore the constant band.
+    """
 
     rebalance_band_pct: float = 0.005
     minimum_order_notional: float = 10.0
+    downsize_gain_band: DownsizeGainBand | None = DownsizeGainBand()
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.rebalance_band_pct) or not 0 <= self.rebalance_band_pct < 1:
             raise ValueError("execution.rebalance_band_pct must be in [0, 1)")
         if not math.isfinite(self.minimum_order_notional) or self.minimum_order_notional < 0:
             raise ValueError("execution.minimum_order_notional must be non-negative")
+        schedule = self.downsize_gain_band
+        if schedule is not None and not isinstance(schedule, DownsizeGainBand):
+            raise ValueError("execution.downsize_gain_band must be a schedule or null")
 
 
 @dataclass(frozen=True)
@@ -755,6 +801,31 @@ def _block(value: Any) -> dict[str, Any]:
     return {} if value is None else dict(value)
 
 
+def _execution_from_raw(value: Any) -> ExecutionConfig:
+    """``execution`` block with its nested downsize-gain-band schedule.
+
+    Absent key: the packaged default (the shipped A1u schedule). Present with
+    ``null``: the rule is explicitly disabled. Present as a mapping: that
+    schedule (an empty block keeps the shipped thresholds/bands).
+    """
+    block = _block(value)
+    if "downsize_gain_band" not in block:
+        return ExecutionConfig(**block)
+    schedule = block["downsize_gain_band"]
+    if schedule is None:
+        return ExecutionConfig(**{**block, "downsize_gain_band": None})
+    if not isinstance(schedule, dict):
+        raise ValueError("execution.downsize_gain_band must be a mapping or null")
+    return ExecutionConfig(
+        **{
+            **block,
+            "downsize_gain_band": DownsizeGainBand(
+                **{key: tuple(float(item) for item in items) for key, items in schedule.items()}
+            ),
+        }
+    )
+
+
 _CRYPTO_REMOVED = (
     "Crypto support was removed from ParayaBuck (equity-only since 2026-09-30; docs/research/crypto_removal_v1.md)"
 )
@@ -948,7 +1019,7 @@ def load_config(config_path: str | None = None) -> Config:
         backtest=BacktestConfig(**_block(raw.get("backtest"))),
         live=LiveConfig(**_block(raw.get("live"))),
         engine=EngineConfig(**engine_raw),
-        execution=ExecutionConfig(**_block(raw.get("execution"))),
+        execution=_execution_from_raw(raw.get("execution")),
         backup=BackupConfig(**_block(raw.get("backup"))),
         alerting=AlertingConfig(**_block(raw.get("alerting"))),
         observability=ObservabilityConfig(**observability_raw),
@@ -968,6 +1039,7 @@ __all__ = [
     "BackupConfig",
     "Config",
     "DataConfig",
+    "DownsizeGainBand",
     "EngineConfig",
     "EquityUniverseConfig",
     "ExecutionConfig",

@@ -41,7 +41,7 @@ from parayabuck.execution.alpaca_reconciliation import (
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
-    PortfolioExecutionPolicy,
+    portfolio_execution_policy_from_config,
     portfolio_risk_limits_from_config,
 )
 from parayabuck.live_safety import (
@@ -535,10 +535,7 @@ class EngineRuntime:
 
     def _expected_live_configuration_digests(self) -> tuple[str, ...]:
         risk_limits = portfolio_risk_limits_from_config(self.app_config.risk)
-        execution_policy = PortfolioExecutionPolicy(
-            rebalance_band_pct=self.app_config.execution.rebalance_band_pct,
-            minimum_order_notional=self.app_config.execution.minimum_order_notional,
-        )
+        execution_policy = portfolio_execution_policy_from_config(self.app_config.execution)
         digests: list[str] = []
         universe_version = equity_universe_digest(self.app_config.universe.equity)
         for strategy, _symbols, maximum_allocation in self._strategy_specs:
@@ -1296,10 +1293,7 @@ class EngineRuntime:
                     universe_version=universe_version,
                     account_id=self.broker.account_id or "unknown",
                     live_dollar_cap=configured_live_cap,
-                    execution_policy=PortfolioExecutionPolicy(
-                        rebalance_band_pct=self.app_config.execution.rebalance_band_pct,
-                        minimum_order_notional=self.app_config.execution.minimum_order_notional,
-                    ),
+                    execution_policy=portfolio_execution_policy_from_config(self.app_config.execution),
                     sip_embargo=timedelta(minutes=self.app_config.signal_cross_check.sip_embargo_minutes),
                     live_buy_gap_margin=self.app_config.live.buy_gap_margin_pct,
                 )

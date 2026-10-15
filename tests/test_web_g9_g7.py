@@ -11,7 +11,7 @@ import yaml
 
 import parayabuck.execution.alpaca as alpaca_module
 from parayabuck.config import load_config
-from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
+from parayabuck.execution.portfolio import portfolio_execution_policy_from_config, portfolio_risk_limits_from_config
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.portfolio import product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
@@ -53,10 +53,7 @@ def _expected_digests(config_path: Path) -> tuple[str, ...]:
             selection.maximum_allocation,
             equity_universe_digest(cfg.universe.equity),
             portfolio_risk_limits_from_config(cfg.risk),
-            PortfolioExecutionPolicy(
-                rebalance_band_pct=cfg.execution.rebalance_band_pct,
-                minimum_order_notional=cfg.execution.minimum_order_notional,
-            ),
+            portfolio_execution_policy_from_config(cfg.execution),
         ),
     )
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from bisect import bisect_right
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from enum import StrEnum
 from itertools import pairwise
@@ -14,9 +14,11 @@ from parayabuck.backtest.stats import sample_stddev
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
 from parayabuck.execution.portfolio import (
+    GainBandHold,
     PortfolioExecutionPolicy,
     PortfolioRiskLimits,
     PortfolioRiskOverlay,
+    downsize_gain_band_verdict,
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -66,6 +68,12 @@ class _Position:
     opened_at: datetime
     entry_fee: float = 0.0
     realized_pnl_accumulator: float = 0.0
+    # FIFO lot book of this position as [quantity, unit cost] pairs, oldest
+    # first, unit cost including the buy's fees (the research engine's lot
+    # basis). ``qty`` and the lot sum always agree; the downsize gain band
+    # reads the lots, and falls back to the constant band if they ever do not
+    # (``docs/research/gain_band_integration_v1.md``).
+    lots: list[list[float]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -111,6 +119,11 @@ class RebalanceRecord:
     # observable so reports can explain why a target was capped.
     risk_overlay_halted: bool = False
     risk_overlay_reasons: tuple[str, ...] = ()
+    # Downsizes this decision suppressed through the gain-scaled band
+    # (``PortfolioExecutionPolicy.downsize_gain_band``): the user-visible reason
+    # a target weight was not traded down. Empty whenever the policy is
+    # inactive or the band did not bind.
+    gain_band_holds: tuple[GainBandHold, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -349,6 +362,11 @@ class PortfolioBacktestEngine:
         self.liquidity_lookback_bars = liquidity_lookback_bars
         self.turnover_band = turnover_band
         self.minimum_order_notional = minimum_order_notional
+        # Shared A1u downsize gain band: the same schedule the planner reads, so
+        # a downward resize between two positive weights is suppressed on the
+        # same (target, current, lots) triple in backtest and production.
+        self.downsize_gain_band = execution_policy.downsize_gain_band if execution_policy is not None else None
+        self._gain_band_holds: list[GainBandHold] = []
         self.universe = universe
         self.universe_version = universe_version or EQUITY_UNIVERSE_VERSION
         self.allow_static_universe = bool(allow_static_universe)
@@ -441,6 +459,7 @@ class PortfolioBacktestEngine:
         self._rebalance_number = 0
         self._current_pre_trade_weights: dict[str, float] = {}
         self._expected_turnover = 0.0
+        self._gain_band_holds = []
         self.state = PortfolioState(strategy_name=self.strategy.name, strategy_version=self.strategy.version)
         if prepared_inputs is not None:
             ordered, decision_bars = prepared_inputs
@@ -645,6 +664,9 @@ class PortfolioBacktestEngine:
             return
         position.qty *= ratio
         position.avg_price /= ratio
+        # The lot book follows the position exactly (more shares, same cost), so
+        # a post-split downsize is measured against the real basis.
+        position.lots = [[lot_quantity * ratio, lot_cost / ratio] for lot_quantity, lot_cost in position.lots]
 
     @staticmethod
     def _deduplicate(bars: list[Bar]) -> list[Bar]:
@@ -867,6 +889,9 @@ class PortfolioBacktestEngine:
                     notional = fillable * fill_price
                 self._cash -= notional + fee
                 position = self._positions.get(symbol)
+                # Lot basis is the fill price plus this buy's fee per unit, the
+                # same cost basis the research engine's lot book carries.
+                lot_cost = (notional + fee) / fillable
                 if position is None:
                     self._positions[symbol] = _Position(
                         symbol,
@@ -876,12 +901,14 @@ class PortfolioBacktestEngine:
                         fill_price,
                         order.created_at,
                         entry_fee=fee,
+                        lots=[[fillable, lot_cost]],
                     )
                 else:
                     total = position.qty + fillable
                     position.avg_price = (position.qty * position.avg_price + fillable * fill_price) / total
                     position.qty = total
                     position.entry_fee += fee
+                    position.lots.append([fillable, lot_cost])
             else:
                 position = self._positions.get(symbol)
                 assert position is not None  # guaranteed by the SELL gate above
@@ -900,6 +927,15 @@ class PortfolioBacktestEngine:
                 position.realized_pnl_accumulator += realized_delta
                 self.state.realized_pnl += realized_delta
                 position.qty -= close_qty
+                # FIFO: a partial sell consumes the oldest lots first, so the
+                # gain band sees the units this sale would actually dispose of.
+                unfilled_lot_units = close_qty
+                while unfilled_lot_units > 1e-12 and position.lots:
+                    taken = min(unfilled_lot_units, position.lots[0][0])
+                    position.lots[0][0] -= taken
+                    unfilled_lot_units -= taken
+                    if position.lots[0][0] <= 1e-12:
+                        position.lots.pop(0)
                 self._realized_pnl_events.append((bar.timestamp, symbol, realized_delta))
                 if position.qty <= 0:
                     self._closed_position_events.append((bar.timestamp, symbol, position.realized_pnl_accumulator))
@@ -1223,6 +1259,7 @@ class PortfolioBacktestEngine:
             symbol_targets.setdefault(symbol, 0.0)
         self._current_pre_trade_weights = {}
         self._expected_turnover = 0.0
+        self._gain_band_holds = []
         for symbol, target_weight in symbol_targets.items():
             price = self._last_price.get(symbol)
             if price is None or price <= 0:
@@ -1231,7 +1268,12 @@ class PortfolioBacktestEngine:
             current_qty = current_position.qty if current_position is not None else 0.0
             current_weight = current_qty * price / equity if equity > 0 else 0.0
             self._current_pre_trade_weights[symbol] = current_weight
-            if abs(target_weight - current_weight) < self.turnover_band:
+            gap = abs(target_weight - current_weight)
+            # Shared A1u policy: the gain-scaled band can only widen the band of
+            # a downward resize between two positive weights, so that case is
+            # evaluated after the units the sell consumes are known.
+            gain_band_case = self.downsize_gain_band is not None and 0.0 < target_weight < current_weight
+            if gap < self.turnover_band and not gain_band_case:
                 continue
             target_qty = target_weight * equity / price
             delta = target_qty - current_qty
@@ -1242,6 +1284,34 @@ class PortfolioBacktestEngine:
                 continue
             if abs(delta) * price < self.minimum_order_notional:
                 continue
+            if gain_band_case and delta < 0:
+                position_lots = current_position.lots if current_position is not None else None
+                verdict = downsize_gain_band_verdict(
+                    self.downsize_gain_band,
+                    target_weight=target_weight,
+                    current_weight=current_weight,
+                    units=abs(delta),
+                    price=price,
+                    lots=position_lots,
+                    managed_qty=current_qty,
+                    base_band=self.turnover_band,
+                )
+                if not verdict.applied:
+                    # FAIL-SAFE: a missing or inconsistent lot book (a _Position
+                    # built without fills, a corporate action this engine did not
+                    # model) keeps the constant band, i.e. the old behaviour.
+                    log.info(
+                        "Downsize gain band unavailable for %s (%s); using the %.4f band",
+                        symbol,
+                        verdict.fallback,
+                        self.turnover_band,
+                    )
+                if gap < verdict.band:
+                    if verdict.applied and gap >= self.turnover_band:
+                        self._gain_band_holds.append(
+                            GainBandHold(symbol, verdict.g_frac or 0.0, verdict.band, verdict.gap)
+                        )
+                    continue
             side = OrderSide.BUY if delta > 0 else OrderSide.SELL
             self._expected_turnover += abs(target_weight - current_weight)
             self._pending.append(
@@ -1299,6 +1369,7 @@ class PortfolioBacktestEngine:
                 rebalance_number=self._rebalance_number,
                 risk_overlay_halted=bool(target.metadata.get("risk_overlay_halted", False)),
                 risk_overlay_reasons=overlay_reasons,
+                gain_band_holds=tuple(self._gain_band_holds),
             )
         )
         self._weight_history.append((decision, {weight.symbol: weight.weight for weight in target.weights}))
@@ -1692,6 +1763,7 @@ class PortfolioBacktestEngine:
                     rebalance_number=record.rebalance_number,
                     risk_overlay_halted=record.risk_overlay_halted,
                     risk_overlay_reasons=record.risk_overlay_reasons,
+                    gain_band_holds=record.gain_band_holds,
                 )
             )
         return tuple(enriched)

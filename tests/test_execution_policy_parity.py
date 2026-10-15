@@ -13,9 +13,11 @@ from datetime import UTC, datetime
 import pytest
 
 from parayabuck.backtest.portfolio_engine import OrderSide, PortfolioBacktestEngine, _Position
+from parayabuck.config import DownsizeGainBand
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
+    GainBandHold,
     PortfolioExecutionPolicy,
     PortfolioOrderSide,
     TargetToOrderPlanner,
@@ -23,6 +25,12 @@ from parayabuck.execution.portfolio import (
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import RebalancePolicy, TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_service import configuration_digest
+
+# A1u (docs/research/gain_band_v3.md): the shipped downsize gain band. The lots
+# are the 100 managed shares of the parity fixtures' account, oldest first, with
+# the older lot deep in profit (60 % gain fraction on a 20-share sell).
+GAIN_BAND = DownsizeGainBand()
+GAIN_BAND_LOTS = ((60.0, 40.0), (40.0, 99.5))
 
 
 class _FixedTargetStrategy(PortfolioStrategy):
@@ -92,6 +100,7 @@ def _engine(
     qty: float,
     price: float = 100.0,
     equity: float = 100_000.0,
+    lots: tuple[tuple[float, float], ...] = (),
 ) -> PortfolioBacktestEngine:
     strategy = _FixedTargetStrategy({})
     engine = PortfolioBacktestEngine(
@@ -107,7 +116,15 @@ def _engine(
     )
     engine._cash = equity - qty * price
     engine._last_price["SPY"] = price
-    engine._positions["SPY"] = _Position("SPY", Market.EQUITY, "1d", qty, price, datetime(2025, 1, 1, tzinfo=UTC))
+    engine._positions["SPY"] = _Position(
+        "SPY",
+        Market.EQUITY,
+        "1d",
+        qty,
+        price,
+        datetime(2025, 1, 1, tzinfo=UTC),
+        lots=[[lot_qty, lot_cost] for lot_qty, lot_cost in lots],
+    )
     return engine
 
 
@@ -118,6 +135,8 @@ def _planned_verdict(
     qty: float,
     price: float = 100.0,
     equity: float = 100_000.0,
+    lots: tuple[tuple[float, float], ...] = (),
+    holds: list[GainBandHold] | None = None,
 ) -> dict[str, PortfolioOrderSide]:
     """Planner order-existence verdict: symbol -> side for produced orders."""
     account = _account(qty=qty, price=price, equity=equity)
@@ -129,6 +148,8 @@ def _planned_verdict(
         rules={symbol: _rule(symbol) for symbol in (*targets, "SPY")},
         approved_symbols=tuple(targets),
         decision_id="parity-decision",
+        open_lots={"SPY": lots} if lots else {},
+        gain_band_holds=holds,
     )
     return {order.symbol: order.side for order in orders}
 
@@ -140,9 +161,10 @@ def _backtest_verdict(
     qty: float,
     price: float = 100.0,
     equity: float = 100_000.0,
+    lots: tuple[tuple[float, float], ...] = (),
 ) -> dict[str, OrderSide]:
     """Backtest target-application verdict: symbol -> side for produced orders."""
-    engine = _engine(policy, qty=qty, price=price, equity=equity)
+    engine = _engine(policy, qty=qty, price=price, equity=equity, lots=lots)
     engine._apply_target(_target(targets))
     return {order.symbol: order.side for order in engine._pending}
 
@@ -154,9 +176,10 @@ def _assert_parity(
     qty: float,
     price: float = 100.0,
     equity: float = 100_000.0,
+    lots: tuple[tuple[float, float], ...] = (),
 ) -> None:
-    planned = _planned_verdict(policy, targets, qty=qty, price=price, equity=equity)
-    backtest = _backtest_verdict(policy, targets, qty=qty, price=price, equity=equity)
+    planned = _planned_verdict(policy, targets, qty=qty, price=price, equity=equity, lots=lots)
+    backtest = _backtest_verdict(policy, targets, qty=qty, price=price, equity=equity, lots=lots)
     assert set(planned) == set(backtest), (planned, backtest)
     for symbol in planned:
         assert planned[symbol].value == backtest[symbol].value, (symbol, planned, backtest)
@@ -261,6 +284,58 @@ def test_configuration_digest_includes_execution_policy() -> None:
     )
     assert baseline != other_band
     assert baseline != other_notional
+
+
+def test_configuration_digest_includes_the_downsize_gain_band() -> None:
+    """A1u changes order existence, so the schedule belongs to the digest an
+    operator authorizes; dropping it must produce a different digest."""
+    strategy = _FixedTargetStrategy({"SPY": 0.10})
+    arguments = (strategy, "paper", 0.50, "universe-v1")
+    without = configuration_digest(*arguments, execution_policy=PortfolioExecutionPolicy())
+    with_band = configuration_digest(
+        *arguments,
+        execution_policy=PortfolioExecutionPolicy(downsize_gain_band=GAIN_BAND),
+    )
+    other_tiers = configuration_digest(
+        *arguments,
+        execution_policy=PortfolioExecutionPolicy(
+            downsize_gain_band=DownsizeGainBand(thresholds=(0.02,), bands=(0.005, 0.05))
+        ),
+    )
+    assert len({without, with_band, other_tiers}) == 3
+
+
+def test_gain_band_parity_planner_and_backtest_agree() -> None:
+    """The same (target, current, lots) triple produces the same order-existence
+    verdict through production planning and through backtest target application."""
+    policy = PortfolioExecutionPolicy(downsize_gain_band=GAIN_BAND)
+    # 100 shares @ $100 on $100k = 0.10 weight; the lots carry a 60 % gain.
+    for target in (0.1049, 0.105, 0.0801, 0.088, 0.0901, 0.0, 0.20):
+        _assert_parity(policy, {"SPY": target}, qty=100, lots=GAIN_BAND_LOTS)
+
+
+def test_gain_band_parity_without_a_lot_book_falls_back_in_both() -> None:
+    """No lots anywhere: both paths keep the constant band and trade."""
+    policy = PortfolioExecutionPolicy(downsize_gain_band=GAIN_BAND)
+    _assert_parity(policy, {"SPY": 0.08}, qty=100)
+    assert _planned_verdict(policy, {"SPY": 0.08}, qty=100) == {"SPY": PortfolioOrderSide.SELL}
+    assert _backtest_verdict(policy, {"SPY": 0.08}, qty=100) == {"SPY": OrderSide.SELL}
+
+
+def test_gain_band_hold_is_reported_by_the_planner_only_when_it_binds() -> None:
+    """The diagnostics sink names the suppressed downsize that the backtest
+    would also have executed."""
+    policy = PortfolioExecutionPolicy(downsize_gain_band=GAIN_BAND)
+    holds: list[GainBandHold] = []
+    assert _planned_verdict(policy, {"SPY": 0.08}, qty=100, lots=GAIN_BAND_LOTS, holds=holds) == {}
+    assert [(hold.symbol, hold.band) for hold in holds] == [("SPY", 0.08)]
+    engine = _engine(policy, qty=100, lots=GAIN_BAND_LOTS)
+    engine._apply_target(_target({"SPY": 0.08}))
+    assert engine._pending == []
+    assert list(engine._gain_band_holds) == holds
+    holds = []
+    _planned_verdict(policy, {"SPY": 0.1049}, qty=100, lots=GAIN_BAND_LOTS, holds=holds)
+    assert holds == []  # the constant band already skips this drift
 
 
 def test_live_authorization_digest_includes_execution_policy() -> None:

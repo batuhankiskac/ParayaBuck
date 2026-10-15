@@ -68,6 +68,15 @@ version 1.0.0) exactly, and dropping `early_reentry_weight` alone restores E2
 | `risk.max_drawdown_pct` | 0.75 (catastrophe brake; halt until operator risk-epoch reset) |
 | `execution.rebalance_band_pct` | 0.005 |
 | `execution.minimum_order_notional` | 10 |
+| `execution.downsize_gain_band` | `thresholds: [0.01, 0.05]`, `bands: [0.005, 0.03, 0.08]` (A1u; `null` disables it) |
+
+A downward resize between two positive weights fills only when its drift
+exceeds the band of the tier selected by the embedded USD FIFO gain fraction of
+the units the sell would consume (0.5 / 3 / 8 pp at `≤ 1 % / ≤ 5 % / > 5 %`),
+measured over the bot's own open lots (fill price plus buy fees, oldest first).
+Entries, exits to zero and up-resizes keep 0.5 pp, and a missing or
+inconsistent lot book falls back to 0.5 pp exactly
+(`docs/research/gain_band_integration_v1.md`).
 
 The loss latches are deliberately wide: a daily-reset 2x index ETF routinely
 moves more than tighter latches would allow.
@@ -86,6 +95,7 @@ moves more than tighter latches would allow.
 | 2026-09-30 | Crypto code removed; VT35 results unchanged | `docs/research/crypto_removal_v1.md` |
 | 2026-10-12 | E2 2-of-3 trend vote (owner-approved exception to the failed signal_ensemble_v1 bootstrap gate) | `docs/research/e2_integration_v1.md` (Stage B 2017–2026: 31.05% CAGR, 32.2% max DD vs VT35 29.35% / 27.7%) |
 | 2026-10-14 | R2 early re-entry path at half weight while the vote is off (owner-directed; research pass with the confirmation study's plateau gate failed, no Stage B replay yet) | `docs/research/fast_reentry_integration_v1.md` (main window 2000–2026 m = 2: 15.48% CAGR / 46.8% max DD vs E2 14.67% / 49.6%) |
+| 2026-10-15 | A1u gain-scaled downsize band on the shared execution policy (owner-directed; research pass failed one fresh-bootstrap cell, no Stage B replay yet; fail-safe to 0.5 pp) | `docs/research/gain_band_integration_v1.md`, research `docs/research/gain_band_v3.md` (arm A1u: after tax +0.117 pp median on 21 ETFs, 21/21 rolling starts positive; pre-tax ≈ 0, Δ max DD +0.43 pp) |
 
 Earlier equity identities and the crypto strategies are removed and not
 selectable; they are recoverable only from git history (see

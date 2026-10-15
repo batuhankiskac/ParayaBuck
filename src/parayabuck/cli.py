@@ -26,7 +26,7 @@ from parayabuck.config import DEFAULT_DECISION_DB_PATH, Config, RuntimeMode, loa
 from parayabuck.core.models import Bar, Market
 from parayabuck.data import AlpacaHistoricalData
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
+from parayabuck.execution.portfolio import portfolio_execution_policy_from_config, portfolio_risk_limits_from_config
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -413,10 +413,7 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
                 selection.maximum_allocation,
                 universe_version,
                 portfolio_risk_limits_from_config(config.risk),
-                PortfolioExecutionPolicy(
-                    rebalance_band_pct=config.execution.rebalance_band_pct,
-                    minimum_order_notional=config.execution.minimum_order_notional,
-                ),
+                portfolio_execution_policy_from_config(config.execution),
             )
         )
     now = datetime.now(UTC)

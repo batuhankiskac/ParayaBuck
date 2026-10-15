@@ -200,8 +200,35 @@ assumptions, not tax advice. A2 ≡ A1 and A1u ≡ A1 in the R-USD stages by con
 
 ## 8. Amendments
 
-None at the time of this commit. Any bug fix found after the run is recorded here, with its effect
-on the arm cells, in the RESULTS/SUMMARY commit that follows.
+**A1. Implementation bug fixes, made before any v3 arm cell was observed** (each was a crash with a
+non-zero exit and no `RESULTS.json` written):
+
+1. `boot()` crashed when aggregating with `n_pre = 0` (E3's fresh bootstraps build no pre-tax
+   paths) — the pre-tax aggregation block is now skipped when `n_pre == 0`, and the E2-anchor
+   median is only computed when the anchor list is non-empty.
+2. `harness()`'s local result dict was named `boot`, shadowing the module-level `boot()` function
+   (`TypeError: 'dict' object is not callable`); renamed to `boot_control`.
+3. `v2_reference_compare` asked v2's `bootstrap_e1` for the capital `"10k"`, which v2 never
+   published (its clean bootstrap was run at `100k`/`1M` only); the comparison now uses
+   `V2REF_BOOT_CAPITALS = ("100k", "1M")` while the after-tax *window* comparison keeps
+   `10k`/`100k`/`1M`.
+
+None of these touches an arm definition, a parameter, a tier, an override, a stage, a seed, a
+block length, a gate, a threshold, a tolerance or the selection rule.
+
+**A2. Reference-block capital convention, corrected *after* the first complete run.** The first
+complete run wrote `RESULTS.json` and its `v2_reference_check` reported 30 mismatches out of 1,608
+cells — all of them A2/A3 **pre-tax reporting rows** inside the after-tax windows and the m = 4
+cost stress, where v3 had run the pre-tax leg at the $100k gate capital while v2 ran it at
+capital 1.0 (so A2/A3's bracket budget is inert there). At that point E3's FAIL was already
+visible in the same run's SUMMARY, so this is disclosed plainly: the correction restores v2's
+convention for those two reporting rows (documented inline in `after_tax_windows` and
+`cost_stress`). It changes **only** those pre-tax/turnover fields: no after-tax cell, no E1–E5
+cell, no gate input and no selection input depends on them, and the two complete runs after the
+correction reproduce v2's 1,608 cells with 0 mismatches.
+
+**A3.** No gate, threshold, arm, parameter or selection-rule change was made after seeing any v3
+result. The E3 FAIL reported in `RESULTS.json` is the pre-registered gate's outcome.
 
 ## 9. Honesty note on the pre-run state
 

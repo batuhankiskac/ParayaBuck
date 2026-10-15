@@ -1,0 +1,105 @@
+gain_band_v3 | confirmation of the gain-scaled band on new evidence | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | control = production R2 | arms = C0 + A1 + A2 + A1u
+harness PASS (0 outside tolerance); control R2 anchors PASS; C0 engine == simulate_band max|diff| 1.31e-13
+v2 reference block: 1608 cells vs research/gain_band_v2/RESULTS.json, 0 mismatches (tol 2e-06), max|diff| 5.00e-07 -> PASS
+
+pre-tax main window (m = 2, R-INDEX, $100k account), after-tax windows, OOS median, boots:
+  arm   CAGR base  CAGR cal   maxDD base  maxDD cal | AT2000  AT2010  AT2017 (pp vs C0) | E4 med base/cal (pp) | E1 med (pp) | E2 med (pp) | E3 med (pp) prog-flat b10 b40 | OOS med (pp)
+  C0     15.48%   14.90%   46.76%   46.88% |   +0.000  +0.000  +0.000 [control] |         -         |       -      |       -      |            -            |   -
+  A1     15.68%   15.06%   47.46%   47.58% |   +0.457  +0.436  +0.853 |  +0.000/ -0.004 |   +0.098 |   +0.595 |  +0.184  +0.029  +0.268  +0.130 |  +0.040
+  A2     15.90%   15.29%   47.46%   47.58% |   +0.791  +0.933  +1.814 |  -0.034/ -0.040 |   +0.119 |   +1.116 |  +0.244  +0.039  +0.377  +0.164 |  +0.040
+  A1u    15.72%   15.12%   47.19%   47.31% |   +0.455  +0.396  +0.815 |  +0.001/ -0.005 |   +0.117 |   +0.543 |  +0.186  +0.029  +0.265  +0.134 |  +0.040
+
+E1 after tax on the 21 quality-passing ETFs (R-INDEX, $100k, calibrated, m = 2, liquidated):
+  instrument  window                       C0 AT     pre-tax delta  after-tax delta  share>0  blocked b/bud
+  DIA         2000-03-09..2026-10-12     2.28%    +0.089pp(A1)   A1  +0.017  A2  -0.014  A1u  -0.035  | A1 1/A2 0/A1u 0 | 2187/0
+  EEM         2004-04-15..2026-10-13     1.34%    +0.066pp(A1)   A1  +0.117  A2  +0.055  A1u  +0.158  | A1 1/A2 1/A1u 1 | 1241/0
+  EFA         2002-09-04..2026-10-13     4.66%    +0.131pp(A1)   A1  +0.227  A2  +0.400  A1u  +0.245  | A1 1/A2 1/A1u 1 | 1641/0
+  EWA         2000-03-09..2026-10-13     1.26%    +0.078pp(A1)   A1  +0.226  A2  +0.411  A1u  +0.187  | A1 1/A2 1/A1u 1 | 1419/0
+  EWG         2000-03-09..2026-10-13     1.50%    +0.186pp(A1)   A1  +0.173  A2  +0.203  A1u  +0.143  | A1 1/A2 1/A1u 1 | 1298/0
+  EWH         2000-03-09..2026-10-13     1.40%    +0.234pp(A1)   A1  +0.235  A2  +0.420  A1u  +0.257  | A1 1/A2 1/A1u 1 | 1402/0
+  EWJ         2000-03-09..2026-10-13    -2.83%    -0.105pp(A1)   A1  +0.014  A2  +0.085  A1u  +0.025  | A1 1/A2 1/A1u 1 | 1312/0
+  EWL         2000-03-09..2026-10-13     2.01%    +0.027pp(A1)   A1  +0.103  A2  +0.141  A1u  +0.117  | A1 1/A2 1/A1u 1 | 1599/0
+  EWS         2000-03-09..2026-10-13     4.23%    +0.235pp(A1)   A1  +0.205  A2  +0.053  A1u  +0.216  | A1 1/A2 1/A1u 1 | 1301/0
+  EWU         2000-03-09..2026-10-13     0.14%    -0.013pp(A1)   A1  +0.073  A2  +0.110  A1u  +0.051  | A1 1/A2 1/A1u 1 | 1276/0
+  IWM         2001-05-30..2026-10-12     0.54%    +0.063pp(A1)   A1  +0.253  A2  +0.281  A1u  +0.292  | A1 1/A2 1/A1u 1 | 1237/0
+  SPY         2000-03-09..2026-10-12     6.50%    +0.092pp(A1)   A1  +0.067  A2  +0.112  A1u  +0.102  | A1 1/A2 1/A1u 1 | 2392/0
+  XLB         2000-03-09..2026-10-13    -1.53%    +0.059pp(A1)   A1  +0.076  A2  +0.259  A1u  +0.039  | A1 1/A2 1/A1u 1 | 1428/0
+  XLE         2000-03-09..2026-10-13     2.52%    -0.136pp(A1)   A1  +0.065  A2  +0.526  A1u  +0.062  | A1 1/A2 1/A1u 1 | 1438/0
+  XLF         2000-03-09..2026-10-13     1.30%    +0.095pp(A1)   A1  +0.098  A2  +0.032  A1u  +0.154  | A1 1/A2 1/A1u 1 | 1427/0
+  XLI         2000-03-09..2026-10-13     4.10%    +0.063pp(A1)   A1  +0.080  A2  +0.119  A1u  +0.059  | A1 1/A2 1/A1u 1 | 1854/0
+  XLK         2000-03-09..2026-10-13     9.31%    +0.248pp(A1)   A1  +0.329  A2  +0.491  A1u  +0.366  | A1 1/A2 1/A1u 1 | 2032/0
+  XLP         2000-03-09..2026-10-13     0.99%    +0.000pp(A1)   A1  +0.065  A2  -0.043  A1u  +0.060  | A1 1/A2 0/A1u 1 | 1845/0
+  XLU         2000-03-09..2026-10-13     3.11%    -0.111pp(A1)   A1  +0.060  A2  -0.057  A1u  +0.025  | A1 1/A2 0/A1u 1 | 2298/0
+  XLV         2000-03-09..2026-10-13    -1.64%    -0.084pp(A1)   A1  -0.124  A2  -0.110  A1u  -0.093  | A1 0/A2 0/A1u 0 | 1557/0
+  XLY         2000-03-09..2026-10-13     3.18%    +0.016pp(A1)   A1  +0.179  A2  +0.289  A1u  +0.223  | A1 1/A2 1/A1u 1 | 1767/0
+  E1 gate: A1 median +0.098pp share>0 95.2% (20/21) -> PASS; A2 median +0.119pp share>0 81.0% (17/21) -> PASS; A1u median +0.117pp share>0 90.5% (19/21) -> PASS
+
+E2 rolling January starts (after tax $100k, base, m = 2, to 2026-09-29):
+  year   start        C0 AT      A1 d      A2 d     A1u d
+  2001   2001-01-02    11.72%    +0.521    +0.932    +0.520
+  2002   2002-01-02    12.50%    +0.555    +0.991    +0.543
+  2003   2003-01-02    13.38%    +0.595    +1.054    +0.576
+  2004   2004-01-02    12.55%    +0.475    +0.830    +0.452
+  2005   2005-01-03    12.81%    +0.483    +0.854    +0.447
+  2006   2006-01-03    13.73%    +0.495    +0.887    +0.457
+  2007   2007-01-03    14.31%    +0.493    +0.907    +0.456
+  2008   2008-01-02    14.04%    +0.481    +0.962    +0.441
+  2009   2009-01-02    16.35%    +0.525    +0.995    +0.479
+  2010   2010-01-04    14.71%    +0.436    +0.933    +0.396
+  2011   2011-01-03    15.31%    +0.522    +1.116    +0.487
+  2012   2012-01-03    18.17%    +0.595    +1.300    +0.543
+  2013   2013-01-02    19.17%    +0.617    +1.379    +0.561
+  2014   2014-01-02    17.35%    +0.611    +1.329    +0.550
+  2015   2015-01-02    16.98%    +0.675    +1.443    +0.618
+  2016   2016-01-04    20.55%    +0.751    +1.604    +0.728
+  2017   2017-01-03    22.89%    +0.853    +1.814    +0.815
+  2018   2018-01-02    20.08%    +0.915    +1.870    +0.845
+  2019   2019-01-02    22.97%    +1.035    +2.252    +0.991
+  2020   2020-01-02    21.55%    +0.992    +1.581    +0.952
+  2021   2021-01-04    19.05%    +0.824    +1.305    +0.865
+  E2 gate: A1 median +0.595pp share>0 100.0% (21/21) -> PASS; A2 median +1.116pp share>0 100.0% (21/21) -> PASS; A1u median +0.543pp share>0 100.0% (21/21) -> PASS
+
+E3 fresh after-tax bootstraps (seed 20261015, 1000 paths, $100k) -- seed 20261015, blocks (10, 40):
+  run                    arm   median d   mean d   share>0   p05 / p95   gate
+  block10_flat         A1      +0.029   +0.059     53.4% -0.38/+0.63   FAIL
+  block10_flat         A2      +0.039   +0.107     54.1% -0.57/+1.03   FAIL
+  block10_flat         A1u     +0.029   +0.061     53.7% -0.40/+0.59   FAIL
+  block10_progressive  A1      +0.184   +0.223     71.9% -0.31/+0.87   PASS
+  block10_progressive  A2      +0.244   +0.345     70.8% -0.45/+1.41   PASS
+  block10_progressive  A1u     +0.186   +0.218     71.3% -0.31/+0.85   PASS
+  block40_flat         A1      +0.130   +0.161     67.0% -0.30/+0.74   PASS
+  block40_flat         A2      +0.164   +0.269     63.7% -0.47/+1.29   PASS
+  block40_flat         A1u     +0.134   +0.161     66.7% -0.30/+0.73   PASS
+  block40_progressive  A1      +0.268   +0.309     78.8% -0.22/+1.01   PASS
+  block40_progressive  A2      +0.377   +0.486     76.7% -0.33/+1.66   PASS
+  block40_progressive  A1u     +0.265   +0.298     76.8% -0.22/+0.99   PASS
+
+E4 pre-tax non-inferiority (clean bootstrap seed 20261011, block 20, 5000 pre-tax paths; margin -0.1 pp) + main-window max DD:
+  arm   boot median d base  boot median d cal   share>0 base/cal   main DD d base/cal (pp)  gate
+  A1                +0.000              -0.004     50.0%/ 49.5%       +0.70/    +0.70   PASS
+  A2                -0.034              -0.040     47.1%/ 46.5%       +0.70/    +0.70   PASS
+  A1u               +0.001              -0.005     50.2%/ 49.3%       +0.43/    +0.43   PASS
+
+E5 (report only):
+  A1u vs A1 fill decisions, main path (2000-03-09..2026-09-29, 6679 sessions): 52 differ (0.78%); A1 sells 277, A1u 277, A1-sells/A1u-holds 16, A1-holds/A1u-sells 16
+  after tax at $30k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   C0   10.98% | A1   11.39%  +0.408pp A2   11.74%  +0.755pp A1u   11.39%  +0.413pp
+    2010_01_to_end       C0   15.90% | A1   16.30%  +0.399pp A2   16.72%  +0.817pp A1u   16.27%  +0.374pp
+    2017_01_to_end       C0   24.36% | A1   25.15%  +0.787pp A2   25.68%  +1.321pp A1u   25.12%  +0.754pp
+  after tax at $300k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   C0    9.55% | A1   10.05%  +0.497pp A2   10.45%  +0.894pp A1u   10.04%  +0.488pp
+    2010_01_to_end       C0   14.01% | A1   14.47%  +0.456pp A2   15.03%  +1.019pp A1u   14.42%  +0.406pp
+    2017_01_to_end       C0   22.07% | A1   22.96%  +0.889pp A2   24.09%  +2.012pp A1u   22.92%  +0.850pp
+
+reference cells (v2 stages, not deciding v3):
+  A1   pre-tax base/cal   15.68%/  15.06% turn 5.48 | OOS median d +0.040pp | B1/B2 (seed 20261011) $100k +0.228/+0.093pp
+  A2   pre-tax base/cal   15.90%/  15.29% turn 5.34 | OOS median d +0.040pp | B1/B2 (seed 20261011) $100k +0.283/+0.085pp
+  A1u  pre-tax base/cal   15.72%/  15.12% turn 5.49 | OOS median d +0.040pp | B1/B2 (seed 20261011) $100k +0.226/+0.095pp
+
+gates (v3; pass = all of E1-E4):
+  A1   E1=P E2=P E3=F E4=P -> FAIL
+  A2   E1=P E2=P E3=F E4=P -> FAIL
+  A1u  E1=P E2=P E3=F E4=P -> FAIL
+
+selected: none  (no arm passes all of E1-E4)
+  eligible: []; 2000-window $100k after-tax delta vs C0: A1 +0.457pp, A2 +0.791pp, A1u +0.455pp

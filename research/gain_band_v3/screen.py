@@ -148,7 +148,8 @@ TAX_WINDOWS = {
     "2017_01_to_end": ("2017-01-03", "2026-09-29"),
 }
 TAX_CAPITALS = {"10k": 10_000.0, "30k": 30_000.0, "100k": 100_000.0, "300k": 300_000.0, "1M": 1_000_000.0}
-V2REF_CAPITALS = ("10k", "100k", "1M")   # the capitals v2 published
+V2REF_CAPITALS = ("10k", "100k", "1M")   # the capitals v2 published for the after-tax windows
+V2REF_BOOT_CAPITALS = ("100k", "1M")     # ... and for its clean bootstrap (v2's default)
 E5_CAPITALS = ("30k", "300k")            # report-only, v3
 GATE_CAPITAL = "100k"
 # The pre-tax runs of the main window and of bootstrap E1 use the gate capital, so that the
@@ -985,7 +986,7 @@ def boot(seed=SEED, block=BLOCK, arms=ARMS_ALL, n_pre=PRE_BOOT_PATHS, n_tax=TAX_
     out = {"n_paths_pre": n_pre, "n_paths_tax": n_tax, "seed": seed, "block": block,
            "arms": list(arms), "calendar_start": fixed_dates[0], "calendar_end": fixed_dates[-1],
            "pre": {}, "tax": {}}
-    for md in FIN:
+    for md in (FIN if n_pre > 0 else ()):   # no pre-tax paths -> no pre-tax block
         base = np.array(pre[(md, CONTROL)])
         out["pre"][md] = {}
         for arm in arms:
@@ -1012,7 +1013,9 @@ def boot(seed=SEED, block=BLOCK, arms=ARMS_ALL, n_pre=PRE_BOOT_PATHS, n_tax=TAX_
                         "p05_delta_cagr_pp": float(np.percentile(d, 5) * 100),
                         "p95_delta_cagr_pp": float(np.percentile(d, 95) * 100)}
             out["tax"][cl][mode] = e
-    out["anchor_e2_100k"] = {mode: {"cagr_median": float(np.median(v))} for mode, v in anchor_e2_out.items()}
+    out["anchor_e2_100k"] = {mode: ({"cagr_median": float(np.median(anchor_e2_out[mode]))}
+                                    if anchor_e2_out[mode] else {})
+                             for mode in modes}
     return out
 
 
@@ -1310,22 +1313,22 @@ def harness(run_boot=True):
         and all(r2_anchors["after_tax_100k"][wn]["pass"] for wn in TAX_WINDOWS))
     if not r2_anchors["pass"]:
         bad += 1
-    boot = {}
+    boot_control = {}
     if run_boot:
         b = boot(n_pre=TAX_BOOT_PATHS, n_tax=TAX_BOOT_PATHS, capitals=("100k",), arms=ARMS_ALL)
         for mode in ("progressive", "flat"):
             # boot() drives every arm label, "C0" included, from the R2 target series, so its
             # "C0" is production R2 and matches BOOT_ANCHOR["R2"] (tax_harvest_v2's R2 medians);
             # the pure-E2 series is tracked by its own anchor label and matches "E2".
-            boot[mode] = {"R2": b["tax"]["100k"][mode]["C0"]["cagr_median"],
-                          "E2": b["anchor_e2_100k"][mode]["cagr_median"]}
+            boot_control[mode] = {"R2": b["tax"]["100k"][mode]["C0"]["cagr_median"],
+                                  "E2": b["anchor_e2_100k"][mode]["cagr_median"]}
             for label, ref_key in (("R2", "R2"), ("E2", "E2")):
-                if abs(boot[mode][label] - BOOT_ANCHOR[mode][ref_key]) > 0.0010:
+                if abs(boot_control[mode][label] - BOOT_ANCHOR[mode][ref_key]) > 0.0010:
                     bad += 1
-        boot["pre_base"] = {a: b["pre"]["base"][a]["cagr_median"] for a in ARMS}
-        boot["pre_cal"] = {a: b["pre"]["calibrated"][a]["cagr_median"] for a in ARMS}
+        boot_control["pre_base"] = {a: b["pre"]["base"][a]["cagr_median"] for a in ARMS}
+        boot_control["pre_cal"] = {a: b["pre"]["calibrated"][a]["cagr_median"] for a in ARMS}
     return {"reproduction_checks": checks, "n_outside_tolerance": bad, "after_tax_anchors": tax,
-            "r2_anchors": r2_anchors, "bootstrap_control": boot, "pass": bool(bad == 0)}
+            "r2_anchors": r2_anchors, "bootstrap_control": boot_control, "pass": bool(bad == 0)}
 
 
 # ----------------------------------------------------------------------------- the run
@@ -1367,7 +1370,10 @@ def after_tax_windows(capitals, arms):
             win[cap_label][wn] = {}
             for arm in arms:
                 rq = engine_run(TAX_CAPITALS[cap_label], a, b, days, mkt, o, c, WANTS[arm], e2, arm, "progressive")
-                rp = engine_run(PRE_CAPITAL, a, b, days, mkt, o, c, WANTS[arm], e2, arm, "pre_tax")
+                # v2's convention for this reporting row: the pre-tax leg of the after-tax
+                # windows runs at capital 1.0 (so A2/A3's budget is inert here). Kept identical
+                # to v2, which is what the reference check verifies; it is not a v3 gate cell.
+                rp = engine_run(1.0, a, b, days, mkt, o, c, WANTS[arm], e2, arm, "pre_tax")
                 win[cap_label][wn][arm] = {
                     "pre_tax_cagr": rp["cagr_usd_liquidated"],
                     "after_tax_cagr": rq["cagr_usd_liquidated"],
@@ -1396,7 +1402,9 @@ def cost_stress(arms):
         for arm in arms:
             rq = engine_run(TAX_CAPITALS[GATE_CAPITAL], a, b, days, mkt, o, c, w_r2, e2, arm,
                             "progressive", m=M_STRESS)
-            rp = engine_run(PRE_CAPITAL, a, b, days, mkt, o, c, w_r2, e2, arm, "pre_tax", m=M_STRESS)
+            # v2's convention (see after_tax_windows): the pre-tax leg of the cost stress runs
+            # at capital 1.0, so the reference check reproduces v2 exactly.
+            rp = engine_run(1.0, a, b, days, mkt, o, c, w_r2, e2, arm, "pre_tax", m=M_STRESS)
             cost[wn][arm] = {"after_tax_cagr": rq["cagr_usd_liquidated"],
                              "pre_tax_cagr": rp["cagr_usd_liquidated"],
                              "max_dd_after_tax": rq["max_dd_nav_usd"],
@@ -1617,7 +1625,7 @@ def v2_reference_compare(res):
             for k in ("cagr_median", "diff_vs_C0_median_pp", "diff_vs_C0_mean_pp", "share_gt_0",
                       "p05_delta_pp", "p95_delta_pp"):
                 add(f"boot_e1.pre.{md}.{arm}.{k}", a[k], b[k])
-    for cl in V2REF_CAPITALS:
+    for cl in V2REF_BOOT_CAPITALS:
         for mode in ("progressive", "flat"):
             for arm in REF_ARMS:
                 a, b = res["boot_ref"]["tax"][cl][mode][arm], v2["bootstrap_e1"]["tax"][cl][mode][arm]
@@ -1702,7 +1710,7 @@ def gates_v3(res):
         r["ref_oos_median_delta_pp"] = float(np.median(
             [res["oos"][wn][arm]["delta_cagr_pp"] for wn in OOS_WINDOWS]))
         r["ref_boot_seed20261011"] = {mode: {cl: boot_ref["tax"][cl][mode][f"{arm}_vs_C0"]["median_delta_cagr_pp"]
-                                             for cl in V2REF_CAPITALS}
+                                             for cl in V2REF_BOOT_CAPITALS}
                                       for mode in ("progressive", "flat")}
         r["pass_all"] = bool(r["E1"] and r["E2"] and r["E3"] and r["E4"])
         g[arm] = r

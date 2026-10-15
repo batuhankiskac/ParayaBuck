@@ -102,7 +102,9 @@ indexation) and differs from A1 on 0.78 % of the main-path sessions.
   the backtest engine attaches it to the `RebalanceRecord`
   (`gain_band_holds`), and the daily summary appends
   `gain band held (g 7.2%, band 8pp)`. Decisions the band does not touch carry
-  no `gain_band` key at all.
+  no `gain_band` key at all. The mirror-image record —
+  `metadata["gain_band_bypass"]`, the symbols whose target the risk layer
+  lowered — is written only when there is one (see "Review fixes").
 - **Tests.** `tests/test_gain_band_a1u.py` (tiers and inclusive boundaries,
   FIFO consumption and a loss lot offsetting a gain lot, entries/exits/
   up-resizes unaffected, every fail-safe reason, engine lot book vs its own
@@ -144,15 +146,92 @@ falls), which is why the goldens change:
 
 | Identity | Band | Fills | Held | CAGR | Max DD |
 |---|---|---:|---:|---:|---:|
-| VT35 (`trend_rule: sma`) | off / on | 228 / 122 | 0 / 149 | 26.07 % / 26.16 % | 27.79 % / 28.26 % |
+| VT35 (`trend_rule: sma`) | off / on | 228 / 123 | 0 / 137 | 26.07 % / 26.17 % | 27.79 % / 28.22 % |
 | E2 1.1.0 (no early path) | off / on | 230 / 126 | 0 / 134 | 20.37 % / 20.70 % | 27.81 % / 27.81 % |
 | shipped 1.2.0 (E2 + R2) | off / on | 187 / 93 | 0 / 124 | 17.99 % / 17.75 % | 25.38 % / 25.54 % |
+
+Only VT35 moves under the review fix below: its 98 % managed sleeve is binding
+almost every session while the account is fully invested, so the 0.5–0.6 pp
+trims that keep the drift above that cap are risk enforcement and trade again
+(122 → 123 fills, 149 → 137 holds). The band-off goldens are byte-identical, and
+the two lower-exposure identities never reach their caps, so their numbers stand
+unchanged. The 2017–2026 Stage B replay is still missing, and the band-on VT35
+path diverges from the pre-fix one on 2020-02-04 onward, so no band-on golden is
+a research number.
+
+## Review fixes (2026-10-15)
+
+The orchestrator's review of the first commit found two behavioural defects.
+Both are fixed here; nothing else about the band changed.
+
+- **False alarms.** The band deliberately leaves a position ABOVE its target
+  by up to 8 pp, which the intent watchdog read as a failed order:
+  `_over_target` alarmed at `held > target + max(0.01, 0.10 × target)` — target
+  0.40/held 0.47 arose `equity_position_over_target`, which is DEGRADED health,
+  an e-mail (`intent_alarm` ∈ `EMAIL_ALERT_KINDS`) and HTTP 503 from `/readyz`.
+  The check now reads the latest decision's own `metadata["gain_band"]`
+  (`runtime.py::_intent_watchdog_pass` →
+  `PortfolioStateRepository.latest_decision_gain_band`, the new single reader
+  that also serves `latest_decision_cross_check`) and widens the tolerance by
+  the recorded band plus the same relative drift slack the target gets
+  (`over_target_tolerance(target, held_band)`). An exit to zero keeps the
+  constant tolerance (`held_band` is applied only when `target > 0`), the band
+  can never hold an exit, and a symbol the record does not name is unchanged —
+  a failed cash DAY SELL still alarms. A decision whose only intended order was
+  the held downsize also stops reporting `NO_TARGET_CHANGE` in the decision
+  summary: it reports `GAIN_BAND_HOLD`.
+- **Risk reductions bypass the band.** The band is a tax-timing device for the
+  STRATEGY's own drift trims. `PortfolioRiskOverlay.apply` now compares each of
+  its output weights with the strategy's own weight for that symbol and writes
+  `metadata["gain_band_bypass"]` (canonical symbols) whenever it lowered one —
+  per-asset cap, sleeve/`maximum_allocation` scaling, gross/cash capacity, and,
+  since a halt is exactly when the runtime must be able to de-risk, every
+  target symbol while `halted`. (A position-count eviction removes the symbol
+  from the target altogether, i.e. an exit, which the band never holds.) The
+  entry-latch and intermediate-risk constructions (`min(weight, current)`,
+  "risk reduction only") mark their symbols through
+  `gain_band_bypass_metadata`. Both
+  order-existence sites read the key (`TargetToOrderPlanner.plan` and
+  `PortfolioBacktestEngine._apply_target`) and fall back to the constant band
+  for those symbols, so parity holds and a risk-driven sell is never
+  postponed for tax. Symbols the overlay did not lower — including a
+  strategy trim that a cap above it left alone — stay band-eligible.
+
+Audit of every other target-vs-held comparison (all verified against the tree,
+none of them act differently for a band-held position):
+
+| Site | Verdict |
+|---|---|
+| `intent_watchdog._under_target` | ok — a hold above target cannot read as under-target |
+| `intent_watchdog.evaluate_equity` signal-cross-check branch | ok — replaces both checks; its target is the held weight |
+| `daily_summary.build_equity_daily_summary` | ok — prints, and already annotates `gain band held (…)` |
+| `runtime_service._with_paper_observability` | ok — records `target_weight`/`current_position`/`planned_order_delta`, no flag |
+| `runtime_service._emit_decision_summary_safe` | **fixed** — was `NO_TARGET_CHANGE`, now `GAIN_BAND_HOLD` |
+| `runtime_repository.latest_decision_target` / `latest_decision_cross_check` | **fixed** — `gain_band` was dropped; new reader |
+| startup catch-up `already_invested` | ok — tests `managed_qty > 0`, never the target |
+| rebalance recovery / `sell_pending` / `rebalance_in_progress` | ok — order status and phase, no target comparison |
+| reconciliation (`alpaca_reconciliation`, `alpaca_account`, `paper_incident`) | ok — repository-own vs broker quantities; a held trim places no order |
+| web dashboard / `/readyz` / ops / CLI status | ok — side-by-side display; `/readyz` only relays watchdog codes (now correct) |
+| backtest `_enrich_rebalances` `target_vs_actual_drift` / `unfilled_notional` | ok — no consumer; the deliberate gap reads as drift there |
+| `shadow_comparator`, `telemetry.expected_vs_actual` | ok — per-order quantity vs fill, not account vs target |
+
+Coverage added with the fixes: `tests/test_intent_watchdog.py` (the widened
+tolerance, a record for another symbol / a malformed record / a foreign
+symbol changing nothing, an unfilled exit still alarming, the repository
+reader through the runtime pass), `tests/test_gain_band_a1u.py` (the real
+overlay's per-asset cap, the halt, the risk-reduction-only marking, the
+engine's bypass, the PAPER path end to end including the persisted
+`gain_band_bypass` and the `GAIN_BAND_HOLD` summary reason) and
+`tests/test_execution_policy_parity.py` (planner vs backtest for a marked
+target, with the unmarked control held by both).
 
 ## Decision
 
 A1u ships as an execution-policy option, enabled in the shipped configuration,
 on the owner's instruction and after the v3 evidence described above. It is
-fail-safe to R2, part of both digests, and observable per decision. Next steps
-if the owner takes it further: a Stage B replay on the production engine over
-2017-2026 (the goldens above are the only production-engine evidence so far),
-and the LIVE readiness review.
+fail-safe to R2, part of both digests, and observable per decision. The review
+fixes above are part of this revision: a downsize the risk layer produced keeps
+the constant band, and a band-held position no longer reads as a failed order.
+Next steps if the owner takes it further: a Stage B replay on the production
+engine over 2017-2026 (the goldens above are the only production-engine
+evidence so far), and the LIVE readiness review.

@@ -22,6 +22,7 @@ from parayabuck.execution.portfolio import (
     RiskOverlayDecision,
     TargetToOrderPlanner,
     floor_increment,
+    gain_band_bypass_metadata,
     record_gain_band_holds,
     reserve_opening_order_slots,
 )
@@ -1323,10 +1324,15 @@ class PortfolioRuntime:
                 ),
                 cash_weight=1.0
                 - sum(min(weight.weight, current_weights.get(weight.symbol, 0.0)) for weight in raw_target.weights),
-                metadata={
-                    **raw_target.metadata,
-                    "entry_risk_latch": entry_latch,
-                },
+                metadata=gain_band_bypass_metadata(
+                    {**raw_target.metadata, "entry_risk_latch": entry_latch},
+                    (
+                        weight.symbol
+                        for weight in raw_target.weights
+                        if min(weight.weight, current_weights.get(weight.symbol, 0.0)) > 0
+                    ),
+                    self.market,
+                ),
             )
         if not scheduled:
             current_weights = {
@@ -1348,7 +1354,11 @@ class PortfolioRuntime:
                 raw_target,
                 weights=reducing_weights,
                 cash_weight=1.0 - sum(weight.weight for weight in reducing_weights),
-                metadata={**raw_target.metadata, "intermediate_risk_reduction": True},
+                metadata=gain_band_bypass_metadata(
+                    {**raw_target.metadata, "intermediate_risk_reduction": True},
+                    (weight.symbol for weight in reducing_weights),
+                    self.market,
+                ),
             )
         if force_scheduled or decision_origin != "scheduled":
             # Tag the decision origin on the FINAL target so both the normal
@@ -1568,7 +1578,11 @@ class PortfolioRuntime:
                 universe_version=self.universe_version,
                 planned=orders,
                 submitted=submitted,
-                no_trade_reason=hold_reason.upper() if hold_reason is not None else None,
+                no_trade_reason=(
+                    hold_reason.upper()
+                    if hold_reason is not None
+                    else ("GAIN_BAND_HOLD" if not orders and risk.target.metadata.get("gain_band") else None)
+                ),
             )
             return PortfolioRuntimeResult(
                 decision_id,

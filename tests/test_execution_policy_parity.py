@@ -8,6 +8,7 @@ Fill mechanics may differ; order existence must not.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
 import pytest
@@ -16,6 +17,7 @@ from parayabuck.backtest.portfolio_engine import OrderSide, PortfolioBacktestEng
 from parayabuck.config import DownsizeGainBand
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.execution.portfolio import (
+    GAIN_BAND_BYPASS_KEY,
     AssetTradingRules,
     GainBandHold,
     PortfolioExecutionPolicy,
@@ -59,13 +61,18 @@ class _FixedTargetStrategy(PortfolioStrategy):
         )
 
 
-def _target(targets: dict[str, float], timestamp: datetime | None = None) -> TargetPortfolio:
+def _target(
+    targets: dict[str, float],
+    timestamp: datetime | None = None,
+    metadata: Mapping[str, object] | None = None,
+) -> TargetPortfolio:
     return TargetPortfolio(
         strategy_name="fixed_target",
         strategy_version="1.0.0",
         decision_timestamp=timestamp or datetime(2025, 1, 1, tzinfo=UTC),
         weights=tuple(TargetWeight(symbol, w) for symbol, w in targets.items()),
         cash_weight=1.0 - sum(targets.values()),
+        metadata=dict(metadata or {}),
         universe_version="test",
     )
 
@@ -137,11 +144,12 @@ def _planned_verdict(
     equity: float = 100_000.0,
     lots: tuple[tuple[float, float], ...] = (),
     holds: list[GainBandHold] | None = None,
+    metadata: Mapping[str, object] | None = None,
 ) -> dict[str, PortfolioOrderSide]:
     """Planner order-existence verdict: symbol -> side for produced orders."""
     account = _account(qty=qty, price=price, equity=equity)
     orders = TargetToOrderPlanner(policy).plan(
-        _target(targets),
+        _target(targets, metadata=metadata),
         account,
         market=Market.EQUITY,
         prices={"SPY": price, "QQQ": price},
@@ -162,10 +170,11 @@ def _backtest_verdict(
     price: float = 100.0,
     equity: float = 100_000.0,
     lots: tuple[tuple[float, float], ...] = (),
+    metadata: Mapping[str, object] | None = None,
 ) -> dict[str, OrderSide]:
     """Backtest target-application verdict: symbol -> side for produced orders."""
     engine = _engine(policy, qty=qty, price=price, equity=equity, lots=lots)
-    engine._apply_target(_target(targets))
+    engine._apply_target(_target(targets, metadata=metadata))
     return {order.symbol: order.side for order in engine._pending}
 
 
@@ -177,9 +186,10 @@ def _assert_parity(
     price: float = 100.0,
     equity: float = 100_000.0,
     lots: tuple[tuple[float, float], ...] = (),
+    metadata: Mapping[str, object] | None = None,
 ) -> None:
-    planned = _planned_verdict(policy, targets, qty=qty, price=price, equity=equity, lots=lots)
-    backtest = _backtest_verdict(policy, targets, qty=qty, price=price, equity=equity, lots=lots)
+    planned = _planned_verdict(policy, targets, qty=qty, price=price, equity=equity, lots=lots, metadata=metadata)
+    backtest = _backtest_verdict(policy, targets, qty=qty, price=price, equity=equity, lots=lots, metadata=metadata)
     assert set(planned) == set(backtest), (planned, backtest)
     for symbol in planned:
         assert planned[symbol].value == backtest[symbol].value, (symbol, planned, backtest)
@@ -336,6 +346,25 @@ def test_gain_band_hold_is_reported_by_the_planner_only_when_it_binds() -> None:
     holds = []
     _planned_verdict(policy, {"SPY": 0.1049}, qty=100, lots=GAIN_BAND_LOTS, holds=holds)
     assert holds == []  # the constant band already skips this drift
+
+
+def test_gain_band_bypass_parity_for_a_risk_reduced_target() -> None:
+    """A target the risk layer lowered (``gain_band_bypass``) keeps the
+    constant band on BOTH paths, so its 4 pp over-target sell trades; the very
+    same target without the mark is held by both."""
+    policy = PortfolioExecutionPolicy(downsize_gain_band=GAIN_BAND)
+    marked = {GAIN_BAND_BYPASS_KEY: ("SPY",)}
+    _assert_parity(policy, {"SPY": 0.06}, qty=100, lots=GAIN_BAND_LOTS, metadata=marked)
+    assert _planned_verdict(policy, {"SPY": 0.06}, qty=100, lots=GAIN_BAND_LOTS, metadata=marked) == {
+        "SPY": PortfolioOrderSide.SELL
+    }
+    assert _backtest_verdict(policy, {"SPY": 0.06}, qty=100, lots=GAIN_BAND_LOTS, metadata=marked) == {
+        "SPY": OrderSide.SELL
+    }
+    # Control: the same (target, current, lots) as the strategy's own trim.
+    _assert_parity(policy, {"SPY": 0.06}, qty=100, lots=GAIN_BAND_LOTS)
+    assert _planned_verdict(policy, {"SPY": 0.06}, qty=100, lots=GAIN_BAND_LOTS) == {}
+    assert _backtest_verdict(policy, {"SPY": 0.06}, qty=100, lots=GAIN_BAND_LOTS) == {}
 
 
 def test_live_authorization_digest_includes_execution_policy() -> None:

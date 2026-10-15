@@ -75,12 +75,15 @@ _VT35 = _Golden(
 _VT35_WITH_BAND = replace(
     _VT35,
     gain_band=True,
-    fills=122,
-    ending_equity=210_744.83,
-    cagr=0.26158,
-    max_drawdown=0.28264,
-    suppressed=149,
-    fill_digest="1aa3ecc766c806cf555651eca7b19050ba330ad622933e08d9dced9bfb7c436e",
+    # Review fix (2026-10-15): a reduction the risk overlay produced keeps the
+    # constant band, so VT35's binding 98 % managed-exposure cap trades its
+    # drift trims again (122 -> 123 fills, 149 -> 137 held).
+    fills=123,
+    ending_equity=210_819.74,
+    cagr=0.26172,
+    max_drawdown=0.282175,
+    suppressed=137,
+    fill_digest="5f2c44ef8f32fc47da4f8b5941ab4ee870375cae50de3ec249c73e9fbf567890",
 )
 
 _E2_ONLY = _Golden(

@@ -19,6 +19,8 @@ from parayabuck.execution.portfolio import (
     PortfolioRiskLimits,
     PortfolioRiskOverlay,
     downsize_gain_band_verdict,
+    gain_band_bypass_metadata,
+    gain_band_bypass_symbols,
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -1080,7 +1082,11 @@ class PortfolioBacktestEngine:
                 target,
                 weights=reducing_weights,
                 cash_weight=1.0 - sum(weight.weight for weight in reducing_weights),
-                metadata={**target.metadata, "intermediate_risk_reduction": True},
+                metadata=gain_band_bypass_metadata(
+                    {**target.metadata, "intermediate_risk_reduction": True},
+                    (weight.symbol for weight in reducing_weights),
+                    self.strategy.market,
+                ),
             )
         if self.risk_overlay is not None:
             risk = self.risk_overlay.apply(
@@ -1260,6 +1266,10 @@ class PortfolioBacktestEngine:
         self._current_pre_trade_weights = {}
         self._expected_turnover = 0.0
         self._gain_band_holds = []
+        # Symbols whose target the risk layer produced (overlay cap/scale/halt
+        # or a risk-reduction-only construction): their downsize is risk
+        # enforcement, so it keeps the constant band.
+        risk_reduced = gain_band_bypass_symbols(target, self.strategy.market)
         for symbol, target_weight in symbol_targets.items():
             price = self._last_price.get(symbol)
             if price is None or price <= 0:
@@ -1271,8 +1281,14 @@ class PortfolioBacktestEngine:
             gap = abs(target_weight - current_weight)
             # Shared A1u policy: the gain-scaled band can only widen the band of
             # a downward resize between two positive weights, so that case is
-            # evaluated after the units the sell consumes are known.
-            gain_band_case = self.downsize_gain_band is not None and 0.0 < target_weight < current_weight
+            # evaluated after the units the sell consumes are known. A target
+            # the risk layer produced keeps the constant band (parity with the
+            # planner): a risk-driven sell must not be tax-deferred.
+            gain_band_case = (
+                self.downsize_gain_band is not None
+                and 0.0 < target_weight < current_weight
+                and symbol not in risk_reduced
+            )
             if gap < self.turnover_band and not gain_band_case:
                 continue
             target_qty = target_weight * equity / price

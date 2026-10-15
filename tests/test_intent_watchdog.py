@@ -17,6 +17,7 @@ from parayabuck.monitoring.intent_watchdog import (
     LatestDecision,
     evaluate_equity,
     last_due_equity_session,
+    over_target_tolerance,
 )
 from parayabuck.portfolio.models import RebalancePolicy
 from parayabuck.runtime import EngineRuntime
@@ -182,6 +183,73 @@ def test_over_target_never_fires_without_an_account() -> None:
     assert evaluate_equity(_utc(2026, 9, 29, 14, 5), cash, None, running_since=None, settings=_SETTINGS) == []
 
 
+# --------------------------------------------------------------------------- #
+# (d) equity target exceeded by a recorded gain-band hold (A1u)
+# --------------------------------------------------------------------------- #
+
+
+def _band_hold(symbol: str = "QLD", band: float = 0.08) -> tuple[dict[str, object], ...]:
+    """One ``metadata["gain_band"]`` entry, as the planner writes it."""
+    return ({"symbol": symbol, "g_frac": 0.07, "band": band, "gap": 0.07},)
+
+
+def test_over_target_tolerance_widens_by_the_recorded_band() -> None:
+    """The band is room the decision deliberately left; it is added to the
+    tolerance on top of the ordinary relative drift slack of the target."""
+    assert over_target_tolerance(0.40) == pytest.approx(0.04)
+    assert over_target_tolerance(0.40, 0.08) == pytest.approx(0.12)
+    assert over_target_tolerance(0.0, 0.08) == pytest.approx(0.08)
+    # Never narrower than the constant tolerance.
+    assert over_target_tolerance(0.90, 0.005) == pytest.approx(0.095)
+
+
+def test_over_target_tolerates_a_recorded_gain_band_hold() -> None:
+    """Target 0.40, held 0.47: the latest decision recorded a held downsize for
+    QLD, so the gap is the recorded intent, not a failed order. Without the
+    record the same account is the everyday unfilled trim, and a position
+    past the recorded band is beyond what the hold justified."""
+    late = _utc(2026, 9, 29, 14, 5)
+    held = _account((_qld(47_000.0),))
+    recorded = LatestDecision(_utc(2026, 9, 28, 13, 30), {"QLD": 0.40}, None, _band_hold())
+    assert evaluate_equity(late, recorded, held, running_since=None, settings=_SETTINGS) == []
+    blind = _decision(_utc(2026, 9, 28, 13, 30), {"QLD": 0.40})
+    assert _codes(evaluate_equity(late, blind, held, running_since=None, settings=_SETTINGS)) == [
+        "equity_position_over_target"
+    ]
+    beyond = _account((_qld(56_000.0),))
+    assert _codes(evaluate_equity(late, recorded, beyond, running_since=None, settings=_SETTINGS)) == [
+        "equity_position_over_target"
+    ]
+
+
+def test_over_target_ignores_a_band_record_malformed_or_for_another_symbol() -> None:
+    """Only a well-formed record for the same symbol widens the tolerance: a
+    foreign symbol, a missing band and a non-numeric band change nothing."""
+    late = _utc(2026, 9, 29, 14, 5)
+    held = _account((_qld(47_000.0),))
+    for entries in (
+        ({"symbol": "QQQ", "band": 0.08},),
+        ({"symbol": "QLD"},),
+        ({"symbol": "QLD", "band": "wide"},),
+        ({"band": 0.08},),
+    ):
+        decision = LatestDecision(_utc(2026, 9, 28, 13, 30), {"QLD": 0.40}, None, entries)  # type: ignore[arg-type]
+        assert _codes(evaluate_equity(late, decision, held, running_since=None, settings=_SETTINGS)) == [
+            "equity_position_over_target"
+        ]
+
+
+def test_over_target_still_alarms_for_an_unfilled_exit_with_a_band_record() -> None:
+    """The band can never hold an exit, so a cash decision whose DAY SELL did
+    not fill alarms even when the metadata carries an entry for that symbol."""
+    cash = LatestDecision(_utc(2026, 9, 28, 13, 30), {}, None, _band_hold())
+    alarms = evaluate_equity(
+        _utc(2026, 9, 29, 14, 5), cash, _account((_qld(98_000.0),)), running_since=None, settings=_SETTINGS
+    )
+    assert _codes(alarms) == ["equity_position_over_target"]
+    assert "QLD held 98.0% vs target 0.0%" in alarms[0].message
+
+
 @pytest.mark.parametrize(
     ("early_close_session", "next_session"),
     [
@@ -250,11 +318,19 @@ def test_over_target_waits_for_the_next_session_open_after_an_early_close(
 
 
 class _Repo:
-    def __init__(self, latest: tuple[datetime, dict[str, float]] | None) -> None:
+    def __init__(
+        self,
+        latest: tuple[datetime, dict[str, float]] | None,
+        gain_band: tuple[dict[str, object], ...] | None = None,
+    ) -> None:
         self.latest = latest
+        self.gain_band = gain_band
 
     def latest_decision_target(self, account_id: str, market: Market) -> tuple[datetime, dict[str, float]] | None:
         return self.latest
+
+    def latest_decision_gain_band(self, account_id: str, market: Market) -> tuple[dict[str, object], ...] | None:
+        return self.gain_band
 
 
 def _engine(repo: _Repo, *, enabled: bool = True) -> EngineRuntime:
@@ -306,6 +382,26 @@ def test_runtime_pass_is_edge_triggered_and_recovers(emitted) -> None:
     engine._intent_watchdog_pass(now + timedelta(minutes=2))
     assert [kind for kind, _ in emitted] == ["intent_alarm", "intent_recovered"]
     assert engine.intent_watchdog_status()["degraded_reasons"] == []
+
+
+def test_runtime_pass_reads_the_recorded_gain_band_hold(emitted) -> None:
+    """The persisted hold reaches the check through the repository reader: an
+    account 7 pp above a target the band deliberately held raises no alarm,
+    while the same account without the record is the everyday failed trim."""
+    latest = (_utc(2026, 9, 28, 13, 30), {"QLD": 0.40})
+    held = _account((_qld(47_000.0),))
+    recorded = _engine(_Repo(latest, _band_hold()))
+    recorded._last_account_snapshot = held
+    assert recorded._intent_watchdog_pass(_utc(2026, 9, 29, 14, 5)) == []
+    assert recorded.intent_watchdog_status()["degraded_reasons"] == []
+
+    blind = _engine(_Repo(latest))
+    blind._last_account_snapshot = held
+    alarms = blind._intent_watchdog_pass(_utc(2026, 9, 29, 14, 5))
+    assert [alarm["code"] for alarm in alarms] == ["equity_position_over_target"]
+    # Only the blind engine alarmed, and it did so through the operator path.
+    assert [kind for kind, _ in emitted] == ["intent_alarm"]
+    assert emitted[0][1]["category"] == "equity_position_over_target"
 
 
 def test_runtime_pass_is_inert_when_disabled_or_before_startup(emitted) -> None:

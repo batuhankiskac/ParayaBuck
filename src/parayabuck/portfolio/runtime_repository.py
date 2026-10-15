@@ -550,6 +550,24 @@ class PortfolioStateRepository:
         Read-only observability for the intent watchdog; None when the
         newest decision carries no cross-check record.
         """
+        check = self._latest_decision_metadata(account_id, market).get("signal_cross_check")
+        return dict(check) if isinstance(check, dict) else None
+
+    def latest_decision_gain_band(self, account_id: str, market: Market) -> tuple[dict[str, Any], ...] | None:
+        """``gain_band`` metadata of the newest decision for ``market``.
+
+        One mapping per downsize the A1u gain-scaled band deliberately did not
+        trade (``GainBandHold.as_metadata``). Read-only observability for the
+        intent watchdog, which must not call a recorded hold a failed order;
+        None when the newest decision carries no such record.
+        """
+        entries = self._latest_decision_metadata(account_id, market).get("gain_band")
+        if not isinstance(entries, (tuple, list)):
+            return None
+        return tuple(dict(entry) for entry in entries if isinstance(entry, dict))
+
+    def _latest_decision_metadata(self, account_id: str, market: Market) -> dict[str, Any]:
+        """Parsed ``metadata`` of the newest decision for ``market`` ({} if none)."""
         with self.store.lock:
             row = self.store.connection.execute(
                 """SELECT target_json FROM portfolio_decisions
@@ -558,14 +576,13 @@ class PortfolioStateRepository:
                 (account_id, market.value),
             ).fetchone()
         if row is None:
-            return None
+            return {}
         try:
             raw = json.loads(str(row[0]))
         except (TypeError, ValueError):
-            return None
+            return {}
         metadata = raw.get("metadata") if isinstance(raw, dict) else None
-        check = metadata.get("signal_cross_check") if isinstance(metadata, dict) else None
-        return dict(check) if isinstance(check, dict) else None
+        return metadata if isinstance(metadata, dict) else {}
 
     def record_decision_with_orders(
         self,

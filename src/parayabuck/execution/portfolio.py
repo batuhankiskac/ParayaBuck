@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import ROUND_DOWN, Decimal
@@ -119,6 +119,43 @@ class GainBandHold:
             "band": float(self.band),
             "gap": float(self.gap),
         }
+
+
+# Metadata key naming the symbols whose current target the RISK layer produced
+# rather than the strategy: the portfolio risk overlay lowering a weight below
+# the strategy's own, a halt (any reduction while halted), and a
+# risk-reduction-only target construction. The gain-scaled band is a tax-timing
+# device for the strategy's own drift trims, so those symbols keep the constant
+# band and their sell executes (``docs/research/gain_band_integration_v1.md``).
+GAIN_BAND_BYPASS_KEY = "gain_band_bypass"
+
+
+def gain_band_bypass_symbols(target: TargetPortfolio, market: Market) -> frozenset[str]:
+    """Canonical symbols of ``target`` the gain-scaled band must not hold."""
+    entries = (target.metadata or {}).get(GAIN_BAND_BYPASS_KEY)
+    if not isinstance(entries, (tuple, list)):
+        return frozenset()
+    symbols: set[str] = set()
+    for raw in entries:
+        if not isinstance(raw, str):
+            continue
+        try:
+            symbols.add(canonical_symbol(raw, market))
+        except ValueError:
+            symbols.add(raw)
+    return frozenset(symbols)
+
+
+def gain_band_bypass_metadata(
+    metadata: Mapping[str, object],
+    symbols: Iterable[str],
+    market: Market,
+) -> dict[str, object]:
+    """``metadata`` plus ``symbols`` marked as risk-driven reductions."""
+    existing = metadata.get(GAIN_BAND_BYPASS_KEY)
+    merged = set(existing) if isinstance(existing, (tuple, list)) else set()
+    merged.update(symbols)
+    return {**metadata, GAIN_BAND_BYPASS_KEY: tuple(sorted(merged))}
 
 
 @dataclass(frozen=True)
@@ -346,6 +383,10 @@ class PortfolioRiskOverlay:
             and (canonical_symbol(position.symbol, position.market) not in approved or position.external_qty > 1e-12)
         )
         desired = {canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights}
+        # The strategy's own weights, before this overlay lowers any of them: a
+        # target below its strategy weight is a risk-driven reduction, not a
+        # discretionary trim, so the gain-scaled band must not hold it.
+        strategy_desired = dict(desired)
         # Strategy alpha priority per canonical symbol (0 = unranked). When
         # the strategy declares ranks, position-count enforcement below
         # retains best-ranked names; otherwise the legacy target-weight
@@ -521,6 +562,14 @@ class PortfolioRiskOverlay:
             for symbol, weight in sorted(desired.items())
             if weight > 1e-12
         )
+        # Symbols this overlay pushed BELOW the strategy's own weight, plus
+        # everything it can still reduce while halted: those sells are risk
+        # enforcement, so the A1u band must decide them with the constant band.
+        reduced = {
+            weight.symbol for weight in weights if weight.weight < strategy_desired.get(weight.symbol, 0.0) - 1e-12
+        }
+        if halted:
+            reduced.update(weight.symbol for weight in weights)
         # gross_after is the actual expected account gross: immutable external
         # exposure plus the managed weights. The external floor carried inside
         # the target weights must not be counted a second time.
@@ -532,16 +581,19 @@ class PortfolioRiskOverlay:
             and position.external_qty > 1e-12
             and canonical_symbol(position.symbol, position.market) in weight_symbols
         )
+        metadata: dict[str, object] = {
+            **target.metadata,
+            "risk_overlay_reasons": tuple(halted_reasons),
+            "risk_overlay_halted": halted,
+            "risk_overlay_managed_exposure": sum(weight.weight for weight in weights) - external_in_weights,
+        }
+        if reduced:
+            metadata = gain_band_bypass_metadata(metadata, reduced, market)
         adjusted = replace(
             target,
             weights=weights,
             cash_weight=max(0.0, 1.0 - sum(weight.weight for weight in weights)),
-            metadata={
-                **target.metadata,
-                "risk_overlay_reasons": tuple(halted_reasons),
-                "risk_overlay_halted": halted,
-                "risk_overlay_managed_exposure": sum(weight.weight for weight in weights) - external_in_weights,
-            },
+            metadata=metadata,
         )
         gross_after = immutable_gross + sum(weight.weight for weight in weights) - external_in_weights
         return RiskOverlayDecision(
@@ -622,6 +674,9 @@ class TargetToOrderPlanner:
         }
         target_weights = {canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights}
         symbols = approved & (set(target_weights) | set(positions))
+        # Symbols whose current target the RISK layer produced: their downsize
+        # must execute, so they are decided by the constant band.
+        risk_reduced = gain_band_bypass_symbols(target, market)
         orders: list[PortfolioOrderRequest] = []
         for symbol in sorted(symbols):
             price = prices.get(symbol) or (positions[symbol].current_price if symbol in positions else 0.0)
@@ -642,8 +697,14 @@ class TargetToOrderPlanner:
             # The gain-scaled band (A1u) can only widen the band of a downward
             # resize between two positive weights, so that case must not be
             # skipped here: its own band is only known after the units the
-            # sell would consume are known.
-            gain_band_case = self.policy.downsize_gain_band is not None and 0.0 < target_weight < current_weight
+            # sell would consume are known. A reduction the risk overlay
+            # produced (or any risk-reduction-only decision) is not the
+            # strategy's own trim: it keeps the constant band and executes.
+            gain_band_case = (
+                self.policy.downsize_gain_band is not None
+                and 0.0 < target_weight < current_weight
+                and symbol not in risk_reduced
+            )
             if gap < self.policy.rebalance_band_pct and not gain_band_case:
                 continue
             delta = target_qty - current_qty
@@ -809,6 +870,7 @@ def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide, sa
 
 
 __all__ = [
+    "GAIN_BAND_BYPASS_KEY",
     "AssetTradingRules",
     "DownsizeGainBandVerdict",
     "GainBandHold",
@@ -823,6 +885,8 @@ __all__ = [
     "downsize_gain_fraction",
     "floor_increment",
     "floor_increment_decimal",
+    "gain_band_bypass_metadata",
+    "gain_band_bypass_symbols",
     "portfolio_execution_policy_from_config",
     "record_gain_band_holds",
 ]

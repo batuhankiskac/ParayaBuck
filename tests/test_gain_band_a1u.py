@@ -11,8 +11,10 @@ production path, ``tmp_path`` state only.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -30,20 +32,25 @@ from parayabuck.config import (
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
 from parayabuck.execution.portfolio import (
+    GAIN_BAND_BYPASS_KEY,
     AssetTradingRules,
     GainBandHold,
     PortfolioExecutionPolicy,
     PortfolioOrderRequest,
     PortfolioOrderSide,
     PortfolioRiskLimits,
+    PortfolioRiskOverlay,
     RiskOverlayDecision,
     TargetToOrderPlanner,
     downsize_gain_band_verdict,
     downsize_gain_fraction,
+    gain_band_bypass_metadata,
+    gain_band_bypass_symbols,
     portfolio_execution_policy_from_config,
     record_gain_band_holds,
 )
 from parayabuck.monitoring.daily_summary import build_equity_daily_summary
+from parayabuck.portfolio import runtime_service
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import RebalancePolicy, TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
@@ -95,19 +102,19 @@ def _account(*, qty: float = QTY, price: float = PRICE, equity: float = EQUITY) 
     )
 
 
-def _plan(
-    target_weight: float,
+def _plan_target(
+    target: TargetPortfolio,
     *,
     lots: object = "default",
     policy: PortfolioExecutionPolicy | None = None,
     qty: float = QTY,
     price: float = PRICE,
 ) -> tuple[tuple[PortfolioOrderRequest, ...], list[GainBandHold]]:
-    """Planner verdict for one symbol, with the suppressed downsizes collected."""
+    """Planner verdict for one target, with the suppressed downsizes collected."""
     holds: list[GainBandHold] = []
     open_lots = {"QLD": [(600.0, 40.0), (300.0, 99.5)]} if lots == "default" else lots
     orders = TargetToOrderPlanner(policy or _policy()).plan(
-        _target(target_weight),
+        target,
         _account(qty=qty, price=price),
         market=Market.EQUITY,
         prices={SYMBOL: price},
@@ -118,6 +125,18 @@ def _plan(
         gain_band_holds=holds,
     )
     return orders, holds
+
+
+def _plan(
+    target_weight: float,
+    *,
+    lots: object = "default",
+    policy: PortfolioExecutionPolicy | None = None,
+    qty: float = QTY,
+    price: float = PRICE,
+) -> tuple[tuple[PortfolioOrderRequest, ...], list[GainBandHold]]:
+    """Planner verdict for one symbol weight, with the suppressed downsizes collected."""
+    return _plan_target(_target(target_weight), lots=lots, policy=policy, qty=qty, price=price)
 
 
 def _engine(
@@ -406,6 +425,119 @@ def test_backtest_without_a_lot_book_falls_back_to_the_constant_band() -> None:
     orders, holds = _backtest_plan(0.88, lots=[])
     assert orders == [(SYMBOL, OrderSide.SELL.value)]
     assert holds == ()
+
+
+# ---------------------------------------------------------------------------
+# Risk-driven reductions bypass the band (review fix)
+# ---------------------------------------------------------------------------
+
+
+def _risk_limits(**overrides: object) -> PortfolioRiskLimits:
+    """Risk limits that never halt and never scale the sleeve on the fixtures."""
+    values: dict[str, object] = {
+        "daily_loss_limit": 0.20,
+        "drawdown_halt": 0.75,
+        "maximum_gross": 0.98,
+        "maximum_equity": 0.98,
+        "maximum_equity_asset": 0.98,
+        "minimum_cash": 0.02,
+        "maximum_positions": 8,
+    }
+    values.update(overrides)
+    return PortfolioRiskLimits(**values)  # type: ignore[arg-type]
+
+
+def _overlay(
+    target: TargetPortfolio,
+    *,
+    limits: PortfolioRiskLimits | None = None,
+    account: AccountSnapshot | None = None,
+) -> RiskOverlayDecision:
+    """The real overlay output for one strategy target."""
+    return PortfolioRiskOverlay(limits or _risk_limits()).apply(
+        target,
+        account or _account(),
+        market=Market.EQUITY,
+        approved_symbols=(SYMBOL,),
+        maximum_allocation=1.0,
+        mode="paper",
+    )
+
+
+def test_risk_capped_target_is_not_held_by_the_band() -> None:
+    """The overlay lowered the strategy's 0.92 to the 0.84 per-asset cap while
+    the account holds 0.90: the 6 pp sell enforces the cap, so the band must
+    not hold it. The same 6 pp gap as the strategy's OWN trim is still held."""
+    risk = _overlay(_target(0.92), limits=_risk_limits(maximum_equity_asset=0.84))
+    assert [weight.weight for weight in risk.target.weights] == [pytest.approx(0.84)]
+    assert risk.target.metadata[GAIN_BAND_BYPASS_KEY] == (SYMBOL,)
+
+    orders, holds = _plan_target(risk.target)
+    assert [(order.side, order.quantity) for order in orders] == [(PortfolioOrderSide.SELL, 60.0)]
+    assert holds == []
+
+    control, control_holds = _plan(0.84)
+    assert control == ()
+    assert [(hold.symbol, hold.band, hold.gap) for hold in control_holds] == [(SYMBOL, 0.08, pytest.approx(0.06))]
+
+
+def test_halted_decision_trades_its_own_trim() -> None:
+    """A daily-loss breach caps the target at the held weight and forbids new
+    risk: while the account is de-risking, its own 5 pp downsize executes
+    instead of being deferred for tax. Without the breach the band holds it."""
+    breach = replace(_account(), daily_pnl=-5_000.0)
+    risk = _overlay(_target(0.85), limits=_risk_limits(daily_loss_limit=0.04), account=breach)
+    assert risk.halted is True and risk.reasons == ("daily_loss_limit",)
+    assert risk.target.metadata[GAIN_BAND_BYPASS_KEY] == (SYMBOL,)
+
+    orders, holds = _plan_target(risk.target)
+    assert [(order.side, order.quantity) for order in orders] == [(PortfolioOrderSide.SELL, 50.0)]
+    assert holds == []
+
+    quiet, quiet_holds = _plan(0.85)
+    assert quiet == ()
+    assert [hold.band for hold in quiet_holds] == [0.08]
+
+
+def test_overlay_leaves_a_strategy_trim_band_eligible() -> None:
+    """The overlay only marks what IT lowered: a cap above the strategy's own
+    downsize keeps that downsize in the gain band."""
+    risk = _overlay(_target(0.85), limits=_risk_limits(maximum_equity_asset=0.90))
+    assert risk.target.metadata.get(GAIN_BAND_BYPASS_KEY) is None
+    orders, holds = _plan_target(risk.target)
+    assert orders == ()
+    assert [hold.symbol for hold in holds] == [SYMBOL]
+
+
+def test_backtest_engine_applies_the_same_risk_bypass() -> None:
+    """Parity: the engine's own target application reads the same metadata, so
+    a risk-lowered target trades there too."""
+    capped = _overlay(_target(0.92), limits=_risk_limits(maximum_equity_asset=0.84)).target
+    engine = _engine()
+    engine._apply_target(capped)
+    assert [(order.symbol, order.side.value) for order in engine._pending] == [(SYMBOL, OrderSide.SELL.value)]
+    assert engine._gain_band_holds == []
+
+    engine = _engine()
+    engine._apply_target(_target(0.84))
+    assert engine._pending == []
+    assert [hold.symbol for hold in engine._gain_band_holds] == [SYMBOL]
+
+
+def test_risk_reduction_only_construction_marks_its_symbols() -> None:
+    """The entry-latch/intermediate-risk construction (min with the held
+    weight) marks every symbol it caps: its sells are protective, never
+    tax-deferred, whatever the embedded gain."""
+    marked = gain_band_bypass_metadata({}, (SYMBOL,), Market.EQUITY)
+    assert marked[GAIN_BAND_BYPASS_KEY] == (SYMBOL,)
+    assert gain_band_bypass_symbols(_target(0.85), Market.EQUITY) == frozenset()
+    bypassed = replace(_target(0.85), metadata=marked)
+    assert gain_band_bypass_symbols(bypassed, Market.EQUITY) == frozenset({SYMBOL})
+    orders, holds = _plan_target(bypassed)
+    assert [(order.side, order.quantity) for order in orders] == [(PortfolioOrderSide.SELL, 50.0)]
+    assert holds == []
+    # Merging keeps what an earlier layer already marked.
+    assert gain_band_bypass_metadata(marked, ("SPY",), Market.EQUITY)[GAIN_BAND_BYPASS_KEY] == ("QLD", "SPY")
 
 
 # ---------------------------------------------------------------------------
@@ -740,10 +872,19 @@ def test_runtime_lots_come_from_the_bot_fill_ledger_fifo_and_fee_inclusive(tmp_p
     assert repo.owned_fifo_lots(ACCOUNT, SYMBOL, Market.EQUITY) == ()
 
 
-def test_runtime_holds_the_downsize_and_persists_it_with_the_decision(tmp_path: Path) -> None:
+def test_runtime_holds_the_downsize_and_persists_it_with_the_decision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """PAPER/LIVE end to end: the planner reads the bot's own lots from the fill
     ledger, the band holds a profitable downsize, and the persisted decision
-    carries the hold for the operator (and the daily summary)."""
+    carries the hold for the operator (and the daily summary). The decision
+    summary names the hold instead of claiming the target did not change."""
+    summaries: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        runtime_service,
+        "_observe",
+        SimpleNamespace(on_decision_summary=lambda **fields: summaries.append(fields)),
+    )
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _order_fill(repo, "buy", 900.0, 50.0, T0)
     broker = _RuntimeBroker(qty=900.0, price=PRICE, equity=EQUITY)
@@ -781,6 +922,37 @@ def test_runtime_holds_the_downsize_and_persists_it_with_the_decision(tmp_path: 
     assert hold["gap"] == pytest.approx(0.05)
     row = repo.decision_row(result.decision_id)
     assert json.loads(row["target_json"])["metadata"]["gain_band"] == list(result.target.metadata["gain_band"])
+    assert [summary["no_trade_reason"] for summary in summaries] == ["GAIN_BAND_HOLD"]
+
+
+def test_runtime_trades_a_risk_capped_downsize(tmp_path: Path) -> None:
+    """PAPER end to end: the per-asset cap lowers the strategy's 0.92 target to
+    0.84 while the account holds 0.90, and the runtime still submits the 6 pp
+    SELL (the band is not given the chance to defer it)."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _order_fill(repo, "buy", 900.0, 50.0, T0)
+    broker = _RuntimeBroker(qty=900.0, price=PRICE, equity=EQUITY)
+    runtime = PortfolioRuntime(
+        _ScriptedStrategy((0.92,)),
+        ("SPY", SYMBOL),
+        broker,
+        repo,
+        mode="paper",
+        maximum_allocation=1.0,
+        allow_static_universe=True,
+        account_id=ACCOUNT,
+        universe=_TestUniverse(),
+        universe_version="test-universe-v1",
+        risk_limits=_risk_limits(maximum_equity_asset=0.84),
+        execution_policy=PortfolioExecutionPolicy(downsize_gain_band=SHIPPED),
+    )
+    result = runtime.process_closed_bars(_runtime_bars())
+    assert [(order.side, order.quantity) for order in result.orders] == [(PortfolioOrderSide.SELL, 60.0)]
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+    assert result.target.weight_for(SYMBOL, Market.EQUITY) == pytest.approx(0.84)
+    metadata = json.loads(repo.decision_row(result.decision_id)["target_json"])["metadata"]
+    assert metadata[GAIN_BAND_BYPASS_KEY] == [SYMBOL]
+    assert "gain_band" not in metadata
 
 
 def test_runtime_lots_ignore_another_accounts_fills(tmp_path: Path) -> None:

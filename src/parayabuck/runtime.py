@@ -1025,8 +1025,19 @@ class EngineRuntime:
                 if raw is not None and callable(cross_check_reader)
                 else None
             )
+            gain_band_reader = getattr(portfolio_runtime.repository, "latest_decision_gain_band", None)
+            gain_band = (
+                gain_band_reader(portfolio_runtime.account_id, portfolio_runtime.market)
+                if raw is not None and callable(gain_band_reader)
+                else None
+            )
             latest = (
-                LatestDecision(raw[0], raw[1], cross_check if isinstance(cross_check, dict) else None)
+                LatestDecision(
+                    raw[0],
+                    raw[1],
+                    cross_check if isinstance(cross_check, dict) else None,
+                    gain_band if isinstance(gain_band, tuple) else None,
+                )
                 if raw is not None
                 else None
             )

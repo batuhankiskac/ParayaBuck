@@ -1,0 +1,19 @@
+main window 2000-03-09 -> 2026-09-29, 6679 sessions measured
+panel majority-hold fractions: instrument 0.7431, SPY member 0.7326, IWM member 0.6763
+vote agreement with the instrument's own majority: SPY 0.9114, IWM 0.8257
+
+arm | main-vote ON share | differs from C0's ON state (sessions, share) | flat->long / long->flat transitions vs C0 | early-leg share of sessions | full-weight share
+C0  0.7431     0 0.0000 | (78, 78) vs C0 (78, 78) | 0.0246 | 0.7431
+B1  0.7326   592 0.0886 | (103, 103) vs C0 (78, 78) | 0.0365 | 0.7326
+B2  0.7546    77 0.0115 | (66, 66) vs C0 (78, 78) | 0.0243 | 0.7546
+B3  0.7044   258 0.0386 | (104, 104) vs C0 (78, 78) | 0.0355 | 0.7044
+B4  0.7519   597 0.0894 | (63, 63) vs C0 (78, 78) | 0.0566 | 0.7519
+
+B2 latch: sessions where C0's main vote is OFF but B2's is ON (delayed exits): 77
+B3/B4: sessions where C0's main vote is ON but the arm's is OFF (extra exits): B3 258, B4 269
+
+reduced OOS windows (instrument time-in-market):
+U1 ^IXIC: measured sessions 2860, instrument-own majority ON 0.8133, B1 (SPY vote) ON 0.8601, disagreement 0.0909
+U2 ^N225: measured sessions 9330, instrument-own majority ON 0.5697, B1 (SPY vote) ON 0.7735, disagreement 0.2817
+U3 ^GDAXI: measured sessions 9547, instrument-own majority ON 0.7151, B1 (SPY vote) ON 0.7683, disagreement 0.1448
+U4 ^FTSE: measured sessions 9612, instrument-own majority ON 0.6879, B1 (SPY vote) ON 0.7706, disagreement 0.1591

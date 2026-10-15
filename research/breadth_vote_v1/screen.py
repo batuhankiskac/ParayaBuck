@@ -905,12 +905,14 @@ def engine_run(capital, i0, i1, days, mkt, oq, cq, wq, mode, m=M):
 
 
 # ----------------------------------------------------------------------------- after-tax bootstrap
-def boot_e1(n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS):
-    """Block-20 bootstrap on the fixed 2015-09 -> 2026-09 calendar with its realised USD/TRY and
-    YI-UFE; market returns (QQQ overnight/intraday/dividend + DTB3) and the two panel members'
-    returns resampled exactly as tax_asym_v2 / vt_level_tax_v1 / gain_band_v2. Pre-tax at `n_pre`
-    paths under both financing models (gate G5); after-tax progressive (B1) and flat 20 % (B2) at
-    the first `n_tax` paths, $100k."""
+def boot_tax(n_paths=TAX_BOOT_PATHS):
+    """Clean after-tax bootstrap: block-20 bootstrap of whole sessions on the fixed real
+    2015-09-01 -> 2026-09-30 calendar (its realised USD/TRY and YI-UFE), market returns (QQQ
+    overnight/intraday/dividend + DTB3) and the two panel members' returns resampled exactly as
+    tax_asym_v2 / vt_level_tax_v1 / gain_band_v2, `n_paths` paths, $100k, m = 2. Per path each arm
+    runs once in the progressive regime (B1-recent) and once with the flat 20 % account (B2). The
+    pure-E2 series is tracked under its own label as the engine/median fidelity anchor. The
+    pre-tax G5 bootstrap is `boot_main` (same draws, vectorised)."""
     all_days, arr, y = trv2.load()
     sub = [d for d in all_days if TAX_BOOT_LO <= d <= TAX_BOOT_HI]
     need = TAX_BOOT_L + TAX_BOOT_EXT
@@ -933,10 +935,9 @@ def boot_e1(n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS):
     npool = len(pool)
     L, EXT_ = TAX_BOOT_L, TAX_BOOT_EXT
     i0, i1 = TAX_BOOT_I0, len(fixed_dates) - 1
-    pre = {(md, a): [] for md in FIN for a in ARMS}
     at = {mode: {a: [] for a in ARMS} for mode in ("progressive", "flat")}
     anchor_e2 = {"progressive": [], "flat": []}
-    for pidx in range(max(n_pre, n_tax)):
+    for pidx in range(n_paths):
         pos = np.empty((1, L), dtype=np.int64)
         pos[:, 0] = rng.integers(0, npool, 1)
         jump = rng.random((1, L)) < 1 / BLOCK
@@ -960,45 +961,24 @@ def boot_e1(n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS):
         pm_iwm = np.concatenate([one, np.cumprod(iwm_m[idx] / iwm_m[idx - 1], axis=1)], axis=1)
         comps = early_components(pc)
         so, sc = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp + FIN["base"], EXP_Q)
-        so_c, sc_c = trv2.synthetic_2x(qo, qc, np.zeros_like(qc), yyp + FIN["calibrated"], EXP_Q)
-        vol_b, vol_c = trv2.vol_n(sc)[0], trv2.vol_n(sc_c)[0]
-        wants = {a: arm_wants(a, pc, pm_spy, pm_iwm, vol_b, comps)[0] for a in ARMS}
-        wants_c = {a: arm_wants(a, pc, pm_spy, pm_iwm, vol_c, comps)[0] for a in ARMS}
+        vol_b = trv2.vol_n(sc)[0]
+        W = {a: arm_wants(a, pc, pm_spy, pm_iwm, vol_b, comps)[0] for a in ARMS}
         wants_e2 = sized_wants(np.atleast_2d(e2_up(pc)), np.ones((1, pc.shape[1])), vol_b)[0]
-        legs = {"base": (so[0], sc[0], wants), "calibrated": (so_c[0], sc_c[0], wants_c)}
-        if pidx < n_pre:
-            for md, (o_, c_, W) in legs.items():
-                for arm in ARMS:
-                    r = engine_run(1.0, i0, i1, fixed_dates, mkt, o_, c_, W[arm], "pre_tax", m=M)
-                    k = len(r["_nav"]) - 1
-                    pre[(md, arm)].append((r["_nav"][-1] / r["_nav"][0]) ** (252 / k) - 1)
-        if pidx < n_tax:
-            o_, c_, W = legs["base"]
-            for mode in ("progressive", "flat"):
-                for arm in ARMS:
-                    r = engine_run(TAX_CAPITAL, i0, i1, fixed_dates, mkt, o_, c_, W[arm], mode, m=M)
-                    if not (r["terminal_usd_liquidated"] > 0) or r["terminal_usd_liquidated"] != r["terminal_usd_liquidated"]:
-                        raise RuntimeError(f"non-positive/NaN terminal on path {pidx} arm {arm} {mode}")
-                    at[mode][arm].append(r["cagr_usd_liquidated"])
-                r = engine_run(TAX_CAPITAL, i0, i1, fixed_dates, mkt, o_, c_, wants_e2, mode, m=M)
-                anchor_e2[mode].append(r["cagr_usd_liquidated"])
-        if (pidx + 1) % 500 == 0:
-            print(f"  E1 path {pidx + 1}/{max(n_pre, n_tax)}", flush=True)
+        for mode in ("progressive", "flat"):
+            for arm in ARMS:
+                r = engine_run(TAX_CAPITAL, i0, i1, fixed_dates, mkt, so[0], sc[0], W[arm], mode, m=M)
+                if not (r["terminal_usd_liquidated"] > 0) or r["terminal_usd_liquidated"] != r["terminal_usd_liquidated"]:
+                    raise RuntimeError(f"non-positive/NaN terminal on path {pidx} arm {arm} {mode}")
+                at[mode][arm].append(r["cagr_usd_liquidated"])
+            r = engine_run(TAX_CAPITAL, i0, i1, fixed_dates, mkt, so[0], sc[0], wants_e2, mode, m=M)
+            anchor_e2[mode].append(r["cagr_usd_liquidated"])
+        if (pidx + 1) % 200 == 0:
+            print(f"  boot_tax path {pidx + 1}/{n_paths}", flush=True)
 
-    out = {"n_paths_pre": n_pre, "n_paths_tax": n_tax, "seed": SEED, "block": BLOCK,
-           "calendar_start": fixed_dates[0], "calendar_end": fixed_dates[-1], "pre": {}, "tax": {}}
-    for md in FIN:
-        base = np.array(pre[(md, CONTROL)])
-        out["pre"][md] = {}
-        for arm in ARMS:
-            c = np.array(pre[(md, arm)])
-            d = c - base
-            out["pre"][md][arm] = {
-                "cagr_median": float(np.median(c)), "diff_vs_C0_median_pp": float(np.median(d) * 100),
-                "diff_vs_C0_mean_pp": float(np.mean(d) * 100), "share_gt_0": float(np.mean(d > 0)),
-                "p05_pp": float(np.percentile(d, 5) * 100), "p95_pp": float(np.percentile(d, 95) * 100)}
+    out = {"n_paths": n_paths, "seed": SEED, "block": BLOCK, "capital_usd": TAX_CAPITAL,
+           "calendar_start": fixed_dates[0], "calendar_end": fixed_dates[-1], "tax": {}}
     for mode in ("progressive", "flat"):
-        e = {"n_paths": n_tax, "capital_usd": TAX_CAPITAL}
+        e = {"n_paths": n_paths, "capital_usd": TAX_CAPITAL}
         for arm in ARMS:
             e[arm] = {"cagr_median": float(np.median(at[mode][arm]))}
         base = np.array(at[mode][CONTROL])
@@ -1027,8 +1007,9 @@ def g_return(a, c):
 
 
 def gates_and_selection(res):
-    pre, win, oos, inst, boot, oos_boot = (res["pre"], res["windows"], res["oos"], res["instruments"],
-                                           res["bootstrap"], res["oos_bootstrap"])
+    pre, win, oos, inst = res["pre"], res["windows"], res["oos"], res["instruments"]
+    boot, oos_boot = res["bootstrap"], res["oos_bootstrap"]
+    boot_tax_res = res["boot_tax"]
     g = {}
     for arm in CANDIDATES:
         r = {}
@@ -1038,7 +1019,7 @@ def gates_and_selection(res):
             r[f"G1_{md}"] = g_return(a2, c2)
             r[f"G2_{md}"] = bool(a2["max_dd"] <= c2["max_dd"] + 0.01)
             r[f"G3_{md}"] = bool(a2["2017_end"]["cagr"] >= c2["2017_end"]["cagr"] - 0.01)
-            r[f"G5_{md}"] = bool(boot["pre"][md][arm]["diff_vs_C0_median_pp"] >= BOOT_MEDIAN_MIN_PP)
+            r[f"G5_{md}"] = bool(boot[md][arm]["diff_vs_C0_median_pp"] >= BOOT_MEDIAN_MIN_PP)
             r[f"G6_{md}"] = g_return(a1, c1)
         a2, c2 = pre["base"]["m2"][arm], pre["base"]["m2"][CONTROL]
         wins = [p for p in ("P1", "P2", "P3") if a2["subperiods"][p]["cagr"] > c2["subperiods"][p]["cagr"]]
@@ -1070,7 +1051,7 @@ def gates_and_selection(res):
         r["AT_cells"] = at_cells
         boots = {}
         for label, mode in (("B1_recent", "progressive"), ("B2_flat", "flat")):
-            v = boot["tax"][mode][f"{arm}_vs_{CONTROL}"]
+            v = boot_tax_res["tax"][mode][f"{arm}_vs_{CONTROL}"]
             boots[label] = {"median_delta_pp": v["median_delta_cagr_pp"], "share_gt_0": v["share_gt_0"],
                             "p05_pp": v["p05_delta_cagr_pp"], "p95_pp": v["p95_delta_cagr_pp"],
                             "pass": bool(v["median_delta_cagr_pp"] >= BOOT_MEDIAN_MIN_PP
@@ -1103,7 +1084,7 @@ def gates_and_selection(res):
 
 
 # ----------------------------------------------------------------------------- harness
-def harness(run_boot=True):
+def harness():
     """Control reproduction on real data. No candidate arm is simulated here."""
     checks, bad = {}, 0
     days, arr, y = trv2.load()
@@ -1183,25 +1164,31 @@ def harness(run_boot=True):
                 if abs(v["diff_pp"]) > TAX_TOL:
                     bad += 1
     boot = {}
-    if run_boot:
-        b = boot_e1(n_pre=TAX_BOOT_PATHS, n_tax=TAX_BOOT_PATHS)
-        for mode, label in (("progressive", "R2"), ("flat", "R2")):
-            got = b["tax"][mode]["C0"]["cagr_median"]
-            boot[f"{mode}_R2"] = {"reference": BOOT_ANCHOR[mode][label], "reproduced": got,
-                                  "diff_pp": (got - BOOT_ANCHOR[mode][label]) * 100}
-            if abs(got - BOOT_ANCHOR[mode][label]) > 0.0010:
-                bad += 1
-        boot["e2_anchor"] = {mode: {"reference": BOOT_ANCHOR[mode]["E2"],
-                                    "reproduced": b["anchor_e2_100k"][mode]["cagr_median"]}
-                             for mode in ("progressive", "flat")}
-        for md in FIN:
-            got = b["pre"][md]["C0"]["cagr_median"]
-            boot[f"pre_{md}"] = {"reference": REF_BOOT_CAGR_MEDIAN[md], "reproduced": got,
-                                 "diff_pp": (got - REF_BOOT_CAGR_MEDIAN[md]) * 100}
-            if abs(got - REF_BOOT_CAGR_MEDIAN[md]) > 0.0050:
-                bad += 1
     return {"reproduction_checks": checks, "n_outside_tolerance": bad, "pre_tax_anchors": anchors,
             "after_tax_anchors": tax, "bootstrap_control": boot, "pass": bool(bad == 0)}
+
+
+def check_boot_anchors(boot_tax, boot_main_res):
+    """Fidelity anchors for the two bootstraps (control only). `boot_tax` must reproduce
+    tax_harvest_v2's R2 medians (progressive 3.5155 %, flat 3.9678 % at $100k) and its pure-E2
+    anchor; `boot_main_res` must reproduce fast_reentry_v1's R2 pre-tax 10-year medians."""
+    checks, bad = {}, 0
+    for mode in ("progressive", "flat"):
+        got = boot_tax["tax"][mode][CONTROL]["cagr_median"]
+        checks[f"boot_tax_{mode}_R2"] = {"reference": BOOT_ANCHOR[mode]["R2"], "reproduced": got,
+                                         "diff_pp": (got - BOOT_ANCHOR[mode]["R2"]) * 100}
+        if abs(got - BOOT_ANCHOR[mode]["R2"]) > 0.0010:
+            bad += 1
+        checks[f"boot_tax_{mode}_E2_anchor"] = {
+            "reference": BOOT_ANCHOR[mode]["E2"], "reproduced": boot_tax["anchor_e2_100k"][mode]["cagr_median"],
+            "diff_pp": (boot_tax["anchor_e2_100k"][mode]["cagr_median"] - BOOT_ANCHOR[mode]["E2"]) * 100}
+    for md in FIN:
+        got = boot_main_res[md][CONTROL]["cagr_median"]
+        checks[f"boot_main_{md}_R2"] = {"reference": REF_BOOT_CAGR_MEDIAN[md], "reproduced": got,
+                                        "diff_pp": (got - REF_BOOT_CAGR_MEDIAN[md]) * 100}
+        if abs(got - REF_BOOT_CAGR_MEDIAN[md]) > 0.0050:
+            bad += 1
+    return {"checks": checks, "n_outside_tolerance": bad, "pass": bool(bad == 0)}
 
 
 # ----------------------------------------------------------------------------- the run
@@ -1258,8 +1245,11 @@ def run() -> dict:
             continue
         inst[key] = instrument_window(idays, io, ic, iy, ARMS)
     # ---- bootstraps
-    print("E1 bootstrap (pre-tax + B1/B2)", flush=True)
-    boot = boot_e1()
+    print("G5 pre-tax bootstrap", flush=True)
+    cg, tv = boot_main(ARMS)
+    boot = boot_summary(cg, tv, ARMS, FIN)
+    print("B1/B2 after-tax bootstrap", flush=True)
+    boot_tax_res = boot_tax()
     print("G8 OOS bootstrap", flush=True)
     rng = np.random.default_rng(SEED)
     per = {k: boot_oos_market(k, rng, ARMS) for k in OOS_WINDOWS}
@@ -1275,7 +1265,7 @@ def run() -> dict:
                                  "share_gt_0": float(np.mean(d > 0)), "paths": int(len(d))}
     print("bootstraps done", flush=True)
     return {"pre": pre, "windows": win, "oos": oos, "instruments": inst, "quality": quality,
-            "bootstrap": boot, "oos_bootstrap": oos_boot}
+            "bootstrap": boot, "boot_tax": boot_tax_res, "oos_bootstrap": oos_boot}
 
 
 # ----------------------------------------------------------------------------- smoke (synthetic)
@@ -1395,7 +1385,7 @@ def main() -> None:
         sys.exit(0 if sm["pass"] else 1)
     if not sm["pass"]:
         sys.exit(1)
-    hc = harness(run_boot=(mode == "--run"))
+    hc = harness()
     for k, v in hc["reproduction_checks"].items():
         if isinstance(v, dict) and "diff_pp" in v:
             print(f"harness {k}: ref {v['reference']:.8f} repro {v['reproduced']:.8f} diff {v['diff_pp']:+.6f} pp")
@@ -1407,9 +1397,16 @@ def main() -> None:
         sys.exit(0 if hc["pass"] else 1)
 
     res = run()
-    cg, tv = boot_main(ARMS)
-    boot = boot_summary(cg, tv, ARMS, FIN)
+    bc = check_boot_anchors(res["boot_tax"], res["bootstrap"])
+    for k, v in bc["checks"].items():
+        print(f"bootstrap anchor {k}: ref {v['reference']:.8f} repro {v['reproduced']:.8f} "
+              f"diff {v['diff_pp']:+.6f} pp")
+    print(f"bootstrap anchors n_outside_tolerance={bc['n_outside_tolerance']} "
+          f"{'PASS' if bc['pass'] else 'FAIL'}")
+    if not bc["pass"]:
+        sys.exit(1)
     gates = gates_and_selection(res)
+    pre, boot = res["pre"], res["bootstrap"]
 
     out = {
         "campaign": "breadth_vote_v1",
@@ -1424,8 +1421,9 @@ def main() -> None:
                           "^RUT x factor; each member carries the production votes on its own closes",
             "bootstrap_main": {"seed": SEED, "paths": PRE_BOOT_PATHS, "block": BLOCK, "warmup": trv2.WARM,
                                "measured": trv2.MEASURED, "m": M},
-            "bootstrap_e1": {"seed": SEED, "paths_pre": PRE_BOOT_PATHS, "paths_tax": TAX_BOOT_PATHS,
-                             "calendar": [TAX_BOOT_LO, TAX_BOOT_HI], "block": BLOCK, "m": M},
+            "bootstrap_tax": {"seed": SEED, "paths": TAX_BOOT_PATHS,
+                              "calendar": [TAX_BOOT_LO, TAX_BOOT_HI], "block": BLOCK, "m": M,
+                              "capital_usd": TAX_CAPITAL},
             "bootstrap_oos": {"seed": SEED, "paths_per_market": OOS_PATHS_PER_MARKET, "block": BLOCK,
                               "returns_per_path": OOS_BOOT_L, "m": M},
             "oos_windows": {k: list(v) for k, v in OOS_MARKETS.items()},
@@ -1433,9 +1431,9 @@ def main() -> None:
             "signals": "production votes on each panel member's own price closes: close > SMA200; "
                        "252-session price return > 0; close > 126-session max/min midpoint",
         },
-        "smoke": sm, "harness_check": hc,
-        "main_window": res["pre"], "bootstrap_main_block20_m2": boot,
-        "after_tax_windows": res["windows"], "after_tax_bootstrap": res["bootstrap"],
+        "smoke": sm, "harness_check": hc, "bootstrap_anchor_check": bc,
+        "main_window": pre, "bootstrap_main_block20_m2": boot,
+        "after_tax_windows": res["windows"], "after_tax_bootstrap": res["boot_tax"],
         "oos": res["oos"], "oos_bootstrap": res["oos_bootstrap"],
         "instruments": res["instruments"], "quality": res["quality"],
         "gates": gates["arms"], "selection": gates["selection"],
@@ -1485,7 +1483,7 @@ def main() -> None:
     L.append("")
     L.append("after-tax bootstraps (block-20, 1000 paths, 2015-09..2026-09 calendar, $100k)")
     for label, mode in (("B1_recent progressive", "progressive"), ("B2_flat 20%", "flat")):
-        b = res["bootstrap"]["tax"][mode]
+        b = res["boot_tax"]["tax"][mode]
         L.append(f"  {label}: C0 median after-tax CAGR {p(b[CONTROL]['cagr_median'])}")
         for arm in CANDIDATES:
             d = b[f"{arm}_vs_{CONTROL}"]

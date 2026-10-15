@@ -1,0 +1,94 @@
+breadth_vote_v1 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | C0 = production R2 (E2 + 0.5x early re-entry)
+smoke: PASS; harness: PASS (n_outside_tolerance=0)
+
+[base] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | m=1 CAGR
+  C0    15.48%   46.76% 0.331   32.71%   -0.06%   14.30%   32.71%  5.99 |    7.89%  +0.000pp |   15.75%
+  B1    13.69%   54.09% 0.253   24.45%   -2.81%   21.03%   24.45%  7.39 |    7.79%  -0.275pp |   14.03%
+  B2    15.41%   48.46% 0.318   32.71%   -1.85%   16.37%   32.71%  5.16 |    8.42%  +0.359pp |   15.65%
+  B3    14.74%   47.44% 0.311   28.15%   -0.41%   17.23%   28.15%  7.61 |    7.15%  -0.692pp |   15.09%
+  B4    15.65%   46.45% 0.337   30.63%   -1.17%   18.57%   30.63%  5.49 |    8.50%  +0.735pp |   15.91%
+
+[calibrated] m=2: arm CAGR maxDD Calmar 2017+ P1 P2 P3 turn/yr | boot20 median, median(arm-C0) | m=1 CAGR
+  C0    14.90%   46.88% 0.318   31.96%   -0.41%   13.62%   31.96%  5.99 |    7.43%  +0.000pp |   15.17%
+  B1    13.12%   54.20% 0.242   23.75%   -3.16%   20.32%   23.75%  7.39 |    7.33%  -0.273pp |   13.45%
+  B2    14.82%   48.59% 0.305   31.96%   -2.21%   15.67%   31.96%  5.16 |    7.93%  +0.350pp |   15.06%
+  B3    14.19%   47.54% 0.298   27.44%   -0.74%   16.56%   27.44%  7.61 |    6.73%  -0.671pp |   14.53%
+  B4    15.06%   46.59% 0.323   29.90%   -1.56%   17.86%   29.90%  5.49 |    8.03%  +0.722pp |   15.31%
+
+trades (base, m=2): arm | full window: round trips/yr, resizes/yr, sells/yr, turnover/yr (entries+exits / resizes) | 2017+: round trips/yr, sells/yr, turnover/yr
+  C0   2.97  55.95  29.56  5.99 (3.84 / 2.15) |  1.54  34.27  4.02
+  B1   4.14  52.45  28.46  7.39 (5.46 / 1.93) |  2.98  33.86  6.14
+  B2   2.52  56.40  29.44  5.16 (3.01 / 2.15) |  1.54  34.27  4.02
+  B3   4.03  50.45  27.45  7.61 (5.54 / 2.07) |  2.26  32.73  5.20
+  B4   2.60  61.78  32.27  5.49 (3.25 / 2.24) |  2.15  35.29  4.89
+
+after-tax ($100k, progressive, liquidated): window | arm pre-tax -> after-tax CAGR (delta vs C0 pre-tax) maxDD taxUSD sells/yr turnover/yr
+  2000_03_to_2026_09
+    C0    15.47% ->   10.16% ( -5.313pp) DD   46.76% tax    766,160 sells/yr  30.7 turn/yr  6.00
+    B1    13.68% ->    8.53% ( -6.942pp) DD   54.09% tax    555,752 sells/yr  29.6 turn/yr  7.41
+    B2    15.41% ->    9.98% ( -5.493pp) DD   50.34% tax    740,098 sells/yr  30.6 turn/yr  5.17
+    B3    14.74% ->    9.63% ( -5.843pp) DD   47.44% tax    680,505 sells/yr  28.7 turn/yr  7.62
+    B4    15.65% ->   10.48% ( -4.997pp) DD   46.45% tax    756,485 sells/yr  33.5 turn/yr  5.50
+  2010_01_to_end
+    C0    22.16% ->   14.71% ( -7.453pp) DD   43.78% tax    553,536 sells/yr  31.4 turn/yr  6.21
+    B1    21.32% ->   13.68% ( -8.477pp) DD   43.07% tax    527,473 sells/yr  29.1 turn/yr  6.63
+    B2    23.21% ->   15.35% ( -6.813pp) DD   50.18% tax    623,482 sells/yr  31.1 turn/yr  5.20
+    B3    21.33% ->   14.05% ( -8.113pp) DD   34.75% tax    507,448 sells/yr  29.3 turn/yr  7.62
+    B4    24.42% ->   16.87% ( -5.289pp) DD   43.74% tax    712,353 sells/yr  33.0 turn/yr  5.26
+  2017_01_to_end
+    C0    32.53% ->   22.89% ( -9.647pp) DD   36.24% tax    360,297 sells/yr  35.6 turn/yr  4.14
+    B1    24.28% ->   16.34% (-16.197pp) DD   42.70% tax    199,489 sells/yr  35.3 turn/yr  6.26
+    B2    32.53% ->   22.89% ( -9.647pp) DD   36.24% tax    360,297 sells/yr  35.6 turn/yr  4.14
+    B3    27.97% ->   19.48% (-13.051pp) DD   34.49% tax    258,042 sells/yr  34.2 turn/yr  5.32
+    B4    30.45% ->   21.89% (-10.645pp) DD   32.75% tax    291,856 sells/yr  36.7 turn/yr  5.01
+
+after-tax bootstraps (block-20, 1000 paths, 2015-09..2026-09 calendar, $100k)
+  B1_recent progressive: C0 median after-tax CAGR    3.52%
+    B1  median dCAGR  -0.306pp share>0 0.461 p05  -6.760 p95  +5.453
+    B2  median dCAGR  +0.216pp share>0 0.569 p05  -2.429 p95  +2.844
+    B3  median dCAGR  -0.500pp share>0 0.400 p05  -4.029 p95  +2.694
+    B4  median dCAGR  +0.560pp share>0 0.562 p05  -4.740 p95  +5.740
+  B2_flat 20%: C0 median after-tax CAGR    3.97%
+    B1  median dCAGR  -0.248pp share>0 0.461 p05  -6.593 p95  +5.374
+    B2  median dCAGR  +0.229pp share>0 0.562 p05  -2.348 p95  +2.840
+    B3  median dCAGR  -0.520pp share>0 0.398 p05  -4.152 p95  +2.783
+    B4  median dCAGR  +0.422pp share>0 0.562 p05  -4.710 p95  +5.605
+
+OOS (calibrated, m=2, reduced window set): window instrument period | arm CAGR / maxDD
+  U1 ^IXIC  1988-09-09->1999-12-31 | C0 26.27%/35.55%  B1 26.66%/40.12%  B2 26.93%/37.24%  B3 24.42%/35.86%  B4 29.86%/31.46%
+  U2 ^N225  1988-09-21->2026-09-29 | C0 2.05%/65.04%  B1 1.54%/91.56%  B2 1.48%/81.20%  B3 4.15%/55.79%  B4 1.72%/86.16%
+  U3 ^GDAXI 1989-01-03->2026-09-29 | C0 9.47%/58.10%  B1 10.56%/52.77%  B2 10.07%/60.27%  B3 8.25%/55.74%  B4 8.18%/56.53%
+  U4 ^FTSE  1988-09-12->2026-09-29 | C0 -1.38%/85.45%  B1 4.85%/56.70%  B2 -0.29%/77.90%  B3 0.25%/77.53%  B4 -0.84%/77.50%
+  not applicable: GSPC_1957_1999, M2_GSPC_1934_1956 (instrument is the SPY proxy; ^RUT starts 1987-09-10)
+OOS pooled bootstrap (U1..U4, 8,000 paths) median(arm-C0): B1 +2.311pp  B2 +0.494pp  B3 +0.348pp  B4 +0.684pp
+
+instruments (21 ETFs, panel = {ETF, SPY, IWM}): arm | median dCAGR pp, share CAGR>0, n DD within +3pp, share, worst DD instrument
+  B1   +0.939 0.619 11/21 0.524 EWS +31.93pp
+  B2   +0.000 0.476 11/21 0.524 EWH +21.47pp
+  B3   +0.202 0.571 20/21 0.952 EEM +6.77pp
+  B4   +0.203 0.571 13/21 0.619 EEM +22.96pp
+
+gates (G1_base G1_calibrated G2_base G2_calibrated G3_base G3_calibrated G5_base G5_calibrated G6_base G6_calibrated G4 G7 G8 G9 AT B1 B2 F3):
+  B1  G1_base=F G1_calibrated=F G2_base=F G2_calibrated=F G3_base=F G3_calibrated=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=F G8=P G9=P AT=F B1=F B2=F F3=F -> FAIL
+      G7 median +0.740pp, 3/4 windows >= -0.5pp, 2/4 DD within +3pp; B1 -0.306pp/0.46, B2 -0.248pp/0.46
+  B2  G1_base=F G1_calibrated=F G2_base=F G2_calibrated=F G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=F G6_calibrated=F G4=F G7=F G8=P G9=P AT=F B1=P B2=P F3=F -> FAIL
+      G7 median +0.626pp, 3/4 windows >= -0.5pp, 3/4 DD within +3pp; B1 +0.216pp/0.57, B2 +0.229pp/0.56
+  B3  G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=F G8=P G9=P AT=F B1=F B2=F F3=P -> FAIL
+      G7 median +0.204pp, 2/4 windows >= -0.5pp, 4/4 DD within +3pp; B1 -0.500pp/0.40, B2 -0.520pp/0.40
+  B4  G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=F G3_calibrated=F G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=F G7=F G8=P G9=P AT=F B1=P B2=P F3=F -> FAIL
+      G7 median +0.105pp, 3/4 windows >= -0.5pp, 3/4 DD within +3pp; B1 +0.560pp/0.56, B2 +0.422pp/0.56
+
+AT cells (after-tax $100k, liquidated CAGR arm vs C0):
+  B1  2000_03_to_2026_09: 8.53% vs 10.16% (F)  2010_01_to_end: 13.68% vs 14.71% (F)  2017_01_to_end: 16.34% vs 22.89% (F)
+  B2  2000_03_to_2026_09: 9.98% vs 10.16% (F)  2010_01_to_end: 15.35% vs 14.71% (P)  2017_01_to_end: 22.89% vs 22.89% (F)
+  B3  2000_03_to_2026_09: 9.63% vs 10.16% (F)  2010_01_to_end: 14.05% vs 14.71% (F)  2017_01_to_end: 19.48% vs 22.89% (F)
+  B4  2000_03_to_2026_09: 10.48% vs 10.16% (P)  2010_01_to_end: 16.87% vs 14.71% (P)  2017_01_to_end: 21.89% vs 22.89% (F)
+
+cost stress (report only): base CAGR at m=1/2/4 and m=4 max DD
+  C0  15.75% / 15.48% / 14.92% | 47.44%
+  B1  14.03% / 13.69% / 13.02% | 54.78%
+  B2  15.65% / 15.41% / 14.93% | 49.13%
+  B3  15.09% / 14.74% / 14.05% | 48.02%
+  B4  15.91% / 15.65% / 15.15% | 47.06%
+
+eligible []; selected: none

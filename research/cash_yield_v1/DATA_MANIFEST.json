@@ -1,0 +1,90 @@
+{
+ "campaign": "cash_yield_v1",
+ "note": "Offline study: no network download. Every price/FX/CPI/rate input is an existing committed research file, restored unchanged from the branch research/band_h2_combo_v1 (which checked them out of research/gain_band_v3 unchanged); the SHA-256 values were re-computed in this worktree. Uses: stress_robustness_v1_daily.csv (QQQ/SPY/QLD open, close, dividend bars: the main window, both bootstraps and the QQQ series behind the synthetic QLD*), stress_robustness_v1_dtb3.csv (DTB3: synthetic-Qld* financing, the OOS/instrument financing, and the new idle-cash yield rate), after_tax_tr_v1_usdtry_cbrt.csv (USD/TRY conversion of gains, tax payments and the interest income), after_tax_tr_v1_yiufe.csv (Yi-UFE indexation and the deflated bracket ceilings and declaration bars), ewma_band_v1_{gspc,index,tb3ms}.csv (the six OOS windows), range_vol_v2_*.csv (19) + range_vol_v1_{spy,dia,iwm}.csv (the 21 quality-passing ETFs; EWC excluded by range_vol_v2's fixed rule). The TRY/Yi-UFE calendar starts 2000-01 / 1999-01, so no after-tax stage starts before 2000-03-09. Two entries are derived evidence rather than inputs: K_ANCHORS.json (the control's published cells, generated from research/band_h2_combo_v1/RESULTS.json by cell-by-cell path mapping) and research/band_h2_combo_v1/RESULTS.json itself (the source of those anchors).",
+ "files": {
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "bytes": 172726,
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+   "restored_from": "research/band_h2_combo_v1 (unchanged)",
+   "source": "reused from existing research data",
+   "source_url": "CBRT USD/TRY forex buying rate (as recorded by after_tax_tr_v1)",
+   "range": "2000-01-03 .. 2026-10-09",
+   "used_by": "tax_engine.load_market -> USD/TRY conversion of gains, tax payments and the credited interest"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "bytes": 17845,
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+   "restored_from": "research/band_h2_combo_v1 (unchanged)",
+   "source": "reused from existing research data",
+   "source_url": "TUIK Yi-UFE monthly index (as recorded by after_tax_tr_v1; TCMB/TUIK chained)",
+   "range": "1999-01 .. 2026-09",
+   "used_by": "tax_engine -> Yi-UFE indexation of the acquisition month, the deflated bracket ceilings, and the 22,000 x scale(year) TRY declaration bar of Z2"
+  },
+  "data/historical/ewma_band_v1_gspc.csv": {
+   "bytes": 1145471,
+   "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+   "restored_from": "research/band_h2_combo_v1 (unchanged)",
+   "source": "reused from existing research data",
+   "used_by": "gate G7 window ^GSPC 1957-01-02 -> 1999-12-31"
+  },
+  "data/historical/ewma_band_v1_index.csv": {
+   "bytes": 4114163,
+   "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+   "restored_from": "research/band_h2_combo_v1 (unchanged)",
+   "source": "reused from existing research data",
+   "used_by": "gate G7 windows M1-M5: ^IXIC/^GSPC/^N225/^GDAXI/^FTSE OHLC"
+  },
+  "data/historical/ewma_band_v1_tb3ms.csv": {
+   "bytes": 4439,
+   "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+   "restored_from": "research/band_h2_combo_v1 (unchanged)",
+   "source": "reused from existing research data",
+   "used_by": "gate G7: TB3MS pre-1954 T-bill rate for the M2 window (and the cash-yield rate there)"
+  },
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "bytes": 2671225,
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+   "restored_from": "research/band_h2_combo_v1 (unchanged)",
+   "source": "reused from existing research data",
+   "range": "1999-03-10 .. 2026-09-29",
+   "used_by": "trend_robustness_v2.load() -> QQQ/SPY/QLD open, close, dividend bars (main window and both bootstraps)"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "bytes": 301157,
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+   "restored_from": "research/band_h2_combo_v1 (unchanged)",
+   "source": "reused from existing research data",
+   "source_url": "FRED DTB3 (3-Month Treasury Bill Secondary Market Rate, discount basis)",
+   "range": "1954-01-04 .. 2026-09-28 (daily, ffilled over holidays)",
+   "used_by": "trend_robustness_v2.load() -> DTB3 financing rate; the OOS T-bill fallback; and this study's idle-cash yield rate: d3 = DTB3, rate[i] = max(0, DTB3[i-1] - spread) / 252. Main-window mean DTB3 1.915 %/yr (6,642 obs), 2015-09..2021 mean 0.896 %, 2022-01..2026-09 mean 3.977 %, last 4.10 %"
+  },
+  "research/cash_yield_v1/K_ANCHORS.json": {
+   "bytes": 9131,
+   "sha256": "61e51340fc29dcd683aff5a071122d9680af91153e6a4c0d2dd233f78ecd45c9",
+   "restored_from": "n/a (authored in this worktree)",
+   "source": "generated mechanically from research/band_h2_combo_v1/RESULTS.json",
+   "source_sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
+   "source_url": "research/band_h2_combo_v1/RESULTS.json (branch research/band_h2_combo_v1, commit bdb7625d; the campaign that shipped K, preserved in tag archive/research/band-h2-combo-v1-2026-10)",
+   "used_by": "harness -> k_anchor_checks: the control K's published cells (174 leaves) compared cell-by-cell against this run's own output",
+   "key_map": {
+    "bootstrap_clean_seed20261011.pre.*.K.diff_vs_control_median_pp": "parent 'diff_vs_C0_median_pp' (the parent's C0 = production R2)",
+    "bootstrap_clean_seed20261011.tax.*.*.K_vs_R2.*": "parent 'K_vs_C0'",
+    "e3.*.K_vs_R2.*": "parent 'K_vs_C0'"
+   }
+  },
+  "research/band_h2_combo_v1/RESULTS.json": {
+   "bytes": 260050,
+   "sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
+   "restored_from": "n/a (present on this branch)",
+   "source": "published evidence of the parent campaign (committed in this worktree)",
+   "source_url": "branch research/band_h2_combo_v1, commit bdb7625d",
+   "used_by": "provenance of K_ANCHORS.json only (read, never run)"
+  }
+ },
+ "external_documentation": {
+  "note": "read-only web, no download, no data file: the two sources below fix the three pre-registered yield parameters (the rate spread, the accrual/credit timing) and the availability answer. Quoted in PREREGISTRATION.md section 2.2 and docs/research/cash_yield_v1.md.",
+  "alpaca_fdic_sweep_faq": "https://alpaca.markets/support/fdic-sweep-program-faq (August 2026) and https://docs.alpaca.markets/us/docs/fdic-sweep-program (updated 2026-07-07): interest accrues daily on the day's ending swept balance, is realized monthly on the last business day of the month and stays invested to compound; Individual and business trading accounts; USD base currency; opt-in",
+  "alpaca_rate": "https://alpaca.markets/blog/alpaca-launches-high-yield-cash-program-for-trading-api-users-enabling-growth-on-deposits (updated 2026-09-17): up to 3.56 % APY on uninvested USD balances from 2026-09-22, i.e. about DTB3 - 0.5 pp at the 4.10 % DTB3 of 2026-09-28; https://alpaca.markets/learn/live-trading-account-non-us (updated 2026-03-11): a funded non-US-resident Trading API account can participate in the High-Yield Cash offering",
+  "turkish_tax": "GIB Menkul Sermaye Iradi Vergi Rehberi 2026 (Yayin No 584) section 3.2: MSI that is neither withheld in Turkey nor exempt -- explicitly including 'yurt disindan elde edilen diger menkul sermaye iratlari' and 'her turlu alacak faizleri' -- is declared when the total exceeds 18,000 TL (22,000 TL for 2026); the figure is a declaration bar, not an exemption, and the whole amount is declared once it is passed"
+ }
+}

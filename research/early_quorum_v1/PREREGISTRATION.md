@@ -249,4 +249,55 @@ tax advice.**
 
 ## 10. Amendments
 
-*(none yet)*
+**Disclosure of the pre-commit / post-commit activity (all before any real run).**
+
+*Before the pre-registration commit `af40c6f3`:* `--smoke` (synthetic prices only) and two
+`--harness` attempts on real data (the first was terminated by a 300 s command cap inside the deep
+bootstrap; the second reached only the deep bootstrap's first 500 paths). **No candidate arm was
+simulated and no gate outcome, SUMMARY or RESULTS.json existed at the time of the commit.**
+*After the commit, before the first real `--run`:* several **code-path probes** executed `harness`
+and `run` with deliberately tiny resample counts (`PRE_BOOT_PATHS` 30–40, `TAX_BOOT_PATHS` 10–12,
+`OOS_PATHS_PER_MARKET` 10–20, `EI_PATHS` 6–10) and wrote only to `/tmp/…eq_probe_*`, so they could
+not touch `RESULTS.json`; their deterministic stages (pre-tax main window, after-tax windows, OOS,
+21 instruments, E1, E2, the plateau block, LOEO) were full-size and therefore did produce
+candidate-arm numbers before this section was written. **No arm, parameter, stage, seed, threshold
+or gate in sections 4–6 was changed in response**; the only content change after the commit is the
+structural-claim correction below, which is a statement about the device's shape, not a gate.
+
+**A1. The structural claim in §4.4 was made directional and measured, not asserted.** §4.4 as
+committed claimed "production ⊆ Q2 ⊆ Q1, while Q3 and Q1 cross". The gating part is unchanged and
+logical (same exit rule, strictly larger entry sets ⇒ production ⊆ Q2 ⊆ Q1, asserted on the real
+series). The Q1/Q3 part was **not** asserted in general and is now **reported, not gated**: on the
+main path Q3's active set is a strict subset of Q1's (Q3-only sessions 0, Q1-only sessions 6 —
+Q3 holds through one-condition dips, while Q1 can stay active through a session Q3 has left), and
+in principle neither contains the other. `device_structure` records both counts.
+
+**A2. Post-commit bug fixes and plumbing corrections** (none touches an arm, a parameter, a stage,
+a seed, a gate threshold or the selection rule; each was found by `--smoke`, `--harness` or a
+`/tmp` code-path probe):
+
+1. `main()`'s harness print loop crashed on the boolean checks (`"reference" in v` on a bool).
+2. The harness's engine-identity check was wrong: it compared the **K** engine against
+   `simulate_band_overlay`, but that simulator implements H2 alone (no A1u band). It now asserts
+   the **H2** engine against the overlay simulator (bit for bit) and, separately, that K and C0
+   share the same target series and differ only by the fill rule.
+3. `boot`'s pre-tax block now stores one delta cell **per baseline** (`{arm}_vs_{ctrl}`) and
+   re-exports the parent campaign's five cell names as the arm-versus-`C0` (= production R2)
+   comparison, which is what `gain_band_v3/RESULTS.json` published. (The control of *this* study is
+   K, so the old single "vs C0" naming would have silently compared K-relative deltas against
+   R2-relative reference cells.)
+4. `wants_by_arm`/`sized_pair` return the full `[P, T]` target array (the batched OOS and
+   instrument bootstraps index path rows), and the now-unused `wants_for` helper was removed.
+5. `boot_instrument` unpacked `load_instrument`'s six return values incorrectly.
+6. `stage_loeo` no longer requires the control's own early episode to start exactly on the
+   published entry date: it uses the published span directly (the dated spans are the objects the
+   survey and `fast_reentry_v1` discuss).
+7. `early_state` is computed as the vectorised "last entry / last mandatory exit" recurrence, with
+   `_early_state_loop` kept as the session-by-session reference; `--smoke` asserts the two agree
+   for **every** spec on both a random-walk and an adversarial flicker series, and `--harness`
+   asserts the production spec equals `r2_state` bit for bit.
+8. The OOS and instrument bootstraps simulate only the control and the candidates, and the
+   pre-registration's own `--harness` bootstrap check was folded into the deep block, which now
+   asserts K's bootstrap anchors directly (pre-tax medians and $100k deltas versus R2).
+9. `--smoke`'s structural checks were corrected to the provable inclusions
+   (production ⊆ Q2 ⊆ Q1) — see A1.

@@ -1307,15 +1307,29 @@ def boot(seed=SEED, block=BLOCK, arms=ARMS_ALL, n_pre=PRE_BOOT_PATHS, n_tax=TAX_
            "arms": list(arms), "calendar_start": fixed_dates[0], "calendar_end": fixed_dates[-1],
            "pre": {}, "tax": {}}
     for md in (FIN if n_pre > 0 else ()):   # no pre-tax paths -> no pre-tax block
-        base = np.array(pre[(md, CONTROL)])
         out["pre"][md] = {}
         for arm in arms:
             c = np.array(pre[(md, arm)])
-            d = c - base
-            out["pre"][md][arm] = {
-                "cagr_median": float(np.median(c)), "diff_vs_C0_median_pp": float(np.median(d) * 100),
-                "diff_vs_C0_mean_pp": float(np.mean(d) * 100), "share_gt_0": float(np.mean(d > 0)),
-                "p05_delta_pp": float(np.percentile(d, 5) * 100), "p95_delta_pp": float(np.percentile(d, 95) * 100)}
+            e = {"cagr_median": float(np.median(c))}
+            for ctrl in baselines:
+                if arm == ctrl:
+                    continue
+                d = c - np.array(pre[(md, ctrl)])
+                e[f"{arm}_vs_{ctrl}"] = {
+                    "median_delta_pp": float(np.median(d) * 100),
+                    "mean_delta_pp": float(np.mean(d) * 100), "share_gt_0": float(np.mean(d > 0)),
+                    "p05_pp": float(np.percentile(d, 5) * 100),
+                    "p95_pp": float(np.percentile(d, 95) * 100)}
+            if "C0" in baselines and arm != "C0":
+                # the parent campaign's cell names for this block: its "C0" is production R2, so
+                # these five leaves are the arm-versus-R2 comparison gain_band_v3 published.
+                s = e[f"{arm}_vs_C0"]
+                e["diff_vs_C0_median_pp"] = s["median_delta_pp"]
+                e["diff_vs_C0_mean_pp"] = s["mean_delta_pp"]
+                e["share_gt_0"] = s["share_gt_0"]
+                e["p05_delta_pp"] = s["p05_pp"]
+                e["p95_delta_pp"] = s["p95_pp"]
+            out["pre"][md][arm] = e
     for cl in capitals:
         out["tax"][cl] = {}
         for mode in modes:
@@ -1776,15 +1790,17 @@ def harness(deep=False):
         and all(k_anchors["after_tax_100k"][wn]["pass"] for wn in TAX_WINDOWS))
     if not k_anchors["pass"]:
         bad += 1
-    # ---- the K engine == the reference overlay simulator (tail-10 December window, verbatim
-    # composition), and the production early spec == production `r2_state` bit for bit
+    # ---- the H2 engine == the reference overlay simulator (tail-10 December window, verbatim
+    # H2 rule), the production early spec == production `r2_state` bit for bit, and K differs
+    # from C0 only by its fill rule (both run production R2's target series)
     dt10 = december_tail(days, START, len(days) - 1, DEC_TAIL)
     ref_ov, _, _ = simulate_band_overlay(o[None, :], c[None, :], w_r2[None, :], COST_PER_SIDE * M,
                                          START, C0_BAND, dec_tail=dt10)
-    kov = engine_run(1.0, START, len(days) - 1, days, mkt, o, c, w_k, e2, "K", "pre_tax")
-    d_kov = float(np.max(np.abs(kov["_nav"] - ref_ov[0])))
-    checks["k_engine_equals_simulate_band_overlay"] = {"max_abs_nav_diff": d_kov,
-                                                       "dec_tail_sessions": int(len(dt10))}
+    h2ov = engine_run(1.0, START, len(days) - 1, days, mkt, o, c, w_r2, e2, "H2", "pre_tax")
+    d_kov = float(np.max(np.abs(h2ov["_nav"] - ref_ov[0])))
+    checks["h2_engine_equals_simulate_band_overlay"] = {
+        "max_abs_nav_diff": d_kov, "dec_tail_sessions": int(len(dt10)),
+        "deferred": int(h2ov["deferred"])}
     if d_kov > 1e-9:
         bad += 1
     comps_full = early_components(c)
@@ -1797,8 +1813,10 @@ def harness(deep=False):
             and checks["early_state_prod_equals_r2_state"]["factor_equal"]):
         bad += 1
     # ---- the device's structural ordering on the real main series: the production early set is
-    # contained in Q2's (drop `mom`) and Q2's in Q1's (the quorum); Q3 shares Q1's entry quorum
-    # but holds through single-condition dips, so Q1 and Q3 cross on the real path.
+    # contained in Q2's (drop `mom`) and Q2's in Q1's (the quorum). Both inclusions are logical
+    # (same exit rule, strictly larger entry sets), so they gate; the Q1/Q3 relation is measured
+    # and reported (Q3 shares Q1's entry but holds through one-condition dips, and Q1 can stay
+    # active through a session Q3 has left).
     f_prod = early_flag(c, e2, EARLY_PROD, comps_full)[0]
     f_q1 = early_flag(c, e2, EARLY_SPEC["Q1"], comps_full)[0]
     f_q2 = early_flag(c, e2, EARLY_SPEC["Q2"], comps_full)[0]
@@ -1806,21 +1824,23 @@ def harness(deep=False):
     checks["quorum_prod_subset_Q2"] = bool(np.all(f_q2 | ~f_prod))
     checks["quorum_Q2_subset_Q1"] = bool(np.all(f_q1 | ~f_q2))
     checks["quorum_Q2_strictly_tighter_than_Q1"] = bool(f_q1.sum() > f_q2.sum())
-    checks["quorum_Q3_crosses_Q1"] = bool(np.any(f_q3 & ~f_q1) and np.any(f_q1 & ~f_q3))
     if not (checks["quorum_prod_subset_Q2"] and checks["quorum_Q2_subset_Q1"]
-            and checks["quorum_Q2_strictly_tighter_than_Q1"] and checks["quorum_Q3_crosses_Q1"]):
+            and checks["quorum_Q2_strictly_tighter_than_Q1"]):
         bad += 1
     hold_all = np.sum([comps_full[0],
                        (np.isfinite(comps_full[2]) & (comps_full[1] < comps_full[2])),
                        comps_full[3]], axis=0)[0]
     monotonicity = {"early_sessions": {"prod": int(f_prod.sum()), "Q1": int(f_q1.sum()),
                                        "Q2": int(f_q2.sum()), "Q3": int(f_q3.sum())},
+                    "Q1_only_sessions": int((f_q1 & ~f_q3).sum()),
+                    "Q3_only_sessions": int((f_q3 & ~f_q1).sum()),
                     "hold_counts": {str(h): int(np.sum(hold_all == h)) for h in (0, 1, 2, 3)}}
-    # ---- the R2 reference row is *not* the K series (the two labels must not collapse)
-    checks["K_series_differs_from_C0_series"] = {
+    # ---- K and C0 share production R2's target series; they differ only by K's fill rule
+    checks["K_and_C0_share_target_series_and_differ_in_rule"] = {
         "max_abs_want_diff": float(np.max(np.abs(w_k - w_r2))),
-        "K_rule_differs_from_C0_rule": bool(kov["postponements"] > 0)}
-    if not checks["K_series_differs_from_C0_series"]["K_rule_differs_from_C0_rule"]:
+        "K_rule_differs_from_C0_rule": bool(h2ov["deferred"] > 0)}
+    kk = checks["K_and_C0_share_target_series_and_differ_in_rule"]
+    if kk["max_abs_want_diff"] != 0.0 or not kk["K_rule_differs_from_C0_rule"]:
         bad += 1
     boot_control = {}
     out = {"reproduction_checks": checks, "n_outside_tolerance": bad, "after_tax_anchors": tax,
@@ -2411,12 +2431,12 @@ def gates_quorum(res):
         # ---- G5: pre-tax block-20 bootstrap (base and calibrated)
         det, ok = {}, True
         for mdl in ("base", "calibrated"):
-            c = bt["pre"][mdl][arm]
-            good = bool(c["diff_vs_C0_median_pp"] >= G5_MIN_MEDIAN_PP)
-            det[mdl] = {"median_delta_pp": c["diff_vs_C0_median_pp"],
-                        "mean_delta_pp": c["diff_vs_C0_mean_pp"],
-                        "share_gt_0": c["share_gt_0"], "p05_pp": c["p05_delta_pp"],
-                        "p95_pp": c["p95_delta_pp"], "pass": good}
+            c = bt["pre"][mdl][arm][f"{arm}_vs_{CONTROL}"]
+            good = bool(c["median_delta_pp"] >= G5_MIN_MEDIAN_PP)
+            det[mdl] = {"median_delta_pp": c["median_delta_pp"], "mean_delta_pp": c["mean_delta_pp"],
+                        "share_gt_0": c["share_gt_0"], "p05_pp": c["p05_pp"],
+                        "p95_pp": c["p95_pp"],
+                        "cagr_median": bt["pre"][mdl][arm]["cagr_median"], "pass": good}
             ok = ok and good
         r["G5_detail"] = det
         r["G5"] = bool(ok)
@@ -2634,7 +2654,7 @@ def main() -> None:
     hs = harness(deep=True)
     for k in sorted(hs["reproduction_checks"]):
         v = hs["reproduction_checks"][k]
-        if "reference" in v:
+        if isinstance(v, dict) and "reference" in v:
             print(f"harness {k}: ref {v['reference']:.8f} repro {v['reproduced']:.8f} diff {v['diff']:+.6f}")
         else:
             print(f"harness {k}: {v}")
@@ -2784,12 +2804,14 @@ def main() -> None:
          f"K anchors {'PASS' if hs['k_anchors']['pass'] else 'FAIL'} "
          f"(pre-tax base m2 {hs['k_anchors']['pre_tax']['base_m2']['reproduced_cagr'] * 100:.4f}%); "
          f"R2 reference anchors {'PASS' if hs['r2_anchors']['pass'] else 'FAIL'}; "
-         f"K engine == simulate_band_overlay max|diff| "
-         f"{hs['reproduction_checks']['k_engine_equals_simulate_band_overlay']['max_abs_nav_diff']:.2e}; "
+         f"H2 engine == simulate_band_overlay max|diff| "
+         f"{hs['reproduction_checks']['h2_engine_equals_simulate_band_overlay']['max_abs_nav_diff']:.2e}; "
          f"early_state(prod) == r2_state "
          f"{hs['reproduction_checks']['early_state_prod_equals_r2_state']['on_eff_equal']}",
          f"early sessions on the main path (pre-tax, m = 2): "
-         + ", ".join(f"{a} {res['e5']['decisions']['early_sessions'][a]}" for a in ARMS_ALL),
+         + ", ".join(f"{a} {res['e5']['decisions']['early_sessions'][a]}" for a in STUDY_ARMS)
+         + " | plateau block: "
+         + ", ".join(f"{a} {plt['rows'][a]['early_sessions']}" for a in CANDIDATES + NEIGHBOURS),
          f"deep reference block: {rc['n_cells']} cells ({', '.join(rc['sections'])}), "
          f"{rc['n_mismatch']} mismatches (tol {rc['tolerance']}), max|diff| {rc['max_abs_diff']:.2e} -> "
          f"{'PASS' if rc['pass'] else 'FAIL'}",
@@ -2805,8 +2827,10 @@ def main() -> None:
                       for wn in TAX_WINDOWS)
         bts = "".join((f"{boot_ref['tax'][GATE_CAPITAL][md][f'{arm}_vs_{CONTROL}']['median_delta_cagr_pp']:+8.3f}"
                        if arm != CONTROL else "       -") for md in ("progressive", "flat"))
-        ei = float(np.median([res["instruments"][k][arm]["delta_cagr_pp"] for k in INSTRUMENTS]))
-        oo = float(np.median([res["oos"][wn][arm].get("delta_cagr_pp", 0.0) for wn in OOS_WINDOWS]))
+        ei = (0.0 if arm == CONTROL else
+              float(np.median([res["instruments"][k][arm]["delta_cagr_pp"] for k in INSTRUMENTS])))
+        oo = (0.0 if arm == CONTROL else
+              float(np.median([res["oos"][wn][arm].get("delta_cagr_pp", 0.0) for wn in OOS_WINDOWS])))
         fl = ("          -" if arm not in CANDIDATES
               else f"{sum(1 for x in keys if g[arm][x])}/{len(keys)}")
         L.append(f"  {arm:4s} {p(a['cagr'])} {p(ac['cagr'])} {p(a['max_dd'])} {p(ac['max_dd'])} "

@@ -1,8 +1,5 @@
 # Vol-target level on E2, pre-tax and after Turkish tax, v1 (2026-10-14)
 
-> Evidence for this report (`research/vt_level_tax_v1/` code, data inputs and results) is not on
-> `main`; it is preserved in tag `archive/research/vt-level-tax-v1-2026-10`.
-
 **No candidate passes the pre-registered rule, so production E2's 0.35 vol
 target (`equity_leveraged_trend_v1` 1.1.0) stays unchanged.** No arm is
 selected; the production identity is untouched.

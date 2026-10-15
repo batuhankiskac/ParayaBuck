@@ -1,0 +1,79 @@
+{
+  "campaign": "r2_tbill_combo_v1",
+  "network_downloads": "none for this campaign: every input is reused from an existing study on disk; BIL* is synthetic and the out-of-sample T-bill rates come from the same series the market's financing uses",
+  "files": {
+    "data/historical/ewma_band_v1_gspc.csv": {
+      "bytes": 1145471,
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "source": "reused from existing research data",
+      "source_path": "data/historical/ewma_band_v1_gspc.csv",
+      "used_by": "^GSPC OOS window 1957-1999 (signal_ensemble_v1 loader)"
+    },
+    "data/historical/ewma_band_v1_index.csv": {
+      "bytes": 4114163,
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "source": "reused from existing research data",
+      "source_path": "data/historical/ewma_band_v1_index.csv",
+      "used_by": "OOS markets M1 (^IXIC), M2 (^GSPC), M3 (^N225), M4 (^GDAXI), M5 (^FTSE)"
+    },
+    "data/historical/ewma_band_v1_tb3ms.csv": {
+      "bytes": 4439,
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "source": "reused from existing research data",
+      "source_path": "data/historical/ewma_band_v1_tb3ms.csv",
+      "used_by": "TB3MS before 1954-01-04, for the OOS wallets and BIL*"
+    },
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "source": "reused from existing research data",
+      "source_path": "data/historical/stress_robustness_v1_daily.csv",
+      "used_by": "QQQ open/close/dividend bars, main window 2000-03-09 -> 2026-09-29"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "source": "reused from existing research data",
+      "source_path": "data/historical/stress_robustness_v1_dtb3.csv",
+      "used_by": "DTB3: QLD* financing (base and calibrated), BIL* accrual, OOS rates"
+    },
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "source": "reused from existing research data (SHA-256 verified against research/vt_level_tax_v1/DATA_MANIFEST.json)",
+      "source_path": "data/historical/after_tax_tr_v1_usdtry_cbrt.csv",
+      "used_by": "after-tax engine: CBRT USD/TRY forex buying"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "source": "reused from existing research data (SHA-256 verified against research/vt_level_tax_v1/DATA_MANIFEST.json)",
+      "source_path": "data/historical/after_tax_tr_v1_yiufe.csv",
+      "used_by": "after-tax engine: Yi-UFE monthly indexation and tariff-bracket scaling"
+    },
+    "research/r2_tbill_combo_v1/E2_INTEGRATION_DEVIATION.json": {
+      "bytes": 16936,
+      "sha256": "7571ed991a08945533b176e5aa4938e5f369cc5a503f142e475821e2e61d99a4",
+      "source": "reused from existing research data (byte copy of research/ewma_band_v1/E2_INTEGRATION_DEVIATION.json)",
+      "source_path": "research/r2_tbill_combo_v1/E2_INTEGRATION_DEVIATION.json",
+      "used_by": "C0 reproduction check (production E2 row)"
+    }
+  },
+  "code_provenance": {
+    "research/r2_tbill_combo_v1/tax_engine.py": {
+      "bytes": 13413,
+      "sha256": "8efc33232378b93068adac681928fc51f69f8b13e994bec7be8acd227d14edf3",
+      "base": "research/fast_reentry_v2/tax_engine.py",
+      "base_sha256": "57b891e70473db0d57f24f91532c586f341ff17d78d75b0b7dc0ca9c9e6c6cd9",
+      "delta": "appended FlatAccount (B2), copied verbatim from research/vt_level_tax_v1/screen.py lines 1319-1334 of branch research/vt_level_tax_v1",
+      "origin": "research/vt_level_tax_v1/screen.py (corrected multi-instrument after-tax model, branch research/vt_level_tax_v1)"
+    },
+    "research/r2_tbill_combo_v1/screen.py": {
+      "base": "research/fast_reentry_v1/screen.py (tag archive/research/fast-reentry-v1-2026-10)",
+      "grafts": [
+        "research/tbill_sweep_v1/screen.py (tag archive/research/tbill-sweep-v1-2026-10): bill_series, the two-leg simulator and its S2_10 band rule",
+        "new: simulate_two, the two-book after-tax runner, the gate/verdict machinery and the smoke test"
+      ]
+    }
+  }
+}

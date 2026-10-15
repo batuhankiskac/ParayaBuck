@@ -1,0 +1,103 @@
+{
+  "campaign": "fast_reentry_v2",
+  "note": "All inputs are offline byte copies of already-committed research data or of files restored from the branches/tags named below. No network access and no download was needed for this study.",
+  "files": {
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "bytes": 2671225,
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "content": "QQQ/SPY/QLD daily open, close, dividend",
+      "date_range": "1993-01-29 .. 2026-09-29 (QQQ/SPY intersection; QQQ from 1999-03-10)",
+      "source": "reused from existing research data (trend_robustness_v2 / ewma_band_v1 harness)",
+      "source_path": "data/historical/stress_robustness_v1_daily.csv"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "bytes": 301157,
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "content": "FRED DTB3 3-month T-bill secondary market rate, daily",
+      "date_range": "1954-01-04 .. 2026-09-29",
+      "source": "reused from existing research data",
+      "source_path": "data/historical/stress_robustness_v1_dtb3.csv"
+    },
+    "data/historical/ewma_band_v1_gspc.csv": {
+      "bytes": 1145471,
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "content": "^GSPC daily close",
+      "date_range": "1927-12-30 .. 1999-12-31",
+      "source": "byte copy from the ewma_band_v1 harness (identical to signal_ensemble_v1's copy)",
+      "source_path": "data/historical/ewma_band_v1_gspc.csv"
+    },
+    "data/historical/ewma_band_v1_index.csv": {
+      "bytes": 4114163,
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "content": "multi-index OHLC (^IXIC, ^GSPC, ^N225, ^GDAXI, ^FTSE)",
+      "date_range": "1900 .. 2026-09-29",
+      "source": "byte copy from the ewma_band_v1 harness",
+      "source_path": "data/historical/ewma_band_v1_index.csv"
+    },
+    "data/historical/ewma_band_v1_tb3ms.csv": {
+      "bytes": 4439,
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "content": "FRED TB3MS monthly 3-month T-bill rate (for pre-1954 OOS windows)",
+      "date_range": "1934-01 .. 2026-09",
+      "source": "byte copy from the ewma_band_v1 harness",
+      "source_path": "data/historical/ewma_band_v1_tb3ms.csv"
+    },
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "content": "USD/TRY CBRT buying rate, daily",
+      "date_range": "2000-01-03 .. 2026-09",
+      "source": "restored from branch research/vt_level_tax_v1 (path data/historical/after_tax_tr_v1_usdtry_cbrt.csv); SHA-256 verified against that branch's DATA_MANIFEST.json",
+      "used_by": "after-tax stage (report only)"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "content": "Turkish Yi-UFE (PPI) index, monthly",
+      "date_range": "1999-01 .. 2026-09",
+      "source": "restored from branch research/vt_level_tax_v1; SHA-256 verified against that branch's DATA_MANIFEST.json",
+      "used_by": "after-tax stage (report only)"
+    },
+    "research/fast_reentry_v2/E2_INTEGRATION_DEVIATION.json": {
+      "bytes": 16936,
+      "sha256": "7571ed991a08945533b176e5aa4938e5f369cc5a503f142e475821e2e61d99a4",
+      "content": "e2_integration_v1 production-E2 deviation reference rows",
+      "source": "byte copy of research/ewma_band_v1/E2_INTEGRATION_DEVIATION.json (restored harness, tag archive/research/ewma-band-v1-2026-10)"
+    },
+    "research/fast_reentry_v1/RESULTS.json": {
+      "bytes": 208316,
+      "sha256": "65a3bc1e941ca0bf3956651e19073ca0e5ceed59db1d7078869f75f354294f14",
+      "content": "fast_reentry_v1 results (C0 and R2 rows used as the v2 harness reproduction reference)",
+      "source": "tracked file on this branch at commit fba5a02a8745db25db42ba95f32a7c08c8a3c484 (research/fast_reentry_v1/RESULTS.json)"
+    },
+    "research/vt_level_tax_v1/screen.py": {
+      "git_ref": "research/vt_level_tax_v1",
+      "git_blob_sha1": "59b246aa9c58bc691059a596061c82be5bed8c81",
+      "content": "corrected after-tax engine (lines 1009-1287 copied verbatim into research/fast_reentry_v2/tax_engine.py)",
+      "source": "git show research/vt_level_tax_v1:research/vt_level_tax_v1/screen.py"
+    },
+    "data/historical/range_vol_v1_dia.csv": {"sha256": "1300f2a61255d5699a349794179f09ead15703e2813025e6b64a2df16d91b14e", "date_range": "1998-01-20 .. 2026-10-12", "source": "byte copy of the range_vol_v1 instrument file (tag archive/research/range-vol-v2-2026-10)"},
+    "data/historical/range_vol_v1_iwm.csv": {"sha256": "c6ff89f0fb18506a9869de2d92b609c37815cc8fe634d064bb29218638573580", "date_range": "2000-05-26 .. 2026-10-12", "source": "byte copy of the range_vol_v1 instrument file (tag archive/research/range-vol-v2-2026-10)"},
+    "data/historical/range_vol_v1_spy.csv": {"sha256": "80c8bee68dcd3e1a8ee5fb3cf6828afc6cdc018aaf7b7395dbdac7b22e0ea0a4", "date_range": "1993-01-29 .. 2026-10-12", "source": "byte copy of the range_vol_v1 instrument file (tag archive/research/range-vol-v2-2026-10)"},
+    "data/historical/range_vol_v2_eem.csv": {"sha256": "2a7d0a7f3cd9c2e3c70abb3e366de7589141b5d1f82dd1c382f5fe2cba36aa99", "date_range": "2003-04-14 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file (tag archive/research/range-vol-v2-2026-10)"},
+    "data/historical/range_vol_v2_efa.csv": {"sha256": "61f525b17d70aa947aba6e6e1033cc2f626b815e7d8a9c05663ad1dd64bd345d", "date_range": "2001-08-27 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_ewa.csv": {"sha256": "09b6942f6660cc90306d5dc4cca54c6fd6a67e783517b6b9cb48f07094f49187", "date_range": "1996-03-18 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_ewc.csv": {"sha256": "51321cb9cc1f45f59023ec63d055535f4f2e2af4b5ed0bbe1b1e6dffa3e6518e", "date_range": "1996-03-18 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file", "excluded": "fails the range_vol_v2 quality rule (5.615% invalid/flat bars > 5%)"},
+    "data/historical/range_vol_v2_ewg.csv": {"sha256": "79ebfa1f9df848ae208f983ebcf41f0a71b9acf5decf6a3983886ebf3a4710f5", "date_range": "1996-03-18 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_ewh.csv": {"sha256": "d1e7a96c6b72d0a041ea362d42b9159bc42da7993d13f5947e6b5ae5972b3aee", "date_range": "1996-03-18 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_ewj.csv": {"sha256": "846ef8ec8b7206498f668f6e7df5d4d1a75afb61b4bf5059b25c279f704c4457", "date_range": "1996-03-18 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_ewl.csv": {"sha256": "344b8a554ad668e88df543ab0c8e8ed5c5ff350b756e2ba9813f3fd992d69780", "date_range": "1996-03-18 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_ews.csv": {"sha256": "92ad902cba58e1f3d4cffcb02fa6ead636b468437b014a60e7cb82611f75a12e", "date_range": "1996-03-18 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_ewu.csv": {"sha256": "8f0d1914103a55f47329264d2aecc5845f76791b0aa37cc1c7bd1d4b1529e9f8", "date_range": "1996-03-18 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_xlb.csv": {"sha256": "687e99eaaad489c85847fdfc84d8136545ab929b50e0f784eaf186ca8568a59a", "date_range": "1998-12-22 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_xle.csv": {"sha256": "7c06aac6ddbf7b8fef6dc1ba5d4022e1c22bf1f6f1e7a8685730f9b0542e17f1", "date_range": "1998-12-22 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_xlf.csv": {"sha256": "f6c34092978d4d1da1fc0ee96a395019c0d8fcb893694faf584d1ddf9367182e", "date_range": "1998-12-22 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_xli.csv": {"sha256": "c9039b8828807c489e1d64381e53f48a5dca5d0e77775cae515f30264508a7b8", "date_range": "1998-12-22 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_xlk.csv": {"sha256": "0916e3134092de2ca9049c9b317e1170980057ff8b0a5159b76e24fb6424fa61", "date_range": "1998-12-22 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_xlp.csv": {"sha256": "5a08680540fc09205024f5ebb997c24ffdb98d967a0aed10c616b2144e2d0670", "date_range": "1998-12-22 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_xlu.csv": {"sha256": "614e80d03bcbfd99af27a87981a3cb463d72654ce22f0c0bdb07052c8bea8421", "date_range": "1998-12-22 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_xlv.csv": {"sha256": "02e5df03723d01930af4ae348409d88cc7fbaf9513d7049e628777399e5533f7", "date_range": "1998-12-22 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"},
+    "data/historical/range_vol_v2_xly.csv": {"sha256": "abfd815334cae8cbeb25329e16041d994289eb5804103a8d7ef1930ee55b0ba6", "date_range": "1998-12-22 .. 2026-10-13", "source": "byte copy of the range_vol_v2 instrument file"}
+  },
+  "network": "none; all files are byte copies of committed research data or of files restored from the branches/tags named above"
+}

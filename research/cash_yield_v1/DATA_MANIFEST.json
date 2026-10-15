@@ -59,13 +59,14 @@
    "used_by": "trend_robustness_v2.load() -> DTB3 financing rate; the OOS T-bill fallback; and this study's idle-cash yield rate: d3 = DTB3, rate[i] = max(0, DTB3[i-1] - spread) / 252. Main-window mean DTB3 1.915 %/yr (6,642 obs), 2015-09..2021 mean 0.896 %, 2022-01..2026-09 mean 3.977 %, last 4.10 %"
   },
   "research/cash_yield_v1/K_ANCHORS.json": {
-   "bytes": 9131,
-   "sha256": "61e51340fc29dcd683aff5a071122d9680af91153e6a4c0d2dd233f78ecd45c9",
+   "bytes": 41535,
+   "sha256": "3e8ac70368b2fb2d6c6711ba5057ccd930d0a6cd0cc484e7f5930bb42aabe3e2",
    "restored_from": "n/a (authored in this worktree)",
-   "source": "generated mechanically from research/band_h2_combo_v1/RESULTS.json",
+   "source": "generated mechanically from research/band_h2_combo_v1/RESULTS.json (explicit dotted paths, 792 leaves)",
    "source_sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
    "source_url": "research/band_h2_combo_v1/RESULTS.json (branch research/band_h2_combo_v1, commit bdb7625d; the campaign that shipped K, preserved in tag archive/research/band-h2-combo-v1-2026-10)",
-   "used_by": "harness -> k_anchor_checks: the control K's published cells (174 leaves) compared cell-by-cell against this run's own output",
+   "used_by": "harness -> k_anchor_checks: the control K's published cells (792 leaves) compared cell-by-cell against this run's own output",
+   "amendment": "A1: regenerated with explicit leaf paths before the first complete --run (the first version's recursive flattener collapsed the prefixed sub-dicts to their section key). A2: the bootstrap's pre-block cells are control-relative, so the parent's K-vs-C0(R2) values are anchored under K_vs_R2 (my run's control is K, where K-minus-K is identically zero). No arm, parameter, stage, gate, seed or threshold changed.",
    "key_map": {
     "bootstrap_clean_seed20261011.pre.*.K.diff_vs_control_median_pp": "parent 'diff_vs_C0_median_pp' (the parent's C0 = production R2)",
     "bootstrap_clean_seed20261011.tax.*.*.K_vs_R2.*": "parent 'K_vs_C0'",

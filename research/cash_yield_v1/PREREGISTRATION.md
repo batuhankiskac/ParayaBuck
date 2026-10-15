@@ -316,4 +316,49 @@ pass, if any, is broad-based; they never enter the selection.
 
 ## 10. Amendments
 
-(none yet — this section is filled only if something changes after the pre-registration commit)
+**A1. `K_ANCHORS.json` regenerated with explicit leaf paths (before the first complete `--run`).**
+The first version of the anchor file was written by a recursive flattener that collapsed the
+prefixed sub-dicts (`after_tax_windows.*.K`, `e1.*.K`, …) to their section key, so `--harness`
+compared only 24 of its 174 entries and reported `K control anchor block: 0/174 cells compared …
+-> FAIL` (the 24 that did resolve matched exactly; the R2/E2 anchors, the `R2 == simulate_band`
+identity and the A_ALL cross-check all passed in that same run). The file is now generated with
+explicit dotted paths — **790 leaves** — and was verified against a real run of
+`pre_tax_main`/`after_tax_windows`/`cost_stress`: **279 cells compared, 0 mismatches, max|diff|
+5.0e-07** (the parent's `RESULTS.json` stores `round(x, 6)`, so 5e-7 is its own rounding). No arm,
+parameter, stage, gate, seed, threshold or selection rule changed, and no `RESULTS.json` existed
+before or after that failing run.
+
+**A2. Pre-run state.** Before the pre-registration commit `ac9011a3`: `--smoke` on synthetic
+random-walk prices only, plus one timing/anchoring probe that ran the *control* K alone on the main
+window (it reproduced K's published 15.7649 % / 10.7533 % / 46.6698 %, which is the harness
+requirement, not a result of this study). After that commit: `--harness` (one run, failed on A1
+alone). No non-control arm had been simulated on real data before the commit.
+
+**A3–A5. Three implementation fixes and one probe mode, all made before the first complete
+`--run` and none touching an arm, parameter, stage, seed, threshold, gate or the selection rule.**
+Each was a crash with a non-zero exit and **no** `RESULTS.json` written, and each was found by a
+**code-path probe**: `CASH_YIELD_PROBE=1 screen.py --run` shrinks the bootstrap path counts
+(60 pre-tax / 12 after-tax / 12 per E3 run / 20 per OOS market) and redirects `RESULTS.json` and
+`SUMMARY.txt` to `/tmp`, so the whole pipeline — stages, `reference_checks`, `gates_cash` and the
+summary writer — runs end to end in ~40 s without touching the study's outputs (the parent
+campaign's A2 probe, same idea). The probe's own numbers are meaningless by construction (tiny
+path counts) and were discarded.
+
+1. `stage_e3` ran its arms as `ARMS + ("R2",)` while its `deltas` list carries the report arm
+   `Z1x`, which was not among them (`KeyError: 'Z1x'`). Its arm list is now
+   `ARMS_ALL + ("R2",)`, so the E3 cell set matches what the summary prints.
+2. `gates_cash` built a headline `row` only for the candidates, but the summary's per-arm table
+   prints the control too (`KeyError: 'K'`). The row builder is now `_arm_row(arm, …)`, called for
+   the control as well (the control carries no gates — it is the reference).
+3. The summary asked the after-tax window record for `years`, which it does not carry
+   (`KeyError: 'years'`); it now uses the main window's year count.
+4. The synthetic smoke is evaluated once per `--run` and stored in `RESULTS.json["smoke"]`
+   (it was called twice, and the summary read a key `run()` does not set).
+
+**A6. Disclosed deviation from the survey's spread wording.** `idea_survey_v4` writes Z1's rate as
+"`DTB3 − 0.50 pp`/yr, accrued daily"; this study implements accrued **daily, credited monthly**,
+because Alpaca's own documentation of the sweep it models says exactly that ("Interest accrues
+daily based on the day's ending swept balance … realized (credited) monthly on the last business
+day of the month"). The pre-tax difference from daily compounding is < 0.02 pp, and the A_ALL
+cross-check confirms it: the pure-E2 series with this study's yield reproduces the archived arm's
+published 15.35 % at **15.343 %** (diff −0.007 pp).

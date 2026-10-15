@@ -109,6 +109,7 @@ import csv
 import importlib.util
 import json
 import math
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -1653,7 +1654,7 @@ def harness_deep():
     boot_ref = boot(seed=SEED, block=BLOCK, arms=boot_arms, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS,
                     capitals=("100k", "1M"), modes=("progressive", "flat"),
                     deltas=("K",) + CANDIDATES + REPORT_ARMS, baselines=(CONTROL, "R2"),
-                    pre_baselines=(CONTROL, "E2"), label="clean")
+                    pre_baselines=(CONTROL, "E2", "R2"), label="clean")
     ref = k_anchor_checks({"pre_tax_main": pre, "pre_tax_main_r_usd": pre_usd,
                            "after_tax_windows": win, "cost_stress_m4": cost,
                            "bootstrap_clean_seed20261011": boot_ref})
@@ -1899,7 +1900,7 @@ def stage_e3(arms):
     """E3: fresh after-tax bootstraps -- seed 20261015, blocks 10 and 40, 1,000 paths each,
     $100k, B1-recent (progressive) and B2-flat. Median delta and share > 0 per run."""
     out = {}
-    arms = tuple(arms) + (("R2",) if "R2" not in arms else ())
+    arms = tuple(dict.fromkeys(tuple(arms) + ARMS_ALL + ("R2",)))
     for block in E3_BLOCKS:
         for mode in ("progressive", "flat"):
             b = boot(seed=E3_SEED, block=block, arms=arms, n_pre=0, n_tax=E3_PATHS,
@@ -1958,6 +1959,50 @@ def reference_checks(res):
 
 
 # ----------------------------------------------------------------------------- gates (this study)
+def _arm_row(arm, pre, win, boot_ref):
+    """One arm's headline row (pre-tax, after-tax, bootstrap, yield details); the control gets
+    one too, so the summary table can print it."""
+    g5 = {md: boot_ref["pre"][md][arm][f"diff_vs_{CONTROL}_median_pp"] for md in FIN}
+    bb = {}
+    for mode in ("progressive", "flat"):
+        cell = (boot_ref["tax"][GATE_CAPITAL][mode].get(f"{arm}_vs_{CONTROL}")
+                if arm != CONTROL else None)
+        bb[mode] = {"median_delta_pp": cell["median_delta_cagr_pp"] if cell else 0.0,
+                    "share_gt_0": cell["share_gt_0"] if cell else 0.0}
+    dc = ({wn: win[wn][arm]["after_tax_cagr"] - win[wn][CONTROL]["after_tax_cagr"] for wn in TAX_WINDOWS}
+          if arm != CONTROL else {wn: 0.0 for wn in TAX_WINDOWS})
+    rx = win["2000_03_to_2026_09"][arm]
+    return {
+        "pre_tax_cagr_base_m2": pre["base"]["m2"][arm]["cagr"],
+        "pre_tax_cagr_cal_m2": pre["calibrated"]["m2"][arm]["cagr"],
+        "pre_tax_cagr_base_m1": pre["base"]["m1"][arm]["cagr"],
+        "pre_tax_cagr_delta_pp_base": (pre["base"]["m2"][arm]["cagr"] - pre["base"]["m2"][CONTROL]["cagr"]) * 100,
+        "pre_tax_cagr_delta_pp_cal": (pre["calibrated"]["m2"][arm]["cagr"] - pre["calibrated"]["m2"][CONTROL]["cagr"]) * 100,
+        "pre_tax_max_dd_base": pre["base"]["m2"][arm]["max_dd"],
+        "pre_tax_max_dd_cal": pre["calibrated"]["m2"][arm]["max_dd"],
+        "pre_tax_max_dd_delta_pp_base": (pre["base"]["m2"][arm]["max_dd"] - pre["base"]["m2"][CONTROL]["max_dd"]) * 100,
+        "pre_tax_max_dd_delta_pp_cal": (pre["calibrated"]["m2"][arm]["max_dd"] - pre["calibrated"]["m2"][CONTROL]["max_dd"]) * 100,
+        "turnover_annual": pre["base"]["m2"][arm]["turnover_annual"],
+        "sells_per_year": pre["base"]["m2"][arm]["sells_per_year"],
+        "turnover_ratio": pre["base"]["m2"][arm]["turnover_annual"] / pre["base"]["m2"][CONTROL]["turnover_annual"],
+        "after_tax_100k": {wn: {"after_tax_cagr": win[wn][arm]["after_tax_cagr"],
+                                "delta_vs_K_pp": dc[wn] * 100,
+                                "tax_usd": win[wn][arm]["tax_usd"],
+                                "max_dd_after_tax": win[wn][arm]["max_dd_after_tax"]}
+                           for wn in TAX_WINDOWS},
+        "after_tax_unliquidated_100k": {wn: win[wn][arm]["after_tax_cagr_unliquidated"]
+                                        for wn in TAX_WINDOWS},
+        "yield_usd_total_2000_window": rx.get("yield_usd_total"),
+        "yield_try_total_2000_window": rx.get("yield_try_total"),
+        "interest_tax_try_total_2000_window": rx.get("interest_tax_try_total"),
+        "yield_try_by_year": rx.get("yield_try_by_year"),
+        "oos_median_delta_pp": None,   # filled by the caller through the OOS stage
+        "boot_pre_median_delta_pp": g5,
+        "boot_after_tax_median_delta_pp": {mode: bb[mode]["median_delta_pp"] for mode in bb},
+        "boot_after_tax_share_gt_0": {mode: bb[mode]["share_gt_0"] for mode in bb},
+    }
+
+
 def gates_cash(res):
     """ewma_band_v1's G1-G9 against the control K, plus the common protocol's after-tax pair
     (AT: arm - K >= 0 after tax at $100k in all three windows; B1B2: clean-bootstrap median >= 0
@@ -2041,35 +2086,8 @@ def gates_cash(res):
         r["gate_list"] = {k: r[k] for k in ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "AT", "B1B2")}
         r["all_pass"] = bool(all(r["gate_list"].values()))
         # ---- headline row for the summary
-        r["row"] = {
-            "pre_tax_cagr_base_m2": pre["base"]["m2"][arm]["cagr"],
-            "pre_tax_cagr_cal_m2": pre["calibrated"]["m2"][arm]["cagr"],
-            "pre_tax_cagr_base_m1": pre["base"]["m1"][arm]["cagr"],
-            "pre_tax_cagr_delta_pp_base": (pre["base"]["m2"][arm]["cagr"] - pre["base"]["m2"][CONTROL]["cagr"]) * 100,
-            "pre_tax_cagr_delta_pp_cal": (pre["calibrated"]["m2"][arm]["cagr"] - pre["calibrated"]["m2"][CONTROL]["cagr"]) * 100,
-            "pre_tax_max_dd_base": pre["base"]["m2"][arm]["max_dd"],
-            "pre_tax_max_dd_cal": pre["calibrated"]["m2"][arm]["max_dd"],
-            "pre_tax_max_dd_delta_pp_base": (pre["base"]["m2"][arm]["max_dd"] - pre["base"]["m2"][CONTROL]["max_dd"]) * 100,
-            "pre_tax_max_dd_delta_pp_cal": (pre["calibrated"]["m2"][arm]["max_dd"] - pre["calibrated"]["m2"][CONTROL]["max_dd"]) * 100,
-            "turnover_annual": pre["base"]["m2"][arm]["turnover_annual"],
-            "sells_per_year": pre["base"]["m2"][arm]["sells_per_year"],
-            "turnover_ratio": turn,
-            "after_tax_100k": {wn: {"after_tax_cagr": win[wn][arm]["after_tax_cagr"],
-                                    "delta_vs_K_pp": at[wn],
-                                    "tax_usd": win[wn][arm]["tax_usd"],
-                                    "max_dd_after_tax": win[wn][arm]["max_dd_after_tax"]}
-                               for wn in TAX_WINDOWS},
-            "after_tax_unliquidated_100k": {wn: win[wn][arm]["after_tax_cagr_unliquidated"]
-                                            for wn in TAX_WINDOWS},
-            "yield_usd_total_2000_window": win["2000_03_to_2026_09"][arm].get("yield_usd_total"),
-            "yield_try_total_2000_window": (win["2000_03_to_2026_09"][arm].get("yield_try_total")),
-            "interest_tax_try_total_2000_window": win["2000_03_to_2026_09"][arm].get("interest_tax_try_total"),
-            "yield_try_by_year": win["2000_03_to_2026_09"][arm].get("yield_try_by_year"),
-            "oos_median_delta_pp": float(np.median(list(dc.values()))),
-            "boot_pre_median_delta_pp": g5,
-            "boot_after_tax_median_delta_pp": {mode: bb[mode]["median_delta_pp"] for mode in bb},
-            "boot_after_tax_share_gt_0": {mode: bb[mode]["share_gt_0"] for mode in bb},
-        }
+        r["row"] = _arm_row(arm, pre, win, boot_ref)
+        r["row"]["oos_median_delta_pp"] = float(np.median(list(dc.values())))
         # ---- reporting: the parent campaigns' E1/E2/E3 (not decisive)
         ds = [res["e1"][k][arm]["delta_after_tax_pp"] for k in INSTRUMENTS]
         n_p = int(sum(1 for d in ds if d > 0))
@@ -2104,6 +2122,10 @@ def gates_cash(res):
             "pre_tax_main_anchor": {"base_m2_cagr": REF_R2[("base", 2)][0],
                                     "cal_m2_cagr": REF_R2[("calibrated", 2)][0]},
             "after_tax_100k_anchor": {wn: TAX_ANCHORS["R2"][wn][1] for wn in TAX_WINDOWS}}
+    # ---- the control's own headline row (it is the reference, so it carries no gates)
+    g[CONTROL] = {"row": _arm_row(CONTROL, pre, win, boot_ref), "gate_list": {}, "all_pass": True,
+                  "failing_gates": [], "E1_report": {}, "E2_report": {}, "E3_report": {"runs": {}}}
+    g[CONTROL]["row"]["oos_median_delta_pp"] = 0.0
     # ---- selection
     passing = [a for a in CANDIDATES if g[a]["all_pass"]]
     if passing:
@@ -2156,7 +2178,7 @@ def run(boot_ref=None) -> dict:
         boot_ref = boot(seed=SEED, block=BLOCK, arms=ARMS_ALL + ("R2", "E2y"), n_pre=PRE_BOOT_PATHS,
                         n_tax=TAX_BOOT_PATHS, capitals=("100k", "1M"), modes=("progressive", "flat"),
                         deltas=("K",) + CANDIDATES + REPORT_ARMS, baselines=(CONTROL, "R2"),
-                        pre_baselines=(CONTROL, "E2"), label="clean")
+                        pre_baselines=(CONTROL, "E2", "R2"), label="clean")
     print("E1: after-tax 21 ETFs (R-INDEX)", flush=True)
     e1 = stage_e1(ARMS)
     print("E2: rolling January starts", flush=True)
@@ -2189,6 +2211,11 @@ def main() -> None:
         print(json.dumps(s, indent=2, sort_keys=True, default=float))
         print("smoke PASS" if s["pass"] else "smoke FAIL")
         sys.exit(0 if s["pass"] else 1)
+    if os.environ.get("CASH_YIELD_PROBE"):   # code-path probe: tiny path counts, scratch outputs
+        global PRE_BOOT_PATHS, TAX_BOOT_PATHS, E3_PATHS, OOS_PATHS_PER_MARKET, OUT, SUMMARY
+        PRE_BOOT_PATHS, TAX_BOOT_PATHS, E3_PATHS, OOS_PATHS_PER_MARKET = 60, 12, 12, 20
+        OUT, SUMMARY = Path("/tmp/cash_yield_probe_RESULTS.json"), Path("/tmp/cash_yield_probe_SUMMARY.txt")
+        print(f"PROBE MODE: tiny path counts, scratch outputs {OUT}", flush=True)
 
     hs = harness(run_boot=(mode == "--run"), deep=(mode in ("--harness", "--run")))
     for k in sorted(hs["reproduction_checks"]):
@@ -2238,7 +2265,7 @@ def main() -> None:
               f"{d['n_mismatch']} mismatches, max|diff| {d['max_abs_diff']:.2e}, "
               f"missing {d['n_missing_sections']} -> {'PASS' if d['pass'] else 'FAIL'}")
     print(f"harness {'PASS' if hs['pass'] else 'FAIL'} ({hs['n_outside_tolerance']} outside tolerance)")
-    if mode == "--harness" or not hs["pass"]:
+    if (mode == "--harness" or not hs["pass"]) and not os.environ.get("CASH_YIELD_PROBE"):
         sys.exit(0 if hs["pass"] else 1)
 
     res = run(boot_ref=hs["deep"]["boot_ref"])
@@ -2247,6 +2274,7 @@ def main() -> None:
     pre, win, e1, e2, e3, boot_ref = res["pre"], res["windows"], res["e1"], res["e2"], res["e3"], res["boot_ref"]
     ctrl = win[GATE_CAPITAL]
 
+    res["smoke"] = smoke()
     out = {
         "campaign": "cash_yield_v1",
         "params": {
@@ -2306,7 +2334,7 @@ def main() -> None:
                     "bootstrap_control_medians": hs["bootstrap_control"],
                     "deep_reference": {k: v for k, v in hs["deep"].items() if k != "boot_ref"}},
         "reference_check": {k: v for k, v in rc.items()},
-        "smoke": smoke(),
+        "smoke": res["smoke"],
         "pre_tax_main": pre,
         "pre_tax_main_r_usd": res["pre_usd"],
         "after_tax_windows": win,
@@ -2355,7 +2383,8 @@ def main() -> None:
         bc = "".join(f"{row['boot_after_tax_median_delta_pp'][md]:+7.3f}"
                      for md in ("progressive", "flat"))
         fl = "  ".join(f"{x}={'P' if g[arm]['gate_list'][x] else 'F'}"
-                       for x in ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "AT", "B1B2"))
+                       for x in ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "AT", "B1B2")
+                       ) if arm in CANDIDATES else "  (control: no gates)"
         L.append(f"  {arm:4s} {p(a['cagr'])} {p(ac['cagr'])} {p(a['max_dd'])} {p(ac['max_dd'])} "
                  f"{a['turnover_annual']:9.2f} |{ats} |{bc} | {row['oos_median_delta_pp']:+9.3f} | {fl}")
     rx = win[GATE_CAPITAL]["2000_03_to_2026_09"]
@@ -2368,8 +2397,8 @@ def main() -> None:
     L.append(f"gross interest credited (main window, base, m = 2, $100k) and the tax it caused:")
     for arm in ARMS:
         r = rx[arm]
-        L.append(f"  {arm:4s} gross {r['yield_usd_total']:>12,.0f} USD over {r['years']:.2f} yr "
-                 f"({r['yield_usd_total'] / r['years'] / r['terminal_usd'] * 100:.3f} % of ending NAV/yr); "
+        L.append(f"  {arm:4s} gross {r['yield_usd_total']:>12,.0f} USD over {w['years']:.2f} yr "
+                 f"({r['yield_usd_total'] / w['years'] / r['terminal_usd'] * 100:.3f} % of ending NAV/yr); "
                  f"TR interest income {r['yield_try_total']:>16,.0f} TRY; tax attributable to the interest "
                  f"{r['interest_tax_try_total']:>14,.0f} TRY")
     L.append("")

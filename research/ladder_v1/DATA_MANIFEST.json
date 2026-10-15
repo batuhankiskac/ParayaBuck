@@ -1,0 +1,77 @@
+{
+ "campaign": "ladder_v1",
+ "files": {
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "bytes": 172726,
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+   "source": "reused from existing research data",
+   "used_by": "tax_engine.load_market -> USD/TRY (CBRT buying) conversion of gains, tax payments and the rule-gain probe"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "bytes": 17845,
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+   "source": "reused from existing research data",
+   "used_by": "tax_engine -> Yi-UFE indexation of the acquisition month and the deflated bracket ceilings"
+  },
+  "data/historical/ewma_band_v1_gspc.csv": {
+   "bytes": 1145471,
+   "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+   "source": "reused from existing research data",
+   "used_by": "gate G7 window ^GSPC 1957-01-02 -> 1999-12-31"
+  },
+  "data/historical/ewma_band_v1_index.csv": {
+   "bytes": 4114163,
+   "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+   "source": "reused from existing research data",
+   "used_by": "gate G7 windows M1-M5: ^IXIC/^GSPC/^N225/^GDAXI/^FTSE OHLC"
+  },
+  "data/historical/ewma_band_v1_tb3ms.csv": {
+   "bytes": 4439,
+   "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+   "source": "reused from existing research data",
+   "used_by": "gate G7: TB3MS pre-1954 T-bill rate for the M2 window"
+  },
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "bytes": 2671225,
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+   "source": "reused from existing research data",
+   "used_by": "trend_robustness_v2.load() -> QQQ/SPY/QLD open, close, dividend bars (main window and the clean bootstrap)"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "bytes": 301157,
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+   "source": "reused from existing research data",
+   "used_by": "trend_robustness_v2.load() -> DTB3 financing rate; the OOS T-bill fallback"
+  },
+  "research/ladder_v1/K_ANCHORS.json": {
+   "bytes": 4527,
+   "restored_from": "branch research/band_h2_combo_v1 : research/band_h2_combo_v1/RESULTS.json",
+   "sha256": "d32e7a8fd06b0f1cefd080ecadf5500ce69cb5025778fc0c661a9e49393c5de3",
+   "source": "authored in this worktree from the parent's published cells",
+   "used_by": "harness() -> every control (K) and reference-row (R2) anchor, plus the paired-bootstrap pin"
+  },
+  "research/ladder_v1/PARENT_K_RESULTS.json": {
+   "bytes": 260050,
+   "restored_from": "branch research/band_h2_combo_v1 : research/band_h2_combo_v1/RESULTS.json",
+   "sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
+   "source": "published evidence of the parent campaign (copied into this worktree)",
+   "source_sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
+   "used_by": "the source of K_ANCHORS.json (not read by screen.py)"
+  },
+  "research/ladder_v1/tax_engine.py": {
+   "bytes": 13413,
+   "restored_from": "branch research/band_h2_combo_v1",
+   "sha256": "8efc33232378b93068adac681928fc51f69f8b13e994bec7be8acd227d14edf3",
+   "source": "byte copy of research/band_h2_combo_v1/tax_engine.py",
+   "used_by": "the Turkish after-tax account (BaseAccount/FlatAccount/Regime/Market/instalments)"
+  },
+  "research/trend_robustness_v2/screen.py": {
+   "bytes": 25032,
+   "sha256": "c2a70719029b912d33c22af79c43037663fd7accf9cb9bebaa67c1cdc0fbcd12",
+   "source": "code dependency (imported, main() never run)",
+   "used_by": "engine helpers: synthetic_2x, sma_up, vol_n, vt_of, max_dd, cagr, calmar, load, rnd, CHUNK, MEASURED, BAND, CAP, COST_PER_SIDE, EXP_Q"
+  }
+ },
+ "note": "Offline study: no network download. Every price/FX/CPI input is an existing committed research file, unchanged from research/band_h2_combo_v1 (which checked it out of gain_band_v3 unchanged); the SHA-256 values were re-computed in this worktree. The TRY/Yi-UFE calendar starts 2000-01 / 1999-01, so no after-tax stage starts before 2000-03-09. Two further entries are published evidence (not inputs): K_ANCHORS.json (the control's and the R2 reference row's cells, extracted from the parent's RESULTS.json) and PARENT_K_RESULTS.json (that file itself).",
+ "verified_on": "2026-10-15"
+}

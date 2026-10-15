@@ -1,0 +1,209 @@
+{
+ "campaign": "ladder_v1",
+ "control_C0_K": {
+  "after_tax_100k": {
+   "2000_03_to_2026_09": {
+    "after_tax_cagr": 0.107533,
+    "max_dd_after_tax": 0.466698,
+    "pre_tax_cagr": 0.157615,
+    "sells_per_year": 10.655164
+   },
+   "2010_01_to_end": {
+    "after_tax_cagr": 0.152354,
+    "max_dd_after_tax": 0.446272,
+    "pre_tax_cagr": 0.223435,
+    "sells_per_year": 10.630232
+   },
+   "2017_01_to_end": {
+    "after_tax_cagr": 0.23972,
+    "max_dd_after_tax": 0.349774,
+    "pre_tax_cagr": 0.330215,
+    "sells_per_year": 9.541643
+   }
+  },
+  "bootstrap_clean": {
+   "flat": {
+    "cagr_median": 0.040376
+   },
+   "progressive": {
+    "cagr_median": 0.038577
+   }
+  },
+  "oos": {
+   "GSPC_1957_1999": {
+    "cagr": 0.099674,
+    "max_dd": 0.396513
+   },
+   "M1": {
+    "cagr": 0.212731,
+    "max_dd": 0.412154
+   },
+   "M2": {
+    "cagr": 0.117257,
+    "max_dd": 0.581119
+   },
+   "M3": {
+    "cagr": 0.064568,
+    "max_dd": 0.65178
+   },
+   "M4": {
+    "cagr": 0.097067,
+    "max_dd": 0.581454
+   },
+   "M5": {
+    "cagr": -0.006233,
+    "max_dd": 0.856485
+   }
+  },
+  "pre_tax": {
+   "base": {
+    "m1": {
+     "cagr": 0.160173,
+     "cagr_2017": 0.334096,
+     "calmar": 0.345552,
+     "max_dd": 0.463529,
+     "subperiods": {
+      "P1": 0.00503,
+      "P2": 0.146339,
+      "P3": 0.334096
+     },
+     "turnover_annual": 5.456781
+    },
+    "m2": {
+     "cagr": 0.157649,
+     "cagr_2017": 0.332306,
+     "calmar": 0.337797,
+     "max_dd": 0.466698,
+     "subperiods": {
+      "P1": 0.002858,
+      "P2": 0.142662,
+      "P3": 0.332306
+     },
+     "turnover_annual": 5.456136
+    }
+   },
+   "calibrated": {
+    "m1": {
+     "cagr": 0.154303,
+     "cagr_2017": 0.326509,
+     "calmar": 0.331987,
+     "max_dd": 0.464786,
+     "subperiods": {
+      "P1": 0.001466,
+      "P2": 0.139503,
+      "P3": 0.326509
+     },
+     "turnover_annual": 5.456216
+    },
+    "m2": {
+     "cagr": 0.151785,
+     "cagr_2017": 0.32471,
+     "calmar": 0.324364,
+     "max_dd": 0.467948,
+     "subperiods": {
+      "P1": -0.000698,
+      "P2": 0.135849,
+      "P3": 0.32471
+     },
+     "turnover_annual": 5.456216
+    }
+   }
+  }
+ },
+ "note": "Published cells of the K control (production rule since 2026-10-15) and of production R2, copied from research/band_h2_combo_v1/RESULTS.json on branch research/band_h2_combo_v1. ladder_v1's --harness asserts the control against every cell below.",
+ "pair_check": {
+  "flat": {
+   "K_vs_C0_median_delta_pp": 0.1311
+  },
+  "note": "the parent's paired bootstrap cells K_vs_C0 (median delta, pp at $100k) -- ladder_v1's R2_vs_C0 must be the exact negation when the draws match",
+  "progressive": {
+   "K_vs_C0_median_delta_pp": 0.2856
+  }
+ },
+ "reference_R2": {
+  "after_tax_100k": {
+   "2000_03_to_2026_09": {
+    "after_tax_cagr": 0.1016,
+    "max_dd_after_tax": 0.467584,
+    "pre_tax_cagr": 0.154732,
+    "sells_per_year": 30.685367
+   },
+   "2010_01_to_end": {
+    "after_tax_cagr": 0.147059,
+    "max_dd_after_tax": 0.437839,
+    "pre_tax_cagr": 0.221587,
+    "sells_per_year": 31.353213
+   },
+   "2017_01_to_end": {
+    "after_tax_cagr": 0.228861,
+    "max_dd_after_tax": 0.362426,
+    "pre_tax_cagr": 0.32533,
+    "sells_per_year": 35.601615
+   }
+  },
+  "bootstrap_clean": {
+   "flat": {
+    "cagr_median": 0.039678
+   },
+   "progressive": {
+    "cagr_median": 0.035155
+   }
+  },
+  "note": "production R2 (band off, no deferral) -- the pre-K incumbent, used as a reference row.",
+  "pre_tax": {
+   "base": {
+    "m1": {
+     "cagr": 0.157538,
+     "cagr_2017": 0.329273,
+     "calmar": 0.339417,
+     "max_dd": 0.464143,
+     "subperiods": {
+      "P1": 0.001759,
+      "P2": 0.146862,
+      "P3": 0.329273
+     },
+     "turnover_annual": 5.991522
+    },
+    "m2": {
+     "cagr": 0.154766,
+     "cagr_2017": 0.327139,
+     "calmar": 0.330992,
+     "max_dd": 0.467584,
+     "subperiods": {
+      "P1": -0.000601,
+      "P2": 0.142965,
+      "P3": 0.327139
+     },
+     "turnover_annual": 5.991522
+    }
+   },
+   "calibrated": {
+    "m1": {
+     "cagr": 0.151719,
+     "cagr_2017": 0.321764,
+     "calmar": 0.326022,
+     "max_dd": 0.465364,
+     "subperiods": {
+      "P1": -0.001763,
+      "P2": 0.140056,
+      "P3": 0.321764
+     },
+     "turnover_annual": 5.991496
+    },
+    "m2": {
+     "cagr": 0.148961,
+     "cagr_2017": 0.319642,
+     "calmar": 0.317752,
+     "max_dd": 0.468797,
+     "subperiods": {
+      "P1": -0.004114,
+      "P2": 0.136182,
+      "P3": 0.319642
+     },
+     "turnover_annual": 5.991496
+    }
+   }
+  }
+ },
+ "source": "research/band_h2_combo_v1/RESULTS.json"
+}

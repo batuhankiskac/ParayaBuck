@@ -1,0 +1,172 @@
+cash_yield_v1 | idle cash at DTB3 - 0.50 pp (Z1/Z2), DTB3 - 1.00 pp (Z3), taxed as menkul sermaye iradi | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | control = production K | arms = K + Z1 + Z2 + Z3 (+ report-only Z1x)
+harness PASS (0 outside tolerance); K control anchors PASS (279/792 cells, max|diff| 4.98e-07); production-R2 reference block PASS; R2 engine == simulate_band max|diff| 1.31e-13
+A_ALL cross-check (tbill_sweep_v1 pre-tax): {'cagr': 0.15342998914001105, 'max_dd': 0.45584830208023064, 'reference_cagr': 0.1535, 'reference_max_dd': 0.457, 'diff_pp': -0.00700108599889504, 'tolerance_pp': 0.05, 'pass': True}
+all-cell control reference block: 792/792 cells, 0 mismatches (tol 0.0001), max|diff| 4.99e-07 -> PASS
+VERDICT: Z2 -- ADOPT Z2: highest pre-tax base m = 2 CAGR among the candidates clearing every gate
+
+per arm (pre-tax main window m = 2, R-INDEX; after tax at $100k, base, m = 2, liquidated):
+  arm   CAGR base  CAGR cal   maxDD base  maxDD cal   turn/yr | dAT2000  dAT2010  dAT2017 (pp vs K) | boot d B1     B2   (pp) | OOS med d | gates
+  K      15.76%   15.18%   46.67%   46.79%      5.46 |   +0.000   +0.000   +0.000 | +0.000 +0.000 |    +0.000 |   (control: no gates)
+  Z1     16.41%   15.82%   42.54%   42.67%      5.46 |   +0.478   +0.234   +0.429 | +0.625 +0.642 |    +1.052 | G1=P  G2=P  G3=P  G4=P  G5=P  G6=P  G7=P  G8=P  G9=P  AT=P  B1B2=P
+  Z2     16.41%   15.82%   42.54%   42.67%      5.46 |   +0.485   +0.234   +0.429 | +0.636 +0.642 |    +1.052 | G1=P  G2=P  G3=P  G4=P  G5=P  G6=P  G7=P  G8=P  G9=P  AT=P  B1B2=P
+  Z3     16.27%   15.69%   43.31%   43.44%      5.46 |   +0.384   +0.189   +0.347 | +0.510 +0.522 |    +0.913 | G1=P  G2=P  G3=P  G4=P  G5=P  G6=P  G7=P  G8=P  G9=P  AT=P  B1B2=P
+  R2 reference row (published, not re-run here): pre-tax 15.4766 / 14.8961 %, max DD 46.7584 %, after tax at $100k 10.160 / 14.706 / 22.886 %; K's own after tax at $100k is 10.7533 / 15.2354 / 23.9720 %
+
+gross interest credited (main window, base, m = 2, $100k) and the tax it caused:
+  K    gross            0 USD over 26.56 yr (0.000 % of ending NAV/yr); TR interest income                0 TRY; tax attributable to the interest              0 TRY
+  Z1   gross       47,028 USD over 26.56 yr (0.105 % of ending NAV/yr); TR interest income        1,162,972 TRY; tax attributable to the interest        434,393 TRY
+  Z2   gross       47,090 USD over 26.56 yr (0.105 % of ending NAV/yr); TR interest income        1,164,728 TRY; tax attributable to the interest        434,740 TRY
+  Z3   gross       37,976 USD over 26.56 yr (0.087 % of ending NAV/yr); TR interest income          962,144 TRY; tax attributable to the interest        358,951 TRY
+
+gates (all against the control K; ewma_band_v1's G1-G9 plus the after-tax pair):
+  Z1: G1=PASS, G2=PASS, G3=PASS, G4=PASS, G5=PASS, G6=PASS, G7=PASS, G8=PASS, G9=PASS, AT=PASS, B1B2=PASS -> ALL PASS
+    G1 m2 base/cal CAGR d +0.641/+0.637 pp (calmar 0.386 vs 0.338); G6 m1 +0.642/+0.639 pp
+    G2 max DD d -4.13/-4.12 pp; G3 2017+ d +0.578/+0.575 pp; G4 sub-periods 3/3 (P1 +1.19, P2 +0.00, P3 +0.58)
+    G5 bootstrap median d base/cal +0.795/+0.790 pp (share>0 100.0/100.0 %)
+    G7 OOS median d +1.052 pp, 6/6 inside bounds, worst d DD -0.00 pp; G8 pooled OOS bootstrap median d +1.869 pp (100.0 % > 0, 10000 paths)
+    G9 turnover 5.457 vs K 5.456 (ratio 1.000); AT after-tax $100k 2000_03_to_2026_09 +0.478pp, 2010_01_to_end +0.234pp, 2017_01_to_end +0.429pp
+    B1B2 progressive  median +0.625pp mean +0.631pp share>0 100.0% p05/p95 +0.41/+0.88 -> PASS
+    B1B2 flat         median +0.642pp mean +0.647pp share>0 100.0% p05/p95 +0.43/+0.89 -> PASS
+    reported (not decisive): E1 21 ETFs median +0.394pp share>0 100.0% (21/21); E2 rolling starts 21/21 median +0.297pp; E3 block10_flat +0.656pp/100%, block10_progressive +0.642pp/100%, block40_flat +0.604pp/100%, block40_progressive +0.578pp/100%
+  Z2: G1=PASS, G2=PASS, G3=PASS, G4=PASS, G5=PASS, G6=PASS, G7=PASS, G8=PASS, G9=PASS, AT=PASS, B1B2=PASS -> ALL PASS
+    G1 m2 base/cal CAGR d +0.641/+0.637 pp (calmar 0.386 vs 0.338); G6 m1 +0.642/+0.639 pp
+    G2 max DD d -4.13/-4.12 pp; G3 2017+ d +0.578/+0.575 pp; G4 sub-periods 3/3 (P1 +1.19, P2 +0.00, P3 +0.58)
+    G5 bootstrap median d base/cal +0.795/+0.790 pp (share>0 100.0/100.0 %)
+    G7 OOS median d +1.052 pp, 6/6 inside bounds, worst d DD -0.00 pp; G8 pooled OOS bootstrap median d +1.869 pp (100.0 % > 0, 10000 paths)
+    G9 turnover 5.457 vs K 5.456 (ratio 1.000); AT after-tax $100k 2000_03_to_2026_09 +0.485pp, 2010_01_to_end +0.234pp, 2017_01_to_end +0.429pp
+    B1B2 progressive  median +0.636pp mean +0.643pp share>0 100.0% p05/p95 +0.42/+0.89 -> PASS
+    B1B2 flat         median +0.642pp mean +0.647pp share>0 100.0% p05/p95 +0.43/+0.89 -> PASS
+    reported (not decisive): E1 21 ETFs median +0.410pp share>0 100.0% (21/21); E2 rolling starts 21/21 median +0.301pp; E3 block10_flat +0.656pp/100%, block10_progressive +0.655pp/100%, block40_flat +0.604pp/100%, block40_progressive +0.587pp/100%
+  Z3: G1=PASS, G2=PASS, G3=PASS, G4=PASS, G5=PASS, G6=PASS, G7=PASS, G8=PASS, G9=PASS, AT=PASS, B1B2=PASS -> ALL PASS
+    G1 m2 base/cal CAGR d +0.509/+0.507 pp (calmar 0.376 vs 0.338); G6 m1 +0.511/+0.508 pp
+    G2 max DD d -3.36/-3.35 pp; G3 2017+ d +0.466/+0.463 pp; G4 sub-periods 2/3 (P1 +0.94, P2 +0.00, P3 +0.47)
+    G5 bootstrap median d base/cal +0.647/+0.644 pp (share>0 100.0/100.0 %)
+    G7 OOS median d +0.913 pp, 6/6 inside bounds, worst d DD +0.00 pp; G8 pooled OOS bootstrap median d +1.686 pp (80.0 % > 0, 10000 paths)
+    G9 turnover 5.457 vs K 5.456 (ratio 1.000); AT after-tax $100k 2000_03_to_2026_09 +0.384pp, 2010_01_to_end +0.189pp, 2017_01_to_end +0.347pp
+    B1B2 progressive  median +0.510pp mean +0.516pp share>0 100.0% p05/p95 +0.32/+0.73 -> PASS
+    B1B2 flat         median +0.522pp mean +0.529pp share>0 100.0% p05/p95 +0.34/+0.74 -> PASS
+    reported (not decisive): E1 21 ETFs median +0.320pp share>0 100.0% (21/21); E2 rolling starts 21/21 median +0.236pp; E3 block10_flat +0.536pp/100%, block10_progressive +0.526pp/100%, block40_flat +0.486pp/100%, block40_progressive +0.471pp/100%
+
+postponement counters (main window, m = 2, base, $100k, progressive):
+  K    postponements  1917 (band  1836, December-deferred   81) sells/yr 10.66
+  Z1   postponements  1926 (band  1845, December-deferred   81) sells/yr 10.66
+  Z2   postponements  1926 (band  1845, December-deferred   81) sells/yr 10.66
+  Z3   postponements  1921 (band  1840, December-deferred   81) sells/yr 10.66
+
+E1 after tax on the 21 quality-passing ETFs (R-INDEX, $100k, calibrated, m = 2, liquidated) -- reported, not decisive:
+  instrument  window                     K AT     Z1 d      Z2 d      Z3 d
+  DIA         2000-03-09..2026-10-12    2.28%   +0.274   +0.288   +0.212
+  EEM         2004-04-15..2026-10-13    1.49%   +0.359   +0.367   +0.285
+  EFA         2002-09-04..2026-10-13    4.91%   +0.221   +0.223   +0.162
+  EWA         2000-03-09..2026-10-13    1.43%   +0.408   +0.410   +0.335
+  EWG         2000-03-09..2026-10-13    1.65%   +0.411   +0.417   +0.323
+  EWH         2000-03-09..2026-10-13    1.68%   +0.573   +0.578   +0.470
+  EWJ         2000-03-09..2026-10-13   -2.78%   +0.467   +0.485   +0.371
+  EWL         2000-03-09..2026-10-13    2.23%   +0.363   +0.370   +0.288
+  EWS         2000-03-09..2026-10-13    4.42%   +0.434   +0.439   +0.350
+  EWU         2000-03-09..2026-10-13    0.25%   +0.407   +0.419   +0.326
+  IWM         2001-05-30..2026-10-12    0.84%   +0.368   +0.375   +0.288
+  SPY         2000-03-09..2026-10-12    6.67%   +0.336   +0.345   +0.263
+  XLB         2000-03-09..2026-10-13   -1.46%   +0.469   +0.480   +0.386
+  XLE         2000-03-09..2026-10-13    2.64%   +0.453   +0.455   +0.359
+  XLF         2000-03-09..2026-10-13    1.47%   +0.376   +0.380   +0.296
+  XLI         2000-03-09..2026-10-13    4.18%   +0.300   +0.304   +0.230
+  XLK         2000-03-09..2026-10-13    9.65%   +0.506   +0.514   +0.405
+  XLP         2000-03-09..2026-10-13    1.01%   +0.293   +0.305   +0.228
+  XLU         2000-03-09..2026-10-13    3.20%   +0.345   +0.348   +0.274
+  XLV         2000-03-09..2026-10-13   -1.74%   +0.394   +0.412   +0.320
+  XLY         2000-03-09..2026-10-13    3.60%   +0.475   +0.478   +0.387
+
+E2 rolling January starts (after tax $100k, base, m = 2, to 2026-09-29) -- reported:
+  year   start        K AT      Z1 d       Z2 d       Z3 d
+  2001   2001-01-02    12.39%   +0.374    +0.382    +0.288
+  2002   2002-01-02    13.16%   +0.297    +0.306    +0.222
+  2003   2003-01-02    14.08%   +0.274    +0.283    +0.212
+  2004   2004-01-02    13.12%   +0.296    +0.301    +0.236
+  2005   2005-01-03    13.39%   +0.289    +0.296    +0.231
+  2006   2006-01-03    14.33%   +0.291    +0.295    +0.233
+  2007   2007-01-03    14.90%   +0.224    +0.228    +0.171
+  2008   2008-01-02    14.60%   +0.243    +0.243    +0.189
+  2009   2009-01-02    16.96%   +0.223    +0.223    +0.181
+  2010   2010-01-04    15.24%   +0.234    +0.234    +0.189
+  2011   2011-01-03    15.94%   +0.250    +0.250    +0.203
+  2012   2012-01-03    18.87%   +0.275    +0.275    +0.222
+  2013   2013-01-02    19.89%   +0.297    +0.297    +0.240
+  2014   2014-01-02    18.08%   +0.314    +0.314    +0.254
+  2015   2015-01-02    17.78%   +0.339    +0.345    +0.274
+  2016   2016-01-04    21.52%   +0.384    +0.384    +0.311
+  2017   2017-01-03    23.97%   +0.429    +0.429    +0.347
+  2018   2018-01-02    21.22%   +0.461    +0.467    +0.373
+  2019   2019-01-02    24.29%   +0.486    +0.492    +0.398
+  2020   2020-01-02    22.89%   +0.521    +0.521    +0.431
+  2021   2021-01-04    20.31%   +0.581    +0.581    +0.476
+
+E3 fresh after-tax bootstraps (seed 20261015, 1000 paths, $100k, blocks (10, 40)) -- reported:
+  run                    arm    d vs K   share>0
+  block10_flat         Z1       +0.656    100.0%
+  block10_flat         Z2       +0.656    100.0%
+  block10_flat         Z3       +0.536    100.0%
+  block10_progressive  Z1       +0.642    100.0%
+  block10_progressive  Z2       +0.655    100.0%
+  block10_progressive  Z3       +0.526    100.0%
+  block40_flat         Z1       +0.604    100.0%
+  block40_flat         Z2       +0.604    100.0%
+  block40_flat         Z3       +0.486    100.0%
+  block40_progressive  Z1       +0.578    100.0%
+  block40_progressive  Z2       +0.587    100.0%
+  block40_progressive  Z3       +0.471    100.0%
+
+E5 (report only): fill-decision differences on the main path (pre-tax, $100k, m = 2)
+  Z1_vs_K     :     5 sessions differ (0.07%); Z1 sells where K holds 2, Z1 holds where K sells 2
+  Z2_vs_K     :     5 sessions differ (0.07%); Z2 sells where K holds 2, Z2 holds where K sells 2
+  Z3_vs_K     :     5 sessions differ (0.07%); Z3 sells where K holds 2, Z3 holds where K sells 2
+  Z2_vs_Z1    :     0 sessions differ (0.00%); Z2 sells where Z1 holds 0, Z2 holds where Z1 sells 0
+  Z3_vs_Z1    :     0 sessions differ (0.00%); Z3 sells where Z1 holds 0, Z3 holds where Z1 sells 0
+  sells (downward resizes+exits) per arm: K 270, Z1 270, Z2 270, Z3 270
+  after tax at $10k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   12.18% | Z1   12.68%  +0.500pp Z2   12.71%  +0.531pp Z3   12.58%  +0.401pp Z1x   12.76%  +0.582pp
+    2010_01_to_end       K   17.47% | Z1   17.71%  +0.241pp Z2   17.73%  +0.263pp Z3   17.66%  +0.195pp Z1x   17.76%  +0.297pp
+    2017_01_to_end       K   26.92% | Z1   27.36%  +0.443pp Z2   27.41%  +0.494pp Z3   27.27%  +0.357pp Z1x   27.45%  +0.538pp
+  after tax at $30k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   11.52% | Z1   11.99%  +0.466pp Z2   12.00%  +0.478pp Z3   11.90%  +0.374pp Z1x   12.08%  +0.554pp
+    2010_01_to_end       K   16.40% | Z1   16.64%  +0.240pp Z2   16.64%  +0.243pp Z3   16.60%  +0.194pp Z1x   16.70%  +0.301pp
+    2017_01_to_end       K   25.35% | Z1   25.78%  +0.426pp Z2   25.80%  +0.448pp Z3   25.69%  +0.340pp Z1x   25.89%  +0.534pp
+  after tax at $100k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   10.75% | Z1   11.23%  +0.478pp Z2   11.24%  +0.485pp Z3   11.14%  +0.384pp Z1x   11.34%  +0.582pp
+    2010_01_to_end       K   15.24% | Z1   15.47%  +0.234pp Z2   15.47%  +0.234pp Z3   15.42%  +0.189pp Z1x   15.54%  +0.306pp
+    2017_01_to_end       K   23.97% | Z1   24.40%  +0.429pp Z2   24.40%  +0.429pp Z3   24.32%  +0.347pp Z1x   24.53%  +0.557pp
+  after tax at $300k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   10.19% | Z1   10.67%  +0.473pp Z2   10.67%  +0.473pp Z3   10.57%  +0.380pp Z1x   10.79%  +0.602pp
+    2010_01_to_end       K   14.56% | Z1   14.79%  +0.229pp Z2   14.79%  +0.230pp Z3   14.74%  +0.186pp Z1x   14.87%  +0.310pp
+    2017_01_to_end       K   23.20% | Z1   23.62%  +0.424pp Z2   23.62%  +0.424pp Z3   23.54%  +0.344pp Z1x   23.77%  +0.567pp
+  after tax at $1M (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K    9.88% | Z1   10.34%  +0.463pp Z2   10.34%  +0.463pp Z3   10.25%  +0.372pp Z1x   10.50%  +0.619pp
+    2010_01_to_end       K   14.16% | Z1   14.42%  +0.256pp Z2   14.42%  +0.256pp Z3   14.38%  +0.213pp Z1x   14.48%  +0.314pp
+    2017_01_to_end       K   22.86% | Z1   23.28%  +0.419pp Z2   23.28%  +0.419pp Z3   23.20%  +0.338pp Z1x   23.44%  +0.577pp
+
+unliquidated (mark-to-market) after tax at $100k -- the view the owner holds:
+  2000_03_to_2026_09   K   11.43% | Z1   11.92%  +0.490pp Z2   11.93%  +0.496pp Z3   11.82%  +0.393pp Z1x   12.02%  +0.587pp
+  2010_01_to_end       K   16.34% | Z1   16.59%  +0.247pp Z2   16.59%  +0.248pp Z3   16.54%  +0.201pp Z1x   16.65%  +0.308pp
+  2017_01_to_end       K   25.99% | Z1   26.44%  +0.457pp Z2   26.44%  +0.458pp Z3   26.36%  +0.371pp Z1x   26.55%  +0.565pp
+
+m = 4 cost stress, after tax at $100k:
+  2000_03_to_2026_09   K   10.35% | Z1   10.83%  +0.476pp Z2   10.84%  +0.483pp Z3   10.74%  +0.382pp
+  2010_01_to_end       K   14.82% | Z1   15.05%  +0.233pp Z2   15.05%  +0.233pp Z3   15.01%  +0.188pp
+  2017_01_to_end       K   23.67% | Z1   24.10%  +0.427pp Z2   24.10%  +0.427pp Z3   24.02%  +0.346pp
+
+six OOS windows (pre-tax, calibrated, m = 2, R-USD rule) -- delta vs K:
+  window            K CAGR    K maxDD     Z1 d      Z2 d      Z3 d   (CAGR pp)
+  GSPC_1957_1999      9.97%    39.65%    +1.994    +1.994    +1.825
+  M1                 21.27%    41.22%    +2.207    +2.207    +2.050
+  M2                 11.73%    58.11%    +0.117    +0.117    +0.066
+  M3                  6.46%    65.18%    +1.332    +1.332    +1.175
+  M4                  9.71%    58.15%    +0.772    +0.772    +0.641
+  M5                 -0.62%    85.65%    +0.763    +0.763    +0.651
+
+pooled OOS bootstrap over M1-M5 (G8), pre-tax, delta vs K:
+  Z1   median +1.869pp mean +1.622pp share>0 100.0% (10000 paths)
+  Z2   median +1.869pp mean +1.622pp share>0 100.0% (10000 paths)
+  Z3   median +1.686pp mean +1.473pp share>0 80.0% (10000 paths)
+
+control reference reproduction: 792/792 cells, 0 mismatches, max|diff| 4.99e-07 -> PASS
+smoke (synthetic): PASS -- 28/28 checks

@@ -1012,6 +1012,20 @@ def window_stats(nav, days, start):
 
 
 # ----------------------------------------------------------------------------- inputs
+_PRICE = {}
+
+
+def qqq_price():
+    """The QQQ close series: the series production `equity_leveraged_trend_v1` evaluates the E2
+    vote and the early leg's conditions on, and the series `main_inputs` sizes from. It is NOT the
+    synthetic 2x close: the production early path is active in 164 measured sessions on the price
+    against 126 on the synthetic close, and 164 is production's own count (fast_reentry_v1: 164 of
+    6,679, 2.46 %). Spread-independent, so one cached load serves every reporting stage."""
+    if not _PRICE:
+        _PRICE["price"] = trv2.load()[1]["QQQ"][1]
+    return _PRICE["price"]
+
+
 def main_inputs(spread, arms=ARMS_ALL):
     """The main QQQ series inputs plus {arm: target series} for `arms` (and the pure-E2 anchor)."""
     days, arr, y = trv2.load()
@@ -1803,9 +1817,9 @@ def harness(deep=False):
         "deferred": int(h2ov["deferred"])}
     if d_kov > 1e-9:
         bad += 1
-    comps_full = early_components(c)
-    on_prod, fac_prod = early_state(c[None, :], e2, comps_full, EARLY_PROD)
-    on_ref, fac_ref = r2_state(c, e2, comps_full)
+    comps_full = early_components(qqq_price())
+    on_prod, fac_prod = early_state(qqq_price()[None, :], e2, comps_full, EARLY_PROD)
+    on_ref, fac_ref = r2_state(qqq_price(), e2, comps_full)
     checks["early_state_prod_equals_r2_state"] = {
         "on_eff_equal": bool(np.array_equal(on_prod, on_ref)),
         "factor_equal": bool(np.array_equal(fac_prod, fac_ref))}
@@ -1817,10 +1831,10 @@ def harness(deep=False):
     # (same exit rule, strictly larger entry sets), so they gate; the Q1/Q3 relation is measured
     # and reported (Q3 shares Q1's entry but holds through one-condition dips, and Q1 can stay
     # active through a session Q3 has left).
-    f_prod = early_flag(c, e2, EARLY_PROD, comps_full)[0]
-    f_q1 = early_flag(c, e2, EARLY_SPEC["Q1"], comps_full)[0]
-    f_q2 = early_flag(c, e2, EARLY_SPEC["Q2"], comps_full)[0]
-    f_q3 = early_flag(c, e2, EARLY_SPEC["Q3"], comps_full)[0]
+    f_prod = early_flag(qqq_price(), e2, EARLY_PROD, comps_full)[0]
+    f_q1 = early_flag(qqq_price(), e2, EARLY_SPEC["Q1"], comps_full)[0]
+    f_q2 = early_flag(qqq_price(), e2, EARLY_SPEC["Q2"], comps_full)[0]
+    f_q3 = early_flag(qqq_price(), e2, EARLY_SPEC["Q3"], comps_full)[0]
     checks["quorum_prod_subset_Q2"] = bool(np.all(f_q2 | ~f_prod))
     checks["quorum_Q2_subset_Q1"] = bool(np.all(f_q1 | ~f_q2))
     checks["quorum_Q2_strictly_tighter_than_Q1"] = bool(f_q1.sum() > f_q2.sum())
@@ -2142,7 +2156,7 @@ def stage_plateau(arms):
             "cagr": st["cagr"], "max_dd": st["max_dd"], "calmar": st["calmar"],
             "turnover_annual": st["turnover_annual"],
             "late_2017_cagr": st["2017_end"]["cagr"],
-            "early_sessions": int(np.sum(early_flag(c, e2, s)[0])),
+            "early_sessions": int(np.sum(early_flag(qqq_price(), e2, s)[0])),
         }
     ctrl = out["rows"][CONTROL]
     for arm in arms:
@@ -2160,8 +2174,8 @@ def stage_loeo(arms):
     days, o, c, e2, W, _ = main_inputs(0.0, tuple(arms) + (CONTROL,))
     mkt = te.load_market(FX_CSV, UFE_CSV, days)
     T = len(days) - 1
-    comps = early_components(c)
-    ctrl_flag = early_flag(c, e2, EARLY_SPEC[CONTROL], comps)[0]
+    comps = early_components(qqq_price())
+    ctrl_flag = early_flag(qqq_price(), e2, EARLY_SPEC[CONTROL], comps)[0]
     spans = {}
     for name, (d0, d1) in LOEO_EPISODES.items():
         i0, i1 = days.index(d0), days.index(d1)
@@ -2176,7 +2190,7 @@ def stage_loeo(arms):
            "control_cagr": ctrl_cagr, "loeo": {}}
     for arm in arms:
         s = EARLY_SPEC[arm]
-        flag = early_flag(c, e2, s, comps)[0]
+        flag = early_flag(qqq_price(), e2, s, comps)[0]
         full = pre_stats(days, START, T, engine_run(PRE_CAPITAL, START, T, days, mkt, o, c,
                                                     W[arm], e2, arm, "pre_tax", m=M))["cagr"]
         rec = {"episodes": {}, "cagr_full": full, "delta_cagr_full_vs_K_pp": (full - ctrl_cagr) * 100,
@@ -2218,7 +2232,7 @@ def stage_e5_decisions(arms):
         r = traces[arm]
         out["sells"][arm] = int(np.sum(r["_dec"] == 2))
         out["postponements"][arm] = {"band": int(r["blocked_band"]), "deferred": int(r["deferred"])}
-        out["early_sessions"][arm] = int(np.sum(early_flag(c, e2, EARLY_SPEC[arm])[0]))
+        out["early_sessions"][arm] = int(np.sum(early_flag(qqq_price(), e2, EARLY_SPEC[arm])[0]))
     for a, b in ((REFERENCE, CONTROL), (CONTROL, REFERENCE)) + tuple((q, CONTROL) for q in CANDIDATES):
         da, db = traces[a]["_dec"], traces[b]["_dec"]
         out[f"{a}_vs_{b}"] = {
@@ -2253,6 +2267,22 @@ def _compare_subtree(label, mine, theirs, cells, only_mine, only_theirs):
             only_mine.append(f"{label}.{k}")
         else:
             cells.append((f"{label}.{k}", fm[k], ft[k]))
+
+
+def _parent_convention(rec, arm="A1u", ref=REFERENCE):
+    """Re-express one of this study's stage records in the parent campaigns' published convention.
+
+    The parents (gain_band_v3) publish their E1/E2/OOS/instrument cells as **arm-minus-C0** deltas
+    (C0 = production R2); this study's stages publish **arm-minus-K**. Comparing the two raw would
+    flag every delta cell as a mismatch even though the numbers agree exactly, so the study's
+    deltas are shifted by its own C0 delta (`arm-K - (C0-K) = arm-C0`) -- the same convention fix
+    amendment A2.3 applied to the bootstrap block. Only `delta_*` leaves are touched; levels,
+    counters and windows are compared as published."""
+    out = dict(rec[arm])
+    for k, v in rec[ref].items():
+        if k.startswith("delta_") and k in out:
+            out[k] = out[k] - v
+    return out
 
 
 def reference_checks(res, full=True):
@@ -2321,19 +2351,19 @@ def reference_checks(res, full=True):
     if full:
         sections.append("e1_e2_e3_oos_instruments")
         for key in INSTRUMENTS:
-            _compare_subtree(f"e1.{key}.A1u", res["e1"][key]["A1u"],
+            _compare_subtree(f"e1.{key}.A1u", _parent_convention(res["e1"][key]),
                              v3["E1_after_tax_etfs_rindex"][key]["A1u"], cells, only_mine, only_theirs)
         for yr in E2_START_YEARS:
-            _compare_subtree(f"e2.{yr}.A1u", res["e2"][str(yr)]["A1u"],
+            _compare_subtree(f"e2.{yr}.A1u", _parent_convention(res["e2"][str(yr)]),
                              v3["E2_rolling_starts"][str(yr)]["A1u"], cells, only_mine, only_theirs)
         for key in sorted(res.get("e3", {})):
             _compare_subtree(f"e3.{key}.A1u_vs_C0", res["e3"][key]["A1u_vs_C0"],
                              v3["E3_fresh_bootstraps"][key]["A1u_vs_C0"], cells, only_mine, only_theirs)
         for wn in OOS_WINDOWS:
-            _compare_subtree(f"oos.{wn}.A1u", res["oos"][wn]["A1u"], v3["oos"][wn]["A1u"],
-                             cells, only_mine, only_theirs)
+            _compare_subtree(f"oos.{wn}.A1u", _parent_convention(res["oos"][wn]),
+                             v3["oos"][wn]["A1u"], cells, only_mine, only_theirs)
         for key in res["instruments"]:
-            _compare_subtree(f"instruments.{key}.A1u", res["instruments"][key]["A1u"],
+            _compare_subtree(f"instruments.{key}.A1u", _parent_convention(res["instruments"][key]),
                              v3["instruments"][key]["A1u"], cells, only_mine, only_theirs)
 
     # ---- H2 against the tagged campaign's published cells
@@ -2768,6 +2798,7 @@ def main() -> None:
         },
         "harness": {"pass": hs["pass"], "n_outside_tolerance": hs["n_outside_tolerance"],
                     "reproduction_checks": hs["reproduction_checks"],
+                    "device_structure": hs["device_structure"],
                     "r2_anchors": hs["r2_anchors"], "k_anchors": hs["k_anchors"],
                     "after_tax_anchors": hs["after_tax_anchors"],
                     "bootstrap_control_medians": hs["bootstrap_control"],
@@ -2812,6 +2843,10 @@ def main() -> None:
          + ", ".join(f"{a} {res['e5']['decisions']['early_sessions'][a]}" for a in STUDY_ARMS)
          + " | plateau block: "
          + ", ".join(f"{a} {plt['rows'][a]['early_sessions']}" for a in CANDIDATES + NEIGHBOURS),
+         f"device structure on the QQQ close (the pre-registered Q1/Q3 crossing measurement): "
+         f"Q1-only {hs['device_structure']['Q1_only_sessions']} session(s), Q3-only "
+         f"{hs['device_structure']['Q3_only_sessions']}, hold-count histogram "
+         f"{hs['device_structure']['hold_counts']}",
          f"deep reference block: {rc['n_cells']} cells ({', '.join(rc['sections'])}), "
          f"{rc['n_mismatch']} mismatches (tol {rc['tolerance']}), max|diff| {rc['max_abs_diff']:.2e} -> "
          f"{'PASS' if rc['pass'] else 'FAIL'}",
@@ -2825,8 +2860,11 @@ def main() -> None:
         a, ac = pre["base"]["m2"][arm], pre["calibrated"]["m2"][arm]
         ats = "".join(f"{(ctrl[wn][arm]['after_tax_cagr'] - ctrl[wn][CONTROL]['after_tax_cagr']) * 100:+8.3f}"
                       for wn in TAX_WINDOWS)
+        # the reference row C0 is not in the tax block's `deltas` (it is the parent campaign's own
+        # baseline, present there as K_vs_C0), so its B1/B2 cells are reported as "-", like K's.
         bts = "".join((f"{boot_ref['tax'][GATE_CAPITAL][md][f'{arm}_vs_{CONTROL}']['median_delta_cagr_pp']:+8.3f}"
-                       if arm != CONTROL else "       -") for md in ("progressive", "flat"))
+                       if arm not in (CONTROL, REFERENCE) else "       -")
+                      for md in ("progressive", "flat"))
         ei = (0.0 if arm == CONTROL else
               float(np.median([res["instruments"][k][arm]["delta_cagr_pp"] for k in INSTRUMENTS])))
         oo = (0.0 if arm == CONTROL else
@@ -2871,9 +2909,9 @@ def main() -> None:
         L.append("      T1 after tax $100k: " + ", ".join(
             f"{wn} {r['T1_detail']['windows'][wn]['delta_pp']:+.3f}pp" for wn in TAX_WINDOWS)
             + f" | tax paid ${r['T1_detail']['tax_paid_usd']:,.0f} vs K "
-              f"${win[TAX_WINDOWS_LAST][CONTROL]['tax_usd']:,.0f} (2017 window), "
+              f"${ctrl[TAX_WINDOWS_LAST][CONTROL]['tax_usd']:,.0f} (2017 window), "
               f"sells/yr {r['T1_detail']['sells_per_year']:.2f} vs "
-              f"{win[TAX_WINDOWS_LAST][CONTROL]['sells_per_year']:.2f}")
+              f"{ctrl[TAX_WINDOWS_LAST][CONTROL]['sells_per_year']:.2f}")
         for md_, kk in (("progressive", "T2"), ("flat", "T3")):
             c = r[f"{kk}_detail"]
             L.append(f"      {kk} {md_} bootstrap: median {c['median_delta_pp']:+.3f}pp "

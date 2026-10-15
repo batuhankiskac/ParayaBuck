@@ -1,0 +1,177 @@
+early_quorum_v1 | the early re-entry leg's trigger quorum (idea I2) on production K | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | control = production K (A1u band + H2) | arms = K (control) + C0 (R2 reference) + Q1 + Q2 + Q3
+harness PASS (0 outside tolerance); K anchors PASS (pre-tax base m2 15.7649%); R2 reference anchors PASS; H2 engine == simulate_band_overlay max|diff| 9.95e-14; early_state(prod) == r2_state True
+early sessions on the main path (pre-tax, m = 2): C0 164, A1u 164, H2 164, K 164, Q1 425, Q2 178, Q3 419 | plateau block: Q1 425, Q2 178, Q3 419, N40 171, N60 141, N126 275, N504 115, W13 164, W23 164
+device structure on the QQQ close (the pre-registered Q1/Q3 crossing measurement): Q1-only 6 session(s), Q3-only 0, hold-count histogram {'0': 1442, '1': 1145, '2': 1836, '3': 2509}
+deep reference block: 1015 cells (pre_tax_main, after_tax_windows, cost_stress_m4, clean_bootstrap, e1_e2_e3_oos_instruments), 0 mismatches (tol 2e-06), max|diff| 5.00e-07 -> PASS
+ADOPTED: K -- no candidate clears every gate: Q1 fails G2,G7,EI,PL; Q2 fails G1,G4,G6,G7,T1,T2,T3,PL; Q3 fails G2,G7,EI,PL -> production keeps K
+
+per arm (pre-tax main window m = 2, R-INDEX; after tax at $100k, base, m = 2, liquidated; deltas vs the control K):
+  arm   CAGR base  CAGR cal   maxDD base  maxDD cal   turn/yr | dAT2000 dAT2010 dAT2017 | boot B1/B2 | EI med | OOS med | gates
+  K      15.76%   15.18%   46.67%   46.79%      5.46 |  +0.000  +0.000  +0.000 |       -       - | +0.000 |  +0.000 |           -
+  C0     15.48%   14.90%   46.76%   46.88%      5.99 |  -0.593  -0.529  -1.086 |       -       - | -0.095 |  -0.065 |           -
+  Q1     16.13%   15.53%   53.74%   53.87%      5.65 |  +0.256  +0.558  +0.520 |  +0.311  +0.317 | +0.163 |  +0.163 |     10/14
+  Q2     15.71%   15.12%   46.22%   46.35%      5.48 |  -0.076  -0.155  -0.091 |  +0.000  +0.002 | +0.048 |  -0.274 |      6/14
+  Q3     16.14%   15.54%   53.66%   53.78%      5.67 |  +0.269  +0.568  +0.539 |  +0.291  +0.264 | +0.354 |  +0.239 |     10/14
+
+gates (every one must pass; G1/G2/G3/G4/G5/G6/G7/G8/G9/EI/T1/T2/T3/PL):
+  G1  Q1=PASS  Q2=FAIL  Q3=PASS
+  G2  Q1=FAIL  Q2=PASS  Q3=FAIL
+  G3  Q1=PASS  Q2=PASS  Q3=PASS
+  G4  Q1=PASS  Q2=FAIL  Q3=PASS
+  G5  Q1=PASS  Q2=PASS  Q3=PASS
+  G6  Q1=PASS  Q2=FAIL  Q3=PASS
+  G7  Q1=FAIL  Q2=FAIL  Q3=FAIL
+  G8  Q1=PASS  Q2=PASS  Q3=PASS
+  G9  Q1=PASS  Q2=PASS  Q3=PASS
+  EI  Q1=FAIL  Q2=PASS  Q3=FAIL
+  T1  Q1=PASS  Q2=FAIL  Q3=PASS
+  T2  Q1=PASS  Q2=FAIL  Q3=PASS
+  T3  Q1=PASS  Q2=FAIL  Q3=PASS
+  PL  Q1=FAIL  Q2=FAIL  Q3=FAIL
+  --- Q1
+      G1 return m2: base +0.364pp (calmar ratio 0.888), cal +0.352pp (calmar ratio 0.889)
+      G6 return m1: base +0.373pp (calmar ratio 0.889), cal +0.362pp (calmar ratio 0.889)
+      G2 DD: base +7.07pp, calibrated +7.07pp
+      G3 2017+: base +0.669pp, calibrated +0.660pp
+      G4 subperiods: 2/3 P1 -0.18pp, P2 +0.72pp, P3 +0.67pp
+      G5 pre-tax bootstrap: base +0.485pp (share>0 65.8%), cal +0.469pp (share>0 65.1%)
+      G7 OOS: median +0.163pp, 5/6 within, worst delta DD +9.78pp
+      G8 pooled OOS bootstrap: median +0.333pp (share>0 62.5%, 10000 paths)
+      G9 turnover ratio 1.036 (<= 1.0: False)
+      EI 21 ETFs: median +0.163pp share>0 52.4% (11/21), share dDD <= 3pp 66.7%, boot median +0.285pp
+      T1 after tax $100k: 2000_03_to_2026_09 +0.256pp, 2010_01_to_end +0.558pp, 2017_01_to_end +0.520pp | tax paid $389,804 vs K $371,487 (2017 window), sells/yr 9.75 vs 9.54
+      T2 progressive bootstrap: median +0.311pp mean +0.306pp share>0 61.3% p05/p95 -1.53/+2.11
+      T3 flat bootstrap: median +0.317pp mean +0.313pp share>0 62.4% p05/p95 -1.51/+2.11
+      PL plateau: delta CAGR base-m2 +0.364pp, delta DD +7.07pp
+  --- Q2
+      G1 return m2: base -0.059pp (calmar ratio 1.006), cal -0.060pp (calmar ratio 1.006)
+      G6 return m1: base -0.058pp (calmar ratio 1.006), cal -0.058pp (calmar ratio 1.006)
+      G2 DD: base -0.45pp, calibrated -0.45pp
+      G3 2017+: base -0.080pp, calibrated -0.080pp
+      G4 subperiods: 1/3 P1 +0.06pp, P2 -0.19pp, P3 -0.08pp
+      G5 pre-tax bootstrap: base +0.007pp (share>0 50.5%), cal +0.006pp (share>0 50.4%)
+      G7 OOS: median -0.274pp, 4/6 within, worst delta DD +4.83pp
+      G8 pooled OOS bootstrap: median +0.022pp (share>0 52.9%, 10000 paths)
+      G9 turnover ratio 1.005 (<= 1.0: False)
+      EI 21 ETFs: median +0.048pp share>0 61.9% (13/21), share dDD <= 3pp 95.2%, boot median +0.002pp
+      T1 after tax $100k: 2000_03_to_2026_09 -0.076pp, 2010_01_to_end -0.155pp, 2017_01_to_end -0.091pp | tax paid $370,290 vs K $371,487 (2017 window), sells/yr 9.64 vs 9.54
+      T2 progressive bootstrap: median +0.000pp mean -0.008pp share>0 49.6% p05/p95 -0.65/+0.60
+      T3 flat bootstrap: median +0.002pp mean -0.005pp share>0 50.7% p05/p95 -0.63/+0.59
+      PL plateau: delta CAGR base-m2 -0.059pp, delta DD -0.45pp
+  --- Q3
+      G1 return m2: base +0.378pp (calmar ratio 0.891), cal +0.366pp (calmar ratio 0.891)
+      G6 return m1: base +0.389pp (calmar ratio 0.891), cal +0.377pp (calmar ratio 0.892)
+      G2 DD: base +6.99pp, calibrated +6.99pp
+      G3 2017+: base +0.690pp, calibrated +0.681pp
+      G4 subperiods: 2/3 P1 -0.16pp, P2 +0.72pp, P3 +0.69pp
+      G5 pre-tax bootstrap: base +0.442pp (share>0 64.6%), cal +0.426pp (share>0 64.0%)
+      G7 OOS: median +0.239pp, 5/6 within, worst delta DD +8.90pp
+      G8 pooled OOS bootstrap: median +0.305pp (share>0 61.9%, 10000 paths)
+      G9 turnover ratio 1.039 (<= 1.0: False)
+      EI 21 ETFs: median +0.354pp share>0 52.4% (11/21), share dDD <= 3pp 71.4%, boot median +0.247pp
+      T1 after tax $100k: 2000_03_to_2026_09 +0.269pp, 2010_01_to_end +0.568pp, 2017_01_to_end +0.539pp | tax paid $390,270 vs K $371,487 (2017 window), sells/yr 9.64 vs 9.54
+      T2 progressive bootstrap: median +0.291pp mean +0.281pp share>0 60.8% p05/p95 -1.58/+2.08
+      T3 flat bootstrap: median +0.264pp mean +0.287pp share>0 61.1% p05/p95 -1.59/+2.03
+      PL plateau: delta CAGR base-m2 +0.378pp, delta DD +6.99pp
+
+plateau comparison block (main window, base, m = 2, pre-tax; delta vs K) -- the fast_reentry_v2 one-parameter neighbours plus the three Q arms:
+  arm    spec                                          early sess   CAGR     dCAGR     maxDD   dDD
+  Q1     conds=sma,vol,mom need=2 exit=sma sma=50 med=252 w=0.5000    425    16.13%   +0.364   53.74%   +7.07
+  Q2     conds=sma,vol need=2 exit=sma sma=50 med=252 w=0.5000    178    15.71%   -0.059   46.22%   -0.45
+  Q3     conds=sma,vol,mom need=2 exit=majority sma=50 med=252 w=0.5000    419    16.14%   +0.378   53.66%   +6.99
+  N40    conds=sma,vol,mom need=3 exit=sma sma=40 med=252 w=0.5000    171    15.32%   -0.446   51.75%   +5.08
+  N60    conds=sma,vol,mom need=3 exit=sma sma=60 med=252 w=0.5000    141    15.32%   -0.440   48.90%   +2.23
+  N126   conds=sma,vol,mom need=3 exit=sma sma=50 med=126 w=0.5000    275    15.99%   +0.221   49.25%   +2.58
+  N504   conds=sma,vol,mom need=3 exit=sma sma=50 med=504 w=0.5000    115    15.63%   -0.135   46.78%   +0.11
+  W13    conds=sma,vol,mom need=3 exit=sma sma=50 med=252 w=0.3333    164    15.53%   -0.235   47.35%   +0.68
+  W23    conds=sma,vol,mom need=3 exit=sma sma=50 med=252 w=0.6667    164    15.99%   +0.223   46.00%   -0.67
+  K      production (reference row)                        164    15.76%   +0.000   46.67%   +0.00
+
+leave-one-episode-out (the candidate's early decisions replaced by K's over the published episode span; main window, base, m = 2, pre-tax):
+  control K CAGR   15.76%; episodes 2001-10 2001-10-31..2001-12-05 (25s, K early inside 24s), 2002-11 2002-11-04..2002-12-02 (20s, K early inside 19s), 2023-01 2023-01-20..2023-02-01 (9s, K early inside 8s)
+  Q1: full   16.13% (+0.364pp vs K), 425 early sessions | 2001-10 replaced:   16.13% (+0.364pp, lost 0.000pp) | 2002-11 replaced:   16.13% (+0.364pp, lost 0.000pp) | 2023-01 replaced:   16.13% (+0.364pp, lost 0.000pp)
+  Q2: full   15.71% (-0.059pp vs K), 178 early sessions | 2001-10 replaced:   15.71% (-0.059pp, lost 0.000pp) | 2002-11 replaced:   15.71% (-0.059pp, lost 0.000pp) | 2023-01 replaced:   15.71% (-0.059pp, lost 0.000pp)
+  Q3: full   16.14% (+0.378pp vs K), 419 early sessions | 2001-10 replaced:   16.14% (+0.378pp, lost 0.000pp) | 2002-11 replaced:   16.14% (+0.378pp, lost 0.000pp) | 2023-01 replaced:   16.14% (+0.378pp, lost 0.000pp)
+
+postponement counters (main window, m = 2, base, $100k, progressive):
+  K    postponements   816 (band   787, December-deferred   29) sells/yr 9.54
+  C0   postponements     0 (band     0, December-deferred    0) sells/yr 35.60
+  Q1   postponements   829 (band   800, December-deferred   29) sells/yr 9.75
+  Q2   postponements   818 (band   789, December-deferred   29) sells/yr 9.64
+  Q3   postponements   829 (band   800, December-deferred   29) sells/yr 9.64
+
+E1 after tax on the 21 quality-passing ETFs (R-INDEX, $100k, calibrated, m = 2, liquidated) -- reporting block vs K:
+  instrument  window                     K AT      C0 d      Q1 d      Q2 d      Q3 d
+  DIA         2000-03-09..2026-10-12    2.28%    +0.007    +0.261    +0.132    +0.288
+  EEM         2004-04-15..2026-10-13    1.49%    -0.158    -0.928    +0.093    -0.597
+  EFA         2002-09-04..2026-10-13    4.91%    -0.244    +0.681    -0.044    +0.792
+  EWA         2000-03-09..2026-10-13    1.43%    -0.175    +0.085    +0.063    +0.644
+  EWG         2000-03-09..2026-10-13    1.65%    -0.157    -0.601    +0.088    -0.615
+  EWH         2000-03-09..2026-10-13    1.68%    -0.284    -0.705    -0.406    -0.528
+  EWJ         2000-03-09..2026-10-13   -2.78%    -0.050    +0.373    +0.020    +0.236
+  EWL         2000-03-09..2026-10-13    2.23%    -0.223    +1.102    +0.208    +1.032
+  EWS         2000-03-09..2026-10-13    4.42%    -0.189    -1.839    -0.134    -1.834
+  EWU         2000-03-09..2026-10-13    0.25%    -0.107    -0.578    +0.089    -0.463
+  IWM         2001-05-30..2026-10-12    0.84%    -0.295    +0.753    -0.094    +0.868
+  SPY         2000-03-09..2026-10-12    6.67%    -0.172    -0.036    -0.006    +0.135
+  XLB         2000-03-09..2026-10-13   -1.46%    -0.070    +0.879    +0.381    +0.947
+  XLE         2000-03-09..2026-10-13    2.64%    -0.126    -0.127    +0.070    -0.035
+  XLF         2000-03-09..2026-10-13    1.47%    -0.168    -0.387    -0.284    -0.416
+  XLI         2000-03-09..2026-10-13    4.18%    -0.081    +1.126    +0.105    +1.021
+  XLK         2000-03-09..2026-10-13    9.65%    -0.342    +0.593    +0.181    +0.543
+  XLP         2000-03-09..2026-10-13    1.01%    -0.020    -0.360    -0.041    -0.405
+  XLU         2000-03-09..2026-10-13    3.20%    -0.091    -0.158    -0.229    -0.275
+  XLV         2000-03-09..2026-10-13   -1.74%    +0.092    +1.244    +0.343    +1.237
+  XLY         2000-03-09..2026-10-13    3.60%    -0.418    -0.602    -0.143    -0.350
+  E1 Q arms: Q1 median -0.036pp share>0 47.6%, Q2 median +0.063pp share>0 57.1%, Q3 median +0.135pp share>0 52.4% (vs K, report only)
+
+E2 rolling January starts (after tax $100k, base, m = 2, to 2026-09-29):
+  year   start        K AT      C0 d      Q1 d      Q2 d      Q3 d
+  2001   2001-01-02    12.39%   -0.672    +0.408    -0.071    +0.422
+  2002   2002-01-02    13.16%   -0.663    +0.801    -0.074    +0.815
+  2003   2003-01-02    14.08%   -0.704    +0.767    -0.115    +0.775
+  2004   2004-01-02    13.12%   -0.566    +0.851    -0.116    +0.858
+  2005   2005-01-03    13.39%   -0.577    +0.844    -0.133    +0.852
+  2006   2006-01-03    14.33%   -0.594    +0.916    -0.127    +0.924
+  2007   2007-01-03    14.90%   -0.589    +0.707    -0.134    +0.716
+  2008   2008-01-02    14.60%   -0.560    +0.741    -0.139    +0.750
+  2009   2009-01-02    16.96%   -0.607    +0.512    -0.152    +0.521
+  2010   2010-01-04    15.24%   -0.529    +0.558    -0.155    +0.568
+  2011   2011-01-03    15.94%   -0.629    +0.606    -0.165    +0.617
+  2012   2012-01-03    18.87%   -0.697    +0.558    -0.183    +0.570
+  2013   2013-01-02    19.89%   -0.728    +0.394    -0.198    +0.407
+  2014   2014-01-02    18.08%   -0.727    +0.412    -0.183    +0.425
+  2015   2015-01-02    17.78%   -0.793    +0.434    -0.191    +0.449
+  2016   2016-01-04    21.52%   -0.969    +0.496    -0.218    +0.513
+  2017   2017-01-03    23.97%   -1.086    +0.520    -0.091    +0.539
+  2018   2018-01-02    21.22%   -1.134    +0.530    -0.098    +0.550
+  2019   2019-01-02    24.29%   -1.326    +0.605    -0.113    +0.629
+  2020   2020-01-02    22.89%   -1.348    +0.266    -0.129    +0.292
+  2021   2021-01-04    20.31%   -1.259    +0.315    -0.140    +0.346
+  E2 Q1: n>=0 21/21 (100.0%), median +0.558pp, min +0.266pp (report only)
+  E2 Q2: n>=0 0/21 (0.0%), median -0.134pp, min -0.218pp (report only)
+  E2 Q3: n>=0 21/21 (100.0%), median +0.568pp, min +0.292pp (report only)
+
+E5 (report only): fill-decision differences on the main path (pre-tax, $100k, m = 2)
+  C0_vs_K     :   790 sessions differ (11.83%); C0 sells where K holds 524, C0 holds where K sells 9
+  K_vs_C0     :   790 sessions differ (11.83%); K sells where C0 holds 9, K holds where C0 sells 524
+  Q1_vs_K     :   190 sessions differ (2.84%); Q1 sells where K holds 49, Q1 holds where K sells 22
+  Q2_vs_K     :    12 sessions differ (0.18%); Q2 sells where K holds 5, Q2 holds where K sells 0
+  Q3_vs_K     :   192 sessions differ (2.87%); Q3 sells where K holds 51, Q3 holds where K sells 23
+  sells (downward resizes+exits) per arm: K 270, C0 785, Q1 297, Q2 275, Q3 298
+
+m = 4 cost stress, after tax at $100k (delta vs K):
+  2000_03_to_2026_09   K   10.35% | Q1   10.59%  +0.239pp Q2   10.28%  -0.077pp Q3   10.60%  +0.250pp
+  2010_01_to_end       K   14.82% | Q1   15.38%  +0.563pp Q2   14.66%  -0.157pp Q3   15.39%  +0.573pp
+  2017_01_to_end       K   23.67% | Q1   24.19%  +0.517pp Q2   23.58%  -0.098pp Q3   24.21%  +0.535pp
+
+six OOS windows (pre-tax, calibrated, m = 2, R-USD rule) -- delta vs K:
+  window            K CAGR   K maxDD    C0 d      Q1 d      Q2 d      Q3 d
+  GSPC_1957_1999      9.97%    39.65%    -0.077    +0.803    +0.224    +0.901
+  M1                 21.27%    41.22%    -0.091    +1.722    -0.229    +1.831
+  M2                 11.73%    58.11%    -0.024    +0.203    -0.414    +0.179
+  M3                  6.46%    65.18%    -0.053    -0.115    -0.319    +0.035
+  M4                  9.71%    58.15%    -0.232    -0.116    -0.504    -0.001
+  M5                 -0.62%    85.65%    +0.038    +0.124    -0.019    +0.299
+
+reference reproduction: 1015 cells, 0 mismatches, max|diff| 5.00e-07 -> PASS

@@ -301,3 +301,63 @@ a seed, a gate threshold or the selection rule; each was found by `--smoke`, `--
    asserts K's bootstrap anchors directly (pre-tax medians and $100k deltas versus R2).
 9. `--smoke`'s structural checks were corrected to the provable inclusions
    (production ⊆ Q2 ⊆ Q1) — see A1.
+
+**A3. Report-path fixes found by the first real `--run` (report-only; no arm, parameter, stage,
+seed, gate threshold, gate outcome or the selection rule changed).** The first `--run` computed
+every stage at full size and wrote `RESULTS.json`, then died in `main()`'s SUMMARY writer. The
+fixes below were made after that run's numbers existed; the gate booleans and `ADOPTED` are
+**identical before and after** (checked cell by cell, not assumed: 0 changed gate booleans of the
+3 × 14 cells).
+
+1. **The three reporting stages read the wrong series.** `stage_plateau`'s `early_sessions`,
+   `stage_e5_decisions`' `early_sessions` and the entire LOEO block computed the early leg's flag
+   on the **synthetic 2x close** instead of the **QQQ close** (the series production
+   `equity_leveraged_trend_v1` evaluates the vote and the early conditions on, and the series
+   `main_inputs` sizes from). The measured difference is decisive: the production early path is
+   active in **164** measured sessions on the QQQ close — production's own count
+   (`fast_reentry_v1`: 164 of 6,679, 2.46 %) — against **126** on the synthetic close, and §8
+   expectation 2 pre-registered "a multiple of the production 164 sessions". Fixed with a cached
+   accessor `qqq_price()`; the harness's structural checks and its `device_structure` counts now
+   also run on the QQQ close (the inclusions are series-independent and still hold). Corrected
+   counts: **K 164, Q1 425, Q2 178, Q3 419** (plateau neighbours: N40 171, N60 141, N126 275,
+   N504 115, W13 164, W23 164). **No gate reads any of these cells** — PL reads only the Q rows'
+   ΔCAGR and Δmax DD, which were always computed from the arms' own target series — and the LOEO
+   block is report-only by §5.
+2. **The full reproduction block compared two different conventions.** `reference_checks(res,
+   full=True)` compared this study's E1/E2/OOS/instrument **arm-minus-K** deltas against the
+   parents' published **arm-minus-C0** cells, flagging 138 of 1,015 cells (63 `e1` + 21 `e2` +
+   12 `oos` + 42 `instruments`). Every one of the 138 vanishes under the parents' convention
+   (`arm-K - (C0-K) = arm-C0`), verified cell by cell *before* the fix was written; the new
+   `_parent_convention` helper performs the conversion — the same convention fix A2.3 applied to
+   the bootstrap block. The full block now reports **1,015 cells, 0 mismatches, max|diff|
+   5.0e-07 → PASS**, so it is now a genuine reproduction of the parents' E1/E2/OOS/instrument
+   stages as well as the deep part's pre-tax/after-tax/cost/bootstrap cells.
+3. **Two crashes in `main()`'s SUMMARY writer** (print path only): the reference row's B1/B2
+   column indexed `{arm}_vs_K` for `C0`, which the tax block does not publish (C0 is the parents'
+   own baseline there, published as `K_vs_C0`); and the T1 control cell indexed
+   `win[TAX_WINDOWS_LAST]` (a *window* key) where `ctrl[...]` (the gate *capital*) is meant.
+4. **`device_structure` was computed but not recorded.** §4.4/A1 report the Q1/Q3 relation as the
+   pre-registered measurement of the device's shape; it is now exported (`harness.device_structure`)
+   and printed on the SUMMARY's device-structure line: **Q1-only 6 sessions, Q3-only 0** on the
+   QQQ close (unchanged from A1's numbers).
+5. Nothing else in the pipeline changed: the pre-tax main window, the three after-tax windows,
+   both clean bootstraps, the six OOS windows, the 21 instruments, E1/E2 and the plateau Δ cells
+   are bit-identical to the first run's.
+
+## 11. Runs
+
+The two final runs of the frozen code (`research/early_quorum_v1/screen.py`) produced
+**byte-identical** `RESULTS.json` and `SUMMARY.txt`; both exited 0, with the deep harness block
+(379 cells) and the full reproduction block (1,015 cells) at 0 mismatches.
+
+| run | `RESULTS.json` SHA-256 |
+|---|---|
+| 1 | `32037decf41d539233109729a43cc05aef59a576bdfde86519a2dc0cc861b143` |
+| 2 | `32037decf41d539233109729a43cc05aef59a576bdfde86519a2dc0cc861b143` |
+
+`SUMMARY.txt` is also byte-identical between the two runs
+(`762f03ec413cd6f1b9748139cc39363def7f4624ed6839e66523fa1b3d29bf6d`), and so is the two runs'
+stdout. Each run: `harness PASS (0 outside tolerance)`, deep block 379 cells / 0 mismatches /
+max|diff| 4.99e-07, full block 1,015 cells / 0 mismatches / max|diff| 5.00e-07, and
+`ADOPTED: K -- no candidate clears every gate`.
+

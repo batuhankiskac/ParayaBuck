@@ -36,7 +36,7 @@ STANDING_INVALID = "invalid"
 
 def live_configuration_digests(config: Any) -> tuple[str, ...]:
     """Digests a LIVE approval binds (one per enabled strategy)."""
-    from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
+    from parayabuck.execution.portfolio import portfolio_execution_policy_from_config, portfolio_risk_limits_from_config
     from parayabuck.portfolio import product_strategy_from
     from parayabuck.portfolio.runtime_service import configuration_digest
     from parayabuck.universe import equity_universe_digest
@@ -54,10 +54,7 @@ def live_configuration_digests(config: Any) -> tuple[str, ...]:
             selection.maximum_allocation,
             equity_universe_digest(equity_universe),
             portfolio_risk_limits_from_config(config.risk),
-            PortfolioExecutionPolicy(
-                rebalance_band_pct=config.execution.rebalance_band_pct,
-                minimum_order_notional=config.execution.minimum_order_notional,
-            ),
+            portfolio_execution_policy_from_config(config.execution),
         ),
     )
 

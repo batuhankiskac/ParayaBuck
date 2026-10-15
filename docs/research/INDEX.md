@@ -1,17 +1,22 @@
 # Research index
 
-Current production identity: **VT35 with the E2 trend vote and the R2 early
-re-entry path** (`equity_leveraged_trend_v1` 1.2.0: hold QLD at
+Current production identity: **VT35 with the E2 trend vote, the R2 early
+re-entry path, the A1u gain-scaled downsize band and the H2 December deferral**
+(`equity_leveraged_trend_v1` 1.2.0: hold QLD at
 `min(1, 0.35 / 20-session vol)` while at least two of QQQ > 200-session SMA,
 QQQ 252-session return > 0 and QQQ > 126-session channel midpoint hold;
 half that weight while the vote is off but QQQ > SMA50, its 20-session
 annualized vol is below its 252-session median and QQQ > its close 20 sessions
-back), PAPER only. Supporting code, data and
+back; a downward resize between two positive weights fills only when its drift
+exceeds 0.5 / 3 / 8 pp at an embedded USD FIFO gain fraction of ≤ 1 % / ≤ 5 % /
+> 5 %, and a downsize whose fill session is one of the last 10 NYSE sessions of
+December is postponed to the first January decision), PAPER only. Supporting code, data and
 results for each doc live in `research/<name>/` unless noted (from 2026-10-12 on,
 in the archive tag named in the row).
 
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|
+| [`gain_band_integration_v1.md`](gain_band_integration_v1.md) | 2026-10-15 | A1u shipped as `execution.downsize_gain_band` (0.5 / 3 / 8 pp at a USD FIFO gain fraction of ≤ 1 % / ≤ 5 % / > 5 %, entries/exits/up-resizes unchanged, fail-safe to the constant band, in both authorization digests, per-decision metadata and a daily-summary line); **H2 ships with it** as the adopted composition K (`execution.december_downsize_deferral_sessions: 10`, the last 10 NYSE December sessions by the fill session, never an exit, entry, up-resize or risk reduction; own metadata key, receipt field, `DECEMBER_DEFERRAL_HOLD` reason and unbounded watchdog tolerance while the hold stands). The packaged defaults mirror the YAML (R2's `d5309d1f` precedent); `null` / `0` disable. No Stage B replay; goldens pinned three times per identity (band+deferral off = the pre-A1u numbers, band only, shipped). Research arm A1u: after tax +0.117 pp median on 21 ETFs, 21/21 rolling starts positive, pre-tax ≈ 0 with +0.43 pp max DD, but v3 failed its E3 flat-tax bootstrap cell; K clears it (58.3 %) and keeps H2's contribution (+0.042 pp on 61.0 % of B1 paths). Evidence: tag `archive/research/gain-band-v3-2026-10` plus `archive/research/band-h2-combo-v1-2026-10`. | current evidence |
 | [`band_h2_combo_v1.md`](band_h2_combo_v1.md) | 2026-10-15 | A1u gain band + H2 December deferral (K) vs A1u alone: every pre-registered gate passes — K adds +0.14 / +0.13 / +0.27 pp after tax at $100k over A1u (+0.59 / +0.53 / +1.09 pp over R2), bootstraps B1/B2 +0.04 / +0.03 pp (61% / 60% of paths), 21/21 rolling starts, max DD 0.5 pp better than A1u, and it repairs A1u's only failing gain_band_v3 cell (block-10 flat: 58% of paths). Adopted for integration. Evidence: tag `archive/research/band-h2-combo-v1-2026-10`. | current evidence (adopted) |
 | [`smooth_target_v1.md`](smooth_target_v1.md) | 2026-10-15 | Smoothed / partial-adjustment target weight on R2 (idea_survey_v3 I3: 5- and 10-session means, λ = 0.2 partial adjustment, on-state-only mean): traded volume falls 29–40% but the number of taxable sells does not, so pre-tax is ≈ 0 or worse and every arm fails; best S1 wins after tax (+0.35 / +0.27 / +0.36 pp) but fails the OOS windows (−0.42 pp), the pre-tax non-inferiority margin (−0.109 pp) and B2 (53%); worse than the gain-scaled band A1. Evidence: tag `archive/research/smooth-target-v1-2026-10`. | current evidence |
 | [`gain_band_v3.md`](gain_band_v3.md) | 2026-10-15 | Confirmation of the gain-scaled downsize band on new evidence: after tax on 21 ETFs with the real TRY calendar (median +0.10 to +0.12 pp, 81–95% positive), 21/21 rolling January starts positive (median +0.54 to +1.12 pp), pre-tax non-inferiority (≥ −0.04 pp; margin chosen after v2, disclosed) all pass; formally FAILS one of four fresh bootstraps (block-10 flat 20% tax: median +0.03 pp but 53–54% of paths positive vs 55%). The USD-only implementable arm A1u matches A1 (+0.46 / +0.40 / +0.82 pp after tax at $100k; decisions differ on 0.8% of sessions). Candidate for owner decision. Evidence: tag `archive/research/gain-band-v3-2026-10`. | current evidence (candidate) |

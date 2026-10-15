@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from parayabuck import Config, EngineConfig, RiskLimits, load_config
-from parayabuck.config import AppConfig, DataConfig, RuntimeMode
+from parayabuck.config import AppConfig, DataConfig, DownsizeGainBand, ExecutionConfig, RuntimeMode
 
 
 def _settings() -> dict[str, object]:
@@ -150,6 +150,43 @@ def test_shipped_paper_config_has_integrated_cap8_with_other_limits_unchanged() 
     assert config.strategy.equity.parameters["early_reentry_weight"] == 0.5
     assert config.symbols == ("SPY", "QQQ", "QLD")
     assert config.execution.rebalance_band_pct == 0.005
+
+
+def test_shipped_execution_block_pins_the_a1u_downsize_gain_band() -> None:
+    """The shipped execution policy ships A1u's schedule (docs/research/
+    gain_band_v3.md) and the H2 December window (docs/research/
+    band_h2_combo_v1.md), and the packaged defaults mirror both so a deleted
+    key cannot silently restore the constant band or drop the deferral."""
+    config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "settings.yaml"))
+
+    assert config.execution.downsize_gain_band == DownsizeGainBand(
+        thresholds=(0.01, 0.05),
+        bands=(0.005, 0.03, 0.08),
+    )
+    assert config.execution.downsize_gain_band == ExecutionConfig().downsize_gain_band
+    assert config.execution.december_downsize_deferral_sessions == 10
+    assert config.execution.december_downsize_deferral_sessions == ExecutionConfig().december_downsize_deferral_sessions
+
+
+def test_downsize_gain_band_config_validation(tmp_path: Path) -> None:
+    path = tmp_path / "settings.yaml"
+    for schedule, match in (
+        ({"thresholds": [0.01, 0.05], "bands": [0.005, 0.03]}, "one more band than thresholds"),
+        ({"thresholds": [0.05, 0.01], "bands": [0.005, 0.03, 0.08]}, "strictly increasing"),
+        ({"thresholds": [0.01, 0.05], "bands": [0.005, 0.08, 0.03]}, "non-decreasing"),
+        ({"thresholds": [0.01], "bands": [0.005, 1.5]}, "bands must be in"),
+        ("0.03", "must be a mapping or null"),
+    ):
+        raw = _settings()
+        raw["execution"] = {"downsize_gain_band": schedule}
+        path.write_text(yaml.safe_dump(raw))
+        with pytest.raises(ValueError, match=match):
+            load_config(str(path))
+
+    raw = _settings()
+    raw["execution"] = {"downsize_gain_band": None}
+    path.write_text(yaml.safe_dump(raw))
+    assert load_config(str(path)).execution.downsize_gain_band is None
 
 
 def test_deprecated_risk_monitor_timeframe_still_loads_and_maps(tmp_path) -> None:

@@ -25,6 +25,13 @@ show:
   filled, leaving the previous position in a downtrend). A residual is
   tolerated so partially filled exits, fractional-share rounding and the
   ordinary price drift of a held position between decisions do not raise it.
+  A downsize the A1u gain-scaled band deliberately did NOT trade
+  (``metadata["gain_band"]``) widens that residual by the recorded band, since
+  holding above the target IS the recorded intent there; an exit to zero is
+  never a band case and still alarms. A downsize the December window postponed
+  (``metadata["december_deferral"]``, H2) is tolerated without limit while its
+  target stays positive, because the whole resize is deliberately held until
+  the first January decision re-plans it; an exit to zero is never deferred.
 
 Everything here is pure and deterministic given ``now``; the exchange
 schedule comes from :mod:`parayabuck.markets.nyse_calendar` — the one
@@ -53,9 +60,24 @@ _EXIT_RESIDUAL_WEIGHT = 0.01
 _OVER_TARGET_RELATIVE = 0.10
 
 
-def over_target_tolerance(target: float) -> float:
-    """Weight a holding may exceed ``target`` by before it counts as over target."""
-    return max(_EXIT_RESIDUAL_WEIGHT, _OVER_TARGET_RELATIVE * max(0.0, target))
+def over_target_tolerance(target: float, held_band: float = 0.0) -> float:
+    """Weight a holding may exceed ``target`` by before it counts as over target.
+
+    ``held_band`` is the gain-scaled downsize band the latest decision's
+    metadata recorded for this symbol (A1u,
+    ``docs/research/gain_band_integration_v1.md``). That decision DELIBERATELY
+    left the position above its target because the drift had not reached
+    ``B_down(g_frac)`` yet, so the position may legitimately sit up to the band
+    above the target until the next decision: the tolerance becomes the band
+    plus the same relative slack the target itself gets, never less than the
+    usual tolerance. A symbol the band did not hold, and an exit to zero (where
+    the band can never apply), keep the constant tolerance, so an unfilled exit
+    still alarms.
+    """
+    base = max(_EXIT_RESIDUAL_WEIGHT, _OVER_TARGET_RELATIVE * max(0.0, target))
+    if held_band <= 0.0:
+        return base
+    return max(base, held_band + _OVER_TARGET_RELATIVE * max(0.0, target))
 
 
 @dataclass(frozen=True)
@@ -71,6 +93,13 @@ class LatestDecision:
     weights: dict[str, float]
     # ``signal_cross_check`` metadata of the decision (None when absent).
     signal_cross_check: dict[str, object] | None = None
+    # ``gain_band`` metadata of the decision: one mapping per downsize the A1u
+    # gain-scaled band suppressed (None/absent when the band touched nothing).
+    gain_band: tuple[dict[str, object], ...] | None = None
+    # ``december_deferral`` metadata of the decision: one mapping per downsize
+    # the December window postponed (H2, ``docs/research/band_h2_combo_v1.md``);
+    # None/absent when nothing was deferred.
+    december_deferral: tuple[dict[str, object], ...] | None = None
 
     @property
     def signal_source_hold(self) -> bool:
@@ -157,6 +186,56 @@ def _under_target(
     ]
 
 
+def _recorded_bands(latest: LatestDecision, market: Market) -> dict[str, float]:
+    """Gain-scaled bands the latest decision recorded, per canonical symbol.
+
+    ``metadata["gain_band"]`` is the planner's own record of the downsizes A1u
+    deliberately did not trade (``GainBandHold.as_metadata``). The largest band
+    wins when a symbol appears twice; malformed rows are ignored, never fatal.
+    """
+    entries = latest.gain_band
+    if not isinstance(entries, (tuple, list)):
+        return {}
+    bands: dict[str, float] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        raw_symbol, band = entry.get("symbol"), entry.get("band")
+        if not isinstance(raw_symbol, str) or not isinstance(band, (int, float)) or isinstance(band, bool):
+            continue
+        try:
+            symbol = canonical_symbol(raw_symbol, market)
+        except ValueError:
+            symbol = raw_symbol
+        bands[symbol] = max(bands.get(symbol, 0.0), float(band))
+    return bands
+
+
+def _deferred_symbols(latest: LatestDecision, market: Market) -> frozenset[str]:
+    """Canonical symbols the latest decision postponed through the December window.
+
+    ``metadata["december_deferral"]`` is the planner's own record of the
+    downsizes H2 deliberately did not trade (``DecemberDeferralHold``). A row
+    is used only when it carries a symbol; malformed rows are ignored, never
+    fatal.
+    """
+    entries = latest.december_deferral
+    if not isinstance(entries, (tuple, list)):
+        return frozenset()
+    symbols: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        raw_symbol = entry.get("symbol")
+        if not isinstance(raw_symbol, str):
+            continue
+        try:
+            symbols.add(canonical_symbol(raw_symbol, market))
+        except ValueError:
+            symbols.add(raw_symbol)
+    return frozenset(symbols)
+
+
 def _over_target(
     market: Market,
     latest: LatestDecision,
@@ -167,6 +246,8 @@ def _over_target(
     if account is None:
         return []
     held = held_weights(account, market)
+    bands = _recorded_bands(latest, market)
+    deferred = _deferred_symbols(latest, market)
     targets: dict[str, float] = {}
     for raw_symbol, weight in latest.weights.items():
         try:
@@ -178,7 +259,18 @@ def _over_target(
     for symbol in sorted(set(held) | set(targets)):
         actual = held.get(symbol, 0.0)
         target = targets.get(symbol, 0.0)
-        if actual > target + over_target_tolerance(target):
+        # A December deferral holds the WHOLE downsize by construction, so any
+        # excess over a POSITIVE target is the recorded intent until the first
+        # January decision re-plans it (H2, ``docs/research/
+        # band_h2_combo_v1.md``). An exit to zero is never a deferral case
+        # (and never recorded), so an unfilled exit still alarms.
+        if target > 1e-9 and symbol in deferred:
+            continue
+        # A recorded band only justifies a holding above a POSITIVE target: the
+        # band never applies to an exit, so a target of zero keeps the constant
+        # tolerance and an unfilled exit still alarms.
+        held_band = bands.get(symbol, 0.0) if target > 1e-9 else 0.0
+        if actual > target + over_target_tolerance(target, held_band):
             over.append(f"{symbol} held {actual:.1%} vs target {target:.1%}")
     if not over:
         return []

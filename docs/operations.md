@@ -16,9 +16,22 @@ How the running PAPER bot behaves and how to watch it. Deployment is in
 
 No order is placed when the target is within the 0.5% rebalance band or the
 order is under $10 (`execution.rebalance_band_pct`,
-`execution.minimum_order_notional`). A fresh deployment makes one startup
-catch-up decision on the latest completed bars; a restart never duplicates a
-decision.
+`execution.minimum_order_notional`), and — with `execution.downsize_gain_band`
+(A1u) — a downward resize between two positive weights is held while the drift
+stays under 0.5 / 3 / 8 pp of the embedded USD FIFO gain fraction of the units
+it would sell (`docs/research/gain_band_integration_v1.md`); the daily summary
+then says `gain band held (g 7.2%, band 8pp)`. With
+`execution.december_downsize_deferral_sessions` (H2, shipped 10) a downsize
+between two positive weights whose FILL session is one of the last 10 NYSE
+sessions of December is postponed whatever its size and re-planned at every
+later decision, so it executes at the first January open; the summary says
+`december deferral held (88.0% -> 90.0%, 10 sessions)`, the decision summary
+reports `DECEMBER_DEFERRAL_HOLD`, and the intent watchdog does not read the
+deliberately held weight as a failed order (an exit to zero still alarms).
+Exits, entries, up-resizes and any reduction the risk layer produced are never
+deferred, and an unavailable NYSE calendar falls back to the ordinary rule. A fresh deployment makes one
+startup catch-up decision on the latest completed bars; a restart never
+duplicates a decision.
 
 
 ## One runner per account

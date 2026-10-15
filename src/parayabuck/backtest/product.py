@@ -26,7 +26,7 @@ from parayabuck.config import Config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
 from parayabuck.execution.portfolio import (
-    PortfolioExecutionPolicy,
+    portfolio_execution_policy_from_config,
     portfolio_risk_limits_from_config,
 )
 from parayabuck.logger import get_logger
@@ -467,10 +467,7 @@ def run_product_backtest(
         universe_version=universe_hash,
         risk_limits=risk,
         maximum_allocation=selection.maximum_allocation,
-        execution_policy=PortfolioExecutionPolicy(
-            rebalance_band_pct=config.execution.rebalance_band_pct,
-            minimum_order_notional=config.execution.minimum_order_notional,
-        ),
+        execution_policy=portfolio_execution_policy_from_config(config.execution),
         terminal_lifecycles=terminal_lifecycles,
     )
     result = engine.run(

@@ -134,6 +134,26 @@ execution:
   # live-authorization digests.
   rebalance_band_pct: 0.005
   minimum_order_notional: 10
+  # 2026-10-15 (gain_band_v3, A1u): a downward resize between two positive
+  # weights (never an entry, an exit to zero or an up-resize) fills only when
+  # the drift exceeds the band selected by the USD FIFO gain fraction of the
+  # units the sell would consume, over the bot's own lots (0.5pp / 3pp / 8pp
+  # at g_frac <= 1% / <= 5% / > 5%). Per-lot cost basis includes buy fees; a
+  # missing or inconsistent lot book falls back to rebalance_band_pct exactly.
+  # Set the block to null to restore the constant band. See
+  # docs/research/gain_band_integration_v1.md and gain_band_v3.md.
+  downsize_gain_band:
+    thresholds: [0.01, 0.05]
+    bands: [0.005, 0.03, 0.08]
+  # 2026-10-15 (band_h2_combo_v1, H2): a downward resize between two positive
+  # weights whose FILL session is one of the last 10 NYSE sessions of December
+  # (parayabuck.markets.nyse_calendar) is postponed; the ordinary rule,
+  # including the band above, is re-evaluated at every later decision, so it
+  # executes from the first January decision on (the January open). Exits to
+  # zero, up-resizes, entries and any risk-driven reduction are never deferred.
+  # 0 disables it. See docs/research/gain_band_integration_v1.md and
+  # band_h2_combo_v1.md.
+  december_downsize_deferral_sessions: 10
 backup:
   # Consistent SQLite snapshots of the runtime decision database
   # (runtime.decision_db_path), taken with the sqlite3 online backup API so

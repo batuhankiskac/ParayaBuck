@@ -5,8 +5,9 @@ overlay and one execution path shared by backtest, PAPER and LIVE.
 
 | | |
 |---|---|
-| Strategy | **VT35** with the E2 trend vote and the R2 early re-entry path — `equity_leveraged_trend_v1` 1.2.0 (Leveraged Index Trend v1) |
+| Strategy | **VT35** with the E2 trend vote, the R2 early re-entry path, the A1u gain-scaled downsize band and the H2 December deferral — `equity_leveraged_trend_v1` 1.2.0 (Leveraged Index Trend v1) |
 | Rule | Hold QLD (2x Nasdaq-100) while at least two of three QQQ trend votes hold on the completed daily close (close > 200-session SMA; 252-session return > 0; close > midpoint of the 126-session max/min), at weight `min(1, 0.35 / 20-session annualized QLD volatility)`; while the vote is off, hold half that weight when QQQ > SMA50, its 20-session annualized vol is under its 252-session median and QQQ > its close 20 sessions back; cash otherwise |
+| Execution | A downward resize between two positive weights fills only above 0.5 / 3 / 8 pp of drift at an embedded USD FIFO gain fraction of ≤ 1 % / ≤ 5 % / > 5 % (`execution.downsize_gain_band`); entries, exits to zero, up-resizes and any decision without a consistent lot book keep the 0.5 pp band. A downsize whose fill session is one of the last 10 NYSE sessions of December is postponed to the first January decision (`execution.december_downsize_deferral_sessions`); exits, entries, up-resizes and risk-driven reductions are never deferred |
 | Timing | Decided on the completed session bar after the NYSE close (16:00 ET; 13:00 ET on early-close days); DAY market orders fill at the next regular open |
 | Allocation | Equity 0.98 of account equity; 0.02 cash buffer |
 | Universe | Static `[SPY, QQQ, QLD]` (QQQ signal, QLD holding, SPY benchmark) |
@@ -19,7 +20,11 @@ alert at startup. Earlier equity identities are recoverable from git history
 only. Evidence for VT35: `docs/research/profit_max_v1.md`,
 `docs/research/paper_config_v2.md`; for the E2 trend vote:
 `docs/research/e2_integration_v1.md`; for the R2 early re-entry path:
-`docs/research/fast_reentry_integration_v1.md`. Backtest returns do not imply
+`docs/research/fast_reentry_integration_v1.md`; for the A1u downsize band and
+the H2 December deferral: `docs/research/gain_band_v3.md` and
+`docs/research/band_h2_combo_v1.md` (research) and
+`docs/research/gain_band_integration_v1.md` (what shipped, and what is still
+missing: no Stage B replay). Backtest returns do not imply
 live returns.
 
 > **Never run the engine on the laptop.** The laptop and the VM share one

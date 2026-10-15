@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from bisect import bisect_right
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime
 from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
+from functools import lru_cache
 
-from parayabuck.config import RiskLimits
+from parayabuck.config import DownsizeGainBand, ExecutionConfig, RiskLimits
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
+from parayabuck.data.adjustment import signal_session_date
+from parayabuck.logger import get_logger
+from parayabuck.markets.nyse_calendar import nyse_sessions
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.utils import is_crypto
+
+log = get_logger("parayabuck.execution.portfolio")
 
 
 class PortfolioOrderSide(StrEnum):
@@ -76,16 +83,288 @@ class PortfolioExecutionPolicy:
     turnover, and ``minimum_order_notional`` is the floor for a produced
     order (production also enforces the broker-authoritative minimum, which
     is at least as large).
+
+    ``downsize_gain_band`` (A1u, ``docs/research/gain_band_v3.md``) widens that
+    band for one case only: a downward resize between two positive weights,
+    whose band becomes ``B_down(g_frac)`` of the USD FIFO gain fraction of the
+    units the sell would consume. Entries, exits to zero and up-resizes keep
+    ``rebalance_band_pct``. The code default is inactive; the packaged
+    configuration ships the schedule, mirroring the shipped YAML (the same
+    split R2's ``early_reentry_weight`` uses). ``december_deferral_sessions``
+    (H2, ``docs/research/band_h2_combo_v1.md``) postpones the same case out of
+    the year end entirely: a downward resize whose fill session falls in the
+    last N NYSE sessions of December waits for the first January decision.
+    Zero (the code default) disables it; the packaged configuration ships 10.
     """
 
     rebalance_band_pct: float = 0.005
     minimum_order_notional: float = 10.0
+    downsize_gain_band: DownsizeGainBand | None = None
+    december_deferral_sessions: int = 0
 
     def __post_init__(self) -> None:
         if not 0 <= self.rebalance_band_pct < 1:
             raise ValueError("rebalance_band_pct must be in [0, 1)")
         if not math.isfinite(self.minimum_order_notional) or self.minimum_order_notional < 0:
             raise ValueError("minimum_order_notional must be finite and non-negative")
+        if self.downsize_gain_band is not None and not isinstance(self.downsize_gain_band, DownsizeGainBand):
+            raise ValueError("downsize_gain_band must be a schedule or None")
+        if (
+            isinstance(self.december_deferral_sessions, bool)
+            or not isinstance(self.december_deferral_sessions, int)
+            or self.december_deferral_sessions < 0
+        ):
+            raise ValueError("december_deferral_sessions must be a non-negative integer")
+
+
+@dataclass(frozen=True)
+class GainBandHold:
+    """One downsize the gain-scaled band suppressed, at one decision."""
+
+    symbol: str
+    g_frac: float
+    band: float
+    gap: float
+
+    def as_metadata(self) -> dict[str, object]:
+        """Round-trippable decision-metadata entry (``TargetPortfolio.metadata``)."""
+        return {
+            "symbol": self.symbol,
+            "g_frac": float(self.g_frac),
+            "band": float(self.band),
+            "gap": float(self.gap),
+        }
+
+
+@dataclass(frozen=True)
+class DecemberDeferralHold:
+    """One downsize the December deferral window postponed, at one decision."""
+
+    symbol: str
+    target_weight: float
+    current_weight: float
+    sessions: int
+
+    def as_metadata(self) -> dict[str, object]:
+        """Round-trippable decision-metadata entry (``TargetPortfolio.metadata``)."""
+        return {
+            "symbol": self.symbol,
+            "target_weight": float(self.target_weight),
+            "current_weight": float(self.current_weight),
+            "sessions": int(self.sessions),
+        }
+
+
+# Metadata key naming the symbols whose downsize the December deferral window
+# postponed to the first January decision (H2,
+# ``docs/research/band_h2_combo_v1.md``). Read by the intent watchdog, which
+# must tolerate the deliberately held weight, and by the summaries.
+DECEMBER_DEFERRAL_KEY = "december_deferral"
+
+
+# Metadata key naming the symbols whose current target the RISK layer produced
+# rather than the strategy: the portfolio risk overlay lowering a weight below
+# the strategy's own, a halt (any reduction while halted), and a
+# risk-reduction-only target construction. The gain-scaled band is a tax-timing
+# device for the strategy's own drift trims, so those symbols keep the constant
+# band and their sell executes (``docs/research/gain_band_integration_v1.md``).
+GAIN_BAND_BYPASS_KEY = "gain_band_bypass"
+
+
+def gain_band_bypass_symbols(target: TargetPortfolio, market: Market) -> frozenset[str]:
+    """Canonical symbols of ``target`` the gain-scaled band must not hold."""
+    entries = (target.metadata or {}).get(GAIN_BAND_BYPASS_KEY)
+    if not isinstance(entries, (tuple, list)):
+        return frozenset()
+    symbols: set[str] = set()
+    for raw in entries:
+        if not isinstance(raw, str):
+            continue
+        try:
+            symbols.add(canonical_symbol(raw, market))
+        except ValueError:
+            symbols.add(raw)
+    return frozenset(symbols)
+
+
+def gain_band_bypass_metadata(
+    metadata: Mapping[str, object],
+    symbols: Iterable[str],
+    market: Market,
+) -> dict[str, object]:
+    """``metadata`` plus ``symbols`` marked as risk-driven reductions."""
+    existing = metadata.get(GAIN_BAND_BYPASS_KEY)
+    merged = set(existing) if isinstance(existing, (tuple, list)) else set()
+    merged.update(symbols)
+    return {**metadata, GAIN_BAND_BYPASS_KEY: tuple(sorted(merged))}
+
+
+@lru_cache(maxsize=32)
+def _december_season_sessions(year: int) -> tuple[date, ...]:
+    """NYSE November/December session dates of ``year``, ascending.
+
+    November is included because the fill session of the last November session
+    is the first December one, and both sides must be classified by the same
+    list. An unavailable calendar returns ``()``: the deferral then never
+    applies and the ordinary rule executes, exactly like the gain band's
+    constant-band fallback (a tax-timing rule must not be able to stop a sell).
+    """
+    try:
+        return tuple(day for day, _, _ in nyse_sessions(date(year, 11, 1), date(year, 12, 31)))
+    except Exception:
+        log.warning("December deferral window unavailable for %s; the ordinary rule applies", year, exc_info=True)
+        return ()
+
+
+def in_december_deferral_window(decision_timestamp: datetime, sessions: int) -> bool:
+    """Whether this decision's FILL session is one of the last ``sessions``
+    NYSE sessions of December (H2, ``docs/research/band_h2_combo_v1.md``).
+
+    The research arm tests the FILL session of the resize (``research/
+    band_h2_combo_v1/screen.py``: ``december_tail`` at 436-450, the window at
+    589, and the arm branch ``if spec["defer"] and i in dec_tail and tgt < w``
+    at 663), which is the session after the decision session because the engine
+    decides on the completed close and trades at the next open
+    (``docs/research/gain_band_integration_v1.md``, timing note). The successor
+    is taken from the same ``parayabuck.markets.nyse_calendar`` schedule the
+    runtime uses, so the backtest and PAPER/LIVE share one window.
+    """
+    if sessions <= 0:
+        return False
+    session = signal_session_date(decision_timestamp)
+    if session.month < 11:
+        # January to October: the fill session cannot be in December.
+        return False
+    season = _december_season_sessions(session.year)
+    index = bisect_right(season, session)
+    if index >= len(season):
+        # The fill session is in January: nothing left to defer.
+        return False
+    fill = season[index]
+    if fill.month != 12:
+        # A November fill is never part of the December window.
+        return False
+    # Every December session from the fill session on is exactly the tail,
+    # so the fill is inside the window iff at most `sessions` remain.
+    return index >= len(season) - sessions
+
+
+@dataclass(frozen=True)
+class DownsizeGainBandVerdict:
+    """Outcome of applying the downsize-gain-band schedule to one candidate order."""
+
+    applied: bool
+    band: float
+    gap: float
+    g_frac: float | None = None
+    # "" when the schedule decided (or did not apply at all); otherwise why the
+    # schedule could not be evaluated and the constant band was used instead.
+    fallback: str = ""
+
+
+def downsize_gain_fraction(
+    lots: Sequence[Sequence[float]],
+    units: float,
+    price: float,
+) -> float | None:
+    """USD FIFO gain fraction of the ``units`` a sell at ``price`` would consume.
+
+    ``lots`` are the bot's own open lots, oldest first, as
+    ``(quantity, fee-inclusive unit cost)``. The per-lot gain is
+    ``units_from_lot * (price - unit_cost)``; the total is floored at zero
+    (the research arm A1u has no per-lot floor: a loss lot offsets a gain lot,
+    and any ``g_frac <= 1 %`` selects the same first tier anyway). Returns
+    ``None`` when the lots do not cover the sale, so the caller falls back to
+    the constant band.
+    """
+    if price <= 0 or units <= 0:
+        return 0.0
+    remaining = units
+    gain = 0.0
+    for lot_quantity, lot_cost in lots:
+        if remaining <= 0:
+            break
+        take = min(remaining, lot_quantity)
+        gain += take * (price - lot_cost)
+        remaining -= take
+    if remaining > 1e-9:
+        return None
+    return max(0.0, gain) / (units * price)
+
+
+def downsize_gain_band_verdict(
+    schedule: DownsizeGainBand | None,
+    *,
+    target_weight: float,
+    current_weight: float,
+    units: float,
+    price: float,
+    lots: Sequence[Sequence[float]] | None,
+    managed_qty: float,
+    base_band: float,
+) -> DownsizeGainBandVerdict:
+    """Decide which band applies to one planned resize.
+
+    The schedule only ever replaces the band of a downward resize between two
+    positive weights (``0 < target_weight < current_weight``). Anything else,
+    an unavailable lot book, or a lot book that does not add up to the managed
+    quantity keeps ``base_band`` — exactly the constant-band behaviour.
+    """
+    gap = abs(target_weight - current_weight)
+    if schedule is None or not 0.0 < target_weight < current_weight:
+        return DownsizeGainBandVerdict(False, base_band, gap)
+    if not lots:
+        return DownsizeGainBandVerdict(False, base_band, gap, None, "lots_unavailable")
+    tolerance = max(1e-6 * abs(managed_qty), 1e-9)
+    if abs(sum(lot_quantity for lot_quantity, _ in lots) - managed_qty) > tolerance:
+        return DownsizeGainBandVerdict(False, base_band, gap, None, "lot_book_mismatch")
+    g_frac = downsize_gain_fraction(lots, units, price)
+    if g_frac is None:
+        return DownsizeGainBandVerdict(False, base_band, gap, None, "lot_book_too_small")
+    return DownsizeGainBandVerdict(True, schedule.band_for(g_frac), gap, g_frac)
+
+
+def record_gain_band_holds(target: TargetPortfolio, holds: Sequence[GainBandHold]) -> TargetPortfolio:
+    """Attach the downsizes the gain band suppressed to the decision metadata.
+
+    The record is persisted with the decision (``portfolio_decisions`` →
+    ``target_json``) and read back by the daily summary, so an operator can see
+    that the band, not a strategy signal, kept the position. Only non-empty
+    hold lists add the key: every decision without a suppressed downsize keeps
+    byte-identical metadata.
+    """
+    if not holds:
+        return target
+    return replace(
+        target,
+        metadata={**target.metadata, "gain_band": tuple(hold.as_metadata() for hold in holds)},
+    )
+
+
+def record_december_deferral_holds(target: TargetPortfolio, holds: Sequence[DecemberDeferralHold]) -> TargetPortfolio:
+    """Attach the downsizes the December window postponed to the decision metadata.
+
+    Same contract as :func:`record_gain_band_holds`, on the deferral's own key:
+    the record is persisted with the decision, the intent watchdog reads it so
+    the deliberately held weight is not a failed order, and the summaries show
+    it. Only non-empty hold lists add the key.
+    """
+    if not holds:
+        return target
+    return replace(
+        target,
+        metadata={**target.metadata, DECEMBER_DEFERRAL_KEY: tuple(hold.as_metadata() for hold in holds)},
+    )
+
+
+def portfolio_execution_policy_from_config(execution: ExecutionConfig) -> PortfolioExecutionPolicy:
+    """Single semantic mapping shared by backtest, paper and live."""
+    return PortfolioExecutionPolicy(
+        rebalance_band_pct=execution.rebalance_band_pct,
+        minimum_order_notional=execution.minimum_order_notional,
+        downsize_gain_band=execution.downsize_gain_band,
+        december_deferral_sessions=execution.december_downsize_deferral_sessions,
+    )
 
 
 @dataclass(frozen=True)
@@ -212,6 +491,10 @@ class PortfolioRiskOverlay:
             and (canonical_symbol(position.symbol, position.market) not in approved or position.external_qty > 1e-12)
         )
         desired = {canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights}
+        # The strategy's own weights, before this overlay lowers any of them: a
+        # target below its strategy weight is a risk-driven reduction, not a
+        # discretionary trim, so the gain-scaled band must not hold it.
+        strategy_desired = dict(desired)
         # Strategy alpha priority per canonical symbol (0 = unranked). When
         # the strategy declares ranks, position-count enforcement below
         # retains best-ranked names; otherwise the legacy target-weight
@@ -387,6 +670,14 @@ class PortfolioRiskOverlay:
             for symbol, weight in sorted(desired.items())
             if weight > 1e-12
         )
+        # Symbols this overlay pushed BELOW the strategy's own weight, plus
+        # everything it can still reduce while halted: those sells are risk
+        # enforcement, so the A1u band must decide them with the constant band.
+        reduced = {
+            weight.symbol for weight in weights if weight.weight < strategy_desired.get(weight.symbol, 0.0) - 1e-12
+        }
+        if halted:
+            reduced.update(weight.symbol for weight in weights)
         # gross_after is the actual expected account gross: immutable external
         # exposure plus the managed weights. The external floor carried inside
         # the target weights must not be counted a second time.
@@ -398,16 +689,19 @@ class PortfolioRiskOverlay:
             and position.external_qty > 1e-12
             and canonical_symbol(position.symbol, position.market) in weight_symbols
         )
+        metadata: dict[str, object] = {
+            **target.metadata,
+            "risk_overlay_reasons": tuple(halted_reasons),
+            "risk_overlay_halted": halted,
+            "risk_overlay_managed_exposure": sum(weight.weight for weight in weights) - external_in_weights,
+        }
+        if reduced:
+            metadata = gain_band_bypass_metadata(metadata, reduced, market)
         adjusted = replace(
             target,
             weights=weights,
             cash_weight=max(0.0, 1.0 - sum(weight.weight for weight in weights)),
-            metadata={
-                **target.metadata,
-                "risk_overlay_reasons": tuple(halted_reasons),
-                "risk_overlay_halted": halted,
-                "risk_overlay_managed_exposure": sum(weight.weight for weight in weights) - external_in_weights,
-            },
+            metadata=metadata,
         )
         gross_after = immutable_gross + sum(weight.weight for weight in weights) - external_in_weights
         return RiskOverlayDecision(
@@ -436,6 +730,9 @@ class TargetToOrderPlanner:
         open_order_symbols: set[str] | None = None,
         open_order_sides: Mapping[str, set[str] | frozenset[str]] | None = None,
         client_order_salt: str = "",
+        open_lots: Mapping[str, Sequence[Sequence[float]]] | None = None,
+        gain_band_holds: list[GainBandHold] | None = None,
+        december_deferral_holds: list[DecemberDeferralHold] | None = None,
     ) -> tuple[PortfolioOrderRequest, ...]:
         """Build rebalance orders from a target.
 
@@ -445,6 +742,14 @@ class TargetToOrderPlanner:
         timestamp never produce the same broker idempotency key.
         ``client_order_salt`` is the per-ledger salt that keeps those ids
         distinct from ids another ledger derives for the same decision.
+
+        ``open_lots`` maps a symbol to the bot's own (managed) open lots,
+        oldest first, as ``(quantity, fee-inclusive unit cost)``; it is the
+        only input of the ``downsize_gain_band`` policy and is ignored by every
+        other decision. ``gain_band_holds`` and ``december_deferral_holds`` are
+        optional diagnostics sinks: one hold is appended per suppressed or
+        postponed downsize, which the caller records with the decision
+        (metadata / summary) instead of silently dropping the order.
         """
         _validate_unique_account_positions(account)
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
@@ -478,6 +783,9 @@ class TargetToOrderPlanner:
         }
         target_weights = {canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights}
         symbols = approved & (set(target_weights) | set(positions))
+        # Symbols whose current target the RISK layer produced: their downsize
+        # must execute, so they are decided by the constant band.
+        risk_reduced = gain_band_bypass_symbols(target, market)
         orders: list[PortfolioOrderRequest] = []
         for symbol in sorted(symbols):
             price = prices.get(symbol) or (positions[symbol].current_price if symbol in positions else 0.0)
@@ -490,10 +798,35 @@ class TargetToOrderPlanner:
             target_qty = target_weights.get(symbol, 0.0) * account.equity / price
             current_weight = current_qty * price / account.equity if account.equity > 0 else 0.0
             target_weight = target_weights.get(symbol, 0.0)
+            gap = abs(target_weight - current_weight)
             # Shared execution policy: sub-band drift produces no order in
             # backtest, paper OR live. This keeps turnover/cost parity between
             # the historical simulator and the live broker path.
-            if abs(target_weight - current_weight) < self.policy.rebalance_band_pct:
+            #
+            # The December window (H2) is tested FIRST, exactly as the research
+            # composition K does: an in-window downsize is postponed whatever
+            # its size, so the band never gets a say in December. Both cases
+            # cover the same shape — a downward resize between two positive
+            # weights — and must not be skipped here: whether they bind is only
+            # known after the units the sell would consume are known. A
+            # reduction the risk overlay produced (or any risk-reduction-only
+            # decision) is not the strategy's own trim: it keeps the constant
+            # band, executes, and is never deferred.
+            deferral_sessions = self.policy.december_deferral_sessions
+            deferral_case = (
+                deferral_sessions > 0
+                and 0.0 < target_weight < current_weight
+                and symbol not in risk_reduced
+                and gap >= self.policy.rebalance_band_pct
+                and in_december_deferral_window(target.decision_timestamp, deferral_sessions)
+            )
+            gain_band_case = (
+                self.policy.downsize_gain_band is not None
+                and 0.0 < target_weight < current_weight
+                and symbol not in risk_reduced
+                and not deferral_case
+            )
+            if gap < self.policy.rebalance_band_pct and not gain_band_case:
                 continue
             delta = target_qty - current_qty
             if delta < 0:
@@ -502,6 +835,40 @@ class TargetToOrderPlanner:
                 delta = -min(abs(delta), managed_qty)
                 if abs(delta) <= 1e-12:
                     continue
+                if deferral_case:
+                    if december_deferral_holds is not None:
+                        december_deferral_holds.append(
+                            DecemberDeferralHold(symbol, target_weight, current_weight, deferral_sessions)
+                        )
+                    continue
+                if gain_band_case:
+                    verdict = downsize_gain_band_verdict(
+                        self.policy.downsize_gain_band,
+                        target_weight=target_weight,
+                        current_weight=current_weight,
+                        units=abs(delta),
+                        price=price,
+                        lots=(open_lots or {}).get(symbol),
+                        managed_qty=managed_qty,
+                        base_band=self.policy.rebalance_band_pct,
+                    )
+                    if not verdict.applied:
+                        # FAIL-SAFE: without a consistent lot book the resize is
+                        # decided by the constant band, i.e. exactly as before.
+                        log.info(
+                            "Downsize gain band unavailable for %s (%s); using the %.4f band",
+                            symbol,
+                            verdict.fallback,
+                            self.policy.rebalance_band_pct,
+                        )
+                    if gap < verdict.band:
+                        if verdict.applied and gap >= self.policy.rebalance_band_pct and gain_band_holds is not None:
+                            gain_band_holds.append(
+                                GainBandHold(symbol, verdict.g_frac or 0.0, verdict.band, verdict.gap)
+                            )
+                        continue
+            elif gap < self.policy.rebalance_band_pct:
+                continue
             if delta > 0 and position is not None and managed_qty <= 1e-12:
                 # Never grow a manually opened position; the risk overlay
                 # already excludes purely external symbols, this is defense
@@ -630,7 +997,12 @@ def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide, sa
 
 
 __all__ = [
+    "DECEMBER_DEFERRAL_KEY",
+    "GAIN_BAND_BYPASS_KEY",
     "AssetTradingRules",
+    "DecemberDeferralHold",
+    "DownsizeGainBandVerdict",
+    "GainBandHold",
     "PortfolioExecutionPolicy",
     "PortfolioOrderRequest",
     "PortfolioOrderSide",
@@ -638,6 +1010,14 @@ __all__ = [
     "PortfolioRiskOverlay",
     "RiskOverlayDecision",
     "TargetToOrderPlanner",
+    "downsize_gain_band_verdict",
+    "downsize_gain_fraction",
     "floor_increment",
     "floor_increment_decimal",
+    "gain_band_bypass_metadata",
+    "gain_band_bypass_symbols",
+    "in_december_deferral_window",
+    "portfolio_execution_policy_from_config",
+    "record_december_deferral_holds",
+    "record_gain_band_holds",
 ]

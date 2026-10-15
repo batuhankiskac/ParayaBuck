@@ -267,6 +267,17 @@ def test_no_trade_reason_maps_canonical_vocabulary(canonical: str) -> None:
     assert map_no_trade_reason(f"{canonical}: 3 holdings blocked") == canonical
 
 
+@pytest.mark.parametrize(
+    "reason",
+    ["GAIN_BAND_HOLD", "DECEMBER_DEFERRAL_HOLD"],
+)
+def test_downsize_hold_reasons_map_to_the_band_vocabulary(reason: str) -> None:
+    """A1u's band hold and H2's December deferral are both the drift rule
+    postponing a resize, so ops reports read them as REBALANCE_BAND rather than
+    UNKNOWN (``docs/research/gain_band_integration_v1.md``)."""
+    assert map_no_trade_reason(reason) == "REBALANCE_BAND"
+
+
 # ---------------------------------------------------------------------------
 # Event redaction — nested values and decoded events
 # ---------------------------------------------------------------------------

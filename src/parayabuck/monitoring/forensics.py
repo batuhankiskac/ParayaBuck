@@ -414,6 +414,9 @@ def _table_exists(conn: sqlite3.Connection, table: str, *, strict: bool = False)
 _NO_TRADE_PATTERNS: dict[str, str] = {
     "rebalance_band": "REBALANCE_BAND",
     "band": "REBALANCE_BAND",
+    # H2's year-end deferral is the same vocabulary: the drift rule postponed
+    # the resize (``december_downsize_deferral_sessions``).
+    "deferral": "REBALANCE_BAND",
     "min_notional": "MIN_NOTIONAL",
     "minimum_order_notional": "MIN_NOTIONAL",
     "no_qualified": "NO_QUALIFIED_CANDIDATES",

@@ -1,0 +1,175 @@
+{
+  "branch": "research/k_stage_b_v1",
+  "campaign": "k_stage_b_v1",
+  "files": {
+    "pc2_evaluate.py": {
+      "bytes": 5642,
+      "group": "code",
+      "note": "archive/research/signal-ensemble-v1-2026-10:research/paper_config_v2/evaluate.py, byte copy; the metric definitions (_returns/_metrics/_accounting/_summary) the Stage B reports share",
+      "restored_from": "archive/research/signal-ensemble-v1-2026-10",
+      "sha256": "6988b3f7ee7a5ca5a01a9a38f23fdee81cac967999115f9d2fe1d69842492696",
+      "symlink": false
+    },
+    "stage_b/data/historical/equity_entity_lifetimes_full_v5.csv": {
+      "bytes": 2320175,
+      "group": "inputs",
+      "note": "archive/research/r2-stage-b-v1-2026-10:.../equity_entity_lifetimes_full_v5.csv; entity lifetimes for the terminal-lifecycle model (committed on main since the campaign)",
+      "restored_from": "archive/research/r2-stage-b-v1-2026-10",
+      "sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+      "symlink": false
+    },
+    "stage_b/data/historical/substitute_v5_actions_qqq_spy_qld.csv": {
+      "bytes": 10758,
+      "group": "inputs",
+      "note": "archive/research/r2-stage-b-v1-2026-10:research/r2_stage_b_v1/stage_b/data/historical/substitute_v5_actions_qqq_spy_qld.csv; the same campaign file's corporate actions for those three symbols",
+      "restored_from": "archive/research/r2-stage-b-v1-2026-10",
+      "sha256": "edaf08ade79d6f7a4a87eaceb4e6665bf145ea154b675f969f995653ff76c6b5",
+      "symlink": false
+    },
+    "stage_b/data/historical/substitute_v5_bars_qqq_spy_qld.csv": {
+      "bytes": 617769,
+      "group": "inputs",
+      "note": "archive/research/r2-stage-b-v1-2026-10:research/r2_stage_b_v1/stage_b/data/historical/substitute_v5_bars_qqq_spy_qld.csv; QQQ/SPY/QLD rows of the profit_max_v1 Alpaca SIP campaign file (split-adjusted price closes)",
+      "restored_from": "archive/research/r2-stage-b-v1-2026-10",
+      "sha256": "08ce87ef17a4fed6e0ee7b69abb9ca76f704d093d04573d6d5d739c37473ae2f",
+      "symlink": false
+    },
+    "stage_b/data/historical/substitute_v5_plus_warmup_bars_qqq_spy_qld.csv": {
+      "bytes": 736028,
+      "group": "inputs",
+      "note": "archive/research/r2-stage-b-v1-2026-10:research/r2_stage_b_v1/stage_b/data/historical/substitute_v5_plus_warmup_bars_qqq_spy_qld.csv; THE BARS THE ARMS TRADED ON (Yahoo warm-up 2014-01-02..2015-12-31 + the substitute rows; without it R2 starts 145 sessions late, see docs/research/r2_stage_b_v1.md)",
+      "restored_from": "archive/research/r2-stage-b-v1-2026-10",
+      "sha256": "fdc08320a50615531d6316c26b95036022bf0a6ce2ef2aa65feffeb4a984189d",
+      "symlink": false
+    },
+    "stage_b/data/historical/warmup_yahoo_2014_2015_bars_qqq_qld_spy.csv": {
+      "bytes": 118320,
+      "group": "inputs",
+      "note": "archive/research/r2-stage-b-v1-2026-10:.../warmup_yahoo_2014_2015_bars_qqq_qld_spy.csv; the warm-up half above",
+      "restored_from": "archive/research/r2-stage-b-v1-2026-10",
+      "sha256": "82413c0495352110f5b564a9e0f61d3963d79244843107bede19c8c19125645d",
+      "symlink": false
+    },
+    "stage_b/research/paper_config_v2/run_stage_b.py": {
+      "bytes": 22266,
+      "group": "code",
+      "note": "the archived Stage B runner, this worktree's copy, plus the k_stage_b_v1 audit additions (rebalances with the A1u/H2 hold records, band fallback log lines)",
+      "restored_from": "archive/research/r2-stage-b-v1-2026-10",
+      "sha256": "1e65e26e725026841e526daa11050cec56fbcbf8d6361d68637772ae934bfcaf",
+      "symlink": false
+    },
+    "stage_b/research/physical_availability_clock_v2/run_historical.py": {
+      "bytes": 46579,
+      "group": "code",
+      "note": "harness copy",
+      "restored_from": "archive/research/sleeve-candidates-v2-v3-2026-09",
+      "sha256": "f2e85a16f44be3f74d0e2a64c4f793255c1f0228df99c14c461a26364c734f84",
+      "symlink": false
+    },
+    "stage_b/research/physical_availability_clock_v2/shared_replay.py": {
+      "bytes": 63505,
+      "group": "code",
+      "note": "the shared-ledger physical replay the runner drives",
+      "restored_from": "archive/research/sleeve-candidates-v2-v3-2026-09",
+      "sha256": "bd0b82e3ddbfe2b9949b9ba5e7672d8b1c0f04d56c0b3f6e7406ef89a88aff0e",
+      "symlink": false
+    },
+    "stage_b/research/physical_availability_clock_v2/timing.py": {
+      "bytes": 4246,
+      "group": "code",
+      "note": "harness copy",
+      "restored_from": "archive/research/sleeve-candidates-v2-v3-2026-09",
+      "sha256": "19613df9a2aff330a55d49d14a9bb8906d00833c3ce24405a987e7e8ff533d4a",
+      "symlink": false
+    },
+    "stage_b/research/sleeve_candidates_v2/stage_b/composite.py": {
+      "bytes": 13570,
+      "group": "code",
+      "note": "harness copy",
+      "restored_from": "archive/research/sleeve-candidates-v2-v3-2026-09",
+      "sha256": "202f1353d86f363667264b01f3077c3b9a3c9e5a0eed66304bbe5f1b10b2ecde",
+      "symlink": false
+    },
+    "stage_b/research/sleeve_candidates_v2/stage_b/run_stage_b.py": {
+      "bytes": 16668,
+      "group": "code",
+      "note": "harness copy; adapt_harness.py adaptations + the single k_stage_b_v1 change (execution_policy=portfolio_execution_policy_from_config(config.execution))",
+      "restored_from": "archive/research/sleeve-candidates-v2-v3-2026-09",
+      "sha256": "9e72234addc7f7fa7887f7731820ccc31b3e5a5c08d834cec39e740825541564",
+      "symlink": false
+    },
+    "taxref/data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "bytes": 172726,
+      "group": "inputs",
+      "note": "CBRT USD/TRY forex buying rate, as recorded by after_tax_tr_v1; SHA-256 matches archive/research/gain-band-v3-2026-10:research/gain_band_v3/DATA_MANIFEST.json (2000-01-03..2026-10-09)",
+      "restored_from": "archive/research/gain-band-v3-2026-10",
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "symlink": false
+    },
+    "taxref/data/historical/after_tax_tr_v1_yiufe.csv": {
+      "bytes": 17845,
+      "group": "inputs",
+      "note": "TUIK Y\u0130-\u00dcFE monthly index, as recorded by after_tax_tr_v1; SHA-256 matches archive/research/gain-band-v3-2026-10:research/gain_band_v3/DATA_MANIFEST.json (1999-01..2026-09)",
+      "restored_from": "archive/research/gain-band-v3-2026-10",
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "symlink": false
+    },
+    "taxref/research/gain_band_v3/tax_engine.py": {
+      "bytes": 13413,
+      "group": "code",
+      "note": "archive/research/gain-band-v3-2026-10:research/gain_band_v3/tax_engine.py, byte copy; the corrected Turkish after-tax engine (FIFO + Y\u0130-\u00dcFE indexation + progressive tariff + March/July instalments)",
+      "restored_from": "archive/research/gain-band-v3-2026-10",
+      "sha256": "8efc33232378b93068adac681928fc51f69f8b13e994bec7be8acd227d14edf3",
+      "symlink": false
+    },
+    "taxref/research/trend_robustness_v2/screen.py": {
+      "bytes": 25032,
+      "group": "code",
+      "note": "symlinked from research/trend_robustness_v2/screen.py (on main); tax_engine.py reads COST_PER_SIDE/BAND/CAP/calendar_years/max_dd from it",
+      "restored_from": "archive/research/gain-band-v3-2026-10",
+      "sha256": "c2a70719029b912d33c22af79c43037663fd7accf9cb9bebaa67c1cdc0fbcd12",
+      "symlink": false
+    }
+  },
+  "network": "none: every input is committed in this repository or restored from an archive tag (the four git archive commands in docs/research/k_stage_b_v1.md)",
+  "outputs": {
+    "STAGE_B_RESULTS.json": {
+      "bytes": 504053,
+      "sha256": "baa870111802617dc57755f10f69104c836b4f662fc9b39ce3f650c4173d2484"
+    },
+    "SUMMARY.txt": {
+      "bytes": 6246,
+      "sha256": "a431ba3fbc59d2927a1cb9748db15197efdaa554d202e8c7c3e291275e353664"
+    }
+  },
+  "references": {
+    "gain_band_v3 results": {
+      "paths": [
+        "archive/research/gain-band-v3-2026-10:research/gain_band_v3/{RESULTS.json,SUMMARY.txt}"
+      ],
+      "tag": "archive/research/gain-band-v3-2026-10",
+      "used_for": "the research expectation the after-tax block is compared against (2017 window: A1u +0.815 pp, H2 +0.271 pp after tax vs R2)"
+    },
+    "r2_stage_b_v1 doc": {
+      "paths": [
+        "docs/research/r2_stage_b_v1.md",
+        "docs/research/gain_band_integration_v1.md",
+        "docs/research/gain_band_v3.md",
+        "docs/research/band_h2_combo_v1.md (main)"
+      ],
+      "used_for": "method, reference values and the K composition rule"
+    },
+    "r2_stage_b_v1 payloads": {
+      "paths": [
+        "archive/research/r2-stage-b-v1-2026-10:research/r2_stage_b_v1/stage_b/runs/R2_1.0.json.gz",
+        "archive/research/r2-stage-b-v1-2026-10:research/r2_stage_b_v1/stage_b/runs/R2_2.0.json.gz",
+        "archive/research/r2-stage-b-v1-2026-10:research/r2_stage_b_v1/stage_b/runs/E2_1.0.json.gz",
+        "archive/research/r2-stage-b-v1-2026-10:research/r2_stage_b_v1/stage_b/runs/E2_2.0.json.gz"
+      ],
+      "tag": "archive/research/r2-stage-b-v1-2026-10",
+      "used_for": "the reproduction targets embedded as literals in evaluate_k_stage_b.py (ending NAV, fill count, fees, decision and fill hashes)"
+    }
+  },
+  "topic": "Stage B replay of K = A1u gain-scaled downsize band + H2 December deferral on the production engine (equity_leveraged_trend_v1 1.2.0)",
+  "window": "2017-01-03 .. 2026-07-30 (the substitute bars' own range)"
+}

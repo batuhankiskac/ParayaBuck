@@ -1,0 +1,7 @@
+# Byte copies of tagged harness files (the git archive commands in
+# docs/research/k_stage_b_v1.md rebuild them) and the adapted copies under
+# stage_b/research/ are restored with the same commands. Rebuilt, not committed:
+# the pre-adaptation sources of the two harness packages.
+archive/
+taxref/research/trend_robustness_v2
+__pycache__/

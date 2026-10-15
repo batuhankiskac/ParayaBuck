@@ -1,0 +1,65 @@
+k_stage_b_v1 | Stage B replay of K on the production engine | 2017-01-03 -> 2026-07-30 | $100k
+engine: this worktree's src, equity_leveraged_trend_v1 1.2.0, via the archived paper_config_v2 Stage B runner
+arms: R2off (R2 with A1u+H2 off) | A1u (band on, deferral 0) | K (band on, deferral 10 = shipped policy)
+VERDICT: K reproduces on the production engine: +0.47 pp CAGR pre-tax and +1.27 pp after Turkish tax vs
+         R2, of which the band is +0.40 / +0.88 pp (research 2017 window: A1u +0.82, K +1.09 pp).
+         R2 and E2 reproduce the r2_stage_b_v1 payloads bit-for-bit.
+
+REPRODUCTION (the r2_stage_b_v1 references, read field by field)
+  R2   1.0x NAV  1,359,064.18  expected  1,359,064.18  nav=True fills=True fees=True decisions_hash=True fills_hash=True
+  R2   2.0x NAV  1,342,001.29  expected  1,342,001.29  nav=True fills=True fees=True decisions_hash=True fills_hash=True
+  E2   1.0x NAV  1,329,642.62  expected  1,329,642.62  nav=True fills=True fees=True decisions_hash=True fills_hash=True
+  E2   2.0x NAV  1,313,969.74  expected  1,313,969.74  nav=True fills=True fees=True decisions_hash=True fills_hash=True
+  config/settings.yaml verbatim == K.yaml: NAV 1,405,902.45 == 1,405,902.45 (True), decisions and fills hashes equal (True, True)
+
+PRE-TAX (session-close NAV path)
+  arm  cost       ending NAV     CAGR    maxDD   Sharpe  turn/yr  fills  buys sells  sells/yr   2017-21   2022-26
+  R2   1.0x   1,359,064.18   31.35%   30.69%   1.102     4.06    644   328   316     32.98    41.05%    21.57%
+  R2   2.0x   1,342,001.29   31.18%   30.89%   1.097     4.06    645   328   317     33.08    40.89%    21.39%
+  A1u  1.0x   1,399,349.50   31.75%   31.11%   1.105     3.21    303   219    84      8.77    41.73%    21.71%
+  A1u  2.0x   1,384,605.37   31.61%   31.30%   1.101     3.21    302   218    84      8.77    41.59%    21.56%
+  K    1.0x   1,405,902.45   31.82%   30.93%   1.106     3.20    299   216    83      8.66    41.81%    21.77%
+  K    2.0x   1,391,144.33   31.67%   31.11%   1.103     3.20    298   215    83      8.66    41.67%    21.62%
+  delta vs R2 (1x): A1u CAGR +0.40 pp, maxDD +0.42 pp, Sharpe +0.003, turnover -0.85/yr, fills -341
+  delta vs R2 (1x): K CAGR +0.47 pp, maxDD +0.24 pp, Sharpe +0.004, turnover -0.86/yr, fills -345
+  max DD episode (all arms): peak 2021-11-19 -> trough 2023-03-13
+  in-market share 85.37% (16 episodes) in all three arms: the target series is identical
+  calendar-year differences vs R2 (pp): {'2018': {'A1u': 1.07, 'K': 1.07}, '2019': {'A1u': 0.96, 'K': 0.96}, '2020': {'A1u': -0.24, 'K': -0.24}, '2021': {'A1u': 1.28, 'K': 1.66}, '2022': {'A1u': -0.48, 'K': -0.47}, '2023': {'A1u': 1.11, 'K': 1.11}, '2024': {'A1u': 1.1, 'K': 0.88}, '2025': {'A1u': -0.07, 'K': 0.38}, '2026': {'A1u': -0.33, 'K': -0.33}}
+
+BAND AND DEFERRAL (1x)
+  A1u: band holds 415 decisions in 133 runs; deferral holds 0 decisions in 0 runs; A1u lot-book fail-safe log lines 0
+       vs R2: extra-exposure P&L $34,151.67 + saved costs $1,168.22 + extra dividends $222.49 + intraday marking $4,742.94 = NAV difference $40,285.32
+  K: band holds 401 decisions in 129 runs; deferral holds 18 decisions in 3 runs; A1u lot-book fail-safe log lines 0
+       vs R2: extra-exposure P&L $33,500.19 + saved costs $1,169.29 + extra dividends $242.30 + intraday marking $11,926.49 = NAV difference $46,838.27
+  December-deferral episodes (K, indicative per-episode P&L):
+    2021-12-16 -> 2021-12-29 (9 decisions), sell executed 2022-01-21, 0.6918 <- 0.7306, retained $21,300, span -12.32% -> $-2,624
+    2024-12-18 -> 2024-12-30 (8 decisions), sell executed 2025-01-02, 0.9538 <- 0.9807, retained $27,196, span -2.67% -> $-725
+    2025-12-18 -> 2025-12-18 (1 decisions), sell executed 2026-03-23, 0.9554 <- 0.9787, retained $28,680, span -8.28% -> $-2,375
+  largest band holds (K, by |P&L|):
+    2023-03-16 -> 2023-03-20 (3 decisions), executed 2023-07-13, g_frac 7.78% band 8%, retained $33,775, span +46.82% -> $15,814
+    2025-06-05 -> 2025-06-09 (3 decisions), executed 2025-10-31, g_frac 13.26% band 8%, retained $23,746, span +39.25% -> $9,321
+    2026-04-14 -> 2026-04-17 (4 decisions), executed 2026-06-08, g_frac 6.92% band 8%, retained $31,954, span +28.34% -> $9,054
+    2025-11-04 -> 2025-11-06 (3 decisions), executed 2025-11-21, g_frac 37.07% band 8%, retained $64,775, span -10.26% -> $-6,643
+    2023-03-22 -> 2023-03-23 (2 decisions), executed 2023-07-13, g_frac 7.49% band 8%, retained $13,446, span +43.65% -> $5,869
+
+AFTER TAX (the runs' own fills through the corrected Turkish engine; $100k = the 1x run's starting cash)
+  weight-preserving scaling; the pre-tax replay reproduces every production NAV path to < 1e-9
+  arm  cost   AT CAGR   delta vs R2   delta unscaled   tax paid     terminal   funding sales / cash-capped buys
+  R2   1.0x   24.067%       +0.000 pp         +0.000 pp $   222,197 $     787,346   4 / 4
+  A1u  1.0x   24.949%       +0.882 pp         +1.070 pp $   212,690 $     842,590   4 / 2
+  K    1.0x   25.341%       +1.275 pp         +1.499 pp $   202,879 $     868,246   4 / 2
+  R2   2.0x   23.921%       +0.000 pp         +0.000 pp $   220,078 $     778,553   4 / 4
+  A1u  2.0x   24.825%       +0.904 pp         +1.103 pp $   210,968 $     834,635   4 / 2
+  K    2.0x   25.218%       +1.296 pp         +1.533 pp $   201,231 $     860,075   4 / 2
+  research expectation for this window (gain_band_v3, 2017 start): A1u +0.82 pp, K +1.09 pp after tax
+  after-tax max DD: R2 36.19%, A1u 36.14%, K 35.30% (research 2017 window R2: 36.24%)
+  tax paid (TRY, cumulative): R2 5,518,717 | A1u 5,263,114 | K 4,991,426; Yİ-ÜFE relief
+  R2 10,437,099 | A1u 11,074,053 | K 11,341,807 (1x)
+
+CHECKS
+  accounting and engine invariants (cash_conserved, nav_matches_ledger, position_quantities_reconciled,
+  duplicate_fill_count == 0, unowned_fill_count == 0, no_future_data_access, final_position_count == 0):
+    ok in all six runs (A1u 1.0x True, A1u 2.0x True, K 1.0x True, K 2.0x True, R2 1.0x True, R2 2.0x True)
+  determinism: every arm run twice; payloads identical up to elapsed_seconds, audits byte-identical;
+  STAGE_B_RESULTS.json byte-identical across two evaluations
+  tax harness: the pre-tax replay's ending NAV equals the production ending NAV exactly in all six runs

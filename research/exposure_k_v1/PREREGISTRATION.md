@@ -229,3 +229,36 @@ reported; the gate is evaluated on each.
 
 **A4. `E3` is report-only here.** It exists because the deep reference block must reproduce
 `band_h2_combo_v1`'s E3 cells; it is not part of this study's gate set.
+
+**A5. Code fixes made after the pre-registration commit (`c333da35`), before the recorded
+`--run`.** All four are plumbing bugs of this study's own harness adaptation; **none touches an
+arm, a parameter, a stage, a seed, a threshold, a gate or the selection rule**, and each was found
+by running the harness, not by reading a candidate's performance:
+
+1. `targets_of` returned only the first path of the sized target series (`[P, T]` → `[0]`), which
+   broke the pooled OOS bootstrap (G8), whose paths are re-sized in chunks of 500. It now returns
+   the full `[P, T]` arrays; the frozen smoke test asserts the per-path identities this changed.
+2. `run()`/`stage_e3()` built the bootstrap's delta cells with `deltas=CANDIDATES + (CONTROL,)`,
+   so the R2 reference row had no `R2_vs_K` cell and the SUMMARY writer raised `KeyError`. The
+   delta list now also carries the reference row (`deltas=CANDIDATES + (CONTROL, BASELINE)`), which
+   *adds* two reporting cells and changes no existing one.
+3. `gates_exposure`'s frontier table was built out of the candidate-only gate dict, so it raised
+   `KeyError: 'R2'`. It is now built from the stage results for **all five arms**, which is what the
+   survey's "after-tax CAGR-versus-max-DD frontier" reporting asks for (K and R2 appear as the
+   frontier's origin and reference point, with no candidate gates).
+4. `harness()` passed a `[1, T]` target array where the reference `simulate_band` needs 1-D
+   (`IndexError`), fixed with `.ravel()`.
+
+**A6. Post-commit probe on real data (disclosed).** After the fixes in A5 and **before** the two
+recorded `--run`s, `run()` was exercised end-to-end once with deliberately tiny path counts (40
+pre-tax / 12 after-tax / 12 E3 / 12 OOS-bootstrap paths instead of 5,000 / 1,000 / 1,000 / 2,000)
+with `OUT`/`SUMMARY` redirected to `/tmp`, so it could not touch `research/exposure_k_v1/`. That
+probe therefore **did** display the candidates' *deterministic* cells before the recorded run: the
+pre-tax CAGR/max-DD, the three after-tax windows, E1/E2/E3's deterministic parts and the tail-gate
+shares (which are path-count dependent and were meaningless at 12 paths). **No arm, parameter,
+stage, seed, threshold, gate or selection rule was changed after that probe**; the failures it
+foreshadowed (G2 at every arm, G5, the tail gate from 0.40) are the failures the recorded run
+reports. The pre-registration (arms with every parameter fixed, stages, gates, selection rule) was
+committed in `c333da35` **before any candidate arm was simulated on real data at all**, and the
+`--harness` run that preceded the commit only executed the control, the reference row and the
+pure-E2 anchor series plus the structural target-series check (A1).

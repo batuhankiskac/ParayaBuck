@@ -792,7 +792,7 @@ def targets_of(price, e2, vol_instr, arms=ARMS, comps=None):
     on_eff, factor = r2_state(price, e2, comps)
     e2_arr = np.atleast_2d(np.asarray(e2, dtype=bool))
     v = np.atleast_2d(np.asarray(vol_instr, dtype=float))
-    w_e2 = sized_wants(e2_arr, np.ones_like(factor), v, VT["K"])[0]
+    w_e2 = sized_wants(e2_arr, np.ones_like(factor), v, VT["K"])
     cache, out = {}, {}
     for arm in arms:
         if arm == "E2":
@@ -800,7 +800,7 @@ def targets_of(price, e2, vol_instr, arms=ARMS, comps=None):
             continue
         t = VT[arm]
         if t not in cache:
-            cache[t] = sized_wants(on_eff, factor, v, t)[0]
+            cache[t] = sized_wants(on_eff, factor, v, t)
         out[arm] = cache[t]
     return w_e2, out
 
@@ -1196,7 +1196,8 @@ def smoke():
     e2 = e2_up(price)[0]
     v20 = trv2.vol_n(sc)[0]
     w_e2, W = targets_of(price, e2, v20, ARMS, early_components(price))
-    w_k, w_r2 = W["K"], W["R2"]
+    w_e2r = w_e2.ravel()
+    w_k, w_r2 = W["K"].ravel(), W["R2"].ravel()
     ufe = {f"{yr}-{mo:02d}": float(1000 + 12 * yr + 5 * mo) for yr in range(1995, 2030) for mo in range(1, 13)}
     mkt = te.Market(days, np.full(n, 30.0), ufe)
     checks, res = {}, {}
@@ -1276,7 +1277,7 @@ def smoke():
     checks["K_nav_differs_from_R2"] = bool(np.max(np.abs(k_sig["_nav"] - r2e["_nav"])) > 1e-6)
     checks["candidate_target_series_move_the_rule"] = bool(
         np.max(np.abs(k_sig["_nav"] - f2_sig["_nav"])) > 1e-6
-        and not np.array_equal(w_k, W["F2"]))
+        and not np.array_equal(w_k, W["F2"].ravel()))
 
     # 2. fast rolling vol median == the loop reference
     pv = trv2.vol_n(100 * np.cumprod(1 + rng.normal(0, 0.01, 1400)))
@@ -1290,14 +1291,14 @@ def smoke():
     checks["r2_state_sizing_matches_arm_signals"] = bool(
         np.array_equal(w_ref, sized_wants(on_eff, factor, v20, VT["R2"])[0]))
     checks["targets_of_matches_arm_signals"] = bool(
-        np.array_equal(W["R2"], w_ref) and np.array_equal(W["K"], w_ref))
+        np.array_equal(W["R2"].ravel(), w_ref) and np.array_equal(W["K"].ravel(), w_ref))
     checks["local_vt_of_035_equals_trv2"] = bool(
         np.allclose(vt_of(v20, 0.35), trv2.vt_of(v20), equal_nan=True))
     checks["candidate_vt_raises_mean_weight_in_trend"] = bool(
         np.mean(W["F1"]) > np.mean(W["K"]) and np.mean(W["F2"]) > np.mean(W["F1"])
         and np.mean(W["F3"]) > np.mean(W["F2"]))
     checks["pure_E2_series_differs_from_R2"] = bool(
-        not np.array_equal(w_e2, w_ref))
+        not np.array_equal(w_e2r, w_ref))
 
     # 3. the R2 arm == the reference simulate_band (base, m = 2)
     ref_nav, _, _ = simulate_band(so[None, :], sc[None, :], w_r2, COST_PER_SIDE * 2, START, C0_BAND)
@@ -1436,7 +1437,7 @@ def harness():
                 if isinstance(v, dict) and abs(v["diff_pp"]) > 0.005:
                     bad += 1
     # ---- identity checks
-    ref_nav, _, _ = simulate_band(o[None, :], c[None, :], W["R2"][None, :], COST_PER_SIDE * 2,
+    ref_nav, _, _ = simulate_band(o[None, :], c[None, :], W["R2"].ravel()[None, :], COST_PER_SIDE * 2,
                                   START, C0_BAND)
     r2_run = engine_run(1.0, START, T, days, mkt, o, c, W["R2"], e2, "R2", "pre_tax")
     k_run = engine_run(1.0, START, T, days, mkt, o, c, W["K"], e2, "K", "pre_tax")
@@ -1688,7 +1689,7 @@ def stage_e3(arms):
         for mode in ("progressive", "flat"):
             b = boot(seed=E3_SEED, block=block, arms=arms, n_pre=0, n_tax=E3_PATHS,
                      capitals=(GATE_CAPITAL,), modes=(mode,), anchor_e2=False,
-                     deltas=CANDIDATES + (CONTROL,), baselines=(CONTROL, BASELINE),
+                     deltas=CANDIDATES + (CONTROL, BASELINE), baselines=(CONTROL, BASELINE),
                      label=f"E3 block {block} {mode}")
             out[f"block{block}_{mode}"] = b["tax"][GATE_CAPITAL][mode]
     return out
@@ -2039,19 +2040,43 @@ def gates_exposure(res):
     ranked = sorted(CANDIDATES, key=lambda a: -g[a]["vs_K"]["after_tax_100k"]["2000_03_to_2026_09"]["after_tax_cagr"])
     survey_sel = next((a for a in ranked if g[a]["survey_eligible"]), None)
     protocol_sel = next((a for a in ranked if g[a]["protocol_eligible"]), None)
-    frontier = [{"arm": a,
-                 "vt": VT[a],
-                 "after_tax_cagr_100k_2000": g[a]["vs_K"]["after_tax_100k"]["2000_03_to_2026_09"]["after_tax_cagr"],
-                 "after_tax_cagr_100k_2010": g[a]["vs_K"]["after_tax_100k"]["2010_01_to_end"]["after_tax_cagr"],
-                 "after_tax_cagr_100k_2017": g[a]["vs_K"]["after_tax_100k"]["2017_01_to_end"]["after_tax_cagr"],
-                 "pre_tax_max_dd_base": g[a]["vs_K"]["pre_tax_max_dd_base"],
-                 "pre_tax_max_dd_cal": g[a]["vs_K"]["pre_tax_max_dd_cal"],
-                 "pre_tax_cagr_base": g[a]["vs_K"]["pre_tax_cagr_base_m2"],
-                 "p_dd_gt_70_pre_base": g[a]["TAIL_detail"]["cells"]["pre_base"]["p_dd_gt_70"],
-                 "p_dd_gt_70_at_100k": g[a]["TAIL_detail"]["cells"]["at_100k_progressive"]["p_dd_gt_70"],
-                 "survey_eligible": g[a]["survey_eligible"],
-                 "protocol_eligible": g[a]["protocol_eligible"]
-                 } for a in ARMS if a != CONTROL]
+
+    def frontier_row(arm):
+        """The survey's frontier table: after-tax CAGR and pre-tax max DD per arm. Built from the
+        stages directly so the control K and the reference row R2 appear as the frontier's origin
+        even though they carry no candidate gates."""
+        b, c = pre["base"]["m2"][arm], pre["calibrated"]["m2"][arm]
+        row = {
+            "arm": arm, "vt": VT[arm],
+            "after_tax_cagr_100k_2000": win["2000_03_to_2026_09"][arm]["after_tax_cagr"],
+            "after_tax_cagr_100k_2010": win["2010_01_to_end"][arm]["after_tax_cagr"],
+            "after_tax_cagr_100k_2017": win["2017_01_to_end"][arm]["after_tax_cagr"],
+            "after_tax_max_dd_100k_2000": win["2000_03_to_2026_09"][arm]["max_dd_after_tax"],
+            "after_tax_max_dd_100k_2010": win["2010_01_to_end"][arm]["max_dd_after_tax"],
+            "after_tax_max_dd_100k_2017": win["2017_01_to_end"][arm]["max_dd_after_tax"],
+            "pre_tax_cagr_base": b["cagr"], "pre_tax_cagr_cal": c["cagr"],
+            "pre_tax_max_dd_base": b["max_dd"], "pre_tax_max_dd_cal": c["max_dd"],
+            "pre_tax_max_dd_delta_pp_base": (b["max_dd"] - pre["base"]["m2"][CONTROL]["max_dd"]) * 100,
+            "pre_tax_max_dd_delta_pp_cal": (c["max_dd"] - pre["calibrated"]["m2"][CONTROL]["max_dd"]) * 100,
+            "turnover_annual": b["turnover_annual"], "sells_per_year": b["sells_per_year"],
+            "p_dd_gt_70_pre_base": boot_tail["pre"]["base"][arm]["p_dd_gt_70"],
+            "p_dd_gt_70_at_100k": boot_tail["tax"]["100k"]["progressive"][arm]["p_dd_gt_70"],
+            "p_dd_gt_70_at_1M": boot_tail["tax"]["1M"]["progressive"][arm]["p_dd_gt_70"],
+            "median_max_dd_pre_base": boot_tail["pre"]["base"][arm]["median_max_dd"],
+        }
+        if arm in g:
+            row["G1_G9"] = g[arm]["G1_G9"]
+            row["survey_eligible"] = g[arm]["survey_eligible"]
+            row["protocol_eligible"] = g[arm]["protocol_eligible"]
+            row["after_tax_delta_pp"] = g[arm]["AT_detail"]["delta_pp"]
+        else:
+            row["G1_G9"] = None
+            row["survey_eligible"] = None
+            row["protocol_eligible"] = None
+            row["after_tax_delta_pp"] = None
+        return row
+
+    frontier = [frontier_row(a) for a in ARMS]
     for a in g:
         g[a]["survey_run"] = bool(g[a]["survey_eligible"])
         g[a]["protocol_run"] = bool(g[a]["protocol_eligible"])
@@ -2113,7 +2138,7 @@ def run(boot_ref=None) -> dict:
         print(f"clean bootstrap (seed {SEED}, block {BLOCK}, {PRE_BOOT_PATHS} pre-tax paths)", flush=True)
         boot_ref = boot(seed=SEED, block=BLOCK, arms=ARMS, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS,
                         capitals=("100k", "1M"), modes=("progressive", "flat"),
-                        deltas=CANDIDATES + (CONTROL,), baselines=(CONTROL, BASELINE), label="clean")
+                        deltas=CANDIDATES + (CONTROL, BASELINE), baselines=(CONTROL, BASELINE), label="clean")
     print("E1: after-tax 21 ETFs (R-INDEX)", flush=True)
     e1 = stage_e1(ARMS)
     print("E2: rolling January starts", flush=True)
@@ -2275,15 +2300,19 @@ def main() -> None:
         L.append(f"  {arm:4s} {VT[arm]:.3f} {p(a['cagr'])} {p(ac['cagr'])} {p(a['max_dd'])} {p(ac['max_dd'])} "
                  f"{a['turnover_annual']:9.2f} |{ats} |{bc} | {eo:+12.3f} |{dds}")
     L.append("")
-    L.append("after-tax frontier at $100k (liquidated) -- the selection table:")
-    L.append("  arm  vt     AT CAGR 2000  maxDD 2000   AT CAGR 2010  maxDD 2010   AT CAGR 2017  maxDD 2017   "
-             "DD budget ok   G1-G9")
+    L.append("after-tax frontier at $100k (liquidated) -- the survey's frontier table "
+             "(pre-tax max DD delta is versus K):")
+    L.append("  arm  vt     AT CAGR 2000  maxDD base (d)  AT CAGR 2010  maxDD cal (d)   AT CAGR 2017  "
+             "P(DD>70%) pre/$100k   DD budget   G1-G9")
     for row in g["frontier"]:
         L.append(f"  {row['arm']:4s} {row['vt']:.3f} {row['after_tax_cagr_100k_2000'] * 100:13.3f} "
-                 f"{row['pre_tax_max_dd_base'] * 100:11.2f} {row['after_tax_cagr_100k_2010'] * 100:14.3f} "
-                 f"{row['pre_tax_max_dd_cal'] * 100:12.2f} {row['after_tax_cagr_100k_2017'] * 100:14.3f} "
-                 f"{'':13s} {'YES' if row['survey_eligible'] else 'no':>5s}   "
-                 f"{'PASS' if g['arms'][row['arm']]['G1_G9'] else 'FAIL'}")
+                 f"{row['pre_tax_max_dd_base'] * 100:11.2f} ({row['pre_tax_max_dd_delta_pp_base']:+5.2f}) "
+                 f"{row['after_tax_cagr_100k_2010'] * 100:13.3f} "
+                 f"{row['pre_tax_max_dd_cal'] * 100:10.2f} ({row['pre_tax_max_dd_delta_pp_cal']:+5.2f}) "
+                 f"{row['after_tax_cagr_100k_2017'] * 100:13.3f}   "
+                 f"{row['p_dd_gt_70_pre_base'] * 100:6.1f}% / {row['p_dd_gt_70_at_100k'] * 100:5.1f}%        "
+                 f"{('YES' if row['survey_eligible'] else ('no' if row['survey_eligible'] is False else ' - ')):>5s}   "
+                 f"{('PASS' if row['G1_G9'] else ('FAIL' if row['G1_G9'] is False else '  - ')):>4s}")
     L.append("")
     L.append("per-arm gates versus K:")
     for arm in CANDIDATES:

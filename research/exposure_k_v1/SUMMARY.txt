@@ -1,0 +1,137 @@
+exposure_k_v1 | idea I1 of idea_survey_v4: the after-tax exposure frontier under K (vt = 0.375/0.4/0.45 vs K's 0.35) | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | control = production K | arms = K + R2 + F1 + F2 + F3
+harness PASS (0 outside tolerance)
+deep reference block (K cells of band_h2_combo_v1): 2270 cells (pre_tax_main, after_tax_windows, cost_stress_m4, clean_bootstrap, e1_e2_e3_oos_instruments), 0 mismatches (tol 2e-06), max|diff| 5.00e-07 -> PASS
+bootstrap median anchors: 0 mismatches
+SELECTION (the survey rule decides): survey = None, common protocol = None, deciding rule = survey_rule
+
+per arm (pre-tax main window m = 2, R-INDEX; after tax at $100k, base, m = 2, liquidated):
+  arm  vt     CAGR base  CAGR cal   maxDD base  maxDD cal   turn/yr | dAT2000  dAT2010  dAT2017 (pp vs K) | boot d B1/B2 (pp) | OOS med d (pp) | AT maxDD 2000/2010/2017
+  K    0.350   15.76%   15.18%   46.67%   46.79%      5.46 |   +0.000   +0.000   +0.000 |      -      - |       +0.000 |   46.67   44.63   34.98
+  R2   0.350   15.48%   14.90%   46.76%   46.88%      5.99 |   -0.593   -0.529   -1.086 | -0.286 -0.131 |       -0.065 |   46.76   43.78   36.24
+  F1   0.375   16.07%   15.47%   49.03%   49.16%      5.43 |   +0.365   +0.580   +0.914 | -0.013 -0.039 |       +0.091 |   49.03   44.63   36.50
+  F2   0.400   16.25%   15.64%   51.40%   51.53%      5.45 |   +0.597   +1.018   +1.685 | -0.122 -0.159 |       +0.314 |   51.40   44.77   36.17
+  F3   0.450   16.19%   15.57%   55.79%   55.92%      5.41 |   +0.787   +1.390   +2.665 | -0.404 -0.464 |       +0.559 |   55.79   44.97   37.55
+
+after-tax frontier at $100k (liquidated) -- the survey's frontier table (pre-tax max DD delta is versus K):
+  arm  vt     AT CAGR 2000  maxDD base (d)  AT CAGR 2010  maxDD cal (d)   AT CAGR 2017  P(DD>70%) pre/$100k   DD budget   G1-G9
+  K    0.350        10.753       46.67 (+0.00)        15.235      46.79 (+0.00)        23.972     11.1% /  16.7%           -      - 
+  R2   0.350        10.160       46.76 (+0.09)        14.706      46.88 (+0.08)        22.886     10.4% /  16.0%           -      - 
+  F1   0.375        11.118       49.03 (+2.36)        15.816      49.16 (+2.37)        24.886     13.2% /  19.5%           no   FAIL
+  F2   0.400        11.350       51.40 (+4.73)        16.254      51.53 (+4.73)        25.657     16.0% /  22.9%           no   FAIL
+  F3   0.450        11.540       55.79 (+9.12)        16.625      55.92 (+9.13)        26.637     21.6% /  29.6%           no   FAIL
+
+per-arm gates versus K:
+  F1 (vt 0.375): G1=P G2=F G3=P G4=P G5=F G6=P G7=P G8=P G9=P | G1-G9 FAIL
+     G1 dCAGR base +0.302pp / cal +0.287pp; G2 dDD base +2.36pp / cal +2.37pp; G3 dCAGR2017 base +0.800 / cal +0.771pp; G4 2/3 sub-periods; G5 median base -0.042 / cal -0.053pp; G7 median +0.091pp (6/6 within), max dDD +2.32pp; G8 +0.046pp; G9 ratio 0.995
+     AT $100k: 2000_03_to_2026_09 +0.365pp, 2010_01_to_end +0.580pp, 2017_01_to_end +0.914pp -> PASS; B1-recent median -0.013pp share 48.7%, B2-flat median -0.039pp share 46.6% -> protocol FAIL
+     TAIL P(DD>70%): pre base 13.2% (K 11.1%), $100k 19.5% (K 16.7%), $1M 22.2% (K 18.9%); median maxDD pre base 55.0% (K 53.4%) -> pre base PASS, pre cal PASS, $100k PASS, $1M PASS
+     survey eligibility: G1-G9 no and DD budget no -> NOT eligible
+     reporting: E1 21 ETFs median +0.049pp (12/21) -> FAIL; E2 21 rolling starts median +0.714pp (21/21) -> PASS; 21 instruments median dCAGR +0.053pp, worst dDD +2.09pp
+  F2 (vt 0.4): G1=P G2=F G3=P G4=P G5=F G6=P G7=P G8=P G9=P | G1-G9 FAIL
+     G1 dCAGR base +0.481pp / cal +0.458pp; G2 dDD base +4.73pp / cal +4.73pp; G3 dCAGR2017 base +1.520 / cal +1.483pp; G4 2/3 sub-periods; G5 median base -0.170 / cal -0.186pp; G7 median +0.314pp (5/6 within), max dDD +3.26pp; G8 +0.090pp; G9 ratio 0.998
+     AT $100k: 2000_03_to_2026_09 +0.597pp, 2010_01_to_end +1.018pp, 2017_01_to_end +1.685pp -> PASS; B1-recent median -0.122pp share 43.1%, B2-flat median -0.159pp share 41.7% -> protocol FAIL
+     TAIL P(DD>70%): pre base 16.0% (K 11.1%), $100k 22.9% (K 16.7%), $1M 26.4% (K 18.9%); median maxDD pre base 56.5% (K 53.4%) -> pre base PASS, pre cal FAIL, $100k FAIL, $1M FAIL
+     survey eligibility: G1-G9 no and DD budget no -> NOT eligible
+     reporting: E1 21 ETFs median +0.045pp (12/21) -> FAIL; E2 21 rolling starts median +1.233pp (21/21) -> PASS; 21 instruments median dCAGR +0.068pp, worst dDD +4.73pp
+  F3 (vt 0.45): G1=P G2=F G3=P G4=P G5=F G6=P G7=P G8=P G9=P | G1-G9 FAIL
+     G1 dCAGR base +0.427pp / cal +0.393pp; G2 dDD base +9.12pp / cal +9.13pp; G3 dCAGR2017 base +1.933 / cal +1.878pp; G4 2/3 sub-periods; G5 median base -0.503 / cal -0.546pp; G7 median +0.559pp (5/6 within), max dDD +5.49pp; G8 +0.143pp; G9 ratio 0.992
+     AT $100k: 2000_03_to_2026_09 +0.787pp, 2010_01_to_end +1.390pp, 2017_01_to_end +2.665pp -> PASS; B1-recent median -0.404pp share 38.0%, B2-flat median -0.464pp share 37.0% -> protocol FAIL
+     TAIL P(DD>70%): pre base 21.6% (K 11.1%), $100k 29.6% (K 16.7%), $1M 31.7% (K 18.9%); median maxDD pre base 59.0% (K 53.4%) -> pre base FAIL, pre cal FAIL, $100k FAIL, $1M FAIL
+     survey eligibility: G1-G9 no and DD budget no -> NOT eligible
+     reporting: E1 21 ETFs median +0.131pp (13/21) -> PASS; E2 21 rolling starts median +1.766pp (21/21) -> PASS; 21 instruments median dCAGR +0.189pp, worst dDD +8.93pp
+
+trading activity (main window, m = 2, base, $100k, progressive):
+  K    sells/yr  10.66 trades/yr  32.94 postponements  1917 (band  1836, December   81) tax paid USD      830,903 index relief TRY      22,607,442
+  R2   sells/yr  30.69 trades/yr  62.65 postponements     0 (band     0, December    0) tax paid USD      766,160 index relief TRY      18,578,813
+  F1   sells/yr   9.38 trades/yr  29.25 postponements  2037 (band  1966, December   71) tax paid USD      897,000 index relief TRY      24,029,444
+  F2   sells/yr   8.89 trades/yr  26.39 postponements  2316 (band  2237, December   79) tax paid USD      944,017 index relief TRY      25,524,147
+  F3   sells/yr   7.42 trades/yr  20.33 postponements  2586 (band  2492, December   94) tax paid USD      941,361 index relief TRY      28,929,280
+
+E5 (report only): fill-decision differences on the main path (pre-tax, $100k, m = 2)
+  F1_vs_K   :   232 sessions differ (3.47%); F1 sells where K holds 27, F1 holds where K sells 62
+  F2_vs_K   :   295 sessions differ (4.42%); F2 sells where K holds 23, F2 holds where K sells 74
+  F3_vs_K   :   461 sessions differ (6.90%); F3 sells where K holds 25, F3 holds where K sells 120
+  R2_vs_K   :   790 sessions differ (11.83%); R2 sells where K holds 524, R2 holds where K sells 9
+  F2_vs_F1  :   153 sessions differ (2.29%); F2 sells where F1 holds 16, F2 holds where F1 sells 32
+  F3_vs_F2  :   238 sessions differ (3.56%); F3 sells where F2 holds 17, F3 holds where F2 sells 61
+  sells (downward resizes+exits) per arm: K 270, R2 785, F1 235, F2 219, F3 175
+  after tax at $10k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   12.18% | F1   12.50%  +0.320pp F2   12.68%  +0.503pp F3   12.83%  +0.656pp
+    2010_01_to_end       K   17.47% | F1   17.96%  +0.495pp F2   18.35%  +0.884pp F3   18.71%  +1.241pp
+    2017_01_to_end       K   26.92% | F1   27.66%  +0.746pp F2   28.32%  +1.409pp F3   29.20%  +2.288pp
+  after tax at $30k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   11.52% | F1   11.86%  +0.333pp F2   12.05%  +0.530pp F3   12.22%  +0.695pp
+    2010_01_to_end       K   16.40% | F1   16.91%  +0.512pp F2   17.31%  +0.909pp F3   17.68%  +1.275pp
+    2017_01_to_end       K   25.35% | F1   26.16%  +0.805pp F2   26.88%  +1.528pp F3   27.79%  +2.437pp
+  after tax at $300k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   10.19% | F1   10.59%  +0.401pp F2   10.86%  +0.665pp F3   11.05%  +0.856pp
+    2010_01_to_end       K   14.56% | F1   15.19%  +0.633pp F2   15.64%  +1.081pp F3   16.01%  +1.456pp
+    2017_01_to_end       K   23.20% | F1   24.18%  +0.982pp F2   24.99%  +1.794pp F3   25.99%  +2.787pp
+  after tax at $1M (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K    9.88% | F1   10.27%  +0.392pp F2   10.56%  +0.682pp F3   10.74%  +0.863pp
+    2010_01_to_end       K   14.16% | F1   14.81%  +0.644pp F2   15.27%  +1.100pp F3   15.64%  +1.475pp
+    2017_01_to_end       K   22.86% | F1   23.89%  +1.033pp F2   24.71%  +1.856pp F3   25.71%  +2.853pp
+
+m = 4 cost stress, after tax at $100k:
+  2000_03_to_2026_09   K   10.35% | F1   10.71%  +0.358pp F2   10.95%  +0.592pp F3   11.14%  +0.781pp
+  2010_01_to_end       K   14.82% | F1   15.37%  +0.548pp F2   15.80%  +0.984pp F3   16.17%  +1.351pp
+  2017_01_to_end       K   23.67% | F1   24.60%  +0.924pp F2   25.37%  +1.690pp F3   26.34%  +2.660pp
+
+six OOS windows (pre-tax, calibrated, m = 2, R-USD rule) -- delta vs K:
+  window            K CAGR   K maxDD    F1 d     F2 d     F3 d   (CAGR pp)
+  GSPC_1957_1999      9.97%    39.65%    +0.115   +0.198   +0.262
+  M1                 21.27%    41.22%    +0.520   +0.883   +1.428
+  M2                 11.73%    58.11%    +0.049   +0.338   +0.705
+  M3                  6.46%    65.18%    +0.170   +0.348   +0.659
+  M4                  9.71%    58.15%    +0.039   +0.291   +0.458
+  M5                 -0.62%    85.65%    +0.067   +0.083   +0.095
+
+E1 after tax on the 21 quality-passing ETFs (R-INDEX, $100k, calibrated, m = 2, liquidated):
+  instrument  window                     K AT      F1 d     F2 d     F3 d
+  DIA         2000-03-09..2026-10-12    2.28%   -0.051   -0.073   -0.218
+  EEM         2004-04-15..2026-10-13    1.49%   +0.130   +0.213   +0.244
+  EFA         2002-09-04..2026-10-13    4.91%   +0.228   +0.491   +0.782
+  EWA         2000-03-09..2026-10-13    1.43%   -0.046   +0.045   +0.229
+  EWG         2000-03-09..2026-10-13    1.65%   -0.202   -0.061   +0.158
+  EWH         2000-03-09..2026-10-13    1.68%   -0.018   +0.077   +0.095
+  EWJ         2000-03-09..2026-10-13   -2.78%   -0.027   -0.104   -0.289
+  EWL         2000-03-09..2026-10-13    2.23%   +0.099   +0.132   +0.131
+  EWS         2000-03-09..2026-10-13    4.42%   +0.086   +0.339   +0.881
+  EWU         2000-03-09..2026-10-13    0.25%   +0.124   +0.190   +0.282
+  IWM         2001-05-30..2026-10-12    0.84%   +0.059   +0.407   +0.936
+  SPY         2000-03-09..2026-10-12    6.67%   +0.032   +0.097   +0.046
+  XLB         2000-03-09..2026-10-13   -1.46%   +0.056   -0.037   -0.201
+  XLE         2000-03-09..2026-10-13    2.64%   +0.068   +0.009   +0.444
+  XLF         2000-03-09..2026-10-13    1.47%   -0.157   -0.020   -0.026
+  XLI         2000-03-09..2026-10-13    4.18%   +0.184   +0.341   +0.456
+  XLK         2000-03-09..2026-10-13    9.65%   +0.325   +0.501   +0.356
+  XLP         2000-03-09..2026-10-13    1.01%   -0.122   -0.194   -0.263
+  XLU         2000-03-09..2026-10-13    3.20%   -0.025   -0.051   -0.252
+  XLV         2000-03-09..2026-10-13   -1.74%   +0.049   -0.032   -0.204
+  XLY         2000-03-09..2026-10-13    3.60%   -0.048   -0.245   -0.105
+
+E2 rolling January starts (after tax $100k, base, m = 2, to 2026-09-29):
+  year   start        K AT       F1 d     F2 d     F3 d
+  2001   2001-01-02    12.39%   +0.491   +0.854   +1.253
+  2002   2002-01-02    13.16%   +0.534   +0.940   +1.394
+  2003   2003-01-02    14.08%   +0.592   +1.045   +1.573
+  2004   2004-01-02    13.12%   +0.514   +0.887   +1.314
+  2005   2005-01-03    13.39%   +0.531   +0.941   +1.380
+  2006   2006-01-03    14.33%   +0.578   +1.015   +1.468
+  2007   2007-01-03    14.90%   +0.611   +1.043   +1.459
+  2008   2008-01-02    14.60%   +0.601   +1.007   +1.405
+  2009   2009-01-02    16.96%   +0.723   +1.233   +1.766
+  2010   2010-01-04    15.24%   +0.580   +1.018   +1.390
+  2011   2011-01-03    15.94%   +0.617   +1.130   +1.526
+  2012   2012-01-03    18.87%   +0.721   +1.398   +2.044
+  2013   2013-01-02    19.89%   +0.811   +1.444   +2.141
+  2014   2014-01-02    18.08%   +0.829   +1.464   +2.205
+  2015   2015-01-02    17.78%   +0.714   +1.308   +2.062
+  2016   2016-01-04    21.52%   +0.788   +1.465   +2.329
+  2017   2017-01-03    23.97%   +0.914   +1.685   +2.665
+  2018   2018-01-02    21.22%   +0.936   +1.798   +2.877
+  2019   2019-01-02    24.29%   +0.999   +1.966   +3.288
+  2020   2020-01-02    22.89%   +1.055   +1.993   +3.173
+  2021   2021-01-04    20.31%   +0.987   +1.376   +2.244
+
+reference reproduction: 2270 cells, 0 mismatches, max|diff| 5.00e-07 -> PASS

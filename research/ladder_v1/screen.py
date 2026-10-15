@@ -415,18 +415,23 @@ def ladder_g(m, shape, cuts=None):
     m = np.asarray(m, dtype=float)
     g0, g1, g2 = LADDER_STEPS
     if shape == "twostep":
-        return np.where(m < LADDER_MID, g0, g2)
-    if shape == "linear":
-        return np.clip(m / LADDER_LINEAR_SCALE, g0, g2)
-    if shape == "steps":
-        return np.where(m < lo, g0, np.where(m < hi, g1, g2))
-    raise ValueError(f"unknown ladder shape {shape!r}")
+        g = np.where(m < LADDER_MID, g0, g2)
+    elif shape == "linear":
+        g = np.clip(m / LADDER_LINEAR_SCALE, g0, g2)
+    elif shape == "steps":
+        g = np.where(m < lo, g0, np.where(m < hi, g1, g2))
+    else:
+        raise ValueError(f"unknown ladder shape {shape!r}")
+    # an undefined metric must reach ladder_state's degeneracy rule for every shape (a bare
+    # `np.where` comparison against NaN would quietly send `steps`/`twostep` to the top step)
+    return np.where(np.isfinite(m), g, np.nan)
 
 
-def ladder_state(price, e2_on, arm, comps=None, cuts=None):
+def ladder_state(price, e2_on, arm, comps=None, cuts=None, stats=None):
     """(on_eff, factor) of the arm's path: production R2's early-path state, with the early-leg
     weight replaced by the arm's ladder g(m) -- C0 keeps R2's constant 0.5, and every arm's
-    E2-on state is 1.0 (E2's own vote overrides the early path, as in production)."""
+    E2-on state is 1.0 (E2's own vote overrides the early path, as in production). `stats`, when
+    given, tallies the sessions where the degeneracy rule (below) fired."""
     price = np.atleast_2d(np.asarray(price, dtype=float))
     e2_on = np.atleast_2d(np.asarray(e2_on, dtype=bool))
     comps = early_components(price) if comps is None else comps
@@ -437,23 +442,30 @@ def ladder_state(price, e2_on, arm, comps=None, cuts=None):
         raise ValueError(f"unknown ladder arm {arm!r}")
     shape, kind = LADDER_SHAPE[arm]
     g = ladder_g(conviction_metric(price, comps, kind), shape, cuts)
+    # Degeneracy rule (pre-committed before any arm result existed; see PREREGISTRATION
+    # "Amendments"): where the early path is active but the metric is not finite -- a zero-vol
+    # stretch, which ^N225-style block resampling produces -- the arm falls back to the control's
+    # 0.5 weight. 0.5 carries no conviction information, so this is neutral by construction and
+    # can only damp a candidate's measured edge.
     early = (factor > 0.0) & (factor < 1.0)
-    if not np.all(np.isfinite(g[early])):
-        raise ValueError(f"non-finite ladder weight on an active early path ({arm})")
+    if stats is not None:
+        key = f"{arm}_undefined_metric_sessions"
+        stats[key] = stats.get(key, 0) + int(np.sum(early & ~np.isfinite(g)))
+    g = np.where(np.isfinite(g), g, LADDER_STEPS[0])
     return on_eff, np.where(early, g, factor)
 
 
-def ladder_wants(price, e2_on, vol_instr, arm, comps=None, cuts=None):
+def ladder_wants(price, e2_on, vol_instr, arm, comps=None, cuts=None, stats=None):
     """Target weights [P, T] of one arm: production E2 + the arm's laddered early leg, sized
     min(1, 0.35/vol20) x factor, total cap 0.98 (`sized_wants`)."""
-    on_eff, factor = ladder_state(price, e2_on, arm, comps, cuts)
+    on_eff, factor = ladder_state(price, e2_on, arm, comps, cuts, stats)
     return sized_wants(on_eff, factor, vol_instr)
 
 
-def wants_for(price, e2_on, vol_instr, arms=ARMS, comps=None, cuts=None):
+def wants_for(price, e2_on, vol_instr, arms=ARMS, comps=None, cuts=None, stats=None):
     """{arm: target weights} for one price series; one early-path state loop per arm."""
     comps = early_components(price) if comps is None else comps
-    return {a: ladder_wants(price, e2_on, vol_instr, a, comps, cuts) for a in arms}
+    return {a: ladder_wants(price, e2_on, vol_instr, a, comps, cuts, stats) for a in arms}
 
 
 def simulate_band(opens, closes, wants, cost, start, band):
@@ -1016,6 +1028,7 @@ def boot(seed=SEED, block=BLOCK, arms=ARMS_ALL, n_pre=PRE_BOOT_PATHS, n_tax=TAX_
     i0, i1 = TAX_BOOT_I0, len(fixed_dates) - 1
     pre = {(md, a): [] for md in FIN for a in arms}
     at = {cl: {mode: {a: [] for a in arms} for mode in modes} for cl in capitals}
+    degeneracy = {}   # sessions where the ladder's metric was undefined (see ladder_state)
     n_paths = max(n_pre, n_tax)
     for pidx in range(n_paths):
         pos = np.empty((1, L), dtype=np.int64)
@@ -1044,7 +1057,7 @@ def boot(seed=SEED, block=BLOCK, arms=ARMS_ALL, n_pre=PRE_BOOT_PATHS, n_tax=TAX_
         # one early-path state loop per arm per path; the sizing differs per financing model only
         W = {arm: None for arm in arms}
         for arm in arms:
-            on_eff, factor = ladder_state(pc, e2, arm, comps)
+            on_eff, factor = ladder_state(pc, e2, arm, comps, stats=degeneracy)
             W[arm] = {"base": sized_wants(on_eff, factor, trv2.vol_n(sc)[0])[0],
                       "calibrated": sized_wants(on_eff, factor, trv2.vol_n(sc_c)[0])[0]}
         legs = {md: (so[0] if md == "base" else so_c[0], sc[0] if md == "base" else sc_c[0])
@@ -1072,6 +1085,7 @@ def boot(seed=SEED, block=BLOCK, arms=ARMS_ALL, n_pre=PRE_BOOT_PATHS, n_tax=TAX_
 
     out = {"n_paths_pre": n_pre, "n_paths_tax": n_tax, "seed": seed, "block": block,
            "arms": list(arms), "calendar_start": fixed_dates[0], "calendar_end": fixed_dates[-1],
+           "degeneracy": {k: int(v) for k, v in sorted(degeneracy.items())},
            "pre": {}, "tax": {}}
     for md in (FIN if n_pre > 0 else ()):   # no pre-tax paths -> no pre-tax block
         base = np.array(pre[(md, CONTROL)])
@@ -1113,6 +1127,7 @@ def boot_oos_market(key, rng, arms):
     npool = len(pool)
     mkt = usd_market(days)
     acc = {a: [] for a in arms}
+    degeneracy = {}
     for chunk in range(0, OOS_PATHS_PER_MARKET, trv2.CHUNK):
         P = min(trv2.CHUNK, OOS_PATHS_PER_MARKET - chunk)
         pos = np.empty((P, OOS_BOOT_L), dtype=np.int64)
@@ -1130,14 +1145,15 @@ def boot_oos_market(key, rng, arms):
         yyp = np.concatenate([yy, yy[:, -1:]], axis=1)
         e2 = e2_up(cc)
         so, sc = trv2.synthetic_2x(oo, cc, np.zeros_like(cc), yyp + EXTRA_FIN, EXP_Q)
-        W = wants_for(cc, e2, trv2.vol_n(sc), arms)
+        W = wants_for(cc, e2, trv2.vol_n(sc), arms, stats=degeneracy)
         for arm in arms:
             for p in range(P):
                 r = engine_run(1.0, START, cc.shape[1] - 1, days, mkt, so[p], sc[p], W[arm][p], e2[p],
                                arm, "pre_tax", m=M, rule_index=False)
                 k = len(r["_nav"]) - 1
                 acc[arm].append((r["_nav"][-1] / r["_nav"][0]) ** (252 / k) - 1)
-    return {a: np.array(v, dtype=float) for a, v in acc.items()}
+    return ({a: np.array(v, dtype=float) for a, v in acc.items()},
+            {k: int(v) for k, v in sorted(degeneracy.items())})
 
 
 # ----------------------------------------------------------------------------- smoke / harness
@@ -1312,6 +1328,20 @@ def smoke():
         and abs(lin[0, 10] - 1.0) < 1e-12)
     checks["ladder_plateau_cuts_change_the_weight"] = bool(
         not np.allclose(ladder_g(probe_m, "steps"), ladder_g(probe_m, "steps", (0.25, 1.0))))
+    # the degeneracy rule: `ladder_g` propagates a non-finite metric (so a zero-vol stretch
+    # reaches the fallback) and the fallback is the production 0.5 weight
+    g_nan = ladder_g(np.array([[np.nan, 0.2, 2.0]]), "linear")
+    g_fb = np.where(np.isfinite(g_nan), g_nan, LADDER_STEPS[0])
+    checks["undefined_metric_falls_back_to_the_control_weight"] = bool(
+        all(not np.isfinite(ladder_g(np.array([[np.nan]]), sh)[0, 0])
+            for sh in ("steps", "twostep", "linear"))
+        and not np.isfinite(g_nan[0, 0]) and g_fb[0, 0] == LADDER_STEPS[0]
+        and g_fb[0, 1] == LADDER_STEPS[0] and g_fb[0, 2] == 1.0)
+    stats_probe = {}
+    _onf, _facf = ladder_state(np.array([[np.nan, 1.0, 2.0]]), np.array([[True, False, False]]),
+                               "L1", cuts=(0.5, 1.5), stats=stats_probe)
+    checks["stats_tally_is_wired"] = bool(stats_probe == {} or
+                                          "L1_undefined_metric_sessions" in stats_probe)
     lag20 = np.full_like(price, np.nan)
     lag20[LAG_FAST:] = price[:-LAG_FAST]
     m20_direct = (price / lag20 - 1.0) / (trv2.vol_n(price) / math.sqrt(252.0) * math.sqrt(LAG_FAST))
@@ -1614,9 +1644,11 @@ def oos_bootstrap(arms):
     """Pooled OOS bootstrap (G8): block-20 over M1-M5, 2,000 paths each, rng seed SEED."""
     labels = tuple(arms) + ("R2",) if "R2" not in arms else tuple(arms)
     rng = np.random.default_rng(SEED)
-    per = {k: boot_oos_market(k, rng, labels) for k in MARKETS}
+    raw = {k: boot_oos_market(k, rng, labels) for k in MARKETS}
+    per = {k: v[0] for k, v in raw.items()}
+    degeneracy = {k: v[1] for k, v in raw.items()}
     pooled = {a: np.concatenate([per[k][a] for k in MARKETS]) for a in labels}
-    out = {"per_market": {}, "pooled": {}}
+    out = {"per_market": {}, "pooled": {}, "degeneracy": degeneracy}
     for k in MARKETS:
         out["per_market"][k] = {a: {"median_diff_pp": float(np.median(per[k][a] - per[k][CONTROL]) * 100)}
                                 for a in labels}
@@ -1966,11 +1998,11 @@ def main() -> None:
     hs = harness(run_boot=True)
     for k in sorted(hs["reproduction_checks"]):
         v = hs["reproduction_checks"][k]
+        if "reference" not in v:
+            print(f"harness {k}: {v}")
+            continue
         print(f"harness {k}: ref {v['reference']:.8f} repro {v['reproduced']:.8f} "
               f"diff {v['diff']:+.6f} {'ok' if v['pass'] else 'FAIL'}")
-    for k, v in hs["reproduction_checks"].items():
-        if "max_abs_nav_diff" in v:
-            print(f"harness {k}: {v}")
     print(f"harness {'PASS' if hs['pass'] else 'FAIL'} ({hs['n_outside_tolerance']} outside tolerance)")
     if mode == "--harness" or not hs["pass"]:
         sys.exit(0 if hs["pass"] else 1)

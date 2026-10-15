@@ -206,3 +206,28 @@ the arm's target series is replaced by the control's inside that span, and the r
    early weight is a lever, not a signal", and the answer is to leave 0.5 alone.
 5. The metric distribution check in §3.2 is a control-side, arm-independent inspection; no arm was
    simulated on real data before this file was committed.
+
+## 8. Amendments (post-pre-registration; no arm result was observed before or during them)
+
+The pre-registration (commit `d04343bd`) fixed the arms, parameters, gates and selection rule; none
+of them changed. Three changes were needed to make `--run` work at all, and they were made with
+**no candidate result written or read** (the aborted run below exited on an exception before
+`RESULTS.json` or `SUMMARY.txt` existed):
+
+1. **Print fix in `main()`** (report-only). The harness anchor block printed every check with
+   `v['reference']`, but two checks hold a dict instead; the `--harness` run therefore crashed
+   *after* all 60 anchors had reproduced (the printed block showed every one `ok`). The loop now
+   prints dict-valued checks as dicts. No gated metric, arm or gate changed.
+2. **The first `--run` attempt** (log kept out of the repo) passed the whole harness (60 anchors,
+   0 outside tolerance) and the pre/after-tax/cost/OOS stages, then **aborted inside the OOS
+   bootstrap on the L3 arm**: `^N225` (M3) block-resampling produces stretches of ~20 identical
+   closes, where `vol20 == 0` and the conviction metric is undefined. No result was written.
+3. **Degeneracy rule for an undefined metric (pre-committed here, before any arm result existed).**
+   Where the early path is active but the metric is not finite, the arm falls back to the control's
+   **0.5** early weight. Rationale: a zero-volatility stretch carries no conviction information, so
+   0.5 is neutral by construction and can only damp, never flatter, a candidate. `ladder_g` now
+   propagates a non-finite metric for **every** shape (a bare `np.where` comparison against NaN
+   would have sent the `steps`/`twostep` shapes quietly to the top step — i.e. to full weight on a
+   zero-vol session, the opposite of the rule). `ladder_state` tallies the sessions where the rule
+   fired, and the tally is reported per bootstrap and in `RESULTS.json` under `degeneracy`.
+   `--smoke` pins the contract: a non-finite metric reaches the fallback and yields exactly 0.5.

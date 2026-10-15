@@ -1759,10 +1759,14 @@ def reference_checks(res, full=True):
             _compare_subtree(f"pre_tax_main.{md}.{m}.A1u", res["pre"][md][m]["A1u"],
                              v3["pre_tax_main"][md][m]["A1u"], cells, only_mine, only_theirs)
         for arm in CANDIDATES:
+            if arm not in v3["pre_tax_main_r_usd"][md]:
+                continue   # H2 and K are new here; v3 has no published cell to compare
             _compare_subtree(f"pre_usd.{md}.{arm}", res["pre_usd"][md][arm],
                              v3["pre_tax_main_r_usd"][md][arm], cells, only_mine, only_theirs)
     sections.append("after_tax_windows")
     for cl in TAX_CAPITALS:
+        if cl not in res["windows"]:
+            continue   # full=False (the deep harness) runs the gate capital only
         for wn in TAX_WINDOWS:
             _compare_subtree(f"after_tax.{cl}.{wn}.A1u", res["windows"][cl][wn]["A1u"],
                              v3["after_tax_windows"][cl][wn]["A1u"], cells, only_mine, only_theirs)
@@ -1912,19 +1916,22 @@ def gates_combo(res):
                        for cl in ("100k", "1M")} for mode in ("progressive", "flat")},
         }
         # ---- against A1u (the arm being implemented now), for the record
-        r["vs_A1u"] = {
-            "after_tax_100k": {wn: {"after_tax_cagr": win[wn][arm]["after_tax_cagr"],
-                                    "delta_vs_A1u_pp": (win[wn][arm]["after_tax_cagr"]
-                                                        - win[wn][BASELINE]["after_tax_cagr"]) * 100}
-                               for wn in TAX_WINDOWS},
-            "pre_tax_cagr_delta_pp_base": (pre["base"]["m2"][arm]["cagr"] - pre["base"]["m2"][BASELINE]["cagr"]) * 100,
-            "pre_tax_max_dd_delta_pp_base": (pre["base"]["m2"][arm]["max_dd"] - pre["base"]["m2"][BASELINE]["max_dd"]) * 100,
-            "pre_tax_max_dd_delta_pp_cal": (pre["calibrated"]["m2"][arm]["max_dd"] - pre["calibrated"]["m2"][BASELINE]["max_dd"]) * 100,
-            "boot_median_delta_pp": {mode: boot_ref["tax"][GATE_CAPITAL][mode][f"{arm}_vs_{BASELINE}"]["median_delta_cagr_pp"]
-                                     for mode in ("progressive", "flat")},
-            "boot_share_gt_0": {mode: boot_ref["tax"][GATE_CAPITAL][mode][f"{arm}_vs_{BASELINE}"]["share_gt_0"]
-                                for mode in ("progressive", "flat")},
-        }
+        if arm == BASELINE:
+            r["vs_A1u"] = {"note": "baseline arm (the comparison reference of the adoption gate)"}
+        else:
+            r["vs_A1u"] = {
+                "after_tax_100k": {wn: {"after_tax_cagr": win[wn][arm]["after_tax_cagr"],
+                                        "delta_vs_A1u_pp": (win[wn][arm]["after_tax_cagr"]
+                                                            - win[wn][BASELINE]["after_tax_cagr"]) * 100}
+                                   for wn in TAX_WINDOWS},
+                "pre_tax_cagr_delta_pp_base": (pre["base"]["m2"][arm]["cagr"] - pre["base"]["m2"][BASELINE]["cagr"]) * 100,
+                "pre_tax_max_dd_delta_pp_base": (pre["base"]["m2"][arm]["max_dd"] - pre["base"]["m2"][BASELINE]["max_dd"]) * 100,
+                "pre_tax_max_dd_delta_pp_cal": (pre["calibrated"]["m2"][arm]["max_dd"] - pre["calibrated"]["m2"][BASELINE]["max_dd"]) * 100,
+                "boot_median_delta_pp": {mode: boot_ref["tax"][GATE_CAPITAL][mode][f"{arm}_vs_{BASELINE}"]["median_delta_cagr_pp"]
+                                         for mode in ("progressive", "flat")},
+                "boot_share_gt_0": {mode: boot_ref["tax"][GATE_CAPITAL][mode][f"{arm}_vs_{BASELINE}"]["share_gt_0"]
+                                    for mode in ("progressive", "flat")},
+            }
         g[arm] = r
     # ---- K's adoption gate (against A1u) and soundness gate (against C0)
     k = g["K"]
@@ -2176,12 +2183,13 @@ def main() -> None:
                       for wn in TAX_WINDOWS)
         atb = "".join(f"{(ctrl[wn][arm]['after_tax_cagr'] - ctrl[wn][BASELINE]['after_tax_cagr']) * 100:+9.3f}"
                       for wn in TAX_WINDOWS)
-        bc = "".join(f"{boot_ref['tax'][GATE_CAPITAL][md][f'{arm}_vs_C0']['median_delta_cagr_pp']:+7.3f}"
+        bc = "".join((f"{boot_ref['tax'][GATE_CAPITAL][md][f'{arm}_vs_C0']['median_delta_cagr_pp']:+7.3f}"
+                      if arm != CONTROL else "      -")
                      for md in ("progressive", "flat"))
         bb = "".join(f"{boot_ref['tax'][GATE_CAPITAL][md][f'{arm}_vs_{BASELINE}']['median_delta_cagr_pp']:+7.3f}"
-                     if arm != BASELINE else "      -"
+                     if arm not in (BASELINE, CONTROL) else "      -"
                      for md in ("progressive", "flat"))
-        eo = float(np.median([res["oos"][wn][arm]["delta_cagr_pp"] for wn in OOS_WINDOWS]))
+        eo = float(np.median([res["oos"][wn][arm].get("delta_cagr_pp", 0.0) for wn in OOS_WINDOWS]))
         if arm == CONTROL:
             fl = "    -     -     -     -"
         else:

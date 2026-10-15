@@ -214,13 +214,41 @@ and is inherited by K unchanged in kind.
 
 ## 10. Amendments
 
-*(none yet; any bug fix, convention change or disclosure made after the first complete run goes
-here, with what was already visible at that point)*
+*(these were all made **before the first complete run** — i.e. before any gate outcome existed —
+and none touches an arm, parameter, stage, seed, threshold, gate or the decision rule)*
 
-**Pre-commit honesty note.** Before this commit, on this branch, the following ran:
-(a) one **timing probe** that executed `engine_run` (imported from `research/gain_band_v3/screen.py`)
-once for C0 (progressive), once for C0 (pre-tax) and once for **A1u** (progressive) on the main
-window, used only to size the compute; A1u's value reproduced v3's published cell (0.106146), so
-no information about this study's question (K vs A1u, H2) existed; and (b) `--smoke` (synthetic
-random-walk prices only). **No K cell, no H2 cell, no stage, no gate outcome and no
-reference-comparison result existed at the time of this commit.**
+**A1. Four KeyErrors in the reproduction checks / SUMMARY writer.** Each was a crash with a
+non-zero exit and **no `RESULTS.json` written**:
+
+1. `reference_checks`' R-USD pre-tax comparison looped over the candidate arms and asked
+   `research/gain_band_v3/RESULTS.json` for an `H2`/`K` cell that does not exist
+   (`KeyError: 'H2'`) — arms absent from the reference file are now skipped.
+2. The after-tax window comparison looped over all five capitals, but the deep `--harness` part
+   runs the gate capital only (`KeyError: '10k'`) — capitals absent from the partial stage dict
+   are now skipped.
+3. `gates_combo`'s "vs A1u" reporting block asked for an `A1u_vs_A1u` bootstrap cell
+   (`KeyError: 'A1u_vs_A1u'`) — the baseline arm now reports a note instead of a delta.
+4. Three `boot_ref`/SUMMARY lookups assumed a `{arm}_vs_C0` cell for the control arm
+   (`KeyError: 'C0_vs_C0'`) — the control's delta columns now print `-`.
+
+**A2. Stage code untouched.** `engine_run`, the arm rules, every stage function and every gate
+function were unchanged by A1; the four fixes only add "skip / print dash" guards in the
+comparison-and-reporting layer.
+
+**Pre-commit honesty note.** Before the pre-registration commit `cfd24f83`, on this branch, the
+following ran: (a) one **timing probe** that executed `engine_run` (imported from
+`research/gain_band_v3/screen.py`) once for C0 (progressive), once for C0 (pre-tax) and once for
+**A1u** (progressive) on the main window, used only to size the compute; A1u's value reproduced
+v3's published cell (0.106146), so no information about this study's question (K vs A1u, H2)
+existed; and (b) `--smoke` (synthetic random-walk prices only). **No K cell, no H2 cell, no
+stage, no gate outcome and no reference-comparison result existed at the time of this commit.**
+
+**Post-commit, pre-run state (same disclosure, continued).** After the commit: `--harness` was run
+twice (it crashed in A1's checks twice, then passed with **0** mismatches over 1,395 reference
+cells); a **code-path probe** with deliberately tiny bootstrap path counts (40 pre-tax / 12
+after-tax / 12 E3 paths instead of 5,000 / 1,000 / 1,000, writing only to `/tmp`, so it could not
+touch `RESULTS.json`) was used to exercise `run()`, `gates_combo` and the SUMMARY writer; and then
+the real `--run` was executed **twice**, byte-identical
+(`RESULTS.json` SHA-256 `5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997`,
+`SUMMARY.txt` SHA-256 `eee0843ffb086ff433d1ee55dd335f463f91400e4fe46672880a29cee27cf145`).
+No gate, threshold, arm, parameter or selection rule was changed after seeing any stage result.

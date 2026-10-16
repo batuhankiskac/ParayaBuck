@@ -239,7 +239,7 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 14.1s -> PARITY.json"
+  "tail": "parity PASS in 11.2s -> PARITY.json"
  },
  "failed": [],
  "n_checks": 116,
@@ -571,7 +571,7 @@
    ]
   },
   "the_control_shares_the_reduced_pool": {
-   "delta_median_pp": 14.035128,
+   "delta_median_pp": 0.071417,
    "n": 10,
    "pass": true,
    "pool": [
@@ -603,9 +603,9 @@
   "chunk_leg_b_gap_names_the_failing_column": {
    "columns": 2777,
    "days": 2776,
-   "label": "2016-09-28",
+   "label": "2016-09-02",
    "pass": true,
-   "reason": "the leg-B instrument 'dgs10' has no price on 2016-09-28 (the series covers 2015-09-01..2026-09-16 of this window)"
+   "reason": "the leg-B instrument 'dgs10' has no price on 2016-09-02 (the series covers 2015-09-01..2016-02-17 of this window)"
   },
   "fill_knobs_off_is_the_published_kernel": {
    "cagr_off": 0.090773,
@@ -621,7 +621,7 @@
    "reason": "the leg-B instrument 'gld' has no price on 2000-03-08 (the series covers 2004-11-18..2026-09-29 of this window)"
   },
   "the_reduced_pool_makes_a_late_leg_b_usable": {
-   "default_pool_reason": "the leg-B instrument 'gld' has no price on 2016-09-07 (the series covers 2015-09-01..2026-09-16 of this window)",
+   "default_pool_reason": "the leg-B instrument 'gld' has no price on 2016-09-07 (the series covers 2015-09-01..2016-09-06 of this window)",
    "pass": true,
    "pool": [
     1433,
@@ -663,7 +663,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 14.1s -> PARITY.json"
+   "tail": "parity PASS in 11.2s -> PARITY.json"
   },
   "failed": [],
   "riskoff_divergence_pp": {
@@ -686,7 +686,7 @@
    "failed": [],
    "n_cells": 28,
    "pass": true,
-   "wall_s": 0.724217
+   "wall_s": 0.633243
   },
   "p1_off_identity.base_flat_m1": {
    "max_abs_diff": 0.0,
@@ -981,5 +981,5 @@
    "tax_same_both_ways": 0.0
   }
  },
- "wall_s": 44.968502
+ "wall_s": 37.050676
 }

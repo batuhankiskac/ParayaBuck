@@ -375,3 +375,65 @@ untouched, so every arm is a `rerun` line with its bank_v3 `spec_hash` and **N i
 * **Gates unchanged.** Stage 1 is the same pass rule (`after-tax 2000-window Δ > 0` and
 `B1-recent median Δ > 0`, the DD/turnover gates), Stage 2 the same holdout, the deflation the same
 three tests. The re-screen exists only to replace the NaN bootstrap cells with real ones.
+
+### 6.6 2026-10-16 — the extra-key leg-B calendar-spanning return in a bootstrap chunk; re-screen `rw_fix_v1`
+
+Committed **before any arm of the re-screen batch `rw_fix_v1` is screened**. This amendment changes
+no arm, no parameter, no gate, no threshold, no seed, no sample size, no control and no window: it
+repairs one framework accessor and records the re-run of every arm whose *bootstrap* leg B went
+through it. It was written after `batch_bank_v3`, `bank_v3b`, `two_leg_v1` and `opts_fix_v1` had
+been reported — the numbers it repairs were already read then. The study is
+`research/rw_boot_audit_v1/` and its report `docs/research/rw_boot_audit_v1.md`.
+
+* **The defect.** `MarketData.leg_series` returned an extra-data leg B as the **per-column level**
+  `extra(key)` — the drawn source session's own value per column. That is the right convention for
+  a *state condition*, but a leg B is a *tradable price*: the kernel reads the return between two
+  consecutive columns, and a chunk is stitched from 20-session blocks with a jump between them
+  (`fe_boot.draw_positions`), so at every jump the ratio spans the calendar. On the published
+  `IC37/C` draw that is **120 of 2,776** columns, where `max |return − 1| = 1.229` against the
+  instrument's own `0.019` (a ratio of two unrelated IEF sessions). The framework's own market leg
+  (`boot.boot_panels`) never does this — it steps each drawn session from its **own** previous close
+  (`prev = win.q[1][idx − 1]`) — and `opts_nan_fix_v1` established the same convention for
+  `chunk_triple`. Panel legs (`1x`/`2x`) were always built correctly; only registered extra keys were
+  affected, which is why the arms with `leg_b = "1x"` (`IC38`, `IC42`–`IC44`, `ib27_2L`) report a
+  sane B1.
+* **The fix.** `MarketData.leg_series` now returns `MarketData.chunk_price_path(key)` inside a
+  bootstrap chunk: the level compounded from the base with each drawn session's own
+  close-to-close return (`level[:, t] = level[:, t−1] · pool[idx_{t−1}] / pool[idx_{t−1} − 1]`,
+  `idx = extra_index[:, 1:]`), which is `boot_panels`' convention exactly. On a contiguous draw the
+  two agree on every return but the artificial base column. `extra()` is **unchanged** — a state
+  condition still sees the drawn source session's own value, per its published semantics.
+  `leg_b_usable` follows `leg_series`, so the availability check is now about the price path the
+  kernel reads; for gap-free instrument series (every registered leg-B ETF) the verdict is
+  identical, and a mid-chunk gap is refused at the first poisoned column (`IC37/C`, `IC31/A`,
+  `ib25_RW/A_RW`, `IB26_2L/A_2L` are all accepted on their own pools, before and after).
+* **What it touches.** `leg_series`/`chunk_price_path` are reached only by a two-leg arm whose
+  `leg_b` is a registered extra key, inside a bootstrap chunk (`boot.boot`, `boot.oos_pooled`). No
+  window path (a real window has `extra_index is None`, so `extra()` is returned as before), no
+  single-leg arm, no panel-leg arm and no option arm reaches it. Parity cells
+  (`research/rw_boot_audit_v1/parity_cells.py`, committed before/after archives over five draws —
+  the published main-window draw, two fresh seeds/blocks, the `IC37/C` reduced pool twice — 76
+  cells): `k_control/K`, `r2_control/R2`, `IC38/A` and `ib27_2L/A_2L` are **bit-identical**
+  (`np.array_equal`, `equal_nan=True`), and no extra-key cell gains a non-finite entry. The one-path
+  reproduction of the published `IC37/C` B1 path 0 (`research/rw_boot_audit_v1/repro.py`) gives
+  +28.3583 pp with the per-column level — exactly the recorded `b1_delta_pp[0]` — and −1.11 pp with
+  the repaired path, on the same chunk, with the leg-A targets identical and a zeroed leg B
+  reproducing K bit for bit. The engine's own `--quick` parity, K's anchors, the framework's 116
+  checks, its 136 tests, the option package's 30 checks and 36 tests and the two-leg kernel's parity
+  suites all reproduce unchanged.
+* **The regression tests** (`research/batch_screen/tests/test_two_leg.py`): the chunk leg-B path
+  must equal `cumprod` of the drawn sessions' own returns **and** differ from `extra(key)`, with
+  zero calendar-spanning columns (the pre-fix level has 120); a jump-free draw must leave both
+  conventions' returns identical; a synthetic series must give the own-return cumprod (a constant
+  one is flat); and the availability rule must be preserved.
+* **The re-screen.** Batch **`rw_fix_v1`** (`--ideas IC31,IC32,IC33,IC34,IC35,IC37,IC38,IC42,IC43,
+  IC44,IC45,IC46,ib25_RW,ib25_2L,IB26_RW,IB26_2L,ib27_2L`) re-runs every registered arm with an
+  extra-key leg B — `IB26_RW` A–C, `IC31` A–C, `IC32` A–C, `IC33` A–C, `IC34` A/B, `IC35` A–C,
+  `IC37` A–C, `IC45` A/B, `IC46` A/B, `ib25_RW` A/B, `ib25_2L` A/B, `IB26_2L` A–C — plus the
+  panel-leg arms (`IC38`, `IC42`–`IC44`, `ib27_2L`) as the collateral check. Their specs and code
+  are untouched, so every line is a `rerun` with its recorded `spec_hash` and **N is unchanged
+  (303)**; the deflation is re-run over the batch (`--deflate --batch rw_fix_v1`).
+* **Gates unchanged, nothing declared.** Stage 1 is the same pass rule (`after-tax 2000-window
+  Δ > 0` and `B1-recent median Δ > 0`, the DD/turnover gates), Stage 2 the same holdout, the
+  deflation the same three tests. The re-screen exists only to replace the corrupted bootstrap cells
+  with real ones; a verdict that changes is reported, not adopted.

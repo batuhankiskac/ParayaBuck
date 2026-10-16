@@ -138,8 +138,12 @@ def pairing_cells() -> dict:
             "pass": bool(c["pool"] == pool == (c["win"].i0 - 1, len(windows.bars()[0]) - 2)),
             "pool": list(pool), "arm_i0": int(c["win"].i0)},
         "control_and_arm_share_the_same_i0_i1_years": {
-            "pass": bool(rec_win.get("i0") == c["win"].i0 and bw.i1 == 2776 and bw.i0 == 256),
-            "control_i0": rec_win.get("i0"), "arm_i0": int(c["win"].i0),
+            "pass": bool(rec_win.get("start") == c["win"].i0
+                         and (rec.get("record") or {}).get("window", {}).get("start")
+                         == windows.bars()[0][c["win"].i0]
+                         and bw.i0 == B.BootWindow().i0 and bw.i1 == B.BootWindow().i1
+                         and bw.yrs == B.BootWindow().yrs),
+            "control_start": rec_win.get("start"), "arm_i0": int(c["win"].i0),
             "i0_i1": [int(bw.i0), int(bw.i1)], "years": float(bw.yrs)},
         "levered_control_is_re_simulated_on_the_window": {
             "pass": bool(rec.get("win", {}).get("tag") == c["win"].tag
@@ -163,12 +167,41 @@ def parity_diff() -> dict:
                           labels=("PRE_FIX_BASELINE.npz", "current (fixed) archive"))
 
 
+def repro_path0() -> dict:
+    """The published IC37/C B1 path 0 reproduced on its own chunk, raw vs `leg_series`."""
+    r = REPRO.run(0)
+    rec = r["recorded"]["arm_b1_path0_delta_pp"]
+    sim = r["simulation"]
+    dec = r["decomposition"]
+    return {
+        "recorded_path0_b1_delta_pp": rec,
+        "reproduced_raw_pp": sim["prog_delta_raw_pp"],
+        "reproduced_leg_series_pp": sim["prog_delta_leg_series_pp"],
+        "raw_convention_reproduces_the_published_path": {
+            "pass": bool(abs(sim["prog_delta_raw_pp"] - rec) <= 0.01)},
+        "zero_leg_b_reproduces_the_control": {
+            "pass": bool(sim["zero_leg_b_is_the_control_pretax"]
+                         and sim["leg_a_targets_identical"])},
+        "the_read_leg_b_spans_block_jumps": {
+            "pass": bool(dec["leg_b_spanning_columns"] > 0),
+            "spanning_columns": dec["leg_b_spanning_columns"],
+            "max_abs_return_minus_1_as_read": dec["leg_b_max_abs_return_minus_1_as_read"],
+            "max_abs_return_minus_1_own": dec["leg_b_max_abs_return_minus_1_own"]},
+        "leg_series_leg_b_spans_none": {
+            "pass": bool(dec["leg_b_max_abs_diff_vs_own_fixed"] <= 1e-12)},
+        "paired_with_the_published_control_pool": {
+            "pass": bool(r["pairing"]["control_pool_matches_arm_pool"]
+                         and r["pairing"]["control_win"]["tag"] == r["decomposition"]["win"]["tag"])},
+    }
+
+
 def harness() -> dict:
     t0 = time.time()
     groups = {"engine_parity_quick": engine_parity_quick(),
               "engine_anchors": engine_anchors(),
               "leg_b_convention": leg_convention(),
               "pairing": pairing_cells(),
+              "repro_path0": repro_path0(),
               "parity_before_after": parity_diff()}
     flat = {}
 
@@ -290,10 +323,12 @@ def summary() -> dict:
     pd = res["parity"] or {}
     rp = res["repro"] or {}
     lines = ["rw_boot_audit_v1 SUMMARY", ""]
-    lines.append(f"repro IC37/C path0: leg-B spanning columns "
-                 f"{(rp.get('decomposition') or {}).get('leg_b_spanning_columns')} / "
-                 f"{(rp.get('decomposition') or {}).get('leg_b_columns')}; "
-                 f"pre-tax Δ {(rp.get('simulation') or {}).get('pretax_cagr_delta_pp')} pp")
+    d = (rp.get("decomposition") or {})
+    s = (rp.get("simulation") or {})
+    lines.append(f"repro IC37/C path0: leg-B spanning columns {d.get('leg_b_spanning_columns')}"
+                 f" / {d.get('leg_b_columns')}; progressive Δ raw {s.get('prog_delta_raw_pp')} pp"
+                 f" (= recorded {(rp.get('recorded') or {}).get('arm_b1_path0_delta_pp')}) vs"
+                 f" leg_series {s.get('prog_delta_leg_series_pp')} pp")
     lines.append(f"parity: pass={pd.get('pass')} cells={pd.get('n_cells')} "
                  f"unaffected moved={len(pd.get('unaffected_arms_moved') or [])} "
                  f"hard failures={len(pd.get('hard_failures') or [])} "

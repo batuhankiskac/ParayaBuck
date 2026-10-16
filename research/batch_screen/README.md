@@ -123,7 +123,11 @@ leg on that leg's own book**, per-leg costs, financing only inside the synthetic
 optional idle-cash yield as in the engine, and one taxpayer: both legs' realisations (Yİ-ÜFE
 indexed per lot) add into one annual net TRY gain. A tax-funding sale sells leg A first, then B.
 An extra series has one column (its adjusted close), used as both the leg's fill and close price
-(`MarketData.leg_series`); a leg-B series without a price on every session the engine reads makes
+(`MarketData.leg_series`); inside a bootstrap chunk that price path is rebuilt by
+`MarketData.chunk_price_path` from each drawn session's **own** close-to-close return (the
+convention `boot_panels` uses for the market leg), so a block jump cannot make a leg-B return span
+the calendar — `extra(key)` itself keeps its per-drawn-session semantics for state conditions
+(`PREREGISTRATION.md` §6.6). A leg-B series without a price on every session the engine reads makes
 the window `NotApplicable` (`leg_b_usable`; for a bootstrap chunk, on the drawn source sessions),
 so for example a GLD leg is not applicable on the main window (GLD starts 2004-11-18) **unless the
 arm declares a reduced window** that begins after GLD's first session (§1a). Bootstrap groups are
@@ -453,7 +457,7 @@ PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch --ideas two_leg 
 
 `research/batch_screen/tests/run.sh` (the research venv's numba + the project venv's pytest, see
 the header of that script; it finds the project venv whether or not the worktree sits next to the
-main checkout). 132 tests: the plugin contract and its validation, the leg constructions, the
+main checkout). 136 tests: the plugin contract and its validation, the leg constructions, the
 registry's append-only semantics and commit gate, every stage-1/stage-2 gate branch on synthetic
 records, the deflation's null control/power/monotonicity/DSR properties, the extra-data layer
 (registry resolution, date alignment, the bootstrap chunk convention, ffill, downloads and hashing
@@ -463,7 +467,9 @@ floor, the clipped after-tax windows, the dropped rolling starts, the restricted
 default pool's bit-identity with the published draw), and
 the parity cells (engine `fe_boot.boot`, old `boot_oos_market`, the production R2 target series,
 `vol_shape_v1`'s sizing, and the control's published K cells stage by stage), and the two-leg
-contract, the fill-knob routing and the panel column calendar (`tests/test_two_leg.py`, probe
+contract, the chunk leg-B price path (the drawn sessions' own returns, the contiguous-draw
+isolation, the synthetic/constant series and the preserved availability rule), the fill-knob
+routing and the panel column calendar (`tests/test_two_leg.py`, probe
 `probes/two_leg.py`), and the `2x_spy` option leg's panel plumbing (`tests/test_spy_leg.py`,
 `PREREGISTRATION.md` §6.3). The harness is **116 checks**: the original 59, the two-leg routing checks,
 the two-leg kernel's parity groups, the reduced-window cells (the resolved window, the clipped

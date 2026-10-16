@@ -193,6 +193,7 @@ class MarketData:
         self.year = np.array([int(d[:4]) for d in self.column_days], dtype=np.int64)
         self.month = np.array([int(d[5:7]) for d in self.column_days], dtype=np.int64)
         self._extra = {}
+        self._chunk_paths = {}
         self.extra_log = []
 
     @property
@@ -245,11 +246,42 @@ class MarketData:
         fill price and the close of that leg -- an explicit convention, stated where it is used,
         not an interpolation. No forward fill: a session the series does not reach is `NaN`, and
         the framework refuses the window (`NotApplicable`) rather than invent a price.
+
+        Inside a bootstrap chunk an extra series is the **price path** `chunk_price_path` rebuilds
+        from each drawn session's own return, not the raw per-column level: the kernel reads the
+        return between two consecutive columns and a chunk stitches 20-session blocks with a jump
+        between them, so a per-column level would make every jump's return span the calendar --
+        the defect `research/opts_nan_fix_v1` repaired for `chunk_triple`. `extra()` keeps its
+        published per-drawn-session semantics, which is what a *state condition* wants.
         """
         if key in self.legs:
             return self.legs[key]
-        v = self.extra(key)
+        v = self.chunk_price_path(key) if self.extra_index is not None else self.extra(key)
         return v, v
+
+    def chunk_price_path(self, key: str) -> np.ndarray:
+        """An extra-data key as a tradable price path on a bootstrap chunk, `(P, T)`.
+
+        Column `t` is the level after the drawn source session `idx[p, t - 1]`, compounded from
+        the base with each drawn session's **own** close-to-close return:
+
+            level[:, 0] = 1,
+            level[:, t] = level[:, t-1] * pool[idx_{t-1}] / pool[idx_{t-1} - 1]
+
+        where `idx = extra_index[:, 1:]` is the chunk's drawn session list and `pool` is the series
+        on the pool calendar (`extra_days`). That is exactly `boot.boot_panels`' convention for the
+        market leg (`prev = win.q[1][idx - 1]`), so a block jump cannot span the calendar; on a
+        contiguous draw the path is the raw series up to a scale factor.
+        """
+        if key not in self._chunk_paths:
+            from . import extra as _ext
+
+            idx = np.asarray(self.extra_index, dtype=np.int64)[:, 1:]
+            pool = _ext.aligned(key, self.extra_window or self.window, self.extra_days)[0]
+            own = pool[idx] / pool[idx - 1]
+            self._chunk_paths[key] = np.concatenate(
+                [np.ones((idx.shape[0], 1)), np.cumprod(own, axis=1)], axis=1)
+        return self._chunk_paths[key]
 
     def leg_b_usable(self, key: str, i0: int, i1: int) -> tuple:
         """`(ok, reason)`: is `key`'s series finite on every session the engine reads?

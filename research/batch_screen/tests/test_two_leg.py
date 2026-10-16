@@ -18,9 +18,11 @@ import pytest
 
 from research.batch_screen import api, stages, windows
 from research.batch_screen import boot as B
+from research.batch_screen import extra
 from research.batch_screen import run
 from research.batch_screen.tests.test_api import tiny_panel, write_idea
 from research.fast_engine import fe_boot, fe_study
+from research.fast_engine.fe_config import BLOCK, SEED
 
 HERE = Path(__file__).resolve().parent
 PROBE = HERE.parent / "probes" / "two_leg.py"
@@ -186,6 +188,125 @@ def test_two_leg_after_tax_cells_and_models(probe):
     cell = stages.after_tax_cells(arm, p, days, j0, j1, "none")
     assert cell["pre_tax_cagr"] > 0 and cell["after_tax_cagr"] > 0
     assert cell["sells_per_year"] > 0 and np.isfinite(cell["tax_usd"])
+
+
+# ----------------------------------------------------------------------------- the chunk leg-B path
+def _chunk(arm_id=("IC37", "C"), n_paths=2, pool=None):
+    """One real chunk panel on an arm's own window pool (`B.boot_panels`, base financing)."""
+    arm = api.load_arm(*arm_id)
+    win = windows.arm_window(arm)
+    pool = pool if pool is not None else windows.boot_pool(windows.bars()[0], win)
+    bw = B.BootWindow("none", pool)
+    pos = bw.positions(np.random.default_rng(SEED), BLOCK, n_paths)
+    return bw, pos, B.boot_panels(bw, pos, ("2x",), (0.0,), cache={})[("2x", 0.0)]
+
+
+def _spanning(raw, own) -> int:
+    """Columns whose column-to-column return is not the drawn session's own return.
+
+    A chunk is stitched from 20-session blocks with a jump between blocks, so a per-column *level*
+    makes the return at every jump span the calendar. The count is 0 for a correct path.
+    """
+    seen = raw[:, 1:] / raw[:, :-1]
+    return int((np.abs(seen - own) > 1e-9).sum())
+
+
+def test_chunk_leg_b_is_built_from_each_drawn_sessions_own_return():
+    """A chunk's extra-key leg B is a price path from the drawn sessions' OWN returns.
+
+    Regression for the reduced-window bootstrap Δ: the kernel reads the return between two
+    consecutive columns, so a per-column level (the pre-fix `leg_series`) makes every block jump
+    span the calendar. `leg_series` must return the path `boot_panels` uses for the market leg --
+    and it must differ from `extra(key)`, which keeps its per-drawn-session semantics.
+    """
+    _bw, _pos, p = _chunk()
+    key = "ief"
+    got = np.asarray(p.leg_series(key)[0], dtype=np.float64)
+    raw = np.asarray(p.extra(key), dtype=np.float64)
+    pool = extra.values_on(extra.resolve_series(key, p.extra_window or p.window),
+                           windows.bars()[0])
+    idx = np.asarray(p.extra_index, dtype=np.int64)[:, 1:]
+    own = pool[idx] / pool[idx - 1]
+    want = np.concatenate([np.ones((idx.shape[0], 1)), np.cumprod(own, axis=1)], axis=1)
+    assert np.allclose(got, want, rtol=1e-12, atol=1e-15)
+    # the fix is non-vacuous here: the pre-fix per-column level really is a different path
+    assert _spanning(raw, own) > 0
+    assert not np.allclose(got, raw, rtol=1e-9)
+    # ... and the rebuilt path's return at column t is drawn session t-1's own return
+    assert _spanning(got, own) == 0
+    assert np.isfinite(got).all()
+
+
+def test_chunk_leg_b_is_unchanged_on_a_contiguous_draw():
+    """A jump-free draw has no calendar-spanning return under either convention."""
+    arm = api.load_arm("IC37", "C")
+    win = windows.arm_window(arm)
+    bw = B.BootWindow("none", windows.boot_pool(windows.bars()[0], win))
+    L = fe_boot.TAX_BOOT_L + fe_boot.TAX_BOOT_EXT          # a chunk's own column count
+    pos = np.arange(1200, 1200 + L, dtype=np.int64)[None, :]
+    p = B.boot_panels(bw, pos, ("2x",), (0.0,), cache={})[("2x", 0.0)]
+    key = "ief"
+    raw = np.asarray(p.extra(key), dtype=np.float64)
+    got = np.asarray(p.leg_series(key)[0], dtype=np.float64)
+    pool = extra.values_on(extra.resolve_series(key, p.extra_window or p.window),
+                           windows.bars()[0])
+    idx = np.asarray(p.extra_index, dtype=np.int64)[:, 1:]
+    own = pool[idx] / pool[idx - 1]
+    assert (idx[0, 1:] != idx[0, :-1] + 1).sum() == 0
+    assert _spanning(raw, own) <= 1          # only the artificial base column
+    assert _spanning(got, own) == 0
+
+
+def test_chunk_leg_b_uses_the_series_own_returns(monkeypatch):
+    """A synthetic series: the rebuilt path is the own-return cumprod, a constant one is flat."""
+    def fake_aligned(key, window, days, pool_days=None, index=None, shape=None, path=None,
+                     root=None):
+        if index is None:                        # the pool vector on `extra_days`
+            return np.array([[1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0]])
+        return np.full(shape, -1.0)              # never used: `extra_index` is consulted instead
+
+    monkeypatch.setattr(extra, "aligned", fake_aligned)
+    # a chunk panel: 6 columns, 5 session labels (the arrays carry one artificial base row)
+    days = np.array(["2020-01-0%d" % k for k in range(1, 6)])
+    idx = np.array([[1, 1, 2, 5, 3, 7]])
+    p = api.panel(days, price=np.ones((1, 6)), div=np.zeros((1, 6)), rate=np.zeros((1, 6)),
+                  o2=np.ones((1, 6)), c2=np.ones((1, 6)), d2=np.zeros((1, 6)),
+                  window="boot", extra_days=np.arange(8), extra_index=idx)
+    pool = np.array([1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0])
+    own = pool[idx[0, 1:]] / pool[idx[0, 1:] - 1]
+    got = np.asarray(p.leg_series("any")[0], dtype=np.float64)
+    assert np.allclose(got, np.concatenate([[1.0], np.cumprod(own)]), rtol=1e-12)
+
+    def const_aligned(key, window, days, pool_days=None, index=None, shape=None, path=None,
+                      root=None):
+        if index is None:
+            return np.full((1, len(days)), 7.0)
+        return np.full(shape, 7.0)
+
+    monkeypatch.setattr(extra, "aligned", const_aligned)
+    p2 = api.panel(days, price=np.ones((1, 6)), div=np.zeros((1, 6)), rate=np.zeros((1, 6)),
+                   o2=np.ones((1, 6)), c2=np.ones((1, 6)), d2=np.zeros((1, 6)),
+                   window="boot", extra_days=np.arange(8), extra_index=idx)
+    g2 = np.asarray(p2.leg_series("any")[0], dtype=np.float64)
+    assert np.allclose(g2, 1.0)                  # a constant series is a zero-return asset
+
+
+def test_chunk_leg_b_availability_is_preserved():
+    """`leg_b_usable` follows the rebuilt path: a gapped series is still refused, a late-starting
+    one is usable on a reduced pool, and the path is finite wherever the window is accepted."""
+    bw = B.BootWindow("none")
+    pos = bw.positions(np.random.default_rng(SEED), BLOCK, 2)
+    p = B.boot_panels(bw, pos, ("2x",), (0.0,), cache={})[("2x", 0.0)]
+    ok, why = p.leg_b_usable("dgs10", bw.i0, bw.i1)
+    assert not ok and "no price on" in why
+    assert not p.leg_b_usable("gld", bw.i0, bw.i1)[0]
+    win = windows.arm_window(api.load_arm("IC37", "C"))
+    bwr = B.BootWindow("none", windows.boot_pool(windows.bars()[0], win))
+    posr = bwr.positions(np.random.default_rng(SEED), BLOCK, 2)
+    pr = B.boot_panels(bwr, posr, ("2x",), (0.0,), cache={})[("2x", 0.0)]
+    okr, whyr = pr.leg_b_usable("ief", bwr.i0, bwr.i1)
+    assert okr, whyr
+    assert np.isfinite(np.asarray(pr.leg_series("ief")[0])[0, bwr.i0 - 1 : bwr.i1 + 1]).all()
 
 
 # ----------------------------------------------------------------------------- the harness

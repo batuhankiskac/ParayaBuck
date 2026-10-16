@@ -104,7 +104,13 @@ def decompose(c: dict) -> dict:
 
 
 def simulate_both(c: dict) -> dict:
-    """The arm (two-leg) and the control (one-leg) on the *same* chunk, pre-tax and after tax."""
+    """The arm (two-leg) and the control (one-leg) on the *same* chunk, pre-tax and after tax.
+
+    Leg B is run twice: once with the **raw per-column level** (`extra(key)`, the pre-fix
+    behaviour, fed to the kernel explicitly) and once through `MarketData.leg_series` (the chunk
+    price path). The control is the framework's one-leg `k_control/K` on the same chunk, at the
+    same `i0/i1`, capital, calendar and rule.
+    """
     pan = c["panels"][("2x", FIN["base"])]
     arm = c["arm"]
     ctrl = RUN.control_spec()
@@ -113,7 +119,10 @@ def simulate_both(c: dict) -> dict:
     t = api.call_targets(arm["mod"], pan, arm)
     tk = api.call_targets(ctrl["mod"], pan, ctrl)
     oa, ca = pan.legs["2x"]
-    ob, cb = pan.leg_series(arm.get("leg_b") or "ief")
+    key = arm.get("leg_b") or "ief"
+    raw = np.asarray(pan.extra(key), dtype=np.float64)
+    got, _got_close = pan.leg_series(key)
+    got = np.asarray(got, dtype=np.float64)
     zeros = np.zeros_like(t.wants_b)
 
     def pre(o_b, c_b, w_b):
@@ -125,11 +134,11 @@ def simulate_both(c: dict) -> dict:
                                  bw.i0, bw.i1, arm="K", mode="progressive", m=2, rule_index=True)
 
     r_k = fe_sim.simulate(oa, ca, tk.wants[0], env, 1.0, bw.i0, bw.i1, arm="K", mode="pre_tax", m=2)
-    r_zero = pre(zeros, zeros, zeros)
-    r_arm = pre(ob, cb, t.wants_b[0])
-    r_arm_prog = prog(ob, cb, t.wants_b[0])
     r_k_prog = fe_sim.simulate(oa, ca, tk.wants[0], env, TAX_CAPITALS["100k"], bw.i0, bw.i1,
                                arm="K", mode="progressive", m=2)
+    r_zero = pre(zeros, zeros, zeros)
+    r_raw, r_raw_prog = pre(raw, raw, t.wants_b[0]), prog(raw, raw, t.wants_b[0])
+    r_fix, r_fix_prog = pre(got, got, t.wants_b[0]), prog(got, got, t.wants_b[0])
 
     def cagr(nav):
         k = bw.i1 - bw.i0 + 1
@@ -141,25 +150,32 @@ def simulate_both(c: dict) -> dict:
                                                  and r_zero["cagr_usd_liquidated"]
                                                  == r_k["cagr_usd_liquidated"]),
         "pretax_cagr_control": cagr(r_k["_nav"]),
-        "pretax_cagr_arm": cagr(r_arm["_nav"]),
-        "pretax_cagr_delta_pp": (cagr(r_arm["_nav"]) - cagr(r_k["_nav"])) * 100,
-        "pretax_nav_min_arm": float(np.nanmin(r_arm["_nav"])),
+        "pretax_cagr_arm_raw_leg_b": cagr(r_raw["_nav"]),
+        "pretax_cagr_arm_leg_series": cagr(r_fix["_nav"]),
+        "pretax_delta_raw_pp": (cagr(r_raw["_nav"]) - cagr(r_k["_nav"])) * 100,
+        "pretax_delta_leg_series_pp": (cagr(r_fix["_nav"]) - cagr(r_k["_nav"])) * 100,
+        "pretax_nav_min_arm_raw": float(np.nanmin(r_raw["_nav"])),
         "pretax_nav_min_control": float(np.nanmin(r_k["_nav"])),
-        "leg_b_trades": int(r_arm["_legs"]["B"]["trades"]),
-        "leg_b_turnover": float(r_arm["_legs"]["B"]["turnover_total"]),
+        "leg_b_trades_raw": int(r_raw["_legs"]["B"]["trades"]),
+        "leg_b_trades_leg_series": int(r_fix["_legs"]["B"]["trades"]),
+        "leg_b_turnover_raw": float(r_raw["_legs"]["B"]["turnover_total"]),
+        "leg_b_turnover_leg_series": float(r_fix["_legs"]["B"]["turnover_total"]),
         "prog_cagr_control": float(r_k_prog["cagr_usd_liquidated"]),
-        "prog_cagr_arm": float(r_arm_prog["cagr_usd_liquidated"]),
-        "prog_cagr_delta_pp": (float(r_arm_prog["cagr_usd_liquidated"])
-                               - float(r_k_prog["cagr_usd_liquidated"])) * 100,
+        "prog_cagr_arm_raw_leg_b": float(r_raw_prog["cagr_usd_liquidated"]),
+        "prog_cagr_arm_leg_series": float(r_fix_prog["cagr_usd_liquidated"]),
+        "prog_delta_raw_pp": (float(r_raw_prog["cagr_usd_liquidated"])
+                              - float(r_k_prog["cagr_usd_liquidated"])) * 100,
+        "prog_delta_leg_series_pp": (float(r_fix_prog["cagr_usd_liquidated"])
+                                     - float(r_k_prog["cagr_usd_liquidated"])) * 100,
         "prog_tax_control_try": float(r_k_prog["tax_total_try"]),
-        "prog_tax_arm_try": float(r_arm_prog["tax_total_try"]),
-        "prog_nav_min_arm": float(np.nanmin(r_arm_prog["_nav"])),
-        "prog_nav_n_le_0_arm": int((r_arm_prog["_nav"] <= 0).sum()),
-        "prog_terminal_arm_usd": float(r_arm_prog["terminal_usd_liquidated"]),
-        "leg_b_realised_gain_try": float(sum(r_arm_prog["_legs"]["B"]
-                                            ["realised_gain_try_by_reason"].values())),
-        "leg_a_realised_gain_try": float(sum(r_arm_prog["_legs"]["A"]
-                                            ["realised_gain_try_by_reason"].values())),
+        "prog_tax_arm_raw_leg_b_try": float(r_raw_prog["tax_total_try"]),
+        "prog_tax_arm_leg_series_try": float(r_fix_prog["tax_total_try"]),
+        "prog_nav_min_arm_raw": float(np.nanmin(r_raw_prog["_nav"])),
+        "prog_nav_min_arm_leg_series": float(np.nanmin(r_fix_prog["_nav"])),
+        "prog_nav_n_le_0_arm_raw": int((r_raw_prog["_nav"] <= 0).sum()),
+        "prog_nav_n_le_0_arm_leg_series": int((r_fix_prog["_nav"] <= 0).sum()),
+        "prog_terminal_arm_raw_usd": float(r_raw_prog["terminal_usd_liquidated"]),
+        "prog_terminal_arm_leg_series_usd": float(r_fix_prog["terminal_usd_liquidated"]),
     }
 
 

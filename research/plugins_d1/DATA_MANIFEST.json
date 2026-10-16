@@ -1,0 +1,75 @@
+{
+ "campaign": "plugins_d1",
+ "extra_data": {
+  "GDX": {
+   "bytes": 177513,
+   "column": "adjclose",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_d1_gdx.csv",
+   "price": "adjclose",
+   "range": [
+    "2006-05-22",
+    "2026-10-16"
+   ],
+   "rows": 5134,
+   "sha256": "565fda9d55a2dca0baf71700b354f700cc71894995ddb5f17eb9e82b85fd5928",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/GDX?period1=0&period2=1792169393&interval=1d&events=div%2Csplit"
+  },
+  "LQD": {
+   "bytes": 210540,
+   "column": "adjclose",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_d1_lqd.csv",
+   "price": "adjclose",
+   "range": [
+    "2002-07-30",
+    "2026-10-16"
+   ],
+   "rows": 6094,
+   "sha256": "6ac65e841101edb627e2ed99d65b7c8180234306189d13352930534fe223819d",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/LQD?period1=0&period2=1792169393&interval=1d&events=div%2Csplit"
+  },
+  "TIP": {
+   "bytes": 198910,
+   "column": "adjclose",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_d1_tip.csv",
+   "price": "adjclose",
+   "range": [
+    "2003-12-05",
+    "2026-10-16"
+   ],
+   "rows": 5752,
+   "sha256": "08dd15c8a5375e5691c7ba9e039c01933a58547d5d7fd78b32db3bb8e13a83f3",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/TIP?period1=0&period2=1792169394&interval=1d&events=div%2Csplit"
+  }
+ },
+ "files": {
+  "data/historical/plugins_d1_gdx.csv": {
+   "bytes": 177513,
+   "sha256": "565fda9d55a2dca0baf71700b354f700cc71894995ddb5f17eb9e82b85fd5928"
+  },
+  "data/historical/plugins_d1_lqd.csv": {
+   "bytes": 210540,
+   "sha256": "6ac65e841101edb627e2ed99d65b7c8180234306189d13352930534fe223819d"
+  },
+  "data/historical/plugins_d1_tip.csv": {
+   "bytes": 198910,
+   "sha256": "08dd15c8a5375e5691c7ba9e039c01933a58547d5d7fd78b32db3bb8e13a83f3"
+  }
+ },
+ "keys": {
+  "gdx": "GDX",
+  "lqd": "LQD",
+  "tip": "TIP"
+ },
+ "note": "Extra series for the plugins_d1 off-state plugins (IC31-IC38): three new Yahoo chart API adjusted closes (LQD, TIP, GDX). The framework registry research/batch_screen/EXTRA_DATA.json carries the series and the plugin-facing keys (lqd, tip, gdx); IC32's HYG, IC34's XLU/XLP and IC37's IEF/DGS10/T10YIE were already registered by plugins_c2 / the batch_screen_v1 build.",
+ "used_by": {
+  "GDX": "IC35 off-state gold-miners leg",
+  "LQD": "IC31 off-state investment-grade credit leg (and IC31 arm C's own SMA200 gate)",
+  "TIP": "IC33 off-state TIPS leg"
+ }
+}

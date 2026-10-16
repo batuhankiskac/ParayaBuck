@@ -112,7 +112,10 @@
     "sec_disp": "SEC-DISP",
     "sec_disp_rel": "SEC-DISP-REL",
     "spy": "SPY",
-    "t10y3m": "T10Y3M"
+    "t10y3m": "T10Y3M",
+    "lqd": "LQD",
+    "tip": "TIP",
+    "gdx": "GDX"
   },
   "note": "Extra series for batch_screen plugins, one CSV per series. Sources: the Yahoo chart API (period1=0, daily, `events=div,split`: columns `date,close,adjclose`) and FRED CSV (columns `date,value`). Refresh with `python -m research.batch_screen.extra --fetch-all`, add a series with --fetch/--fetch-fred, check every hash and range with --verify. A key is a series name or a {\"windows\": {window: series}} map; `data.extra(key)` returns the series aligned to the panel's own sessions (the drawn source session inside a bootstrap chunk), NaN where the series has no value on that date. Nothing is forward-filled unless the plugin asks for `ffill=True`.",
   "schema": "parayabuck.batch_screen.extradata/v1",
@@ -1428,6 +1431,51 @@
       "bytes": 179130,
       "sha256": "a464c1dc610832971b5ef3d7ec11c63f1b0e4b47021e27f952a3038ca6075060",
       "source": "FRED CSV"
+    },
+    "GDX": {
+      "file": "data/historical/plugins_d1_gdx.csv",
+      "column": "adjclose",
+      "price": "adjclose",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/GDX?period1=0&period2=1792169393&interval=1d&events=div%2Csplit",
+      "fetched": "2026-10-16",
+      "range": [
+        "2006-05-22",
+        "2026-10-16"
+      ],
+      "rows": 5134,
+      "bytes": 177513,
+      "sha256": "565fda9d55a2dca0baf71700b354f700cc71894995ddb5f17eb9e82b85fd5928",
+      "source": "Yahoo chart API"
+    },
+    "LQD": {
+      "file": "data/historical/plugins_d1_lqd.csv",
+      "column": "adjclose",
+      "price": "adjclose",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/LQD?period1=0&period2=1792169393&interval=1d&events=div%2Csplit",
+      "fetched": "2026-10-16",
+      "range": [
+        "2002-07-30",
+        "2026-10-16"
+      ],
+      "rows": 6094,
+      "bytes": 210540,
+      "sha256": "6ac65e841101edb627e2ed99d65b7c8180234306189d13352930534fe223819d",
+      "source": "Yahoo chart API"
+    },
+    "TIP": {
+      "file": "data/historical/plugins_d1_tip.csv",
+      "column": "adjclose",
+      "price": "adjclose",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/TIP?period1=0&period2=1792169394&interval=1d&events=div%2Csplit",
+      "fetched": "2026-10-16",
+      "range": [
+        "2003-12-05",
+        "2026-10-16"
+      ],
+      "rows": 5752,
+      "bytes": 198910,
+      "sha256": "08dd15c8a5375e5691c7ba9e039c01933a58547d5d7fd78b32db3bb8e13a83f3",
+      "source": "Yahoo chart API"
     }
   }
 }

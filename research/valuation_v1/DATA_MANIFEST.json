@@ -15,8 +15,8 @@
     "1871-01",
     "2024-09"
    ],
-   "sha256": "5a2a887c8a2a7ad61bbc624ae830be89d0698ae6e4b081dd6ac00dc35d25d33e",
-   "bytes": 239791,
+   "sha256": "d8bd5a56a760110d13231951d524eeaab00489dee93a1b479c6e94b447b4ea46",
+   "bytes": 237945,
    "used_by": "EY_REF, CAPE_Q90, and the monthly multipliers of V1-V4"
   },
   "data/historical/valuation_v1_ndx_daily.csv": {
@@ -26,8 +26,8 @@
     "1985-10-01",
     "2000-03-22"
    ],
-   "sha256": "946403e2b1bd111b1cfcb3e650f4ab023161d4d85bc5446139b9fd2e3e3d3a5c",
-   "bytes": 173681,
+   "sha256": "cd4b47fec89f8cb09ee15c07ae7770dbf19df5c668b4141237db8f262a40c3ee",
+   "bytes": 170021,
    "used_by": "V4_C calibration window 1985-10-01 -> 2000-03-08"
   }
  },

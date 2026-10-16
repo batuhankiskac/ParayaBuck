@@ -101,7 +101,7 @@ def build_monthly(xls_path: Path, out_csv: Path) -> dict:
 
     cols = ("month", "P", "D", "E", "CPI", "EY", "CAPE", "F10", "shiller_cape", "shiller_fwd10")
     with out_csv.open("w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(cols)
         for r in recs:
             w.writerow([r["month"]] + ["" if r[c] != r[c] else repr(r[c]) for c in cols[1:]])
@@ -147,7 +147,7 @@ def build_ndx(url: str, out_csv: Path) -> dict:
         rows.append((_dt.datetime.fromtimestamp(ts, _dt.UTC).date().isoformat(), q["open"][k], q["close"][k]))
     rows.sort()
     with out_csv.open("w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(("date", "open", "close"))
         for d, op, cl in rows:
             w.writerow((d, repr(float(op)), repr(float(cl))))

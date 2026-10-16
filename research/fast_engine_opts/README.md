@@ -183,8 +183,10 @@ differently (different `wht`) are not the same group, so the paired `Δ` stays p
   a bootstrap chunk the framework's leg is built from a total-return path with a zero dividend
   column, so the netting has to happen upstream of the reconstruction: `chunk_raw_panel` rebuilds
   the chunk's legs from the drawn *raw* triple (`chunk_triple`, one leading base column, the drawn
-  sessions' returns unchanged — the same series up to floating-point rounding). `wht = 0` never
-  touches the framework's panel, which is what keeps the off-parity claim exact.
+  sessions' returns unchanged, each stepped from the drawn session's **own** previous close --
+  `c[idx - 1]`, exactly `boot_panels`' `prev = win.q[1][idx - 1]`; fixed 2026-10-16,
+  `docs/research/opts_nan_fix_v1.md`). `wht = 0` never touches the framework's panel, which is what
+  keeps the off-parity claim exact.
 * **The settlement is rarely active under production targets.** Its trigger is a tax-funding sale
   followed by an up-resize in the *same* session, so IC58's bootstrap cell is often inert and its
   evidence will come from the after-tax windows (and from deliberately constructed paths, see

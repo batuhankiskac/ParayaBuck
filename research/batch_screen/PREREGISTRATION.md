@@ -326,3 +326,52 @@ plumbing bug in `research/fast_engine_opts/bridge.py`, not a missing mechanism o
   anchor cells, `fe_sim` parity `--quick`) and all 32 package tests pass, and the full 27-idea smoke
   reports the same 11 declared `NEEDS_KERNEL` refusals as before this fix (IC34/C, IC36 A–C,
   IC41 A–C, IC45/C, IC46/C, IC54 A/B). The batch's arms, control and procedure are exactly §6.3's.
+
+### 6.5 2026-10-16 — the `chunk_triple` calendar-spanning return (the IC56/IC40 bootstrap NaN); re-screen batch `opts_fix_v1`
+
+Committed **before any arm of the re-screen batch `opts_fix_v1` is screened**. This amendment changes
+no arm, no parameter, no gate, no threshold, no seed, no sample size, no control and no window: it
+repairs one framework function and records the re-run of the arms whose *bootstrap* cells the defect
+made unusable. It was written after `batch_bank_v3` (and its `bank_v3b` addendum) had been reported —
+the numbers it repairs were read then, and the fix is the diagnosis §`Known issue` of
+`docs/research/batch_bank_v3.md` called for. The study is `research/opts_nan_fix_v1/` and its report
+`docs/research/opts_nan_fix_v1.md`.
+
+* **The defect.** `research/fast_engine_opts.fe_opts_legs.chunk_triple` rebuilds a bootstrap chunk's
+option leg from the *drawn sessions' raw prices*, concatenated as if consecutive
+(`[base, close(idx₀), close(idxₜ)…]`). A chunk is stitched from 20-session blocks with a jump
+between blocks (`fe_boot.draw_positions`), so at every jump the return `synthetic_2x` reads between
+consecutive columns is a ratio of two *unrelated* sessions — it spans the calendar. For the 2x leg
+one such return ≤ −50 % gives a gross factor `1 + 2r − cost` ≤ 0, the cumprod path flips sign, the
+leg's price goes non-positive, and the per-path CAGR `(nav[k]/nav[0])**(1/yrs) − 1` is NaN. Both
+option legs that go through it were affected: the `wht` leg (IC56, `chunk_raw_panel` → `chunk_triple`)
+and the `2x_spy` leg (IC40, `chunk_triple` → `_leg_of`). The framework's own chunk panel
+(`boot.boot_panels`) is correct: it steps each drawn session from its **own** previous close
+(`prev = win.q[1][idx − 1]`) and never skips the gap.
+* **The fix.** `chunk_triple` now builds the triple's level as the drawn sessions' own price returns
+compounded forward from the first drawn session's previous close (`lvl[t+1] = lvl[t] ·
+c[idx_t]/c[idx_t − 1]`), with the open and the dividend rescaled to that level
+(`o[idx_t]·lvl[t]/c[idx_t − 1]`, `d[idx_t]·lvl[t]/c[idx_t − 1]`). Each column's return is therefore
+the drawn session's *own* return — exactly `boot_panels`' convention — and a block jump cannot span
+the calendar. On a contiguous draw the level is algebraically the raw price path, so the fix is a
+no-op there (verified to 1e-12).
+* **What it touches.** `chunk_triple` (and so `chunk_raw_panel`) is reached **only** when a bootstrap
+chunk needs an option leg: `wht > 0` or `leg = 2x_spy`. No window path, no other option and no
+non-option arm reaches it. Parity cells (`research/opts_nan_fix_v1/parity_cells.py`, committed
+before/after archives, main window + reduced pool + two fresh seeds/blocks + the pooled OOS
+bootstrap, 85 cells): every non-option arm (`k_control/K`, `r2_control/R2`, the two-leg `IC38/A`)
+is **bit-identical**, NaN pattern included; the option arms' every all-NaN cell becomes finite; no
+finite entry becomes non-finite. The few option cells that were finite pre-fix change, because they
+were *built by the defect* (a jump whose spanning 2x factor happened not to flip the sign) — a fix
+that preserved them would preserve the bug. The engine's own `--quick` parity, the framework's 116
+checks, the option package's 30 harness checks and K's 14 anchor cells all reproduce unchanged.
+* **The re-screen.** Batch **`opts_fix_v1`** (`--ideas IC56,IC40,IC31,IC35 --workers 4`) re-runs the
+12 registered arms of those ideas: IC56 A–C and IC40 A–C (the two ideas the defect reached) and
+IC31 A–C / IC35 A–C (whose bank_v3 B1 vectors each carried a handful of non-finite entries — the
+orchestrator's list; they are two-leg extra-series arms that do **not** reach `chunk_triple`, so
+their numbers are expected to be unchanged, and this batch is the check). Their specs and code are
+untouched, so every arm is a `rerun` line with its bank_v3 `spec_hash` and **N is unchanged
+(303)**; the deflation is re-run over the batch (`--deflate --batch opts_fix_v1`).
+* **Gates unchanged.** Stage 1 is the same pass rule (`after-tax 2000-window Δ > 0` and
+`B1-recent median Δ > 0`, the DD/turnover gates), Stage 2 the same holdout, the deflation the same
+three tests. The re-screen exists only to replace the NaN bootstrap cells with real ones.

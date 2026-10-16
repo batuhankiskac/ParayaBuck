@@ -1,0 +1,54 @@
+{
+ "study": "opts_nan_fix_v1",
+ "campaign": "batch_screen_v1",
+ "note": "No data was downloaded for this study: the fix reads only inputs the campaign already committed, and the re-screen runs the same battery as bank_v3. files[] pins the inputs the re-screened arms and the engine read (SHA-256 computed in this worktree); the framework's own research/batch_screen/DATA_MANIFEST.json pins the full input set (31 extra series + the OOS/ETF files) and `python -m research.batch_screen.extra --verify` re-hashes every extra series. The parity archive inputs are the engine's own committed battery (research/fast_engine/PARITY.json's data), unchanged.",
+ "files": {
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "bytes": 2671225,
+   "role": "QQQ / QLD* / SPY bars -- the main window and every clean/fresh bootstrap chunk (the SPY column builds the IC40 2x_spy leg)",
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "bytes": 301157,
+   "role": "DTB3 -- the leg's financing (the 2x recurrence's rate column)",
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c"
+  },
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "bytes": 172726,
+   "role": "USDTRY -- the after-tax stages' currency conversion (the Stage-1 after-tax cell)",
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "bytes": 17845,
+   "role": "Yi-UFE -- the Turkish tax indexation (the after-tax stages)",
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c"
+  },
+  "data/historical/batch_screen_v1_gspc.csv": {
+   "bytes": 492465,
+   "role": "^GSPC -- IC40/C's S&P 500 vote series (extra key `sp500` -> `^GSPC`)",
+   "sha256": "be1832887b742d6f706d54637f1f1c4b246515a7b2d1d4e1b840c330d9e33762"
+  },
+  "data/historical/plugins_d1_lqd.csv": {
+   "bytes": 210540,
+   "role": "LQD adjusted close -- IC31's off-state leg (extra key `lqd`)",
+   "sha256": "6ac65e841101edb627e2ed99d65b7c8180234306189d13352930534fe223819d"
+  },
+  "data/historical/plugins_d1_gdx.csv": {
+   "bytes": 177513,
+   "role": "GDX adjusted close -- IC35's off-state leg (extra key `gdx`)",
+   "sha256": "565fda9d55a2dca0baf71700b354f700cc71894995ddb5f17eb9e82b85fd5928"
+  }
+ },
+ "artifacts": {
+  "research/opts_nan_fix_v1/PRE_FIX_BASELINE.npz": "the pre-fix bootstrap archive (85 cells, raw float64 per-path CAGRs) the parity diff is taken against; its SHA-256 (over the file bytes) is recorded in PARITY_FIX.json",
+  "research/opts_nan_fix_v1/PARITY_FIX.json": "the before/after parity diff",
+  "research/opts_nan_fix_v1/HARNESS.json": "the study harness (engine parity --quick, engine anchors, chunk-leg stats, parity diff)"
+ },
+ "seed_and_samples": {
+  "clean_bootstrap": {"seed": 20261011, "block": 20, "paths_pre": 5000, "paths_tax": 1000},
+  "fresh_bootstrap": {"seed": 20261016, "block": [10, 40], "paths": 1000},
+  "oos_pooled": {"seed": 20261011, "block": 20, "paths_per_market": 2000},
+  "parity_cells": {"seeds": [20261011, 20261016], "blocks": [10, 20, 40], "note": "small path counts (2-8) -- the parity cell is about bit-identity, not sampling"}
+ },
+ "verified_on": "2026-10-16"
+}

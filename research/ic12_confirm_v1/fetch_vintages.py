@@ -48,6 +48,7 @@ UA = "Mozilla/5.0 (research; parayabuck ic12_confirm_v1)"
 VINTAGE_CSV = HIST / "ic12_confirm_v1_nfci_vintages.csv"
 DATES_CSV = HIST / "ic12_confirm_v1_nfci_vintage_dates.csv"
 LIVE_CSV = HIST / "ic12_confirm_v1_nfci_live.csv"
+STATE_CSV = HIST / "ic12_confirm_v1_nfci_rt_state.csv"
 MANIFEST = HERE / "DATA_MANIFEST.json"
 
 #: observations kept per vintage: the rule needs 1 + 4 + 156 = 161; 210 leaves margin.
@@ -148,54 +149,15 @@ def write_date_table(series: dict[str, list[tuple[str, float]]], raw_hash: dict[
             w.writerow([v, len(rows), rows[0][0], rows[-1][0], raw_hash[v]])
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--verify", action="store_true", help="re-hash the committed files only")
-    args = ap.parse_args()
-
-    if args.verify:
-        man = json.loads(MANIFEST.read_text())
-        bad = 0
-        for rel, rec in sorted(man["files"].items()):
-            p = ROOT / rel
-            got = sha256_bytes(p.read_bytes()) if p.exists() else None
-            ok = got == rec["sha256"]
-            bad += not ok
-            print(f"  {'OK ' if ok else 'BAD'} {rel} {rec['sha256'][:16]} …")
-        print(f"verify: {len(man['files'])} files, {bad} mismatches")
-        return 1 if bad else 0
-
-    print("1/4 vintage calendar", flush=True)
-    dates, cal_raw = vintage_calendar()
-    print(f"     {len(dates)} vintages, {dates[0]} .. {dates[-1]}", flush=True)
-
-    print("2/4 vintage series", flush=True)
-    series, raw_hash = fetch_vintages(dates)
-    write_vintage_panel(series)
-    write_date_table(series, raw_hash)
-
-    print("3/4 current revised series (cross-check)", flush=True)
-    live_raw = get(FRED_URL)
-    live = parse_series(live_raw, FRED_URL)
-    with LIVE_CSV.open("w", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(["date", "value"])
-        for d, x in live:
-            w.writerow([d, repr(float(x))])
-    committed = HIST / "plugins_c2_nfci.csv"
-    same = sha256_bytes(committed.read_bytes()) == sha256_bytes(LIVE_CSV.read_bytes())
-    print(f"     live {live[0][0]} .. {live[-1][0]} ({len(live)} rows); "
-          f"byte-identical to plugins_c2_nfci.csv: {same}", flush=True)
-
-    print("4/4 manifest", flush=True)
+def manifest_entries(dates, cal_raw, live, same_values):
     files = {}
-    for p in (VINTAGE_CSV, DATES_CSV, LIVE_CSV, committed):
+    for p in (VINTAGE_CSV, DATES_CSV, LIVE_CSV, HIST / "plugins_c2_nfci.csv"):
         b = p.read_bytes()
         files[str(p.relative_to(ROOT))] = {
             "sha256": sha256_bytes(b), "bytes": len(b),
             "rows": sum(1 for _ in p.open()) - 1,
         }
-    man = {
+    return {
         "campaign": "ic12_confirm_v1",
         "note": ("NFCI ALFRED vintages for the IC12 confirmation study. ALFRED's NFCI archive "
                  "begins 2011-05-25 (every earlier vintage_date returns HTTP 404); FRED's own graph "
@@ -203,7 +165,11 @@ def main() -> int:
                  "response bytes are not committed (800 files); each vintage's SHA-256 of the raw "
                  "ALFRED response is in the `sha256_raw` column of "
                  "ic12_confirm_v1_nfci_vintage_dates.csv, next to the row count and observation "
-                 "range that response parsed to."),
+                 "range that response parsed to. "
+                 "ic12_confirm_v1_nfci_live.csv was re-downloaded next to the committed "
+                 "data/historical/plugins_c2_nfci.csv: the two files carry the same 2,910 "
+                 "(date, value) pairs but different headers (`observation_date,NFCI` vs "
+                 "`date,value`), so the value comparison, not the byte comparison, is the check."),
         "extra_data": {
             "nfci_vintages": {
                 "file": "data/historical/ic12_confirm_v1_nfci_vintages.csv",
@@ -235,7 +201,7 @@ def main() -> int:
                 "rows": len(live),
                 "sha256": files["data/historical/ic12_confirm_v1_nfci_live.csv"]["sha256"],
                 "fetched": time.strftime("%Y-%m-%d"),
-                "equals_plugins_c2_nfci": bool(same),
+                "values_equal_plugins_c2_nfci": bool(same_values),
             },
             "nfci_committed": {
                 "file": "data/historical/plugins_c2_nfci.csv",
@@ -252,7 +218,89 @@ def main() -> int:
                              "ones, hashed in research/batch_screen/DATA_MANIFEST.json"),
         },
     }
-    MANIFEST.write_text(json.dumps(man, indent=1, sort_keys=True) + "\n")
+
+
+def _live_vs_committed(live) -> bool:
+    committed = parse_series((HIST / "plugins_c2_nfci.csv").read_bytes(), str(HIST / "plugins_c2_nfci.csv"))
+    return committed == sorted(live)
+
+
+def add_derived(man: dict) -> dict:
+    """Record `ic12_confirm_v1_nfci_rt_state.csv` once `screen --save-state` has written it."""
+    if not STATE_CSV.exists():
+        return man
+    b = STATE_CSV.read_bytes()
+    rel = str(STATE_CSV.relative_to(ROOT))
+    man["files"][rel] = {"sha256": sha256_bytes(b), "bytes": len(b),
+                         "rows": sum(1 for _ in STATE_CSV.open()) - 1}
+    man["derived"] = {
+        "nfci_rt_state": {
+            "file": rel, "sha256": sha256_bytes(b),
+            "rows": man["files"][rel]["rows"],
+            "built_by": "research.ic12_confirm_v1.rt_state.build() "
+                        "(python -m research.ic12_confirm_v1.screen --save-state)",
+            "note": ("one (date, state) row per weekday from the first NFCI observation: the "
+                     "committed IC12 state on the current-revision series before the first ALFRED "
+                     "vintage (2011-05-25), the state of the latest vintage on or before the date "
+                     "from then on; empty where the state is undefined"),
+        }
+    }
+    return man
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--verify", action="store_true", help="re-hash the committed files only")
+    ap.add_argument("--manifest-only", action="store_true",
+                    help="rebuild DATA_MANIFEST.json from the committed files (one calendar GET)")
+    args = ap.parse_args()
+
+    if args.verify:
+        man = json.loads(MANIFEST.read_text())
+        bad = 0
+        for rel, rec in sorted(man["files"].items()):
+            p = ROOT / rel
+            got = sha256_bytes(p.read_bytes()) if p.exists() else None
+            ok = got == rec["sha256"]
+            bad += not ok
+            print(f"  {'OK ' if ok else 'BAD'} {rel} {rec['sha256'][:16]} …")
+        print(f"verify: {len(man['files'])} files, {bad} mismatches")
+        return 1 if bad else 0
+
+    if args.manifest_only:
+        dates, cal_raw = vintage_calendar()
+        with LIVE_CSV.open() as fh:
+            rd = csv.reader(fh)
+            next(rd)
+            live = sorted((r[0], float(r[1])) for r in rd if r[1])
+        man = add_derived(manifest_entries(dates, cal_raw, live, _live_vs_committed(live)))
+        MANIFEST.write_text(json.dumps(man, indent=1, sort_keys=True) + "\n")
+        print(f"     wrote {MANIFEST.relative_to(ROOT)} ({len(dates)} vintages)")
+        return 0
+
+    print("1/4 vintage calendar", flush=True)
+    dates, cal_raw = vintage_calendar()
+    print(f"     {len(dates)} vintages, {dates[0]} .. {dates[-1]}", flush=True)
+
+    print("2/4 vintage series", flush=True)
+    series, raw_hash = fetch_vintages(dates)
+    write_vintage_panel(series)
+    write_date_table(series, raw_hash)
+
+    print("3/4 current revised series (cross-check)", flush=True)
+    live = parse_series(get(FRED_URL), FRED_URL)
+    with LIVE_CSV.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["date", "value"])
+        for d, x in live:
+            w.writerow([d, repr(float(x))])
+    same = _live_vs_committed(live)
+    print(f"     live {live[0][0]} .. {live[-1][0]} ({len(live)} rows); "
+          f"same values as plugins_c2_nfci.csv: {same}", flush=True)
+
+    print("4/4 manifest", flush=True)
+    MANIFEST.write_text(json.dumps(add_derived(manifest_entries(dates, cal_raw, live, same)),
+                                   indent=1, sort_keys=True) + "\n")
     print(f"     wrote {MANIFEST.relative_to(ROOT)}", flush=True)
     return 0
 

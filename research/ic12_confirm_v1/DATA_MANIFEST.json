@@ -1,0 +1,94 @@
+{
+ "campaign": "ic12_confirm_v1",
+ "derived": {
+  "nfci_rt_state": {
+   "built_by": "research.ic12_confirm_v1.rt_state.build() (python -m research.ic12_confirm_v1.screen --save-state)",
+   "file": "data/historical/ic12_confirm_v1_nfci_rt_state.csv",
+   "note": "one (date, state) row per weekday from the first NFCI observation: the committed IC12 state on the current-revision series before the first ALFRED vintage (2011-05-25), the state of the latest vintage on or before the date from then on; empty where the state is undefined",
+   "rows": 14546,
+   "sha256": "25d5e6c459ab3a66f109aa25320d00ca57bfdd3028649b54e5d065be626c1a7f"
+  }
+ },
+ "extra_data": {
+  "nfci_committed": {
+   "file": "data/historical/plugins_c2_nfci.csv",
+   "rows": 2910,
+   "sha256": "84a6a007499d027f5f5c06fd777ccceb0a1e75a47602ccfbf3898d440ce8ba20",
+   "source": "plugins_c2 (already committed)",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NFCI"
+  },
+  "nfci_live": {
+   "fetched": "2026-10-16",
+   "file": "data/historical/ic12_confirm_v1_nfci_live.csv",
+   "range": [
+    "1971-01-08",
+    "2026-10-09"
+   ],
+   "rows": 2910,
+   "sha256": "e98b7d60b1ed1fc7a3bb08c2b558347279e8d486caffc705e0d148cdfca08a7a",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NFCI",
+   "values_equal_plugins_c2_nfci": true
+  },
+  "nfci_vintage_dates": {
+   "fetched": "2026-10-16",
+   "file": "data/historical/ic12_confirm_v1_nfci_vintage_dates.csv",
+   "range": [
+    "2011-05-25",
+    "2026-10-15"
+   ],
+   "rows": 800,
+   "sha256": "d54e27346205968ee6594986da7c3e6d18c58f8add5c2b8adeeb58edf6c4f64d",
+   "source": "ALFRED vintage calendar",
+   "url": "https://alfred.stlouisfed.org/series/downloaddata?seid=NFCI"
+  },
+  "nfci_vintages": {
+   "fetched": "2026-10-16",
+   "file": "data/historical/ic12_confirm_v1_nfci_vintages.csv",
+   "keep_per_vintage": 210,
+   "n_vintages": 800,
+   "range": [
+    "2011-05-25",
+    "2026-10-15"
+   ],
+   "rows": 168000,
+   "sha256": "554447cba81630beed6d00e69dd54f74630a41bb3d2d1e7857a7fb468fd98731",
+   "source": "ALFRED CSV (per vintage)",
+   "url": "https://alfred.stlouisfed.org/graph/alfredgraph.csv?id=NFCI&vintage_date=<vintage_date>",
+   "vintage_calendar_sha256": "8e7ff1e3ab94c35d07d1d5884c5df585af173a2532a713feff5cecb2a9a158eb",
+   "vintage_calendar_url": "https://alfred.stlouisfed.org/series/downloaddata?seid=NFCI"
+  }
+ },
+ "files": {
+  "data/historical/ic12_confirm_v1_nfci_live.csv": {
+   "bytes": 54158,
+   "rows": 2910,
+   "sha256": "e98b7d60b1ed1fc7a3bb08c2b558347279e8d486caffc705e0d148cdfca08a7a"
+  },
+  "data/historical/ic12_confirm_v1_nfci_rt_state.csv": {
+   "bytes": 230408,
+   "rows": 14546,
+   "sha256": "25d5e6c459ab3a66f109aa25320d00ca57bfdd3028649b54e5d065be626c1a7f"
+  },
+  "data/historical/ic12_confirm_v1_nfci_vintage_dates.csv": {
+   "bytes": 83249,
+   "rows": 800,
+   "sha256": "d54e27346205968ee6594986da7c3e6d18c58f8add5c2b8adeeb58edf6c4f64d"
+  },
+  "data/historical/ic12_confirm_v1_nfci_vintages.csv": {
+   "bytes": 5031068,
+   "rows": 168000,
+   "sha256": "554447cba81630beed6d00e69dd54f74630a41bb3d2d1e7857a7fb468fd98731"
+  },
+  "data/historical/plugins_c2_nfci.csv": {
+   "bytes": 51243,
+   "rows": 2910,
+   "sha256": "84a6a007499d027f5f5c06fd777ccceb0a1e75a47602ccfbf3898d440ce8ba20"
+  }
+ },
+ "keys": {
+  "other_inputs": "market/tax/FX/YI-UFE/instrument files are the campaign's committed ones, hashed in research/batch_screen/DATA_MANIFEST.json",
+  "prefix": "ic12_confirm_v1_"
+ },
+ "note": "NFCI ALFRED vintages for the IC12 confirmation study. ALFRED's NFCI archive begins 2011-05-25 (every earlier vintage_date returns HTTP 404); FRED's own graph CSV ignores vintage_date, so ALFRED is the only source. The raw per-vintage response bytes are not committed (800 files); each vintage's SHA-256 of the raw ALFRED response is in the `sha256_raw` column of ic12_confirm_v1_nfci_vintage_dates.csv, next to the row count and observation range that response parsed to. ic12_confirm_v1_nfci_live.csv was re-downloaded next to the committed data/historical/plugins_c2_nfci.csv: the two files carry the same 2,910 (date, value) pairs but different headers (`observation_date,NFCI` vs `date,value`), so the value comparison, not the byte comparison, is the check."
+}

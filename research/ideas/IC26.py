@@ -13,10 +13,12 @@ Literal reading and the frozen conventions (everything the spec leaves open):
 * **the night-length measure.**  `H_t` = hours of night at 40.7 N on the session's date from the
   standard solar-declination formula (Cooper 1969: `decl = 23.44 * sin(2*pi*(284 + doy)/365)`,
   `night = 24 - 2*acos(-tan(lat)*tan(decl))*24/(2*pi)`; clipped where |cos| > 1, i.e. polar day).
-  `night_factor_t = clip((H(d) - H(d - 30)) / max_year(H(d) - H(d - 30)), 0, 1)` with `d` the
-  session's calendar day of year -- the **night-length change** over the preceding 30 calendar days
-  (~21 sessions, "a measure of daylight change"), which is **maximal at the autumn equinox** (the
-  night lengthens fastest there) exactly as the spec says, not at the winter solstice.  The
+  `night_factor_t = clip((H(d + 15) - H(d - 15)) / max_year(same), 0, 1)` with `d` the session's
+  calendar day of year -- the **night-length change** over a 30-calendar-day span centred on the
+  date (~21 sessions, "a measure of daylight change"); centring makes it **maximal at the autumn
+  equinox** (the night lengthens fastest there) exactly as the spec says, not at the winter
+  solstice -- a trailing difference would peak half a span late.  The night-length calendar is a
+  deterministic function of the date, so the centred span uses no market information.  The
   positive-part clip is the fall weighting: only the autumn lengthening counts; the spring
   shortening (a negative change) is discarded.  The change is a pure function of the date (the
   365-day year wraps around), so it is defined on every session with no warm-up and no dependence
@@ -49,9 +51,9 @@ from research.fast_engine import fe_signals
 from research.plugins_c1 import c1_lib
 
 ARMS = {
-    "A": {"rule": "K", "leg": "2x", "cash_yield": "none", "coef": 0.15, "lag_days": 30, "sign": -1},
-    "B": {"rule": "K", "leg": "2x", "cash_yield": "none", "coef": 0.30, "lag_days": 30, "sign": -1},
-    "C": {"rule": "K", "leg": "2x", "cash_yield": "none", "coef": 0.15, "lag_days": 30, "sign": +1},
+    "A": {"rule": "K", "leg": "2x", "cash_yield": "none", "coef": 0.15, "span_days": 30, "sign": -1},
+    "B": {"rule": "K", "leg": "2x", "cash_yield": "none", "coef": 0.30, "span_days": 30, "sign": -1},
+    "C": {"rule": "K", "leg": "2x", "cash_yield": "none", "coef": 0.15, "span_days": 30, "sign": +1},
 }
 
 #: the study's latitude (Kamstra-Kramer-Levi's 40.7 N)
@@ -66,24 +68,26 @@ def night_hours(doy) -> np.ndarray:
     return 24.0 - np.arccos(cos_w) * 24.0 / np.pi
 
 
-def night_change(doy, lag_days: int) -> np.ndarray:
-    """`H(doy) - H(doy - lag_days)` on the 365-day year (wrapping into the previous year)."""
+def night_change(doy, span_days: int) -> np.ndarray:
+    """`H(doy + span/2) - H(doy - span/2)` on the 365-day year (wrapping around the year end)."""
     doy = np.asarray(doy, dtype=np.float64)
-    prev = np.mod(doy - 1.0 - lag_days, 365.0) + 1.0
-    return night_hours(doy) - night_hours(prev)
+    half = 0.5 * span_days
+    nxt = np.mod(doy - 1.0 + half, 365.0) + 1.0
+    prev = np.mod(doy - 1.0 - half, 365.0) + 1.0
+    return night_hours(nxt) - night_hours(prev)
 
 
-def _max_year_change(lag_days: int) -> float:
-    """`max_year(H(d) - H(d - lag_days))`: the peak of the night-length increase over the year."""
-    return float(np.max(night_change(np.arange(1.0, 366.0), lag_days)))
+def _max_year_change(span_days: int) -> float:
+    """`max_year(H(d + span/2) - H(d - span/2))`: the peak of the night-length increase over the year."""
+    return float(np.max(night_change(np.arange(1.0, 366.0), span_days)))
 
 
 def night_factor(data, spec) -> np.ndarray:
     """`(P, T)` the normalised fall-weighted night-length change in `[0, 1]`."""
     lab = np.asarray(c1_lib.day_labels(data), dtype="datetime64[D]")
     doy = np.minimum((lab - lab.astype("datetime64[Y]")).astype(np.int64) + 1, 365)
-    lag = int(spec["lag_days"])
-    return np.clip(night_change(doy, lag) / _max_year_change(lag), 0.0, 1.0)
+    span = int(spec["span_days"])
+    return np.clip(night_change(doy, span) / _max_year_change(span), 0.0, 1.0)
 
 
 def targets(data, spec):

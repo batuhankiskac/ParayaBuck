@@ -4,7 +4,7 @@ Every helper is numpy over a `(P, T)` panel (one path on a real window, a bootst
 otherwise), no Python loop over sessions and none over paths except a bounded block over paths where
 a temporary would otherwise be `(P, T, window)` sized.  The production pieces (`e2_up`, `don_up`,
 `r2_state`, `sized_wants`, `vol_n`) are called, never re-implemented, except `r2_state_gated` --
-`fe_signals.r2_state`'s loop with one extra entry condition, which the check script proves reduces
+`fe_signals.r2_state`'s loop with one extra entry condition, which `check_plugins.py` proves reduces
 to the engine's own function when the gate is `True` everywhere.
 
 Calendar helpers (`day_labels`, `last_sessions_of_year`) follow the framework's extra-series

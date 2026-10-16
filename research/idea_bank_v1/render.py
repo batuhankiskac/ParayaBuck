@@ -343,7 +343,9 @@ def render_md(doc: dict) -> str:
       "leg from the index itself and runs the R-USD rule, so an arm is evaluable out of sample only if "
       "its signal exists in that index's own history: ^VIX (1990+) kills the VRP arm's OOS clause, IEF/"
       "GLD/SMH/HG=F/SHY (2002+) kill the bond, gold, semis, copper and SHY arms' OOS clauses, and the "
-      "^GSPC 1957-1999 window is close-only, which kills any high/low statistic there. (b) The after-tax "
+      "harness loads the ^GSPC 1957-1999 window close-only (fe_data.load_gspc reads the close column and "
+      "sets opens := the previous close), which kills any high/low statistic there -- the raw file "
+      "(ewma_band_v1_gspc.csv) carries OHLCV 1950-1999 and only the loader is close-only. (b) The after-tax "
       "stage starts in 2000 because the CBRT/YI-UFE calendar does, so no after-tax idea can ever have a "
       "true out-of-sample window; B1/B2, the 21 rolling January starts and the E3 fresh bootstraps are the "
       "substitutes. (c) Every non-evaluable window is paired with a pre-registered reduced gate "
@@ -385,9 +387,9 @@ def render_md(doc: dict) -> str:
             a(f"**Data.** in repo: {'; '.join('`' + x + '`' for x in idea['data']['in_repo']) or 'none'}. "
               f"New downloads: {'; '.join(idea['data']['new_downloads']) or 'none'}. "
               f"Main window: {idea['data']['main_window']}. "
-              f"OOS windows: {', '.join(idea['data']['oos']['evaluable']) or 'none'} -- {idea['data']['oos']['note']}")
+              f"OOS windows: {', '.join(idea['data']['oos']['evaluable']) or 'none'} -- " + idea['data']['oos']['note'].rstrip('.') + ".")
             a("")
-            a(f"**Plugin.** `{idea['plugin']['model']}` -- {idea['plugin']['detail']}.")
+            a(f"**Plugin.** `{idea['plugin']['model']}` -- " + idea['plugin']['detail'].rstrip('.') + ".")
             a("")
             a("**Arms (parameters frozen).**")
             a("")
@@ -448,8 +450,17 @@ def render_md(doc: dict) -> str:
     a("")
     a("## 9. Amendments")
     a("")
-    a("None. This artefact predates every arm it proposes; no parameter, gate, category or rank was "
-      "changed after any computation, because none was performed.")
+    a("**2026-10-16, before any arm ran (no simulation exists yet).** A second, independent pass "
+      "over the coverage facts corrected five per-idea statements (IB03, IB06, IB10, IB36, IB37) "
+      "that described the ^GSPC 1957-1999 window as close-only *in the file*: the file "
+      "(`ewma_band_v1_gspc.csv` = `signal_ensemble_v1_gspc.csv`) carries OHLCV 1950-01-03 -> "
+      "1999-12-31, and it is the harness loader (`fe_data.load_gspc`) that reads the close column "
+      "and sets opens := the previous close.  The conclusion is unchanged: a high/low statistic is "
+      "not available in that window without changing the loader and therefore the published control "
+      "cells.  The same pass recorded that GC=F/HG=F are futures continuations used as signal inputs "
+      "only (IB23) and that the real bill ETFs start in 2016/2020, which is why IB24 is defined on "
+      "tbill_sweep_v1's synthetic BIL*.  No arm, parameter, gate, category or rank changed; no "
+      "result existed to change.")
     a("")
     return "\n".join(out) + "\n"
 

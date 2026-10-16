@@ -29,7 +29,7 @@ OFF_STATE = [
         "data": {"in_repo": ["stress_robustness_v1_dtb3.csv (BIL* = DTB3 - 0.1356%/yr, tbill_sweep's construction)"],
                  "new_downloads": [],
                  "main_window": "full",
-                 "oos": {"evaluable": ["GSPC_1957_1999", "M1", "M2", "M3", "M4", "M5"], "note": "BIL* is synthetic from DTB3/TB3MS, available in every window"}},
+                 "oos": {"evaluable": ["GSPC_1957_1999", "M1", "M2", "M3", "M4", "M5"], "note": ("BIL* is synthetic from DTB3/TB3MS, so it exists in every window; the real bill ETFs start much later (BIL 2016-01-04, SGOV 2020-05-29 in tbill_sweep_v1_etf_daily_split_sip.csv), which is why this arm is defined on the synthetic -- tbill_sweep_v1's own construction")}},
         "plugin": {"model": "targets_from_data",
                    "detail": ("the sleeve is a second leg, but it is *cash-like and never rebalanced against the "
                               "equity leg*, so it can be represented as a cash modifier on the target series in "

@@ -125,10 +125,13 @@ TREND = [
             "main_window": "full",
             "oos": {"evaluable": ["M1", "M2", "M3", "M4", "M5"],
                     "note": ("high/low exist in ewma_band_v1_index for all five market windows, "
-                             "including ^GSPC 1927-1956; the ^GSPC 1957-1999 window is close-only "
-                             "(ewma_band_v1_gspc.csv), so a true-range statistic cannot be built "
-                             "there -> that one window is dropped and a reduced 5-window G7 is "
-                             "pre-registered as credit_vote_v1 did for its 3-window gate.")},
+                             "including ^GSPC 1927-1956; in the ^GSPC 1957-1999 window the harness's "
+                             "loader (fe_data.load_gspc) reads only the close column and sets opens := the "
+                             "previous close, so a true-range statistic cannot be built there without "
+                             "changing the loader, which would move the published control cells -> that one "
+                             "window is dropped and a reduced 5-window G7 is pre-registered as "
+                             "credit_vote_v1 did for its 3-window gate (the raw file does carry "
+                             "OHLCV 1950-1999; only the loader is close-only).")},
         },
         "plugin": {"model": "targets_from_data", "detail": "don_up -> keltner_up; no engine change"},
         "arms": [
@@ -242,7 +245,7 @@ TREND = [
                  "new_downloads": [],
                  "main_window": "full",
                  "oos": {"evaluable": ["M1", "M2", "M3", "M4", "M5"],
-                         "note": "same reduction as IB03: ^GSPC 1957-1999 is close-only"}},
+                         "note": "same reduction as IB03: the harness loads the ^GSPC 1957-1999 window close-only (opens := previous close)"}},
         "plugin": {"model": "targets_from_data", "detail": "extra gates on the early path / an extra exit condition in the target series; no engine change"},
         "arms": [
             {"id": "A", "rule": "early entry additionally requires TR_t > 1.5*ATR20"},
@@ -406,7 +409,7 @@ VOL = [
                  "new_downloads": [],
                  "main_window": "full",
                  "oos": {"evaluable": ["M1", "M2", "M3", "M4", "M5"],
-                         "note": "^GSPC 1957-1999 is close-only; there TR == |c_t-c_{t-1}| degenerates towards vol20 (disclosed)"}},
+                         "note": "the harness loads ^GSPC 1957-1999 close-only; there TR == |c_t-c_{t-1}| and the estimate degenerates towards vol20 (disclosed)"}},
         "plugin": {"model": "targets_from_data", "detail": "vt_of(vol20) -> vt_of(atr_sigma); no engine change"},
         "arms": [
             {"id": "A", "rule": "vt = min(1, 0.35/sigma_atr), sigma_atr = 0.63*(ATR20/close)*sqrt(252)"},

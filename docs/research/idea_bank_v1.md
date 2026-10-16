@@ -84,7 +84,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **New downloads required by the bank (5, all public, none of them market-state data that the harness cannot get):** CPI (CPIAUCSL, monthly SA index, 1947+) for IB12 (FRED CSV); SMH (semiconductor ETF, 2000-05-05+) for IB20 (Yahoo chart API); HG=F (COMEX copper front future, 2000+) for IB23 (Yahoo chart API); SHY (1-3y Treasury ETF, inception 2002-07) for IB25 (Yahoo chart API); scheduled FOMC meeting dates 1994-2026 for IB17 (federalreserve.gov public calendar (not market data)).
 
-**Structural coverage facts that decide several ideas.** (a) The pre-2000 OOS stage builds the 2x leg from the index itself and runs the R-USD rule, so an arm is evaluable out of sample only if its signal exists in that index's own history: ^VIX (1990+) kills the VRP arm's OOS clause, IEF/GLD/SMH/HG=F/SHY (2002+) kill the bond, gold, semis, copper and SHY arms' OOS clauses, and the ^GSPC 1957-1999 window is close-only, which kills any high/low statistic there. (b) The after-tax stage starts in 2000 because the CBRT/YI-UFE calendar does, so no after-tax idea can ever have a true out-of-sample window; B1/B2, the 21 rolling January starts and the E3 fresh bootstraps are the substitutes. (c) Every non-evaluable window is paired with a pre-registered reduced gate (credit_vote_v1's convention), never with a silently dropped check.
+**Structural coverage facts that decide several ideas.** (a) The pre-2000 OOS stage builds the 2x leg from the index itself and runs the R-USD rule, so an arm is evaluable out of sample only if its signal exists in that index's own history: ^VIX (1990+) kills the VRP arm's OOS clause, IEF/GLD/SMH/HG=F/SHY (2002+) kill the bond, gold, semis, copper and SHY arms' OOS clauses, and the harness loads the ^GSPC 1957-1999 window close-only (fe_data.load_gspc reads the close column and sets opens := the previous close), which kills any high/low statistic there -- the raw file (ewma_band_v1_gspc.csv) carries OHLCV 1950-1999 and only the loader is close-only. (b) The after-tax stage starts in 2000 because the CBRT/YI-UFE calendar does, so no after-tax idea can ever have a true out-of-sample window; B1/B2, the 21 rolling January starts and the E3 fresh bootstraps are the substitutes. (c) Every non-evaluable window is paired with a pre-registered reduced gate (credit_vote_v1's convention), never with a silently dropped check.
 
 ## 4. The 40 ideas
 
@@ -143,7 +143,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** QQQ daily close (the arm's own instrument close in the OOS/ETF stages).
 
-**Data.** in repo: `data/historical/stress_robustness_v1_daily.csv (QQQ close)`. New downloads: none. Main window: full: QQQ 1999-03-10 -> 2026-09-29. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only; every OOS index file carries a close column
+**Data.** in repo: `data/historical/stress_robustness_v1_daily.csv (QQQ close)`. New downloads: none. Main window: full: QQQ 1999-03-10 -> 2026-09-29. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only; every OOS index file carries a close column.
 
 **Plugin.** `targets_from_data` -- wants() replacement in fe_signals.arm_signals; no engine change.
 
@@ -165,7 +165,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** QQQ daily close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- sma_up -> rolling median; no engine change.
 
@@ -187,7 +187,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** QQQ daily high, low, close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv (QQQ OHLC)`; `data/historical/ewma_band_v1_index.csv (^IXIC/^GSPC/^N225/^GDAXI/^FTSE OHLC)`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- high/low exist in ewma_band_v1_index for all five market windows, including ^GSPC 1927-1956; the ^GSPC 1957-1999 window is close-only (ewma_band_v1_gspc.csv), so a true-range statistic cannot be built there -> that one window is dropped and a reduced 5-window G7 is pre-registered as credit_vote_v1 did for its 3-window gate.
+**Data.** in repo: `stress_robustness_v1_daily.csv (QQQ OHLC)`; `data/historical/ewma_band_v1_index.csv (^IXIC/^GSPC/^N225/^GDAXI/^FTSE OHLC)`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- high/low exist in ewma_band_v1_index for all five market windows, including ^GSPC 1927-1956; in the ^GSPC 1957-1999 window the harness's loader (fe_data.load_gspc) reads only the close column and sets opens := the previous close, so a true-range statistic cannot be built there without changing the loader, which would move the published control cells -> that one window is dropped and a reduced 5-window G7 is pre-registered as credit_vote_v1 did for its 3-window gate (the raw file does carry OHLCV 1950-1999; only the loader is close-only).
 
 **Plugin.** `targets_from_data` -- don_up -> keltner_up; no engine change.
 
@@ -209,7 +209,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** QQQ daily close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- new numpy statistic feeding the vote; no engine change.
 
@@ -231,7 +231,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** QQQ daily close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- rolling R/S estimator added to fe_signals-compatible wants(); no engine change.
 
@@ -253,7 +253,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** QQQ high, low, close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`; `ewma_band_v1_index.csv`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- same reduction as IB03: ^GSPC 1957-1999 is close-only
+**Data.** in repo: `stress_robustness_v1_daily.csv`; `ewma_band_v1_index.csv`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- same reduction as IB03: the harness loads the ^GSPC 1957-1999 window close-only (opens := previous close).
 
 **Plugin.** `targets_from_data` -- extra gates on the early path / an extra exit condition in the target series; no engine change.
 
@@ -277,7 +277,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close (QQQ in the main window).
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- vt_of(vol) -> vt_of(garch_sigma); no engine change.
 
@@ -299,7 +299,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- vol_n(20) and vol_n(252) both already exist in fe_signals.
 
@@ -321,7 +321,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only (needs 20+252 warm-up beyond the vote warm-up)
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only (needs 20+252 warm-up beyond the vote warm-up).
 
 **Plugin.** `targets_from_data` -- nested rolling std in numpy; no engine change.
 
@@ -343,7 +343,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument high, low, close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`; `ewma_band_v1_index.csv`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- ^GSPC 1957-1999 is close-only; there TR == |c_t-c_{t-1}| degenerates towards vol20 (disclosed)
+**Data.** in repo: `stress_robustness_v1_daily.csv`; `ewma_band_v1_index.csv`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- the harness loads ^GSPC 1957-1999 close-only; there TR == |c_t-c_{t-1}| and the estimate degenerates towards vol20 (disclosed).
 
 **Plugin.** `targets_from_data` -- vt_of(vol20) -> vt_of(atr_sigma); no engine change.
 
@@ -365,7 +365,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- no engine change.
 
@@ -411,7 +411,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** FRED DGS10 (daily); FRED T10Y3M / GS10-TB3MS for the pre-1982 US OOS windows.
 
-**Data.** in repo: `leverage_frontier_v1_dgs10.csv (1962+)`; `credit_vote_v1_T10Y3M.csv (1982+)`; `credit_vote_v1_TB3MS.csv (monthly 1934+)`; `credit_vote_v1_GS10.csv (monthly 1953+)`. New downloads: FRED TB3MS daily-ified is not needed: GS10/TB3MS monthly splice as in credit_vote_v1, OR FRED TB3MS monthly (already in repo). Main window: full. OOS windows: GSPC_1957_1999, M1, M2 -- monthly GS10/TB3MS with a 1-month lag for the OOS windows (credit_vote_v1's convention)
+**Data.** in repo: `leverage_frontier_v1_dgs10.csv (1962+)`; `credit_vote_v1_T10Y3M.csv (1982+)`; `credit_vote_v1_TB3MS.csv (monthly 1934+)`; `credit_vote_v1_GS10.csv (monthly 1953+)`. New downloads: FRED TB3MS daily-ified is not needed: GS10/TB3MS monthly splice as in credit_vote_v1, OR FRED TB3MS monthly (already in repo). Main window: full. OOS windows: GSPC_1957_1999, M1, M2 -- monthly GS10/TB3MS with a 1-month lag for the OOS windows (credit_vote_v1's convention).
 
 **Plugin.** `targets_from_data` -- no engine change.
 
@@ -433,7 +433,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** FRED BAA10Y (daily, 1986+); monthly BAA-AAA for the pre-1986 OOS windows.
 
-**Data.** in repo: `data/historical/credit_vote_v1_BAA10Y.csv`; `credit_vote_v1_BAA.csv (monthly 1919+)`; `credit_vote_v1_AAA.csv (monthly 1919+)`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2 -- monthly BAA-AAA (1919+) with a 1-month lag, the credit_vote_v1 OOS convention
+**Data.** in repo: `data/historical/credit_vote_v1_BAA10Y.csv`; `credit_vote_v1_BAA.csv (monthly 1919+)`; `credit_vote_v1_AAA.csv (monthly 1919+)`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2 -- monthly BAA-AAA (1919+) with a 1-month lag, the credit_vote_v1 OOS convention.
 
 **Plugin.** `targets_from_data` -- no engine change.
 
@@ -523,7 +523,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the session calendar (third-Friday computation).
 
-**Data.** in repo: `session indices in the daily files`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- calendar-only
+**Data.** in repo: `session indices in the daily files`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- calendar-only.
 
 **Plugin.** `targets_from_data` -- calendar multiplier; no engine change.
 
@@ -545,7 +545,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** calendar year.
 
-**Data.** in repo: none. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2 -- US windows only; the political cycle is US-specific
+**Data.** in repo: none. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2 -- US windows only; the political cycle is US-specific.
 
 **Plugin.** `targets_from_data` -- calendar multiplier; no engine change.
 
@@ -633,7 +633,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Literature.** Gundlach copper/gold ratio; Bhardwaj & Janardanan (commodity ratio as a growth proxy) (https://doi.org/10.1016/j.jcomm.2021.100216).
 
-**Signal inputs.** HG=F (COMEX copper front future, new) and GC=F (in repo) daily closes.
+**Signal inputs.** HG=F (COMEX copper front-month continuation, new) and GC=F (COMEX gold front-month continuation, in repo) daily closes; both are signal inputs only (a futures continuation is not the instrument traded in any arm).
 
 **Data.** in repo: `data/historical/leverage_frontier_v1_daily.csv (GC=F 2000-08-30 -> 2026-09-29)`. New downloads: Yahoo chart API HG=F (2000 ->); if unavailable, the ETF proxies CPER (2011+)/DBB (2007+) are not long enough, so HG=F is the requirement. Main window: reduced start: ~2001-09 (GC=F 2000-08-30 + 252 warm-up). OOS windows: none -- no pre-2000 futures data in the repo -> reduced gate (main window, 21-ETF stage, bootstraps).
 
@@ -659,7 +659,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the E2 vote state (derived from the arm's own price series).
 
-**Data.** in repo: `stress_robustness_v1_dtb3.csv (BIL* = DTB3 - 0.1356%/yr, tbill_sweep's construction)`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- BIL* is synthetic from DTB3/TB3MS, available in every window
+**Data.** in repo: `stress_robustness_v1_dtb3.csv (BIL* = DTB3 - 0.1356%/yr, tbill_sweep's construction)`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- BIL* is synthetic from DTB3/TB3MS, so it exists in every window; the real bill ETFs start much later (BIL 2016-01-04, SGOV 2020-05-29 in tbill_sweep_v1_etf_daily_split_sip.csv), which is why this arm is defined on the synthetic -- tbill_sweep_v1's own construction.
 
 **Plugin.** `targets_from_data` -- the sleeve is a second leg, but it is *cash-like and never rebalanced against the equity leg*, so it can be represented as a cash modifier on the target series in the pre-tax stage; the after-tax stage needs the existing engine's cash-yield knob (fe_sim.RunEnv(cash_rate=...)) rather than a new kernel.
 
@@ -728,7 +728,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Data.** in repo: `stress_robustness_v1_daily.csv (QQQ OHLC+dividend)`; `the harness's synthetic 2x QLD* (built from QQQ in every window)`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- both legs are derivable in every window: the index itself is the unlevered leg (1x total return minus a 20 bp expense) and the existing synthetic 2x is the levered leg, so the pre-tax OOS and 21-ETF stages are evaluable without new data.
 
-**Plugin.** `hybrid` -- pre-tax / OOS / 21-ETF stages: run the blend as one *synthetic blended instrument* whose daily return is the blend's own return on the arm's own weight path -- a targets-from-data change, no engine edit (disclosed approximation: it prices the blend as one fund).  After-tax stages: two legs have two FIFO lot books and one cash account, which the engine does not model (see fast_engine_v1 'One instrument per account'), so an exact after-tax result needs a two-leg kernel option in a copy of the engine plus an off/on parity cell; otherwise the after-tax number must be reported as the single-instrument approximation and labelled as such..
+**Plugin.** `hybrid` -- pre-tax / OOS / 21-ETF stages: run the blend as one *synthetic blended instrument* whose daily return is the blend's own return on the arm's own weight path -- a targets-from-data change, no engine edit (disclosed approximation: it prices the blend as one fund).  After-tax stages: two legs have two FIFO lot books and one cash account, which the engine does not model (see fast_engine_v1 'One instrument per account'), so an exact after-tax result needs a two-leg kernel option in a copy of the engine plus an off/on parity cell; otherwise the after-tax number must be reported as the single-instrument approximation and labelled as such.
 
 **Arms (parameters frozen).**
 
@@ -748,7 +748,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the two legs' own price/lot history.
 
-**Data.** in repo: `as IB27`. New downloads: none. Main window: full; after-tax stages only (it changes nothing pre-tax beyond IB27's carry). OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- pre-tax it is identical to IB27 arm A/B, so OOS reports the IB27 cells
+**Data.** in repo: `as IB27`. New downloads: none. Main window: full; after-tax stages only (it changes nothing pre-tax beyond IB27's carry). OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- pre-tax it is identical to IB27 arm A/B, so OOS reports the IB27 cells.
 
 **Plugin.** `kernel_option` -- requires the two-leg account from IB27 plus a routing rule with the FIFO books visible in the fill decision; parity cell = routing disabled reproduces IB27 bit-for-bit.
 
@@ -772,7 +772,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- multiplier on the target series; no engine change.
 
@@ -794,7 +794,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- no engine change.
 
@@ -816,7 +816,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- the early-state machine's exit condition in numpy; no engine change.
 
@@ -838,7 +838,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- the vol series is filtered before vt_of; no engine change.
 
@@ -862,7 +862,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- no engine change.
 
@@ -884,7 +884,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- no engine change.
 
@@ -906,7 +906,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument close.
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only
+**Data.** in repo: `stress_robustness_v1_daily.csv`. New downloads: none. Main window: full. OOS windows: GSPC_1957_1999, M1, M2, M3, M4, M5 -- closes only.
 
 **Plugin.** `targets_from_data` -- no engine change.
 
@@ -930,7 +930,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own instrument open and close (with a one-session decision lag).
 
-**Data.** in repo: `stress_robustness_v1_daily.csv (QQQ open/close)`; `ewma_band_v1_index.csv (index OHLC for M1-M5, M2 included)`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- ^GSPC 1957-1999 has close-only data (opens := previous close in the harness), so the gap filter is inert there -> reduced 5-window G7
+**Data.** in repo: `stress_robustness_v1_daily.csv (QQQ open/close)`; `ewma_band_v1_index.csv (index OHLC for M1-M5, M2 included)`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- the harness fills ^GSPC 1957-1999 opens as the previous close, so the gap filter is inert there -> reduced 5-window G7.
 
 **Plugin.** `kernel_option` -- sim_one's fill decision must see the fill session's open and the prior close; parity cell = threshold set to 0 reproduces K bit-for-bit.
 
@@ -952,7 +952,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Signal inputs.** the arm's own high, low, close (fill session).
 
-**Data.** in repo: `stress_robustness_v1_daily.csv`; `ewma_band_v1_index.csv`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- same close-only reduction for ^GSPC 1957-1999
+**Data.** in repo: `stress_robustness_v1_daily.csv`; `ewma_band_v1_index.csv`. New downloads: none. Main window: full. OOS windows: M1, M2, M3, M4, M5 -- same reduction for ^GSPC 1957-1999 (harness opens := previous close).
 
 **Plugin.** `kernel_option` -- sim_one's fill price; parity cell = 'open' reproduces K bit-for-bit.
 
@@ -978,7 +978,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Data.** in repo: `after_tax_tr_v1_usdtry_cbrt.csv`; `after_tax_tr_v1_yiufe.csv`; `the engine's TARIFF_2026 and the flat-20% account (fe_tax)`. New downloads: none. Main window: full (after-tax stages only; the pre-tax stages are regime-invariant). OOS windows: none -- the TRY/YI-UFE calendar starts 2000, so no after-tax OOS exists; the roller of E2 starts, E3 bootstraps and B1/B2 are the substitutes, as in every after-tax study.
 
-**Plugin.** `hybrid` -- arm A is the existing engine with mode/capital varied (targets-from-data, no kernel edit); arm B is two/three independent engine runs summed (an accounting layer, no kernel edit); arm C needs a two-book kernel option with a route cap, and an off/on parity cell proving two unrouted identical accounts reproduce K's NAV exactly..
+**Plugin.** `hybrid` -- arm A is the existing engine with mode/capital varied (targets-from-data, no kernel edit); arm B is two/three independent engine runs summed (an accounting layer, no kernel edit); arm C needs a two-book kernel option with a route cap, and an off/on parity cell proving two unrouted identical accounts reproduce K's NAV exactly.
 
 **Arms (parameters frozen).**
 
@@ -1000,7 +1000,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Data.** in repo: `data/historical/after_tax_tr_v1_usdtry_cbrt.csv (2000-01-03 ->)`; `data/historical/after_tax_tr_v1_yiufe.csv (1999-01 ->)`. New downloads: none. Main window: after-tax stages only. OOS windows: none -- the pre-tax OOS stage has no TRY calendar (the R-USD rule), so G7/G8 cannot see this arm; pre-register the reduced gate on the after-tax windows + B1/B2 + the 21-ETF after-tax stage, and report the stress table separately.
 
-**Plugin.** `kernel_option` -- band widths are the kernel's RULE constants (0.5/3/8 pp); making them state-dependent needs a per-session width multiplier in a copy of the engine, with an off/on parity cell (multiplier = 1.0 reproduces K bit-for-bit).  Arm A needs no kernel edit at all (the calendar is an existing input)..
+**Plugin.** `kernel_option` -- band widths are the kernel's RULE constants (0.5/3/8 pp); making them state-dependent needs a per-session width multiplier in a copy of the engine, with an off/on parity cell (multiplier = 1.0 reproduces K bit-for-bit).  Arm A needs no kernel edit at all (the calendar is an existing input).
 
 **Arms (parameters frozen).**
 
@@ -1022,7 +1022,7 @@ Every idea below that needs no kernel option is a change to the target-weight ar
 
 **Data.** in repo: `after_tax_tr_v1_usdtry_cbrt.csv`; `after_tax_tr_v1_yiufe.csv`; `the engine's instalment schedule (fe_tax)`. New downloads: none. Main window: after-tax stages only. OOS windows: none -- same reduced gate as IB39 (no after-tax OOS exists).
 
-**Plugin.** `kernel_option` -- the payment/funding interaction lives in fe_tax plus sim_one's cash routing; needs an enable flag with a parity cell (flag off = K bit-for-bit)..
+**Plugin.** `kernel_option` -- the payment/funding interaction lives in fe_tax plus sim_one's cash routing; needs an enable flag with a parity cell (flag off = K bit-for-bit).
 
 **Arms (parameters frozen).**
 
@@ -1076,5 +1076,5 @@ Four ideas sit adjacent to a closed axis and are filed as *axis-closing measurem
 
 ## 9. Amendments
 
-None. This artefact predates every arm it proposes; no parameter, gate, category or rank was changed after any computation, because none was performed.
+**2026-10-16, before any arm ran (no simulation exists yet).** A second, independent pass over the coverage facts corrected five per-idea statements (IB03, IB06, IB10, IB36, IB37) that described the ^GSPC 1957-1999 window as close-only *in the file*: the file (`ewma_band_v1_gspc.csv` = `signal_ensemble_v1_gspc.csv`) carries OHLCV 1950-01-03 -> 1999-12-31, and it is the harness loader (`fe_data.load_gspc`) that reads the close column and sets opens := the previous close.  The conclusion is unchanged: a high/low statistic is not available in that window without changing the loader and therefore the published control cells.  The same pass recorded that GC=F/HG=F are futures continuations used as signal inputs only (IB23) and that the real bill ETFs start in 2016/2020, which is why IB24 is defined on tbill_sweep_v1's synthetic BIL*.  No arm, parameter, gate, category or rank changed; no result existed to change.
 

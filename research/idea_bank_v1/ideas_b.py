@@ -485,7 +485,7 @@ CROSS_ASSET = [
                            "inventory records 'commodities other than gold: NOT tested' and the "
                            "ratio-as-signal form is untested for gold too."),
         },
-        "signal_inputs": ["HG=F (COMEX copper front future, new) and GC=F (in repo) daily closes"],
+        "signal_inputs": ["HG=F (COMEX copper front-month continuation, new) and GC=F (COMEX gold front-month continuation, in repo) daily closes; both are signal inputs only (a futures continuation is not the instrument traded in any arm)"],
         "data": {"in_repo": ["data/historical/leverage_frontier_v1_daily.csv (GC=F 2000-08-30 -> 2026-09-29)"],
                  "new_downloads": ["Yahoo chart API HG=F (2000 ->); if unavailable, the ETF proxies CPER (2011+)/"
                                    "DBB (2007+) are not long enough, so HG=F is the requirement"],

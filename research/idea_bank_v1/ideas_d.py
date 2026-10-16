@@ -148,7 +148,7 @@ EXECUTION = [
                  "new_downloads": [],
                  "main_window": "full",
                  "oos": {"evaluable": ["M1", "M2", "M3", "M4", "M5"],
-                         "note": "^GSPC 1957-1999 has close-only data (opens := previous close in the harness), so the gap filter is inert there -> reduced 5-window G7"}},
+                         "note": "the harness fills ^GSPC 1957-1999 opens as the previous close, so the gap filter is inert there -> reduced 5-window G7"}},
         "plugin": {"model": "kernel_option",
                    "detail": ("sim_one's fill decision must see the fill session's open and the prior close; "
                               "parity cell = threshold set to 0 reproduces K bit-for-bit")},
@@ -191,7 +191,7 @@ EXECUTION = [
                  "new_downloads": [],
                  "main_window": "full",
                  "oos": {"evaluable": ["M1", "M2", "M3", "M4", "M5"],
-                         "note": "same close-only reduction for ^GSPC 1957-1999"}},
+                         "note": "same reduction for ^GSPC 1957-1999 (harness opens := previous close)"}},
         "plugin": {"model": "kernel_option",
                    "detail": "sim_one's fill price; parity cell = 'open' reproduces K bit-for-bit"},
         "arms": [

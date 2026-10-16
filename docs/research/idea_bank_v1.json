@@ -546,7 +546,7 @@
             "M4",
             "M5"
           ],
-          "note": "high/low exist in ewma_band_v1_index for all five market windows, including ^GSPC 1927-1956; the ^GSPC 1957-1999 window is close-only (ewma_band_v1_gspc.csv), so a true-range statistic cannot be built there -> that one window is dropped and a reduced 5-window G7 is pre-registered as credit_vote_v1 did for its 3-window gate."
+          "note": "high/low exist in ewma_band_v1_index for all five market windows, including ^GSPC 1927-1956; in the ^GSPC 1957-1999 window the harness's loader (fe_data.load_gspc) reads only the close column and sets opens := the previous close, so a true-range statistic cannot be built there without changing the loader, which would move the published control cells -> that one window is dropped and a reduced 5-window G7 is pre-registered as credit_vote_v1 did for its 3-window gate (the raw file does carry OHLCV 1950-1999; only the loader is close-only)."
         }
       },
       "plugin": {
@@ -763,7 +763,7 @@
             "M4",
             "M5"
           ],
-          "note": "same reduction as IB03: ^GSPC 1957-1999 is close-only"
+          "note": "same reduction as IB03: the harness loads the ^GSPC 1957-1999 window close-only (opens := previous close)"
         }
       },
       "plugin": {
@@ -1051,7 +1051,7 @@
             "M4",
             "M5"
           ],
-          "note": "^GSPC 1957-1999 is close-only; there TR == |c_t-c_{t-1}| degenerates towards vol20 (disclosed)"
+          "note": "the harness loads ^GSPC 1957-1999 close-only; there TR == |c_t-c_{t-1}| and the estimate degenerates towards vol20 (disclosed)"
         }
       },
       "plugin": {
@@ -1954,7 +1954,7 @@
         "difference": "every tested use of gold is as a *holding* in the off state; the scout inventory records 'commodities other than gold: NOT tested' and the ratio-as-signal form is untested for gold too."
       },
       "signal_inputs": [
-        "HG=F (COMEX copper front future, new) and GC=F (in repo) daily closes"
+        "HG=F (COMEX copper front-month continuation, new) and GC=F (COMEX gold front-month continuation, in repo) daily closes; both are signal inputs only (a futures continuation is not the instrument traded in any arm)"
       ],
       "data": {
         "in_repo": [
@@ -2037,7 +2037,7 @@
             "M4",
             "M5"
           ],
-          "note": "BIL* is synthetic from DTB3/TB3MS, available in every window"
+          "note": "BIL* is synthetic from DTB3/TB3MS, so it exists in every window; the real bill ETFs start much later (BIL 2016-01-04, SGOV 2020-05-29 in tbill_sweep_v1_etf_daily_split_sip.csv), which is why this arm is defined on the synthetic -- tbill_sweep_v1's own construction"
         }
       },
       "plugin": {
@@ -2891,7 +2891,7 @@
             "M4",
             "M5"
           ],
-          "note": "^GSPC 1957-1999 has close-only data (opens := previous close in the harness), so the gap filter is inert there -> reduced 5-window G7"
+          "note": "the harness fills ^GSPC 1957-1999 opens as the previous close, so the gap filter is inert there -> reduced 5-window G7"
         }
       },
       "plugin": {
@@ -2962,7 +2962,7 @@
             "M4",
             "M5"
           ],
-          "note": "same close-only reduction for ^GSPC 1957-1999"
+          "note": "same reduction for ^GSPC 1957-1999 (harness opens := previous close)"
         }
       },
       "plugin": {

@@ -111,7 +111,8 @@
     "sec_corr_rel": "SEC-CORR-REL",
     "sec_disp": "SEC-DISP",
     "sec_disp_rel": "SEC-DISP-REL",
-    "spy": "SPY"
+    "spy": "SPY",
+    "t10y3m": "T10Y3M"
   },
   "note": "Extra series for batch_screen plugins, one CSV per series. Sources: the Yahoo chart API (period1=0, daily, `events=div,split`: columns `date,close,adjclose`) and FRED CSV (columns `date,value`). Refresh with `python -m research.batch_screen.extra --fetch-all`, add a series with --fetch/--fetch-fred, check every hash and range with --verify. A key is a series name or a {\"windows\": {window: series}} map; `data.extra(key)` returns the series aligned to the panel's own sessions (the drawn source session inside a bootstrap chunk), NaN where the series has no value on that date. Nothing is forward-filled unless the plugin asks for `ffill=True`.",
   "schema": "parayabuck.batch_screen.extradata/v1",
@@ -1412,6 +1413,21 @@
       "sha256": "60b0be419856901a6d6249b716cbae1cd9c4fdcf9b33fa0f987818aa6ec65e6e",
       "source": "derived (research/plugins_c4/signals.py oil_state)",
       "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILWTICO"
+    },
+    "T10Y3M": {
+      "file": "data/historical/two_leg_arms_v1_T10Y3M.csv",
+      "column": "value",
+      "price": "level",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=T10Y3M",
+      "fetched": "2026-10-16",
+      "range": [
+        "1982-01-04",
+        "2026-10-15"
+      ],
+      "rows": 11199,
+      "bytes": 179130,
+      "sha256": "a464c1dc610832971b5ef3d7ec11c63f1b0e4b47021e27f952a3038ca6075060",
+      "source": "FRED CSV"
     }
   }
 }

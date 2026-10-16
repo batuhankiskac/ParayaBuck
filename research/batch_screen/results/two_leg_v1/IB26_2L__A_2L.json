@@ -1,0 +1,43 @@
+{
+ "arm": "IB26_2L/A_2L",
+ "arm_id": "A_2L",
+ "b1_delta_pp": [],
+ "batch": "two_leg_v1",
+ "boot_params": {
+  "block": 20,
+  "capital": "100k",
+  "n_pre": 5000,
+  "n_tax": 1000,
+  "seed": 20261011
+ },
+ "cash_yield": "none",
+ "date": "2026-10-16",
+ "gates": null,
+ "hashes": {
+  "code": "f2d654c9e72f019303b8158f812d4bcf1781e11cda0ab41ad9d6dbaee894fb09",
+  "spec": "2e62507e2c39939c9dee2f3f35edc4959894893e2c990423e73f2168b54f041e"
+ },
+ "idea": "IB26_2L",
+ "leg": "2x",
+ "not_applicable": {
+  "reason": "the leg-B instrument 'ief' has no price on 2000-03-08 (the series covers 2002-07-30..2026-09-29 of this window)",
+  "where": "main window (stage 1)"
+ },
+ "rule": "K",
+ "spec": {
+  "cash_yield": "none",
+  "ief_weight": 0.98,
+  "leg": "2x",
+  "leg_b": "ief",
+  "off_leg": "IEF",
+  "rule": "K",
+  "slope_min": 0.01,
+  "slope_series": "T10Y3M"
+ },
+ "stage1": null,
+ "stage1_gates": null,
+ "stage1_pass": null,
+ "stage2": null,
+ "stage2_pass": null,
+ "verdict": "not_applicable"
+}

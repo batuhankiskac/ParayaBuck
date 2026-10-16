@@ -1,0 +1,61 @@
+two_leg_arms_v1 — screen of idea_bank_v1 IB25 / IB26 / IB27 on the two-leg kernel
+====================================================================================
+
+VERDICT: no candidate.
+  * IB27 (beta-matched QQQ + QLD blend), three arms: screened, all three FAIL stage 1
+    (3 of 4 conditions). Pre-tax main-window drag -0.47 / -0.48 / -0.63 pp/yr, after-tax
+    -1.32 / -1.33 / -1.38 pp/yr; deflation declares nothing (rw_stepdown p_adj = 1.0,
+    DSR = 0.0).
+  * IB25 (off-state SHY sleeve) and IB26 (curve-conditioned off-state IEF leg), five arms:
+    expressible on the two-leg kernel but NOT screenable by the framework -- SHY/IEF start
+    2002-07-30, after the framework's fixed main-window start (2000-03-09), so
+    `leg_b_usable` refuses the main window and stage 1 requires it. All five are recorded
+    verdict = not_applicable (main window (stage 1)), no claim made. The bank's own oracle
+    for both ideas is a reduced main window (IB25 2002-08, IB26 2003-07) which the
+    framework has no way to express (hard rule: framework/kernel not edited).
+
+ARMS (8 new): research/ideas/ib25_2L.py (A_2L, B_2L), IB26_2L.py (A_2L, B_2L, C_2L),
+ib27_2L.py (A_2L, B_2L, C_2L). The old needs_kernel modules are untouched.
+
+CONTROL k_control/K reproduced: pre-tax 15.7649 % base / 15.1785 % calibrated, max DD
+46.6698 % / 46.7948 %, after tax at $100k 10.7533 % on the 2000 window, bootstrap
+Δ arithmetic on the identical path draw (5000 pre / 1000 after-tax paths); the framework
+harness -- 73 checks incl. `research.fast_engine.parity --quick` and the two-leg kernel's
+parity groups -- PASS.
+
+STAGE 1 (Δ = arm - K, pp; turnover ratio = arm/K)
+  arm            base%   cal%   maxDD base/cal   turnover ratio  AT2000Δ   B1 med/share   B2 med/share   pre-tax boot med/share  sells/yr  verdict
+  K              15.7649 15.1785 46.67/46.79     5.456  1.00     -         -              -              -                        10.66    control
+  ib27_2L/A_2L   15.2903 14.7587 47.41/47.46    11.656  2.136    -1.3164  -1.7169/0.005  -0.8650/0.030  -0.3494/0.176            39.35    reject_stage1
+  ib27_2L/B_2L   15.2871 14.7617 46.48/46.49    12.340  2.262    -1.3305  -1.9682/0.001  -1.1056/0.010  -0.5202/0.102            39.57    reject_stage1
+  ib27_2L/C_2L   15.1379 14.5906 46.63/46.75    12.710  2.329    -1.3833  -1.7873/0.002  -1.0467/0.007  -0.7410/0.022            37.84    reject_stage1
+  ib25_2L/A_2L, ib25_2L/B_2L, IB26_2L/A_2L, IB26_2L/B_2L, IB26_2L/C_2L: not applicable (main window (stage 1))
+
+  Stage-1 gates failed by all three ib27 arms: after-tax 2000-window Δ > 0, B1-recent
+  median Δ > 0, turnover <= 2 x K. Max DD gate passed (+0.74 / -0.19 / -0.04 pp base).
+
+WHY (illustration, not a gate; research/two_leg_arms_v1/check_plugins.py `gross_check`):
+  cost-free, tax-free, close-to-close main-window CAGR of the same weight paths:
+  production 15.2432 %, A_2L 15.4277 % (+0.184 pp), B_2L 15.4522 % (+0.209), C_2L 15.3615 %
+  (+0.118). The bank's carry saving is real but ~0.2 pp/yr; the second leg's turnover costs
+  (~0.50 pp/yr at 8 bp x the extra 6.2 drift units/yr) plus earlier realisation of taxable
+  TRY gains in the QQQ leg's own FIFO book (39.3 vs 10.7 sells/yr) turn it into -1.32 pp.
+
+N: 107 -> 115 distinct (idea, arm, spec_hash) trials (8 new arms); ledger 140 -> 156 lines
+(the re-run appended 8 `rerun` lines for the byte-identity check).
+
+DEFLATION (results/DEFLATION.json): best by Sharpe ib27_2L/A_2L; white_rc p = 1.0;
+rw_stepdown p_adjusted = 1.0 for all three; deflated Sharpe 0.0; stage2_pass = [].
+
+DETERMINISM: two runs of `--batch two_leg_v1` gave a byte-identical RESULTS.json
+(sha256 08b7d3386358ab41e0670e4876e99ab2a707a3fe8e5d6ba47dd0e3f002704a28).
+
+WALL CLOCK: framework harness 78.4 s; `--batch two_leg_v1 --workers 4` 29.1 s (control
+included; 10.9 s re-run with the control cached); `--deflate` < 1 s.
+
+FRAMEWORK (reported, not patched): `MarketData.leg_b_usable` builds its failure reason with
+`self.days[finite[-1]]`, but a bootstrap chunk's series is one column wider than the chunk's
+`days`, so an extra-key leg B with a NaN inside the chunk's read window raises IndexError
+instead of returning NotApplicable. Reproduced with the framework's own probe
+`probes/two_leg.py::gld_sleeve`; `smoke --ideas ib25_2L,IB26_2L` therefore exits non-zero,
+while `smoke --ideas ib27_2L` is OK. It does not affect this batch's screened arm.

@@ -7,6 +7,7 @@
     "copper": "HG=F",
     "cpi": "CPIAUCSL",
     "dax": "^GDAXI",
+    "dff": "DFF",
     "dgs10": "DGS10",
     "dtwexbgs": "DTWEXBGS",
     "fomc_dates": "FOMC_DATES",
@@ -158,6 +159,21 @@
       "sha256": "96d5d49aa19316f612b5334bfe1390fcd24e91d94679f3d3b5b50a08938b573a",
       "source": "FRED CSV",
       "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
+    },
+    "DFF": {
+      "file": "data/historical/batch_screen_v1_dff.csv",
+      "column": "value",
+      "price": "level",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF",
+      "fetched": "2026-10-16",
+      "source": "FRED CSV",
+      "range": [
+        "1954-07-01",
+        "2026-10-14"
+      ],
+      "rows": 26404,
+      "bytes": 414258,
+      "sha256": "5899fc508adf8bbe889fc013d71e54e0190b9fa504be66c111793c4244d8c32a"
     },
     "DGS10": {
       "bytes": 258322,

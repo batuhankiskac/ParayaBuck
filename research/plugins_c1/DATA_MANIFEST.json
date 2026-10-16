@@ -1,0 +1,46 @@
+{
+ "built": "2026-10-16",
+ "registry": {
+  "file": "research/batch_screen/EXTRA_DATA.json",
+  "keys_added": [
+   "dff"
+  ],
+  "series_added": [
+   "DFF"
+  ]
+ },
+ "series": {
+  "DFF": {
+   "bytes": 414258,
+   "column": "value",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_v1_dff.csv",
+   "price": "level",
+   "range": [
+    "1954-07-01",
+    "2026-10-14"
+   ],
+   "role": "IC16 (Fed-funds tightening-cycle veto): the 126-session change of the daily effective federal funds rate",
+   "rows": 26404,
+   "sha256": "5899fc508adf8bbe889fc013d71e54e0190b9fa504be66c111793c4244d8c32a",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF"
+  }
+ },
+ "study": "plugins_c1",
+ "verify": {
+  "ok": true,
+  "series": {
+   "DFF": {
+    "file": "data/historical/batch_screen_v1_dff.csv",
+    "range": [
+     "1954-07-01",
+     "2026-10-14"
+    ],
+    "range_ok": true,
+    "rows": 26404,
+    "sha256_ok": true
+   }
+  }
+ }
+}

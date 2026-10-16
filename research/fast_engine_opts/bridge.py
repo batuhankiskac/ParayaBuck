@@ -84,8 +84,12 @@ def prepare_panel(p, arm, win=None, pos=None):
         if chunk:
             triple = chunk_triple(pos, "SPY")
         else:
+            # `main_spy_triple` aligns SPY to a panel whose *columns* are a window's own session
+            # list. A chunk without `pos` (the pooled OOS bootstrap: `days` is the market's whole
+            # calendar, the columns are another market's drawn sessions) must keep its own 2x leg
+            # -- that is IC40's documented degeneration on a window that has no SPY series.
             try:
-                triple = main_spy_triple(p.days)
+                triple = main_spy_triple(p.days) if p.days.size == p.T else None
             except ValueError:
                 triple = None
     if chunk and wht:
@@ -124,22 +128,31 @@ def bundle_for(arm_list, panel) -> Bundle | None:
     if all(o.is_off() and not k for o, k in parsed):
         return None
     n = len(arm_list)
-    # the option arrays are indexed by *session* like the market arrays (`wq[i - 1]`, `early[i]`),
-    # and a bootstrap chunk's legs are one column wider than its calendar (`win.dates`), so the
-    # width is the panel's own: `panel.vol` follows the leg's width exactly.
+    # The option arrays are indexed by *session* like the market arrays (`wq[i - 1]`, `early[i]`)
+    # and like the env's own rails (`mth_of[i]`, `dec_tail[i]`, `cash_rate[i]`), which
+    # `windows.usd_env` builds from the window's session list by index -- so the labels are
+    # `panel.days`, the *window's* calendar. Its length is not the array width: the kernel reads
+    # `i0..i1` of the panel's columns (`panel.vol` follows the leg's width exactly, 2,773 columns
+    # for a pooled OOS chunk), while `panel.days` is that window's whole session list (7,304 on
+    # M1, 15,175 on M3) there and one session shorter than the columns on a main bootstrap chunk.
+    # The arrays are therefore clamped to the columns the kernel can read.
     T = int(panel.vol.shape[-1])
+    days = np.asarray(panel.days)
+    W = min(T, days.size)
     P = panel.P
     optf = np.zeros((n, NF), dtype=np.float64)
     opti = np.zeros((n, NI), dtype=np.int64)
-    fill = np.zeros((n, T), dtype=np.float64)
     mrate = np.zeros((n, T), dtype=np.float64)
     early = np.zeros((n, T), dtype=np.bool_)
     wvol = np.zeros((n, P, T), dtype=np.float64)
-    need_fill = need_mrate = need_early = need_vol = False
+    need_mrate = need_early = need_vol = False
     for a, (o, knobs) in enumerate(parsed):
         optf[a], opti[a] = o.pack()
         if o.fill_mode == 2:
-            need_fill = True
+            # the per-session fill reference is a *supplied* series and the bridge has no source
+            # for one (no call site carries it): a zero array would fill every order at price 0.
+            raise ValueError("fill_mode = 2 needs a fill series, which the bridge cannot build; "
+                             "call simulate_opts(fill=...) directly (IC54's arms A/B)")
         if knobs.get("margin_spread") is not None:
             need_mrate = True
         if o.early_mode:
@@ -148,24 +161,25 @@ def bundle_for(arm_list, panel) -> Bundle | None:
             need_vol = True
             wvol[a] = panel.vol
     if need_early:
-        f = early_flags(panel.days)
-        early[:, : f.shape[0]] = f[None, :]
+        early[:, :W] = early_flags(days[:W])
     if need_mrate:
         rate = np.atleast_2d(np.asarray(panel.rate, dtype=np.float64))
         if rate.shape[0] != 1 and rate.shape[0] != P:
             raise ValueError("panel.rate does not match the panel's path count")
-        if rate.shape[1] < len(panel.days):
+        if rate.shape[1] < W:
             raise ValueError("panel.rate must have one entry per session")
         for a, (_o, knobs) in enumerate(parsed):
             spread = knobs.get("margin_spread")
             if spread is None:
                 continue
-            fold = session_fold(panel.days, rate[:, : len(panel.days)] + float(spread))
-            mrate[a, : len(panel.days)] = fold[0]
+            fold = session_fold(days[:W], rate[:, :W] + float(spread))
+            mrate[a, :W] = fold[0]
     return Bundle(
         optf=optf,
         opti=opti,
-        fill=fill if need_fill else np.zeros((n, 0)),
+        # no call site supplies a per-session fill series (`fill_mode = 2` is refused above), and
+        # the modes the bridge can carry (`0` the open, `1` the session midpoint) need no array
+        fill=np.zeros((n, 0)),
         mrate=mrate if need_mrate else np.zeros((n, 0)),
         early=early if need_early else np.zeros((n, 0), dtype=np.bool_),
         wvol=wvol if need_vol else np.zeros((n, P, 0)),

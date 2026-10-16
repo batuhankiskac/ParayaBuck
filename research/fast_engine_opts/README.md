@@ -91,6 +91,17 @@ the bridge builds when nothing asks for it):
 | `fill` | `(T,)` | the fill reference itself (`fill_mode = 2`) | IC54-A/B |
 | `wvol` | `(T,)` | the leg's `vol20` panel row, the governor's sizing input | IC49 |
 
+The bridge builds `early` and `mrate` on the **window's own session list** (`MarketData.days`, the
+same array `windows.usd_env` rails are indexed by) and clamps them to the panel's *columns*
+(`(P, T)`), which is what the kernel reads (`i0..i1`): on a plain window the two widths are equal,
+on a main bootstrap chunk the calendar is one session shorter than the columns, and on a pooled OOS
+chunk `days` is the market's whole session list (7,304 on M1) against a 2,773-column draw. Building
+them at `days`' width is a broadcast error, not a silent one -- see `bridge.bundle_for` and
+`test_bundle_for_clamps_the_session_arrays_to_the_panels_columns`.
+`fill` is the one array the bridge never builds: `fill_mode = 2` needs a *supplied* series, no call
+site carries one (IC54's arms A/B are blocked on data), and a zero array would fill every order at
+price 0, so an arm asking for it is refused rather than simulated.
+
 Two mechanisms are **panel** construction, not kernel logic, so they live in `fe_opts_legs` and are
 built from the panel's recorded raw triple (`MarketData.raw`, which `api.panel` now keeps):
 

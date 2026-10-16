@@ -151,6 +151,70 @@ def test_bundle_for_is_none_without_options():
     assert b.wvol.shape == (1, p.P, 0)
     assert np.array_equal(b.row(0)["early"], CAL.flags(list(p.days)))
 
+# ----------------------------------------------------------------------------- the chunk width
+def _pooled_chunk_panel(ncols=8, ndays=20, rate_=0.04):
+    """A panel shaped like the pooled OOS bootstrap's chunk: `days` is the market's *whole* session
+    list while the columns are the drawn chunk (`col_days` labels them, `boot.py`'s convention)."""
+    days = range_days(ndays)
+    n = ncols
+    rng = np.random.default_rng(11)
+    price = 100.0 * np.cumprod(1 + rng.normal(0.0005, 0.01, n))
+    idx = np.arange(n - 1)  # the drawn source sessions; column 0 is the artificial base row
+    cols = np.concatenate([idx[:1], idx])
+    assert ndays > n
+    return api.panel(days, price=price, div=np.zeros(n), rate=np.full(n, rate_),
+                     o2=price * 0.999, c2=price, d2=np.zeros(n), window="oos_boot",
+                     col_days=np.asarray(days)[cols])
+
+def test_bundle_for_clamps_the_session_arrays_to_the_panels_columns():
+    """Regression, 2026-10-16: on a pooled OOS chunk the panel's `days` is the market's whole
+    session list (5,755 to 15,175 sessions) against a 2,773-column draw, so building `early` /
+    `mrate` at `days`' width failed to broadcast (IC57/IC39, stage 2 of the bank batch)."""
+    p = _pooled_chunk_panel()
+    assert p.days.size > p.T  # the shape that crashed: the calendar longer than the columns
+    arms = [dict(rule="K", leg="2x", params={}, opts={"early_mode": 1}),
+            dict(rule="K", leg="2x", params={}, opts={"margin_spread": 0.015})]
+    b = bundle_for(arms, p)
+    assert b.early.shape == (2, p.T) and b.mrate.shape == (2, p.T)
+    # the labels stay the window's own calendar, clamped to the columns the kernel reads
+    assert np.array_equal(b.row(0)["early"], CAL.flags(list(p.days[: p.T])))
+    assert np.allclose(b.row(1)["mrate"], session_fold(list(p.days[: p.T]), p.rate + 0.015)[0])
+    assert not b.row(0)["mrate"].any()  # no margin_spread: the option is inert for that arm
+
+def test_a_chunk_arm_reaches_the_pooled_oos_bootstrap():
+    """The crashed call path itself (`boot.oos_pooled` per market, `per_market = 1`) on the market
+    whose calendar is longest (M1: 7,304 sessions, 2,773-column chunks), plus the reduced-window /
+    fresh-seed pool, whose chunks are the main window's own sessions -- one arm per option array:
+    `early`, `mrate`, the netted-dividend panel and the second underlying's panel."""
+    import types
+
+    from research.batch_screen import boot as B
+
+    def targets(data, spec):
+        return np.full((data.P, data.T), 0.5)
+
+    mod = types.ModuleType("kopt_probe_targets")
+    mod.targets = targets
+
+    def arm(aid, **extra):
+        return dict({"id": aid, "rule": "K", "leg": "2x", "params": {}, "opts": {},
+                     "mod": mod}, **extra)
+
+    arms = [arm("probe/early", opts={"early_mode": 1}),
+            arm("probe/margin", opts={"margin_spread": 0.015}),
+            arm("probe/wht", opts={"wht": 0.2, "early_mode": 2}),
+            arm("probe/spy", leg=api.LEG_SPY)]
+    out = B.oos_pooled(arms, markets=("M1",), per_market=1)
+    for a in arms:
+        v = out["pooled"][a["id"]]
+        assert v.shape == (1,) and np.isfinite(v).all()
+    out2 = B.boot(arms, seed=20261016, block=20, n_pre=2, n_tax=2, capitals=("100k",),
+                  modes=("progressive",), chunk=2, pool=(0, 500), quiet=True)
+    for a in arms:
+        pre = out2["pre"]["base"][a["id"]]
+        tax = out2["tax"]["100k"]["progressive"][a["id"]]
+        assert pre.shape == tax.shape == (2,) and np.isfinite(pre).all() and np.isfinite(tax).all()
+
 
 # ----------------------------------------------------------------------------- the plumbing
 def _env_for(days, i0=2):

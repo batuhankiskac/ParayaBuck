@@ -279,3 +279,50 @@ the batch's other arms instead of a separate study.
   window rules of §6.2 and the deflation procedure are exactly as in §§ 1–5, §6.1 and §6.2. This
   amendment changes no arm's parameters, no gate and no number; it removes a construction refusal
   and records the batch's arm list.
+
+### 6.4 2026-10-16 — crash fix before any `batch_bank_v3` result was read; the per-session option arrays' width
+
+Committed **before any arm of `batch_bank_v3` is screened and before any of its performance numbers
+was read**. An earlier attempt at the batch (the orchestrator's `--batch bank_v3`) crashed in stage 2
+of the kernel-option arms and its ledger lines were reverted; its partial records were set aside
+outside the repository and were not read, used or referred to. Reason: the crash is a framework
+plumbing bug in `research/fast_engine_opts/bridge.py`, not a missing mechanism or a bad arm.
+
+* **The crash.** `run.py:_arm_task` → `stages.oos_pooled_markets` → `boot.oos_pooled`
+  (`boot.py:566`) → `bridge.bundle_for` with
+  `ValueError: could not broadcast input array from shape (1,7304) into shape (1,2773)` — the
+  bridge's `early[:, : f.shape[0]] = f[None, :]` line. 7,304 is M1's whole session list; 2,773 is
+  the width of a pooled-OOS chunk's arrays. Every arm whose rule asks for a per-session option array
+  (`early_mode`, IC57; `margin_spread`/`mrate`, IC39) failed there, on every OOS market.
+* **The cause.** `bundle_for` sizes the per-session arrays by the panel's *columns* (`(P, T)`, what
+  the kernel indexes, `i0..i1`) but built their *contents* from `panel.days`, the window's own
+  session list. The two widths differ in two of the three panel kinds: on a main bootstrap chunk the
+  calendar is one session shorter than the columns (2776 vs 2777 — the assignment clamped and was
+  right), and on a pooled OOS chunk `panel.days` is the market's whole session list (7,304 on M1,
+  15,175 on M3, 5,755 on M2) against a 2,773-column draw — the assignment could not broadcast. The
+  same mismatch applied to `mrate`'s `session_fold(panel.days, …)` and to its write-back.
+* **The fix.** `research/fast_engine_opts/bridge.py`: the option arrays keep the *window's own*
+  session list as their labels (the calendar `windows.usd_env`'s rails — `mth_of`, `dec_tail`,
+  `cash_rate` — are indexed by), clamped to the panel's columns: `W = min(T, panel.days.size)`,
+  `early[:, :W] = fe_opts_calendar.flags(days[:W])`, `session_fold(days[:W], rate[:, :W])`,
+  `mrate[a, :W] = …`. Every previously working path is bit-identical — on a plain window `W = T`; on
+  a main bootstrap chunk and on the reduced-window (`pool=`) and FRESH pools `W = days.size`, exactly
+  the slice the old code wrote. The other bundle fields were checked with the same question and are
+  correct as they stand: `wvol` is copied from `panel.vol` (column-shaped by construction), `fill`
+  is never built (no call site carries a fill series, so `fill_mode = 2` is now *refused* with an
+  explicit error instead of being silently filled at price 0 — IC54's arms A/B stay declared
+  `NEEDS_KERNEL`), and the two panel mechanisms (`wht`, `2x_spy`) are unaffected: on the OOS chunk
+  the `2x_spy` leg keeps the window's own `2x` leg — IC40's documented degeneration — and
+  `prepare_panel` now takes that branch on an explicit criterion (`panel.days.size == panel.T`, i.e.
+  a plain window) rather than on `main_spy_triple`'s calendar-length refusal happening to fire.
+* **Regression tests.** `research/fast_engine_opts/tests/test_opts.py`:
+  `test_bundle_for_clamps_the_session_arrays_to_the_panels_columns` (a chunk panel whose calendar is
+  longer than its columns: the array widths and the `flags`/`session_fold` contents) and
+  `test_a_chunk_arm_reaches_the_pooled_oos_bootstrap` (`boot.oos_pooled` on M1, one path, for
+  `early`, `mrate`, `wht` and `2x_spy` arms — plus the reduced-window/fresh pool through
+  `boot(pool=…)`). Both fail with the reported broadcast error on the unfixed bridge and pass on it.
+* **Unchanged.** No arm's spec, no gate, no threshold, no seed, no sample size and no published
+  number: the harnesses (`batch_screen` 116 checks, `fast_engine_opts` HARNESS PASS with K's 14
+  anchor cells, `fe_sim` parity `--quick`) and all 32 package tests pass, and the full 27-idea smoke
+  reports the same 11 declared `NEEDS_KERNEL` refusals as before this fix (IC34/C, IC36 A–C,
+  IC41 A–C, IC45/C, IC46/C, IC54 A/B). The batch's arms, control and procedure are exactly §6.3's.

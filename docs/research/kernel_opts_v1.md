@@ -112,7 +112,7 @@ printed, not stored).
 | IC55 FX cost / schedule | **expressible** | `opts={"fx_cost": 0.005}` / `0.01` / `{"prefund_sessions": 63}` |
 | IC56 withholding | **expressible** | `opts={"wht": 0.20}` / `0.15` (arm C's credit needs the tax model) |
 | IC40 S&P 2x leg | **expressible** | `"leg": "2x_spy"`; arm C also needs the vote on the S&P path (targets) |
-| IC54 delayed intraday fill | **partly — arm C only** | `opts={"fill_mode": 1}` (the open-close midpoint). Arms A/B need a 30-minute series: Yahoo's 30-minute history reaches ~730 days and the Alpaca SIP feed is not available offline → `NEEDS_DATA`. The generic mechanism (`fill_mode=2` + a `fill` array) is implemented and tested, so only the data is missing. |
+| IC54 delayed intraday fill | **partly — arm C only** | `opts={"fill_mode": 1}` (the open-close midpoint). Arms A/B need a 30-minute series: Yahoo's 30-minute history reaches ~730 days and the Alpaca SIP feed is not available offline → `NEEDS_DATA`. The generic mechanism (`fill_mode=2` + a `fill` array) is implemented and tested, so only the data is missing — and the bridge refuses `fill_mode=2` (it has no call site carrying a fill series; `simulate_opts(fill=...)` is the direct route). |
 
 Findings the ideas' authors should read before registering arms (all in
 `research/fast_engine_opts/README.md`, §"Semantics worth knowing"):

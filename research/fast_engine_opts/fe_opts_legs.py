@@ -107,13 +107,19 @@ def select_leg(p, name):
 def chunk_triple(pos, sym="SPY"):
     """`(open, close, dividend)` of one instrument along a bootstrap chunk's drawn positions.
 
-    The returned arrays carry the same convention as the framework's reconstruction: one leading
-    base column (the close of the session *before* the first drawn one, so the return into the
-    first drawn session is that session's own return) followed by the drawn sessions' raw values.
-    Width = drawn columns + 1, exactly the market arrays' width. `fe_signals.synthetic_2x` of this
-    triple is the same series as `batch_screen.boot.boot_panels`' total-return reconstruction, to
-    floating-point rounding -- which is what makes a second underlying, or a netted dividend,
-    comparable to the Nasdaq leg the framework builds.
+    The returned arrays carry the framework's reconstruction convention: one leading base column
+    (the close of the session *before* the first drawn one, so the return into the first drawn
+    session is that session's own return) followed by one column per drawn session. The level is
+    the drawn sessions' **own** returns compounded forward -- column `t + 1` steps column `t` by
+    the drawn session's `close / previous close`, whose previous close is *its own*
+    (`c[idx - 1]`, exactly `boot_panels`' `prev = win.q[1][idx - 1]`) -- so a block jump (two
+    unrelated sessions drawn back to back) does not span the calendar. Concatenating the drawn
+    sessions' raw prices instead made the return across a jump the ratio of two unrelated
+    sessions; for the 2x leg one such return below -50 % gives a gross factor `1 + 2r - cost` <= 0,
+    the cumprod path flips sign and the leg's price (and the NAV, and the per-path CAGR) goes
+    non-positive/NaN -- the IC56/IC40 bootstrap NaN of `docs/research/batch_bank_v3.md`. On a
+    contiguous draw the level is the raw price path, so the triple is unchanged there up to
+    floating-point rounding.
     """
     days, arr, _y = fe_data.load()
     o, c, d = arr[sym]
@@ -121,9 +127,11 @@ def chunk_triple(pos, sym="SPY"):
     prev = c[idx - 1]
     base = prev[:, :1]
     zero = np.zeros_like(base)
-    o2 = np.concatenate([base, o[idx]], axis=1)
-    c2 = np.concatenate([base, c[idx]], axis=1)
-    d2 = np.concatenate([zero, d[idx]], axis=1)
+    # the synthetic level: base times the drawn sessions' own price-return cumprod
+    lvl = np.concatenate([base, base * np.cumprod(c[idx] / prev, axis=1)], axis=1)
+    o2 = np.concatenate([base, lvl[:, :-1] * o[idx] / prev], axis=1)
+    c2 = lvl
+    d2 = np.concatenate([zero, lvl[:, :-1] * d[idx] / prev], axis=1)
     return o2, c2, d2
 
 
@@ -132,8 +140,9 @@ def chunk_raw_panel(p, pos, wht=0.0, extra=None, sym="QQQ"):
 
     The framework's chunk panel is built from a total-return path with a zero dividend column, so
     a withholding cannot be applied to it: netting has to happen upstream of the reconstruction.
-    The rebuilt legs are the same series (the drawn returns are unchanged) and the same width; the
-    panel's `price`/`div`/`rate` and its extra-series context are carried over unchanged.
+    The rebuilt legs are the same series (the drawn sessions' returns unchanged, each stepped from
+    its *own* previous close -- see `chunk_triple`) and the same width; the panel's
+    `price`/`div`/`rate` and its extra-series context are carried over unchanged.
     """
     o2, c2, d2 = chunk_triple(pos, sym)
     if wht:

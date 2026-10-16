@@ -1,0 +1,121 @@
+{
+ "after": "/var/folders/59/05vxc0l518q0809k97j19bmc0000gn/T/tmpewvfnzja/after.npz",
+ "after_sha256": "dcddb9038a5d7c95e5ad6a4fc1d5c217523da4fb10b9839171fcfb26fe105c94",
+ "before": "/Users/batuhankiskac/Desktop/ParayaBuck-wt/opts_nan_fix_v1/research/opts_nan_fix_v1/PRE_FIX_BASELINE.npz",
+ "before_sha256": "a08106523f980b9cc5fad123b3c8d1d171403a8c7fb193147ed2aaaae0d177ee",
+ "hard_failures": [],
+ "n_cells": 85,
+ "non_option_arms": [
+  "k_control/K",
+  "r2_control/R2",
+  "IC38/A"
+ ],
+ "non_option_not_bit_identical": [],
+ "option_all_nan_cells_still_not_finite": [],
+ "option_cells_nan_to_finite": {
+  "fresh_s20261016_b10|IC40/A|pre_base": 4,
+  "fresh_s20261016_b10|IC40/A|pre_calibrated": 4,
+  "fresh_s20261016_b10|IC40/A|tax_flat": 4,
+  "fresh_s20261016_b10|IC40/A|tax_progressive": 4,
+  "fresh_s20261016_b10|IC56/A|pre_base": 4,
+  "fresh_s20261016_b10|IC56/A|pre_calibrated": 4,
+  "fresh_s20261016_b10|IC56/A|tax_flat": 4,
+  "fresh_s20261016_b10|IC56/A|tax_progressive": 4,
+  "fresh_s20261016_b40|IC40/A|pre_base": 3,
+  "fresh_s20261016_b40|IC40/A|pre_calibrated": 3,
+  "fresh_s20261016_b40|IC40/A|tax_flat": 3,
+  "fresh_s20261016_b40|IC40/A|tax_progressive": 4,
+  "fresh_s20261016_b40|IC56/A|pre_base": 4,
+  "fresh_s20261016_b40|IC56/A|pre_calibrated": 4,
+  "fresh_s20261016_b40|IC56/A|tax_flat": 4,
+  "fresh_s20261016_b40|IC56/A|tax_progressive": 4,
+  "main_s20261011_b20|IC40/A|pre_base": 8,
+  "main_s20261011_b20|IC40/A|pre_calibrated": 8,
+  "main_s20261011_b20|IC40/A|tax_flat": 8,
+  "main_s20261011_b20|IC40/A|tax_progressive": 8,
+  "main_s20261011_b20|IC56/A|pre_base": 8,
+  "main_s20261011_b20|IC56/A|pre_calibrated": 8,
+  "main_s20261011_b20|IC56/A|tax_flat": 8,
+  "main_s20261011_b20|IC56/A|tax_progressive": 8
+ },
+ "option_previously_finite_cells_repaired": [
+  {
+   "arm": "IC40/A",
+   "cell": "fresh_s20261016_b40|IC40/A|pre_base",
+   "max_abs_diff": 0.11314857485036778,
+   "n_changed": 1,
+   "n_finite_baseline": 1
+  },
+  {
+   "arm": "IC40/A",
+   "cell": "fresh_s20261016_b40|IC40/A|pre_calibrated",
+   "max_abs_diff": 0.1084670994062844,
+   "n_changed": 1,
+   "n_finite_baseline": 1
+  },
+  {
+   "arm": "IC40/A",
+   "cell": "fresh_s20261016_b40|IC40/A|tax_flat",
+   "max_abs_diff": 0.12003242901926481,
+   "n_changed": 1,
+   "n_finite_baseline": 1
+  },
+  {
+   "arm": "IC40/A",
+   "cell": "pool0_500_s20261011_b20|IC40/A|pre_base",
+   "max_abs_diff": 0.059493591068738194,
+   "n_changed": 4,
+   "n_finite_baseline": 4
+  },
+  {
+   "arm": "IC40/A",
+   "cell": "pool0_500_s20261011_b20|IC40/A|pre_calibrated",
+   "max_abs_diff": 0.05975105910324974,
+   "n_changed": 4,
+   "n_finite_baseline": 4
+  },
+  {
+   "arm": "IC40/A",
+   "cell": "pool0_500_s20261011_b20|IC40/A|tax_flat",
+   "max_abs_diff": 0.0529089409960789,
+   "n_changed": 4,
+   "n_finite_baseline": 4
+  },
+  {
+   "arm": "IC40/A",
+   "cell": "pool0_500_s20261011_b20|IC40/A|tax_progressive",
+   "max_abs_diff": 0.05629949629104325,
+   "n_changed": 4,
+   "n_finite_baseline": 4
+  },
+  {
+   "arm": "IC56/A",
+   "cell": "pool0_500_s20261011_b20|IC56/A|pre_base",
+   "max_abs_diff": 0.20399426423733813,
+   "n_changed": 4,
+   "n_finite_baseline": 4
+  },
+  {
+   "arm": "IC56/A",
+   "cell": "pool0_500_s20261011_b20|IC56/A|pre_calibrated",
+   "max_abs_diff": 0.2050070946457241,
+   "n_changed": 4,
+   "n_finite_baseline": 4
+  },
+  {
+   "arm": "IC56/A",
+   "cell": "pool0_500_s20261011_b20|IC56/A|tax_flat",
+   "max_abs_diff": 0.19111360297099678,
+   "n_changed": 4,
+   "n_finite_baseline": 4
+  },
+  {
+   "arm": "IC56/A",
+   "cell": "pool0_500_s20261011_b20|IC56/A|tax_progressive",
+   "max_abs_diff": 0.18859893977460174,
+   "n_changed": 4,
+   "n_finite_baseline": 4
+  }
+ ],
+ "pass": true
+}

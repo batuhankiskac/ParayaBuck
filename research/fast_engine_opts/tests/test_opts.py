@@ -216,6 +216,112 @@ def test_a_chunk_arm_reaches_the_pooled_oos_bootstrap():
         assert pre.shape == tax.shape == (2,) and np.isfinite(pre).all() and np.isfinite(tax).all()
 
 
+# ----------------------------------------------------------------------------- the chunk leg
+def _chunk_draw(n_paths=3, block=20, seed=20261011):
+    from research.batch_screen import boot as B
+    from research.fast_engine import fe_boot
+
+    win = B.BootWindow()
+    rng = np.random.default_rng(seed)
+    pos = fe_boot.draw_positions(rng, block, n_paths, 2776, win.npool, 0)
+    pan = B.boot_panels(win, pos, ("2x",), (0.0,), cache={})[("2x", 0.0)]
+    return win, pos, pan
+
+
+def test_chunk_triple_steps_by_each_drawn_sessions_own_return():
+    """Regression, 2026-10-16: `chunk_triple` must not let a block jump span the calendar.
+
+    Column `t + 1` is the drawn session's own return off *its* previous close (`c[idx - 1]`),
+    exactly `boot_panels`' `prev = win.q[1][idx - 1]`. Concatenating the drawn sessions' raw
+    prices made `(c[idx_t]) / (c[idx_{t-1}])` the return at a jump -- the IC56/IC40 NaN.
+    """
+    from research.fast_engine import fe_data
+
+    win, pos, _pan = _chunk_draw()
+    idx = pos + 1
+    _days, arr, _y = fe_data.load()
+    o, c, d = (np.asarray(x) for x in arr["QQQ"])
+    o2, c2, d2 = (np.asarray(x) for x in LEGS.chunk_triple(pos, "QQQ"))
+    prev = c[idx - 1]
+    # the synthetic level is the *own*-return cumprod: the close return is `c[idx]/prev`
+    r_level = c2[:, 1:] / c2[:, :-1] - 1
+    r_own = c[idx] / prev - 1
+    assert np.allclose(r_level, r_own, rtol=1e-12, atol=1e-14)
+    # ... and the total (dividend-inclusive) returns are the drawn sessions' own
+    r_tot = (c2[:, 1:] + d2[:, 1:]) / c2[:, :-1] - 1
+    assert np.allclose(r_tot, (c[idx] + d[idx]) / prev - 1, rtol=1e-12, atol=1e-14)
+    r_open = (o2[:, 1:] + d2[:, 1:]) / c2[:, :-1] - 1
+    assert np.allclose(r_open, (o[idx] + d[idx]) / prev - 1, rtol=1e-12, atol=1e-14)
+    # a jump is present (the draw the fix is about) yet no level is non-positive
+    assert (idx[:, 1:] != idx[:, :-1] + 1).any()
+    assert (c2 > 0).all()
+
+
+def test_chunk_leg_is_positive_and_matches_the_framework_on_a_real_draw():
+    """The repaired chunk leg stays positive and tracks the framework's own chunk leg.
+
+    The gross (`wht = 0`) rebuild uses a different dividend convention from the framework's
+    (reinvest-at-the-open vs dividend-on-the-close: a `div^2`-order difference of ~3.6e-4 relative
+    over a 2,776-session chunk), so "matches" is a `1e-3` relative tolerance -- but neither may go
+    non-positive, which is the NaN's root. The 20 %-withholding rebuild must sit *below* the gross
+    one (that is the arm), and it too must stay positive.
+    """
+    _win, pos, pan = _chunk_draw()
+    from research.fast_engine.fe_config import EXP_Q
+
+    fw = np.asarray(pan.legs["2x"][1])
+    gross = np.asarray(LEGS.chunk_raw_panel(pan, pos, wht=0.0).legs["2x"][1])
+    net = np.asarray(LEGS.chunk_raw_panel(pan, pos, wht=0.20).legs["2x"][1])
+    spy = np.asarray(LEGS._leg_of(*LEGS.chunk_triple(pos, "SPY"), pan.meta.get("fin", 0.0),
+                                  pan.meta.get("exp_q", EXP_Q))[1])
+    assert gross.shape == net.shape == fw.shape
+    assert (fw > 0).all() and (gross > 0).all() and (net > 0).all() and (spy > 0).all()
+    max_rel = float(np.max(np.abs(gross - fw) / fw))
+    assert max_rel < 1e-3, max_rel
+    assert (net <= gross).all() and (net[:, -1] < gross[:, -1]).all()  # withholding drags it down
+
+
+def test_chunk_triple_is_the_raw_triple_on_a_contiguous_draw():
+    """The isolation property: on a jump-free run the triple is the drawn raw prices again."""
+    from research.fast_engine import fe_data
+
+    _days, arr, _y = fe_data.load()
+    o, c, d = (np.asarray(x) for x in arr["QQQ"])
+    pos = np.arange(1000, 2776, dtype=np.int64)[None, :].repeat(2, axis=0)
+    assert not (pos[:, 1:] != pos[:, :-1] + 1).any()
+    o2, c2, d2 = (np.asarray(x) for x in LEGS.chunk_triple(pos, "QQQ"))
+    idx = pos + 1
+    assert np.allclose(c2[:, 1:], c[idx], rtol=1e-12, atol=1e-10)
+    assert np.allclose(o2[:, 1:], o[idx], rtol=1e-12, atol=1e-10)
+    assert np.allclose(d2[:, 1:], d[idx], rtol=1e-9, atol=1e-12)
+    assert np.array_equal(c2[:, 0], c[idx[:, 0] - 1])
+
+
+def test_chunk_leg_naive_raw_concatenation_would_go_non_positive():
+    """The defect, reproduced: the old raw-price concatenation flips the leg negative.
+
+    This is the counterfactual cell -- it computes the *unfixed* construction inline and asserts
+    it does go non-positive on the same draw on which the fixed one does not, so a future
+    regression to "just take the drawn prices" is caught.
+    """
+    from research.fast_engine import fe_signals
+
+    _win, pos, _pan = _chunk_draw()
+    from research.fast_engine import fe_data
+
+    _days, arr, _y = fe_data.load()
+    o, c, d = (np.asarray(x) for x in arr["QQQ"])
+    idx = pos + 1
+    naive = (np.concatenate([c[idx - 1][:, :1], o[idx]], axis=1),
+             np.concatenate([c[idx - 1][:, :1], c[idx]], axis=1),
+             np.concatenate([np.zeros((pos.shape[0], 1)), d[idx]], axis=1))
+    _no, nclose = fe_signals.synthetic_2x(naive[0], naive[1], naive[2],
+                                          np.zeros((pos.shape[0], naive[1].shape[1])), 0.0095)
+    fixed = np.asarray(LEGS.chunk_triple(pos, "QQQ")[1])
+    assert (nclose <= 0).any()          # the old construction breaks
+    assert (fixed > 0).all()            # the fixed one does not
+
+
 # ----------------------------------------------------------------------------- the plumbing
 def _env_for(days, i0=2):
     n = len(days)

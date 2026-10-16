@@ -92,12 +92,13 @@ byte-identical reruns
   exception. Every float is rounded to 6 dp and every container sorted before serialising.
 
 tests
-  research/batch_screen/tests/run.sh (the research venv's numba + the project venv's pytest):
-  52 tests, 9 s -- plugin contract and validation, leg constructions, registry append-only
-  semantics + the commit gate + the planner's refusals, every stage-1/stage-2 gate branch on
-  synthetic records, the deflation's null control/power/monotonicity/DSR properties, and the
-  parity cells (engine fe_boot.boot, old boot_oos_market, the production R2 target series,
-  vol_shape_v1's sizing, and the control's published K cells stage by stage).
+  research/batch_screen/tests/run.sh (the research venv's numba + the project venv's pytest; the
+  script finds the project venv from any worktree layout): 52 tests, 9 s for v1 -- plugin contract
+  and validation, leg constructions, registry append-only semantics + the commit gate + the
+  planner's refusals, every stage-1/stage-2 gate branch on synthetic records, the deflation's null
+  control/power/monotonicity/DSR properties, and the parity cells (engine fe_boot.boot, old
+  boot_oos_market, the production R2 target series, vol_shape_v1's sizing, and the control's
+  published K cells stage by stage). v2 adds 47 more (99 in total) -- see the v2 section.
 
 how to run
   R=~/.venvs/pb-research/bin/python
@@ -124,3 +125,63 @@ commits
   framework + example plugins (pre-registration, committed before the batch ran): 4f516d37
   bootstrap level cells, distinct-trial N, per-arm pooled-OOS delta fix:                 1e724255
   results / docs / SUMMARY:                                                             see git log
+
+---------------------------------------- v2 follow-up (2026-10-16) ----------------------------------------
+Before the plugin-writing workers start, the framework gained the four things they need. The rules
+were pre-registered first (PREREGISTRATION.md section 6.1, commit 33a068ff, before any of it ran);
+nothing about the engine, the gates G1-G6/G8/G9, the seeds, the sample sizes or the control changed.
+
+extra data
+  data.extra(key[, ffill]) -> (P, T) aligned to the panel's sessions by date (NaN where the series
+  has no value on that date) and, inside a bootstrap chunk, to the drawn SOURCE session each column
+  replays. Registry EXTRA_DATA.json: 32 keys / 31 series -- ^VIX, ^VIX3M, ^VXN, FRED DGS10, T10YIE,
+  DTWEXBGS, BAA10Y, CPIAUCSL, SMH, SOXX, HG=F, SHY, GLD, TLT, IEF, XLB..XLY, ^STOXX50E, ^GDAXI,
+  ^N225, ^FTSE, ^IXIC, ^GSPC, ^NDX, and local_index (a window map). Each series: file, source URL,
+  date range, rows, SHA-256, all fetched from the Yahoo chart API / FRED CSV and pinned in
+  DATA_MANIFEST.json (extra_data, 31 files, 7.4 MB). extra.py --fetch-all refreshes; --verify
+  re-hashes every file and re-reads every declared range. No kernel, no engine edit, no published
+  number touched -- extra() is numpy evaluated inside targets().
+
+availability (NotApplicable)
+  stage 1 requires the MAIN window to be applicable: an arm that raises NotApplicable there (or in
+  its block bootstrap) is recorded verdict=not_applicable with the stage and the reason and is not
+  screened further. In stage 2 the six OOS windows and 21 ETFs are evaluated on the applicable ones
+  only: G7 then allows one outlier among the k >= 3 applicable windows (n_c >= k-1, n_d >= k-1; the
+  published 5-of-6 rule is unchanged at k = 6) and G8 (pooled OOS bootstrap) runs on the applicable
+  market subset with the control re-drawn in the SAME draw, so the delta stays paired. Fewer than 3
+  applicable OOS windows or fewer than 15 applicable instruments -> holdout_insufficient: NOT a
+  pass, never declared, listed in the scoreboard's "manual confirmation" section with the counts and
+  the reasons (the idea bank's pre-registered convention for its non-US arms). Registry and N are
+  unchanged: every such arm keeps its ledger line.
+
+smoke
+  python -m research.batch_screen.smoke --ideas a,b : each arm's targets() on a synthetic panel, the
+  real main window, the real M2 OOS window, the real XLK instrument window and a real block
+  bootstrap chunk. NO performance number (no return, no NAV, no gate), no registry line, no result
+  file read; reports shapes, the leg, the extra keys the arm touched and each key's NaN share per
+  panel, plus the traceback tail of a genuine bug. --keys prints the extra-data key table with
+  per-window coverage. 1.2 s for three arms.
+
+merge safety
+  .gitattributes: research/batch_screen/REGISTRY.jsonl merge=union (append-only lines from parallel
+  plugin branches merge without conflict). The runner re-verifies the whole ledger before every
+  batch and aborts on any inconsistency (--verify-registry prints the report): every line's
+  code_hash must be the SHA-256 of that module at the commit the line names, and every registered
+  (idea, arm) must still exist at HEAD with its latest recorded spec_hash. A module that changed
+  after its last screen is reported 'stale' (information, not an error).
+
+evidence
+  --harness                                   PASS 59/59 checks (unchanged count), 33.8 s
+  control record vs committed _control.json   byte-identical, worst float diff 0.0
+  anchors_v1 SCOREBOARD.md regenerated        byte-identical
+  probes/run_probe_batch.py (isolated ledger) yield_veto -> reject_stage1;
+                                              coverage_gate/dgs10_gate (4 applicable OOS) -> G7 on
+                                              4 (n_within_required 3), G8 on {M1,M3,M4,M5},
+                                              reject_stage2 on E1;
+                                              coverage_gate/gld_gate (1 applicable OOS) ->
+                                              holdout_insufficient, 21 applicable ETFs, listed for
+                                              manual confirmation; 49 s for 3 arms
+  tests/run.sh                                99 passed, 10.6 s (52 in v1)
+
+  probes/ = two engineering fixtures (never registered as trials: outside research/ideas/);
+  TEMPLATE_plugin.py = the copy-me starting point exercising data.extra and NotApplicable.

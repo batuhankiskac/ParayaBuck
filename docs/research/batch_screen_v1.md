@@ -20,6 +20,11 @@ the old pure-Python `boot_oos_market` cell for cell, both at **max |diff| = 0.0*
 No trading idea is evaluated: this is an engineering deliverable. The three example arms exist to
 prove the plugin path reaches the engine unchanged and to exercise one pass and two fail paths.
 
+**v2 follow-up (2026-10-16, §7):** extra-data series (`data.extra`), per-window `NotApplicable`
+handling with the `holdout_insufficient` verdict, a metric-free smoke runner and a merge-safe
+ledger were added on top, with the control record and the `anchors_v1` scoreboard still
+byte-identical to what v1 wrote (`--harness` 59/59, 99 tests).
+
 ## 2. What the framework adds
 
 The per-study harnesses each carry their own simulator, tax engine and bootstrap; screening
@@ -84,7 +89,9 @@ its bootstrap cells (B1 +0.2507 pp at 63.5 %, B2 +0.3311 pp at 68.3 %, pre-tax m
 | `--batch anchors_v1` warm (control cached) | 17 s |
 | per arm: `r2_control/R2` (stage 1) | 5.7 s |
 | per arm: `vol_shape_p15/p15` (stage 1 + whole stage 2) | 16.9 s |
-| `tests/run.sh` (52 tests) | 9 s |
+| `tests/run.sh` (52 tests in v1; **99 in v2**, §7) | 9 s / 10.6 s |
+| `smoke --ideas a,b,c` (v2, no simulation) | 1.2 s |
+| `probes/run_probe_batch.py` (v2, isolated ledger, 3 arms, both stages) | 49 s |
 
 Arms run in separate processes (`--workers`, default = the CPU count) and share one cached control
 record, so ~100 stage-1-only arms is 1–2 minutes on this machine. Re-running a batch reproduces
@@ -106,3 +113,62 @@ PYTHONPATH=. ~/.venvs/pb-research/bin/python -m research.batch_screen.run --defl
 The stage-1 pass rate then decides what the expensive holdout set is spent on, and the deflation
 keeps the survivors of a hundreds-of-ideas search honest. `README.md` documents the API, the exact
 gate thresholds, the deflation method and its four stated assumptions.
+
+## 7. v2 follow-up (2026-10-16): extra data, applicability, smoke, merge safety
+
+Before the plugin-writing workers start on their own branches, the framework gained the four things
+they need. `research/batch_screen/PREREGISTRATION.md` §6.1 fixes the rules (committed **before** any
+of it ran: `33a068ff`); nothing about the engine, the gates G1–G6/G8/G9, the seeds, the sample sizes
+or the control changed.
+
+**1. Extra data.** `data.extra(key[, ffill])` returns a registered series as `(P, T)` aligned to the
+panel's sessions by date (`NaN` where the series has no value), and inside a bootstrap chunk to the
+drawn *source* session each column replays. `EXTRA_DATA.json` declares 32 keys / 31 series — `^VIX`,
+`^VIX3M`, `^VXN`, FRED `DGS10`/`T10YIE`/`DTWEXBGS`/`BAA10Y`/`CPIAUCSL`, `SMH`, `SOXX`, `HG=F`,
+`SHY`/`GLD`/`TLT`/`IEF`, the nine sector ETFs, `^STOXX50E`/`^GDAXI`/`^N225`/`^FTSE`/`^IXIC`/`^GSPC`/
+`^NDX`, and `local_index` (a window map: `^NDX` on main, the market's own index on each OOS window)
+— each with its file, source URL, date range, rows and SHA-256, all 31 fetched from the Yahoo chart
+API and FRED CSV and pinned in `DATA_MANIFEST.json` (`extra_data`). `extra.py --fetch-all` refreshes
+them, `--verify` re-hashes every file and re-reads every declared range. No kernel, no engine file
+and no published number is touched: `extra()` is numpy inside `targets`.
+
+**2. Availability.** `targets` may raise `api.NotApplicable(reason)`. Stage 1 requires the main
+window to be applicable (otherwise the arm is recorded `not_applicable` with the stage and the
+reason, and never screened further). In stage 2 the six OOS windows and the 21 ETFs are evaluated
+on the applicable ones only; G7 then allows one outlier among the `k ≥ 3` applicable windows
+(`n_c ≥ k − 1`, `n_d ≥ k − 1`; the published rule at `k = 6` is unchanged) and G8 runs on the
+applicable market subset with the control re-drawn in the *same* draw, so the Δ stays paired. An
+arm with fewer than 3 applicable OOS windows or fewer than 15 applicable instruments is **not** a
+pass: `verdict = holdout_insufficient`, listed in the scoreboard's "manual confirmation" section
+with the counts and the reasons, for its own pre-registered confirmation study. Registry and N are
+unchanged.
+
+**3. Smoke.** `python -m research.batch_screen.smoke --ideas a,b` calls each arm's `targets` on a
+synthetic panel, the real main window, the real `M2` OOS window, the real `XLK` instrument window and
+a real block-bootstrap chunk, and computes **no** performance number (no return, no NAV, no gate),
+writes no registry line and reads no result file. It reports shapes, the leg, the extra keys the arm
+touched and each key's `NaN` share per panel (so an author sees that `^VIX` is 100 % missing on
+`M2`), and prints the traceback tail of a genuine bug. `--keys` prints the extra-data key table with
+per-window coverage.
+
+**4. Merge safety.** `.gitattributes` marks `REGISTRY.jsonl` `merge=union` (append-only lines from
+parallel plugin branches merge without conflict) and the runner re-verifies the whole ledger before
+every batch (`--verify-registry` prints the report): each line's `code_hash` must be the SHA-256 of
+that module at the commit the line names, and each registered arm must still exist at HEAD with its
+latest recorded `spec_hash`. A failure aborts the run; a module that changed since its last screen
+is reported as `stale` (information, not an error).
+
+**Evidence (all on this branch).**
+
+| check | result |
+|---|---|
+| `--harness` | **PASS, 59/59** checks, 33.8 s (unchanged count; runs `parity --quick` too) |
+| control record vs the committed `results/anchors_v1/_control.json` | **byte-identical**, worst float diff 0.0 |
+| `SCOREBOARD.md` regenerated from the committed `anchors_v1` files | **byte-identical** |
+| `probes/run_probe_batch.py` (isolated ledger + results, real stage 1 + stage 2) | `yield_veto` extras veto → **reject_stage1**; `dgs10_gate` (4 applicable OOS) → G7 on 4 windows (`n_within_required` 3), G8 on `{M1, M3, M4, M5}`, **reject_stage2** on E1; `gld_gate` (1 applicable OOS) → **holdout_insufficient**, 21 applicable ETFs, listed for manual confirmation; 49 s |
+| `tests/run.sh` | **99 passed**, 10.6 s (was 52) |
+| the idea bank's `new_downloads` | 4 of 5 registered (`SMH`, `HG=F`, `SHY`, `CPIAUCSL`); the FOMC calendar (IB17) is not market data — it is registered by hand and `--verify`d |
+
+`probes/` holds the two engineering fixtures (never registered as trials: they live outside
+`research/ideas/`), and `TEMPLATE_plugin.py` is the copy-me starting point that exercises both
+`data.extra` and `NotApplicable`.

@@ -1,0 +1,64 @@
+plugins_d3 -- idea-bank IC39/40/49/52-59 as batch_screen plugins (kernel options only)
+
+Deliverable: one plugin module per idea in research/ideas/, every arm's parameters taken verbatim
+from docs/research/idea_bank_v2.json (main).  No arm was tuned, none added, none dropped.  Every
+mechanism is one of research/fast_engine_opts's options, requested through a rule the module
+registers at import time (rules.register_rule(..., opts={...})); targets() is production K's target
+series in every module except IC39 (2 x production's weight on the 1x leg), IC49 (the governor's
+un-capped target on arms A/B) and IC40-C (the vote on the S&P series).
+
+| idea  | arm | rule                    | requested option(s)                         | status                       |
+|-------|-----|-------------------------|---------------------------------------------|------------------------------|
+| IC39  | A   | ic39_margin_qqq         | margin_spread=0.015, leg 1x, target 2x wt    | runnable                     |
+| IC39  | B   | ic39_margin_qqq         | as A, gross exposure capped at 1.6x          | runnable                     |
+| IC39  | C   | ic39_margin_qqq_stress  | margin_spread=0.035 (+2 pp stress)           | runnable                     |
+| IC40  | A/B/C | K (leg 2x_spy)        | S&P 500 2x leg; C's vote on ^GSPC            | NEEDS_KERNEL (framework bug) |
+| IC49  | A   | ic49_gov20              | dd_start=0.20, dd_floor=0.25                 | runnable                     |
+| IC49  | B   | ic49_gov15              | dd_start=0.15, dd_floor=0.15                 | runnable                     |
+| IC49  | C   | ic49_gov20_up           | as A + dd_upsize_only=1                      | runnable                     |
+| IC52  | A   | ic52_floor250           | min_notional=250                             | runnable                     |
+| IC52  | B   | ic52_floor1000          | min_notional=1000                            | runnable                     |
+| IC52  | C   | ic52_floor250_frac5bp   | min_notional=250, min_notional_frac=0.0005   | runnable                     |
+| IC53  | A   | ic53_slice25_x3         | slice_frac=0.25, slice_parts=3               | runnable                     |
+| IC53  | B   | ic53_slice50_x5         | slice_frac=0.50, slice_parts=5               | runnable                     |
+| IC53  | C   | ic53_slice_all_x2       | slice_frac=0.0, slice_parts=2                | runnable                     |
+| IC54  | A   | K                       | first-30-minute close fill                   | NEEDS_DATA (no 30-minute bars)|
+| IC54  | B   | K                       | first-30-minute VWAP fill                    | NEEDS_DATA (no 30-minute bars)|
+| IC54  | C   | ic54_fill_mid           | fill_mode=1 (open/close midpoint)            | runnable                     |
+| IC55  | A   | ic55_fx50bp             | fx_cost=0.005, kernel_scope after-tax only   | runnable                     |
+| IC55  | B   | ic55_prefund63          | prefund_sessions=63, kernel_scope after-tax  | runnable                     |
+| IC55  | C   | ic55_fx100bp            | fx_cost=0.01                                 | runnable                     |
+| IC56  | A   | ic56_wht20              | wht=0.20 (leg construction)                  | runnable                     |
+| IC56  | B   | ic56_wht15              | wht=0.15                                     | runnable                     |
+| IC56  | C   | ic56_wht20              | as A; the foreign-tax credit is report-only  | runnable (= A, documented)   |
+| IC57  | A   | ic57_skip_early         | early_mode=1                                 | runnable                     |
+| IC57  | B   | K                       | decide on the previous full close (engine)    | runnable (= the control)     |
+| IC57  | C   | ic57_block_downsize_early | early_mode=2                               | runnable                     |
+| IC58  | A   | ic58_settle_cash        | settle_floor=0.0                             | runnable                     |
+| IC58  | B   | ic58_settle_1pct        | settle_floor=0.01                            | runnable                     |
+| IC58  | C   | ic58_settle_cash        | as A (single-leg A and C coincide)           | runnable (= A, documented)   |
+| IC59_K| A_K | ic59k_band_up0          | band_up=0.0, K's A1u down band               | runnable                     |
+| IC59_K| B_K | ic59k_band_up25         | band_up=0.0025                               | runnable                     |
+| IC59_K| C_K | ic59k_band_up0_try      | band_up=0.0, usd_rule=False (TRY gain frac)  | runnable                     |
+
+IC59's original arms (research/ideas/IC59.py, pinned in REGISTRY.jsonl as needs_kernel) are left
+byte-for-byte untouched; the runnable arms with the _K names live in research/ideas/IC59_K.py (see
+that module's docstring for why: the module-level NEEDS_KERNEL applies to every arm of the module,
+and re-hashing the old specs would make verify_ledger report spec_drift and refuse every batch).
+
+Data: no new series.  IC39/49/52/53/54/55/57/58/59_K use in-repo or framework series only; IC56
+rebuilds the leg from the window's own dividend column; IC40-C reads the already-registered `sp500`
+(^GSPC) key of research/batch_screen/EXTRA_DATA.json.  Nothing added to EXTRA_DATA.json, no
+DATA_MANIFEST entry: none of these arms needed a download.
+
+Verification (no simulation, no metric -- this task excludes Stage 1/Stage 2):
+* `python -m research.batch_screen.smoke --ideas <id>` for every module: every runnable arm OK on
+  the synthetic, main, M2, XLK and bootstrap-chunk panels; the declared-refused arms (IC40 A/B/C,
+  IC54 A/B) print NEEDS_KERNEL/NEEDS_DATA, which the smoke counts as not-OK by design.
+* a wiring check (throwaway, /tmp) that resolves every arm and asserts the registered rule carries
+  the arm's option values, that the bridge really builds the arrays the mechanism reads (mrate,
+  wvol, early on both a window and a bootstrap chunk), that wht rebuilds the leg, and that IC40's
+  targets runs on a bridge-prepared 2x_spy panel (main / OOS / ETF / chunk).
+* framework bugs found: research/plugins_d3/BUGS.md.
+
+Wall clock: the smoke runs of all 11 modules, 5.5 s + 6.5 s; the wiring checks < 5 s each.

@@ -138,12 +138,16 @@ def main_stage(shapes_of) -> dict:
                       "years": float(fe_sim.calendar_years(days[START - 1], days[-1]))},
            "arms": {}}
     meas = slice(START - 1, T)  # the target sessions the measured window's decisions read
-    mw = {a: float(np.mean(W["base"][a][meas])) for a in ARMS}
+    mw = {a: float(np.mean(W["base"][a][0, meas])) for a in ARMS}
     for md, spread in FIN.items():
         d_, o_, c_, _we, _wr, _e = fe_data.main_inputs(spread)
         for a in ARMS:
-            rec = out["arms"].setdefault(a, {"mean_weight": mw[a],
-                                             "mean_abs_dw": float(np.mean(np.abs(np.diff(W["base"][a][meas])))), "cells": {}})
+            rec = out["arms"].setdefault(
+                a,
+                {"mean_weight": mw[a],
+                 "mean_abs_dw": float(np.mean(np.abs(np.diff(W["base"][a][0, meas])))),
+                 "cells": {}},
+            )
             for m in (1, 2, M_STRESS):
                 r = fe_sim.simulate(o_, c_, W[md][a], env, TAX_CAPITALS[GATE_CAPITAL], START, T,
                                     arm="K", mode="pre_tax", m=m)
@@ -274,7 +278,9 @@ def decision_diff_stage(shapes_of) -> dict:
             "share_decision_differs": float(np.mean(da != d0)),
             "sells_where_C0_holds": int(np.sum((da == 2) & (d0 != 2))),
             "holds_where_C0_sells": int(np.sum((da != 2) & (d0 == 2))),
-            "share_target_differs_gt_0_5pp": float(np.mean(np.abs(W[a][START - 1 : T] - W[CTRL][START - 1 : T]) > 0.005)),
+            "share_target_differs_gt_0_5pp": float(
+                np.mean(np.abs(W[a][0, START - 1 : T] - W[CTRL][0, START - 1 : T]) > 0.005)
+            ),
         }
     return out
 
@@ -363,7 +369,8 @@ def verdicts(main, boot, at, oos, oosboot, dd) -> dict:
             "tierN_pre_tax_non_inferior": noninf,
             "verdict": ("adopt" if (strict and supported)
                         else "reject"
-                        + (" (exposure-neutral non-inferior, no gain)" if noninf else "")
+                        + (f" (tier-N non-inferior; strict set fails: {','.join(failed)})" if noninf and not strict
+                           else (f" (fails: {','.join(failed)})" if failed else ""))
                         + ("" if supported else " (support < 1 % of sessions)")),
         }
     return out
@@ -378,28 +385,30 @@ def _anchor(label, got, want, tol_pp=TOL_PP, scale=100.0):
 def harness() -> dict:
     checks = {}
     # (1) the engine's own parity suite
-    t0 = time.time()
     p = subprocess.run([sys.executable, "-m", "research.fast_engine.parity", "--quick"],
                        cwd=ROOT, capture_output=True, text=True)
     tail = [ln for ln in p.stdout.strip().splitlines() if ln.strip()][-1:]
-    checks["parity_quick"] = {"returncode": int(p.returncode), "last_line": tail[0] if tail else "",
-                              "wall_s": time.time() - t0, "pass": bool(p.returncode == 0 and "PASS" in (tail[0] if tail else ""))}
+    # the parity run's own wall clock and its "in 12.0s" tail are timing, not results: neither is
+    # recorded, so RESULTS.json stays byte-identical across runs
+    ok = bool(p.returncode == 0 and "PASS" in (tail[0] if tail else ""))
+    checks["parity_quick"] = {"returncode": int(p.returncode), "verdict": "PASS" if ok else "FAIL", "pass": ok}
     # (2) the calibration constants the pre-registration froze
     cal = shapes.calibrate()
-    checks["calibration_frozen"] = {
+    frozen = {
         arm: {"frozen": PRE_C[arm], "recomputed": cal["c"][arm],
               "diff": float(cal["c"][arm] - PRE_C[arm]), "pass": bool(abs(cal["c"][arm] - PRE_C[arm]) <= 1e-12)}
         for arm in ARMS
     }
+    checks["calibration_frozen"] = {"arms": frozen, "pass": bool(all(v["pass"] for v in frozen.values()))}
     # (3) the shape option is inert at (p = 1, c = 0.35), on real data
     days, o, c, w_e2, w_r2, e2 = fe_data.main_inputs(0.0)
     W = main_weights(shape_of(cal))
-    checks["target_identity_main"] = {
-        md: {"bitwise_equal": bool(np.array_equal(W[md][CTRL][0], w_r2))} for md in FIN
-    }
-    checks["vt_identity_ndx"] = {
-        "bitwise_equal": bool(np.array_equal(shapes.vt_shape(shapes.ndx_vol()[1], 1.0, 0.35),
-                                            fe_signals.vt_of(shapes.ndx_vol()[1])))}
+    w_ref = {md: fe_data.main_inputs(FIN[md])[4] for md in FIN}  # each model's own w_r2
+    ident = {md: {"bitwise_equal": bool(np.array_equal(W[md][CTRL][0], w_ref[md]))} for md in FIN}
+    checks["target_identity_main"] = {"models": ident, "pass": bool(all(v["bitwise_equal"] for v in ident.values()))}
+    vt_id = bool(np.array_equal(shapes.vt_shape(shapes.ndx_vol()[1], 1.0, 0.35),
+                                fe_signals.vt_of(shapes.ndx_vol()[1])))
+    checks["vt_identity_ndx"] = {"bitwise_equal": vt_id, "pass": vt_id}
     # (4) K's published anchors, through the engine
     fx, ufe = fe_study.try_market(days)
     T = len(days) - 1
@@ -619,7 +628,7 @@ def run() -> None:
     print("harness ...", flush=True)
     hc = harness()
     for k, v in hc.items():
-        if isinstance(v, dict) and "pass" in v and k not in ("calibration_frozen",):
+        if isinstance(v, dict) and "pass" in v and k != "pass":
             print(f"  {k}: {'PASS' if v['pass'] else 'FAIL'}")
     print(f"harness {'PASS' if hc['pass'] else 'FAIL'}")
     if not hc["pass"]:
@@ -673,7 +682,8 @@ def run() -> None:
         "decision_diff": stages["decision_diff"],
         "gates": gts,
         "verdicts": vd,
-        "run_meta": {"wall_s": wall, "git_commit": _git("HEAD"), "engine": "research/fast_engine (tag fast-engine-v1-2026-10)"},
+        # the wall clock lives in SUMMARY.txt only: RESULTS.json must be byte-identical across runs
+        "run_meta": {"git_commit": _git("HEAD"), "engine": "research/fast_engine (tag fast-engine-v1-2026-10)"},
         "status": "complete",
     }
     OUT.write_text(json.dumps(rnd(out), indent=2, sort_keys=True) + "\n")
@@ -748,8 +758,9 @@ def summary_text(o, wall) -> str:
         L.append(f"  {a:3s} {p(mw['arms'][a]['exposure_normalised_cagr'])} (delta vs K "
                  f"{mw['arms'][a]['exposure_normalised_cagr_delta_pp']:+.3f} pp)")
     L.append("")
-    L.append("harness checks: " + ", ".join(f"{k}={'P' if (v.get('pass') if isinstance(v, dict) else False) else 'F'}"
-                                             for k, v in o["harness"].items() if isinstance(v, dict)))
+    L.append("harness checks: " + ", ".join(
+        f"{k}={'P' if v.get('pass') else 'F'}" for k, v in o["harness"].items()
+        if isinstance(v, dict) and "pass" in v and k != "pass"))
     return "\n".join(L) + "\n"
 
 

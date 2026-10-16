@@ -227,7 +227,28 @@ After-tax deltas below ~0.1 pp are inside modelling uncertainty. Not tax advice.
 
 ## 10. Amendments
 
-*(none: the study has not been run at the time of this commit; the pre-commit disclosure is below)*
+**A1. Five code fixes in the reporting/aggregation layer, made after the first complete run.**
+None touches an arm, a `c_p`, a stage, a threshold, a gate or the decision rule, and no numeric
+cell of the arm results moved (the first run's printed arm cells — CAGR, max DD, turnover, OOS and
+bootstrap deltas — are identical to the final ones):
+
+1. **The realised-mean-weight and `mean |Δw|` slice indexed axis 0 of a 2-D array**, so both
+   printed NaN and every arm was forced into tier F. Fixed to slice the time axis. Consequence: the
+   tier label, which had been wrong, is now N for all four arms; the *adoption* gate is the strict
+   G1–G9 set plus the after-tax set (declared in §6 before any run), so no gate outcome changed.
+2. **Two harness checks did not gate the harness verdict** (`calibration_frozen`,
+   `target_identity_main` had no top-level `pass`, so the aggregator skipped them, and the
+   `vt_identity_ndx`/`target_identity_main` comparisons were computed against the base model's
+   series in both financing models). Both were and are passing; they now gate.
+3. **The verdict string** now names the failed gates instead of the misleading "no gain"; the
+   tier-N label is a reading, never an adoption.
+4. **`RESULTS.json` no longer records the parity run's wall clock** (nor its "in 12.0 s" tail
+   line), so two `--run`s are byte-identical; the study's own wall clock is in `SUMMARY.txt` only.
+5. A kernel-wrapper bug found by `--smoke` **before** the pre-registration commit, disclosed in the
+   pre-commit note below: the panel builder emitted all five arms' panels while the kernel's output
+   buffers were sized for the arms actually requested (heap corruption, non-deterministic crashes).
+   Fixed by passing the arm list to `chunk_panels`; the pre-commit run of `--harness` includes the
+   fix.
 
 **Pre-commit honesty note.** Before the pre-registration commit, on this branch, the following ran:
 (a) the ^NDX download (`fetch_ndx.py`); (b) the `c_p` solve, whose frozen values are in §1 — it

@@ -508,7 +508,7 @@ PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch --ideas two_leg 
 
 `research/batch_screen/tests/run.sh` (the research venv's numba + the project venv's pytest, see
 the header of that script; it finds the project venv whether or not the worktree sits next to the
-main checkout). 145 tests: the plugin contract and its validation, the leg constructions, the
+main checkout). 146 tests: the plugin contract and its validation, the leg constructions, the
 registry's append-only semantics and commit gate, every stage-1/stage-2 gate branch on synthetic
 records, the deflation's null control/power/monotonicity/DSR properties, the extra-data layer
 (registry resolution, date alignment, the bootstrap chunk convention, ffill, downloads and hashing

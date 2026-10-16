@@ -217,6 +217,12 @@ def _arm_task(payload):
         "boot_params": {"seed": SEED, "block": BLOCK, "n_pre": PRE_BOOT_PATHS,
                         "n_tax": TAX_BOOT_PATHS, "capital": GATE_CAPITAL},
     }
+    # a multi-leg / margin arm's record names its instruments and its loan (an engine-path arm's
+    # record is unchanged, so no published per-arm file moves)
+    if arm.get("multi_leg") or arm.get("margin_spread") is not None:
+        out["legs"] = list(arm.get("legs") or ())
+        if arm.get("margin_spread") is not None:
+            out["margin_spread"] = arm["margin_spread"]
     try:
         win = windows.arm_window(arm)
     except api.NotApplicable as exc:

@@ -256,6 +256,26 @@ def test_the_n_leg_blend_runs_a_clean_bootstrap(probe):
     assert b["params"]["pool"] == list(pool)
 
 
+def test_multi_leg_stage2_paths(probe):
+    """The pooled OOS bootstrap, the 6 OOS windows and the 21 ETF windows route a multi-leg arm."""
+    marg = probe_arm(probe, "margin_qqq")
+    ok, bad = stages.oos_pooled_markets(marg, "none")
+    assert len(ok) == len(stages.OOS_POOLED_MARKETS) and not bad
+    r = B.oos_pooled([marg], markets=(ok[0],), per_market=1, quiet=True)
+    v = r["pooled"][marg["id"]]
+    assert v.size == 1 and np.isfinite(v).all()
+    rec = stages.stage2_oos(marg, "none")
+    assert all("cagr" in cell for cell in rec.values())
+    pre, aft = stages.stage2_instruments(marg, "none")
+    assert len(aft) == len(stages.INSTRUMENTS)
+    assert all("after_tax_cagr" in cell for cell in aft.values())
+    # a multi-leg arm whose extra-data legs have no value on another market is NotApplicable
+    blend = probe_arm(probe, "offstate_blend")
+    ok2, bad2 = stages.oos_pooled_markets(blend, "none")
+    assert not ok2 and len(bad2) == len(stages.OOS_POOLED_MARKETS)
+    assert all(cell.get("applicable") is False for cell in stages.stage2_oos(blend, "none").values())
+
+
 # ----------------------------------------------------------------------------- the harness
 def test_harness_multi_leg_checks_pass():
     checks = run.multi_leg_checks()

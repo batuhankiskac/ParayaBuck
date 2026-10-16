@@ -239,7 +239,7 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 18.4s -> PARITY.json"
+  "tail": "parity PASS in 14.8s -> PARITY.json"
  },
  "failed": [],
  "multi_leg": {
@@ -307,7 +307,7 @@
    "failed": [],
    "n_cells": 206,
    "pass": true,
-   "wall_s": 1.868209
+   "wall_s": 2.136514
   },
   "bootstrap": {
    "cells": 16,
@@ -323,7 +323,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 18.4s -> PARITY.json"
+   "tail": "parity PASS in 14.8s -> PARITY.json"
   },
   "main_window": {
    "cells": 96,
@@ -771,7 +771,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 18.4s -> PARITY.json"
+   "tail": "parity PASS in 14.8s -> PARITY.json"
   },
   "failed": [],
   "riskoff_divergence_pp": {
@@ -794,7 +794,7 @@
    "failed": [],
    "n_cells": 28,
    "pass": true,
-   "wall_s": 1.018825
+   "wall_s": 1.059066
   },
   "p1_off_identity.base_flat_m1": {
    "max_abs_diff": 0.0,
@@ -1089,5 +1089,5 @@
    "tax_same_both_ways": 0.0
   }
  },
- "wall_s": 62.241115
+ "wall_s": 60.99269
 }

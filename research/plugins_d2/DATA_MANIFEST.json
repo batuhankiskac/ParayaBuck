@@ -1,0 +1,112 @@
+{
+ "extra_series": {
+  "dgs10": {
+   "column": "value",
+   "file": "data/historical/batch_screen_v1_dgs10.csv",
+   "range": [
+    "1962-01-02",
+    "2026-10-14"
+   ],
+   "rows": 16181,
+   "series": "DGS10",
+   "sha256": "3eda40d71b514fc0614ef32bda3a8bac82e7a9915667f0feb4b1609e87c5be9b",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
+   "used_by": "IB26_RW/B_RW 60-session change (FRED DGS10, percent level)"
+  },
+  "gld": {
+   "column": "adjclose",
+   "file": "data/historical/batch_screen_v1_gld.csv",
+   "range": [
+    "2004-11-18",
+    "2026-10-15"
+   ],
+   "rows": 5511,
+   "series": "GLD",
+   "sha256": "dab5c79cfafdf86a23017082d83ad64b02f9859ea2c4fe26b70a7cba9f73dfce",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/GLD?period1=0&period2=1792150996&interval=1d&events=div%2Csplit",
+   "used_by": "IC45 leg B (Yahoo GLD adjusted close)"
+  },
+  "ief": {
+   "column": "adjclose",
+   "file": "data/historical/batch_screen_v1_ief.csv",
+   "range": [
+    "2002-07-30",
+    "2026-10-15"
+   ],
+   "rows": 6093,
+   "series": "IEF",
+   "sha256": "4d0726302e7d518ff42b63ab9501fc9fc89e9cb930cb25f807f1fd4d6c83a18f",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/IEF?period1=0&period2=1792150998&interval=1d&events=div%2Csplit",
+   "used_by": "IC46 leg B and IB26_RW leg B (Yahoo IEF adjusted close)"
+  },
+  "shy": {
+   "column": "adjclose",
+   "file": "data/historical/batch_screen_v1_shy.csv",
+   "range": [
+    "2002-07-30",
+    "2026-10-15"
+   ],
+   "rows": 6093,
+   "series": "SHY",
+   "sha256": "60e73fe63bacbaafde4de91c5b52eef64309fd715911c6f6feb4104a5348d4d1",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/SHY?period1=0&period2=1792150996&interval=1d&events=div%2Csplit",
+   "used_by": "ib25_RW leg B (Yahoo SHY adjusted close)"
+  },
+  "t10y3m": {
+   "column": "value",
+   "file": "data/historical/two_leg_arms_v1_T10Y3M.csv",
+   "range": [
+    "1982-01-04",
+    "2026-10-15"
+   ],
+   "rows": 11199,
+   "series": "T10Y3M",
+   "sha256": "a464c1dc610832971b5ef3d7ec11c63f1b0e4b47021e27f952a3038ca6075060",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=T10Y3M",
+   "used_by": "IB26_RW curve condition (FRED T10Y3M, percent level)"
+  }
+ },
+ "inputs": {
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "role": "USD/TRY (CBRT): the TRY-indexed after-tax engine",
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "role": "Y\u0130-\u00dcFE monthly index: the indexation rule",
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c"
+  },
+  "data/historical/ewma_band_v1_gspc.csv": {
+   "role": "the GSPC 1957-1999 OOS window",
+   "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be"
+  },
+  "data/historical/ewma_band_v1_index.csv": {
+   "role": "the M1-M5 OOS and the 21 ETF windows",
+   "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+  },
+  "data/historical/ewma_band_v1_tb3ms.csv": {
+   "role": "TB3MS: financing on the OOS/ETF windows",
+   "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf"
+  },
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "role": "QQQ/SPY/QLD* daily bars: the panel's price close, the synthetic 2x leg's open/close/div (the main window, all reduced windows re-read the same panel)",
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "role": "DTB3: the 2x leg's financing",
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c"
+  }
+ },
+ "kind": "plugin writing (no performance claim, no new data, no download)",
+ "name": "plugins_d2",
+ "new_downloads": [],
+ "note": "This branch adds idea plugins, not an idea study: nothing was downloaded, research/batch_screen/EXTRA_DATA.json is unchanged, and every input the arms read is already committed. The series below are the registered extra series the new arms read through `data.extra(key)`/`leg_b` (hashes re-read from the registry and re-hashed here) and the panel inputs the framework builds their windows from; the geometry of the two reduced windows (2004-11-19 for `gld`, 2002-07-31 for `ief`/`shy`) follows from them.",
+ "registry": {
+  "file": "research/batch_screen/EXTRA_DATA.json",
+  "note": "the framework's own extra-data registry declares every series' file, column, source URL, range and SHA-256; `python -m research.batch_screen.extra --verify` re-hashes them"
+ }
+}

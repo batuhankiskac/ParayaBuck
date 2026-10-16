@@ -1,0 +1,4117 @@
+{
+  "after_tax_windows": {
+    "100k": {
+      "2000_03_to_2026_09": {
+        "H2": {
+          "after_tax_cagr": 0.103033,
+          "deferrals": 53,
+          "max_dd_after_tax": 0.462542,
+          "pre_tax_cagr": 0.155137,
+          "sells_per_year": 29.781749,
+          "tax_assessed_try_by_year": {
+            "1999": 0.0,
+            "2000": 0.0,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 4619.349064,
+            "2004": 0.0,
+            "2005": 0.0,
+            "2006": 4122.01276,
+            "2007": 6518.816384,
+            "2008": 0.0,
+            "2009": 4571.897552,
+            "2010": 3999.352924,
+            "2011": 9373.202709,
+            "2012": 2996.941551,
+            "2013": 117.120725,
+            "2014": 92494.372195,
+            "2015": 50073.184975,
+            "2016": 0.0,
+            "2017": 599.283759,
+            "2018": 346297.939358,
+            "2019": 127128.853138,
+            "2020": 788758.037987,
+            "2021": 634113.69191,
+            "2022": 0.0,
+            "2023": 1222343.509911,
+            "2024": 5276519.725496,
+            "2025": 4198597.896181,
+            "2026": 10801407.823274
+          },
+          "tax_usd": 775619.832007,
+          "terminal_usd": 1352538.59588,
+          "trades_per_year": 61.10718
+        },
+        "H2_15": {
+          "after_tax_cagr": 0.104546,
+          "deferrals": 72,
+          "max_dd_after_tax": 0.455794,
+          "pre_tax_cagr": 0.155833,
+          "sells_per_year": 29.32994,
+          "tax_assessed_try_by_year": {
+            "1999": 0.0,
+            "2000": 0.0,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 4430.700674,
+            "2004": 0.0,
+            "2005": 0.0,
+            "2006": 4197.082106,
+            "2007": 6630.486522,
+            "2008": 0.0,
+            "2009": 4656.673572,
+            "2010": 4076.516882,
+            "2011": 9587.815454,
+            "2012": 3066.774802,
+            "2013": 119.465989,
+            "2014": 94035.566839,
+            "2015": 49798.590529,
+            "2016": 0.0,
+            "2017": 610.095213,
+            "2018": 353002.648886,
+            "2019": 129637.891209,
+            "2020": 803398.175353,
+            "2021": 465315.972278,
+            "2022": 0.0,
+            "2023": 1274903.753934,
+            "2024": 5485226.723679,
+            "2025": 4368187.69337,
+            "2026": 11219508.181775
+          },
+          "tax_usd": 788423.439383,
+          "terminal_usd": 1402676.64103,
+          "trades_per_year": 60.316514
+        },
+        "H2_20": {
+          "after_tax_cagr": 0.104924,
+          "deferrals": 97,
+          "max_dd_after_tax": 0.465952,
+          "pre_tax_cagr": 0.155075,
+          "sells_per_year": 28.84048,
+          "tax_assessed_try_by_year": {
+            "1999": 0.0,
+            "2000": 0.0,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 4022.024209,
+            "2004": 0.0,
+            "2005": 0.0,
+            "2006": 4114.014901,
+            "2007": 6438.537885,
+            "2008": 0.0,
+            "2009": 4570.716375,
+            "2010": 3808.684793,
+            "2011": 9642.685605,
+            "2012": 3013.828131,
+            "2013": 117.542762,
+            "2014": 92478.977779,
+            "2015": 49004.976675,
+            "2016": 0.0,
+            "2017": 601.935092,
+            "2018": 347949.470476,
+            "2019": 127744.40446,
+            "2020": 792344.844444,
+            "2021": 157876.88959,
+            "2022": 136956.366275,
+            "2023": 1311110.176518,
+            "2024": 5535317.357235,
+            "2025": 4376137.152299,
+            "2026": 11358765.414714
+          },
+          "tax_usd": 776768.402505,
+          "terminal_usd": 1415489.49938,
+          "trades_per_year": 59.676451
+        },
+        "H2_5": {
+          "after_tax_cagr": 0.101662,
+          "deferrals": 17,
+          "max_dd_after_tax": 0.467584,
+          "pre_tax_cagr": 0.154512,
+          "sells_per_year": 30.384161,
+          "tax_assessed_try_by_year": {
+            "1999": 0.0,
+            "2000": 0.0,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 4762.738856,
+            "2004": 0.0,
+            "2005": 0.0,
+            "2006": 4065.669836,
+            "2007": 6352.251374,
+            "2008": 0.0,
+            "2009": 4489.8903,
+            "2010": 3924.709127,
+            "2011": 9171.415513,
+            "2012": 2937.91378,
+            "2013": 115.059823,
+            "2014": 90981.594556,
+            "2015": 50797.225709,
+            "2016": 0.0,
+            "2017": 591.898386,
+            "2018": 341713.99182,
+            "2019": 125414.779137,
+            "2020": 778759.11666,
+            "2021": 767853.598239,
+            "2022": 0.0,
+            "2023": 1177932.459856,
+            "2024": 5218370.751235,
+            "2025": 4067556.854823,
+            "2026": 10307021.036579
+          },
+          "tax_usd": 765197.010352,
+          "terminal_usd": 1308582.799196,
+          "trades_per_year": 62.199052
+        },
+        "R2": {
+          "after_tax_cagr": 0.1016,
+          "deferrals": 0,
+          "max_dd_after_tax": 0.467584,
+          "pre_tax_cagr": 0.154732,
+          "sells_per_year": 30.685367,
+          "tax_assessed_try_by_year": {
+            "1999": 0.0,
+            "2000": 0.0,
+            "2001": 0.0,
+            "2002": 0.0,
+            "2003": 5016.747826,
+            "2004": 0.0,
+            "2005": 0.0,
+            "2006": 4051.978421,
+            "2007": 6347.185247,
+            "2008": 0.0,
+            "2009": 4472.914936,
+            "2010": 3909.257985,
+            "2011": 9143.414772,
+            "2012": 2921.456715,
+            "2013": 272.548534,
+            "2014": 90183.21689,
+            "2015": 51668.093092,
+            "2016": 0.0,
+            "2017": 591.451506,
+            "2018": 341430.58136,
+            "2019": 125310.855307,
+            "2020": 778156.942695,
+            "2021": 774341.595281,
+            "2022": 0.0,
+            "2023": 1175721.329518,
+            "2024": 5434956.166292,
+            "2025": 3871068.159258,
+            "2026": 10273363.800741
+          },
+          "tax_usd": 766159.93359,
+          "terminal_usd": 1306627.035617,
+          "trades_per_year": 62.650861
+        }
+      },
+      "2010_01_to_end": {
+        "H2": {
+          "after_tax_cagr": 0.148395,
+          "deferrals": 32,
+          "max_dd_after_tax": 0.440722,
+          "pre_tax_cagr": 0.221284,
+          "sells_per_year": 30.337966,
+          "tax_assessed_try_by_year": {
+            "2009": 0.0,
+            "2010": 0.0,
+            "2011": 6035.732919,
+            "2012": 2033.094333,
+            "2013": 81.53343,
+            "2014": 64843.967212,
+            "2015": 34704.991958,
+            "2016": 0.0,
+            "2017": 441.187173,
+            "2018": 248396.119269,
+            "2019": 90443.881896,
+            "2020": 574607.578862,
+            "2021": 459398.297094,
+            "2022": 0.0,
+            "2023": 867868.478188,
+            "2024": 3868965.000862,
+            "2025": 3054856.084163,
+            "2026": 7981669.433564
+          },
+          "tax_usd": 551338.333886,
+          "terminal_usd": 1014399.276404,
+          "trades_per_year": 60.675932
+        },
+        "H2_15": {
+          "after_tax_cagr": 0.150008,
+          "deferrals": 39,
+          "max_dd_after_tax": 0.438812,
+          "pre_tax_cagr": 0.221551,
+          "sells_per_year": 29.979644,
+          "tax_assessed_try_by_year": {
+            "2009": 0.0,
+            "2010": 0.0,
+            "2011": 6043.891246,
+            "2012": 2033.53123,
+            "2013": 81.545158,
+            "2014": 64845.510818,
+            "2015": 33929.267538,
+            "2016": 0.0,
+            "2017": 443.198083,
+            "2018": 249648.475623,
+            "2019": 90910.739763,
+            "2020": 577328.120256,
+            "2021": 329003.779419,
+            "2022": 0.0,
+            "2023": 893155.049353,
+            "2024": 3969373.293484,
+            "2025": 3136445.212127,
+            "2026": 8182816.225512
+          },
+          "tax_usd": 552839.680553,
+          "terminal_usd": 1038520.535168,
+          "trades_per_year": 60.078728
+        },
+        "H2_20": {
+          "after_tax_cagr": 0.151426,
+          "deferrals": 46,
+          "max_dd_after_tax": 0.438808,
+          "pre_tax_cagr": 0.22163,
+          "sells_per_year": 29.681042,
+          "tax_assessed_try_by_year": {
+            "2009": 0.0,
+            "2010": 0.0,
+            "2011": 6193.133607,
+            "2012": 2039.569371,
+            "2013": 81.682908,
+            "2014": 64809.898032,
+            "2015": 33908.839306,
+            "2016": 0.0,
+            "2017": 442.979463,
+            "2018": 249513.088427,
+            "2019": 90860.010625,
+            "2020": 577031.99027,
+            "2021": 113084.245259,
+            "2022": 96899.243033,
+            "2023": 932131.737794,
+            "2024": 4057107.355482,
+            "2025": 3183291.22025,
+            "2026": 8387592.583387
+          },
+          "tax_usd": 552413.847321,
+          "terminal_usd": 1060177.062317,
+          "trades_per_year": 59.720405
+        },
+        "H2_5": {
+          "after_tax_cagr": 0.146992,
+          "deferrals": 14,
+          "max_dd_after_tax": 0.43951,
+          "pre_tax_cagr": 0.221187,
+          "sells_per_year": 30.93517,
+          "tax_assessed_try_by_year": {
+            "2009": 0.0,
+            "2010": 0.0,
+            "2011": 6030.916473,
+            "2012": 2029.150199,
+            "2013": 81.428534,
+            "2014": 64832.314628,
+            "2015": 35818.619083,
+            "2016": 0.0,
+            "2017": 441.493399,
+            "2018": 248577.834384,
+            "2019": 90514.667717,
+            "2020": 575026.113786,
+            "2021": 566549.874883,
+            "2022": 0.0,
+            "2023": 847591.770288,
+            "2024": 3877630.494623,
+            "2025": 2998924.305376,
+            "2026": 7713643.002576
+          },
+          "tax_usd": 551357.202045,
+          "terminal_usd": 993853.478808,
+          "trades_per_year": 61.631458
+        },
+        "R2": {
+          "after_tax_cagr": 0.147059,
+          "deferrals": 0,
+          "max_dd_after_tax": 0.437839,
+          "pre_tax_cagr": 0.221587,
+          "sells_per_year": 31.353213,
+          "tax_assessed_try_by_year": {
+            "2009": 0.0,
+            "2010": 0.0,
+            "2011": 6037.739453,
+            "2012": 2024.456579,
+            "2013": 198.406753,
+            "2014": 64516.365061,
+            "2015": 36593.177308,
+            "2016": 0.0,
+            "2017": 442.325397,
+            "2018": 249087.985066,
+            "2019": 90707.552057,
+            "2020": 576155.490502,
+            "2021": 573009.338139,
+            "2022": 0.0,
+            "2023": 848491.471435,
+            "2024": 4051969.360742,
+            "2025": 2858565.612146,
+            "2026": 7708375.978376
+          },
+          "tax_usd": 553536.061581,
+          "terminal_usd": 994825.173572,
+          "trades_per_year": 62.168942
+        }
+      },
+      "2017_01_to_end": {
+        "H2": {
+          "after_tax_cagr": 0.231609,
+          "deferrals": 19,
+          "max_dd_after_tax": 0.34863,
+          "pre_tax_cagr": 0.32568,
+          "sells_per_year": 34.67823,
+          "tax_assessed_try_by_year": {
+            "2016": 0.0,
+            "2017": 93.594558,
+            "2018": 122359.388014,
+            "2019": 58137.000463,
+            "2020": 415462.073419,
+            "2021": 329281.622547,
+            "2022": 0.0,
+            "2023": 621139.105458,
+            "2024": 2820366.934081,
+            "2025": 2200571.246696,
+            "2026": 5874872.309584
+          },
+          "tax_usd": 360065.093279,
+          "terminal_usd": 761753.696219,
+          "trades_per_year": 69.356461
+        },
+        "H2_15": {
+          "after_tax_cagr": 0.234034,
+          "deferrals": 23,
+          "max_dd_after_tax": 0.335582,
+          "pre_tax_cagr": 0.325855,
+          "sells_per_year": 34.267837,
+          "tax_assessed_try_by_year": {
+            "2016": 0.0,
+            "2017": 93.594558,
+            "2018": 122359.388014,
+            "2019": 58137.000463,
+            "2020": 415462.073419,
+            "2021": 231206.316969,
+            "2022": 0.0,
+            "2023": 634587.553165,
+            "2024": 2881417.253253,
+            "2025": 2250425.83922,
+            "2026": 5997856.935835
+          },
+          "tax_usd": 359554.350707,
+          "terminal_usd": 776501.988528,
+          "trades_per_year": 68.946067
+        },
+        "H2_20": {
+          "after_tax_cagr": 0.236553,
+          "deferrals": 28,
+          "max_dd_after_tax": 0.316201,
+          "pre_tax_cagr": 0.325965,
+          "sells_per_year": 33.857444,
+          "tax_assessed_try_by_year": {
+            "2016": 0.0,
+            "2017": 93.594558,
+            "2018": 122359.388014,
+            "2019": 58137.000463,
+            "2020": 415462.073419,
+            "2021": 79420.101794,
+            "2022": 66764.362537,
+            "2023": 655080.62565,
+            "2024": 2942989.627824,
+            "2025": 2283383.0079,
+            "2026": 6145799.429636
+          },
+          "tax_usd": 359063.243116,
+          "terminal_usd": 792088.124453,
+          "trades_per_year": 68.433076
+        },
+        "H2_5": {
+          "after_tax_cagr": 0.228958,
+          "deferrals": 6,
+          "max_dd_after_tax": 0.36184,
+          "pre_tax_cagr": 0.325057,
+          "sells_per_year": 35.191222,
+          "tax_assessed_try_by_year": {
+            "2016": 0.0,
+            "2017": 93.594558,
+            "2018": 122359.388014,
+            "2019": 58137.000463,
+            "2020": 415462.073419,
+            "2021": 408547.709522,
+            "2022": 0.0,
+            "2023": 607523.962467,
+            "2024": 2824917.549955,
+            "2025": 2157379.752872,
+            "2026": 5670708.000293
+          },
+          "tax_usd": 359567.466273,
+          "terminal_usd": 745924.356058,
+          "trades_per_year": 70.382444
+        },
+        "R2": {
+          "after_tax_cagr": 0.228861,
+          "deferrals": 0,
+          "max_dd_after_tax": 0.362426,
+          "pre_tax_cagr": 0.32533,
+          "sells_per_year": 35.601615,
+          "tax_assessed_try_by_year": {
+            "2016": 0.0,
+            "2017": 93.594558,
+            "2018": 122359.388014,
+            "2019": 58137.000463,
+            "2020": 415462.073419,
+            "2021": 412504.436578,
+            "2022": 0.0,
+            "2023": 606920.474298,
+            "2024": 2948935.296024,
+            "2025": 2048693.471934,
+            "2026": 5656102.043039
+          },
+          "tax_usd": 360296.618408,
+          "terminal_usd": 745348.628037,
+          "trades_per_year": 70.895435
+        }
+      }
+    },
+    "10k": {
+      "2000_03_to_2026_09": {
+        "H2": {
+          "after_tax_cagr": 0.11805,
+          "deferrals": 53,
+          "max_dd_after_tax": 0.462542,
+          "pre_tax_cagr": 0.155137,
+          "sells_per_year": 29.744099,
+          "tax_usd": 77685.031597,
+          "terminal_usd": 193696.770185,
+          "trades_per_year": 61.069529
+        },
+        "H2_15": {
+          "after_tax_cagr": 0.119358,
+          "deferrals": 72,
+          "max_dd_after_tax": 0.455794,
+          "pre_tax_cagr": 0.155833,
+          "sells_per_year": 29.254639,
+          "tax_usd": 78811.864183,
+          "terminal_usd": 199806.861967,
+          "trades_per_year": 60.203561
+        },
+        "H2_20": {
+          "after_tax_cagr": 0.119546,
+          "deferrals": 97,
+          "max_dd_after_tax": 0.465952,
+          "pre_tax_cagr": 0.155075,
+          "sells_per_year": 28.765179,
+          "tax_usd": 77187.942088,
+          "terminal_usd": 200701.878147,
+          "trades_per_year": 59.601149
+        },
+        "H2_5": {
+          "after_tax_cagr": 0.116853,
+          "deferrals": 17,
+          "max_dd_after_tax": 0.467584,
+          "pre_tax_cagr": 0.154512,
+          "sells_per_year": 30.346511,
+          "tax_usd": 76756.561077,
+          "terminal_usd": 188265.43231,
+          "trades_per_year": 62.161401
+        },
+        "R2": {
+          "after_tax_cagr": 0.116874,
+          "deferrals": 0,
+          "max_dd_after_tax": 0.467584,
+          "pre_tax_cagr": 0.154732,
+          "sells_per_year": 30.647717,
+          "tax_usd": 77026.73497,
+          "terminal_usd": 188360.733081,
+          "trades_per_year": 62.61321
+        }
+      },
+      "2010_01_to_end": {
+        "H2": {
+          "after_tax_cagr": 0.171337,
+          "deferrals": 32,
+          "max_dd_after_tax": 0.413483,
+          "pre_tax_cagr": 0.221284,
+          "sells_per_year": 30.278246,
+          "tax_usd": 51363.580263,
+          "terminal_usd": 141272.438123,
+          "trades_per_year": 60.675932
+        },
+        "H2_15": {
+          "after_tax_cagr": 0.17269,
+          "deferrals": 39,
+          "max_dd_after_tax": 0.411771,
+          "pre_tax_cagr": 0.221551,
+          "sells_per_year": 29.860203,
+          "tax_usd": 51370.416806,
+          "terminal_usd": 144029.6622,
+          "trades_per_year": 60.019008
+        },
+        "H2_20": {
+          "after_tax_cagr": 0.173787,
+          "deferrals": 46,
+          "max_dd_after_tax": 0.411769,
+          "pre_tax_cagr": 0.22163,
+          "sells_per_year": 29.50188,
+          "tax_usd": 51214.154256,
+          "terminal_usd": 146303.396932,
+          "trades_per_year": 59.600965
+        },
+        "H2_5": {
+          "after_tax_cagr": 0.17017,
+          "deferrals": 14,
+          "max_dd_after_tax": 0.411886,
+          "pre_tax_cagr": 0.221187,
+          "sells_per_year": 30.93517,
+          "tax_usd": 51493.197364,
+          "terminal_usd": 138932.862861,
+          "trades_per_year": 61.631458
+        },
+        "R2": {
+          "after_tax_cagr": 0.17029,
+          "deferrals": 0,
+          "max_dd_after_tax": 0.409971,
+          "pre_tax_cagr": 0.221587,
+          "sells_per_year": 31.353213,
+          "tax_usd": 51766.556905,
+          "terminal_usd": 139173.523035,
+          "trades_per_year": 62.168942
+        }
+      },
+      "2017_01_to_end": {
+        "H2": {
+          "after_tax_cagr": 0.262632,
+          "deferrals": 19,
+          "max_dd_after_tax": 0.333748,
+          "pre_tax_cagr": 0.32568,
+          "sells_per_year": 34.575632,
+          "tax_usd": 29112.58227,
+          "terminal_usd": 97077.565907,
+          "trades_per_year": 69.151264
+        },
+        "H2_15": {
+          "after_tax_cagr": 0.264318,
+          "deferrals": 23,
+          "max_dd_after_tax": 0.324408,
+          "pre_tax_cagr": 0.325855,
+          "sells_per_year": 34.06264,
+          "tax_usd": 29027.309711,
+          "terminal_usd": 98348.638316,
+          "trades_per_year": 68.740871
+        },
+        "H2_20": {
+          "after_tax_cagr": 0.266127,
+          "deferrals": 28,
+          "max_dd_after_tax": 0.311152,
+          "pre_tax_cagr": 0.325965,
+          "sells_per_year": 33.754846,
+          "tax_usd": 28923.087929,
+          "terminal_usd": 99729.071923,
+          "trades_per_year": 68.330478
+        },
+        "H2_5": {
+          "after_tax_cagr": 0.260511,
+          "deferrals": 6,
+          "max_dd_after_tax": 0.344685,
+          "pre_tax_cagr": 0.325057,
+          "sells_per_year": 35.191222,
+          "tax_usd": 29121.892674,
+          "terminal_usd": 95500.214496,
+          "trades_per_year": 70.382444
+        },
+        "R2": {
+          "after_tax_cagr": 0.260376,
+          "deferrals": 0,
+          "max_dd_after_tax": 0.34521,
+          "pre_tax_cagr": 0.32533,
+          "sells_per_year": 35.601615,
+          "tax_usd": 29255.406798,
+          "terminal_usd": 95400.318263,
+          "trades_per_year": 70.895435
+        }
+      }
+    },
+    "1M": {
+      "2000_03_to_2026_09": {
+        "H2": {
+          "after_tax_cagr": 0.093505,
+          "deferrals": 53,
+          "max_dd_after_tax": 0.462542,
+          "pre_tax_cagr": 0.155137,
+          "sells_per_year": 29.932352,
+          "tax_usd": 6887442.355418,
+          "terminal_usd": 10741667.482878,
+          "trades_per_year": 61.10718
+        },
+        "H2_15": {
+          "after_tax_cagr": 0.09512,
+          "deferrals": 72,
+          "max_dd_after_tax": 0.455794,
+          "pre_tax_cagr": 0.155833,
+          "sells_per_year": 29.480543,
+          "tax_usd": 7006678.891825,
+          "terminal_usd": 11171156.730748,
+          "trades_per_year": 60.316514
+        },
+        "H2_20": {
+          "after_tax_cagr": 0.095464,
+          "deferrals": 97,
+          "max_dd_after_tax": 0.465952,
+          "pre_tax_cagr": 0.155075,
+          "sells_per_year": 28.991083,
+          "tax_usd": 6915521.673305,
+          "terminal_usd": 11264611.78393,
+          "trades_per_year": 59.676451
+        },
+        "H2_5": {
+          "after_tax_cagr": 0.092055,
+          "deferrals": 17,
+          "max_dd_after_tax": 0.467584,
+          "pre_tax_cagr": 0.154512,
+          "sells_per_year": 30.534764,
+          "tax_usd": 6791656.080335,
+          "terminal_usd": 10369701.100803,
+          "trades_per_year": 62.199052
+        },
+        "R2": {
+          "after_tax_cagr": 0.09195,
+          "deferrals": 0,
+          "max_dd_after_tax": 0.467584,
+          "pre_tax_cagr": 0.154732,
+          "sells_per_year": 30.835971,
+          "tax_usd": 6793740.213311,
+          "terminal_usd": 10343300.941032,
+          "trades_per_year": 62.650861
+        }
+      },
+      "2010_01_to_end": {
+        "H2": {
+          "after_tax_cagr": 0.13764,
+          "deferrals": 32,
+          "max_dd_after_tax": 0.456348,
+          "pre_tax_cagr": 0.221284,
+          "sells_per_year": 30.457407,
+          "tax_usd": 5320528.320534,
+          "terminal_usd": 8665287.250662,
+          "trades_per_year": 60.675932
+        },
+        "H2_15": {
+          "after_tax_cagr": 0.139325,
+          "deferrals": 39,
+          "max_dd_after_tax": 0.454384,
+          "pre_tax_cagr": 0.221551,
+          "sells_per_year": 30.099084,
+          "tax_usd": 5336073.547647,
+          "terminal_usd": 8882762.44654,
+          "trades_per_year": 60.078728
+        },
+        "H2_20": {
+          "after_tax_cagr": 0.140669,
+          "deferrals": 46,
+          "max_dd_after_tax": 0.454381,
+          "pre_tax_cagr": 0.22163,
+          "sells_per_year": 29.800482,
+          "tax_usd": 5332625.148434,
+          "terminal_usd": 9059846.320357,
+          "trades_per_year": 59.720405
+        },
+        "H2_5": {
+          "after_tax_cagr": 0.136182,
+          "deferrals": 14,
+          "max_dd_after_tax": 0.455266,
+          "pre_tax_cagr": 0.221187,
+          "sells_per_year": 31.054611,
+          "tax_usd": 5319679.117152,
+          "terminal_usd": 8481247.348555,
+          "trades_per_year": 61.631458
+        },
+        "R2": {
+          "after_tax_cagr": 0.136237,
+          "deferrals": 0,
+          "max_dd_after_tax": 0.453668,
+          "pre_tax_cagr": 0.221587,
+          "sells_per_year": 31.472654,
+          "tax_usd": 5338306.898169,
+          "terminal_usd": 8488091.97725,
+          "trades_per_year": 62.168942
+        }
+      },
+      "2017_01_to_end": {
+        "H2": {
+          "after_tax_cagr": 0.220068,
+          "deferrals": 19,
+          "max_dd_after_tax": 0.353699,
+          "pre_tax_cagr": 0.32568,
+          "sells_per_year": 34.780829,
+          "tax_usd": 3740497.265791,
+          "terminal_usd": 6949661.200402,
+          "trades_per_year": 69.356461
+        },
+        "H2_15": {
+          "after_tax_cagr": 0.222556,
+          "deferrals": 23,
+          "max_dd_after_tax": 0.34068,
+          "pre_tax_cagr": 0.325855,
+          "sells_per_year": 34.370435,
+          "tax_usd": 3736009.463669,
+          "terminal_usd": 7089039.222313,
+          "trades_per_year": 68.946067
+        },
+        "H2_20": {
+          "after_tax_cagr": 0.225171,
+          "deferrals": 28,
+          "max_dd_after_tax": 0.319298,
+          "pre_tax_cagr": 0.325965,
+          "sells_per_year": 34.06264,
+          "tax_usd": 3736015.474086,
+          "terminal_usd": 7238193.574026,
+          "trades_per_year": 68.535674
+        },
+        "H2_5": {
+          "after_tax_cagr": 0.217347,
+          "deferrals": 6,
+          "max_dd_after_tax": 0.366894,
+          "pre_tax_cagr": 0.325057,
+          "sells_per_year": 35.29382,
+          "tax_usd": 3735357.67965,
+          "terminal_usd": 6800040.617848,
+          "trades_per_year": 70.382444
+        },
+        "R2": {
+          "after_tax_cagr": 0.217246,
+          "deferrals": 0,
+          "max_dd_after_tax": 0.36748,
+          "pre_tax_cagr": 0.32533,
+          "sells_per_year": 35.704213,
+          "tax_usd": 3742184.443734,
+          "terminal_usd": 6794570.628374,
+          "trades_per_year": 70.895435
+        }
+      }
+    }
+  },
+  "bootstrap": {
+    "100k": {
+      "flat": {
+        "H2": {
+          "cagr_median": 0.039682,
+          "deferrals_median": 24.0,
+          "maxdd_median": 0.563049,
+          "sells_per_year_median": 39.297788
+        },
+        "H2_15": {
+          "cagr_median": 0.03937,
+          "deferrals_median": 38.0,
+          "maxdd_median": 0.564008,
+          "sells_per_year_median": 38.599604
+        },
+        "H2_15_vs_R2": {
+          "mean_delta_cagr_pp": 0.096323,
+          "median_delta_cagr_pp": 0.063055,
+          "p05_delta_cagr_pp": -0.519298,
+          "p95_delta_cagr_pp": 0.781664,
+          "share_gt_0": 0.614
+        },
+        "H2_20": {
+          "cagr_median": 0.039636,
+          "deferrals_median": 52.0,
+          "maxdd_median": 0.565251,
+          "sells_per_year_median": 37.90142
+        },
+        "H2_20_vs_R2": {
+          "mean_delta_cagr_pp": 0.112748,
+          "median_delta_cagr_pp": 0.082648,
+          "p05_delta_cagr_pp": -0.741798,
+          "p95_delta_cagr_pp": 1.081862,
+          "share_gt_0": 0.616
+        },
+        "H2_5": {
+          "cagr_median": 0.039417,
+          "deferrals_median": 10.0,
+          "maxdd_median": 0.56137,
+          "sells_per_year_median": 39.995972
+        },
+        "H2_5_vs_R2": {
+          "mean_delta_cagr_pp": 0.027245,
+          "median_delta_cagr_pp": 0.016428,
+          "p05_delta_cagr_pp": -0.16926,
+          "p95_delta_cagr_pp": 0.231313,
+          "share_gt_0": 0.65
+        },
+        "H2_vs_R2": {
+          "mean_delta_cagr_pp": 0.069256,
+          "median_delta_cagr_pp": 0.045437,
+          "p05_delta_cagr_pp": -0.369712,
+          "p95_delta_cagr_pp": 0.533736,
+          "share_gt_0": 0.644
+        },
+        "R2": {
+          "cagr_median": 0.039678,
+          "deferrals_median": 0.0,
+          "maxdd_median": 0.560714,
+          "sells_per_year_median": 40.594416
+        },
+        "block": 20,
+        "calendar_end": "2026-09-16",
+        "calendar_start": "2015-09-01",
+        "capital_usd": 100000.0,
+        "n_paths": 1000,
+        "seed": 20261011,
+        "tax_kind": "flat"
+      },
+      "progressive": {
+        "H2": {
+          "cagr_median": 0.036013,
+          "deferrals_median": 24.0,
+          "maxdd_median": 0.577004,
+          "sells_per_year_median": 39.497269
+        },
+        "H2_15": {
+          "cagr_median": 0.037383,
+          "deferrals_median": 38.0,
+          "maxdd_median": 0.577074,
+          "sells_per_year_median": 38.898826
+        },
+        "H2_15_vs_R2": {
+          "mean_delta_cagr_pp": 0.147824,
+          "median_delta_cagr_pp": 0.089235,
+          "p05_delta_cagr_pp": -0.467608,
+          "p95_delta_cagr_pp": 0.879379,
+          "share_gt_0": 0.658
+        },
+        "H2_20": {
+          "cagr_median": 0.037019,
+          "deferrals_median": 52.0,
+          "maxdd_median": 0.578165,
+          "sells_per_year_median": 38.100901
+        },
+        "H2_20_vs_R2": {
+          "mean_delta_cagr_pp": 0.172241,
+          "median_delta_cagr_pp": 0.115211,
+          "p05_delta_cagr_pp": -0.629746,
+          "p95_delta_cagr_pp": 1.169062,
+          "share_gt_0": 0.64
+        },
+        "H2_5": {
+          "cagr_median": 0.035668,
+          "deferrals_median": 10.0,
+          "maxdd_median": 0.577319,
+          "sells_per_year_median": 40.195453
+        },
+        "H2_5_vs_R2": {
+          "mean_delta_cagr_pp": 0.045764,
+          "median_delta_cagr_pp": 0.022693,
+          "p05_delta_cagr_pp": -0.167607,
+          "p95_delta_cagr_pp": 0.288471,
+          "share_gt_0": 0.646
+        },
+        "H2_vs_R2": {
+          "mean_delta_cagr_pp": 0.103269,
+          "median_delta_cagr_pp": 0.0549,
+          "p05_delta_cagr_pp": -0.310754,
+          "p95_delta_cagr_pp": 0.607977,
+          "share_gt_0": 0.674
+        },
+        "R2": {
+          "cagr_median": 0.035155,
+          "deferrals_median": 0.0,
+          "maxdd_median": 0.577191,
+          "sells_per_year_median": 40.793897
+        },
+        "block": 20,
+        "calendar_end": "2026-09-16",
+        "calendar_start": "2015-09-01",
+        "capital_usd": 100000.0,
+        "n_paths": 1000,
+        "seed": 20261011,
+        "tax_kind": "progressive"
+      }
+    },
+    "1M": {
+      "flat": {
+        "H2": {
+          "cagr_median": 0.039682,
+          "deferrals_median": 24.0,
+          "maxdd_median": 0.563049,
+          "sells_per_year_median": 39.297788
+        },
+        "H2_15": {
+          "cagr_median": 0.03937,
+          "deferrals_median": 38.0,
+          "maxdd_median": 0.564008,
+          "sells_per_year_median": 38.599604
+        },
+        "H2_15_vs_R2": {
+          "mean_delta_cagr_pp": 0.096323,
+          "median_delta_cagr_pp": 0.063055,
+          "p05_delta_cagr_pp": -0.519298,
+          "p95_delta_cagr_pp": 0.781664,
+          "share_gt_0": 0.614
+        },
+        "H2_20": {
+          "cagr_median": 0.039636,
+          "deferrals_median": 52.0,
+          "maxdd_median": 0.565251,
+          "sells_per_year_median": 37.90142
+        },
+        "H2_20_vs_R2": {
+          "mean_delta_cagr_pp": 0.112748,
+          "median_delta_cagr_pp": 0.082648,
+          "p05_delta_cagr_pp": -0.741798,
+          "p95_delta_cagr_pp": 1.081862,
+          "share_gt_0": 0.616
+        },
+        "H2_5": {
+          "cagr_median": 0.039417,
+          "deferrals_median": 10.0,
+          "maxdd_median": 0.56137,
+          "sells_per_year_median": 39.995972
+        },
+        "H2_5_vs_R2": {
+          "mean_delta_cagr_pp": 0.027245,
+          "median_delta_cagr_pp": 0.016428,
+          "p05_delta_cagr_pp": -0.16926,
+          "p95_delta_cagr_pp": 0.231313,
+          "share_gt_0": 0.65
+        },
+        "H2_vs_R2": {
+          "mean_delta_cagr_pp": 0.069256,
+          "median_delta_cagr_pp": 0.045437,
+          "p05_delta_cagr_pp": -0.369712,
+          "p95_delta_cagr_pp": 0.533736,
+          "share_gt_0": 0.644
+        },
+        "R2": {
+          "cagr_median": 0.039678,
+          "deferrals_median": 0.0,
+          "maxdd_median": 0.560714,
+          "sells_per_year_median": 40.594416
+        },
+        "block": 20,
+        "calendar_end": "2026-09-16",
+        "calendar_start": "2015-09-01",
+        "capital_usd": 1000000.0,
+        "n_paths": 1000,
+        "seed": 20261011,
+        "tax_kind": "flat"
+      },
+      "progressive": {
+        "H2": {
+          "cagr_median": 0.024611,
+          "deferrals_median": 24.0,
+          "maxdd_median": 0.591601,
+          "sells_per_year_median": 39.59701
+        },
+        "H2_15": {
+          "cagr_median": 0.025077,
+          "deferrals_median": 38.0,
+          "maxdd_median": 0.591842,
+          "sells_per_year_median": 38.898826
+        },
+        "H2_15_vs_R2": {
+          "mean_delta_cagr_pp": 0.178006,
+          "median_delta_cagr_pp": 0.110221,
+          "p05_delta_cagr_pp": -0.433876,
+          "p95_delta_cagr_pp": 0.927042,
+          "share_gt_0": 0.685
+        },
+        "H2_20": {
+          "cagr_median": 0.025626,
+          "deferrals_median": 52.0,
+          "maxdd_median": 0.591902,
+          "sells_per_year_median": 38.200642
+        },
+        "H2_20_vs_R2": {
+          "mean_delta_cagr_pp": 0.213417,
+          "median_delta_cagr_pp": 0.141507,
+          "p05_delta_cagr_pp": -0.600229,
+          "p95_delta_cagr_pp": 1.209554,
+          "share_gt_0": 0.678
+        },
+        "H2_5": {
+          "cagr_median": 0.024074,
+          "deferrals_median": 10.0,
+          "maxdd_median": 0.592197,
+          "sells_per_year_median": 40.295194
+        },
+        "H2_5_vs_R2": {
+          "mean_delta_cagr_pp": 0.055301,
+          "median_delta_cagr_pp": 0.025614,
+          "p05_delta_cagr_pp": -0.162244,
+          "p95_delta_cagr_pp": 0.324558,
+          "share_gt_0": 0.668
+        },
+        "H2_vs_R2": {
+          "mean_delta_cagr_pp": 0.123532,
+          "median_delta_cagr_pp": 0.071127,
+          "p05_delta_cagr_pp": -0.280642,
+          "p95_delta_cagr_pp": 0.647016,
+          "share_gt_0": 0.697
+        },
+        "R2": {
+          "cagr_median": 0.023516,
+          "deferrals_median": 0.0,
+          "maxdd_median": 0.592294,
+          "sells_per_year_median": 40.893637
+        },
+        "block": 20,
+        "calendar_end": "2026-09-16",
+        "calendar_start": "2015-09-01",
+        "capital_usd": 1000000.0,
+        "n_paths": 1000,
+        "seed": 20261011,
+        "tax_kind": "progressive"
+      }
+    }
+  },
+  "campaign": "tax_harvest_v2",
+  "cost_stress": {
+    "2000_03_to_2026_09": {
+      "H2": {
+        "after_tax_cagr": 0.098745,
+        "max_dd_after_tax": 0.469228,
+        "pre_tax_cagr": 0.149616,
+        "turnover_annual": 5.948224
+      },
+      "H2_15": {
+        "after_tax_cagr": 0.10026,
+        "max_dd_after_tax": 0.462361,
+        "pre_tax_cagr": 0.150334,
+        "turnover_annual": 5.920416
+      },
+      "H2_20": {
+        "after_tax_cagr": 0.10067,
+        "max_dd_after_tax": 0.472336,
+        "pre_tax_cagr": 0.149591,
+        "turnover_annual": 5.908124
+      },
+      "H2_5": {
+        "after_tax_cagr": 0.09736,
+        "max_dd_after_tax": 0.4744,
+        "pre_tax_cagr": 0.14896,
+        "turnover_annual": 5.985065
+      },
+      "R2": {
+        "after_tax_cagr": 0.097295,
+        "max_dd_after_tax": 0.4744,
+        "pre_tax_cagr": 0.149173,
+        "turnover_annual": 5.991522
+      }
+    },
+    "2010_01_to_end": {
+      "H2": {
+        "after_tax_cagr": 0.143628,
+        "max_dd_after_tax": 0.44845,
+        "pre_tax_cagr": 0.215202,
+        "turnover_annual": 6.177655
+      },
+      "H2_15": {
+        "after_tax_cagr": 0.14524,
+        "max_dd_after_tax": 0.446512,
+        "pre_tax_cagr": 0.215478,
+        "turnover_annual": 6.167238
+      },
+      "H2_20": {
+        "after_tax_cagr": 0.146692,
+        "max_dd_after_tax": 0.446508,
+        "pre_tax_cagr": 0.21556,
+        "turnover_annual": 6.163309
+      },
+      "H2_5": {
+        "after_tax_cagr": 0.142223,
+        "max_dd_after_tax": 0.44726,
+        "pre_tax_cagr": 0.21509,
+        "turnover_annual": 6.19364
+      },
+      "R2": {
+        "after_tax_cagr": 0.142289,
+        "max_dd_after_tax": 0.445613,
+        "pre_tax_cagr": 0.215485,
+        "turnover_annual": 6.196626
+      }
+    },
+    "2017_01_to_end": {
+      "H2": {
+        "after_tax_cagr": 0.228183,
+        "max_dd_after_tax": 0.353408,
+        "pre_tax_cagr": 0.321239,
+        "turnover_annual": 4.092221
+      },
+      "H2_15": {
+        "after_tax_cagr": 0.230604,
+        "max_dd_after_tax": 0.340435,
+        "pre_tax_cagr": 0.321413,
+        "turnover_annual": 4.092142
+      },
+      "H2_20": {
+        "after_tax_cagr": 0.233251,
+        "max_dd_after_tax": 0.321232,
+        "pre_tax_cagr": 0.321525,
+        "turnover_annual": 4.089903
+      },
+      "H2_5": {
+        "after_tax_cagr": 0.225522,
+        "max_dd_after_tax": 0.366619,
+        "pre_tax_cagr": 0.320595,
+        "turnover_annual": 4.113695
+      },
+      "R2": {
+        "after_tax_cagr": 0.225425,
+        "max_dd_after_tax": 0.367208,
+        "pre_tax_cagr": 0.320864,
+        "turnover_annual": 4.116333
+      }
+    }
+  },
+  "episodes": [
+    {
+      "dec_from": "2015-12-03",
+      "dec_to": "2016-01-29",
+      "delta_pp": -0.698869,
+      "jan_to": "2016-01-29",
+      "worst_session": "2016-01-04",
+      "worst_session_pp": -0.549142,
+      "year": 2015
+    },
+    {
+      "dec_from": "2024-12-03",
+      "dec_to": "2025-01-31",
+      "delta_pp": -0.318145,
+      "jan_to": "2025-01-31",
+      "worst_session": "2024-12-31",
+      "worst_session_pp": -0.217404,
+      "year": 2024
+    },
+    {
+      "dec_from": "2002-12-03",
+      "dec_to": "2003-01-30",
+      "delta_pp": -0.05369,
+      "jan_to": "2003-01-30",
+      "worst_session": "2002-12-18",
+      "worst_session_pp": -0.064717,
+      "year": 2002
+    },
+    {
+      "dec_from": "2012-12-03",
+      "dec_to": "2013-01-30",
+      "delta_pp": -0.0,
+      "jan_to": "2013-01-30",
+      "worst_session": "2012-12-20",
+      "worst_session_pp": -0.0,
+      "year": 2012
+    },
+    {
+      "dec_from": "2010-12-03",
+      "dec_to": "2011-01-31",
+      "delta_pp": -0.0,
+      "jan_to": "2011-01-31",
+      "worst_session": "2010-12-10",
+      "worst_session_pp": -0.0,
+      "year": 2010
+    },
+    {
+      "dec_from": "2013-12-03",
+      "dec_to": "2014-01-30",
+      "delta_pp": -0.0,
+      "jan_to": "2014-01-30",
+      "worst_session": "2014-01-02",
+      "worst_session_pp": -0.0,
+      "year": 2013
+    },
+    {
+      "dec_from": "2014-12-03",
+      "dec_to": "2015-01-30",
+      "delta_pp": -0.0,
+      "jan_to": "2015-01-30",
+      "worst_session": "2015-01-12",
+      "worst_session_pp": -0.0,
+      "year": 2014
+    },
+    {
+      "dec_from": "2009-12-03",
+      "dec_to": "2010-01-29",
+      "delta_pp": -0.0,
+      "jan_to": "2010-01-29",
+      "worst_session": "2009-12-21",
+      "worst_session_pp": -0.0,
+      "year": 2009
+    },
+    {
+      "dec_from": "2023-12-01",
+      "dec_to": "2024-01-30",
+      "delta_pp": -0.0,
+      "jan_to": "2024-01-30",
+      "worst_session": "2024-01-12",
+      "worst_session_pp": -0.0,
+      "year": 2023
+    },
+    {
+      "dec_from": "2000-12-01",
+      "dec_to": "2001-01-30",
+      "delta_pp": 0.0,
+      "jan_to": "2001-01-30",
+      "worst_session": null,
+      "worst_session_pp": 0.0,
+      "year": 2000
+    },
+    {
+      "dec_from": "2008-12-03",
+      "dec_to": "2009-01-30",
+      "delta_pp": 0.0,
+      "jan_to": "2009-01-30",
+      "worst_session": null,
+      "worst_session_pp": 0.0,
+      "year": 2008
+    },
+    {
+      "dec_from": "2018-12-03",
+      "dec_to": "2019-01-30",
+      "delta_pp": 0.0,
+      "jan_to": "2019-01-30",
+      "worst_session": null,
+      "worst_session_pp": 0.0,
+      "year": 2018
+    },
+    {
+      "dec_from": "2017-12-01",
+      "dec_to": "2018-01-30",
+      "delta_pp": 0.0,
+      "jan_to": "2018-01-30",
+      "worst_session": "2018-01-09",
+      "worst_session_pp": -0.0,
+      "year": 2017
+    },
+    {
+      "dec_from": "2004-12-03",
+      "dec_to": "2005-01-31",
+      "delta_pp": 0.0,
+      "jan_to": "2005-01-31",
+      "worst_session": "2005-01-21",
+      "worst_session_pp": -0.0,
+      "year": 2004
+    },
+    {
+      "dec_from": "2016-12-02",
+      "dec_to": "2017-01-31",
+      "delta_pp": 0.0,
+      "jan_to": "2017-01-31",
+      "worst_session": "2016-12-08",
+      "worst_session_pp": -0.0,
+      "year": 2016
+    },
+    {
+      "dec_from": "2022-12-02",
+      "dec_to": "2023-01-31",
+      "delta_pp": 0.0,
+      "jan_to": "2023-01-31",
+      "worst_session": "2022-12-14",
+      "worst_session_pp": -0.0,
+      "year": 2022
+    },
+    {
+      "dec_from": "2019-12-03",
+      "dec_to": "2020-01-30",
+      "delta_pp": 0.0,
+      "jan_to": "2020-01-30",
+      "worst_session": "2020-01-23",
+      "worst_session_pp": -0.0,
+      "year": 2019
+    },
+    {
+      "dec_from": "2005-12-02",
+      "dec_to": "2006-01-31",
+      "delta_pp": 0.0,
+      "jan_to": "2006-01-31",
+      "worst_session": "2005-12-19",
+      "worst_session_pp": -0.0,
+      "year": 2005
+    },
+    {
+      "dec_from": "2006-12-01",
+      "dec_to": "2007-01-31",
+      "delta_pp": 0.0,
+      "jan_to": "2007-01-31",
+      "worst_session": "2007-01-19",
+      "worst_session_pp": -0.0,
+      "year": 2006
+    },
+    {
+      "dec_from": "2020-12-03",
+      "dec_to": "2021-01-29",
+      "delta_pp": 0.0,
+      "jan_to": "2021-01-29",
+      "worst_session": "2020-12-29",
+      "worst_session_pp": -0.0,
+      "year": 2020
+    },
+    {
+      "dec_from": "2003-12-03",
+      "dec_to": "2004-01-30",
+      "delta_pp": 0.021639,
+      "jan_to": "2004-01-30",
+      "worst_session": "2003-12-19",
+      "worst_session_pp": -0.02628,
+      "year": 2003
+    },
+    {
+      "dec_from": "2011-12-02",
+      "dec_to": "2012-01-31",
+      "delta_pp": 0.026435,
+      "jan_to": "2012-01-31",
+      "worst_session": "2011-12-30",
+      "worst_session_pp": -0.002575,
+      "year": 2011
+    },
+    {
+      "dec_from": "2025-12-03",
+      "dec_to": "2026-01-30",
+      "delta_pp": 0.071181,
+      "jan_to": "2026-01-30",
+      "worst_session": "2026-01-21",
+      "worst_session_pp": -0.000439,
+      "year": 2025
+    },
+    {
+      "dec_from": "2007-12-03",
+      "dec_to": "2008-01-30",
+      "delta_pp": 0.381631,
+      "jan_to": "2008-01-30",
+      "worst_session": "2007-12-27",
+      "worst_session_pp": -0.110127,
+      "year": 2007
+    },
+    {
+      "dec_from": "2021-12-03",
+      "dec_to": "2022-01-31",
+      "delta_pp": 0.503707,
+      "jan_to": "2022-01-31",
+      "worst_session": "2021-12-28",
+      "worst_session_pp": -0.081611,
+      "year": 2021
+    },
+    {
+      "dec_from": "2001-12-03",
+      "dec_to": "2002-01-30",
+      "delta_pp": 0.996102,
+      "jan_to": "2002-01-30",
+      "worst_session": "2001-12-24",
+      "worst_session_pp": -0.184461,
+      "year": 2001
+    }
+  ],
+  "gates": {
+    "arms": {
+      "H2": {
+        "F2": {
+          "max_delta_max_dd_pp": 0.004473,
+          "median_delta_cagr_pp": 0.027957,
+          "pass": true,
+          "worst_dd_window": "M2"
+        },
+        "F3": {
+          "median_delta_cagr_pp": 0.024642,
+          "n_dd_within": 21,
+          "n_instruments": 21,
+          "pass": true,
+          "share_cagr_gt_0": 0.809524,
+          "share_dd_within_pp": 1.0
+        },
+        "F4": {
+          "pass": true,
+          "windows": {
+            "2000_03_to_2026_09": {
+              "R2": 0.097295,
+              "after_tax_cagr": 0.098745,
+              "pass": true
+            },
+            "2010_01_to_end": {
+              "R2": 0.142289,
+              "after_tax_cagr": 0.143628,
+              "pass": true
+            },
+            "2017_01_to_end": {
+              "R2": 0.225425,
+              "after_tax_cagr": 0.228183,
+              "pass": true
+            }
+          }
+        },
+        "G1_base": true,
+        "G1_cal": true,
+        "G2_base": true,
+        "G2_cal": true,
+        "bootstrap_reported": {
+          "100k_flat": {
+            "median_delta_cagr_pp": 0.045437,
+            "pass": true,
+            "share_gt_0": 0.644
+          },
+          "100k_progressive": {
+            "median_delta_cagr_pp": 0.0549,
+            "pass": true,
+            "share_gt_0": 0.674
+          },
+          "1M_flat": {
+            "median_delta_cagr_pp": 0.045437,
+            "pass": true,
+            "share_gt_0": 0.644
+          },
+          "1M_progressive": {
+            "median_delta_cagr_pp": 0.071127,
+            "pass": true,
+            "share_gt_0": 0.697
+          }
+        },
+        "pass": true,
+        "windows_100k": {
+          "2000_03_to_2026_09": true,
+          "2010_01_to_end": true,
+          "2017_01_to_end": true
+        }
+      },
+      "H2_15": {
+        "F2": {
+          "max_delta_max_dd_pp": 0.0,
+          "median_delta_cagr_pp": 0.050988,
+          "pass": true,
+          "worst_dd_window": "M1"
+        },
+        "F3": {
+          "median_delta_cagr_pp": 0.023776,
+          "n_dd_within": 21,
+          "n_instruments": 21,
+          "pass": true,
+          "share_cagr_gt_0": 0.761905,
+          "share_dd_within_pp": 1.0
+        },
+        "F4": {
+          "pass": true,
+          "windows": {
+            "2000_03_to_2026_09": {
+              "R2": 0.097295,
+              "after_tax_cagr": 0.10026,
+              "pass": true
+            },
+            "2010_01_to_end": {
+              "R2": 0.142289,
+              "after_tax_cagr": 0.14524,
+              "pass": true
+            },
+            "2017_01_to_end": {
+              "R2": 0.225425,
+              "after_tax_cagr": 0.230604,
+              "pass": true
+            }
+          }
+        },
+        "G1_base": true,
+        "G1_cal": true,
+        "G2_base": true,
+        "G2_cal": true,
+        "bootstrap_reported": {
+          "100k_flat": {
+            "median_delta_cagr_pp": 0.063055,
+            "pass": true,
+            "share_gt_0": 0.614
+          },
+          "100k_progressive": {
+            "median_delta_cagr_pp": 0.089235,
+            "pass": true,
+            "share_gt_0": 0.658
+          },
+          "1M_flat": {
+            "median_delta_cagr_pp": 0.063055,
+            "pass": true,
+            "share_gt_0": 0.614
+          },
+          "1M_progressive": {
+            "median_delta_cagr_pp": 0.110221,
+            "pass": true,
+            "share_gt_0": 0.685
+          }
+        },
+        "pass": true,
+        "windows_100k": {
+          "2000_03_to_2026_09": true,
+          "2010_01_to_end": true,
+          "2017_01_to_end": true
+        }
+      },
+      "H2_20": {
+        "F2": {
+          "max_delta_max_dd_pp": 0.057529,
+          "median_delta_cagr_pp": 0.086947,
+          "pass": true,
+          "worst_dd_window": "M4"
+        },
+        "F3": {
+          "median_delta_cagr_pp": 0.031288,
+          "n_dd_within": 21,
+          "n_instruments": 21,
+          "pass": true,
+          "share_cagr_gt_0": 0.666667,
+          "share_dd_within_pp": 1.0
+        },
+        "F4": {
+          "pass": true,
+          "windows": {
+            "2000_03_to_2026_09": {
+              "R2": 0.097295,
+              "after_tax_cagr": 0.10067,
+              "pass": true
+            },
+            "2010_01_to_end": {
+              "R2": 0.142289,
+              "after_tax_cagr": 0.146692,
+              "pass": true
+            },
+            "2017_01_to_end": {
+              "R2": 0.225425,
+              "after_tax_cagr": 0.233251,
+              "pass": true
+            }
+          }
+        },
+        "G1_base": true,
+        "G1_cal": true,
+        "G2_base": true,
+        "G2_cal": true,
+        "bootstrap_reported": {
+          "100k_flat": {
+            "median_delta_cagr_pp": 0.082648,
+            "pass": true,
+            "share_gt_0": 0.616
+          },
+          "100k_progressive": {
+            "median_delta_cagr_pp": 0.115211,
+            "pass": true,
+            "share_gt_0": 0.64
+          },
+          "1M_flat": {
+            "median_delta_cagr_pp": 0.082648,
+            "pass": true,
+            "share_gt_0": 0.616
+          },
+          "1M_progressive": {
+            "median_delta_cagr_pp": 0.141507,
+            "pass": true,
+            "share_gt_0": 0.678
+          }
+        },
+        "pass": true,
+        "windows_100k": {
+          "2000_03_to_2026_09": true,
+          "2010_01_to_end": true,
+          "2017_01_to_end": true
+        }
+      },
+      "H2_5": {
+        "F2": {
+          "max_delta_max_dd_pp": 0.004473,
+          "median_delta_cagr_pp": 0.002927,
+          "pass": true,
+          "worst_dd_window": "M2"
+        },
+        "F3": {
+          "median_delta_cagr_pp": 0.001919,
+          "n_dd_within": 21,
+          "n_instruments": 21,
+          "pass": true,
+          "share_cagr_gt_0": 0.761905,
+          "share_dd_within_pp": 1.0
+        },
+        "F4": {
+          "pass": false,
+          "windows": {
+            "2000_03_to_2026_09": {
+              "R2": 0.097295,
+              "after_tax_cagr": 0.09736,
+              "pass": true
+            },
+            "2010_01_to_end": {
+              "R2": 0.142289,
+              "after_tax_cagr": 0.142223,
+              "pass": false
+            },
+            "2017_01_to_end": {
+              "R2": 0.225425,
+              "after_tax_cagr": 0.225522,
+              "pass": true
+            }
+          }
+        },
+        "G1_base": true,
+        "G1_cal": true,
+        "G2_base": true,
+        "G2_cal": true,
+        "bootstrap_reported": {
+          "100k_flat": {
+            "median_delta_cagr_pp": 0.016428,
+            "pass": true,
+            "share_gt_0": 0.65
+          },
+          "100k_progressive": {
+            "median_delta_cagr_pp": 0.022693,
+            "pass": true,
+            "share_gt_0": 0.646
+          },
+          "1M_flat": {
+            "median_delta_cagr_pp": 0.016428,
+            "pass": true,
+            "share_gt_0": 0.65
+          },
+          "1M_progressive": {
+            "median_delta_cagr_pp": 0.025614,
+            "pass": true,
+            "share_gt_0": 0.668
+          }
+        },
+        "pass": false,
+        "windows_100k": {
+          "2000_03_to_2026_09": true,
+          "2010_01_to_end": false,
+          "2017_01_to_end": true
+        }
+      }
+    },
+    "gate_p": {
+      "cells": {
+        "H2_15_2000_03_to_2026_09": {
+          "R2": 0.1016,
+          "R2_pre_tax": 0.154732,
+          "after_tax_cagr": 0.104546,
+          "pass": true,
+          "pre_tax_cagr": 0.155833
+        },
+        "H2_15_2010_01_to_end": {
+          "R2": 0.147059,
+          "R2_pre_tax": 0.221587,
+          "after_tax_cagr": 0.150008,
+          "pass": true,
+          "pre_tax_cagr": 0.221551
+        },
+        "H2_15_2017_01_to_end": {
+          "R2": 0.228861,
+          "R2_pre_tax": 0.32533,
+          "after_tax_cagr": 0.234034,
+          "pass": true,
+          "pre_tax_cagr": 0.325855
+        },
+        "H2_20_2000_03_to_2026_09": {
+          "R2": 0.1016,
+          "R2_pre_tax": 0.154732,
+          "after_tax_cagr": 0.104924,
+          "pass": true,
+          "pre_tax_cagr": 0.155075
+        },
+        "H2_20_2010_01_to_end": {
+          "R2": 0.147059,
+          "R2_pre_tax": 0.221587,
+          "after_tax_cagr": 0.151426,
+          "pass": true,
+          "pre_tax_cagr": 0.22163
+        },
+        "H2_20_2017_01_to_end": {
+          "R2": 0.228861,
+          "R2_pre_tax": 0.32533,
+          "after_tax_cagr": 0.236553,
+          "pass": true,
+          "pre_tax_cagr": 0.325965
+        },
+        "H2_5_2000_03_to_2026_09": {
+          "R2": 0.1016,
+          "R2_pre_tax": 0.154732,
+          "after_tax_cagr": 0.101662,
+          "pass": true,
+          "pre_tax_cagr": 0.154512
+        },
+        "H2_5_2010_01_to_end": {
+          "R2": 0.147059,
+          "R2_pre_tax": 0.221587,
+          "after_tax_cagr": 0.146992,
+          "pass": false,
+          "pre_tax_cagr": 0.221187
+        },
+        "H2_5_2017_01_to_end": {
+          "R2": 0.228861,
+          "R2_pre_tax": 0.32533,
+          "after_tax_cagr": 0.228958,
+          "pass": true,
+          "pre_tax_cagr": 0.325057
+        }
+      },
+      "pass": false
+    },
+    "verdict": "FAIL"
+  },
+  "harness": {
+    "after_tax_anchors": {
+      "2000_03_to_2026_09": {
+        "C0": {
+          "pre_tax": {
+            "diff_pp": 1.8e-05,
+            "reference": 0.146715,
+            "reproduced": 0.146715
+          },
+          "progressive": {
+            "diff_pp": 4.5e-05,
+            "reference": 0.09534,
+            "reproduced": 0.09534
+          },
+          "progressive_max_dd": {
+            "diff_pp": -1.7e-05,
+            "reference": 0.495643,
+            "reproduced": 0.495643
+          }
+        },
+        "R2": {
+          "pre_tax": {
+            "diff_pp": 2.9e-05,
+            "reference": 0.154732,
+            "reproduced": 0.154732
+          },
+          "progressive": {
+            "diff_pp": 7e-06,
+            "reference": 0.1016,
+            "reproduced": 0.1016
+          },
+          "progressive_max_dd": {
+            "diff_pp": -3.9e-05,
+            "reference": 0.467584,
+            "reproduced": 0.467584
+          }
+        }
+      },
+      "2010_01_to_end": {
+        "C0": {
+          "pre_tax": {
+            "diff_pp": -3.1e-05,
+            "reference": 0.218852,
+            "reproduced": 0.218852
+          },
+          "progressive": {
+            "diff_pp": -5e-06,
+            "reference": 0.144968,
+            "reproduced": 0.144968
+          },
+          "progressive_max_dd": {
+            "diff_pp": -1e-05,
+            "reference": 0.44692,
+            "reproduced": 0.44692
+          }
+        },
+        "R2": {
+          "pre_tax": {
+            "diff_pp": -3e-06,
+            "reference": 0.221587,
+            "reproduced": 0.221587
+          },
+          "progressive": {
+            "diff_pp": 2.2e-05,
+            "reference": 0.147059,
+            "reproduced": 0.147059
+          },
+          "progressive_max_dd": {
+            "diff_pp": 1e-05,
+            "reference": 0.437839,
+            "reproduced": 0.437839
+          }
+        }
+      },
+      "2017_01_to_end": {
+        "C0": {
+          "pre_tax": {
+            "diff_pp": 1.4e-05,
+            "reference": 0.322564,
+            "reproduced": 0.322564
+          },
+          "progressive": {
+            "diff_pp": 3.9e-05,
+            "reference": 0.226932,
+            "reproduced": 0.226932
+          },
+          "progressive_max_dd": {
+            "diff_pp": -4.9e-05,
+            "reference": 0.376052,
+            "reproduced": 0.376052
+          }
+        },
+        "R2": {
+          "pre_tax": {
+            "diff_pp": -1.7e-05,
+            "reference": 0.32533,
+            "reproduced": 0.32533
+          },
+          "progressive": {
+            "diff_pp": -4.3e-05,
+            "reference": 0.228861,
+            "reproduced": 0.228861
+          },
+          "progressive_max_dd": {
+            "diff_pp": -4e-06,
+            "reference": 0.362426,
+            "reproduced": 0.362426
+          }
+        }
+      }
+    },
+    "bootstrap_control_medians": {
+      "100k": {
+        "flat": {
+          "C0": 0.035201,
+          "R2": 0.039678
+        },
+        "progressive": {
+          "C0": 0.03079,
+          "R2": 0.035155
+        }
+      }
+    },
+    "n_outside_tolerance": 0,
+    "pass": true
+  },
+  "instruments": {
+    "DIA": {
+      "H2": {
+        "cagr": 0.055123,
+        "delta_cagr_pp": 0.013881,
+        "delta_max_dd_pp": 0.024769,
+        "max_dd": 0.716834,
+        "turnover_annual": 9.138608,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6974,
+          "start": "1999-01-21"
+        },
+        "years": 27.726215
+      },
+      "H2_15": {
+        "cagr": 0.055353,
+        "delta_cagr_pp": 0.03693,
+        "delta_max_dd_pp": -0.202882,
+        "max_dd": 0.714557,
+        "turnover_annual": 9.094988,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6974,
+          "start": "1999-01-21"
+        },
+        "years": 27.726215
+      },
+      "H2_20": {
+        "cagr": 0.055297,
+        "delta_cagr_pp": 0.031288,
+        "delta_max_dd_pp": -0.242448,
+        "max_dd": 0.714162,
+        "turnover_annual": 9.090423,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6974,
+          "start": "1999-01-21"
+        },
+        "years": 27.726215
+      },
+      "H2_5": {
+        "cagr": 0.054918,
+        "delta_cagr_pp": -0.006614,
+        "delta_max_dd_pp": 0.010641,
+        "max_dd": 0.716693,
+        "turnover_annual": 9.18432,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6974,
+          "start": "1999-01-21"
+        },
+        "years": 27.726215
+      },
+      "R2": {
+        "cagr": 0.054984,
+        "max_dd": 0.716586,
+        "turnover_annual": 9.187589,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6974,
+          "start": "1999-01-21"
+        },
+        "years": 27.726215
+      }
+    },
+    "EEM": {
+      "H2": {
+        "cagr": 0.044861,
+        "delta_cagr_pp": 0.005275,
+        "delta_max_dd_pp": 0.007126,
+        "max_dd": 0.572484,
+        "turnover_annual": 10.033034,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 5660,
+          "start": "2004-04-15"
+        },
+        "years": 22.49692
+      },
+      "H2_15": {
+        "cagr": 0.044875,
+        "delta_cagr_pp": 0.006668,
+        "delta_max_dd_pp": -0.001078,
+        "max_dd": 0.572402,
+        "turnover_annual": 10.03254,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 5660,
+          "start": "2004-04-15"
+        },
+        "years": 22.49692
+      },
+      "H2_20": {
+        "cagr": 0.044888,
+        "delta_cagr_pp": 0.007939,
+        "delta_max_dd_pp": -0.006525,
+        "max_dd": 0.572348,
+        "turnover_annual": 10.022884,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 5660,
+          "start": "2004-04-15"
+        },
+        "years": 22.49692
+      },
+      "H2_5": {
+        "cagr": 0.044811,
+        "delta_cagr_pp": 0.000322,
+        "delta_max_dd_pp": 0.009539,
+        "max_dd": 0.572509,
+        "turnover_annual": 10.043587,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 5660,
+          "start": "2004-04-15"
+        },
+        "years": 22.49692
+      },
+      "R2": {
+        "cagr": 0.044808,
+        "max_dd": 0.572413,
+        "turnover_annual": 10.050932,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 5660,
+          "start": "2004-04-15"
+        },
+        "years": 22.49692
+      }
+    },
+    "EFA": {
+      "H2": {
+        "cagr": 0.087612,
+        "delta_cagr_pp": 0.004422,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.456334,
+        "turnover_annual": 7.750643,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6066,
+          "start": "2002-09-04"
+        },
+        "years": 24.109514
+      },
+      "H2_15": {
+        "cagr": 0.087535,
+        "delta_cagr_pp": -0.003305,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.456334,
+        "turnover_annual": 7.748153,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6066,
+          "start": "2002-09-04"
+        },
+        "years": 24.109514
+      },
+      "H2_20": {
+        "cagr": 0.087561,
+        "delta_cagr_pp": -0.000731,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.456334,
+        "turnover_annual": 7.742557,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6066,
+          "start": "2002-09-04"
+        },
+        "years": 24.109514
+      },
+      "H2_5": {
+        "cagr": 0.087571,
+        "delta_cagr_pp": 0.000257,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.456334,
+        "turnover_annual": 7.75665,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6066,
+          "start": "2002-09-04"
+        },
+        "years": 24.109514
+      },
+      "R2": {
+        "cagr": 0.087568,
+        "max_dd": 0.456334,
+        "turnover_annual": 7.75816,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6066,
+          "start": "2002-09-04"
+        },
+        "years": 24.109514
+      }
+    },
+    "EWA": {
+      "H2": {
+        "cagr": 0.025207,
+        "delta_cagr_pp": 0.008397,
+        "delta_max_dd_pp": 0.126392,
+        "max_dd": 0.707108,
+        "turnover_annual": 10.375422,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_15": {
+        "cagr": 0.0255,
+        "delta_cagr_pp": 0.037659,
+        "delta_max_dd_pp": -0.006189,
+        "max_dd": 0.705782,
+        "turnover_annual": 10.365173,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_20": {
+        "cagr": 0.025826,
+        "delta_cagr_pp": 0.07034,
+        "delta_max_dd_pp": -0.001832,
+        "max_dd": 0.705826,
+        "turnover_annual": 10.349069,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_5": {
+        "cagr": 0.025137,
+        "delta_cagr_pp": 0.001364,
+        "delta_max_dd_pp": 0.010909,
+        "max_dd": 0.705953,
+        "turnover_annual": 10.393855,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "R2": {
+        "cagr": 0.025123,
+        "max_dd": 0.705844,
+        "turnover_annual": 10.402092,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      }
+    },
+    "EWG": {
+      "H2": {
+        "cagr": 0.053597,
+        "delta_cagr_pp": 0.100653,
+        "delta_max_dd_pp": -0.815383,
+        "max_dd": 0.65752,
+        "turnover_annual": 8.047369,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_15": {
+        "cagr": 0.053634,
+        "delta_cagr_pp": 0.104357,
+        "delta_max_dd_pp": -0.859407,
+        "max_dd": 0.65708,
+        "turnover_annual": 8.041247,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_20": {
+        "cagr": 0.053949,
+        "delta_cagr_pp": 0.135816,
+        "delta_max_dd_pp": -1.157868,
+        "max_dd": 0.654095,
+        "turnover_annual": 8.028485,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_5": {
+        "cagr": 0.052946,
+        "delta_cagr_pp": 0.035479,
+        "delta_max_dd_pp": -0.320217,
+        "max_dd": 0.662472,
+        "turnover_annual": 8.069133,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "R2": {
+        "cagr": 0.052591,
+        "max_dd": 0.665674,
+        "turnover_annual": 8.079715,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      }
+    },
+    "EWH": {
+      "H2": {
+        "cagr": 0.054866,
+        "delta_cagr_pp": 0.039225,
+        "delta_max_dd_pp": -0.098805,
+        "max_dd": 0.520928,
+        "turnover_annual": 8.221144,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_15": {
+        "cagr": 0.053196,
+        "delta_cagr_pp": -0.127756,
+        "delta_max_dd_pp": 0.073705,
+        "max_dd": 0.522653,
+        "turnover_annual": 8.194547,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_20": {
+        "cagr": 0.053124,
+        "delta_cagr_pp": -0.134972,
+        "delta_max_dd_pp": 0.352665,
+        "max_dd": 0.525443,
+        "turnover_annual": 8.177576,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_5": {
+        "cagr": 0.054498,
+        "delta_cagr_pp": 0.002415,
+        "delta_max_dd_pp": -0.09676,
+        "max_dd": 0.520949,
+        "turnover_annual": 8.264175,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "R2": {
+        "cagr": 0.054473,
+        "max_dd": 0.521916,
+        "turnover_annual": 8.271232,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      }
+    },
+    "EWJ": {
+      "H2": {
+        "cagr": 0.002329,
+        "delta_cagr_pp": 0.084563,
+        "delta_max_dd_pp": 0.010504,
+        "max_dd": 0.748806,
+        "turnover_annual": 10.473958,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_15": {
+        "cagr": 0.002581,
+        "delta_cagr_pp": 0.109842,
+        "delta_max_dd_pp": 0.014653,
+        "max_dd": 0.748847,
+        "turnover_annual": 10.457029,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_20": {
+        "cagr": 0.002985,
+        "delta_cagr_pp": 0.150214,
+        "delta_max_dd_pp": 0.001833,
+        "max_dd": 0.748719,
+        "turnover_annual": 10.446213,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_5": {
+        "cagr": 0.001651,
+        "delta_cagr_pp": 0.016823,
+        "delta_max_dd_pp": 0.009159,
+        "max_dd": 0.748792,
+        "turnover_annual": 10.519981,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "R2": {
+        "cagr": 0.001483,
+        "max_dd": 0.748701,
+        "turnover_annual": 10.541024,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      }
+    },
+    "EWL": {
+      "H2": {
+        "cagr": 0.04298,
+        "delta_cagr_pp": 0.128074,
+        "delta_max_dd_pp": -0.69501,
+        "max_dd": 0.735553,
+        "turnover_annual": 9.778211,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_15": {
+        "cagr": 0.043268,
+        "delta_cagr_pp": 0.156845,
+        "delta_max_dd_pp": -0.963569,
+        "max_dd": 0.732868,
+        "turnover_annual": 9.764545,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_20": {
+        "cagr": 0.043155,
+        "delta_cagr_pp": 0.145534,
+        "delta_max_dd_pp": -0.892855,
+        "max_dd": 0.733575,
+        "turnover_annual": 9.753267,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_5": {
+        "cagr": 0.042091,
+        "delta_cagr_pp": 0.039201,
+        "delta_max_dd_pp": -0.311605,
+        "max_dd": 0.739388,
+        "turnover_annual": 9.818235,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "R2": {
+        "cagr": 0.041699,
+        "max_dd": 0.742504,
+        "turnover_annual": 9.833847,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      }
+    },
+    "EWS": {
+      "H2": {
+        "cagr": 0.085638,
+        "delta_cagr_pp": -0.012143,
+        "delta_max_dd_pp": 0.407923,
+        "max_dd": 0.456553,
+        "turnover_annual": 7.73722,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_15": {
+        "cagr": 0.085997,
+        "delta_cagr_pp": 0.023776,
+        "delta_max_dd_pp": 0.407923,
+        "max_dd": 0.456553,
+        "turnover_annual": 7.72692,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_20": {
+        "cagr": 0.087639,
+        "delta_cagr_pp": 0.188025,
+        "delta_max_dd_pp": 0.407923,
+        "max_dd": 0.456553,
+        "turnover_annual": 7.704793,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_5": {
+        "cagr": 0.085782,
+        "delta_cagr_pp": 0.002275,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.452474,
+        "turnover_annual": 7.746419,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "R2": {
+        "cagr": 0.085759,
+        "max_dd": 0.452474,
+        "turnover_annual": 7.753775,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      }
+    },
+    "EWU": {
+      "H2": {
+        "cagr": 0.02864,
+        "delta_cagr_pp": 0.095811,
+        "delta_max_dd_pp": -0.818988,
+        "max_dd": 0.596366,
+        "turnover_annual": 8.693058,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_15": {
+        "cagr": 0.028639,
+        "delta_cagr_pp": 0.095708,
+        "delta_max_dd_pp": -0.818988,
+        "max_dd": 0.596366,
+        "turnover_annual": 8.688496,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_20": {
+        "cagr": 0.02867,
+        "delta_cagr_pp": 0.098832,
+        "delta_max_dd_pp": -0.831826,
+        "max_dd": 0.596237,
+        "turnover_annual": 8.674686,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "H2_5": {
+        "cagr": 0.02768,
+        "delta_cagr_pp": -0.000181,
+        "delta_max_dd_pp": -0.001343,
+        "max_dd": 0.604542,
+        "turnover_annual": 8.750975,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      },
+      "R2": {
+        "cagr": 0.027682,
+        "max_dd": 0.604556,
+        "turnover_annual": 8.75564,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 7440,
+          "start": "1997-03-18"
+        },
+        "years": 29.574264
+      }
+    },
+    "IWM": {
+      "H2": {
+        "cagr": 0.040207,
+        "delta_cagr_pp": 0.039971,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.503721,
+        "turnover_annual": 9.817422,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6380,
+          "start": "2001-05-30"
+        },
+        "years": 25.371663
+      },
+      "H2_15": {
+        "cagr": 0.040442,
+        "delta_cagr_pp": 0.063504,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.503721,
+        "turnover_annual": 9.802546,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6380,
+          "start": "2001-05-30"
+        },
+        "years": 25.371663
+      },
+      "H2_20": {
+        "cagr": 0.042141,
+        "delta_cagr_pp": 0.233391,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.503721,
+        "turnover_annual": 9.765839,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6380,
+          "start": "2001-05-30"
+        },
+        "years": 25.371663
+      },
+      "H2_5": {
+        "cagr": 0.039826,
+        "delta_cagr_pp": 0.001919,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.503721,
+        "turnover_annual": 9.851717,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6380,
+          "start": "2001-05-30"
+        },
+        "years": 25.371663
+      },
+      "R2": {
+        "cagr": 0.039807,
+        "max_dd": 0.503721,
+        "turnover_annual": 9.857241,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 6380,
+          "start": "2001-05-30"
+        },
+        "years": 25.371663
+      }
+    },
+    "SPY": {
+      "H2": {
+        "cagr": 0.112783,
+        "delta_cagr_pp": 0.024642,
+        "delta_max_dd_pp": -0.024225,
+        "max_dd": 0.579,
+        "turnover_annual": 6.605667,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 8230,
+          "start": "1994-01-28"
+        },
+        "years": 32.706366
+      },
+      "H2_15": {
+        "cagr": 0.112735,
+        "delta_cagr_pp": 0.019929,
+        "delta_max_dd_pp": -0.023737,
+        "max_dd": 0.579005,
+        "turnover_annual": 6.593389,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 8230,
+          "start": "1994-01-28"
+        },
+        "years": 32.706366
+      },
+      "H2_20": {
+        "cagr": 0.112918,
+        "delta_cagr_pp": 0.038208,
+        "delta_max_dd_pp": 0.000483,
+        "max_dd": 0.579247,
+        "turnover_annual": 6.590734,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 8230,
+          "start": "1994-01-28"
+        },
+        "years": 32.706366
+      },
+      "H2_5": {
+        "cagr": 0.112496,
+        "delta_cagr_pp": -0.003978,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.579242,
+        "turnover_annual": 6.616339,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 8230,
+          "start": "1994-01-28"
+        },
+        "years": 32.706366
+      },
+      "R2": {
+        "cagr": 0.112536,
+        "max_dd": 0.579242,
+        "turnover_annual": 6.620394,
+        "window": {
+          "end": "2026-10-12",
+          "sessions": 8230,
+          "start": "1994-01-28"
+        },
+        "years": 32.706366
+      }
+    },
+    "XLB": {
+      "H2": {
+        "cagr": 0.012636,
+        "delta_cagr_pp": 0.041769,
+        "delta_max_dd_pp": -0.021173,
+        "max_dd": 0.559313,
+        "turnover_annual": 9.823866,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_15": {
+        "cagr": 0.012421,
+        "delta_cagr_pp": 0.020243,
+        "delta_max_dd_pp": 0.143822,
+        "max_dd": 0.560963,
+        "turnover_annual": 9.81208,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_20": {
+        "cagr": 0.011964,
+        "delta_cagr_pp": -0.025457,
+        "delta_max_dd_pp": 0.152293,
+        "max_dd": 0.561048,
+        "turnover_annual": 9.805429,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_5": {
+        "cagr": 0.012359,
+        "delta_cagr_pp": 0.014015,
+        "delta_max_dd_pp": -0.009704,
+        "max_dd": 0.559428,
+        "turnover_annual": 9.845246,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "R2": {
+        "cagr": 0.012219,
+        "max_dd": 0.559525,
+        "turnover_annual": 9.851281,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      }
+    },
+    "XLE": {
+      "H2": {
+        "cagr": 0.06801,
+        "delta_cagr_pp": 0.047593,
+        "delta_max_dd_pp": -0.007404,
+        "max_dd": 0.724368,
+        "turnover_annual": 9.154676,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_15": {
+        "cagr": 0.067892,
+        "delta_cagr_pp": 0.035718,
+        "delta_max_dd_pp": 0.062746,
+        "max_dd": 0.725069,
+        "turnover_annual": 9.143759,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_20": {
+        "cagr": 0.067787,
+        "delta_cagr_pp": 0.02522,
+        "delta_max_dd_pp": 0.072233,
+        "max_dd": 0.725164,
+        "turnover_annual": 9.110429,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_5": {
+        "cagr": 0.067643,
+        "delta_cagr_pp": 0.010857,
+        "delta_max_dd_pp": 0.004314,
+        "max_dd": 0.724485,
+        "turnover_annual": 9.187485,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "R2": {
+        "cagr": 0.067534,
+        "max_dd": 0.724442,
+        "turnover_annual": 9.203901,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      }
+    },
+    "XLF": {
+      "H2": {
+        "cagr": 0.031175,
+        "delta_cagr_pp": 0.052136,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.575008,
+        "turnover_annual": 8.496996,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_15": {
+        "cagr": 0.031151,
+        "delta_cagr_pp": 0.04973,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.575008,
+        "turnover_annual": 8.487963,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_20": {
+        "cagr": 0.032719,
+        "delta_cagr_pp": 0.206535,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.575008,
+        "turnover_annual": 8.426938,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_5": {
+        "cagr": 0.030658,
+        "delta_cagr_pp": 0.000428,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.575008,
+        "turnover_annual": 8.544894,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "R2": {
+        "cagr": 0.030654,
+        "max_dd": 0.575008,
+        "turnover_annual": 8.545991,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      }
+    },
+    "XLI": {
+      "H2": {
+        "cagr": 0.062076,
+        "delta_cagr_pp": 0.001219,
+        "delta_max_dd_pp": 0.09175,
+        "max_dd": 0.585611,
+        "turnover_annual": 8.528326,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_15": {
+        "cagr": 0.061914,
+        "delta_cagr_pp": -0.01505,
+        "delta_max_dd_pp": 0.127759,
+        "max_dd": 0.585971,
+        "turnover_annual": 8.51552,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_20": {
+        "cagr": 0.060099,
+        "delta_cagr_pp": -0.196483,
+        "delta_max_dd_pp": 1.865065,
+        "max_dd": 0.603344,
+        "turnover_annual": 8.503474,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_5": {
+        "cagr": 0.062112,
+        "delta_cagr_pp": 0.004751,
+        "delta_max_dd_pp": -0.012269,
+        "max_dd": 0.584571,
+        "turnover_annual": 8.538635,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "R2": {
+        "cagr": 0.062064,
+        "max_dd": 0.584694,
+        "turnover_annual": 8.545406,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      }
+    },
+    "XLK": {
+      "H2": {
+        "cagr": 0.141067,
+        "delta_cagr_pp": -0.024043,
+        "delta_max_dd_pp": 0.033281,
+        "max_dd": 0.527586,
+        "turnover_annual": 6.47687,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_15": {
+        "cagr": 0.140114,
+        "delta_cagr_pp": -0.119365,
+        "delta_max_dd_pp": 1.052856,
+        "max_dd": 0.537782,
+        "turnover_annual": 6.46364,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_20": {
+        "cagr": 0.140474,
+        "delta_cagr_pp": -0.083352,
+        "delta_max_dd_pp": 0.93958,
+        "max_dd": 0.536649,
+        "turnover_annual": 6.448136,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_5": {
+        "cagr": 0.14085,
+        "delta_cagr_pp": -0.045795,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.527254,
+        "turnover_annual": 6.493126,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "R2": {
+        "cagr": 0.141308,
+        "max_dd": 0.527254,
+        "turnover_annual": 6.495517,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      }
+    },
+    "XLP": {
+      "H2": {
+        "cagr": 0.026685,
+        "delta_cagr_pp": -0.041669,
+        "delta_max_dd_pp": -0.00317,
+        "max_dd": 0.579991,
+        "turnover_annual": 8.675383,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_15": {
+        "cagr": 0.02678,
+        "delta_cagr_pp": -0.032179,
+        "delta_max_dd_pp": -0.001381,
+        "max_dd": 0.580009,
+        "turnover_annual": 8.669245,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_20": {
+        "cagr": 0.026652,
+        "delta_cagr_pp": -0.044976,
+        "delta_max_dd_pp": -0.001381,
+        "max_dd": 0.580009,
+        "turnover_annual": 8.660382,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_5": {
+        "cagr": 0.027105,
+        "delta_cagr_pp": 0.000289,
+        "delta_max_dd_pp": -0.00317,
+        "max_dd": 0.579991,
+        "turnover_annual": 8.713854,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "R2": {
+        "cagr": 0.027102,
+        "max_dd": 0.580023,
+        "turnover_annual": 8.714847,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      }
+    },
+    "XLU": {
+      "H2": {
+        "cagr": 0.05664,
+        "delta_cagr_pp": 0.065108,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.499696,
+        "turnover_annual": 9.095136,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_15": {
+        "cagr": 0.056486,
+        "delta_cagr_pp": 0.049669,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.499696,
+        "turnover_annual": 9.086297,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_20": {
+        "cagr": 0.056486,
+        "delta_cagr_pp": 0.049745,
+        "delta_max_dd_pp": 0.007806,
+        "max_dd": 0.499774,
+        "turnover_annual": 9.08395,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_5": {
+        "cagr": 0.056289,
+        "delta_cagr_pp": 0.030047,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.499696,
+        "turnover_annual": 9.105544,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "R2": {
+        "cagr": 0.055989,
+        "max_dd": 0.499696,
+        "turnover_annual": 9.106831,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      }
+    },
+    "XLV": {
+      "H2": {
+        "cagr": -0.000735,
+        "delta_cagr_pp": 0.001824,
+        "delta_max_dd_pp": 0.001812,
+        "max_dd": 0.771042,
+        "turnover_annual": 11.473249,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_15": {
+        "cagr": -0.000703,
+        "delta_cagr_pp": 0.005079,
+        "delta_max_dd_pp": -0.014865,
+        "max_dd": 0.770875,
+        "turnover_annual": 11.470283,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_20": {
+        "cagr": -0.00109,
+        "delta_cagr_pp": -0.033608,
+        "delta_max_dd_pp": -0.040766,
+        "max_dd": 0.770616,
+        "turnover_annual": 11.465422,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_5": {
+        "cagr": -0.000699,
+        "delta_cagr_pp": 0.005441,
+        "delta_max_dd_pp": 0.001812,
+        "max_dd": 0.771042,
+        "turnover_annual": 11.475756,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "R2": {
+        "cagr": -0.000753,
+        "max_dd": 0.771024,
+        "turnover_annual": 11.480051,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      }
+    },
+    "XLY": {
+      "H2": {
+        "cagr": 0.064089,
+        "delta_cagr_pp": -0.021503,
+        "delta_max_dd_pp": 0.706252,
+        "max_dd": 0.555813,
+        "turnover_annual": 7.118572,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_15": {
+        "cagr": 0.064437,
+        "delta_cagr_pp": 0.01332,
+        "delta_max_dd_pp": 0.653829,
+        "max_dd": 0.555289,
+        "turnover_annual": 7.105958,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_20": {
+        "cagr": 0.064346,
+        "delta_cagr_pp": 0.004171,
+        "delta_max_dd_pp": 0.621831,
+        "max_dd": 0.554969,
+        "turnover_annual": 7.089456,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "H2_5": {
+        "cagr": 0.064119,
+        "delta_cagr_pp": -0.018496,
+        "delta_max_dd_pp": 0.21913,
+        "max_dd": 0.550942,
+        "turnover_annual": 7.133677,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      },
+      "R2": {
+        "cagr": 0.064304,
+        "max_dd": 0.548751,
+        "turnover_annual": 7.141583,
+        "window": {
+          "end": "2026-10-13",
+          "sessions": 6741,
+          "start": "1999-12-23"
+        },
+        "years": 26.809035
+      }
+    }
+  },
+  "oos": {
+    "GSPC_1957_1999": {
+      "H2": {
+        "cagr": 0.09899,
+        "delta_cagr_pp": 0.009141,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.396257,
+        "turnover_annual": 5.996482,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 10828,
+          "start": "1957-01-02"
+        },
+        "years": 42.997947
+      },
+      "H2_15": {
+        "cagr": 0.09944,
+        "delta_cagr_pp": 0.054159,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.396257,
+        "turnover_annual": 5.994114,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 10828,
+          "start": "1957-01-02"
+        },
+        "years": 42.997947
+      },
+      "H2_20": {
+        "cagr": 0.099311,
+        "delta_cagr_pp": 0.041197,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.396257,
+        "turnover_annual": 5.985143,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 10828,
+          "start": "1957-01-02"
+        },
+        "years": 42.997947
+      },
+      "H2_5": {
+        "cagr": 0.098919,
+        "delta_cagr_pp": 0.002004,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.396257,
+        "turnover_annual": 6.003716,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 10828,
+          "start": "1957-01-02"
+        },
+        "years": 42.997947
+      },
+      "R2": {
+        "cagr": 0.098899,
+        "max_dd": 0.396257,
+        "turnover_annual": 6.008334,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 10828,
+          "start": "1957-01-02"
+        },
+        "years": 42.997947
+      }
+    },
+    "M1": {
+      "H2": {
+        "cagr": 0.212472,
+        "delta_cagr_pp": 0.065332,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.409711,
+        "turnover_annual": 5.687336,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 6319,
+          "start": "1975-01-02"
+        },
+        "years": 24.999316
+      },
+      "H2_15": {
+        "cagr": 0.214568,
+        "delta_cagr_pp": 0.274923,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.409711,
+        "turnover_annual": 5.67075,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 6319,
+          "start": "1975-01-02"
+        },
+        "years": 24.999316
+      },
+      "H2_20": {
+        "cagr": 0.216569,
+        "delta_cagr_pp": 0.475048,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.409711,
+        "turnover_annual": 5.659186,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 6319,
+          "start": "1975-01-02"
+        },
+        "years": 24.999316
+      },
+      "H2_5": {
+        "cagr": 0.211996,
+        "delta_cagr_pp": 0.017759,
+        "delta_max_dd_pp": 0.0,
+        "max_dd": 0.409711,
+        "turnover_annual": 5.709739,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 6319,
+          "start": "1975-01-02"
+        },
+        "years": 24.999316
+      },
+      "R2": {
+        "cagr": 0.211819,
+        "max_dd": 0.409711,
+        "turnover_annual": 5.715862,
+        "window": {
+          "end": "1999-12-31",
+          "sessions": 6319,
+          "start": "1975-01-02"
+        },
+        "years": 24.999316
+      }
+    },
+    "M2": {
+      "H2": {
+        "cagr": 0.117356,
+        "delta_cagr_pp": 0.033915,
+        "delta_max_dd_pp": 0.004473,
+        "max_dd": 0.583358,
+        "turnover_annual": 6.117678,
+        "window": {
+          "end": "1956-12-31",
+          "sessions": 5502,
+          "start": "1935-01-08"
+        },
+        "years": 21.982204
+      },
+      "H2_15": {
+        "cagr": 0.117495,
+        "delta_cagr_pp": 0.047817,
+        "delta_max_dd_pp": -0.094791,
+        "max_dd": 0.582365,
+        "turnover_annual": 6.102828,
+        "window": {
+          "end": "1956-12-31",
+          "sessions": 5502,
+          "start": "1935-01-08"
+        },
+        "years": 21.982204
+      },
+      "H2_20": {
+        "cagr": 0.118525,
+        "delta_cagr_pp": 0.150856,
+        "delta_max_dd_pp": -0.088604,
+        "max_dd": 0.582427,
+        "turnover_annual": 6.089243,
+        "window": {
+          "end": "1956-12-31",
+          "sessions": 5502,
+          "start": "1935-01-08"
+        },
+        "years": 21.982204
+      },
+      "H2_5": {
+        "cagr": 0.117026,
+        "delta_cagr_pp": 0.000953,
+        "delta_max_dd_pp": 0.004473,
+        "max_dd": 0.583358,
+        "turnover_annual": 6.131208,
+        "window": {
+          "end": "1956-12-31",
+          "sessions": 5502,
+          "start": "1935-01-08"
+        },
+        "years": 21.982204
+      },
+      "R2": {
+        "cagr": 0.117017,
+        "max_dd": 0.583313,
+        "turnover_annual": 6.134564,
+        "window": {
+          "end": "1956-12-31",
+          "sessions": 5502,
+          "start": "1935-01-08"
+        },
+        "years": 21.982204
+      }
+    },
+    "M3": {
+      "H2": {
+        "cagr": 0.064257,
+        "delta_cagr_pp": 0.021998,
+        "delta_max_dd_pp": -0.292165,
+        "max_dd": 0.647332,
+        "turnover_annual": 6.970582,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 14922,
+          "start": "1966-01-19"
+        },
+        "years": 60.695414
+      },
+      "H2_15": {
+        "cagr": 0.064379,
+        "delta_cagr_pp": 0.034224,
+        "delta_max_dd_pp": -0.645277,
+        "max_dd": 0.643801,
+        "turnover_annual": 6.961063,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 14922,
+          "start": "1966-01-19"
+        },
+        "years": 60.695414
+      },
+      "H2_20": {
+        "cagr": 0.064868,
+        "delta_cagr_pp": 0.083157,
+        "delta_max_dd_pp": -0.632834,
+        "max_dd": 0.643925,
+        "turnover_annual": 6.94641,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 14922,
+          "start": "1966-01-19"
+        },
+        "years": 60.695414
+      },
+      "H2_5": {
+        "cagr": 0.064075,
+        "delta_cagr_pp": 0.00385,
+        "delta_max_dd_pp": -0.032722,
+        "max_dd": 0.649926,
+        "turnover_annual": 6.976815,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 14922,
+          "start": "1966-01-19"
+        },
+        "years": 60.695414
+      },
+      "R2": {
+        "cagr": 0.064037,
+        "max_dd": 0.650253,
+        "turnover_annual": 6.980399,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 14922,
+          "start": "1966-01-19"
+        },
+        "years": 60.695414
+      }
+    },
+    "M4": {
+      "H2": {
+        "cagr": 0.095494,
+        "delta_cagr_pp": 0.075118,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.581035,
+        "turnover_annual": 6.336304,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 9546,
+          "start": "1989-01-03"
+        },
+        "years": 37.738535
+      },
+      "H2_15": {
+        "cagr": 0.09554,
+        "delta_cagr_pp": 0.079725,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.581035,
+        "turnover_annual": 6.325048,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 9546,
+          "start": "1989-01-03"
+        },
+        "years": 37.738535
+      },
+      "H2_20": {
+        "cagr": 0.09565,
+        "delta_cagr_pp": 0.090737,
+        "delta_max_dd_pp": 0.057529,
+        "max_dd": 0.58161,
+        "turnover_annual": 6.303799,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 9546,
+          "start": "1989-01-03"
+        },
+        "years": 37.738535
+      },
+      "H2_5": {
+        "cagr": 0.094921,
+        "delta_cagr_pp": 0.0179,
+        "delta_max_dd_pp": -0.0,
+        "max_dd": 0.581035,
+        "turnover_annual": 6.343255,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 9546,
+          "start": "1989-01-03"
+        },
+        "years": 37.738535
+      },
+      "R2": {
+        "cagr": 0.094742,
+        "max_dd": 0.581035,
+        "turnover_annual": 6.353271,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 9546,
+          "start": "1989-01-03"
+        },
+        "years": 37.738535
+      }
+    },
+    "M5": {
+      "H2": {
+        "cagr": -0.005721,
+        "delta_cagr_pp": 0.013242,
+        "delta_max_dd_pp": -0.039345,
+        "max_dd": 0.854111,
+        "turnover_annual": 9.162182,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 10544,
+          "start": "1985-01-02"
+        },
+        "years": 41.744011
+      },
+      "H2_15": {
+        "cagr": -0.005564,
+        "delta_cagr_pp": 0.028863,
+        "delta_max_dd_pp": -0.059663,
+        "max_dd": 0.853908,
+        "turnover_annual": 9.153423,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 10544,
+          "start": "1985-01-02"
+        },
+        "years": 41.744011
+      },
+      "H2_20": {
+        "cagr": -0.005298,
+        "delta_cagr_pp": 0.055517,
+        "delta_max_dd_pp": -0.129305,
+        "max_dd": 0.853211,
+        "turnover_annual": 9.133245,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 10544,
+          "start": "1985-01-02"
+        },
+        "years": 41.744011
+      },
+      "H2_5": {
+        "cagr": -0.005841,
+        "delta_cagr_pp": 0.001173,
+        "delta_max_dd_pp": -0.000755,
+        "max_dd": 0.854497,
+        "turnover_annual": 9.171313,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 10544,
+          "start": "1985-01-02"
+        },
+        "years": 41.744011
+      },
+      "R2": {
+        "cagr": -0.005853,
+        "max_dd": 0.854504,
+        "turnover_annual": 9.175749,
+        "window": {
+          "end": "2026-09-29",
+          "sessions": 10544,
+          "start": "1985-01-02"
+        },
+        "years": 41.744011
+      }
+    }
+  },
+  "params": {
+    "after_tax": {
+      "bootstrap": {
+        "block": 20,
+        "calendar_hi": "2026-09-30",
+        "calendar_lo": "2015-09-01",
+        "modes": [
+          "progressive (B1-recent)",
+          "flat 20% (B2)"
+        ],
+        "paths": 1000,
+        "seed": 20261011
+      },
+      "capitals": {
+        "100k": 100000.0,
+        "10k": 10000.0,
+        "1M": 1000000.0
+      },
+      "engine": "tax_engine.py (byte copy of tax_harvest_v1/tax_engine.py = r2_tbill_combo_v1/vt_level_tax_v1 corrected engine)",
+      "financing": "base",
+      "gate_capital": "100k",
+      "m": 2,
+      "windows": {
+        "2000_03_to_2026_09": [
+          "2000-03-09",
+          "2026-09-29"
+        ],
+        "2010_01_to_end": [
+          "2010-01-01",
+          "2026-09-29"
+        ],
+        "2017_01_to_end": [
+          "2017-01-03",
+          "2026-09-29"
+        ]
+      }
+    },
+    "arms": [
+      "R2",
+      "H2",
+      "H2_5",
+      "H2_15",
+      "H2_20"
+    ],
+    "candidates": [
+      "H2",
+      "H2_5",
+      "H2_15",
+      "H2_20"
+    ],
+    "control": "R2",
+    "cost_per_side": 0.0004,
+    "cost_stress_m": 4,
+    "gates": {
+      "F2": "OOS: median delta CAGR >= -0.05 pp and no window with delta max DD > +2.0 pp (H2 vs R2)",
+      "F3": "instruments: share of delta max DD <= +2.0 pp >= 90% (H2 vs R2)",
+      "F4": "cost stress m = 4: H2 after-tax >= R2 in all three windows, $100k",
+      "P": "H2_5/H2_15/H2_20 each > R2 after tax, all three windows, $100k"
+    },
+    "instrument": "synthetic QLD* daily-reset 2x on QQQ total return, expense 0.95%/yr, financing DTB3 + {base 0.0, calibrated 0.75%/yr}",
+    "instruments": {
+      "excluded": [
+        "EWC"
+      ],
+      "files": {
+        "DIA": "range_vol_v1_dia.csv",
+        "EEM": "range_vol_v2_eem.csv",
+        "EFA": "range_vol_v2_efa.csv",
+        "EWA": "range_vol_v2_ewa.csv",
+        "EWC": "range_vol_v2_ewc.csv",
+        "EWG": "range_vol_v2_ewg.csv",
+        "EWH": "range_vol_v2_ewh.csv",
+        "EWJ": "range_vol_v2_ewj.csv",
+        "EWL": "range_vol_v2_ewl.csv",
+        "EWS": "range_vol_v2_ews.csv",
+        "EWU": "range_vol_v2_ewu.csv",
+        "IWM": "range_vol_v1_iwm.csv",
+        "SPY": "range_vol_v1_spy.csv",
+        "XLB": "range_vol_v2_xlb.csv",
+        "XLE": "range_vol_v2_xle.csv",
+        "XLF": "range_vol_v2_xlf.csv",
+        "XLI": "range_vol_v2_xli.csv",
+        "XLK": "range_vol_v2_xlk.csv",
+        "XLP": "range_vol_v2_xlp.csv",
+        "XLU": "range_vol_v2_xlu.csv",
+        "XLV": "range_vol_v2_xlv.csv",
+        "XLY": "range_vol_v2_xly.csv"
+      },
+      "included": [
+        "DIA",
+        "EEM",
+        "EFA",
+        "EWA",
+        "EWG",
+        "EWH",
+        "EWJ",
+        "EWL",
+        "EWS",
+        "EWU",
+        "IWM",
+        "SPY",
+        "XLB",
+        "XLE",
+        "XLF",
+        "XLI",
+        "XLK",
+        "XLP",
+        "XLU",
+        "XLV",
+        "XLY"
+      ],
+      "quality_rule": "range_vol_v2: > 5% invalid/flat bars -> excluded"
+    },
+    "main_window": {
+      "end": "2026-09-29",
+      "sessions": 6679,
+      "start": "2000-03-09",
+      "years": 26.55989
+    },
+    "oos": {
+      "financing": "calibrated",
+      "gspc": [
+        "1957-01-02",
+        "1999-12-31"
+      ],
+      "m": 2,
+      "markets": {
+        "M1": [
+          "^IXIC",
+          "1971-01-01",
+          "1975-01-02",
+          "1999-12-31"
+        ],
+        "M2": [
+          "^GSPC",
+          "1934-01-01",
+          null,
+          "1956-12-31"
+        ],
+        "M3": [
+          "^N225",
+          "1900-01-01",
+          null,
+          "2026-09-29"
+        ],
+        "M4": [
+          "^GDAXI",
+          "1900-01-01",
+          null,
+          "2026-09-29"
+        ],
+        "M5": [
+          "^FTSE",
+          "1900-01-01",
+          null,
+          "2026-09-29"
+        ]
+      },
+      "windows": [
+        "GSPC_1957_1999",
+        "M1",
+        "M2",
+        "M3",
+        "M4",
+        "M5"
+      ]
+    },
+    "overlay_impl": {
+      "C0": "none",
+      "H2": "H2",
+      "H2_15": "H2_15",
+      "H2_20": "H2_20",
+      "H2_5": "H2_5",
+      "R2": "none"
+    },
+    "plateau": [
+      "H2_5",
+      "H2_15",
+      "H2_20"
+    ],
+    "signals": "production R2 (equity_leveraged_trend_v1 1.2.0): E2 2-of-3 on price closes (SMA200, 252-session price return > 0, close > 126-session max/min midpoint) + early re-entry at 0.5 x vt while E2 off and close > SMA50, vol20 < its 252-session median and close > close 20 sessions ago; exit early below SMA50",
+    "sizing": "vt = min(1, 0.35/vol20) on synthetic QLD*, cap 0.98, 0.5 pp resize band",
+    "start": 253,
+    "tails": {
+      "H2": 10,
+      "H2_15": 15,
+      "H2_20": 20,
+      "H2_5": 5,
+      "none": 0
+    }
+  },
+  "pre_tax_main": {
+    "base": {
+      "m1": {
+        "H2": {
+          "cagr": 0.157907,
+          "deferrals": 51,
+          "max_dd": 0.459169,
+          "sells_per_year": 28.652227,
+          "trades": 1604,
+          "turnover_annual": 5.948224
+        },
+        "H2_15": {
+          "cagr": 0.158592,
+          "deferrals": 70,
+          "max_dd": 0.452482,
+          "sells_per_year": 28.200417,
+          "trades": 1583,
+          "turnover_annual": 5.920416
+        },
+        "H2_20": {
+          "cagr": 0.157826,
+          "deferrals": 95,
+          "max_dd": 0.462732,
+          "sells_per_year": 27.710958,
+          "trades": 1566,
+          "turnover_annual": 5.908124
+        },
+        "H2_5": {
+          "cagr": 0.157298,
+          "deferrals": 15,
+          "max_dd": 0.464143,
+          "sells_per_year": 29.254639,
+          "trades": 1633,
+          "turnover_annual": 5.985065
+        },
+        "R2": {
+          "cagr": 0.157521,
+          "deferrals": 0,
+          "max_dd": 0.464143,
+          "sells_per_year": 29.555845,
+          "trades": 1645,
+          "turnover_annual": 5.991522
+        }
+      },
+      "m2": {
+        "H2": {
+          "cagr": 0.155137,
+          "deferrals": 51,
+          "max_dd": 0.462542,
+          "sells_per_year": 28.652227,
+          "trades": 1604,
+          "turnover_annual": 5.948224
+        },
+        "H2_15": {
+          "cagr": 0.155833,
+          "deferrals": 70,
+          "max_dd": 0.455794,
+          "sells_per_year": 28.200417,
+          "trades": 1583,
+          "turnover_annual": 5.920416
+        },
+        "H2_20": {
+          "cagr": 0.155075,
+          "deferrals": 95,
+          "max_dd": 0.465952,
+          "sells_per_year": 27.710958,
+          "trades": 1566,
+          "turnover_annual": 5.908124
+        },
+        "H2_5": {
+          "cagr": 0.154512,
+          "deferrals": 15,
+          "max_dd": 0.467584,
+          "sells_per_year": 29.254639,
+          "trades": 1633,
+          "turnover_annual": 5.985065
+        },
+        "R2": {
+          "cagr": 0.154732,
+          "deferrals": 0,
+          "max_dd": 0.467584,
+          "sells_per_year": 29.555845,
+          "trades": 1645,
+          "turnover_annual": 5.991522
+        }
+      }
+    },
+    "calibrated": {
+      "m1": {
+        "H2": {
+          "cagr": 0.152081,
+          "deferrals": 51,
+          "max_dd": 0.46042,
+          "sells_per_year": 28.652227,
+          "trades": 1604,
+          "turnover_annual": 5.948199
+        },
+        "H2_15": {
+          "cagr": 0.15276,
+          "deferrals": 70,
+          "max_dd": 0.453756,
+          "sells_per_year": 28.200417,
+          "trades": 1583,
+          "turnover_annual": 5.920396
+        },
+        "H2_20": {
+          "cagr": 0.151992,
+          "deferrals": 95,
+          "max_dd": 0.464022,
+          "sells_per_year": 27.710958,
+          "trades": 1566,
+          "turnover_annual": 5.908105
+        },
+        "H2_5": {
+          "cagr": 0.151479,
+          "deferrals": 15,
+          "max_dd": 0.465364,
+          "sells_per_year": 29.254639,
+          "trades": 1633,
+          "turnover_annual": 5.98504
+        },
+        "R2": {
+          "cagr": 0.151702,
+          "deferrals": 0,
+          "max_dd": 0.465364,
+          "sells_per_year": 29.555845,
+          "trades": 1645,
+          "turnover_annual": 5.991496
+        }
+      },
+      "m2": {
+        "H2": {
+          "cagr": 0.149325,
+          "deferrals": 51,
+          "max_dd": 0.463786,
+          "sells_per_year": 28.652227,
+          "trades": 1604,
+          "turnover_annual": 5.948199
+        },
+        "H2_15": {
+          "cagr": 0.150016,
+          "deferrals": 70,
+          "max_dd": 0.457061,
+          "sells_per_year": 28.200417,
+          "trades": 1583,
+          "turnover_annual": 5.920396
+        },
+        "H2_20": {
+          "cagr": 0.149254,
+          "deferrals": 95,
+          "max_dd": 0.467234,
+          "sells_per_year": 27.710958,
+          "trades": 1566,
+          "turnover_annual": 5.908105
+        },
+        "H2_5": {
+          "cagr": 0.148708,
+          "deferrals": 15,
+          "max_dd": 0.468797,
+          "sells_per_year": 29.254639,
+          "trades": 1633,
+          "turnover_annual": 5.98504
+        },
+        "R2": {
+          "cagr": 0.148927,
+          "deferrals": 0,
+          "max_dd": 0.468797,
+          "sells_per_year": 29.555845,
+          "trades": 1645,
+          "turnover_annual": 5.991496
+        }
+      }
+    },
+    "window": {
+      "end": "2026-09-29",
+      "sessions": 6679,
+      "start": "2000-03-09",
+      "years": 26.55989
+    }
+  },
+  "quality": {
+    "DIA": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 7227
+    },
+    "EEM": {
+      "bad_frac": 0.000169,
+      "pass": true,
+      "sessions": 5913
+    },
+    "EFA": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 6319
+    },
+    "EWA": {
+      "bad_frac": 0.024438,
+      "pass": true,
+      "sessions": 7693
+    },
+    "EWC": {
+      "bad_frac": 0.056155,
+      "pass": false,
+      "sessions": 7693
+    },
+    "EWG": {
+      "bad_frac": 0.013909,
+      "pass": true,
+      "sessions": 7693
+    },
+    "EWH": {
+      "bad_frac": 0.006759,
+      "pass": true,
+      "sessions": 7693
+    },
+    "EWJ": {
+      "bad_frac": 0.00169,
+      "pass": true,
+      "sessions": 7693
+    },
+    "EWL": {
+      "bad_frac": 0.035487,
+      "pass": true,
+      "sessions": 7693
+    },
+    "EWS": {
+      "bad_frac": 0.008189,
+      "pass": true,
+      "sessions": 7693
+    },
+    "EWU": {
+      "bad_frac": 0.022878,
+      "pass": true,
+      "sessions": 7693
+    },
+    "IWM": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 6633
+    },
+    "SPY": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 8483
+    },
+    "XLB": {
+      "bad_frac": 0.000286,
+      "pass": true,
+      "sessions": 6994
+    },
+    "XLE": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 6994
+    },
+    "XLF": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 6994
+    },
+    "XLI": {
+      "bad_frac": 0.000143,
+      "pass": true,
+      "sessions": 6994
+    },
+    "XLK": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 6994
+    },
+    "XLP": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 6994
+    },
+    "XLU": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 6994
+    },
+    "XLV": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 6994
+    },
+    "XLY": {
+      "bad_frac": 0.0,
+      "pass": true,
+      "sessions": 6994
+    }
+  },
+  "status": "complete",
+  "verdict": "FAIL"
+}

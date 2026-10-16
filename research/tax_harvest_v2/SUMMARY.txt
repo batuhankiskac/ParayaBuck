@@ -1,0 +1,172 @@
+tax_harvest_v2 | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | control = production R2 (equity_leveraged_trend_v1 1.2.0) | arms = R2 + H2(10) + H2_5/H2_15/H2_20 December postponement windows
+harness PASS (0 checks outside tolerance); overlay 'none' == fast_reentry simulate_band nav path max|diff| 1.31e-13
+  boot anchor progressive  C0 ref 0.030790 repro 0.030790  R2 ref 0.035155 repro 0.035155
+  boot anchor flat         C0 ref 0.035201 repro 0.035201  R2 ref 0.039678 repro 0.039678
+
+pre-tax main window (m = 2; G1 = CAGR >= R2 - 0.10 pp, G2 = DD <= R2 + 1 pp, reported):
+  arm     CAGR base  CAGR cal   maxDD base  maxDD cal   m=1 CAGR base  trades/yr  sells/yr  turn/yr  deferrals
+  R2       15.47%   14.89%   46.76%   46.88%   15.75%     61.94     29.56     5.99          0
+  H2       15.51%   14.93%   46.25%   46.38%   15.79%     60.39     28.65     5.95         51
+  H2_5     15.45%   14.87%   46.76%   46.88%   15.73%     61.48     29.25     5.99         15
+  H2_15    15.58%   15.00%   45.58%   45.71%   15.86%     59.60     28.20     5.92         70
+  H2_20    15.51%   14.93%   46.60%   46.72%   15.78%     58.96     27.71     5.91         95
+
+after tax, progressive 2026 tariff, liquidated, $10k (base financing, m = 2):
+  window                 arm     pre-tax   after-tax  d vs R2   maxDD    tax USD     sells/yr  defers
+  2000_03_to_2026_09   R2       15.47%   11.69%    +0.00pp   46.76%      77,027     30.65       0
+  2000_03_to_2026_09   H2       15.51%   11.80%    +0.12pp   46.25%      77,685     29.74      53
+  2000_03_to_2026_09   H2_5     15.45%   11.69%    -0.00pp   46.76%      76,757     30.35      17
+  2000_03_to_2026_09   H2_15    15.58%   11.94%    +0.25pp   45.58%      78,812     29.25      72
+  2000_03_to_2026_09   H2_20    15.51%   11.95%    +0.27pp   46.60%      77,188     28.77      97
+  2010_01_to_end       R2       22.16%   17.03%    +0.00pp   41.00%      51,767     31.35       0
+  2010_01_to_end       H2       22.13%   17.13%    +0.10pp   41.35%      51,364     30.28      32
+  2010_01_to_end       H2_5     22.12%   17.02%    -0.01pp   41.19%      51,493     30.94      14
+  2010_01_to_end       H2_15    22.16%   17.27%    +0.24pp   41.18%      51,370     29.86      39
+  2010_01_to_end       H2_20    22.16%   17.38%    +0.35pp   41.18%      51,214     29.50      46
+  2017_01_to_end       R2       32.53%   26.04%    +0.00pp   34.52%      29,255     35.60       0
+  2017_01_to_end       H2       32.57%   26.26%    +0.23pp   33.37%      29,113     34.58      19
+  2017_01_to_end       H2_5     32.51%   26.05%    +0.01pp   34.47%      29,122     35.19       6
+  2017_01_to_end       H2_15    32.59%   26.43%    +0.39pp   32.44%      29,027     34.06      23
+  2017_01_to_end       H2_20    32.60%   26.61%    +0.58pp   31.12%      28,923     33.75      28
+
+after tax, progressive 2026 tariff, liquidated, $100k (base financing, m = 2):
+  window                 arm     pre-tax   after-tax  d vs R2   maxDD    tax USD     sells/yr  defers
+  2000_03_to_2026_09   R2       15.47%   10.16%    +0.00pp   46.76%     766,160     30.69       0
+  2000_03_to_2026_09   H2       15.51%   10.30%    +0.14pp   46.25%     775,620     29.78      53
+  2000_03_to_2026_09   H2_5     15.45%   10.17%    +0.01pp   46.76%     765,197     30.38      17
+  2000_03_to_2026_09   H2_15    15.58%   10.45%    +0.29pp   45.58%     788,423     29.33      72
+  2000_03_to_2026_09   H2_20    15.51%   10.49%    +0.33pp   46.60%     776,768     28.84      97
+  2010_01_to_end       R2       22.16%   14.71%    +0.00pp   43.78%     553,536     31.35       0
+  2010_01_to_end       H2       22.13%   14.84%    +0.13pp   44.07%     551,338     30.34      32
+  2010_01_to_end       H2_5     22.12%   14.70%    -0.01pp   43.95%     551,357     30.94      14
+  2010_01_to_end       H2_15    22.16%   15.00%    +0.29pp   43.88%     552,840     29.98      39
+  2010_01_to_end       H2_20    22.16%   15.14%    +0.44pp   43.88%     552,414     29.68      46
+  2017_01_to_end       R2       32.53%   22.89%    +0.00pp   36.24%     360,297     35.60       0
+  2017_01_to_end       H2       32.57%   23.16%    +0.27pp   34.86%     360,065     34.68      19
+  2017_01_to_end       H2_5     32.51%   22.90%    +0.01pp   36.18%     359,567     35.19       6
+  2017_01_to_end       H2_15    32.59%   23.40%    +0.52pp   33.56%     359,554     34.27      23
+  2017_01_to_end       H2_20    32.60%   23.66%    +0.77pp   31.62%     359,063     33.86      28
+
+after tax, progressive 2026 tariff, liquidated, $1M (base financing, m = 2):
+  window                 arm     pre-tax   after-tax  d vs R2   maxDD    tax USD     sells/yr  defers
+  2000_03_to_2026_09   R2       15.47%    9.19%    +0.00pp   46.76%   6,793,740     30.84       0
+  2000_03_to_2026_09   H2       15.51%    9.35%    +0.16pp   46.25%   6,887,442     29.93      53
+  2000_03_to_2026_09   H2_5     15.45%    9.21%    +0.01pp   46.76%   6,791,656     30.53      17
+  2000_03_to_2026_09   H2_15    15.58%    9.51%    +0.32pp   45.58%   7,006,679     29.48      72
+  2000_03_to_2026_09   H2_20    15.51%    9.55%    +0.35pp   46.60%   6,915,522     28.99      97
+  2010_01_to_end       R2       22.16%   13.62%    +0.00pp   45.37%   5,338,307     31.47       0
+  2010_01_to_end       H2       22.13%   13.76%    +0.14pp   45.63%   5,320,528     30.46      32
+  2010_01_to_end       H2_5     22.12%   13.62%    -0.01pp   45.53%   5,319,679     31.05      14
+  2010_01_to_end       H2_15    22.16%   13.93%    +0.31pp   45.44%   5,336,074     30.10      39
+  2010_01_to_end       H2_20    22.16%   14.07%    +0.44pp   45.44%   5,332,625     29.80      46
+  2017_01_to_end       R2       32.53%   21.72%    +0.00pp   36.75%   3,742,184     35.70       0
+  2017_01_to_end       H2       32.57%   22.01%    +0.28pp   35.37%   3,740,497     34.78      19
+  2017_01_to_end       H2_5     32.51%   21.73%    +0.01pp   36.69%   3,735,358     35.29       6
+  2017_01_to_end       H2_15    32.59%   22.26%    +0.53pp   34.07%   3,736,009     34.37      23
+  2017_01_to_end       H2_20    32.60%   22.52%    +0.79pp   31.93%   3,736,015     34.06      28
+
+cost stress m = 4 (doubled cost), after tax at $100k, base financing:
+  window                 arm     pre-tax m4  after-tax m4  d vs R2   maxDD    turn/yr
+  2000_03_to_2026_09   R2       14.92%    9.73%    +0.00pp   47.44%     5.99
+  2000_03_to_2026_09   H2       14.96%    9.87%    +0.15pp   46.92%     5.95
+  2000_03_to_2026_09   H2_5     14.90%    9.74%    +0.01pp   47.44%     5.99
+  2000_03_to_2026_09   H2_15    15.03%   10.03%    +0.30pp   46.24%     5.92
+  2000_03_to_2026_09   H2_20    14.96%   10.07%    +0.34pp   47.23%     5.91
+  2010_01_to_end       R2       21.55%   14.23%    +0.00pp   44.56%     6.20
+  2010_01_to_end       H2       21.52%   14.36%    +0.13pp   44.84%     6.18
+  2010_01_to_end       H2_5     21.51%   14.22%    -0.01pp   44.73%     6.19
+  2010_01_to_end       H2_15    21.55%   14.52%    +0.30pp   44.65%     6.17
+  2010_01_to_end       H2_20    21.56%   14.67%    +0.44pp   44.65%     6.16
+  2017_01_to_end       R2       32.09%   22.54%    +0.00pp   36.72%     4.12
+  2017_01_to_end       H2       32.12%   22.82%    +0.28pp   35.34%     4.09
+  2017_01_to_end       H2_5     32.06%   22.55%    +0.01pp   36.66%     4.11
+  2017_01_to_end       H2_15    32.14%   23.06%    +0.52pp   34.04%     4.09
+  2017_01_to_end       H2_20    32.15%   23.33%    +0.78pp   32.12%     4.09
+
+OOS windows (ewma_band_v1: ^GSPC 1957-1999 + e2_confirmation_v1 M1-M5), pre-tax, calibrated, m = 2:
+  window              arm     CAGR       maxDD      d CAGR    d maxDD
+  GSPC_1957_1999      R2        9.89%   39.63%                        
+  GSPC_1957_1999      H2        9.90%   39.63%     +0.01pp     +0.00pp
+  GSPC_1957_1999      H2_5      9.89%   39.63%     +0.00pp     +0.00pp
+  GSPC_1957_1999      H2_15     9.94%   39.63%     +0.05pp     -0.00pp
+  GSPC_1957_1999      H2_20     9.93%   39.63%     +0.04pp     -0.00pp
+  M1                  R2       21.18%   40.97%                        
+  M1                  H2       21.25%   40.97%     +0.07pp     -0.00pp
+  M1                  H2_5     21.20%   40.97%     +0.02pp     +0.00pp
+  M1                  H2_15    21.46%   40.97%     +0.27pp     +0.00pp
+  M1                  H2_20    21.66%   40.97%     +0.48pp     +0.00pp
+  M2                  R2       11.70%   58.33%                        
+  M2                  H2       11.74%   58.34%     +0.03pp     +0.00pp
+  M2                  H2_5     11.70%   58.34%     +0.00pp     +0.00pp
+  M2                  H2_15    11.75%   58.24%     +0.05pp     -0.09pp
+  M2                  H2_20    11.85%   58.24%     +0.15pp     -0.09pp
+  M3                  R2        6.40%   65.03%                        
+  M3                  H2        6.43%   64.73%     +0.02pp     -0.29pp
+  M3                  H2_5      6.41%   64.99%     +0.00pp     -0.03pp
+  M3                  H2_15     6.44%   64.38%     +0.03pp     -0.65pp
+  M3                  H2_20     6.49%   64.39%     +0.08pp     -0.63pp
+  M4                  R2        9.47%   58.10%                        
+  M4                  H2        9.55%   58.10%     +0.08pp     -0.00pp
+  M4                  H2_5      9.49%   58.10%     +0.02pp     -0.00pp
+  M4                  H2_15     9.55%   58.10%     +0.08pp     -0.00pp
+  M4                  H2_20     9.56%   58.16%     +0.09pp     +0.06pp
+  M5                  R2       -0.59%   85.45%                        
+  M5                  H2       -0.57%   85.41%     +0.01pp     -0.04pp
+  M5                  H2_5     -0.58%   85.45%     +0.00pp     -0.00pp
+  M5                  H2_15    -0.56%   85.39%     +0.03pp     -0.06pp
+  M5                  H2_20    -0.53%   85.32%     +0.06pp     -0.13pp
+  per-arm median d CAGR and worst d max DD over the six windows:
+    H2     median d CAGR  +0.028pp | max d max DD   +0.00pp (M2) -> PASS
+    H2_5   median d CAGR  +0.003pp | max d max DD   +0.00pp (M2) -> PASS
+    H2_15  median d CAGR  +0.051pp | max d max DD   +0.00pp (M1) -> PASS
+    H2_20  median d CAGR  +0.087pp | max d max DD   +0.06pp (M4) -> PASS
+
+instruments (gate F3): 21 quality-passing ETFs, own E2+R2, own 2x leg, calibrated, m = 2:
+  arm     median d CAGR  share dCAGR>0  n dDD<=+2pp  share  worst d maxDD  gate
+  H2           +0.025pp         81.0%         21/21   100.0%       +0.71pp   PASS
+  H2_5         +0.002pp         76.2%         21/21   100.0%       +0.22pp   PASS
+  H2_15        +0.024pp         76.2%         21/21   100.0%       +1.05pp   PASS
+  H2_20        +0.031pp         66.7%         21/21   100.0%       +1.87pp   PASS
+  excluded by the range_vol_v2 quality rule: EWC (bad 5.6%)
+
+late-December episodes (main window, base, m = 2, pre-tax): H2 - R2 NAV log-ratio change over [last 20 Dec sessions] U [first 20 Jan sessions]; worst first:
+  year   window                    delta pp   worst session   worst pp
+  2015   2015-12-03..2016-01-29    -0.699     2016-01-04     -0.549
+  2024   2024-12-03..2025-01-31    -0.318     2024-12-31     -0.217
+  2002   2002-12-03..2003-01-30    -0.054     2002-12-18     -0.065
+  2012   2012-12-03..2013-01-30    -0.000     2012-12-20     -0.000
+  2010   2010-12-03..2011-01-31    -0.000     2010-12-10     -0.000
+  2013   2013-12-03..2014-01-30    -0.000     2014-01-02     -0.000
+  (best year 2001: +0.996 pp; sum over all years +0.930 pp)
+
+clean after-tax bootstrap (block-20, 1000 paths, 2015-09-01..2026-09-30, fixed FX) - reported, not gated:
+  capital mode         arm     median CAGR  median d vs R2   mean d   share>0   p05 / p95  defers/10y
+  100k    progressive  R2        3.52%               --       --        --          --         0.0
+  100k    progressive  H2        3.60%        +0.055pp   +0.103     67.4% -0.31/+0.61        24.0
+  100k    progressive  H2_5      3.57%        +0.023pp   +0.046     64.6% -0.17/+0.29        10.0
+  100k    progressive  H2_15     3.74%        +0.089pp   +0.148     65.8% -0.47/+0.88        38.0
+  100k    progressive  H2_20     3.70%        +0.115pp   +0.172     64.0% -0.63/+1.17        52.0
+  100k    flat         R2        3.97%               --       --        --          --         0.0
+  100k    flat         H2        3.97%        +0.045pp   +0.069     64.4% -0.37/+0.53        24.0
+  100k    flat         H2_5      3.94%        +0.016pp   +0.027     65.0% -0.17/+0.23        10.0
+  100k    flat         H2_15     3.94%        +0.063pp   +0.096     61.4% -0.52/+0.78        38.0
+  100k    flat         H2_20     3.96%        +0.083pp   +0.113     61.6% -0.74/+1.08        52.0
+
+  1M      progressive  R2        2.35%               --       --        --          --         0.0
+  1M      progressive  H2        2.46%        +0.071pp   +0.124     69.7% -0.28/+0.65        24.0
+  1M      progressive  H2_5      2.41%        +0.026pp   +0.055     66.8% -0.16/+0.32        10.0
+  1M      progressive  H2_15     2.51%        +0.110pp   +0.178     68.5% -0.43/+0.93        38.0
+  1M      progressive  H2_20     2.56%        +0.142pp   +0.213     67.8% -0.60/+1.21        52.0
+  1M      flat         R2        3.97%               --       --        --          --         0.0
+  1M      flat         H2        3.97%        +0.045pp   +0.069     64.4% -0.37/+0.53        24.0
+  1M      flat         H2_5      3.94%        +0.016pp   +0.027     65.0% -0.17/+0.23        10.0
+  1M      flat         H2_15     3.94%        +0.063pp   +0.096     61.4% -0.52/+0.78        38.0
+  1M      flat         H2_20     3.96%        +0.083pp   +0.113     61.6% -0.74/+1.08        52.0
+
+gates: P = every plateau neighbour > R2 after tax, all three windows at $100k; F2 = OOS (median d CAGR >= -0.05 pp, no window d max DD > +2 pp); F3 = instruments (>= 90% d max DD <= +2 pp); F4 = m = 4 cost stress at $100k. Verdict on H2 (the v1 candidate):
+  gate P (H2_5, H2_15, H2_20): H2_5 FAIL | H2_15 PASS | H2_20 PASS
+  H2     F2 PASS F3 PASS F4 PASS -> True (G1 True, G2 True, 100k windows 3/3)
+  H2_5   F2 PASS F3 PASS F4 FAIL -> False (G1 True, G2 True, 100k windows 2/3)
+  H2_15  F2 PASS F3 PASS F4 PASS -> True (G1 True, G2 True, 100k windows 3/3)
+  H2_20  F2 PASS F3 PASS F4 PASS -> True (G1 True, G2 True, 100k windows 3/3)
+VERDICT: FAIL

@@ -357,6 +357,9 @@ def resolve_arm(mod, arm_id: str) -> dict:
             raise PluginError(f"arm {arm_id!r}: leg_b {leg_b!r} is leg A's own instrument")
     if leg == LEG_SPY and leg_b is not None:
         raise PluginError(f"arm {arm_id!r}: the option leg {LEG_SPY!r} is single-leg only")
+    if leg_b is not None and opts_of(rule):
+        raise PluginError(f"arm {arm_id!r}: the kernel options of rule {rule!r} are single-leg "
+                          f"only; a two-leg arm cannot carry them")
     return {"rule": rule, "leg": leg, "leg_b": leg_b, "two_leg": leg_b is not None,
             "cash_yield": cash,
             #: the rule's kernel options (`research/fast_engine_opts.bridge`), {} for the engine's

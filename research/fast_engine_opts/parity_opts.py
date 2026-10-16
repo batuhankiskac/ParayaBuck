@@ -30,6 +30,8 @@ from . import fe_opts_sim as OS
 from .fe_opts import Opts
 
 HERE = Path(__file__).resolve().parent
+#: a value no cell can hold: proves both drivers wrote every cell (no uninitialised memory)
+SENTINEL = -123456.789
 ARMS = ("C0", "A1u", "H2", "K")
 CAPS = ("10k", "30k", "100k", "300k", "1M")
 FLAT_KEYS = (
@@ -100,10 +102,16 @@ def off_boot_parity(n_pre=32, n_tax=32, W=32):
     The framework's own driver and the option driver on the *same* drawn paths, the same target
     panels (the framework's `_targets`), the same rules, over the pre-tax base/calibrated block and
     the after-tax block of both modes: max |diff| must be exactly 0.
+
+    The draw is a full bootstrap path (`TAX_BOOT_L` drawn columns plus `TAX_BOOT_EXT`) and the
+    kernel runs the window's own `i0 -> i1`, exactly as `batch_screen.boot.boot` does: a *shorter*
+    draw with the full calendar's indices would read past the end of the price arrays (numba does
+    not bounds-check), which is a trap worth naming -- it produced garbage, non-reproducible cells
+    the first time this cell was written.
     """
     from research.batch_screen import boot as B
     from research.fast_engine import fe_boot
-    from research.fast_engine.fe_config import FIN, TAX_CAPITALS
+    from research.fast_engine.fe_config import FIN, TAX_BOOT_EXT, TAX_BOOT_L, TAX_CAPITALS
 
     from .bridge import Bundle
 
@@ -112,7 +120,7 @@ def off_boot_parity(n_pre=32, n_tax=32, W=32):
     win = B.BootWindow()
     env = win.env
     rng = np.random.default_rng(20261011)
-    pos = fe_boot.draw_positions(rng, 20, W, 285, win.npool, 3)
+    pos = fe_boot.draw_positions(rng, 20, W, TAX_BOOT_L, win.npool, TAX_BOOT_EXT)
     panels = B.boot_panels(win, pos, ("2x",), (FIN["base"], FIN["calibrated"]), cache={})
     pb, pcal = panels[("2x", FIN["base"])], panels[("2x", FIN["calibrated"])]
     wb = np.ascontiguousarray(np.stack([B._targets(a, pb) for a in arms]))
@@ -129,10 +137,10 @@ def off_boot_parity(n_pre=32, n_tax=32, W=32):
             env.dec_tail, env.pay_ptr, env.pay_yr, env.pay_part, TAX_CAPITALS["100k"],
             np.array([100_000.0]), win.i0, win.i1, cost, win.yrs, env.Y0, env.M_lo, band, usd,
             defer, True, mode_ids, env.cash_rate, 0, n_pre, n_tax, B.DBG0)
-    ok_pre = np.empty((2, n_a, W))
-    ok_at = np.empty((1, 2, n_a, W))
-    mine_pre = np.empty((2, n_a, W))
-    mine_at = np.empty((1, 2, n_a, W))
+    ok_pre = np.full((2, n_a, W), SENTINEL)
+    ok_at = np.full((1, 2, n_a, W), SENTINEL)
+    mine_pre = np.full((2, n_a, W), SENTINEL)
+    mine_at = np.full((1, 2, n_a, W), SENTINEL)
     B._chunk(*args, ok_pre, ok_at)
     from .fe_opts import Opts
     from .fe_opts_boot import chunk_opts
@@ -145,18 +153,24 @@ def off_boot_parity(n_pre=32, n_tax=32, W=32):
                empty.optf, empty.opti, empty.fill, empty.mrate, empty.early, empty.wvol,
                empty.optf, empty.opti, empty.fill, empty.mrate, empty.early, empty.wvol)
     # the bundle must be *all-off*: the option arrays are empty, and the kernel branches on them
-    def _cmp(a, b):
-        pat = np.array_equal(np.isnan(a), np.isnan(b))
-        both = np.isnan(a) & np.isnan(b)
-        d = float(np.max(np.where(both, 0.0, np.abs(a - b))))
-        return d, bool(pat and d == 0.0)
+    def _cmp(a, b, label=""):
+        if (a == SENTINEL).any() or (b == SENTINEL).any():
+            which = ("chunk" if (a == SENTINEL).any() else "") + ("opts" if (b == SENTINEL).any() else "")
+            i = np.argwhere((a == SENTINEL) | (b == SENTINEL))[:4]
+            raise AssertionError(f"unwritten cell in {label}: {which} at {i.tolist()}")
+        pat = np.isnan(a) == np.isnan(b)
+        d = np.where(np.isnan(a) & np.isnan(b), 0.0, np.abs(np.where(pat, a, 0.0) - np.where(pat, b, 0.0)))
+        idx = np.argwhere(pat == False)  # noqa: E712
+        return float(np.max(d)), bool(pat.all() and not idx.size), idx
 
-    d_pre, ok_p = _cmp(ok_pre, mine_pre)
-    d_at, ok_a = _cmp(ok_at, mine_at)
+    d_pre, ok_p, i_p = _cmp(ok_pre, mine_pre, "pre")
+    d_at, ok_a, i_a = _cmp(ok_at, mine_at, "tax")
+    bad = [(int(x), int(y), int(z), float(ok_pre[x, y, z]), float(mine_pre[x, y, z]))
+           for x, y, z in i_p[:4]]
     return {"cells": 2 * (2 * n_a + 2 * n_a), "n_arms": n_a, "n_paths": W,
             "max_abs_diff_pre": d_pre, "max_abs_diff_tax": d_at,
             "max_abs_diff": max(d_pre, d_at), "nan_pattern_matches": bool(ok_p and ok_a),
-            "pass": bool(ok_p and ok_a)}
+            "first_nan_mismatch": bad, "pass": bool(ok_p and ok_a)}
 
 
 # ----------------------------------------------------------------------------- mechanisms

@@ -501,3 +501,22 @@ CHECKS = {
 }
 
 __all__ = ["CHECKS", "fixture", "run", "steps", "ufe_table", "weekdays"]
+
+
+def main(argv=None) -> int:
+    """`python -m research.fast_engine_opts.checks`: the mechanism table as JSON (+ a tail line)."""
+    import json as _json
+    import sys as _sys
+    import time as _time
+
+    t0 = _time.time()
+    out = {name: fn() for name, fn in CHECKS.items()}
+    bad = [k for k, v in out.items() if not v.get("pass")]
+    print(_json.dumps(out, indent=1, sort_keys=True, default=str))
+    print(f"checks {'PASS' if not bad else 'FAIL'}  {len(out) - len(bad)}/{len(out)} "
+          f"in {_time.time() - t0:.1f} s", file=_sys.stderr)
+    return 0 if not bad else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

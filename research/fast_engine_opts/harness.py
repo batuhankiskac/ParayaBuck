@@ -19,6 +19,7 @@ builds on this package reports it).
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import time
@@ -48,6 +49,8 @@ def engine_parity_quick() -> dict:
         out.write_bytes(before)
         restored = True
     tail = (proc.stdout.strip().splitlines() or [proc.stderr[-200:]])[-1]
+    # the engine prints its own wall clock in that line; HARNESS_OPTS.json must not carry it
+    tail = re.sub(r"in [0-9.]+s", "in <t>s", tail)
     return {"pass": bool(proc.returncode == 0 and "parity PASS" in proc.stdout),
             "tail": tail, "parity_json_restored": restored}
 
@@ -113,6 +116,8 @@ def _flatten(groups) -> dict:
 
 
 def harness(full=False) -> dict:
+    """Every group's result. `wall_s` is measured and *not* stored: the artifact must be
+    byte-identical across runs (the wall clock is printed by `main`)."""
     t0 = time.time()
     groups = {
         "engine_parity_quick": engine_parity_quick(),
@@ -125,7 +130,12 @@ def harness(full=False) -> dict:
     }
     flat = _flatten(groups)
     return {"pass": all(flat.values()), "checks": flat, "groups": groups,
-            "wall_s": time.time() - t0}
+            "wall_s": time.time() - t0, "full": bool(full)}
+
+
+def _stored(res) -> dict:
+    """The deterministic part of a harness result (what goes into HARNESS_OPTS.json)."""
+    return {k: v for k, v in res.items() if k != "wall_s"}
 
 
 def main(argv=None) -> int:
@@ -138,8 +148,8 @@ def main(argv=None) -> int:
         print(f"{gname:28s} {'PASS' if not bad else 'FAIL'}  {len(flat) - len(bad)}/{len(flat)}")
         for k in bad:
             print(f"    FAILED {k}")
-    (HERE / "HARNESS_OPTS.json").write_text(json.dumps(res, indent=1, sort_keys=True, default=float)
-                                            + "\n")
+    (HERE / "HARNESS_OPTS.json").write_text(
+        json.dumps(_stored(res), indent=1, sort_keys=True, default=float) + "\n")
     print(f"\nHARNESS {'PASS' if res['pass'] else 'FAIL'}   wall {res['wall_s']:.1f} s"
           f"   (HARNESS_OPTS.json written)")
     return 0 if res["pass"] else 1

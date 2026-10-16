@@ -30,6 +30,7 @@
   "options_off_bootstrap": true,
   "options_off_side_by_side": true
  },
+ "full": false,
  "groups": {
   "anchors": {
    "C0_after_tax_2000_03_to_2026_09": {
@@ -120,7 +121,7 @@
   "engine_parity_quick": {
    "parity_json_restored": true,
    "pass": true,
-   "tail": "parity PASS in 11.3s -> PARITY.json"
+   "tail": "parity PASS in <t>s -> PARITY.json"
   },
   "mechanisms": {
    "IC39_margin": {
@@ -313,6 +314,7 @@
   },
   "options_off_bootstrap": {
    "cells": 24,
+   "first_nan_mismatch": [],
    "max_abs_diff": 0.0,
    "max_abs_diff_pre": 0.0,
    "max_abs_diff_tax": 0.0,
@@ -329,6 +331,5 @@
    "pass": true
   }
  },
- "pass": true,
- "wall_s": 12.579493045806885
+ "pass": true
 }

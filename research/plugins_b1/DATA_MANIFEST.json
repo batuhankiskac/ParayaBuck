@@ -1,0 +1,52 @@
+{
+ "schema": "parayabuck.research.data_manifest/v1",
+ "study": "plugins_b1",
+ "date": "2026-10-16",
+ "branch": "research/plugins_b1",
+ "purpose": "Data added by the plugin-writing worker for the idea-bank batch screen: the hand-made FOMC policy calendar that IB17 needs. No other idea in this task adds data (IB13/IB21 use the framework's already-registered FRED DGS10 / Yahoo IEF series; IB25, which would need SHY, is declared NEEDS_KERNEL and never simulated). Nothing was downloaded: the two files are derived from the hand-transcribed meeting table in research/plugins_b1/make_fomc_data.py. See research/plugins_b1/README.md.",
+ "extra_data": [
+  {
+   "series": "FOMC_DATES",
+   "file": "data/historical/plugins_b1_fomc_dates.csv",
+   "column": "value",
+   "price": "level",
+   "role": "the source table: one row per *scheduled* FOMC meeting, on its announcement date (second day of the two-day meeting), value 1",
+   "rows": 264,
+   "bytes": 3443,
+   "range": [
+    "1994-02-04",
+    "2026-12-16"
+   ],
+   "sha256": "7f10efa78f478153bc001f50eb34ae8bab810218ef0375d2dbc0add4a2e033fa",
+   "source": "hand-made (Federal Reserve published FOMC calendars)",
+   "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+   "url_historical": "https://www.federalreserve.gov/monetarypolicy/fomc_historical_year.htm",
+   "fetched": "2026-10-16",
+   "generator": "python -m research.plugins_b1.make_fomc_data",
+   "note": "hand-transcribed, not downloaded: no Yahoo/FRED endpoint publishes scheduled meeting dates as a series, and the task's network rule allows only the Yahoo chart API and FRED CSV. 8 scheduled meetings per year (1994-2026, 33 years x 8 = 264). Emergency/intermeeting actions are excluded (2020-03-15, the 2001/2007-08 conference-call moves); the cancelled scheduled 2020-03-17/18 meeting keeps its published calendar date. RESIDUAL RISK: a hand-transcription error in one meeting date shifts FOMC_WEEK's parity by one for the week(s) after that meeting, i.e. a handful of sessions per affected year."
+  },
+  {
+   "series": "FOMC_WEEK",
+   "file": "data/historical/plugins_b1_fomc_week.csv",
+   "column": "value",
+   "price": "level",
+   "role": "the dense cycle index the IB17 plugin reads: one row per *calendar day*, w = floor((day - the most recent scheduled FOMC meeting date) / 7 days), week 0 = the meeting week",
+   "rows": 12019,
+   "bytes": 156258,
+   "range": [
+    "1994-02-04",
+    "2026-12-31"
+   ],
+   "sha256": "16947ab0d1ea27839fbb137e44471f985cabc72621160d6b11c0cbb48c0a8d91",
+   "source": "derived from FOMC_DATES",
+   "derived_from": "FOMC_DATES",
+   "fetched": "2026-10-16",
+   "generator": "python -m research.plugins_b1.make_fomc_data",
+   "note": "dense (every calendar day 1994-02-04 -> 2026-12-31) so that every session of every window has a value and, inside a bootstrap chunk, the drawn *source* session's own index is what `data.extra` replays. w is unbounded (meeting gaps run 4-8 weeks, w_max = 8 in 2004-2005); IB17's arms use its parity exactly as the arm specs word it, with no mod-5 wrap. NaN before 1994-02-04 (so M2, 1935-1956, has no coverage -> IB17 declares it NotApplicable)."
+  }
+ ],
+ "registry": "research/batch_screen/EXTRA_DATA.json (series FOMC_DATES, FOMC_WEEK; keys fomc_dates, fomc_week) -- hand-registered, checked with `python -m research.batch_screen.extra --verify`",
+ "unchanged_inputs": {
+  "note": "IB13 reads the framework's registered FRED DGS10 series (batch_screen_v1_dgs10.csv, 1962-01-02 ->, sha256 3eda40d71b514fc0614ef32bda3a8bac82e7a9915667f0feb4b1609e87c5be9b) and IB21 the registered Yahoo IEF series (batch_screen_v1_ief.csv, 2002-07-30 ->, sha256 4d0726302e7d518ff42b63ab9501fc9fc89e9cb930cb25f807f1fd4d6c83a18f); both are declared in the framework's own registry and were not re-fetched or modified by this branch."
+ }
+}

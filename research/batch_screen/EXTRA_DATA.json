@@ -7,6 +7,8 @@
   "dax": "^GDAXI",
   "dgs10": "DGS10",
   "dtwexbgs": "DTWEXBGS",
+  "fomc_dates": "FOMC_DATES",
+  "fomc_week": "FOMC_WEEK",
   "ftse": "^FTSE",
   "gld": "GLD",
   "ief": "IEF",
@@ -107,6 +109,36 @@
    "sha256": "8396fb76c82b524b29b03ea84541637afbff37e04813032eb70832991831cb1f",
    "source": "FRED CSV",
    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTWEXBGS"
+  },
+  "FOMC_DATES": {
+   "bytes": 3443,
+   "column": "value",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b1_fomc_dates.csv",
+   "price": "level",
+   "range": [
+    "1994-02-04",
+    "2026-12-16"
+   ],
+   "rows": 264,
+   "sha256": "7f10efa78f478153bc001f50eb34ae8bab810218ef0375d2dbc0add4a2e033fa",
+   "source": "hand-made (Federal Reserve FOMC calendars)",
+   "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+  },
+  "FOMC_WEEK": {
+   "bytes": 156258,
+   "column": "value",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b1_fomc_week.csv",
+   "price": "level",
+   "range": [
+    "1994-02-04",
+    "2026-12-31"
+   ],
+   "rows": 12019,
+   "sha256": "16947ab0d1ea27839fbb137e44471f985cabc72621160d6b11c0cbb48c0a8d91",
+   "source": "hand-made (derived from FOMC_DATES)",
+   "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
   },
   "GLD": {
    "bytes": 189669,

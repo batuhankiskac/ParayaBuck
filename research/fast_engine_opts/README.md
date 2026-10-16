@@ -12,8 +12,8 @@ fe_opts_boot.py     `chunk_opts` / `pt_opts`: `batch_screen.boot`'s two numba dr
 fe_opts_calendar.py the NYSE early-close (13:00 ET) calendar, derived from the exchange's rules
 fe_opts_legs.py     the two *panel* mechanisms: dividend withholding, a second underlying
 bridge.py           what `batch_screen` calls: an arm's option bundle and the two dispatchers
-parity_opts.py      options-off parity (pre-tax, after-tax, bootstrap) + the mechanism table
-checks.py           one check per option, on hand-built synthetic fixtures
+parity_opts.py      options-off parity (pre-tax, after-tax, bootstrap)
+checks.py           one check per option on synthetic fixtures + the end-to-end framework check
 harness.py          the single entry point (engine parity, option parity, K's anchors, the checks)
 HARNESS_OPTS.json   the harness's artifact (deterministic: two runs are byte-identical)
 PARITY_OPTS.json    the last standalone parity run
@@ -168,7 +168,16 @@ differently (different `wht`) are not the same group, so the paired `Δ` stays p
   never forces a sale and never changes the tax base. Making it sell would realize gains — a
   different mechanism, and a plugin can express the intent by lowering the target early instead.
 * **Withholding is a leg construction.** `wht` nets the dividend in the engine's own 2x recurrence;
-  a price-only window (the OOS indices, the 21 ETFs) has no dividend, hence no effect there.
+  a price-only window (the OOS indices, the 21 ETFs) has no dividend, hence no effect there. Inside
+  a bootstrap chunk the framework's leg is built from a total-return path with a zero dividend
+  column, so the netting has to happen upstream of the reconstruction: `chunk_raw_panel` rebuilds
+  the chunk's legs from the drawn *raw* triple (`chunk_triple`, one leading base column, the drawn
+  sessions' returns unchanged — the same series up to floating-point rounding). `wht = 0` never
+  touches the framework's panel, which is what keeps the off-parity claim exact.
+* **The settlement is rarely active under production targets.** Its trigger is a tax-funding sale
+  followed by an up-resize in the *same* session, so IC58's bootstrap cell is often inert and its
+  evidence will come from the after-tax windows (and from deliberately constructed paths, see
+  `check_settlement_tax_sale`).
 * **`2x_spy` on a window without SPY** (any OOS index, any of the 21 ETFs) resolves to a copy of
   that window's own `2x` leg — IC40's documented degeneration, since those windows' on-state leg is
   already 2x of their own index.

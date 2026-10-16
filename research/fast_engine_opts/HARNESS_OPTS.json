@@ -27,6 +27,7 @@
   "mechanisms.IC58_settlement": true,
   "mechanisms.IC58_tax_sale": true,
   "mechanisms.IC59_asym_band": true,
+  "mechanisms.all_options_through_the_framework": true,
   "options_off_bootstrap": true,
   "options_off_side_by_side": true
  },
@@ -310,6 +311,31 @@
      1,
      7
     ]
+   },
+   "all_options_through_the_framework": {
+    "arms": 13,
+    "control_matches_the_engine_bootstrap": true,
+    "deterministic": true,
+    "inert_on_this_fixture": [
+     "kopt_probe/settle"
+    ],
+    "moved": [
+     "kopt_probe/band",
+     "kopt_probe/early",
+     "kopt_probe/fill",
+     "kopt_probe/fx",
+     "kopt_probe/gov",
+     "kopt_probe/margin",
+     "kopt_probe/notional",
+     "kopt_probe/prefund",
+     "kopt_probe/slice",
+     "kopt_probe/spy",
+     "kopt_probe/wht"
+    ],
+    "n_moved": 11,
+    "n_options": 12,
+    "pass": true,
+    "paths": 4
    }
   },
   "options_off_bootstrap": {

@@ -29,8 +29,8 @@ from research.fast_engine.fe_sim import DEFAULT_M
 from . import fe_opts_boot
 from .fe_opts import FLOAT_OPTS, INT_OPTS, NF, NI, Opts, session_fold
 from .fe_opts_calendar import flags as early_flags
-from .fe_opts_legs import (LEG_SPY, chunk_triple, clone_leg, main_spy_triple, repanel,
-                           select_leg)
+from .fe_opts_legs import (LEG_SPY, chunk_raw_panel, chunk_triple, clone_leg,
+                           main_spy_triple, repanel, select_leg)
 from .fe_opts_sim import simulate_opts
 
 #: the `opts` keys that are *not* kernel scalars: the bridge consumes them itself
@@ -64,30 +64,34 @@ def panel_key(arm) -> tuple:
 def prepare_panel(p, arm, win=None, pos=None):
     """The panel an arm actually runs on: `p` itself unless the arm asks for more.
 
-    `wht` rebuilds the legs from net dividends (`fe_opts_legs.repanel`); `leg == "2x_spy"` adds the
-    S&P 500 2x leg -- from the drawn chunk's own SPY sessions inside a bootstrap (`pos`), from the
-    main window's SPY column otherwise, and as an alias of the window's own 2x leg on a window that
-    has no SPY series (an OOS index or one of the 21 ETFs, which is IC40's documented degeneration
-    there). The panel a caller already holds is never mutated: the result is either `p` itself (no
-    request) or a new object.
+    `wht` rebuilds the legs from net dividends (`fe_opts_legs.repanel` on a window, and
+    `fe_opts_legs.chunk_raw_panel` inside a bootstrap, where the framework's chunk leg already
+    embeds the gross dividend and the netting therefore has to happen upstream of the
+    reconstruction); `leg == "2x_spy"` adds the S&P 500 2x leg -- from the drawn chunk's own SPY
+    sessions inside a bootstrap (`pos`), from the main window's SPY column otherwise, and as an
+    alias of the window's own 2x leg on a window that has no SPY series (an OOS index or one of the
+    21 ETFs, which is IC40's documented degeneration there). The panel a caller already holds is
+    never mutated: the result is either `p` itself (no request) or a new object.
     """
     _o, knobs = arm_opts(arm)
     wht = float(knobs.get("wht", 0.0) or 0.0)
     want_spy = arm.get("leg") == LEG_SPY
     if not wht and not want_spy:
         return p
+    chunk = pos is not None and p.window == "boot"
     triple = None
     if want_spy:
-        if pos is not None and p.window == "boot":
-            # the clean bootstrap's drawn positions index the *main* window's own pool, which is
-            # where the SPY column lives; the pooled OOS bootstrap draws from a market's own pool
+        if chunk:
             triple = chunk_triple(pos, "SPY")
         else:
             try:
                 triple = main_spy_triple(p.days)
             except ValueError:
                 triple = None
-    if wht or triple is not None:
+    if chunk and wht:
+        p = chunk_raw_panel(p, pos, wht=wht,
+                            extra=None if triple is None else {LEG_SPY: triple})
+    elif wht or triple is not None:
         p = repanel(p, wht=wht, extra=None if triple is None else {LEG_SPY: triple})
     if want_spy:
         if LEG_SPY not in p.legs:
@@ -120,7 +124,10 @@ def bundle_for(arm_list, panel) -> Bundle | None:
     if all(o.is_off() and not k for o, k in parsed):
         return None
     n = len(arm_list)
-    T = len(panel.days)
+    # the option arrays are indexed by *session* like the market arrays (`wq[i - 1]`, `early[i]`),
+    # and a bootstrap chunk's legs are one column wider than its calendar (`win.dates`), so the
+    # width is the panel's own: `panel.vol` follows the leg's width exactly.
+    T = int(panel.vol.shape[-1])
     P = panel.P
     optf = np.zeros((n, NF), dtype=np.float64)
     opti = np.zeros((n, NI), dtype=np.int64)
@@ -141,18 +148,20 @@ def bundle_for(arm_list, panel) -> Bundle | None:
             need_vol = True
             wvol[a] = panel.vol
     if need_early:
-        early[:] = early_flags(panel.days)[None, :]
+        f = early_flags(panel.days)
+        early[:, : f.shape[0]] = f[None, :]
     if need_mrate:
         rate = np.atleast_2d(np.asarray(panel.rate, dtype=np.float64))
         if rate.shape[0] != 1 and rate.shape[0] != P:
             raise ValueError("panel.rate does not match the panel's path count")
-        if rate.shape[1] != len(panel.days):
+        if rate.shape[1] < len(panel.days):
             raise ValueError("panel.rate must have one entry per session")
         for a, (_o, knobs) in enumerate(parsed):
             spread = knobs.get("margin_spread")
             if spread is None:
                 continue
-            mrate[a, : len(panel.days)] = session_fold(panel.days, rate + float(spread))[0]
+            fold = session_fold(panel.days, rate[:, : len(panel.days)] + float(spread))
+            mrate[a, : len(panel.days)] = fold[0]
     return Bundle(
         optf=optf,
         opti=opti,

@@ -61,6 +61,7 @@ pushed into `targets`, which is what makes them execution options rather than si
 | `off_side_by_side`: `fe_sim.simulate` vs `simulate_opts(Opts())`, 4 arms × 3 modes × 5 capitals | 1,260 | **0** |
 | …the NAV path, bitwise (`np.array_equal`) | 60 | **0** |
 | `off_boot_parity`: `boot._chunk` vs `chunk_opts` with an all-off bundle, 3 arms × 2 models × (2 pre-tax + 2 modes), 2,520-session paths | 24 | **0** |
+| `all_options_through_the_framework`: a fixture plugin with one arm per option through `boot.boot` (13 arms × 2 blocks × 4 paths), its control against the engine's own bootstrap draw | 13 arms | control exact |
 | `harness.anchors`: K's published pre-tax base/calibrated and the three after-tax windows | 14 | ≤ 0.0001 pp |
 
 The after-tax/liquidation path, the Yİ-ÜFE indexation, the instalment schedule and the FIFO books
@@ -126,7 +127,10 @@ Findings the ideas' authors should read before registering arms (all in
   one-session decision lag; arm C's is a deferred downsize (not a cancelled one).
 * **IC58's arms A and C coincide** in a single-leg account: only a same-session sale's proceeds can
   fund a same-session buy. The real trigger is an instalment's funding sale followed by an
-  up-resize in the same session (`check_settlement_tax_sale` builds exactly that).
+  up-resize in the same session (`check_settlement_tax_sale` builds exactly that), so the option is
+  *inert* on the production target series in a bootstrap chunk (`all_options_through_the_framework`
+  reports it as the one option that moves nothing there) and IC58's evidence will come from the
+  after-tax windows.
 * **IC55's pre-funding uses idle cash only.** A fully invested account reports `prefund_usd = 0`,
   so this arm can never force a sale and never changes the tax base; making it sell would realize
   gains, which is a different mechanism (a plugin can lower the target early instead).

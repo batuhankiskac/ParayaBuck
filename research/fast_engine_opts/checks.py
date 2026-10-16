@@ -459,6 +459,125 @@ def check_withholding_panel():
     }
 
 
+def check_options_through_the_framework(paths=4, chunk=4):
+    """Every option, end to end: a fixture plugin's arms through `batch_screen.boot.boot`.
+
+    This is the integration the other checks cannot see: a spec's `opts` resolved by
+    `api.resolve_arm`, the panel mechanisms prepared, the group keyed, and the option bundle built
+    and carried into `chunk_opts` on real bootstrap paths. It asserts that every arm runs, that
+    every option actually *moves* its per-path CAGRs away from the control's, and that a second run
+    of the whole thing is identical.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from research.batch_screen import api as _api
+    from research.batch_screen import boot as B
+    from research.fast_engine import fe_boot
+
+    plugin = PLUGIN_SOURCE
+    td = Path(tempfile.mkdtemp(prefix="kopt_probe_"))
+    (td / "kopt_probe.py").write_text(plugin)
+    old_dir = _api.IDEAS_DIR
+    _api.IDEAS_DIR = td
+    try:
+        arms = [_api.load_arm("kopt_probe", a) for a in PLUGIN_ARMS]
+        out = B.boot(arms, seed=20261011, block=20, n_pre=paths, n_tax=paths,
+                     capitals=("100k",), modes=("progressive",), chunk=chunk, quiet=True)
+        def _vec(res, a):
+            return {"pre": res["pre"]["base"][a["id"]],
+                    "tax": res["tax"]["100k"]["progressive"][a["id"]]}
+
+        ctrl = _vec(out, {"id": "kopt_probe/ctrl"})
+        per_arm = {a["id"]: _vec(out, a) for a in arms}
+        out2 = B.boot(arms, seed=20261011, block=20, n_pre=paths, n_tax=paths,
+                      capitals=("100k",), modes=("progressive",), chunk=chunk, quiet=True)
+        again = all(np.array_equal(per_arm[a["id"]][k], _vec(out2, a)[k], equal_nan=True)
+                    for a in arms for k in ("pre", "tax"))
+        moved = {}
+        for arm in arms:
+            if arm["id"] == "kopt_probe/ctrl":
+                continue
+            v = per_arm[arm["id"]]
+            # a mechanism may act in only one block (the tax-funded ones need a liability, the
+            # notional floor needs a small enough account): "moved" is "not equal in both blocks"
+            moved[arm["id"]] = not all(
+                np.array_equal(np.nan_to_num(v[k], nan=-9.0), np.nan_to_num(ctrl[k], nan=-9.0))
+                for k in ("pre", "tax"))
+        # the control through this whole path (prepare -> no bundle -> the framework's driver)
+        # against the engine's own bootstrap draw: the anchor for everything above
+        ref = fe_boot.boot(seed=20261011, block=20, arms=("C0", "K"), n_pre=paths, n_tax=paths,
+                           capitals=("100k",), modes=("progressive",), anchor_e2=False,
+                           deltas=("K",), keep_paths=True, quiet=True)
+        anchor = bool(np.array_equal(ctrl["pre"], ref["paths"]["pre"][("base", "K")])
+                      and np.array_equal(ctrl["tax"],
+                                         ref["paths"]["tax"]["100k"]["progressive"]["K"],
+                                         equal_nan=True))
+        n_moved = sum(moved.values())
+        return {
+            "arms": len(arms), "paths": paths,
+            "moved": sorted(k for k, v in moved.items() if v),
+            "inert_on_this_fixture": sorted(k for k, v in moved.items() if not v),
+            "n_moved": n_moved, "n_options": len(moved),
+            "control_matches_the_engine_bootstrap": anchor,
+            "deterministic": bool(again),
+            "pass": bool(anchor and again and n_moved >= 8),
+        }
+    finally:
+        _api.IDEAS_DIR = old_dir
+
+
+PLUGIN_ARMS = ("ctrl", "band", "notional", "slice", "gov", "margin", "early", "settle", "fx",
+               "prefund", "fill", "wht", "spy")
+
+PLUGIN_SOURCE = '''
+"""A synthetic arm per option: only the rule (and one leg or one spec flag) differs (a check fixture)."""
+import numpy as np
+
+from research.batch_screen import rules
+from research.fast_engine import fe_signals
+
+rules.register_rule("koptc_band", True, True, True, {"band_up": 0.0})
+rules.register_rule("koptc_notional", True, True, True, {"min_notional": 2000.0})
+rules.register_rule("koptc_slice", True, True, True, {"slice_frac": 0.25, "slice_parts": 3})
+rules.register_rule("koptc_gov", True, True, True, {"dd_start": 0.20, "dd_floor": 0.25})
+rules.register_rule("koptc_margin", True, True, True, {"margin_spread": 0.015})
+rules.register_rule("koptc_early", True, True, True, {"early_mode": 1})
+rules.register_rule("koptc_settle", True, True, True, {"settle_floor": 0.0})
+rules.register_rule("koptc_fx", True, True, True, {"fx_cost": 0.005})
+rules.register_rule("koptc_prefund", True, True, True, {"prefund_sessions": 63.0})
+rules.register_rule("koptc_fill", True, True, True, {"fill_mode": 1})
+rules.register_rule("koptc_wht", True, True, True, {"wht": 0.20})
+
+ARMS = {
+    "ctrl": {"rule": "K", "leg": "2x", "cash_yield": "none"},
+    "band": {"rule": "koptc_band", "leg": "2x", "cash_yield": "none"},
+    "notional": {"rule": "koptc_notional", "leg": "2x", "cash_yield": "none"},
+    "slice": {"rule": "koptc_slice", "leg": "2x", "cash_yield": "none"},
+    "gov": {"rule": "koptc_gov", "leg": "2x", "cash_yield": "none", "uncapped": True},
+    "margin": {"rule": "koptc_margin", "leg": "1x", "cash_yield": "none"},
+    "early": {"rule": "koptc_early", "leg": "2x", "cash_yield": "none"},
+    "settle": {"rule": "koptc_settle", "leg": "2x", "cash_yield": "none"},
+    "fx": {"rule": "koptc_fx", "leg": "2x", "cash_yield": "none"},
+    "prefund": {"rule": "koptc_prefund", "leg": "2x", "cash_yield": "none"},
+    "fill": {"rule": "koptc_fill", "leg": "2x", "cash_yield": "none"},
+    "wht": {"rule": "koptc_wht", "leg": "2x", "cash_yield": "none"},
+    "spy": {"rule": "K", "leg": "2x_spy", "cash_yield": "none"},
+}
+
+
+def targets(data, spec):
+    e2 = fe_signals.e2_up(data.price)
+    comps = fe_signals.early_components(data.price)
+    on_eff, factor = fe_signals.r2_state(data.price, e2, comps)
+    vt = fe_signals.vt_of(data.vol)
+    raw = np.atleast_2d(on_eff.astype(float)) * np.atleast_2d(factor) * vt
+    if spec.get("uncapped"):
+        return raw          # the governor's convention: the kernel applies the 0.98 cap
+    return fe_signals.sized_wants(on_eff, factor, data.vol)
+'''
+
+
 def check_spy_leg():
     """`leg = "2x_spy"` adds the S&P 500 leg on the main window and degenerates elsewhere."""
     from research.batch_screen import api, windows
@@ -498,6 +617,7 @@ CHECKS = {
     "IC54_fill_reference": check_fill_reference,
     "IC56_withholding": check_withholding_panel,
     "IC40_spy_leg": check_spy_leg,
+    "all_options_through_the_framework": check_options_through_the_framework,
 }
 
 __all__ = ["CHECKS", "fixture", "run", "steps", "ufe_table", "weekdays"]

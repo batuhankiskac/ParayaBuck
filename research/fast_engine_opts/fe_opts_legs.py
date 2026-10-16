@@ -106,15 +106,64 @@ def select_leg(p, name):
 def chunk_triple(pos, sym="SPY"):
     """`(open, close, dividend)` of one instrument along a bootstrap chunk's drawn positions.
 
-    `pos` is `fe_boot.draw_positions`'s matrix (`idx = pos + 1` indexes the pool the panel is
-    built from), so the returned arrays are the drawn source sessions' own raw values -- the same
-    convention `batch_screen.boot.boot_panels` uses for the Nasdaq instrument, which is what makes
-    a second underlying's reconstructed leg comparable to the first.
+    The returned arrays carry the same convention as the framework's reconstruction: one leading
+    base column (the close of the session *before* the first drawn one, so the return into the
+    first drawn session is that session's own return) followed by the drawn sessions' raw values.
+    Width = drawn columns + 1, exactly the market arrays' width. `fe_signals.synthetic_2x` of this
+    triple is the same series as `batch_screen.boot.boot_panels`' total-return reconstruction, to
+    floating-point rounding -- which is what makes a second underlying, or a netted dividend,
+    comparable to the Nasdaq leg the framework builds.
     """
     days, arr, _y = fe_data.load()
     o, c, d = arr[sym]
     idx = pos + 1
-    return o[idx], c[idx], d[idx]
+    prev = c[idx - 1]
+    base = prev[:, :1]
+    zero = np.zeros_like(base)
+    o2 = np.concatenate([base, o[idx]], axis=1)
+    c2 = np.concatenate([base, c[idx]], axis=1)
+    d2 = np.concatenate([zero, d[idx]], axis=1)
+    return o2, c2, d2
+
+
+def chunk_raw_panel(p, pos, wht=0.0, extra=None, sym="QQQ"):
+    """One bootstrap chunk's panel rebuilt from the drawn *raw* triple of `sym`.
+
+    The framework's chunk panel is built from a total-return path with a zero dividend column, so
+    a withholding cannot be applied to it: netting has to happen upstream of the reconstruction.
+    The rebuilt legs are the same series (the drawn returns are unchanged) and the same width; the
+    panel's `price`/`div`/`rate` and its extra-series context are carried over unchanged.
+    """
+    o2, c2, d2 = chunk_triple(pos, sym)
+    if wht:
+        d2 = d2 * (1.0 - wht)
+    fin = p.meta.get("fin", 0.0)
+    exp_q = p.meta.get("exp_q", EXP_Q)
+    out = api.panel(
+        p.days,
+        price=p.price,
+        div=(p.div * (1.0 - wht)) if wht else p.div,
+        rate=p.rate,
+        o2=o2,
+        c2=c2,
+        d2=d2,
+        o1=o2,
+        c1=c2,
+        d1=d2,
+        fin=fin,
+        exp_q=exp_q,
+        leg=p.leg,
+        window=p.window,
+        meta={**p.meta, "wht": float(wht)},
+        extra_days=p.extra_days,
+        extra_index=p.extra_index,
+        extra_window=p.extra_window,
+    )
+    out.raw = ((o2, c2, d2), (o2, c2, d2))
+    for name, triple in (extra or {}).items():
+        eo, ec, ed = (np.atleast_2d(np.asarray(x, dtype=np.float64)) for x in triple)
+        out.legs[name] = _leg_of(eo, ec, ed, fin, exp_q)
+    return out
 
 
 def window_triple(sym="SPY"):

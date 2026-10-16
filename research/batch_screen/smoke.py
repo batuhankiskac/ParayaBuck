@@ -59,13 +59,34 @@ def synthetic_panel(P=SYNTH_P, T=SYNTH_T, leg=api.DEFAULT_LEG, seed=20261016) ->
                      window="synthetic", leg=leg)
 
 
-def real_panels(leg=api.DEFAULT_LEG, win=None) -> dict:
+def _prepared(p, arm, pos=None) -> api.MarketData:
+    """`p` prepared for the arm: `bridge.prepare_panel` when the arm asks for something the panel's
+    own construction does not have (the `2x_spy` option leg, the `wht` leg), `p` itself otherwise.
+
+    Exactly what `stages.run_one` does for a real run, so the smoke sees the panel the arm will.
+    """
+    if arm is None or not (arm.get("opts") or arm.get("leg") == api.LEG_SPY):
+        return p
+    from research.fast_engine_opts import bridge
+
+    return bridge.prepare_panel(p, arm, pos=pos)
+
+def real_panels(leg=api.DEFAULT_LEG, win=None, arm=None) -> dict:
     """One real panel per kind of window a plugin is screened on (no simulation).
 
     `win` is the main window the arm declared (`windows.arm_window`): the `main` panel is the
     window's own panel (a reduced window only changes the sessions the *engine* reads), and the
     bootstrap chunk is drawn from `win`'s own pool -- exactly what the arm will see.
+
+    Every panel is built from `bridge.base_leg(leg)` (an option leg is added on top of the window's
+    own `2x` leg, never built by `api.panel`) and prepared for `arm` when one is given, so a
+    `2x_spy` arm reaches `targets` here as it does in a real run (research/plugins_d3/BUGS.md B1);
+    the drawn positions `pos` are handed to `prepare_panel` for the chunk panel, the same
+    argument `boot.boot` passes.
     """
+    from research.fast_engine_opts import bridge
+
+    leg = bridge.base_leg(leg)
     out = {}
     _days, p, _i0, _i1 = windows.main_panel(0.0, leg=leg)
     out["main"] = p
@@ -77,7 +98,8 @@ def real_panels(leg=api.DEFAULT_LEG, win=None) -> dict:
     bw = B.BootWindow("none", pool)
     pos = bw.positions(np.random.default_rng(SEED), BLOCK, BOOT_P)
     out["boot"] = B.boot_panels(bw, pos, (leg,), (0.0,))[(leg, 0.0)]
-    return out
+    return {name: _prepared(p, arm, pos if name == "boot" else None)
+            for name, p in out.items()}
 
 
 # ----------------------------------------------------------------------------- one arm
@@ -110,7 +132,7 @@ def smoke_arm(idea_id: str, arm_id: str, panels: dict | None = None, leg: str | 
         return out
     out["win"] = win.as_dict()
     if panels is None:
-        panels = smoke_panels(leg or arm["leg"], win)
+        panels = smoke_panels(leg or arm["leg"], win, arm)
     for name, p in panels.items():
         before = len(p.extra_log)
         rec = {"shape": [int(p.P), int(p.T)], "sessions": [p.days[0], p.days[-1]]}
@@ -155,17 +177,22 @@ def smoke_arm(idea_id: str, arm_id: str, panels: dict | None = None, leg: str | 
     return out
 
 
-def smoke_panels(leg=api.DEFAULT_LEG, win=None) -> dict:
+def smoke_panels(leg=api.DEFAULT_LEG, win=None, arm=None) -> dict:
     """The synthetic panel plus the real ones, with the synthetic panel first.
 
-    Cached per `(leg, window tag)`: a reduced-window arm smokes on its own window, which is the
-    only difference (the main panel keeps the whole history; its bootstrap chunk moves to the
-    window's pool).
+    Cached per `(leg, window tag, arm)`: a reduced-window arm smokes on its own window, which is
+    the only difference (the main panel keeps the whole history; its bootstrap chunk moves to the
+    window's pool). `arm` prepares every panel for that arm (`_prepared`), including the synthetic
+    one, which `real_panels` does not build.
     """
-    key = (leg, "default" if win is None else win.tag)
+    from research.fast_engine_opts import bridge
+
+    leg = bridge.base_leg(leg)
+    key = (leg, "default" if win is None else win.tag,
+           None if arm is None else (arm.get("leg"), bridge.panel_key(arm)))
     if key not in _PANELS:
-        out = {"synthetic": synthetic_panel(leg=leg)}
-        out.update(real_panels(leg=leg, win=win))
+        out = {"synthetic": _prepared(synthetic_panel(leg=leg), arm)}
+        out.update(real_panels(leg=leg, win=win, arm=arm))
         _PANELS[key] = out
     return _PANELS[key]
 

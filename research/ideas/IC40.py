@@ -31,20 +31,13 @@ control-identical on those stages and only C differs (its vote is still the S&P'
   (`NotApplicable`) rather than voted on with a fabricated price; `M1`, `M4` and `M5` are covered.
   Sizing stays production's (`data.vol`, the held 2x_spy leg's vol20).
 
-**Status: NEEDS_KERNEL (a framework plumbing bug, not a missing mechanism).**  Every arm declares
-`NEEDS_KERNEL` because the option leg cannot be constructed outside the bootstrap as committed:
-`api.panel` builds only the `2x` and `1x` legs, `MarketData.__post_init__` then looks up
-`legs[leg]`, and every non-bootstrap call site builds its panel with `leg=arm["leg"]`
-(`windows.main_panel` / `oos_panel` / `instrument_panel` called from `stages.stage1`,
-`stage2_tax_windows`, `stage2_oos`, `stage2_instruments`, `stage2_rolling` and
-`smoke.real_panels`).  A `leg = "2x_spy"` arm therefore raises `KeyError: '2x_spy'` while the panel
-is being built, *before* `bridge.prepare_panel` (which adds the SPY leg) is ever reached; the
-bootstrap path works only because `boot.boot` builds its panels with
-`kernel_opts.base_leg(arm["leg"])`.  The fix is those call sites passing
-`research.fast_engine_opts.bridge.base_leg(arm["leg"])` (the bootstrap path already does), after
-which these three arms run unchanged -- the framework is not edited by this branch's task.  The
-mechanism itself is exercised by `check_spy_leg` in `research/fast_engine_opts/checks.py` on a
-panel built with the `2x` leg.
+**Status: runnable.**  The option leg's panel is built by the framework's call sites with
+`research.fast_engine_opts.bridge.base_leg(arm["leg"])` (`stages.panel_leg` for every
+`windows.*_panel` call, and `smoke.real_panels`), and `stages.run_one` / `boot.boot` add the leg
+through `bridge.prepare_panel` -- the plumbing bug (`research/plugins_d3/BUGS.md` B1) this arm was
+declared `needs_kernel` for is fixed by batch_bank_v3's pre-screen amendment, so these three arms
+run unchanged.  The mechanism itself is exercised by `check_spy_leg` in
+`research/fast_engine_opts/checks.py` and by the framework's own regression test.
 """
 
 from __future__ import annotations
@@ -54,24 +47,11 @@ import numpy as np
 from research.batch_screen.api import NotApplicable
 from research.fast_engine import fe_signals
 
-#: the framework cannot build the option leg's panel outside the bootstrap (see the docstring)
-NEEDS_KERNEL_PANEL = (
-    "leg = '2x_spy' cannot be constructed as committed: api.panel builds only the 2x/1x legs and "
-    "MarketData.__post_init__ reads legs[leg], while every non-bootstrap call site builds its "
-    "panel with windows.*_panel(leg=arm['leg']) (stages.stage1 / stage2_tax_windows / stage2_oos "
-    "/ stage2_instruments / stage2_rolling, and smoke.real_panels) before bridge.prepare_panel "
-    "-- which is what adds the SPY leg -- is reached; the bootstrap path works only because "
-    "boot.boot builds its panels with bridge.base_leg(arm['leg']). Fix: pass "
-    "research.fast_engine_opts.bridge.base_leg(arm['leg']) at those call sites"
-)
-
 ARMS = {
-    "A": {"rule": "K", "leg": "2x_spy", "cash_yield": "none", "vote": "qqq",
-          "needs_kernel": NEEDS_KERNEL_PANEL},
-    "B": {"rule": "K", "leg": "2x_spy", "cash_yield": "none", "vote": "qqq",
-          "needs_kernel": NEEDS_KERNEL_PANEL},
+    "A": {"rule": "K", "leg": "2x_spy", "cash_yield": "none", "vote": "qqq"},
+    "B": {"rule": "K", "leg": "2x_spy", "cash_yield": "none", "vote": "qqq"},
     "C": {"rule": "K", "leg": "2x_spy", "cash_yield": "none", "vote": "sp500",
-          "inputs": ["sp500"], "needs_kernel": NEEDS_KERNEL_PANEL},
+          "inputs": ["sp500"]},
 }
 
 #: the windows whose own underlying *is* the S&P 500 index (the framework's own window keys; the

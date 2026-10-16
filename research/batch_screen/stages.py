@@ -78,6 +78,21 @@ STAGE1_KEYS = ("at2000_gt_0", "b1_median_gt_0", "maxdd", "turnover")
 
 
 # ----------------------------------------------------------------------------- one run
+def panel_leg(arm) -> str:
+    """The leg a *panel* is built from: an option leg is added on top of the window's own `2x`.
+
+    `api.panel` builds only `2x`/`1x`, so an arm holding the option leg `2x_spy` (`IC40`) must have
+    its panel built with the base leg and the option leg added afterwards by
+    `research.fast_engine_opts.bridge.prepare_panel` -- what `run_one` already does for such an arm
+    (and what `boot.boot` does for its own panels). Without this the panel construction raises
+    `KeyError: '2x_spy'` before `targets` is ever reached (`research/plugins_d3/BUGS.md` B1).
+    """
+    if arm.get("leg") == api.LEG_SPY:
+        from research.fast_engine_opts import bridge
+
+        return bridge.base_leg(arm["leg"])
+    return arm["leg"]
+
 def fill_knobs_of(arm, mode):
     """The two-leg option dict this *stage* may use, or `None` (off -> the published kernel).
 
@@ -209,10 +224,10 @@ def stage1(arm, cash_yield="none", win=None):
     starts at `win.i0`, and the block bootstrap draws from `win`'s own pool
     (`windows.boot_pool`).
     """
-    days_b, p_base, _i0, i1 = windows.main_panel(0.0, leg=arm["leg"])
+    days_b, p_base, _i0, i1 = windows.main_panel(0.0, leg=panel_leg(arm))
     win = win or windows.arm_window(arm, days_b)
     i0 = win.i0
-    _, p_cal, _, _ = windows.main_panel(FIN["calibrated"], leg=arm["leg"])
+    _, p_cal, _, _ = windows.main_panel(FIN["calibrated"], leg=panel_leg(arm))
     env = windows.try_env(days_b, i0, i1, cash_yield)
     env_usd = windows.usd_env(days_b, i0, i1, cash_yield)
     main = {"base": {}, "calibrated": {}}
@@ -257,7 +272,7 @@ def stage2_main_windows(arm, cash_yield="none", win=None):
     Every declared window starts at the arm's own window start when that is later (`clipped`),
     so a reduced arm's three windows are all measured against a control on the same window.
     """
-    days, p, _i0, _i1 = windows.main_panel(0.0, leg=arm["leg"])
+    days, p, _i0, _i1 = windows.main_panel(0.0, leg=panel_leg(arm))
     win = win or windows.arm_window(arm, days)
     out = {}
     for wn, (j0, j1) in windows.after_tax_windows(days, win).items():
@@ -274,7 +289,7 @@ def stage2_oos(arm, cash_yield="none"):
     out = {}
     for key in OOS_WINDOWS:
         try:
-            days, p, start, _i1 = windows.oos_panel(key, leg=arm["leg"])
+            days, p, start, _i1 = windows.oos_panel(key, leg=panel_leg(arm))
             env = windows.usd_env(days, start, len(days) - 1, cash_yield)
             r = run_one(arm, p, env, start, len(days) - 1, "pre_tax", M, 1.0, rule_index=False)
             out[key] = _win_cells(r, days, start)
@@ -290,7 +305,7 @@ def stage2_instruments(arm, cash_yield="none"):
     pre, after = {}, {}
     for key in INSTRUMENTS:
         try:
-            days, p, h, lo, _i0, _i1 = windows.instrument_panel(key, leg=arm["leg"])
+            days, p, h, lo, _i0, _i1 = windows.instrument_panel(key, leg=panel_leg(arm))
             env = windows.usd_env(days, 253, len(days) - 1, cash_yield)
             r = run_one(arm, p, env, 253, len(days) - 1, "pre_tax", M, 1.0, rule_index=False)
             pre[key] = _win_cells(r, days, 253)
@@ -309,7 +324,7 @@ def stage2_rolling(arm, cash_yield="none", win=None):
     A start that begins before the arm's reduced window is dropped (`windows.rolling_starts`), so
     every start it keeps is fully inside the window the arm declared.
     """
-    days, p, _i0, _i1 = windows.main_panel(0.0, leg=arm["leg"])
+    days, p, _i0, _i1 = windows.main_panel(0.0, leg=panel_leg(arm))
     win = win or windows.arm_window(arm, days)
     T = len(days) - 1
     out = {}

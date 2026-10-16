@@ -1,0 +1,44 @@
+{
+  "campaign": "plugins_b4",
+  "note": "Extra-data dependencies of the research/ideas/IB04,IB08,IB12,IB16,IB20,IB24,IB29,IB33 plugins. No new download was needed: every series these arms read is already registered in research/batch_screen/EXTRA_DATA.json (framework v2, fetched 2026-10-16 from the Yahoo chart API / FRED CSV) and is pinned there with its own url/range/rows/sha256. This file records the three series the arms actually touch, re-hashed on this branch; EXTRA_DATA.json stays the authoritative registry (this branch does not edit the framework). The remaining arms read only the panel's own price/close/calendar, so they need no extra series at all.",
+  "verified_on": "2026-10-16",
+  "registry": "research/batch_screen/EXTRA_DATA.json",
+  "extra_data": {
+    "DGS10": {
+      "key": "dgs10",
+      "used_by": ["IB12"],
+      "source": "FRED CSV",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
+      "file": "data/historical/batch_screen_v1_dgs10.csv",
+      "column": "value",
+      "range": ["1962-01-02", "2026-10-14"],
+      "rows": 16181,
+      "sha256": "3eda40d71b514fc0614ef32bda3a8bac82e7a9915667f0feb4b1609e87c5be9b"
+    },
+    "CPIAUCSL": {
+      "key": "cpi",
+      "used_by": ["IB12"],
+      "source": "FRED CSV",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL",
+      "file": "data/historical/batch_screen_v1_cpiaucsl.csv",
+      "column": "value",
+      "range": ["1947-01-01", "2026-09-01"],
+      "rows": 956,
+      "sha256": "96d5d49aa19316f612b5334bfe1390fcd24e91d94679f3d3b5b50a08938b573a",
+      "gaps": ["2025-10"],
+      "gap_note": "one missing month: the BLS published no October-2025 CPI during the 2025 shutdown. IB12's 1-month-lagged year-on-year rate is therefore unavailable for the single session-month that reads it (2025-11); every other month is finite."
+    },
+    "SMH": {
+      "key": "smh",
+      "used_by": ["IB20"],
+      "source": "Yahoo chart API",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/SMH?period1=0&period2=1792150994&interval=1d&events=div%2Csplit",
+      "file": "data/historical/batch_screen_v1_smh.csv",
+      "column": "adjclose",
+      "range": ["2000-06-05", "2026-10-15"],
+      "rows": 6631,
+      "sha256": "cd1475a2d67b406be521d8d4a3a71d0d745e96a21bd1d33fd39f5e8caf22fa56"
+    }
+  },
+  "no_new_files": true
+}

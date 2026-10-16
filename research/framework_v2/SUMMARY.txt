@@ -1,0 +1,127 @@
+framework_v2 — SUMMARY
+================================================================================
+VERDICT: engineering delivery, no idea screened, no performance number computed.
+Every gate the task set passes: fast_engine.parity --quick PASS, framework harness
+116 checks / 0 failed, two-leg kernel parity (128 cells + parity_b) PASS, the option
+copy's parity 28 cells PASS (option off == the current kernel bit for bit), pytest 128
+passed / 0 failed, two consecutive --run invocations byte-identical RESULTS.json.
+
+WHAT WAS ADDED (task goals 1-3)
+--------------------------------------------------------------------------------
+1. REDUCED WINDOWS. spec["start"] = "auto" | "YYYY-MM-DD" (plus spec["inputs"]).
+   Stage 1, stage 2 and both block bootstraps run on the declared window, with K
+   re-simulated on the SAME window as control (per-window cache _control_<tag>.json).
+   Rules (README §1a, PREREGISTRATION §6.2): "auto" = the later of the published start
+   and the first session every declared input covers, plus one session (the engine reads
+   the previous close at i0-1); a window shorter than 10 calendar years is
+   NotApplicable; the three after-tax windows are clipped up to the window's start (no
+   key dropped, the record names the window that ran); the January rolling starts that
+   begin before it are dropped (<15 leaves the arm holdout_insufficient); the block
+   bootstrap draws from the window's own pool at the published seed/block/rng order; the
+   OOS windows, the 21 ETFs and the pooled OOS bootstrap are unchanged (other markets).
+   The record / scoreboard / DEFLATION.json carry the window; an arm that declares
+   nothing takes the published code path (default pool bit-identical to pool=None).
+2. THE REPORTED BUG. MarketData.leg_b_usable indexed self.days with a column index; on a
+   bootstrap chunk the market arrays carry one artificial leading base row, so the
+   reported session was off by one and the span string raised IndexError whenever the
+   last column was finite. Reproduced with probes/two_leg.py::gld_sleeve and with the
+   FRED key dgs10 (interior NaN) before the fix; fixed by MarketData.column_days (which
+   also makes year/month (T,)); regression test + a harness cell.
+3. TWO-LEG OPTIONS (copy: research/fast_engine2/fe2_opts.py; fe2_sim/fe2_boot untouched
+   except one pure refactor). (a) The off-state ideas IC31-IC37 need NO per-session
+   instrument switch: a fixed leg B whose weight varies is enough, demonstrated end to
+   end by probes/two_leg.py::gld_offstate (start="auto") and ::onex_offstate
+   (leg_b="1x", IC38) on real data through the plugin path. (b) gain-aware fill
+   options: band_score usd|indexed|max (K's widths keyed to the TRY-indexed FIFO gain
+   fraction), band_step4_pp (fourth step above a fixed 0.15), route_cap_pp (downsize
+   routing to the cheaper-indexed leg, unit-based, capped by the cap / the other leg's
+   sale / the cheap leg's remaining units), loss_net_frac + loss_net_min_ytd_try
+   (loss-lot harvesting with a YTD gate, taxed modes only), kernel_scope
+   after_tax_stage_only (IC42/IC43 keep the published kernel pre-tax). (c) three
+   instruments in one account (IC36, IC34 arm C) is marked NEEDS_KERNEL, with the
+   reason (a derived blend series would hide the sleeve's internal rescale from the
+   taxpayer and leave it without a per-instrument FIFO book).
+
+EVIDENCE (the check groups; there are no idea arms in this study)
+--------------------------------------------------------------------------------
+  command                                              result
+  ---------------------------------------------------  ----------------------------
+  fast_engine.parity --quick                           PASS (PARITY.json restored)
+  batch_screen.run --harness                            PASS 116 checks, 0 failed
+  fast_engine2.fe2_parity                              PASS 128 cells, 0 failed
+  two_leg_kernel_v1.parity_b                           all_pass True (nav diff 0.0)
+  fast_engine2.fe2_opts_parity                         PASS 28 cells, 0 failed
+  batch_screen/tests/run.sh -q                         128 passed, 0 failed
+  probes.run_probe_batch --ideas two_leg               5 arms, isolated ledger, 57 s
+  framework_v2.screen --run --tests                    PASS (RESULTS.json written)
+
+  harness group detail (0 failed anywhere; 116 checks in total):
+    control_anchors (29)     K's published cells: pre-tax base/calibrated m1/m2, max DD,
+                             turnover, the three after-tax windows at $100k, OOS x6, ETF
+                             median pre-tax and after-tax, rolling starts, B1/B2 levels
+    plugin_anchors (30)      r2_control/R2 and vol_shape_p15/p15 published cells
+    parity                   fe_boot.boot and the old boot_oos_market, bit for bit
+                             (nested cells 4 + 5; reported, not part of n_checks -- the
+                             flat counter reads one level)
+    behaviour (2 cells)      the cash-yield and leg knobs (likewise nested, not counted)
+    two_leg (10)             zero leg B == the control bit for bit; a real two-legged
+                             account trades; gld without history is N/A; the chunk leg-B
+                             column label (the bug fix); the reduced pool unlocks a late
+                             leg B; fill_knobs off / on / after-tax scope; IC38 on 1x
+    reduced_window (8)       the resolved window, the clipped after-tax windows, the
+                             dropped rolling starts, the restricted pool, the paired
+                             control, the default pool == the published draw
+    two_leg_kernel_parity (9) the two-leg kernel vs the engine + riskoff_after_tax_v1
+    two_leg_opts_parity (29) the option copy: off == the current kernel (0.0 on every
+                             cell), one positive control per option
+    engine_parity_quick      the required PASS
+
+  two-leg option positive controls (main window, K, 100k; off -> on):
+    band_score indexed       blocked_band 2647 -> 2497, CAGR .170428 -> .170203
+    band_score max           blocked_band 2647 -> 2670, CAGR .170428 -> .170628
+    band_step4 12pp          blocked_band 2647 -> 2778, CAGR .170628 -> .172397
+    route_cap 10pp           leg turnover A 159.60 -> 159.55, B 33.19 -> 46.13 (opposite
+                             signs, total |delta| 12.89 <= 2 x 0.10 x 6679 bound)
+    loss_net 0.25            tax 28,986,005 -> 28,497,773 TRY; pre-tax identical (0.0)
+    loss_net_min_ytd 100k    501 -> 266 netting events (1M: 139)
+
+  reduced-window evidence (probe two_leg/gld_offstate, GLD from 2004-11-18):
+    window w20041119         i0 = session 1434 (2004-11-19), pool (1433, 6930) = 5498
+                             sessions, 17 rolling starts (2005-2021), after-tax windows
+                             2004-11-19 / 2010-01-04 / 2017-01-03, P1 partial
+    probe batch              a full stage 1 + stage 2 with its own _control_w20041119.json
+    default window           boot(pool=boot_pool(default)) == boot(pool=None) exactly
+
+FAILED GATES: none. Nothing is declared (no candidate is proposed by this study).
+
+WALL CLOCK (this machine, foreground):
+  framework_v2.screen --run --tests    67.96 s (harness ~37 s, pytest ~17 s, ledger ~2 s)
+  the same run again                   98.2 s; a third run 91.9 s -- all three wrote a
+                                       byte-identical RESULTS.json:
+                                       7ed72c15703c0ca18fd5ec043b30b41bc637ec7fa3aa11ac3b59f292f53c0ef5
+  batch_screen.run --harness (alone)   37.6 s / 61.0 s (the machine was busier)
+  probes.run_probe_batch --ideas two_leg  57.0 s
+  fast_engine2.fe2_parity                  13.3 s
+
+COMMITS (branch research/framework_v2, on top of research/batch_run_v1 abe822fb)
+  3eb6e1dd  reduced-window option (spec start auto|date) + panel column calendar
+  af9134c4  reduced-window checks, off-state probe arm, tests
+  776310f2  two-leg fill options (fe2_opts) + framework plumbing and checks
+  a2c89186  plugin-author guide, pre-registration amendment, reference doc, study screen
+
+CAVEATS
+  * A reduced-window arm's delta is paired against K on its own window; different windows
+    do not share a pool, so its deflation p-value is not the published single-pool one
+    (DEFLATION.json names the pools in window_tags; the compared quantity is the paired
+    advantage, which is what the screening decision uses).
+  * A two-leg sleeve realising a large TRY-indexed gain can leave an advance tax the
+    account cannot fund on a few drawn paths: (NAV < 0)**(1/years) is NaN. Seen once, on
+    the naive gld_offstate fixture (3 of 200 paths, progressive mode only); the arm fails
+    closed at stage 1 and is reported in excluded_non_finite instead of poisoning every
+    other arm's p-value. The single-leg control and the split arm are clean on that pool.
+  * route_cap moves UNITS, so a routed fill's cash differs from the un-routed fill by the
+    two instruments' price ratio; the band widths a routed leg is judged on are those its
+    routed quantity earns.
+  * No new data was downloaded; DATA_MANIFEST.json lists the seven inputs the new code
+    touches with their SHA-256. research/fast_engine/ is untouched (the harness restores
+    PARITY.json to its committed bytes).

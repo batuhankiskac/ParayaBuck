@@ -239,10 +239,10 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 11.4s -> PARITY.json"
+  "tail": "parity PASS in 21.1s -> PARITY.json"
  },
  "failed": [],
- "n_checks": 115,
+ "n_checks": 116,
  "parity": {
   "boot_vs_engine": {
    "C0_pre_base": {
@@ -589,6 +589,12 @@
   }
  },
  "two_leg": {
+  "a_panel_leg_off_state_needs_no_reduced_window": {
+   "cagr": 0.085576,
+   "control_cagr": 0.090773,
+   "leg_b_trades": 176,
+   "pass": true
+  },
   "after_tax_scope_leaves_the_pretax_stage_alone": {
    "cagr_plain": 0.132519,
    "cagr_scoped": 0.132519,
@@ -657,7 +663,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 11.4s -> PARITY.json"
+   "tail": "parity PASS in 21.1s -> PARITY.json"
   },
   "failed": [],
   "riskoff_divergence_pp": {
@@ -680,7 +686,7 @@
    "failed": [],
    "n_cells": 28,
    "pass": true,
-   "wall_s": 0.655143
+   "wall_s": 1.014418
   },
   "p1_off_identity.base_flat_m1": {
    "max_abs_diff": 0.0,
@@ -975,5 +981,5 @@
    "tax_same_both_ways": 0.0
   }
  },
- "wall_s": 37.555673
+ "wall_s": 60.961309
 }

@@ -39,9 +39,8 @@ import numpy as np
 from research.fast_engine import fe_sim
 from research.fast_engine.fe_config import BLOCK, GATE_CAPITAL, PRE_BOOT_PATHS, SEED, TAX_BOOT_PATHS
 
-from . import api
+from . import api, deflation, registry, stages, windows
 from . import boot as B
-from . import deflation, registry, stages, windows
 from .rules import CONTROL_ARM, cash_rates
 
 HERE = Path(__file__).resolve().parent
@@ -243,8 +242,8 @@ def _arm_task(payload):
 
 
 # ----------------------------------------------------------------------------- the batch
-def scoreboard(batch, batch_dir, control, arms, timing, defl=None):
-    n, lines_n = registry.n_trials(), registry.n_lines()
+def scoreboard(batch, batch_dir, control, arms, defl=None):
+    n = registry.n_trials()
     lines = [
         f"# batch {batch} -- SCOREBOARD",
         "",
@@ -256,12 +255,11 @@ def scoreboard(batch, batch_dir, control, arms, timing, defl=None):
         f"fresh-seed bootstraps seed {stages.FRESH_SEED} blocks 10/40, 21 January rolling starts, "
         "pooled OOS bootstrap). Δ = arm − K in pp.",
         "",
-        f"registered trials N = {n} ({lines_n} ledger lines; "
-        "`research/batch_screen/REGISTRY.jsonl` -- N counts distinct `(idea, arm, spec_hash)`, "
-        "the deflation's multiple-testing count).",
+        f"registered trials N = {n} (`research/batch_screen/REGISTRY.jsonl`; N counts distinct "
+        "`(idea, arm, spec_hash)`, the deflation's multiple-testing count).",
         "",
         "| arm | stage 1 | stage 2 | failed gates | AT2000 Δ | B1 med/share | B2 med/share | "
-        "OOS med Δ | ETFs med Δ | fresh | RW p | wall s |",
+        "OOS med Δ | ETFs med Δ | fresh | RW p | final |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for a in arms:
@@ -278,6 +276,16 @@ def scoreboard(batch, batch_dir, control, arms, timing, defl=None):
         etf = (g.get("E1") or {}).get("median_delta_pp")
         fresh = (g.get("FRESH") or {}).get("pass")
         p = (defl or {}).get("rw_stepdown", {}).get("p_adjusted", {}).get(r["arm"])
+        if ctrl:
+            final = "control"
+        elif r["verdict"] == "reject_stage1":
+            final = "rejected (stage 1)"
+        elif r["verdict"] == "reject_stage2":
+            final = "rejected (stage 2)"
+        elif r["arm"] in (defl or {}).get("declared", []):
+            final = "**declared**"
+        else:
+            final = "not declared (deflation)"
         lines.append(
             f"| `{r['arm']}` | " + ("control" if ctrl else ("PASS" if r["stage1_pass"] else "FAIL"))
             + f" | {r['verdict']}"
@@ -288,7 +296,7 @@ def scoreboard(batch, batch_dir, control, arms, timing, defl=None):
             + f" | {'-' if etf is None else f'{etf:+.4f}'}"
             + f" | {'-' if fresh is None else ('PASS' if fresh else 'FAIL')}"
             + f" | {'-' if p is None else f'{p:.4f}'}"
-            + f" | {timing.get(r['arm'], 0.0):.1f} |")
+            + f" | {final} |")
     lines += [""]
     return "\n".join(lines) + "\n"
 
@@ -330,16 +338,19 @@ def run_batch(batch, ideas, cash_yield="none", workers=None, stage2=True, allow_
             "b1_delta_pp": [0.0] * len(ctrl["vectors"]["tax"]["progressive"]),
         })
         timing[CONTROL_ARM] = 0.0
-    files = sorted(p for p in batch_dir.glob("*.json") if not p.name.startswith("_"))
+    files = sorted(p for p in batch_dir.glob("*__*.json") if not p.name.startswith("_"))
     agg = {"batch": batch, "control": CONTROL_ARM, "cash_yield": cash_yield,
-           "n_registered_trials": registry.n_trials(), "n_registry_lines": registry.n_lines(),
-           "params": ctrl["params"],
+           "n_registered_trials": registry.n_trials(), "params": ctrl["params"],
            "arms": [json.loads(p.read_text()) for p in files]}
     dump(batch_dir / "RESULTS.json", agg)
     defl = deflate_batch(batch) if stage2 else None
-    (batch_dir / "SCOREBOARD.md").write_text(scoreboard(batch, batch_dir, ctrl, arms, timing, defl))
+    (batch_dir / "SCOREBOARD.md").write_text(scoreboard(batch, batch_dir, ctrl, arms, defl))
+    # `timing.json` is the batch's only non-deterministic file: wall clock per arm and the
+    # ledger's line count (which grows with every declaration by construction).
     dump(batch_dir / "timing.json", {"batch": batch, "wall_s": timing,
-                                     "total_wall_s": time.time() - t0})
+                                     "total_wall_s": time.time() - t0,
+                                     "registry_trials": registry.n_trials(),
+                                     "registry_lines": registry.n_lines()})
     return {"batch": batch, "dir": str(batch_dir), "timing": timing, "deflation": defl,
             "wall_s": time.time() - t0}
 
@@ -348,7 +359,7 @@ def run_batch(batch, ideas, cash_yield="none", workers=None, stage2=True, allow_
 def b1_vectors(batch=None):
     """The B1-recent Δ vector (pp) of every screened arm, from the result files."""
     out = {}
-    for p in sorted(RESULTS.glob("*/[a-z]*__*.json")):
+    for p in sorted(RESULTS.glob("*/*__*.json")):
         if batch is not None and p.parent.name != batch:
             continue
         r = json.loads(p.read_text())
@@ -358,12 +369,24 @@ def b1_vectors(batch=None):
 
 
 def deflate_batch(batch=None, alpha=0.05, resamples=2000):
-    """White RC + Romano-Wolf + deflated Sharpe over every screened arm's B1 Δ vector."""
+    """White RC + Romano-Wolf + deflated Sharpe over every screened arm's B1 Δ vector.
+
+    `deflation_rejected` is the multiple-testing verdict on its own; `declared` is the framework's
+    final candidate set -- arms that passed **stage 2** *and* the deflation test at `alpha`.
+    """
     vecs = b1_vectors(batch)
     out = deflation.deflate(vecs, registry.n_trials(), alpha=alpha, resamples=resamples)
     out["batch"] = batch or "all"
-    out["registry_lines"] = registry.n_lines()
     out["registry_trials"] = registry.n_trials()
+    stage2 = {}
+    for p in sorted(RESULTS.glob("*/*__*.json")):
+        if batch is not None and p.parent.name != batch:
+            continue
+        r = json.loads(p.read_text())
+        stage2[r["arm"]] = bool(r.get("stage2_pass"))
+    out["stage2_pass"] = sorted(a for a, v in stage2.items() if v)
+    out["deflation_rejected"] = list(out.get("declared", []))
+    out["declared"] = sorted(a for a in out["deflation_rejected"] if stage2.get(a, False))
     dump(RESULTS / "DEFLATION.json", out)
     return out
 
@@ -422,6 +445,10 @@ def harness():
         an[f"K_bootstrap_level_{mode}"] = _anchor(
             "", rec["boot_level"]["tax"][mode]["cagr_median"],
             vs["bootstrap_b12"]["tax"]["100k"][mode]["C0"]["cagr_median"])
+    for md in ("base", "calibrated"):
+        an[f"K_pretax_bootstrap_level_{md}"] = _anchor(
+            "", rec["boot_level"]["pre"][md]["cagr_median"],
+            vs["bootstrap_b12"]["pre"][md]["C0"]["cagr_median"])
     checks["control_anchors"] = an
     checks["plugin_anchors"] = plugin_anchors(bh, vs, ctrl)
     checks["parity"] = {"boot_vs_engine": boot_parity(), "oos_pooled_vs_old_code": oos_pooled_parity()}
@@ -474,6 +501,15 @@ def plugin_anchors(bh, vs, ctrl):
                     "", rec["after_tax"][wn]["after_tax_cagr"],
                     vs["after_tax_windows"]["100k"][wn]["E3"]["after_tax_cagr"])
             b12 = stages.stage1_vectors(arm, "none", quiet=True, label="p15 anchor")
+            for md in ("base", "calibrated"):
+                v = b12["pre"][md][arm["id"]]
+                d = v - np.asarray(ctrl["vectors"]["pre"][md], dtype=np.float64)
+                out[f"p15_pre_{md}_level"] = _anchor(
+                    "", B.delta_stats(v)["cagr_median"],
+                    vs["bootstrap_b12"]["pre"][md]["E3"]["cagr_median"])
+                out[f"p15_pre_{md}_median_delta"] = _anchor(
+                    "", B.delta_stats(d)["median_delta_pp"],
+                    vs["bootstrap_b12"]["pre"][md]["E3"]["diff_vs_ctrl_median_pp"], tol_pp=0.02)
             for mode, key in (("progressive", "B1"), ("flat", "B2")):
                 v = b12["tax"][GATE_CAPITAL][mode][arm["id"]]
                 d = v - np.asarray(ctrl["vectors"]["tax"][mode])
@@ -603,6 +639,9 @@ def main(argv=None) -> int:
         print(f"harness {'PASS' if checks['all'] else 'FAIL'} ({checks['n_checks']} checks, "
               f"{len(checks['failed'])} failed, {checks['wall_s']:.1f}s)", flush=True)
         return 0 if checks["all"] else 1
+    if args.deflate:
+        print(json.dumps(rnd(deflate_batch(args.batch)), indent=1, sort_keys=True))
+        return 0
     if args.batch:
         if not args.ideas:
             raise SystemExit("--batch needs --ideas a,b,c")
@@ -611,9 +650,6 @@ def main(argv=None) -> int:
         print((RESULTS / args.batch / "SCOREBOARD.md").read_text(), flush=True)
         print(f"batch {args.batch}: wall {res['wall_s']:.1f}s; per arm "
               f"{ {k: round(v, 1) for k, v in sorted(res['timing'].items())} }", flush=True)
-        return 0
-    if args.deflate:
-        print(json.dumps(rnd(deflate_batch(args.batch)), indent=1, sort_keys=True))
         return 0
     ap.print_help()
     return 2

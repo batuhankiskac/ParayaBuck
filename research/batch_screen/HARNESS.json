@@ -187,6 +187,20 @@
    "reference": 0.151785,
    "reproduced": 0.151785
   },
+  "K_pretax_bootstrap_level_base": {
+   "diff_pp": -2.8e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.077761,
+   "reproduced": 0.077761
+  },
+  "K_pretax_bootstrap_level_calibrated": {
+   "diff_pp": -1.4e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.073137,
+   "reproduced": 0.073137
+  },
   "K_rolling_2001": {
    "diff_pp": -4.1e-05,
    "label": "",
@@ -225,10 +239,10 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 11.2s -> PARITY.json"
+  "tail": "parity PASS in 11.8s -> PARITY.json"
  },
  "failed": [],
- "n_checks": 53,
+ "n_checks": 59,
  "parity": {
   "boot_vs_engine": {
    "C0_pre_base": {
@@ -426,6 +440,13 @@
    "reference": 0.399865,
    "reproduced": 0.399865
   },
+  "p15_pre_base_level": {
+   "diff_pp": -3.2e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.081522,
+   "reproduced": 0.081522
+  },
   "p15_pre_base_m1": {
    "diff_pp": -2.3e-05,
    "label": "",
@@ -440,6 +461,20 @@
    "reference": 0.165333,
    "reproduced": 0.165333
   },
+  "p15_pre_base_median_delta": {
+   "diff_pp": -1.5e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.42305,
+   "reproduced": 0.42305
+  },
+  "p15_pre_calibrated_level": {
+   "diff_pp": -4.5e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.076862,
+   "reproduced": 0.076862
+  },
   "p15_pre_calibrated_m1": {
    "diff_pp": 4.9e-05,
    "label": "",
@@ -453,6 +488,13 @@
    "pass": true,
    "reference": 0.159416,
    "reproduced": 0.159416
+  },
+  "p15_pre_calibrated_median_delta": {
+   "diff_pp": 4.9e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.424499,
+   "reproduced": 0.424499
   },
   "p15_turnover_base": {
    "diff_pp": 6e-06,
@@ -469,5 +511,5 @@
    "reproduced": 5.484735
   }
  },
- "wall_s": 33.809328
+ "wall_s": 36.197411
 }

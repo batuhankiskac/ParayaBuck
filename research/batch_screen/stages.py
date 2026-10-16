@@ -27,10 +27,10 @@ from research.fast_engine.fe_config import (
     FIN,
     GATE_CAPITAL,
     INSTRUMENTS,
-    M,
     OOS_WINDOWS,
     TAX_CAPITALS,
     TAX_WINDOWS,
+    M,
 )
 
 from . import boot as B

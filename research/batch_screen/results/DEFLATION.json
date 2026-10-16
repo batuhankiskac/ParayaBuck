@@ -2,9 +2,7 @@
  "alpha": 0.05,
  "batch": "anchors_v1",
  "best_by_sharpe": "vol_shape_p15/p15",
- "declared": [
-  "vol_shape_p15/p15"
- ],
+ "declared": [],
  "deflated_sharpe": {
   "r2_control/R2": {
    "dsr": 0.0,
@@ -29,9 +27,11 @@
    "z": 8.160468
   }
  },
+ "deflation_rejected": [
+  "vol_shape_p15/p15"
+ ],
  "n_arms_with_delta": 2,
  "n_trials": 3,
- "registry_lines": 6,
  "registry_trials": 3,
  "resamples": 2000,
  "rw_stepdown": {
@@ -80,6 +80,7 @@
    "skew": -0.222856
   }
  },
+ "stage2_pass": [],
  "var_sr": 0.499957,
  "white_rc": {
   "best_arm": "vol_shape_p15/p15",

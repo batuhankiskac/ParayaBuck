@@ -12,7 +12,8 @@ import json
 import numpy as np
 import pytest
 
-from research.batch_screen import api, boot as B, run, stages, windows
+from research.batch_screen import api, run, stages, windows
+from research.batch_screen import boot as B
 from research.fast_engine import fe_data, fe_signals
 
 BAND_H2 = api.ROOT / "research/band_h2_combo_v1/RESULTS.json"

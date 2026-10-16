@@ -1198,6 +1198,7 @@
   "boot": {
    "pre": {
     "base": {
+     "cagr_median": 0.004231,
      "mean_delta_pp": 0.410119,
      "median_delta_pp": 0.423066,
      "n_paths": 5000,
@@ -1207,6 +1208,7 @@
      "share_gt_0": 0.7028
     },
     "calibrated": {
+     "cagr_median": 0.004245,
      "mean_delta_pp": 0.411295,
      "median_delta_pp": 0.424465,
      "n_paths": 5000,
@@ -1218,6 +1220,7 @@
    },
    "tax": {
     "flat": {
+     "cagr_median": 0.003311,
      "mean_delta_pp": 0.324544,
      "median_delta_pp": 0.331089,
      "n_paths": 1000,
@@ -1227,6 +1230,7 @@
      "share_gt_0": 0.683
     },
     "progressive": {
+     "cagr_median": 0.002507,
      "mean_delta_pp": 0.238834,
      "median_delta_pp": 0.250732,
      "n_paths": 1000,
@@ -1234,6 +1238,52 @@
      "p95_delta_pp": 1.382459,
      "p_mean": 0.0,
      "share_gt_0": 0.635
+    }
+   }
+  },
+  "boot_level": {
+   "pre": {
+    "base": {
+     "cagr_median": 0.081522,
+     "mean_delta_pp": 9.275191,
+     "median_delta_pp": 8.152168,
+     "n_paths": 5000,
+     "p05_delta_pp": -6.449921,
+     "p95_delta_pp": 28.320625,
+     "p_mean": 0.0,
+     "share_gt_0": 0.8104
+    },
+    "calibrated": {
+     "cagr_median": 0.076862,
+     "mean_delta_pp": 8.799377,
+     "median_delta_pp": 7.686155,
+     "n_paths": 5000,
+     "p05_delta_pp": -6.767816,
+     "p95_delta_pp": 27.663161,
+     "p_mean": 0.0,
+     "share_gt_0": 0.798
+    }
+   },
+   "tax": {
+    "flat": {
+     "cagr_median": 0.043851,
+     "mean_delta_pp": 5.377761,
+     "median_delta_pp": 4.385094,
+     "n_paths": 1000,
+     "p05_delta_pp": -8.117596,
+     "p95_delta_pp": 21.55697,
+     "p_mean": 0.0,
+     "share_gt_0": 0.706
+    },
+    "progressive": {
+     "cagr_median": 0.04069,
+     "mean_delta_pp": 4.790927,
+     "median_delta_pp": 4.069029,
+     "n_paths": 1000,
+     "p05_delta_pp": -8.301593,
+     "p95_delta_pp": 20.172302,
+     "p_mean": 0.0,
+     "share_gt_0": 0.7
     }
    }
   },
@@ -6325,6 +6375,7 @@
    }
   },
   "oos_pooled": {
+   "cagr_median": -0.000128,
    "mean_delta_pp": -0.02629,
    "median_delta_pp": -0.012838,
    "n_paths": 10000,

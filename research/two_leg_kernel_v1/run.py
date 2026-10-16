@@ -37,6 +37,7 @@ HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "RESULTS.json"
 HARNESS = HERE / "HARNESS.json"
 SUMMARY = HERE / "SUMMARY.txt"
+TIMING = HERE / "TIMING.json"   # wall clocks: machine-dependent, kept out of RESULTS.json
 
 
 def rnd(x, nd=6):
@@ -270,16 +271,22 @@ def main(argv=None) -> int:
         "parity_table": cell_table(fe2, pb),
         "parity_cells": {"n": h["n_checks"], "failed": h["failed"]},
         "framework_harness": {"all": bool(fw["all"]), "n_checks": int(fw["n_checks"]),
-                              "failed": list(fw["failed"]), "wall_s": float(fw["wall_s"])},
-        "speed": speed,
+                              "failed": list(fw["failed"])},
+        "framework_checks": fw["two_leg"],
+        "speed_trade_counts": {k: speed[k] for k in ("leg_a_trades", "leg_b_trades")},
+    }
+    timing = {
+        "speed_s": {k: v for k, v in speed.items() if k not in ("leg_a_trades", "leg_b_trades")},
         "wall_clock_s": {"parity_cells": t_h, "framework_harness": t_fw,
+                         "framework_harness_internal": float(fw["wall_s"]),
                          "total_run": time.time() - t0},
         "environment": {"python": sys.version.split()[0], "machine": platform.machine(),
                         "platform": platform.platform(),
                         "threads": __import__("os").cpu_count()},
-        "framework_checks": fw["two_leg"],
     }
     dump(RESULTS, results)
+    dump(TIMING, timing)
+    results = dict(results, wall_clock_s=timing["wall_clock_s"])
     write_summary(results, h, fw, speed)
     print(SUMMARY.read_text(), flush=True)
     return 0 if (h["all"] and fw["all"]) else 1
@@ -317,23 +324,26 @@ def write_summary(results, h, fw, speed):
     ]
     for r in rows:
         mad = "-" if r["max_abs_diff"] is None else f"{r['max_abs_diff']:.3e}"
+        if "anchors" in r["check"] and r["max_abs_diff"] is not None:
+            mad += " pp (vs 6-dp published)"
         lines.append(f"| {r['check']} | {r['cells']} | {mad} | {'PASS' if r['pass'] else 'FAIL'} |")
     n = pb_div = None
     lines += [
         "",
-        f"* parity (a) cells: {h['n_checks']} asserted, {len(h['failed'])} failed.",
+        f"* parity cells (a + b + routing): {h['n_checks']} asserted, {len(h['failed'])} failed.",
         f"* framework harness: {fw['n_checks']} checks, "
         f"{len(fw['failed'])} failed ({fw['wall_s']:.1f}s).",
         "",
-        "## Speed (10 threads, warm numba cache, min of repeats)",
+        f"## Speed ({__import__('os').cpu_count()} threads, warm numba cache, min of repeats; "
+        "TIMING.json)",
         "",
-        f"| measurement | s |",
+        f"| measurement | ms |",
         f"|---|---:|",
-        f"| one main-window path, one leg (engine) | {speed['one_main_window_path_s_one_leg']:.3f} |",
-        f"| one main-window path, two legs (50/50 2x+1x) | {speed['one_main_window_path_s_two_leg']:.3f} |",
-        f"| one main-window path, two-leg kernel with leg B = 0 | {speed['one_main_window_paths_two_leg_leg_b_zero']:.3f} |",
-        f"| clean bootstrap, 256 paths, one leg | {speed['bootstrap_256_paths_s_one_leg']:.3f} |",
-        f"| clean bootstrap, 256 paths, two legs | {speed['bootstrap_256_paths_s_two_leg']:.3f} |",
+        f"| one main-window path, one leg (engine) | {1e3 * speed['one_main_window_path_s_one_leg']:.2f} |",
+        f"| one main-window path, two legs (50/50 2x+1x) | {1e3 * speed['one_main_window_path_s_two_leg']:.2f} |",
+        f"| one main-window path, two-leg kernel with leg B = 0 | {1e3 * speed['one_main_window_paths_two_leg_leg_b_zero']:.2f} |",
+        f"| clean bootstrap, 256 paths (pre-tax x2 + after-tax), one leg | {1e3 * speed['bootstrap_256_paths_s_one_leg']:.1f} |",
+        f"| clean bootstrap, 256 paths (pre-tax x2 + after-tax), two legs | {1e3 * speed['bootstrap_256_paths_s_two_leg']:.1f} |",
         "",
         f"Wall clock of `--run`: {results['wall_clock_s']['total_run']:.1f}s "
         f"(parity cells {results['wall_clock_s']['parity_cells']:.1f}s, framework harness "

@@ -782,7 +782,7 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 11.4s -> PARITY.json"
+  "tail": "parity PASS in 16.3s -> PARITY.json"
  },
  "failed": [],
  "framework_checks": {
@@ -840,7 +840,7 @@
   {
    "cells": 9,
    "check": "published K anchors through the two-leg kernel (band_h2_combo_v1 RESULTS)",
-   "max_abs_diff": 0.0,
+   "max_abs_diff": 4e-05,
    "pass": true
   },
   {
@@ -870,5 +870,5 @@
   "legs": 2,
   "numba": true
  },
- "wall_s": 13.683931
+ "wall_s": 19.225853
 }

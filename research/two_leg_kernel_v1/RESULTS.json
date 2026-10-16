@@ -1,0 +1,96 @@
+{
+ "framework_checks": {
+  "leg_b_without_history_is_not_applicable": {
+   "pass": true,
+   "reason": "the leg-B instrument 'gld' has no price on 2000-03-08 (the series covers 2004-11-18..2026-09-29 of this window)"
+  },
+  "two_leg_arm_reaches_the_two_leg_kernel": {
+   "cagr": 0.090773,
+   "leg_a_trades": 651,
+   "leg_b_trades": 763,
+   "pass": true
+  },
+  "zero_leg_b_is_the_control_after_tax": {
+   "cagr": 0.107533,
+   "pass": true
+  },
+  "zero_leg_b_is_the_control_pretax": {
+   "cagr": 0.157615,
+   "pass": true
+  }
+ },
+ "framework_harness": {
+  "all": true,
+  "failed": [],
+  "n_checks": 73
+ },
+ "parity_cells": {
+  "failed": [],
+  "n": 134
+ },
+ "parity_table": [
+  {
+   "cells": 1,
+   "check": "engine parity (research/fast_engine.parity --quick)",
+   "max_abs_diff": 0.0,
+   "pass": true
+  },
+  {
+   "cells": 72,
+   "check": "two-leg vs engine, leg B == 0: main window (4 rules x 3 modes x m=1/2/4, base+calibrated)",
+   "max_abs_diff": 0.0,
+   "pass": true
+  },
+  {
+   "cells": 36,
+   "check": "two-leg vs engine, leg B == 0: after-tax windows (3 windows x 3 capitals x 2 rules x progressive/flat)",
+   "max_abs_diff": 0.0,
+   "pass": true
+  },
+  {
+   "cells": 3,
+   "check": "two-leg vs engine, leg B == 0: idle-cash yield on",
+   "max_abs_diff": 0.0,
+   "pass": true
+  },
+  {
+   "cells": 8,
+   "check": "two-leg vs engine, leg B == 0: clean bootstrap (per path, pre-tax + after-tax)",
+   "max_abs_diff": 0.0,
+   "pass": true
+  },
+  {
+   "cells": 9,
+   "check": "published K anchors through the two-leg kernel (band_h2_combo_v1 RESULTS)",
+   "max_abs_diff": 4e-05,
+   "pass": true
+  },
+  {
+   "cells": 17,
+   "check": "riskoff_after_tax_v1 engine on the fixed two-leg case (alternating_pre_tax)",
+   "max_abs_diff": 0.0,
+   "pass": true
+  },
+  {
+   "cells": 17,
+   "check": "riskoff_after_tax_v1 engine on the fixed two-leg case (alternating_progressive)",
+   "max_abs_diff": 0.0,
+   "pass": true
+  },
+  {
+   "cagr_diff_pp": 0.61003,
+   "cells": 2,
+   "check": "same case with both legs realising in one tax year (reported, not asserted: the pooled-vs-per-account convention)",
+   "kernel_tax_try": 0.0,
+   "max_abs_diff": null,
+   "pass": true,
+   "ref_tax_try": 19114.90131
+  }
+ ],
+ "speed_trade_counts": {
+  "leg_a_trades": 651,
+  "leg_b_trades": 763
+ },
+ "task": "two_leg_kernel_v1",
+ "verdict": "two-leg kernel built and parity-proven; no idea's performance computed"
+}

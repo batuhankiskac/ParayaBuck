@@ -1,0 +1,83 @@
+{
+ "study": "rw_boot_audit_v1",
+ "campaign": "batch_screen_v1",
+ "note": "No data was downloaded for this study. The audit reads only inputs the campaign already committed: the engine's QQQ/QLD*/SPY bars and DTB3, the USD/TRY and Yi-UFE calendars of the after-tax stages, and the extra-data series the re-screened two-leg arms trade as leg B (ief/dgs10/t10yie/shy/gld/lqd/hyg/tip/gdx/sec_xlu/sec_xlp) plus their windows' inputs. `files[]` pins the ones the fix's own evidence touches (SHA-256 computed in this worktree); the framework's full input set is pinned by research/batch_screen/DATA_MANIFEST.json and `python -m research.batch_screen.extra --verify` re-hashes every extra series in place.",
+ "files": {
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "bytes": 2671225,
+   "role": "QQQ / QLD* / SPY bars -- the main window, every clean/fresh bootstrap chunk and the leg-A market path the chunk-leg reconstruction mirrors",
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "bytes": 301157,
+   "role": "DTB3 -- the leg's financing (the 2x recurrence's rate column) and the bootstrap env",
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c"
+  },
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "bytes": 172726,
+   "role": "USDTRY -- the after-tax stages' currency conversion (the B1/B2 Δ vectors)",
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "bytes": 17845,
+   "role": "Yi-UFE -- the Turkish tax indexation (the after-tax bootstrap modes)",
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c"
+  },
+  "data/historical/batch_screen_v1_ief.csv": {
+   "bytes": 210814,
+   "role": "IEF adjusted close -- IC37/IB26/IB26_2L/IC46's leg B (the reported arm's instrument)",
+   "sha256": "4d0726302e7d518ff42b63ab9501fc9fc89e9cb930cb25f807f1fd4d6c83a18f"
+  },
+  "data/historical/batch_screen_v1_dgs10.csv": {
+   "bytes": 258322,
+   "role": "DGS10 -- IC37's gate input; also the gapped-series fixture of the availability cells",
+   "sha256": "3eda40d71b514fc0614ef32bda3a8bac82e7a9915667f0feb4b1609e87c5be9b"
+  },
+  "data/historical/batch_screen_v1_t10yie.csv": {
+   "bytes": 94624,
+   "role": "T10YIE -- IC37's gate input (the binding input of the auto window start 2003-01-03)",
+   "sha256": "4cd72854523e4badd91e0db8d8e15e734398a4263ed009c6007d28f5ca9decea"
+  },
+  "data/historical/batch_screen_v1_shy.csv": {
+   "bytes": 210749,
+   "role": "SHY adjusted close -- ib25_RW / ib25_2L's leg B",
+   "sha256": "60e73fe63bacbaafde4de91c5b52eef64309fd715911c6f6feb4104a5348d4d1"
+  },
+  "data/historical/batch_screen_v1_gld.csv": {
+   "bytes": 189669,
+   "role": "GLD adjusted close -- IC45's leg B and the harness's late-start availability fixture",
+   "sha256": "dab5c79cfafdf86a23017082d83ad64b02f9859ea2c4fe26b70a7cba9f73dfce"
+  },
+  "data/historical/plugins_d1_lqd.csv": {
+   "bytes": 210540,
+   "role": "LQD adjusted close -- IC31's leg B",
+   "sha256": "6ac65e841101edb627e2ed99d65b7c8180234306189d13352930534fe223819d"
+  },
+  "data/historical/plugins_d1_gdx.csv": {
+   "bytes": 177513,
+   "role": "GDX adjusted close -- IC35's leg B",
+   "sha256": "565fda9d55a2dca0baf71700b354f700cc71894995ddb5f17eb9e82b85fd5928"
+  },
+  "data/historical/plugins_d1_tip.csv": {
+   "bytes": 198910,
+   "role": "TIP adjusted close -- IC33's leg B",
+   "sha256": "08dd15c8a5375e5691c7ba9e039c01933a58547d5d7fd78b32db3bb8e13a83f3"
+  }
+ },
+ "artifacts": {
+  "research/rw_boot_audit_v1/PRE_FIX_BASELINE.npz": "the pre-fix bootstrap archive (raw per-path CAGRs over 5 draws x 8 arms x 4 cells) the parity diff is taken against; SHA-256 recorded in PARITY_LEGB.json",
+  "research/rw_boot_audit_v1/PARITY_LEGB.json": "the before/after diff: which arms are bit-identical (single-leg, panel-leg) and which the extra-key repair moves",
+  "research/rw_boot_audit_v1/repro.json": "the one-path decomposition of the IC37/C B1 Δ (leg-A identity, leg-B spanning columns, tax, pool/start/length)",
+  "research/rw_boot_audit_v1/HARNESS.json": "the study harness (engine parity --quick, K anchors, the leg-B convention cells, the parity diff)",
+  "research/rw_boot_audit_v1/RESULTS.json": "old (bank_v3 / two_leg_v1 / opts_fix_v1) vs new (rw_fix_v1) Stage-1 cells per re-screened arm",
+  "research/batch_screen/results/rw_fix_v1/": "the re-screen batch (per-arm records, RESULTS.json, SCOREBOARD.md)"
+ },
+ "seed_and_samples": {
+  "clean_bootstrap": {"seed": 20261011, "block": 20, "paths_pre": 5000, "paths_tax": 1000},
+  "fresh_bootstrap": {"seed": 20261016, "block": [10, 40], "paths": 1000},
+  "oos_pooled": {"seed": 20261011, "block": 20, "paths_per_market": 2000},
+  "parity_cells": {"seeds": [20261011, 20261016], "blocks": [10, 20, 40], "note": "small path counts (2-8): bit-identity, not sampling"},
+  "repro_path": {"seed": 20261011, "block": 20, "path": 0, "note": "one drawn chunk, the published draw"}
+ },
+ "verified_on": "2026-10-16"
+}

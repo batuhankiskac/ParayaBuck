@@ -1,0 +1,20 @@
+{
+ "note": "Registered through research/batch_screen/EXTRA_DATA.json (the framework's own extra-data mechanism); the existing `dgs10` key carries FRED DGS10 for arm B.",
+ "series": [
+  {
+   "file": "data/historical/two_leg_arms_v1_T10Y3M.csv",
+   "key": "t10y3m",
+   "range": [
+    "1982-01-04",
+    "2026-10-15"
+   ],
+   "rows": 11199,
+   "series": "T10Y3M",
+   "sha256": "a464c1dc610832971b5ef3d7ec11c63f1b0e4b47021e27f952a3038ca6075060",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=T10Y3M",
+   "used_by": "IB26 off-state curve condition (slope > 1.0 pp)"
+  }
+ ],
+ "study": "two_leg_arms_v1"
+}

@@ -1,0 +1,118 @@
+{
+ "arm": "IC37/C",
+ "decomposition": {
+  "boot_i0_i1": [
+   256,
+   2775
+  ],
+  "boot_years": 10.026009582477755,
+  "chunk_columns": 2777,
+  "leg_b_columns": 2776,
+  "leg_b_first_spanning_column": 1,
+  "leg_b_key": "ief",
+  "leg_b_level_end_as_read": 76.33642578,
+  "leg_b_level_end_own_built": 1.193400009781419,
+  "leg_b_max_abs_diff_vs_own_fixed": 1.1102230246251565e-16,
+  "leg_b_max_abs_return_minus_1_as_read": 1.2287783510359307,
+  "leg_b_max_abs_return_minus_1_own": 0.01919134019910884,
+  "leg_b_own_log_return_window": 0.18775764161969316,
+  "leg_b_read_log_return_window": 0.4204157488283947,
+  "leg_b_rel_diff_raw_vs_own_max": 1.227317500780908,
+  "leg_b_spanning_columns": 120,
+  "n_drawn_sessions": 2776,
+  "pool": [
+   959,
+   6930
+  ],
+  "win": {
+   "declared": "auto",
+   "inputs": [
+    "dgs10",
+    "t10yie",
+    "ief"
+   ],
+   "start": 960,
+   "tag": "w20030103"
+  }
+ },
+ "pairing": {
+  "arm_pool": [
+   959,
+   6930
+  ],
+  "control_file": "_control_w20030103.json",
+  "control_params": {
+   "block": 20,
+   "capital": "100k",
+   "fresh_blocks": [
+    10,
+    40
+   ],
+   "fresh_seed": 20261016,
+   "n_pre": 5000,
+   "n_tax": 1000,
+   "oos_paths_per_market": 2000,
+   "seed": 20261011
+  },
+  "control_pool_matches_arm_pool": true,
+  "control_vectors_n_pre": 5000,
+  "control_vectors_n_tax": 1000,
+  "control_win": {
+   "declared": "auto",
+   "inputs": [
+    "dgs10",
+    "t10yie",
+    "ief"
+   ],
+   "start": 960,
+   "tag": "w20030103"
+  },
+  "exists": true
+ },
+ "path": 0,
+ "recorded": {
+  "arm_b1_max_pp": 97.252829,
+  "arm_b1_median_pp": 12.229612,
+  "arm_b1_min_pp": -20.209813,
+  "arm_b1_n": 1000,
+  "arm_b1_n_nonfinite": 0,
+  "arm_b1_path0_delta_pp": 28.358243,
+  "control_pool_record": {
+   "block": 20,
+   "capital": "100k",
+   "fresh_blocks": [
+    10,
+    40
+   ],
+   "fresh_seed": 20261016,
+   "n_pre": 5000,
+   "n_tax": 1000,
+   "oos_paths_per_market": 2000,
+   "seed": 20261011
+  },
+  "control_tax_progressive_path0": 0.137518,
+  "note_nonfinite": "ic37c_confirm_v1 reported a path whose after-tax NAV went <= 0"
+ },
+ "simulation": {
+  "leg_a_realised_gain_try": 149866063.93284842,
+  "leg_a_targets_identical": true,
+  "leg_b_realised_gain_try": 54280531.33753537,
+  "leg_b_trades": 143,
+  "leg_b_turnover": 80.99824885328414,
+  "pretax_cagr_arm": 0.5969321725151828,
+  "pretax_cagr_control": 0.20022163306387264,
+  "pretax_cagr_delta_pp": 39.67105394513102,
+  "pretax_nav_min_arm": 0.8087102994565515,
+  "pretax_nav_min_control": 0.7374206134755976,
+  "prog_cagr_arm": 0.4211004260384754,
+  "prog_cagr_control": 0.1375176789694743,
+  "prog_cagr_delta_pp": 28.35827470690011,
+  "prog_nav_min_arm": 80871.02994565514,
+  "prog_nav_n_le_0_arm": 0,
+  "prog_tax_arm_try": 80368174.74346235,
+  "prog_tax_control_try": 5651783.0764182815,
+  "prog_terminal_arm_usd": 3390138.2022958705,
+  "zero_leg_b_is_the_control_pretax": true
+ },
+ "study": "rw_boot_audit_v1"
+}

@@ -256,13 +256,14 @@ deflation. With realistic leg-B returns no such path exists.
 
 ## 8. Determinism, cost, artifacts
 
-* Re-screen wall clock: run 1 **242.7 s**, run 2 **138.7 s**, deflation 2 s (6 workers, 49 arms);
-  the two runs are byte-identical.
+* Re-screen wall clock (`RUN_TIMING.json`): `--run` **383.3 s** in total — batch pass 1 **242.7 s**,
+  batch pass 2 **138.7 s**, deflation **1.9 s** (6 workers, 49 arms); a further reference pass
+  (**94.1 s**) reproduced `RESULTS.json`, `SCOREBOARD.md` and all 46 arm records byte for byte.
 * The ledger is append-only: 383 → 530 lines, all `rw_fix_v1` additions `rerun` (or
   `needs_kernel` for `IC34/C`, `IC45/C`, `IC46/C`), **N = 303 unchanged**.
 * `research/rw_boot_audit_v1/`: `PREREGISTRATION.md`, `DATA_MANIFEST.json`, `repro.py`/`repro.json`,
   `parity_cells.py`, `PRE_FIX_BASELINE.npz`, `PRE_FIX_SUMMARY.json`, `PARITY_LEGB.json`,
-  `screen.py`, `HARNESS.json`, `RESULTS.json`, `SUMMARY.txt`.
+  `screen.py`, `HARNESS.json`, `RUN_TIMING.json`, `RESULTS.json`, `SUMMARY.txt`.
 * `research/batch_screen/results/rw_fix_v1/` (+ `_control*.json`, `timing.json`, `SCOREBOARD.md`).
 * No data was downloaded; every input the study reads is pinned in `DATA_MANIFEST.json` (SHA-256)
   and the framework's own `research/batch_screen/DATA_MANIFEST.json` / `extra --verify`.

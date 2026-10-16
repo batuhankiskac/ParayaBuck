@@ -236,18 +236,26 @@ def run_batch(twice=True) -> dict:
     if twice:
         cmds.append(list(cmds[0]))
     cmds.append([PY, "-m", "research.batch_screen.run", "--deflate", "--batch", BATCH])
-    out = {"commands": [" ".join(c) for c in cmds], "wall_s": None, "batch_log": []}
-    for c in cmds:
+    out = {"commands": [" ".join(c) for c in cmds], "wall_s": None, "per_command": [],
+           "batch_log": []}
+    labels = ["batch pass 1", "batch pass 2", "deflate"] if twice else ["batch pass", "deflate"]
+    for label, c in zip(labels, cmds):
         cs = time.time()
         proc = subprocess.run(c, cwd=api.ROOT, capture_output=True, text=True)
-        out["batch_log"].append({"cmd": " ".join(c), "returncode": proc.returncode,
-                                 "wall_s": time.time() - cs, "stdout_tail": proc.stdout[-3000:],
-                                 "stderr_tail": proc.stderr[-2000:]})
+        out["per_command"].append({"cmd": " ".join(c), "label": label,
+                                   "returncode": proc.returncode, "wall_s": time.time() - cs})
+        out["batch_log"].append({"cmd": " ".join(c), "label": label,
+                                 "returncode": proc.returncode, "wall_s": time.time() - cs,
+                                 "stdout_tail": proc.stdout[-3000:], "stderr_tail": proc.stderr[-2000:]})
         print(proc.stdout[-3000:], flush=True)
         if proc.returncode != 0:
             print(proc.stderr[-2000:], flush=True)
             raise SystemExit(f"command failed: {' '.join(c)}")
     out["wall_s"] = time.time() - t0
+    tm = RUN.RESULTS / BATCH / "timing.json"
+    out["batch_total_wall_s"] = (json.loads(tm.read_text()).get("total_wall_s")
+                                if tm.exists() else None)
+    (HERE / "RUN_TIMING.json").write_text(json.dumps(out, indent=1, sort_keys=True, default=float) + "\n")
     return out
 
 
@@ -364,6 +372,8 @@ def summary() -> dict:
         if (HERE / "PARITY_LEGB.json").exists() else {},
         "harness": json.loads((HERE / "HARNESS.json").read_text()).get("checks")
         if (HERE / "HARNESS.json").exists() else {},
+        "run_timing": json.loads((HERE / "RUN_TIMING.json").read_text())
+        if (HERE / "RUN_TIMING.json").exists() else {},
         "deflation": {k: defl.get(k) for k in ("n_trials", "n_arms_with_delta", "pass_5pct",
                                                "stage2_pass", "declared", "excluded_non_finite",
                                                "window_tags")},
@@ -388,6 +398,12 @@ def summary() -> dict:
                  f"unaffected moved={len(pd.get('unaffected_arms_moved') or [])} "
                  f"hard failures={len(pd.get('hard_failures') or [])} "
                  f"affected cells changed={pd.get('affected_cells_n_changed')}")
+    rt = (res.get("run_timing") or {})
+    per = ", ".join("%s %.1f s" % (c.get("label") or c.get("cmd", "")[-30:], c.get("wall_s") or 0.0)
+                    for c in rt.get("per_command", []))
+    lines.append("`--run` wall clock: %s s total (%s); a reference pass took %s s and reproduced "
+                 "RESULTS.json byte for byte"
+                 % (rt.get("wall_s"), per, rt.get("reference_pass_wall_s")))
     lines.append(f"verdicts changed: {res['verdict_changed'] or 'none'}")
     lines.append("")
     lines.append(f"{'arm':18s} {'AT2000 old':>11s} {'new':>11s} {'B1med old':>11s} {'new':>11s} "

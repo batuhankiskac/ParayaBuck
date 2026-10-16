@@ -70,6 +70,7 @@
   "research/rw_boot_audit_v1/repro.json": "the one-path decomposition of the IC37/C B1 Δ (leg-A identity, leg-B spanning columns, tax, pool/start/length)",
   "research/rw_boot_audit_v1/HARNESS.json": "the study harness (engine parity --quick, K anchors, the leg-B convention cells, the parity diff)",
   "research/rw_boot_audit_v1/RESULTS.json": "old (bank_v3 / two_leg_v1 / opts_fix_v1) vs new (rw_fix_v1) Stage-1 cells per re-screened arm",
+  "research/rw_boot_audit_v1/RUN_TIMING.json": "the measured wall clock of the recorded `--run` (two batch passes + the deflation) and of the byte-identity reference pass",
   "research/batch_screen/results/rw_fix_v1/": "the re-screen batch (per-arm records, RESULTS.json, SCOREBOARD.md)"
  },
  "seed_and_samples": {

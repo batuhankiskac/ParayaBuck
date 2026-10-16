@@ -3251,6 +3251,60 @@
   },
   "study": "rw_boot_audit_v1"
  },
+ "run_timing": {
+  "batch_log": [
+   {
+    "cmd": "research.batch_screen.run --batch rw_fix_v1 --ideas IC31,IC32,IC33,IC34,IC35,IC37,IC38,IC42,IC43,IC44,IC45,IC46,ib25_RW,ib25_2L,IB26_RW,IB26_2L,ib27_2L --workers 6",
+    "label": "batch pass 1",
+    "returncode": 0,
+    "stdout_tail": "",
+    "wall_s": 242.7
+   },
+   {
+    "cmd": "research.batch_screen.run --batch rw_fix_v1 --ideas IC31,IC32,IC33,IC34,IC35,IC37,IC38,IC42,IC43,IC44,IC45,IC46,ib25_RW,ib25_2L,IB26_RW,IB26_2L,ib27_2L --workers 6",
+    "label": "batch pass 2",
+    "returncode": 0,
+    "stdout_tail": "",
+    "wall_s": 138.7
+   },
+   {
+    "cmd": "research.batch_screen.run --deflate --batch rw_fix_v1",
+    "label": "deflate",
+    "returncode": 0,
+    "stdout_tail": "the leg-B instrument 'gld' has no price on 1999-12-22 (the series covers 2004-11-18..2026-10-13 of this window)\"}\n\n\nbatch rw_fix_v1: wall 138.7s; per arm {'IB26_2L/A_2L': 0.2, 'IB26_2L/B_2L': 0.2, 'IB26_2L/C_2L': 0.1, 'IB26_RW/A_RW': 18.5, 'IB26_RW/B_RW': 18.7, 'IB26_RW/C_RW': 18.4, 'IC31/A': 21.7, 'IC31/B': 21.6, 'IC31/C': 22.3, 'IC32/A': 21.7, 'IC32/B': 22.0, 'IC32/C': 21.5, 'IC33/A': 18.6, 'IC33/B': 18.9, 'IC33/C': 19.3, 'IC34/A': 19.0, 'IC34/B': 19.1, 'IC35/A': 18.8, 'IC35/B': 19.0, 'IC35/C': 19.9, 'IC37/A': 20.3, 'IC37/B': 20.7, 'IC37/C': 20.6, 'IC38/A': 18.5, 'IC38/B': 19.8, 'IC38/C': 20.3, 'IC42/A': 17.1, 'IC42/B': 17.1, 'IC42/C': 16.8, 'IC43/A': 17.1, 'IC43/B': 16.4, 'IC43/C': 17.2, 'IC44/A': 17.4, 'IC44/B': 17.5, 'IC44/C': 17.3, 'IC45/A': 41.2, 'IC45/B': 18.2, 'IC46/A': 18.1, 'IC46/B': 17.8, 'ib25_2L/A_2L': 0.3, 'ib25_2L/B_2L': 0.3, 'ib25_RW/A_RW': 17.8, 'ib25_RW/B_RW': 20.9, 'ib27_2L/A_2L': 17.3, 'ib27_2L/B_2L': 15.9, 'ib27_2L/C_2L': 13.4}\n\n,\n   \"mean_pp\": -220.871325,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 94.667825,\n   \"sharpe\": -2.333119,\n   \"skew\": -0.564218\n  },\n  \"IC43/B\": {\n   \"kurt\": 3.431562,\n   \"mean_pp\": -229.645585,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 100.328811,\n   \"sharpe\": -2.28893,\n   \"skew\": -0.579022\n  },\n  \"IC43/C\": {\n   \"kurt\": 3.492072,\n   \"mean_pp\": -217.397833,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 93.456625,\n   \"sharpe\": -2.32619,\n   \"skew\": -0.583297\n  },\n  \"IC44/A\": {\n   \"kurt\": 3.486081,\n   \"mean_pp\": -203.098723,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 85.409016,\n   \"sharpe\": -2.377954,\n   \"skew\": -0.546157\n  },\n  \"IC44/B\": {\n   \"kurt\": 3.468446,\n   \"mean_pp\": -198.978054,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 82.388807,\n   \"sharpe\": -2.41511,\n   \"skew\": -0.541241\n  },\n  \"IC44/C\": {\n   \"kurt\": 3.483733,\n   \"mean_pp\": -202.742339,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 84.893902,\n   \"sharpe\": -2.388185,\n   \"skew\": -0.547252\n  },\n  \"IC45/A\": {\n   \"kurt\": 3.798576,\n   \"mean_pp\": 42.756436,\n   \"n\": 1000,\n   \"p\": 0.0,\n   \"p_normal\": 0.0,\n   \"sd_pp\": 110.620656,\n   \"sharpe\": 0.386514,\n   \"skew\": -0.489015\n  },\n  \"IC45/B\": {\n   \"kurt\": 3.91835,\n   \"mean_pp\": 77.363034,\n   \"n\": 1000,\n   \"p\": 0.0,\n   \"p_normal\": 0.0,\n   \"sd_pp\": 218.08311,\n   \"sharpe\": 0.354741,\n   \"skew\": -0.51833\n  },\n  \"IC46/A\": {\n   \"kurt\": 3.472244,\n   \"mean_pp\": -39.877476,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 122.33347,\n   \"sharpe\": -0.325974,\n   \"skew\": -0.599129\n  },\n  \"IC46/B\": {\n   \"kurt\": 3.496659,\n   \"mean_pp\": -82.428173,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 222.903886,\n   \"sharpe\": -0.369792,\n   \"skew\": -0.596648\n  },\n  \"ib25_RW/A_RW\": {\n   \"kurt\": 3.702039,\n   \"mean_pp\": -88.506243,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 59.339939,\n   \"sharpe\": -1.491512,\n   \"skew\": -0.40743\n  },\n  \"ib25_RW/B_RW\": {\n   \"kurt\": 3.389092,\n   \"mean_pp\": -111.225822,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 57.679018,\n   \"sharpe\": -1.928358,\n   \"skew\": -0.238093\n  },\n  \"ib27_2L/A_2L\": {\n   \"kurt\": 3.55449,\n   \"mean_pp\": -178.681737,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 87.117279,\n   \"sharpe\": -2.051048,\n   \"skew\": -0.559192\n  },\n  \"ib27_2L/B_2L\": {\n   \"kurt\": 3.480809,\n   \"mean_pp\": -204.0988,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 86.005038,\n   \"sharpe\": -2.373103,\n   \"skew\": -0.539337\n  },\n  \"ib27_2L/C_2L\": {\n   \"kurt\": 3.862624,\n   \"mean_pp\": -188.091502,\n   \"n\": 1000,\n   \"p\": 1.0,\n   \"p_normal\": 1.0,\n   \"sd_pp\": 78.628742,\n   \"sharpe\": -2.392147,\n   \"skew\": -0.673763\n  }\n },\n \"stage2_pass\": [],\n \"var_sr\": 1.065507,\n \"white_rc\": {\n  \"best_arm\": \"IC38/B\",\n  \"n_arms\": 41,\n  \"p_value\": 0.0,\n  \"resamples\": 2000,\n  \"t_max\": 17.370379\n },\n \"window_tags\": [\n  \"default\",\n  \"w20020731\",\n  \"w20030103\",\n  \"w20031208\",\n  \"w20041119\",\n  \"w20060523\",\n  \"w20070412\"\n ]\n}\n\n{\n \"wall_s\": 383.28919196128845\n}\n",
+    "wall_s": 1.9
+   }
+  ],
+  "batch_total_wall_s": 94.073348,
+  "commands": [
+   "research.batch_screen.run --batch rw_fix_v1 --ideas IC31,IC32,IC33,IC34,IC35,IC37,IC38,IC42,IC43,IC44,IC45,IC46,ib25_RW,ib25_2L,IB26_RW,IB26_2L,ib27_2L --workers 6",
+   "research.batch_screen.run --batch rw_fix_v1 --ideas IC31,IC32,IC33,IC34,IC35,IC37,IC38,IC42,IC43,IC44,IC45,IC46,ib25_RW,ib25_2L,IB26_RW,IB26_2L,ib27_2L --workers 6",
+   "research.batch_screen.run --deflate --batch rw_fix_v1"
+  ],
+  "note": "measured wall clock of the recorded `--run` (two full passes + the deflation, 6 workers, 49 arms). `reference_pass_wall_s` is an extra single pass whose output reproduced RESULTS.json, SCOREBOARD.md and all 46 arm records byte for byte (`shasum -a 256`); `batch_total_wall_s` is that pass's own timing.json",
+  "per_command": [
+   {
+    "cmd": "research.batch_screen.run --batch rw_fix_v1 --ideas IC31,IC32,IC33,IC34,IC35,IC37,IC38,IC42,IC43,IC44,IC45,IC46,ib25_RW,ib25_2L,IB26_RW,IB26_2L,ib27_2L --workers 6",
+    "label": "batch pass 1",
+    "returncode": 0,
+    "wall_s": 242.7
+   },
+   {
+    "cmd": "research.batch_screen.run --batch rw_fix_v1 --ideas IC31,IC32,IC33,IC34,IC35,IC37,IC38,IC42,IC43,IC44,IC45,IC46,ib25_RW,ib25_2L,IB26_RW,IB26_2L,ib27_2L --workers 6",
+    "label": "batch pass 2",
+    "returncode": 0,
+    "wall_s": 138.7
+   },
+   {
+    "cmd": "research.batch_screen.run --deflate --batch rw_fix_v1",
+    "label": "deflate",
+    "returncode": 0,
+    "wall_s": 1.9
+   }
+  ],
+  "reference_pass_wall_s": 94.07,
+  "wall_s": 383.3
+ },
  "study": "rw_boot_audit_v1",
  "verdict_changed": [
   "IC37/A",

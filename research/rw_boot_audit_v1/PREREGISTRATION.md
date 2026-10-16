@@ -159,7 +159,8 @@ every re-screened arm, and `verdict_changed` listed explicitly.
   restored), K's published anchors through `fe_sim`, the paired-control cells, the leg-B convention
   cells and the pre/post parity diff.
 * The batch is run **twice**; `RESULTS.json` (and the per-arm records) must be byte-identical.
-* Wall clock of the `--run` is recorded in `SUMMARY.txt`.
+* Wall clock of the `--run` is recorded in `SUMMARY.txt` and `RUN_TIMING.json`.
 * Artifacts: `repro.py`, `parity_cells.py`, `screen.py`, `DATA_MANIFEST.json`,
-  `PRE_FIX_BASELINE.npz`, `PARITY_LEGB.json`, `HARNESS.json`, `RESULTS.json`, `SUMMARY.txt`, and
-  the report `docs/research/rw_boot_audit_v1.md`.
+  `PRE_FIX_BASELINE.npz`, `PRE_FIX_SUMMARY.json`, `PARITY_LEGB.json`, `HARNESS.json`,
+  `RUN_TIMING.json`, `RESULTS.json`, `SUMMARY.txt`, and the report
+  `docs/research/rw_boot_audit_v1.md`.

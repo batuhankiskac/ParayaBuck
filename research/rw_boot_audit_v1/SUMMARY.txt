@@ -2,6 +2,7 @@ rw_boot_audit_v1 SUMMARY
 
 repro IC37/C path0: leg-B spanning columns 120 / 2776; progressive Δ raw 28.35827470690011 pp (= recorded 28.358243) vs leg_series -1.1065837204670137 pp
 parity: pass=True cells=76 unaffected moved=0 hard failures=0 affected cells changed=128
+`--run` wall clock: 383.3 s total (batch pass 1 242.7 s, batch pass 2 138.7 s, deflate 1.9 s); a reference pass took 94.07 s and reproduced RESULTS.json byte for byte
 verdicts changed: ['IC37/A', 'IC37/B', 'IC37/C']
 
 arm                 AT2000 old         new   B1med old         new  B1nan old->new verdict

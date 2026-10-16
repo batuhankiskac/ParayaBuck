@@ -193,3 +193,94 @@ def test_harness_two_leg_checks_pass():
     checks = run.two_leg_checks()
     flat = {k: v["pass"] for k, v in checks.items() if isinstance(v, dict) and "pass" in v}
     assert flat and all(flat.values()), json.dumps(checks, default=str)[:800]
+
+
+# ----------------------------------------------------------------------------- the fill knobs
+def test_fill_knobs_off_is_the_published_kernel(probe):
+    """A declared-but-off option arm takes the published kernel's numbers, bit for bit."""
+    from research.fast_engine2 import fe2_opts
+
+    days, p, i0, i1 = windows.main_panel(0.0)
+    env = windows.try_env(days, i0, i1)
+    arm = probe_arm(probe, "split")
+    off = dict(arm, fill_knobs=dict(fe2_opts.KNOBS_OFF), fill_knobs_pretax=True)
+    a = stages.run_one(arm, p, env, i0, i1, "progressive", 2, 100_000.0)
+    b = stages.run_one(off, p, env, i0, i1, "progressive", 2, 100_000.0)
+    assert np.array_equal(a["_nav"], b["_nav"]) and a["tax_total_try"] == b["tax_total_try"]
+    assert (a["_legs"]["B"]["realised_gain_try_by_reason"]
+            == b["_legs"]["B"]["realised_gain_try_by_reason"])
+
+
+def test_fill_knobs_reach_the_option_kernel(probe):
+    days, p, i0, i1 = windows.main_panel(0.0)
+    env = windows.try_env(days, i0, i1)
+    arm = probe_arm(probe, "split")
+    routed = dict(arm, fill_knobs={"band_score": "indexed", "route_cap_pp": 10.0},
+                  fill_knobs_pretax=True)
+    a = stages.run_one(arm, p, env, i0, i1, "progressive", 2, 100_000.0)
+    b = stages.run_one(routed, p, env, i0, i1, "progressive", 2, 100_000.0)
+    assert not np.array_equal(a["_nav"], b["_nav"])
+    assert a["cagr_usd_liquidated"] != b["cagr_usd_liquidated"]
+
+
+def test_after_tax_scope_keeps_the_pretax_stage_unchanged(probe):
+    """`kernel_scope = "after_tax_stage_only"` (IC42/IC43) is the published kernel pre-tax."""
+    days, p, i0, i1 = windows.main_panel(0.0)
+    env = windows.try_env(days, i0, i1)
+    arm = probe_arm(probe, "split")
+    scoped = dict(arm, fill_knobs={"loss_net_frac": 0.25}, fill_knobs_pretax=False)
+    assert stages.fill_knobs_of(scoped, "pre_tax") is None
+    assert stages.fill_knobs_of(scoped, "progressive") == {"loss_net_frac": 0.25}
+    assert stages.fill_knobs_of(arm, "progressive") is None      # nothing declared -> published
+    a = stages.run_one(arm, p, env, i0, i1, "pre_tax", 2)
+    b = stages.run_one(scoped, p, env, i0, i1, "pre_tax", 2)
+    assert np.array_equal(a["_nav"], b["_nav"])
+
+
+def test_the_bootstrap_routes_a_knob_arm_to_the_option_kernel(probe):
+    """`B.boot` shares the chunk: an optioned arm moves, an off arm is the published draw."""
+    from research.fast_engine2 import fe2_opts
+
+    arm = probe_arm(probe, "split")
+    plain = B.boot([arm], n_pre=8, n_tax=8, quiet=True)
+    off = B.boot([dict(arm, fill_knobs=dict(fe2_opts.KNOBS_OFF), fill_knobs_pretax=True)],
+                 n_pre=8, n_tax=8, quiet=True)
+    on = B.boot([dict(arm, fill_knobs={"band_score": "indexed", "route_cap_pp": 10.0},
+                      fill_knobs_pretax=True)], n_pre=8, n_tax=8, quiet=True)
+    for md in ("base", "calibrated"):
+        assert np.array_equal(plain["pre"][md][arm["id"]], off["pre"][md][arm["id"]])
+    for md in ("progressive", "flat"):
+        assert np.array_equal(plain["tax"]["100k"][md][arm["id"]],
+                              off["tax"]["100k"][md][arm["id"]])
+        assert not np.array_equal(plain["tax"]["100k"][md][arm["id"]],
+                                  on["tax"]["100k"][md][arm["id"]])
+
+
+def test_fill_knobs_are_validated(tmp_path, monkeypatch):
+    monkeypatch.setattr(api, "IDEAS_DIR", tmp_path)
+    head = ("import numpy as np\nARMS = {{'a': {{'leg_b': '1x', {extra}}}}}\n\n\n"
+            "def targets(data, spec):\n"
+            "    w = np.zeros((data.P, data.T))\n"
+            "    return w, w, '1x'\n")
+    write_idea(tmp_path, "onetleg",
+               head.format(extra="'rule': 'K', 'fill_knobs': {}").replace("'leg_b': '1x', ", ""))
+    with pytest.raises(api.PluginError, match="needs a two-leg arm"):
+        api.resolve_arm(api.load_idea("onetleg"), "a")
+    write_idea(tmp_path, "badknob", head.format(extra="'fill_knobs': {'nope': 1}"))
+    with pytest.raises(api.PluginError, match="unknown fill knob"):
+        api.resolve_arm(api.load_idea("badknob"), "a")
+    write_idea(tmp_path, "noband",
+               head.format(extra="'rule': 'C0', 'fill_knobs': {'band_score': 'indexed'}"))
+    with pytest.raises(api.PluginError, match="A1u band"):
+        api.resolve_arm(api.load_idea("noband"), "a")
+    write_idea(tmp_path, "badscope", head.format(extra="'kernel_scope': 'sometimes'"))
+    with pytest.raises(api.PluginError, match="kernel_scope"):
+        api.resolve_arm(api.load_idea("badscope"), "a")
+    write_idea(tmp_path, "okknob", head.format(
+        extra="'rule': 'K', 'fill_knobs': {'route_cap_pp': 10.0}, "
+              "'kernel_scope': 'after_tax_stage_only'"))
+    arm = api.load_arm("okknob", "a")
+    assert arm["fill_knobs"]["route_cap_pp"] == 10.0
+    assert arm["fill_knobs"]["band_score"] == "usd"          # canonical: every key present
+    assert arm["fill_knobs_pretax"] is False and arm["kernel_scope"] == "after_tax_stage_only"
+    assert arm["params"]["fill_knobs"]["route_cap_pp"] == 10.0

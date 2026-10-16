@@ -154,3 +154,88 @@ survives several plugin branches merging into one.
   the seeds, the sample sizes, the deflation and the control are exactly as in §§ 1–5. For an arm
   that is applicable everywhere the record, the scoreboard and the results files are byte-identical
   to what the v1 framework wrote.
+
+### 6.2 2026-10-16 — reduced windows, the panel column calendar, two-leg fill options (framework v2)
+
+Committed **before** any idea arm uses any of `spec["start"]`, `spec["inputs"]`, `spec["fill_knobs"]`
+or `spec["kernel_scope"]`. The three plugin fixtures that exercise them (`probes/two_leg.py`'s
+`gld_offstate`, `onex_offstate`, plus the harness's knob-routing cells) are engineering probes,
+outside `research/ideas/`, registered as no trial. Reason: `idea_bank_v2`'s IC31–IC46 and
+`idea_bank_v1`'s IB25/IB26 hold a second instrument or a second book that starts after 2000-03-09
+or that only exists as a fill decision, and the framework as of §6.1 could only refuse them.
+
+**Reduced window (`spec["start"]`, `spec["inputs"]`).** An arm may declare the window it is
+evaluated on:
+
+* no declaration — the published window (2000-03-09 → 2026-09-29), unchanged: every registered arm
+  and every published number keeps its exact code path;
+* `start = "YYYY-MM-DD"` — the first session at or after it, never before the published warm-up
+  start (session `START` = 253 = 2000-03-09) and never after the panel's end;
+* `start = "auto"` — the later of the published start and **the first session every declared input
+  covers, plus one session** (the engine reads the previous close at `i0 - 1`). The declared inputs
+  are `spec["inputs"]` plus `spec["leg_b"]` when that is an extra-data key (a panel leg has the
+  window's own history). This is the rule that unblocks a second instrument which starts later
+  (IEF 2002-07, TIP 2003-12, GLD 2004-11, GDX 2006-05, HYG 2007-04, LQD 2002-07 …): the framework
+  refuses a leg-B series that does not reach every session the engine reads rather than invent a
+  price, so before the input's own start the arm simply is not evaluated.
+* A window shorter than **10 calendar years** (its first session's previous session to 2026-09-29)
+  is `NotApplicable`, as is an `"auto"` window whose declared input has no value anywhere.
+
+Stages on a reduced window: the pre-tax block (`main.*`), the three after-tax windows (each
+declared window's start is **clipped up** to `i0`; no window key is dropped, the record carries the
+effective window per key), the 21 January rolling starts (**the starts that begin before `i0` are
+dropped**; below 15 applicable starts the arm is `holdout_insufficient`), and both block
+bootstraps (**the drawn pool is the window's own sessions** — one `integers`, one `random`, one
+`integers` per path, the published order, at the published seed and block, with `npool` = the
+window's session count). The six OOS windows, the 21 ETFs and the pooled OOS bootstrap are
+**unchanged**: they are other markets with their own pools. A pre-tax subperiod (P1–P3) whose end
+precedes the window's first session is not covered (`subperiods_not_covered`), and G4 then judges
+the covered ones and requires at least two of them covered.
+
+**Control.** K is re-simulated **on the same window**: the same `i0`, the same clipped after-tax
+windows, the same dropped rolling starts, the same restricted pool (`_control_<tag>.json`, e.g.
+`_control_w20041119.json`; the published window keeps `_control.json`). Every Δ of such an arm is
+therefore paired *inside its own window*. The record carries the window (`win`, the stage-1
+`window` block, each after-tax cell's own window) and the scoreboard shows its tag.
+
+**Deflation.** The B1 Δ vector is the arm's *paired advantage over K on the window it declared* —
+which is the quantity comparable across arms — and `DEFLATION.json` names the pools in play
+(`window_tags`). Caveat, stated: arms on different windows do not share a pool, so their p-values
+are not the published single-pool p-values; the test is still on paired Δ vectors (each arm
+against its own window's K), which is what the screening decision is built on. An arm whose Δ
+vector is not finite is **left out** of the deflation (reported in `excluded_non_finite`) rather
+than making every other arm's p-value NaN; it can never be declared (its stage-1 after-tax gate is
+NaN and fails closed).
+
+**Two-leg fill options (`spec["fill_knobs"]`, `spec["kernel_scope"]`).** An arm with `leg_b` may
+declare options that `research/fast_engine2/fe2_opts.py` (a copy of the two-leg kernel; the
+published `fe2_sim`/`fe2_boot` are untouched) implements. **Every option off reproduces the current
+kernel bit for bit** (`fe2_opts_parity`, in the harness: 28 cells, `max_abs_diff == 0.0` on the
+main window and the bootstrap):
+
+* `band_score`: `"usd"` (the published K A1u fraction) | `"indexed"` (the TRY-indexed FIFO gain
+  fraction of the units the sell would consume, Yİ-ÜFE indexation applied as the engine applies it)
+  | `"max"` (the larger of the two). K's widths key on that fraction. `band_step4_pp` adds a fourth
+  step above a fixed `0.15` fraction. Needs a rule with the A1u band on (K/A1u).
+* `route_cap_pp`: on a session where both legs downsize, units are routed from the other leg to the
+  leg with the lower indexed fraction, bounded by the cap (a weight), by the other leg's own sale
+  and by the cheap leg's remaining units; the routed quantity is what the band test and the fill
+  use.
+* `loss_net_frac` (+ `loss_net_min_ytd_try`): after a permitted downsize fill with a positive
+  realised TRY gain and only in a taxed mode, the other leg's loss lots are sold (FIFO, indexed per
+  unit) up to that fraction of the gain, if the year-to-date realised gain exceeds the threshold.
+* `kernel_scope`: `"all_stages"` (default) or `"after_tax_stage_only"` — the latter (IC42/IC43's
+  own declaration) runs every pre-tax stage on the published kernel, so only the taxed stages carry
+  the options.
+
+Still `NEEDS_KERNEL`, named rather than approximated: a **per-session instrument switch** (no arm
+needs it any more — IC31–IC38 are expressible as a fixed leg B whose weight varies, and
+`probes/two_leg.py::gld_offstate`/`onex_offstate` demonstrate both forms), a **third instrument**
+(IC36's GLD/IEF/SHY blend and IC34 arm C's XLU+XLP pair need three books; a derived blend series
+would hide the sleeve's internal rebalancing from the taxpayer and leave it without a per-instrument
+FIFO book, so it is not used), a **cash loan** (IC39), a **second leg family** (IC40's SPY-based 2x
+leg), and **two books of the same instrument** (IB38's A/B/C).
+
+**Unchanged.** The gate thresholds G1–G9, the after-tax rule, B1/B2, E1/E2, FRESH, the seeds, the
+sample sizes and the deflation procedure are exactly as in §§ 1–5 and §6.1. An arm that declares
+none of the four keys takes the v1/v2 code path byte for byte.

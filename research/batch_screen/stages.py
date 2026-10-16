@@ -21,7 +21,6 @@ import numpy as np
 
 from research.fast_engine import fe_sim, fe_study
 from research.fast_engine.fe_config import (
-    E2_START_YEARS,
     E3_BLOCKS,
     E3_PATHS,
     FIN,
@@ -49,6 +48,10 @@ FRESH_SEED = 20261016
 #: `holdout_insufficient` -- not a pass, listed for a manual confirmation study (see README §2).
 OOS_MIN_APPLICABLE = 3
 ETF_MIN_APPLICABLE = 15
+#: the rolling-start stage (E2) needs a comparable number of starts: a reduced-window arm drops
+#: the January starts that begin before its own window, and below this count the holdout is not
+#: evaluable (the published 21-start rule is unaffected -- it always keeps 21).
+E2_MIN_APPLICABLE = 15
 
 #: the five markets of the pooled OOS bootstrap (G8); `GSPC_1957_1999` has no pooled draw.
 OOS_POOLED_MARKETS = ("M1", "M2", "M3", "M4", "M5")
@@ -75,6 +78,34 @@ STAGE1_KEYS = ("at2000_gt_0", "b1_median_gt_0", "maxdd", "turnover")
 
 
 # ----------------------------------------------------------------------------- one run
+def fill_knobs_of(arm, mode):
+    """The two-leg option dict this *stage* may use, or `None` (off -> the published kernel).
+
+    `arm["fill_knobs"]` is the arm's declaration (`research/fast_engine2/fe2_opts.py`, validated by
+    `api.resolve_arm`); `kernel_scope = "after_tax_stage_only"` (the `idea_bank_v2` declaration of
+    IC42/IC43) returns `None` for a pre-tax stage, so those stages stay bit-identical to a
+    no-option arm and only the taxed stages carry the options.
+    """
+    knobs = arm.get("fill_knobs")
+    if not knobs:
+        return None
+    if mode == "pre_tax" and not arm.get("fill_knobs_pretax", True):
+        return None
+    return knobs
+
+
+def _sim2(arm, t, oa, ca, ob, cb, env, capital, i0, i1, mode, m, rule_index):
+    """One two-leg run: the published kernel, or the option copy when the stage declared options."""
+    knobs = fill_knobs_of(arm, mode)
+    if knobs is None:
+        return fe2_sim.simulate2(oa, ca, t.wants, ob, cb, t.wants_b, env, capital, i0, i1,
+                                 arm=arm["rule"], mode=mode, m=m, rule_index=rule_index)
+    from research.fast_engine2 import fe2_opts
+
+    return fe2_opts.simulate2(oa, ca, t.wants, ob, cb, t.wants_b, env, capital, i0, i1,
+                              arm=arm["rule"], mode=mode, m=m, rule_index=rule_index, knobs=knobs)
+
+
 def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL], rule_index=True):
     """`targets` -> `fe_sim.simulate` (one leg) or `fe2_sim.simulate2` (two legs) on one window.
 
@@ -82,7 +113,8 @@ def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL
     third value) is routed to the two-leg kernel: one cash pool, both legs' FIFO books, one
     taxpayer. Its leg-B instrument must have a price on every session the engine reads
     (`leg_b_usable`), otherwise the window is `NotApplicable` -- exactly the framework's rule for
-    any other missing input.
+    any other missing input. An arm that declares `fill_knobs` is routed to the option copy
+    (`fe2_opts`) instead, with the same kernel and every option off the rest of the time.
     """
     t = call_targets(arm["mod"], data, arm)
     if t.leg != arm["leg"]:
@@ -95,15 +127,32 @@ def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL
         if not ok:
             raise NotApplicable(why)
         ob, cb = data.leg_series(t.leg_b)
-        return fe2_sim.simulate2(oa, ca, t.wants, ob, cb, t.wants_b, env, capital, i0, i1,
-                                 arm=arm["rule"], mode=mode, m=m, rule_index=rule_index)
+        return _sim2(arm, t, oa, ca, ob, cb, env, capital, i0, i1, mode, m, rule_index)
     return fe_sim.simulate(oa, ca, t.wants, env, capital, i0, i1,
                            arm=arm["rule"], mode=mode, m=m, rule_index=rule_index)
 
 
 def _cells(res, days, i0, i1):
-    """`fe_study.pre_stats`'s cells (the published pre-tax statistic block)."""
-    return fe_study.pre_stats(days, i0, i1, res)
+    """`fe_study.pre_stats`'s cells (the published pre-tax statistic block).
+
+    A reduced window that starts after a subperiod's end (the 2026 campaign's P1 ends
+    2008-12-31) cannot be split by `fe_study.seg` -- `seg` takes `max(k for k, d in dates if
+    d <= b)` and a window that begins inside the subperiod leaves that generator empty. The
+    engine's block is then computed on the **covered** subperiods only and the record names the
+    ones left out; `pre_tax_gates` judges G4 on the covered ones (see README section 2a). The
+    published window covers all three and takes the unchanged path.
+    """
+    subs = tuple((n, a, b) for n, a, b in SUBPERIODS if b is None or days[i0] <= b)
+    if len(subs) == len(SUBPERIODS):
+        return fe_study.pre_stats(days, i0, i1, res)
+    saved = fe_study.SUBPERIODS
+    try:
+        fe_study.SUBPERIODS = subs
+        st = fe_study.pre_stats(days, i0, i1, res)
+    finally:
+        fe_study.SUBPERIODS = saved
+    st["subperiods_not_covered"] = [n for n, _a, _b in SUBPERIODS if n not in st["subperiods"]]
+    return st
 
 
 def _win_cells(res, days, start):
@@ -136,13 +185,20 @@ def after_tax_cells(arm, data, days, i0, i1, cash_yield, m=M, capital=TAX_CAPITA
 
 
 # ----------------------------------------------------------------------------- stage 1
-def stage1(arm, cash_yield="none"):
-    """Main-window pre-tax block + the 2000 after-tax window + the clean bootstrap vectors.
+def stage1(arm, cash_yield="none", win=None):
+    """Main-window pre-tax block + the after-tax windows + the clean bootstrap vectors.
 
     Returns `(record, vectors)`: the record is JSON-ready scalars, `vectors` the raw per-path
     CAGRs the batch driver hands to `fe_boot`/deflation.
+
+    `win` is the main window the arm is evaluated on (`windows.arm_window` of the arm's own
+    `spec["start"]` when not given): every main-window stage and every after-tax window then
+    starts at `win.i0`, and the block bootstrap draws from `win`'s own pool
+    (`windows.boot_pool`).
     """
-    days_b, p_base, i0, i1 = windows.main_panel(0.0, leg=arm["leg"])
+    days_b, p_base, _i0, i1 = windows.main_panel(0.0, leg=arm["leg"])
+    win = win or windows.arm_window(arm, days_b)
+    i0 = win.i0
     _, p_cal, _, _ = windows.main_panel(FIN["calibrated"], leg=arm["leg"])
     env = windows.try_env(days_b, i0, i1, cash_yield)
     env_usd = windows.usd_env(days_b, i0, i1, cash_yield)
@@ -153,37 +209,45 @@ def stage1(arm, cash_yield="none"):
             main[name][f"m{m}"] = _cells(r, days_b, i0, i1)
         r = run_one(arm, p, env_usd, i0, i1, "pre_tax", M, rule_index=False)
         main[name]["r_usd"] = _cells(r, days_b, i0, i1)
-    a, b = TAX_WINDOWS["2000_03_to_2026_09"]
-    j0, j1 = fe_study.window_indices(days_b, a, b)
-    at2000 = after_tax_cells(arm, p_base, days_b, j0, j1, cash_yield)
+    at = {}
+    for wn, (j0, j1) in windows.after_tax_windows(days_b, win).items():
+        at[wn] = after_tax_cells(arm, p_base, days_b, j0, j1, cash_yield)
     rec = {
         "window": {"start": days_b[i0], "end": days_b[i1], "sessions": int(i1 - i0 + 1)},
+        "win": win.as_dict(),
         "main": main,
-        "after_tax": {"2000_03_to_2026_09": at2000},
+        "after_tax": at,
     }
     return rec
 
 
 def stage1_vectors(arm, cash_yield="none", seed=None, block=None, n_pre=None, n_tax=None,
-                   quiet=True, label="stage1"):
+                   quiet=True, label="stage1", win=None, pool=None):
     """The clean block bootstrap's raw per-path CAGRs (pre-tax base/calibrated, after-tax both
-    modes at the gate capital). Same seeds/paths as the campaign's B1/B2."""
+    modes at the gate capital). Same seeds/paths as the campaign's B1/B2; a reduced window moves
+    the drawn pool onto its own sessions (`windows.boot_pool`) and keeps the seed/block order."""
     from research.fast_engine.fe_config import BLOCK, PRE_BOOT_PATHS, SEED, TAX_BOOT_PATHS
 
+    if pool is None and win is not None:
+        pool = windows.boot_pool(windows.bars()[0], win)
     return B.boot([arm], seed=seed or SEED, block=block or BLOCK,
                   n_pre=PRE_BOOT_PATHS if n_pre is None else n_pre,
                   n_tax=TAX_BOOT_PATHS if n_tax is None else n_tax,
                   capitals=(GATE_CAPITAL,), modes=B.TAX_MODES, cash_yield=cash_yield,
-                  label=label, quiet=quiet)
+                  label=label, quiet=quiet, pool=pool)
 
 
 # ----------------------------------------------------------------------------- stage 2
-def stage2_main_windows(arm, cash_yield="none"):
-    """After tax at $100k on the 2010 and 2017 windows (the 2000 window is stage 1's)."""
+def stage2_main_windows(arm, cash_yield="none", win=None):
+    """After tax at $100k on the 2010 and 2017 windows (the 2000 window is stage 1's).
+
+    Every declared window starts at the arm's own window start when that is later (`clipped`),
+    so a reduced arm's three windows are all measured against a control on the same window.
+    """
     days, p, _i0, _i1 = windows.main_panel(0.0, leg=arm["leg"])
+    win = win or windows.arm_window(arm, days)
     out = {}
-    for wn, (a, b) in TAX_WINDOWS.items():
-        j0, j1 = fe_study.window_indices(days, a, b)
+    for wn, (j0, j1) in windows.after_tax_windows(days, win).items():
         out[wn] = after_tax_cells(arm, p, days, j0, j1, cash_yield)
     return out
 
@@ -226,24 +290,30 @@ def stage2_instruments(arm, cash_yield="none"):
     return pre, after
 
 
-def stage2_rolling(arm, cash_yield="none"):
-    """The 21 January rolling starts, after tax at $100k (the 2000 window is stage 1's)."""
+def stage2_rolling(arm, cash_yield="none", win=None):
+    """The 21 January rolling starts, after tax at $100k (the 2000 window is stage 1's).
+
+    A start that begins before the arm's reduced window is dropped (`windows.rolling_starts`), so
+    every start it keeps is fully inside the window the arm declared.
+    """
     days, p, _i0, _i1 = windows.main_panel(0.0, leg=arm["leg"])
+    win = win or windows.arm_window(arm, days)
     T = len(days) - 1
     out = {}
-    for yr in E2_START_YEARS:
-        i0 = windows.rolling_start_index(days, yr)
-        out[str(yr)] = after_tax_cells(arm, p, days, i0, T, cash_yield)
+    for yr, i0 in windows.rolling_starts(days, win).items():
+        out[yr] = after_tax_cells(arm, p, days, i0, T, cash_yield)
     return out
 
 
-def stage2_fresh(arm, cash_yield="none", label="fresh"):
+def stage2_fresh(arm, cash_yield="none", label="fresh", pool=None, win=None):
     """Fresh-seed after-tax bootstraps: seed 20261016, blocks 10 and 40, 1,000 paths, $100k."""
+    if pool is None and win is not None:
+        pool = windows.boot_pool(windows.bars()[0], win)
     out = {}
     for block in E3_BLOCKS:
         b = B.boot([arm], seed=FRESH_SEED, block=block, n_pre=0, n_tax=E3_PATHS,
                    capitals=(GATE_CAPITAL,), modes=B.TAX_MODES, cash_yield=cash_yield,
-                   label=f"{label} block {block}", quiet=True)
+                   label=f"{label} block {block}", quiet=True, pool=pool)
         out[f"block{block}"] = b
     return out
 
@@ -320,13 +390,17 @@ def applicable_etfs(rec) -> list:
 def applicability(rec) -> dict:
     """What a stage-2 record could evaluate, and why the rest was skipped."""
     oos, etfs = applicable_oos(rec), applicable_etfs(rec)
+    starts = sorted((rec.get("rolling") or {}), key=int)
     out = {"oos_applicable": oos, "n_oos_applicable": len(oos),
            "etf_applicable": etfs, "n_etf_applicable": len(etfs),
+           "n_rolling_applicable": len(starts),
            "oos_min": OOS_MIN_APPLICABLE, "etf_min": ETF_MIN_APPLICABLE,
+           "rolling_min": E2_MIN_APPLICABLE,
            "reasons": {k: v["reason"] for k, v in list((rec.get("oos") or {}).items())
                        + list((rec.get("etf_after_tax") or {}).items())
                        if isinstance(v, dict) and v.get("applicable") is False}}
-    out["sufficient"] = bool(len(oos) >= OOS_MIN_APPLICABLE and len(etfs) >= ETF_MIN_APPLICABLE)
+    out["sufficient"] = bool(len(oos) >= OOS_MIN_APPLICABLE and len(etfs) >= ETF_MIN_APPLICABLE
+                             and len(starts) >= E2_MIN_APPLICABLE)
     return out
 
 
@@ -350,8 +424,11 @@ def pre_tax_gates(rec, ctrl):
         g[f"G2_{md}"] = bool(a["max_dd"] <= c["max_dd"] + G2_DD_PP / 100 + 1e-12)
         g[f"G3_{md}"] = bool(a["2017_end"]["cagr"] >= c["2017_end"]["cagr"] - G3_SLACK_PP / 100 - 1e-12)
     a, c = rec["main"]["base"]["m2"], ctrl["main"]["base"]["m2"]
-    wins = [p for p, _x, _y in SUBPERIODS if a["subperiods"][p]["cagr"] > c["subperiods"][p]["cagr"]]
-    g["G4"] = bool(len(wins) >= 2)
+    subs = a["subperiods"]
+    wins = [p for p in subs if subs[p]["cagr"] > c["subperiods"][p]["cagr"]]
+    # "at least two of the three subperiods" -- on a reduced window only the *covered* ones count,
+    # and fewer than two covered subperiods is not a pass (the record names what was left out)
+    g["G4"] = bool(len(wins) >= 2 and len(subs) >= 2)
     g["G4_wins"] = wins
     g["G9"] = bool(a["turnover_annual"] <= G9_TURNOVER_MULT * c["turnover_annual"] + 1e-12
                    and rec["main"]["calibrated"]["m2"]["turnover_annual"]

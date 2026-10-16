@@ -31,7 +31,7 @@ from datetime import date, timedelta
 import numpy as np
 
 from research.fast_engine import fe_boot
-from research.fast_engine.fe_config import BLOCK, SEED, TAX_BOOT_EXT, TAX_BOOT_L
+from research.fast_engine.fe_config import BLOCK, SEED, TAX_BOOT_I0
 
 from . import api, extra, windows
 from . import boot as B
@@ -39,6 +39,8 @@ from . import boot as B
 SYNTH_P = 3
 SYNTH_T = 800
 BOOT_P = 4
+
+_PANELS = {}
 
 
 # ----------------------------------------------------------------------------- panels
@@ -57,8 +59,13 @@ def synthetic_panel(P=SYNTH_P, T=SYNTH_T, leg=api.DEFAULT_LEG, seed=20261016) ->
                      window="synthetic", leg=leg)
 
 
-def real_panels(leg=api.DEFAULT_LEG) -> dict:
-    """One real panel per kind of window a plugin is screened on (no simulation)."""
+def real_panels(leg=api.DEFAULT_LEG, win=None) -> dict:
+    """One real panel per kind of window a plugin is screened on (no simulation).
+
+    `win` is the main window the arm declared (`windows.arm_window`): the `main` panel is the
+    window's own panel (a reduced window only changes the sessions the *engine* reads), and the
+    bootstrap chunk is drawn from `win`'s own pool -- exactly what the arm will see.
+    """
     out = {}
     _days, p, _i0, _i1 = windows.main_panel(0.0, leg=leg)
     out["main"] = p
@@ -66,19 +73,23 @@ def real_panels(leg=api.DEFAULT_LEG) -> dict:
     out["oos:M2"] = p
     _days, p, _h, _lo, _i0, _i1 = windows.instrument_panel("XLK", leg=leg)
     out["etf:XLK"] = p
-    win = B.BootWindow("none")
-    pos = fe_boot.draw_positions(np.random.default_rng(SEED), BLOCK, BOOT_P, TAX_BOOT_L,
-                                win.npool, TAX_BOOT_EXT)
-    out["boot"] = B.boot_panels(win, pos, (leg,), (0.0,))[(leg, 0.0)]
+    pool = None if win is None else windows.boot_pool(windows.bars()[0], win)
+    bw = B.BootWindow("none", pool)
+    pos = bw.positions(np.random.default_rng(SEED), BLOCK, BOOT_P)
+    out["boot"] = B.boot_panels(bw, pos, (leg,), (0.0,))[(leg, 0.0)]
     return out
 
 
 # ----------------------------------------------------------------------------- one arm
-def smoke_arm(idea_id: str, arm_id: str, panels: dict | None = None) -> dict:
-    """Call one arm's `targets` on every panel; report shape/leg/extras, never a metric."""
-    if panels is None:
-        panels = smoke_panels()
-    out = {"arm": api.arm_key(idea_id, arm_id), "status": "ok", "panels": {}, "extras": {}}
+def smoke_arm(idea_id: str, arm_id: str, panels: dict | None = None, leg: str | None = None) -> dict:
+    """Call one arm's `targets` on every panel; report shape/leg/extras, never a metric.
+
+    The arm's declared window (`spec["start"]`) is resolved first: an arm that declares one smokes
+    on its own window (and only its own bootstrap pool), which is the point of the reports below.
+    `leg` overrides the panel's leg (the CLI's `--leg`); by default it is the arm's own.
+    """
+    out = {"arm": api.arm_key(idea_id, arm_id), "status": "ok", "panels": {}, "extras": {},
+           "win": None}
     t0 = time.perf_counter()
     try:
         mod = api.load_idea(idea_id)
@@ -91,6 +102,15 @@ def smoke_arm(idea_id: str, arm_id: str, panels: dict | None = None) -> dict:
         out["status"] = "plugin_error"
         out["reason"] = str(exc)
         return out
+    try:
+        win = windows.arm_window(arm)
+    except api.NotApplicable as exc:
+        out["status"] = "not_applicable_window"
+        out["reason"] = exc.reason
+        return out
+    out["win"] = win.as_dict()
+    if panels is None:
+        panels = smoke_panels(leg or arm["leg"], win)
     for name, p in panels.items():
         before = len(p.extra_log)
         rec = {"shape": [int(p.P), int(p.T)], "sessions": [p.days[0], p.days[-1]]}
@@ -115,7 +135,13 @@ def smoke_arm(idea_id: str, arm_id: str, panels: dict | None = None) -> dict:
                 rec["error"] = f"targets changed the leg to {t.leg!r} (the arm holds {arm['leg']!r})"
                 out["status"] = "error"
             elif t.two_leg:
-                ok, why = p.leg_b_usable(t.leg_b, 0 if p.P > 1 else 253, p.T - 1)
+                if p.P > 1:                       # a chunk's engine range is fixed (fe_boot)
+                    j0, j1 = TAX_BOOT_I0, p.T - 2
+                elif name == "main":              # the arm's own declared window
+                    j0, j1 = win.i0, p.T - 1
+                else:                             # the OOS/ETF convention
+                    j0, j1 = 253, p.T - 1
+                ok, why = p.leg_b_usable(t.leg_b, j0, j1)
                 rec["leg_b_usable"] = bool(ok)
                 rec["leg_b_reason"] = why
         for e in p.extra_log[before:]:
@@ -129,11 +155,19 @@ def smoke_arm(idea_id: str, arm_id: str, panels: dict | None = None) -> dict:
     return out
 
 
-def smoke_panels(leg=api.DEFAULT_LEG) -> dict:
-    """The synthetic panel plus the real ones, with the synthetic panel first."""
-    out = {"synthetic": synthetic_panel(leg=leg)}
-    out.update(real_panels(leg=leg))
-    return out
+def smoke_panels(leg=api.DEFAULT_LEG, win=None) -> dict:
+    """The synthetic panel plus the real ones, with the synthetic panel first.
+
+    Cached per `(leg, window tag)`: a reduced-window arm smokes on its own window, which is the
+    only difference (the main panel keeps the whole history; its bootstrap chunk moves to the
+    window's pool).
+    """
+    key = (leg, "default" if win is None else win.tag)
+    if key not in _PANELS:
+        out = {"synthetic": synthetic_panel(leg=leg)}
+        out.update(real_panels(leg=leg, win=win))
+        _PANELS[key] = out
+    return _PANELS[key]
 
 
 # ----------------------------------------------------------------------------- extra keys
@@ -169,6 +203,8 @@ def format_arm(r: dict) -> str:
         else:
             parts.append(f"{name} {p['status']}: {p.get('reason') or p.get('error')}")
     line = f"  {r['arm']:28s} {r['status'].upper():16s} " + " | ".join(parts)
+    if r.get("win") and r["win"].get("tag") != "default":
+        line += f"   [window {r['win']['tag']}]"
     if r["extras"]:
         line += "\n" + " " * 47 + "extras: " + "; ".join(
             f"{k} (ffill={v['ffill']}; NaN " + ", ".join(
@@ -213,10 +249,9 @@ def main(argv=None) -> int:
                 return 1
             pairs += [(idea_id, a) for a in mod.ARMS]
     print("smoke: targets() only -- no return, no NAV, no gate, no registry write.")
-    panels = smoke_panels(args.leg)
     bad = 0
     for idea_id, arm_id in pairs:
-        r = smoke_arm(idea_id, arm_id, panels)
+        r = smoke_arm(idea_id, arm_id, leg=args.leg)
         print(format_arm(r), flush=True)
         bad += 1 if r["status"] in ("error", "plugin_error", "needs_kernel") else 0
     if bad:

@@ -516,6 +516,78 @@ def sim2(
     return nav, dec, scal, yr, gbr, gbr_n, has_due, legscal, yr2
 
 
+# ----------------------------------------------------------------------------- the result dict
+def _outputs(nav, dec, scal, yr, gbr, gbr_n, has_due, legscal, yr2, env, capital, i0, i1, trace,
+             n_reasons=N_REASONS, reason_names=REASON_NAMES):
+    """`simulate2`'s post-processing tail: the published result dict of one two-leg run.
+
+    `n_reasons`/`reason_names` let a kernel with extra reasons reuse it unchanged (`fe2_opts` adds
+    the netting reason); the account-level and per-leg reason dicts iterate `range(n_reasons)`
+    over `reason_names`, in that order.
+    """
+    days = env.days
+    yrs = fe_sim.calendar_years(days[i0 - 1], days[i1])
+    mtm = float(scal[SC_MTM])
+    liq = float(scal[SC_LIQ])
+    liq_tax = float(scal[SC_LIQ_TAX])
+    fx1 = float(env.fx[i1])
+    tax_paid_sum = 0.0
+    for k in range(yr.shape[1]):
+        tax_paid_sum += float(yr[YR_PAID, k])
+    due = {int(k + env.Y0): float(yr[YR_DUE, k]) for k in range(yr.shape[1]) if has_due[k] == 1}
+    post = {int(k + env.Y0): int(yr[YR_POST, k]) for k in range(yr.shape[1]) if yr[YR_POST, k]}
+    defer = {int(k + env.Y0): int(yr[YR_DEFER, k]) for k in range(yr.shape[1]) if yr[YR_DEFER, k]}
+    reasons = {reason_names[r]: float(gbr[LEG_A, r] + gbr[LEG_B, r]) for r in range(n_reasons)
+               if gbr_n[LEG_A, r] + gbr_n[LEG_B, r] > 0}
+    legs = {}
+    for l in range(N_LEGS):
+        name = LEG_NAMES[l]
+        lr = {reason_names[r]: float(gbr[l, r]) for r in range(n_reasons) if gbr_n[l, r] > 0}
+        legs[name] = {
+            "trades": int(legscal[l, L_TRADES]),
+            "sells": int(legscal[l, L_QSELLS]),
+            "tax_funding_sales": int(legscal[l, L_TAXSALES]),
+            "postponements": int(legscal[l, L_POSTP]),
+            "blocked_band": int(legscal[l, L_BANDBLK]),
+            "deferred": int(legscal[l, L_DEFER]),
+            "turnover_total": float(legscal[l, L_TURNOVER]),
+            "turnover_annual": float(legscal[l, L_TURNOVER] / yrs),
+            "fees_usd": float(legscal[l, L_FEES]),
+            "units_end": float(legscal[l, L_UNITS_END]),
+            "realised_gain_try_by_reason": dict(sorted(lr.items())),
+        }
+    return {
+        "window": [days[i0], days[i1]],
+        "years": float(yrs),
+        "capital_usd": float(capital),
+        "ending_nav_usd": mtm,
+        "max_dd_nav_usd": float(fe_sim.max_dd(nav)[0]),
+        "cagr_usd_liquidated": float((liq / capital) ** (1 / yrs) - 1),
+        "terminal_usd_liquidated": liq,
+        "cagr_usd_unliquidated": float((mtm / capital) ** (1 / yrs) - 1),
+        "terminal_usd_unliquidated": mtm,
+        "tax_total_try": float(tax_paid_sum + liq_tax),
+        "tax_total_usd_at_payment_fx": float(scal[SC_TPUSD] + (liq_tax / fx1 if fx1 != 0 else liq_tax)),
+        "tax_assessed_try_by_year": dict(sorted(due.items())),
+        "strategy_trades": int(scal[SC_TRADES]),
+        "qld_sells": int(scal[SC_QSELLS]),
+        "tax_funding_sales": int(scal[SC_TAXSALES]),
+        "sells": int(scal[SC_QSELLS] + scal[SC_TAXSALES]),
+        "turnover_total": float(scal[SC_TURNOVER]),
+        "turnover_annual": float(scal[SC_TURNOVER] / yrs),
+        "postponements": int(scal[SC_POSTP]),
+        "blocked_band": int(scal[SC_BANDBLK]),
+        "deferred": int(scal[SC_DEFER]),
+        "postponements_by_year": dict(sorted(post.items())),
+        "deferrals_by_year": dict(sorted(defer.items())),
+        "fees_usd": float(scal[SC_FEES]),
+        "index_relief_try": float(scal[SC_IDXREL]),
+        "realised_gain_try_by_reason": dict(sorted(reasons.items())),
+        "_nav": nav,
+        "_dec": dec if trace else None,
+        "_legs": legs,
+    }
+
 # ----------------------------------------------------------------------------- one run
 def simulate2(
     opens_a,
@@ -581,69 +653,8 @@ def simulate2(
     )
     if env.ufe_missing and not (np.isfinite(nav).all() and np.isfinite(scal).all()):
         raise ValueError(f"a YI-UFE month is missing from the table: {env.ufe_missing[:5]}")
-    days = env.days
-    yrs = fe_sim.calendar_years(days[i0 - 1], days[i1])
-    mtm = float(scal[SC_MTM])
-    liq = float(scal[SC_LIQ])
-    liq_tax = float(scal[SC_LIQ_TAX])
-    fx1 = float(env.fx[i1])
-    tax_paid_sum = 0.0
-    for k in range(yr.shape[1]):
-        tax_paid_sum += float(yr[YR_PAID, k])
-    due = {int(k + env.Y0): float(yr[YR_DUE, k]) for k in range(yr.shape[1]) if has_due[k] == 1}
-    post = {int(k + env.Y0): int(yr[YR_POST, k]) for k in range(yr.shape[1]) if yr[YR_POST, k]}
-    defer = {int(k + env.Y0): int(yr[YR_DEFER, k]) for k in range(yr.shape[1]) if yr[YR_DEFER, k]}
-    reasons = {REASON_NAMES[r]: float(gbr[LEG_A, r] + gbr[LEG_B, r]) for r in range(N_REASONS)
-               if gbr_n[LEG_A, r] + gbr_n[LEG_B, r] > 0}
-    legs = {}
-    for l in range(N_LEGS):
-        name = LEG_NAMES[l]
-        lr = {REASON_NAMES[r]: float(gbr[l, r]) for r in range(N_REASONS) if gbr_n[l, r] > 0}
-        legs[name] = {
-            "trades": int(legscal[l, L_TRADES]),
-            "sells": int(legscal[l, L_QSELLS]),
-            "tax_funding_sales": int(legscal[l, L_TAXSALES]),
-            "postponements": int(legscal[l, L_POSTP]),
-            "blocked_band": int(legscal[l, L_BANDBLK]),
-            "deferred": int(legscal[l, L_DEFER]),
-            "turnover_total": float(legscal[l, L_TURNOVER]),
-            "turnover_annual": float(legscal[l, L_TURNOVER] / yrs),
-            "fees_usd": float(legscal[l, L_FEES]),
-            "units_end": float(legscal[l, L_UNITS_END]),
-            "realised_gain_try_by_reason": dict(sorted(lr.items())),
-        }
-    return {
-        "window": [days[i0], days[i1]],
-        "years": float(yrs),
-        "capital_usd": float(capital),
-        "ending_nav_usd": mtm,
-        "max_dd_nav_usd": float(fe_sim.max_dd(nav)[0]),
-        "cagr_usd_liquidated": float((liq / capital) ** (1 / yrs) - 1),
-        "terminal_usd_liquidated": liq,
-        "cagr_usd_unliquidated": float((mtm / capital) ** (1 / yrs) - 1),
-        "terminal_usd_unliquidated": mtm,
-        "tax_total_try": float(tax_paid_sum + liq_tax),
-        "tax_total_usd_at_payment_fx": float(scal[SC_TPUSD] + (liq_tax / fx1 if fx1 != 0 else liq_tax)),
-        "tax_assessed_try_by_year": dict(sorted(due.items())),
-        "strategy_trades": int(scal[SC_TRADES]),
-        "qld_sells": int(scal[SC_QSELLS]),
-        "tax_funding_sales": int(scal[SC_TAXSALES]),
-        "sells": int(scal[SC_QSELLS] + scal[SC_TAXSALES]),
-        "turnover_total": float(scal[SC_TURNOVER]),
-        "turnover_annual": float(scal[SC_TURNOVER] / yrs),
-        "postponements": int(scal[SC_POSTP]),
-        "blocked_band": int(scal[SC_BANDBLK]),
-        "deferred": int(scal[SC_DEFER]),
-        "postponements_by_year": dict(sorted(post.items())),
-        "deferrals_by_year": dict(sorted(defer.items())),
-        "fees_usd": float(scal[SC_FEES]),
-        "index_relief_try": float(scal[SC_IDXREL]),
-        "realised_gain_try_by_reason": dict(sorted(reasons.items())),
-        "_nav": nav,
-        "_dec": dec if trace else None,
-        "_legs": legs,
-    }
-
+    return _outputs(nav, dec, scal, yr, gbr, gbr_n, has_due, legscal, yr2, env, capital, i0, i1,
+                    trace)
 
 __all__ = [
     "LEG_A",

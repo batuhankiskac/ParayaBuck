@@ -1,0 +1,173 @@
+[
+ {
+  "check": "parity_quick",
+  "pass": true,
+  "tail": "parity PASS in 15.9s -> PARITY.json"
+ },
+ {
+  "check": "K_pre_base_m2",
+  "diff_pp": -8e-06,
+  "got": 0.157649,
+  "pass": true,
+  "reference": 0.157649
+ },
+ {
+  "check": "K_pre_cal_m2",
+  "diff_pp": 3.1e-05,
+  "got": 0.151785,
+  "pass": true,
+  "reference": 0.151785
+ },
+ {
+  "check": "K_dd_base_m2",
+  "diff_pp": -9e-06,
+  "got": 0.466698,
+  "pass": true,
+  "reference": 0.466698
+ },
+ {
+  "check": "K_dd_cal_m2",
+  "diff_pp": -1.7e-05,
+  "got": 0.467948,
+  "pass": true,
+  "reference": 0.467948
+ },
+ {
+  "check": "K_at2000",
+  "diff_pp": 6e-06,
+  "got": 0.107533,
+  "pass": true,
+  "reference": 0.107533
+ },
+ {
+  "check": "K_at2010",
+  "diff_pp": -4e-05,
+  "got": 0.152354,
+  "pass": true,
+  "reference": 0.152354
+ },
+ {
+  "check": "K_at2017",
+  "diff_pp": -2.6e-05,
+  "got": 0.23972,
+  "pass": true,
+  "reference": 0.23972
+ },
+ {
+  "check": "R2_pre_base_m2",
+  "diff_pp": -0.003356,
+  "got": 0.154766,
+  "pass": true,
+  "reference": 0.1548
+ },
+ {
+  "check": "R2_pre_cal_m2",
+  "diff_pp": -0.003883,
+  "got": 0.148961,
+  "pass": true,
+  "reference": 0.149
+ },
+ {
+  "check": "R2_pre_base_m1",
+  "diff_pp": 0.003817,
+  "got": 0.157538,
+  "pass": true,
+  "reference": 0.1575
+ },
+ {
+  "check": "R2_dd_base_m2",
+  "diff_pp": -0.001639,
+  "got": 0.467584,
+  "pass": true,
+  "reference": 0.4676
+ },
+ {
+  "check": "IC12/A_AT2000",
+  "diff_pp": -5e-06,
+  "got": 0.007078,
+  "pass": true,
+  "reference": 0.007078
+ },
+ {
+  "check": "IC12/A_AT2017",
+  "diff_pp": 2.5e-05,
+  "got": -0.013528,
+  "pass": true,
+  "reference": -0.013529
+ },
+ {
+  "check": "IC12/A_B1_median",
+  "diff_pp": 0.000667,
+  "got": 1.413646,
+  "pass": true,
+  "reference": 1.413639
+ },
+ {
+  "check": "IC12/A_B2_median",
+  "diff_pp": 0.001068,
+  "got": 2.139342,
+  "pass": true,
+  "reference": 2.139331
+ },
+ {
+  "check": "IC12/B_AT2000",
+  "diff_pp": -6e-06,
+  "got": 0.006997,
+  "pass": true,
+  "reference": 0.006997
+ },
+ {
+  "check": "IC12/B_AT2017",
+  "diff_pp": 2.5e-05,
+  "got": -0.003471,
+  "pass": true,
+  "reference": -0.003471
+ },
+ {
+  "check": "IC12/B_B1_median",
+  "diff_pp": -0.000317,
+  "got": 0.85192,
+  "pass": true,
+  "reference": 0.851923
+ },
+ {
+  "check": "IC12/B_B2_median",
+  "diff_pp": -0.000242,
+  "got": 1.24248,
+  "pass": true,
+  "reference": 1.242482
+ },
+ {
+  "check": "rt_state_file_matches_rebuild",
+  "pass": true
+ },
+ {
+  "check": "rt_pre_vintage_segment_equals_committed",
+  "n_weekdays": 10533,
+  "pass": true
+ },
+ {
+  "check": "rt_and_live_differ_on_sessions",
+  "pass": true,
+  "sessions": 6932,
+  "sessions_differ": 354
+ },
+ {
+  "check": "IC12rt/A_targets_live_equals_IC12",
+  "pass": true
+ },
+ {
+  "check": "IC12rt/A_targets_rt_differs_from_IC12",
+  "max_abs_weight_diff": 0.98,
+  "pass": true
+ },
+ {
+  "check": "IC12rt/B_targets_live_equals_IC12",
+  "pass": true
+ },
+ {
+  "check": "IC12rt/B_targets_rt_differs_from_IC12",
+  "max_abs_weight_diff": 0.49,
+  "pass": true
+ }
+]

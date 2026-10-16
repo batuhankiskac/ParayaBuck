@@ -97,12 +97,12 @@ def boot_vectors(arm_list, seed, block, n_pre, n_tax, label):
                   label=label, quiet=True)
 
 
-def e3_vectors(arm_list):
-    """This study's E3 draws (seed 20261017, blocks 10/20/40), keyed by `block<N>`."""
+def e3_vectors(arm):
+    """This study's E3 draws (seed 20261017, blocks 10/20/40) for ONE arm, by block and mode."""
     out = {}
     for blk in E3_BLOCKS:
-        b = boot_vectors(arm_list, E3_SEED, blk, 0, E3_PATHS, f"E3 block {blk}")
-        out[f"block{blk}"] = {md: b["tax"][GATE_CAPITAL][md] for md in B.TAX_MODES}
+        b = boot_vectors([arm], E3_SEED, blk, 0, E3_PATHS, f"E3 block {blk}")
+        out[f"block{blk}"] = {md: b["tax"][GATE_CAPITAL][md][arm["id"]] for md in B.TAX_MODES}
     return out
 
 
@@ -122,13 +122,13 @@ def gather(arm, ctrl_vec, ctrl_arm=None, quiet=True):
     rec["boot"], rec["boot_level"] = {"pre": {}, "tax": {}}, {"pre": {}, "tax": {}}
     for md in ("base", "calibrated"):
         v = b12["pre"][md][aid]
-        base = v if ctrl_vec is None else ctrl_vec["pre"][md]
+        base = v if ctrl_vec is None else ctrl_vec[f"pre_{md}"]
         rec["boot"]["pre"][md] = B.delta_stats(v - base)
         rec["boot_level"]["pre"][md] = B.delta_stats(v)
         vecs[f"pre_{md}"] = v
     for md in B.TAX_MODES:
         v = b12["tax"][GATE_CAPITAL][md][aid]
-        base = v if ctrl_vec is None else ctrl_vec["tax"][md]
+        base = v if ctrl_vec is None else ctrl_vec[f"tax_{md}"]
         rec["boot"]["tax"][md] = B.delta_stats(v - base)
         rec["boot_level"]["tax"][md] = B.delta_stats(v)
         vecs[f"tax_{md}"] = v
@@ -158,7 +158,7 @@ def gather(arm, ctrl_vec, ctrl_arm=None, quiet=True):
         rec["oos_pooled"] = {"not_evaluable": "no OOS market's pooled bootstrap could be drawn",
                              "markets_not_applicable": na_markets}
 
-    return {"record": rec, "vectors": vecs, "e3": e3_vectors([arm])}
+    return {"record": rec, "vectors": vecs, "e3": e3_vectors(arm)}
 
 
 # ----------------------------------------------------------------------------- gates
@@ -255,9 +255,12 @@ def shortfall_decomposition(arm, days, i0, i1, state_rt, ctrl_arm):
                            TAX_CAPITALS[GATE_CAPITAL])["_nav"]
     nav_k = stages.run_one(ctrl_arm, panel, env, i0, i1, "progressive", 2,
                            TAX_CAPITALS[GATE_CAPITAL])["_nav"]
+    # `_nav` spans sessions i0-1 .. i1 (fe_study.pre_stats' convention), so diff element k is the
+    # return into session i0+k: the session labels are days[i0 : i1+1], one per diff element.
     d = np.diff(np.log(nav_a)) - np.diff(np.log(nav_k))
-    labels = list(np.asarray(days)[i0 + 1:i1 + 1])
-    on = np.asarray(state_rt)[0][i0 + 1:i1 + 1] > 0.5
+    labels = list(np.asarray(days)[i0:i1 + 1])
+    on = np.asarray(state_rt)[0][i0:i1 + 1] > 0.5
+    assert len(labels) == d.size, (len(labels), d.size)
     years = np.asarray([int(x[:4]) for x in labels])
     per_year = {str(y): float(d[years == y].sum() * 100) for y in sorted(set(years.tolist()))}
     ep, cur = [], []

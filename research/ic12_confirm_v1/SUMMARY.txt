@@ -1,0 +1,30 @@
+ic12_confirm_v1 | confirmation of IC12 (NFCI veto) on a real-time (ALFRED vintage) signal | control k_control/K | harness PASS (27/27)
+Verdict: FAIL  (IC12rt/A pass=False, IC12rt/B pass=False) | E1 usable: 800 vintages 2011-05-25 .. 2026-10-15, the state differs from the committed one on 354/6932 main-window sessions
+wall clock of --run: 172.0 s
+
+arm          | preCAGR base/cal | maxDD base/cal | dCAGR base/cal | turn/K | B1 med/sh      | B2 med/sh      | OOSmed | pooled | AT2000/2010/2017 d | E2 med/sh  | E2p med/sh | E4 med/sh  | E3 (10/20/40 x prog/flat med/share)
+IC12/A       |  17.03/ 16.54  | 36.76/36.87 |  +1.27/ +1.36 |  1.008 |  +1.41/0.633 |  +2.14/0.709 |  +1.68 |  +1.69 |  +0.71/ +0.19/ -1.35 |  -0.03/0.38 |  -0.26/0.36 |  +2.22/0.81 | 10f:+2.24/0.69 10p:+1.41/0.63 20f:+2.17/0.70 20p:+1.50/0.64 40f:+2.13/0.69 40p:+1.63/0.64
+IC12/B       |  16.61/ 16.07  | 39.71/39.84 |  +0.85/ +0.89 |  1.004 |  +0.85/0.647 |  +1.24/0.734 |  +0.97 |  +1.06 |  +0.70/ +0.49/ -0.35 |  +0.36/0.76 |  +0.10/0.55 |  +1.34/0.86 | 10f:+1.27/0.72 10p:+0.71/0.64 20f:+1.29/0.73 20p:+0.83/0.66 40f:+1.22/0.72 40p:+0.94/0.66
+IC12rt/A     |  15.35/ 14.84  | 36.76/36.87 |  -0.42/ -0.34 |  1.026 |  +0.35/0.544 |  +1.02/0.601 |  +1.48 |  +0.96 |  -0.56/ -1.86/ -4.25 |  -2.06/0.00 |  -3.81/0.00 |  +0.40/0.57 | 10f:+1.32/0.64 10p:+0.55/0.57 20f:+1.04/0.59 20p:+0.37/0.54 40f:+0.85/0.58 40p:+0.44/0.54
+IC12rt/B     |  15.66/ 15.11  | 39.71/39.84 |  -0.11/ -0.07 |  1.010 |  +0.30/0.574 |  +0.66/0.640 |  +0.81 |  +0.70 |  -0.12/ -0.84/ -2.13 |  -0.93/0.00 |  -1.76/0.00 |  +0.29/0.62 | 10f:+0.83/0.68 10p:+0.38/0.58 20f:+0.66/0.63 20p:+0.34/0.57 40f:+0.53/0.60 40p:+0.33/0.57
+
+IC12/A: pass=False failed=['AT', 'E2', 'E2p']
+IC12/B: pass=False failed=['AT', 'E2p']
+IC12rt/A: pass=False failed=['AT', 'E2', 'E2p', 'E3', 'E4', 'G3_base', 'G3_calibrated', 'stage1']
+IC12rt/B: pass=False failed=['AT', 'E2', 'E2p', 'G3_base', 'G3_calibrated', 'stage1']
+
+IC12/A: sells/yr 9.34; OOS windows GSPC_1957_1999,M1,M3,M4,M5
+IC12/B: sells/yr 11.56; OOS windows GSPC_1957_1999,M1,M3,M4,M5
+IC12rt/A: sells/yr 9.56; OOS windows GSPC_1957_1999,M1,M3,M4,M5
+IC12rt/B: sells/yr 11.03; OOS windows GSPC_1957_1999,M1,M3,M4,M5
+
+2017-window decomposition IC12rt/A: total dlogNAV -34.46 pp over 9 episodes | per year 2017:+0.00 2018:+0.00 2019:-1.04 2020:-20.24 2021:+5.32 2022:-6.18 2023:-15.59 2024:-4.04 2025:+5.61 2026:+1.69
+    worst episode 2020-09-23..2020-11-18 (40 sessions) -11.00 pp
+    worst episode 2022-02-02..2022-08-03 (125 sessions) -10.51 pp
+    worst episode 2023-03-15..2023-04-26 (29 sessions) -6.83 pp
+2017-window decomposition IC12rt/B: total dlogNAV -17.14 pp over 9 episodes | per year 2017:+0.00 2018:+0.00 2019:-0.41 2020:-10.97 2021:+2.91 2022:-2.78 2023:-7.43 2024:-3.26 2025:+3.44 2026:+1.37
+    worst episode 2020-09-23..2020-11-18 (40 sessions) -5.31 pp
+    worst episode 2022-02-02..2022-08-03 (125 sessions) -4.59 pp
+    worst episode 2020-03-11..2020-05-06 (39 sessions) -3.76 pp
+veto incidence on the main window (live state): 23.0% of defined sessions, 33 episodes, mean 46.6 / median 39 / max 131 sessions
+veto incidence on the main window (rt state): 19.7% of defined sessions, 33 episodes, mean 39.9 / median 33 / max 131 sessions

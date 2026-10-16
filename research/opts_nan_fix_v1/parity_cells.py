@@ -126,7 +126,7 @@ def dump(path) -> dict:
     return summary
 
 
-def compare(before, after, out=None) -> dict:
+def compare(before, after, out=None, labels=None) -> dict:
     """Diff two archives.
 
     Two claims are *required* (the fix is a repair, not a re-tune):
@@ -184,7 +184,8 @@ def compare(before, after, out=None) -> dict:
         if k.split("|")[1] not in NON_OPTION and k in b.files
         and not np.isfinite(np.asarray(b[k])).any() and not np.isfinite(np.asarray(a[k])).all()]
     result = {
-        "before": str(before), "after": str(after),
+        "before": (labels[0] if labels else str(before)),
+        "after": (labels[1] if labels else str(after)),
         "before_sha256": hashlib.sha256(Path(before).read_bytes()).hexdigest(),
         "after_sha256": hashlib.sha256(Path(after).read_bytes()).hexdigest(),
         "n_cells": len(keys),

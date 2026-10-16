@@ -40,7 +40,7 @@
   }
  },
  "artifacts": {
-  "research/opts_nan_fix_v1/PRE_FIX_BASELINE.npz": "the pre-fix bootstrap archive (85 cells, raw float64 per-path CAGRs) the parity diff is taken against; its SHA-256 is recorded in PARITY_FIX.json (the file is a zip, so its bytes are not reproducible, only its arrays are)",
+  "research/opts_nan_fix_v1/PRE_FIX_BASELINE.npz": "the pre-fix bootstrap archive (85 cells, raw float64 per-path CAGRs) the parity diff is taken against; its SHA-256 (over the file bytes) is recorded in PARITY_FIX.json",
   "research/opts_nan_fix_v1/PARITY_FIX.json": "the before/after parity diff",
   "research/opts_nan_fix_v1/HARNESS.json": "the study harness (engine parity --quick, engine anchors, chunk-leg stats, parity diff)"
  },

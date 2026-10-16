@@ -102,7 +102,9 @@ def parity_diff() -> dict:
     with tempfile.TemporaryDirectory() as td:
         cur = Path(td) / "after.npz"
         PC.dump(cur)
-        return PC.compare(base, cur, HERE / "PARITY_FIX.json")
+        # stable labels: the temp path would otherwise leak into the committed JSON
+        return PC.compare(base, cur, HERE / "PARITY_FIX.json",
+                          labels=("PRE_FIX_BASELINE.npz", "current (fixed) archive"))
 
 
 def harness() -> dict:

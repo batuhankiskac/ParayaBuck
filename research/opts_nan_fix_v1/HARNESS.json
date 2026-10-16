@@ -121,9 +121,9 @@
    "tail": "parity PASS"
   },
   "parity_before_after": {
-   "after": "/var/folders/59/05vxc0l518q0809k97j19bmc0000gn/T/tmpewvfnzja/after.npz",
+   "after": "current (fixed) archive",
    "after_sha256": "dcddb9038a5d7c95e5ad6a4fc1d5c217523da4fb10b9839171fcfb26fe105c94",
-   "before": "/Users/batuhankiskac/Desktop/ParayaBuck-wt/opts_nan_fix_v1/research/opts_nan_fix_v1/PRE_FIX_BASELINE.npz",
+   "before": "PRE_FIX_BASELINE.npz",
    "before_sha256": "a08106523f980b9cc5fad123b3c8d1d171403a8c7fb193147ed2aaaae0d177ee",
    "hard_failures": [],
    "n_cells": 85,

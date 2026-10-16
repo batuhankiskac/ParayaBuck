@@ -37,6 +37,7 @@ from research.state_defer_v1.engine import fe_boot, fe_data, fe_sim, fe_study
 from research.state_defer_v1.engine.fe_config import (
     BLOCK,
     CANDIDATES,
+    FIN,
     GATE_CAPITAL,
     OOS_WINDOWS,
     SEED,
@@ -203,7 +204,9 @@ def shared_parity():
     if not ok:
         print("\n".join(out[-15:]))
         print(p.stderr[-2000:])
-    return {"pass": bool(ok), "tail": out[-6:]}
+    # only the deterministic check lines are stored (the wall-clock lines are not reproducible)
+    keep = [line.strip() for line in out if "-> PASS" in line or "-> FAIL" in line]
+    return {"pass": bool(ok), "checks": keep}
 
 
 def harness():
@@ -211,8 +214,9 @@ def harness():
     checks = {}
 
     def chk(name, got, want, tol=TOL, pp=True):
+        """TOL is 0.01 pp expressed as a fraction (1e-4); `diff_pp` is reported in pp."""
         scale = 100.0 if pp else 1.0
-        ok = abs(got - want) * scale <= tol
+        ok = abs(got - want) <= tol * scale / 100.0
         checks[name] = {"got": got, "want": want, "diff_pp": (got - want) * scale, "pass": bool(ok)}
         return ok
 
@@ -228,19 +232,25 @@ def harness():
             r = ref[md]["m2"][arm]
             chk(f"{arm}_{md}_cagr", r["cagr"], anchor["cagr_base" if md == "base" else "cagr_cal"] / 100)
             chk(f"{arm}_{md}_maxdd", r["max_dd"], anchor["dd_base" if md == "base" else "dd_cal"] / 100)
-        # and my fork must reproduce that same published file, not just the protocol's summary
-        for md in ("base", "calibrated"):
+    # ---- and my fork must reproduce that same published file, not just the protocol's summary
+    for md, spread in FIN.items():
+        days_m, o_m, c_m, _we, w_m, _e2 = fe_data.main_inputs(spread)
+        fx_m, ufe_m = fe_study.try_market(days_m)
+        T_m = len(days_m) - 1
+        env_m = fe_sim.RunEnv(days_m, fx_m, ufe_m, START, T_m)
+        for arm in ("K", "C0"):
             for m in ("m1", "m2", "m4"):
                 rr = fe_sim.simulate(
-                    o, c, w_r2, env, TAX_CAPITALS[GATE_CAPITAL], START, T, arm=arm, mode="pre_tax",
-                    m=int(m[1]),
+                    o_m, c_m, w_m, env_m, TAX_CAPITALS[GATE_CAPITAL], START, T_m, arm=arm,
+                    mode="pre_tax", m=int(m[1]),
                 )
-                st = fe_study.pre_stats(days, START, T, rr)
+                st = fe_study.pre_stats(days_m, START, T_m, rr)
                 chk(f"fork_{arm}_{md}_{m}_cagr", st["cagr"], ref[md][m][arm]["cagr"])
                 chk(f"fork_{arm}_{md}_{m}_maxdd", st["max_dd"], ref[md][m][arm]["max_dd"])
                 chk(f"fork_{arm}_{md}_{m}_turnover", st["turnover_annual"], ref[md][m][arm]["turnover_annual"])
                 if arm == "K":
-                    chk(f"fork_{arm}_{md}_{m}_deferred", float(st["deferred"]), float(ref[md][m][arm]["deferred"]), tol=0.0)
+                    chk(f"fork_{arm}_{md}_{m}_deferred", float(st["deferred"]),
+                        float(ref[md][m][arm]["deferred"]), tol=0.0)
     # ---- after-tax anchors at $100k
     for wn, (d0, d1) in TAX_WINDOWS.items():
         i0, i1 = fe_study.window_indices(days, d0, d1)
@@ -268,7 +278,7 @@ def harness():
     traces = {
         arm: fe_sim.simulate(o, c, w_r2, env, TAX_CAPITALS[GATE_CAPITAL], START, T, arm=arm,
                              mode="pre_tax", m=2, trace=True, stats=True)
-        for arm in ("C0", "A1u", "K", "D1", "D2", "D3", "D4")
+        for arm in ("C0", "A1u", "H2", "K", "D1", "D2", "D3", "D4")
     }
     dd_, _, _, _, dd_env = env_main()
     inv = {}
@@ -304,10 +314,11 @@ def harness():
         "pass": bool(all(v for k, v in inv.items() if isinstance(v, bool))), "detail": inv
     }
 
-    # ---- the published R2 January-gap episodes, as a sanity check on the gap table
+    # ---- the published H2-minus-R2 January-gap episodes, as a sanity check on the gap table
     gaps = january_gaps(days, traces)
-    checks["r2_gap_2015"] = {"got": gaps["C0"]["2016"]["log_ratio"], "want": -0.00699, "pass": abs(gaps["C0"]["2016"]["log_ratio"] + 0.00699) < 5e-4}
-    checks["r2_gap_2024"] = {"got": gaps["C0"]["2025"]["log_ratio"], "want": -0.00318, "pass": abs(gaps["C0"]["2025"]["log_ratio"] + 0.00318) < 5e-4}
+    for yr, want in (("2016", -0.699), ("2019", 0.0), ("2025", -0.318)):
+        got = (gaps["H2"][yr]["log_return"] - gaps["C0"][yr]["log_return"]) * 100
+        checks[f"h2_r2_gap_{yr}"] = {"got": got, "want": want, "pass": abs(got - want) <= 0.01}
 
     shared = shared_parity()
     n_bad = sum(1 for v in checks.values() if not v.get("pass", False)) + (0 if shared["pass"] else 1)
@@ -328,22 +339,24 @@ def harness():
 
 
 def january_gaps(days, traces, i0=START):
-    """Per tax year: ln(NAV at the last January close / NAV at the last December close), per arm.
+    """The published January-gap episode, per tax year `y`: the log return from the **first**
+    session of December `y-1` to the **last** session of January `y`.
 
-    `nav[k]` is the close of session `i0 + k - 1` (`nav[0]` is the starting capital), so the close
-    of session `i` is `nav[i - i0 + 1]`.
+    That is `tax_harvest_v2`'s convention (reproduced here: H2 minus R2 is -0.699 pp for 2016,
+    -0.318 pp for 2025 and exactly 0.000 pp for 2019, when R2 was flat). `nav[k]` is the close of
+    session `i0 + k - 1`, so the close of session `i` is `nav[i - i0 + 1]`.
     """
     out = {}
     for arm, r in traces.items():
         nav, rows = r["_nav"], {}
         for y in range(2001, 2027):
-            dec = [i for i, d in enumerate(days) if d.startswith(f"{y}-12")]
-            jan = [i for i, d in enumerate(days) if d.startswith(f"{y + 1}-01")]
+            dec = [i for i, d in enumerate(days) if d.startswith(f"{y - 1}-12")]
+            jan = [i for i, d in enumerate(days) if d.startswith(f"{y}-01")]
             if not dec or not jan:
                 continue
-            di, ji = dec[-1] - i0 + 1, jan[-1] - i0 + 1
+            di, ji = dec[0] - i0 + 1, jan[-1] - i0 + 1
             if 0 <= di < len(nav) and 0 <= ji < len(nav) and nav[di] > 0:
-                rows[str(y + 1)] = {"log_ratio": float(np.log(nav[ji] / nav[di]))}
+                rows[str(y)] = {"log_return": float(np.log(nav[ji] / nav[di]))}
         out[arm] = rows
     return out
 
@@ -380,7 +393,7 @@ def stage_clean_boot(arms):
         capitals=("100k", "1M"),
         modes=("progressive", "flat"),
         anchor_e2=True,
-        deltas=CANDIDATES,
+        deltas=tuple(a for a in arms if a != CONTROL),
         baselines=(CONTROL,),
         control=CONTROL,
         label="clean",
@@ -422,6 +435,8 @@ def stage_deferral(arms):
             "event_drift_max": float(ev[:, 0].max()) if len(ev) else 0.0,
             "event_drift_p95": float(np.percentile(ev[:, 0], 95)) if len(ev) else 0.0,
             "max_hold_above_target": float(rp["max_hold_above_target"]),
+            "mean_held_weight": float(rp["mean_held_weight"]),
+            "mean_abs_target_gap": float(rp["mean_abs_target_gap"]),
             "deferrals_by_year": rp["deferrals_by_year"],
             "sells_per_year": float(rp["sells"] / rp["years"]),
             "turnover_annual": float(rp["turnover_annual"]),
@@ -448,7 +463,7 @@ def stage_gap_table(arms):
     base = gaps[CONTROL]
     for arm in arms:
         for y in gaps[arm]:
-            gaps[arm][y]["delta_vs_K_pp"] = (gaps[arm][y]["log_ratio"] - base[y]["log_ratio"]) * 100
+            gaps[arm][y]["delta_vs_K_pp"] = (gaps[arm][y]["log_return"] - base[y]["log_return"]) * 100
     return {"january_gaps": rnd(gaps)}
 
 
@@ -628,20 +643,20 @@ def run():
         "main_window": res["pre_tax_main"]["window"],
         "seed": SEED, "block": BLOCK,
     }
-    res["wall_clock_s"] = round(time.time() - t0, 1)
+    wall = round(time.time() - t0, 1)
     (OUT / "RESULTS.json").write_text(json.dumps(rnd(res), indent=1, sort_keys=True))
-    write_summary(res)
-    print(f"run: {res['wall_clock_s']}s -> RESULTS.json / SUMMARY.txt")
+    write_summary(res, wall)
+    print(f"run: {wall}s -> RESULTS.json / SUMMARY.txt")
     return res
 
 
-def write_summary(res):
+def write_summary(res, wall):
     pre, tax, gates_ = res["pre_tax_main"], res["after_tax_windows"], res["gates"]
     boot = res["bootstrap_clean_seed20261011"]
     oos = res["oos"]
     oosb = res["oos_bootstrap"]["pooled"]
     lines = []
-    lines.append(f"state_defer_v1 -- {res['status']}  (wall clock {res['wall_clock_s']}s)")
+    lines.append(f"state_defer_v1 -- {res['status']}  (wall clock of this --run: {wall}s)")
     lines.append(f"harness: {res['harness']['n_checks']} checks, {res['harness']['n_outside_tolerance']} outside tolerance, "
                  f"shared engine parity --quick {'PASS' if res['harness']['shared_engine_parity']['pass'] else 'FAIL'}")
     lines.append(f"adopted: {gates_['adopted']} ({gates_['reason']})")
@@ -692,26 +707,33 @@ def write_summary(res):
     lines.append("")
     lines.append("gates (P = pass, F = fail)")
     for arm, g in gates_["arms"].items():
-        keys = [k for k in g if not k.endswith(("detail", "wins", "verdict", "failed"))]
+        keys = [k for k in GATE_KEYS if k in g]
         lines.append(f"  {arm:5s} " + " ".join(f"{k}={'P' if g[k] else 'F'}" for k in keys) + f"  -> {g['verdict']}")
         if g["failed"]:
             lines.append(f"        failed: {g['failed']}")
+        lines.append(f"        G7 {g['G7_detail']}  T1 {g['T1_detail_pp']}  "
+                     f"T2 {g['T2_detail']}  T3 {g['T3_detail']}")
     lines.append("")
     lines.append("deferral report (main window, pre-tax m = 2 / after-tax progressive $100k)")
+    lines.append("  K/H2's deferral is the original H2 device: it has no fork episode/gain counter")
+    lines.append("  (its `deferrals` counter is H2's own), so those columns are 0 for K and C0.")
     for arm in REPORT:
         d = res["deferral_report"][arm]
         lines.append(f"  {arm:5s} deferrals {d['deferrals']:5d} episodes {d['deferral_episodes']:4d} "
-                     f"maxep {d['max_episode_sessions']:3d} defgain_TRY {d['deferred_gain_try_events']:14.0f} "
+                     f"maxep {d['max_episode_sessions']:3d} defgain_events {d['deferred_gain_try_events']:14.0f} "
+                     f"episodes {d['deferred_gain_try_episodes']:14.0f} "
                      f"drift max {d['event_drift_max']:.4f} p95 {d['event_drift_p95']:.4f} "
                      f"pathmax {d['max_hold_above_target']:.4f} sells/yr {d['sells_per_year']:.2f} "
-                     f"taxUSD {d['tax_usd']:12.0f}")
+                     f"taxUSD {d['tax_usd']:12.0f} meanW {d['mean_held_weight']:.4f} "
+                     f"meanGap {d['mean_abs_target_gap']:.4f}")
     lines.append("")
-    lines.append("January-gap log ratios (pre-tax) for the arms' deferred years")
+    lines.append("January-gap episodes (log return from the first December close to the last")
+    lines.append("January close, pre-tax; delta vs K in pp)")
     gaps = res["january_gaps"]
     for y in ("2016", "2019", "2025"):
         if y in gaps[CONTROL]:
             lines.append("  " + " ".join(
-                f"{arm}={gaps[arm][y]['log_ratio']*100:+.3f}" for arm in REPORT if y in gaps[arm]))
+                f"{arm}={gaps[arm][y]['delta_vs_K_pp']:+.3f}" for arm in REPORT if y in gaps[arm]))
     (OUT / "SUMMARY.txt").write_text("\n".join(lines) + "\n")
 
 

@@ -1,0 +1,84 @@
+state_defer_v1 -- complete  (wall clock of this --run: 28.9s)
+harness: 71 checks, 0 outside tolerance, shared engine parity --quick PASS
+adopted: None (no arm passes every gate)
+
+arm   CAGR base  CAGR cal   maxDD base  maxDD cal   m1 base   2017+ base  turn/yr  sells/yr  defer  band
+K       15.7649%   15.1785%    46.6698%    46.7948%  16.0173%   33.2306%   5.4561     10.17     71  1239
+D1      15.7322%   15.1434%    47.5238%    47.6451%  15.9794%   32.7864%   5.3309      8.92    792   623
+D2      15.7366%   15.1500%    47.5238%    47.6451%  15.9877%   33.1337%   5.4151      9.49    710   641
+D3      15.8546%   15.2667%    47.1824%    47.3047%  16.1030%   33.4302%   5.3523      9.04    995   456
+D4      15.7241%   15.1382%    47.1972%    47.3192%  15.9768%   33.1332%   5.4627     10.05    112  1194
+C0      15.4766%   14.8961%    46.7584%    46.8797%  15.7538%   32.7139%   5.9915     29.56      0     0
+
+after tax, progressive, liquidated, base financing, m = 2 (gate capital $100k)
+  capital 10k
+    2000_03_to_2026_09     K=12.1788 D1=12.1980 D2=12.1332 D3=12.1869 D4=12.0778 C0=11.6874   d-vs-K D1=+0.0192 D2=-0.0456 D3=+0.0081 D4=-0.1010 C0=-0.4914
+    2010_01_to_end         K=17.4670 D1=17.3632 D2=17.4123 D3=17.4795 D4=17.3710 C0=17.0290   d-vs-K D1=-0.1038 D2=-0.0547 D3=+0.0125 D4=-0.0960 C0=-0.4380
+    2017_01_to_end         K=26.9157 D1=26.5709 D2=26.7285 D3=26.7893 D4=26.6055 C0=26.0376   d-vs-K D1=-0.3448 D2=-0.1872 D3=-0.1264 D4=-0.3102 C0=-0.8781
+  capital 100k
+    2000_03_to_2026_09     K=10.7533 D1=10.8052 D2=10.7107 D3=10.7977 D4=10.6476 C0=10.1600   d-vs-K D1=+0.0519 D2=-0.0426 D3=+0.0444 D4=-0.1057 C0=-0.5933
+    2010_01_to_end         K=15.2354 D1=15.1559 D2=15.1762 D3=15.2828 D4=15.1156 C0=14.7059   d-vs-K D1=-0.0795 D2=-0.0592 D3=+0.0474 D4=-0.1198 C0=-0.5295
+    2017_01_to_end         K=23.9720 D1=23.6774 D2=23.8139 D3=23.9018 D4=23.6345 C0=22.8861   d-vs-K D1=-0.2946 D2=-0.1581 D3=-0.0702 D4=-0.3375 C0=-1.0859
+  capital 1M
+    2000_03_to_2026_09     K=9.8773 D1=9.9709 D2=9.8512 D3=9.9639 D4=9.7969 C0=9.1950   d-vs-K D1=+0.0936 D2=-0.0261 D3=+0.0866 D4=-0.0804 C0=-0.6823
+    2010_01_to_end         K=14.1650 D1=14.1266 D2=14.1459 D3=14.2645 D4=14.0440 C0=13.6237   d-vs-K D1=-0.0384 D2=-0.0191 D3=+0.0995 D4=-0.1210 C0=-0.5413
+    2017_01_to_end         K=22.8581 D1=22.6149 D2=22.7775 D3=22.8841 D4=22.5125 C0=21.7246   d-vs-K D1=-0.2432 D2=-0.0806 D3=+0.0260 D4=-0.3456 C0=-1.1335
+
+clean bootstrap seed 20261011 block 20 ($100k)
+  B1-recent  K     median   3.8577%
+  B1-recent  D1    median   3.7110%  delta -0.0012pp share>0 49.8% p05 -1.3124 p95 +1.1863
+  B1-recent  D2    median   3.7523%  delta -0.0246pp share>0 46.4% p05 -0.5498 p95 +0.4123
+  B1-recent  D3    median   3.8081%  delta -0.0032pp share>0 49.1% p05 -0.5917 p95 +0.5336
+  B1-recent  D4    median   3.8098%  delta -0.0315pp share>0 37.4% p05 -0.5485 p95 +0.2953
+  B1-recent  C0    median   3.5155%  delta -0.2856pp share>0 25.0% p05 -1.2205 p95 +0.3817
+  B2-flat    K     median   4.0376%
+  B2-flat    D1    median   3.9270%  delta -0.1239pp share>0 43.3% p05 -1.5177 p95 +1.1094
+  B2-flat    D2    median   4.0510%  delta -0.0363pp share>0 44.0% p05 -0.5426 p95 +0.4353
+  B2-flat    D3    median   4.0803%  delta -0.0203pp share>0 47.0% p05 -0.5826 p95 +0.5421
+  B2-flat    D4    median   4.0365%  delta -0.0254pp share>0 39.0% p05 -0.4844 p95 +0.3654
+  B2-flat    C0    median   3.9678%  delta -0.1311pp share>0 36.0% p05 -0.9100 p95 +0.4596
+
+pre-tax bootstrap (5,000 ten-year paths): median delta pp (share>0)
+  D1=-0.1677(41.6%)  D2=+0.0112(51.4%)  D3=+0.0235(53.1%)  D4=+0.0000(49.1%)  C0=+0.0071(50.9%)
+  D1=-0.1710(41.2%)  D2=+0.0106(51.3%)  D3=+0.0244(52.7%)  D4=+0.0000(49.2%)  C0=+0.0117(51.3%)
+
+OOS windows: delta CAGR pp / delta maxDD pp (vs K), and the pooled bootstrap (G8)
+  GSPC_1957_1999 M1 M2 M3 M4 M5
+  D1    +0.04/+0.00 +0.53/+0.00 +0.23/+0.18 +0.12/+0.64 -0.33/+2.33 +0.01/+0.16   pooled +0.0622pp (56.7%)
+  D2    +0.00/-0.00 +0.12/+0.00 -0.09/+0.49 -0.04/+0.23 +0.02/-0.27 -0.02/+0.06   pooled +0.0021pp (51.0%)
+  D3    +0.02/+0.00 -0.00/+0.00 +0.06/-0.40 -0.05/-0.06 -0.12/+1.29 +0.02/-0.09   pooled +0.0124pp (53.3%)
+  D4    -0.00/+0.00 -0.07/+0.00 -0.05/+0.13 -0.03/+0.33 -0.06/+0.06 -0.00/-0.11   pooled +0.0000pp (36.9%)
+  C0    -0.08/-0.03 -0.09/-0.24 -0.02/+0.22 -0.05/-0.15 -0.23/-0.04 +0.04/-0.20   pooled -0.0368pp (42.3%)
+
+gates (P = pass, F = fail)
+  D1    G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G4=F G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G7=P G8=P G9=P T1=F T2=F T3=F  -> FAIL
+        failed: ['G1_base', 'G1_calibrated', 'G4', 'G5_base', 'G5_calibrated', 'G6_base', 'G6_calibrated', 'T1', 'T2', 'T3']
+        G7 {'median_dcagr_pp': 0.081167, 'n_dcagr_ge_-0.5': 6, 'n_ddd_le_3': 6, 'worst_ddd_pp': 2.33415}  T1 {'2000_03_to_2026_09': 0.0519, '2010_01_to_end': -0.0795, '2017_01_to_end': -0.2946}  T2 {'median_pp': -0.001164, 'share': 0.498}  T3 {'median_pp': -0.123884, 'share': 0.433}
+  D2    G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G4=F G5_base=P G5_calibrated=P G6_base=F G6_calibrated=F G7=F G8=P G9=P T1=F T2=F T3=F  -> FAIL
+        failed: ['G1_base', 'G1_calibrated', 'G4', 'G6_base', 'G6_calibrated', 'G7', 'T1', 'T2', 'T3']
+        G7 {'median_dcagr_pp': -0.010277, 'n_dcagr_ge_-0.5': 6, 'n_ddd_le_3': 6, 'worst_ddd_pp': 0.490644}  T1 {'2000_03_to_2026_09': -0.0426, '2010_01_to_end': -0.0592, '2017_01_to_end': -0.1581}  T2 {'median_pp': -0.024625, 'share': 0.464}  T3 {'median_pp': -0.036336, 'share': 0.44}
+  D3    G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G4=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G7=P G8=P G9=P T1=F T2=F T3=F  -> FAIL
+        failed: ['T1', 'T2', 'T3']
+        G7 {'median_dcagr_pp': 0.007205, 'n_dcagr_ge_-0.5': 6, 'n_ddd_le_3': 6, 'worst_ddd_pp': 1.289965}  T1 {'2000_03_to_2026_09': 0.0444, '2010_01_to_end': 0.0474, '2017_01_to_end': -0.0702}  T2 {'median_pp': -0.003249, 'share': 0.491}  T3 {'median_pp': -0.020324, 'share': 0.47}
+  D4    G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G4=F G5_base=P G5_calibrated=P G6_base=F G6_calibrated=F G7=F G8=P G9=P T1=F T2=F T3=F  -> FAIL
+        failed: ['G1_base', 'G1_calibrated', 'G4', 'G6_base', 'G6_calibrated', 'G7', 'T1', 'T2', 'T3']
+        G7 {'median_dcagr_pp': -0.041233, 'n_dcagr_ge_-0.5': 6, 'n_ddd_le_3': 6, 'worst_ddd_pp': 0.331224}  T1 {'2000_03_to_2026_09': -0.1057, '2010_01_to_end': -0.1198, '2017_01_to_end': -0.3375}  T2 {'median_pp': -0.031505, 'share': 0.374}  T3 {'median_pp': -0.025356, 'share': 0.39}
+  C0    G1_base=F G1_calibrated=F G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G4=F G5_base=P G5_calibrated=P G6_base=F G6_calibrated=F G7=F G8=F G9=P T1=F T2=F T3=F  -> FAIL
+        failed: ['G1_base', 'G1_calibrated', 'G4', 'G6_base', 'G6_calibrated', 'G7', 'G8', 'T1', 'T2', 'T3']
+        G7 {'median_dcagr_pp': -0.065321, 'n_dcagr_ge_-0.5': 6, 'n_ddd_le_3': 6, 'worst_ddd_pp': 0.21938}  T1 {'2000_03_to_2026_09': -0.5933, '2010_01_to_end': -0.5295, '2017_01_to_end': -1.0859}  T2 {'median_pp': -0.285562, 'share': 0.25}  T3 {'median_pp': -0.131071, 'share': 0.36}
+
+deferral report (main window, pre-tax m = 2 / after-tax progressive $100k)
+  K/H2's deferral is the original H2 device: it has no fork episode/gain counter
+  (its `deferrals` counter is H2's own), so those columns are 0 for K and C0.
+  K     deferrals    71 episodes    0 maxep   0 defgain_events              0 episodes              0 drift max 0.0000 p95 0.0000 pathmax 0.0000 sells/yr 10.17 taxUSD       830903 meanW 0.6787 meanGap 0.0276
+  D1    deferrals   792 episodes  188 maxep   9 defgain_events      393574847 episodes       68041346 drift max 0.4797 p95 0.1404 pathmax 0.9827 sells/yr 8.92 taxUSD       836751 meanW 0.6818 meanGap 0.0302
+  D2    deferrals   710 episodes  202 maxep   9 defgain_events      202100508 episodes       52677418 drift max 0.1000 p95 0.0850 pathmax 0.9827 sells/yr 9.49 taxUSD       832737 meanW 0.6792 meanGap 0.0279
+  D3    deferrals   995 episodes  263 maxep  20 defgain_events      413127779 episodes       72465794 drift max 0.1000 p95 0.0853 pathmax 0.9827 sells/yr 9.04 taxUSD       854216 meanW 0.6799 meanGap 0.0284
+  D4    deferrals   112 episodes   26 maxep  19 defgain_events       34803516 episodes        6026149 drift max 0.0985 p95 0.0827 pathmax 0.9827 sells/yr 10.05 taxUSD       828300 meanW 0.6785 meanGap 0.0274
+  C0    deferrals     0 episodes    0 maxep   0 defgain_events              0 episodes              0 drift max 0.0000 p95 0.0000 pathmax 0.0000 sells/yr 29.56 taxUSD       766160 meanW 0.6736 meanGap 0.0248
+
+January-gap episodes (log return from the first December close to the last
+January close, pre-tax; delta vs K in pp)
+  K=+0.000 D1=-0.010 D2=+1.020 D3=+1.251 D4=+1.251 C0=+0.801
+  K=+0.000 D1=+0.000 D2=+0.000 D3=+0.000 D4=+0.000 C0=+0.000
+  K=+0.000 D1=+0.256 D2=+0.337 D3=+0.436 D4=+0.123 C0=+0.367

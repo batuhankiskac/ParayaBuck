@@ -149,8 +149,10 @@ N_CNT = 6
     SC_MAXDRIFT,
     SC_DEFEP,
     SC_MAXEP,
-) = range(20)
-N_SCAL = 20
+    SC_MEANW,
+    SC_MEANGAP,
+) = range(22)
+N_SCAL = 22
 # per-year output rows
 YR_GAIN, YR_DUE, YR_PAID, YR_POST, YR_DEFER, N_YR = range(6)
 # `dfr_stats` columns (one row per deferred fill, in order; row 4 flags a used row)
@@ -595,6 +597,8 @@ def sim_one(
             trade = True
         if dfr_on and w - tgt > scal[SC_MAXDRIFT]:
             scal[SC_MAXDRIFT] = w - tgt
+        scal[SC_MEANW] += w
+        scal[SC_MEANGAP] += abs(tgt - w)
 
         if trade:
             drift = abs(tgt - w)
@@ -801,6 +805,8 @@ def sim_one(
     scal[SC_DEFGAIN] = st[S_DEFGAIN]
     scal[SC_DEFGAIN_EP] = st[S_DEFGAIN_EP]
     scal[SC_DEFEP] = st[S_DEFEP]
+    scal[SC_MEANW] = scal[SC_MEANW] / nsess
+    scal[SC_MEANGAP] = scal[SC_MEANGAP] / nsess
     return nav, dec, scal, yr, gbr, gbr_n, has_due
 
 
@@ -1031,6 +1037,8 @@ def simulate(
         "deferred_gain_try_events": float(scal[SC_DEFGAIN]),
         "deferred_gain_try_episodes": float(scal[SC_DEFGAIN_EP]),
         "max_hold_above_target": float(scal[SC_MAXDRIFT]),
+        "mean_held_weight": float(scal[SC_MEANW]),
+        "mean_abs_target_gap": float(scal[SC_MEANGAP]),
         "_nav": nav,
         "_dec": dec if trace else None,
         "_dfr": dfr_stats[dfr_stats[:, DF_FLAG] == 1.0] if stats else None,

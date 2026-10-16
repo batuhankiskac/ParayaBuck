@@ -3631,8 +3631,7 @@
     }
   },
   "run_meta": {
-    "engine": "research/fast_engine (tag fast-engine-v1-2026-10)",
-    "git_commit": "68eea1644973511704df1cc9aab29a6d984fb4ca"
+    "engine": "research/fast_engine (tag archive/research/fast-engine-v1-2026-10)"
   },
   "status": "complete",
   "verdicts": {

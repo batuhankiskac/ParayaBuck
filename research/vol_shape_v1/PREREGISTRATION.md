@@ -243,7 +243,9 @@ bootstrap deltas — are identical to the final ones):
 3. **The verdict string** now names the failed gates instead of the misleading "no gain"; the
    tier-N label is a reading, never an adoption.
 4. **`RESULTS.json` no longer records the parity run's wall clock** (nor its "in 12.0 s" tail
-   line), so two `--run`s are byte-identical; the study's own wall clock is in `SUMMARY.txt` only.
+   line), **nor the study's own wall clock or the `HEAD` hash**, so two `--run`s are byte-identical
+   (a recorded `HEAD` would change as soon as the result file is committed); both live in
+   `SUMMARY.txt` only.
 5. A kernel-wrapper bug found by `--smoke` **before** the pre-registration commit, disclosed in the
    pre-commit note below: the panel builder emitted all five arms' panels while the kernel's output
    buffers were sized for the arms actually requested (heap corruption, non-deterministic crashes).

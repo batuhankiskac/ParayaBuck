@@ -1,6 +1,6 @@
 vol_shape_v1 | I2 exposure-shape replication at matched average weight | control = production K (p = 1)
 main window 2000-03-09 -> 2026-09-29 (6679 sessions), m = 2, base unless stated
-run wall-clock: 28.1 s | git 68eea1644973 | harness PASS
+run wall-clock: 31.9 s | git c59af704fbd5 | harness PASS
 
 calibration (1985-10-01 -> 2000-03-08, ^NDX, base financing, zero dividends):
   C0  p = 1.0   c = 0.350000000000  mean(vt) = 0.8396819604 (K 0.8396819604)

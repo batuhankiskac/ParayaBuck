@@ -17,7 +17,7 @@ import hashlib
 import json
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,7 +32,7 @@ URL = (
 
 
 def epoch(d: str) -> int:
-    return int(datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+    return int(datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=UTC).timestamp())
 
 
 def main() -> None:
@@ -50,7 +50,7 @@ def main() -> None:
     for k, t in enumerate(ts):
         if None in (q["open"][k], q["close"][k]):
             continue
-        d = datetime.fromtimestamp(t, tz=timezone.utc).strftime("%Y-%m-%d")
+        d = datetime.fromtimestamp(t, tz=UTC).strftime("%Y-%m-%d")
         rows.append(
             (
                 d,

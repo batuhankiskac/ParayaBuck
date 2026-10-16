@@ -27,19 +27,19 @@ from pathlib import Path
 import numpy as np
 
 from research.fast_engine import fe_boot, fe_data, fe_signals, fe_sim, fe_study
-from research.fast_engine.fe_tax import MODE_PROGRESSIVE
 from research.fast_engine.fe_config import (
     EXP_Q,
     EXTRA_FIN,
     FIN,
     GATE_CAPITAL,
-    M,
     M_STRESS,
     OOS_WINDOWS,
     START,
     TAX_CAPITALS,
     TAX_WINDOWS,
+    M,
 )
+from research.fast_engine.fe_tax import MODE_PROGRESSIVE
 from research.vol_shape_v1 import boot_shape, shapes
 
 HERE = Path(__file__).resolve().parent
@@ -440,8 +440,6 @@ def harness() -> dict:
                                  capitals=("100k", "1M"), modes=("progressive", "flat"),
                                  seed=20261011, block=20, m=M, keep_paths=True, quiet=True)
     diff_cells, maxdiff = 0, 0.0
-    pre_keys = (("cagr_median", "cagr_median"), ("diff_vs_ctrl_median_pp", "diff_vs_C0_median_pp"),
-                ("diff_vs_ctrl_mean_pp", "diff_vs_C0_mean_pp"), ("share_gt_0", "share_gt_0"))
     # The 'K' arm only, and only the cells that do not reference the baseline: this study's kernel
     # runs K's fill rule for every arm, so the engine's 'C0' arm (R2's rule) is not comparable and
     # neither is any `_vs_C0_` delta. The claim is: the shape option off reproduces the engine's K
@@ -682,12 +680,13 @@ def run() -> None:
         "decision_diff": stages["decision_diff"],
         "gates": gts,
         "verdicts": vd,
-        # the wall clock lives in SUMMARY.txt only: RESULTS.json must be byte-identical across runs
-        "run_meta": {"git_commit": _git("HEAD"), "engine": "research/fast_engine (tag fast-engine-v1-2026-10)"},
+        # the wall clock and the commit hash live in SUMMARY.txt only: RESULTS.json must be
+        # byte-identical across runs (a hash of HEAD would change with every commit)
+        "run_meta": {"engine": "research/fast_engine (tag archive/research/fast-engine-v1-2026-10)"},
         "status": "complete",
     }
     OUT.write_text(json.dumps(rnd(out), indent=2, sort_keys=True) + "\n")
-    SUMMARY.write_text(summary_text(out, wall))
+    SUMMARY.write_text(summary_text(out, wall, _git("HEAD")))
     print(SUMMARY.read_text())
 
 
@@ -696,12 +695,13 @@ def _git(rev: str) -> str:
     return p.stdout.strip()
 
 
-def summary_text(o, wall) -> str:
+def summary_text(o, wall, commit="") -> str:
     p = lambda x: f"{x * 100:7.2f}%"  # noqa: E731
     mw = o["main_window"]
     L = ["vol_shape_v1 | I2 exposure-shape replication at matched average weight | control = production K (p = 1)",
          f"main window {mw['window']['start']} -> {mw['window']['end']} ({mw['window']['sessions']} sessions), m = 2, base unless stated",
-         f"run wall-clock: {wall:.1f} s | git {o['run_meta']['git_commit'][:12]} | harness {'PASS' if o['harness']['pass'] else 'FAIL'}", ""]
+         f"run wall-clock: {wall:.1f} s | git {commit[:12] or '(uncommitted)'} | harness "
+         f"{'PASS' if o['harness']['pass'] else 'FAIL'}", ""]
     L.append("calibration (1985-10-01 -> 2000-03-08, ^NDX, base financing, zero dividends):")
     for a in ARMS:
         r = o["calibration"]["arms"][a]

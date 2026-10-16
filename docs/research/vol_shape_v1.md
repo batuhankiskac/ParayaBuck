@@ -212,8 +212,9 @@ Code fixes made **after the first complete run** (all in the reporting/aggregati
    contribute to the harness verdict (no top-level `pass`); they were passing and are now gating.
 3. the verdict label now names the failed gates instead of "no gain"; the tier-N label is a
    reading, not an adoption.
-4. `RESULTS.json` no longer records the parity run's wall clock (nor its "in 12.0s" tail line), so
-   two `--run`s are byte-identical; the study's own wall clock lives in `SUMMARY.txt` only.
+4. `RESULTS.json` no longer records the parity run's wall clock (nor its "in 12.0 s" tail line),
+   nor the study's own wall clock or the `HEAD` hash (either would change as soon as the result
+   file is committed), so two `--run`s are byte-identical; both live in `SUMMARY.txt` only.
 5. a kernel-wrapper bug found by `--smoke *before* the pre-registration commit (the panel builder
    emitted all five arms' panels while the output buffers were sized for the arms actually
    requested — heap corruption, non-deterministic crashes) is fixed by passing the arm list to

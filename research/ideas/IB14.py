@@ -20,10 +20,15 @@ OOS convention"), selected per window:
   amendment's convention for the daily series; 0.8 % of the main window's sessions).
 * `GSPC_1957_1999`, `M1`, `M2`: the monthly Moody's `BAA - AAA` spread, both registered from FRED
   by this branch (`baa_m`, `aaa_m`, 1919+), used **only from the first session of the following
-  month** (the 1-month lag): on the sessions of month M the series carries the observation in force
-  at the last session at or before the end of month M-1.  The arm's own 60-session change and
-  thresholds are then applied to that session-mapped series, i.e. the series is substituted and the
-  statistic kept, the most literal reading of the bank's rule.
+  month** (the 1-month lag): on a session of month M the series carries the observation of
+  reference month M-1.  That value is read from the series' **own monthly grid** with an as-of
+  lookup (`_asof_month`, the last reference month at or before M-1), *not* by an exact-date match
+  on the panel's sessions plus a forward fill: FRED stamps a monthly observation the 1st, so a
+  month whose 1st is not a trading session is never matched by an exact-date join and the
+  *previous* month's value carries over (two months behind, for the whole of the month that reads
+  it -- the bug this branch fixes).  The arm's own 60-session change and thresholds are then
+  applied to that session-mapped series, i.e. the series is substituted and the statistic kept,
+  the most literal reading of the bank's rule.
 * `M3`, `M4`, `M5`: `NotApplicable`.  The idea declares its OOS evaluable set as the three US
   windows above -- credit_vote_v1's convention (credit arms were evaluated on the US windows only),
   which is the "reduced 3-window G7" the bank's note refers to.  Data exists on M4/M5 (the daily
@@ -38,6 +43,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from research.batch_screen import extra as _ext
 from research.batch_screen.api import NotApplicable
 from research.fast_engine import fe_signals
 from research.fast_engine.fe_config import SMA_N
@@ -55,6 +61,43 @@ ARMS = {
 MONTHLY_WINDOWS = ("GSPC_1957_1999", "M1", "M2")
 NON_US = ("M3", "M4", "M5")
 MIN_COVER = 0.99
+
+#: (baa name, aaa name) -> (month ordinals, spread), built once per process
+_MONTHLY_CACHE = {}
+
+
+def _month_ordinals(days):
+    """Month ordinals (months since 1970-01) of ISO day strings, shape preserved."""
+    d = np.asarray(days).astype("datetime64[D]").astype("datetime64[M]")
+    return d.astype(np.int64)
+
+
+def _monthly_spread(baa, aaa):
+    """``(month ordinals, spread)`` of the BAA-AAA spread on the series' own monthly grid.
+
+    The grid is the months both series declare (FRED dates a monthly observation the 1st of its
+    reference month); months missing from either series are dropped, so the as-of lookup below can
+    never return a hole.  Nothing depends on the window -- a bootstrap chunk's drawn source session
+    maps to the same value it has in the real window.
+    """
+    ck = (baa, aaa)
+    if ck not in _MONTHLY_CACHE:
+        lo = max(np.datetime64(_ext.series_meta(baa)["range"][0], "M"),
+                 np.datetime64(_ext.series_meta(aaa)["range"][0], "M"))
+        hi = min(np.datetime64(_ext.series_meta(baa)["range"][1], "M"),
+                 np.datetime64(_ext.series_meta(aaa)["range"][1], "M"))
+        grid = np.arange(lo, hi + np.timedelta64(1, "M"))
+        values = (_ext.values_on(baa, grid.astype("datetime64[D]").astype(str))
+                  - _ext.values_on(aaa, grid.astype("datetime64[D]").astype(str)))
+        have = np.isfinite(values)
+        _MONTHLY_CACHE[ck] = (grid[have].astype(np.int64), values[have])
+    return _MONTHLY_CACHE[ck]
+
+
+def _asof_month(months, values, m):
+    """``(P, T)`` values of the last month ordinal ``<= m`` (NaN before the series starts)."""
+    slot = np.searchsorted(months, m, side="right") - 1
+    return np.where(slot >= 0, values[np.clip(slot, 0, None)], np.nan)
 
 
 def window_key(data) -> str:
@@ -81,25 +124,6 @@ def shift(a, n):
     return out
 
 
-def month_lag(s, mk):
-    """The monthly series one month older, on the panel's own sessions.
-
-    `s` is the date-aligned, forward-filled series and `mk` the `(P, T)` month index
-    (`year * 12 + month`); FRED dates a monthly observation the 1st, so "used only from the first
-    session of the following month" means: on a session of month M, the value in force at the last
-    session at or before the end of month M-1.  One `searchsorted` per path (`mk` is non-decreasing
-    along each row); no simulation loop.
-    """
-    P, T = mk.shape
-    out = np.full_like(s, np.nan)
-    for p in range(P):
-        row = mk[p]
-        j = np.searchsorted(row, row - 1, side="right") - 1
-        ok = j >= 0
-        out[p, ok] = s[p, j[ok]]
-    return out
-
-
 def credit_series(data, spec):
     """`(series, what)`: the window's credit series (see the module docstring)."""
     w = window_key(data)
@@ -108,13 +132,17 @@ def credit_series(data, spec):
             "the idea's declared OOS set: the credit arms are evaluated on the US windows only "
             "(credit_vote_v1's convention); M3-M5 are not evaluated for this arm")
     if w in MONTHLY_WINDOWS:
-        raw = data.extra("baa_m", ffill=True) - data.extra("aaa_m", ffill=True)
         what = "monthly BAA-AAA (1-month lag)"
+        months, spread = _monthly_spread(_ext.resolve_series("baa_m", w),
+                                         _ext.resolve_series("aaa_m", w))
+        mk = _month_ordinals(session_calendar(data))
+        # the 1-month publication lag: on a session of month M the series carries the observation of
+        # reference month M-1, as an as-of lookup on the series' own monthly grid (no reliance on a
+        # panel column of month M-1 existing, and valid for a chunk's non-monotone drawn sessions).
+        raw = _asof_month(months, spread, mk - 1)
         if np.isfinite(raw).mean() < MIN_COVER:
             raise NotApplicable(f"the {what} series does not cover this window's sessions")
-        d = session_calendar(data).astype("datetime64[M]").astype(np.int64)
-        yr, mon = (d // 12) + 1970, (d % 12) + 1
-        return month_lag(raw, yr * 12 + mon), what
+        return raw, what
     series = data.extra("baa10y", ffill=True)
     if np.isfinite(series).mean() < MIN_COVER:
         raise NotApplicable("the daily BAA10Y series does not cover this window's sessions")

@@ -94,8 +94,11 @@ def _cpi_yoy(name):
 def real_10y(data):
     """DGS10 minus the 1-month-lagged CPI year-on-year rate, in percentage points, ``(P, T)``."""
     dgs10 = data.extra("dgs10", ffill=True)
+    # the source session of each column is `pool[extra_index]` -- the framework's own convention
+    # (`extra.aligned` returns `pool[index]`, `boot._extra_index` prepends the base column), NOT
+    # `extra_index - 1`, which would read the previous real session's month.
     src = np.asarray(data.days) if data.extra_index is None else (
-        np.asarray(data.extra_days)[np.asarray(data.extra_index) - 1])
+        np.asarray(data.extra_days)[np.asarray(data.extra_index)])
     months, yoy = _cpi_yoy(_ext.resolve_series("cpi", data.extra_window or data.window))
     m = _month_ord(src)
     slot = np.searchsorted(months, m, side="right") - 1
@@ -125,7 +128,8 @@ def targets(data, spec):
         d = fe_signals.don_up(data.price, DON_N).astype(int)
         ok = np.isfinite(rr)
         vote = s + t + d + np.where(ok, (rr <= spec["thr"]).astype(int), 0)
-        e2 = vote >= np.where(ok, spec["need"], spec["votes"] - 1)
+        # 3 of 4 with the vote; the 4th abstains, i.e. 2 of 3 among the price votes (not 3 of 3)
+        e2 = vote >= np.where(ok, spec["need"], spec["need"] - 1)
         on_eff, factor = fe_signals.r2_state(data.price, e2, comps)
         return fe_signals.sized_wants(on_eff, factor, data.vol)
     e2 = fe_signals.e2_up(data.price)

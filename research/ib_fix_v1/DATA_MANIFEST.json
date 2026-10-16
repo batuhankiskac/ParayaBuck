@@ -1,0 +1,84 @@
+{
+ "extra_series": {
+  "aaa_m": {
+   "file": "data/historical/batch_screen_v1_aaa.csv",
+   "matches": true,
+   "range": [
+    "1919-01-01",
+    "2026-09-01"
+   ],
+   "rows": 1293,
+   "series": "AAA",
+   "sha256_declared": "a34e4ac766751a58161725cb5bec21f957358a83ca2c21ec5e57430f835a2b1c",
+   "sha256_now": "a34e4ac766751a58161725cb5bec21f957358a83ca2c21ec5e57430f835a2b1c",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=AAA"
+  },
+  "baa10y": {
+   "file": "data/historical/batch_screen_v1_baa10y.csv",
+   "matches": true,
+   "range": [
+    "1986-01-02",
+    "2026-10-14"
+   ],
+   "rows": 10196,
+   "series": "BAA10Y",
+   "sha256_declared": "fdb2a99185024e2f50bacf23aede38eeaa01d265da0e57391c6f4d1ce7e024be",
+   "sha256_now": "fdb2a99185024e2f50bacf23aede38eeaa01d265da0e57391c6f4d1ce7e024be",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAA10Y"
+  },
+  "baa_m": {
+   "file": "data/historical/batch_screen_v1_baa.csv",
+   "matches": true,
+   "range": [
+    "1919-01-01",
+    "2026-09-01"
+   ],
+   "rows": 1293,
+   "series": "BAA",
+   "sha256_declared": "6383958b60e76da2c36bf7f9c5cfccb55eb2e20de1cbd15e056b32137c8f808e",
+   "sha256_now": "6383958b60e76da2c36bf7f9c5cfccb55eb2e20de1cbd15e056b32137c8f808e",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAA"
+  },
+  "cpi": {
+   "file": "data/historical/batch_screen_v1_cpiaucsl.csv",
+   "matches": true,
+   "range": [
+    "1947-01-01",
+    "2026-09-01"
+   ],
+   "rows": 956,
+   "series": "CPIAUCSL",
+   "sha256_declared": "96d5d49aa19316f612b5334bfe1390fcd24e91d94679f3d3b5b50a08938b573a",
+   "sha256_now": "96d5d49aa19316f612b5334bfe1390fcd24e91d94679f3d3b5b50a08938b573a",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
+  },
+  "dgs10": {
+   "file": "data/historical/batch_screen_v1_dgs10.csv",
+   "matches": true,
+   "range": [
+    "1962-01-02",
+    "2026-10-14"
+   ],
+   "rows": 16181,
+   "series": "DGS10",
+   "sha256_declared": "3eda40d71b514fc0614ef32bda3a8bac82e7a9915667f0feb4b1609e87c5be9b",
+   "sha256_now": "3eda40d71b514fc0614ef32bda3a8bac82e7a9915667f0feb4b1609e87c5be9b",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
+  }
+ },
+ "note": "Bug-fix re-screen of IB12/IB14. All inputs are the framework's own registered extra series (research/batch_screen/EXTRA_DATA.json, re-verified by `extra --verify`); no new download. Hashes recomputed here.",
+ "study": "ib_fix_v1",
+ "window_files": {
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c"
+  }
+ }
+}

@@ -1,0 +1,41 @@
+ib_fix_v1 -- bug-fix re-screen of idea_bank_v1's IB12 (real-10y veto) and IB14 (credit-spread
+momentum) on the batch_screen framework. Verdict: no candidate; all six arms fail stage 1,
+nothing declared after deflation. N unchanged at 107.
+
+code fix           af04eccb (research/ideas/IB12.py, research/ideas/IB14.py) + the unit checks,
+                   PREREGISTRATION.md and DATA_MANIFEST.json -- committed BEFORE the screen
+bugs fixed         IB12 (a) bootstrap source session extra_days[extra_index - 1] -> [extra_index]
+                   (391/8331 cells of one chunk; the framework's own convention is pool[index])
+                   IB12 (b) arm C's missing-rate fallback 3-of-3 price votes -> 2-of-3 (the
+                   docstring's "the 4th vote abstains"); 19 main-window sessions reach it, all
+                   with 3 true price votes, so no main-window number moves
+                   IB14 monthly BAA-AAA exact-date+ffill -> as-of on the series' own grid at
+                   reference month M-1 (the 1-month lag unchanged); 35.1/32.4/34.4 % of the
+                   M1/M2/GSPC_1957_1999 sessions had the wrong value before
+not a framework bug  data.extra(..., ffill=True) behaves as documented; the caller owns the
+                   as-of decision for a series stamped the 1st of the month
+
+Stage 1 (main window 2000-03-09 -> 2026-09-29, K control, delta = arm - K in pp)
+  IB12/A  CAGR 12.87 base / 12.39 cal, DD 45.54, AT2000 -2.1283, B1 -1.8479 (0.343)  FAIL
+  IB12/B  CAGR 13.32 / 12.84, DD 35.74, AT2000 -2.1598, B1 -1.0137 (0.363)           FAIL
+  IB12/C  CAGR 14.58 / 14.01, DD 42.93, AT2000 -0.9907, B1 -0.3621 (0.407)           FAIL
+  IB14/A  CAGR 15.55 / 15.00, DD 39.87, AT2000 -0.2887, B1 -2.3055 (0.325)           FAIL
+  IB14/B  CAGR 14.58 / 14.05, DD 40.90, AT2000 -0.8332, B1 -1.1454 (0.345)           FAIL
+  IB14/C  CAGR 15.53 / 14.95, DD 48.15, AT2000 -0.3224, B1 -0.4401 (0.432)           FAIL
+  K control (identical in both batches): 15.7649 / 15.1785, DD 46.6698 / 46.7948, AT2000 10.7533
+  Only IB12's bootstrap cells moved (B1 median -0.27 / -0.07 / -0.02 pp for A/B/C, adverse);
+  IB14's whole stage-1 record is byte-identical to bank_v1 -- its bug acts only on the monthly
+  OOS windows (its stage 1 reads the daily BAA10Y).
+
+Stage 2            not run (no stage-1 survivor)
+Deflation          White p = 1.0000; Romano-Wolf rejects none; declared = []
+Ledger             140 -> 152 lines (6 screened + 6 rerun); N = 107 unchanged; verify PASS
+Byte identity      RESULTS.json sha256 63aea26c7122126e1c912206db8681134832000580f2b424f59dd1eec15d84ff
+                   reproduced exactly on a second run (only timing.json differs)
+Wall clock         screen run 1: 147.4 s (6 arms, 4 workers, cold); re-run 25.8 s (warm cache);
+                   --harness 200.9 s (73 checks PASS, incl. fast_engine parity --quick);
+                   smoke 11.3 s; check_plugins 11.9 s; deflate 0.6 s
+
+outputs            research/batch_screen/results/ib_fix_v1/{RESULTS.json,SCOREBOARD.md,IB*__*.json}
+                   docs/research/ib_fix_v1.md, research/ib_fix_v1/{PREREGISTRATION.md,
+                   DATA_MANIFEST.json,check_plugins.py}

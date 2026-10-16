@@ -239,7 +239,7 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 12.8s -> PARITY.json"
+  "tail": "parity PASS in 66.8s -> PARITY.json"
  },
  "failed": [],
  "n_checks": 73,
@@ -550,7 +550,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 12.8s -> PARITY.json"
+   "tail": "parity PASS in 66.8s -> PARITY.json"
   },
   "failed": [],
   "riskoff_divergence_pp": {
@@ -568,5 +568,5 @@
    "pass": true
   }
  },
- "wall_s": 39.193249
+ "wall_s": 200.946656
 }

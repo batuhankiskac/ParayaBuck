@@ -87,8 +87,11 @@ max DD 46.6698 / 46.7948 % and 46.7584 / 46.8797 %) **and** every corresponding 
 parity cell is exactly zero; and the mechanism invariants all hold — events == counter, every event a
 genuine downsize, D1/D2 events inside the month tail, D4 inside the 20-session December tail,
 episode starts within the drift cap, episode lengths within the cap, sells ≤ K's, and D1 defers on
-73 of K's 71 A1u-vs-K deferral sessions (it covers them). The published R2 January-gap episodes are
-reproduced from the fork (−0.699 pp for 2015-12→2016-01, −0.318 pp for 2024-12→2025-01, exactly 0.000
+**all 9** of the sessions where A1u sells and K does not — K's own H2 device produces 9 such trace
+divergences (its 71 counted postponements resolve into later fills) and D1 diverges from A1u on 73,
+so the survey's sanity check ("it must reproduce at least the H2 deferrals") holds at session
+resolution: D1 covers every one of K's December deferral sessions and 64 more.
+The published R2 January-gap episodes are reproduced from the fork (−0.699 pp for 2015-12→2016-01, −0.318 pp for 2024-12→2025-01, exactly 0.000
 for 2018, with the December-first-session → January-last-session, H2 − R2 convention).
 
 ## 4. Pre-tax main window (m = 2, `turn` and `sells` per year)

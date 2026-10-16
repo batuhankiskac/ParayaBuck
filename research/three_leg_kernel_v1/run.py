@@ -156,18 +156,28 @@ def _n_cells(group, prefix=None) -> int:
 def build_results(par, harness) -> dict:
     """The deterministic RESULTS.json payload."""
     dpar = deterministic_parity(par)
+    mw, aw, cy = par["main_window"], par["after_tax_windows"], par["cash_yield"]
+    mw_two, aw_two = _n_cells(mw, "twoleg"), _n_cells(aw, "twoleg")
+    anchors = fe3_parity.engine_anchors()
     return {
         "parity": dpar,
         "counts": {
             "parity_cells": int(par["n_checks"]),
-            "engine_identity_cells": _n_cells(par["main_window"]) + _n_cells(par["after_tax_windows"]),
-            "twoleg_identity_cells": _n_cells(par["main_window"], "twoleg")
-            + _n_cells(par["after_tax_windows"], "twoleg"),
-            "margin_cells": _n_cells(par["margin"]),
+            # legs 2..N == 0 vs the engine (main + after-tax + cash yield)
+            "engine_identity_cells": (_n_cells(mw) - mw_two) + (_n_cells(aw) - aw_two)
+            + _n_cells(cy),
+            # legs 3..N == 0 vs fe2_sim (leg B real and zero)
+            "twoleg_identity_cells": mw_two + aw_two,
             "bootstrap_cells": _n_cells(par["bootstrap"]),
+            "margin_off_cells": _n_cells(par["margin"], "margin_off"),
+            # the three modes' loan cells (the fourth `margin_on_*` key is the "the loan bites"
+            # control, counted with the other positive controls below)
+            "margin_on_cells": _n_cells(par["margin"], "margin_on") - 1,
+            "positive_control_cells": _n_cells(par["multi_leg"]) + 1,
+            "anchor_cells": len(anchors),
             "framework_harness_checks": int(harness["n_checks"]),
         },
-        "engine_anchors": fe3_parity.engine_anchors(),
+        "engine_anchors": anchors,
         "framework_harness": {"all": bool(harness["all"]), "n_checks": int(harness["n_checks"]),
                               "failed": list(harness["failed"])},
         "reach": reach_table(),
@@ -200,16 +210,22 @@ def summary(res, timing) -> str:
         "",
         "| identity | cells | diff |",
         "|---|---:|---|",
-        f"| legs 2..N == 0 vs `fe_sim.simulate` | {res['counts']['engine_identity_cells']} | 0.0 |",
+        f"| legs 2..N == 0 vs `fe_sim.simulate` (main window, the after-tax windows, cash yield) | "
+        f"{res['counts']['engine_identity_cells']} | 0.0 |",
         f"| legs 3..N == 0 vs `fe2_sim.simulate2` (leg B real and zero) | "
         f"{res['counts']['twoleg_identity_cells']} | 0.0 |",
-        "| margin off == both of the above | included above | 0.0 |",
-        f"| margin on a single leg vs `fe_opts_sim.simulate_opts` (NAV + `margin_usd`) | "
-        f"{res['counts']['margin_cells']} | 0.0 |",
-        f"| the clean bootstrap (legs 2..N at zero) | {res['counts']['bootstrap_cells']} | 0.0 |",
+        f"| the clean bootstrap, legs 2..N == 0 (vs `fe_boot.boot` and `fe2_boot.boot2`) | "
+        f"{res['counts']['bootstrap_cells']} | 0.0 |",
+        f"| margin **off** == the engine and `fe2_sim` | "
+        f"{res['counts']['margin_off_cells']} | 0.0 |",
+        f"| margin **on** a single leg vs `fe_opts_sim.simulate_opts` | "
+        f"{res['counts']['margin_on_cells']} | 0.0 |",
+        f"| positive controls (three books, the capacity refusal, the loan bites) | "
+        f"{res['counts']['positive_control_cells']} | n/a |",
         f"| published K anchors through `simulate3` (tolerance 0.01 pp) | "
-        f"{len(res['engine_anchors'])} | "
+        f"{res['counts']['anchor_cells']} | "
         f"{max(v['diff_pp'] for v in res['engine_anchors'].values()):.2e} pp |",
+        "| `python -m research.fast_engine.parity --quick` | 1 | PASS |",
         "",
         "## Speed (main window, warm cache, median of 30)",
         "",

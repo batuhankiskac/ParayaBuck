@@ -7,29 +7,31 @@
 ## Parity (bit for bit, `max_abs_diff == 0.0`)
 
 * `python -m research.fast_engine.parity --quick`: PASS
-* N-leg parity suite: PASS (206 cells, 0 failed, 16.2s)
+* N-leg parity suite: PASS (206 cells, 0 failed, 15.2s)
 
 | identity | cells | diff |
 |---|---:|---|
-| legs 2..N == 0 vs `fe_sim.simulate` | 168 | 0.0 |
+| legs 2..N == 0 vs `fe_sim.simulate` (main window, the after-tax windows, cash yield) | 111 | 0.0 |
 | legs 3..N == 0 vs `fe2_sim.simulate2` (leg B real and zero) | 60 | 0.0 |
-| margin off == both of the above | included above | 0.0 |
-| margin on a single leg vs `fe_opts_sim.simulate_opts` (NAV + `margin_usd`) | 7 | 0.0 |
-| the clean bootstrap (legs 2..N at zero) | 16 | 0.0 |
+| the clean bootstrap, legs 2..N == 0 (vs `fe_boot.boot` and `fe2_boot.boot2`) | 16 | 0.0 |
+| margin **off** == the engine and `fe2_sim` | 3 | 0.0 |
+| margin **on** a single leg vs `fe_opts_sim.simulate_opts` | 3 | 0.0 |
+| positive controls (three books, the capacity refusal, the loan bites) | 3 | n/a |
 | published K anchors through `simulate3` (tolerance 0.01 pp) | 9 | 3.08e-05 pp |
+| `python -m research.fast_engine.parity --quick` | 1 | PASS |
 
 ## Speed (main window, warm cache, median of 30)
 
 | run | ms |
 |---|---:|
-| engine (1 leg) | 0.157 |
-| N-leg, 2 legs (leg B at zero) | 0.309 |
-| N-leg, 3 legs (legs B/C at zero) | 0.347 |
-| N-leg, 4 legs (legs B/C/D at zero) | 0.380 |
-| N-leg, 4 real books | 0.647 |
-| N-leg, 1 leg with a margin loan | 0.416 |
-| clean bootstrap 256 paths, engine | 0.21 s |
-| clean bootstrap 256 paths, 4-leg kernel | 0.29 s (1.34x) |
+| engine (1 leg) | 0.160 |
+| N-leg, 2 legs (leg B at zero) | 0.313 |
+| N-leg, 3 legs (legs B/C at zero) | 0.342 |
+| N-leg, 4 legs (legs B/C/D at zero) | 0.382 |
+| N-leg, 4 real books | 0.767 |
+| N-leg, 1 leg with a margin loan | 0.492 |
+| clean bootstrap 256 paths, engine | 0.23 s |
+| clean bootstrap 256 paths, 4-leg kernel | 0.32 s (1.43x) |
 
 ## The framework harness
 
@@ -52,6 +54,6 @@
 
 ## Timings of this run
 
-* `--run` wall clock: **64.9 s**
-* N-leg parity suite: 16.2 s; framework harness: 47.9 s; speed cells + bootstrap timings: 0.8 s
+* `--run` wall clock: **65.1 s**
+* N-leg parity suite: 15.2 s; framework harness: 49.2 s; speed cells + bootstrap timings: 0.8 s
 

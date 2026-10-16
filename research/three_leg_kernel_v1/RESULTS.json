@@ -1,10 +1,13 @@
 {
  "counts": {
+  "anchor_cells": 9,
   "bootstrap_cells": 16,
-  "engine_identity_cells": 168,
+  "engine_identity_cells": 111,
   "framework_harness_checks": 139,
-  "margin_cells": 7,
+  "margin_off_cells": 3,
+  "margin_on_cells": 3,
   "parity_cells": 206,
+  "positive_control_cells": 3,
   "twoleg_identity_cells": 60
  },
  "engine_anchors": {

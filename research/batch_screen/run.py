@@ -490,14 +490,35 @@ def run_batch(batch, ideas, cash_yield="none", workers=None, stage2=True, allow_
 
 # ----------------------------------------------------------------------------- deflation pass
 def b1_vectors(batch=None):
-    """The B1-recent Δ vector (pp) of every screened arm, from the result files."""
+    """The B1-recent Δ vector (pp) of every screened arm, from the result files.
+
+    An arm whose Δ vector is not finite is left out, and `b1_non_finite` reports it: one NaN
+    would make the whole test statistic NaN and hide every *other* arm's p-value. (A two-leg
+    sleeve can produce this: a large TRY-indexed gain realised on a state flip leaves an advance
+    tax the account cannot fund on a few drawn paths, and `(NAV < 0) ** (1/years)` is NaN.)
+    """
     out = {}
     for p in sorted(RESULTS.glob("*/*__*.json")):
         if batch is not None and p.parent.name != batch:
             continue
         r = json.loads(p.read_text())
         if r.get("b1_delta_pp") and not r.get("control"):
-            out[r["arm"]] = np.asarray(r["b1_delta_pp"], dtype=np.float64)
+            v = np.asarray(r["b1_delta_pp"], dtype=np.float64)
+            if np.isfinite(v).all():
+                out[r["arm"]] = v
+    return out
+
+def b1_non_finite(batch=None):
+    """`{arm: number of non-finite Δ cells}` for the arms `b1_vectors` leaves out."""
+    out = {}
+    for p in sorted(RESULTS.glob("*/*__*.json")):
+        if batch is not None and p.parent.name != batch:
+            continue
+        r = json.loads(p.read_text())
+        v = np.asarray(r.get("b1_delta_pp") or [], dtype=np.float64)
+        n = int((~np.isfinite(v)).sum())
+        if n:
+            out[r["arm"]] = n
     return out
 
 
@@ -511,6 +532,7 @@ def deflate_batch(batch=None, alpha=0.05, resamples=2000):
     out = deflation.deflate(vecs, registry.n_trials(), alpha=alpha, resamples=resamples)
     out["batch"] = batch or "all"
     out["registry_trials"] = registry.n_trials()
+    out["excluded_non_finite"] = b1_non_finite(batch)
     stage2 = {}
     tags = set()
     for p in sorted(RESULTS.glob("*/*__*.json")):
@@ -605,11 +627,48 @@ def two_leg_checks():
     out["the_reduced_pool_makes_a_late_leg_b_usable"] = {
         "pass": bool(okr and not ok_gld and win_r.reduced),
         "reason": whyr, "pool": list(bwr.pool), "default_pool_reason": why_gld}
+    # The fill-knob routing (`spec["fill_knobs"]`, `research/fast_engine2/fe2_opts.py`): an arm
+    # that declares options reaches the option copy; with every option off -- and in a pre-tax
+    # stage of an `after_tax_stage_only` arm -- the numbers are the published kernel's, bit for bit.
+    from research.fast_engine2 import fe2_opts
+
+    off = dict(split, fill_knobs=dict(fe2_opts.KNOBS_OFF), fill_knobs_pretax=True)
+    routed = dict(split, fill_knobs={"band_score": "indexed", "route_cap_pp": 10.0},
+                  fill_knobs_pretax=True)
+    scoped = dict(split, fill_knobs={"loss_net_frac": 0.25}, fill_knobs_pretax=False)
+    r0 = stages.run_one(split, p, env, i0, i1, "progressive", 2, 100_000.0)
+    r1 = stages.run_one(off, p, env, i0, i1, "progressive", 2, 100_000.0)
+    r2 = stages.run_one(routed, p, env, i0, i1, "progressive", 2, 100_000.0)
+    r0p = stages.run_one(split, p, env, i0, i1, "pre_tax", 2)
+    r3p = stages.run_one(scoped, p, env, i0, i1, "pre_tax", 2)
+    out["fill_knobs_off_is_the_published_kernel"] = {
+        "pass": bool(np.array_equal(r0["_nav"], r1["_nav"])
+                     and r0["tax_total_try"] == r1["tax_total_try"]),
+        "cagr_off": r1["cagr_usd_liquidated"]}
+    out["fill_knobs_reach_the_option_kernel"] = {
+        "pass": bool(not np.array_equal(r0["_nav"], r2["_nav"])
+                     and r2["cagr_usd_liquidated"] != r0["cagr_usd_liquidated"]),
+        "cagr_plain": r0["cagr_usd_liquidated"], "cagr_routed": r2["cagr_usd_liquidated"]}
+    out["after_tax_scope_leaves_the_pretax_stage_alone"] = {
+        "pass": bool(np.array_equal(r0p["_nav"], r3p["_nav"])
+                     and np.isfinite(r3p["cagr_usd_liquidated"])),
+        "cagr_plain": r0p["cagr_usd_liquidated"], "cagr_scoped": r3p["cagr_usd_liquidated"]}
+    # The same off-state mechanism on a *panel* leg (IC38: "while off, hold 0.98 in the 1x
+    # index"): the 1x leg has the window's own history, so the published window is enough and the
+    # second book really trades.
+    onex = two_leg_probe("onex_offstate")
+    r_1x = stages.run_one(onex, p, env, i0, i1, "progressive", 2, 100_000.0)
+    out["a_panel_leg_off_state_needs_no_reduced_window"] = {
+        "pass": bool(not windows.arm_window(onex).reduced and r_1x["_legs"]["B"]["trades"] > 0
+                     and r_1x["_legs"]["B"]["units_end"] == 0.0
+                     and r_1x["cagr_usd_liquidated"] != r0["cagr_usd_liquidated"]),
+        "leg_b_trades": r_1x["_legs"]["B"]["trades"],
+        "cagr": r_1x["cagr_usd_liquidated"], "control_cagr": r0["cagr_usd_liquidated"]}
     return out
 
 
 def two_leg_opts_parity(n_boot_paths=20):
-    """The two-leg *option* copy's parity cells (`research.fast_engine2/fe2_opts_parity.py`).
+    """The two-leg *option* copy's parity cells (`research/fast_engine2/fe2_opts_parity.py`).
 
     Each option off must reproduce the current kernel bit for bit; each option on must change the
     numbers in the direction the option specifies.
@@ -617,13 +676,11 @@ def two_leg_opts_parity(n_boot_paths=20):
     from research.fast_engine2 import fe2_opts_parity
 
     res = fe2_opts_parity.run(n_boot_paths=n_boot_paths, quiet=True)
-    out = {}
+    out = {"all": {"pass": bool(res["all"]), "n_cells": int(res["n_checks"]),
+                   "failed": list(res["failed"]), "wall_s": float(res["wall_s"])}}
     for k, v in sorted(res.items()):
         if isinstance(v, dict) and "pass" in v:
-            out[k] = {kk: vv for kk, vv in v.items()
-                      if kk in ("pass", "max_abs_diff", "note", "reason")}
-        elif isinstance(v, (int, float, bool, str)):
-            out[k] = {"value": v}
+            out[k] = v
     return out
 
 
@@ -811,6 +868,7 @@ def harness():
     checks["reduced_window"] = reduced_window_checks()
     checks["two_leg_kernel_parity"] = two_leg_kernel_parity(
         engine_parity_result=checks["engine_parity_quick"])
+    checks["two_leg_opts_parity"] = two_leg_opts_parity()
     flat = {}
     for group, val in checks.items():
         if isinstance(val, dict):

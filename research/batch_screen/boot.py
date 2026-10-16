@@ -369,7 +369,12 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
 
 def _two_leg_chunk(arm_list, panels, leg, leg_b, win, env, cap_at, cost, mode_ids, rule_index,
                    p0, W, n_pre, n_tax, pre, tax, capitals, modes):
-    """One chunk of a two-leg group on the chunk's already drawn panels (`fe2_boot._boot_chunk2`)."""
+    """One chunk of a two-leg group on the chunk's already drawn panels (`fe2_boot._boot_chunk2`).
+
+    A group with any `fill_knobs` arm runs the option copy `fe2_opts.boot_chunk2g` instead; the
+    other arms of the group carry the off values, so they stay on the published kernel's path
+    (`knobs_pre` decides per arm whether the knobs also act in the pre-tax phase).
+    """
     pb, pc = panels[(leg, FIN["base"])], panels[(leg, FIN["calibrated"])]
     ob, cb = two_leg_series(panels, leg, leg_b, FIN["base"], win.i0, win.i1)
     oc, cc = two_leg_series(panels, leg, leg_b, FIN["calibrated"], win.i0, win.i1)
@@ -378,12 +383,24 @@ def _two_leg_chunk(arm_list, panels, leg, leg_b, win, env, cap_at, cost, mode_id
     band, usd, defer = _rule_arrays(arm_list)
     out_pre = np.empty((2, len(arm_list), W), dtype=np.float64)
     out_at = np.empty((len(capitals), len(modes), len(arm_list), W), dtype=np.float64)
-    fe2_boot._boot_chunk2(
-        ob, cb, wb, oc, cc, wc, env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y,
-        env.dec_tail, env.pay_ptr, env.pay_yr, env.pay_part, TAX_CAPITALS["100k"], cap_at,
-        win.i0, win.i1, cost, win.yrs, env.Y0, env.M_lo, band, usd, defer, rule_index, mode_ids,
-        env.cash_rate, p0, n_pre, n_tax, DBG0, out_pre, out_at,
-    )
+    if any(a.get("fill_knobs") for a in arm_list):
+        from research.fast_engine2 import fe2_opts
+
+        sa, b4, rc, nf, nm, kpre = fe2_opts.knob_arrays(arm_list)
+        fe2_opts.boot_chunk2g(
+            ob, cb, wb, oc, cc, wc, env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y,
+            env.dec_tail, env.pay_ptr, env.pay_yr, env.pay_part, TAX_CAPITALS["100k"], cap_at,
+            win.i0, win.i1, cost, win.yrs, env.Y0, env.M_lo, band, usd, defer, rule_index,
+            mode_ids, env.cash_rate, p0, n_pre, n_tax, sa, b4, rc, nf, nm, kpre, DBG0, out_pre,
+            out_at,
+        )
+    else:
+        fe2_boot._boot_chunk2(
+            ob, cb, wb, oc, cc, wc, env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y,
+            env.dec_tail, env.pay_ptr, env.pay_yr, env.pay_part, TAX_CAPITALS["100k"], cap_at,
+            win.i0, win.i1, cost, win.yrs, env.Y0, env.M_lo, band, usd, defer, rule_index, mode_ids,
+            env.cash_rate, p0, n_pre, n_tax, DBG0, out_pre, out_at,
+        )
     npre = max(0, min(W, n_pre - p0))
     ntax = max(0, min(W, n_tax - p0))
     for ai, arm in enumerate(arm_list):

@@ -21,6 +21,9 @@ Arms, all of them plugin-path smoke tests of `(wants_a, wants_b, leg_b)`:
   deliberately naive (while the vote is off the whole sleeve is GLD and leg A holds nothing, so
   the early half-weight path is not held in those states); the contract it demonstrates is the
   mechanism.
+* `onex_offstate` -- the same rule with `leg_b = "1x"`, the window's own index at gearing 1
+  (IC38): a *panel* leg has the window's full history, so this arm needs no reduced window and is
+  the control's window with a second book.
 
 Lives in `probes/`, outside `research/ideas/`, so it is never registered as a trial (see
 `README.md` section 5).
@@ -48,6 +51,10 @@ ARMS = {
                    "sleeve": 0.20},
     "gld_offstate": {"rule": "K", "leg": "2x", "leg_b": "gld", "cash_yield": "none",
                      "start": "auto", "off_weight": 0.98},
+    # the same mechanism on a *panel* leg (IC38: "while off, hold 0.98 in the 1x index"): the 1x
+    # leg has the window's own history, so no reduced window is needed
+    "onex_offstate": {"rule": "K", "leg": "2x", "leg_b": "1x", "cash_yield": "none",
+                      "off_weight": 0.98},
 }
 
 

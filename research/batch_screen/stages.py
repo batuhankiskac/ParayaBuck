@@ -78,6 +78,34 @@ STAGE1_KEYS = ("at2000_gt_0", "b1_median_gt_0", "maxdd", "turnover")
 
 
 # ----------------------------------------------------------------------------- one run
+def fill_knobs_of(arm, mode):
+    """The two-leg option dict this *stage* may use, or `None` (off -> the published kernel).
+
+    `arm["fill_knobs"]` is the arm's declaration (`research/fast_engine2/fe2_opts.py`, validated by
+    `api.resolve_arm`); `kernel_scope = "after_tax_stage_only"` (the `idea_bank_v2` declaration of
+    IC42/IC43) returns `None` for a pre-tax stage, so those stages stay bit-identical to a
+    no-option arm and only the taxed stages carry the options.
+    """
+    knobs = arm.get("fill_knobs")
+    if not knobs:
+        return None
+    if mode == "pre_tax" and not arm.get("fill_knobs_pretax", True):
+        return None
+    return knobs
+
+
+def _sim2(arm, t, oa, ca, ob, cb, env, capital, i0, i1, mode, m, rule_index):
+    """One two-leg run: the published kernel, or the option copy when the stage declared options."""
+    knobs = fill_knobs_of(arm, mode)
+    if knobs is None:
+        return fe2_sim.simulate2(oa, ca, t.wants, ob, cb, t.wants_b, env, capital, i0, i1,
+                                 arm=arm["rule"], mode=mode, m=m, rule_index=rule_index)
+    from research.fast_engine2 import fe2_opts
+
+    return fe2_opts.simulate2(oa, ca, t.wants, ob, cb, t.wants_b, env, capital, i0, i1,
+                              arm=arm["rule"], mode=mode, m=m, rule_index=rule_index, knobs=knobs)
+
+
 def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL], rule_index=True):
     """`targets` -> `fe_sim.simulate` (one leg) or `fe2_sim.simulate2` (two legs) on one window.
 
@@ -85,7 +113,8 @@ def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL
     third value) is routed to the two-leg kernel: one cash pool, both legs' FIFO books, one
     taxpayer. Its leg-B instrument must have a price on every session the engine reads
     (`leg_b_usable`), otherwise the window is `NotApplicable` -- exactly the framework's rule for
-    any other missing input.
+    any other missing input. An arm that declares `fill_knobs` is routed to the option copy
+    (`fe2_opts`) instead, with the same kernel and every option off the rest of the time.
     """
     t = call_targets(arm["mod"], data, arm)
     if t.leg != arm["leg"]:
@@ -98,8 +127,7 @@ def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL
         if not ok:
             raise NotApplicable(why)
         ob, cb = data.leg_series(t.leg_b)
-        return fe2_sim.simulate2(oa, ca, t.wants, ob, cb, t.wants_b, env, capital, i0, i1,
-                                 arm=arm["rule"], mode=mode, m=m, rule_index=rule_index)
+        return _sim2(arm, t, oa, ca, ob, cb, env, capital, i0, i1, mode, m, rule_index)
     return fe_sim.simulate(oa, ca, t.wants, env, capital, i0, i1,
                            arm=arm["rule"], mode=mode, m=m, rule_index=rule_index)
 

@@ -390,8 +390,28 @@ def resolve_arm(mod, arm_id: str) -> dict:
     for k in inputs:
         if k not in _ext.keys():
             raise PluginError(f"arm {arm_id!r}: unknown input {k!r}; known: {sorted(_ext.keys())}")
+    knobs = spec.get("fill_knobs")
+    if knobs is not None:
+        if leg_b is None:
+            raise PluginError(f"arm {arm_id!r}: fill_knobs needs a two-leg arm (declare leg_b); "
+                              "the options are two-leg fill decisions")
+        from research.fast_engine2 import fe2_opts
+
+        try:
+            knobs = fe2_opts.check_knobs(knobs)
+        except ValueError as exc:
+            raise PluginError(f"arm {arm_id!r}: {exc}") from None
+        if (knobs["band_score"] != "usd" or knobs["band_step4_pp"]) and not RULES[rule]["band"]:
+            raise PluginError(f"arm {arm_id!r}: band_score/band_step4_pp re-key the A1u band, so "
+                              f"they need a rule with the band on; {rule!r} has it off")
+    scope = spec.get("kernel_scope", "all_stages")
+    if scope not in ("all_stages", "after_tax_stage_only"):
+        raise PluginError(f"arm {arm_id!r}: kernel_scope must be \"all_stages\" or "
+                          f"\"after_tax_stage_only\"; got {scope!r}")
     return {"rule": rule, "leg": leg, "leg_b": leg_b, "two_leg": leg_b is not None,
             "cash_yield": cash, "start": start, "inputs": tuple(inputs),
+            "fill_knobs": knobs, "kernel_scope": scope,
+            "fill_knobs_pretax": scope == "all_stages",
             # `leg_b` stays in `params` (unlike the engine options `rule`/`leg`/`cash_yield`): a
             # two-leg plugin has to *return* it, so its `targets(data, spec)` must be able to read
             # the instrument the arm was registered with.

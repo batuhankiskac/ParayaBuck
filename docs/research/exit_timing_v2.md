@@ -3,13 +3,16 @@
 **Verdict: no arm adopted; the axis is closed.** X1 (December exit deferral), X2 (gain-heavy exit
 staging) and X3 (X1 + X2) all fail at least one pre-registered gate against production **K**:
 X1 fails G4/T1/T2/T3, X2 fails G7/T1/T2/T3, X3 fails G4/G7/T1. The devices act on a *handful* of
-sessions in 26.5 years (X1: 24 deferred exits; X2: 10 staging events, 9 staged sessions, 5 gate
-releases, 4 ordinary-rule takeovers, **0** cap releases), and the sign of the effect flips inside
+sessions in 26.5 years (X1: 24 deferred exits; X2: 10 staging events over 10 staged sessions —
+6 released by the early-conditions gate, 4 taken over by the ordinary rule, **0** by the
+21-session cap), and the sign of the effect flips inside
 the sample: X1 gains +0.14/+0.28 pp after tax on the 2000/2010 windows and loses −0.19 pp on 2017+;
 X3 clears the two bootstrap share gates (T2/T3, share > 0 ≈ 56 %) but loses −0.72 pp on 2017+.
 The pre-registered expectation (X2's anti-correlation: the gain-richness that triggers staging is
 what makes the early conditions false) is confirmed exactly — X2 stages and is released by the
-gate in the next decision close, never by its 21-session cap.
+gate in the next decision close, never by its 21-session cap (pre-tax main path: 10 staging events,
+10 staged sessions, 6 gate releases, 4 ordinary-rule takeovers, **0** cap releases — v1's
+pre-commit probe through the old harness, reproduced event for event by the engine).
 
 This is the redo of `exit_timing_v1` on the mandatory Numba research engine
 (`research/fast_engine`, `docs/research/fast_engine_v1.md`). Arms, parameters, stages, seeds,
@@ -135,8 +138,8 @@ Main window, $100k, progressive, m = 2 (pre-tax whole path in parentheses):
 |---|---|---|---|---|---|
 | K | 0 | 0 | 0 | 0 / 0 / 0 | 10.66 (9.54 on 2017+) |
 | X1 | **24** | 0 | 0 | — | 10.58 |
-| X2 | 0 | 9 (10 pre-tax) | 9 | **5 / 0 / 4** | 10.81 |
-| X3 | **24** | 9 (10 pre-tax) | 9 | 5 / 0 / 4 | 10.73 |
+| X2 | 0 | 9 (10 pre-tax) | 9 (10) | **5 / 0 / 4** (pre-tax **6 / 0 / 4**) | 10.81 |
+| X3 | **24** | 9 (10 pre-tax) | 9 (10) | 5 / 0 / 4 (pre-tax 6 / 0 / 4) | 10.73 |
 
 X2's 21-session cap **never binds**: every staging is released within one decision close by the
 early conditions failing, or taken over by the ordinary rule — exactly the anti-correlation

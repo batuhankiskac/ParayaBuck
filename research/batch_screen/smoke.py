@@ -95,7 +95,7 @@ def smoke_arm(idea_id: str, arm_id: str, panels: dict | None = None) -> dict:
         before = len(p.extra_log)
         rec = {"shape": [int(p.P), int(p.T)], "sessions": [p.days[0], p.days[-1]]}
         try:
-            wants, leg = api.call_targets(mod, p, arm)
+            t = api.call_targets(mod, p, arm)
         except api.NotApplicable as exc:
             rec.update({"status": "n/a", "reason": exc.reason})
         except api.NeedsKernel as exc:
@@ -106,13 +106,18 @@ def smoke_arm(idea_id: str, arm_id: str, panels: dict | None = None) -> dict:
                         "traceback": traceback.format_exc().strip().splitlines()[-6:]})
             out["status"] = "error"
         else:
-            rec.update({"status": "ok", "leg": leg,
-                        "wants_min": float(np.min(wants)), "wants_max": float(np.max(wants)),
-                        "wants_nonzero": float(np.mean(wants > 0))})
-            if leg != arm["leg"]:
+            rec.update({"status": "ok", "leg": t.leg, "leg_b": t.leg_b,
+                        "wants_min": float(np.min(t.wants)), "wants_max": float(np.max(t.wants)),
+                        "wants_nonzero": float(np.mean(t.wants > 0)),
+                        "two_leg": bool(t.two_leg)})
+            if t.leg != arm["leg"]:
                 rec["status"] = "error"
-                rec["error"] = f"targets changed the leg to {leg!r} (the arm holds {arm['leg']!r})"
+                rec["error"] = f"targets changed the leg to {t.leg!r} (the arm holds {arm['leg']!r})"
                 out["status"] = "error"
+            elif t.two_leg:
+                ok, why = p.leg_b_usable(t.leg_b, 0 if p.P > 1 else 253, p.T - 1)
+                rec["leg_b_usable"] = bool(ok)
+                rec["leg_b_reason"] = why
         for e in p.extra_log[before:]:
             cell = out["extras"].setdefault(e["key"], {"ffill": e["ffill"], "nan_share": {}})
             cell["nan_share"][name] = e["nan_share"]

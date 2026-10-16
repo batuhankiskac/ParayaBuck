@@ -43,7 +43,8 @@ def test_control_targets_are_the_published_r2_series():
     """`k_control`'s targets must be bit-identical to `fe_data.main_inputs`' R2 wants."""
     days, p, _i0, _i1 = windows.main_panel(0.0)
     arm = api.load_arm("k_control", "K")
-    wants, leg = api.call_targets(arm["mod"], p, arm)
+    t = api.call_targets(arm["mod"], p, arm)
+    wants, leg = t.wants, t.leg
     _d, o, c, w_e2, w_r2, _e2 = fe_data.main_inputs(0.0)
     assert leg == "2x"
     assert np.array_equal(wants[0], w_r2)
@@ -57,8 +58,8 @@ def test_r2_control_differs_from_k_only_in_the_fill_rule():
     assert k["params"] == r2["params"] == {}
     days, p, i0, i1 = windows.main_panel(0.0)
     env = windows.try_env(days, i0, i1)
-    wk, _ = api.call_targets(k["mod"], p, k)
-    wr, _ = api.call_targets(r2["mod"], p, r2)
+    wk = api.call_targets(k["mod"], p, k).wants
+    wr = api.call_targets(r2["mod"], p, r2).wants
     assert np.array_equal(wk, wr)
     rk = stages.run_one(k, p, env, i0, i1, "pre_tax", 2)
     rr = stages.run_one(r2, p, env, i0, i1, "pre_tax", 2)
@@ -72,7 +73,7 @@ def test_vol_shape_p15_matches_its_published_sizing():
 
     days, p, _i0, _i1 = windows.main_panel(0.0)
     arm = api.load_arm("vol_shape_p15", "p15")
-    wants, _leg = api.call_targets(arm["mod"], p, arm)
+    wants = api.call_targets(arm["mod"], p, arm).wants
     e2 = fe_signals.e2_up(p.price)
     comps = fe_signals.early_components(p.price)
     on_eff, factor = fe_signals.r2_state(p.price, e2, comps)

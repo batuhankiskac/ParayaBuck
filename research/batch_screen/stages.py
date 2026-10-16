@@ -33,6 +33,9 @@ from research.fast_engine.fe_config import (
     M,
 )
 
+from research.fast_engine2 import fe2_sim
+
+from . import api
 from . import boot as B
 from . import windows
 from .api import NotApplicable, call_targets
@@ -73,11 +76,28 @@ STAGE1_KEYS = ("at2000_gt_0", "b1_median_gt_0", "maxdd", "turnover")
 
 # ----------------------------------------------------------------------------- one run
 def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL], rule_index=True):
-    """`targets` -> `fe_sim.simulate` for one arm on one window."""
-    wants, leg = call_targets(arm["mod"], data, arm)
-    if leg != arm["leg"]:
-        raise ValueError(f"arm {arm['id']}: targets() changed the leg to {leg!r}")
-    return fe_sim.simulate(data.legs[leg][0], data.legs[leg][1], wants, env, capital, i0, i1,
+    """`targets` -> `fe_sim.simulate` (one leg) or `fe2_sim.simulate2` (two legs) on one window.
+
+    A two-leg arm (`Targets.two_leg`, i.e. the spec declares `leg_b` and `targets` returned the
+    third value) is routed to the two-leg kernel: one cash pool, both legs' FIFO books, one
+    taxpayer. Its leg-B instrument must have a price on every session the engine reads
+    (`leg_b_usable`), otherwise the window is `NotApplicable` -- exactly the framework's rule for
+    any other missing input.
+    """
+    t = call_targets(arm["mod"], data, arm)
+    if t.leg != arm["leg"]:
+        raise ValueError(f"arm {arm['id']}: targets() changed the leg to {t.leg!r}")
+    oa, ca = data.legs[t.leg]
+    if t.two_leg:
+        if data.P != 1:
+            raise api.PluginError("stages.run_one runs one path; the bootstrap uses boot.boot")
+        ok, why = data.leg_b_usable(t.leg_b, i0, i1)
+        if not ok:
+            raise NotApplicable(why)
+        ob, cb = data.leg_series(t.leg_b)
+        return fe2_sim.simulate2(oa, ca, t.wants, ob, cb, t.wants_b, env, capital, i0, i1,
+                                 arm=arm["rule"], mode=mode, m=m, rule_index=rule_index)
+    return fe_sim.simulate(oa, ca, t.wants, env, capital, i0, i1,
                            arm=arm["rule"], mode=mode, m=m, rule_index=rule_index)
 
 

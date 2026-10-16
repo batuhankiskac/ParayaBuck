@@ -477,6 +477,93 @@ def deflate_batch(batch=None, alpha=0.05, resamples=2000):
     return out
 
 
+# ----------------------------------------------------------------------------- two-leg checks
+def two_leg_probe(arm_id):
+    """One arm of `probes/two_leg.py` (the two-leg engineering probe, outside `research/ideas/`)."""
+    import importlib.util
+
+    path = HERE / "probes/two_leg.py"
+    spec = importlib.util.spec_from_file_location("probe_two_leg_run", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    arm = api.resolve_arm(mod, arm_id)
+    arm.update({"id": f"probes.two_leg/{arm_id}", "idea": "probes.two_leg", "arm_id": arm_id,
+                "mod": mod})
+    return arm
+
+
+def two_leg_checks():
+    """The framework's two-leg routing: the plugin contract, the kernel, the availability rule."""
+    ctrl = control_spec()
+    days, p, i0, i1 = windows.main_panel(0.0)
+    env = windows.try_env(days, i0, i1)
+    out = {}
+    zeros = two_leg_probe("zeros")
+    split = two_leg_probe("split")
+    gld = two_leg_probe("gld_sleeve")
+    rc = stages.run_one(ctrl, p, env, i0, i1, "pre_tax", 2)
+    rz = stages.run_one(zeros, p, env, i0, i1, "pre_tax", 2)
+    out["zero_leg_b_is_the_control_pretax"] = {
+        "pass": bool(np.array_equal(rc["_nav"], rz["_nav"])
+                     and rc["cagr_usd_liquidated"] == rz["cagr_usd_liquidated"]),
+        "cagr": rz["cagr_usd_liquidated"]}
+    rc2 = stages.run_one(ctrl, p, env, i0, i1, "progressive", 2, 100_000.0)
+    rz2 = stages.run_one(zeros, p, env, i0, i1, "progressive", 2, 100_000.0)
+    out["zero_leg_b_is_the_control_after_tax"] = {
+        "pass": bool(np.array_equal(rc2["_nav"], rz2["_nav"])
+                     and rc2["cagr_usd_liquidated"] == rz2["cagr_usd_liquidated"]),
+        "cagr": rz2["cagr_usd_liquidated"]}
+    rs = stages.run_one(split, p, env, i0, i1, "progressive", 2, 100_000.0)
+    a, b = rs["_legs"]["A"], rs["_legs"]["B"]
+    out["two_leg_arm_reaches_the_two_leg_kernel"] = {
+        "pass": bool(a["trades"] > 0 and b["trades"] > 0 and b["turnover_total"] > 0
+                     and sum(b["realised_gain_try_by_reason"].values()) != 0.0),
+        "leg_a_trades": a["trades"], "leg_b_trades": b["trades"],
+        "cagr": rs["cagr_usd_liquidated"]}
+    try:
+        stages.run_one(gld, p, env, i0, i1, "pre_tax", 2)
+        out["leg_b_without_history_is_not_applicable"] = {
+            "pass": False, "reason": "the GLD sleeve ran on the main window"}
+    except api.NotApplicable as exc:
+        out["leg_b_without_history_is_not_applicable"] = {
+            "pass": bool("gld" in exc.reason), "reason": exc.reason}
+    return out
+
+
+def _group_pass(cells):
+    """True when every `{"pass": ...}` cell of one parity group passed."""
+    v = [c for c in cells.values() if isinstance(c, dict) and "pass" in c]
+    return bool(v) and all(c["pass"] for c in v)
+
+
+def two_leg_kernel_parity(n_boot_paths=40, engine_parity_result=None):
+    """The two-leg kernel's own parity cells (leg B == 0, bit for bit) plus the riskoff case."""
+    from research.fast_engine2 import fe2_parity
+    from research.two_leg_kernel_v1 import parity_b
+
+    fe2 = fe2_parity.run(n_boot_paths=n_boot_paths, quiet=True,
+                         engine_parity_result=engine_parity_result)
+    pb = parity_b.run(assert_pass=True)
+    out = {
+        "engine_b0_nav_and_scalars": {"pass": _group_pass(fe2["main_window"])},
+        "engine_b0_after_tax_windows": {"pass": _group_pass(fe2["after_tax_windows"])},
+        "engine_b0_bootstrap": {"pass": _group_pass(fe2["bootstrap"])},
+        "engine_b0_cash_yield": {"pass": _group_pass(fe2["cash_yield"])},
+        "engine_anchors_published_K": {"pass": _group_pass(fe2["engine_anchors"])},
+        "engine_parity_quick": {"pass": bool(fe2["engine_parity_quick"]["pass"]),
+                                "tail": fe2["engine_parity_quick"]["tail"]},
+        "cells": fe2["n_checks"], "failed": fe2["failed"],
+    }
+    for k, v in pb["parity"].items():
+        out[f"riskoff_two_leg_case_{k}"] = {"pass": bool(v["pass"]),
+                                            "nav_max_abs_diff": v["nav_max_abs_diff"]}
+    out["riskoff_divergence_pp"] = {"pass": True,
+                                    "cagr_diff_pp": pb["divergence"]["numbers"]["cagr_diff_pp"],
+                                    "ref_tax_try": pb["divergence"]["numbers"]["ref_tax_total_try"],
+                                    "kernel_tax_try": pb["divergence"]["numbers"]["kernel_tax_total_try"]}
+    return out
+
+
 # ----------------------------------------------------------------------------- harness
 def _anchor(label, got, want, tol_pp=ANCHOR_TOL_PP):
     got, want = float(got), float(want)
@@ -546,12 +633,17 @@ def harness():
     checks["plugin_anchors"] = plugin_anchors(bh, vs, ctrl)
     checks["parity"] = {"boot_vs_engine": boot_parity(), "oos_pooled_vs_old_code": oos_pooled_parity()}
     checks["behaviour"] = {"cash_yield": cash_yield_check(), "leg": leg_check()}
+    checks["two_leg"] = two_leg_checks()
+    checks["two_leg_kernel_parity"] = two_leg_kernel_parity(
+        engine_parity_result=checks["engine_parity_quick"])
     flat = {}
     for group, val in checks.items():
         if isinstance(val, dict):
             for k, v in val.items():
                 if isinstance(v, dict) and "pass" in v:
                     flat[f"{group}.{k}"] = bool(v["pass"])
+                elif isinstance(v, list):   # a group that reports a list of cell names
+                    flat[f"{group}.{k}"] = not v
     checks["all"] = all(flat.values())
     checks["n_checks"] = len(flat)
     checks["failed"] = sorted(k for k, v in flat.items() if not v)

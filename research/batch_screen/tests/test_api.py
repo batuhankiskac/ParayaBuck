@@ -94,8 +94,8 @@ def test_call_targets_normalises_and_rejects(tmp_path, monkeypatch):
     with pytest.raises(api.NeedsKernel):
         api.call_targets(api.load_idea("leg"), p, {"params": {}, "leg": "2x"})
     write_idea(tmp_path, "consleg", "import numpy as np\nARMS = {'a': {}}\n\n\ndef targets(data, spec):\n    return np.zeros((data.P, data.T)), '1x'\n")
-    wants, leg = api.call_targets(api.load_idea("consleg"), p, {"params": {}, "leg": "2x"})
-    assert leg == "1x" and wants.shape == (p.P, p.T)
+    t = api.call_targets(api.load_idea("consleg"), p, {"params": {}, "leg": "2x"})
+    assert t.leg == "1x" and t.wants.shape == (p.P, p.T) and not t.two_leg
 
 
 def test_hashes_are_canonical(tmp_path, monkeypatch):

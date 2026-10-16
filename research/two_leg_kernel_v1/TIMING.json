@@ -1,0 +1,22 @@
+{
+ "environment": {
+  "machine": "arm64",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "python": "3.13.12",
+  "threads": 10
+ },
+ "speed_s": {
+  "bootstrap_256_paths_s_one_leg": 0.290109,
+  "bootstrap_256_paths_s_two_leg": 0.307357,
+  "one_main_window_path_s_one_leg": 0.000171,
+  "one_main_window_path_s_two_leg": 0.000387,
+  "one_main_window_paths_two_leg_leg_b_zero": 0.000272,
+  "one_path_overhead_pp_cagr": -1.676039
+ },
+ "wall_clock_s": {
+  "framework_harness": 43.458605,
+  "framework_harness_internal": 43.458174,
+  "parity_cells": 19.226297,
+  "total_run": 81.649412
+ }
+}

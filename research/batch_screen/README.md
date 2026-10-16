@@ -69,7 +69,7 @@ extra keys the arm touched and how much of each series is missing:
 ARMS = {"arm_id": {"rule": "K", "leg": "2x", "cash_yield": "none", ...fixed params...}}
 
 def targets(data, spec):
-    """(P, T) target weights of the held leg, or (wants, leg)."""
+    """(P, T) target weights of the held leg, or (wants, leg), or (wants_a, wants_b, leg_b)."""
 ```
 
 `targets` gets a `MarketData` panel whose arrays are all `(P, T)` — `P = 1` for a real window, a
@@ -111,7 +111,26 @@ main and `M2` windows and the first/last session each series reaches; `data.extr
 Two legs are supported: `2x` is the campaign's published synthetic daily-reset 2x (this is what
 every published number used) and `1x` is the same underlying at gearing 1 with no cost. The leg is
 constant per arm; `targets` may *return* a per-session leg selection, but a varying one raises
-`NeedsKernel` — the account holds one instrument, there is no portfolio layer.
+`NeedsKernel` — an arm's instruments are fixed, only their weights vary.
+
+**Two-leg arms** (`research/fast_engine2`, task `two_leg_kernel_v1`). An arm whose spec declares
+`"leg_b": key` — a panel leg (`2x`/`1x`) or a registered extra key (`shy`, `ief`, `gld`, `tlt`, …,
+`api.leg_b_keys()`) other than its own `leg` — returns `(wants_a, wants_b, leg_b)` (both `(P,T)`,
+`leg_b` equal to the declaration). The runner routes it to `fe2_sim.simulate2` (one window) and
+`fe2_boot._boot_chunk2` / `_pt2` (bootstraps): one cash pool, next-open fills, each leg with its
+own units and FIFO lot book, the rule's 0.5 pp band, A1u gain band and H2 deferral applied **per
+leg on that leg's own book**, per-leg costs, financing only inside the synthetic 2x leg's price,
+optional idle-cash yield as in the engine, and one taxpayer: both legs' realisations (Yİ-ÜFE
+indexed per lot) add into one annual net TRY gain. A tax-funding sale sells leg A first, then B.
+An extra series has one column (its adjusted close), used as both the leg's fill and close price
+(`MarketData.leg_series`); a leg-B series without a price on every session the engine reads makes
+the window `NotApplicable` (`leg_b_usable`; for a bootstrap chunk, on the drawn source sessions),
+so for example a GLD leg is not applicable on the main window (GLD starts 2004-11-18). Bootstrap
+groups are `(leg, leg_b)` and share each chunk's drawn paths, so Δ vs the control stays paired.
+With leg B identically zero the kernel is bit-identical to the engine (`fe2_parity`, in the
+harness). Not expressible yet (still `NEEDS_KERNEL`): a per-session instrument switch, two books
+of the *same* instrument, several cash pools/accounts, per-arm tax regime or capital, and gain-
+aware routing between books (IB38 A/B/C).
 
 **Availability.** `targets` may raise `api.NotApplicable(reason)` for a window whose inputs do not
 exist (`^VIX` before 1990 for `M2`, a European index for `^N225`, a series that starts after the
@@ -124,11 +143,11 @@ Engine RULE options come from the spec and are the engine's own three booleans:
   `A1u` (band only), `H2` (deferral only), or a name a plugin registers with
   `research.batch_screen.rules.register_rule(name, band, usd_rule, defer)` at import time
   (`fe_sim.RULE` is the engine's extension point, so no engine file is edited). A genuinely new
-  mechanism — a bracket budget, a partial fill, a second leg — is **not** expressible: declare it
+  mechanism — a bracket budget, a partial fill, a third leg — is **not** expressible: declare it
   `NEEDS_KERNEL = "why"` at module level (or `"needs_kernel": "why"` in the arm's spec), and the
   runner registers the trial and refuses to simulate it. That is the honest boundary: a new
   mechanism is a kernel change in a copy of the engine plus a parity cell, i.e. a separate study.
-* `leg` — `2x` (default) or `1x`.
+* `leg` — `2x` (default) or `1x`; `leg_b` — the second instrument of a two-leg arm (above).
 * `cash_yield` — `"none"` (default) or `"tbill"` (the session-folded DTB3 schedule of
   `engine README`). It changes every published cell, so it is a batch-level flag: an arm whose
   declaration disagrees with `--cash-yield` is refused.
@@ -292,10 +311,12 @@ PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch      # ~50 s, is
 
 `research/batch_screen/tests/run.sh` (the research venv's numba + the project venv's pytest, see
 the header of that script; it finds the project venv whether or not the worktree sits next to the
-main checkout). 99 tests: the plugin contract and its validation, the leg constructions, the
+main checkout). 110 tests: the plugin contract and its validation, the leg constructions, the
 registry's append-only semantics and commit gate, every stage-1/stage-2 gate branch on synthetic
 records, the deflation's null control/power/monotonicity/DSR properties, the extra-data layer
 (registry resolution, date alignment, the bootstrap chunk convention, ffill, downloads and hashing
 — all offline), the availability rules, the ledger's re-verification against git, and
 the parity cells (engine `fe_boot.boot`, old `boot_oos_market`, the production R2 target series,
-`vol_shape_v1`'s sizing, and the control's published K cells stage by stage).
+`vol_shape_v1`'s sizing, and the control's published K cells stage by stage), and the two-leg
+contract and routing (`tests/test_two_leg.py`, probe `probes/two_leg.py`). The harness is 73
+checks: the original 59 plus the two-leg routing checks and the two-leg kernel's parity groups.

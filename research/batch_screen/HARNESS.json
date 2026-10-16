@@ -239,10 +239,10 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 11.3s -> PARITY.json"
+  "tail": "parity PASS in 12.8s -> PARITY.json"
  },
  "failed": [],
- "n_checks": 59,
+ "n_checks": 73,
  "parity": {
   "boot_vs_engine": {
    "C0_pre_base": {
@@ -511,5 +511,62 @@
    "reproduced": 5.484735
   }
  },
- "wall_s": 33.736587
+ "two_leg": {
+  "leg_b_without_history_is_not_applicable": {
+   "pass": true,
+   "reason": "the leg-B instrument 'gld' has no price on 2000-03-08 (the series covers 2004-11-18..2026-09-29 of this window)"
+  },
+  "two_leg_arm_reaches_the_two_leg_kernel": {
+   "cagr": 0.090773,
+   "leg_a_trades": 651,
+   "leg_b_trades": 763,
+   "pass": true
+  },
+  "zero_leg_b_is_the_control_after_tax": {
+   "cagr": 0.107533,
+   "pass": true
+  },
+  "zero_leg_b_is_the_control_pretax": {
+   "cagr": 0.157615,
+   "pass": true
+  }
+ },
+ "two_leg_kernel_parity": {
+  "cells": 128,
+  "engine_anchors_published_K": {
+   "pass": true
+  },
+  "engine_b0_after_tax_windows": {
+   "pass": true
+  },
+  "engine_b0_bootstrap": {
+   "pass": true
+  },
+  "engine_b0_cash_yield": {
+   "pass": true
+  },
+  "engine_b0_nav_and_scalars": {
+   "pass": true
+  },
+  "engine_parity_quick": {
+   "pass": true,
+   "tail": "parity PASS in 12.8s -> PARITY.json"
+  },
+  "failed": [],
+  "riskoff_divergence_pp": {
+   "cagr_diff_pp": 0.61003,
+   "kernel_tax_try": 0.0,
+   "pass": true,
+   "ref_tax_try": 19114.90131
+  },
+  "riskoff_two_leg_case_alternating_pre_tax": {
+   "nav_max_abs_diff": 0.0,
+   "pass": true
+  },
+  "riskoff_two_leg_case_alternating_progressive": {
+   "nav_max_abs_diff": 0.0,
+   "pass": true
+  }
+ },
+ "wall_s": 39.193249
 }

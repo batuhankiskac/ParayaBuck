@@ -22,6 +22,7 @@ import numpy as np
 from numba import njit, prange
 
 from research.fast_engine import fe_boot, fe_data, fe_sim
+from research.fast_engine2 import fe2_boot
 from research.fast_engine.fe_config import (
     BLOCK,
     EXP_Q,
@@ -37,7 +38,7 @@ from research.fast_engine.fe_config import (
 from research.fast_engine.fe_tax import MODE_FLAT, MODE_PRE_TAX, MODE_PROGRESSIVE
 
 from . import windows
-from .api import call_targets, panel
+from .api import NotApplicable, call_targets, panel
 from .rules import cash_rates, rule_of
 
 TAX_MODES = ("progressive", "flat")
@@ -228,7 +229,11 @@ def boot_panels(win, pos, legs, fins, cache=None):
     qo = np.concatenate([one, qc[:, :-1] * r_on_tr], axis=1)
     pc = np.concatenate([one, np.cumprod(r_on_p * r_id, axis=1)], axis=1)
     yyp = np.concatenate([yy, yy[:, -1:]], axis=1)
-    o1, c1, d1 = win.q[0][idx], win.q[1][idx], win.q[2][idx]
+    d1 = win.q[2][idx]
+    # the 1x leg: the chunk's own total-return QQQ path (`qo`/`qc`, dividends already in), so it
+    # has the 2x leg's width and no return across a block jump -- `total_return_1x` of the raw
+    # drawn prices would span the jumps (and is one column short)
+    o1, c1, d1_leg = qo, qc, np.zeros_like(qc)
     pool_days = windows.bars()[0]
     out = cache if cache is not None else {}
     for fin in fins:
@@ -243,7 +248,7 @@ def boot_panels(win, pos, legs, fins, cache=None):
                 d2=np.zeros_like(qc),
                 o1=o1,
                 c1=c1,
-                d1=d1,
+                d1=d1_leg,
                 fin=fin,
                 exp_q=EXP_Q,
                 leg=leg,
@@ -268,6 +273,11 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
          cash_yield="none", rule_index=True, label="boot", quiet=True):
     """The clean/fresh block bootstrap over arbitrary plugin targets.
 
+    Arms are grouped by `(leg, leg_b)`: a single-leg group runs the engine's kernel, a two-leg
+    group (`leg_b` declared) runs `fe2_boot._boot_chunk2`. Both groups share the chunk's drawn
+    paths -- the same `draw_positions` call per chunk -- so every arm's per-path CAGRs, and
+    therefore the Δ against the control, stay paired.
+
     Returns `{"pre": {model: {arm_id: (n_pre,)}}, "tax": {cap: {mode: {arm_id: (n_tax,)}}},
     "params": {...}}` -- raw per-path CAGRs, the input of `delta_stats` and the deflation.
     """
@@ -283,14 +293,18 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
     rng = np.random.default_rng(seed)
     groups = {}
     for arm in arms:
-        groups.setdefault(arm["leg"], []).append(arm)
+        groups.setdefault((arm["leg"], arm.get("leg_b")), []).append(arm)
     for p0 in range(0, n_paths, chunk):
         W = min(chunk, n_paths - p0)
         pos = fe_boot.draw_positions(rng, block, W, TAX_BOOT_L, win.npool, TAX_BOOT_EXT)
         panels = {}
-        for leg in groups:
+        for leg in sorted({g[0] for g in groups}):
             panels.update(boot_panels(win, pos, (leg,), (FIN["base"], FIN["calibrated"]), cache=panels))
-        for leg, arm_list in groups.items():
+        for (leg, leg_b), arm_list in groups.items():
+            if leg_b is not None:
+                _two_leg_chunk(arm_list, panels, leg, leg_b, win, env, cap_at, cost, mode_ids,
+                               rule_index, p0, W, n_pre, n_tax, pre, tax, capitals, modes)
+                continue
             wb = np.stack([_targets(a, panels[(leg, FIN["base"])]) for a in arm_list])
             wc = np.stack([_targets(a, panels[(leg, FIN["calibrated"])]) for a in arm_list])
             band, usd, defer = _rule_arrays(arm_list)
@@ -330,12 +344,73 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
     }
 
 
+def _two_leg_chunk(arm_list, panels, leg, leg_b, win, env, cap_at, cost, mode_ids, rule_index,
+                   p0, W, n_pre, n_tax, pre, tax, capitals, modes):
+    """One chunk of a two-leg group on the chunk's already drawn panels (`fe2_boot._boot_chunk2`)."""
+    pb, pc = panels[(leg, FIN["base"])], panels[(leg, FIN["calibrated"])]
+    ob, cb = two_leg_series(panels, leg, leg_b, FIN["base"], win.i0, win.i1)
+    oc, cc = two_leg_series(panels, leg, leg_b, FIN["calibrated"], win.i0, win.i1)
+    wb = np.ascontiguousarray(np.stack([_targets2(a, pb) for a in arm_list]))
+    wc = np.ascontiguousarray(np.stack([_targets2(a, pc) for a in arm_list]))
+    band, usd, defer = _rule_arrays(arm_list)
+    out_pre = np.empty((2, len(arm_list), W), dtype=np.float64)
+    out_at = np.empty((len(capitals), len(modes), len(arm_list), W), dtype=np.float64)
+    fe2_boot._boot_chunk2(
+        ob, cb, wb, oc, cc, wc, env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y,
+        env.dec_tail, env.pay_ptr, env.pay_yr, env.pay_part, TAX_CAPITALS["100k"], cap_at,
+        win.i0, win.i1, cost, win.yrs, env.Y0, env.M_lo, band, usd, defer, rule_index, mode_ids,
+        env.cash_rate, p0, n_pre, n_tax, DBG0, out_pre, out_at,
+    )
+    npre = max(0, min(W, n_pre - p0))
+    ntax = max(0, min(W, n_tax - p0))
+    for ai, arm in enumerate(arm_list):
+        for bi, mdi in enumerate(("base", "calibrated")):
+            if npre:
+                pre[mdi][arm["id"]][p0 : p0 + npre] = out_pre[bi, ai, :npre]
+        for ci, cl in enumerate(capitals):
+            for mi, md in enumerate(modes):
+                if ntax:
+                    tax[cl][md][arm["id"]][p0 : p0 + ntax] = out_at[ci, mi, ai, :ntax]
+
+
 def _targets(arm, p):
     """The arm's `targets` on one panel (the module travels with the arm)."""
-    wants, leg = call_targets(arm["mod"], p, arm)
-    if leg != p.leg:
-        raise ValueError(f"arm {arm['id']}: targets() changed the leg to {leg!r}")
-    return wants
+    t = call_targets(arm["mod"], p, arm)
+    if t.leg != p.leg:
+        raise ValueError(f"arm {arm['id']}: targets() changed the leg to {t.leg!r}")
+    if t.two_leg:
+        raise ValueError(f"arm {arm['id']}: two-leg targets in a one-leg group")
+    return t.wants
+
+
+def _targets2(arm, p):
+    """A two-leg arm's `(W, 2, T)` target panel on one panel (`p` is that model's panel)."""
+    t = call_targets(arm["mod"], p, arm)
+    if t.leg != p.leg:
+        raise ValueError(f"arm {arm['id']}: targets() changed the leg to {t.leg!r}")
+    if not t.two_leg:
+        raise ValueError(f"arm {arm['id']}: single-leg targets in a two-leg group")
+    return np.ascontiguousarray(np.stack([np.atleast_2d(t.wants), np.atleast_2d(t.wants_b)],
+                                         axis=1))
+
+
+def two_leg_series(panels, leg, leg_b, fin, i0, i1):
+    """One model's `(opens, closes)` stacked `(W, 2, T)` for a two-leg group, or `NotApplicable`.
+
+    Leg A is the group's `leg` and leg B is its declared `leg_b` -- a panel leg or a registered
+    extra series (`MarketData.leg_series`). The leg-B availability rule is the framework's
+    (`leg_b_usable`): a series that does not reach every session the engine reads refuses the
+    window. Inside a bootstrap chunk the check is about the *drawn source* sessions (the chunk
+    replays an extra series with its returns), while the reason names the chunk's own calendar.
+    """
+    p = panels[(leg, fin)]
+    ok, why = p.leg_b_usable(leg_b, i0, i1)
+    if not ok:
+        raise NotApplicable(why)
+    oa, ca = p.legs[leg]
+    ob, cb = p.leg_series(leg_b)
+    return (np.ascontiguousarray(np.stack([np.atleast_2d(oa), np.atleast_2d(ob)], axis=1)),
+            np.ascontiguousarray(np.stack([np.atleast_2d(ca), np.atleast_2d(cb)], axis=1)))
 
 
 # ----------------------------------------------------------------------------- OOS pooled bootstrap
@@ -382,9 +457,12 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
     """
     rng = np.random.default_rng(seed)
     ids = [a["id"] for a in arms]
-    legs = sorted({a["leg"] for a in arms})
-    leg_of = {a["id"]: a["leg"] for a in arms}
-    per = {leg: {k: {a: [] for a in ids if leg_of[a] == leg} for k in markets} for leg in legs}
+    groups = {}
+    for a in arms:
+        groups.setdefault((a["leg"], a.get("leg_b")), []).append(a)
+    legs = sorted({g[0] for g in groups})
+    leg_of = {a["id"]: (a["leg"], a.get("leg_b")) for a in arms}
+    per = {g: {k: {a["id"]: [] for a in g_arms} for k in markets} for g, g_arms in groups.items()}
     for key in markets:
         days, o, c, y, start = fe_data.load_market(key)
         npool = len(days) - start
@@ -398,9 +476,28 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
             for t in range(1, OOS_BOOT_L):
                 pos[:, t] = np.where(jump[:, t], fresh[:, t], (pos[:, t - 1] + 1) % npool)
             panels = _oos_market_panels(days, o, c, y, start, pos, tuple(legs), {}, key)
-            for leg in legs:
-                arm_list = [a for a in arms if a["leg"] == leg]
+            for (leg, leg_b), arm_list in groups.items():
                 p = panels[leg]
+                if leg_b is not None:
+                    ok, why = p.leg_b_usable(leg_b, 253, OOS_BOOT_L)
+                    if not ok:
+                        raise NotApplicable(why)
+                    oa, ca = p.legs[leg]
+                    ob, cb = p.leg_series(leg_b)
+                    ob2 = np.ascontiguousarray(np.stack([np.atleast_2d(oa), np.atleast_2d(ob)], axis=1))
+                    cb2 = np.ascontiguousarray(np.stack([np.atleast_2d(ca), np.atleast_2d(cb)], axis=1))
+                    wq2 = np.ascontiguousarray(np.stack([_targets2(a, p) for a in arm_list]))
+                    band2, usd2, defer2 = _rule_arrays(arm_list)
+                    out = np.empty((len(arm_list), P), dtype=np.float64)
+                    fe2_boot._pt2(
+                        ob2, cb2, wq2, env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y,
+                        env.dec_tail, env.pay_ptr, env.pay_yr, env.pay_part, 1.0, 253, OOS_BOOT_L,
+                        fe_sim.COST_PER_SIDE * m, band2, usd2, defer2, rule_index, env.Y0,
+                        env.M_lo, env.cash_rate, DBG0, out,
+                    )
+                    for ai, arm in enumerate(arm_list):
+                        per[(leg, leg_b)][key][arm["id"]].append(out[ai])
+                    continue
                 wq = np.stack([_targets(a, p) for a in arm_list])
                 band, usd, defer = _rule_arrays(arm_list)
                 out = np.empty((len(arm_list), P), dtype=np.float64)
@@ -412,18 +509,18 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
                     env.cash_rate, DBG0, out,
                 )
                 for ai, arm in enumerate(arm_list):
-                    per[leg][key][arm["id"]].append(out[ai])
+                    per[(leg, leg_b)][key][arm["id"]].append(out[ai])
         if not quiet:
             print(f"  oos_boot {key} {per_market} paths", flush=True)
     per_market_out = {k: {} for k in markets}
     pooled = {}
-    for leg in legs:
+    for g in groups:
         for a in ids:
-            if leg_of[a] != leg:
+            if leg_of[a] != g:
                 continue
-            pooled[a] = np.concatenate([np.concatenate(per[leg][k][a]) for k in markets])
+            pooled[a] = np.concatenate([np.concatenate(per[g][k][a]) for k in markets])
             for k in markets:
-                per_market_out[k][a] = np.concatenate(per[leg][k][a])
+                per_market_out[k][a] = np.concatenate(per[g][k][a])
     return {
         "per_market": per_market_out,
         "pooled": pooled,

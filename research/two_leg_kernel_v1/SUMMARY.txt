@@ -1,0 +1,73 @@
+# two_leg_kernel_v1 -- two-leg kernel + parity (code deliverable, no arm performance)
+
+Verdict: **two-leg kernel built and parity-proven; no idea's performance computed**.
+
+## Design
+
+* `research/fast_engine2/fe2_sim.py` -- the two-leg session kernel: one cash pool, per-leg
+  units and FIFO lot books, the 0.5 pp band + A1u gain band + H2 deferral per leg on that
+  leg's own book, per-leg costs, one taxpayer (both legs' realisations in one annual net
+  TRY gain), next-open fills, optional idle-cash yield. With leg B identically zero it is
+  bit-identical to `fe_sim.sim_one`.
+* `research/fast_engine2/fe2_boot.py` -- the two-leg bootstrap (`boot2`, `_boot_chunk2`,
+  `_pt2`), on `fe_boot.draw_positions` (the same paths as `fe_boot.boot`).
+* `research/fast_engine2/fe2_parity.py` -- parity (a): leg B == 0 against the engine.
+* `research/two_leg_kernel_v1/riskoff_ref.py` + `parity_b.py` -- parity (b): the
+  `riskoff_after_tax_v1` engine (copied verbatim, tag
+  `archive/research/riskoff-after-tax-v1-2026-10`) on a fixed synthetic two-leg case.
+* Framework: `api` accepts `(wants_a, wants_b, leg_b)` (`leg_b` = a panel leg or a
+  registered extra key), `stages.run_one` routes two-leg arms to `fe2_sim.simulate2`,
+  `boot` groups arms by `(leg, leg_b)` and runs them on the same drawn paths, a leg-B
+  series without history makes the window `NotApplicable`.
+
+## Parity
+
+| check | cells | max abs diff | pass |
+|---|---:|---:|---|
+| engine parity (research/fast_engine.parity --quick) | 1 | 0.000e+00 | PASS |
+| two-leg vs engine, leg B == 0: main window (4 rules x 3 modes x m=1/2/4, base+calibrated) | 72 | 0.000e+00 | PASS |
+| two-leg vs engine, leg B == 0: after-tax windows (3 windows x 3 capitals x 2 rules x progressive/flat) | 36 | 0.000e+00 | PASS |
+| two-leg vs engine, leg B == 0: idle-cash yield on | 3 | 0.000e+00 | PASS |
+| two-leg vs engine, leg B == 0: clean bootstrap (per path, pre-tax + after-tax) | 8 | 0.000e+00 | PASS |
+| published K anchors through the two-leg kernel (band_h2_combo_v1 RESULTS) | 9 | 4.017e-05 pp (vs 6-dp published) | PASS |
+| riskoff_after_tax_v1 engine on the fixed two-leg case (alternating_pre_tax) | 17 | 0.000e+00 | PASS |
+| riskoff_after_tax_v1 engine on the fixed two-leg case (alternating_progressive) | 17 | 0.000e+00 | PASS |
+| same case with both legs realising in one tax year (reported, not asserted: the pooled-vs-per-account convention) | 2 | - | PASS |
+
+* parity cells (a + b + routing): 134 asserted, 0 failed.
+* framework harness: 73 checks, 0 failed (43.5s).
+
+## Speed (10 threads, warm numba cache, min of repeats; TIMING.json)
+
+| measurement | ms |
+|---|---:|
+| one main-window path, one leg (engine) | 0.17 |
+| one main-window path, two legs (50/50 2x+1x) | 0.39 |
+| one main-window path, two-leg kernel with leg B = 0 | 0.27 |
+| clean bootstrap, 256 paths (pre-tax x2 + after-tax), one leg | 290.1 |
+| clean bootstrap, 256 paths (pre-tax x2 + after-tax), two legs | 307.4 |
+
+Wall clock of `--run`: 81.6s (parity cells 19.2s, framework harness 43.5s).
+
+## What is now expressible, and what remains NEEDS_KERNEL
+
+* Expressible with the two-leg kernel (a plugin returns `(wants_a, wants_b, leg_b)`; the
+  idea modules themselves were left untouched, since their registered arms are pinned by
+  the ledger): **IB25** (SHY sleeve, `leg_b="shy"`), **IB26** (off-state IEF,
+  `leg_b="ief"`; its T10Y3M input series is still not registered), **IB27** (beta-matched
+  QQQ + QLD blend, `leg_b="1x"`).
+* Still NEEDS_KERNEL: **IB38 A** (per-arm tax regime and capital -- batch-level settings,
+  not weights), **IB38 B** (two/three accounts, i.e. several cash pools and FIFO books in
+  one household), **IB38 C** (routed split: gain-aware routing between two books of the
+  same instrument with a route cap, which a target-weight panel cannot express), and a
+  per-session *instrument* switch for one leg (a leg's instrument is fixed per arm).
+
+## Caveats
+
+* Leg B of an extra-data series is priced by its registered adjusted close, used for both
+  the fill and the close (an extra series carries no OHLC); the convention is stated in
+  `api.MarketData.leg_series`.
+* `riskoff_after_tax_v1` assesses each account separately and trades its non-equity legs
+  on a 10 pp band; the kernel pools one taxpayer's annual net gain and uses 0.5 pp per leg.
+  Parity (b) is therefore asserted on a case built so those conventions cannot differ, and
+  the deliberate counter-example is reported instead of asserted (see the doc).

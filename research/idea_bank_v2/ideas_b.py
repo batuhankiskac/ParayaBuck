@@ -66,8 +66,8 @@ IDEAS = [
         literature=[
             dict(ref="Etula, Rinne, Suominen & Vaittinen, Dash for Cash: Monthly Market Impact of Institutional Liquidity Needs, RFS 2020",
                  url="https://doi.org/10.1093/rfs/hhz106"),
-            dict(ref="Kandel & Marx, Nasdaq Trading Halts and the Advantages of a Specialist System / quarter-end flow evidence, 1999",
-                 url="https://www.tandfonline.com/doi/abs/10.1080/1351847X.2011.579748"),
+            dict(ref="riskoff_rotation_v4 / monthly_defer_v1 (the tested boundary-effect studies this quarter-turn arm differs from)",
+                 url="docs/research/monthly_defer_v1.md"),
         ],
         closest_tested=dict(
             study="monthly_defer_v1 (YI-UFE month boundaries) and seasonal_overlay_v1 (turn-of-month)",
@@ -163,8 +163,8 @@ IDEAS = [
         literature=[
             dict(ref="Kamstra, Kramer & Levi, Winter Blues: A SAD Stock Market Cycle, American Economic Review 2003",
                  url="https://doi.org/10.1257/000282803321455133"),
-            dict(ref="Dolvin & Pyles, Seasonal affective disorder and the pricing of IPOs, 2007",
-                 url="https://doi.org/10.1007/s11156-007-0024-0"),
+            dict(ref="seasonal_placebo_v1 (the tested seasonal family and its placebo verdict, the base rate for this arm)",
+                 url="docs/research/seasonal_placebo_v1.md"),
         ],
         closest_tested=dict(
             study="seasonal_overlay_v1 / seasonal_placebo_v1 (May-October half exposure, September cash)",

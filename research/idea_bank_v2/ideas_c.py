@@ -532,8 +532,8 @@ IDEAS = [
             "feeds back on the strategy's own NAV, so it is a kernel option under this API."
         ),
         literature=[
-            dict(ref="Cloud, The Evolution of Drawdown-Based Risk Management / Grossman-Zhou (drawdown control), 1988",
-                 url="https://doi.org/10.1093/rfs/1.4.361"),
+            dict(ref="Grossman & Zhou, Optimal Investment Strategies for Controlling Drawdowns, Mathematical Finance 1993",
+                 url="https://doi.org/10.1111/j.1467-9965.1993.tb00044.x"),
             dict(ref="exposure_k_v1 and vol_shape_v1 (the closed vol-target variants this arm is *not*: the target stays 0.35 until the NAV budget is consumed)",
                  url="docs/research/exposure_k_v1.md"),
         ],

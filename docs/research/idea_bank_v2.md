@@ -132,7 +132,7 @@ Arms tagged `needs_kernel_option` in the JSON (the `kernel_scope` key says wheth
 - ^VIX (1990+) and the long FRED series (DGS10 1962, BAA10Y 1986, CPIAUCSL 1947, DFF 1954, BAMLH0A0HYM2 1996, NFCI 1971, ICSA 1967, CFNAI 1967, DCOILWTICO 1986, BAA/AAA 1919) keep 5 or 6 OOS windows; BAA-AAA is the only credit state old enough for the 1935-56 window.
 - The harness loads the ^GSPC 1957-1999 window close-only (`fe_data.load_gspc` sets opens := the previous close), so every arm needing intraday structure (overnight/intraday decomposition, true range, intraday fills) loses that window - the raw file does carry OHLCV 1950-1999, only the loader is close-only.
 - The after-tax stage starts in 2000 because the CBRT/YI-UFE calendar does, so no after-tax idea can ever be evaluated before 2000; and the tax is assessed per calendar year with FIFO and no loss carry-forward, which is what makes the two-leg routing and loss-netting ideas (IC42-IC44) interesting rather than cosmetic.
-- The panel offers the window's own underlying at 2x and 1x only (`api.LEGS`), and no volume: an arm needing a second leg, a state-dependent leg or volume is a kernel/data-plumbing item, which is why IC31-IC40 and the anchored-VWAP family are tagged as they are.
+- The panel offers the window's own underlying at 2x and 1x only (`api.LEGS`) and carries no volume, so an arm needing a second leg, a state-dependent leg or a second instrument family is a kernel/data-plumbing item: that is why the off-state and on-state ideas (IC31-IC40), the drawdown-budget governor (IC49) and the execution arms (IC52-IC58) are tagged as they are, and why the two-leg ideas (IC41-IC46) need the second-book kernel. No arm in this bank needs volume - the panel has none and the record's volume-free vote family is accepted here.
 
 ## 4. The 60 ideas at a glance
 
@@ -506,7 +506,7 @@ Arms tagged `needs_kernel_option` in the JSON (the `kernel_scope` key says wheth
 
 **Mechanism.** The vol target is a second-moment statistic, but equities have a fat left tail: two periods with equal variance can have very different worst days. Sizing on the mean of the worst 5% of the last 252 daily returns (a 95% CVaR), rescaled to be Gaussian-comparable (x 2.063 x sqrt(252)), makes the target respond to how bad the bad days are rather than to total variance. This is a quantile-tail statistic, which no tested estimator computes.
 
-**Literature.** [Rockafellar & Uryasev, Optimization of Conditional Value-at-Risk, Journal of Risk 2000](https://doi.org/10.21314/JOR.2000.038); [Barndorff-Nielsen & Shephard, Power and Bipower Variation (tail-robust risk measures), 2004](https://doi.org/10.1016/j.jeconom.2003.10.011)
+**Literature.** [Rockafellar & Uryasev, Optimization of Conditional Value-at-Risk, Journal of Risk 2000](https://doi.org/10.21314/JOR.2000.038); [Barndorff-Nielsen & Shephard, Power and Bipower Variation with Stochastic Volatility and Jumps, Journal of Financial Econometrics 2004](https://doi.org/10.1093/jjfinec/nbh001)
 
 **Closest tested study.** vol_window_v1 (downside semi-deviation) and range_vol_v1-v3 (`docs/research/range_vol_v1.md`). *Difference:* vol_window_v1 tested a downside *second moment* (semi-deviation); a CVaR is a quantile-average of the tail and reacts to the shape of the loss distribution, not only to its variance below the mean.
 
@@ -697,7 +697,7 @@ Arms tagged `needs_kernel_option` in the JSON (the `kernel_scope` key says wheth
 
 **Mechanism.** Rate volatility is the transmission channel of the 2022 equity drawdown and leads risk-off episodes generally: when bond vol doubles, duration-heavy and long-duration equity is re-priced. The canonical series (ICE BofA MOVE) has no long free daily history, so the arm uses the IEF realised 20-session volatility against its own 252-session median - a bond volatility state computed from a tradable instrument, the analogue of vix_filter_v1's equity-option state for the bond market.
 
-**Literature.** [ICE BofA MOVE Index (bond-market implied volatility; the 'bond VIX')](https://www.ice.com/publicdocs/MOVE_Index.pdf); [Baele, Bekaert, Inghelbrecht & Wei, Flights to Safety (rate volatility and risk-off), RFS 2020](https://doi.org/10.1093/rfs/hhz055)
+**Literature.** [ICE BofA US Bond Market Option Volatility Estimate Index (MOVE; the 'bond VIX')](https://developer.ice.com/fixed-income-data-services/catalog/ice-data-indices-move-index); [Baele, Bekaert, Inghelbrecht & Wei, Flights to Safety (rate volatility and risk-off), RFS 2020](https://doi.org/10.1093/rfs/hhz055)
 
 **Closest tested study.** vix_filter_v1 (VIX level, spike and term structure; VXN sizing) (`docs/research/vix_filter_v1.md`). *Difference:* vix_filter_v1's inputs are all equity-option-implied. A *realised bond* volatility state is a different market's risk price; it was unavailable to vix_filter_v1 (no bond vol series) and is available now from the registered IEF extra key.
 
@@ -718,7 +718,7 @@ Arms tagged `needs_kernel_option` in the JSON (the `kernel_scope` key says wheth
 
 **Mechanism.** The 10-year breakeven (T10YIE) is the market's expected inflation; its *change* over 126 sessions is the state in which the reaction function tightens and long-duration equity de-rates, isolated from the nominal yield's real component. IB12 (real-yield level) and IB13 (nominal-10y momentum) are in the bank; neither isolates expectations, which is the component that moved in 2021-22 and that the Fed reacts to.
 
-**Literature.** [FRED T10YIE (10-year breakeven inflation rate, daily, 2003-01-02 ->)](https://fred.stlouisfed.org/series/T10YIE); [Gurkaynak, Sack & Wright, The TIPS Yield Curve and Inflation Compensation, 2010](https://doi.org/10.1353/mcb.0.0003)
+**Literature.** [FRED T10YIE (10-year breakeven inflation rate, daily, 2003-01-02 ->)](https://fred.stlouisfed.org/series/T10YIE); [Campbell, Sunderam & Viceira, Inflation Bets or Deflation Hedges? The Changing Risks of Nominal Bonds, 2017](https://doi.org/10.3386/w21318)
 
 **Closest tested study.** valuation_v1 (a valuation level) and IB12 (real 10-year yield level, in the bank) (`docs/research/valuation_v1.md`). *Difference:* Real-yield *levels* and valuation *levels* were tested; breakeven *momentum* is the expectations component of the nominal yield, a distinct state variable that decomposes the same curve point.
 
@@ -741,7 +741,7 @@ Arms tagged `needs_kernel_option` in the JSON (the `kernel_scope` key says wheth
 
 **Literature.** [FRED DTWEXBGS (nominal broad US dollar index, daily, 2006-01-02 ->)](https://fred.stlouisfed.org/series/DTWEXBGS); [Bruno & Shin, Cross-Border Banking and Global Liquidity (the dollar as a risk factor), 2015](https://doi.org/10.1093/restud/rdu028)
 
-**Closest tested study.** IB22 international lead-lag (foreign *equity* index returns, in the bank) and vix_filter_v1 (`docs/research/vix_filter_v1.md`). *Difference:* IC22/IB22 are complements: the bank's IB22 uses foreign equity moves as an intraday causal signal, while this uses the *currency* - the global funding variable - with a level-plus-change state. Nothing tested uses FX.
+**Closest tested study.** IB22 international lead-lag (foreign *equity* index returns, in the bank) and vix_filter_v1 (`docs/research/vix_filter_v1.md`). *Difference:* This idea and the banked IB22 are complements: IB22 uses foreign equity moves as an intraday causal signal, while this uses the *currency* - the global funding variable - with a level-plus-change state. Nothing tested uses FX.
 
 **Signal inputs.** FRED DTWEXBGS (registered extra key dtwexbgs)
 
@@ -783,7 +783,7 @@ Arms tagged `needs_kernel_option` in the JSON (the `kernel_scope` key says wheth
 
 **Mechanism.** Quarter ends are a heavier structural date than month ends: index rebalancing, quarterly window dressing and the institutional flow calendar concentrate in the last and first few sessions of a quarter, and the documented quarter-turn pattern in both equity and bond markets is separate from the month-turn pattern that was tested. The arm scales exposure in the three sessions spanning each quarter boundary and in the three sessions ending it, with both signs specified.
 
-**Literature.** [Etula, Rinne, Suominen & Vaittinen, Dash for Cash: Monthly Market Impact of Institutional Liquidity Needs, RFS 2020](https://doi.org/10.1093/rfs/hhz106); [Kandel & Marx, Nasdaq Trading Halts and the Advantages of a Specialist System / quarter-end flow evidence, 1999](https://www.tandfonline.com/doi/abs/10.1080/1351847X.2011.579748)
+**Literature.** [Etula, Rinne, Suominen & Vaittinen, Dash for Cash: Monthly Market Impact of Institutional Liquidity Needs, RFS 2020](https://doi.org/10.1093/rfs/hhz106); [riskoff_rotation_v4 / monthly_defer_v1 (the tested boundary-effect studies this quarter-turn arm differs from)](docs/research/monthly_defer_v1.md)
 
 **Closest tested study.** monthly_defer_v1 (YI-UFE month boundaries) and seasonal_overlay_v1 (turn-of-month) (`docs/research/monthly_defer_v1.md`). *Difference:* Both tested boundaries are *monthly* (12 dates/yr, and monthly_defer_v1 changed when downsizes fill, not the target). The turn of the quarter is four dates a year with a different flow mechanism (quarterly rebalancing and reporting), and this arm changes the target weight.
 
@@ -825,7 +825,7 @@ Arms tagged `needs_kernel_option` in the JSON (the `kernel_scope` key says wheth
 
 **Mechanism.** Kamstra, Kramer & Levi show that the seasonal variation in the length of the night - a fall-weighted measure of daylight change - explains a large and replicated part of the autumn/winter return pattern through risk aversion, and the effect is identifiable separately from the months because it varies continuously with date and latitude. The arm scales the target by (1 - c * night_factor), where night_factor is the normalised night-length change for 40.7N peaking at the autumn equinox. Unlike the tested month buckets, the variable is continuous and externally parameterised, and the southern-hemisphere mirror gives a built-in placebo.
 
-**Literature.** [Kamstra, Kramer & Levi, Winter Blues: A SAD Stock Market Cycle, American Economic Review 2003](https://doi.org/10.1257/000282803321455133); [Dolvin & Pyles, Seasonal affective disorder and the pricing of IPOs, 2007](https://doi.org/10.1007/s11156-007-0024-0)
+**Literature.** [Kamstra, Kramer & Levi, Winter Blues: A SAD Stock Market Cycle, American Economic Review 2003](https://doi.org/10.1257/000282803321455133); [seasonal_placebo_v1 (the tested seasonal family and its placebo verdict, the base rate for this arm)](docs/research/seasonal_placebo_v1.md)
 
 **Closest tested study.** seasonal_overlay_v1 / seasonal_placebo_v1 (May-October half exposure, September cash) (`docs/research/seasonal_placebo_v1.md`). *Difference:* The tested seasonals are month buckets with no external variable; the SAD measure is continuous in the calendar, has a stated calibration (latitude, night length) and a falsifiable mirror - the same computation with the sign of the seasonal term inverted.
 
@@ -1318,7 +1318,7 @@ Arms tagged `needs_kernel_option` in the JSON (the `kernel_scope` key says wheth
 
 **Mechanism.** The vol target is a variance control, not a drawdown control, yet the owner's acceptance test is stated as a drawdown comparison against buy-and-hold. A governor that scales exposure so the *forecast* drawdown of the position stays inside a budget makes the drawdown the objective and volatility the instrument: sigma_budget_t = 0.35 x clip((0.35 - |NAV_dd_t|)/(0.35 - 0.20), 0.25, 1.0) and vt = min(1, 0.35/vol20, sigma_budget_t/vol20). It is *inactive* while the NAV drawdown is under 20% (sigma_budget = 0.35, exactly production) and de-risks progressively as the budget is consumed, which is a state the fixed vol target cannot see. Unlike IB29/IB30 it feeds back on the strategy's own NAV, so it is a kernel option under this API.
 
-**Literature.** [Cloud, The Evolution of Drawdown-Based Risk Management / Grossman-Zhou (drawdown control), 1988](https://doi.org/10.1093/rfs/1.4.361); [exposure_k_v1 and vol_shape_v1 (the closed vol-target variants this arm is *not*: the target stays 0.35 until the NAV budget is consumed)](docs/research/exposure_k_v1.md)
+**Literature.** [Grossman & Zhou, Optimal Investment Strategies for Controlling Drawdowns, Mathematical Finance 1993](https://doi.org/10.1111/j.1467-9965.1993.tb00044.x); [exposure_k_v1 and vol_shape_v1 (the closed vol-target variants this arm is *not*: the target stays 0.35 until the NAV budget is consumed)](docs/research/exposure_k_v1.md)
 
 **Closest tested study.** exposure_k_v1 / vt_level_tax_v1 / vol_shape_v1 (vol-target level and shape changes at matched average weight) and IB29/IB30 (price-based drawdown scaling, in the bank) (`docs/research/exposure_k_v1.md`). *Difference:* The closed exposure family changes the *constant* (or the shape) of the vol target, and the banked drawdown ideas scale on the *price* drawdown. This one is a feedback law on the realised NAV drawdown with a dead zone below 20% - inactive on most sessions by construction, so it cannot be a disguised lower vol target.
 
@@ -1406,7 +1406,7 @@ Arms tagged `needs_kernel_option` in the JSON (the `kernel_scope` key says wheth
 
 **Mechanism.** A state flip moves the whole target, so the resulting order is the largest the strategy ever places. Slicing it into N equal daily parts reduces market impact and - more quantifiably - exploits the close-to-open drift the strategy already banks: a sell whose fills are spread over three opens sells some of the position at later, on average higher openings, while a buy is penalised symmetrically. In the last week of December slicing also physically moves part of a realisation past the year boundary, which interacts with H2.
 
-**Literature.** [Almgren & Chriss, Optimal execution of portfolio transactions, Journal of Risk 2000](https://doi.org/10.21314/JOR.2000.038); [exec_delay_v1 (day-level fill shifts: next close / t+2 / split fills all failed the real-open OOS windows)](docs/research/exec_delay_v1.md)
+**Literature.** [Almgren & Chriss, Optimal Execution of Portfolio Transactions, Journal of Risk 2001](https://doi.org/10.21314/JOR.2001.041); [exec_delay_v1 (day-level fill shifts: next close / t+2 / split fills all failed the real-open OOS windows)](docs/research/exec_delay_v1.md)
 
 **Closest tested study.** exec_delay_v1 (fill-timing family including a split-fill arm) and IB36/IB37 (fill filters/prices, in the bank) (`docs/research/exec_delay_v1.md`). *Difference:* exec_delay_v1's split arm was one of its day-level variants and it failed on the real-open OOS windows - which is why this must be pre-registered with those windows as the decisive gate. The distinct point here is that the schedule is tied to the *drift* the account earns (sells later, buys earlier), not to a generic delay.
 

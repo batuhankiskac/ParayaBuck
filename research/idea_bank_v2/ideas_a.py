@@ -506,8 +506,8 @@ IDEAS = [
         literature=[
             dict(ref="Rockafellar & Uryasev, Optimization of Conditional Value-at-Risk, Journal of Risk 2000",
                  url="https://doi.org/10.21314/JOR.2000.038"),
-            dict(ref="Barndorff-Nielsen & Shephard, Power and Bipower Variation (tail-robust risk measures), 2004",
-                 url="https://doi.org/10.1016/j.jeconom.2003.10.011"),
+            dict(ref="Barndorff-Nielsen & Shephard, Power and Bipower Variation with Stochastic Volatility and Jumps, Journal of Financial Econometrics 2004",
+                 url="https://doi.org/10.1093/jjfinec/nbh001"),
         ],
         closest_tested=dict(
             study="vol_window_v1 (downside semi-deviation) and range_vol_v1-v3",
@@ -926,8 +926,8 @@ IDEAS = [
             "equity-option state for the bond market."
         ),
         literature=[
-            dict(ref="ICE BofA MOVE Index (bond-market implied volatility; the 'bond VIX')",
-                 url="https://www.ice.com/publicdocs/MOVE_Index.pdf"),
+            dict(ref="ICE BofA US Bond Market Option Volatility Estimate Index (MOVE; the 'bond VIX')",
+                 url="https://developer.ice.com/fixed-income-data-services/catalog/ice-data-indices-move-index"),
             dict(ref="Baele, Bekaert, Inghelbrecht & Wei, Flights to Safety (rate volatility and risk-off), RFS 2020",
                  url="https://doi.org/10.1093/rfs/hhz055"),
         ],
@@ -974,8 +974,8 @@ IDEAS = [
         literature=[
             dict(ref="FRED T10YIE (10-year breakeven inflation rate, daily, 2003-01-02 ->)",
                  url="https://fred.stlouisfed.org/series/T10YIE"),
-            dict(ref="Gurkaynak, Sack & Wright, The TIPS Yield Curve and Inflation Compensation, 2010",
-                 url="https://doi.org/10.1353/mcb.0.0003"),
+            dict(ref="Campbell, Sunderam & Viceira, Inflation Bets or Deflation Hedges? The Changing Risks of Nominal Bonds, 2017",
+                 url="https://doi.org/10.3386/w21318"),
         ],
         closest_tested=dict(
             study="valuation_v1 (a valuation level) and IB12 (real 10-year yield level, in the bank)",
@@ -1027,7 +1027,7 @@ IDEAS = [
             study="IB22 international lead-lag (foreign *equity* index returns, in the bank) and vix_filter_v1",
             index_row="docs/research/vix_filter_v1.md",
             difference=(
-                "IC22/IB22 are complements: the bank's IB22 uses foreign equity moves as an intraday "
+                "This idea and the banked IB22 are complements: IB22 uses foreign equity moves as an intraday "
                 "causal signal, while this uses the *currency* - the global funding variable - with a "
                 "level-plus-change state. Nothing tested uses FX."
             ),

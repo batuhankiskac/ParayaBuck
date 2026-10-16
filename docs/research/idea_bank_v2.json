@@ -1277,8 +1277,8 @@
           "url": "https://doi.org/10.21314/JOR.2000.038"
         },
         {
-          "ref": "Barndorff-Nielsen & Shephard, Power and Bipower Variation (tail-robust risk measures), 2004",
-          "url": "https://doi.org/10.1016/j.jeconom.2003.10.011"
+          "ref": "Barndorff-Nielsen & Shephard, Power and Bipower Variation with Stochastic Volatility and Jumps, Journal of Financial Econometrics 2004",
+          "url": "https://doi.org/10.1093/jjfinec/nbh001"
         }
       ],
       "closest_tested": {
@@ -1986,8 +1986,8 @@
       "mechanism": "Rate volatility is the transmission channel of the 2022 equity drawdown and leads risk-off episodes generally: when bond vol doubles, duration-heavy and long-duration equity is re-priced. The canonical series (ICE BofA MOVE) has no long free daily history, so the arm uses the IEF realised 20-session volatility against its own 252-session median - a bond volatility state computed from a tradable instrument, the analogue of vix_filter_v1's equity-option state for the bond market.",
       "literature": [
         {
-          "ref": "ICE BofA MOVE Index (bond-market implied volatility; the 'bond VIX')",
-          "url": "https://www.ice.com/publicdocs/MOVE_Index.pdf"
+          "ref": "ICE BofA US Bond Market Option Volatility Estimate Index (MOVE; the 'bond VIX')",
+          "url": "https://developer.ice.com/fixed-income-data-services/catalog/ice-data-indices-move-index"
         },
         {
           "ref": "Baele, Bekaert, Inghelbrecht & Wei, Flights to Safety (rate volatility and risk-off), RFS 2020",
@@ -2062,8 +2062,8 @@
           "url": "https://fred.stlouisfed.org/series/T10YIE"
         },
         {
-          "ref": "Gurkaynak, Sack & Wright, The TIPS Yield Curve and Inflation Compensation, 2010",
-          "url": "https://doi.org/10.1353/mcb.0.0003"
+          "ref": "Campbell, Sunderam & Viceira, Inflation Bets or Deflation Hedges? The Changing Risks of Nominal Bonds, 2017",
+          "url": "https://doi.org/10.3386/w21318"
         }
       ],
       "closest_tested": {
@@ -2141,7 +2141,7 @@
       "closest_tested": {
         "study": "IB22 international lead-lag (foreign *equity* index returns, in the bank) and vix_filter_v1",
         "index_row": "docs/research/vix_filter_v1.md",
-        "difference": "IC22/IB22 are complements: the bank's IB22 uses foreign equity moves as an intraday causal signal, while this uses the *currency* - the global funding variable - with a level-plus-change state. Nothing tested uses FX."
+        "difference": "This idea and the banked IB22 are complements: IB22 uses foreign equity moves as an intraday causal signal, while this uses the *currency* - the global funding variable - with a level-plus-change state. Nothing tested uses FX."
       },
       "signal_inputs": [
         "FRED DTWEXBGS (registered extra key dtwexbgs)"
@@ -2281,8 +2281,8 @@
           "url": "https://doi.org/10.1093/rfs/hhz106"
         },
         {
-          "ref": "Kandel & Marx, Nasdaq Trading Halts and the Advantages of a Specialist System / quarter-end flow evidence, 1999",
-          "url": "https://www.tandfonline.com/doi/abs/10.1080/1351847X.2011.579748"
+          "ref": "riskoff_rotation_v4 / monthly_defer_v1 (the tested boundary-effect studies this quarter-turn arm differs from)",
+          "url": "docs/research/monthly_defer_v1.md"
         }
       ],
       "closest_tested": {
@@ -2438,8 +2438,8 @@
           "url": "https://doi.org/10.1257/000282803321455133"
         },
         {
-          "ref": "Dolvin & Pyles, Seasonal affective disorder and the pricing of IPOs, 2007",
-          "url": "https://doi.org/10.1007/s11156-007-0024-0"
+          "ref": "seasonal_placebo_v1 (the tested seasonal family and its placebo verdict, the base rate for this arm)",
+          "url": "docs/research/seasonal_placebo_v1.md"
         }
       ],
       "closest_tested": {
@@ -4202,8 +4202,8 @@
       "mechanism": "The vol target is a variance control, not a drawdown control, yet the owner's acceptance test is stated as a drawdown comparison against buy-and-hold. A governor that scales exposure so the *forecast* drawdown of the position stays inside a budget makes the drawdown the objective and volatility the instrument: sigma_budget_t = 0.35 x clip((0.35 - |NAV_dd_t|)/(0.35 - 0.20), 0.25, 1.0) and vt = min(1, 0.35/vol20, sigma_budget_t/vol20). It is *inactive* while the NAV drawdown is under 20% (sigma_budget = 0.35, exactly production) and de-risks progressively as the budget is consumed, which is a state the fixed vol target cannot see. Unlike IB29/IB30 it feeds back on the strategy's own NAV, so it is a kernel option under this API.",
       "literature": [
         {
-          "ref": "Cloud, The Evolution of Drawdown-Based Risk Management / Grossman-Zhou (drawdown control), 1988",
-          "url": "https://doi.org/10.1093/rfs/1.4.361"
+          "ref": "Grossman & Zhou, Optimal Investment Strategies for Controlling Drawdowns, Mathematical Finance 1993",
+          "url": "https://doi.org/10.1111/j.1467-9965.1993.tb00044.x"
         },
         {
           "ref": "exposure_k_v1 and vol_shape_v1 (the closed vol-target variants this arm is *not*: the target stays 0.35 until the NAV budget is consumed)",
@@ -4500,8 +4500,8 @@
       "mechanism": "A state flip moves the whole target, so the resulting order is the largest the strategy ever places. Slicing it into N equal daily parts reduces market impact and - more quantifiably - exploits the close-to-open drift the strategy already banks: a sell whose fills are spread over three opens sells some of the position at later, on average higher openings, while a buy is penalised symmetrically. In the last week of December slicing also physically moves part of a realisation past the year boundary, which interacts with H2.",
       "literature": [
         {
-          "ref": "Almgren & Chriss, Optimal execution of portfolio transactions, Journal of Risk 2000",
-          "url": "https://doi.org/10.21314/JOR.2000.038"
+          "ref": "Almgren & Chriss, Optimal Execution of Portfolio Transactions, Journal of Risk 2001",
+          "url": "https://doi.org/10.21314/JOR.2001.041"
         },
         {
           "ref": "exec_delay_v1 (day-level fill shifts: next close / t+2 / split fills all failed the real-open OOS windows)",

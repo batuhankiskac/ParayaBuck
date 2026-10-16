@@ -159,8 +159,8 @@ IDEAS = [
             "physically moves part of a realisation past the year boundary, which interacts with H2."
         ),
         literature=[
-            dict(ref="Almgren & Chriss, Optimal execution of portfolio transactions, Journal of Risk 2000",
-                 url="https://doi.org/10.21314/JOR.2000.038"),
+            dict(ref="Almgren & Chriss, Optimal Execution of Portfolio Transactions, Journal of Risk 2001",
+                 url="https://doi.org/10.21314/JOR.2001.041"),
             dict(ref="exec_delay_v1 (day-level fill shifts: next close / t+2 / split fills all failed the real-open OOS windows)",
                  url="docs/research/exec_delay_v1.md"),
         ],

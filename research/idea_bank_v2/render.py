@@ -452,9 +452,12 @@ def render_md(doc, ideas):
                "can ever be evaluated before 2000; and the tax is assessed per calendar year with FIFO and no loss "
                "carry-forward, which is what makes the two-leg routing and loss-netting ideas (IC42-IC44) "
                "interesting rather than cosmetic.")
-    out.append("- The panel offers the window's own underlying at 2x and 1x only (`api.LEGS`), and no volume: an "
-               "arm needing a second leg, a state-dependent leg or volume is a kernel/data-plumbing item, which is "
-               "why IC31-IC40 and the anchored-VWAP family are tagged as they are.")
+    out.append("- The panel offers the window's own underlying at 2x and 1x only (`api.LEGS`) and carries no "
+               "volume, so an arm needing a second leg, a state-dependent leg or a second instrument family is a "
+               "kernel/data-plumbing item: that is why the off-state and on-state ideas (IC31-IC40), the "
+               "drawdown-budget governor (IC49) and the execution arms (IC52-IC58) are tagged as they are, and why "
+               "the two-leg ideas (IC41-IC46) need the second-book kernel. No arm in this bank needs volume - the "
+               "panel has none and the record's volume-free vote family is accepted here.")
     out.append("")
     out.append("## 4. The 60 ideas at a glance")
     out.append("")

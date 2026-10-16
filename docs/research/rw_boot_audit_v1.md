@@ -240,7 +240,8 @@ premise is void; nothing about the IC37 idea (or any other) survives this audit 
 | `python -m research.fast_engine.parity --quick` | **PASS** (11.5 s; `PARITY.json` restored byte for byte) |
 | `python -m research.batch_screen.run --harness` | **PASS**, **116/116** checks |
 | `bash research/batch_screen/tests/run.sh -q` | **136 passed** (4 new: the own-return convention, the contiguous-draw isolation, the synthetic/constant series, the availability rule) |
-| `python -m research.fast_engine_opts.harness` | **PASS** (parity off + bootstrap off + 14 anchor cells + 13 mechanism checks) |
+| `python -m research.fast_engine_opts.harness` | **PASS**, 30/30 (option-off side-by-side + bootstrap, 14 anchor cells, 13 mechanism checks) |
+| `bash research/fast_engine_opts/tests/run.sh -q` | **36 passed** |
 | `python -m research.rw_boot_audit_v1.screen --harness` | **PASS** (engine parity, K's and R2's 14 anchor cells ≤ 0.01 pp, the leg-B convention cells, the pairing cells, the one-path repro, the pre/post parity diff) |
 | `run --verify-registry` | **PASS** (530 lines, N = 303) |
 | `rw_fix_v1` run twice | `RESULTS.json`, `SCOREBOARD.md`, 46 arm records **byte-identical** (`shasum -a 256`) |

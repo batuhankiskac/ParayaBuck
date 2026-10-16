@@ -172,9 +172,17 @@ _WINDOWS = {}
 
 
 class BootWindow:
-    """`fe_boot.BootWindow` (the fixed 2015-09 -> 2026-09 calendar) plus the cash-yield schedule."""
+    """`fe_boot.BootWindow` (the fixed 2015-09 -> 2026-09 calendar) plus the cash-yield schedule
+    and an optional restricted drawing pool.
 
-    def __init__(self, cash_yield: str = "none"):
+    `pool = (lo, hi)` restricts the drawn source sessions to `positions lo..hi` of the main
+    window's return pool (i.e. sessions `lo + 1 .. hi + 1`, see `windows.boot_pool`). The chunks
+    are then built from those sessions only -- the *same* seed/block/rng order
+    (`fe_boot.draw_positions` with the pool's own length and an added offset), so a reduced-window
+    arm's bootstrap pool is its own window and the control is re-drawn on that pool.
+    """
+
+    def __init__(self, cash_yield: str = "none", pool=None):
         base = _WINDOWS.get("base")
         if base is None:
             base = _WINDOWS["base"] = fe_boot.BootWindow()
@@ -187,12 +195,26 @@ class BootWindow:
         self.i0 = base.i0
         self.i1 = base.i1
         self.yrs = base.yrs
+        self.pool = None if pool is None else (int(pool[0]), int(pool[1]))
+        if self.pool is None:
+            self.pool_lo, self.npool_draw = 0, self.npool
+        else:
+            lo, hi = self.pool
+            if not (0 <= lo <= hi < self.npool):
+                raise ValueError(f"bootstrap pool {self.pool} outside the return pool "
+                                 f"[0, {self.npool})")
+            self.pool_lo, self.npool_draw = lo, hi - lo + 1
         key = ("env", cash_yield)
         env = _WINDOWS.get(key)
         if env is None:
             rate = None if cash_yield == "none" else cash_rates(list(self.dates))
             env = _WINDOWS[key] = fe_sim.RunEnv(self.dates, self.fx, self.ufe, self.i0, self.i1, cash_rate=rate)
         self.env = env
+
+    def positions(self, rng, block, n_paths) -> np.ndarray:
+        """This window's chunk draw: the published three rng calls, on the restricted pool."""
+        return (fe_boot.draw_positions(rng, block, n_paths, TAX_BOOT_L, self.npool_draw,
+                                       TAX_BOOT_EXT) + self.pool_lo)
 
 
 # ----------------------------------------------------------------------------- market panels
@@ -270,7 +292,7 @@ def _rule_arrays(arm_list):
 
 def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS,
          capitals=("100k",), modes=TAX_MODES, m=fe_sim.DEFAULT_M, chunk=DEFAULT_CHUNK,
-         cash_yield="none", rule_index=True, label="boot", quiet=True):
+         cash_yield="none", rule_index=True, label="boot", quiet=True, pool=None):
     """The clean/fresh block bootstrap over arbitrary plugin targets.
 
     Arms are grouped by `(leg, leg_b)`: a single-leg group runs the engine's kernel, a two-leg
@@ -281,7 +303,7 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
     Returns `{"pre": {model: {arm_id: (n_pre,)}}, "tax": {cap: {mode: {arm_id: (n_tax,)}}},
     "params": {...}}` -- raw per-path CAGRs, the input of `delta_stats` and the deflation.
     """
-    win = BootWindow(cash_yield)
+    win = BootWindow(cash_yield, pool)
     env = win.env
     n_paths = max(n_pre, n_tax)
     cap_at = np.array([TAX_CAPITALS[c] for c in capitals], dtype=np.float64)
@@ -296,7 +318,7 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
         groups.setdefault((arm["leg"], arm.get("leg_b")), []).append(arm)
     for p0 in range(0, n_paths, chunk):
         W = min(chunk, n_paths - p0)
-        pos = fe_boot.draw_positions(rng, block, W, TAX_BOOT_L, win.npool, TAX_BOOT_EXT)
+        pos = win.positions(rng, block, W)
         panels = {}
         for leg in sorted({g[0] for g in groups}):
             panels.update(boot_panels(win, pos, (leg,), (FIN["base"], FIN["calibrated"]), cache=panels))
@@ -340,6 +362,7 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
         "params": {"seed": seed, "block": block, "n_pre": n_pre, "n_tax": n_tax,
                    "capitals": list(capitals), "modes": list(modes), "m": m,
                    "calendar": [win.dates[0], win.dates[-1]], "cash_yield": cash_yield,
+                   "pool": None if win.pool is None else list(win.pool),
                    "arms": ids},
     }
 
@@ -420,6 +443,7 @@ def _oos_market_panels(days, o, c, y, start, pos, legs, m_cache, key):
     r_on = o[idx] / c[idx - 1]
     r_id = c[idx] / o[idx]
     P = idx.shape[0]
+    cols = _extra_index(idx)
     cc = np.concatenate([np.ones((P, 1)), np.cumprod(r_on * r_id, axis=1)], axis=1)
     oo = np.concatenate([np.ones((P, 1)), cc[:, :-1] * r_on], axis=1)
     yy = y[idx - 1]
@@ -439,8 +463,11 @@ def _oos_market_panels(days, o, c, y, start, pos, legs, m_cache, key):
             window="oos_boot",
             meta={"market": key, "fin": EXTRA_FIN, "leg": leg},
             extra_days=days,
-            extra_index=_extra_index(idx),
+            extra_index=cols,
             extra_window=key,
+            # the chunk's columns are the drawn *source* sessions of the market's own calendar
+            # (the panel's `days` is that market's whole session list, so it cannot label them)
+            col_days=np.asarray(days)[cols[0]],
         )
     return m_cache
 

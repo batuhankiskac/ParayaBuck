@@ -34,6 +34,7 @@ framework then marks that window (or, on the main window, the whole arm) not eva
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import importlib.util
 import json
@@ -130,6 +131,11 @@ class MarketData:
     window, the bootstrap path's reconstructed price index, an index/ETF close on the OOS and
     instrument windows). `div`/`rate` are per-session and are what the 2x leg's financing and
     the total-return conventions are built from.
+
+    `days` labels the window's sessions; `column_days` is the same label per *column* of every
+    `(P, T)` array (they are the same array on a real window; on a bootstrap chunk `column_days`
+    carries the chunk's first label one extra time, because the arrays have one artificial
+    leading base row). `year`/`month` are built on `column_days`.
     """
 
     days: np.ndarray
@@ -149,11 +155,33 @@ class MarketData:
     extra_days: np.ndarray | None = None
     extra_index: np.ndarray | None = None
     extra_window: str | None = None
+    #: the day label of every column of the `(P, T)` arrays (see `column_days`); a chunk whose
+    #: arrays are not the window's own sessions must pass it (the OOS pooled bootstrap does)
+    col_days: np.ndarray | None = None
 
     def __post_init__(self):
         self.vol = fe_signals.vol_n(self.legs[self.leg][1])
-        self.year = np.array([int(d[:4]) for d in self.days], dtype=np.int64)
-        self.month = np.array([int(d[5:7]) for d in self.days], dtype=np.int64)
+        # Every `(P, T)` array of the panel is labelled by `days`, except on a bootstrap chunk:
+        # its market arrays carry one artificial leading base row, so `days` (the drawn session
+        # list) is one shorter than the arrays and *column* `c >= 1` is `days[c - 1]` (column 0
+        # repeats the first drawn session -- `boot._extra_index`'s convention). `column_days` is
+        # that mapping, and the calendar arrays are built on it so that `year`/`month` are (T,)
+        # like every other panel array.
+        n = int(self.price.shape[1])
+        cd = None if self.col_days is None else np.asarray(self.col_days)
+        if cd is None:
+            if n == self.days.size:
+                cd = self.days
+            elif n == self.days.size + 1:
+                cd = np.concatenate([np.repeat(self.days[:1], 1), self.days])
+            else:
+                raise ValueError(f"panel {self.window!r}: {n} price columns and "
+                                 f"{self.days.size} days -- pass col_days")
+        if cd.size != n:
+            raise ValueError(f"panel {self.window!r}: {cd.size} column days for {n} columns")
+        self.column_days = cd
+        self.year = np.array([int(d[:4]) for d in self.column_days], dtype=np.int64)
+        self.month = np.array([int(d[5:7]) for d in self.column_days], dtype=np.int64)
         self._extra = {}
         self.extra_log = []
 
@@ -219,7 +247,8 @@ class MarketData:
         The engine reads opens/closes on `[i0, i1]` and the previous close on `i0 - 1`, so a
         series that starts after the window begins (or has an interior gap, e.g. a FRED series
         that is not published daily) makes the window not applicable. `reason` names the first
-        session the series does not reach.
+        session the series does not reach -- the label of the *column* (`column_days`), which is
+        what a bootstrap chunk's extra series is indexed by.
         """
         opn, _cls = self.leg_series(key)
         opn = np.asarray(opn, dtype=np.float64)
@@ -231,15 +260,15 @@ class MarketData:
             return True, ""
         first = int(np.argmax(bad)) + lo
         finite = np.flatnonzero(np.isfinite(row))
-        span = (f"{self.days[finite[0]]}..{self.days[finite[-1]]}" if finite.size
+        span = (f"{self.column_days[finite[0]]}..{self.column_days[finite[-1]]}" if finite.size
                 else "empty in this window")
-        return False, (f"the leg-B instrument {key!r} has no price on {self.days[first]} "
+        return False, (f"the leg-B instrument {key!r} has no price on {self.column_days[first]} "
                        f"(the series covers {span} of this window)")
 
 
 def panel(days, *, price, div, rate, o2, c2, d2, o1=None, c1=None, d1=None, fin=0.0,
           exp_q=EXP_Q, leg=DEFAULT_LEG, window="", high=None, low=None, meta=None,
-          extra_days=None, extra_index=None, extra_window=None):
+          extra_days=None, extra_index=None, extra_window=None, col_days=None):
     """Build a `MarketData`: the 2x leg from the window's published input triple ``(o2, c2, d2)``
     and `fin`/`exp_q`, the 1x leg from the underlying's raw triple (defaults to the same one).
 
@@ -267,6 +296,7 @@ def panel(days, *, price, div, rate, o2, c2, d2, o1=None, c1=None, d1=None, fin=
         extra_days=None if extra_days is None else np.asarray(extra_days),
         extra_index=None if extra_index is None else np.asarray(extra_index, dtype=np.int64),
         extra_window=extra_window,
+        col_days=None if col_days is None else np.asarray(col_days),
     )
 
 
@@ -344,8 +374,24 @@ def resolve_arm(mod, arm_id: str) -> dict:
             raise PluginError(f"arm {arm_id!r}: unknown leg_b {leg_b!r}; known: {leg_b_keys()}")
         if leg_b == leg:
             raise PluginError(f"arm {arm_id!r}: leg_b {leg_b!r} is leg A's own instrument")
+    start = spec.get("start")
+    if start is not None:
+        if start != "auto":
+            try:
+                datetime.date.fromisoformat(str(start))
+            except ValueError:
+                raise PluginError(f"arm {arm_id!r}: start must be \"auto\" or YYYY-MM-DD, "
+                                  f"got {start!r}") from None
+    inputs = spec.get("inputs", [])
+    if not isinstance(inputs, (list, tuple)) or not all(isinstance(k, str) for k in inputs):
+        raise PluginError(f"arm {arm_id!r}: inputs must be a list of extra-data key strings")
+    from . import extra as _ext
+
+    for k in inputs:
+        if k not in _ext.keys():
+            raise PluginError(f"arm {arm_id!r}: unknown input {k!r}; known: {sorted(_ext.keys())}")
     return {"rule": rule, "leg": leg, "leg_b": leg_b, "two_leg": leg_b is not None,
-            "cash_yield": cash,
+            "cash_yield": cash, "start": start, "inputs": tuple(inputs),
             # `leg_b` stays in `params` (unlike the engine options `rule`/`leg`/`cash_yield`): a
             # two-leg plugin has to *return* it, so its `targets(data, spec)` must be able to read
             # the instrument the arm was registered with.

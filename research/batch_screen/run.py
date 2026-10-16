@@ -119,12 +119,23 @@ def plan(ideas, batch, cash_yield="none", allow_dirty=False):
 
 
 # ----------------------------------------------------------------------------- control record
-def control_record(cash_yield="none", stage2=True, quiet=True):
-    """The control's stage-1/stage-2 record and its raw bootstrap vectors."""
+def control_file(batch_dir, win=None) -> Path:
+    """The batch's cached control record for one window (`_control.json` for the published one)."""
+    win = win or windows.DEFAULT_WINDOW
+    return Path(batch_dir) / ("_control.json" if not win.reduced else f"_control_{win.tag}.json")
+
+def control_record(cash_yield="none", stage2=True, quiet=True, win=None):
+    """The control's stage-1/stage-2 record and its raw bootstrap vectors, on `win`.
+
+    `win` defaults to the published main window; a reduced window re-simulates K itself on that
+    window (and draws its block bootstrap from that window's pool), which is what keeps every
+    arm's Δ paired when the arm declared a later start.
+    """
     arm = control_spec()
+    win = win or windows.DEFAULT_WINDOW
     t0 = time.time()
-    rec = stages.stage1(arm, cash_yield)
-    b12 = stages.stage1_vectors(arm, cash_yield, quiet=quiet, label="control")
+    rec = stages.stage1(arm, cash_yield, win=win)
+    b12 = stages.stage1_vectors(arm, cash_yield, quiet=quiet, label="control", win=win)
     rec["boot"] = {"pre": {}, "tax": {}}
     rec["boot_level"] = {"pre": {}, "tax": {}}
     for md in ("base", "calibrated"):
@@ -136,7 +147,7 @@ def control_record(cash_yield="none", stage2=True, quiet=True):
         rec["boot"]["tax"][md] = B.delta_stats(v - v)
         rec["boot_level"]["tax"][md] = B.delta_stats(v)
     rec["after_tax"].update({k: v for k, v in
-                             stages.stage2_main_windows(arm, cash_yield).items()
+                             stages.stage2_main_windows(arm, cash_yield, win=win).items()
                              if k not in rec["after_tax"]})
     vec = {"pre": {md: b12["pre"][md][CONTROL_ARM].tolist() for md in b12["pre"]},
            "tax": {md: b12["tax"][GATE_CAPITAL][md][CONTROL_ARM].tolist()
@@ -144,8 +155,8 @@ def control_record(cash_yield="none", stage2=True, quiet=True):
     if stage2:
         rec["oos"] = stages.stage2_oos(arm, cash_yield)
         rec["etf_pre"], rec["etf_after_tax"] = stages.stage2_instruments(arm, cash_yield)
-        rec["rolling"] = stages.stage2_rolling(arm, cash_yield)
-        fresh = stages.stage2_fresh(arm, cash_yield, label="control fresh")
+        rec["rolling"] = stages.stage2_rolling(arm, cash_yield, win=win)
+        fresh = stages.stage2_fresh(arm, cash_yield, label="control fresh", win=win)
         rec["fresh"] = {blk: {"tax": {md: list(fresh[blk]["tax"][GATE_CAPITAL][md][CONTROL_ARM])
                                       for md in fresh[blk]["tax"][GATE_CAPITAL]}}
                         for blk in fresh}
@@ -156,7 +167,7 @@ def control_record(cash_yield="none", stage2=True, quiet=True):
         rec["oos_pooled"] = crec_pool
         vec["oos_pooled"] = pooled["pooled"][CONTROL_ARM].tolist()
     return {"arm": CONTROL_ARM, "cash_yield": cash_yield, "spec": arm["spec"], "record": rec,
-            "vectors": vec,
+            "vectors": vec, "win": win.as_dict(),
             "params": {"seed": SEED, "block": BLOCK, "n_pre": PRE_BOOT_PATHS, "n_tax": TAX_BOOT_PATHS,
                        "capital": GATE_CAPITAL, "fresh_seed": stages.FRESH_SEED,
                        "fresh_blocks": list(stages.E3_BLOCKS),
@@ -164,14 +175,16 @@ def control_record(cash_yield="none", stage2=True, quiet=True):
             "wall_s": time.time() - t0}
 
 
-def load_control(batch_dir: Path, cash_yield="none", require_stage2=True, quiet=True):
-    """The batch's control record, computed once and cached."""
-    path = batch_dir / "_control.json"
+def load_control(batch_dir: Path, cash_yield="none", require_stage2=True, quiet=True, win=None):
+    """The batch's control record for one window, computed once and cached in `_control.json`
+    (`_control_<tag>.json` for a reduced window)."""
+    win = win or windows.DEFAULT_WINDOW
+    path = control_file(batch_dir, win)
     if path.exists():
         ctrl = json.loads(path.read_text())
         if ctrl.get("cash_yield") == cash_yield and (not require_stage2 or "oos" in ctrl["record"]):
             return ctrl
-    ctrl = control_record(cash_yield, stage2=require_stage2, quiet=quiet)
+    ctrl = control_record(cash_yield, stage2=require_stage2, quiet=quiet, win=win)
     dump(path, ctrl)
     return ctrl
 
@@ -194,23 +207,28 @@ def _arm_task(payload):
     idea_id, arm_id, batch, cash_yield, batch_dir, stage2_allowed, quiet = payload
     t0 = time.time()
     arm = api.load_arm(idea_id, arm_id)
-    ctrl = json.loads((Path(batch_dir) / "_control.json").read_text())
-    crec, cvec = ctrl["record"], ctrl["vectors"]
     out = {
         "arm": arm["id"], "idea": idea_id, "arm_id": arm_id, "spec": arm["spec"],
         "rule": arm["rule"], "leg": arm["leg"], "cash_yield": arm["cash_yield"],
         "hashes": {"code": api.code_hash(idea_id), "spec": api.spec_hash(arm["spec"])},
-        "batch": batch, "date": date.today().isoformat(),
+        "batch": batch, "date": date.today().isoformat(), "win": None,
         "stage1": None, "stage1_gates": None, "stage1_pass": None,
         "stage2": None, "gates": None, "stage2_pass": None, "b1_delta_pp": [],
         "boot_params": {"seed": SEED, "block": BLOCK, "n_pre": PRE_BOOT_PATHS,
                         "n_tax": TAX_BOOT_PATHS, "capital": GATE_CAPITAL},
     }
+    try:
+        win = windows.arm_window(arm)
+    except api.NotApplicable as exc:
+        return _na_record(out, batch_dir, "declared window (spec[\"start\"])", exc.reason, t0)
+    out["win"] = win.as_dict()
+    ctrl = json.loads(control_file(batch_dir, win).read_text())
+    crec, cvec = ctrl["record"], ctrl["vectors"]
     where = "main window (stage 1)"
     try:
-        rec = stages.stage1(arm, cash_yield)
+        rec = stages.stage1(arm, cash_yield, win=win)
         where = "stage-1 block bootstrap"
-        b12 = stages.stage1_vectors(arm, cash_yield, quiet=quiet, label=arm["id"])
+        b12 = stages.stage1_vectors(arm, cash_yield, quiet=quiet, label=arm["id"], win=win)
     except api.NotApplicable as exc:
         # stage 1 requires the main window (and therefore its own bootstrap) to be applicable
         return _na_record(out, batch_dir, where, exc.reason, t0)
@@ -230,7 +248,8 @@ def _arm_task(payload):
         rec["boot_level"]["tax"][md] = B.delta_stats(v)
         delta_vec[f"tax_{md}"] = d
     try:
-        rec["after_tax"].update({k: v for k, v in stages.stage2_main_windows(arm, cash_yield).items()
+        rec["after_tax"].update({k: v for k, v in
+                                 stages.stage2_main_windows(arm, cash_yield, win=win).items()
                                  if k not in rec["after_tax"]})
     except api.NotApplicable as exc:
         return _na_record(out, batch_dir, "after-tax window (2010/2017)", exc.reason, t0)
@@ -243,9 +262,9 @@ def _arm_task(payload):
         s2["etf_pre"], s2["etf_after_tax"] = stages.stage2_instruments(arm, cash_yield)
         where = "rolling January starts"
         try:
-            s2["rolling"] = stages.stage2_rolling(arm, cash_yield)
+            s2["rolling"] = stages.stage2_rolling(arm, cash_yield, win=win)
             where = "fresh-seed bootstrap"
-            fresh = stages.stage2_fresh(arm, cash_yield, label=arm["id"])
+            fresh = stages.stage2_fresh(arm, cash_yield, label=arm["id"], win=win)
             s2["fresh"] = {blk: {"tax": {md: list(fresh[blk]["tax"][GATE_CAPITAL][md][arm["id"]])
                                          for md in fresh[blk]["tax"][GATE_CAPITAL]}}
                            for blk in fresh}
@@ -299,9 +318,9 @@ def scoreboard(batch, batch_dir, control, arms, defl=None):
         f"registered trials N = {n} (`research/batch_screen/REGISTRY.jsonl`; N counts distinct "
         "`(idea, arm, spec_hash)`, the deflation's multiple-testing count).",
         "",
-        "| arm | stage 1 | stage 2 | failed gates | AT2000 Δ | B1 med/share | B2 med/share | "
-        "OOS med Δ | ETFs med Δ | fresh | RW p | final |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| arm | window | stage 1 | stage 2 | failed gates | AT2000 Δ | B1 med/share | "
+        "B2 med/share | OOS med Δ | ETFs med Δ | fresh | RW p | final |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     rows, manual = [], []
     for a in arms:
@@ -338,7 +357,11 @@ def scoreboard(batch, batch_dir, control, arms, defl=None):
         else:
             final = "not declared (deflation)"
         s1_cell = "control" if ctrl else ("n/a" if na else ("PASS" if r["stage1_pass"] else "FAIL"))
+        w = r.get("win") or {}
+        win_cell = "-" if not w else ("default" if w.get("tag") == "default"
+                                      else f"**{w['tag']}**")
         cells = [
+            win_cell,
             s1_cell,
             r["verdict"],
             ", ".join(g.get("failed", [])) or "-",
@@ -379,6 +402,22 @@ def scoreboard(batch, batch_dir, control, arms, defl=None):
     return "\n".join(lines) + "\n"
 
 
+def batch_windows(arms) -> dict:
+    """The distinct main windows a batch's arms declared, keyed by tag (published one first).
+
+    A window whose declaration is not evaluable (shorter than `MIN_WINDOW_YEARS`, an `"auto"`
+    input with no data) is left out here; the arm's own record carries the `not_applicable`
+    verdict the worker produces.
+    """
+    out = {"default": windows.DEFAULT_WINDOW}
+    for a in arms:
+        try:
+            w = windows.arm_window(a)
+        except api.NotApplicable:
+            continue
+        out[w.tag] = w
+    return out
+
 def run_batch(batch, ideas, cash_yield="none", workers=None, stage2=True, allow_dirty=False,
               quiet=False):
     t0 = time.time()
@@ -395,7 +434,14 @@ def run_batch(batch, ideas, cash_yield="none", workers=None, stage2=True, allow_
     arms, skipped = plan(ideas, batch, cash_yield, allow_dirty)
     for key, why, note in skipped:
         print(f"  {key}: {why} -- {note}", flush=True)
-    ctrl = load_control(batch_dir, cash_yield, require_stage2=stage2, quiet=quiet)
+    wins = batch_windows(arms)
+    ctrls = {}
+    for tag in sorted(wins):
+        if tag != "default" and not quiet:
+            print(f"  reduced window {tag}: the batch's control is re-simulated on it", flush=True)
+        ctrls[tag] = load_control(batch_dir, cash_yield, require_stage2=stage2, quiet=quiet,
+                                  win=wins[tag])
+    ctrl = ctrls["default"]
     candidates = [a for a in arms if a["id"] != CONTROL_ARM]
     timing = {}
     if candidates:
@@ -427,6 +473,7 @@ def run_batch(batch, ideas, cash_yield="none", workers=None, stage2=True, allow_
     files = sorted(p for p in batch_dir.glob("*__*.json") if not p.name.startswith("_"))
     agg = {"batch": batch, "control": CONTROL_ARM, "cash_yield": cash_yield,
            "n_registered_trials": registry.n_trials(), "params": ctrl["params"],
+           "windows": {tag: w.as_dict() for tag, w in sorted(wins.items())},
            "arms": [json.loads(p.read_text()) for p in files]}
     dump(batch_dir / "RESULTS.json", agg)
     defl = deflate_batch(batch) if stage2 else None
@@ -465,11 +512,17 @@ def deflate_batch(batch=None, alpha=0.05, resamples=2000):
     out["batch"] = batch or "all"
     out["registry_trials"] = registry.n_trials()
     stage2 = {}
+    tags = set()
     for p in sorted(RESULTS.glob("*/*__*.json")):
         if batch is not None and p.parent.name != batch:
             continue
         r = json.loads(p.read_text())
         stage2[r["arm"]] = bool(r.get("stage2_pass"))
+        tags.add((r.get("win") or {}).get("tag", "default"))
+    # every Δ vector is the arm's *paired* advantage over K on the window the arm declared, so
+    # the comparison across arms is between advantages; the window tags say which pools are in
+    # play (a single-pool batch carries `["default"]` only).
+    out["window_tags"] = sorted(tags)
     out["stage2_pass"] = sorted(a for a, v in stage2.items() if v)
     out["deflation_rejected"] = list(out.get("declared", []))
     out["declared"] = sorted(a for a in out["deflation_rejected"] if stage2.get(a, False))

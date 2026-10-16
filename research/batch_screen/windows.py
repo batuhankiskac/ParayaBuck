@@ -12,17 +12,59 @@ wrapper. Windows:
 
 from __future__ import annotations
 
+import bisect
+from dataclasses import dataclass
+
 import numpy as np
 
-from research.fast_engine import fe_data, fe_signals, fe_sim
-from research.fast_engine.fe_config import EXP_Q, EXTRA_FIN, START
+from research.fast_engine import fe_data, fe_signals, fe_sim, fe_study
+from research.fast_engine.fe_config import (
+    E2_START_YEARS,
+    EXP_Q,
+    EXTRA_FIN,
+    START,
+    TAX_WINDOWS,
+)
 
-from .api import DEFAULT_LEG, panel
+from .api import DEFAULT_LEG, LEGS, NotApplicable, panel
 from .rules import cash_rates
 
 _BARS = {}
 _UFE = {}
 _ENV = {}
+
+#: a reduced window shorter than this (calendar years, from the session before its first to its
+#: last) is not evaluable at all: `arm_window` raises `NotApplicable`.
+MIN_WINDOW_YEARS = 10.0
+
+#: the bootstrap pool of a reduced window: the drawn session positions of the main window's own
+#: return pool (`pos = session - 1`), restricted to the window. Same seed/block semantics, a
+#: shorter pool (see `boot_pool`).
+
+@dataclass(frozen=True)
+class Window:
+    """The main window an arm is evaluated on: its first measured session (`i0`) and a tag.
+
+    `default` is the published main window (2000-03-09 -> 2026-09-29); any other tag is a
+    *reduced* window an arm declared with `"start"` in its spec (see README §2a and the
+    pre-registration's amendment): stage 1, stage 2 and the block bootstrap then all run on
+    `[i0, last]`, and the control is re-simulated on the same window so every Δ stays paired.
+    """
+
+    i0: int = START
+    tag: str = "default"
+    declared: str | None = None
+    inputs: tuple = ()
+
+    @property
+    def reduced(self) -> bool:
+        return self.tag != "default"
+
+    def as_dict(self) -> dict:
+        return {"start": int(self.i0), "tag": self.tag, "declared": self.declared,
+                "inputs": list(self.inputs)}
+
+DEFAULT_WINDOW = Window()
 
 
 def bars():
@@ -134,6 +176,122 @@ def rolling_start_index(days, year: int) -> int:
 
     return bisect.bisect_left(days, f"{year}-01-01")
 
+# ----------------------------------------------------------------------------- reduced windows
+def win_tag(days, i0: int) -> str:
+    """The record's window tag: `default` for the published start, else `w<first session>`."""
+    return "default" if int(i0) == START else "w" + str(days[int(i0)]).replace("-", "")
+
+
+def input_start_index(days, key: str, window: str = "main"):
+    """First session index of `days` on which the extra-data `key` has a value, or None.
+
+    The series' own registered range (`EXTRA_DATA.json`) is what this reads; the panel's
+    alignment is by date (`extra.values_on`), so the answer is the first session the arm's input
+    really covers.
+    """
+    from . import extra as _ext
+
+    v = _ext.values_on(_ext.resolve_series(key, window), days)
+    fin = np.flatnonzero(np.isfinite(v))
+    return int(fin[0]) if fin.size else None
+
+
+def arm_window(arm, days=None) -> Window:
+    """The main window an arm declared (`spec["start"]`), resolved against the data.
+
+    Rules (pre-registered, see README §2a):
+
+    * no `start` -> the published window (`START`, tag `default`): nothing changes for an arm
+      that does not ask for a reduced window;
+    * `start = "YYYY-MM-DD"` -> the first session at or after it, never before the published
+      warm-up start (`START`, the 2001-session vote's own beginning);
+    * `start = "auto"` -> the later of the published start and the **first session every declared
+      input covers**, moved one session forward (the engine reads the previous close at `i0 - 1`,
+      so the input must reach `i0 - 1` for the fill to be defined). The inputs are the arm's
+      `inputs` list plus its `leg_b` when that is an extra-data key (a panel leg has the window's
+      own history). This is the rule that unblocks an idea whose second instrument starts after
+      2000-03-09 (LQD 2002-07, IEF 2002-07, TIP 2003-12, GLD 2004-11, GDX 2006-05, HYG 2007-04
+      ...): before its own start the arm has no price, and the framework refuses a leg-B series
+      with a hole rather than invent one.
+
+    A window shorter than `MIN_WINDOW_YEARS` calendar years is `NotApplicable`, and so is an
+    `"auto"` window whose declared input has no value anywhere in the panel.
+    """
+    declared = arm.get("start")
+    if declared is None:
+        # opt-in: an arm that declares nothing keeps the published window untouched, so every
+        # published number (and every arm of every earlier batch) is unchanged
+        return DEFAULT_WINDOW
+    if days is None:
+        days = bars()[0]
+    i0 = START
+    inputs = tuple(arm.get("inputs") or ())
+    leg_b = arm.get("leg_b")
+    if leg_b is not None and leg_b not in LEGS:
+        inputs = inputs + (leg_b,)
+    if declared == "auto":
+        for key in inputs:
+            j = input_start_index(days, key)
+            if j is None:
+                raise NotApplicable(f"the window is \"auto\" but the input {key!r} has no value "
+                                    "in this panel")
+            i0 = max(i0, j + 1)
+    else:
+        i0 = max(i0, bisect.bisect_left(days, str(declared)))
+    win = Window(i0=int(i0), tag=win_tag(days, i0), declared=declared, inputs=inputs)
+    years = fe_sim.calendar_years(days[win.i0 - 1], days[-1])
+    if years < MIN_WINDOW_YEARS:
+        raise NotApplicable(
+            f"the reduced window {days[win.i0]}..{days[-1]} is {years:.1f} years long, less than "
+            f"the pre-registered {MIN_WINDOW_YEARS:.0f}")
+    return win
+
+
+def after_tax_windows(days, win: Window | None = None) -> dict:
+    """The three published after-tax windows, clipped up to the window's own start.
+
+    A window that starts before the arm's reduced start is **clipped** (`max(declared start,
+    win.i0)`), not dropped: the arm's after-tax block then measures its own window against a
+    control re-simulated on the same one, and the record's `window` cell names the window that
+    really ran. An arm whose reduced start leaves fewer than three *distinct* windows (after
+    2017 the three clip onto the same window) is still evaluated on all three keys -- the gate
+    iterates `TAX_WINDOWS` -- and the record shows the clipping.
+    """
+    win = win or DEFAULT_WINDOW
+    out = {}
+    for name, (a, b) in TAX_WINDOWS.items():
+        j0, j1 = fe_study.window_indices(days, a, b)
+        out[name] = (max(j0, win.i0), j1)
+    return out
+
+
+def rolling_starts(days, win: Window | None = None) -> dict:
+    """The E2 rolling January starts, dropping the ones that begin before the window."""
+    win = win or DEFAULT_WINDOW
+    out = {}
+    for yr in E2_START_YEARS:
+        i0 = rolling_start_index(days, yr)
+        if i0 >= win.i0:
+            out[str(yr)] = i0
+    return out
+
+
+def boot_pool(days, win: Window | None = None) -> tuple:
+    """The block bootstrap's restricted source pool, as `(lo, hi)` in drawn-position space.
+
+    `fe_boot.draw_positions` draws positions in `[0, npool)` and the chunk builder reads
+    `q[pos + 1]`, so session `i` of the main window is position `i - 1` (session 0 is never drawn:
+    the published pool is `arange(1, Tsrc)`). Restricting the pool to the window keeps the
+    seed/block semantics (one `integers`, one `random`, one `integers` per path, in the published
+    order) with `npool` = the number of sessions the window covers.
+    """
+    win = win or DEFAULT_WINDOW
+    if not win.reduced:
+        # the published pool: every session but the first, from the top of the history -- a
+        # default-window arm must draw exactly the paths the campaign's B1/B2 draw
+        return 0, len(days) - 2
+    return int(win.i0) - 1, len(days) - 2
+
 
 # ----------------------------------------------------------------------------- helpers
 def e2_of(price):
@@ -155,15 +313,24 @@ def window_cells(nav, days, i0, i1):
 
 
 __all__ = [
+    "DEFAULT_WINDOW",
+    "MIN_WINDOW_YEARS",
+    "Window",
+    "after_tax_windows",
+    "arm_window",
     "bars",
+    "boot_pool",
     "e2_of",
+    "input_start_index",
     "instrument_panel",
     "instrument_start",
     "main_panel",
     "oos_panel",
     "rolling_start_index",
+    "rolling_starts",
     "try_env",
     "ufe",
     "usd_env",
+    "win_tag",
     "window_cells",
 ]

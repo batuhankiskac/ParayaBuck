@@ -59,3 +59,30 @@ The bank's arm texts are ambiguous in four places; the reading frozen in the cod
 `needs_kernel`: **IC36** (all three arms: a 3–4-instrument blend in one account, rescaled monthly)
 and **IC34 arm C** (XLU + XLP + leg A = three instruments) — registered, never simulated, per
 `README.md`'s "not expressible yet" list. No other arm needed a kernel change.
+
+## Holdout coverage: the extra-key legs are structurally `holdout_insufficient`
+
+Measured on the framework's own windows (`windows.oos_panel` / `instrument_panel` +
+`MarketData.leg_b_usable`, no simulation):
+
+* every one of the six OOS windows starts long before any ETF exists (M2 1935-01-08, `GSPC_1957_1999`
+  1957-01-02, M3 1966-01-19, M1 1975-01-02, M5 1985-01-02, M4 1989-01-03), and
+  `stages.run_one` refuses a window whose leg-B series does not reach its first session. So
+  **all six OOS windows are `NotApplicable` for every extra-key leg B** (LQD 2002-07, IEF/SHY
+  2002-07, TIP 2003-12, GLD 2004-11, GDX 2006-05, HYG 2007-04, and the registered sector SPDRs
+  1998-12 as well) — 0 of 6, where G7 needs `OOS_MIN_APPLICABLE = 3`. The bank's
+  `oos.evaluable: [M3, M4, M5]` fields assume the foreign OOS windows start after 2002-2007; they
+  do not. This is not new to these arms: the already-registered two-leg arms `IB25_2L`/`IB26_2L`
+  have the same property (checked with the same call), and it is a property of the framework's
+  design (OOS windows are "other markets and unchanged", `README.md` §1a), not a bug in it — no
+  framework file was edited.
+* the E1 stage's leg-B check runs from panel index 253 (`stages.stage2_instruments`), so the
+  applicable share of the 21 instruments is LQD 2/21, TIP 1/21, IEF 2/21, XLU 13/21, XLP 13/21,
+  HYG 0/21, GDX 0/21 — all below `ETF_MIN_APPLICABLE = 15`.
+
+Consequence recorded for the batch screen's own report: if an extra-key arm survives stage 1 it
+lands on `verdict = holdout_insufficient` ("not a pass", listed under "manual confirmation"), and
+the informative content of the screen is then stage 1 (main window + B1 bootstrap) against K on its
+own reduced window. Only IC38 (panel `1x` leg) has a fully evaluable holdout (6/6 OOS windows,
+21/21 instruments). Nothing here changes an arm's code, spec or gate: it is what the framework will
+print, so it is written down before the run.

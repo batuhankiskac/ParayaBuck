@@ -1,0 +1,20 @@
+{
+ "harness_pass": true,
+ "off": {
+  "cells": 1260,
+  "max_abs_diff": 0.0,
+  "max_abs_nav_diff": 0.0,
+  "nav_bitwise_identical": true,
+  "pass": true
+ },
+ "off_boot": {
+  "cells": 24,
+  "max_abs_diff": 0.0,
+  "max_abs_diff_pre": 0.0,
+  "max_abs_diff_tax": 0.0,
+  "n_arms": 3,
+  "n_paths": 32,
+  "nan_pattern_matches": true,
+  "pass": true
+ }
+}

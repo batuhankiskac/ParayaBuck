@@ -49,8 +49,13 @@ ROOT = Path(__file__).resolve().parents[2]
 IDEAS_DIR = ROOT / "research" / "ideas"
 
 #: the legs every window offers (see `leg` below). "2x" is the campaign's synthetic daily-reset
-#: 2x leg (the published one); "1x" is the same underlying at gearing 1 with no cost.
-LEGS = ("2x", "1x")
+#: 2x leg (the published one); "1x" is the same underlying at gearing 1 with no cost; "2x_spy" is
+#: the S&P 500 daily-reset 2x leg of `research/fast_engine_opts` (IC40), which a window without an
+#: SPY series resolves to a copy of its own "2x" leg (see `bridge.prepare_panel`). The name must
+#: equal `research.fast_engine_opts.fe_opts_legs.LEG_SPY` (a test asserts it); it is repeated here
+#: as a literal because that package imports this one.
+LEG_SPY = "2x_spy"
+LEGS = ("2x", "1x", LEG_SPY)
 DEFAULT_LEG = "2x"
 DEFAULT_RULE = "K"
 CASH_YIELDS = ("none", "tbill")
@@ -149,6 +154,11 @@ class MarketData:
     extra_days: np.ndarray | None = None
     extra_index: np.ndarray | None = None
     extra_window: str | None = None
+    #: the raw input triple the legs were built from, `((o, c, d) of leg 2x, ... of leg 1x)`.
+    #: `research/fast_engine_opts.fe_opts_legs.repanel` rebuilds a panel from it (net dividends,
+    #: a second underlying) without re-reading any data; it is the same arrays `panel()` was
+    #: handed, not a copy.
+    raw: tuple | None = None
 
     def __post_init__(self):
         self.vol = fe_signals.vol_n(self.legs[self.leg][1])
@@ -267,6 +277,7 @@ def panel(days, *, price, div, rate, o2, c2, d2, o1=None, c1=None, d1=None, fin=
         extra_days=None if extra_days is None else np.asarray(extra_days),
         extra_index=None if extra_index is None else np.asarray(extra_index, dtype=np.int64),
         extra_window=extra_window,
+        raw=((o2, c2, d2), (o1, c1, d1)),
     )
 
 
@@ -320,7 +331,7 @@ def idea_kernel_note(mod) -> str | None:
 
 def resolve_arm(mod, arm_id: str) -> dict:
     """The arm's spec, with the engine options filled in and validated. Raises `NeedsKernel`."""
-    from .rules import RULES  # local import: rules imports api
+    from .rules import RULES, opts_of  # local import: rules imports api
 
     spec = dict(mod.ARMS[arm_id])
     note = spec.get("needs_kernel") or idea_kernel_note(mod)
@@ -344,8 +355,13 @@ def resolve_arm(mod, arm_id: str) -> dict:
             raise PluginError(f"arm {arm_id!r}: unknown leg_b {leg_b!r}; known: {leg_b_keys()}")
         if leg_b == leg:
             raise PluginError(f"arm {arm_id!r}: leg_b {leg_b!r} is leg A's own instrument")
+    if leg == LEG_SPY and leg_b is not None:
+        raise PluginError(f"arm {arm_id!r}: the option leg {LEG_SPY!r} is single-leg only")
     return {"rule": rule, "leg": leg, "leg_b": leg_b, "two_leg": leg_b is not None,
             "cash_yield": cash,
+            #: the rule's kernel options (`research/fast_engine_opts.bridge`), {} for the engine's
+            #: four rules. Empty means "the engine", which is what every driver branches on.
+            "opts": opts_of(rule),
             # `leg_b` stays in `params` (unlike the engine options `rule`/`leg`/`cash_yield`): a
             # two-leg plugin has to *return* it, so its `targets(data, spec)` must be able to read
             # the instrument the arm was registered with.

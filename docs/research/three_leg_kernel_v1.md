@@ -121,10 +121,10 @@ def targets(data, spec):
   (a multi-leg group shares the chunk's drawn paths with the control, so Δ stays paired), the same
   `NotApplicable` rule, the same deflation.
 
-The framework harness (`python -m research.batch_screen.run --harness`) went from **116 to 138
+The framework harness (`python -m research.batch_screen.run --harness`) went from **116 to 139
 checks**, all green: the published cells plus the N-leg routing cells (`run.multi_leg_checks`,
 `run.multi_leg_kernel_parity`) and the kernel's own 205 parity cells. The pytest suite is **145
-tests** (`tests/test_multi_leg.py`, 14 new).
+tests** (`tests/test_multi_leg.py`, 15 new).
 
 ## 5. What is now expressible, and what remains blocked
 
@@ -153,8 +153,8 @@ tests** (`tests/test_multi_leg.py`, 14 new).
 R=~/.venvs/pb-research/bin/python
 PYTHONPATH=. $R -m research.fast_engine.parity --quick         # PASS (the engine)
 PYTHONPATH=. $R -m research.fast_engine3.fe3_parity --write    # 206 cells -> PARITY3.json
-PYTHONPATH=. $R -m research.batch_screen.run --harness         # 138 checks -> HARNESS.json
-PROJ_VENV=…/ParayaBuck/.venv sh research/batch_screen/tests/run.sh   # 146 tests
+PYTHONPATH=. $R -m research.batch_screen.run --harness         # 139 checks -> HARNESS.json
+PROJ_VENV=…/ParayaBuck/.venv sh research/batch_screen/tests/run.sh   # 147 tests
 PYTHONPATH=. $R -m research.three_leg_kernel_v1.run --run      # all of the above + speed
 ```
 

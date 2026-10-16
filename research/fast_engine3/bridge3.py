@@ -71,15 +71,17 @@ def needs_kernel3(arm) -> bool:
     """True when the arm must run on `fe3_sim`: > 2 legs, a margin loan on two, or a `2x_spy` leg
     beside another instrument.
 
-    A *single*-leg `2x_spy` arm keeps the published path (`fast_engine_opts.bridge.prepare_panel`,
-    IC40); a two-leg arm holding `2x_spy` and an arm with a loan need this kernel.
+    A *single*-leg arm keeps the published single-leg paths: a `2x_spy` leg A is IC40's
+    `bridge.prepare_panel`, and a single-leg `margin_spread` (IC39) is the option kernel's own
+    `mrate`, which `fast_engine_opts.bridge.bundle_for` builds. Only a second instrument makes the
+    loan this kernel's job.
     """
     legs = arm_legs(arm)
     if len(legs) >= 3:
         return True
-    if margin_spread(arm) is not None:
+    if len(legs) == 2 and (margin_spread(arm) is not None or LEG_SPY in legs):
         return True
-    return len(legs) == 2 and LEG_SPY in legs
+    return False
 
 
 # ----------------------------------------------------------------------------- panels

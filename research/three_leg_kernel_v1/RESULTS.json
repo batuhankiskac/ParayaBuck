@@ -2,7 +2,7 @@
  "counts": {
   "bootstrap_cells": 16,
   "engine_identity_cells": 168,
-  "framework_harness_checks": 138,
+  "framework_harness_checks": 139,
   "margin_cells": 7,
   "parity_cells": 206,
   "twoleg_identity_cells": 60
@@ -66,7 +66,7 @@
  "framework_harness": {
   "all": true,
   "failed": [],
-  "n_checks": 138
+  "n_checks": 139
  },
  "parity": {
   "after_tax_windows": {

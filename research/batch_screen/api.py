@@ -454,9 +454,6 @@ def resolve_arm(mod, arm_id: str) -> dict:
         margin_spread = float(margin_spread)
         if not np.isfinite(margin_spread) or margin_spread < 0.0:
             raise PluginError(f"arm {arm_id!r}: margin_spread must be finite and >= 0")
-        if not multi:
-            raise PluginError(f"arm {arm_id!r}: margin_spread needs a multi-leg arm (declare "
-                              "legs/leg_b); the single-leg option kernel carries margin itself")
     if multi and opts and set(opts) != {"margin_spread"}:
         raise PluginError(f"arm {arm_id!r}: only the margin loan (margin_spread) reaches the "
                           f"multi-leg kernel; {sorted(opts)} are single-leg options")

@@ -56,6 +56,9 @@ ARMS = {
                       "kind": "sleeve", "sleeve": 0.25},
     "spy_pair": {"rule": "K", "legs": ["2x", "2x_spy"], "cash_yield": "none", "kind": "pair",
                  "share_a": 0.5},
+    # a *single*-leg loan (IC39's shape): the published option kernel's own `mrate`, not this one
+    "one_leg_loan": {"rule": MARGIN_RULE, "leg": "2x", "cash_yield": "none", "kind": "one_leg",
+                     "gross": 2.0},
 }
 
 
@@ -65,6 +68,8 @@ def targets(data, spec):
     kind = spec["kind"]
     if kind == "zeros":
         return [w, zero, zero]
+    if kind == "one_leg":
+        return float(spec["gross"]) * w
     if kind == "margin":
         return [float(spec["gross"]) * w, zero]
     if kind == "sleeve":

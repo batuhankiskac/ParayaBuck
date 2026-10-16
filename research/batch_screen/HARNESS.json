@@ -239,7 +239,7 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 14.8s -> PARITY.json"
+  "tail": "parity PASS in 13.2s -> PARITY.json"
  },
  "failed": [],
  "multi_leg": {
@@ -254,6 +254,11 @@
    "window": "w20041119"
   },
   "a_margin_arm_bootstraps": {
+   "pass": true
+  },
+  "a_single_leg_loan_keeps_the_option_kernel": {
+   "margin_usd": 256480.58701,
+   "n_legs": 1,
    "pass": true
   },
   "margin_arm_carries_the_loan": {
@@ -307,7 +312,7 @@
    "failed": [],
    "n_cells": 206,
    "pass": true,
-   "wall_s": 2.136514
+   "wall_s": 1.489144
   },
   "bootstrap": {
    "cells": 16,
@@ -323,7 +328,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 14.8s -> PARITY.json"
+   "tail": "parity PASS in 13.2s -> PARITY.json"
   },
   "main_window": {
    "cells": 96,
@@ -350,7 +355,7 @@
    "pass": true
   }
  },
- "n_checks": 138,
+ "n_checks": 139,
  "parity": {
   "boot_vs_engine": {
    "C0_pre_base": {
@@ -771,7 +776,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 14.8s -> PARITY.json"
+   "tail": "parity PASS in 13.2s -> PARITY.json"
   },
   "failed": [],
   "riskoff_divergence_pp": {
@@ -794,7 +799,7 @@
    "failed": [],
    "n_cells": 28,
    "pass": true,
-   "wall_s": 1.059066
+   "wall_s": 0.708458
   },
   "p1_off_identity.base_flat_m1": {
    "max_abs_diff": 0.0,
@@ -1089,5 +1094,5 @@
    "tax_same_both_ways": 0.0
   }
  },
- "wall_s": 60.99269
+ "wall_s": 47.936735
 }

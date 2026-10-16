@@ -907,10 +907,18 @@ def multi_leg_checks():
             and _refuses({"legs": ["gld", "2x"]}, "panel leg")
             and _refuses({"legs": ["2x", "1x"], "leg": "1x"}, "disagrees")
             and _refuses({"legs": ["2x", "1x"], "leg_b": "2x"}, "disagrees")
-            and _refuses({"margin_spread": 0.01}, "multi-leg arm")
             and _refuses({"legs": ["2x", "1x"], "rule": "probe_band0_k"}, "multi-leg kernel")
             and _refuses({"legs": ["2x", "1x"], "margin_spread": float("nan")}, "finite")),
         "rule": "each refusal names its own defect"}
+    # a *single*-leg loan is the option kernel's own `mrate` (IC39): it must keep that path
+    one = multi_leg_probe("one_leg_loan")
+    r1 = stages.run_one(one, p, env, i0, i1, "progressive", 2, 100_000.0)
+    out["a_single_leg_loan_keeps_the_option_kernel"] = {
+        "pass": bool(one["n_legs"] == 1 and one["margin_spread"] == 0.015
+                     and not bridge3.needs_kernel3(one)
+                     and r1["opts_stats"]["margin_usd"] > 0
+                     and r1["cagr_usd_liquidated"] < rc["cagr_usd_liquidated"]),
+        "margin_usd": r1["opts_stats"]["margin_usd"], "n_legs": one["n_legs"]}
     # the bootstrap: the control's paths are untouched, the empty-book arm is the control
     zzb = multi_leg_probe("zeros")
     both = B.boot([ctrl, zzb], n_pre=8, n_tax=8, capitals=("100k",), modes=("progressive",),

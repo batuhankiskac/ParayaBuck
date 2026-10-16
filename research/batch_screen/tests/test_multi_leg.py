@@ -69,15 +69,25 @@ def test_the_legs_declaration_is_validated(tmp_path, monkeypatch):
         api.resolve_arm(mod("'legs': ['2x', '1x'], 'leg': '1x'"), "a")
     with pytest.raises(api.PluginError, match="disagrees"):
         api.resolve_arm(mod("'legs': ['2x', '1x'], 'leg_b': '2x'"), "a")
-    # a loan needs a multi-leg arm
-    with pytest.raises(api.PluginError, match="multi-leg arm"):
-        api.resolve_arm(mod("'margin_spread': 0.01"), "a")
-    with pytest.raises(api.PluginError, match="finite"):
-        api.resolve_arm(mod("'legs': ['2x', '1x'], 'margin_spread': float('nan')"), "a")
-    # a multi-leg arm may not carry a single-leg kernel option
+    # a *single*-leg loan is the published option kernel's own `mrate` (IC39): allowed, and it
+    # must not be routed to the N-leg kernel
     from research.batch_screen import rules
+    from research.fast_engine3 import bridge3
 
     rules.register_rule("t_band0", band=True, usd_rule=True, defer=True, opts={"band_up": 0.0})
+    rules.register_rule("t_margin", band=True, usd_rule=True, defer=True,
+                        opts={"margin_spread": 0.015})
+    one = api.resolve_arm(mod("'margin_spread': 0.01"), "a")
+    assert one["n_legs"] == 1 and one["margin_spread"] == 0.01 and one["opts"] == {
+        "margin_spread": 0.01}
+    assert not bridge3.needs_kernel3(one)
+    with pytest.raises(api.PluginError, match="finite"):
+        api.resolve_arm(mod("'legs': ['2x', '1x'], 'margin_spread': float('nan')"), "a")
+    # a spec-level loan must agree with the rule's own
+    with pytest.raises(api.PluginError, match="disagrees"):
+        api.resolve_arm(mod("'legs': ['2x', '1x'], 'margin_spread': 0.02, 'rule': 't_margin'"),
+                        "a")
+    # a multi-leg arm may not carry a single-leg kernel option
     with pytest.raises(api.PluginError, match="multi-leg kernel"):
         api.resolve_arm(mod("'legs': ['2x', '1x'], 'rule': 't_band0'"), "a")
     # a valid declaration resolves with the legs tuple
@@ -171,6 +181,21 @@ def test_margin_arm_charges_interest(probe):
     assert bill["opts_stats"]["margin_usd"] > 0
     assert on["opts_stats"]["margin_usd"] > bill["opts_stats"]["margin_usd"]
     assert bill["cagr_usd_liquidated"] > on["cagr_usd_liquidated"]
+
+
+def test_a_single_leg_loan_stays_on_the_option_kernel(probe):
+    """IC39's shape: one leg with a loan runs the published single-leg option kernel, not this one."""
+    from research.fast_engine3 import bridge3
+
+    arm = probe_arm(probe, "one_leg_loan")
+    assert arm["n_legs"] == 1 and not bridge3.needs_kernel3(arm)
+    days, p, i0, i1 = windows.main_panel(0.0)
+    env = windows.try_env(days, i0, i1)
+    r = stages.run_one(arm, p, env, i0, i1, "progressive", 2, 100_000.0)
+    ctrl = api.load_arm("k_control", "K")
+    rc = stages.run_one(ctrl, p, env, i0, i1, "progressive", 2, 100_000.0)
+    assert r["opts_stats"]["margin_usd"] > 0
+    assert r["cagr_usd_liquidated"] < rc["cagr_usd_liquidated"]
 
 
 def test_sleeve_over_the_cap_is_funded_by_the_loan(probe):

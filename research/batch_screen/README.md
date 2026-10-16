@@ -508,7 +508,7 @@ PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch --ideas two_leg 
 
 `research/batch_screen/tests/run.sh` (the research venv's numba + the project venv's pytest, see
 the header of that script; it finds the project venv whether or not the worktree sits next to the
-main checkout). 146 tests: the plugin contract and its validation, the leg constructions, the
+main checkout). 147 tests: the plugin contract and its validation, the leg constructions, the
 registry's append-only semantics and commit gate, every stage-1/stage-2 gate branch on synthetic
 records, the deflation's null control/power/monotonicity/DSR properties, the extra-data layer
 (registry resolution, date alignment, the bootstrap chunk convention, ffill, downloads and hashing
@@ -521,7 +521,7 @@ the parity cells (engine `fe_boot.boot`, old `boot_oos_market`, the production R
 contract, the fill-knob routing and the panel column calendar (`tests/test_two_leg.py`, probe
 `probes/two_leg.py`), the `2x_spy` option leg's panel plumbing (`tests/test_spy_leg.py`,
 `PREREGISTRATION.md` §6.3), and the N-leg contract, routing, loan and option leg
-(`tests/test_multi_leg.py`, probe `probes/multi_leg.py`). The harness is **138 checks**: the
+(`tests/test_multi_leg.py`, probe `probes/multi_leg.py`). The harness is **139 checks**: the
 original 59, the two-leg routing checks,
 the two-leg kernel's parity groups, the reduced-window cells (the resolved window, the clipped
 after-tax windows, the dropped rolling starts, the restricted pool and the paired control), the

@@ -1,22 +1,22 @@
 {
  "bootstrap": {
-  "engine_s": 0.253329,
-  "nleg_4legs_s": 0.334921,
+  "engine_s": 0.212924,
+  "nleg_4legs_s": 0.285599,
   "paths": 256,
-  "ratio": 1.322079
+  "ratio": 1.341319
  },
- "harness_s": 62.241274,
- "parity_s": 21.311693,
+ "harness_s": 47.936876,
+ "parity_s": 16.219657,
  "speed_ms": {
-  "engine_1leg_ms": 0.1915,
-  "nleg_1_margin_ms": 0.486999,
-  "nleg_2_ms": 0.377562,
-  "nleg_3_ms": 0.415,
-  "nleg_4_ms": 0.418854,
-  "nleg_4_real_ms": 0.757458,
+  "engine_1leg_ms": 0.157105,
+  "nleg_1_margin_ms": 0.416312,
+  "nleg_2_ms": 0.309188,
+  "nleg_3_ms": 0.346729,
+  "nleg_4_ms": 0.380125,
+  "nleg_4_real_ms": 0.64675,
   "runs": 30,
   "sessions": 6679
  },
- "speed_s": 0.888019,
- "wall_s": 84.440997
+ "speed_s": 0.754535,
+ "wall_s": 64.911076
 }

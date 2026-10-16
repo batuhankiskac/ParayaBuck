@@ -36,7 +36,10 @@ The five options, and what they are for:
 The netting walk selects the loss lots in FIFO order and sums their units; the sale then executes
 them as one `_sell_leg` call, because the engine's FIFO book can only consume from the head -- a
 profitable lot that sits before a loss lot is therefore consumed by the netting sale rather than
-skipped (the walk's skip only decides which lots *count* towards the loss budget).
+skipped (the walk's skip only decides which lots *count* towards the loss budget). The netting sale
+happens in the same session as the fill that triggered it, in the legs' own order: a leg whose own
+fill is executed *after* the netting sale sees the reduced units, so its recomputed target
+difference already includes the netting (a leg filled before the netting sale is not revisited).
 """
 
 from __future__ import annotations

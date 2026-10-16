@@ -125,12 +125,16 @@ indexed per lot) add into one annual net TRY gain. A tax-funding sale sells leg 
 An extra series has one column (its adjusted close), used as both the leg's fill and close price
 (`MarketData.leg_series`); a leg-B series without a price on every session the engine reads makes
 the window `NotApplicable` (`leg_b_usable`; for a bootstrap chunk, on the drawn source sessions),
-so for example a GLD leg is not applicable on the main window (GLD starts 2004-11-18). Bootstrap
-groups are `(leg, leg_b)` and share each chunk's drawn paths, so Δ vs the control stays paired.
-With leg B identically zero the kernel is bit-identical to the engine (`fe2_parity`, in the
-harness). Not expressible yet (still `NEEDS_KERNEL`): a per-session instrument switch, two books
-of the *same* instrument, several cash pools/accounts, per-arm tax regime or capital, and gain-
-aware routing between books (IB38 A/B/C).
+so for example a GLD leg is not applicable on the main window (GLD starts 2004-11-18) **unless the
+arm declares a reduced window** that begins after GLD's first session (§1a). Bootstrap groups are
+`(leg, leg_b)` and share each chunk's drawn paths, so Δ vs the control stays paired. With leg B
+identically zero the kernel is bit-identical to the engine (`fe2_parity`, in the harness). Fill
+options that go beyond the three rule booleans live in a **copy** of the kernel
+(`research/fast_engine2/fe2_opts.py`, §1b): `fe2_sim`/`fe2_boot` are untouched and the copy with
+every option off reproduces them bit for bit. Not expressible yet (still `NEEDS_KERNEL`): a
+per-session instrument switch (the off-state ideas no longer need one — a *fixed* leg B with a
+state-dependent weight is enough, §1b), three instruments in one account, two books of the *same*
+instrument, several cash pools/accounts, a cash loan and per-arm tax regime or capital.
 
 **Availability.** `targets` may raise `api.NotApplicable(reason)` for a window whose inputs do not
 exist (`^VIX` before 1990 for `M2`, a European index for `^N225`, a series that starts after the
@@ -151,6 +155,105 @@ Engine RULE options come from the spec and are the engine's own three booleans:
 * `cash_yield` — `"none"` (default) or `"tbill"` (the session-folded DTB3 schedule of
   `engine README`). It changes every published cell, so it is a batch-level flag: an arm whose
   declaration disagrees with `--cash-yield` is refused.
+* `start` — `"auto"` or `"YYYY-MM-DD"`: the arm is evaluated on the **reduced window** that
+  declaration defines, with K re-simulated on the same window as control. See §1a; an arm that
+  declares nothing is untouched.
+* `inputs` — the extra-data keys the arm reads besides `leg_b`, for `start = "auto"` (and for the
+  record): an undeclared extra series is **not** consulted, so a plugin that reads `data.extra`
+  should list it.
+* `fill_knobs` / `kernel_scope` — the two-leg fill options (`research/fast_engine2/fe2_opts.py`,
+  a copy of the kernel that leaves `fe2_sim`/`fe2_boot` untouched): the gain fraction that keys
+  K's band (`band_score`), a fourth band step (`band_step4_pp`), downsize routing between the two
+  books by indexed gain (`route_cap_pp`), loss netting with a year-to-date gate (`loss_net_frac`,
+  `loss_net_min_ytd_try`), and whether the options act in every stage or only in the taxed ones
+  (`kernel_scope = "all_stages"` | `"after_tax_stage_only"`). Every option off reproduces the
+  published kernel bit for bit; a declaration without `leg_b`, an unknown key or a banded option
+  under a band-less rule is refused (`PluginError`). See §1b.
+
+## 1a. Reduced windows (`start`, `inputs`)
+
+An arm whose second instrument or book begins after 2000-03-09 cannot be screened on the published
+window: the engine reads a leg's price on `[i0, i1]` and the previous close at `i0 - 1`, and
+`leg_b_usable` refuses a series that does not reach every one of those sessions rather than invent a
+price. `start` declares the window instead:
+
+```python
+ARMS = {"A": {"rule": "K", "leg": "2x", "leg_b": "gld", "cash_yield": "none", "start": "auto"}}
+```
+
+The rules (pre-registered in `PREREGISTRATION.md` §6.2):
+
+* no `start` — the published window (2000-03-09 → 2026-09-29): the default code path, unchanged;
+* `start = "YYYY-MM-DD"` — the first session at or after it, never before the published warm-up
+  start (session 253), never past the panel's end;
+* `start = "auto"` — the later of the published start and **the first session every declared input
+  covers, plus one** session (the engine's read of the previous close). The inputs are `inputs`
+  plus `leg_b` when it is an extra-data key; a panel leg (`1x`/`2x`) has the window's own history
+  and never moves the window, so an off-state arm on the `1x` leg needs no `start` at all. An input
+  with no value anywhere in the panel is `NotApplicable`.
+* a window shorter than **10 calendar years** is `NotApplicable`.
+
+What a reduced window changes: the pre-tax block, the three after-tax windows (**clipped up** to
+the window's start — no key is dropped, each cell reports the window that really ran), the January
+rolling starts (**the ones that begin before the window are dropped**; fewer than 15 leaves the
+arm `holdout_insufficient`), and both block bootstraps (**drawn from the window's own sessions**,
+same seed/block/rng order and the same published path length). The six OOS windows, the 21 ETFs and
+the pooled OOS bootstrap are other markets and are unchanged. A pre-tax subperiod the window starts
+inside is not covered (`subperiods_not_covered`) and G4 then judges the covered ones.
+
+The control is re-simulated on the same window — its own `_control_<tag>.json` (e.g.
+`_control_w20041119.json`) with the same `i0`, the same clipped windows, the same dropped starts
+and the same pool — so every Δ stays **paired inside the arm's window**. The record carries the
+window (`win.tag`, `win.declared`, `win.inputs`, the stage-1 `window` block and each after-tax
+cell's own window) and the scoreboard shows the tag. The deflation is on the B1 Δ vectors and
+therefore still works: an arm's Δ is its paired advantage over K **on its own window**, which is
+the comparable quantity; arms on different windows do not share a pool, so `DEFLATION.json` names
+the pools in play (`window_tags`) and their p-values are not the published single-pool ones. An arm
+whose Δ vector is not finite is left out (`excluded_non_finite`) instead of making every other
+arm's p-value NaN.
+
+## 1b. Two-leg fill options (`fill_knobs`, `kernel_scope`)
+
+The published two-leg kernel applies K, A1u or H2 to each leg's own lot book. Four further fill
+decisions — the ones `idea_bank_v2`'s IC42/IC43/IC44 need — live in
+`research/fast_engine2/fe2_opts.py`, a copy of `fe2_sim`/`fe2_boot` with the options as
+parameters (**off = the current kernel, bit for bit**, asserted by `fe2_opts_parity`, which the
+harness runs):
+
+```python
+ARMS = {"A": {"rule": "K", "leg": "2x", "leg_b": "1x", "cash_yield": "none",
+              "fill_knobs": {"band_score": "indexed", "route_cap_pp": 10.0},
+              "kernel_scope": "after_tax_stage_only"}}
+```
+
+| knob | meaning |
+|---|---|
+| `band_score` | `"usd"` (published K), `"indexed"` (the TRY-indexed FIFO gain fraction of the units the sell would consume) or `"max"` of the two — the fraction K's 0.5/3/8 pp widths key on |
+| `band_step4_pp` | a fourth step the band takes above a fixed 0.15 fraction (0 = off) |
+| `route_cap_pp` | on a downsize session, route units from the other leg to the leg with the lower indexed fraction, bounded by that cap (a weight), by the other leg's own sale and by the cheap leg's remaining units (0 = off) |
+| `loss_net_frac` | after a permitted downsize fill with a positive realised TRY gain (taxed modes only), sell the other leg's loss lots, FIFO and indexed per unit, up to this fraction of the gain (0 = off) |
+| `loss_net_min_ytd_try` | the netting sale only fires while the year-to-date realised TRY gain exceeds this (0 = always) |
+| `kernel_scope` | `"all_stages"` (default) or `"after_tax_stage_only"`: the latter runs every pre-tax stage on the published kernel |
+
+The routed quantity is what the band test and the fill use, so a routed leg is judged on what it
+really sells. `NEEDS_KERNEL` still covers: a per-session instrument switch (no longer needed for
+the off-state ideas — IC31–IC38 are a *fixed* leg B whose weight varies, see
+`probes/two_leg.py`), three instruments in one account (IC36, IC34 arm C), a cash loan (IC39), a
+second leg *family* (IC40) and two books of the same instrument (IB38).
+
+**The off-state recipe** (IC31–IC37). "While the trend vote is off, hold 0.98 in X; production
+target otherwise" is a fixed leg B with a state-dependent weight — no instrument switch:
+
+```python
+def targets(data, spec):
+    off = 1.0 - fe_signals.e2_up(data.price)
+    return production_wants(data) * (1.0 - off), 0.98 * off, spec["leg_b"]
+```
+
+With `leg_b` an extra-data key (LQD/HYG/TIP/XLU/GDX/IEF) the arm also declares `start = "auto"`;
+with `leg_b = "1x"` (IC38) it does not. `probes/two_leg.py::gld_offstate` and `onex_offstate` are
+the working fixtures of both forms.
+
 
 Three example plugins reproduce published results exactly (`--harness`, and the `anchors_v1`
 batch): `k_control/K` (production K — the framework's control), `r2_control/R2` (the same target
@@ -277,6 +380,12 @@ resample's own standard error.
 5. The deflated Sharpe here is the *advantage*-Sharpe of the bootstrap Δ distribution, not the
    daily-return Sharpe of the strategy (the screening decision is made on the after-tax CAGR
    advantage, and the deflation is applied to the same statistic).
+6. A **reduced-window** arm's Δ is its paired advantage over K *re-simulated on that same window*
+   (§1a), which is the quantity comparable across arms; its pool is not the published one, so its
+   p-values are not the published single-pool p-values. `DEFLATION.json` names the pools in play
+   (`window_tags`) and lists the arms it had to leave out (`excluded_non_finite`: an arm whose Δ
+   vector contains NaN cannot be studentized, and one NaN would make every other arm's p-value
+   NaN — such an arm can never be declared, its stage-1 after-tax gate fails closed).
 
 ## 5. Outputs, cost, and byte-identical reruns
 
@@ -297,26 +406,38 @@ same deterministic path draw, and the control is computed once per batch and sha
 about 1 s of stage 1 plus (if it survives) 5–10 s of stage 2 on this machine — the synthetic
 scale factor is the full holdout set, not the arm.
 
-**The availability probes.** `probes/` holds two engineering fixtures (never registered as trials —
-they are outside `research/ideas/`) that exercise the `NotApplicable` paths on real data:
-`yield_veto.py` (a `dgs10` veto whose extra series feeds the weights) and `coverage_gate.py`
+**The availability probes.** `probes/` holds engineering fixtures (never registered as trials —
+they are outside `research/ideas/`) that exercise the framework's refusal paths on real data:
+`yield_veto.py` (a `dgs10` veto whose extra series feeds the weights), `coverage_gate.py`
 (`dgs10_gate` applicable on four OOS windows, so G7 runs on four and G8 on `{M1, M3, M4, M5}`;
-`gld_gate` applicable on one, so it must come out `holdout_insufficient`).
+`gld_gate` applicable on one, so it must come out `holdout_insufficient`), and `two_leg.py`
+(`zeros`: leg B identically zero — the control, bit for bit; `split`: a real two-legged account;
+`gld_sleeve`: a leg-B series that does not reach the window; `gld_offstate`: the IC31–IC37
+off-state pattern with `start = "auto"`, which runs a full batch on its own window with its own
+`_control_w20041119.json`; `onex_offstate`: the same pattern on the `1x` panel leg, no reduced
+window).
 
 ```sh
-PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch      # ~50 s, isolated ledger
+PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch                      # ~50 s
+PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch --ideas two_leg       # ~60 s
 ```
 
 ## 6. Tests
 
 `research/batch_screen/tests/run.sh` (the research venv's numba + the project venv's pytest, see
 the header of that script; it finds the project venv whether or not the worktree sits next to the
-main checkout). 110 tests: the plugin contract and its validation, the leg constructions, the
+main checkout). 128 tests: the plugin contract and its validation, the leg constructions, the
 registry's append-only semantics and commit gate, every stage-1/stage-2 gate branch on synthetic
 records, the deflation's null control/power/monotonicity/DSR properties, the extra-data layer
 (registry resolution, date alignment, the bootstrap chunk convention, ffill, downloads and hashing
-— all offline), the availability rules, the ledger's re-verification against git, and
+— all offline), the availability rules, the ledger's re-verification against git, the
+reduced-window rules (the `start`/`inputs` declarations, the window resolution and its 10-year
+floor, the clipped after-tax windows, the dropped rolling starts, the restricted pool and the
+default pool's bit-identity with the published draw), and
 the parity cells (engine `fe_boot.boot`, old `boot_oos_market`, the production R2 target series,
 `vol_shape_v1`'s sizing, and the control's published K cells stage by stage), and the two-leg
-contract and routing (`tests/test_two_leg.py`, probe `probes/two_leg.py`). The harness is 73
-checks: the original 59 plus the two-leg routing checks and the two-leg kernel's parity groups.
+contract, the fill-knob routing and the panel column calendar (`tests/test_two_leg.py`, probe
+`probes/two_leg.py`). The harness is **116 checks**: the original 59, the two-leg routing checks,
+the two-leg kernel's parity groups, the reduced-window cells (the resolved window, the clipped
+after-tax windows, the dropped rolling starts, the restricted pool and the paired control) and the
+option copy's own parity and positive controls (`fe2_opts_parity`, 28 cells).

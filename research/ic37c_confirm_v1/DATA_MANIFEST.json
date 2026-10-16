@@ -1,0 +1,150 @@
+{
+ "fetched": "2026-10-16",
+ "inputs": {
+  "CPIAUCSL": {
+   "bytes": 16373,
+   "columns": [
+    "value"
+   ],
+   "file": "data/historical/ic37c_confirm_v1_cpiaucsl.csv",
+   "range": [
+    "1947-01-01",
+    "2026-09-01"
+   ],
+   "rows": 956,
+   "sha256": "96d5d49aa19316f612b5334bfe1390fcd24e91d94679f3d3b5b50a08938b573a",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
+  },
+  "CPIAUCSL_VINTAGES": {
+   "bytes": 10273,
+   "columns": [
+    "obs_date",
+    "value"
+   ],
+   "file": "data/historical/ic37c_confirm_v1_cpi_vintages.csv",
+   "range": [
+    "1972-07-21",
+    "2002-12-17"
+   ],
+   "rows": 367,
+   "sha256": "323b92ac129a3b3f956aeabaa6fef1798d83f2c58b57c1089918b476b4fb95e2",
+   "source": "ALFRED vintages",
+   "url": "https://alfred.stlouisfed.org/series/downloaddata?seid=CPIAUCSL"
+  },
+  "DFII10": {
+   "bytes": 95442,
+   "columns": [
+    "value"
+   ],
+   "file": "data/historical/ic37c_confirm_v1_dfii10.csv",
+   "range": [
+    "2003-01-02",
+    "2026-10-15"
+   ],
+   "rows": 5951,
+   "sha256": "a9a37431ad17beefeb1b485be0696a4a49302f8cbf6dd1050df800eb5a90b417",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10"
+  },
+  "DGS10": {
+   "bytes": 258337,
+   "columns": [
+    "value"
+   ],
+   "file": "data/historical/ic37c_confirm_v1_dgs10.csv",
+   "range": [
+    "1962-01-02",
+    "2026-10-15"
+   ],
+   "rows": 16182,
+   "sha256": "2f5382ac026d2a8b31c151491c5d9163d44fed85f48714f83f2f3ea0d05d48ce",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
+  },
+  "DGS7": {
+   "bytes": 228649,
+   "columns": [
+    "value"
+   ],
+   "file": "data/historical/ic37c_confirm_v1_dgs7.csv",
+   "range": [
+    "1969-07-01",
+    "2026-10-15"
+   ],
+   "rows": 14312,
+   "sha256": "60e304bd882ab0f6518a5f15155bf2c6d55aa07035641802f18acf54c59538bf",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS7"
+  },
+  "IC37C_BE_PROXY": {
+   "bytes": 402215,
+   "derived_from": [
+    "T10YIE",
+    "CPIAUCSL vintages"
+   ],
+   "file": "data/historical/ic37c_confirm_v1_be_proxy.csv",
+   "range": [
+    "1969-07-01",
+    "2026-10-15"
+   ],
+   "rows": 20926,
+   "sha256": "8e488be34a9b8c23ca7a1be0baaeb5f50c0f889051fd25c5a42be3bc51982f89",
+   "source": "derived (ic37c_confirm_v1.data.build_be_proxy)"
+  },
+  "IC37C_IEF_PROXY": {
+   "bytes": 478980,
+   "derived_from": [
+    "DGS7",
+    "DGS10"
+   ],
+   "file": "data/historical/ic37c_confirm_v1_ief_proxy.csv",
+   "range": [
+    "1969-07-01",
+    "2026-10-15"
+   ],
+   "rows": 20926,
+   "sha256": "c81f58e115cc021eb7813d6fd63f756e67395175e75c2ec11c42fa92a6200d4c",
+   "source": "derived (ic37c_confirm_v1.data.build_ief_proxy)"
+  },
+  "IEF": {
+   "bytes": 210811,
+   "columns": [
+    "close",
+    "adjclose"
+   ],
+   "file": "data/historical/ic37c_confirm_v1_ief.csv",
+   "range": [
+    "2002-07-30",
+    "2026-10-15"
+   ],
+   "rows": 6093,
+   "sha256": "39dd2b653b0ca1faefab233b1a105d0d83d35423ced59340de05b2c7f99c45ac",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/IEF?period1=0&period2=<epoch>&interval=1d&events=div%2Csplit"
+  },
+  "T10YIE": {
+   "bytes": 94624,
+   "columns": [
+    "value"
+   ],
+   "file": "data/historical/ic37c_confirm_v1_t10yie.csv",
+   "range": [
+    "2003-01-02",
+    "2026-10-15"
+   ],
+   "rows": 5951,
+   "sha256": "4cd72854523e4badd91e0db8d8e15e734398a4263ed009c6007d28f5ca9decea",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=T10YIE"
+  }
+ },
+ "note": "Raw inputs from FRED CSV / ALFRED vintages / the Yahoo chart API only; the two derived series are deterministic functions of them (PREREGISTRATION sections 2-3). Nothing in data/historical owned by another study is touched.",
+ "proxy": {
+  "duration_years": 7.5,
+  "expense_ratio": 0.0015,
+  "interpolation": "y75 = 5/6 DGS7 + 1/6 DGS10",
+  "start": "1969-07-01"
+ },
+ "study": "ic37c_confirm_v1"
+}

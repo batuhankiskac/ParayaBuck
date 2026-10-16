@@ -199,10 +199,15 @@ def summary() -> dict:
     }
     for arm in sorted(set(new) | set(old)):
         res["arms"][arm] = {"old_bank_v3": old.get(arm), "new_opts_fix_v1": new.get(arm)}
-    verdict_changed = [a for a in res["arms"]
-                       if (res["arms"][a]["old_bank_v3"] or {}).get("verdict")
-                       != (res["arms"][a]["new_opts_fix_v1"] or {}).get("verdict")]
-    res["verdict_changed"] = verdict_changed
+    # the comparison that matters is the 12 re-run arms (the four ideas), not every bank_v3 arm
+    re_run = sorted(a for a in new if a.split("/")[0] in IDEAS.split(","))
+    res["re_run_arms"] = re_run
+    res["verdict_changed"] = [a for a in re_run
+                              if (res["arms"][a]["old_bank_v3"] or {}).get("verdict")
+                              != (res["arms"][a]["new_opts_fix_v1"] or {}).get("verdict")]
+    # the two-leg ideas (IC31/IC35) must be bit-identical cell for cell -- they never reach the fix
+    res["unchanged_arms"] = [
+        a for a in re_run if res["arms"][a]["old_bank_v3"] == res["arms"][a]["new_opts_fix_v1"]]
     (HERE / "RESULTS.json").write_text(json.dumps(res, indent=1, sort_keys=True, default=float) + "\n")
 
     pd = res["parity"] or {}
@@ -210,11 +215,12 @@ def summary() -> dict:
     lines.append(f"parity: pass={pd.get('pass')} cells={pd.get('n_cells')} "
                  f"non-option bit-identical={not pd.get('non_option_not_bit_identical')} "
                  f"hard_failures={len(pd.get('hard_failures') or [])}")
-    lines.append(f"verdicts changed: {verdict_changed or 'none'}")
+    lines.append(f"verdicts changed: {res['verdict_changed'] or 'none'}")
+    lines.append(f"arms bit-identical to bank_v3: {res['unchanged_arms']}")
     lines.append("")
     lines.append(f"{'arm':10s} {'AT2000 old':>11s} {'new':>11s} {'B1med old':>10s} {'new':>10s} "
                  f"{'B1nan old->new':>15s} {'verdict'}")
-    for arm in sorted(res["arms"]):
+    for arm in re_run:
         o, n = res["arms"][arm]["old_bank_v3"] or {}, res["arms"][arm]["new_opts_fix_v1"] or {}
         lines.append(f"{arm:10s} {str(o.get('after_tax_2000_delta_pp')):>11s} "
                      f"{str(n.get('after_tax_2000_delta_pp')):>11s} "

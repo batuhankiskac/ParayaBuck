@@ -1,0 +1,19 @@
+opts_nan_fix_v1 SUMMARY
+
+parity: pass=True cells=85 non-option bit-identical=True hard_failures=0
+verdicts changed: none
+arms bit-identical to bank_v3: ['IC31/A', 'IC31/B', 'IC31/C', 'IC35/A', 'IC35/B', 'IC35/C']
+
+arm         AT2000 old         new  B1med old        new  B1nan old->new verdict
+IC31/A       -0.228656   -0.228656   0.959438   0.959438            0->0 reject_stage1 -> reject_stage1
+IC31/B        0.280882    0.280882        nan        nan            1->1 reject_stage1 -> reject_stage1
+IC31/C       -0.532648   -0.532648        nan        nan            2->2 reject_stage1 -> reject_stage1
+IC35/A        1.830206    1.830206        nan        nan            8->8 reject_stage1 -> reject_stage1
+IC35/B        1.532914    1.532914  13.815586  13.815586            0->0 reject_stage1 -> reject_stage1
+IC35/C       -0.280216   -0.280216        nan        nan          10->10 reject_stage1 -> reject_stage1
+IC40/A        -1.33877    -1.33877        nan   -0.80912          981->0 reject_stage1 -> reject_stage1
+IC40/B        -1.33877    -1.33877        nan   -0.80912          981->0 reject_stage1 -> reject_stage1
+IC40/C       -2.809626   -2.809626        nan  -0.961678          992->0 reject_stage1 -> reject_stage1
+IC56/A       -0.182495   -0.182495        nan  -0.139618          988->0 reject_stage1 -> reject_stage1
+IC56/B       -0.139958   -0.139958        nan  -0.104884          988->0 reject_stage1 -> reject_stage1
+IC56/C       -0.182495   -0.182495        nan  -0.139618          988->0 reject_stage1 -> reject_stage1

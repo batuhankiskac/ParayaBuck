@@ -107,3 +107,50 @@ second-level resamples, seed 20261016) `p_adjusted ≤ 0.05`, **and** `deflated_
 
 * None as of the first (demonstration) batch run. Any later change to a gate, threshold, seed,
   sample size or arm is appended here, dated, with the reason.
+
+### 6.1 2026-10-16 — extra data, applicability, smoke, merge safety (framework v2)
+
+Committed **before** any non-control idea arm of any follow-up batch is screened (no arm other than
+the three demonstration arms above has been run at this date). Reason: the idea bank
+(`docs/research/idea_bank_v1.json`, 119 arms) needs series beyond `MarketData`, windows where an
+arm's inputs do not exist, a way to test a plugin without seeing results, and a registry that
+survives several plugin branches merging into one.
+
+* **Extra data.** `data.extra(key)` returns the registered series aligned to the panel's sessions
+  as `(P, T)`, `NaN` where the series has no value on that session. The registry
+  `research/batch_screen/EXTRA_DATA.json` declares, per series, its file, column, source URL,
+  date range and SHA-256, and per key its window→series map. Keys are the same in every window; a
+  key whose window map has a `"*"` default (and, for the bootstrap chunks, the `"main"` entry)
+  resolves per window. Downloads are restricted to the Yahoo chart API and FRED CSV; the helper
+  writes one wide CSV per source and recomputes the registry's hashes. Nothing about the engine
+  changes: `extra()` is plain numpy evaluated inside `targets`, so the kernel and the published
+  control numbers are untouched.
+* **Applicability.** `targets` may raise `batch_screen.api.NotApplicable(reason)`. Stage 1
+  requires the **main** window to be applicable: an arm that declares N/A on the main window (or
+  inside the stage-1 bootstrap) is recorded with `verdict = not_applicable` and is not screened
+  further. In stage 2 the six OOS windows and the 21 ETFs are evaluated **only on the applicable
+  ones**, and the pooled OOS bootstrap (G8) runs on the applicable market subset with the control
+  re-run in the *same* draw (so Δ stays paired); the applicable subset is recorded in the record.
+  Reduced G7 at `k < 6` applicable windows (k ≥ 3 required): median Δ CAGR ≥ 0, ≤ 1 outlier
+  (`n_c ≥ k − 1`, `n_d ≥ k − 1`), max Δ max DD ≤ +8 pp. E1 keeps its median/share rule on the
+  applicable instruments.
+* **`holdout_insufficient`.** An arm that comes through stage 1 but has fewer than **3**
+  applicable OOS windows or fewer than **15** applicable instruments is **not** a pass: it is
+  recorded with `verdict = holdout_insufficient`, is never declared, and is listed in the
+  scoreboard under "manual confirmation" — the reduced-holdout convention the idea bank
+  pre-registers for its non-US arms (as `credit_vote_v1` did). The registry and N are unchanged:
+  every such arm keeps its ledger line.
+* **Smoke.** `python -m research.batch_screen.smoke --ideas a,b` runs each arm's `targets` on a
+  synthetic panel, on the real main window, on one OOS window, on one ETF and on a real bootstrap
+  chunk, and computes **no** performance metric (no returns, no NAV, no CAGR). It reports shape,
+  finiteness, the leg, the extra keys the arm touched and each key's NaN share; it never writes to
+  the registry.
+* **Merge safety.** `REGISTRY.jsonl` is append-only and marked `merge=union` in `.gitattributes`,
+  so parallel plugin branches merge without conflict; the runner re-verifies before every batch
+  that each ledger line's recorded `code_hash` is the SHA-256 of that module at the line's own
+  recorded commit, and that every registered arm still exists at HEAD with its latest recorded
+  `spec_hash`. A failed verification aborts the run (`--verify-registry` prints the report).
+* **Unchanged.** The gate thresholds G1–G6, G8, G9, the after-tax windows, B1/B2, E1/E2, FRESH,
+  the seeds, the sample sizes, the deflation and the control are exactly as in §§ 1–5. For an arm
+  that is applicable everywhere the record, the scoreboard and the results files are byte-identical
+  to what the v1 framework wrote.

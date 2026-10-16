@@ -1,0 +1,62 @@
+{
+ "campaign": "valuation_v1",
+ "files": {
+  "data/historical/valuation_v1_shiller_source.xls": {
+   "source_url": "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/ie_data.xls",
+   "source": "Robert Shiller, ie_data.xls (shillerdata.com), workbook last saved 2024-09-04",
+   "sha256": "59532175bd1b95cee294de96fe05856cfb109663e235b5c2e5a496b258ba00c3",
+   "bytes": 1623552,
+   "used_by": "input of build_monthly; parsed by research/valuation_v1/xls_biff.py"
+  },
+  "data/historical/valuation_v1_shiller_monthly.csv": {
+   "source_url": "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/ie_data.xls",
+   "source": "derived from the workbook's Data sheet columns Date/P/D/E/CPI",
+   "date_range": [
+    "1871-01",
+    "2024-09"
+   ],
+   "sha256": "5a2a887c8a2a7ad61bbc624ae830be89d0698ae6e4b081dd6ac00dc35d25d33e",
+   "bytes": 239791,
+   "used_by": "EY_REF, CAPE_Q90, and the monthly multipliers of V1-V4"
+  },
+  "data/historical/valuation_v1_ndx_daily.csv": {
+   "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?period1=491529600&period2=953769600&interval=1d&events=div%7Csplit",
+   "source": "Yahoo Finance chart API, ^NDX daily (price index, no dividends)",
+   "date_range": [
+    "1985-10-01",
+    "2000-03-22"
+   ],
+   "sha256": "946403e2b1bd111b1cfcb3e650f4ab023161d4d85bc5446139b9fd2e3e3d3a5c",
+   "bytes": 173681,
+   "used_by": "V4_C calibration window 1985-10-01 -> 2000-03-08"
+  }
+ },
+ "derived": {
+  "EY": "E / P (nominal month)",
+  "CAPE": "(P/CPI) / mean of the trailing 120 months of E/CPI",
+  "F10": "annualized forward 10-year real total return, (P + D/12)/P lagged, CPI-deflated"
+ },
+ "checks": {
+  "months": 1845,
+  "first": "1871-01",
+  "last": "2024-09",
+  "last_with_E": "2024-06",
+  "last_with_CAPE": "2024-06",
+  "last_with_F10": "2014-06",
+  "cross_check_CAPE_vs_shiller": {
+   "n": 1722,
+   "max_abs_diff": 0.32531643195320825,
+   "corr": 0.9999780305596002
+  },
+  "cross_check_F10_vs_shiller": {
+   "n": 1722,
+   "max_abs_diff": 6.661338147750939e-16,
+   "corr": 1.0
+  }
+ },
+ "ndx": {
+  "sessions": 3659,
+  "first": "1985-10-01",
+  "last": "2000-03-22"
+ }
+}

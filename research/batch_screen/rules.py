@@ -9,7 +9,9 @@ An arm's execution layer is three booleans, exactly `fe_sim.RULE`'s:
 The engine ships four combinations (C0, A1u, H2, K). `register_rule` adds the remaining ones to
 `fe_sim.RULE` -- the engine's own extension point (its `simulate` and `_boot_chunk` both look the
 rule up by name there), so no engine file is edited. A *new mechanism* (not a re-combination of
-these three) is not expressible and must be declared `needs_kernel` and screened separately.
+these three) is expressible only through `register_rule(..., opts={...})`, which routes the arm to
+`research.fast_engine_opts`'s kernel (`bridge`); see that package's README section "requesting an
+option". A mechanism outside that option set still has to be declared `needs_kernel`.
 """
 
 from __future__ import annotations
@@ -29,18 +31,37 @@ RULES = {name: dict(opts) for name, opts in fe_sim.RULE.items()}
 # execution layer, i.e. what production R2 ran.
 RULES["R2"] = dict(RULES["C0"])
 RULES["E2"] = dict(RULES["C0"])
+#: the *kernel* options of each registered rule, by name: `research/fast_engine_opts`'s option set
+#: (the mechanisms the engine does not implement -- a per-direction band width, a dollar floor on
+#: a downsize, slicing, the drawdown governor, margin, the early-close calendar, T+1 funding, the
+#: FX conversion cost, the fill reference, dividend withholding). `{}` for the engine's own rules.
+#: The drivers branch on `arm["opts"]`: empty -> the engine, otherwise `bridge`.
+RULE_OPTS = {}
 _CASH = {}
 
 
-def register_rule(name: str, band: bool, usd_rule: bool, defer: bool) -> dict:
-    """Add a re-combination of the three options to `fe_sim.RULE` (idempotent)."""
-    opts = {"band": bool(band), "usd_rule": bool(usd_rule), "defer": bool(defer)}
+def register_rule(name: str, band: bool, usd_rule: bool, defer: bool,
+                  opts: dict | None = None) -> dict:
+    """Add a re-combination of the three options to `fe_sim.RULE` (idempotent).
+
+    `opts` carries the kernel options of `research/fast_engine_opts` (any `fe_opts.Opts` field plus
+    the bridge's own `margin_spread` / `wht`); the framework's drivers route a rule with a
+    non-empty `opts` to `fe_opts_sim.sim_one_opts` instead of the engine's kernel. The three
+    booleans stay the engine's (`fe_sim.RULE`), so an *empty* option set is simulated by the
+    engine's own code path and every published cell is unchanged.
+    """
+    o = {"band": bool(band), "usd_rule": bool(usd_rule), "defer": bool(defer)}
+    kopt = dict(opts or {})
     cur = fe_sim.RULE.get(name)
-    if cur is not None and dict(cur) != opts:
-        raise ValueError(f"rule {name!r} already means {cur}, cannot redefine it as {opts}")
-    fe_sim.RULE[name] = opts
-    RULES[name] = dict(opts)
-    return opts
+    if cur is not None and dict(cur) != o:
+        raise ValueError(f"rule {name!r} already means {cur}, cannot redefine it as {o}")
+    prev = RULE_OPTS.get(name)
+    if prev is not None and prev != kopt:
+        raise ValueError(f"rule {name!r} already carries the kernel options {prev}, not {kopt}")
+    fe_sim.RULE[name] = o
+    RULES[name] = dict(o)
+    RULE_OPTS[name] = dict(kopt)
+    return o
 
 
 def rule_of(name: str) -> dict:
@@ -48,6 +69,13 @@ def rule_of(name: str) -> dict:
     if name not in RULES:
         raise KeyError(f"unknown rule {name!r}; known: {sorted(RULES)}")
     return RULES[name]
+
+
+def opts_of(name: str) -> dict:
+    """The kernel options a rule label carries (`{}` for the engine's own rules)."""
+    if name not in RULES:
+        raise KeyError(f"unknown rule {name!r}; known: {sorted(RULES)}")
+    return dict(RULE_OPTS.get(name, {}))
 
 
 def cash_rates(days) -> np.ndarray:
@@ -81,4 +109,5 @@ def cash_rates(days) -> np.ndarray:
     return rates
 
 
-__all__ = ["CONTROL_ARM", "RULES", "cash_rates", "register_rule", "rule_of"]
+__all__ = ["CONTROL_ARM", "RULES", "RULE_OPTS", "cash_rates", "opts_of", "register_rule",
+           "rule_of"]

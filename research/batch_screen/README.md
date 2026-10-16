@@ -147,11 +147,36 @@ Engine RULE options come from the spec and are the engine's own three booleans:
   `A1u` (band only), `H2` (deferral only), or a name a plugin registers with
   `research.batch_screen.rules.register_rule(name, band, usd_rule, defer)` at import time
   (`fe_sim.RULE` is the engine's extension point, so no engine file is edited). A genuinely new
-  mechanism — a bracket budget, a partial fill, a third leg — is **not** expressible: declare it
-  `NEEDS_KERNEL = "why"` at module level (or `"needs_kernel": "why"` in the arm's spec), and the
-  runner registers the trial and refuses to simulate it. That is the honest boundary: a new
+  mechanism outside the option set below — a bracket budget, a third leg — is **not** expressible:
+  declare it `NEEDS_KERNEL = "why"` at module level (or `"needs_kernel": "why"` in the arm's spec),
+  and the runner registers the trial and refuses to simulate it. That is the honest boundary: a new
   mechanism is a kernel change in a copy of the engine plus a parity cell, i.e. a separate study.
-* `leg` — `2x` (default) or `1x`; `leg_b` — the second instrument of a two-leg arm (above).
+* `leg` — `2x` (default), `1x`, or `2x_spy` (the S&P 500 daily-reset 2x leg of
+  `research/fast_engine_opts`, IC40; on a window without an SPY series it resolves to that window's
+  own `2x` leg); `leg_b` — the second instrument of a two-leg arm (above).
+
+**Kernel options (`register_rule(..., opts={...})`).** The single-leg execution mechanisms the
+engine does not implement live in `research/fast_engine_opts` — a *copy* of `fe_sim.sim_one` with
+every option inert by default, so that options-off is the engine bit for bit (1260 cells and the
+bootstrap driver, max |diff| = 0; read that package's README). A plugin asks for one through the
+rule it registers:
+
+```python
+from research.batch_screen import rules
+rules.register_rule("kopt_band_up0", band=True, usd_rule=True, defer=True,
+                    opts={"band_up": 0.0})      # IC59-A: immediate upsizes, K's downsize gate
+ARMS = {"A": {"rule": "kopt_band_up0", "leg": "2x", "cash_yield": "none"}}
+```
+
+`opts` holds the values of any `fe_opts.Opts` field (a per-direction band width, a dollar floor on
+a permitted downsize, order slicing, the NAV-drawdown governor, margin interest on a negative
+balance, the early-close calendar, T+1 funding, the TRY conversion cost and pre-funding, the fill
+reference) plus two things that are properties of the *window* rather than of the plugin:
+`margin_spread` (the loan rate over the window's own DTB3 column) and `wht` (dividend withholding
+in the leg's construction). `resolve_arm` returns the dict as `arm["opts"]`, and `stages.run_one`,
+`boot.boot` and `boot.oos_pooled` route a non-empty one to `research.fast_engine_opts.bridge`;
+with `{}` every call site is the engine's own path, unchanged. An arm cannot combine `opts` with
+`leg_b` (options are single-leg).
 * `cash_yield` — `"none"` (default) or `"tbill"` (the session-folded DTB3 schedule of
   `engine README`). It changes every published cell, so it is a batch-level flag: an arm whose
   declaration disagrees with `--cash-yield` is refused.

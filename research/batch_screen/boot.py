@@ -23,6 +23,7 @@ from numba import njit, prange
 
 from research.fast_engine import fe_boot, fe_data, fe_sim
 from research.fast_engine2 import fe2_boot
+from research.fast_engine_opts import bridge as kernel_opts
 from research.fast_engine.fe_config import (
     BLOCK,
     EXP_Q,
@@ -315,28 +316,33 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
     rng = np.random.default_rng(seed)
     groups = {}
     for arm in arms:
-        groups.setdefault((arm["leg"], arm.get("leg_b")), []).append(arm)
+        # the group key carries the arm's panel construction too (`kernel_opts.panel_key`): two
+        # arms that build their legs differently are not the same group, even at the same leg.
+        groups.setdefault((arm["leg"], arm.get("leg_b"), kernel_opts.panel_key(arm)), []).append(arm)
     for p0 in range(0, n_paths, chunk):
         W = min(chunk, n_paths - p0)
         pos = win.positions(rng, block, W)
         panels = {}
-        for leg in sorted({g[0] for g in groups}):
+        for leg in sorted({kernel_opts.base_leg(g[0]) for g in groups}):
             panels.update(boot_panels(win, pos, (leg,), (FIN["base"], FIN["calibrated"]), cache=panels))
-        for (leg, leg_b), arm_list in groups.items():
+        for (leg, leg_b, _pkey), arm_list in groups.items():
             if leg_b is not None:
                 _two_leg_chunk(arm_list, panels, leg, leg_b, win, env, cap_at, cost, mode_ids,
                                rule_index, p0, W, n_pre, n_tax, pre, tax, capitals, modes)
                 continue
-            wb = np.stack([_targets(a, panels[(leg, FIN["base"])]) for a in arm_list])
-            wc = np.stack([_targets(a, panels[(leg, FIN["calibrated"])]) for a in arm_list])
+            base = kernel_opts.base_leg(leg)
+            pb = kernel_opts.prepare_panel(panels[(base, FIN["base"])], arm_list[0], pos=pos)
+            pcal = kernel_opts.prepare_panel(panels[(base, FIN["calibrated"])], arm_list[0], pos=pos)
+            wb = np.stack([_targets(a, pb) for a in arm_list])
+            wc = np.stack([_targets(a, pcal) for a in arm_list])
             band, usd, defer = _rule_arrays(arm_list)
-            so = panels[(leg, FIN["base"])].legs[leg][0]
-            sc = panels[(leg, FIN["base"])].legs[leg][1]
-            so_c = panels[(leg, FIN["calibrated"])].legs[leg][0]
-            sc_c = panels[(leg, FIN["calibrated"])].legs[leg][1]
+            so = pb.legs[leg][0]
+            sc = pb.legs[leg][1]
+            so_c = pcal.legs[leg][0]
+            sc_c = pcal.legs[leg][1]
             out_pre = np.empty((2, len(arm_list), W), dtype=np.float64)
             out_at = np.empty((len(capitals), len(modes), len(arm_list), W), dtype=np.float64)
-            _chunk(
+            args = (
                 np.ascontiguousarray(so), np.ascontiguousarray(sc), np.ascontiguousarray(wb),
                 np.ascontiguousarray(so_c), np.ascontiguousarray(sc_c), np.ascontiguousarray(wc),
                 env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y, env.dec_tail, env.pay_ptr,
@@ -344,6 +350,11 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
                 win.yrs, env.Y0, env.M_lo, band, usd, defer, rule_index, mode_ids, env.cash_rate,
                 p0, n_pre, n_tax, DBG0, out_pre, out_at,
             )
+            bundle_b = kernel_opts.bundle_for(arm_list, pb)
+            if bundle_b is None:
+                _chunk(*args)
+            else:
+                kernel_opts.chunk(bundle_b, kernel_opts.bundle_for(arm_list, pcal), *args)
             npre = max(0, min(W, n_pre - p0))
             ntax = max(0, min(W, n_tax - p0))
             for ai, arm in enumerate(arm_list):
@@ -503,9 +514,9 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
     ids = [a["id"] for a in arms]
     groups = {}
     for a in arms:
-        groups.setdefault((a["leg"], a.get("leg_b")), []).append(a)
-    legs = sorted({g[0] for g in groups})
-    leg_of = {a["id"]: (a["leg"], a.get("leg_b")) for a in arms}
+        groups.setdefault((a["leg"], a.get("leg_b"), kernel_opts.panel_key(a)), []).append(a)
+    legs = sorted({kernel_opts.base_leg(g[0]) for g in groups})
+    leg_of = {a["id"]: (a["leg"], a.get("leg_b"), kernel_opts.panel_key(a)) for a in arms}
     per = {g: {k: {a["id"]: [] for a in g_arms} for k in markets} for g, g_arms in groups.items()}
     for key in markets:
         days, o, c, y, start = fe_data.load_market(key)
@@ -520,8 +531,8 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
             for t in range(1, OOS_BOOT_L):
                 pos[:, t] = np.where(jump[:, t], fresh[:, t], (pos[:, t - 1] + 1) % npool)
             panels = _oos_market_panels(days, o, c, y, start, pos, tuple(legs), {}, key)
-            for (leg, leg_b), arm_list in groups.items():
-                p = panels[leg]
+            for (leg, leg_b, _pkey), arm_list in groups.items():
+                p = kernel_opts.prepare_panel(panels[kernel_opts.base_leg(leg)], arm_list[0])
                 if leg_b is not None:
                     ok, why = p.leg_b_usable(leg_b, 253, OOS_BOOT_L)
                     if not ok:
@@ -540,20 +551,25 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
                         env.M_lo, env.cash_rate, DBG0, out,
                     )
                     for ai, arm in enumerate(arm_list):
-                        per[(leg, leg_b)][key][arm["id"]].append(out[ai])
+                        per[(leg, leg_b, _pkey)][key][arm["id"]].append(out[ai])
                     continue
                 wq = np.stack([_targets(a, p) for a in arm_list])
                 band, usd, defer = _rule_arrays(arm_list)
                 out = np.empty((len(arm_list), P), dtype=np.float64)
-                _pt(
+                args = (
                     np.ascontiguousarray(p.legs[leg][0]), np.ascontiguousarray(p.legs[leg][1]),
                     np.ascontiguousarray(wq), env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y,
                     env.dec_tail, env.pay_ptr, env.pay_yr, env.pay_part, 1.0, 253, OOS_BOOT_L,
                     fe_sim.COST_PER_SIDE * m, band, usd, defer, rule_index, env.Y0, env.M_lo,
                     env.cash_rate, DBG0, out,
                 )
+                bundle = kernel_opts.bundle_for(arm_list, p)
+                if bundle is None:
+                    _pt(*args)
+                else:
+                    kernel_opts.pt(bundle, *args)
                 for ai, arm in enumerate(arm_list):
-                    per[(leg, leg_b)][key][arm["id"]].append(out[ai])
+                    per[(leg, leg_b, _pkey)][key][arm["id"]].append(out[ai])
         if not quiet:
             print(f"  oos_boot {key} {per_market} paths", flush=True)
     per_market_out = {k: {} for k in markets}

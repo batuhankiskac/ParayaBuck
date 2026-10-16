@@ -239,7 +239,7 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 21.1s -> PARITY.json"
+  "tail": "parity PASS in 14.1s -> PARITY.json"
  },
  "failed": [],
  "n_checks": 116,
@@ -663,7 +663,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 21.1s -> PARITY.json"
+   "tail": "parity PASS in 14.1s -> PARITY.json"
   },
   "failed": [],
   "riskoff_divergence_pp": {
@@ -686,7 +686,7 @@
    "failed": [],
    "n_cells": 28,
    "pass": true,
-   "wall_s": 1.014418
+   "wall_s": 0.724217
   },
   "p1_off_identity.base_flat_m1": {
    "max_abs_diff": 0.0,
@@ -981,5 +981,5 @@
    "tax_same_both_ways": 0.0
   }
  },
- "wall_s": 60.961309
+ "wall_s": 44.968502
 }

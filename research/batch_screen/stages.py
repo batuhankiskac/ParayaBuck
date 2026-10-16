@@ -115,7 +115,16 @@ def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL
     (`leg_b_usable`), otherwise the window is `NotApplicable` -- exactly the framework's rule for
     any other missing input. An arm that declares `fill_knobs` is routed to the option copy
     (`fe2_opts`) instead, with the same kernel and every option off the rest of the time.
+
+    An arm whose rule carries kernel options (`arm["opts"]`, registered through
+    `rules.register_rule`) -- or that holds the option leg `2x_spy` -- is prepared and simulated by
+    `research.fast_engine_opts.bridge` instead. With no options the panel and the engine call are
+    the ones above, unchanged.
     """
+    if arm.get("opts") or arm.get("leg") == api.LEG_SPY:
+        from research.fast_engine_opts import bridge as _bridge
+
+        data = _bridge.prepare_panel(data, arm)
     t = call_targets(arm["mod"], data, arm)
     if t.leg != arm["leg"]:
         raise ValueError(f"arm {arm['id']}: targets() changed the leg to {t.leg!r}")
@@ -123,11 +132,15 @@ def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL
     if t.two_leg:
         if data.P != 1:
             raise api.PluginError("stages.run_one runs one path; the bootstrap uses boot.boot")
+        if arm.get("opts"):
+            raise api.PluginError("the kernel options are single-leg; an arm cannot declare both")
         ok, why = data.leg_b_usable(t.leg_b, i0, i1)
         if not ok:
             raise NotApplicable(why)
         ob, cb = data.leg_series(t.leg_b)
         return _sim2(arm, t, oa, ca, ob, cb, env, capital, i0, i1, mode, m, rule_index)
+    if arm.get("opts"):
+        return _bridge.simulate_one(arm, t, data, env, capital, i0, i1, mode, m, rule_index)
     return fe_sim.simulate(oa, ca, t.wants, env, capital, i0, i1,
                            arm=arm["rule"], mode=mode, m=m, rule_index=rule_index)
 

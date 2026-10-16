@@ -45,24 +45,28 @@ def thanksgiving_friday(year: int) -> _date:
 
 
 def is_early_close_date(d: _date) -> bool:
-    """The rule of the module docstring, as a pure date test (no session list involved)."""
+    """The rule of the module docstring, as a pure date test (no session list involved).
+
+    `date.weekday()` is Monday = 0, so `1 <= wd <= 4` is Tuesday..Friday: July 3 is a session
+    (and closes early) whenever July 4 falls on a Tuesday through Friday, and December 24 whenever
+    December 25 does. A Saturday holiday is observed on the preceding Friday and a Sunday one on
+    the following Monday, which is exactly when the eve itself is not a session.
+    """
     if d == thanksgiving_friday(d.year):
         return True
     if d.month == 7 and d.day == 3:
-        # a session iff July 4 is Tue..Fri (Sat -> observed Friday July 3, Sun -> observed Monday)
-        return 2 <= _date(d.year, 7, 4).weekday() <= 4
+        return 1 <= _date(d.year, 7, 4).weekday() <= 4
     if d.month == 12 and d.day == 24:
-        # a session iff December 25 is Tue..Fri (Sat -> observed Friday, Sun -> observed Monday)
-        return 2 <= _date(d.year, 12, 25).weekday() <= 4
+        return 1 <= _date(d.year, 12, 25).weekday() <= 4
     return False
 
 
 def early_close_dates(year: int) -> list:
-    """The rule's dates of one year: at most three, in calendar order."""
+    """The rule's dates of one year: one to three, in calendar order."""
     out = [thanksgiving_friday(year)]
-    if 2 <= _date(year, 7, 4).weekday() <= 4:
+    if 1 <= _date(year, 7, 4).weekday() <= 4:
         out.append(_date(year, 7, 3))
-    if 2 <= _date(year, 12, 25).weekday() <= 4:
+    if 1 <= _date(year, 12, 25).weekday() <= 4:
         out.append(_date(year, 12, 24))
     return sorted(out)
 

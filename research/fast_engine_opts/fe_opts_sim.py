@@ -694,7 +694,7 @@ def simulate_opts(
         "_nav": nav,
         "_dec": dec if trace else None,
     }
-    if not o.is_off():
+    if not o.is_off() or fill_a.size or mrate_a.size or early_a.size or wvol_a.size:
         out["opts_stats"] = {
             "early_skips": int(scal[SC_EARLY_SKIPS]),
             "early_blocks": int(scal[SC_EARLY_BLOCKS]),

@@ -23,6 +23,7 @@ import numpy as np
 
 from research.batch_screen import api
 from research.fast_engine import fe_data, fe_signals
+from research.fast_engine.fe_config import EXP_Q
 
 __all__ = ["LEG_SPY", "chunk_triple", "clone_leg", "main_spy_triple", "repanel", "select_leg"]
 
@@ -49,7 +50,7 @@ def repanel(p, *, wht=0.0, fin=None, exp_q=None, extra=None):
         d2 = d2 * (1.0 - wht)
         d1 = d1 * (1.0 - wht)
     fin = p.meta.get("fin", 0.0) if fin is None else fin
-    exp_q = p.meta.get("exp_q", 0.0) if exp_q is None else exp_q
+    exp_q = p.meta.get("exp_q", EXP_Q) if exp_q is None else exp_q
     out = api.panel(
         p.days,
         price=p.price,
@@ -71,8 +72,8 @@ def repanel(p, *, wht=0.0, fin=None, exp_q=None, extra=None):
         extra_days=p.extra_days,
         extra_index=p.extra_index,
         extra_window=p.extra_window,
-        raw=((o2, c2, d2), (o1, c1, d1)),
     )
+    out.raw = ((o2, c2, d2), (o1, c1, d1))  # what *this* panel was built from
     for name, triple in (extra or {}).items():
         eo, ec, ed = (np.atleast_2d(np.asarray(x, dtype=np.float64)) for x in triple)
         out.legs[name] = _leg_of(eo, ec, ed, fin, exp_q)

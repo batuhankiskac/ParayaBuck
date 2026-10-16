@@ -1,0 +1,334 @@
+{
+ "checks": {
+  "anchors.C0_after_tax_2000_03_to_2026_09": true,
+  "anchors.C0_after_tax_2010_01_to_end": true,
+  "anchors.C0_after_tax_2017_01_to_end": true,
+  "anchors.C0_pre_base_cagr": true,
+  "anchors.C0_pre_base_max_dd": true,
+  "anchors.C0_pre_calibrated_cagr": true,
+  "anchors.C0_pre_calibrated_max_dd": true,
+  "anchors.K_after_tax_2000_03_to_2026_09": true,
+  "anchors.K_after_tax_2010_01_to_end": true,
+  "anchors.K_after_tax_2017_01_to_end": true,
+  "anchors.K_pre_base_cagr": true,
+  "anchors.K_pre_base_max_dd": true,
+  "anchors.K_pre_calibrated_cagr": true,
+  "anchors.K_pre_calibrated_max_dd": true,
+  "engine_parity_quick": true,
+  "mechanisms.IC39_margin": true,
+  "mechanisms.IC40_spy_leg": true,
+  "mechanisms.IC49_dd_governor": true,
+  "mechanisms.IC52_min_notional": true,
+  "mechanisms.IC53_slicing": true,
+  "mechanisms.IC54_fill_reference": true,
+  "mechanisms.IC55_fx_prefund": true,
+  "mechanisms.IC56_withholding": true,
+  "mechanisms.IC57_early_close": true,
+  "mechanisms.IC58_settlement": true,
+  "mechanisms.IC58_tax_sale": true,
+  "mechanisms.IC59_asym_band": true,
+  "options_off_bootstrap": true,
+  "options_off_side_by_side": true
+ },
+ "groups": {
+  "anchors": {
+   "C0_after_tax_2000_03_to_2026_09": {
+    "diff_pp": 7.014437822250308e-06,
+    "pass": true,
+    "reference": 0.1016,
+    "reproduced": 0.10160007014437822
+   },
+   "C0_after_tax_2010_01_to_end": {
+    "diff_pp": 2.236245627007527e-05,
+    "pass": true,
+    "reference": 0.147059,
+    "reproduced": 0.1470592236245627
+   },
+   "C0_after_tax_2017_01_to_end": {
+    "diff_pp": -4.2842260719599956e-05,
+    "pass": true,
+    "reference": 0.228861,
+    "reproduced": 0.2288605715773928
+   },
+   "C0_pre_base_cagr": {
+    "diff_pp": 4.442904683876758e-05,
+    "pass": true,
+    "reference": 0.154766,
+    "reproduced": 0.15476644429046837
+   },
+   "C0_pre_base_max_dd": {
+    "diff_pp": -3.918776607658714e-05,
+    "pass": true,
+    "reference": 0.467584,
+    "reproduced": 0.46758360812233923
+   },
+   "C0_pre_calibrated_cagr": {
+    "diff_pp": 1.727568007536817e-05,
+    "pass": true,
+    "reference": 0.148961,
+    "reproduced": 0.14896117275680076
+   },
+   "C0_pre_calibrated_max_dd": {
+    "diff_pp": 3.812800196678623e-05,
+    "pass": true,
+    "reference": 0.468797,
+    "reproduced": 0.4687973812800197
+   },
+   "K_after_tax_2000_03_to_2026_09": {
+    "diff_pp": 5.7125888783260415e-06,
+    "pass": true,
+    "reference": 0.107533,
+    "reproduced": 0.10753305712588879
+   },
+   "K_after_tax_2010_01_to_end": {
+    "diff_pp": -4.016916675952942e-05,
+    "pass": true,
+    "reference": 0.152354,
+    "reproduced": 0.1523535983083324
+   },
+   "K_after_tax_2017_01_to_end": {
+    "diff_pp": -2.5702499290014558e-05,
+    "pass": true,
+    "reference": 0.23972,
+    "reproduced": 0.2397197429750071
+   },
+   "K_pre_base_cagr": {
+    "diff_pp": -7.545196786806763e-06,
+    "pass": true,
+    "reference": 0.157649,
+    "reproduced": 0.15764892454803214
+   },
+   "K_pre_base_max_dd": {
+    "diff_pp": -8.966133085985817e-06,
+    "pass": true,
+    "reference": 0.466698,
+    "reproduced": 0.46669791033866914
+   },
+   "K_pre_calibrated_cagr": {
+    "diff_pp": 3.079150135421038e-05,
+    "pass": true,
+    "reference": 0.151785,
+    "reproduced": 0.15178530791501355
+   },
+   "K_pre_calibrated_max_dd": {
+    "diff_pp": -1.6820756981728024e-05,
+    "pass": true,
+    "reference": 0.467948,
+    "reproduced": 0.46794783179243016
+   }
+  },
+  "engine_parity_quick": {
+   "parity_json_restored": true,
+   "pass": true,
+   "tail": "parity PASS in 11.3s -> PARITY.json"
+  },
+  "mechanisms": {
+   "IC39_margin": {
+    "a_loan_is_held": true,
+    "interest_charged": true,
+    "interest_scales_with_the_rate": true,
+    "interest_usd": 677.9295786483174,
+    "loan_usd": -102872.73867762747,
+    "nav_with": 102534.65330689431,
+    "nav_without": 103222.60870741948,
+    "pass": true
+   },
+   "IC40_spy_leg": {
+    "corr_2x_vs_spy_2x": 0.8524785546416991,
+    "different_underlying": true,
+    "leg_present": true,
+    "oos_degenerates_to_alias": true,
+    "panel_leg": "2x_spy",
+    "pass": true
+   },
+   "IC49_dd_governor": {
+    "dead_zone_is_bit_identical": true,
+    "derisks_in_a_drawdown": true,
+    "max_dd": [
+     0.7634995884377782,
+     0.6837577692814933,
+     0.7634995884377782
+    ],
+    "pass": true,
+    "upsize_only_is_weaker_than_the_full_governor": true,
+    "upsize_only_never_forces_a_downsize": true
+   },
+   "IC52_min_notional": {
+    "blocks": [
+     9,
+     0,
+     9
+    ],
+    "floor_bites_at_1k": true,
+    "inert_at_100k": true,
+    "pass": true,
+    "sells": [
+     1,
+     0,
+     1,
+     0
+    ],
+    "the_threshold_is_the_max_of_the_two": true
+   },
+   "IC53_slicing": {
+    "pass": true,
+    "slice_sessions": 2,
+    "slicing_is_inert_with_one_part": true,
+    "three_parts_reach_the_target": true,
+    "trades": [
+     1,
+     3,
+     2
+    ],
+    "triggers": 1,
+    "two_parts_every_resize": true
+   },
+   "IC54_fill_reference": {
+    "given_array_used": true,
+    "mid_beats_the_gap_down_open_for_a_buy": true,
+    "mid_differs_from_open": true,
+    "mid_units": 512.6153846153846,
+    "mid_units_match_the_midpoint": true,
+    "open_units": 526.1052631578947,
+    "pass": true,
+    "want_mid_units": 512.6153846153846
+   },
+   "IC55_fx_prefund": {
+    "cost_is_the_spread": true,
+    "cost_usd": 1047.44109513386,
+    "nav_side_effect_pp": -0.05235455422016866,
+    "no_idle_cash_cannot_prefund": true,
+    "pass": true,
+    "prefund_fires_on_idle_cash": true,
+    "prefund_leaves_the_liability_alone": true,
+    "prefund_never_forces_a_sale": true,
+    "prefund_usd": 3702.839935723798,
+    "tax_paid_usd": [
+     208509.91465212387,
+     208532.02156811315
+    ]
+   },
+   "IC56_withholding": {
+    "gross_end": 0.9960906029370605,
+    "matches_net_dividends": true,
+    "net_below_gross": true,
+    "net_end": 0.9900449540120024,
+    "pass": true,
+    "price_only_unchanged": true
+   },
+   "IC57_early_close": {
+    "blocks": 1,
+    "calendar_2001": [
+     "2001-07-03",
+     "2001-11-23",
+     "2001-12-24"
+    ],
+    "calendar_2021": [
+     "2021-11-26"
+    ],
+    "calendar_2026": [
+     "2026-11-27",
+     "2026-12-24"
+    ],
+    "dates_per_year": [
+     1,
+     2,
+     3
+    ],
+    "downsize_moved_one_session": true,
+    "entry_delayed_one_session": true,
+    "median_volume_ratio": 0.4041405794888327,
+    "not_a_session": [],
+    "pass": true,
+    "plain_dec": [
+     0,
+     0,
+     0,
+     1,
+     0,
+     2,
+     0,
+     0,
+     0,
+     0
+    ],
+    "sessions_per_year": [
+     1,
+     2,
+     3
+    ],
+    "skip_dec": [
+     0,
+     0,
+     0,
+     0,
+     1,
+     2,
+     0,
+     0,
+     0,
+     0
+    ],
+    "skips": 1
+   },
+   "IC58_settlement": {
+    "defers": 16,
+    "half_allows_the_deficit": true,
+    "nav": [
+     101007.43316987672,
+     100672.63069604056,
+     101007.43316987672
+    ],
+    "pass": true,
+    "strict_caps_at_settled_cash": true
+   },
+   "IC58_tax_sale": {
+    "buy_is_deferred": true,
+    "defers": 376,
+    "instalment_session": "2020-03-31",
+    "instalment_year": 2019,
+    "pass": true,
+    "sales_happen": true,
+    "tax_sales": [
+     4,
+     4
+    ]
+   },
+   "IC59_asym_band": {
+    "a1u_still_gates_the_downsize": true,
+    "down_band_bites": true,
+    "down_side_unchanged_by_the_up_band": true,
+    "down_trades": [
+     1,
+     2
+    ],
+    "pass": true,
+    "up_band_bites": false,
+    "up_trades": [
+     0,
+     1,
+     7
+    ]
+   }
+  },
+  "options_off_bootstrap": {
+   "cells": 24,
+   "max_abs_diff": 0.0,
+   "max_abs_diff_pre": 0.0,
+   "max_abs_diff_tax": 0.0,
+   "n_arms": 3,
+   "n_paths": 32,
+   "nan_pattern_matches": true,
+   "pass": true
+  },
+  "options_off_side_by_side": {
+   "cells": 1260,
+   "max_abs_diff": 0.0,
+   "max_abs_nav_diff": 0.0,
+   "nav_bitwise_identical": true,
+   "pass": true
+  }
+ },
+ "pass": true,
+ "wall_s": 12.579493045806885
+}

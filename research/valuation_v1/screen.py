@@ -128,7 +128,7 @@ def multipliers(dates, sig: Signal, consts: dict) -> dict:
     v3 = np.where(cape > med + sd, 0.75, np.where(cape < med - sd, 1.10, 1.0))
     for name, arr in (("V1", v1), ("V2", v2), ("V3", v3)):
         arr[~np.isfinite(arr)] = 1.0
-    v4 = consts["V4_C"] * v2
+    v4 = consts.get("V4_C", 1.0) * v2  # V2 itself needs no V4_C (the solve uses V2 only)
     return {"K": np.ones(len(dates)), "V1": v1, "V2": v2, "V3": v3, "V4": v4}
 
 
@@ -155,22 +155,22 @@ def solve_v4_c(sig: Signal, consts: dict) -> dict:
     """V4_C: V2's tilt rescaled so its mean target weight equals K's on 1985-10-01 -> 2000-03-08."""
     dates, _o, _c, on_eff, factor, vol = ndx_inputs(0.0)
     mu2 = multipliers(dates, sig, consts)["V2"]
-    w_k = fab.sized_mult(on_eff, factor, vol, None)
+    w_k = fab.sized_mult(on_eff, factor, vol, None).ravel()
     target = float(np.mean(w_k[START:]))
     lo, hi = 0.2, 5.0
     for _ in range(200):
         mid = (lo + hi) / 2
-        if float(np.mean(fab.sized_mult(on_eff, factor, vol, mid * mu2)[START:])) < target:
+        if float(np.mean(fab.sized_mult(on_eff, factor, vol, mid * mu2).ravel()[START:])) < target:
             lo = mid
         else:
             hi = mid
     c = (lo + hi) / 2
-    got = float(np.mean(fab.sized_mult(on_eff, factor, vol, c * mu2)[START:]))
+    got = float(np.mean(fab.sized_mult(on_eff, factor, vol, c * mu2).ravel()[START:]))
     return {
         "value": c,
         "window": {"start": dates[START], "end": dates[-1], "sessions": len(dates) - START},
         "k_mean_weight": target,
-        "v2_mean_weight": float(np.mean(fab.sized_mult(on_eff, factor, vol, mu2)[START:])),
+        "v2_mean_weight": float(np.mean(fab.sized_mult(on_eff, factor, vol, mu2).ravel()[START:])),
         "v4_mean_weight": got,
         "residual": got - target,
     }
@@ -312,8 +312,9 @@ def stage_bootstrap(sig: Signal, consts: dict, seed=SEED, block=BLOCK, n_pre=fe_
                     n_tax=fe_config.TAX_BOOT_PATHS, capitals=("100k", "1M"), label="clean") -> dict:
     win = fe_boot.BootWindow()
     mult = multipliers(win.dates, sig, consts)
-    return fab.boot_arms(mult, ARMS, seed=seed, block=block, n_pre=n_pre, n_tax=n_tax,
-                         capitals=capitals, modes=("progressive", "flat"), window=win, label=label)
+    return fab.boot_arms(mult, ARMS, rules={a: "K" for a in ARMS}, seed=seed, block=block,
+                         n_pre=n_pre, n_tax=n_tax, capitals=capitals, modes=("progressive", "flat"),
+                         window=win, label=label)
 
 
 # ------------------------------------------------------------------------------------- V0
@@ -509,10 +510,10 @@ def gates(sig: Signal, consts: dict, pre: dict, at: dict, oos: dict, boot: dict,
 def exposure_stats(wants: dict, days) -> dict:
     out = {}
     for arm, w in wants.items():
-        seg = w[START : len(days)]
+        seg = np.asarray(w, dtype=float).ravel()[START : len(days)]
         out[arm] = {
             "mean_weight": float(np.mean(seg)),
-            "mean_abs_delta_w": float(np.mean(np.abs(np.diff(w[START - 1 : len(days)])))),
+            "mean_abs_delta_w": float(np.mean(np.abs(np.diff(np.asarray(w, dtype=float).ravel()[START - 1 : len(days)])))),
             "share_mult_ne_1": None,
             "derisked_share": None,
         }
@@ -567,7 +568,7 @@ def build(v0: dict) -> dict:
             "v0": v0, "v4_calibration": v4, "exposure": expo, "pre_tax_main": pre,
             "after_tax_windows": at, "cost_stress_m4": cost, "oos": oos, "bootstrap_clean": boot,
             "bootstrap_fresh": boot_fresh, "gates": g, "frozen_signal_robustness": frozen,
-            "status": "complete", "run_seconds": None}
+            "status": "complete"}
 
 
 def stage_frozen(sig: Signal, consts: dict, mult: dict, pre: dict) -> dict:
@@ -634,9 +635,10 @@ def main(argv=None) -> int:
         t0 = time.time()
         v0 = json.loads(V0_JSON.read_text())
         out = sanitize(build(v0))
-        out["run_seconds"] = round(time.time() - t0, 1)
         OUT_JSON.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
-        print(f"wrote {OUT_JSON} in {out['run_seconds']} s")
+        el = time.time() - t0
+        (ROOT / "research/valuation_v1/RUN_WALLCLOCK.txt").write_text(f"{el:.1f}\n")
+        print(f"wrote {OUT_JSON} in {el:.1f} s")
         return 0
     ap.print_help()
     return 1

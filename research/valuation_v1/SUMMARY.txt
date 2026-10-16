@@ -1,0 +1,130 @@
+valuation_v1 — I5: valuation / ERP-conditioned exposure on top of K
+==============================================================================
+
+VERDICT: NO ARM PASSES. V4 (the exposure-matched deciding arm) is the only arm
+that survives the pre-tax return gates, and it fails the two the study is decided
+on: the pre-tax block bootstrap (G5 median -0.249 pp base / -0.228 pp calibrated,
+share > 0 39 % / 40 %) and the after-tax set (it loses the 2017 window by -0.008 pp
+and both clean bootstraps: B1 median -0.053 pp, share 46.8 %; B2 -0.108 pp, 44.4 %).
+The level arms V1-V3 lose 1.0-4.5 pp after tax in every window. The valuation axis
+is closed for K: a de-risking tilt does cut the drawdown (K 46.67 % -> V1 35.95 %,
+V4 44.03 %) but it does not pay for itself in return, before or after Turkish tax.
+
+V0 (pre-run gate) PASSED, so the arms ran: 1871-1949 regression of the forward
+10-year real S&P total return on EY: slope +0.9446, NW(120) t = +5.27;
+on CAPE: -0.00570, t = -4.14. OOS 1950-1999 confirms both (t = +3.76 / -4.14); 2000-2014 confirms CAPE (-10.65), EY is weak (+1.39).
+
+Frozen constants
+  EY_REF = 0.065400 (median E/P 1950-01..1999-12, n=600)
+  CAPE_Q90 = 21.7072 (90th pct of monthly CAPE 1871-01..1999-12)
+  V4_C = 1.222316 (mean target weight matched to K's on the ^NDX calibration window 1986-10-01..2000-03-08: K 0.6727, V2 alone 0.6150)
+
+Exposure (main window 2000-03-09 .. 2026-09-29)
+  arm  mean weight  mean|dw|  share mu != 1  de-risked share
+  K    0.6732       0.0237   0.000          0.000
+  V1   0.5441       0.0197   0.919          0.894
+  V2   0.5498       0.0202   0.774          0.774
+  V3   0.5537       0.0203   0.756          0.756
+  V4   0.6476       0.0225   1.000          0.774
+
+Pre-tax main window, m = 2 (base / calibrated financing)
+  arm  CAGR base   CAGR cal   maxDD base  maxDD cal  Calmar base  turnover  sells/y  G5 dK med (b/c)
+  K     15.7649    15.1785    46.6698     46.7948   0.338       5.4561   10.17   +0.000/+0.000
+  V1    13.5719    13.1077    35.9463     36.2132   0.378       4.4710    9.71   -1.049/-0.946
+  V2    13.9595    13.4940    37.5226     37.6354   0.372       4.6169    9.83   -0.836/-0.739
+  V3    13.7301    13.2507    37.5226     37.6354   0.366       4.6229    9.71   -0.836/-0.739
+  V4    15.7919    15.2226    44.0292     44.1528   0.359       5.2064    9.22   -0.249/-0.228
+
+Pre-tax m = 1 / m = 4 CAGR (base / calibrated)
+  K    m1 16.0173/15.4303   m4 15.2541/14.6703
+  V1   m1 13.7717/13.3097   m4 13.1571/12.6937
+  V2   m1 14.1696/13.7038   m4 13.5562/13.0922
+  V3   m1 13.9401/13.4604   m4 13.3271/12.8493
+  V4   m1 16.0334/15.4629   m4 15.3025/14.7372
+
+Pre-tax bootstrap (G5: seed 20261011, block 20, 5,000 ten-year paths, m = 2)
+  arm  median dK base  median dK cal  share>0 base  share>0 cal
+  K         +0.0000        +0.0000   0.000         0.000
+  V1        -1.0493        -0.9464   0.341         0.355
+  V2        -0.8356        -0.7387   0.350         0.364
+  V3        -0.8356        -0.7387   0.350         0.364
+  V4        -0.2489        -0.2282   0.391         0.401
+
+After tax, $100k, progressive, liquidated, m = 2 — CAGR and delta vs K (pp)
+  window                 K        V1        V2        V3        V4
+  2000_03_to_2026_09      10.7533   -1.3261   -0.9655   -1.1586   +0.3419
+  2010_01_to_end          15.2354   -2.2024   -1.9544   -2.2893   +0.0685
+  2017_01_to_end          23.9720   -4.4701   -3.8275   -3.8275   -0.0078
+  (deltas for V1-V4; K's own CAGR in the first column)
+
+After-tax deltas vs K at the other capitals (pp)
+  10k  2000_03_to_2026_09     V1=-1.4985 V2=-1.0985 V3=-1.2898 V4=+0.1210
+  10k  2010_01_to_end         V1=-2.4181 V2=-2.3134 V3=-2.6405 V4=-0.3003
+  10k  2017_01_to_end         V1=-4.8610 V2=-4.1131 V3=-4.1131 V4=-0.2276
+  1M   2000_03_to_2026_09     V1=-1.3090 V2=-0.9035 V3=-1.0878 V4=+0.3606
+  1M   2010_01_to_end         V1=-2.2706 V2=-1.9613 V3=-2.3116 V4=+0.0368
+  1M   2017_01_to_end         V1=-4.6927 V2=-3.8514 V3=-3.8514 V4=-0.0729
+
+Clean after-tax bootstrap (B1-recent = progressive, real 2016-26 TRY calendar; B2-flat = 20 %),
+$100k / $1M, 1,000 paths, median delta vs K in pp and share > 0
+  100k  progressive V1: -0.181 (0.471)  V2: -0.142 (0.479)  V3: -0.142 (0.479)  V4: -0.053 (0.468)
+  100k  flat        V1: -0.387 (0.443)  V2: -0.271 (0.453)  V3: -0.271 (0.453)  V4: -0.108 (0.444)
+  1M    progressive V1: -0.043 (0.490)  V2: -0.040 (0.494)  V3: -0.040 (0.494)  V4: -0.020 (0.490)
+  1M    flat        V1: -0.387 (0.443)  V2: -0.271 (0.453)  V3: -0.271 (0.453)  V4: -0.108 (0.444)
+
+Fresh after-tax bootstraps (seed 20261015, 1,000 paths, $100k), median delta vs K in pp
+  block10   progressive V1: +0.202 (0.534)  V2: +0.188 (0.538)  V3: +0.188 (0.538)  V4: +0.029 (0.514)
+  block10   flat        V1: -0.013 (0.499)  V2: +0.050 (0.511)  V3: +0.050 (0.511)  V4: -0.077 (0.464)
+  block40   progressive V1: -0.758 (0.352)  V2: -0.571 (0.364)  V3: -0.571 (0.364)  V4: -0.159 (0.422)
+  block40   flat        V1: -0.862 (0.339)  V2: -0.697 (0.348)  V3: -0.697 (0.348)  V4: -0.243 (0.395)
+
+OOS windows (pre-tax, calibrated +0.75 %, m = 2, R-USD rule) — delta CAGR / delta max DD in pp
+  window           K CAGR   K maxDD   V1                V2                V3                V4              
+  GSPC_1957_1999     9.967    39.65    -0.63/+0.32     -0.58/-0.00     -0.88/+0.12     -0.10/+0.44  
+  M1                21.273    41.22    -1.79/+0.42     -1.80/+0.00     -1.77/+0.28     -0.29/+0.62  
+  M2                11.726    58.11    +0.62/-3.10     +0.20/-2.26     +0.37/-2.16     +0.61/+0.66  
+  M3                 6.457    65.18    +0.20/-9.91     +0.29/-6.79     +0.30/-8.01     +0.52/-5.35  
+  M4                 9.707    58.15    -0.90/-11.41     -1.16/-9.56     -1.43/-9.56     -0.02/-3.06  
+  M5                -0.623    85.65    +0.89/-9.14     +0.82/-9.98     +0.79/-8.57     +0.28/-1.92  
+  (G7 uses the 3 US windows GSPC_1957_1999, M1, M2; M3-M5 are report-only, non-US state)
+
+m = 4 cost stress, after tax at $100k (CAGR %)
+  2000_03_to_2026_09     K 10.3539  V1  9.1071 V2  9.4593 V3  9.2729 V4 10.7124
+  2010_01_to_end         K 14.8202  V1 12.6561 V2 12.9603 V3 12.6261 V4 14.8699
+  2017_01_to_end         K 23.6749  V1 19.2784 V2 19.9093 V3 19.9093 V4 23.7034
+
+Frozen-signal robustness (report only, not a gate)
+  no tilt where the published figure is stale (decisions from 2024-08-01), delta vs K in pp:
+    V1: -2.193  V2: -1.805  V3: -2.035  V4: -0.302
+  fresh-signal window only 2000-03-09 .. 2024-06-28 (K CAGR 14.7592 %):
+    K: +0.000  V1: -2.520  V2: -2.076  V3: -2.324  V4: -0.367
+
+Gates (control K). Tier is decided by the realized mean weight (band +-1.0 pp).
+  arm  tier            G1 G2 G3 G4 G5      G6 G7      G9  after-tax  PASS
+  V1   level_change    n  Y  n  n  -1.049  n -0.627  Y   n          fail
+  V2   level_change    n  Y  n  n  -0.836  n -0.578  Y   n          fail
+  V3   level_change    n  Y  n  n  -0.836  n -0.877  Y   n          fail
+  V4   level_change    Y  Y  Y  Y  -0.249  Y -0.102  Y   n          fail
+  G8 (pooled OOS bootstrap) is unavailable on the engine: pre-declared reduced gate.
+  V1 failed gates: G1, G3, G4, G5, G6, G7 + after-tax set
+  V2 failed gates: G1, G3, G4, G5, G6, G7 + after-tax set
+  V3 failed gates: G1, G3, G4, G5, G6, G7 + after-tax set
+  V4 failed gates: G5, G7 + after-tax set
+
+Harness: parity --quick PASS; per-arm bootstrap copy option-off max|diff| 0.0;
+K/R2 anchors reproduced within 0.01 pp (worst 4.4e-5 pp).
+Wall clock of --run: 5.9 s (warm numba cache), two consecutive runs byte-identical.
+
+Caveats
+  1. Shiller's workbook was last saved 2024-09-04: E (and therefore EY/CAPE) ends
+     2024-06, so the last 564 of 6,679 measured sessions (8.4 %) carry the last published
+     figure forward. V4's small main-window pre-tax gain (+0.027 pp) comes entirely from
+     that tail: with the tilt switched off there it is -0.302 pp, and on the fresh-signal
+     window alone -0.367 pp: the only arm whose pre-tax main-window number is positive
+     is positive because of the stale tail, and it fails G5/G7 and the after-tax set in
+     the full run regardless.
+  2. G8 is not reproducible on the mandatory engine (see PREREGISTRATION.md section 5).
+  3. The 2x leg is synthetic QQQ (no QLD bars), the research harness convention.
+  4. The verdict is the pre-registered one: taken on V4 (exposure-matched) and V3
+     (causal). V4 drifted to -2.56 pp of K's mean weight, so it was judged as a level
+     change (full gates), exactly as the pre-declared two-tier rule requires.

@@ -1,0 +1,100 @@
+{
+ "parity_quick": {
+  "pass": true,
+  "last_line": "parity PASS in 11.4s -> PARITY.json"
+ },
+ "boot_arm_parity": {
+  "seed": 20261011,
+  "block": 20,
+  "paths_pre": 200,
+  "paths_tax": 100,
+  "max_abs_diff": 0.0,
+  "pass": true
+ },
+ "anchors": {
+  "K_base_cagr": {
+   "reproduced": 0.15764892454803214,
+   "reference": 0.157649,
+   "diff_pp": -7.545196786806763e-06
+  },
+  "K_base_max_dd": {
+   "reproduced": 0.46669791033866914,
+   "reference": 0.466698,
+   "diff_pp": -8.966133085985817e-06
+  },
+  "R2_base_cagr": {
+   "reproduced": 0.15476644429046837,
+   "reference": 0.154766,
+   "diff_pp": 4.442904683876758e-05
+  },
+  "R2_base_max_dd": {
+   "reproduced": 0.46758360812233923,
+   "reference": 0.467584,
+   "diff_pp": -3.918776607658714e-05
+  },
+  "K_cal_cagr": {
+   "reproduced": 0.15178530791501355,
+   "reference": 0.151785,
+   "diff_pp": 3.079150135421038e-05
+  },
+  "K_cal_max_dd": {
+   "reproduced": 0.46794783179243016,
+   "reference": 0.467948,
+   "diff_pp": -1.6820756981728024e-05
+  },
+  "R2_cal_cagr": {
+   "reproduced": 0.14896117275680076,
+   "reference": 0.148961,
+   "diff_pp": 1.727568007536817e-05
+  },
+  "R2_cal_max_dd": {
+   "reproduced": 0.4687973812800197,
+   "reference": 0.468797,
+   "diff_pp": 3.812800196678623e-05
+  },
+  "K_2000_03_to_2026_09_after_tax": {
+   "reproduced": 0.10753305712588879,
+   "reference": 0.107533,
+   "diff_pp": 5.7125888783260415e-06
+  },
+  "R2_2000_03_to_2026_09_after_tax": {
+   "reproduced": 0.10160007014437822,
+   "reference": 0.1016,
+   "diff_pp": 7.014437822250308e-06
+  },
+  "K_2010_01_to_end_after_tax": {
+   "reproduced": 0.1523535983083324,
+   "reference": 0.152354,
+   "diff_pp": -4.016916675952942e-05
+  },
+  "R2_2010_01_to_end_after_tax": {
+   "reproduced": 0.1470592236245627,
+   "reference": 0.147059,
+   "diff_pp": 2.236245627007527e-05
+  },
+  "K_2017_01_to_end_after_tax": {
+   "reproduced": 0.2397197429750071,
+   "reference": 0.23972,
+   "diff_pp": -2.5702499290014558e-05
+  },
+  "R2_2017_01_to_end_after_tax": {
+   "reproduced": 0.2288605715773928,
+   "reference": 0.228861,
+   "diff_pp": -4.2842260719599956e-05
+  }
+ },
+ "anchors_pass": true,
+ "v4_calibration": {
+  "value": 1.222315655445434,
+  "window": {
+   "start": "1986-10-01",
+   "end": "2000-03-08",
+   "sessions": 3396
+  },
+  "k_mean_weight": 0.6726716793044586,
+  "v2_mean_weight": 0.6149928434202951,
+  "v4_mean_weight": 0.6726716793044584,
+  "residual": -2.220446049250313e-16
+ },
+ "seconds": 13.056189775466919
+}

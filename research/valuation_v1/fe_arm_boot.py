@@ -148,6 +148,7 @@ def _boot_chunk_multi(
 def boot_arms(
     mults,
     arms,
+    rules=None,
     seed=fe_config.SEED,
     block=fe_config.BLOCK,
     n_pre=fe_config.PRE_BOOT_PATHS,
@@ -172,9 +173,10 @@ def boot_arms(
     n_paths = max(n_pre, n_tax)
     cap_at = np.array([fe_config.TAX_CAPITALS[c] for c in capitals], dtype=np.float64)
     n_arms = len(arms)
-    band = np.array([fe_sim.RULE[a]["band"] for a in arms], dtype=np.bool_)
-    usd_rule = np.array([fe_sim.RULE[a]["usd_rule"] for a in arms], dtype=np.bool_)
-    defer = np.array([fe_sim.RULE[a]["defer"] for a in arms], dtype=np.bool_)
+    rule = [a if rules is None else rules[a] for a in arms]  # all valuation arms run K's fill rule
+    band = np.array([fe_sim.RULE[r]["band"] for r in rule], dtype=np.bool_)
+    usd_rule = np.array([fe_sim.RULE[r]["usd_rule"] for r in rule], dtype=np.bool_)
+    defer = np.array([fe_sim.RULE[r]["defer"] for r in rule], dtype=np.bool_)
     cost = fe_sim.COST_PER_SIDE * m
     mode_ids = np.array(
         [MODE_PROGRESSIVE if mode == "progressive" else MODE_FLAT for mode in modes], dtype=np.int64

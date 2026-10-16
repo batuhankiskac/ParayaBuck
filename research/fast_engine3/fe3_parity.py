@@ -378,6 +378,9 @@ def run(n_boot_paths=300, quiet=False, engine_parity_result=None):
             for k, v in cells.items():
                 if isinstance(v, dict) and "pass" in v:
                     flat[f"{group}.{k}"] = bool(v["pass"])
+    # the engine's own parity run is a required cell: it is not a `{...: {"pass": ...}}` map, so it
+    # is added explicitly (the framework's harness checks it separately as well)
+    flat["engine_parity_quick"] = bool(checks["engine_parity_quick"]["pass"])
     checks["all"] = all(flat.values())
     checks["n_checks"] = len(flat)
     checks["failed"] = sorted(k for k, v in flat.items() if not v)

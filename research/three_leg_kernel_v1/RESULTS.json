@@ -1,0 +1,1373 @@
+{
+ "counts": {
+  "bootstrap_cells": 16,
+  "engine_identity_cells": 168,
+  "framework_harness_checks": 138,
+  "margin_cells": 7,
+  "parity_cells": 206,
+  "twoleg_identity_cells": 60
+ },
+ "engine_anchors": {
+  "K_after_tax_100k_2000_03_to_2026_09": {
+   "diff_pp": 6e-06,
+   "pass": true,
+   "reference": 0.107533,
+   "reproduced": 0.107533
+  },
+  "K_after_tax_100k_2010_01_to_end": {
+   "diff_pp": -4e-05,
+   "pass": true,
+   "reference": 0.152354,
+   "reproduced": 0.152354
+  },
+  "K_after_tax_100k_2017_01_to_end": {
+   "diff_pp": -2.6e-05,
+   "pass": true,
+   "reference": 0.23972,
+   "reproduced": 0.23972
+  },
+  "K_pre_base_m2_cagr": {
+   "diff_pp": -8e-06,
+   "pass": true,
+   "reference": 0.157649,
+   "reproduced": 0.157649
+  },
+  "K_pre_base_m2_max_dd": {
+   "diff_pp": -9e-06,
+   "pass": true,
+   "reference": 0.466698,
+   "reproduced": 0.466698
+  },
+  "K_pre_base_m2_turnover": {
+   "diff_pp": 2e-06,
+   "pass": true,
+   "reference": 5.456136,
+   "reproduced": 5.456136
+  },
+  "K_pre_calibrated_m2_cagr": {
+   "diff_pp": 3.1e-05,
+   "pass": true,
+   "reference": 0.151785,
+   "reproduced": 0.151785
+  },
+  "K_pre_calibrated_m2_max_dd": {
+   "diff_pp": -1.7e-05,
+   "pass": true,
+   "reference": 0.467948,
+   "reproduced": 0.467948
+  },
+  "K_pre_calibrated_m2_turnover": {
+   "diff_pp": -3.1e-05,
+   "pass": true,
+   "reference": 5.456216,
+   "reproduced": 5.456216
+  }
+ },
+ "framework_harness": {
+  "all": true,
+  "failed": [],
+  "n_checks": 138
+ },
+ "parity": {
+  "after_tax_windows": {
+   "engine_2000_03_to_2026_09_100k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_100k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_100k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_100k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_10k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_10k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_10k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_10k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_1M_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_1M_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_1M_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2000_03_to_2026_09_1M_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_100k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_100k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_100k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_100k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_10k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_10k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_10k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_10k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_1M_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_1M_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_1M_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2010_01_to_end_1M_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_100k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_100k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_100k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_100k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_10k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_10k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_10k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_10k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_1M_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_1M_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_1M_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_2017_01_to_end_1M_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_100k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_100k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_100k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_100k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_10k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_10k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_10k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_10k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_1M_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_1M_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_1M_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2000_03_to_2026_09_1M_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_100k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_100k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_100k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_100k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_10k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_10k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_10k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_10k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_1M_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_1M_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_1M_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2010_01_to_end_1M_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_100k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_100k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_100k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_100k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_10k_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_10k_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_10k_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_10k_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_1M_C0_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_1M_C0_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_1M_K_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_2017_01_to_end_1M_K_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   }
+  },
+  "all": true,
+  "bootstrap": {
+   "engine_C0_pre_base": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "engine_C0_pre_calibrated": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "engine_C0_tax_flat": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "engine_C0_tax_progressive": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "engine_K_pre_base": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "engine_K_pre_calibrated": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "engine_K_tax_flat": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "engine_K_tax_progressive": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "n_paths": 60,
+   "twoleg_C0_pre_base": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "twoleg_C0_pre_calibrated": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "twoleg_C0_tax_flat": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "twoleg_C0_tax_progressive": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "twoleg_K_pre_base": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "twoleg_K_pre_calibrated": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "twoleg_K_tax_flat": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "twoleg_K_tax_progressive": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   }
+  },
+  "cash_yield": {
+   "A1u_cash_on": {
+    "cagr": 0.113333,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "K_cash_on": {
+    "cagr": 0.114752,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "schedule_positive": {
+    "pass": true,
+    "value": 0.000672
+   }
+  },
+  "engine_anchors": {
+   "K_after_tax_100k_2000_03_to_2026_09": {
+    "diff_pp": 6e-06,
+    "pass": true,
+    "reference": 0.107533,
+    "reproduced": 0.107533
+   },
+   "K_after_tax_100k_2010_01_to_end": {
+    "diff_pp": -4e-05,
+    "pass": true,
+    "reference": 0.152354,
+    "reproduced": 0.152354
+   },
+   "K_after_tax_100k_2017_01_to_end": {
+    "diff_pp": -2.6e-05,
+    "pass": true,
+    "reference": 0.23972,
+    "reproduced": 0.23972
+   },
+   "K_pre_base_m2_cagr": {
+    "diff_pp": -8e-06,
+    "pass": true,
+    "reference": 0.157649,
+    "reproduced": 0.157649
+   },
+   "K_pre_base_m2_max_dd": {
+    "diff_pp": -9e-06,
+    "pass": true,
+    "reference": 0.466698,
+    "reproduced": 0.466698
+   },
+   "K_pre_base_m2_turnover": {
+    "diff_pp": 2e-06,
+    "pass": true,
+    "reference": 5.456136,
+    "reproduced": 5.456136
+   },
+   "K_pre_calibrated_m2_cagr": {
+    "diff_pp": 3.1e-05,
+    "pass": true,
+    "reference": 0.151785,
+    "reproduced": 0.151785
+   },
+   "K_pre_calibrated_m2_max_dd": {
+    "diff_pp": -1.7e-05,
+    "pass": true,
+    "reference": 0.467948,
+    "reproduced": 0.467948
+   },
+   "K_pre_calibrated_m2_turnover": {
+    "diff_pp": -3.1e-05,
+    "pass": true,
+    "reference": 5.456216,
+    "reproduced": 5.456216
+   }
+  },
+  "engine_parity_quick": {
+   "pass": true
+  },
+  "failed": [],
+  "main_window": {
+   "engine_base_A1u_flat_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_A1u_flat_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_A1u_flat_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_A1u_pre_tax_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_A1u_pre_tax_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_A1u_pre_tax_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_A1u_progressive_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_A1u_progressive_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_A1u_progressive_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_C0_flat_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_C0_flat_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_C0_flat_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_C0_pre_tax_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_C0_pre_tax_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_C0_pre_tax_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_C0_progressive_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_C0_progressive_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_C0_progressive_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_H2_flat_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_H2_flat_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_H2_flat_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_H2_pre_tax_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_H2_pre_tax_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_H2_pre_tax_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_H2_progressive_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_H2_progressive_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_H2_progressive_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_K_flat_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_K_flat_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_K_flat_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_K_pre_tax_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_K_pre_tax_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_K_pre_tax_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_K_progressive_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_K_progressive_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_base_K_progressive_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_A1u_flat_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_A1u_flat_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_A1u_flat_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_A1u_pre_tax_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_A1u_pre_tax_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_A1u_pre_tax_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_A1u_progressive_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_A1u_progressive_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_A1u_progressive_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_C0_flat_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_C0_flat_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_C0_flat_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_C0_pre_tax_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_C0_pre_tax_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_C0_pre_tax_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_C0_progressive_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_C0_progressive_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_C0_progressive_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_H2_flat_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_H2_flat_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_H2_flat_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_H2_pre_tax_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_H2_pre_tax_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_H2_pre_tax_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_H2_progressive_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_H2_progressive_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_H2_progressive_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_K_flat_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_K_flat_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_K_flat_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_K_pre_tax_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_K_pre_tax_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_K_pre_tax_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_K_progressive_m1": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_K_progressive_m2": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "engine_calibrated_K_progressive_m4": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_A1u_flat": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_A1u_pre_tax": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_A1u_progressive": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_C0_flat": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_C0_pre_tax": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_C0_progressive": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_H2_flat": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_H2_pre_tax": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_H2_progressive": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_K_flat": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_K_pre_tax": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_base_K_progressive": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_A1u_flat": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_A1u_pre_tax": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_A1u_progressive": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_C0_flat": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_C0_pre_tax": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_C0_progressive": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_H2_flat": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_H2_pre_tax": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_H2_progressive": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_K_flat": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_K_pre_tax": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "twoleg_calibrated_K_progressive": {
+    "legs_A_equal": true,
+    "legs_B_equal": true,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   }
+  },
+  "margin": {
+   "margin_off_flat": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "margin_off_pre_tax": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "margin_off_progressive": {
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "margin_on_flat": {
+    "loan_is_nonzero": true,
+    "margin_usd_engine": 610289.88045,
+    "margin_usd_equal": true,
+    "margin_usd_nleg": 610289.88045,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "margin_on_moves_the_nav": {
+    "cagr_off": 0.131071,
+    "cagr_on": 0.106566,
+    "pass": true
+   },
+   "margin_on_pre_tax": {
+    "loan_is_nonzero": true,
+    "margin_usd_engine": 1489789.951479,
+    "margin_usd_equal": true,
+    "margin_usd_nleg": 1489789.951479,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   },
+   "margin_on_progressive": {
+    "loan_is_nonzero": true,
+    "margin_usd_engine": 256480.58701,
+    "margin_usd_equal": true,
+    "margin_usd_nleg": 256480.58701,
+    "nav_max_abs_diff": 0.0,
+    "pass": true,
+    "scalar_max_abs_diff": 0.0,
+    "scalar_worst_key": ""
+   }
+  },
+  "multi_leg": {
+   "n_legs_are_capped": {
+    "n_max": 4,
+    "pass": true
+   },
+   "three_books_trade": {
+    "pass": true,
+    "trades": {
+     "A": 1464,
+     "B": 1215,
+     "C": 712,
+     "D": 0
+    },
+    "turnover": {
+     "A": 170.033514,
+     "B": 79.429811,
+     "C": 36.238251,
+     "D": 0.0
+    }
+   }
+  },
+  "n_checks": 206
+ },
+ "reach": {
+  "now_expressible": [
+   "IC36 A/B/C -- a 3/4-instrument inverse-vol blend in the off state, rescaled monthly",
+   "IC34-C -- QLD* with XLU and XLP held at once",
+   "IC45-C / IC46-C -- a sleeve on top of production past the 0.98 cap, funded by a cash loan with interest",
+   "IC41 A/B/C -- QLD* plus the S&P 500 2x leg (`2x_spy`) as leg B"
+  ],
+  "still_blocked": [
+   "two books of the same instrument (one FIFO queue per symbol per taxpayer)",
+   "more than 4 instruments in one account",
+   "a per-session instrument switch inside one leg",
+   "several cash pools / accounts, or a per-arm tax regime",
+   "the single-leg execution options (band_up, slicing, the DD governor, T+1, FX cost, withholding) on a multi-leg arm"
+  ]
+ }
+}

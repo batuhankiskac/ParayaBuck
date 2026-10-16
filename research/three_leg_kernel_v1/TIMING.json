@@ -1,0 +1,22 @@
+{
+ "bootstrap": {
+  "engine_s": 0.253329,
+  "nleg_4legs_s": 0.334921,
+  "paths": 256,
+  "ratio": 1.322079
+ },
+ "harness_s": 62.241274,
+ "parity_s": 21.311693,
+ "speed_ms": {
+  "engine_1leg_ms": 0.1915,
+  "nleg_1_margin_ms": 0.486999,
+  "nleg_2_ms": 0.377562,
+  "nleg_3_ms": 0.415,
+  "nleg_4_ms": 0.418854,
+  "nleg_4_real_ms": 0.757458,
+  "runs": 30,
+  "sessions": 6679
+ },
+ "speed_s": 0.888019,
+ "wall_s": 84.440997
+}

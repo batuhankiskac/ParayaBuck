@@ -4,6 +4,7 @@
     "aaa_m": "AAA",
     "baa10y": "BAA10Y",
     "baa_m": "BAA",
+    "cfnai": "CFNAI",
     "copper": "HG=F",
     "cpi": "CPIAUCSL",
     "dax": "^GDAXI",
@@ -143,6 +144,21 @@
       "sha256": "fdb2a99185024e2f50bacf23aede38eeaa01d265da0e57391c6f4d1ce7e024be",
       "source": "FRED CSV",
       "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAA10Y"
+    },
+    "CFNAI": {
+      "bytes": 11661,
+      "column": "value",
+      "fetched": "2026-10-16",
+      "file": "data/historical/batch_screen_v1_cfnai.csv",
+      "price": "level",
+      "range": [
+        "1967-03-01",
+        "2026-08-01"
+      ],
+      "rows": 714,
+      "sha256": "8ce9757f92a30dc07a0db1a24181b5299dd608641c875e6ef5508c63b159fc72",
+      "source": "FRED CSV",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CFNAI"
     },
     "CPIAUCSL": {
       "bytes": 16373,

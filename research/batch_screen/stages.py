@@ -105,8 +105,26 @@ def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL
 
 
 def _cells(res, days, i0, i1):
-    """`fe_study.pre_stats`'s cells (the published pre-tax statistic block)."""
-    return fe_study.pre_stats(days, i0, i1, res)
+    """`fe_study.pre_stats`'s cells (the published pre-tax statistic block).
+
+    A reduced window that starts after a subperiod's end (the 2026 campaign's P1 ends
+    2008-12-31) cannot be split by `fe_study.seg` -- `seg` takes `max(k for k, d in dates if
+    d <= b)` and a window that begins inside the subperiod leaves that generator empty. The
+    engine's block is then computed on the **covered** subperiods only and the record names the
+    ones left out; `pre_tax_gates` judges G4 on the covered ones (see README section 2a). The
+    published window covers all three and takes the unchanged path.
+    """
+    subs = tuple((n, a, b) for n, a, b in SUBPERIODS if b is None or days[i0] <= b)
+    if len(subs) == len(SUBPERIODS):
+        return fe_study.pre_stats(days, i0, i1, res)
+    saved = fe_study.SUBPERIODS
+    try:
+        fe_study.SUBPERIODS = subs
+        st = fe_study.pre_stats(days, i0, i1, res)
+    finally:
+        fe_study.SUBPERIODS = saved
+    st["subperiods_not_covered"] = [n for n, _a, _b in SUBPERIODS if n not in st["subperiods"]]
+    return st
 
 
 def _win_cells(res, days, start):
@@ -378,8 +396,11 @@ def pre_tax_gates(rec, ctrl):
         g[f"G2_{md}"] = bool(a["max_dd"] <= c["max_dd"] + G2_DD_PP / 100 + 1e-12)
         g[f"G3_{md}"] = bool(a["2017_end"]["cagr"] >= c["2017_end"]["cagr"] - G3_SLACK_PP / 100 - 1e-12)
     a, c = rec["main"]["base"]["m2"], ctrl["main"]["base"]["m2"]
-    wins = [p for p, _x, _y in SUBPERIODS if a["subperiods"][p]["cagr"] > c["subperiods"][p]["cagr"]]
-    g["G4"] = bool(len(wins) >= 2)
+    subs = a["subperiods"]
+    wins = [p for p in subs if subs[p]["cagr"] > c["subperiods"][p]["cagr"]]
+    # "at least two of the three subperiods" -- on a reduced window only the *covered* ones count,
+    # and fewer than two covered subperiods is not a pass (the record names what was left out)
+    g["G4"] = bool(len(wins) >= 2 and len(subs) >= 2)
     g["G4_wins"] = wins
     g["G9"] = bool(a["turnover_annual"] <= G9_TURNOVER_MULT * c["turnover_annual"] + 1e-12
                    and rec["main"]["calibrated"]["m2"]["turnover_annual"]

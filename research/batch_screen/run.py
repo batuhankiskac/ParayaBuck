@@ -580,6 +580,127 @@ def two_leg_checks():
     except api.NotApplicable as exc:
         out["leg_b_without_history_is_not_applicable"] = {
             "pass": bool("gld" in exc.reason), "reason": exc.reason}
+    # A leg-B *extra* series on a bootstrap chunk: `column_days` is the label of each column, so a
+    # series with a gap (dgs10 is not published daily, gld starts in 2004) is refused with the
+    # right session and never raises -- the IndexError `leg_b_usable` used to hit on a chunk.
+    bw = B.BootWindow("none")
+    pos = bw.positions(np.random.default_rng(SEED), BLOCK, 4)
+    pb = B.boot_panels(bw, pos, ("2x",), (0.0,))[("2x", 0.0)]
+    ok, why = pb.leg_b_usable("dgs10", bw.i0, bw.i1)
+    row = np.asarray(pb.leg_series("dgs10")[0], dtype=np.float64)[0]
+    first_bad = int(np.argmax(~np.isfinite(row[bw.i0 - 1 : bw.i1 + 1]))) + bw.i0 - 1
+    out["chunk_leg_b_gap_names_the_failing_column"] = {
+        "pass": bool(not ok and str(pb.column_days[first_bad]) in why
+                     and pb.column_days.size == pb.price.shape[1]),
+        "reason": why, "label": str(pb.column_days[first_bad]),
+        "columns": int(pb.column_days.size), "days": int(pb.days.size)}
+    # the same chunk with a restricted pool (the IC31-IC37 unlock): a late-starting leg is usable
+    # because every drawn source session now has a price for it
+    ok_gld, why_gld = pb.leg_b_usable("gld", bw.i0, bw.i1)
+    win_r = windows.arm_window(two_leg_probe("gld_offstate"))
+    bwr = B.BootWindow("none", windows.boot_pool(windows.bars()[0], win_r))
+    posr = bwr.positions(np.random.default_rng(SEED), BLOCK, 4)
+    pr = B.boot_panels(bwr, posr, ("2x",), (0.0,))[("2x", 0.0)]
+    okr, whyr = pr.leg_b_usable("gld", bwr.i0, bwr.i1)
+    out["the_reduced_pool_makes_a_late_leg_b_usable"] = {
+        "pass": bool(okr and not ok_gld and win_r.reduced),
+        "reason": whyr, "pool": list(bwr.pool), "default_pool_reason": why_gld}
+    return out
+
+
+def two_leg_opts_parity(n_boot_paths=20):
+    """The two-leg *option* copy's parity cells (`research.fast_engine2/fe2_opts_parity.py`).
+
+    Each option off must reproduce the current kernel bit for bit; each option on must change the
+    numbers in the direction the option specifies.
+    """
+    from research.fast_engine2 import fe2_opts_parity
+
+    res = fe2_opts_parity.run(n_boot_paths=n_boot_paths, quiet=True)
+    out = {}
+    for k, v in sorted(res.items()):
+        if isinstance(v, dict) and "pass" in v:
+            out[k] = {kk: vv for kk, vv in v.items()
+                      if kk in ("pass", "max_abs_diff", "note", "reason")}
+        elif isinstance(v, (int, float, bool, str)):
+            out[k] = {"value": v}
+    return out
+
+
+def reduced_window_checks():
+    """The reduced-window machinery on real data (`spec["start"]`, README section 2a).
+
+    The probe arm is `probes/two_leg.py::gld_offstate` (`start = "auto"`, a fixed leg-B sleeve
+    while the trend vote is off): its window, its clipped after-tax windows, its dropped rolling
+    starts, its restricted bootstrap pool, and the paired control on that pool.
+    """
+    arm = two_leg_probe("gld_offstate")
+    days = windows.bars()[0]
+    win = windows.arm_window(arm)
+    ctrl_arm = control_spec()
+    out = {}
+    first = windows.input_start_index(days, "gld")
+    out["auto_is_the_inputs_first_session_plus_one"] = {
+        "pass": bool(win.reduced and win.i0 == first + 1
+                     and win.tag == "w" + str(days[win.i0]).replace("-", "")
+                     and win.inputs == ("gld",) and win.declared == "auto"),
+        "i0": int(win.i0), "first_input_session": int(first), "window_start": str(days[win.i0]),
+        "tag": win.tag}
+    atw = windows.after_tax_windows(days, win)
+    out["after_tax_windows_are_clipped_to_the_window"] = {
+        "pass": bool(atw["2000_03_to_2026_09"][0] == win.i0
+                     and atw["2010_01_to_end"][0] == windows.rolling_start_index(days, 2010)
+                     and atw["2017_01_to_end"][0] == windows.rolling_start_index(days, 2017)),
+        "windows": {k: [str(days[a]), str(days[b])] for k, (a, b) in atw.items()}}
+    starts = windows.rolling_starts(days, win)
+    out["rolling_starts_before_the_window_are_dropped"] = {
+        "pass": bool(starts and min(starts, key=int) == "2005"
+                     and all(windows.rolling_start_index(days, int(y)) >= win.i0 for y in starts)),
+        "n": len(starts), "first": min(starts, key=int), "last": max(starts, key=int),
+        "published_n": 21}
+    pool = windows.boot_pool(days, win)
+    bw = B.BootWindow("none", pool)
+    pos = bw.positions(np.random.default_rng(SEED), BLOCK, 8)
+    out["the_bootstrap_pool_is_the_window"] = {
+        "pass": bool(pool == (win.i0 - 1, len(days) - 2) and int(pos.min()) >= pool[0]
+                     and int(pos.max()) <= pool[1] and bw.npool_draw == pool[1] - pool[0] + 1),
+        "pool": [int(pool[0]), int(pool[1])], "drawn": [int(pos.min()), int(pos.max())],
+        "npool_draw": int(bw.npool_draw), "npool_published": int(bw.npool)}
+    rec = stages.stage1(arm, "none", win=win)
+    out["stage1_runs_on_the_declared_window"] = {
+        "pass": bool(rec["window"]["start"] == str(days[win.i0]) and rec["win"]["tag"] == win.tag
+                     and rec["after_tax"]["2000_03_to_2026_09"]["window"][0] == str(days[win.i0])
+                     and np.isfinite(rec["main"]["base"]["m2"]["cagr"])
+                     and rec["main"]["base"]["m2"]["max_dd"] > 0),
+        "window": rec["window"]["start"], "cagr": rec["main"]["base"]["m2"]["cagr"],
+        "max_dd": rec["main"]["base"]["m2"]["max_dd"]}
+    n = 10
+    mine = stages.stage1_vectors(arm, "none", win=win, n_pre=n, n_tax=n, quiet=True)
+    theirs = stages.stage1_vectors(ctrl_arm, "none", win=win, n_pre=n, n_tax=n, quiet=True)
+    d = (mine["tax"]["100k"]["progressive"][arm["id"]]
+         - theirs["tax"]["100k"]["progressive"][ctrl_arm["id"]])
+    out["the_control_shares_the_reduced_pool"] = {
+        "pass": bool(len(d) == n and np.isfinite(d).all()
+                     and mine["params"]["pool"] == theirs["params"]["pool"] == list(pool)
+                     and np.isfinite(mine["pre"]["base"][arm["id"]]).all()),
+        "pool": mine["params"]["pool"], "n": int(len(d)),
+        "delta_median_pp": float(np.median(d) * 100)}
+    a = stages.stage1_vectors(ctrl_arm, "none", n_pre=n, n_tax=n, quiet=True)
+    b = stages.stage1_vectors(ctrl_arm, "none", win=windows.DEFAULT_WINDOW, n_pre=n, n_tax=n,
+                              quiet=True)
+    same = all(np.array_equal(a[grp][md if grp == "pre" else "100k"][ctrl_arm["id"]],
+                              b[grp][md if grp == "pre" else "100k"][ctrl_arm["id"]])
+               for grp, md in (("pre", "base"), ("pre", "calibrated")))
+    out["the_default_window_pool_is_the_published_draw"] = {
+        "pass": bool(same and b["params"]["pool"] == [0, len(days) - 2]
+                     and a["params"]["pool"] is None),
+        "pre_base_max_abs_diff": float(np.max(np.abs(
+            a["pre"]["base"][ctrl_arm["id"]] - b["pre"]["base"][ctrl_arm["id"]]))),
+        "default_pool": b["params"]["pool"]}
+    wins = batch_windows([arm, ctrl_arm])
+    out["a_batch_computes_one_control_per_window"] = {
+        "pass": bool(sorted(wins) == ["default", win.tag] and wins[win.tag].i0 == win.i0),
+        "windows": sorted(wins), "control_file": control_file(Path("."), win).name}
     return out
 
 
@@ -687,6 +808,7 @@ def harness():
     checks["parity"] = {"boot_vs_engine": boot_parity(), "oos_pooled_vs_old_code": oos_pooled_parity()}
     checks["behaviour"] = {"cash_yield": cash_yield_check(), "leg": leg_check()}
     checks["two_leg"] = two_leg_checks()
+    checks["reduced_window"] = reduced_window_checks()
     checks["two_leg_kernel_parity"] = two_leg_kernel_parity(
         engine_parity_result=checks["engine_parity_quick"])
     flat = {}

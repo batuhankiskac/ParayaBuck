@@ -239,6 +239,9 @@ def arm_window(arm, days=None) -> Window:
     else:
         i0 = max(i0, bisect.bisect_left(days, str(declared)))
     win = Window(i0=int(i0), tag=win_tag(days, i0), declared=declared, inputs=inputs)
+    if win.i0 >= len(days):
+        raise NotApplicable(f"the declared window start (session {win.i0}) is past the end of this "
+                            f"panel ({len(days)} sessions)")
     years = fe_sim.calendar_years(days[win.i0 - 1], days[-1])
     if years < MIN_WINDOW_YEARS:
         raise NotApplicable(

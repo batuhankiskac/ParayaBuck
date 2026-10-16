@@ -162,13 +162,15 @@ smoke
   panel, plus the traceback tail of a genuine bug. --keys prints the extra-data key table with
   per-window coverage. 1.2 s for three arms.
 
-merge safety
+  merge safety
   .gitattributes: research/batch_screen/REGISTRY.jsonl merge=union (append-only lines from parallel
-  plugin branches merge without conflict). The runner re-verifies the whole ledger before every
-  batch and aborts on any inconsistency (--verify-registry prints the report): every line's
-  code_hash must be the SHA-256 of that module at the commit the line names, and every registered
-  (idea, arm) must still exist at HEAD with its latest recorded spec_hash. A module that changed
-  after its last screen is reported 'stale' (information, not an error).
+  plugin branches merge without conflict; proved on a throwaway worktree -- two branches each
+  appending a line merge automatically, both lines kept). The runner re-verifies the whole ledger
+  before every batch and aborts on any inconsistency (--verify-registry prints the report): every
+  line's code_hash must be the SHA-256 of that module at the commit the line names, every
+  registered (idea, arm) must still exist at HEAD with its latest recorded spec_hash, and a line
+  missing its fields is reported (malformed_line) rather than crashing the counter. A module that
+  changed after its last screen is reported 'stale' (information, not an error).
 
 evidence
   --harness                                   PASS 59/59 checks (unchanged count), 33.8 s

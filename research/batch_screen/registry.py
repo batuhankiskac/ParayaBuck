@@ -136,8 +136,11 @@ def n_trials(path=None) -> int:
 
     A re-run of the same arm with the same spec/code is the *same* hypothesis (the ledger still
     gets its line), so it is not a second trial; an arm re-specified into a new `spec_hash` is.
+    A line missing those keys is skipped here -- `verify_ledger` is what refuses such a ledger, and
+    the runner runs it before it counts anything.
     """
-    return len({(e["idea"], e["arm"], e["spec_hash"]) for e in read(path)})
+    keys = ("idea", "arm", "spec_hash")
+    return len({tuple(e[k] for k in keys) for e in read(path) if all(k in e for k in keys)})
 
 
 def ledger_arms(path=None) -> list:
@@ -187,7 +190,13 @@ def verify_ledger(path=None) -> dict:
     problems, skipped, stale = [], [], []
     by_arm, blobs, arms_cache = {}, {}, {}
     for i, e in enumerate(lines):
-        if e.get("git", {}).get("commit_gate") != "pass":
+        missing = [k for k in ("idea", "arm", "arm_key", "spec_hash", "code_hash", "git")
+                   if k not in e]
+        if missing:
+            problems.append({"line": i, "arm_key": e.get("arm_key"), "kind": "malformed_line",
+                             "missing": missing})
+            continue
+        if e["git"].get("commit_gate") != "pass":
             skipped.append({"line": i, "arm_key": e.get("arm_key"), "why": "commit gate skipped"})
             continue
         issue = e["idea"]

@@ -87,6 +87,16 @@ def test_lines_whose_commit_gate_was_bypassed_are_skipped(tmp_path):
                                          "why": "commit gate skipped"}]
 
 
+def test_a_malformed_line_is_reported_not_a_crash(tmp_path):
+    # a hand-resolved or duplicated merge block: the runner must say what is wrong, naming the line
+    v = registry.verify_ledger(_ledger(tmp_path, {"arm": "A/1", "arm_key": "A/1"},
+                                       _line("k_control", "K", _spec())))
+    assert not v["ok"]
+    assert v["problems"] == [{"line": 0, "arm_key": "A/1", "kind": "malformed_line",
+                              "missing": ["idea", "spec_hash", "code_hash", "git"]}]
+    assert v["arms"] == 1
+
+
 def test_run_batch_refuses_to_screen_a_ledger_that_does_not_verify(tmp_path, monkeypatch):
     monkeypatch.setattr(registry, "REGISTRY", tmp_path / "REGISTRY.jsonl")
     monkeypatch.setattr(R, "RESULTS", tmp_path / "results")

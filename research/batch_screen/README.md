@@ -167,7 +167,9 @@ report) and **aborts** on any inconsistency:
   with `--allow-dirty` cannot be checked and are reported as `skipped`);
 * every registered `(idea, arm)` must still exist at HEAD and its spec must hash to the *latest*
   recorded `spec_hash` — catching an arm renamed, deleted or re-specified by a merge without a new
-  ledger line (`spec_drift`).
+  ledger line (`spec_drift`);
+* a line missing its fields (`malformed_line`, e.g. a hand-resolved merge block) is reported and
+  refused rather than crashing the counter.
 
 A module that changed *after* its last screen (expected while a branch grows: a later commit adds a
 second arm to the same file) is reported as `stale`, which is information, not an error.

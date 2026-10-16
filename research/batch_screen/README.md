@@ -261,10 +261,12 @@ ARMS = {"A": {"rule": "K", "leg": "2x", "leg_b": "1x", "cash_yield": "none",
 | `kernel_scope` | `"all_stages"` (default) or `"after_tax_stage_only"`: the latter runs every pre-tax stage on the published kernel |
 
 The routed quantity is what the band test and the fill use, so a routed leg is judged on what it
-really sells. `NEEDS_KERNEL` still covers: a per-session instrument switch (no longer needed for
-the off-state ideas — IC31–IC38 are a *fixed* leg B whose weight varies, see
-`probes/two_leg.py`), three instruments in one account (IC36, IC34 arm C), a cash loan (IC39), a
-second leg *family* (IC40) and two books of the same instrument (IB38).
+really sells. `NEEDS_KERNEL` still covers: three instruments in one account (IC36, IC34 arm C) and
+two books of the *same* instrument (IB38). The rest of §6.2's list is now expressible: a cash loan
+is the bridge's `margin_spread` (IC39), the S&P 500 2x leg is the `2x_spy` option leg (IC40 — its
+panels are built with `bridge.base_leg(leg)`, `stages.panel_leg`, see `PREREGISTRATION.md` §6.3),
+and an off-state idea is a *fixed* leg B whose weight varies (IC31–IC38,
+`probes/two_leg.py::gld_offstate`/`onex_offstate`).
 
 **The off-state recipe** (IC31–IC37). "While the trend vote is off, hold 0.98 in X; production
 target otherwise" is a fixed leg B with a state-dependent weight — no instrument switch:
@@ -451,7 +453,7 @@ PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch --ideas two_leg 
 
 `research/batch_screen/tests/run.sh` (the research venv's numba + the project venv's pytest, see
 the header of that script; it finds the project venv whether or not the worktree sits next to the
-main checkout). 128 tests: the plugin contract and its validation, the leg constructions, the
+main checkout). 132 tests: the plugin contract and its validation, the leg constructions, the
 registry's append-only semantics and commit gate, every stage-1/stage-2 gate branch on synthetic
 records, the deflation's null control/power/monotonicity/DSR properties, the extra-data layer
 (registry resolution, date alignment, the bootstrap chunk convention, ffill, downloads and hashing
@@ -462,7 +464,8 @@ default pool's bit-identity with the published draw), and
 the parity cells (engine `fe_boot.boot`, old `boot_oos_market`, the production R2 target series,
 `vol_shape_v1`'s sizing, and the control's published K cells stage by stage), and the two-leg
 contract, the fill-knob routing and the panel column calendar (`tests/test_two_leg.py`, probe
-`probes/two_leg.py`). The harness is **116 checks**: the original 59, the two-leg routing checks,
+`probes/two_leg.py`), and the `2x_spy` option leg's panel plumbing (`tests/test_spy_leg.py`,
+`PREREGISTRATION.md` §6.3). The harness is **116 checks**: the original 59, the two-leg routing checks,
 the two-leg kernel's parity groups, the reduced-window cells (the resolved window, the clipped
 after-tax windows, the dropped rolling starts, the restricted pool and the paired control) and the
 option copy's own parity and positive controls (`fe2_opts_parity`, 28 cells).

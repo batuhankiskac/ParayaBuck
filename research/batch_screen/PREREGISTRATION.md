@@ -239,3 +239,43 @@ leg), and **two books of the same instrument** (IB38's A/B/C).
 **Unchanged.** The gate thresholds G1–G9, the after-tax rule, B1/B2, E1/E2, FRESH, the seeds, the
 sample sizes and the deflation procedure are exactly as in §§ 1–5 and §6.1. An arm that declares
 none of the four keys takes the v1/v2 code path byte for byte.
+
+### 6.3 2026-10-16 — pre-screen amendment of `batch_bank_v3`: the `2x_spy` panel construction (B1)
+
+Committed **before any arm of `batch_bank_v3` is screened** (no arm of that batch had been
+simulated at this date). Reason: `research/plugins_d3/BUGS.md` B1. Three plugin branches wrote
+their arms blind; one of them (`IC40`, three arms holding the option leg `2x_spy` of
+`research/fast_engine_opts`) cannot run as committed, and the refusal is a framework plumbing bug,
+not a missing mechanism. Fixing it before the batch is the only way to screen those three arms with
+the batch's other arms instead of a separate study.
+
+* **The bug.** `api.panel` builds only the window's own `2x`/`1x` legs; `MarketData.__post_init__`
+  then reads `legs[self.leg]`. Every non-bootstrap call site built its panel with the arm's own leg
+  (`windows.main_panel` / `oos_panel` / `instrument_panel` called from `stages.stage1`,
+  `stage2_main_windows`, `stage2_oos`, `stage2_instruments`, `stage2_rolling`, plus
+  `smoke.real_panels`), so a `leg = "2x_spy"` arm raised `KeyError: '2x_spy'` **while the panel was
+  being built**, before `bridge.prepare_panel` (which adds the SPY leg) was ever reached. The
+  bootstrap path worked only because `boot.boot` builds its panels with `kernel_opts.base_leg(...)`.
+* **The fix.** `stages.panel_leg(arm)` returns `research.fast_engine_opts.bridge.base_leg(arm["leg"])`
+  and is used at all six `windows.*_panel` call sites; `smoke.real_panels`/`smoke_panels` build with
+  the base leg and prepare each panel for the arm (`smoke._prepared`, passing the drawn chunk
+  positions to `prepare_panel` exactly as `boot.boot` does). `run_one` and `boot.boot` add the
+  option leg as before, so **no** other arm's panel, gate or number changes: an arm that does not
+  hold `2x_spy` takes the identical code path (the harness's 116 checks, the two-leg parity cells,
+  `fe2_opts_parity` and every published anchor are unchanged; the regression test is
+  `tests/test_spy_leg.py`).
+* **`IC40`'s arms.** Their `needs_kernel` declaration is removed (the arm specs' own parameters —
+  `rule`, `leg`, `cash_yield`, `vote`, `inputs` — are untouched), so `IC40/A`, `IC40/B`, `IC40/C`
+  are screened by this batch like any other arm. The three arms were never registered in the ledger
+  before this batch, so no `spec_hash` is superseded.
+* **Batch composition (fixed here, before the run).** `bank_v3` screens the `idea_bank_v2` ideas
+  `IC31`–`IC46`, `IC49`, `IC52`–`IC59` as committed by the plugin workers, the two `idea_bank_v1`
+  re-arms `ib25_RW`/`IB26_RW` (reduced windows), and `IC59_K` — the *runnable* twins of `IC59`'s
+  three arms under the `band_up` kernel option, in their own module because `IC59.py`'s module-level
+  `NEEDS_KERNEL` applies to every arm of that module and re-hashing its pinned specs would make
+  `verify_ledger` report `spec_drift`. `IC59`'s original arms are listed in the batch as well and
+  stay registered-but-refused (`needs_kernel`).
+* **Unchanged.** Every gate, threshold, seed, sample size, the control (production K), the reduced
+  window rules of §6.2 and the deflation procedure are exactly as in §§ 1–5, §6.1 and §6.2. This
+  amendment changes no arm's parameters, no gate and no number; it removes a construction refusal
+  and records the batch's arm list.

@@ -1,7 +1,9 @@
 {
  "fetched": "2026-10-16",
  "keys": {
+  "aaa_m": "AAA",
   "baa10y": "BAA10Y",
+  "baa_m": "BAA",
   "copper": "HG=F",
   "cpi": "CPIAUCSL",
   "dax": "^GDAXI",
@@ -11,6 +13,28 @@
   "fomc_week": "FOMC_WEEK",
   "ftse": "^FTSE",
   "gld": "GLD",
+  "hl_high": {
+   "windows": {
+    "*": "P2_HC_QQQ",
+    "M1": "P2_HC_IXIC",
+    "M2": "P2_HC_GSPC",
+    "M3": "P2_HC_N225",
+    "M4": "P2_HC_GDAXI",
+    "M5": "P2_HC_FTSE",
+    "main": "P2_HC_QQQ"
+   }
+  },
+  "hl_low": {
+   "windows": {
+    "*": "P2_LC_QQQ",
+    "M1": "P2_LC_IXIC",
+    "M2": "P2_LC_GSPC",
+    "M3": "P2_LC_N225",
+    "M4": "P2_LC_GDAXI",
+    "M5": "P2_LC_FTSE",
+    "main": "P2_LC_QQQ"
+   }
+  },
   "ief": "IEF",
   "local_index": {
    "windows": {
@@ -50,6 +74,36 @@
  "note": "Extra series for batch_screen plugins, one CSV per series. Sources: the Yahoo chart API (period1=0, daily, `events=div,split`: columns `date,close,adjclose`) and FRED CSV (columns `date,value`). Refresh with `python -m research.batch_screen.extra --fetch-all`, add a series with --fetch/--fetch-fred, check every hash and range with --verify. A key is a series name or a {\"windows\": {window: series}} map; `data.extra(key)` returns the series aligned to the panel's own sessions (the drawn source session inside a bootstrap chunk), NaN where the series has no value on that date. Nothing is forward-filled unless the plugin asks for `ffill=True`.",
  "schema": "parayabuck.batch_screen.extradata/v1",
  "series": {
+  "AAA": {
+   "bytes": 20644,
+   "column": "value",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_v1_aaa.csv",
+   "price": "level",
+   "range": [
+    "1919-01-01",
+    "2026-09-01"
+   ],
+   "rows": 1293,
+   "sha256": "a34e4ac766751a58161725cb5bec21f957358a83ca2c21ec5e57430f835a2b1c",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=AAA"
+  },
+  "BAA": {
+   "bytes": 20711,
+   "column": "value",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_v1_baa.csv",
+   "price": "level",
+   "range": [
+    "1919-01-01",
+    "2026-09-01"
+   ],
+   "rows": 1293,
+   "sha256": "6383958b60e76da2c36bf7f9c5cfccb55eb2e20de1cbd15e056b32137c8f808e",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAA"
+  },
   "BAA10Y": {
    "bytes": 162009,
    "column": "value",
@@ -184,6 +238,186 @@
    "sha256": "4d0726302e7d518ff42b63ab9501fc9fc89e9cb930cb25f807f1fd4d6c83a18f",
    "source": "Yahoo chart API",
    "url": "https://query1.finance.yahoo.com/v8/finance/chart/IEF?period1=0&period2=1792150998&interval=1d&events=div%2Csplit"
+  },
+  "P2_HC_FTSE": {
+   "bytes": 373366,
+   "column": "high_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_ftse.csv",
+   "price": "ratio",
+   "range": [
+    "1984-01-03",
+    "2026-09-29"
+   ],
+   "rows": 10797,
+   "sha256": "5c7a560e2447a814ed6b85f1a76da919c3b304d62f6462a0e9ffb18eb31dd33b",
+   "source": "derived: high_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EFTSE?period1=0&period2=1790726400&interval=1d&events=div%2Csplit"
+  },
+  "P2_HC_GDAXI": {
+   "bytes": 315418,
+   "column": "high_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_gdaxi.csv",
+   "price": "ratio",
+   "range": [
+    "1987-12-30",
+    "2026-09-29"
+   ],
+   "rows": 9799,
+   "sha256": "0002c4becded2916ca046d0b3ccc1d0ac3c16017feec9fbfb99476bd44078166",
+   "source": "derived: high_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGDAXI?period1=0&period2=1790726400&interval=1d&events=div%2Csplit"
+  },
+  "P2_HC_GSPC": {
+   "bytes": 108786,
+   "column": "high_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_gspc.csv",
+   "price": "ratio",
+   "range": [
+    "1927-12-30",
+    "1956-12-31"
+   ],
+   "rows": 7250,
+   "sha256": "df91419e510c9319915fbe246feeb41eb9256613f1a853d65b79a95f8524b75c",
+   "source": "derived: high_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=0&period2=-410227200&interval=1d&events=div%2Csplit"
+  },
+  "P2_HC_IXIC": {
+   "bytes": 183807,
+   "column": "high_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_ixic.csv",
+   "price": "ratio",
+   "range": [
+    "1971-02-05",
+    "1999-12-31"
+   ],
+   "rows": 7304,
+   "sha256": "721cb80c93257d1c3db4d6abcd8f47ee8464bfedd483e54674660b9639484a28",
+   "source": "derived: high_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?period1=0&period2=946684800&interval=1d&events=div%2Csplit"
+  },
+  "P2_HC_N225": {
+   "bytes": 413557,
+   "column": "high_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_n225.csv",
+   "price": "ratio",
+   "range": [
+    "1965-01-05",
+    "2026-09-29"
+   ],
+   "rows": 15175,
+   "sha256": "a381a2e304e76072fa0b720fdbcbbfb8818b8548935e9ed4b58cfb1140fea5e5",
+   "source": "derived: high_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EN225?period1=0&period2=1790726400&interval=1d&events=div%2Csplit"
+  },
+  "P2_HC_QQQ": {
+   "bytes": 246109,
+   "column": "high_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_qqq.csv",
+   "price": "ratio",
+   "range": [
+    "1999-03-10",
+    "2026-09-29"
+   ],
+   "rows": 6932,
+   "sha256": "34eb6e55ec9fd8b3773509b469a46cda5eecd64b896ea2647d9e2f80ff21858b",
+   "source": "derived: high_over_close from data/historical/stress_robustness_v1_daily.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=0&period2=1790726400&interval=1d&events=div%2Csplit"
+  },
+  "P2_LC_FTSE": {
+   "bytes": 373366,
+   "column": "low_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_ftse.csv",
+   "price": "ratio",
+   "range": [
+    "1984-01-03",
+    "2026-09-29"
+   ],
+   "rows": 10797,
+   "sha256": "5c7a560e2447a814ed6b85f1a76da919c3b304d62f6462a0e9ffb18eb31dd33b",
+   "source": "derived: low_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EFTSE?period1=0&period2=1790726400&interval=1d&events=div%2Csplit"
+  },
+  "P2_LC_GDAXI": {
+   "bytes": 315418,
+   "column": "low_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_gdaxi.csv",
+   "price": "ratio",
+   "range": [
+    "1987-12-30",
+    "2026-09-29"
+   ],
+   "rows": 9799,
+   "sha256": "0002c4becded2916ca046d0b3ccc1d0ac3c16017feec9fbfb99476bd44078166",
+   "source": "derived: low_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGDAXI?period1=0&period2=1790726400&interval=1d&events=div%2Csplit"
+  },
+  "P2_LC_GSPC": {
+   "bytes": 108786,
+   "column": "low_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_gspc.csv",
+   "price": "ratio",
+   "range": [
+    "1927-12-30",
+    "1956-12-31"
+   ],
+   "rows": 7250,
+   "sha256": "df91419e510c9319915fbe246feeb41eb9256613f1a853d65b79a95f8524b75c",
+   "source": "derived: low_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=0&period2=-410227200&interval=1d&events=div%2Csplit"
+  },
+  "P2_LC_IXIC": {
+   "bytes": 183807,
+   "column": "low_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_ixic.csv",
+   "price": "ratio",
+   "range": [
+    "1971-02-05",
+    "1999-12-31"
+   ],
+   "rows": 7304,
+   "sha256": "721cb80c93257d1c3db4d6abcd8f47ee8464bfedd483e54674660b9639484a28",
+   "source": "derived: low_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?period1=0&period2=946684800&interval=1d&events=div%2Csplit"
+  },
+  "P2_LC_N225": {
+   "bytes": 413557,
+   "column": "low_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_n225.csv",
+   "price": "ratio",
+   "range": [
+    "1965-01-05",
+    "2026-09-29"
+   ],
+   "rows": 15175,
+   "sha256": "a381a2e304e76072fa0b720fdbcbbfb8818b8548935e9ed4b58cfb1140fea5e5",
+   "source": "derived: low_over_close from data/historical/ewma_band_v1_index.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EN225?period1=0&period2=1790726400&interval=1d&events=div%2Csplit"
+  },
+  "P2_LC_QQQ": {
+   "bytes": 246109,
+   "column": "low_over_close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/batch_screen_plugins_b2_hl_qqq.csv",
+   "price": "ratio",
+   "range": [
+    "1999-03-10",
+    "2026-09-29"
+   ],
+   "rows": 6932,
+   "sha256": "34eb6e55ec9fd8b3773509b469a46cda5eecd64b896ea2647d9e2f80ff21858b",
+   "source": "derived: low_over_close from data/historical/stress_robustness_v1_daily.csv (Yahoo chart API)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=0&period2=1790726400&interval=1d&events=div%2Csplit"
   },
   "SHY": {
    "bytes": 210749,

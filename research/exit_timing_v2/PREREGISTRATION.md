@@ -341,5 +341,33 @@ assertion:
    `{arm}_vs_{baseline}` cells for both the control and the reference label, so the published
    `diff_vs_C0_*` cells stay comparable with `gain_band_v3` while G5 reads `{arm}_vs_K`.
 
-**A3. Findings and any post-commit fixes of this (v2) run — see `docs/research/exit_timing_v2.md`.**
-Any issue found while running is recorded there and in this section, with the run it invalidated.
+**A3. Findings of this (v2) run — see `docs/research/exit_timing_v2.md`.** The verdict is recorded
+there: **no arm adopted** (X1 fails G4/T1/T2/T3, X2 fails G7/T1/T2/T3, X3 fails G4/G7/T1) and the
+axis is closed. The pre-registered expectations held: X1 defers 24 exit fill sessions (0.36 % of
+the path, 10 sessions of decision difference from K), X2 stages 10 times over 10 staged sessions
+(6 gate releases, 4 ordinary-rule takeovers, **0** cap releases — exactly the anti-correlation
+§4.3 predicted), and T2/T3's median is exactly 0.000 pp for both single devices (the §6
+expected-share caveat).
+
+**A4. Post-commit fixes of this (v2) run — none touching an arm, parameter, stage, seed, threshold
+or gate.** Every item below was either a crash with a non-zero exit and no `RESULTS.json`, a
+smoke-time assertion, or a *comparison/reporting* fix; the pre-registered run was then executed
+twice with byte-identical `RESULTS.json`.
+
+1. **Smoke-only engineering**: the X1 identity's exit has to be *decided* at the close of the
+   session before a December fill (the engine decides on the close of `i-1` and fills at the open
+   of `i`), and the X2 identity's `hold` has to fail at the decision close *after* the staging
+   decision. Both are properties of the engine's convention, fixed in the smoke scenario only.
+2. **`reference_checks` delta cells (comparison bug).** `gain_band_v3`'s control was **C0**
+   (production R2) while this study's control is **K**, so its published control-relative
+   `delta_*_pp` cells of the E1/E2/OOS/instrument stages are not the same quantity as this study's
+   (138 cells, first complete run). The comparison now rebases those cells on this study's own C0
+   row and additionally compares the **C0** subtrees (1,893 cells, 0 mismatches, max |diff|
+   5.0e-07). No arm, gate, stage or parameter changed; the deep block got *stronger*.
+3. **`RESULTS.json` determinism.** The first two runs differed in three keys only
+   (`wall_clock_s`, and the engine-parity CLI's `wall_s`/`verdict`), so no wall-clock value is
+   stored in `RESULTS.json` any more; the `--run` wall clock is reported in `SUMMARY.txt`
+   (PREREGISTRATION.md §8). Two consecutive `--run`s now write byte-identical `RESULTS.json`.
+4. **`harness`/`summary` crashes** (`KeyError: 'X1'` when the engine's `fe_boot.boot` was handed
+   this study's candidate deltas; `KeyError: 'C0'` in the per-arm table for the non-candidate
+   rows): fixed before any result was written.

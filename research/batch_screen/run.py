@@ -795,6 +795,160 @@ def two_leg_kernel_parity(n_boot_paths=40, engine_parity_result=None):
     return out
 
 
+# ----------------------------------------------------------------------------- multi-leg checks
+MULTI_LEG_PROBE = HERE / "probes/multi_leg.py"
+
+
+def multi_leg_probe(arm_id):
+    """One arm of `probes/multi_leg.py` (the N-leg engineering probe, outside `research/ideas/`)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("probe_multi_leg_run", MULTI_LEG_PROBE)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    arm = api.resolve_arm(mod, arm_id)
+    arm.update({"id": f"probes.multi_leg/{arm_id}", "idea": "probes.multi_leg", "arm_id": arm_id,
+                "mod": mod})
+    return arm
+
+
+class _ProbeMod:
+    """A throwaway module for `api.resolve_arm` validation cells (only `ARMS` is read)."""
+
+    def __init__(self, arms):
+        self.ARMS = arms
+
+
+def _refuses(spec, fragment):
+    """True when `resolve_arm` refuses `spec` with a message carrying `fragment`."""
+    try:
+        api.resolve_arm(_ProbeMod({"a": spec}), "a")
+    except api.PluginError as exc:
+        return fragment in str(exc)
+    return False
+
+
+def multi_leg_checks():
+    """The framework's N-leg routing: the contract, the kernel, the loan, the option leg."""
+    from research.fast_engine3 import bridge3
+
+    days, p, i0, i1 = windows.main_panel(0.0)
+    env = windows.try_env(days, i0, i1)
+    ctrl = control_spec()
+    out = {}
+    zeros = multi_leg_probe("zeros")
+    rc = stages.run_one(ctrl, p, env, i0, i1, "progressive", 2, 100_000.0)
+    rz = stages.run_one(zeros, p, env, i0, i1, "progressive", 2, 100_000.0)
+    out["three_leg_arm_with_two_empty_books_is_the_control"] = {
+        "pass": bool(len(zeros["legs"]) == 3 and np.array_equal(rc["_nav"], rz["_nav"])
+                     and rc["cagr_usd_liquidated"] == rz["cagr_usd_liquidated"]
+                     and rc["turnover_total"] == rz["turnover_total"]
+                     and rz["_legs"]["B"]["trades"] == 0 and rz["_legs"]["C"]["units_end"] == 0.0),
+        "legs": list(zeros["legs"]), "cagr": rz["cagr_usd_liquidated"]}
+    rp = stages.run_one(ctrl, p, env, i0, i1, "pre_tax", 2, 1.0)
+    zp = stages.run_one(zeros, p, env, i0, i1, "pre_tax", 2, 1.0)
+    out["three_leg_empty_books_are_the_control_pretax"] = {
+        "pass": bool(np.array_equal(rp["_nav"], zp["_nav"]))}
+    # the margin arms: the loan is real, it is charged, and it moves the NAV
+    mq = multi_leg_probe("margin_qqq")
+    rq = stages.run_one(mq, p, env, i0, i1, "progressive", 2, 100_000.0)
+    plain = dict(mq, opts={}, margin_spread=None)
+    rplain = stages.run_one(plain, p, env, i0, i1, "progressive", 2, 100_000.0)
+    out["margin_arm_carries_the_loan"] = {
+        "pass": bool(mq["margin_spread"] == 0.015 and rq["opts_stats"]["margin_usd"] > 0
+                     and not np.array_equal(rplain["_nav"], rq["_nav"])
+                     and rq["cagr_usd_liquidated"] < rplain["cagr_usd_liquidated"]),
+        "margin_usd": rq["opts_stats"]["margin_usd"],
+        "cagr_off": rplain["cagr_usd_liquidated"], "cagr_on": rq["cagr_usd_liquidated"]}
+    sm = multi_leg_probe("sleeve_margin")
+    rs = stages.run_one(sm, p, env, i0, i1, "progressive", 2, 100_000.0)
+    out["sleeve_over_the_cap_is_funded_by_the_loan"] = {
+        "pass": bool(rs["_legs"]["A"]["trades"] > 0 and rs["_legs"]["B"]["trades"] > 0
+                     and rs["opts_stats"]["margin_usd"] > 0
+                     and rs["_legs"]["B"]["units_end"] == 0.0),
+        "margin_usd": rs["opts_stats"]["margin_usd"],
+        "leg_b_trades": rs["_legs"]["B"]["trades"]}
+    # the 2x_spy option leg beside another book (IC41)
+    sp = multi_leg_probe("spy_pair")
+    rsp = stages.run_one(sp, p, env, i0, i1, "progressive", 2, 100_000.0)
+    out["the_2x_spy_leg_is_a_real_second_book"] = {
+        "pass": bool(rsp["_legs"]["A"]["trades"] > 0 and rsp["_legs"]["B"]["trades"] > 0
+                     and rsp["_legs"]["B"]["turnover_total"] > 0
+                     and sum(rsp["_legs"]["B"]["realised_gain_try_by_reason"].values()) != 0.0),
+        "leg_a_trades": rsp["_legs"]["A"]["trades"], "leg_b_trades": rsp["_legs"]["B"]["trades"],
+        "cagr": rsp["cagr_usd_liquidated"]}
+    # the off-state blend of three extra-data instruments, on its own reduced window
+    bl = multi_leg_probe("offstate_blend")
+    win = windows.arm_window(bl)
+    out["a_four_leg_off_state_blend_runs"] = {
+        "pass": bool(win.reduced and win.inputs == ("gld", "ief", "shy")
+                     and win.i0 == max(windows.input_start_index(days, k)
+                                       for k in ("gld", "ief", "shy")) + 1
+                     and bridge3.needs_kernel3(bl)),
+        "window": win.tag, "inputs": list(win.inputs), "n_legs": bl["n_legs"]}
+    rec = stages.stage1(bl, "none", win=win)
+    out["the_blend_stage1_is_finite_on_its_window"] = {
+        "pass": bool(rec["window"]["start"] == str(days[win.i0])
+                     and np.isfinite(rec["main"]["base"]["m2"]["cagr"])
+                     and np.isfinite(rec["after_tax"]["2000_03_to_2026_09"]["after_tax_cagr"])),
+        "window": rec["window"]["start"], "cagr": rec["main"]["base"]["m2"]["cagr"]}
+    # the declaration contract
+    out["the_legs_declaration_is_validated"] = {
+        "pass": bool(
+            _refuses({"legs": ["2x"]}, "2..4")
+            and _refuses({"legs": ["2x", "2x"]}, "twice")
+            and _refuses({"legs": ["2x", "nope"]}, "unknown leg")
+            and _refuses({"legs": ["gld", "2x"]}, "panel leg")
+            and _refuses({"legs": ["2x", "1x"], "leg": "1x"}, "disagrees")
+            and _refuses({"legs": ["2x", "1x"], "leg_b": "2x"}, "disagrees")
+            and _refuses({"margin_spread": 0.01}, "multi-leg arm")
+            and _refuses({"legs": ["2x", "1x"], "rule": "probe_band0_k"}, "multi-leg kernel")
+            and _refuses({"legs": ["2x", "1x"], "margin_spread": float("nan")}, "finite")),
+        "rule": "each refusal names its own defect"}
+    # the bootstrap: the control's paths are untouched, the empty-book arm is the control
+    zzb = multi_leg_probe("zeros")
+    both = B.boot([ctrl, zzb], n_pre=8, n_tax=8, capitals=("100k",), modes=("progressive",),
+                  quiet=True)
+    alone = B.boot([ctrl], n_pre=8, n_tax=8, capitals=("100k",), modes=("progressive",),
+                   quiet=True)
+    out["the_n_leg_bootstrap_keeps_the_control_paths"] = {
+        "pass": bool(np.array_equal(both["pre"]["base"][ctrl["id"]],
+                                    alone["pre"]["base"][ctrl["id"]])
+                     and np.array_equal(both["tax"]["100k"]["progressive"][ctrl["id"]],
+                                        alone["tax"]["100k"]["progressive"][ctrl["id"]])
+                     and np.array_equal(both["tax"]["100k"]["progressive"][zzb["id"]],
+                                        both["tax"]["100k"]["progressive"][ctrl["id"]]))}
+    mb = B.boot([ctrl, multi_leg_probe("margin_qqq")], n_pre=8, n_tax=8, capitals=("100k",),
+                modes=("progressive",), quiet=True)
+    v = mb["tax"]["100k"]["progressive"]["probes.multi_leg/margin_qqq"]
+    out["a_margin_arm_bootstraps"] = {
+        "pass": bool(np.isfinite(v).all()
+                     and not np.array_equal(v, mb["tax"]["100k"]["progressive"][ctrl["id"]]))}
+    return out
+
+
+def multi_leg_kernel_parity(n_boot_paths=40, engine_parity_result=None):
+    """The N-leg kernel's own parity cells (`research/fast_engine3/fe3_parity.py`)."""
+    from research.fast_engine3 import fe3_parity
+
+    res = fe3_parity.run(n_boot_paths=n_boot_paths, quiet=True,
+                         engine_parity_result=engine_parity_result)
+    out = {"all": {"pass": bool(res["all"]), "n_cells": int(res["n_checks"]),
+                   "failed": list(res["failed"]), "wall_s": float(res["wall_s"])}}
+    for group in ("main_window", "after_tax_windows", "cash_yield", "bootstrap", "margin",
+                  "multi_leg", "engine_anchors"):
+        out[group] = {"pass": _group_pass(res[group]),
+                      "cells": len([c for c in res[group].values()
+                                    if isinstance(c, dict) and "pass" in c])}
+    for k, v in res["margin"].items():
+        if isinstance(v, dict) and "margin_usd_engine" in v:
+            out[f"margin_{k}"] = {"pass": bool(v["pass"]),
+                                  "margin_usd": v["margin_usd_engine"]}
+    out["engine_parity_quick"] = {"pass": bool(res["engine_parity_quick"]["pass"]),
+                                  "tail": res["engine_parity_quick"]["tail"]}
+    return out
+
+
 # ----------------------------------------------------------------------------- harness
 def _anchor(label, got, want, tol_pp=ANCHOR_TOL_PP):
     got, want = float(got), float(want)
@@ -869,6 +1023,9 @@ def harness():
     checks["two_leg_kernel_parity"] = two_leg_kernel_parity(
         engine_parity_result=checks["engine_parity_quick"])
     checks["two_leg_opts_parity"] = two_leg_opts_parity()
+    checks["multi_leg"] = multi_leg_checks()
+    checks["multi_leg_kernel_parity"] = multi_leg_kernel_parity(
+        engine_parity_result=checks["engine_parity_quick"])
     flat = {}
     for group, val in checks.items():
         if isinstance(val, dict):

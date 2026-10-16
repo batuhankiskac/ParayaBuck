@@ -135,14 +135,26 @@ def run_one(arm, data, env, i0, i1, mode, m=M, capital=TAX_CAPITALS[GATE_CAPITAL
     `rules.register_rule`) -- or that holds the option leg `2x_spy` -- is prepared and simulated by
     `research.fast_engine_opts.bridge` instead. With no options the panel and the engine call are
     the ones above, unchanged.
+
+    An arm that declares more than two instruments (`"legs"`), a `margin_spread` loan or the
+    `2x_spy` leg beside another instrument is routed to the N-leg kernel
+    (`research.fast_engine3.bridge3`); a two-leg arm without any of those keeps the two-leg path
+    unchanged.
     """
-    if arm.get("opts") or arm.get("leg") == api.LEG_SPY:
+    from research.fast_engine3 import bridge3
+
+    multi = bridge3.needs_kernel3(arm)
+    if multi:
+        data = bridge3.prepare(data, bridge3.arm_legs(arm))
+    elif arm.get("opts") or arm.get("leg") == api.LEG_SPY:
         from research.fast_engine_opts import bridge as _bridge
 
         data = _bridge.prepare_panel(data, arm)
     t = call_targets(arm["mod"], data, arm)
     if t.leg != arm["leg"]:
         raise ValueError(f"arm {arm['id']}: targets() changed the leg to {t.leg!r}")
+    if multi:
+        return bridge3.simulate_multi(arm, t, data, env, capital, i0, i1, mode, m, rule_index)
     oa, ca = data.legs[t.leg]
     if t.two_leg:
         if data.P != 1:

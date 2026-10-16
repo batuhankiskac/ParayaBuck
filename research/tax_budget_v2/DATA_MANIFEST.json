@@ -1,0 +1,92 @@
+{
+ "campaign": "tax_budget_v2",
+ "engine": {
+  "base": "research/fast_engine/ (tag archive/research/fast-engine-v1-2026-10)",
+  "fork": "research/tax_budget_v2/fe/ (Y1/Y2 year-end round trip, Y3/Y4 state window, G8 OOS bootstrap)",
+  "prereg": "research/tax_budget_v2/PREREGISTRATION.md"
+ },
+ "files": {
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "bytes": 172726,
+   "restored_from": "archive/research/fast-engine-v1-2026-10 (unchanged from band_h2_combo_v1)",
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+   "source": "reused from existing research data",
+   "source_url": "CBRT USD/TRY forex buying rate (as recorded by after_tax_tr_v1)",
+   "used_by": "tax_engine.load_market -> USD/TRY conversion of gains, tax payments and the rule-gain probe"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "bytes": 17845,
+   "restored_from": "archive/research/fast-engine-v1-2026-10 (unchanged from band_h2_combo_v1)",
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+   "source": "reused from existing research data",
+   "source_url": "TUIK Yi-UFE monthly index (as recorded by after_tax_tr_v1)",
+   "used_by": "tax_engine -> Yi-UFE indexation of the acquisition month and the deflated bracket ceilings"
+  },
+  "data/historical/ewma_band_v1_gspc.csv": {
+   "bytes": 1145471,
+   "restored_from": "archive/research/fast-engine-v1-2026-10 (unchanged from band_h2_combo_v1)",
+   "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+   "source": "reused from existing research data",
+   "source_url": "n/a",
+   "used_by": "gate G7 window ^GSPC 1957-01-02 -> 1999-12-31"
+  },
+  "data/historical/ewma_band_v1_index.csv": {
+   "bytes": 4114163,
+   "restored_from": "archive/research/fast-engine-v1-2026-10 (unchanged from band_h2_combo_v1)",
+   "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+   "source": "reused from existing research data",
+   "source_url": "n/a",
+   "used_by": "gate G7 windows M1-M5: ^IXIC/^GSPC/^N225/^GDAXI/^FTSE OHLC"
+  },
+  "data/historical/ewma_band_v1_tb3ms.csv": {
+   "bytes": 4439,
+   "restored_from": "archive/research/fast-engine-v1-2026-10 (unchanged from band_h2_combo_v1)",
+   "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+   "source": "reused from existing research data",
+   "source_url": "n/a",
+   "used_by": "gate G7: TB3MS pre-1954 T-bill rate for the M2 window"
+  },
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "bytes": 2671225,
+   "restored_from": "archive/research/fast-engine-v1-2026-10 (unchanged from band_h2_combo_v1)",
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+   "source": "reused from existing research data",
+   "source_url": "n/a",
+   "used_by": "trend_robustness_v2.load() -> QQQ/SPY/QLD open, close, dividend bars (main window and both bootstraps)"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "bytes": 301157,
+   "restored_from": "archive/research/fast-engine-v1-2026-10 (unchanged from band_h2_combo_v1)",
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+   "source": "reused from existing research data",
+   "source_url": "n/a",
+   "used_by": "trend_robustness_v2.load() -> DTB3 financing rate; also the OOS T-bill fallback"
+  },
+  "research/band_h2_combo_v1/H2_ANCHORS.json": {
+   "bytes": 4394,
+   "restored_from": "archive/research/band-h2-combo-v1-2026-10 (evidence, not an input)",
+   "sha256": "8d8cd644fe3526e814cb0718cfa2bcd30cb6a91689a93685f723e3b6893f3074",
+   "source": "published evidence, reused",
+   "source_url": "n/a",
+   "used_by": "published evidence (H2 cells) carried by the parent manifest"
+  },
+  "research/band_h2_combo_v1/RESULTS.json": {
+   "bytes": 260050,
+   "restored_from": "archive/research/band-h2-combo-v1-2026-10 (evidence, not an input)",
+   "sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
+   "source": "published evidence, reused",
+   "source_url": "n/a",
+   "used_by": "published evidence of the parent campaign (K and C0 cells)"
+  },
+  "research/gain_band_v3/RESULTS.json": {
+   "bytes": 297446,
+   "restored_from": "archive/research/band-h2-combo-v1-2026-10 (evidence, not an input)",
+   "sha256": "7b4acb8b0ca80878b11f85664b8b438c8129be18f015cc5fc661bc371e7aa278",
+   "source": "published evidence, reused",
+   "source_url": "n/a",
+   "used_by": "published evidence (A1u cells) carried by the parent manifest"
+  }
+ },
+ "note": "Offline study: no network download. Every price/FX/CPI input is an existing committed research file, unchanged from band_h2_combo_v1; the SHA-256 values were re-computed in this worktree. Uses: stress_robustness_v1_{daily,dtb3}.csv (QQQ/SPY/QLD bars, DTB3), after_tax_tr_v1_{usdtry_cbrt,yiufe}.csv (TRY conversion, YI-UFE indexation), ewma_band_v1_{gspc,index,tb3ms}.csv (the six OOS windows). The TRY/YI-UFE calendar starts 2000-01 / 1999-01, so no after-tax stage starts before 2000-03-09. No 21-instrument stage is run. Three further entries are published evidence (not inputs): band_h2_combo_v1/RESULTS.json (the K and C0 anchors), gain_band_v3/RESULTS.json and band_h2_combo_v1/H2_ANCHORS.json (the parent campaigns cells).",
+ "verified_on": "2026-10-16"
+}

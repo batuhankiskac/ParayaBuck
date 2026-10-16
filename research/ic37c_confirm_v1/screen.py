@@ -30,6 +30,7 @@ import numpy as np
 
 from research.batch_screen import api, boot as B, run as runner, stages, windows
 from research.batch_screen.stages import GATE_CAPITAL
+from research.fast_engine import fe_signals
 from research.fast_engine.fe_config import (
     BLOCK,
     PRE_BOOT_PATHS,
@@ -112,6 +113,29 @@ def arms():
 def main_window():
     days, p, i0, i1 = windows.main_panel(0.0)
     return days, p, i0, i1
+
+
+class E2Reference:
+    """The `fast_reentry_v1` **E2** reference row (the plain E2 vote under C0, no early re-entry).
+
+    Harness-only: it is not a study arm, and it lives here rather than in `research/ideas/` so it
+    never enters the trial ledger. Its target series is `fe_signals.arm_signals(..., "E2")`'s:
+    `sized_wants(e2_up, ones, vol)` on the held leg's own vol -- the same inputs `k_control` uses.
+    """
+
+    ARMS = {"E2": {"rule": "C0", "leg": "2x", "cash_yield": "none"}}
+
+    @staticmethod
+    def targets(data, spec):
+        e2 = fe_signals.e2_up(data.price)
+        return fe_signals.sized_wants(e2, np.ones_like(e2, dtype=float), data.vol)
+
+
+def e2_reference_arm():
+    arm = api.resolve_arm(E2Reference, "E2")
+    arm.update({"id": "e2_reference/E2", "idea": "e2_reference", "arm_id": "E2",
+                "mod": E2Reference})
+    return arm
 
 
 # ----------------------------------------------------------------------------- one arm
@@ -450,6 +474,11 @@ def harness():
                         ("R2_pre_cal_m2", rec_r2["main"]["calibrated"]["m2"]["cagr"], 0.149000),
                         ("R2_pre_base_m1", rec_r2["main"]["base"]["m1"]["cagr"], 0.157500),
                         ("R2_dd_base_m2", rec_r2["main"]["base"]["m2"]["max_dd"], 0.467600)):
+        checks.append(_anchor(n, got, ref))
+    rec_e2 = stages.stage1(e2_reference_arm(), "none")
+    for n, got, ref in (("E2_ref_pre_base_m2", rec_e2["main"]["base"]["m2"]["cagr"], 0.146700),
+                        ("E2_ref_pre_cal_m2", rec_e2["main"]["calibrated"]["m2"]["cagr"], 0.141000),
+                        ("E2_ref_dd_base_m2", rec_e2["main"]["base"]["m2"]["max_dd"], 0.495600)):
         checks.append(_anchor(n, got, ref))
 
     print("  4/5 IC37/C reproduces its batch_bank_v3 record (real data)", flush=True)

@@ -3,7 +3,7 @@
   "check": "parity_quick",
   "pass": true,
   "tail": [
-   "parity PASS in 11.3s -> PARITY.json"
+   "parity PASS in 11.2s -> PARITY.json"
   ]
  },
  {
@@ -82,6 +82,27 @@
   "got": 0.467584,
   "pass": true,
   "reference": 0.4676
+ },
+ {
+  "check": "E2_ref_pre_base_m2",
+  "diff_pp": 0.004909,
+  "got": 0.146749,
+  "pass": true,
+  "reference": 0.1467
+ },
+ {
+  "check": "E2_ref_pre_cal_m2",
+  "diff_pp": 0.004311,
+  "got": 0.141043,
+  "pass": true,
+  "reference": 0.141
+ },
+ {
+  "check": "E2_ref_dd_base_m2",
+  "diff_pp": 0.004283,
+  "got": 0.495643,
+  "pass": true,
+  "reference": 0.4956
  },
  {
   "check": "IC37C_window_is_20030103",

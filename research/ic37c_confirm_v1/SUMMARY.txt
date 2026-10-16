@@ -1,8 +1,8 @@
-ic37c_confirm_v1 | confirmation of IC37-C on an extended bond history | control k_control/K | harness PASS (27/27)
+ic37c_confirm_v1 | confirmation of IC37-C on an extended bond history | control k_control/K | harness PASS (30/30)
 Verdict: FAIL | candidate pass=False | E1 valid=True | IC37-C was selected after seeing batch_bank_v3 (N = 303 ledger trials), so a pass is at most a CANDIDATE FOR OWNER DECISION
 window 2000-03-09 -> 2026-09-29  (proxy mode: the synthetic IEF series + the point-in-time breakeven proxy behind IC37's own keys)
 E1 proxy vs real IEF 2002-07-30..2026-09-29: corr 0.9567 (>= 0.95), TE 2.06% (<= 2.5%), CAGR gap -1.13pp (|.| <= 2.0)
-wall clock of --run: 101.9 s
+wall clock of --run: 117.7 s
 
 arm      | preCAGR base/cal | dCAGR base/cal | maxDD base/cal | turn/K | B1 med/sh    | B2 med/sh    | OOSmed | pooled | AT2000/2010/2017 d | E2 med/sh | E4 6-cell med/sh
 IC37/C   |  17.81/ 17.21  |  +2.04/ +2.03 | 39.54/39.77 |  1.897 | +25.05/0.961 | +28.20/0.973 |  +1.94 | +23.53 |  +1.11/ +0.19/ +0.65 |  +0.42/0.86 | 10_flat:+53.72/0.99 10_progressive:+nan/0.99 20_flat:+28.10/0.97 20_progressive:+23.87/0.96 40_flat:+14.84/0.94 40_progressive:+12.78/0.92

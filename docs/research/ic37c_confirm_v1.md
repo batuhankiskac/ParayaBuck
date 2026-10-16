@@ -2,11 +2,12 @@
 
 > **Evidence.** Branch `research/ic37c_confirm_v1` (worktree
 > `/Users/batuhankiskac/Desktop/ParayaBuck-wt/ic37c_confirm_v1`), commits `c6d656d0` (§pre-reg +
-> inputs), `88b27d20` (harness), and the results commit (§`git log`). Files:
+> inputs), `88b27d20` (harness), `299a172e` (results + this report), plus the harness/report
+> follow-up (§`git log`). Files:
 > `research/ic37c_confirm_v1/` — `PREREGISTRATION.md` (committed **before** any non-control arm was
 > simulated), `data.py` (FRED/ALFRED/Yahoo fetch + the two derived series), `proxy.py` (in-memory
 > registration of the derived series into the framework's extra-data registry), `screen.py`,
-> `DATA_MANIFEST.json`, `HARNESS.json` (27/27), `E1.json`, `RESULTS.json`
+> `DATA_MANIFEST.json`, `HARNESS.json` (30/30), `E1.json`, `RESULTS.json`
 > (sha256 `b0c51d2e0ca2ca2ea50fb1eef3b3145cb09b9de8134938e00113dabcf15aa244`, reproduced
 > byte-identically by a second and third run), `SUMMARY.txt`. Inputs: `data/historical/ic37c_confirm_v1_*.csv`.
 > Arms: `research/ideas/IC37.py` (**committed, imported unchanged**) and `research/ideas/k_control.py`
@@ -224,9 +225,12 @@ after seeing the result.
 
 ## 8. Method, determinism, cost
 
-* `--harness`: **27/27** — `research.fast_engine.parity --quick` PASS (with `PARITY.json` restored to
+* `--harness`: **30/30** — `research.fast_engine.parity --quick` PASS (with `PARITY.json` restored to
   its committed bytes), K's anchors to ≤ 5e-05 pp (15.7649 / 15.1785 %, 46.6698 / 46.7948 %,
-  10.7533 / 15.2354 / 23.9720 %) and the R2 reference row, IC37/C reproducing its `batch_bank_v3`
+  10.7533 / 15.2354 / 23.9720 %), the R2 reference row (15.4766 / 14.8961 %, m = 1 15.7538 %,
+  DD 46.7584 %; published 15.48 / 14.90 / 15.75 / 46.76) and the E2/C0 reference row
+  (14.6749 / 14.1043 %, DD 49.5643 %; published 14.67 / 14.10 / 49.56 — all within 0.005 pp),
+  IC37/C reproducing its `batch_bank_v3`
   record **cell for cell** in real mode (arm/control after tax 0.146754 / 0.140875, 0.154118 /
   0.152354, 0.246151 / 0.239720 on the w20030103 window, 5,972 sessions; B1 +12.2296, B2 +14.5108 pp),
   no framework drift, `resolve_arm` and the IC37 module bytes unchanged, and every data file's
@@ -234,8 +238,8 @@ after seeing the result.
 * **Determinism.** `--run` was executed twice from scratch at each code revision (control recomputed
   both times); the two `RESULTS.json` are **byte-identical**, and the hash is unchanged by the
   final import-only cleanup (sha256 `b0c51d2e…`).
-* **Wall clock:** **101.9 – 123.5 s** across four clean `--run` executions (each with the control
-  recomputed from scratch; `SUMMARY.txt` records the wall clock of the run that wrote it: 101.9 s).
+* **Wall clock:** **97.4 – 123.5 s** across six clean `--run` executions (each with the control
+  recomputed from scratch; `SUMMARY.txt` records the wall clock of the run that wrote it: 117.7 s).
   Wall clock of `--harness`: 24 s.
 
 ## 9. Caveats
@@ -261,8 +265,10 @@ after seeing the result.
 
 ## 10. Amendments
 
-**None.** No arm, parameter, gate, threshold, window, seed or dataset was changed after seeing a
-result. The only post-result edits were to *reporting*: the E4 cells now carry the NaN count and the
-finite-paths median, and the two derived series' registration is documented; neither alters a gate.
-`research/batch_screen/`, `research/fast_engine*/` and `research/ideas/IC37.py` are unmodified
-(asserted by `--harness`), and `docs/research/INDEX.md` was not edited.
+**None** to any arm, parameter, gate, threshold, window, seed or dataset. The post-result edits were
+to *reporting* only: the E4 cells now carry the NaN count and the finite-paths median (§6), and the
+harness gained the `fast_reentry_v1` **E2/C0** reference row (§8) — a report-only anchor the common
+protocol names but `PREREGISTRATION.md` §7.2 did not list. Neither alters a gate, and
+`PREREGISTRATION.md` itself was not edited. `research/batch_screen/`, `research/fast_engine*/` and
+`research/ideas/IC37.py` are unmodified (asserted by `--harness`), and `docs/research/INDEX.md` was
+not edited.

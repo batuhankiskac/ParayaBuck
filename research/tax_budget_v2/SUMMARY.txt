@@ -1,0 +1,53 @@
+tax_budget_v2 -- annual tax-budget execution on top of K (I3 of idea_survey_v4)
+engine: research/tax_budget_v2/fe (yearend, realloc, fe_oos) on research/fast_engine (tag archive/research/fast-engine-v1-2026-10)
+wall clock of --run: 24.0 s (SUMMARY.txt only: RESULTS.json is byte-identical across runs)
+
+HARNESS: parity --quick PASS; fork-vs-parent option-off identity PASS (936 cells, nav bit-identical True); published cells 3094 with 0 mismatches (worst 5.000e-07); literal anchors 0 mismatches
+
+PRE-TAX (main window, m = 2; delta vs K in pp)
+arm    CAGR base       d   CAGR cal       d  maxDD base       d   Calmar    2017+  turn/yr
+C0       15.4766  -0.288    14.8961  -0.282      46.758  +0.089   0.3310    32.71   5.9915
+K        15.7649  +0.000    15.1785  +0.000      46.670  +0.000   0.3378    33.23   5.4561
+Y1       15.7582  -0.007    15.1719  -0.007      46.691  +0.021   0.3375    33.23   5.5315
+Y2       15.7209  -0.044    15.1401  -0.038      46.691  +0.021   0.3367    33.15   5.6788
+Y3       15.7076  -0.057    15.1216  -0.057      47.366  +0.696   0.3316    33.23   5.4390
+Y4       15.7009  -0.064    15.1150  -0.063      47.387  +0.717   0.3313    33.23   5.5143
+
+AFTER TAX at $100k (progressive, liquidated, m = 2; delta vs K in pp)
+arm    2000_03_to_  2010_01_to_  2017_01_to_
+C0    10.1600 -0.59    14.7059 -0.53    22.8861 -1.09   
+K     10.7533 +0.00    15.2354 +0.00    23.9720 +0.00   
+Y1    10.8381 +0.08    15.4466 +0.21    23.9720 +0.00   
+Y2    10.6943 -0.06    15.4102 +0.17    24.0161 +0.04   
+Y3    10.7055 -0.05    15.2354 +0.00    23.9720 +0.00   
+Y4    10.7903 +0.04    15.4466 +0.21    23.9720 +0.00   
+
+BOOTSTRAP (clean, seed 20261011, block 20; delta vs K in pp)
+arm     pre base   pre cal   B1 med   B1 >0   B2 med   B2 >0  OOSB med
+C0        +0.007    +0.012   -0.286   25.0%   -0.131   36.0%    -0.037
+K             --        --       --      --       --      --        --
+Y1        -0.005    -0.005   +0.046   75.6%   -0.004    8.9%    -0.012
+Y2        -0.014    -0.015   -0.052   36.8%   -0.070    7.1%    -0.030
+Y3        +0.000    +0.000   +0.000   43.2%   +0.000   37.6%    +0.000
+Y4        -0.004    -0.004   +0.046   66.3%   -0.004   34.3%    -0.009
+
+GATES
+arm       G1     G2     G3     G4     G5     G6     G7     G8     G9     A1     A2
+Y1      FAIL   PASS   PASS   FAIL   PASS   FAIL   FAIL   FAIL   PASS   FAIL   FAIL
+Y2      FAIL   PASS   PASS   FAIL   PASS   FAIL   FAIL   FAIL   PASS   FAIL   FAIL
+Y3      FAIL   PASS   PASS   FAIL   PASS   FAIL   PASS   PASS   PASS   FAIL   FAIL
+Y4      FAIL   PASS   PASS   FAIL   PASS   FAIL   FAIL   FAIL   PASS   FAIL   FAIL   (report-only)
+
+SELECTION: no arm selected -- no arm passed G1-G9 + A1 + A2
+  Y1: failed G1 G6 G4 G7 G8 A1 A2; after-tax window(s) bit-identical to K (delta exactly 0): 2017_01_to_end
+  Y2: failed G1 G6 G4 G7 G8 A1 A2
+  Y3: failed G1 G6 G4 A1 A2; after-tax window(s) bit-identical to K (delta exactly 0): 2010_01_to_end, 2017_01_to_end
+  Y4: failed G1 G6 G4 G7 G8 A1 A2; after-tax window(s) bit-identical to K (delta exactly 0): 2017_01_to_end
+
+POOL (control K, $100k progressive, main window): 8 loss years of 26, sum |min(0,ytd)| = 383,859 TRY (~$92,108); Y1 trigger available in 8 years, Y2 in 17, 25% cap binds in 15
+LOG Y1: 4 round trips ($114,309 notional, 4 cap-bound, 1 whole-book fallback, 59,440 TRY booked)
+LOG Y2: 12 round trips ($428,212 notional, 12 cap-bound, 10 whole-book fallback, 333,080 TRY booked)
+LOG Y4: 4 round trips ($112,925 notional, 4 cap-bound, 1 whole-book fallback, 60,258 TRY booked)
+LOG Y3: 67 realloc holds, months {'01': 14, '12': 53}
+
+RESULTS.json written; wall clock 24.0 s

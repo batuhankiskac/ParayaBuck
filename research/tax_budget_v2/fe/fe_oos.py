@@ -18,7 +18,7 @@ import numpy as np
 from numba import njit, prange
 
 from . import fe_data, fe_signals, fe_sim
-from .fe_config import BLOCK, EXP_Q, EXTRA_FIN, M, SEED, TSM_N
+from .fe_config import BLOCK, EXP_Q, EXTRA_FIN, M, SEED, START, TSM_N
 from .fe_tax import MODE_PRE_TAX
 
 OOS_PATHS_PER_MARKET = 2_000
@@ -74,7 +74,6 @@ def _oos_chunk(
                 yr_of,
                 scale_y,
                 dec_tail,
-                jan_head,
                 pay_ptr,
                 pay_yr,
                 pay_part,
@@ -102,11 +101,20 @@ def _oos_chunk(
 
 
 def oos_boot_market(key, rng, arms, paths=OOS_PATHS_PER_MARKET, chunk=OOS_CHUNK, m=M):
-    """The pooled-bootstrap leg of one OOS market: `{arm: [paths]}` of per-path CAGR."""
-    days, o, c, y, start = fe_data.load_market(key)
-    pool = np.arange(start, len(days))
+    """The pooled-bootstrap leg of one OOS market: `{arm: [paths]}` of per-path CAGR.
+
+    The market series is the resampled one (2,773 points: the 1.0 baseline plus one return per
+    drawn position) but the *calendar* is the market's own first 2,773 sessions, exactly as
+    `band_h2_combo_v1.boot_oos_market` had it when it drove `engine_run(START, cc.shape[1] - 1)`.
+    So the measured window is sessions [START, OOS_BOOT_L] (2,520 sessions) and the year-end /
+    December / January masks come from that fixed calendar, not from the resampled dates.
+    """
+    days, o, c, y, _start = fe_data.load_market(key)
+    pool = np.arange(_start, len(days))
     npool = len(pool)
-    i0, i1 = start, len(days) - 1
+    i0, i1 = START, OOS_BOOT_L
+    if len(days) <= i1:
+        raise ValueError(f"{key}: only {len(days)} sessions, need {i1 + 1} for the fixed calendar")
     env = fe_sim.RunEnv(days, *fe_data.usd_market(days), i0, i1)
     cost = fe_sim.COST_PER_SIDE * m
     band = np.array([fe_sim.RULE[a]["band"] for a in arms], dtype=np.bool_)

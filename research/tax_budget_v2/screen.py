@@ -608,11 +608,12 @@ def _close_at(c, days, start, ye, env):
 
 def _walk(prefix, mine, theirs, out, tol=TOL):
     if isinstance(theirs, dict):
+        md = {str(k): v for k, v in mine.items()} if isinstance(mine, dict) else {}
         for k, v in theirs.items():
-            if not isinstance(mine, dict) or k not in mine:
+            if str(k) not in md:
                 out.append((f"{prefix}.{k}", None, v, True))
             else:
-                _walk(f"{prefix}.{k}", mine[k], v, out, tol)
+                _walk(f"{prefix}.{k}", md[str(k)], v, out, tol)
     elif isinstance(theirs, (list, tuple)):
         if not isinstance(mine, (list, tuple)) or len(mine) != len(theirs):
             out.append((prefix, mine, theirs, True))
@@ -639,9 +640,9 @@ def _compare(name, mine, theirs, results, tol=TOL):
     results[name] = {
         "cells": len(out),
         "mismatches": len(bad) + 0,
-        "max_abs_diff": maxd,
+        "max_abs_diff": f"{maxd:.3e}",
         "tolerance": tol,
-        "worst": [{"cell": w[0], "diff": w[1]} for w in worst],
+        "worst": [{"cell": w[0], "diff": f"{w[1]:.3e}"} for w in worst],
         "pass": bool(len(bad) == 0 and maxd <= tol),
         "bad": [{"cell": b[0], "mine": rnd(b[1]), "theirs": rnd(b[2])} for b in bad[:10]],
     }
@@ -649,21 +650,20 @@ def _compare(name, mine, theirs, results, tol=TOL):
 
 def parity_subprocess():
     """`python -m research.fast_engine.parity --quick`: the parent engine vs the Python harness."""
-    t0 = time.time()
     proc = subprocess.run(
         [sys.executable, "-m", "research.fast_engine.parity", "--quick"],
         cwd=str(ROOT),
         capture_output=True,
         text=True,
     )
-    tail = [ln for ln in proc.stdout.strip().splitlines() if ln.strip()][-3:]
     return {
         "command": "python -m research.fast_engine.parity --quick",
         "returncode": int(proc.returncode),
-        "wall_s": float(time.time() - t0),
-        "tab": [ln.strip() for ln in proc.stdout.splitlines() if "->" in ln],
-        "tail": tail,
         "pass": bool(proc.returncode == 0 and "parity PASS" in proc.stdout),
+        # the check rows only: the final "parity PASS in X s" line carries a wall clock, and
+        # RESULTS.json has to be byte-identical across runs
+        "tab": [ln.strip() for ln in proc.stdout.splitlines() if "->" in ln and "parity PASS" not in ln],
+        "result": "PASS" if "parity PASS" in proc.stdout else "FAIL",
     }
 
 
@@ -757,7 +757,13 @@ def harness(deep=True, quiet=False):
     for mode in b["anchor_e2_100k"]:
         _compare(f"published.bootstrap.anchor_e2_100k.{mode}", b["anchor_e2_100k"][mode], pub["anchor_e2_100k"][mode], results)
     out["published_cells"] = results
-    # 7. the literal brief anchors
+    # 7. the literal brief anchors (the brief's own 0.01 pp tolerance; the published-cell checks
+    #    above are the stricter ones)
+    days0, o0, c0, w_e2_0, _wr0, _e2v0 = main_inputs(0.0)
+    e2_base = fe.fe_sim.simulate(o0, c0, w_e2_0, env, 100_000.0, S, T, arm="E2", mode="pre_tax", m=2)
+    days1, o1, c1, w_e2_1, _wr1, _e2v1 = main_inputs(fe.fe_config.FIN["calibrated"])
+    e2_cal = fe.fe_sim.simulate(o1, c1, w_e2_1, env, 100_000.0, S, T, arm="E2", mode="pre_tax", m=2)
+    brief_tol = 1e-4
     lit = {
         "K_pre_tax_cagr_base": (pre["base"]["m2"]["K"]["cagr"], 0.157649),
         "K_pre_tax_cagr_calibrated": (pre["calibrated"]["m2"]["K"]["cagr"], 0.151785),
@@ -772,15 +778,17 @@ def harness(deep=True, quiet=False):
         "C0_after_tax_100k_2017": (win["100k"]["2017_01_to_end"]["C0"]["after_tax_cagr"], 0.228861),
         "R2_pre_tax_cagr_base_m2": (pre["base"]["m2"]["C0"]["cagr"], 0.154766),
         "R2_pre_tax_cagr_calibrated_m2": (pre["calibrated"]["m2"]["C0"]["cagr"], 0.148961),
-        "E2_pre_tax_cagr_base_m2": (pre["base"]["m2"]["A1u"]["cagr"], 0.159750),
+        "E2_pre_tax_cagr_base_m2": (e2_base["cagr_usd_unliquidated"], 0.146749),
+        "E2_pre_tax_cagr_calibrated_m2": (e2_cal["cagr_usd_unliquidated"], 0.141000),
+        "E2_pre_tax_max_dd_base_m2": (e2_base["max_dd_nav_usd"], 0.495643),
     }
     lit_out = {}
     bad = 0
     for k, (mine, want) in lit.items():
         d = abs(float(mine) - want)
-        ok = d <= TOL
+        ok = d <= brief_tol
         bad += 0 if ok else 1
-        lit_out[k] = {"mine": float(mine), "expected": want, "abs_diff": d, "pass": ok}
+        lit_out[k] = {"mine": float(mine), "expected": want, "abs_diff": f"{d:.3e}", "tolerance": brief_tol, "pass": ok}
     out["literal_anchors"] = {"cells": lit_out, "mismatches": bad, "pass": bad == 0}
     out["pass"] = bool(
         out["parity_subprocess"]["pass"]
@@ -792,7 +800,7 @@ def harness(deep=True, quiet=False):
         "published_blocks": len(results),
         "published_cells": int(sum(v["cells"] for v in results.values())),
         "published_mismatches": int(sum(v["mismatches"] for v in results.values())),
-        "worst_abs_diff": max([v["max_abs_diff"] for v in results.values()] or [0.0]),
+        "worst_abs_diff": f"{max([float(v['max_abs_diff']) for v in results.values()] or [0.0]):.3e}",
     }
     return out
 
@@ -845,7 +853,9 @@ def run_all(quiet=False):
         print("bootstrap B12 (5,000 / 1,000 paths)...", flush=True)
     b = boot_clean(quiet=True)
     bd = boot_delta_vs_K(b)
-    res["bootstrap_clean_seed20261011"] = b
+    # the raw per-path arrays are used for the delta-vs-K cells and then dropped (tuple keys and
+    # ~40k floats per capital/mode); `paths` is restored from the seed when needed
+    res["bootstrap_clean_seed20261011"] = {k: v for k, v in b.items() if k != "paths"}
     res["bootstrap_delta_vs_K"] = bd
     if not quiet:
         print("OOS windows...", flush=True)
@@ -880,7 +890,7 @@ def run_all(quiet=False):
         }
     res["gates"] = gates
     res["selection"] = select(gates)
-    res["wall_clock_s"] = float(time.time() - t0)
+    res["wall_clock_s_unwritten"] = float(time.time() - t0)  # timing is SUMMARY.txt only
     return res
 
 
@@ -898,7 +908,7 @@ def write_summary(res, path, wall_s):
     lines = []
     lines.append("tax_budget_v2 -- annual tax-budget execution on top of K (I3 of idea_survey_v4)")
     lines.append(f"engine: {res['params']['engine']['fork']} on {res['params']['engine']['base']}")
-    lines.append(f"wall clock of --run: {wall_s:.1f} s (this run; RESULTS.json records it)")
+    lines.append(f"wall clock of --run: {wall_s:.1f} s (SUMMARY.txt only: RESULTS.json is byte-identical across runs)")
     lines.append("")
     lines.append("HARNESS: parity --quick " + ("PASS" if res["harness"]["parity_subprocess"]["pass"] else "FAIL")
                  + "; fork-vs-parent option-off identity "
@@ -907,7 +917,7 @@ def write_summary(res, path, wall_s):
                  + str(res["harness"]["fork_option_off_identity"]["nav_paths_bit_identical"]) + ")"
                  + f"; published cells {res['harness']['summary']['published_cells']} with "
                  + f"{res['harness']['summary']['published_mismatches']} mismatches (worst "
-                 + f"{res['harness']['summary']['worst_abs_diff']:.2e})"
+                 + f"{res['harness']['summary']['worst_abs_diff']})"
                  + f"; literal anchors {res['harness']['literal_anchors']['mismatches']} mismatches")
     lines.append("")
     lines.append("PRE-TAX (main window, m = 2; delta vs K in pp)")
@@ -957,16 +967,32 @@ def write_summary(res, path, wall_s):
         rec = g(res, "gates", arm)
         cells = []
         for k in ("G1", "G2", "G3", "G5", "G6"):
-            cells.append("PASS" if all(rec["pre"][k][m]["pass"] for m in ("base", "calibrated")) else "FAIL")
+            cells.append((k, "PASS" if all(rec["pre"][k][m]["pass"] for m in ("base", "calibrated")) else "FAIL"))
         for k in ("G4", "G7", "G8", "G9"):
-            cells.append("PASS" if rec["pre"][k]["pass"] else "FAIL")
+            cells.append((k, "PASS" if rec["pre"][k]["pass"] else "FAIL"))
         for k in ("A1", "A2"):
-            cells.append("PASS" if rec["tax"][k]["pass"] else "FAIL")
-        lines.append(f"{arm:<5}" + "".join(f"{c:>7}" for c in cells)
+            cells.append((k, "PASS" if rec["tax"][k]["pass"] else "FAIL"))
+        cells.sort(key=lambda kv: ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "A1", "A2").index(kv[0]))
+        lines.append(f"{arm:<5}" + "".join(f"{c:>7}" for _k, c in cells)
                      + ("   (report-only)" if arm in REPORT_ONLY else ""))
     lines.append("")
     sel = res["selection"]
     lines.append(f"SELECTION: {sel['selected'] if sel['selected'] else 'no arm selected'} -- {sel['reason'] if 'reason' in sel else sel['rank_key']}")
+    for arm in (*GATED, *REPORT_ONLY):
+        rec = g(res, "gates", arm)
+        failed = []
+        for k in ("G1", "G2", "G3", "G5", "G6"):
+            if not all(rec["pre"][k][m]["pass"] for m in ("base", "calibrated")):
+                failed.append(k)
+        for k in ("G4", "G7", "G8", "G9"):
+            if not rec["pre"][k]["pass"]:
+                failed.append(k)
+        for k in ("A1", "A2"):
+            if not rec["tax"][k]["pass"]:
+                failed.append(k)
+        inert = [wn for wn in WINDOW_KEYS if abs(rec["tax"]["A1"][wn]["delta_pp"]) < 5e-7]
+        lines.append(f"  {arm}: failed {' '.join(failed) if failed else '(none)'}"
+                     + (f"; after-tax window(s) bit-identical to K (delta exactly 0): {', '.join(inert)}" if inert else ""))
     lines.append("")
     lines.append("POOL (control K, $100k progressive, main window): "
                  f"{g(res,'pool','n_loss_years')} loss years of {g(res,'pool','n_years')}, "
@@ -1008,14 +1034,15 @@ def main():
         print(json.dumps(rnd({k: v for k, v in out.items() if k != "published_cells"}), indent=1))
         print(json.dumps({k: {"cells": v["cells"], "mismatches": v["mismatches"], "max_abs_diff": v["max_abs_diff"],
                               "pass": v["pass"]} for k, v in out["published_cells"].items()}, indent=1))
+        print(f"published blocks {out['summary']['published_blocks']}, cells {out['summary']['published_cells']}, "
+              f"mismatches {out['summary']['published_mismatches']}, worst diff {out['summary']['worst_abs_diff']}")
         print(f"harness {'PASS' if out['pass'] else 'FAIL'} in {time.time() - t0:.1f} s")
         return 0 if out["pass"] else 1
     if args.run:
         t0 = time.time()
         res = run_all(quiet=args.quiet)
         wall = time.time() - t0
-        res["wall_clock_s"] = float(wall)
-        payload = rnd(res)
+        payload = rnd({k: v for k, v in res.items() if k != "wall_clock_s_unwritten"})
         (OUTDIR / "RESULTS.json").write_text(json.dumps(payload, indent=1, sort_keys=True) + "\n")
         text = write_summary(rnd(res), OUTDIR / "SUMMARY.txt", wall)
         print(text)

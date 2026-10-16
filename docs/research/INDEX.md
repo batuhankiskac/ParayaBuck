@@ -11,8 +11,10 @@ back; a downward resize between two positive weights fills only when its drift
 exceeds 0.5 / 3 / 8 pp at an embedded USD FIFO gain fraction of ≤ 1 % / ≤ 5 % /
 > 5 %, and a downsize whose fill session is one of the last 10 NYSE sessions of
 December is postponed to the first January decision), PAPER only. Supporting code, data and
-results for each doc live in `research/<name>/` unless noted (from 2026-10-12 on,
-in the archive tag named in the row).
+results for each doc live in the archive tag named in the row; directories that
+were still on `main` before 2026-10-16 (`research/<name>/` paths in older reports) are in tag
+`archive/research/main-research-dir-2026-10`. New studies are built on the Numba research
+engine (`fast_engine_v1.md`, `WORKER_PROTOCOL.md`).
 
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|

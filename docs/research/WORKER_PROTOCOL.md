@@ -59,7 +59,7 @@ The orchestrator rejects a study that does not import research.fast_engine.
 1. Pre-tax: research/fast_reentry_v1/screen.py on branch `research/fast_reentry_v1` (restore with
    `git checkout research/fast_reentry_v1 -- research/fast_reentry_v1` and also
    `git checkout archive/research/ewma-band-v1-2026-10 -- research/ewma_band_v1 data/historical/ewma_band_v1_gspc.csv data/historical/ewma_band_v1_index.csv data/historical/ewma_band_v1_tb3ms.csv`
-   which it imports; research/trend_robustness_v2/screen.py is on main). Its R2 arm is production.
+   which it imports; research/trend_robustness_v2/screen.py is in tag `archive/research/main-research-dir-2026-10`). Its R2 arm is production.
    Reference numbers your `--harness` must reproduce within 0.01 pp (main window 2000-03-09 →
    2026-09-29, m=2): R2 15.48% base / 14.90% calibrated CAGR, max DD 46.76%, m=1 15.75%;
    E2 (C0 there) 14.67% / 14.10%, DD 49.56%. Read docs/research/fast_reentry_v1.md,

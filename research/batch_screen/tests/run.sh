@@ -8,7 +8,14 @@
 set -e
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 RES_VENV=${RES_VENV:-$HOME/.venvs/pb-research}
-PROJ_VENV=${PROJ_VENV:-$ROOT/../ParayaBuck/.venv}
+if [ -z "${PROJ_VENV:-}" ]; then
+  # this suite usually runs from a git worktree, which is not next to the main checkout: try the
+  # layouts a worktree can have before giving up.
+  for cand in "$ROOT/../ParayaBuck/.venv" "$HOME/Desktop/ParayaBuck/.venv" "$ROOT/.venv"; do
+    if [ -x "$cand/bin/python" ]; then PROJ_VENV=$cand; break; fi
+  done
+fi
+: "${PROJ_VENV:?set PROJ_VENV to the project venv (it has pytest)}"
 SITE=$("$RES_VENV/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
 cd "$ROOT"
 PYTHONPATH="$SITE:$ROOT/src:$ROOT" "$PROJ_VENV/bin/python" -m pytest "$ROOT/research/batch_screen/tests" "$@"

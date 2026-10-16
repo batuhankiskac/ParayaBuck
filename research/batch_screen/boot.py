@@ -195,11 +195,26 @@ class BootWindow:
 
 
 # ----------------------------------------------------------------------------- market panels
+def _extra_index(idx):
+    """The extra-series index of a reconstructed chunk, from the drawn session index `idx`.
+
+    A chunk's market arrays carry one leading base row: column 0 is the artificial level and the
+    return *into* column 1 is the first drawn session's, so drawn session `idx[p, t]` is the state
+    at column `t + 1`. The extra series uses the same convention (column 0 repeats the first drawn
+    session), which is also what makes it one column wider than `idx` and therefore exactly as wide
+    as the market arrays a plugin sees.
+    """
+    return np.concatenate([idx[:, :1], idx], axis=1)
+
+
 def boot_panels(win, pos, legs, fins, cache=None):
     """The published `fe_boot.chunk_legs` reconstruction, as `{(leg, fin): MarketData}`.
 
     `pos` is the drawn position matrix; the indices are `pos + 1` and the arrays are the pool
-    `arange(1, Tsrc)`.
+    `arange(1, Tsrc)`. The panel also carries the extra-series context: the pool is the *main
+    window's* own session list (the bootstrap draws from its full 1999-2026 history, whatever
+    labels the chunk's calendar carries), so `data.extra(key)` inside a chunk returns the drawn
+    source sessions' values.
     """
     idx = pos + 1
     yy = win.y[idx - 1]
@@ -214,6 +229,7 @@ def boot_panels(win, pos, legs, fins, cache=None):
     pc = np.concatenate([one, np.cumprod(r_on_p * r_id, axis=1)], axis=1)
     yyp = np.concatenate([yy, yy[:, -1:]], axis=1)
     o1, c1, d1 = win.q[0][idx], win.q[1][idx], win.q[2][idx]
+    pool_days = windows.bars()[0]
     out = cache if cache is not None else {}
     for fin in fins:
         for leg in legs:
@@ -233,6 +249,9 @@ def boot_panels(win, pos, legs, fins, cache=None):
                 leg=leg,
                 window="boot",
                 meta={"model": "base" if fin == 0.0 else "calibrated", "fin": float(fin), "leg": leg},
+                extra_days=pool_days,
+                extra_index=_extra_index(idx),
+                extra_window="main",
             )
     return out
 
@@ -320,7 +339,7 @@ def _targets(arm, p):
 
 
 # ----------------------------------------------------------------------------- OOS pooled bootstrap
-def _oos_market_panels(days, o, c, y, start, pos, legs, m_cache):
+def _oos_market_panels(days, o, c, y, start, pos, legs, m_cache, key):
     """`boot_oos_market`'s reconstruction for one market: pool `arange(start, len(days))`."""
     idx = start + pos
     r_on = o[idx] / c[idx - 1]
@@ -343,7 +362,10 @@ def _oos_market_panels(days, o, c, y, start, pos, legs, m_cache):
             exp_q=EXP_Q,
             leg=leg,
             window="oos_boot",
-            meta={"fin": EXTRA_FIN, "leg": leg},
+            meta={"market": key, "fin": EXTRA_FIN, "leg": leg},
+            extra_days=days,
+            extra_index=_extra_index(idx),
+            extra_window=key,
         )
     return m_cache
 
@@ -375,7 +397,7 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
             fresh = rng.integers(0, npool, (P, OOS_BOOT_L))
             for t in range(1, OOS_BOOT_L):
                 pos[:, t] = np.where(jump[:, t], fresh[:, t], (pos[:, t - 1] + 1) % npool)
-            panels = _oos_market_panels(days, o, c, y, start, pos, tuple(legs), {})
+            panels = _oos_market_panels(days, o, c, y, start, pos, tuple(legs), {}, key)
             for leg in legs:
                 arm_list = [a for a in arms if a["leg"] == leg]
                 p = panels[leg]

@@ -35,11 +35,20 @@ from research.fast_engine.fe_config import (
 
 from . import boot as B
 from . import windows
-from .api import call_targets
+from .api import NotApplicable, call_targets
 
 # stage 2's fresh-seed bootstrap: the same structure as the campaign's E3 (blocks 10/40, 1000
 # after-tax paths, $100k) on a seed no earlier study used.
 FRESH_SEED = 20261016
+
+#: the holdout is evaluable only on the applicable windows: `targets` may raise `NotApplicable`
+#: per window (an arm whose inputs start in 2003 has no M2 window). Below these counts the arm is
+#: `holdout_insufficient` -- not a pass, listed for a manual confirmation study (see README §2).
+OOS_MIN_APPLICABLE = 3
+ETF_MIN_APPLICABLE = 15
+
+#: the five markets of the pooled OOS bootstrap (G8); `GSPC_1957_1999` has no pooled draw.
+OOS_POOLED_MARKETS = ("M1", "M2", "M3", "M4", "M5")
 
 S1_MAX_DD_PP = 2.0
 S1_TURNOVER_MULT = 2.0
@@ -160,29 +169,40 @@ def stage2_main_windows(arm, cash_yield="none"):
 
 
 def stage2_oos(arm, cash_yield="none"):
-    """The six OOS windows, pre-tax, calibrated, m = 2, R-USD rule (`fe_study.oos_window`)."""
+    """The six OOS windows, pre-tax, calibrated, m = 2, R-USD rule (`fe_study.oos_window`).
+
+    A window whose inputs the arm declares `NotApplicable` is recorded as
+    `{"applicable": false, "reason": ...}` and is excluded from G7/G8.
+    """
     out = {}
-    for key in ("GSPC_1957_1999", "M1", "M2", "M3", "M4", "M5"):
-        days, p, start, _i1 = windows.oos_panel(key, leg=arm["leg"])
-        env = windows.usd_env(days, start, len(days) - 1, cash_yield)
-        r = run_one(arm, p, env, start, len(days) - 1, "pre_tax", M, 1.0, rule_index=False)
-        out[key] = _win_cells(r, days, start)
+    for key in OOS_WINDOWS:
+        try:
+            days, p, start, _i1 = windows.oos_panel(key, leg=arm["leg"])
+            env = windows.usd_env(days, start, len(days) - 1, cash_yield)
+            r = run_one(arm, p, env, start, len(days) - 1, "pre_tax", M, 1.0, rule_index=False)
+            out[key] = _win_cells(r, days, start)
+        except NotApplicable as exc:
+            out[key] = {"applicable": False, "reason": exc.reason}
     return out
 
 
 def stage2_instruments(arm, cash_yield="none"):
     """Pre-tax on the 21 quality-passing ETFs (R-USD, calibrated, m = 2), plus the after-tax E1
-    block at $100k under R-INDEX."""
+    block at $100k under R-INDEX. Same per-instrument `NotApplicable` convention as `stage2_oos`.
+    """
     pre, after = {}, {}
     for key in INSTRUMENTS:
-        days, p, h, lo, _i0, _i1 = windows.instrument_panel(key, leg=arm["leg"])
-        env = windows.usd_env(days, 253, len(days) - 1, cash_yield)
-        r = run_one(arm, p, env, 253, len(days) - 1, "pre_tax", M, 1.0, rule_index=False)
-        pre[key] = _win_cells(r, days, 253)
-        start = windows.instrument_start(days, key)
-        rec = after_tax_cells(arm, p, days, start, len(days) - 1, cash_yield)
-        rec["start"] = days[start]
-        after[key] = rec
+        try:
+            days, p, h, lo, _i0, _i1 = windows.instrument_panel(key, leg=arm["leg"])
+            env = windows.usd_env(days, 253, len(days) - 1, cash_yield)
+            r = run_one(arm, p, env, 253, len(days) - 1, "pre_tax", M, 1.0, rule_index=False)
+            pre[key] = _win_cells(r, days, 253)
+            start = windows.instrument_start(days, key)
+            rec = after_tax_cells(arm, p, days, start, len(days) - 1, cash_yield)
+            rec["start"] = days[start]
+            after[key] = rec
+        except NotApplicable as exc:
+            pre[key] = after[key] = {"applicable": False, "reason": exc.reason}
     return pre, after
 
 
@@ -208,12 +228,88 @@ def stage2_fresh(arm, cash_yield="none", label="fresh"):
     return out
 
 
-def stage2_oos_pooled(arm, cash_yield="none"):
-    """The pooled OOS bootstrap (G8): M1-M5, 2,000 paths each, one shared rng, seed 20261011."""
-    return B.oos_pooled([arm], cash_yield=cash_yield)
+def stage2_oos_pooled(arm, cash_yield="none", markets=None, arms=None):
+    """The pooled OOS bootstrap (G8): M1-M5, 2,000 paths each, one shared rng, seed 20261011.
+
+    `markets` restricts the draw (the applicable subset); `arms` draws several arms in one call
+    (so they share their paths), defaulting to this arm alone.
+    """
+    kw = {} if markets is None else {"markets": tuple(markets)}
+    return B.oos_pooled(list(arms) if arms else [arm], cash_yield=cash_yield, **kw)
+
+
+def oos_pooled_markets(arm, cash_yield="none", markets=None):
+    """`(applicable, not_applicable)` of the pooled OOS markets, probed one path at a time.
+
+    The pooled bootstrap builds one chunk per market; a market whose chunk the arm cannot build
+    raises `NotApplicable`. Probing with a single path identifies the market without paying for a
+    2,000-path draw.
+    """
+    keys = list(markets) if markets else list(OOS_POOLED_MARKETS)
+    ok, bad = [], {}
+    for key in keys:
+        try:
+            B.oos_pooled([arm], cash_yield=cash_yield, markets=(key,), per_market=1)
+            ok.append(key)
+        except NotApplicable as exc:
+            bad[key] = exc.reason
+    return ok, bad
+
+
+def oos_pooled_delta(arm, ctrl_vec, control_arm=None, cash_yield="none", markets=None):
+    """The G8 Δ vector (arm − control) on the same paths, plus a note.
+
+    With every market applicable the control's cached six-market vector is used -- the published
+    behaviour, unchanged. With a reduced subset the control is re-drawn *inside the same call*
+    (the rng sequence depends only on the market list, so the two arms share their paths, which is
+    what makes the Δ paired). A market whose chunk surprises the framework after the probe (a
+    chunk-level `NotApplicable`) is dropped and the draw retried.
+    """
+    all_markets = list(OOS_POOLED_MARKETS)
+    markets = list(markets) if markets else list(all_markets)
+    note = {"markets": list(markets), "control": "cached six-market vector"}
+    if len(markets) == len(all_markets):
+        res = B.oos_pooled([arm], cash_yield=cash_yield, markets=tuple(markets))
+        return res["pooled"][arm["id"]] - np.asarray(ctrl_vec, dtype=np.float64), note
+    dropped = {}
+    note["control"] = "re-drawn in the same draw"
+    while markets:
+        try:
+            res = B.oos_pooled([arm, control_arm], cash_yield=cash_yield, markets=tuple(markets))
+            d = res["pooled"][arm["id"]] - res["pooled"][control_arm["id"]]
+            note["markets"] = list(markets)
+            if dropped:
+                note["dropped"] = dropped
+            return d, note
+        except NotApplicable as exc:
+            dropped[markets.pop()] = exc.reason
+    raise NotApplicable("no OOS market's pooled bootstrap could be drawn")
 
 
 # ----------------------------------------------------------------------------- gates
+def applicable_oos(rec) -> list:
+    """The OOS windows of a stage-2 record that were actually evaluated."""
+    return [k for k in OOS_WINDOWS if "cagr" in (rec.get("oos") or {}).get(k, {})]
+
+
+def applicable_etfs(rec) -> list:
+    """The instruments of a stage-2 record that were actually evaluated."""
+    return [k for k in INSTRUMENTS if "after_tax_cagr" in (rec.get("etf_after_tax") or {}).get(k, {})]
+
+
+def applicability(rec) -> dict:
+    """What a stage-2 record could evaluate, and why the rest was skipped."""
+    oos, etfs = applicable_oos(rec), applicable_etfs(rec)
+    out = {"oos_applicable": oos, "n_oos_applicable": len(oos),
+           "etf_applicable": etfs, "n_etf_applicable": len(etfs),
+           "oos_min": OOS_MIN_APPLICABLE, "etf_min": ETF_MIN_APPLICABLE,
+           "reasons": {k: v["reason"] for k, v in list((rec.get("oos") or {}).items())
+                       + list((rec.get("etf_after_tax") or {}).items())
+                       if isinstance(v, dict) and v.get("applicable") is False}}
+    out["sufficient"] = bool(len(oos) >= OOS_MIN_APPLICABLE and len(etfs) >= ETF_MIN_APPLICABLE)
+    return out
+
+
 def _g_return(a, c):
     """G1/G6: CAGR >= control, or Calmar >= 1.1 x control with CAGR >= control - 0.5 pp."""
     if a["cagr"] >= c["cagr"]:
@@ -244,20 +340,43 @@ def pre_tax_gates(rec, ctrl):
         for md in ("base", "calibrated"):
             g[f"G5_{md}"] = bool(rec["boot"]["pre"][md]["median_delta_pp"] >= 0)
     if "oos" in rec:
-        dc = {k: rec["oos"][k]["cagr"] - ctrl["oos"][k]["cagr"] for k in OOS_WINDOWS}
-        dd = {k: rec["oos"][k]["max_dd"] - ctrl["oos"][k]["max_dd"] for k in OOS_WINDOWS}
-        n_c = sum(1 for v in dc.values() if v >= G7_CAGR_SLACK_PP / 100 - 1e-12)
-        n_d = sum(1 for v in dd.values() if v <= G7_DD_PP / 100 + 1e-12)
-        g["G7"] = bool(float(np.median(list(dc.values()))) >= G7_MEDIAN and n_c >= G7_MIN_WINDOWS
-                       and n_d >= G7_MIN_WINDOWS and max(dd.values()) <= G7_MAX_DD_PP / 100 + 1e-12)
-        g["G7_detail"] = {"delta_cagr_pp": {k: v * 100 for k, v in dc.items()},
-                          "delta_max_dd_pp": {k: v * 100 for k, v in dd.items()},
-                          "median_cagr_pp": float(np.median(list(dc.values())) * 100),
-                          "n_cagr_within": n_c, "n_dd_within": n_d,
-                          "max_dd_delta_pp": float(max(dd.values()) * 100)}
-    if "oos_pooled" in rec:
+        keys = applicable_oos(rec)
+        k_app = len(keys)
+        if k_app >= OOS_MIN_APPLICABLE:
+            dc = {k: rec["oos"][k]["cagr"] - ctrl["oos"][k]["cagr"] for k in keys}
+            dd = {k: rec["oos"][k]["max_dd"] - ctrl["oos"][k]["max_dd"] for k in keys}
+            n_c = sum(1 for v in dc.values() if v >= G7_CAGR_SLACK_PP / 100 - 1e-12)
+            n_d = sum(1 for v in dd.values() if v <= G7_DD_PP / 100 + 1e-12)
+            # the published rule allows one outlier among the six (`>= 5 of 6`); on a reduced set
+            # of k applicable windows it allows one outlier among those k.
+            need = G7_MIN_WINDOWS if k_app == len(OOS_WINDOWS) else max(2, k_app - 1)
+            g["G7"] = bool(float(np.median(list(dc.values()))) >= G7_MEDIAN and n_c >= need
+                           and n_d >= need and max(dd.values()) <= G7_MAX_DD_PP / 100 + 1e-12)
+            detail = {"delta_cagr_pp": {k: v * 100 for k, v in dc.items()},
+                      "delta_max_dd_pp": {k: v * 100 for k, v in dd.items()},
+                      "median_cagr_pp": float(np.median(list(dc.values())) * 100),
+                      "n_cagr_within": n_c, "n_dd_within": n_d,
+                      "max_dd_delta_pp": float(max(dd.values()) * 100)}
+            if k_app < len(OOS_WINDOWS):
+                detail["n_applicable"] = k_app
+                detail["n_within_required"] = need
+                detail["not_applicable"] = {k: rec["oos"][k]["reason"] for k in OOS_WINDOWS
+                                            if k not in keys}
+            g["G7_detail"] = detail
+        else:
+            g["G7"] = False
+            g["G7_detail"] = {
+                "not_evaluable": f"{k_app} applicable OOS windows of {len(OOS_WINDOWS)} "
+                                 f"(need >= {OOS_MIN_APPLICABLE})",
+                "n_applicable": k_app,
+                "not_applicable": {k: rec["oos"][k]["reason"] for k in OOS_WINDOWS if k not in keys},
+            }
+    if (rec.get("oos_pooled") or {}).get("median_delta_pp") is not None:
         g["G8"] = bool(rec["oos_pooled"]["median_delta_pp"] >= 0)
         g["G8_median_pp"] = rec["oos_pooled"]["median_delta_pp"]
+        if rec["oos_pooled"].get("markets") not in (None, list(OOS_POOLED_MARKETS)):
+            g["G8_detail"] = {"markets": rec["oos_pooled"]["markets"],
+                              "not_applicable": rec["oos_pooled"].get("markets_not_applicable", {})}
     return g
 
 
@@ -300,12 +419,26 @@ def after_tax_gates(rec, ctrl):
 
 
 def e1_gate(rec, ctrl):
-    """The 21 quality-passing ETFs after tax (R-INDEX): median delta > 0 and share >= 60%."""
-    ds = [rec["etf_after_tax"][k]["after_tax_cagr"] - ctrl["etf_after_tax"][k]["after_tax_cagr"] for k in INSTRUMENTS]
+    """The quality-passing ETFs after tax (R-INDEX): median delta > 0 and share >= 60%.
+
+    Evaluated on the applicable instruments only; below `ETF_MIN_APPLICABLE` it is not evaluable
+    (`gates()` then marks the arm `holdout_insufficient`).
+    """
+    keys = applicable_etfs(rec)
+    ds = [rec["etf_after_tax"][k]["after_tax_cagr"] - ctrl["etf_after_tax"][k]["after_tax_cagr"]
+          for k in keys]
     n_pos = sum(1 for d in ds if d > 0)
-    share = n_pos / len(ds)
-    return {"median_delta_pp": float(np.median(ds) * 100), "share_gt_0": float(share),
-            "n_instruments": len(ds), "pass": bool(float(np.median(ds)) > 0 and share >= E1_SHARE)}
+    share = n_pos / len(ds) if ds else 0.0
+    out = {"median_delta_pp": float(np.median(ds) * 100) if ds else 0.0,
+           "share_gt_0": float(share), "n_instruments": len(ds),
+           "pass": bool(ds and float(np.median(ds)) > 0 and share >= E1_SHARE)}
+    if len(keys) < len(INSTRUMENTS):
+        out["applicable"] = keys
+        out["not_applicable"] = {k: rec["etf_after_tax"][k]["reason"] for k in INSTRUMENTS
+                                 if k not in keys}
+        out["evaluable"] = bool(len(keys) >= ETF_MIN_APPLICABLE)
+        out["pass"] = bool(out["pass"] and out["evaluable"])
+    return out
 
 
 def e2_gate(rec, ctrl):
@@ -337,12 +470,21 @@ def fresh_gate(rec, ctrl):
 
 
 def gates(rec, ctrl):
-    """All gates of a stage-2 record, plus the verdict."""
+    """All gates of a stage-2 record, plus the verdict.
+
+    An arm whose holdout is not evaluable (fewer than `OOS_MIN_APPLICABLE` applicable OOS windows,
+    or fewer than `ETF_MIN_APPLICABLE` applicable instruments) is **not** a pass: `g["pass"]` is
+    false, `g["holdout_insufficient"]` carries the counts and the reasons, and the scoreboard
+    lists the arm for a manual confirmation study.
+    """
     g = pre_tax_gates(rec, ctrl)
     g.update({f"AT_{k}": v for k, v in after_tax_gates(rec, ctrl).items()})
     g["E1"] = e1_gate(rec, ctrl)
     g["E2"] = e2_gate(rec, ctrl)
     g["FRESH"] = fresh_gate(rec, ctrl)
+    av = applicability(rec)
+    if not av["sufficient"]:
+        g["holdout_insufficient"] = av
     keys = ["G1_base", "G1_calibrated", "G2_base", "G2_calibrated", "G3_base", "G3_calibrated",
             "G4", "G5_base", "G5_calibrated", "G6_base", "G6_calibrated", "G7", "G8", "G9"]
     failed = [k for k in keys if not g.get(k, False)]
@@ -351,6 +493,8 @@ def gates(rec, ctrl):
         failed += [f"AT_{k}" for k in TAX_WINDOWS if not at["windows"][k]["pass"]]
         failed += [k for k in ("B1_recent", "B2_flat") if not at[k]["pass"]]
     failed += [k for k in ("E1", "E2", "FRESH") if not g[k]["pass"]]
+    if not av["sufficient"]:
+        failed.append("HOLDOUT_INSUFFICIENT")
     g["failed"], g["pass"] = failed, (not failed)
     return g
 
@@ -364,12 +508,17 @@ def control_ready(ctrl):
 
 __all__ = [
     "after_tax_cells",
+    "applicability",
+    "applicable_etfs",
+    "applicable_oos",
     "control_ready",
     "e1_gate",
     "e2_gate",
     "fresh_gate",
     "gates",
     "after_tax_gates",
+    "oos_pooled_delta",
+    "oos_pooled_markets",
     "pre_tax_gates",
     "run_one",
     "stage1",

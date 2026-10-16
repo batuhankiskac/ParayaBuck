@@ -23,6 +23,13 @@ single-instrument account cannot execute, so it raises `NeedsKernel` -- declare 
     cash_yield  "none" (default) | "tbill"
 
 Everything else in the spec is the idea's own fixed parameter, hashed into the registry.
+
+Beyond its own instrument's OHLC the panel offers the **extra series** of
+`research/batch_screen/EXTRA_DATA.json` through `data.extra(key[, ffill])` (`^VIX`, FRED yields,
+the sector ETFs, GLD/TLT/IEF, the other markets' indices: see `extra.py`), aligned to the panel's
+sessions and `NaN` where a session has no value. `targets` may also raise `NotApplicable(reason)`
+for a window whose inputs do not exist (`^VIX` before 1990, a European index for `^N225`); the
+framework then marks that window (or, on the main window, the whole arm) not evaluable.
 """
 
 from __future__ import annotations
@@ -51,6 +58,19 @@ CASH_YIELDS = ("none", "tbill")
 
 class NeedsKernel(Exception):
     """The arm declares an execution mechanism the engine does not implement."""
+
+
+class NotApplicable(Exception):
+    """The arm's inputs do not exist for this window.
+
+    `targets` raises it (e.g. `raise NotApplicable("^VIX starts 1990")`); the framework then treats
+    the window as not evaluable: stage 1 requires the main window to be applicable, and stage 2
+    evaluates the OOS/ETF holdout stages on the applicable windows only (see `README.md` §2).
+    """
+
+    def __init__(self, reason: str = ""):
+        super().__init__(reason or "not applicable")
+        self.reason = str(reason) or "not applicable"
 
 
 class PluginError(Exception):
@@ -102,11 +122,20 @@ class MarketData:
     high: np.ndarray | None = None
     low: np.ndarray | None = None
     meta: dict = field(default_factory=dict)
+    #: extra-series context (see `extra()`): the pool calendar the registered series are aligned
+    #: to, the `(P, T)` pool index of each session, and the window key the key->series map is
+    #: resolved with. All three are None on a plain window (the panel's own days are the pool and
+    #: the identity alignment is used).
+    extra_days: np.ndarray | None = None
+    extra_index: np.ndarray | None = None
+    extra_window: str | None = None
 
     def __post_init__(self):
         self.vol = fe_signals.vol_n(self.legs[self.leg][1])
         self.year = np.array([int(d[:4]) for d in self.days], dtype=np.int64)
         self.month = np.array([int(d[5:7]) for d in self.days], dtype=np.int64)
+        self._extra = {}
+        self.extra_log = []
 
     @property
     def open(self):
@@ -124,11 +153,44 @@ class MarketData:
     def T(self):
         return self.price.shape[1]
 
+    def extra(self, key: str, ffill: bool = False) -> np.ndarray:
+        """A registered extra series (`research/batch_screen/EXTRA_DATA.json`), `(P, T)`.
+
+        Values are aligned to the panel's own sessions by date, and inside a bootstrap chunk to the
+        session that produced each column: the market path's column `t` is the close of the drawn
+        source session `extra_index[p, t - 1]` (column 0 is the chunk's artificial base row and
+        repeats the first drawn session), so `extra` is exactly as wide as the market arrays.
+        `NaN` where the series has no value on that date; `ffill=True` carries the last known value
+        forward within each path instead. Raises `batch_screen.extra.ExtraError` for an unknown key
+        or a missing/undeclared file.
+        """
+        from . import extra as _ext
+
+        ck = (key, bool(ffill))
+        if ck not in self._extra:
+            arr = _ext.aligned(key, self.extra_window or self.window, self.days,
+                               self.extra_days, self.extra_index, self.price.shape)
+            if ffill:
+                arr = _ext.forward_fill(arr)
+            self._extra[ck] = arr
+        arr = self._extra[ck]
+        # logged on every call, cache hit or not: `smoke` reads this to tell a plugin author which
+        # keys the arm touched and how much of each series the panel carries
+        self.extra_log.append({"key": key, "ffill": bool(ffill),
+                               "nan_share": float(np.isnan(arr).mean())})
+        return arr
+
 
 def panel(days, *, price, div, rate, o2, c2, d2, o1=None, c1=None, d1=None, fin=0.0,
-          exp_q=EXP_Q, leg=DEFAULT_LEG, window="", high=None, low=None, meta=None):
+          exp_q=EXP_Q, leg=DEFAULT_LEG, window="", high=None, low=None, meta=None,
+          extra_days=None, extra_index=None, extra_window=None):
     """Build a `MarketData`: the 2x leg from the window's published input triple ``(o2, c2, d2)``
-    and `fin`/`exp_q`, the 1x leg from the underlying's raw triple (defaults to the same one)."""
+    and `fin`/`exp_q`, the 1x leg from the underlying's raw triple (defaults to the same one).
+
+    `extra_days`/`extra_index`/`extra_window` are the extra-series context [`MarketData.extra`]:
+    a bootstrap chunk passes the pool calendar it draws from, the `(P, T)` pool index of each
+    drawn session and the window key the key->series map resolves through.
+    """
     o2, c2, d2 = (np.atleast_2d(np.asarray(x, dtype=np.float64)) for x in (o2, c2, d2))
     o1 = o2 if o1 is None else np.atleast_2d(np.asarray(o1, dtype=np.float64))
     c1 = c2 if c1 is None else np.atleast_2d(np.asarray(c1, dtype=np.float64))
@@ -146,6 +208,9 @@ def panel(days, *, price, div, rate, o2, c2, d2, o1=None, c1=None, d1=None, fin=
         high=None if high is None else np.atleast_2d(np.asarray(high, dtype=np.float64)),
         low=None if low is None else np.atleast_2d(np.asarray(low, dtype=np.float64)),
         meta=dict(meta or {}),
+        extra_days=None if extra_days is None else np.asarray(extra_days),
+        extra_index=None if extra_index is None else np.asarray(extra_index, dtype=np.int64),
+        extra_window=extra_window,
     )
 
 
@@ -279,6 +344,7 @@ __all__ = [
     "LEGS",
     "MarketData",
     "NeedsKernel",
+    "NotApplicable",
     "PluginError",
     "ROOT",
     "arm_key",

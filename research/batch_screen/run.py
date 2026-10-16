@@ -177,6 +177,18 @@ def load_control(batch_dir: Path, cash_yield="none", require_stage2=True, quiet=
 
 
 # ----------------------------------------------------------------------------- one arm
+def _na_record(out, batch_dir, where, reason, t0):
+    """Write the record of an arm whose inputs do not exist for a required window."""
+    out["not_applicable"] = {"where": where, "reason": str(reason)}
+    out["verdict"] = "not_applicable"
+    out["b1_delta_pp"] = []
+    out["wall_s"] = time.time() - t0
+    dump(Path(batch_dir) / f"{out['idea']}__{out['arm_id']}.json",
+         {k: v for k, v in out.items() if k != "wall_s"})
+    return {"arm": out["arm"], "wall_s": out["wall_s"], "verdict": "not_applicable",
+            "stage1_pass": False}
+
+
 def _arm_task(payload):
     """One arm end to end (runs in a worker process)."""
     idea_id, arm_id, batch, cash_yield, batch_dir, stage2_allowed, quiet = payload
@@ -184,8 +196,24 @@ def _arm_task(payload):
     arm = api.load_arm(idea_id, arm_id)
     ctrl = json.loads((Path(batch_dir) / "_control.json").read_text())
     crec, cvec = ctrl["record"], ctrl["vectors"]
-    rec = stages.stage1(arm, cash_yield)
-    b12 = stages.stage1_vectors(arm, cash_yield, quiet=quiet, label=arm["id"])
+    out = {
+        "arm": arm["id"], "idea": idea_id, "arm_id": arm_id, "spec": arm["spec"],
+        "rule": arm["rule"], "leg": arm["leg"], "cash_yield": arm["cash_yield"],
+        "hashes": {"code": api.code_hash(idea_id), "spec": api.spec_hash(arm["spec"])},
+        "batch": batch, "date": date.today().isoformat(),
+        "stage1": None, "stage1_gates": None, "stage1_pass": None,
+        "stage2": None, "gates": None, "stage2_pass": None, "b1_delta_pp": [],
+        "boot_params": {"seed": SEED, "block": BLOCK, "n_pre": PRE_BOOT_PATHS,
+                        "n_tax": TAX_BOOT_PATHS, "capital": GATE_CAPITAL},
+    }
+    where = "main window (stage 1)"
+    try:
+        rec = stages.stage1(arm, cash_yield)
+        where = "stage-1 block bootstrap"
+        b12 = stages.stage1_vectors(arm, cash_yield, quiet=quiet, label=arm["id"])
+    except api.NotApplicable as exc:
+        # stage 1 requires the main window (and therefore its own bootstrap) to be applicable
+        return _na_record(out, batch_dir, where, exc.reason, t0)
     rec["boot"] = {"pre": {}, "tax": {}}
     rec["boot_level"] = {"pre": {}, "tax": {}}
     delta_vec = {}
@@ -201,40 +229,53 @@ def _arm_task(payload):
         rec["boot"]["tax"][md] = B.delta_stats(d)
         rec["boot_level"]["tax"][md] = B.delta_stats(v)
         delta_vec[f"tax_{md}"] = d
-    rec["after_tax"].update({k: v for k, v in stages.stage2_main_windows(arm, cash_yield).items()
-                             if k not in rec["after_tax"]})
+    try:
+        rec["after_tax"].update({k: v for k, v in stages.stage2_main_windows(arm, cash_yield).items()
+                                 if k not in rec["after_tax"]})
+    except api.NotApplicable as exc:
+        return _na_record(out, batch_dir, "after-tax window (2010/2017)", exc.reason, t0)
     s1_pass, s1_gates = stages.stage1_pass(rec, crec)
-    out = {
-        "arm": arm["id"], "idea": idea_id, "arm_id": arm_id, "spec": arm["spec"],
-        "rule": arm["rule"], "leg": arm["leg"], "cash_yield": arm["cash_yield"],
-        "hashes": {"code": api.code_hash(idea_id), "spec": api.spec_hash(arm["spec"])},
-        "batch": batch, "date": date.today().isoformat(),
-        "stage1": rec, "stage1_gates": s1_gates, "stage1_pass": s1_pass,
-        "stage2": None, "gates": None, "stage2_pass": None,
-        "b1_delta_pp": [float(v) * 100 for v in delta_vec["tax_progressive"]],
-        "boot_params": {"seed": SEED, "block": BLOCK, "n_pre": PRE_BOOT_PATHS,
-                        "n_tax": TAX_BOOT_PATHS, "capital": GATE_CAPITAL},
-    }
+    out.update({"stage1": rec, "stage1_gates": s1_gates, "stage1_pass": s1_pass,
+                "b1_delta_pp": [float(v) * 100 for v in delta_vec["tax_progressive"]]})
     if s1_pass and stage2_allowed:
         s2 = {"after_tax": dict(rec["after_tax"])}
         s2["oos"] = stages.stage2_oos(arm, cash_yield)
         s2["etf_pre"], s2["etf_after_tax"] = stages.stage2_instruments(arm, cash_yield)
-        s2["rolling"] = stages.stage2_rolling(arm, cash_yield)
-        fresh = stages.stage2_fresh(arm, cash_yield, label=arm["id"])
-        s2["fresh"] = {blk: {"tax": {md: list(fresh[blk]["tax"][GATE_CAPITAL][md][arm["id"]])
-                                     for md in fresh[blk]["tax"][GATE_CAPITAL]}} for blk in fresh}
-        pooled = stages.stage2_oos_pooled(arm, cash_yield)
-        s2["oos_pooled"] = B.delta_stats(pooled["pooled"][arm["id"]]
-                                         - np.asarray(cvec["oos_pooled"], dtype=np.float64))
+        where = "rolling January starts"
+        try:
+            s2["rolling"] = stages.stage2_rolling(arm, cash_yield)
+            where = "fresh-seed bootstrap"
+            fresh = stages.stage2_fresh(arm, cash_yield, label=arm["id"])
+            s2["fresh"] = {blk: {"tax": {md: list(fresh[blk]["tax"][GATE_CAPITAL][md][arm["id"]])
+                                         for md in fresh[blk]["tax"][GATE_CAPITAL]}}
+                           for blk in fresh}
+            where = "pooled OOS bootstrap"
+            markets, na_markets = stages.oos_pooled_markets(arm, cash_yield)
+            if markets:
+                d, note = stages.oos_pooled_delta(arm, cvec["oos_pooled"], control_spec(),
+                                                  cash_yield, markets)
+                cell = B.delta_stats(d)
+                if len(markets) != len(stages.OOS_POOLED_MARKETS):
+                    cell["markets"] = note["markets"]
+                    cell["markets_not_applicable"] = na_markets
+            else:
+                cell = {"not_evaluable": "no OOS market's pooled bootstrap could be drawn",
+                        "markets_not_applicable": na_markets}
+            s2["oos_pooled"] = cell
+        except api.NotApplicable as exc:
+            return _na_record(out, batch_dir, where, exc.reason, t0)
         joined = dict(rec)
         joined.update({"oos": s2["oos"], "etf_pre": s2["etf_pre"], "etf_after_tax": s2["etf_after_tax"],
                        "rolling": s2["rolling"], "fresh": s2["fresh"], "oos_pooled": s2["oos_pooled"]})
         out["stage2"] = s2
         out["gates"] = stages.gates(joined, crec)
         out["stage2_pass"] = bool(out["gates"]["pass"])
+        if out["gates"].get("holdout_insufficient"):
+            out["availability"] = out["gates"]["holdout_insufficient"]
     out["verdict"] = ("reject_stage1" if not s1_pass else
                       ("not_run_stage2" if not stage2_allowed else
-                       ("stage2_pass" if out["stage2_pass"] else "reject_stage2")))
+                       ("holdout_insufficient" if (out["gates"] or {}).get("holdout_insufficient")
+                        else ("stage2_pass" if out["stage2_pass"] else "reject_stage2"))))
     out["wall_s"] = time.time() - t0
     dump(Path(batch_dir) / f"{idea_id}__{arm_id}.json", {k: v for k, v in out.items() if k != "wall_s"})
     return {"arm": arm["id"], "wall_s": out["wall_s"], "verdict": out["verdict"],
@@ -262,6 +303,7 @@ def scoreboard(batch, batch_dir, control, arms, defl=None):
         "OOS med Δ | ETFs med Δ | fresh | RW p | final |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
+    rows, manual = [], []
     for a in arms:
         f = batch_dir / f"{a['idea']}__{a['arm_id']}.json"
         if not f.exists():
@@ -269,15 +311,24 @@ def scoreboard(batch, batch_dir, control, arms, defl=None):
         r = json.loads(f.read_text())
         g = r.get("gates") or {}
         ctrl = bool(r.get("control"))
-        at = 0.0 if ctrl else r["stage1_gates"]["after_tax_2000_delta_pp"]
-        b1 = r["stage1"]["boot"]["tax"]["progressive"]
-        b2 = r["stage1"]["boot"]["tax"]["flat"]
+        na = r.get("not_applicable")
+        s1 = r.get("stage1")
+        at = 0.0 if ctrl else (r["stage1_gates"]["after_tax_2000_delta_pp"] if s1 else None)
+        b1 = (s1 or {}).get("boot", {}).get("tax", {}).get("progressive")
+        b2 = (s1 or {}).get("boot", {}).get("tax", {}).get("flat")
         oos = g.get("G7_detail", {}).get("median_cagr_pp")
         etf = (g.get("E1") or {}).get("median_delta_pp")
         fresh = (g.get("FRESH") or {}).get("pass")
         p = (defl or {}).get("rw_stepdown", {}).get("p_adjusted", {}).get(r["arm"])
+        insufficient = bool(r["verdict"] == "holdout_insufficient")
+        if insufficient:
+            manual.append(r["arm"])
         if ctrl:
             final = "control"
+        elif na:
+            final = f"not applicable ({na['where']})"
+        elif insufficient:
+            final = "holdout insufficient"
         elif r["verdict"] == "reject_stage1":
             final = "rejected (stage 1)"
         elif r["verdict"] == "reject_stage2":
@@ -286,24 +337,59 @@ def scoreboard(batch, batch_dir, control, arms, defl=None):
             final = "**declared**"
         else:
             final = "not declared (deflation)"
-        lines.append(
-            f"| `{r['arm']}` | " + ("control" if ctrl else ("PASS" if r["stage1_pass"] else "FAIL"))
-            + f" | {r['verdict']}"
-            + f" | {', '.join(g.get('failed', [])) or '-'}"
-            + f" | {at:+.4f} | {b1['median_delta_pp']:+.4f} / {b1['share_gt_0']:.3f}"
-            + f" | {b2['median_delta_pp']:+.4f} / {b2['share_gt_0']:.3f}"
-            + f" | {'-' if oos is None else f'{oos:+.4f}'}"
-            + f" | {'-' if etf is None else f'{etf:+.4f}'}"
-            + f" | {'-' if fresh is None else ('PASS' if fresh else 'FAIL')}"
-            + f" | {'-' if p is None else f'{p:.4f}'}"
-            + f" | {final} |")
+        s1_cell = "control" if ctrl else ("n/a" if na else ("PASS" if r["stage1_pass"] else "FAIL"))
+        cells = [
+            s1_cell,
+            r["verdict"],
+            ", ".join(g.get("failed", [])) or "-",
+            "-" if at is None else f"{at:+.4f}",
+            "-" if b1 is None else f"{b1['median_delta_pp']:+.4f} / {b1['share_gt_0']:.3f}",
+            "-" if b2 is None else f"{b2['median_delta_pp']:+.4f} / {b2['share_gt_0']:.3f}",
+            "-" if oos is None else f"{oos:+.4f}",
+            "-" if etf is None else f"{etf:+.4f}",
+            "-" if fresh is None else ("PASS" if fresh else "FAIL"),
+            "-" if p is None else f"{p:.4f}",
+            final,
+        ]
+        rows.append("| `" + r["arm"] + "` | " + " | ".join(cells) + " |")
+    lines += rows
     lines += [""]
+    if manual:
+        lines += [
+            "## manual confirmation",
+            "",
+            "These arms came through stage 1 but their holdout is not evaluable (fewer than "
+            f"{stages.OOS_MIN_APPLICABLE} applicable OOS windows or fewer than "
+            f"{stages.ETF_MIN_APPLICABLE} applicable instruments): **not a pass**. Each needs its "
+            "own pre-registered confirmation study on the windows its inputs reach.",
+            "",
+        ]
+        for a in arms:
+            f = batch_dir / f"{a['idea']}__{a['arm_id']}.json"
+            if not f.exists():
+                continue
+            r = json.loads(f.read_text())
+            if r["arm"] not in manual:
+                continue
+            av = r.get("availability") or (r.get("gates") or {}).get("holdout_insufficient") or {}
+            lines.append(f"* `{r['arm']}` — {av.get('n_oos_applicable')} applicable OOS windows, "
+                         f"{av.get('n_etf_applicable')} applicable instruments; reasons: "
+                         f"{json.dumps(av.get('reasons', {}), sort_keys=True)}")
+        lines += [""]
     return "\n".join(lines) + "\n"
 
 
 def run_batch(batch, ideas, cash_yield="none", workers=None, stage2=True, allow_dirty=False,
               quiet=False):
     t0 = time.time()
+    ver = registry.verify_ledger()
+    if not ver["ok"]:
+        raise registry.RegistryError(
+            "the trial ledger does not verify against git (a merge that left the ledger and the "
+            "idea modules inconsistent?): " + json.dumps(ver["problems"], sort_keys=True))
+    if ver["stale"] and not quiet:
+        print(f"  ledger: {len(ver['stale'])} registered arm(s) whose module has changed since "
+              f"their last screen (expected while a branch grows): {ver['stale']}", flush=True)
     batch_dir = RESULTS / batch
     batch_dir.mkdir(parents=True, exist_ok=True)
     arms, skipped = plan(ideas, batch, cash_yield, allow_dirty)
@@ -403,8 +489,15 @@ def harness():
     """Every anchor of the framework, through the plugin path."""
     t0 = time.time()
     checks = {}
+    # `parity.py` writes `research/fast_engine/PARITY.json` unconditionally (the engine's own
+    # artifact, and it has no --no-write flag): keep its committed content, so running this harness
+    # leaves the worktree clean.
+    parity_out = api.ROOT / "research/fast_engine/PARITY.json"
+    parity_before = parity_out.read_bytes() if parity_out.exists() else None
     par = subprocess.run([sys.executable, "-m", "research.fast_engine.parity", "--quick"],
                          cwd=api.ROOT, capture_output=True, text=True)
+    if parity_before is not None and parity_out.read_bytes() != parity_before:
+        parity_out.write_bytes(parity_before)
     checks["engine_parity_quick"] = {
         "pass": bool(par.returncode == 0 and "parity PASS" in par.stdout),
         "tail": (par.stdout.strip().splitlines() or [par.stderr[-200:]])[-1],
@@ -624,6 +717,8 @@ def main(argv=None) -> int:
     ap.add_argument("--batch", help="batch id (results/<batch>/)")
     ap.add_argument("--ideas", help="comma-separated idea ids under research/ideas/")
     ap.add_argument("--deflate", action="store_true", help="run the multiple-testing pass")
+    ap.add_argument("--verify-registry", action="store_true",
+                    help="re-verify the trial ledger against git (merge safety) and exit")
     ap.add_argument("--stage1-only", action="store_true", help="do not run stage 2")
     ap.add_argument("--cash-yield", default="none", choices=("none", "tbill"))
     ap.add_argument("--workers", type=int, default=None)
@@ -639,6 +734,12 @@ def main(argv=None) -> int:
         print(f"harness {'PASS' if checks['all'] else 'FAIL'} ({checks['n_checks']} checks, "
               f"{len(checks['failed'])} failed, {checks['wall_s']:.1f}s)", flush=True)
         return 0 if checks["all"] else 1
+    if args.verify_registry:
+        v = registry.verify_ledger()
+        print(json.dumps(rnd(v), indent=1, sort_keys=True), flush=True)
+        print(f"registry {'PASS' if v['ok'] else 'FAIL'} ({v['lines']} lines, {v['arms']} arms, "
+              f"N = {v['n_trials']})", flush=True)
+        return 0 if v["ok"] else 1
     if args.deflate:
         print(json.dumps(rnd(deflate_batch(args.batch)), indent=1, sort_keys=True))
         return 0

@@ -6,10 +6,17 @@ produce. This framework is built on the mandatory Numba engine `research/fast_en
 
 * a **plugin API** — an idea is a Python module with `ARMS = {arm_id: spec}` and a vectorised
   `targets(data, spec)`;
+* **extra data** — `data.extra(key)` for series beyond the idea's own instrument (`^VIX`, FRED
+  yields, sector ETFs, GLD/TLT/IEF, the other markets' indices), declared with file, URL, range and
+  SHA-256 in `EXTRA_DATA.json` and downloadable from Yahoo/FRED by the same module;
 * a **trial ledger** (`REGISTRY.jsonl`) that refuses to screen an arm whose code is not committed
-  *before* the run, and whose line count N feeds the multiple-testing correction;
+  *before* the run, whose line count N feeds the multiple-testing correction, and which
+  re-verifies every line against git before a batch (several plugin branches merge into it);
 * a two-stage protocol — **stage 1** screens on the main window and its block bootstrap only,
-  **stage 2** applies the full holdout gate set to the survivors;
+  **stage 2** applies the full holdout gate set to the survivors, and both skip the windows an
+  arm declares `NotApplicable` (see §2);
+* a **smoke runner** (`smoke.py`) that calls `targets` on synthetic and real panels without
+  computing any performance number;
 * a **deflation** pass (White's Reality Check, Romano–Wolf stepdown, deflated Sharpe) over every
   trial ever registered.
 
@@ -17,16 +24,42 @@ Everything the framework simulates goes through `fe_sim.sim_one`; the only new k
 numba drivers over that same function (a per-arm target panel instead of production R2's single
 series, and a per-arm fill rule), and `tests/test_parity.py` asserts both reproduce the engine's
 `fe_boot.boot` and the old pure-Python `boot_oos_market` **bit for bit** (max |diff| = 0, not a
-tolerance).
+tolerance). Extra series are plain numpy evaluated inside `targets` — no kernel, no engine change.
 
 Run it from the worktree root with the research venv:
 
 ```sh
 R=~/.venvs/pb-research/bin/python
 PYTHONPATH=. $R -m research.batch_screen.run --harness
-PYTHONPATH=. $R -m research.batch_screen.run --batch anchors_v1 --ideas k_control,r2_control,vol_shape_p15
-PYTHONPATH=. $R -m research.batch_screen.run --deflate --batch anchors_v1
+PYTHONPATH=. $R -m research.batch_screen.smoke --ideas my_idea          # no metric, no ledger write
+PYTHONPATH=. $R -m research.batch_screen.smoke --keys                   # the extra-data keys
+PYTHONPATH=. $R -m research.batch_screen.run --verify-registry          # the ledger vs git
+PYTHONPATH=. $R -m research.batch_screen.run --batch my_batch --ideas my_idea
+PYTHONPATH=. $R -m research.batch_screen.run --deflate --batch my_batch
+PYTHONPATH=. $R -m research.batch_screen.extra --keys                   # same table, longer form
 research/batch_screen/tests/run.sh            # pytest
+```
+
+## 0. Writing a plugin (the short version)
+
+```sh
+cp research/batch_screen/TEMPLATE_plugin.py research/ideas/my_idea.py
+$EDITOR research/ideas/my_idea.py                 # ARMS = {...} and targets(data, spec)
+PYTHONPATH=. $R -m research.batch_screen.smoke --ideas my_idea
+git add research/ideas/my_idea.py && git commit   # the runner refuses uncommitted code
+PYTHONPATH=. $R -m research.batch_screen.run --batch my_batch --ideas my_idea
+```
+
+`TEMPLATE_plugin.py` is a working example of both of the v2 mechanisms (it reads `data.extra("vix")`
+and raises `NotApplicable` for a window whose `^VIX` series is empty) and of the production target
+series; it is illustration only, not a claimed improvement. The smoke runs the arm on a synthetic
+panel, the real main window, the `M2` OOS window, the `XLK` instrument window and a real
+block-bootstrap chunk, and reports — without any return, NAV or gate — the shapes, the leg, the
+extra keys the arm touched and how much of each series is missing:
+
+```
+  my_idea/demo     OK    synthetic ok[3x800] | main ok[1x6932] | oos:M2 n/a: the ^VIX series has no value in this window | etf:XLK ok[1x6994] | boot ok[4x2777]
+                         extras: vix (ffill=True; NaN synthetic 0%, main 0%, oos:M2 100%, etf:XLK 0%, boot 0%)
 ```
 
 ## 1. The plugin API
@@ -51,11 +84,39 @@ bootstrap chunk otherwise — and must be written in vectorised numpy:
 | `div`, `rate` (P,T) | per-session dividend and DTB3 rate of the window's construction |
 | `high`, `low` (P,T or None) | underlying high/low where the data has them (ETFs) |
 | `meta` | the window's own constants (`fin`, `exp_q`, `window`, …) |
+| `extra(key, ffill=False)` | a registered extra series, `(P,T)`, `NaN` where the series has no value on that session |
+
+**Extra data** (`extra.py`, registry `EXTRA_DATA.json`, 32 keys / 31 series committed): `^VIX`,
+`^VIX3M`, `^VXN`, FRED `DGS10`/`T10YIE`/`DTWEXBGS`/`BAA10Y`/`CPIAUCSL`, `SMH`, `SOXX`, `HG=F`,
+`SHY`/`GLD`/`TLT`/`IEF`, the nine sector ETFs, `^STOXX50E`/`^GDAXI`/`^N225`/`^FTSE`/`^IXIC`/`^GSPC`/
+`^NDX` and `local_index` (the window's own index: `^NDX` on main, the market's index on each OOS
+window). `python -m research.batch_screen.smoke --keys` prints the key table, its coverage on the
+main and `M2` windows and the first/last session each series reaches; `data.extra` raises
+`extra.ExtraError` for an unknown key, and a key whose window map has no entry for the window.
+
+* alignment is **by date**: a session gets the series' value on that session's own date (`NaN`
+  where the series has none — an FRED series is missing on non-publication days, a monthly series
+  only exists on the first of the month, so `ffill=True` carries the last value forward, leaving
+  leading `NaN`s in place). Inside a bootstrap chunk the value is the *drawn source session's* of
+  that column, i.e. the chunk replays the extra series together with its returns.
+* a key is a series name (one string: the same series in every window) or a `{"windows": {…}}` map
+  resolved as: the window's own entry, else `main` (a clean/fresh bootstrap chunk replays the main
+  window's pool), else `*`.
+* sources are the Yahoo chart API and FRED CSV only. `python -m research.batch_screen.extra
+  --fetch-all` (or `--fetch SYM,SYM` / `--fetch-fred ID`) refetches and rewrites the file, the
+  registry's `sha256`/`range`/`rows`/`url` and — before any batch runs — `--verify` re-hashes every
+  file and re-reads every declared range. Add a hand-made series (a public calendar, say) by
+  writing its `date,value` CSV and its registry entry, then `--verify`.
 
 Two legs are supported: `2x` is the campaign's published synthetic daily-reset 2x (this is what
 every published number used) and `1x` is the same underlying at gearing 1 with no cost. The leg is
 constant per arm; `targets` may *return* a per-session leg selection, but a varying one raises
 `NeedsKernel` — the account holds one instrument, there is no portfolio layer.
+
+**Availability.** `targets` may raise `api.NotApplicable(reason)` for a window whose inputs do not
+exist (`^VIX` before 1990 for `M2`, a European index for `^N225`, a series that starts after the
+window). Stage 1 requires the **main** window to be applicable; in stage 2 the six OOS windows and
+the 21 ETFs are evaluated on the applicable ones only (§3, §4).
 
 Engine RULE options come from the spec and are the engine's own three booleans:
 
@@ -92,8 +153,24 @@ The runner **refuses to screen an arm whose module's working-tree bytes differ f
 HEAD** (`RegistryError`, see `registry.require_committed`) — the `code_hash` in the ledger is
 therefore the committed one, and a spec cannot be edited after seeing results without a new
 ledger line (`status: "rerun"` when the same spec/code has been screened before). Lines are never
-removed. N = the number of lines is the multiple-testing count, including arms that were declared
-but refused (`needs_kernel`).
+removed. N is the number of distinct `(idea, arm, spec_hash)` ever registered — the
+multiple-testing count, including arms that were declared but refused (`needs_kernel`).
+
+**Merging several plugin branches.** `.gitattributes` marks `REGISTRY.jsonl` `merge=union`, so
+branches that each *append* lines merge without conflict. A union merge cannot corrupt the ledger's
+meaning because the runner re-verifies it before every batch (`--verify-registry` prints the
+report) and **aborts** on any inconsistency:
+
+* every line's `code_hash` must be the SHA-256 of that module *at the commit the line names*
+  (`git show <idea_commit>:research/ideas/<idea>.py`) — a line therefore describes code that was
+  really committed, not a merge artefact or an edited ledger (lines whose commit gate was bypassed
+  with `--allow-dirty` cannot be checked and are reported as `skipped`);
+* every registered `(idea, arm)` must still exist at HEAD and its spec must hash to the *latest*
+  recorded `spec_hash` — catching an arm renamed, deleted or re-specified by a merge without a new
+  ledger line (`spec_drift`).
+
+A module that changed *after* its last screen (expected while a branch grows: a later commit adds a
+second arm to the same file) is reported as `stale`, which is information, not an error.
 
 ## 3. Stages
 
@@ -116,6 +193,30 @@ share ≥ 60 %), the six OOS windows (median Δ ≥ 0, ≥ 5 of 6 within −0.5 
 Δ ≤ +8 pp), the pooled OOS bootstrap (median ≥ 0) and the fresh-seed bootstraps (seed 20261016,
 blocks 10/40, median ≥ 0 and share ≥ 55 % in all four cells). A stage-2 failure still writes its
 record, so the registry counts it.
+
+**Availability (`NotApplicable`).** Stage 1 requires the *main* window to be applicable — an arm
+that declares N/A on the main window or inside the stage-1 bootstrap is recorded with
+`verdict = not_applicable` (the reason and the stage are in the record) and is not screened further.
+In stage 2 the two multi-window stages drop the windows the arm refuses, and the record shows which
+ran and why the others did not:
+
+* **G7** is evaluated on the applicable OOS windows `k` (the record's `G7_detail` then carries
+  `n_applicable`, the reasons and `n_within_required`). At `k = 6` it is the published rule
+  unchanged; on a reduced set the same "one outlier allowed" rule is applied as `n_c ≥ k − 1` and
+  `n_d ≥ k − 1`, and `k ≥ 3` is required.
+* **G8** (pooled OOS bootstrap) runs on the applicable market subset with the control re-drawn
+  **inside the same draw** — the rng sequence depends only on the market list, so the two arms
+  share their paths and the Δ stays paired (`G8_detail` names the subset). A market whose *chunk*
+  the arm refuses is dropped after a one-path probe per market.
+* **E1** is computed on the applicable instruments only, and is not evaluable below 15 of them.
+* **`holdout_insufficient`** — an arm that comes through stage 1 with fewer than 3 applicable OOS
+  windows or fewer than 15 applicable instruments is **not a pass**: `verdict =
+  holdout_insufficient`, never declared, and listed in the scoreboard's "manual confirmation"
+  section with the counts and the reasons, for its own pre-registered confirmation study. The
+  registry and N are unchanged — every such arm keeps its ledger line.
+
+An arm that is applicable everywhere takes exactly the v1 code path: same record, same scoreboard,
+same numbers (`--harness` and the committed results files are unchanged by all of this).
 
 The Δ in every cell is `arm − K` in percentage points, on the *same* resampled paths (the
 bootstrap draw is a deterministic function of `(seed, block, path index)`), which is what makes
@@ -175,11 +276,24 @@ same deterministic path draw, and the control is computed once per batch and sha
 about 1 s of stage 1 plus (if it survives) 5–10 s of stage 2 on this machine — the synthetic
 scale factor is the full holdout set, not the arm.
 
+**The availability probes.** `probes/` holds two engineering fixtures (never registered as trials —
+they are outside `research/ideas/`) that exercise the `NotApplicable` paths on real data:
+`yield_veto.py` (a `dgs10` veto whose extra series feeds the weights) and `coverage_gate.py`
+(`dgs10_gate` applicable on four OOS windows, so G7 runs on four and G8 on `{M1, M3, M4, M5}`;
+`gld_gate` applicable on one, so it must come out `holdout_insufficient`).
+
+```sh
+PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch      # ~50 s, isolated ledger
+```
+
 ## 6. Tests
 
 `research/batch_screen/tests/run.sh` (the research venv's numba + the project venv's pytest, see
-the header of that script). 52 tests: the plugin contract and its validation, the leg
-constructions, the registry's append-only semantics and commit gate, every stage-1/stage-2 gate
-branch on synthetic records, the deflation's null control/power/monotonicity/DSR properties, and
+the header of that script; it finds the project venv whether or not the worktree sits next to the
+main checkout). 99 tests: the plugin contract and its validation, the leg constructions, the
+registry's append-only semantics and commit gate, every stage-1/stage-2 gate branch on synthetic
+records, the deflation's null control/power/monotonicity/DSR properties, the extra-data layer
+(registry resolution, date alignment, the bootstrap chunk convention, ffill, downloads and hashing
+— all offline), the availability rules, the ledger's re-verification against git, and
 the parity cells (engine `fe_boot.boot`, old `boot_oos_market`, the production R2 target series,
 `vol_shape_v1`'s sizing, and the control's published K cells stage by stage).

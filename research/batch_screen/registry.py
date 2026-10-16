@@ -21,6 +21,8 @@ import subprocess
 from datetime import date
 from pathlib import Path
 
+from .api import idea_path, spec_hash
+
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 REGISTRY = HERE / "REGISTRY.jsonl"
@@ -36,7 +38,13 @@ def _git(*args: str) -> str:
 
 
 def rel(path) -> str:
-    return str(Path(path).resolve().relative_to(ROOT))
+    """The repo-relative path (an out-of-tree path -- a probe staged in a temp dir -- is returned
+    absolute: git simply has nothing for it, which is why such a run must skip the commit gate)."""
+    p = Path(path).resolve()
+    try:
+        return str(p.relative_to(ROOT))
+    except ValueError:
+        return str(p)
 
 
 def head_commit() -> str:
@@ -140,11 +148,95 @@ def ledger_arms(path=None) -> list:
     return [seen[k] for k in sorted(seen)]
 
 
+# ----------------------------------------------------------------------------- merge safety
+def blob_at(commit: str, path) -> bytes | None:
+    """The file's bytes at one commit, or None when it does not exist there."""
+    if not commit:
+        return None
+    p = subprocess.run(["git", "show", f"{commit}:{rel(path)}"], cwd=ROOT, capture_output=True)
+    return p.stdout if p.returncode == 0 else None
+
+
+def _arms_of(blob: bytes, idea_id: str):
+    """The `ARMS` of a module's source bytes (executed in a throwaway namespace)."""
+    ns = {}
+    exec(compile(blob, f"<HEAD:research/ideas/{idea_id}.py>", "exec"), ns)  # noqa: S102
+    arms = ns.get("ARMS")
+    return arms if isinstance(arms, dict) else None
+
+
+def verify_ledger(path=None) -> dict:
+    """Re-verify every ledger line against git, and every registered arm against HEAD.
+
+    Two independent checks, both needed when several plugin branches merge into one ledger:
+
+    1. **line identity** — the module's bytes *at the line's own recorded commit* must hash to the
+       line's `code_hash`. A line therefore describes code that was really committed and is not the
+       product of a bad union merge or an edited ledger. Lines whose `commit_gate` was bypassed
+       (`--allow-dirty`) cannot be checked this way and are listed under `skipped`.
+    2. **arm identity at HEAD** — for every registered `(idea, arm)`, the module at HEAD must exist
+       and define the arm, and the arm's spec must hash to the *latest* recorded `spec_hash`. A
+       difference means the ledger and the code have drifted: an arm renamed or deleted by a merge,
+       or edited after screening without a new ledger line (`stale`, by contrast, only says the
+       module has changed since its last screen — expected while a branch grows, so it is reported
+       but not an error).
+
+    `RegistryError` is raised by `run.run_batch` when `ok` is false.
+    """
+    lines = read(path)
+    problems, skipped, stale = [], [], []
+    by_arm, blobs, arms_cache = {}, {}, {}
+    for i, e in enumerate(lines):
+        if e.get("git", {}).get("commit_gate") != "pass":
+            skipped.append({"line": i, "arm_key": e.get("arm_key"), "why": "commit gate skipped"})
+            continue
+        issue = e["idea"]
+        commit = e["git"].get("idea_commit") or ""
+        key = (commit, issue)
+        if key not in blobs:
+            b = blob_at(commit, idea_path(issue))
+            blobs[key] = None if b is None else hashlib.sha256(b).hexdigest()
+        if blobs[key] != e["code_hash"]:
+            problems.append({"line": i, "arm_key": e.get("arm_key"), "kind": "code_hash",
+                             "commit": commit, "recorded": e["code_hash"],
+                             "at_commit": blobs[key]})
+        by_arm.setdefault((issue, e["arm"]), []).append((i, e))
+    for (issue, arm), entries in sorted(by_arm.items()):
+        latest = entries[-1][1]
+        if issue not in arms_cache:
+            b = committed_bytes(idea_path(issue))
+            try:
+                arms_cache[issue] = (b, None if b is None else _arms_of(b, issue))
+            except Exception as exc:  # a module that does not execute at HEAD
+                arms_cache[issue] = (b, exc)
+        blob, arms = arms_cache[issue]
+        if blob is None:
+            problems.append({"arm_key": latest.get("arm_key"), "kind": "module_missing_at_head"})
+            continue
+        if isinstance(arms, Exception):
+            problems.append({"arm_key": latest.get("arm_key"), "kind": "module_error_at_head",
+                             "error": str(arms)})
+            continue
+        if not arms or arm not in arms:
+            problems.append({"arm_key": latest.get("arm_key"), "kind": "arm_missing_at_head"})
+            continue
+        spec_hash_at_head = spec_hash(arms[arm])
+        if spec_hash_at_head != latest["spec_hash"]:
+            problems.append({"arm_key": latest.get("arm_key"), "kind": "spec_drift",
+                             "recorded": latest["spec_hash"], "at_head": spec_hash_at_head})
+        if hashlib.sha256(blob).hexdigest() != latest["code_hash"]:
+            stale.append(latest.get("arm_key"))
+    return {"ok": not problems, "head": head_commit(), "lines": len(lines),
+            "arms": len(by_arm), "n_trials": n_trials(path), "problems": problems,
+            "stale": sorted(stale), "skipped": skipped}
+
+
 __all__ = [
     "REGISTRY",
     "n_lines",
     "RegistryError",
     "append",
+    "blob_at",
     "committed_bytes",
     "entry_for",
     "head_commit",
@@ -155,5 +247,6 @@ __all__ = [
     "n_trials",
     "read",
     "rel",
+    "verify_ledger",
     "require_committed",
 ]

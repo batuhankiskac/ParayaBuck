@@ -1,1 +1,7 @@
 data/research/external/h06_structural_blocker_closure_2026_09_14/** -whitespace
+
+# The trial ledger is append-only: several plugin branches that each append lines must merge
+# without conflict (union keeps both sides' lines). The runner re-verifies every line against git
+# before a batch runs (`--verify-registry`), so a union merge cannot pass off a line whose code
+# hash does not match the commit it claims.
+research/batch_screen/REGISTRY.jsonl merge=union

@@ -208,7 +208,8 @@ def _num(x: str) -> float:
 
 def _file(rel: str, root=ROOT) -> dict:
     """One series file parsed once: `{"dates": (T,) <U10, "cols": {name: (T,) float64}}`."""
-    if rel not in _FILES:
+    key = str((Path(root) / rel).resolve())  # the same relative name under two roots is two files
+    if key not in _FILES:
         p = Path(root) / rel
         if not p.exists():
             raise ExtraError(f"missing series file: {p}")
@@ -225,16 +226,16 @@ def _file(rel: str, root=ROOT) -> dict:
                 dates.append(row[0])
                 for n, v in zip(names, row[1:]):
                     cols[n].append(_num(v))
-        _FILES[rel] = {
+        _FILES[key] = {
             "dates": np.array(dates, dtype="<U10"),
             "cols": {n: np.array(v, dtype=np.float64) for n, v in cols.items()},
         }
-    return _FILES[rel]
+    return _FILES[key]
 
 
 def _column(name: str, path=None, root=ROOT):
     """`(dates, values)` of one registered series, parsed once."""
-    ck = (name, str(path or REGISTRY_PATH))
+    ck = (name, str(path or REGISTRY_PATH), str(Path(root).resolve()))
     if ck not in _SERIES:
         meta = series_meta(name, path)
         f = _file(meta["file"], root)

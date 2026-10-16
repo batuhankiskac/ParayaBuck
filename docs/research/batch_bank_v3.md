@@ -392,3 +392,11 @@ any point). Two of them changed code this batch runs on:
    1 and 2 stay in N.
 7. The IC56/IC40 bootstrap defect (§Known issue) is documented, not fixed; anything that needs a
    bootstrap Δ for the `wht` or `2x_spy` options must be re-run after that fix.
+
+## Addendum (2026-10-16): IC59_K screened in a supplementary batch
+
+The three runnable `IC59_K` arms (pre-registered in amendment §6.3, module `research/ideas/IC59_K.py`) were left
+out of the `bank_v3` run because the orchestrator's idea list filtered module names by `IC59` exactly. They were
+screened unchanged, from the same commit, as batch `bank_v3b` (wall 25 s). All three are **rejected at Stage 1**
+(after-tax 2000-window Δ vs K: A_K −0.0443, B_K −0.0307, C_K −0.0423 pp; B1 median Δ −0.0040 / −0.0020 / +0.0014 pp).
+Ledger N after this batch: **303**; deflation over the full ledger declares nothing.

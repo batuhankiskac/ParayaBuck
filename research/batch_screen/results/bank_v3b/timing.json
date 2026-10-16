@@ -1,0 +1,11 @@
+{
+ "batch": "bank_v3b",
+ "registry_lines": 359,
+ "registry_trials": 303,
+ "total_wall_s": 25.363937,
+ "wall_s": {
+  "IC59_K/A_K": 6.825599,
+  "IC59_K/B_K": 6.778568,
+  "IC59_K/C_K": 6.865054
+ }
+}

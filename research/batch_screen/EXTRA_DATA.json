@@ -9,6 +9,7 @@
   "dtwexbgs": "DTWEXBGS",
   "ftse": "^FTSE",
   "gld": "GLD",
+  "gold": "GC=F",
   "ief": "IEF",
   "local_index": {
    "windows": {
@@ -41,6 +42,30 @@
   "stoxx50e": "^STOXX50E",
   "t10yie": "T10YIE",
   "tlt": "TLT",
+  "underlying_relhigh": {
+   "windows": {
+    "*": "QQQ-HL",
+    "GSPC_1957_1999": "^GSPC-HL",
+    "M1": "^IXIC-HL",
+    "M2": "^GSPC-HL",
+    "M3": "^N225-HL",
+    "M4": "^GDAXI-HL",
+    "M5": "^FTSE-HL",
+    "main": "QQQ-HL"
+   }
+  },
+  "underlying_rellow": {
+   "windows": {
+    "*": "QQQ-HL-LOW",
+    "GSPC_1957_1999": "^GSPC-HL-LOW",
+    "M1": "^IXIC-HL-LOW",
+    "M2": "^GSPC-HL-LOW",
+    "M3": "^N225-HL-LOW",
+    "M4": "^GDAXI-HL-LOW",
+    "M5": "^FTSE-HL-LOW",
+    "main": "QQQ-HL-LOW"
+   }
+  },
   "vix": "^VIX",
   "vix3m": "^VIX3M",
   "vxn": "^VXN"
@@ -108,6 +133,21 @@
    "source": "FRED CSV",
    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTWEXBGS"
   },
+  "GC=F": {
+   "bytes": 142408,
+   "column": "close",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_gc_f.csv",
+   "price": "close",
+   "range": [
+    "2000-08-30",
+    "2026-10-16"
+   ],
+   "rows": 6558,
+   "sha256": "69f66d2c36fbd2b7ea09e0c6108d7d0a936e926941e5b41055ac70635984e18c",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?period1=0&period2=1792153340&interval=1d&events=div%2Csplit"
+  },
   "GLD": {
    "bytes": 189669,
    "column": "adjclose",
@@ -152,6 +192,46 @@
    "sha256": "4d0726302e7d518ff42b63ab9501fc9fc89e9cb930cb25f807f1fd4d6c83a18f",
    "source": "Yahoo chart API",
    "url": "https://query1.finance.yahoo.com/v8/finance/chart/IEF?period1=0&period2=1792150998&interval=1d&events=div%2Csplit"
+  },
+  "QQQ-HL": {
+   "bytes": 246109,
+   "column": "high_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/stress_robustness_v1_daily.csv",
+    "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_qqq_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1999-03-10",
+    "2026-09-29"
+   ],
+   "rows": 6932,
+   "sha256": "34eb6e55ec9fd8b3773509b469a46cda5eecd64b896ea2647d9e2f80ff21858b",
+   "source": "derived from data/historical/stress_robustness_v1_daily.csv (QQQ OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ"
+  },
+  "QQQ-HL-LOW": {
+   "bytes": 246109,
+   "column": "low_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/stress_robustness_v1_daily.csv",
+    "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_qqq_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1999-03-10",
+    "2026-09-29"
+   ],
+   "rows": 6932,
+   "sha256": "34eb6e55ec9fd8b3773509b469a46cda5eecd64b896ea2647d9e2f80ff21858b",
+   "source": "derived from data/historical/stress_robustness_v1_daily.csv (QQQ OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ"
   },
   "SHY": {
    "bytes": 210749,
@@ -378,6 +458,46 @@
    "source": "Yahoo chart API",
    "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EFTSE?period1=0&period2=1792150991&interval=1d&events=div%2Csplit"
   },
+  "^FTSE-HL": {
+   "bytes": 373366,
+   "column": "high_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_ftse_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1984-01-03",
+    "2026-09-29"
+   ],
+   "rows": 10797,
+   "sha256": "5c7a560e2447a814ed6b85f1a76da919c3b304d62f6462a0e9ffb18eb31dd33b",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^FTSE OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EFTSE"
+  },
+  "^FTSE-HL-LOW": {
+   "bytes": 373366,
+   "column": "low_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_ftse_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1984-01-03",
+    "2026-09-29"
+   ],
+   "rows": 10797,
+   "sha256": "5c7a560e2447a814ed6b85f1a76da919c3b304d62f6462a0e9ffb18eb31dd33b",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^FTSE OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EFTSE"
+  },
   "^GDAXI": {
    "bytes": 337556,
    "column": "close",
@@ -392,6 +512,46 @@
    "sha256": "1c66500ba33c4de84df73cd0694784fb2b06e877b81f5d6125dbd56c07a6a992",
    "source": "Yahoo chart API",
    "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGDAXI?period1=0&period2=1792150989&interval=1d&events=div%2Csplit"
+  },
+  "^GDAXI-HL": {
+   "bytes": 315418,
+   "column": "high_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_gdaxi_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1987-12-30",
+    "2026-09-29"
+   ],
+   "rows": 9799,
+   "sha256": "0002c4becded2916ca046d0b3ccc1d0ac3c16017feec9fbfb99476bd44078166",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^GDAXI OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGDAXI"
+  },
+  "^GDAXI-HL-LOW": {
+   "bytes": 315418,
+   "column": "low_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_gdaxi_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1987-12-30",
+    "2026-09-29"
+   ],
+   "rows": 9799,
+   "sha256": "0002c4becded2916ca046d0b3ccc1d0ac3c16017feec9fbfb99476bd44078166",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^GDAXI OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGDAXI"
   },
   "^GSPC": {
    "bytes": 492465,
@@ -408,6 +568,46 @@
    "source": "Yahoo chart API",
    "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=0&period2=1792150992&interval=1d&events=div%2Csplit"
   },
+  "^GSPC-HL": {
+   "bytes": 108786,
+   "column": "high_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_gspc_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1927-12-30",
+    "1956-12-31"
+   ],
+   "rows": 7250,
+   "sha256": "df91419e510c9319915fbe246feeb41eb9256613f1a853d65b79a95f8524b75c",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^GSPC OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
+  },
+  "^GSPC-HL-LOW": {
+   "bytes": 108786,
+   "column": "low_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_gspc_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1927-12-30",
+    "1956-12-31"
+   ],
+   "rows": 7250,
+   "sha256": "df91419e510c9319915fbe246feeb41eb9256613f1a853d65b79a95f8524b75c",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^GSPC OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
+  },
   "^IXIC": {
    "bytes": 479617,
    "column": "close",
@@ -423,6 +623,46 @@
    "source": "Yahoo chart API",
    "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?period1=0&period2=1792150991&interval=1d&events=div%2Csplit"
   },
+  "^IXIC-HL": {
+   "bytes": 183807,
+   "column": "high_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_ixic_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1971-02-05",
+    "1999-12-31"
+   ],
+   "rows": 7304,
+   "sha256": "721cb80c93257d1c3db4d6abcd8f47ee8464bfedd483e54674660b9639484a28",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^IXIC OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC"
+  },
+  "^IXIC-HL-LOW": {
+   "bytes": 183807,
+   "column": "low_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_ixic_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1971-02-05",
+    "1999-12-31"
+   ],
+   "rows": 7304,
+   "sha256": "721cb80c93257d1c3db4d6abcd8f47ee8464bfedd483e54674660b9639484a28",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^IXIC OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC"
+  },
   "^N225": {
    "bytes": 481518,
    "column": "close",
@@ -437,6 +677,46 @@
    "sha256": "453cad14f5d168db00248ac33d8ce4887574d18ac5fbaf95a6f20dacb12136ce",
    "source": "Yahoo chart API",
    "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EN225?period1=0&period2=1792150990&interval=1d&events=div%2Csplit"
+  },
+  "^N225-HL": {
+   "bytes": 413557,
+   "column": "high_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_n225_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1965-01-05",
+    "2026-09-29"
+   ],
+   "rows": 15175,
+   "sha256": "a381a2e304e76072fa0b720fdbcbbfb8818b8548935e9ed4b58cfb1140fea5e5",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^N225 OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EN225"
+  },
+  "^N225-HL-LOW": {
+   "bytes": 413557,
+   "column": "low_over_close",
+   "derived_from": {
+    "column": "high,low,close",
+    "file": "data/historical/ewma_band_v1_index.csv",
+    "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_b3_n225_hl.csv",
+   "price": "ratio",
+   "range": [
+    "1965-01-05",
+    "2026-09-29"
+   ],
+   "rows": 15175,
+   "sha256": "a381a2e304e76072fa0b720fdbcbbfb8818b8548935e9ed4b58cfb1140fea5e5",
+   "source": "derived from data/historical/ewma_band_v1_index.csv (^N225 OHLC)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EN225"
   },
   "^NDX": {
    "bytes": 355788,

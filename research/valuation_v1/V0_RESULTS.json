@@ -1,0 +1,138 @@
+{
+ "campaign": "valuation_v1",
+ "stage": "V0",
+ "EY_REF": 0.06539977475019101,
+ "CAPE_Q90": 21.707231422405908,
+ "EY_REF_n": 600,
+ "CAPE_Q90_n": 1429,
+ "spec": {
+  "dependent": "forward 10-year annualized real S&P total return (Shiller P, D, CPI)",
+  "samples": {
+   "in_sample": [
+    "1871-01",
+    "1949-12"
+   ],
+   "oos_1": [
+    "1950-01",
+    "1999-12"
+   ],
+   "oos_2": [
+    "2000-01",
+    "2014-06"
+   ]
+  },
+  "primary_t": "Newey-West HAC, 120 lags",
+  "gate": "EY slope > 0 and |t_NW| >= 2 AND CAPE slope < 0 and |t_NW| >= 2 (1871-1949)"
+ },
+ "EY": {
+  "in_sample_1871_1949": {
+   "n": 948,
+   "slope": 0.9446256755096556,
+   "intercept": -0.004861130476609965,
+   "t_nw": 5.268805073991389,
+   "t_ols": 17.25405313838181,
+   "r2": 0.23936784373962527,
+   "nw_lags": 120,
+   "non_overlapping": {
+    "n": 8,
+    "slope": 1.9325993305905982,
+    "intercept": -0.08708771348265376,
+    "t_nw": 6.771655820759138,
+    "t_ols": 1.6132042643481852,
+    "r2": 0.302522497016142,
+    "nw_lags": 7,
+    "note": "every 120th month of the sample (report only)"
+   }
+  },
+  "oos_1950_1999": {
+   "n": 600,
+   "slope": 1.182372944565782,
+   "intercept": -0.019837330750185345,
+   "t_nw": 3.7584971784473695,
+   "t_ols": 17.238902788214638,
+   "r2": 0.33197775409973074,
+   "nw_lags": 120,
+   "non_overlapping": {
+    "n": 5,
+    "slope": 1.0308157008890584,
+    "intercept": -0.002877782942069751,
+    "t_nw": 4.055618750876347,
+    "t_ols": 1.2389497459580774,
+    "r2": 0.33847798606795965,
+    "nw_lags": 4,
+    "note": "every 120th month of the sample (report only)"
+   }
+  },
+  "oos_2000_2014": {
+   "n": 174,
+   "slope": 1.0591860997534663,
+   "intercept": 0.0182380455829787,
+   "t_nw": 1.3886215336601886,
+   "t_ols": 5.049624954059784,
+   "r2": 0.12910824529253007,
+   "nw_lags": 120,
+   "non_overlapping": {
+    "n": 2,
+    "note": "every 120th month of the sample (report only)"
+   }
+  }
+ },
+ "CAPE": {
+  "in_sample_1871_1949": {
+   "n": 829,
+   "slope": -0.005700819576054082,
+   "intercept": 0.1468936325890564,
+   "t_nw": -4.135526451949374,
+   "t_ols": -18.290991430138657,
+   "r2": 0.28802667244770563,
+   "nw_lags": 120,
+   "non_overlapping": {
+    "n": 7,
+    "slope": -0.007478011423331779,
+    "intercept": 0.16648098313758924,
+    "t_nw": -5.801708479837445,
+    "t_ols": -1.6020813019126157,
+    "r2": 0.3392068590641828,
+    "nw_lags": 6,
+    "note": "every 120th month of the sample (report only)"
+   }
+  },
+  "oos_1950_1999": {
+   "n": 600,
+   "slope": -0.005036161621185274,
+   "intercept": 0.15413070846453358,
+   "t_nw": -4.141582843623333,
+   "t_ols": -18.592145149550095,
+   "r2": 0.36630246239359454,
+   "nw_lags": 120,
+   "non_overlapping": {
+    "n": 5,
+    "slope": -0.008607768362872817,
+    "intercept": 0.21621057724139825,
+    "t_nw": -3.3333579938226303,
+    "t_ols": -1.0361512341777814,
+    "r2": 0.2635523634975807,
+    "nw_lags": 4,
+    "note": "every 120th month of the sample (report only)"
+   }
+  },
+  "oos_2000_2014": {
+   "n": 174,
+   "slope": -0.00684146902975169,
+   "intercept": 0.2395141095495359,
+   "t_nw": -10.645839584008867,
+   "t_ols": -26.485337033984898,
+   "r2": 0.8030849440345994,
+   "nw_lags": 120,
+   "non_overlapping": {
+    "n": 2,
+    "note": "every 120th month of the sample (report only)"
+   }
+  }
+ },
+ "verdict": {
+  "EY_slope_positive_and_t2": true,
+  "CAPE_slope_negative_and_t2": true,
+  "pass": true
+ }
+}

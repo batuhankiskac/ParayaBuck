@@ -107,8 +107,14 @@ def e3_vectors(arm_list):
 
 
 # ----------------------------------------------------------------------------- one arm
-def gather(arm, ctrl_vec, quiet=True):
-    """Everything the preregistered gates need, for one arm (`ctrl_vec=None` for the control)."""
+def gather(arm, ctrl_vec, ctrl_arm=None, quiet=True):
+    """Everything the preregistered gates need, for one arm.
+
+    `ctrl_vec=None` means "this arm is the control". `ctrl_arm` is the control's arm object: the
+    pooled OOS bootstrap (G8) is drawn for both arms **in one call**, because an arm whose OOS
+    market list is a strict subset would otherwise not share the control's paths (the pooled vector
+    is the per-market concatenation, and `PREREGISTRATION` counts IC12's M2 as not applicable).
+    """
     aid = arm["id"]
     vecs = {}
     rec = stages.stage1(arm, "none")
@@ -140,10 +146,14 @@ def gather(arm, ctrl_vec, quiet=True):
 
     markets, na_markets = stages.oos_pooled_markets(arm, "none")
     if markets:
-        pooled = B.oos_pooled([arm], cash_yield="none", markets=tuple(markets))
+        group = [arm] if ctrl_arm is None else [arm, ctrl_arm]
+        pooled = B.oos_pooled(group, cash_yield="none", markets=tuple(markets))
         vecs["oos_pooled"] = pooled["pooled"][aid]
-        base = vecs["oos_pooled"] if ctrl_vec is None else ctrl_vec["oos_pooled"]
+        base = vecs["oos_pooled"] if ctrl_arm is None else pooled["pooled"][ctrl_arm["id"]]
         rec["oos_pooled"] = B.delta_stats(vecs["oos_pooled"] - base)
+        if len(markets) != len(stages.OOS_POOLED_MARKETS):
+            rec["oos_pooled"]["markets"] = list(markets)
+            rec["oos_pooled"]["markets_not_applicable"] = na_markets
     else:
         rec["oos_pooled"] = {"not_evaluable": "no OOS market's pooled bootstrap could be drawn",
                              "markets_not_applicable": na_markets}
@@ -403,7 +413,7 @@ def run(quiet=True):
                       "control_AT2017": ctrl_rec["after_tax"]["2017_01_to_end"]["after_tax_cagr"]}}
     for name in STUDY_ARMS:
         print(f"  {name}", flush=True)
-        res = gather(amap[name], ctrl_vec, quiet=quiet)
+        res = gather(amap[name], ctrl_vec, ctrl_arm=amap[CONTROL], quiet=quiet)
         r, g = res["record"], gate_block(res["record"], ctrl_rec, res["e3"], ctrl_e3)
         out["arms"][name] = {
             "spec": amap[name]["spec"],

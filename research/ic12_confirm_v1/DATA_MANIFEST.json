@@ -6,7 +6,7 @@
    "file": "data/historical/ic12_confirm_v1_nfci_rt_state.csv",
    "note": "one (date, state) row per weekday from the first NFCI observation: the committed IC12 state on the current-revision series before the first ALFRED vintage (2011-05-25), the state of the latest vintage on or before the date from then on; empty where the state is undefined",
    "rows": 14546,
-   "sha256": "25d5e6c459ab3a66f109aa25320d00ca57bfdd3028649b54e5d065be626c1a7f"
+   "sha256": "86036ec10ab6c9b52d2f2d203d0edb9d7da2b345a9f3f196ba131c4732dd1bab"
   }
  },
  "extra_data": {
@@ -25,7 +25,7 @@
     "2026-10-09"
    ],
    "rows": 2910,
-   "sha256": "e98b7d60b1ed1fc7a3bb08c2b558347279e8d486caffc705e0d148cdfca08a7a",
+   "sha256": "9c0e35863cc2f70efe39f3173d3e69d6c8aa4de2ba73a89717fe39a0ba024207",
    "source": "FRED CSV",
    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NFCI",
    "values_equal_plugins_c2_nfci": true
@@ -38,7 +38,7 @@
     "2026-10-15"
    ],
    "rows": 800,
-   "sha256": "d54e27346205968ee6594986da7c3e6d18c58f8add5c2b8adeeb58edf6c4f64d",
+   "sha256": "59b9879d1fdfb76f787fad380ba4deb11fcf73457f269c052cf5af833f3a6432",
    "source": "ALFRED vintage calendar",
    "url": "https://alfred.stlouisfed.org/series/downloaddata?seid=NFCI"
   },
@@ -52,7 +52,7 @@
     "2026-10-15"
    ],
    "rows": 168000,
-   "sha256": "554447cba81630beed6d00e69dd54f74630a41bb3d2d1e7857a7fb468fd98731",
+   "sha256": "b106bc6cd9806a69f50118ea065338ec279c430eca6d585d8eed44f236e55631",
    "source": "ALFRED CSV (per vintage)",
    "url": "https://alfred.stlouisfed.org/graph/alfredgraph.csv?id=NFCI&vintage_date=<vintage_date>",
    "vintage_calendar_sha256": "8e7ff1e3ab94c35d07d1d5884c5df585af173a2532a713feff5cecb2a9a158eb",
@@ -61,24 +61,24 @@
  },
  "files": {
   "data/historical/ic12_confirm_v1_nfci_live.csv": {
-   "bytes": 54158,
+   "bytes": 51247,
    "rows": 2910,
-   "sha256": "e98b7d60b1ed1fc7a3bb08c2b558347279e8d486caffc705e0d148cdfca08a7a"
+   "sha256": "9c0e35863cc2f70efe39f3173d3e69d6c8aa4de2ba73a89717fe39a0ba024207"
   },
   "data/historical/ic12_confirm_v1_nfci_rt_state.csv": {
-   "bytes": 230408,
+   "bytes": 215861,
    "rows": 14546,
-   "sha256": "25d5e6c459ab3a66f109aa25320d00ca57bfdd3028649b54e5d065be626c1a7f"
+   "sha256": "86036ec10ab6c9b52d2f2d203d0edb9d7da2b345a9f3f196ba131c4732dd1bab"
   },
   "data/historical/ic12_confirm_v1_nfci_vintage_dates.csv": {
-   "bytes": 83249,
+   "bytes": 82448,
    "rows": 800,
-   "sha256": "d54e27346205968ee6594986da7c3e6d18c58f8add5c2b8adeeb58edf6c4f64d"
+   "sha256": "59b9879d1fdfb76f787fad380ba4deb11fcf73457f269c052cf5af833f3a6432"
   },
   "data/historical/ic12_confirm_v1_nfci_vintages.csv": {
-   "bytes": 5031068,
+   "bytes": 4863067,
    "rows": 168000,
-   "sha256": "554447cba81630beed6d00e69dd54f74630a41bb3d2d1e7857a7fb468fd98731"
+   "sha256": "b106bc6cd9806a69f50118ea065338ec279c430eca6d585d8eed44f236e55631"
   },
   "data/historical/plugins_c2_nfci.csv": {
    "bytes": 51243,

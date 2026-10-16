@@ -120,7 +120,7 @@ def write_state_file() -> tuple[np.ndarray, np.ndarray]:
     """Rebuild `data/historical/ic12_confirm_v1_nfci_rt_state.csv` from the committed inputs."""
     cal, state = build()
     with STATE_FILE.open("w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(["date", "state"])
         for d, s in zip(cal, state):
             w.writerow([d, "" if not np.isfinite(s) else repr(float(s))])

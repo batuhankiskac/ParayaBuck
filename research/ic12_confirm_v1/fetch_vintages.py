@@ -28,12 +28,12 @@ import csv
 import hashlib
 import io
 import json
+import os
 import re
 import sys
 import time
 import urllib.error
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,15 +53,18 @@ MANIFEST = HERE / "DATA_MANIFEST.json"
 
 #: observations kept per vintage: the rule needs 1 + 4 + 156 = 161; 210 leaves margin.
 KEEP = 210
-WORKERS = 6
-RETRIES = 4
+#: raw per-vintage responses are cached outside git, so a rate-limited run resumes for free.
+CACHE = Path(os.environ.get("IC12_VINTAGE_CACHE", "/tmp/ic12_confirm_v1_vintages_raw"))
+#: ALFRED rate-limits: one request at a time, a delay between them, long backoff on 403.
+DELAY = 0.30
+BACKOFF = (5.0, 20.0, 60.0, 120.0)
 
 
 def sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
-def get(url: str, tries: int = RETRIES) -> bytes:
+def get(url: str, tries: int = len(BACKOFF)) -> bytes:
     last = None
     for k in range(tries):
         try:
@@ -70,8 +73,19 @@ def get(url: str, tries: int = RETRIES) -> bytes:
                 return r.read()
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
             last = exc
-            time.sleep(1.0 * (2**k))
+            time.sleep(BACKOFF[min(k, len(BACKOFF) - 1)])
     raise RuntimeError(f"GET {url} failed after {tries} tries: {last}")
+
+
+def cached_get(url: str, cache_key: str) -> bytes:
+    CACHE.mkdir(parents=True, exist_ok=True)
+    p = CACHE / cache_key
+    if p.exists():
+        return p.read_bytes()
+    b = get(url)
+    p.write_bytes(b)
+    time.sleep(DELAY)
+    return b
 
 
 def parse_series(raw: bytes, url: str) -> list[tuple[str, float]]:
@@ -103,28 +117,26 @@ def vintage_calendar() -> tuple[list[str], bytes]:
 
 
 def fetch_vintages(dates: list[str]) -> tuple[dict, dict]:
-    """`({vintage_date: [(obs_date, value)]}, {vintage_date: sha256 of the raw response})`."""
+    """`({vintage_date: [(obs_date, value)]}, {vintage_date: sha256 of the raw response})`.
+
+    Sequential with a delay and a response cache (`CACHE`): ALFRED returns 403 under parallel load,
+    and a cached run is free to resume.
+    """
     done: dict[str, list[tuple[str, float]]] = {}
     raw_hash: dict[str, str] = {}
     errors: dict[str, str] = {}
-
-    def one(d: str):
+    t0 = time.time()
+    for k, d in enumerate(dates, 1):
         url = VINTAGE_URL.format(d=d)
         try:
-            raw = get(url)
-            return d, (parse_series(raw, url), sha256_bytes(raw))
+            raw = cached_get(url, f"{d}.csv")
+            done[d] = parse_series(raw, url)
+            raw_hash[d] = sha256_bytes(raw)
         except Exception as exc:  # noqa: BLE001  (reported, not swallowed)
-            return d, exc
-
-    t0 = time.time()
-    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        for k, (d, val) in enumerate(ex.map(one, dates), 1):
-            if isinstance(val, Exception):
-                errors[d] = str(val)
-            else:
-                done[d], raw_hash[d] = val
-            if k % 100 == 0:
-                print(f"  {k}/{len(dates)} vintages fetched ({time.time() - t0:.0f}s)", flush=True)
+            errors[d] = str(exc)
+        if k % 50 == 0:
+            print(f"  {k}/{len(dates)} vintages ({time.time() - t0:.0f}s, {len(errors)} errors)",
+                  flush=True)
     if errors:
         raise RuntimeError(f"{len(errors)} vintages failed, e.g. {list(errors.items())[:3]}")
     return done, raw_hash
@@ -133,7 +145,7 @@ def fetch_vintages(dates: list[str]) -> tuple[dict, dict]:
 def write_vintage_panel(series: dict[str, list[tuple[str, float]]]) -> None:
     """The vintage panel, trailing `KEEP` observations per vintage."""
     with VINTAGE_CSV.open("w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(["vintage_date", "date", "value"])
         for v in sorted(series):
             for d, x in series[v][-KEEP:]:
@@ -142,7 +154,7 @@ def write_vintage_panel(series: dict[str, list[tuple[str, float]]]) -> None:
 
 def write_date_table(series: dict[str, list[tuple[str, float]]], raw_hash: dict[str, str]) -> None:
     with DATES_CSV.open("w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(["vintage_date", "rows", "first_obs", "last_obs", "sha256_raw"])
         for v in sorted(series):
             rows = series[v]
@@ -290,7 +302,7 @@ def main() -> int:
     print("3/4 current revised series (cross-check)", flush=True)
     live = parse_series(get(FRED_URL), FRED_URL)
     with LIVE_CSV.open("w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(["date", "value"])
         for d, x in live:
             w.writerow([d, repr(float(x))])

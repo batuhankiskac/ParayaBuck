@@ -64,6 +64,14 @@ E2_SHARE = 0.60
 E1_CORR, E1_TE, E1_CAGR = 0.95, 0.025, 0.02
 
 STAGE1_KEYS = ("at2000_gt_0", "b1_median_gt_0", "maxdd", "turnover")
+#: the `batch_bank_v3` record's absolute after-tax $100k cells for IC37/C and its own control on
+#: the arm's `w20030103` window (`research/batch_screen/results/bank_v3/IC37__C.json`,
+#: `_control_w20030103.json`) -- the reproduction target of PREREGISTRATION section 7.3
+_BANKV3_AT = {
+    "2000_03_to_2026_09": {"arm": 0.146754, "control": 0.140875},
+    "2010_01_to_end": {"arm": 0.154118, "control": 0.152354},
+    "2017_01_to_end": {"arm": 0.246151, "control": 0.239720},
+}
 PRETAX_KEYS = ("G1_base", "G1_calibrated", "G2_base", "G2_calibrated", "G3_base", "G3_calibrated",
                "G4", "G5_base", "G5_calibrated", "G6_base", "G6_calibrated", "G7", "G8", "G9")
 
@@ -383,10 +391,16 @@ def harness():
     t0 = time.time()
     proxy.use("proxy")
     print("  1/5 research.fast_engine.parity --quick", flush=True)
+    # `parity.py` writes PARITY.json unconditionally (no --no-write flag): keep its committed
+    # bytes, exactly as `research/batch_screen.run.harness` does, so the worktree stays clean.
+    parity_out = ROOT / "research/fast_engine/PARITY.json"
+    parity_before = parity_out.read_bytes() if parity_out.exists() else None
     p = subprocess.run([sys.executable, "-m", "research.fast_engine.parity", "--quick"],
                        cwd=str(ROOT), capture_output=True, text=True,
                        env={**os.environ, "PYTHONPATH": "."})
-    checks.append({"check": "parity_quick", "pass": p.returncode == 0,
+    if parity_before is not None and parity_out.read_bytes() != parity_before:
+        parity_out.write_bytes(parity_before)
+    checks.append({"check": "parity_quick", "pass": bool(p.returncode == 0),
                    "tail": (p.stdout or "").strip().splitlines()[-1:]})
 
     print("  2/5 K's anchors through the engine", flush=True)
@@ -426,11 +440,13 @@ def harness():
     rec["after_tax"].update({k: v for k, v in
                              stages.stage2_main_windows(arm, "none", win=win).items()
                              if k not in rec["after_tax"]})
-    for wn, ref in (("2000_03_to_2026_09", 0.587870), ("2010_01_to_end", 0.176424),
-                    ("2017_01_to_end", 0.643077)):
-        checks.append(_anchor(f"IC37C_AT_{wn}_delta",
-                              (rec["after_tax"][wn]["after_tax_cagr"]
-                               - crec["after_tax"][wn]["after_tax_cagr"]) * 100, ref))
+    # the record's own cells (its `delta_pp` is rounded separately, so compare the cells, which
+    # must match to the 6 dp the record stores -- they do, bit for bit)
+    for key in ("2000_03_to_2026_09", "2010_01_to_end", "2017_01_to_end"):
+        checks.append(_anchor(f"IC37C_AT_{key}_arm", rec["after_tax"][key]["after_tax_cagr"],
+                              _BANKV3_AT[key]["arm"], tol_pp=1e-4))
+        checks.append(_anchor(f"IC37C_AT_{key}_control", crec["after_tax"][key]["after_tax_cagr"],
+                              _BANKV3_AT[key]["control"], tol_pp=1e-4))
     b1d = float(np.median(b12["tax"][GATE_CAPITAL]["progressive"]["IC37/C"]
                           - np.asarray(cvec["tax"]["progressive"]))) * 100
     b2d = float(np.median(b12["tax"][GATE_CAPITAL]["flat"]["IC37/C"]

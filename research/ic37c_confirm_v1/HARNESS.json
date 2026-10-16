@@ -1,0 +1,195 @@
+[
+ {
+  "check": "parity_quick",
+  "pass": true,
+  "tail": [
+   "parity PASS in 11.4s -> PARITY.json"
+  ]
+ },
+ {
+  "check": "K_pre_base_m2",
+  "diff_pp": -8e-06,
+  "got": 0.157649,
+  "pass": true,
+  "reference": 0.157649
+ },
+ {
+  "check": "K_pre_cal_m2",
+  "diff_pp": 3.1e-05,
+  "got": 0.151785,
+  "pass": true,
+  "reference": 0.151785
+ },
+ {
+  "check": "K_dd_base_m2",
+  "diff_pp": -9e-06,
+  "got": 0.466698,
+  "pass": true,
+  "reference": 0.466698
+ },
+ {
+  "check": "K_dd_cal_m2",
+  "diff_pp": -1.7e-05,
+  "got": 0.467948,
+  "pass": true,
+  "reference": 0.467948
+ },
+ {
+  "check": "K_at2000",
+  "diff_pp": 6e-06,
+  "got": 0.107533,
+  "pass": true,
+  "reference": 0.107533
+ },
+ {
+  "check": "K_at2010",
+  "diff_pp": -4e-05,
+  "got": 0.152354,
+  "pass": true,
+  "reference": 0.152354
+ },
+ {
+  "check": "K_at2017",
+  "diff_pp": -2.6e-05,
+  "got": 0.23972,
+  "pass": true,
+  "reference": 0.23972
+ },
+ {
+  "check": "R2_pre_base_m2",
+  "diff_pp": -0.003356,
+  "got": 0.154766,
+  "pass": true,
+  "reference": 0.1548
+ },
+ {
+  "check": "R2_pre_cal_m2",
+  "diff_pp": -0.003883,
+  "got": 0.148961,
+  "pass": true,
+  "reference": 0.149
+ },
+ {
+  "check": "R2_pre_base_m1",
+  "diff_pp": 0.003817,
+  "got": 0.157538,
+  "pass": true,
+  "reference": 0.1575
+ },
+ {
+  "check": "R2_dd_base_m2",
+  "diff_pp": -0.001639,
+  "got": 0.467584,
+  "pass": true,
+  "reference": 0.4676
+ },
+ {
+  "check": "IC37C_window_is_20030103",
+  "i0": 960,
+  "pass": true,
+  "tag": "w20030103"
+ },
+ {
+  "check": "IC37C_AT_2000_03_to_2026_09_arm",
+  "diff_pp": -3e-05,
+  "got": 0.146754,
+  "pass": true,
+  "reference": 0.146754
+ },
+ {
+  "check": "IC37C_AT_2000_03_to_2026_09_control",
+  "diff_pp": -3.8e-05,
+  "got": 0.140875,
+  "pass": true,
+  "reference": 0.140875
+ },
+ {
+  "check": "IC37C_AT_2010_01_to_end_arm",
+  "diff_pp": 2.4e-05,
+  "got": 0.154118,
+  "pass": true,
+  "reference": 0.154118
+ },
+ {
+  "check": "IC37C_AT_2010_01_to_end_control",
+  "diff_pp": -4e-05,
+  "got": 0.152354,
+  "pass": true,
+  "reference": 0.152354
+ },
+ {
+  "check": "IC37C_AT_2017_01_to_end_arm",
+  "diff_pp": -2.3e-05,
+  "got": 0.246151,
+  "pass": true,
+  "reference": 0.246151
+ },
+ {
+  "check": "IC37C_AT_2017_01_to_end_control",
+  "diff_pp": -2.6e-05,
+  "got": 0.23972,
+  "pass": true,
+  "reference": 0.23972
+ },
+ {
+  "check": "IC37C_B1_median",
+  "diff_pp": -0.002483,
+  "got": 12.229587,
+  "pass": true,
+  "reference": 12.229612
+ },
+ {
+  "check": "IC37C_B2_median",
+  "diff_pp": -6e-05,
+  "got": 14.510756,
+  "pass": true,
+  "reference": 14.510757
+ },
+ {
+  "check": "IC37C_repro_sessions",
+  "pass": true,
+  "sessions": 5972
+ },
+ {
+  "check": "no_framework_drift",
+  "dirty": [],
+  "pass": true
+ },
+ {
+  "check": "proxy_keys_point_at_the_derived_series",
+  "keys": {
+   "ief": "IC37C_IEF_PROXY",
+   "t10yie": "IC37C_BE_PROXY"
+  },
+  "pass": true
+ },
+ {
+  "check": "resolve_arm_IC37C_unchanged",
+  "pass": true,
+  "spec": {
+   "cash_yield": "none",
+   "form": "residual",
+   "gate": "real10y",
+   "inputs": [
+    "dgs10",
+    "t10yie"
+   ],
+   "leg": "2x",
+   "leg_b": "ief",
+   "real_min_pp": 0.25,
+   "rule": "K",
+   "start": "auto",
+   "total": 0.98
+  }
+ },
+ {
+  "check": "IC37_module_bytes_equal_HEAD",
+  "code_hash": "e7627362fb9554bee2f1e52eb83df1b51f7508629524ef501e792aefb3f97058",
+  "pass": true
+ },
+ {
+  "bad": [],
+  "check": "data_manifest_verified",
+  "pass": true
+ }
+]

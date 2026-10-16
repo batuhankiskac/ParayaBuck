@@ -1,0 +1,53 @@
+rw_boot_audit_v1 SUMMARY
+
+repro IC37/C path0: leg-B spanning columns 120 / 2776; progressive Δ raw 28.35827470690011 pp (= recorded 28.358243) vs leg_series -1.1065837204670137 pp
+parity: pass=True cells=76 unaffected moved=0 hard failures=0 affected cells changed=128
+verdicts changed: ['IC37/A', 'IC37/B', 'IC37/C']
+
+arm                 AT2000 old         new   B1med old         new  B1nan old->new verdict
+IB26_2L/A_2L              None        None        None        None            0->0 not_applicable -> not_applicable
+IB26_2L/B_2L              None        None        None        None            0->0 not_applicable -> not_applicable
+IB26_2L/C_2L              None        None        None        None            0->0 not_applicable -> not_applicable
+IB26_RW/A_RW         -0.112102   -0.112102    7.062373   -0.528173            0->0 reject_stage1 -> reject_stage1
+IB26_RW/B_RW         -0.143765   -0.143765   11.780518   -0.282185            0->0 reject_stage1 -> reject_stage1
+IB26_RW/C_RW          0.187623    0.187623         nan   -0.310052            1->0 reject_stage1 -> reject_stage1
+IC31/A               -0.228656   -0.228656    0.959438   -0.986767            0->0 reject_stage1 -> reject_stage1
+IC31/B                0.280882    0.280882         nan   -0.836229            1->0 reject_stage1 -> reject_stage1
+IC31/C               -0.532648   -0.532648         nan   -1.045998            2->0 reject_stage1 -> reject_stage1
+IC32/A                0.494057    0.494057    3.680121    -0.83144            0->0 reject_stage1 -> reject_stage1
+IC32/B               -0.312332   -0.312332  -28.217185   -0.912535            0->0 reject_stage1 -> reject_stage1
+IC32/C               -0.002391   -0.002391    0.134652   -1.092954            0->0 reject_stage1 -> reject_stage1
+IC33/A               -0.884626   -0.884626   -0.220415   -0.962873            0->0 reject_stage1 -> reject_stage1
+IC33/B               -0.369328   -0.369328    0.484398   -0.725272            0->0 reject_stage1 -> reject_stage1
+IC33/C               -1.097197   -1.097197    1.319636   -1.091842            0->0 reject_stage1 -> reject_stage1
+IC34/A                -1.25422    -1.25422         nan     0.09758          104->0 reject_stage1 -> reject_stage1
+IC34/B               -0.636913   -0.636913         nan    0.314096           94->0 reject_stage1 -> reject_stage1
+IC35/A                1.830206    1.830206         nan    1.042069            8->0 reject_stage1 -> reject_stage1
+IC35/B                1.532914    1.532914   13.815586    1.135407            0->0 reject_stage1 -> reject_stage1
+IC35/C               -0.280216   -0.280216         nan   -0.520288           10->0 reject_stage1 -> reject_stage1
+IC37/A                0.015838    0.015838   11.352266   -0.637947            0->0 holdout_insufficient -> reject_stage1
+IC37/B                0.059909    0.059909   19.889556   -0.797127            0->0 holdout_insufficient -> reject_stage1
+IC37/C                 0.58787     0.58787   12.229612   -0.236283            0->0 holdout_insufficient -> reject_stage1
+IC38/A               -2.195697   -2.195697    2.101864    2.101864            0->0 reject_stage1 -> reject_stage1
+IC38/B               -0.985975   -0.985975    1.363797    1.363797            0->0 reject_stage1 -> reject_stage1
+IC38/C               -1.828018   -1.828018    2.197475    2.197475            0->0 reject_stage1 -> reject_stage1
+IC42/A               -1.339883   -1.339883   -1.979846   -1.979846            0->0 reject_stage1 -> reject_stage1
+IC42/B               -1.322886   -1.322886   -1.978484   -1.978484            0->0 reject_stage1 -> reject_stage1
+IC42/C               -1.365215   -1.365215    -1.98129    -1.98129            0->0 reject_stage1 -> reject_stage1
+IC43/A               -1.466526   -1.466526   -2.119952   -2.119952            0->0 reject_stage1 -> reject_stage1
+IC43/B                -1.65687    -1.65687   -2.204462   -2.204462            0->0 reject_stage1 -> reject_stage1
+IC43/C               -1.439505   -1.439505   -2.087774   -2.087774            0->0 reject_stage1 -> reject_stage1
+IC44/A               -1.341682   -1.341682   -1.967387   -1.967387            0->0 reject_stage1 -> reject_stage1
+IC44/B               -1.341016   -1.341016   -1.917724   -1.917724            0->0 reject_stage1 -> reject_stage1
+IC44/C               -1.313177   -1.313177   -1.958824   -1.958824            0->0 reject_stage1 -> reject_stage1
+IC45/A                0.007017    0.007017    21.40651    0.465404            0->0 holdout_insufficient -> holdout_insufficient
+IC45/B               -0.144599   -0.144599   44.391649    0.862645            0->0 reject_stage1 -> reject_stage1
+IC46/A               -0.659253   -0.659253    4.450685   -0.290085            0->0 reject_stage1 -> reject_stage1
+IC46/B               -1.684532   -1.684532   10.136447   -0.608805            0->0 reject_stage1 -> reject_stage1
+ib25_2L/A_2L              None        None        None        None            0->0 not_applicable -> not_applicable
+ib25_2L/B_2L              None        None        None        None            0->0 not_applicable -> not_applicable
+ib25_RW/A_RW         -0.266862   -0.266862   -0.138373   -0.832835            0->0 reject_stage1 -> reject_stage1
+ib25_RW/B_RW         -0.275982   -0.275982     0.70347   -1.080813            0->0 reject_stage1 -> reject_stage1
+ib27_2L/A_2L         -1.316428   -1.316428   -1.716937   -1.716937            0->0 reject_stage1 -> reject_stage1
+ib27_2L/B_2L         -1.330544   -1.330544   -1.968161   -1.968161            0->0 reject_stage1 -> reject_stage1
+ib27_2L/C_2L         -1.383301   -1.383301   -1.787263   -1.787263            0->0 reject_stage1 -> reject_stage1

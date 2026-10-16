@@ -251,22 +251,73 @@ def run_batch(twice=True) -> dict:
     return out
 
 
+def _controls(batch: str) -> dict:
+    """The batch's control records by window tag (the paired reference of every Δ)."""
+    out = {}
+    d = RUN.RESULTS / batch
+    if not d.exists():
+        return out
+    for p in sorted(d.glob("_control*.json")):
+        c = json.loads(p.read_text())
+        rec = c.get("record") or {}
+        tag = (c.get("win") or {}).get("tag", "default")
+        out[tag] = {
+            "pre_base_m2": ((rec.get("main") or {}).get("base", {}).get("m2") or {}).get("cagr"),
+            "pre_cal_m2": ((rec.get("main") or {}).get("calibrated", {}).get("m2") or {}).get("cagr"),
+            "level_pre": {md: ((rec.get("boot_level") or {}).get("pre", {}).get(md) or {})
+                          .get("cagr_median") for md in ("base", "calibrated")},
+            "level_b1": ((rec.get("boot_level") or {}).get("tax", {}).get("progressive") or {})
+            .get("cagr_median"),
+            "level_b2": ((rec.get("boot_level") or {}).get("tax", {}).get("flat") or {})
+            .get("cagr_median"),
+            "at": {wn: v.get("after_tax_cagr") for wn, v in (rec.get("after_tax") or {}).items()},
+        }
+    return out
+
+
 def _arm_cells(batch: str) -> dict:
     out = {}
     d = RUN.RESULTS / batch
     if not d.exists():
         return out
+    ctrl = _controls(batch)
     for p in sorted(d.glob("*__*.json")):
         r = json.loads(p.read_text())
         if r.get("control"):
             continue
         v = np.asarray(r.get("b1_delta_pp") or [], dtype=np.float64)
+        s1 = r.get("stage1") or {}
         gates = r.get("stage1_gates") or {}
+        tag = (r.get("win") or {}).get("tag", "default")
+        c = ctrl.get(tag) or {}
+
+        def sub(x, y):
+            return None if x is None or y is None else float(x) - float(y)
+
+        main = s1.get("main") or {}
+        boot_lvl = (s1.get("boot_level") or {}).get("pre", {})
+        b1 = ((s1.get("boot") or {}).get("tax") or {}).get("progressive") or {}
+        b2 = ((s1.get("boot") or {}).get("tax") or {}).get("flat") or {}
         out[r["arm"]] = {
             "spec_hash": (r.get("hashes") or {}).get("spec"),
-            "window": (r.get("win") or {}).get("tag"),
+            "window": tag,
+            "pre_base_cagr_delta_pp": _pp(sub(((main.get("base") or {}).get("m2") or {}).get("cagr"),
+                                              c.get("pre_base_m2"))),
+            "pre_cal_cagr_delta_pp": _pp(sub(((main.get("calibrated") or {}).get("m2") or {}).get("cagr"),
+                                             c.get("pre_cal_m2"))),
+            "pre_boot_base_delta_pp": _pp(sub(((boot_lvl.get("base") or {}).get("cagr_median")),
+                                              (c.get("level_pre") or {}).get("base"))),
             "after_tax_2000_delta_pp": gates.get("after_tax_2000_delta_pp"),
+            "after_tax_2010_delta_pp": _pp(sub(((s1.get("after_tax") or {})
+                                                .get("2010_01_to_end") or {}).get("after_tax_cagr"),
+                                               (c.get("at") or {}).get("2010_01_to_end"))),
+            "after_tax_2017_delta_pp": _pp(sub(((s1.get("after_tax") or {})
+                                                .get("2017_01_to_end") or {}).get("after_tax_cagr"),
+                                               (c.get("at") or {}).get("2017_01_to_end"))),
             "b1_median_delta_pp": gates.get("b1_median_delta_pp"),
+            "b1_share_gt_0": b1.get("share_gt_0"),
+            "b2_median_delta_pp": b2.get("median_delta_pp"),
+            "b2_share_gt_0": b2.get("share_gt_0"),
             "b1_non_finite": int((~np.isfinite(v)).sum()),
             "b1_n": int(v.size),
             "max_dd_delta_pp": gates.get("max_dd_delta_pp"),
@@ -276,6 +327,10 @@ def _arm_cells(batch: str) -> dict:
             "verdict": r.get("verdict"),
         }
     return out
+
+
+def _pp(x, nd=6):
+    return None if x is None else round(float(x) * 100, nd)
 
 
 def _old_cells() -> dict:

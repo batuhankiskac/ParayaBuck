@@ -1,0 +1,48 @@
+{
+ "arm": "ib25_2L/A_2L",
+ "arm_id": "A_2L",
+ "b1_delta_pp": [],
+ "batch": "rw_fix_v1",
+ "boot_params": {
+  "block": 20,
+  "capital": "100k",
+  "n_pre": 5000,
+  "n_tax": 1000,
+  "seed": 20261011
+ },
+ "cash_yield": "none",
+ "date": "2026-10-17",
+ "gates": null,
+ "hashes": {
+  "code": "5b989029929fef46b229504cadb76b4c0d9f8b4a94a3dbcc71dc4654f5690e84",
+  "spec": "af8f2a5cdd24ce72741af71dd4fd34dea527e30c94a577bba54c14406701d909"
+ },
+ "idea": "ib25_2L",
+ "leg": "2x",
+ "not_applicable": {
+  "reason": "the leg-B instrument 'shy' has no price on 2000-03-08 (the series covers 2002-07-30..2026-09-29 of this window)",
+  "where": "main window (stage 1)"
+ },
+ "rule": "K",
+ "spec": {
+  "cash_yield": "none",
+  "key": "shy",
+  "leg": "2x",
+  "leg_b": "shy",
+  "rule": "K",
+  "sleeve": "SHY",
+  "weight": 0.98
+ },
+ "stage1": null,
+ "stage1_gates": null,
+ "stage1_pass": null,
+ "stage2": null,
+ "stage2_pass": null,
+ "verdict": "not_applicable",
+ "win": {
+  "declared": null,
+  "inputs": [],
+  "start": 253,
+  "tag": "default"
+ }
+}

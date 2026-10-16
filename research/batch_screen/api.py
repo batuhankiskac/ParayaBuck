@@ -624,6 +624,9 @@ def _multi_targets(out, want_shape, arm, spec_legs) -> Targets:
         raise PluginError(f"targets() named legs {sorted(named)} but the spec declares "
                           f"{list(spec_legs)}")
     by_leg = dict(pairs)
+    if len(by_leg) < 2:
+        raise PluginError("an N-leg return must name at least two instruments; a single "
+                          "instrument is the plain `wants` return")
     rows = [(k, _panel_weights(by_leg[k], want_shape, f"leg {k}")) for k in spec_legs]
     return Targets(wants=rows[0][1], leg=rows[0][0], wants_b=rows[1][1], leg_b=rows[1][0],
                    more=tuple(rows[2:]))

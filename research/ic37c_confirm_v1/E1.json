@@ -1,24 +1,29 @@
 {
- "beta": 0.998464,
- "cagr_gap_pp": -1.127053,
+ "beta": 0.998383,
+ "beyond_end": {
+  "last": "2026-10-15",
+  "sessions": 12
+ },
+ "cagr_gap_pp": -1.131529,
  "checks": {
   "cagr_gap_le": {
    "pass": true,
    "threshold": 0.02,
-   "value": 0.011271
+   "value": 0.011315
   },
   "corr_ge": {
    "pass": true,
    "threshold": 0.95,
-   "value": 0.956767
+   "value": 0.956749
   },
   "te_le": {
    "pass": true,
    "threshold": 0.025,
-   "value": 0.0206
+   "value": 0.020614
   }
  },
- "daily_corr": 0.956767,
+ "daily_corr": 0.956749,
+ "declared_end": "2026-09-29",
  "per_year": {
   "2002": {
    "corr": 0.960234,
@@ -117,18 +122,18 @@
    "te_pp": 1.579578
   },
   "2026": {
-   "corr": 0.977823,
-   "te_pp": 1.224342
+   "corr": 0.977742,
+   "te_pp": 1.229163
   }
  },
- "proxy_cagr": 0.023009,
- "real_cagr": 0.034279,
- "sessions": 6092,
- "tracking_error_pp": 2.060032,
+ "proxy_cagr": 0.022456,
+ "real_cagr": 0.033771,
+ "sessions": 6080,
+ "tracking_error_pp": 2.061442,
  "valid": true,
  "window": [
   "2002-07-30",
-  "2026-10-15"
+  "2026-09-29"
  ],
  "yearly": {
   "2002": {
@@ -252,9 +257,9 @@
    "real": 0.08032
   },
   "2026": {
-   "gap_pp": -1.294893,
-   "proxy": -0.044878,
-   "real": -0.031929
+   "gap_pp": -1.340238,
+   "proxy": -0.058269,
+   "real": -0.044867
   }
  },
  "years": 24

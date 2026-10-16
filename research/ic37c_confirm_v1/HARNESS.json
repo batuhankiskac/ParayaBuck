@@ -3,7 +3,7 @@
   "check": "parity_quick",
   "pass": true,
   "tail": [
-   "parity PASS in 11.4s -> PARITY.json"
+   "parity PASS in 11.3s -> PARITY.json"
   ]
  },
  {

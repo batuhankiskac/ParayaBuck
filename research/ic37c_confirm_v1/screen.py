@@ -30,14 +30,12 @@ import numpy as np
 
 from research.batch_screen import api, boot as B, run as runner, stages, windows
 from research.batch_screen.stages import GATE_CAPITAL
-from research.fast_engine import fe_study
 from research.fast_engine.fe_config import (
     BLOCK,
     PRE_BOOT_PATHS,
     SEED,
     TAX_BOOT_PATHS,
     TAX_CAPITALS,
-    TAX_WINDOWS,
 )
 
 from . import data as D, proxy
@@ -62,8 +60,10 @@ E4_PATHS = 1000
 E4_SHARE = 0.55
 E2_SHARE = 0.60
 E1_CORR, E1_TE, E1_CAGR = 0.95, 0.025, 0.02
+#: the pre-registered E1 validation window's end (PREREGISTRATION section 2); the fetched IEF file
+#: runs a few sessions further, and those extra sessions are reported separately, not folded in
+E1_END = "2026-09-29"
 
-STAGE1_KEYS = ("at2000_gt_0", "b1_median_gt_0", "maxdd", "turnover")
 #: the `batch_bank_v3` record's absolute after-tax $100k cells for IC37/C and its own control on
 #: the arm's `w20030103` window (`research/batch_screen/results/bank_v3/IC37__C.json`,
 #: `_control_w20030103.json`) -- the reproduction target of PREREGISTRATION section 7.3
@@ -136,7 +136,9 @@ def gather(arm, cvec, ctrl_arm=None, quiet=True):
     for md in B.TAX_MODES:
         v = b12["tax"][GATE_CAPITAL][md][aid]
         base = v if cvec is None else np.asarray(cvec["tax"][md], dtype=np.float64)
-        rec["boot"]["tax"][md] = B.delta_stats(v - base)
+        d = v - base
+        rec["boot"]["tax"][md] = B.delta_stats(d)
+        _nan_note(rec["boot"]["tax"][md], d, v)
         rec["boot_level"]["tax"][md] = B.delta_stats(v)
         vecs[f"tax_{md}"] = v
 
@@ -182,6 +184,16 @@ def e4_vectors(arm):
 
 
 # ----------------------------------------------------------------------------- gates
+def _nan_note(cell, d, arm_vec):
+    """Report-only NaN accounting (the campaign's `delta_stats` median propagates NaN, so a single
+    undefined path makes `median_delta_pp` NaN and the cell fails *closed*, `framework_v2.md` §4)."""
+    cell["nan_paths_arm"] = int(np.isnan(arm_vec).sum())
+    cell["nan_paths_delta"] = int(np.isnan(d).sum())
+    fin = d[np.isfinite(d)]
+    cell["median_finite_delta_pp"] = float(np.median(fin) * 100) if fin.size else None
+    cell["share_gt_0_finite"] = float(np.mean(fin > 0)) if fin.size else None
+
+
 def rolling_cells(rec, ctrl, years=range(2001, 2022)):
     ds = np.asarray([rec["rolling"][str(y)]["after_tax_cagr"]
                      - ctrl["rolling"][str(y)]["after_tax_cagr"] for y in years], dtype=np.float64)
@@ -202,12 +214,19 @@ def e4_gate(e4, ctrl_e4):
     cells, ok = {}, True
     for blk in sorted(e4):
         for md in B.TAX_MODES:
-            cell = B.delta_stats(e4[blk][md] - ctrl_e4[blk][md])
+            d = e4[blk][md] - ctrl_e4[blk][md]
+            cell = B.delta_stats(d)
             good = bool(cell["median_delta_pp"] >= 0 and cell["share_gt_0"] >= E4_SHARE)
-            cells[f"{blk}_{md}"] = {"median_delta_pp": cell["median_delta_pp"],
-                                    "share_gt_0": cell["share_gt_0"], "pass": good}
+            rec = {"median_delta_pp": cell["median_delta_pp"], "share_gt_0": cell["share_gt_0"],
+                   "pass": good}
+            _nan_note(rec, d, e4[blk][md])
+            cells[f"{blk}_{md}"] = rec
             ok = ok and good
-    return {"cells": cells, "pass": bool(ok)}
+    return {"cells": cells, "pass": bool(ok),
+            "note": ("`median_delta_pp` is the campaign's `delta_stats` median, which propagates "
+                     "NaN: a path whose after-tax NAV is <= 0 (an advance tax the account cannot "
+                     "fund) makes the cell undefined and the gate fails closed. `nan_paths_*` and "
+                     "`median_finite_delta_pp` are report-only.")}
 
 
 def gate_block(rec, ctrl, e4, ctrl_e4):
@@ -257,13 +276,19 @@ def yearly_returns(dates, values):
     return out
 
 
-def validate_proxy():
-    """E1 (PREREGISTRATION section 2): the synthetic IEF proxy against real IEF."""
+def validate_proxy(end=E1_END):
+    """E1 (PREREGISTRATION section 2): the synthetic IEF proxy against real IEF, on the ETF's
+    whole life up to the pre-registered end (`end`; the fetched file runs a few sessions further
+    and those are reported as `beyond_end`)."""
     pd_, pv = proxy.ief_proxy()
     rd_, rv = proxy.real_ief()
     pos = np.searchsorted(pd_, rd_)
     ok = pd_[np.clip(pos, 0, pd_.size - 1)] == rd_
     dts, rv, pv = rd_[ok], rv[ok], pv[pos[ok]]
+    beyond = {"sessions": int((dts > end).sum()),
+              "last": str(dts[-1]) if dts.size else None}
+    keep = dts <= end
+    dts, rv, pv = dts[keep], rv[keep], pv[keep]
     years = int(np.ceil((int(dts[-1][:4]) - int(dts[0][:4]))))
     rp, rr = np.diff(pv) / pv[:-1], np.diff(rv) / rv[:-1]
     corr = float(np.corrcoef(rp, rr)[0, 1])
@@ -288,6 +313,7 @@ def validate_proxy():
         "cagr_gap_le": {"value": abs(gap), "threshold": E1_CAGR, "pass": bool(abs(gap) <= E1_CAGR)},
     }
     return {"window": [str(dts[0]), str(dts[-1])], "sessions": int(n), "years": years,
+            "declared_end": end, "beyond_end": beyond,
             "proxy_cagr": cagr_p, "real_cagr": cagr_r, "cagr_gap_pp": gap * 100,
             "daily_corr": corr, "tracking_error_pp": te * 100,
             "beta": float(np.polyfit(rr, rp, 1)[0]),
@@ -516,7 +542,7 @@ def run(quiet=True):
                       "e2_share": E2_SHARE, "e4_share": E4_SHARE, "e1_thresholds":
                           {"corr": E1_CORR, "te": E1_TE, "cagr_gap": E1_CAGR},
                       "window": [crec["window"]["start"], crec["window"]["end"]],
-                      "oos_applicable": stages.applicable_oos(crec),
+                      "control_oos_applicable": stages.applicable_oos(crec),
                       "control_main_cagr_base": crec["main"]["base"]["m2"]["cagr"],
                       "control_main_cagr_calibrated": crec["main"]["calibrated"]["m2"]["cagr"],
                       "control_main_max_dd_base": crec["main"]["base"]["m2"]["max_dd"],
@@ -623,7 +649,10 @@ def write_outputs(res, checks, harness_ok, wall_s):
     for n in ARM_IDS:
         c = a[n]["cells"]
         e4 = res["e4"][n]
-        e4s = " ".join(f"{k[5:]}:{v['median_delta_pp']:+.2f}/{v['share_gt_0']:.2f}"
+        e4s = " ".join(f"{k[5:]}:"
+                       + (f"{v['median_delta_pp']:+.2f}" if v["median_delta_pp"] is not None
+                          else f"nan({v['nan_paths_arm']}p)")
+                       + f"/{v['share_gt_0']:.2f}"
                        for k, v in sorted(e4.items()))
         L.append(
             f"{n:<8} | {c['cagr_base']*100:6.2f}/{c['cagr_calibrated']*100:6.2f}  | "
@@ -639,6 +668,18 @@ def write_outputs(res, checks, harness_ok, wall_s):
     for n in ARM_IDS:
         g = a[n]["gates"]
         L.append(f"{n}: pass={g['pass']} failed={g['failed']}")
+    cc = a[CANDIDATE]["gates"]["E4"]["cells"]
+    bad = {k: v for k, v in cc.items() if not v["pass"]}
+    if bad:
+        for k, v in sorted(bad.items()):
+            L.append(f"E4 cell {k} FAILED: median_delta_pp={v['median_delta_pp']} "
+                     f"share_gt_0={v['share_gt_0']:.3f} nan_paths_arm={v['nan_paths_arm']} "
+                     f"nan_paths_delta={v['nan_paths_delta']} "
+                     f"median_finite_delta_pp={v['median_finite_delta_pp']} "
+                     f"share_gt_0_finite={v['share_gt_0_finite']}")
+        L.append("  (the failure is the campaign's NaN-fails-closed convention on an after-tax NAV "
+                 "<= 0 path -- an advance tax the two-leg account cannot fund, framework_v2.md §4; "
+                 "the framework's own FRESH gate, seed 20261016, passes 4/4 for this arm)")
     L.append("")
     cand = a[CANDIDATE]["cells"]
     e5 = res["e5"]

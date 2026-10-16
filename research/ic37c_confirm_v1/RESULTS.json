@@ -1,0 +1,1939 @@
+{
+ "arms": {
+  "IC37/A": {
+   "availability": {
+    "etf_applicable": [
+     "DIA",
+     "EEM",
+     "EFA",
+     "EWA",
+     "EWG",
+     "EWH",
+     "EWJ",
+     "EWL",
+     "EWS",
+     "EWU",
+     "IWM",
+     "SPY",
+     "XLB",
+     "XLE",
+     "XLF",
+     "XLI",
+     "XLK",
+     "XLP",
+     "XLU",
+     "XLV",
+     "XLY"
+    ],
+    "etf_min": 15,
+    "n_etf_applicable": 21,
+    "n_oos_applicable": 3,
+    "n_rolling_applicable": 21,
+    "oos_applicable": [
+     "M1",
+     "M4",
+     "M5"
+    ],
+    "oos_min": 3,
+    "reasons": {
+     "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+     "M2": "the dgs10 series has no value in this window",
+     "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+    },
+    "rolling_min": 15,
+    "sufficient": true
+   },
+   "cells": {
+    "AT2000_delta_pp": 0.559794,
+    "AT2010_delta_pp": -0.055473,
+    "AT2017_delta_pp": 0.354497,
+    "B1_median_pp": 22.320065,
+    "B1_share": 0.946,
+    "B2_median_pp": 26.026737,
+    "B2_share": 0.969,
+    "E2_median_pp": 0.013896,
+    "E2_share_gt_0": 0.619048,
+    "blocked_band": 1890,
+    "boot_pre_base_median_pp": 31.32337,
+    "boot_pre_cal_median_pp": 31.246005,
+    "cagr_base": 0.169171,
+    "cagr_calibrated": 0.163313,
+    "cagr_m1_base": 0.17406,
+    "delta_cagr_base_pp": 1.152178,
+    "delta_cagr_calibrated_pp": 1.152774,
+    "delta_max_dd_base_pp": -6.352799,
+    "delta_max_dd_calibrated_pp": -6.252011,
+    "max_dd_base": 0.40317,
+    "max_dd_calibrated": 0.405428,
+    "oos_applicable": [
+     "M1",
+     "M4",
+     "M5"
+    ],
+    "oos_median_delta_pp": 2.552596,
+    "oos_pooled_median_pp": 19.497651,
+    "postponements": 1963,
+    "rolling_n": 21,
+    "sells_per_year": 13.253067,
+    "turnover_ratio_base": 1.912802,
+    "turnover_ratio_calibrated": 1.912783
+   },
+   "gates": {
+    "AT": {
+     "B1_recent": {
+      "median_delta_pp": 22.320065,
+      "pass": true,
+      "share_gt_0": 0.946
+     },
+     "B2_flat": {
+      "median_delta_pp": 26.026737,
+      "pass": true,
+      "share_gt_0": 0.969
+     },
+     "pass": false,
+     "windows": {
+      "2000_03_to_2026_09": 0.559794,
+      "2010_01_to_end": -0.055473,
+      "2017_01_to_end": 0.354497
+     }
+    },
+    "E2": {
+     "max_delta_pp": 0.354497,
+     "mean_delta_pp": -0.04554,
+     "median_delta_pp": 0.013896,
+     "min_delta_pp": -1.010938,
+     "n_starts": 21,
+     "pass": true,
+     "share_ge_0": 0.619048,
+     "share_gt_0": 0.619048
+    },
+    "E3": {
+     "applicable": [
+      "M1",
+      "M4",
+      "M5"
+     ],
+     "detail": {
+      "delta_cagr_pp": {
+       "M1": 3.728969,
+       "M4": 1.861724,
+       "M5": 2.552596
+      },
+      "delta_max_dd_pp": {
+       "M1": -4.817063,
+       "M4": 1.097204,
+       "M5": -7.988209
+      },
+      "max_dd_delta_pp": 1.097204,
+      "median_cagr_pp": 2.552596,
+      "n_applicable": 3,
+      "n_cagr_within": 3,
+      "n_dd_within": 3,
+      "n_within_required": 2,
+      "not_applicable": {
+       "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+       "M2": "the dgs10 series has no value in this window",
+       "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+      }
+     },
+     "n_applicable": 3,
+     "pass": true
+    },
+    "E4": {
+     "cells": {
+      "block10_flat": {
+       "median_delta_pp": 50.715724,
+       "median_finite_delta_pp": 50.715724,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.989,
+       "share_gt_0_finite": 0.989
+      },
+      "block10_progressive": {
+       "median_delta_pp": null,
+       "median_finite_delta_pp": 44.703557,
+       "nan_paths_arm": 1,
+       "nan_paths_delta": 1,
+       "pass": false,
+       "share_gt_0": 0.981,
+       "share_gt_0_finite": 0.981982
+      },
+      "block20_flat": {
+       "median_delta_pp": 25.415364,
+       "median_finite_delta_pp": 25.415364,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.958,
+       "share_gt_0_finite": 0.958
+      },
+      "block20_progressive": {
+       "median_delta_pp": 22.076886,
+       "median_finite_delta_pp": 22.076886,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.935,
+       "share_gt_0_finite": 0.935
+      },
+      "block40_flat": {
+       "median_delta_pp": 13.610317,
+       "median_finite_delta_pp": 13.610317,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.908,
+       "share_gt_0_finite": 0.908
+      },
+      "block40_progressive": {
+       "median_delta_pp": 11.672795,
+       "median_finite_delta_pp": 11.672795,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.892,
+       "share_gt_0_finite": 0.892
+      }
+     },
+     "note": "`median_delta_pp` is the campaign's `delta_stats` median, which propagates NaN: a path whose after-tax NAV is <= 0 (an advance tax the account cannot fund) makes the cell undefined and the gate fails closed. `nan_paths_*` and `median_finite_delta_pp` are report-only.",
+     "pass": false
+    },
+    "failed": [
+     "AT",
+     "E4"
+    ],
+    "pass": false,
+    "pre_tax": {
+     "G1_base": true,
+     "G1_calibrated": true,
+     "G2_base": true,
+     "G2_calibrated": true,
+     "G3_base": true,
+     "G3_calibrated": true,
+     "G4": true,
+     "G4_wins": [
+      "P1",
+      "P3"
+     ],
+     "G5_base": true,
+     "G5_calibrated": true,
+     "G6_base": true,
+     "G6_calibrated": true,
+     "G7": true,
+     "G7_detail": {
+      "delta_cagr_pp": {
+       "M1": 3.728969,
+       "M4": 1.861724,
+       "M5": 2.552596
+      },
+      "delta_max_dd_pp": {
+       "M1": -4.817063,
+       "M4": 1.097204,
+       "M5": -7.988209
+      },
+      "max_dd_delta_pp": 1.097204,
+      "median_cagr_pp": 2.552596,
+      "n_applicable": 3,
+      "n_cagr_within": 3,
+      "n_dd_within": 3,
+      "n_within_required": 2,
+      "not_applicable": {
+       "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+       "M2": "the dgs10 series has no value in this window",
+       "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+      }
+     },
+     "G8": true,
+     "G8_median_pp": 19.497651,
+     "G9": true
+    },
+    "report_only": {
+     "E1_etf": {
+      "median_delta_pp": 0.359886,
+      "n_instruments": 21,
+      "pass": true,
+      "share_gt_0": 0.714286
+     },
+     "FRESH_20261016": {
+      "cells": {
+       "block10_flat": {
+        "median_delta_pp": 50.67514,
+        "pass": true,
+        "share_gt_0": 0.992
+       },
+       "block10_progressive": {
+        "median_delta_pp": 43.869844,
+        "pass": true,
+        "share_gt_0": 0.987
+       },
+       "block40_flat": {
+        "median_delta_pp": 12.730192,
+        "pass": true,
+        "share_gt_0": 0.902
+       },
+       "block40_progressive": {
+        "median_delta_pp": 11.003599,
+        "pass": true,
+        "share_gt_0": 0.879
+       }
+      },
+      "pass": true
+     },
+     "availability": {
+      "etf_applicable": [
+       "DIA",
+       "EEM",
+       "EFA",
+       "EWA",
+       "EWG",
+       "EWH",
+       "EWJ",
+       "EWL",
+       "EWS",
+       "EWU",
+       "IWM",
+       "SPY",
+       "XLB",
+       "XLE",
+       "XLF",
+       "XLI",
+       "XLK",
+       "XLP",
+       "XLU",
+       "XLV",
+       "XLY"
+      ],
+      "etf_min": 15,
+      "n_etf_applicable": 21,
+      "n_oos_applicable": 3,
+      "n_rolling_applicable": 21,
+      "oos_applicable": [
+       "M1",
+       "M4",
+       "M5"
+      ],
+      "oos_min": 3,
+      "reasons": {
+       "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+       "M2": "the dgs10 series has no value in this window",
+       "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+      },
+      "rolling_min": 15,
+      "sufficient": true
+     }
+    },
+    "required": {
+     "AT": false,
+     "AT_B1_recent": true,
+     "AT_B2_flat": true,
+     "E2": true,
+     "E3_oos": true,
+     "E4": false,
+     "G1_base": true,
+     "G1_calibrated": true,
+     "G2_base": true,
+     "G2_calibrated": true,
+     "G3_base": true,
+     "G3_calibrated": true,
+     "G4": true,
+     "G5_base": true,
+     "G5_calibrated": true,
+     "G6_base": true,
+     "G6_calibrated": true,
+     "G7": true,
+     "G7_evaluable": true,
+     "G8": true,
+     "G9": true,
+     "stage1": true
+    },
+    "stage1": {
+     "gates": {
+      "after_tax_2000_delta_pp": 0.559794,
+      "b1_median_delta_pp": 22.320065,
+      "max_dd_delta_pp": {
+       "base": -6.352799,
+       "calibrated": -6.252011
+      },
+      "turnover_ratio": {
+       "base": 1.912802,
+       "calibrated": 1.912783
+      }
+     },
+     "pass": true
+    }
+   },
+   "spec": {
+    "cash_yield": "none",
+    "form": "replace",
+    "gate": "real10y",
+    "inputs": [
+     "dgs10",
+     "t10yie"
+    ],
+    "leg": "2x",
+    "leg_b": "ief",
+    "real_min_pp": 0.25,
+    "rule": "K",
+    "start": "auto",
+    "weight": 0.98
+   }
+  },
+  "IC37/B": {
+   "availability": {
+    "etf_applicable": [
+     "DIA",
+     "EEM",
+     "EFA",
+     "EWA",
+     "EWG",
+     "EWH",
+     "EWJ",
+     "EWL",
+     "EWS",
+     "EWU",
+     "IWM",
+     "SPY",
+     "XLB",
+     "XLE",
+     "XLF",
+     "XLI",
+     "XLK",
+     "XLP",
+     "XLU",
+     "XLV",
+     "XLY"
+    ],
+    "etf_min": 15,
+    "n_etf_applicable": 21,
+    "n_oos_applicable": 3,
+    "n_rolling_applicable": 21,
+    "oos_applicable": [
+     "M1",
+     "M4",
+     "M5"
+    ],
+    "oos_min": 3,
+    "reasons": {
+     "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+     "M2": "the dgs10 series has no value in this window",
+     "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+    },
+    "rolling_min": 15,
+    "sufficient": true
+   },
+   "cells": {
+    "AT2000_delta_pp": 0.516966,
+    "AT2010_delta_pp": 0.13241,
+    "AT2017_delta_pp": 0.537386,
+    "B1_median_pp": 36.872601,
+    "B1_share": 0.99,
+    "B2_median_pp": 41.371365,
+    "B2_share": 0.992,
+    "E2_median_pp": 0.13241,
+    "E2_share_gt_0": 0.714286,
+    "blocked_band": 1855,
+    "boot_pre_base_median_pp": 48.756835,
+    "boot_pre_cal_median_pp": 48.581212,
+    "cagr_base": 0.167748,
+    "cagr_calibrated": 0.161898,
+    "cagr_m1_base": 0.17225,
+    "delta_cagr_base_pp": 1.00992,
+    "delta_cagr_calibrated_pp": 1.011228,
+    "delta_max_dd_base_pp": -7.258315,
+    "delta_max_dd_calibrated_pp": -7.154102,
+    "max_dd_base": 0.394115,
+    "max_dd_calibrated": 0.396407,
+    "oos_applicable": [
+     "M1",
+     "M4",
+     "M5"
+    ],
+    "oos_median_delta_pp": 2.207486,
+    "oos_pooled_median_pp": 49.826651,
+    "postponements": 1928,
+    "rolling_n": 21,
+    "sells_per_year": 12.838908,
+    "turnover_ratio_base": 1.764018,
+    "turnover_ratio_calibrated": 1.764002
+   },
+   "gates": {
+    "AT": {
+     "B1_recent": {
+      "median_delta_pp": 36.872601,
+      "pass": true,
+      "share_gt_0": 0.99
+     },
+     "B2_flat": {
+      "median_delta_pp": 41.371365,
+      "pass": true,
+      "share_gt_0": 0.992
+     },
+     "pass": true,
+     "windows": {
+      "2000_03_to_2026_09": 0.516966,
+      "2010_01_to_end": 0.13241,
+      "2017_01_to_end": 0.537386
+     }
+    },
+    "E2": {
+     "max_delta_pp": 0.537386,
+     "mean_delta_pp": 0.122202,
+     "median_delta_pp": 0.13241,
+     "min_delta_pp": -0.34418,
+     "n_starts": 21,
+     "pass": true,
+     "share_ge_0": 0.714286,
+     "share_gt_0": 0.714286
+    },
+    "E3": {
+     "applicable": [
+      "M1",
+      "M4",
+      "M5"
+     ],
+     "detail": {
+      "delta_cagr_pp": {
+       "M1": 3.551685,
+       "M4": 1.647128,
+       "M5": 2.207486
+      },
+      "delta_max_dd_pp": {
+       "M1": -4.817063,
+       "M4": 1.097204,
+       "M5": -5.203955
+      },
+      "max_dd_delta_pp": 1.097204,
+      "median_cagr_pp": 2.207486,
+      "n_applicable": 3,
+      "n_cagr_within": 3,
+      "n_dd_within": 3,
+      "n_within_required": 2,
+      "not_applicable": {
+       "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+       "M2": "the dgs10 series has no value in this window",
+       "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+      }
+     },
+     "n_applicable": 3,
+     "pass": true
+    },
+    "E4": {
+     "cells": {
+      "block10_flat": {
+       "median_delta_pp": 85.21572,
+       "median_finite_delta_pp": 85.21572,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 1.0,
+       "share_gt_0_finite": 1.0
+      },
+      "block10_progressive": {
+       "median_delta_pp": null,
+       "median_finite_delta_pp": 77.82279,
+       "nan_paths_arm": 1,
+       "nan_paths_delta": 1,
+       "pass": false,
+       "share_gt_0": 0.999,
+       "share_gt_0_finite": 1.0
+      },
+      "block20_flat": {
+       "median_delta_pp": 40.102191,
+       "median_finite_delta_pp": 40.102191,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.99,
+       "share_gt_0_finite": 0.99
+      },
+      "block20_progressive": {
+       "median_delta_pp": 35.659379,
+       "median_finite_delta_pp": 35.659379,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.988,
+       "share_gt_0_finite": 0.988
+      },
+      "block40_flat": {
+       "median_delta_pp": 18.246015,
+       "median_finite_delta_pp": 18.246015,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.961,
+       "share_gt_0_finite": 0.961
+      },
+      "block40_progressive": {
+       "median_delta_pp": 16.163011,
+       "median_finite_delta_pp": 16.163011,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.956,
+       "share_gt_0_finite": 0.956
+      }
+     },
+     "note": "`median_delta_pp` is the campaign's `delta_stats` median, which propagates NaN: a path whose after-tax NAV is <= 0 (an advance tax the account cannot fund) makes the cell undefined and the gate fails closed. `nan_paths_*` and `median_finite_delta_pp` are report-only.",
+     "pass": false
+    },
+    "failed": [
+     "E4"
+    ],
+    "pass": false,
+    "pre_tax": {
+     "G1_base": true,
+     "G1_calibrated": true,
+     "G2_base": true,
+     "G2_calibrated": true,
+     "G3_base": true,
+     "G3_calibrated": true,
+     "G4": true,
+     "G4_wins": [
+      "P1",
+      "P3"
+     ],
+     "G5_base": true,
+     "G5_calibrated": true,
+     "G6_base": true,
+     "G6_calibrated": true,
+     "G7": true,
+     "G7_detail": {
+      "delta_cagr_pp": {
+       "M1": 3.551685,
+       "M4": 1.647128,
+       "M5": 2.207486
+      },
+      "delta_max_dd_pp": {
+       "M1": -4.817063,
+       "M4": 1.097204,
+       "M5": -5.203955
+      },
+      "max_dd_delta_pp": 1.097204,
+      "median_cagr_pp": 2.207486,
+      "n_applicable": 3,
+      "n_cagr_within": 3,
+      "n_dd_within": 3,
+      "n_within_required": 2,
+      "not_applicable": {
+       "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+       "M2": "the dgs10 series has no value in this window",
+       "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+      }
+     },
+     "G8": true,
+     "G8_median_pp": 49.826651,
+     "G9": true
+    },
+    "report_only": {
+     "E1_etf": {
+      "median_delta_pp": 0.17694,
+      "n_instruments": 21,
+      "pass": true,
+      "share_gt_0": 0.619048
+     },
+     "FRESH_20261016": {
+      "cells": {
+       "block10_flat": {
+        "median_delta_pp": 89.331471,
+        "pass": true,
+        "share_gt_0": 1.0
+       },
+       "block10_progressive": {
+        "median_delta_pp": 81.150807,
+        "pass": true,
+        "share_gt_0": 1.0
+       },
+       "block40_flat": {
+        "median_delta_pp": 18.11763,
+        "pass": true,
+        "share_gt_0": 0.957
+       },
+       "block40_progressive": {
+        "median_delta_pp": 15.734017,
+        "pass": true,
+        "share_gt_0": 0.946
+       }
+      },
+      "pass": true
+     },
+     "availability": {
+      "etf_applicable": [
+       "DIA",
+       "EEM",
+       "EFA",
+       "EWA",
+       "EWG",
+       "EWH",
+       "EWJ",
+       "EWL",
+       "EWS",
+       "EWU",
+       "IWM",
+       "SPY",
+       "XLB",
+       "XLE",
+       "XLF",
+       "XLI",
+       "XLK",
+       "XLP",
+       "XLU",
+       "XLV",
+       "XLY"
+      ],
+      "etf_min": 15,
+      "n_etf_applicable": 21,
+      "n_oos_applicable": 3,
+      "n_rolling_applicable": 21,
+      "oos_applicable": [
+       "M1",
+       "M4",
+       "M5"
+      ],
+      "oos_min": 3,
+      "reasons": {
+       "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+       "M2": "the dgs10 series has no value in this window",
+       "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+      },
+      "rolling_min": 15,
+      "sufficient": true
+     }
+    },
+    "required": {
+     "AT": true,
+     "AT_B1_recent": true,
+     "AT_B2_flat": true,
+     "E2": true,
+     "E3_oos": true,
+     "E4": false,
+     "G1_base": true,
+     "G1_calibrated": true,
+     "G2_base": true,
+     "G2_calibrated": true,
+     "G3_base": true,
+     "G3_calibrated": true,
+     "G4": true,
+     "G5_base": true,
+     "G5_calibrated": true,
+     "G6_base": true,
+     "G6_calibrated": true,
+     "G7": true,
+     "G7_evaluable": true,
+     "G8": true,
+     "G9": true,
+     "stage1": true
+    },
+    "stage1": {
+     "gates": {
+      "after_tax_2000_delta_pp": 0.516966,
+      "b1_median_delta_pp": 36.872601,
+      "max_dd_delta_pp": {
+       "base": -7.258315,
+       "calibrated": -7.154102
+      },
+      "turnover_ratio": {
+       "base": 1.764018,
+       "calibrated": 1.764002
+      }
+     },
+     "pass": true
+    }
+   },
+   "spec": {
+    "cash_yield": "none",
+    "form": "replace",
+    "gate": "real10y",
+    "inputs": [
+     "dgs10",
+     "t10yie"
+    ],
+    "leg": "2x",
+    "leg_b": "ief",
+    "real_min_pp": 1.0,
+    "rule": "K",
+    "start": "auto",
+    "weight": 0.98
+   }
+  },
+  "IC37/C": {
+   "availability": {
+    "etf_applicable": [
+     "DIA",
+     "EEM",
+     "EFA",
+     "EWA",
+     "EWG",
+     "EWH",
+     "EWJ",
+     "EWL",
+     "EWS",
+     "EWU",
+     "IWM",
+     "SPY",
+     "XLB",
+     "XLE",
+     "XLF",
+     "XLI",
+     "XLK",
+     "XLP",
+     "XLU",
+     "XLV",
+     "XLY"
+    ],
+    "etf_min": 15,
+    "n_etf_applicable": 21,
+    "n_oos_applicable": 3,
+    "n_rolling_applicable": 21,
+    "oos_applicable": [
+     "M1",
+     "M4",
+     "M5"
+    ],
+    "oos_min": 3,
+    "reasons": {
+     "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+     "M2": "the dgs10 series has no value in this window",
+     "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+    },
+    "rolling_min": 15,
+    "sufficient": true
+   },
+   "cells": {
+    "AT2000_delta_pp": 1.113415,
+    "AT2010_delta_pp": 0.187453,
+    "AT2017_delta_pp": 0.647757,
+    "B1_median_pp": 25.05214,
+    "B1_share": 0.961,
+    "B2_median_pp": 28.196458,
+    "B2_share": 0.973,
+    "E2_median_pp": 0.420247,
+    "E2_share_gt_0": 0.857143,
+    "blocked_band": 1985,
+    "boot_pre_base_median_pp": 34.123876,
+    "boot_pre_cal_median_pp": 33.986717,
+    "cagr_base": 0.178075,
+    "cagr_calibrated": 0.172108,
+    "cagr_m1_base": 0.182961,
+    "delta_cagr_base_pp": 2.042639,
+    "delta_cagr_calibrated_pp": 2.032304,
+    "delta_max_dd_base_pp": -7.131908,
+    "delta_max_dd_calibrated_pp": -7.026375,
+    "max_dd_base": 0.395379,
+    "max_dd_calibrated": 0.397684,
+    "oos_applicable": [
+     "M1",
+     "M4",
+     "M5"
+    ],
+    "oos_median_delta_pp": 1.94489,
+    "oos_pooled_median_pp": 23.528754,
+    "postponements": 2068,
+    "rolling_n": 21,
+    "sells_per_year": 15.210906,
+    "turnover_ratio_base": 1.89742,
+    "turnover_ratio_calibrated": 1.897406
+   },
+   "gates": {
+    "AT": {
+     "B1_recent": {
+      "median_delta_pp": 25.05214,
+      "pass": true,
+      "share_gt_0": 0.961
+     },
+     "B2_flat": {
+      "median_delta_pp": 28.196458,
+      "pass": true,
+      "share_gt_0": 0.973
+     },
+     "pass": true,
+     "windows": {
+      "2000_03_to_2026_09": 1.113415,
+      "2010_01_to_end": 0.187453,
+      "2017_01_to_end": 0.647757
+     }
+    },
+    "E2": {
+     "max_delta_pp": 0.871433,
+     "mean_delta_pp": 0.358697,
+     "median_delta_pp": 0.420247,
+     "min_delta_pp": -0.518243,
+     "n_starts": 21,
+     "pass": true,
+     "share_ge_0": 0.857143,
+     "share_gt_0": 0.857143
+    },
+    "E3": {
+     "applicable": [
+      "M1",
+      "M4",
+      "M5"
+     ],
+     "detail": {
+      "delta_cagr_pp": {
+       "M1": 4.031826,
+       "M4": 1.880712,
+       "M5": 1.94489
+      },
+      "delta_max_dd_pp": {
+       "M1": -2.795959,
+       "M4": 0.753557,
+       "M5": -7.601251
+      },
+      "max_dd_delta_pp": 0.753557,
+      "median_cagr_pp": 1.94489,
+      "n_applicable": 3,
+      "n_cagr_within": 3,
+      "n_dd_within": 3,
+      "n_within_required": 2,
+      "not_applicable": {
+       "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+       "M2": "the dgs10 series has no value in this window",
+       "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+      }
+     },
+     "n_applicable": 3,
+     "pass": true
+    },
+    "E4": {
+     "cells": {
+      "block10_flat": {
+       "median_delta_pp": 53.715582,
+       "median_finite_delta_pp": 53.715582,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.995,
+       "share_gt_0_finite": 0.995
+      },
+      "block10_progressive": {
+       "median_delta_pp": null,
+       "median_finite_delta_pp": 47.645006,
+       "nan_paths_arm": 1,
+       "nan_paths_delta": 1,
+       "pass": false,
+       "share_gt_0": 0.989,
+       "share_gt_0_finite": 0.98999
+      },
+      "block20_flat": {
+       "median_delta_pp": 28.102559,
+       "median_finite_delta_pp": 28.102559,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.975,
+       "share_gt_0_finite": 0.975
+      },
+      "block20_progressive": {
+       "median_delta_pp": 23.865641,
+       "median_finite_delta_pp": 23.865641,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.958,
+       "share_gt_0_finite": 0.958
+      },
+      "block40_flat": {
+       "median_delta_pp": 14.838905,
+       "median_finite_delta_pp": 14.838905,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.936,
+       "share_gt_0_finite": 0.936
+      },
+      "block40_progressive": {
+       "median_delta_pp": 12.77617,
+       "median_finite_delta_pp": 12.77617,
+       "nan_paths_arm": 0,
+       "nan_paths_delta": 0,
+       "pass": true,
+       "share_gt_0": 0.917,
+       "share_gt_0_finite": 0.917
+      }
+     },
+     "note": "`median_delta_pp` is the campaign's `delta_stats` median, which propagates NaN: a path whose after-tax NAV is <= 0 (an advance tax the account cannot fund) makes the cell undefined and the gate fails closed. `nan_paths_*` and `median_finite_delta_pp` are report-only.",
+     "pass": false
+    },
+    "failed": [
+     "E4"
+    ],
+    "pass": false,
+    "pre_tax": {
+     "G1_base": true,
+     "G1_calibrated": true,
+     "G2_base": true,
+     "G2_calibrated": true,
+     "G3_base": true,
+     "G3_calibrated": true,
+     "G4": true,
+     "G4_wins": [
+      "P1",
+      "P3"
+     ],
+     "G5_base": true,
+     "G5_calibrated": true,
+     "G6_base": true,
+     "G6_calibrated": true,
+     "G7": true,
+     "G7_detail": {
+      "delta_cagr_pp": {
+       "M1": 4.031826,
+       "M4": 1.880712,
+       "M5": 1.94489
+      },
+      "delta_max_dd_pp": {
+       "M1": -2.795959,
+       "M4": 0.753557,
+       "M5": -7.601251
+      },
+      "max_dd_delta_pp": 0.753557,
+      "median_cagr_pp": 1.94489,
+      "n_applicable": 3,
+      "n_cagr_within": 3,
+      "n_dd_within": 3,
+      "n_within_required": 2,
+      "not_applicable": {
+       "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+       "M2": "the dgs10 series has no value in this window",
+       "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+      }
+     },
+     "G8": true,
+     "G8_median_pp": 23.528754,
+     "G9": true
+    },
+    "report_only": {
+     "E1_etf": {
+      "median_delta_pp": 0.611582,
+      "n_instruments": 21,
+      "pass": true,
+      "share_gt_0": 0.857143
+     },
+     "FRESH_20261016": {
+      "cells": {
+       "block10_flat": {
+        "median_delta_pp": 54.295872,
+        "pass": true,
+        "share_gt_0": 0.997
+       },
+       "block10_progressive": {
+        "median_delta_pp": 47.308078,
+        "pass": true,
+        "share_gt_0": 0.991
+       },
+       "block40_flat": {
+        "median_delta_pp": 14.124307,
+        "pass": true,
+        "share_gt_0": 0.933
+       },
+       "block40_progressive": {
+        "median_delta_pp": 12.346464,
+        "pass": true,
+        "share_gt_0": 0.913
+       }
+      },
+      "pass": true
+     },
+     "availability": {
+      "etf_applicable": [
+       "DIA",
+       "EEM",
+       "EFA",
+       "EWA",
+       "EWG",
+       "EWH",
+       "EWJ",
+       "EWL",
+       "EWS",
+       "EWU",
+       "IWM",
+       "SPY",
+       "XLB",
+       "XLE",
+       "XLF",
+       "XLI",
+       "XLK",
+       "XLP",
+       "XLU",
+       "XLV",
+       "XLY"
+      ],
+      "etf_min": 15,
+      "n_etf_applicable": 21,
+      "n_oos_applicable": 3,
+      "n_rolling_applicable": 21,
+      "oos_applicable": [
+       "M1",
+       "M4",
+       "M5"
+      ],
+      "oos_min": 3,
+      "reasons": {
+       "GSPC_1957_1999": "the leg-B instrument 'ief' has no price on 1956-12-31 (the series covers 1969-07-01..1999-12-31 of this window)",
+       "M2": "the dgs10 series has no value in this window",
+       "M3": "the leg-B instrument 'ief' has no price on 1966-01-18 (the series covers 1969-07-01..2026-09-29 of this window)"
+      },
+      "rolling_min": 15,
+      "sufficient": true
+     }
+    },
+    "required": {
+     "AT": true,
+     "AT_B1_recent": true,
+     "AT_B2_flat": true,
+     "E2": true,
+     "E3_oos": true,
+     "E4": false,
+     "G1_base": true,
+     "G1_calibrated": true,
+     "G2_base": true,
+     "G2_calibrated": true,
+     "G3_base": true,
+     "G3_calibrated": true,
+     "G4": true,
+     "G5_base": true,
+     "G5_calibrated": true,
+     "G6_base": true,
+     "G6_calibrated": true,
+     "G7": true,
+     "G7_evaluable": true,
+     "G8": true,
+     "G9": true,
+     "stage1": true
+    },
+    "stage1": {
+     "gates": {
+      "after_tax_2000_delta_pp": 1.113415,
+      "b1_median_delta_pp": 25.05214,
+      "max_dd_delta_pp": {
+       "base": -7.131908,
+       "calibrated": -7.026375
+      },
+      "turnover_ratio": {
+       "base": 1.89742,
+       "calibrated": 1.897406
+      }
+     },
+     "pass": true
+    }
+   },
+   "spec": {
+    "cash_yield": "none",
+    "form": "residual",
+    "gate": "real10y",
+    "inputs": [
+     "dgs10",
+     "t10yie"
+    ],
+    "leg": "2x",
+    "leg_b": "ief",
+    "real_min_pp": 0.25,
+    "rule": "K",
+    "start": "auto",
+    "total": 0.98
+   }
+  }
+ },
+ "candidate": "IC37/C",
+ "candidate_pass": false,
+ "control": "k_control/K",
+ "e1": {
+  "beta": 0.998383,
+  "beyond_end": {
+   "last": "2026-10-15",
+   "sessions": 12
+  },
+  "cagr_gap_pp": -1.131529,
+  "checks": {
+   "cagr_gap_le": {
+    "pass": true,
+    "threshold": 0.02,
+    "value": 0.011315
+   },
+   "corr_ge": {
+    "pass": true,
+    "threshold": 0.95,
+    "value": 0.956749
+   },
+   "te_le": {
+    "pass": true,
+    "threshold": 0.025,
+    "value": 0.020614
+   }
+  },
+  "daily_corr": 0.956749,
+  "declared_end": "2026-09-29",
+  "per_year": {
+   "2002": {
+    "corr": 0.960234,
+    "te_pp": 2.893535
+   },
+   "2003": {
+    "corr": 0.958247,
+    "te_pp": 2.597054
+   },
+   "2004": {
+    "corr": 0.967742,
+    "te_pp": 1.847082
+   },
+   "2005": {
+    "corr": 0.957703,
+    "te_pp": 1.595892
+   },
+   "2006": {
+    "corr": 0.953547,
+    "te_pp": 1.449582
+   },
+   "2007": {
+    "corr": 0.936098,
+    "te_pp": 2.453136
+   },
+   "2008": {
+    "corr": 0.934927,
+    "te_pp": 4.141905
+   },
+   "2009": {
+    "corr": 0.96151,
+    "te_pp": 2.973152
+   },
+   "2010": {
+    "corr": 0.975446,
+    "te_pp": 1.735601
+   },
+   "2011": {
+    "corr": 0.93157,
+    "te_pp": 2.977693
+   },
+   "2012": {
+    "corr": 0.965679,
+    "te_pp": 1.451987
+   },
+   "2013": {
+    "corr": 0.965552,
+    "te_pp": 1.598304
+   },
+   "2014": {
+    "corr": 0.959813,
+    "te_pp": 1.389025
+   },
+   "2015": {
+    "corr": 0.97442,
+    "te_pp": 1.481919
+   },
+   "2016": {
+    "corr": 0.973712,
+    "te_pp": 1.237534
+   },
+   "2017": {
+    "corr": 0.966377,
+    "te_pp": 1.108949
+   },
+   "2018": {
+    "corr": 0.950094,
+    "te_pp": 1.324829
+   },
+   "2019": {
+    "corr": 0.973033,
+    "te_pp": 1.242495
+   },
+   "2020": {
+    "corr": 0.954697,
+    "te_pp": 2.291549
+   },
+   "2021": {
+    "corr": 0.960246,
+    "te_pp": 1.48276
+   },
+   "2022": {
+    "corr": 0.972269,
+    "te_pp": 2.382136
+   },
+   "2023": {
+    "corr": 0.9653,
+    "te_pp": 2.511887
+   },
+   "2024": {
+    "corr": 0.978399,
+    "te_pp": 1.511971
+   },
+   "2025": {
+    "corr": 0.969981,
+    "te_pp": 1.579578
+   },
+   "2026": {
+    "corr": 0.977742,
+    "te_pp": 1.229163
+   }
+  },
+  "proxy_cagr": 0.022456,
+  "real_cagr": 0.033771,
+  "sessions": 6080,
+  "tracking_error_pp": 2.061442,
+  "valid": true,
+  "window": [
+   "2002-07-30",
+   "2026-09-29"
+  ],
+  "yearly": {
+   "2002": {
+    "gap_pp": 0.551673,
+    "proxy": 0.081258,
+    "real": 0.075741
+   },
+   "2003": {
+    "gap_pp": -5.373053,
+    "proxy": -0.000645,
+    "real": 0.053085
+   },
+   "2004": {
+    "gap_pp": -1.61343,
+    "proxy": 0.025062,
+    "real": 0.041196
+   },
+   "2005": {
+    "gap_pp": -1.603155,
+    "proxy": 0.010352,
+    "real": 0.026384
+   },
+   "2006": {
+    "gap_pp": -0.555275,
+    "proxy": 0.019609,
+    "real": 0.025162
+   },
+   "2007": {
+    "gap_pp": 1.488581,
+    "proxy": 0.118674,
+    "real": 0.103788
+   },
+   "2008": {
+    "gap_pp": -0.439108,
+    "proxy": 0.174783,
+    "real": 0.179174
+   },
+   "2009": {
+    "gap_pp": -2.320427,
+    "proxy": -0.089136,
+    "real": -0.065931
+   },
+   "2010": {
+    "gap_pp": -1.909131,
+    "proxy": 0.074506,
+    "real": 0.093597
+   },
+   "2011": {
+    "gap_pp": -2.826097,
+    "proxy": 0.128236,
+    "real": 0.156497
+   },
+   "2012": {
+    "gap_pp": -1.412278,
+    "proxy": 0.022517,
+    "real": 0.03664
+   },
+   "2013": {
+    "gap_pp": -1.611452,
+    "proxy": -0.077016,
+    "real": -0.060902
+   },
+   "2014": {
+    "gap_pp": -2.87138,
+    "proxy": 0.061967,
+    "real": 0.090681
+   },
+   "2015": {
+    "gap_pp": -0.81648,
+    "proxy": 0.006914,
+    "real": 0.015078
+   },
+   "2016": {
+    "gap_pp": -0.865182,
+    "proxy": 0.001365,
+    "real": 0.010017
+   },
+   "2017": {
+    "gap_pp": -1.050387,
+    "proxy": 0.015025,
+    "real": 0.025529
+   },
+   "2018": {
+    "gap_pp": -0.383423,
+    "proxy": 0.006043,
+    "real": 0.009877
+   },
+   "2019": {
+    "gap_pp": -0.279754,
+    "proxy": 0.077498,
+    "real": 0.080296
+   },
+   "2020": {
+    "gap_pp": -0.554868,
+    "proxy": 0.094518,
+    "real": 0.100067
+   },
+   "2021": {
+    "gap_pp": -1.277422,
+    "proxy": -0.046052,
+    "real": -0.033278
+   },
+   "2022": {
+    "gap_pp": 0.055036,
+    "proxy": -0.151002,
+    "real": -0.151552
+   },
+   "2023": {
+    "gap_pp": 0.309084,
+    "proxy": 0.039535,
+    "real": 0.036444
+   },
+   "2024": {
+    "gap_pp": -0.254289,
+    "proxy": -0.008885,
+    "real": -0.006342
+   },
+   "2025": {
+    "gap_pp": -0.124239,
+    "proxy": 0.079077,
+    "real": 0.08032
+   },
+   "2026": {
+    "gap_pp": -1.340238,
+    "proxy": -0.058269,
+    "real": -0.044867
+   }
+  },
+  "years": 24
+ },
+ "e1_valid": true,
+ "e4": {
+  "IC37/A": {
+   "block10_flat": {
+    "cagr_median": 0.507157,
+    "mean_delta_pp": 53.266109,
+    "median_delta_pp": 50.715724,
+    "n_paths": 1000,
+    "p05_delta_pp": 12.42086,
+    "p95_delta_pp": 107.485776,
+    "p_mean": 0.0,
+    "share_gt_0": 0.989
+   },
+   "block10_progressive": {
+    "cagr_median": null,
+    "mean_delta_pp": null,
+    "median_delta_pp": null,
+    "n_paths": 1000,
+    "p05_delta_pp": null,
+    "p95_delta_pp": null,
+    "p_mean": 0.0,
+    "share_gt_0": 0.981
+   },
+   "block20_flat": {
+    "cagr_median": 0.254154,
+    "mean_delta_pp": 27.12437,
+    "median_delta_pp": 25.415364,
+    "n_paths": 1000,
+    "p05_delta_pp": 0.612264,
+    "p95_delta_pp": 57.812027,
+    "p_mean": 0.0,
+    "share_gt_0": 0.958
+   },
+   "block20_progressive": {
+    "cagr_median": 0.220769,
+    "mean_delta_pp": 23.427357,
+    "median_delta_pp": 22.076886,
+    "n_paths": 1000,
+    "p05_delta_pp": -0.90063,
+    "p95_delta_pp": 51.931257,
+    "p_mean": 0.0,
+    "share_gt_0": 0.935
+   },
+   "block40_flat": {
+    "cagr_median": 0.136103,
+    "mean_delta_pp": 14.538495,
+    "median_delta_pp": 13.610317,
+    "n_paths": 1000,
+    "p05_delta_pp": -3.06461,
+    "p95_delta_pp": 35.508588,
+    "p_mean": 0.0,
+    "share_gt_0": 0.908
+   },
+   "block40_progressive": {
+    "cagr_median": 0.116728,
+    "mean_delta_pp": 12.599177,
+    "median_delta_pp": 11.672795,
+    "n_paths": 1000,
+    "p05_delta_pp": -3.768155,
+    "p95_delta_pp": 31.750739,
+    "p_mean": 0.0,
+    "share_gt_0": 0.892
+   }
+  },
+  "IC37/B": {
+   "block10_flat": {
+    "cagr_median": 0.852157,
+    "mean_delta_pp": 95.084712,
+    "median_delta_pp": 85.21572,
+    "n_paths": 1000,
+    "p05_delta_pp": 33.42409,
+    "p95_delta_pp": 190.712192,
+    "p_mean": 0.0,
+    "share_gt_0": 1.0
+   },
+   "block10_progressive": {
+    "cagr_median": null,
+    "mean_delta_pp": null,
+    "median_delta_pp": null,
+    "n_paths": 1000,
+    "p05_delta_pp": null,
+    "p95_delta_pp": null,
+    "p_mean": 0.0,
+    "share_gt_0": 0.999
+   },
+   "block20_flat": {
+    "cagr_median": 0.401022,
+    "mean_delta_pp": 42.744388,
+    "median_delta_pp": 40.102191,
+    "n_paths": 1000,
+    "p05_delta_pp": 8.997603,
+    "p95_delta_pp": 83.58933,
+    "p_mean": 0.0,
+    "share_gt_0": 0.99
+   },
+   "block20_progressive": {
+    "cagr_median": 0.356594,
+    "mean_delta_pp": 38.04277,
+    "median_delta_pp": 35.659379,
+    "n_paths": 1000,
+    "p05_delta_pp": 7.144912,
+    "p95_delta_pp": 77.540247,
+    "p_mean": 0.0,
+    "share_gt_0": 0.988
+   },
+   "block40_flat": {
+    "cagr_median": 0.18246,
+    "mean_delta_pp": 20.218347,
+    "median_delta_pp": 18.246015,
+    "n_paths": 1000,
+    "p05_delta_pp": 1.547717,
+    "p95_delta_pp": 44.032247,
+    "p_mean": 0.0,
+    "share_gt_0": 0.961
+   },
+   "block40_progressive": {
+    "cagr_median": 0.16163,
+    "mean_delta_pp": 17.875784,
+    "median_delta_pp": 16.163011,
+    "n_paths": 1000,
+    "p05_delta_pp": 0.432553,
+    "p95_delta_pp": 39.932595,
+    "p_mean": 0.0,
+    "share_gt_0": 0.956
+   }
+  },
+  "IC37/C": {
+   "block10_flat": {
+    "cagr_median": 0.537156,
+    "mean_delta_pp": 56.738318,
+    "median_delta_pp": 53.715582,
+    "n_paths": 1000,
+    "p05_delta_pp": 15.579769,
+    "p95_delta_pp": 108.241365,
+    "p_mean": 0.0,
+    "share_gt_0": 0.995
+   },
+   "block10_progressive": {
+    "cagr_median": null,
+    "mean_delta_pp": null,
+    "median_delta_pp": null,
+    "n_paths": 1000,
+    "p05_delta_pp": null,
+    "p95_delta_pp": null,
+    "p_mean": 0.0,
+    "share_gt_0": 0.989
+   },
+   "block20_flat": {
+    "cagr_median": 0.281026,
+    "mean_delta_pp": 29.493696,
+    "median_delta_pp": 28.102559,
+    "n_paths": 1000,
+    "p05_delta_pp": 2.618297,
+    "p95_delta_pp": 61.380804,
+    "p_mean": 0.0,
+    "share_gt_0": 0.975
+   },
+   "block20_progressive": {
+    "cagr_median": 0.238656,
+    "mean_delta_pp": 25.622326,
+    "median_delta_pp": 23.865641,
+    "n_paths": 1000,
+    "p05_delta_pp": 0.86157,
+    "p95_delta_pp": 55.901944,
+    "p_mean": 0.0,
+    "share_gt_0": 0.958
+   },
+   "block40_flat": {
+    "cagr_median": 0.148389,
+    "mean_delta_pp": 15.836475,
+    "median_delta_pp": 14.838905,
+    "n_paths": 1000,
+    "p05_delta_pp": -0.999273,
+    "p95_delta_pp": 35.826973,
+    "p_mean": 0.0,
+    "share_gt_0": 0.936
+   },
+   "block40_progressive": {
+    "cagr_median": 0.127762,
+    "mean_delta_pp": 13.710215,
+    "median_delta_pp": 12.77617,
+    "n_paths": 1000,
+    "p05_delta_pp": -2.318226,
+    "p95_delta_pp": 32.169009,
+    "p_mean": 0.0,
+    "share_gt_0": 0.917
+   }
+  }
+ },
+ "e5": {
+  "e1_2022": {
+   "2021": {
+    "gap_pp": -1.277422,
+    "proxy": -0.046052,
+    "real": -0.033278
+   },
+   "2022": {
+    "gap_pp": 0.055036,
+    "proxy": -0.151002,
+    "real": -0.151552
+   },
+   "2023": {
+    "gap_pp": 0.309084,
+    "proxy": 0.039535,
+    "real": 0.036444
+   }
+  },
+  "leg_b": {
+   "IC37/C": {
+    "by_year": {
+     "2000": {
+      "mean_weight": 0.447184,
+      "share_held": 0.456311
+     },
+     "2001": {
+      "mean_weight": 0.896371,
+      "share_held": 0.959677
+     },
+     "2002": {
+      "mean_weight": 0.912638,
+      "share_held": 0.964286
+     },
+     "2003": {
+      "mean_weight": 0.153425,
+      "share_held": 0.15873
+     },
+     "2004": {
+      "mean_weight": 0.229221,
+      "share_held": 0.25
+     },
+     "2005": {
+      "mean_weight": 0.188492,
+      "share_held": 0.198413
+     },
+     "2006": {
+      "mean_weight": 0.325976,
+      "share_held": 0.334661
+     },
+     "2007": {
+      "mean_weight": 0.0,
+      "share_held": 0.0
+     },
+     "2008": {
+      "mean_weight": 0.78223,
+      "share_held": 0.806324
+     },
+     "2009": {
+      "mean_weight": 0.31397,
+      "share_held": 0.333333
+     },
+     "2010": {
+      "mean_weight": 0.141977,
+      "share_held": 0.146825
+     },
+     "2011": {
+      "mean_weight": 0.023333,
+      "share_held": 0.02381
+     },
+     "2012": {
+      "mean_weight": 0.0,
+      "share_held": 0.0
+     },
+     "2013": {
+      "mean_weight": 0.0,
+      "share_held": 0.0
+     },
+     "2014": {
+      "mean_weight": 0.003889,
+      "share_held": 0.003968
+     },
+     "2015": {
+      "mean_weight": 0.120556,
+      "share_held": 0.123016
+     },
+     "2016": {
+      "mean_weight": 0.206032,
+      "share_held": 0.214286
+     },
+     "2017": {
+      "mean_weight": 0.0,
+      "share_held": 0.0
+     },
+     "2018": {
+      "mean_weight": 0.175697,
+      "share_held": 0.179283
+     },
+     "2019": {
+      "mean_weight": 0.085556,
+      "share_held": 0.087302
+     },
+     "2020": {
+      "mean_weight": 0.011621,
+      "share_held": 0.011858
+     },
+     "2021": {
+      "mean_weight": 0.0,
+      "share_held": 0.0
+     },
+     "2022": {
+      "mean_weight": 0.539221,
+      "share_held": 0.581673
+     },
+     "2023": {
+      "mean_weight": 0.066633,
+      "share_held": 0.084
+     },
+     "2024": {
+      "mean_weight": 0.0,
+      "share_held": 0.0
+     },
+     "2025": {
+      "mean_weight": 0.15288,
+      "share_held": 0.156
+     },
+     "2026": {
+      "mean_weight": 0.063226,
+      "share_held": 0.064516
+     }
+    },
+    "max_weight": 0.98,
+    "mean_weight": 0.216005,
+    "mean_weight_when_held": 0.95102,
+    "share_held": 0.22713
+   }
+  },
+  "real_vs_proxy_2002_08": {
+   "delta_pp": 0.030343,
+   "proxy": {
+    "after_tax_cagr": 0.143383,
+    "sells_per_year": 14.277277,
+    "turnover_annual": 10.116754
+   },
+   "real": {
+    "after_tax_cagr": 0.143079,
+    "sells_per_year": 13.987593,
+    "turnover_annual": 10.028459
+   },
+   "window": [
+    "2002-08-01",
+    "2026-09-29"
+   ]
+  },
+  "year_delta": {
+   "IC37/C": {
+    "arm_turnover_annual": 10.359448,
+    "legs": {
+     "arm": {
+      "A": {
+       "blocked_band": 1848,
+       "deferred": 80,
+       "fees_usd": 41548.373726,
+       "postponements": 1928,
+       "realised_gain_try_by_reason": {
+        "liquidation": 11891042.620194,
+        "resize": 77405083.694969,
+        "tax": 743107.012269
+       },
+       "sells": 276,
+       "tax_funding_sales": 12,
+       "trades": 879,
+       "turnover_annual": 5.457356,
+       "turnover_total": 144.946782,
+       "units_end": 0.0
+      },
+      "B": {
+       "blocked_band": 137,
+       "deferred": 3,
+       "fees_usd": 32233.778467,
+       "postponements": 140,
+       "realised_gain_try_by_reason": {
+        "resize": 6061671.945941,
+        "tax": 110385.895457
+       },
+       "sells": 109,
+       "tax_funding_sales": 7,
+       "trades": 213,
+       "turnover_annual": 4.902092,
+       "turnover_total": 130.199034,
+       "units_end": 0.0
+      }
+     },
+     "control_turnover_annual": 5.455745
+    },
+    "per_year": {
+     "2000": 8.889403,
+     "2001": 6.888595,
+     "2002": 5.543176,
+     "2003": 0.425798,
+     "2004": -1.860307,
+     "2005": 2.080277,
+     "2006": 3.694077,
+     "2007": -0.885704,
+     "2008": 13.004472,
+     "2009": -6.256643,
+     "2010": -8.168108,
+     "2011": 1.031725,
+     "2012": -0.501118,
+     "2013": -0.145333,
+     "2014": 0.056679,
+     "2015": -2.016049,
+     "2016": 0.358644,
+     "2017": 0.0,
+     "2018": 3.169643,
+     "2019": 3.323065,
+     "2020": 3.523332,
+     "2021": -1.004568,
+     "2022": -3.617318,
+     "2023": 0.441655,
+     "2024": -0.478031,
+     "2025": 1.05857,
+     "2026": -1.395174
+    },
+    "total_dlog_nav_pp": 27.160758,
+    "y2022_dlog_nav_pp": -3.617318
+   }
+  }
+ },
+ "gate_profile": {
+  "by_year": {
+   "1969": 0.0,
+   "1970": 0.0,
+   "1971": 0.0,
+   "1972": 0.0,
+   "1973": 0.173387,
+   "1974": 0.0,
+   "1975": 0.180723,
+   "1976": 0.996,
+   "1977": 0.987952,
+   "1978": 0.947581,
+   "1979": 0.064516,
+   "1980": 0.052,
+   "1981": 0.907631,
+   "1982": 1.0,
+   "1983": 1.0,
+   "1984": 1.0,
+   "1985": 1.0,
+   "1986": 1.0,
+   "1987": 1.0,
+   "1988": 1.0,
+   "1989": 1.0,
+   "1990": 1.0,
+   "1991": 1.0,
+   "1992": 1.0,
+   "1993": 1.0,
+   "1994": 1.0,
+   "1995": 1.0,
+   "1996": 1.0,
+   "1997": 1.0,
+   "1998": 1.0,
+   "1999": 1.0,
+   "2000": 1.0,
+   "2001": 1.0,
+   "2002": 1.0,
+   "2003": 1.0,
+   "2004": 1.0,
+   "2005": 1.0,
+   "2006": 1.0,
+   "2007": 1.0,
+   "2008": 1.0,
+   "2009": 1.0,
+   "2010": 1.0,
+   "2011": 0.608,
+   "2012": 0.0,
+   "2013": 0.536,
+   "2014": 0.88,
+   "2015": 0.780876,
+   "2016": 0.42,
+   "2017": 0.996,
+   "2018": 1.0,
+   "2019": 0.576,
+   "2020": 0.011952,
+   "2021": 0.0,
+   "2022": 0.578313,
+   "2023": 1.0,
+   "2024": 1.0,
+   "2025": 1.0,
+   "2026": 1.0
+  },
+  "n_sessions": 14312,
+  "real_yield_first": "1969-07-01",
+  "share_gate_on": 0.759293,
+  "share_gate_on_pre_2003": 0.75601,
+  "t10yie_first": "2003-01-02"
+ },
+ "params": {
+  "block": 20,
+  "capital": "100k",
+  "control_AT2000": 0.107533,
+  "control_AT2010": 0.152354,
+  "control_AT2017": 0.23972,
+  "control_main_cagr_base": 0.157649,
+  "control_main_cagr_calibrated": 0.151785,
+  "control_main_max_dd_base": 0.466698,
+  "control_main_max_dd_calibrated": 0.467948,
+  "control_oos_applicable": [
+   "GSPC_1957_1999",
+   "M1",
+   "M2",
+   "M3",
+   "M4",
+   "M5"
+  ],
+  "e1_thresholds": {
+   "cagr_gap": 0.02,
+   "corr": 0.95,
+   "te": 0.025
+  },
+  "e2_share": 0.6,
+  "e4_blocks": [
+   10,
+   20,
+   40
+  ],
+  "e4_paths": 1000,
+  "e4_seed": 20261018,
+  "e4_share": 0.55,
+  "fresh_blocks": [
+   10,
+   40
+  ],
+  "fresh_seed": 20261016,
+  "n_pre": 5000,
+  "n_tax": 1000,
+  "seed": 20261011,
+  "window": [
+   "2000-03-09",
+   "2026-09-29"
+  ]
+ },
+ "study": "ic37c_confirm_v1",
+ "verdict": "fail"
+}

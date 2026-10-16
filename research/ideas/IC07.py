@@ -18,17 +18,21 @@ the 21 ETF windows, otherwise the registered `underlying_relhigh`/`underlying_re
 (session high / close, derived from the same repo OHLC the panels' prices come from) times the
 panel's own price -- a ratio, so it replays correctly inside a bootstrap chunk.
 
-**Applicability (the bank's pre-registered drop, as `ib03`/`IB06` implement it).**
-`GSPC_1957_1999` is refused explicitly (`DROPPED_WINDOW`, as `ib03` does): the harness builds that
-window close-only and the registered `^GSPC-HL` ratio series reaches it only for 1954-1956 (6.5 % of
-its sessions), so pivots there would be pivots of nothing -- the window is dropped as pre-registered
-(reduced 5-window G7).  The check is on `extra_window or window`, so a pooled-OOS bootstrap chunk
-of that market is refused too.  The main
-window, `M1`-`M5`, the 21 ETFs, the synthetic panel and both bootstrap families are applicable.
-Disclosed degeneracy on the evaluable OOS windows (IB06/IB10's caveat, unchanged): the repo files'
-high/low are placeholders (`h == l == c`) on 100 % of ^GSPC 1927-1956 (`M2`), 47 % of ^IXIC
-1971-1999 (`M1`) and 38 % of ^N225 (`M3`), where a "high" is a close and the pivots are close
-pivots.
+**Applicability (the bank's pre-registered drops).**  The bank is internally inconsistent here: its
+structured evaluable list is `GSPC_1957_1999, M1, M3, M4, M5` (no `M2`), while its note says the
+dropped window is `GSPC_1957_1999` ("close-only ... reduced 5-window G7").  Each of the two windows
+is excluded by one of the two statements *and* lacks real high/low data, so both are refused and
+the reduced G7 runs on 4 windows (`M1`, `M3`-`M5`; the framework requires k >= 3):
+`M2` (^GSPC 1935-1956) is refused because the bank's list omits it and its registered high/low are
+placeholders (`h == l == c`) on 100 % of its sessions, so its "pivots" would be close pivots.
+`GSPC_1957_1999` is refused because the harness builds that window close-only and the registered
+`^GSPC-HL` ratio series reaches it only for 1954-1956 (6.5 % of its sessions), so pivots there
+would be pivots of nothing (the bank's note; `ib03` drops it the same way).  The check is on
+`extra_window or window`, so a pooled-OOS bootstrap chunk of either market is refused too.  The
+main window, `M1`, `M3`-`M5`, the 21 ETFs, the synthetic panel and both bootstrap families are
+applicable.  Disclosed degeneracy on the evaluable OOS windows (IB06/IB10's caveat, unchanged): the
+repo files' high/low are placeholders (`h == l == c`) on 47 % of ^IXIC 1971-1999 (`M1`) and 38 % of
+^N225 (`M3`), where a "high" is a close and the pivots are close pivots.
 
 No engine change: the 2-of-3 majority, the sizing, the early machine (only its entry gate in arm C,
 via `helpers.r2_state_with_entry`) and the execution layer (`rule` = K) are production's.
@@ -44,8 +48,8 @@ from research.fast_engine import fe_signals
 from research.fast_engine.fe_config import DON_N, SMA_N
 from research.plugins_b3 import helpers
 
-#: the one window the idea bank pre-registers as dropped (close-only harness loader)
-DROPPED_WINDOW = "GSPC_1957_1999"
+#: the windows the idea bank drops (see the module docstring)
+DROPPED_WINDOWS = ("GSPC_1957_1999", "M2")
 
 ARMS = {
     "A": {"rule": "K", "leg": "2x", "cash_yield": "none", "mode": "vote_no_tsm", "k": 13},
@@ -116,10 +120,12 @@ def swing_up(high, low, k):
 
 
 def targets(data, spec):
-    if (data.extra_window or data.window) == DROPPED_WINDOW:
-        raise NotApplicable(
-            "fe_data.load_gspc is close-only and the registered high/low covers 1954-1956 only; "
-            f"the idea bank drops {DROPPED_WINDOW} (reduced 5-window G7)")
+    w = data.extra_window or data.window
+    if w in DROPPED_WINDOWS:
+        why = ("fe_data.load_gspc is close-only and the registered high/low covers 1954-1956 only"
+               if w == "GSPC_1957_1999" else
+               "the registered ^GSPC 1935-1956 high/low are placeholders (h == l == c)")
+        raise NotApplicable(f"{why}; outside the idea bank's evaluable OOS set")
     price = data.price
     high, low = helpers.relative_high_low(data)
     k = int(spec["k"])

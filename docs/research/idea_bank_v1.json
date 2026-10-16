@@ -1,0 +1,3213 @@
+{
+  "schema": "parayabuck.idea_bank/v1",
+  "study": "idea_bank_v1",
+  "date": "2026-10-16",
+  "branch": "research/idea_bank_v1",
+  "artefact_type": "idea bank (no backtest, no simulation, no gate run)",
+  "purpose": "40 pre-registered, parameter-frozen ideas for improving production K after Turkish income tax, for an automated two-stage screen with a held-out confirmation and a multiple-testing correction (research/batch_screen).",
+  "counts": {
+    "ideas": 40,
+    "arms": 119,
+    "categories": 11,
+    "strongest_marked": 10
+  },
+  "evaluation_contract": {
+    "control": "C0 = production K = R2 (E2 2-of-3 vote + half-weight early re-entry) + A1u gain-scaled downsize band (0.5/3/8 pp at a USD FIFO gain fraction <=1% / <=5% / >5%) + H2 (a downsize filling in the last 10 NYSE December sessions defers to January).  Reference cells to reproduce before any arm runs: pre-tax 15.7649% base / 15.1785% calibrated, max DD 46.6698% / 46.7948%, after tax at $100k 10.7533 / 15.2354 / 23.9720%.",
+    "pre_tax_gates": "ewma_band_v1's G1-G9 against K: G1 return (CAGR >= C0, or Calmar >= 1.1x with CAGR >= C0 - 0.5 pp), G2 max DD <= C0 + 1 pp, G3 2017+ >= C0 - 1 pp, G4 CAGR above C0 in >= 2 of 3 sub-periods, G5 block-20 bootstrap (seed 20261011, 5,000 paths) median >= 0, G6 G1 at m = 1, G7 the six OOS windows, G8 the pooled OOS bootstrap, G9 turnover <= 2x C0; G1/G2/G3/G5/G6 under both financing models.",
+    "after_tax_gates": "beats K at $100k in all three windows (2000-03-09 -> 2026-09-29; 2010-01-01 ->; 2017-01-03 ->) AND clean bootstrap B1-recent and B2-flat median delta >= 0 with share > 0 >= 55% (seed 20261011, block 20).",
+    "oos_windows": [
+      "GSPC_1957_1999",
+      "M1 ^IXIC 1975-1999",
+      "M2 ^GSPC 1935-1956",
+      "M3 ^N225 1966-2026",
+      "M4 ^GDAXI 1989-2026",
+      "M5 ^FTSE 1985-2026"
+    ],
+    "robustness_stages": [
+      "21 quality-passing ETFs pre-tax (calibrated, m = 2, R-USD)",
+      "E1: 21 ETFs after tax under R-INDEX at $100k",
+      "E2: 21 rolling January starts (2001-2021) after tax",
+      "E3: fresh bootstraps (seed 20261015, blocks 10/40)",
+      "m = 4 cost stress after tax at $100k"
+    ],
+    "reduced_gate_convention": "where a window or stage is not evaluable (documented per idea), the study must pre-register the reduced gate before running, exactly as credit_vote_v1 did for its non-US windows."
+  },
+  "plugin_contract": {
+    "targets_from_data": "the arm is a new numpy function of the instrument's own OHLC(V) plus any external series aligned by date, producing the per-session target-weight array the engine already consumes; the K fill rule (band / USD gain fraction / December deferral) is unchanged.  This is fe_signals.arm_signals' existing extension point and needs no engine edit.",
+    "kernel_option": "the arm changes the fill/decision logic itself (a fill-price or fill-filter rule, a second leg with its own FIFO book, a state-dependent band width, a tax-funding route).  It requires a copy of the engine inside research/<study>/ with the option added and a parity cell proving the option switched off reproduces the engine bit-for-bit (WORKER_PROTOCOL.md).",
+    "screen_stage_1": "pre-tax main window + G1-G9 + the 21-ETF and rolling-start stages; kill anything failing G1/G2/G5/G9 or the OOS median.",
+    "screen_stage_2": "after-tax windows + B1/B2 + the cost stress for survivors only.",
+    "held_out_confirmation": "the pre-2000 OOS windows and the E3 fresh bootstraps must be the only confirmation set; the multiple-testing correction must count *all* arms run across the bank, not only the survivors of stage 1."
+  },
+  "data_inventory": [
+    {
+      "series": "QQQ OHLC+adjclose+volume+dividend",
+      "file": "data/historical/stress_robustness_v1_daily.csv",
+      "coverage": "1999-03-10 -> 2026-09-29",
+      "role": "main-window instrument and every signal input"
+    },
+    {
+      "series": "SPY, QLD (real), VOO",
+      "file": "data/historical/stress_robustness_v1_daily.csv",
+      "coverage": "SPY 1999-01-04 ->; QLD 2006-06-21 ->; VOO 2010-09-09 ->",
+      "role": "benchmarks, real-fund checks"
+    },
+    {
+      "series": "synthetic daily-reset 2x QLD*",
+      "file": "built by fe_signals.synthetic_2x from QQQ",
+      "coverage": "1999-03-10 -> 2026-09-29",
+      "role": "the traded leg in every stage"
+    },
+    {
+      "series": "DTB3 (financing / bill yield)",
+      "file": "data/historical/stress_robustness_v1_dtb3.csv",
+      "coverage": "1954 -> 2026-09",
+      "role": "financing, cash yield"
+    },
+    {
+      "series": "TB3MS (monthly bill rate)",
+      "file": "data/historical/ewma_band_v1_tb3ms.csv",
+      "coverage": "1934-01 ->",
+      "role": "pre-1954 OOS financing"
+    },
+    {
+      "series": "^GSPC",
+      "file": "data/historical/ewma_band_v1_gspc.csv (1957-1999 close only) and ewma_band_v1_index.csv (1927-1956 OHLC)",
+      "coverage": "1927-12-30 -> 1999-12-31",
+      "role": "GSPC_1957_1999 and M2 OOS windows"
+    },
+    {
+      "series": "^IXIC / ^N225 / ^GDAXI / ^FTSE",
+      "file": "data/historical/ewma_band_v1_index.csv",
+      "coverage": "^IXIC 1971-02-05->1999-12-31; ^N225 1965->2026-09-29; ^GDAXI 1987-12-30->; ^FTSE 1984-01-03-> (OHLC)",
+      "role": "M1-M5 OOS windows and the international lead-lag signal"
+    },
+    {
+      "series": "21 quality-passing ETFs (XLB XLE XLF XLI XLK XLP XLU XLV XLY EWJ EWG EWU EWA EWH EWS EWL EFA EEM SPY DIA IWM)",
+      "file": "data/historical/range_vol_v2_*.csv / range_vol_v1_*.csv (OHLC+adjclose, no volume); volume+dividend in riskoff_rotation_v4_etfs.csv",
+      "coverage": "mostly 1999-01-04 ->; EFA 2001-08-27; EEM 2003-04-14; IWM 2000-05-26",
+      "role": "breadth stage"
+    },
+    {
+      "series": "IEF / TLT / GLD / GC=F / TQQQ",
+      "file": "riskoff_rotation_v4_etfs.csv, riskoff_rotation_v2_*.csv, leverage_frontier_v1_daily.csv",
+      "coverage": "IEF/TLT 2002-07-30 ->; GLD 2004-11-18 ->; GC=F 2000-08-30 ->; TQQQ 2010-02-11 ->",
+      "role": "bond/gold legs and the instrument arms"
+    },
+    {
+      "series": "^VIX / ^VIX3M / ^VXN",
+      "file": "data/historical/vix_filter_v1_vix.csv, _vix3m.csv, _vxn.csv, _fred.csv",
+      "coverage": "^VIX 1990-01-02 ->; ^VXN 2001-01-23 ->; ^VIX3M 2006-07-17 ->",
+      "role": "VRP arm"
+    },
+    {
+      "series": "BAA10Y / T10Y3M / DGS10 / BAA / AAA / GS10 / TB3MS",
+      "file": "data/historical/credit_vote_v1_*.csv, leverage_frontier_v1_dgs10.csv",
+      "coverage": "BAA10Y 1986-01-02 ->; T10Y3M 1982-01-04 ->; DGS10 1962-01-02 ->; BAA/AAA monthly 1919-01 ->; GS10 monthly 1953-04 ->",
+      "role": "macro/credit arms"
+    },
+    {
+      "series": "USD/TRY (CBRT) and YI-UFE",
+      "file": "data/historical/after_tax_tr_v1_usdtry_cbrt.csv, _yiufe.csv",
+      "coverage": "USD/TRY 2000-01-03 ->; YI-UFE 1999-01 ->",
+      "role": "the after-tax engine and the FX-regime arms"
+    },
+    {
+      "series": "CAPE / earnings yield / 10y real return (Shiller)",
+      "file": "data/historical/valuation_v1_shiller_monthly.csv",
+      "coverage": "1871-01 -> 2024-09 (monthly)",
+      "role": "already tested (valuation_v1); listed for completeness"
+    },
+    {
+      "series": "^NDX daily",
+      "file": "data/historical/valuation_v1_ndx_daily.csv, vol_shape_v1_ndx.csv",
+      "coverage": "1985-10-01 -> 2000-03-22",
+      "role": "pre-2000 calibration windows"
+    },
+    {
+      "series": "^RUT",
+      "file": "data/historical/breadth_vote_v1_rut.csv",
+      "coverage": "1987-09-10 -> 2026-10-14",
+      "role": "breadth (already tested)"
+    },
+    {
+      "series": "BIL / SGOV / TLT daily (2016+)",
+      "file": "data/historical/tbill_sweep_v1_etf_daily_split_sip.csv",
+      "coverage": "2016-01-04 -> 2026-07-31",
+      "role": "bill-sleeve reference"
+    }
+  ],
+  "new_downloads": [
+    {
+      "series": "CPI (CPIAUCSL, monthly SA index, 1947+)",
+      "needed_by": [
+        "IB12"
+      ],
+      "source": "FRED CSV"
+    },
+    {
+      "series": "SMH (semiconductor ETF, 2000-05-05+)",
+      "needed_by": [
+        "IB20"
+      ],
+      "source": "Yahoo chart API"
+    },
+    {
+      "series": "HG=F (COMEX copper front future, 2000+)",
+      "needed_by": [
+        "IB23"
+      ],
+      "source": "Yahoo chart API"
+    },
+    {
+      "series": "SHY (1-3y Treasury ETF, inception 2002-07)",
+      "needed_by": [
+        "IB25"
+      ],
+      "source": "Yahoo chart API"
+    },
+    {
+      "series": "scheduled FOMC meeting dates 1994-2026",
+      "needed_by": [
+        "IB17"
+      ],
+      "source": "federalreserve.gov public calendar (not market data)"
+    }
+  ],
+  "closed_axes": [
+    {
+      "family": "Trend horizon / aggregation (SMA 100-250, Donchian 126, 2-of-3, proportional, single-signal, hysteresis, confirmation days, exit buffers, min-hold, staged thirds)",
+      "closed_by": "trend_robustness_v2, signal_ensemble_v1, vote_hysteresis_v1, rule_variants_v1, e2_confirmation_v1"
+    },
+    {
+      "family": "Total-return votes and T-bill / 2% hurdles",
+      "closed_by": "tsm_tr_v1"
+    },
+    {
+      "family": "Vol estimator / window / output band (EWMA 0.94, vol10/40/60, max(vol20,vol60), semi-deviation, Parkinson/GK/YZ, 2.5/5/10 pp bands)",
+      "closed_by": "vol_window_v1, ewma_band_v1, range_vol_v1-v3"
+    },
+    {
+      "family": "Vol-target level and leverage grid",
+      "closed_by": "vt_level_tax_v1, leverage_frontier_v1, exposure_k_v1, tax_asym_v1-v3"
+    },
+    {
+      "family": "Vol-target shape min(1, c/sigma^p)",
+      "closed_by": "vol_shape_v1"
+    },
+    {
+      "family": "Valuation / ERP-conditioned exposure",
+      "closed_by": "valuation_v1"
+    },
+    {
+      "family": "Idle/risk-off asset (BIL, BOND10/IEF, GOLD, PSQ/QID, sector and country ETFs, bill sweep as a rule)",
+      "closed_by": "tbill_sweep_v1, r2_tbill_combo_v1, leverage_frontier_v1, riskoff_rotation_v1-v4, riskoff_after_tax_v1, gold_riskoff_oos_v1, shortside_v1"
+    },
+    {
+      "family": "Macro / credit / VIX filters at the *level* (BAA10Y vs its SMA, curve inversion, VIX level / spike / term structure, VXN sizing)",
+      "closed_by": "credit_vote_v1, vix_filter_v1"
+    },
+    {
+      "family": "Execution price and timing (MOC, next close, t+2 open, split fills, overnight hold, intraday stops)",
+      "closed_by": "moc_execution_v1, exec_delay_v1, overnight_hold_v1, intraday_stop_v1"
+    },
+    {
+      "family": "Seasonality and calendar (May-Oct half, September cash, turn-of-month, month-end deferral)",
+      "closed_by": "seasonal_overlay_v1, seasonal_placebo_v1, monthly_defer_v1"
+    },
+    {
+      "family": "Instrument choice among 2x/3x funds (TQQQ at 2/3, early leg in QQQ/SPY/SSO, QLD vs SSO rotation)",
+      "closed_by": "instrument_cost_v1, early_qqq_v1, relstrength_v1"
+    },
+    {
+      "family": "Realization timing (year-end loss harvest, December deferral, gain-scaled band, monthly deferral, inverse hedge, state-keyed deferral, exit-leg timing, smoothing)",
+      "closed_by": "tax_harvest_v1/v2, gain_band_v1-v3, monthly_defer_v1, tax_hedge_v1, state_defer_v1, exit_timing_v2, smooth_target_v1"
+    },
+    {
+      "family": "Annual tax budget / deliberate gain realization",
+      "closed_by": "tax_budget_v2"
+    },
+    {
+      "family": "Early-leg size and trigger (ladder, 2-of-3 quorum, crash path)",
+      "closed_by": "ladder_v1, early_quorum_v1, crash_entry_v1, fast_reentry_v2"
+    },
+    {
+      "family": "Dip buying / stops / crash entry / short side",
+      "closed_by": "dip_overlay_v1, intraday_stop_v1, crash_entry_v1, shortside_v1"
+    },
+    {
+      "family": "Lot-level selection (FIFO blocked by the broker) and two-queue wrappers",
+      "closed_by": "idea_survey_v2 I1 (never run, blocked); relstrength_v1 for the wrapper"
+    },
+    {
+      "family": "ML / sequence models",
+      "closed_by": "timesfm_v1"
+    }
+  ],
+  "categories": [
+    {
+      "id": "trend-signal",
+      "label": "Trend-signal algebra",
+      "idea_ids": [
+        "IB01",
+        "IB02",
+        "IB03",
+        "IB04",
+        "IB05",
+        "IB06"
+      ]
+    },
+    {
+      "id": "vol-estimator",
+      "label": "Volatility estimators and sizing inputs",
+      "idea_ids": [
+        "IB07",
+        "IB08",
+        "IB09",
+        "IB10",
+        "IB11"
+      ]
+    },
+    {
+      "id": "macro-filter",
+      "label": "Macro / credit / rates filters",
+      "idea_ids": [
+        "IB12",
+        "IB13",
+        "IB14",
+        "IB15"
+      ]
+    },
+    {
+      "id": "calendar",
+      "label": "Calendar and structural-date effects",
+      "idea_ids": [
+        "IB16",
+        "IB17",
+        "IB18",
+        "IB19"
+      ]
+    },
+    {
+      "id": "cross-asset",
+      "label": "Cross-asset signals",
+      "idea_ids": [
+        "IB20",
+        "IB21",
+        "IB22",
+        "IB23"
+      ]
+    },
+    {
+      "id": "off-state",
+      "label": "Off-state holdings",
+      "idea_ids": [
+        "IB24",
+        "IB25",
+        "IB26"
+      ]
+    },
+    {
+      "id": "on-state-instrument",
+      "label": "On-state instrument choice",
+      "idea_ids": [
+        "IB27",
+        "IB28"
+      ]
+    },
+    {
+      "id": "drawdown-recovery",
+      "label": "Drawdown / recovery-state sizing",
+      "idea_ids": [
+        "IB29",
+        "IB30",
+        "IB31",
+        "IB32"
+      ]
+    },
+    {
+      "id": "statistical-filter",
+      "label": "Model-free statistical filters",
+      "idea_ids": [
+        "IB33",
+        "IB34",
+        "IB35"
+      ]
+    },
+    {
+      "id": "execution",
+      "label": "Execution timing",
+      "idea_ids": [
+        "IB36",
+        "IB37"
+      ]
+    },
+    {
+      "id": "tax-structure",
+      "label": "Tax unit, regime and funding",
+      "idea_ids": [
+        "IB38",
+        "IB39",
+        "IB40"
+      ]
+    }
+  ],
+  "strongest_ten": [
+    "IB27",
+    "IB38",
+    "IB01",
+    "IB22",
+    "IB04",
+    "IB28",
+    "IB39",
+    "IB20",
+    "IB12",
+    "IB32"
+  ],
+  "ideas": [
+    {
+      "id": "IB01",
+      "title": "Efficiency-ratio (Kaufman) momentum vote",
+      "category": "trend-signal",
+      "strength_rank": 3,
+      "mechanism": "The production momentum vote is a raw 252-session price return whose magnitude is irrelevant (only its sign counts).  The Kaufman efficiency ratio ER_n = |c_t-c_{t-n}| / sum_{i=1..n}|c_{t-i+1}-c_{t-i}| is a scale-free measure of how much of the traversed path was net progress: ER near 1 in a clean trend, near 0 in chop.  Substituting it for the TSM252 vote asks the uptrend to be *efficient* rather than merely positive, which should cut the false re-entries that cost R2 its 2022-12/2023-01 whipsaw and leave the 2001/2009/2023 recoveries (all high-ER) intact.",
+      "literature": [
+        {
+          "ref": "Kaufman, Trading Systems and Methods (adaptive moving average efficiency ratio)",
+          "url": "https://www.wiley.com/en-us/Trading+Systems+and+Methods%2C+6th+Edition-p-9781119605355"
+        },
+        {
+          "ref": "Moskowitz, Ooi & Pedersen, Time Series Momentum, JFE 2012 (scale-free trend strength)",
+          "url": "https://doi.org/10.1016/j.jfineco.2011.11.003"
+        }
+      ],
+      "closest_tested": {
+        "study": "deriv_vote_v1 (C4 vol-scaled TSM hurdle tsv>0.25) and trend_robustness_v2",
+        "index_row": "docs/research/deriv_vote_v1.md",
+        "difference": "deriv_vote replaced the vote with price *derivatives* (SMA cross, OLS log-price slope, rising midpoint) and with a 252-session return divided by annualised vol; the efficiency ratio is a path-length statistic that no arm in the record computes."
+      },
+      "signal_inputs": [
+        "QQQ daily close (the arm's own instrument close in the OOS/ETF stages)"
+      ],
+      "data": {
+        "in_repo": [
+          "data/historical/stress_robustness_v1_daily.csv (QQQ close)"
+        ],
+        "new_downloads": [],
+        "main_window": "full: QQQ 1999-03-10 -> 2026-09-29",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only; every OOS index file carries a close column"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "wants() replacement in fe_signals.arm_signals; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "2-of-3 vote with TSM252 replaced by ER_20 > 0.30",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "2-of-3 vote with TSM252 replaced by ER_60 > 0.30",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "E2 as production, and the early path's entry additionally requires ER_20 > 0.30",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium: a new statistic on the core vote, no new data, cheap to run.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB02",
+      "title": "Median-location trend vote (robust mean vs mean)",
+      "category": "trend-signal",
+      "strength_rank": null,
+      "mechanism": "Production's level vote is close > SMA200 -- a mean over the trailing window, which a single crash bar or a spike high biases upward for 200 sessions and which therefore holds the vote *off* too long after any single extreme print.  The median of the trailing 200 closes is the same idea with a robust location statistic; the claimed difference is fewer post-crash false negatives without any lookback change, i.e. it attacks exactly the lag the early path was invented to patch.",
+      "literature": [
+        {
+          "ref": "Huber, Robust Statistics (location estimators); any trend-filter survey",
+          "url": "https://doi.org/10.1002/0471725250"
+        }
+      ],
+      "closest_tested": {
+        "study": "trend_robustness_v2 (SMA 100/150/200/250 ensemble) and signal_ensemble_v1",
+        "index_row": "docs/research/trend_robustness_v2.md",
+        "difference": "the closed axis is the SMA *length* and its aggregation; no arm swaps the mean for a robust location statistic at a fixed length."
+      },
+      "signal_inputs": [
+        "QQQ daily close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "sma_up -> rolling median; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "MED200 (median of the last 200 closes) replaces SMA200 in the 2-of-3 vote",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "MED100 replaces SMA200",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "3-of-4 vote {SMA200, MED200, TSM252, DON126}, on iff >= 3",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low: tiny change, but the vote is the strategy's core and the change is free.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB03",
+      "title": "ATR/EMA channel (Keltner) vote instead of a Donchian midpoint",
+      "category": "trend-signal",
+      "strength_rank": null,
+      "mechanism": "DON126 asks close > the midpoint of the 126-session max/min -- a *range* channel whose width is set by the largest historical excursion, so it is insensitive to how volatile the market currently is.  A Keltner channel (EMA_n +/- k*ATR_n) scales the breakout threshold with the instrument's own current true range: in a calm market it re-enters earlier than DON126, in a wild one later, which is the opposite of the fixed-width behaviour that made R2 sit out 2009-04 and 2020-04.",
+      "literature": [
+        {
+          "ref": "Keltner channel / ATR (Wilder 1978); Bollinger-band breakout literature",
+          "url": "https://en.wikipedia.org/wiki/Keltner_channel"
+        }
+      ],
+      "closest_tested": {
+        "study": "signal_ensemble_v1 / e2_confirmation_v1 (DON126 = production vote)",
+        "index_row": "docs/research/signal_ensemble_v1.md",
+        "difference": "DON126's threshold is the channel midpoint of *price extrema*; the ATR channel's is a volatility-scaled distance from an EMA.  The nearest measured neighbour is fast_reentry_v1 R3 (Donchian-126 AND SMA50), still a price-extrema channel."
+      },
+      "signal_inputs": [
+        "QQQ daily high, low, close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv (QQQ OHLC)",
+          "data/historical/ewma_band_v1_index.csv (^IXIC/^GSPC/^N225/^GDAXI/^FTSE OHLC)"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "high/low exist in ewma_band_v1_index for all five market windows, including ^GSPC 1927-1956; in the ^GSPC 1957-1999 window the harness's loader (fe_data.load_gspc) reads only the close column and sets opens := the previous close, so a true-range statistic cannot be built there without changing the loader, which would move the published control cells -> that one window is dropped and a reduced 5-window G7 is pre-registered as credit_vote_v1 did for its 3-window gate (the raw file does carry OHLCV 1950-1999; only the loader is close-only)."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "don_up -> keltner_up; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "DON126 replaced by close > EMA20 + 1.0*ATR20 in the 2-of-3 vote",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "SMA200 replaced by close > EMA50 + 0.5*ATR20 in the 2-of-3 vote",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "early-path entry gate 'close > SMA50' replaced by 'close > EMA20 + 1.0*ATR20'",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low: an established channel family, untested here.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB04",
+      "title": "Variance-ratio (Lo-MacKinlay) trend vote",
+      "category": "trend-signal",
+      "strength_rank": 5,
+      "mechanism": "Instead of asking whether price rose, ask whether *returns are trending*: the variance ratio VR_q = Var(q-session return)/(q * Var(1-session return)) estimated on the trailing 252 sessions is > 1 exactly when multi-day returns variance-add more than linearly, i.e. when returns are positively serially dependent.  Using VR_5 > 1 (or VR_20) as the momentum vote makes the on-state conditional on the *structure* of returns rather than their level, so a positive but mean-reverting drift does not buy 2x exposure.",
+      "literature": [
+        {
+          "ref": "Lo & MacKinlay, Stock market prices do not follow random walks, RFS 1988",
+          "url": "https://doi.org/10.1093/rfs/1.1.41"
+        },
+        {
+          "ref": "Moskowitz, Ooi & Pedersen 2012 (time-series momentum)",
+          "url": "https://doi.org/10.1016/j.jfineco.2011.11.003"
+        }
+      ],
+      "closest_tested": {
+        "study": "deriv_vote_v1 (OLS slope of log close, golden cross, rising midpoint)",
+        "index_row": "docs/research/deriv_vote_v1.md",
+        "difference": "deriv_vote's statistics are functions of the price path's *slope*; the variance ratio is a second-moment serial-dependence test with no price-derivative content. The scout inventory records 'autocorrelation / serial-dependence signals' as untested anywhere in the record."
+      },
+      "signal_inputs": [
+        "QQQ daily close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "new numpy statistic feeding the vote; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "2-of-3 vote with TSM252 replaced by VR_5(252-session estimate) > 1.0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "2-of-3 vote with TSM252 replaced by VR_20 > 1.0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "E2 as production AND VR_5 > 1.0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium: literature-backed, low correlation with the tested price votes.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB05",
+      "title": "Hurst-exponent regime gate on the trend vote",
+      "category": "trend-signal",
+      "strength_rank": null,
+      "mechanism": "The Hurst exponent estimated by rescaled range over the trailing 252 sessions is the classical persistence statistic: H > 0.5 means increments are persistent (trend friendly), H < 0.5 mean-reverting.  Gating the E2 vote (or just the early path) on H > 0.5 tests whether the strategy should be allowed to run at all in mean-reverting regimes -- the regime in which the 1935-56 and 2000-02 whipsaws live.",
+      "literature": [
+        {
+          "ref": "Hurst 1951; Peters, Fractal Market Analysis (R/S on equity indices)",
+          "url": "https://www.wiley.com/en-us/Fractal+Market+Analysis-p-9780471585244"
+        }
+      ],
+      "closest_tested": {
+        "study": "deriv_vote_v1 / breadth_vote_v1 (regime-conditioned votes)",
+        "index_row": "docs/research/deriv_vote_v1.md",
+        "difference": "no arm computes a persistence exponent; the closest are price-derivative votes."
+      },
+      "signal_inputs": [
+        "QQQ daily close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "rolling R/S estimator added to fe_signals-compatible wants(); no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "E2 on iff the 2-of-3 vote holds AND H(252, block sizes 10/20/40/80) > 0.50",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "same with the threshold H > 0.55",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "early-path entry additionally requires H > 0.50",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium: heavy estimator, both-sided evidence in the literature.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB06",
+      "title": "Range-expansion / contraction entries and an ATR-chandelier exit",
+      "category": "trend-signal",
+      "strength_rank": null,
+      "mechanism": "True range (max(high-low, |high-prev close|, |low-prev close|)) is the one statistic in the daily bar that the production rule ignores.  Two untested uses: (a) require an expansion bar (TR > 1.5*ATR20) on the session that triggers an early-path entry, so the entry is a breakout day and not a drift up; (b) exit the on-state when close falls more than 2.5*ATR20 below the highest close of the last 20 sessions (the chandelier exit), which is a trend-following exit that has no 200-session averaging lag.",
+      "literature": [
+        {
+          "ref": "Wilder 1978 (ATR); Crabel, Day Trading with Short Term Price Patterns (NR7/range expansion)",
+          "url": "https://en.wikipedia.org/wiki/Average_true_range"
+        }
+      ],
+      "closest_tested": {
+        "study": "intraday_stop_v1 (T8/T12 stops) and dip_overlay_v1 (5-day return triggers)",
+        "index_row": "docs/research/intraday_stop_v1.md",
+        "difference": "the tested exit overlays use *fixed percentage* distances below the prior close; the chandelier exit is volatility-scaled and anchored on the running high, and no arm has used true range at all."
+      },
+      "signal_inputs": [
+        "QQQ high, low, close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv",
+          "ewma_band_v1_index.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "same reduction as IB03: the harness loads the ^GSPC 1957-1999 window close-only (opens := previous close)"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "extra gates on the early path / an extra exit condition in the target series; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "early entry additionally requires TR_t > 1.5*ATR20",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "early entry additionally requires the 7-session range < 0.5*ATR20 (contraction, the opposite sign)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "on-state forced to 0 when close < (highest close of the last 20 sessions) - 2.5*ATR20",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium: an exit overlay, the family that has lost every time, but the statistic is new.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB07",
+      "title": "Mean-reverting GARCH(1,1) volatility forecast instead of backward-looking vol20",
+      "category": "vol-estimator",
+      "strength_rank": null,
+      "mechanism": "vol20 is the realised standard deviation of the last 20 returns: it is unbiased for the recent past and blind to the fact that volatility mean-reverts, so it under-sizes exposure exactly after a spike (when the next 20 sessions are usually calmer) and over-sizes it after a long calm stretch.  A GARCH(1,1) one-step forecast with fixed constants, sigma^2_{t+1} = omega + 0.10*r_t^2 + 0.85*sigma^2_t, omega set so the unconditional annualised volatility is 20%, is the standard term-structure-aware answer and is the only *forecast* class the record has not used (the TimesFM arm is a neural forecaster, EWMA is an exponential average with no mean reversion).",
+      "literature": [
+        {
+          "ref": "Bollerslev 1986 (GARCH); Andersen, Bollerslev, Diebold & Labys 2003 (realised vol forecastability)",
+          "url": "https://doi.org/10.1016/0304-4076(86)90063-1"
+        }
+      ],
+      "closest_tested": {
+        "study": "ewma_band_v1 W1 (RiskMetrics lambda=0.94) and timesfm_v1 V1",
+        "index_row": "docs/research/ewma_band_v1.md",
+        "difference": "EWMA is a variance recursion with no long-run mean and no separate reaction to the last squared return; GARCH(1,1) mean-reverts to a fixed unconditional level.  The vol-*estimator* axis is declared closed by idea_survey_v5 on the strength of vol_window_v1/ewma_band_v1/range_vol_v1-3; this is a different estimator family and is filed as an axis-closure *test*, not as a new axis."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close (QQQ in the main window)"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "vt_of(vol) -> vt_of(garch_sigma); no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "vt = min(1, 0.35/sigma_ann); sigma_ann = sqrt(252*sigma2), sigma2_{t+1} = omega + 0.10*r_t^2 + 0.85*sigma2_t with omega = 7.9365e-06 (=(0.20^2/252)*0.05), seeded with the sample variance of the first 20 returns",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "vt = min(1, 0.35/max(vol20, sigma_ann))",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "vt = min(1, 0.35/(0.5*vol20 + 0.5*sigma_ann))",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low: the estimator axis is closed, but this is the untested family inside it.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB08",
+      "title": "Realised-volatility term-structure sizing (short vol relative to long vol)",
+      "category": "vol-estimator",
+      "strength_rank": null,
+      "mechanism": "vix_filter_v1 tested the *implied* term structure (VIX > VIX3M) and lost.  The realised analogue is untested and has a different information content: sizing on vol20 * (vol20/vol252)^lambda penalises exposure when short-horizon realised vol is elevated relative to the one-year level (the realised-curve is inverted), which is the state the vol-target trims are made in.  It is a *ratio*, not another window, so it is not a neighbour of the closed vol-window axis.",
+      "literature": [
+        {
+          "ref": "Harvey et al., The Impact of Volatility Targeting, JPM 2018",
+          "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3175538"
+        },
+        {
+          "ref": "Moreira & Muir 2017 (volatility-managed portfolios)",
+          "url": "https://doi.org/10.1111/jofi.12513"
+        }
+      ],
+      "closest_tested": {
+        "study": "vol_window_v1 (V10/V40/V60/VMAX) and vix_filter_v1 X3/X4",
+        "index_row": "docs/research/vol_window_v1.md",
+        "difference": "every tested arm picks a *level* (one window, or max of two, or an implied-vol level); none uses the short/long ratio as the sizing input."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "vol_n(20) and vol_n(252) both already exist in fe_signals"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "vt = min(1, 0.35/(vol20*(vol20/vol252)^0.5))",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "vt = min(1, 0.35/(vol20*(vol20/vol252)^1.0))",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "vt = min(1, 0.35/vol20) * clip(vol252/vol20, 0.85, 1.00) (an upside-only term-structure penalty)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low: a new functional form on a closed axis.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB09",
+      "title": "Vol-of-vol sizing (scale down when realised volatility is itself unstable)",
+      "category": "vol-estimator",
+      "strength_rank": null,
+      "mechanism": "Uncertainty about *risk* is a distinct state from the level of risk: a market whose 20-session vol is jumping around (high vol-of-vol) has a less reliable vol estimate, so a vol-targeting rule should size down.  Concrete arm: vov_t = the standard deviation of the last 20 daily values of vol20, and a multiplier clip(median_252(vov)/vov_t, floor, 1.0) applied to the production weight.  vix_filter_v1 X4 (VXN-implied sizing) is the closest tested arm and it *replaced* the vol estimate rather than modulating it.",
+      "literature": [
+        {
+          "ref": "Baltussen, van Bekkum & van der Grient, Unknown Unknowns, JFQA 2018 (vol-of-vol)",
+          "url": "https://doi.org/10.1017/S0022109018000658"
+        }
+      ],
+      "closest_tested": {
+        "study": "vix_filter_v1 X4 (vt(max(vol20, 2*VXN/100)))",
+        "index_row": "docs/research/vix_filter_v1.md",
+        "difference": "X4 used option-implied vol as an alternative vol level and requires ^VXN (2001+); idea_survey_v2 section 7.3 rejected the option-implied vol-of-vol class (VVIX/SKEW) on data grounds (VVIX starts 2007).  This uses the *realised* dispersion of the realised vol estimator, exists for the full 2000-2026 window and for every pre-2000 OOS window, and no arm in the record computes it."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only (needs 20+252 warm-up beyond the vote warm-up)"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "nested rolling std in numpy; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight *= clip(median_252(vov)/vov_t, 0.60, 1.00); vov_t = std of the last 20 daily vol20 values",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "the same with floor 0.80",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "the same multiplier applied only while the vote is on (the early path unchanged)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium: latent-state sizing with a documented literature, but only partial data (^VIX) in the tested neighbours.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB10",
+      "title": "ATR%-based volatility estimate (mean of true ranges, production-feasible)",
+      "category": "vol-estimator",
+      "strength_rank": null,
+      "mechanism": "range_vol_v1-v3 showed that range-based vol estimates (Parkinson/Garman-Klass/Yang-Zhang) beat close-to-close vol20 in-sample, and then failed the implementability gate: the passing arm G3x needed a close-to-close/Parkinson ratio expanded from 1999.  A simple ATR%-based estimate, sigma_ann = 0.63*(ATR20/close)*sqrt(252), needs only 21 bars, is exactly implementable in production, and is the *mean* of true ranges rather than a variance of ranges -- the constant 0.63 is the a-priori Parkinson factor, not a fitted one.",
+      "literature": [
+        {
+          "ref": "Parkinson 1980; Garman & Klass 1980; Alizadeh, Brandt & Diebold 2002 (range-based vol)",
+          "url": "https://doi.org/10.1016/S0304-405X(02)00140-X"
+        }
+      ],
+      "closest_tested": {
+        "study": "range_vol_v3 (F1 rolling 252/504 ratio, F2 plain Parkinson, F3 frozen ratio)",
+        "index_row": "docs/research/range_vol_v3.md",
+        "difference": "all three tested arms rescale a range-variance estimator by an estimated ratio; the ATR form has no rescaling constant to estimate and no full-history requirement, which is precisely the objection that closed that campaign."
+      },
+      "signal_inputs": [
+        "the arm's own instrument high, low, close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv",
+          "ewma_band_v1_index.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "the harness loads ^GSPC 1957-1999 close-only; there TR == |c_t-c_{t-1}| and the estimate degenerates towards vol20 (disclosed)"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "vt_of(vol20) -> vt_of(atr_sigma); no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "vt = min(1, 0.35/sigma_atr), sigma_atr = 0.63*(ATR20/close)*sqrt(252)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "vt = min(1, 0.35/(0.5*sigma_atr + 0.5*vol20))",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "vt = min(1, 0.35/max(sigma_atr, vol20))",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low: a production-feasible form of a family that failed for implementability.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB11",
+      "title": "Downside/upside vol asymmetry as a sizing modifier",
+      "category": "vol-estimator",
+      "strength_rank": null,
+      "mechanism": "vol_window_v1 tested the downside semi-deviation *as the estimator* (V5).  Untested is the *ratio* of downside to upside semi-deviation: when realised downside vol leads upside vol (a crash-prone distribution), the same total vol is a worse risk, so the weight is multiplied by clip(semiUp/semiDown, 0.70, 1.00).  This is a shape-of-the-distribution signal that keeps vol20 as the level and uses the asymmetry only as a tilt.",
+      "literature": [
+        {
+          "ref": "Ang & Chen 2002; Bollerslev, Li & Zhao 2020 (good vs bad volatility)",
+          "url": "https://doi.org/10.1016/S0304-405X(02)00138-1"
+        }
+      ],
+      "closest_tested": {
+        "study": "vol_window_v1 V5 (SEMI = sqrt(2*252/20*sum(min(r,0)^2)))",
+        "index_row": "docs/research/vol_window_v1.md",
+        "difference": "V5 replaced the vol level with the downside semi-deviation; this keeps vol20 and adds the asymmetry ratio."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight *= clip(semiUp60/semiDown60, 0.70, 1.00)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight *= clip(semiUp252/semiDown252, 0.70, 1.00)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "weight *= clip(semiUp60/semiDown60, 0.70, 1.00), applied to the early-path leg only",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB12",
+      "title": "Real 10-year yield veto (nominal yield minus trailing CPI inflation)",
+      "category": "macro-filter",
+      "strength_rank": 9,
+      "mechanism": "credit_vote_v1 tested *nominal* credit spreads and the nominal 10y-3m curve as risk-off triggers and lost 2.6-5.2 pp of CAGR, but the variable with a documented link to long-horizon equity returns is the *real* rate: the equity risk premium falls one-for-one in the real 10-year yield, and the 2022 de-rating is the clean example.  Arm A vetoes the on-state while DGS10 minus the trailing 12-month CPI change exceeds 2.0%; arm B halves the weight above 1.5%; arm C makes it a 4th vote (>= 3 of {SMA200, TSM252, DON126, real rate <= 2.0%}).  All three keep the trend votes as the primary signal and use the real rate only as a slow veto/tilt.",
+      "literature": [
+        {
+          "ref": "Asness, Fight the Fed Model, JPM 2003 (real-rate/valuation link)",
+          "url": "https://www.aqr.com/Insights/Research/Journal-Article/Fight-the-Fed-Model"
+        },
+        {
+          "ref": "Campbell & Shiller 1998; Fama & French, The Equity Premium, JF 2002",
+          "url": "https://doi.org/10.1111/1540-6261.00437"
+        }
+      ],
+      "closest_tested": {
+        "study": "credit_vote_v1 K1 (BAA10Y <= its 200-session SMA) and K3 (curve inverted >= 20 sessions)",
+        "index_row": "docs/research/credit_vote_v1.md",
+        "difference": "K1/K3 are nominal spreads compared to their own history (a self-referential trigger); the real rate is a level-vs-inflation quantity with an absolute threshold, and the scout inventory lists 'real-rate filters' as untested."
+      },
+      "signal_inputs": [
+        "FRED DGS10 (daily)",
+        "FRED CPIAUCSL (monthly, 1-month lag)"
+      ],
+      "data": {
+        "in_repo": [
+          "data/historical/leverage_frontier_v1_dgs10.csv (1962-01-02 -> 2026-09-29)",
+          "data/historical/credit_vote_v1_DGS10.csv"
+        ],
+        "new_downloads": [
+          "FRED CPIAUCSL (monthly SA index, 1947+), saved as data/historical/idea_bank_v1_cpi.csv with URL + SHA-256 in the study manifest"
+        ],
+        "main_window": "full (DGS10 daily from 1962, CPI from 1947, 1-month publication lag honoured)",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2"
+          ],
+          "note": "US CPI and DGS10/MODIS exist over the three US windows; M3-M5 (Japan, Germany, UK) have no US macro overlay -> a reduced 3-window G7/G8 is pre-registered exactly as credit_vote_v1 did."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "external series aligned by date (the engine's `rates`-style input pattern); no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight = 0 while real10y > 2.0%, else production; real10y = DGS10 - CPI YoY (1-month lag)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight *= 0.5 while real10y > 1.5%",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "3-of-4 vote {SMA200, TSM252, DON126, real10y <= 2.0%}",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low for return, medium for drawdown: the veto family has lost every time, but the real rate is the untested, better-motivated variable.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB13",
+      "title": "10-year yield momentum veto (rising long rates)",
+      "category": "macro-filter",
+      "strength_rank": null,
+      "mechanism": "Duration is the discount rate applied to long-duration equity cash flows, and QLD is a 2x long-duration Nasdaq-100 position -- the most rate-sensitive equity expression available in the account.  The tested credit arms used *level* triggers; untested is the 60-session *change* in DGS10 as a risk-off trigger: veto while the 10y has risen more than 0.50 pp over 60 sessions (arm A), halve above 0.25 pp (arm B), or make it a 4th vote (arm C).  The 2022 and 2018 rate shocks are where this should bind.",
+      "literature": [
+        {
+          "ref": "Fama & French 2002 (term-structure slope as a return predictor); Estrella & Mishkin 1998",
+          "url": "https://doi.org/10.1111/1540-6261.00437"
+        }
+      ],
+      "closest_tested": {
+        "study": "credit_vote_v1 K3 (T10Y3M inverted for >= 20 consecutive sessions) and K1",
+        "index_row": "docs/research/credit_vote_v1.md",
+        "difference": "K3 keys on the *slope sign* (inversion), not on the speed of the long-rate move; no tested arm uses a yield change."
+      },
+      "signal_inputs": [
+        "FRED DGS10 (daily)",
+        "FRED T10Y3M / GS10-TB3MS for the pre-1982 US OOS windows"
+      ],
+      "data": {
+        "in_repo": [
+          "leverage_frontier_v1_dgs10.csv (1962+)",
+          "credit_vote_v1_T10Y3M.csv (1982+)",
+          "credit_vote_v1_TB3MS.csv (monthly 1934+)",
+          "credit_vote_v1_GS10.csv (monthly 1953+)"
+        ],
+        "new_downloads": [
+          "FRED TB3MS daily-ified is not needed: GS10/TB3MS monthly splice as in credit_vote_v1, OR FRED TB3MS monthly (already in repo)"
+        ],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2"
+          ],
+          "note": "monthly GS10/TB3MS with a 1-month lag for the OOS windows (credit_vote_v1's convention)"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight = 0 while DGS10_t - DGS10_{t-60} > +0.50 pp",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight *= 0.5 while the same change > +0.25 pp",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "3-of-4 vote {SMA200, TSM252, DON126, 60-session DGS10 change <= +0.50 pp}",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB14",
+      "title": "Credit-spread momentum (widening BAA-10y), not the spread level",
+      "category": "macro-filter",
+      "strength_rank": null,
+      "mechanism": "The tested credit arm asked whether the BAA-10y spread was above its own 200-session mean -- a level test that is slow and self-referential.  Spread *momentum* is the variable credit desks actually trade: veto while the 60-session change exceeds +0.30 pp (arm A), halve above +0.15 pp (arm B), or a 4th vote (arm C).  Mechanically it fires earlier and unwinds earlier than the level test, which is where credit_vote_v1's 5 pp CAGR loss came from.",
+      "literature": [
+        {
+          "ref": "Gilchrist & Zakrajsek, Credit spreads and business cycle fluctuations, AER 2012",
+          "url": "https://doi.org/10.1257/aer.102.4.1692"
+        }
+      ],
+      "closest_tested": {
+        "study": "credit_vote_v1 K1/K2/K4 (BAA10Y vs its 200-session SMA, 4-vote majority, replacement of TSM252)",
+        "index_row": "docs/research/credit_vote_v1.md",
+        "difference": "level-vs-SMA versus a fixed-horizon change; the BAA-10y series is the same input but the statistic is new."
+      },
+      "signal_inputs": [
+        "FRED BAA10Y (daily, 1986+)",
+        "monthly BAA-AAA for the pre-1986 OOS windows"
+      ],
+      "data": {
+        "in_repo": [
+          "data/historical/credit_vote_v1_BAA10Y.csv",
+          "credit_vote_v1_BAA.csv (monthly 1919+)",
+          "credit_vote_v1_AAA.csv (monthly 1919+)"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2"
+          ],
+          "note": "monthly BAA-AAA (1919+) with a 1-month lag, the credit_vote_v1 OOS convention"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight = 0 while BAA10Y_t - BAA10Y_{t-60} > +0.30 pp",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight *= 0.5 while the same change > +0.15 pp",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "3-of-4 vote {SMA200, TSM252, DON126, 60-session spread change <= +0.30 pp}",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB15",
+      "title": "Variance-risk-premium proxy (implied minus realised variance)",
+      "category": "macro-filter",
+      "strength_rank": null,
+      "mechanism": "vix_filter_v1 tested the VIX *level*, a VIX spike ratio and the VIX/VIX3M term structure as cash triggers and lost 0.7-3.2 pp.  Untested is the difference between implied and realised variance, VRP_t = (VIX_t/100)^2 - vol20^2, which is the priced compensation for variance risk rather than the level of fear.  Bollerslev-Tauchen-Zhou find the VRP predicts returns at the quarterly horizon; arms: halve the weight while VRP < 0 (arm A), a z-score tilt weight *= clip(1 + 0.5*z, 0.7, 1.1) with z on a 252-session window (arm B), and a 4th vote 'VRP > 0' (arm C).",
+      "literature": [
+        {
+          "ref": "Bollerslev, Tauchen & Zhou, Expected stock returns and variance risk premia, RFS 2009",
+          "url": "https://doi.org/10.1093/rfs/hhp008"
+        }
+      ],
+      "closest_tested": {
+        "study": "vix_filter_v1 X1 (VIX>30), X2 (VIX/SMA60>1.5), X3 (VIX>VIX3M)",
+        "index_row": "docs/research/vix_filter_v1.md",
+        "difference": "all three tested arms use the VIX level or its own term structure; none subtracts realised variance, i.e. none is a premium rather than a level."
+      },
+      "signal_inputs": [
+        "^VIX close (daily, 1990+)",
+        "the arm's own instrument close (for vol20)"
+      ],
+      "data": {
+        "in_repo": [
+          "data/historical/vix_filter_v1_vix.csv (1990-01-02 -> 2026-09-29)",
+          "data/historical/vix_filter_v1_fred.csv (VIXCLS)"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999(1990-1999 slice)"
+          ],
+          "note": "^VIX starts 1990-01-02, so only the 1990-1999 part of the GSPC_1957_1999 window is evaluable and M1-M5 are not; exactly reproduce vix_filter_v1's G8 convention or pre-register a single-window gate."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight *= 0.5 while VRP_t = (VIX/100)^2 - vol20^2 < 0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight *= clip(1 + 0.5*z_t, 0.7, 1.1), z = (VRP - median252(VRP))/std252(VRP)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "3-of-4 vote {SMA200, TSM252, DON126, VRP > 0}",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium: the closest arm's family lost, and the OOS coverage is one window.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB16",
+      "title": "Pre-holiday exposure top-up (session before a NYSE holiday)",
+      "category": "calendar",
+      "strength_rank": null,
+      "mechanism": "The pre-holiday effect (the last session before an exchange holiday earns an abnormal positive return) is one of the oldest documented calendar anomalies (Ariel 1990, Lakonishok-Smidt 1988) and is completely untested here -- the inventory confirms 'pre-holiday / holiday effect / day-of-week: NOT tested'.  The arms are deliberately written two-sided so the screen measures the sign rather than assuming it: A sets the target to the 0.98 cap on the session before a holiday (only while the trend vote is on); B adds 25% to the weight; C *cuts* to 75% (the mirror that a data-mining screen would need to be able to reject).  Holidays are detected from the session index itself -- a Monday-Friday date on which the market did not trade is a holiday or an unscheduled closure, and the two are treated identically -- so no new data is needed.",
+      "literature": [
+        {
+          "ref": "Ariel, High stock returns before holidays, JF 1990",
+          "url": "https://doi.org/10.1111/j.1540-6261.1990.tb05116.x"
+        },
+        {
+          "ref": "Lakonishok & Smidt, Are seasonal anomalies real? RFS 1988",
+          "url": "https://doi.org/10.1093/rfs/1.4.403"
+        }
+      ],
+      "closest_tested": {
+        "study": "seasonal_overlay_v1 S4 (turn-of-month) and seasonal_placebo_v1",
+        "index_row": "docs/research/seasonal_overlay_v1.md",
+        "difference": "S4 is a month-boundary effect and was killed by its placebo; the holiday calendar is an orthogonal date set, and the scout inventory records pre-holiday as untested."
+      },
+      "signal_inputs": [
+        "the session calendar (derivable from any of the repo's daily files)"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv (session index)",
+          "ewma_band_v1_index.csv (index session calendars)"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "the holiday set must be the *local* market's calendar for M3-M5; each window's own session index provides it, and US holidays fall out of the ^GSPC/^IXIC calendars automatically."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "a calendar multiplier on the target series; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "target = 0.98 (cap) on the last session before a detected holiday, while the trend vote is on",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "target *= 1.25 (capped at 0.98) on that session",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "target *= 0.75 on that session (the mirror sign)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium: the effect is small and decayed, but it costs nothing and tests a genuinely orthogonal date set.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB17",
+      "title": "FOMC cycle (the 5-week meeting cycle) exposure tilt",
+      "category": "calendar",
+      "strength_rank": null,
+      "mechanism": "idea_survey_v2 rejected the *pre-FOMC announcement drift* (it disappeared after 2015 and adds ~8 round trips/yr), and no arm has ever used a policy calendar.  The 'FOMC cycle' of Cieslak, Morse & Vissing-Jorgensen is a different object: the equity premium concentrates in even weeks of the five-week cycle anchored on scheduled meetings.  Arms tilt the target within the cycle: A 1.0x in even weeks / 0.85x in odd weeks; B the same with 0.70x; C the mirror (0.85x in even weeks) so the screen can reject a sign-free artefact.  The tilt is a *multiplier on the existing target*, so no new trade type and no extra round trip is introduced beyond the ordinary resize band.",
+      "literature": [
+        {
+          "ref": "Cieslak, Morse & Vissing-Jorgensen, Stock returns over the FOMC cycle, JF 2019",
+          "url": "https://doi.org/10.1111/jofi.12838"
+        },
+        {
+          "ref": "Lucca & Moench, The pre-FOMC announcement drift, JF 2015 (the rejected variant)",
+          "url": "https://doi.org/10.1111/jofi.12196"
+        }
+      ],
+      "closest_tested": {
+        "study": "seasonal_overlay_v1 (calendar overlays: May-Oct, September, turn-of-month)",
+        "index_row": "docs/research/seasonal_overlay_v1.md",
+        "difference": "the tested overlays are month-of-year effects; the FOMC cycle is a fortnightly policy calendar anchored on meeting dates -- not tested (the pre-FOMC *day* drift was rejected in a survey, not measured)."
+      },
+      "signal_inputs": [
+        "scheduled FOMC meeting dates 1994-2026 (public Fed calendar, hard-coded constant table)"
+      ],
+      "data": {
+        "in_repo": [],
+        "new_downloads": [
+          "federalreserve.gov published FOMC calendar dates 1994-2026, stored as data/historical/idea_bank_v1_fomc_dates.csv with source URL + SHA-256 (not market data; a public meeting calendar)"
+        ],
+        "main_window": "reduced: 2000-03-09 -> 2026-09-29 is fully covered (FOMC dates exist from 1994)",
+        "oos": {
+          "evaluable": [],
+          "note": "no OOS window has FOMC dates (1994+) -> G7/G8 are not evaluable; pre-register a reduced gate (main window + 21 ETFs + rolling starts + bootstraps, no OOS clause), disclosed before the run."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "a calendar multiplier; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "target *= 1.00 when w is even and 0.85 when w is odd, w = floor((session date - the most recent scheduled FOMC meeting date)/7 calendar days) (week 0 = the meeting week)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "the same cycle definition with 1.00 / 0.70",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "the mirror: 0.85 when w is even, 1.00 when w is odd",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low: no OOS coverage at all and the nearest tested calendar family was placebo-rejected; included because the mechanism is untested and cheap.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB18",
+      "title": "Options-expiration week tilt",
+      "category": "calendar",
+      "strength_rank": null,
+      "mechanism": "Expiration weeks concentrate hedging and dealer-gamma flow, and the documented effect is a *reversal* pattern around monthly expiration (Stivers & Sun): the week of the third Friday has negative and more volatile returns.  Untested here, and it needs no new data -- the third Friday is computable from the session index.  A: weight * 0.75 in every expiration week; B: the same only in the quarterly (Mar/Jun/Sep/Dec) expirations, where the flow is largest; C: the mirror (weight * 0.85 outside expiration weeks, i.e. a positive tilt on them).",
+      "literature": [
+        {
+          "ref": "Stivers & Sun, Returns and option expiration (2013); Ni, Pearson & Poteshman (2005)",
+          "url": "https://doi.org/10.1016/j.jbankfin.2012.09.008"
+        }
+      ],
+      "closest_tested": {
+        "study": "seasonal_overlay_v1 / seasonal_placebo_v1 (calendar overlays)",
+        "index_row": "docs/research/seasonal_placebo_v1.md",
+        "difference": "no tested arm uses an expiration calendar; the scout inventory lists 'quarter-end / options expiry / month-end rebalancing flow: NOT tested'."
+      },
+      "signal_inputs": [
+        "the session calendar (third-Friday computation)"
+      ],
+      "data": {
+        "in_repo": [
+          "session indices in the daily files"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "calendar-only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "calendar multiplier; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "target *= 0.75 during the Mon-Fri week containing the third Friday of every month",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "target *= 0.75 only in the quarterly expiration weeks (Mar/Jun/Sep/Dec)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "target *= 0.85 outside expiration weeks (mirror sign)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB19",
+      "title": "US presidential-election cycle tilt",
+      "category": "calendar",
+      "strength_rank": null,
+      "mechanism": "Santa-Clara & Valkanov document that the equity premium is earned in the second half of the presidential term (years 3-4), a large-sample calendar effect computable for every window from the year alone.  Like the other calendar arms it is written two-sided: A 1.0x in years 3-4 / 0.85x in years 1-2; B 0.85x in the election year only; C the mirror (0.85x in years 3-4).  The screen's multiple-testing correction is what should decide whether a 90-year-old pattern survives on a 26-year sample.",
+      "literature": [
+        {
+          "ref": "Santa-Clara & Valkanov, The presidential puzzle, JF 2003",
+          "url": "https://doi.org/10.1111/1540-6261.00588"
+        }
+      ],
+      "closest_tested": {
+        "study": "seasonal_overlay_v1 / seasonal_placebo_v1",
+        "index_row": "docs/research/seasonal_placebo_v1.md",
+        "difference": "the tested calendar set is intra-year (months, turn-of-month); no arm uses a multi-year political cycle."
+      },
+      "signal_inputs": [
+        "calendar year"
+      ],
+      "data": {
+        "in_repo": [],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2"
+          ],
+          "note": "US windows only; the political cycle is US-specific"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "calendar multiplier; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "target *= 1.00 in term years 3-4, *= 0.85 in years 1-2",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "target *= 0.85 in the election year only",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "target *= 0.85 in years 3-4, 1.00 in years 1-2 (mirror)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB20",
+      "title": "Semiconductor relative strength as a cyclical risk-on vote",
+      "category": "cross-asset",
+      "strength_rank": 8,
+      "mechanism": "The tested breadth panel (QQQ/SPY/IWM) is a poor discriminator because SPY and QQQ agree 91% of the time.  Semiconductors are the economically leading cyclical block inside the Nasdaq-100 itself: SMH's 126-session return minus QQQ's is a within-technology cyclical signal rather than a second index.  A: a 4th vote (>= 3 of {SMA200, TSM252, DON126, semis 126-return > QQQ's}); B: veto the on-state while SMH underperforms QQQ by more than 5 pp over 126 sessions; C: the early path's entry additionally requires it.",
+      "literature": [
+        {
+          "ref": "Semiconductor cycle as a global growth bellwether (industry/BIS literature)",
+          "url": "https://www.bis.org/publ/qtrpdf/r_qt1809.htm"
+        },
+        {
+          "ref": "Asness, Frazzini, Israel, Moskowitz & Pedersen, Size matters if you control your junk (sector momentum)",
+          "url": "https://doi.org/10.1093/rfs/hhac008"
+        }
+      ],
+      "closest_tested": {
+        "study": "breadth_vote_v1 B4 (5-vote majority of {QQQ SMA/TSM/DON, SPY TSM, IWM TSM})",
+        "index_row": "docs/research/breadth_vote_v1.md",
+        "difference": "B4 adds whole-index votes that agree with QQQ's 91% of the time; the scout inventory records 'semis/tech sub-industry signals: NOT tested'. The instrument is a sector ETF whose correlation with QQQ is high but whose *relative* trend carries the cyclical information."
+      },
+      "signal_inputs": [
+        "SMH daily close (new)",
+        "QQQ daily close (in repo)"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv (QQQ)"
+        ],
+        "new_downloads": [
+          "Yahoo chart API SMH (2000-05-05 ->), saved as data/historical/idea_bank_v1_smh.csv with URL + SHA-256 in the study manifest"
+        ],
+        "main_window": "full window retained: sessions before the signal's first valid date (2000-05-05 + 126) take the 4th vote as *neutral* (2-of-3 behaviour), a convention fixed in advance",
+        "oos": {
+          "evaluable": [],
+          "note": "SMH has no pre-2000 history -> G7/G8 are not evaluable for this arm; pre-register the reduced gate (main window + 21-ETF stage + rolling starts + bootstraps) as credit_vote_v1 did for its non-US windows."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "second series aligned by date; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "3-of-4 vote {SMA200, TSM252, DON126, r_SMH126 > r_QQQ126}",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight = 0 while (r_SMH126 - r_QQQ126) < -5 pp",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "early-path entry additionally requires r_SMH126 - r_QQQ126 > 0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low for return; the cleanest untested cyclical signal that needs only one small download.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB21",
+      "title": "Bond-equity momentum spread as a risk-regime modifier",
+      "category": "cross-asset",
+      "strength_rank": null,
+      "mechanism": "riskoff_rotation_v1-v4 tested *holding* the better of bonds/gold while the trend vote is off (and the whole off-state family is closed).  Untested is using the bond-equity momentum spread as a *modifier of the on-state*: when intermediate Treasuries lead the Nasdaq over 252 sessions, the long-duration equity position is being paid less for its risk, so A halves the weight while IEF's 252-session return exceeds QQQ's, B cuts to 0.75 only when the lead exceeds 10 pp, and C restricts the early path (a source of extra realisations) to sessions where bonds are not leading.",
+      "literature": [
+        {
+          "ref": "Asness, Moskowitz & Pedersen, Value and momentum everywhere, JF 2013 (cross-asset momentum)",
+          "url": "https://doi.org/10.1111/jofi.12021"
+        }
+      ],
+      "closest_tested": {
+        "study": "riskoff_rotation_v3/v4 (defensive leg chosen monthly by 252-session return) and riskoff_after_tax_v1",
+        "index_row": "docs/research/riskoff_rotation_v4.md",
+        "difference": "the tested arms allocate the *off-state* capital; this leaves the allocation alone and uses the same spread to size the *on-state*."
+      },
+      "signal_inputs": [
+        "IEF daily close (in repo)",
+        "QQQ daily close"
+      ],
+      "data": {
+        "in_repo": [
+          "data/historical/riskoff_rotation_v4_etfs.csv (IEF 2002-07-30 -> 2026-10-13, adjclose)"
+        ],
+        "new_downloads": [],
+        "main_window": "reduced start: 2003-07 (IEF + 252 warm-up); sessions before that take the multiplier as 1.0 (fixed convention)",
+        "oos": {
+          "evaluable": [],
+          "note": "IEF starts 2002-07-30 -> G7/G8 not evaluable; reduced gate pre-registered (main window, 21-ETF stage, bootstraps)."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "second series aligned by date; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight *= 0.5 while r_IEF252 > r_QQQ252",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight *= 0.75 while r_IEF252 - r_QQQ252 > +10 pp",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "early-path entry permitted only while r_IEF252 - r_QQQ252 <= 0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB22",
+      "title": "International lead-lag: same-session European move as a causal intraday signal",
+      "category": "cross-asset",
+      "strength_rank": 4,
+      "mechanism": "This is the only idea in the bank with a *timing* edge rather than a statistical one: at the US close (16:00 ET) that decides the trade, the European session of the *same* calendar day has already closed (^GDAXI/^FTSE close ~11:30 ET) and Japan's session closed before the US open.  So a same-session EU return is information the decision maker legally has, not a look-ahead.  A: the early path's entry additionally requires EU_t = 0.5*(r_GDAXI,t + r_FTSE,t) > 0; B: requires EU_t + r_N225,t-1 > 0; C: cuts the on-state weight to 0.75 on the session after EU_t < -2% (a 'Europe sold off hard' risk cut).  If the US-close decision is genuinely informed by the rest of the world's session, these are the only arms in the bank that can monetise it.",
+      "literature": [
+        {
+          "ref": "Rapach, Strauss & Zhou, International stock return predictability, JF 2013",
+          "url": "https://doi.org/10.1111/jofi.12041"
+        },
+        {
+          "ref": "Hou, Global momentum (international lead-lag)",
+          "url": "https://doi.org/10.1016/j.jfineco.2006.07.004"
+        }
+      ],
+      "closest_tested": {
+        "study": "breadth_vote_v1 (same-close cross-index votes) and relstrength_v1 (Q1-Q4)",
+        "index_row": "docs/research/breadth_vote_v1.md",
+        "difference": "those arms read another index's *same-close* value (no timing advantage: the US and the other index close together) or a monthly rotation; this exploits the time-zone ordering, which no arm in the record uses. signal_cross_check_v1 is about data-source noise, not lead-lag."
+      },
+      "signal_inputs": [
+        "^GDAXI, ^FTSE, ^N225 daily close (all in repo) plus QQQ"
+      ],
+      "data": {
+        "in_repo": [
+          "data/historical/ewma_band_v1_index.csv (^N225 1965+, ^GDAXI 1987+, ^FTSE 1984+)"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "the arm needs non-US data, which exists only from 1984/1987 and not at all in 1935-56; GSPC_1957_1999, M1 and M2 are therefore not evaluable -> pre-register a reduced 3-window G7 (as credit_vote_v1 did) plus the 21-ETF stage."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "multiple series aligned by date in the target builder; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "early entry additionally requires 0.5*(r_GDAXI,t + r_FTSE,t) > 0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "early entry additionally requires 0.5*(r_GDAXI,t + r_FTSE,t) + r_N225,t-1 > 0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "on-state weight *= 0.75 on the session after 0.5*(r_GDAXI + r_FTSE) < -2%",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium: causally clean, uses existing data, no new parameters beyond the thresholds.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB23",
+      "title": "Copper/gold ratio trend (growth-vs-safety) as a regime filter",
+      "category": "cross-asset",
+      "strength_rank": null,
+      "mechanism": "The copper/gold ratio is the practitioner's growth-versus-safety indicator (Gundlach): copper prices industrial demand, gold prices real-rate fear, and their ratio leads cyclical equity risk appetite.  Only gold appears anywhere in the record (as an off-state holding) and no other commodity has ever been used.  A: a 4th vote on the ratio's 252-session return > 0; B: veto the early path while the ratio's 126-session return < 0; C: weight *= 0.75 while the ratio is below its 252-session median.",
+      "literature": [
+        {
+          "ref": "Gundlach copper/gold ratio; Bhardwaj & Janardanan (commodity ratio as a growth proxy)",
+          "url": "https://doi.org/10.1016/j.jcomm.2021.100216"
+        }
+      ],
+      "closest_tested": {
+        "study": "riskoff_rotation_v1-v4 / gold_riskoff_oos_v1 / leverage_frontier_v1 (gold as a holding)",
+        "index_row": "docs/research/gold_riskoff_oos_v1.md",
+        "difference": "every tested use of gold is as a *holding* in the off state; the scout inventory records 'commodities other than gold: NOT tested' and the ratio-as-signal form is untested for gold too."
+      },
+      "signal_inputs": [
+        "HG=F (COMEX copper front-month continuation, new) and GC=F (COMEX gold front-month continuation, in repo) daily closes; both are signal inputs only (a futures continuation is not the instrument traded in any arm)"
+      ],
+      "data": {
+        "in_repo": [
+          "data/historical/leverage_frontier_v1_daily.csv (GC=F 2000-08-30 -> 2026-09-29)"
+        ],
+        "new_downloads": [
+          "Yahoo chart API HG=F (2000 ->); if unavailable, the ETF proxies CPER (2011+)/DBB (2007+) are not long enough, so HG=F is the requirement"
+        ],
+        "main_window": "reduced start: ~2001-09 (GC=F 2000-08-30 + 252 warm-up)",
+        "oos": {
+          "evaluable": [],
+          "note": "no pre-2000 futures data in the repo -> reduced gate (main window, 21-ETF stage, bootstraps)."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "two external series; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "3-of-4 vote {SMA200, TSM252, DON126, r_HG/GC(252) > 0}",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "early-path entry permitted only while r_HG/GC(126) >= 0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "weight *= 0.75 while HG/GC is below its 252-session median",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB24",
+      "title": "T-bill sleeve with an entry/exit hysteresis (kill the failed S1 round trips)",
+      "category": "off-state",
+      "strength_rank": null,
+      "mechanism": "tbill_sweep_v1's S1 (hold BIL whenever the E2 vote is off) failed on the bootstrap by -0.08 pp because a 0.5 pp-banded trend rule turns off and on briefly, paying a BIL round trip each time; S2_10 fixed the *residual* but not that.  This arm leaves the bleed-the-asset question alone and prices only the *timing*: enter the bill sleeve only once the vote has been off for N consecutive sessions (A: 5, B: 10) and, in arm C, exit it only once the vote has been on for 5 consecutive sessions (an exit-side lag instead).",
+      "literature": [
+        {
+          "ref": "tbill_sweep_v1's own post-mortem (repo); no external literature needed",
+          "url": "docs/research/tbill_sweep_v1.md"
+        }
+      ],
+      "closest_tested": {
+        "study": "tbill_sweep_v1 S1 / S2_5 / S2_10 and r2_tbill_combo_v1 RS",
+        "index_row": "docs/research/tbill_sweep_v1.md",
+        "difference": "S1 switches the sleeve on the same session the vote switches; the tested arms vary the *residual band*, not the entry/exit lag on the sleeve itself."
+      },
+      "signal_inputs": [
+        "the E2 vote state (derived from the arm's own price series)"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_dtb3.csv (BIL* = DTB3 - 0.1356%/yr, tbill_sweep's construction)"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "BIL* is synthetic from DTB3/TB3MS, so it exists in every window; the real bill ETFs start much later (BIL 2016-01-04, SGOV 2020-05-29 in tbill_sweep_v1_etf_daily_split_sip.csv), which is why this arm is defined on the synthetic -- tbill_sweep_v1's own construction"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "the sleeve is a second leg, but it is *cash-like and never rebalanced against the equity leg*, so it can be represented as a cash modifier on the target series in the pre-tax stage; the after-tax stage needs the existing engine's cash-yield knob (fe_sim.RunEnv(cash_rate=...)) rather than a new kernel"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "enter BIL* on the residual + off-state weight after 5 consecutive off sessions; exit on re-entry",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "the same with N = 10 consecutive off sessions",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "enter BIL* immediately on the first off session, exit only after 5 consecutive on sessions",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium: the family loses after tax; this arm attacks the measured cost, not the tax.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB25",
+      "title": "Off-state residual in short-duration Treasuries (SHY) instead of bills",
+      "category": "off-state",
+      "strength_rank": null,
+      "mechanism": "Every tested defensive asset is either cash-like (BIL/SGOV), long duration (TLT/IEF/BOND10*) or gold.  The 1-3 year Treasury point has never been used, and it is the only one that carries a genuine yield pick-up over a bill (\u2248 +40-80 bp at 2026 curve levels) with moderate rate risk, and it is the classic 'off-state carry' instrument.  A: hold 0.98 in SHY while the vote is off; B: hold only the *residual* (0.98 - w) in SHY, re-sized only outside a 10 pp band (tbill_sweep S2_10's shape, different asset).",
+      "literature": [
+        {
+          "ref": "riskoff_rotation_v1-v4 (repo) for the BOND10*/GOLD* precedent",
+          "url": "docs/research/riskoff_rotation_v1.md"
+        }
+      ],
+      "closest_tested": {
+        "study": "tbill_sweep_v1 S2_10 (BIL) and leverage_frontier_v1 (BOND10* = 10y par bond)",
+        "index_row": "docs/research/tbill_sweep_v1.md",
+        "difference": "BIL* is DTB3 - 0.1356%/yr and BOND10* is a 10-year constant-maturity par bond; the 1-3 year point, which is the only intermediate-carry cell, is untested.  The scout inventory lists 'leveraged/other bond funds: NOT tested'."
+      },
+      "signal_inputs": [
+        "SHY daily close (new)"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_dtb3.csv (for the cash alternative)"
+        ],
+        "new_downloads": [
+          "Yahoo chart API SHY (inception 2002-07, ->), saved as data/historical/idea_bank_v1_shy.csv with URL + SHA-256"
+        ],
+        "main_window": "reduced start: 2002-08",
+        "oos": {
+          "evaluable": [],
+          "note": "SHY starts 2002 -> reduced gate (main window, rolling starts, bootstraps)."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "a cash-like sleeve; the same cash-rate-knob treatment as IB24, or the two-leg kernel for exactness"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "hold 0.98 in SHY whenever the trend vote is off (production target otherwise)",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "hold the residual (0.98 - w) in SHY, re-sized only outside a 10 pp band",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low: BIL lost after tax through realised sleeve gains, and SHY has more of them; the arm is here to measure the carry-vs-tax trade.",
+      "n_arms": 2
+    },
+    {
+      "id": "IB26",
+      "title": "Curve-conditioned off-state leg: intermediate Treasuries only when the curve pays",
+      "category": "off-state",
+      "strength_rank": null,
+      "mechanism": "Both the credit_vote_v1 curve arm and the riskoff_rotation bond legs use the bond market in isolation.  This arm conditions the *defensive leg* on the curve: hold IEF instead of cash while the vote is off **and** the 10y-3m slope exceeds 1.0 pp (roll-down and carry are paid), fall back to cash otherwise.  A: the 1.0 pp threshold; B: the threshold plus a requirement that the 10y yield is not falling faster than -0.5 pp over 60 sessions; C: the mirror (IEF only when the curve is *flat or inverted*, the recession-timing trade).",
+      "literature": [
+        {
+          "ref": "Campbell, Sunderam & Viceira, Inflation bets or deflation hedges? (bond risk premia and the curve)",
+          "url": "https://doi.org/10.3386/w21466"
+        }
+      ],
+      "closest_tested": {
+        "study": "riskoff_rotation_v1 R3/R4 (trend-gated BOND10*/GOLD* while off) and credit_vote_v1 K3 (inversion veto)",
+        "index_row": "docs/research/riskoff_rotation_v1.md",
+        "difference": "R3/R4 gate the defensive leg on its own 252-session *trend*; K3 uses the curve as an equity veto.  Neither conditions the defensive asset on the curve slope."
+      },
+      "signal_inputs": [
+        "IEF close (repo)",
+        "FRED T10Y3M (repo, 1982+)",
+        "FRED DGS10 (repo)"
+      ],
+      "data": {
+        "in_repo": [
+          "riskoff_rotation_v4_etfs.csv (IEF 2002-07-30+)",
+          "credit_vote_v1_T10Y3M.csv",
+          "leverage_frontier_v1_dgs10.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "reduced start: 2003-07 (IEF + 252 warm-up)",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2"
+          ],
+          "note": "monthly GS10-TB3MS (1953+) exists for the US windows but BOND10* would have to be built from GS10 as riskoff_rotation did; pre-register that as the reduced OOS construction, or drop the OOS clause for this arm."
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "same treatment as IB24/IB25"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "while off: hold IEF at 0.98 if T10Y3M > 1.0 pp, else cash",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "as A plus a requirement that the 60-session DGS10 change > -0.50 pp",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "the mirror: hold IEF while off only if T10Y3M <= 1.0 pp",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB27",
+      "title": "Beta-matched QQQ + QLD blend: same Nasdaq beta-2 exposure at a lower carry",
+      "category": "on-state-instrument",
+      "strength_rank": 1,
+      "mechanism": "K delivers a target Nasdaq beta of B = 2*f*vt (f is the R2 path factor: 1 on, 0.5 early) by holding w_QLD = f*vt of a 2x fund, i.e. it pays the fund's expense plus the internal financing on the *whole* notional.  Half of that beta can be bought more cheaply with the unlevered index fund: QQQ costs ~20 bp/yr and no financing, and one unit of QQQ plus one unit of QLD delivers three units of beta at a cost of (20 bp + 95 bp + DTB3 + spread).  The minimum-carry construction that delivers exactly beta B with C = min(0.98, B) of cash invested is: w_QLD = B - C, w_QQQ = C - w_QLD (with w_QQQ = 0 and w_QLD = C when C = B).  At the measured mean vol-target level (mean(vt) = 0.8397, f = 1) that is w_QLD = 0.70, w_QQQ = 0.28 instead of 0.84 QLD: about 45 bp/yr of carry saved at an identical instantaneous beta, with the same 0.98 capital deployed (idle cash earns nothing, so deploying it is free).  This is a pure cost arbitrage between two Nasdaq instruments, not a signal, and it is the only idea in the bank whose prior is arithmetic rather than statistical.",
+      "literature": [
+        {
+          "ref": "Leveraged-ETF decay/financing literature (Cheng & Madhavan 2009; Tang & Xu 2014)",
+          "url": "https://doi.org/10.2139/ssrn.1343444"
+        },
+        {
+          "ref": "instrument_cost_v1's own finding that financing dominates expense (repo)",
+          "url": "docs/research/instrument_cost_v1.md"
+        }
+      ],
+      "closest_tested": {
+        "study": "instrument_cost_v1 (TQQQ at 2/3 weight, a beta-matched substitution) and early_qqq_v1 (the early leg in unlevered QQQ*/SPY*/SSO*)",
+        "index_row": "docs/research/instrument_cost_v1.md",
+        "difference": "TQQQ at 2/3 keeps the *leveraged notional* at 2x and merely swaps the fund; early_qqq_v1 tested an unlevered substitution only for the half-weight early leg and measured +0.02 pp/yr.  Neither builds the cash-constrained *blend* that holds the unlevered fund up to the 0.98 cap: at vt >= 0.49 the unlevered fund alone cannot reach beta B, so the arm must mix, and the mixture is what removes the financing on the (0.98 - w_QLD) share of the position.  The saving scales with the weight (zero at vt = 0.98, maximal near vt = 0.49), which is exactly the region early_qqq_v1 never operated in."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close (QQQ in the main window)",
+        "the production vt and the R2 path factor"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv (QQQ OHLC+dividend)",
+          "the harness's synthetic 2x QLD* (built from QQQ in every window)"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "both legs are derivable in every window: the index itself is the unlevered leg (1x total return minus a 20 bp expense) and the existing synthetic 2x is the levered leg, so the pre-tax OOS and 21-ETF stages are evaluable without new data."
+        }
+      },
+      "plugin": {
+        "model": "hybrid",
+        "detail": "pre-tax / OOS / 21-ETF stages: run the blend as one *synthetic blended instrument* whose daily return is the blend's own return on the arm's own weight path -- a targets-from-data change, no engine edit (disclosed approximation: it prices the blend as one fund).  After-tax stages: two legs have two FIFO lot books and one cash account, which the engine does not model (see fast_engine_v1 'One instrument per account'), so an exact after-tax result needs a two-leg kernel option in a copy of the engine plus an off/on parity cell; otherwise the after-tax number must be reported as the single-instrument approximation and labelled as such."
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "blend in the on-state only (f=1); the early leg stays production half-weight QLD",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "after_tax_stage_only",
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "blend everywhere, including the early leg (f=0.5), which makes the early leg unlevered QQQ",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "after_tax_stage_only",
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "blend only when vt >= 0.60; production QLD otherwise",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "after_tax_stage_only",
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "high: a deterministic cost saving with no signal content; the risk is the daily-reset tracking difference between the blend and pure QLD, and (arm B) early_qqq_v1's measured switch cost.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB28",
+      "title": "Two-leg execution: route each resize to the leg with the cheaper FIFO lots",
+      "category": "on-state-instrument",
+      "strength_rank": 6,
+      "mechanism": "idea_survey_v2 I1 (sell the lowest-gain lots) was blocked because the broker offers no lot-level sells under FIFO.  A two-leg account creates the one legitimate version of the same economics: with QQQ and QLD both held (IB27), a required downsize can be taken from whichever leg's FIFO head carries the lower USD gain fraction, subject to a route cap of 10 pp on how far the other leg may drift from its share of the target.  Exits to zero and tax-funding sales are never routed (they must clear the position).  This is a genuine tax-reduction mechanism inside the broker's rules, and it is the tax-side twin of IB27.",
+      "literature": [
+        {
+          "ref": "Berkin & Ye, Tax management, loss harvesting and HIFO accounting, FAJ 2003",
+          "url": "https://doi.org/10.2469/faj.v59.n4.2536"
+        },
+        {
+          "ref": "Krasner & Sosner, Loss harvesting or gain deferral? JWM 2024",
+          "url": "https://doi.org/10.3905/jwm.2023.1.213"
+        }
+      ],
+      "closest_tested": {
+        "study": "gain_band_v3 A1u (the FIFO gain fraction decides *whether* a downsize fills) and idea_survey_v2 I1 (blocked lot selection)",
+        "index_row": "docs/research/gain_band_v3.md",
+        "difference": "A1u uses the gain fraction of the single leg's FIFO head to *block* a sale; this uses it to *choose the leg*, which requires the two-leg account and a route cap and has never been run."
+      },
+      "signal_inputs": [
+        "the two legs' own price/lot history"
+      ],
+      "data": {
+        "in_repo": [
+          "as IB27"
+        ],
+        "new_downloads": [],
+        "main_window": "full; after-tax stages only (it changes nothing pre-tax beyond IB27's carry)",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "pre-tax it is identical to IB27 arm A/B, so OOS reports the IB27 cells"
+        }
+      },
+      "plugin": {
+        "model": "kernel_option",
+        "detail": "requires the two-leg account from IB27 plus a routing rule with the FIFO books visible in the fill decision; parity cell = routing disabled reproduces IB27 bit-for-bit"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "downsizes fill in the leg with the lower USD FIFO gain fraction, route cap 10 pp",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "after_tax_stage_only",
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "as A with a route cap of 5 pp",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "after_tax_stage_only",
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "as A, plus up-resizes fill in the leg furthest below its target share (the mirror preference)",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "after_tax_stage_only",
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium: the mechanism is real and broker-legal; the size depends on how often the two legs' gain fractions differ materially.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB29",
+      "title": "Drawdown-depth-scaled exposure (two-sided test)",
+      "category": "drawdown-recovery",
+      "strength_rank": null,
+      "mechanism": "The only state the strategy currently reacts to is vol and trend; its *own* drawdown is not a state variable.  Depth-scaled exposure multiplies the target by clip(1 - dd/D, floor, 1.0) with dd the drawdown from the 252-session high, so exposure is cut as the drawdown deepens (a risk-parity-of-losses idea), and the mirror arm *raises* it as the drawdown deepens (the recovery-value bet).  Both directions are pre-registered because dip_overlay_v1's tested trigger was a 5-day return (a fast dip), not a slow drawdown state, and the two have different trade sets.",
+      "literature": [
+        {
+          "ref": "Grossman & Zhou, Optimal investment strategies for controlling drawdowns, Math Finance 1993",
+          "url": "https://doi.org/10.1111/j.1467-9965.1993.tb00044.x"
+        }
+      ],
+      "closest_tested": {
+        "study": "dip_overlay_v1 P1/P2/P3 (5-day -5%, RSI(2), 5-day +5%) and crash_entry_v1",
+        "index_row": "docs/research/dip_overlay_v1.md",
+        "difference": "P1-P3 are *fast* price triggers; the drawdown state is a slow, continuous state variable and no arm scales exposure by it.  crash_entry's entry path requires an exit >= 20% below the 252-high *and* falling vol, and never fired."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "multiplier on the target series; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight *= clip(1 - dd252/0.30, 0.50, 1.00)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight *= clip(1 - ddATH/0.40, 0.50, 1.00), ddATH from the expanding all-time high",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "mirror: weight *= clip(1 + dd252/0.30, 1.00, 1.50)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium: arm A is a de-risking bet (the DD gate is easy, the return gate is not); arm C is the value bet.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB30",
+      "title": "Time-under-water (duration of the all-time-high drawdown) scaling",
+      "category": "drawdown-recovery",
+      "strength_rank": null,
+      "mechanism": "Depth and duration are different states: 2000-02 was deep and long, 2020 deep and short, 2022 moderate and medium.  Time-under-water (sessions since the last all-time high) has never been a state variable here, and in the trend-following literature the duration of the recovery is the practical proxy for 'the regime has changed'.  A: weight *= clip(1 - u/756, 0.50, 1.00); B: the same with u/378 (twice as aggressive); C: the mirror weight *= clip(1 + u/756, 1.00, 1.25).",
+      "literature": [
+        {
+          "ref": "Underwater/duration-based risk control (drawdown duration literature; Grossman-Zhou 1993)",
+          "url": "https://doi.org/10.1111/j.1467-9965.1993.tb00044.x"
+        }
+      ],
+      "closest_tested": {
+        "study": "rule_variants_v1 (exit buffers, min-hold, staging) and exposure_k_v1",
+        "index_row": "docs/research/rule_variants_v1.md",
+        "difference": "no tested arm carries a duration-of-underwater state; the closest are fixed-session min-holds."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight *= clip(1 - u/756, 0.50, 1.00), u = sessions since the last all-time high",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight *= clip(1 - u/378, 0.50, 1.00)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "mirror: weight *= clip(1 + u/756, 1.00, 1.25)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB31",
+      "title": "Volatility-spike exit for the early leg (replace the SMA50 break)",
+      "category": "drawdown-recovery",
+      "strength_rank": null,
+      "mechanism": "The early path's entry is vol-filtered but its *exit* is purely a price level (close < SMA50), which is what produced the -3.10 pp and -1.85 pp whipsaws in December 2022 and January 2023 -- the two largest early-path losses.  Exiting on a vol spike instead (or as well) removes the position in the deteriorating-vol state rather than after the price has already crossed the average.  A: exit when vol20 > 1.5x its trailing 252-session median; B: 2.0x; C: exit on the union of the production SMA50 break and the 1.5x vol spike (an exit that can only fire earlier).",
+      "literature": [
+        {
+          "ref": "fast_reentry_v1's own whipsaw episode table (repo); Moreira & Muir 2017 for the vol state",
+          "url": "docs/research/fast_reentry_v1.md"
+        }
+      ],
+      "closest_tested": {
+        "study": "fast_reentry_v1/v2 (the early path's SMA50 exit and its vol-median *entry* filter)",
+        "index_row": "docs/research/fast_reentry_v1.md",
+        "difference": "the vol-median test is part of the *entry* condition; the exit has always been the price level.  Nothing in the record keys an exit on a vol spike (intraday_stop_v1 keys on a fixed price distance; vix_filter on the VIX level)."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "the early-state machine's exit condition in numpy; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "early leg exits when vol20 > 1.5 * median252(vol20)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "early leg exits when vol20 > 2.0 * median252(vol20)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "early leg exits on (close < SMA50) OR (vol20 > 1.5 * median252(vol20))",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low: aimed at the measured early-path losses rather than at the rule's average behaviour.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB32",
+      "title": "Sticky sizing input: a dead-band on vol20 instead of on the target weight",
+      "category": "drawdown-recovery",
+      "strength_rank": 10,
+      "mechanism": "Every tested band (ewma_band_v1's 2.5/5/10 pp, A1u's gain-scaled band) acts on the target weight *after* the vol input has moved.  Untested is a dead-band on the input: keep using the last accepted vol20 until it has moved by more than X% (relative) from the value in force, so the target only changes when the vol *state* changes rather than when the estimate wiggles.  Because A1u already blocks the small gain-heavy trims, this arm's measurable effect is on the 0.5-3 pp drifts that still pass the band; it is the cheapest possible two-line change and it interacts directly with the 91%-of-gain trims diagnosis.",
+      "literature": [
+        {
+          "ref": "Bongaerts, Kang & van Dijk, Conditional vol targeting / dead-band trading (FAJ 2020)",
+          "url": "https://doi.org/10.1080/0015198X.2020.1790853"
+        }
+      ],
+      "closest_tested": {
+        "study": "ewma_band_v1 (band widths 2.5/5/10 pp) and smooth_target_v1 (target averaging/partial adjustment)",
+        "index_row": "docs/research/ewma_band_v1.md",
+        "difference": "both tested families band the *output*; a dead-band on the vol *input* has a different trade set (it also changes the level held when the input is stale)."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "the vol series is filtered before vt_of; no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "hold the last accepted vol20 until |vol20_new/vol20_accepted - 1| > 0.20",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "the same with a 0.35 relative dead-band",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "hold the last accepted *target weight* until the new target differs by more than 5 pp (the plain-band control)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low: it targets the trim channel that carries 91% of the realised gain, but the band mechanism is already heavily mined.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB33",
+      "title": "Realised-skewness crash-risk scaling",
+      "category": "statistical-filter",
+      "strength_rank": null,
+      "mechanism": "The vol target reads the second moment only.  Realised skewness of the last 252 daily returns is the third: a negative skew means the return distribution has a fat left tail, the state in which a 2x daily-reset position is most exposed to reset decay.  Arm A multiplies the target by 0.75 while the 252-session skew is below -0.5; B uses -1.0; C uses a continuous multiplier clip(1 + skew, 0.60, 1.10).  No options data is needed, unlike every tested tail measure (VIX/VXN/VIX3M).",
+      "literature": [
+        {
+          "ref": "Harvey & Siddique, Conditional skewness in asset pricing tests, JF 2000",
+          "url": "https://doi.org/10.1111/0022-1082.00265"
+        }
+      ],
+      "closest_tested": {
+        "study": "vix_filter_v1 (X1-X4, all option-implied) and vol_window_v1 V5 (downside semi-deviation)",
+        "index_row": "docs/research/vix_filter_v1.md",
+        "difference": "V5 is a second-moment down-side measure; the tested tail filters are option-implied levels, and idea_survey_v2 section 7.3 rejected the option-implied SKEW index class on data grounds.  Realised skewness as a sizing input is untested and covers the full pre-2000 OOS windows."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "weight *= 0.75 while skew252 < -0.5",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "weight *= 0.75 while skew252 < -1.0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "weight *= clip(1 + skew252, 0.60, 1.10)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB34",
+      "title": "Lag-1 return autocorrelation gate on the trend vote",
+      "category": "statistical-filter",
+      "strength_rank": null,
+      "mechanism": "The cheapest possible serial-dependence test: rho1 = the lag-1 autocorrelation of the trailing 252 daily returns.  A trend rule should not be exposed to a 2x instrument when returns are negatively autocorrelated (a bid-ask-bounce / mean-reverting tape).  Arms: A requires rho1 > 0 for the E2 vote; B relaxes to rho1 > -0.05 (a nuisance-threshold version); C requires rho1 > 0 only for the early path.  IB04's variance ratio is the longer-horizon cousin of this; both are pre-registered so the screen can price the cheap version against the expensive one.",
+      "literature": [
+        {
+          "ref": "Lo & MacKinlay 1988; Campbell, Lo & MacKinlay, The Econometrics of Financial Markets, ch. 2",
+          "url": "https://doi.org/10.1093/rfs/1.1.41"
+        }
+      ],
+      "closest_tested": {
+        "study": "deriv_vote_v1 (price-derivative votes); scout inventory: serial-dependence signals untested",
+        "index_row": "docs/research/deriv_vote_v1.md",
+        "difference": "no arm in the record computes any return autocorrelation statistic."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "E2 on iff the 2-of-3 vote holds AND rho1(252) > 0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "E2 on iff the 2-of-3 vote holds AND rho1(252) > -0.05",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "early-path entry additionally requires rho1(252) > 0",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB35",
+      "title": "Conditional vol targeting: adjust exposure only in the volatility extremes",
+      "category": "statistical-filter",
+      "strength_rank": null,
+      "mechanism": "Bongaerts-Kang-van Dijk's conditional vol targeting: a vol-targeting rule pays for continuous re-sizing in the middle of the vol distribution and gains most of its risk reduction in the tails, so an arm that adjusts exposure only when vol20 is outside its own 252-session quartiles (A) or deciles (B) should keep most of the drawdown control with fewer resizes.  idea_survey_v3 set this aside as 'bounded at < 0 pp by the dead-band arms' but never measured it; arm C is the plain fixed 3 pp band, a width between the tested 2.5 and 5 pp (the only untested width in that family), as the like-for-like control.",
+      "literature": [
+        {
+          "ref": "Bongaerts, Kang & van Dijk, Conditional volatility targeting, FAJ 2020",
+          "url": "https://doi.org/10.1080/0015198X.2020.1790853"
+        }
+      ],
+      "closest_tested": {
+        "study": "ewma_band_v1 B25/B50/B100 (2.5/5/10 pp output bands) and exposure_k_v1 (level)",
+        "index_row": "docs/research/ewma_band_v1.md",
+        "difference": "the tested bands hold the weight while the *target* drifts; this holds it unless the *vol state* is extreme, which is a state-conditional rule, and the conditional-targeting form has never been run (only set aside)."
+      },
+      "signal_inputs": [
+        "the arm's own instrument close"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "GSPC_1957_1999",
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "closes only"
+        }
+      },
+      "plugin": {
+        "model": "targets_from_data",
+        "detail": "no engine change"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "re-size only when vol20 is outside its trailing 252-session [P25, P75]; otherwise hold the weight",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "the same with [P10, P90]",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "the plain fixed 3 pp band (control; between the tested 2.5 and 5 pp)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low: the survey's own prior was '< 0 pp', so this is an axis-closing measurement.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB36",
+      "title": "Gap-aware fill filter: do not sell into the opening gap",
+      "category": "execution",
+      "strength_rank": null,
+      "mechanism": "Every tested fill-timing arm shifts *when* the fill happens (next close, t+2, MOC, overnight).  Untested is conditioning *whether* it happens on the fill price itself: a band-permitted downsize is skipped if the next open has already gapped more than 1% below the decision close (the sale would lock in the gap), and the ordinary rule is re-evaluated at the next close.  A/B differ in the gap threshold (1.0% / 0.5%); C applies the mirror to up-resizes (skip buying an opening gap above +1.0%).  This is the only idea in the bank that uses the *open* price as a decision input, and the mechanism can only help the execution cost, never the signal.",
+      "literature": [
+        {
+          "ref": "Almgren & Chriss, Optimal execution of portfolio transactions (implementation shortfall)",
+          "url": "https://doi.org/10.21314/JOR.2001.041"
+        },
+        {
+          "ref": "Bogousslavsky, The cross-section of intraday and overnight returns, JFE 2021",
+          "url": "https://doi.org/10.1016/j.jfineco.2020.09.001"
+        }
+      ],
+      "closest_tested": {
+        "study": "exec_delay_v1 (D1-D4) and moc_execution_v1 (X1-X3)",
+        "index_row": "docs/research/exec_delay_v1.md",
+        "difference": "those arms move every fill to another session; none conditions the fill on the realised execution price, and the scout inventory lists 'VWAP/TWAP/limit ladders' as untested."
+      },
+      "signal_inputs": [
+        "the arm's own instrument open and close (with a one-session decision lag)"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv (QQQ open/close)",
+          "ewma_band_v1_index.csv (index OHLC for M1-M5, M2 included)"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "the harness fills ^GSPC 1957-1999 opens as the previous close, so the gap filter is inert there -> reduced 5-window G7"
+        }
+      },
+      "plugin": {
+        "model": "kernel_option",
+        "detail": "sim_one's fill decision must see the fill session's open and the prior close; parity cell = threshold set to 0 reproduces K bit-for-bit"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "skip a permitted downsize when the next open < decision close * (1 - 0.010); re-evaluate next close",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "the same with a 0.005 threshold",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "the same at 0.010 for up-resizes (skip buying a gap up) and no filter on downsizes",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "medium-low: execution-cost arms have lost, but this one cannot damage the signal (it only defers fills).",
+      "n_arms": 3
+    },
+    {
+      "id": "IB37",
+      "title": "VWAP-proxy fills: exit at the session's typical price",
+      "category": "execution",
+      "strength_rank": null,
+      "mechanism": "Fill price is a modelling choice: production fills at the next open, and the tested alternatives are the next close and the decision close.  The typical price (high+low+close)/3 of the fill session is the standard VWAP proxy for a *market order worked through the session* and has never been used; it is the honest way to model a large resize that would be spread over the day.  A: exits and downsizes fill at the typical price, entries and up-resizes stay at the open; B: all fills at the typical price; C: conservative -- sells at min(open, typical), buys at max(open, typical).",
+      "literature": [
+        {
+          "ref": "Berkowitz, Logue & Noser 1988 (VWAP as an execution benchmark)",
+          "url": "https://doi.org/10.3905/jpm.1988.409144"
+        }
+      ],
+      "closest_tested": {
+        "study": "moc_execution_v1 (same-close fills) and exec_delay_v1 (D1-D4)",
+        "index_row": "docs/research/moc_execution_v1.md",
+        "difference": "every tested variant uses an auction price (open or close) on some session; execution_model_audit_v1 records the *live* fill VWAP as a diagnostic but no the intra-session typical price has never been modelled, and overnight_hold_v1's finding (QQQ earns ~+9.8%/yr overnight, ~-2.2% intraday) makes the sign of this arm genuinely uncertain in both directions."
+      },
+      "signal_inputs": [
+        "the arm's own high, low, close (fill session)"
+      ],
+      "data": {
+        "in_repo": [
+          "stress_robustness_v1_daily.csv",
+          "ewma_band_v1_index.csv"
+        ],
+        "new_downloads": [],
+        "main_window": "full",
+        "oos": {
+          "evaluable": [
+            "M1",
+            "M2",
+            "M3",
+            "M4",
+            "M5"
+          ],
+          "note": "same reduction for ^GSPC 1957-1999 (harness opens := previous close)"
+        }
+      },
+      "plugin": {
+        "model": "kernel_option",
+        "detail": "sim_one's fill price; parity cell = 'open' reproduces K bit-for-bit"
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "exits and downsizes fill at (h+l+c)/3 of the fill session; entries/up-resizes at the open",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "all fills at (h+l+c)/3",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "sells at min(open, (h+l+c)/3); buys at max(open, (h+l+c)/3)",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium: a modelling-choice arm whose outcome informs the cost model as much as the strategy.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB38",
+      "title": "Tax-unit and tax-regime layer: 20/D eligibility, rate-regime switch table, income splitting",
+      "category": "tax-structure",
+      "strength_rank": 2,
+      "mechanism": "Every arm in 80-odd studies is priced for one taxpayer under the frozen 2026 progressive tariff, and the same rule earns 11.69% after tax at $10k against 9.19% at $1M -- i.e. the *tariff*, not the rule, moves the answer by 1.5 pp.  Three things follow, none ever simulated: (a) a regime switch table that re-runs R2/A1u/H2/K under tau = 0, flat 20% and the progressive tariff on each arm's own path, which measures the rate at which K's execution layer stops paying for itself; (b) income splitting: two independent accounts of $50k (or three of $33.3k) each running K, household CAGR = the per-account CAGR, which multiplies the progressive ladder and the loss pool; (c) a routed split, where downsizes fill in whichever account's FIFO head is cheaper.  The 20/D exemption (GVK muk. 20/D, a 20-year exemption on foreign-source capital gains for individuals becoming Turkish residents from 1/1/2026) is a *precondition* answered by an adviser, not an arm: if any household member qualifies, the entire ~5 pp/yr drag moves taxpayer and the pre-tax optimum becomes the after-tax optimum.",
+      "literature": [
+        {
+          "ref": "Kleven, Kreiner & Svarer, Taxation of couples (tax-unit neutrality)",
+          "url": "https://doi.org/10.1111/j.1468-0297.2009.02259.x"
+        },
+        {
+          "ref": "AQR, The Enduring Appeal of Gain Deferral, Parts 1-3",
+          "url": "https://www.aqr.com/Insights/Research/Journal-Article/The-Enduring-Appeal-of-Gain-Deferral"
+        },
+        {
+          "ref": "Krasner & Sosner, Loss harvesting or gain deferral? JWM 2024",
+          "url": "https://doi.org/10.3905/jwm.2023.1.213"
+        }
+      ],
+      "closest_tested": {
+        "study": "cash_yield_v1 (the one account-setting study) and vt_level_tax_v1 / tax_asym_v3 (capital scaling)",
+        "index_row": "docs/research/cash_yield_v1.md",
+        "difference": "capital was swept in the after-tax stages ($10k-$1M) but the *tax unit* (how many taxpayers, which regime) has never been varied, and idea_survey_v5 I1 -- whose arms these are -- was never run.  The scout inventory records the tax-unit/tax-regime layer as 'SURVEY ONLY, never simulated'."
+      },
+      "signal_inputs": [
+        "none (accounting and tax-regime inputs only)"
+      ],
+      "data": {
+        "in_repo": [
+          "after_tax_tr_v1_usdtry_cbrt.csv",
+          "after_tax_tr_v1_yiufe.csv",
+          "the engine's TARIFF_2026 and the flat-20% account (fe_tax)"
+        ],
+        "new_downloads": [],
+        "main_window": "full (after-tax stages only; the pre-tax stages are regime-invariant)",
+        "oos": {
+          "evaluable": [],
+          "note": "the TRY/YI-UFE calendar starts 2000, so no after-tax OOS exists; the roller of E2 starts, E3 bootstraps and B1/B2 are the substitutes, as in every after-tax study."
+        }
+      },
+      "plugin": {
+        "model": "hybrid",
+        "detail": "arm A is the existing engine with mode/capital varied (targets-from-data, no kernel edit); arm B is two/three independent engine runs summed (an accounting layer, no kernel edit); arm C needs a two-book kernel option with a route cap, and an off/on parity cell proving two unrouted identical accounts reproduce K's NAV exactly."
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "regime switch table: {R2, A1u, H2, K} x {tau=0, flat-20%, progressive-2026} x {$10k,$100k,$1M} x the six windows (report-only for the arms; it *is* the decision input)",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "two $50k accounts and three $33.3k accounts, each running K; household CAGR reported vs K at $100k and vs K at $50k/$33.3k",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "routed split: two accounts, downsizes routed to the cheaper FIFO head, route cap 10 pp; up-resizes to the more-below-target account",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "high for the measurement, unknown for the gain: +3..+5 pp if a household member qualifies for 20/D, ~+0.2..+0.5 pp from splitting alone, 0 if not.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB39",
+      "title": "Tax-regime stress (TRY/PPI decoupling) and an FX-regime band switch",
+      "category": "tax-structure",
+      "strength_rank": 7,
+      "mechanism": "K's A1u+H2 premium is a function of indexation relief, which is a function of the gap between USD/TRY depreciation and YI-UFE inflation; that gap has never been varied, and idea_survey_v4 named the decoupled calendar as the missing regime check.  Arm A is that stress as a pre-registered arm: re-run R2/A1u/H2/K on synthetic calendars (TRY flat with 20%/yr PPI; TRY depreciating 30%/yr with PPI at 5%; and the realised 2016-2026 calendar as the anchor) and report whether K's edge inverts.  Arms B and C then *act* on the regime: multiply A1u's three band widths by 1.5 (0.5/3/8 -> 0.75/4.5/12 pp) while the trailing 252-session realised indexation relief on the account's own sales exceeds 0.5 (relief is large, so each deferred sale is worth more), and by 0.5 in the mirror arm.",
+      "literature": [
+        {
+          "ref": "Constantinides 1983; AQR gain-deferral series (deferral value rises with the rate and the horizon)",
+          "url": "https://www.aqr.com/Insights/Research/Journal-Article/The-Enduring-Appeal-of-Gain-Deferral"
+        },
+        {
+          "ref": "idea_survey_v4 section 6.3 (the named, never-run regime stress)",
+          "url": "docs/research/idea_survey_v4.md"
+        }
+      ],
+      "closest_tested": {
+        "study": "state_defer_v1 (D3: key deferral on the estimated tax > 0.05% of NAV) and monthly_defer_v1",
+        "index_row": "docs/research/state_defer_v1.md",
+        "difference": "state_defer keyed a *deferral trigger* on the lot book's own indexed gain and declared the realization-timing axis closed; this arm keeps K's calendar and gain-band triggers and modulates the *band width* on a macro state, plus a calendar stress that no after-tax study has run.  It is filed as an axis-closing measurement with a low prior, not as a new deferral device."
+      },
+      "signal_inputs": [
+        "USD/TRY (CBRT, repo)",
+        "YI-UFE (repo)",
+        "the engine's own realised-relief fraction"
+      ],
+      "data": {
+        "in_repo": [
+          "data/historical/after_tax_tr_v1_usdtry_cbrt.csv (2000-01-03 ->)",
+          "data/historical/after_tax_tr_v1_yiufe.csv (1999-01 ->)"
+        ],
+        "new_downloads": [],
+        "main_window": "after-tax stages only",
+        "oos": {
+          "evaluable": [],
+          "note": "the pre-tax OOS stage has no TRY calendar (the R-USD rule), so G7/G8 cannot see this arm; pre-register the reduced gate on the after-tax windows + B1/B2 + the 21-ETF after-tax stage, and report the stress table separately."
+        }
+      },
+      "plugin": {
+        "model": "kernel_option",
+        "detail": "band widths are the kernel's RULE constants (0.5/3/8 pp); making them state-dependent needs a per-session width multiplier in a copy of the engine, with an off/on parity cell (multiplier = 1.0 reproduces K bit-for-bit).  Arm A needs no kernel edit at all (the calendar is an existing input)."
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "stress table: K vs R2/A1u/H2 on synthetic calendars {TRY flat + PPI 20%/yr; TRY -30%/yr + PPI 5%; realised 2016-2026} at $100k",
+          "targets_from_data": true,
+          "needs_kernel_option": false,
+          "kernel_scope": null,
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "A1u band widths x 1.5 while the trailing 252-session realised indexation relief fraction > 0.5",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "A1u band widths x 0.5 while the same state holds (mirror)",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low-medium: arm A is a risk measurement that can invalidate K's execution layer; B/C are small and adjacent to a closed axis.",
+      "n_arms": 3
+    },
+    {
+      "id": "IB40",
+      "title": "Instalment funding source: satisfy the tax liability from the target reduction, not from an extra sale",
+      "category": "tax-structure",
+      "strength_rank": null,
+      "mechanism": "The engine funds the March/July instalments by selling units, which realises gain on top of the ordinary resizes (about 1% of the realised base, on the report's own accounting).  Two untested routings remove that extra sale: (A) when a band-permitted downsize occurs in the same year as an unpaid liability, route its proceeds to the tax account instead of reinvesting to the target; (B) suppress the next up-resize while a liability is unpaid (fund the tax by simply holding less); (C) both.  It is a cash-flow rule, not a signal, and it only ever removes a trade.",
+      "literature": [
+        {
+          "ref": "After-tax rebalancing / tax-aware trading: Berkin & Ye, FAJ 2003; Israel & Moskowitz, The role of shorting, tax-aware portfolios",
+          "url": "https://doi.org/10.2469/faj.v59.n4.2536"
+        }
+      ],
+      "closest_tested": {
+        "study": "tax_budget_v2 (Y1/Y2/Y3 all *create* trades), exit_timing_v2 X1-X3 and cash_yield_v1 (which measures the *yield* on money parked for the March/July instalments)",
+        "index_row": "docs/research/tax_budget_v2.md",
+        "difference": "every tested tax arm creates, defers or re-times a realisation, and cash_yield_v1 prices the interest earned on the parked instalment money; none changes the *funding source* of a payment the account already owes."
+      },
+      "signal_inputs": [
+        "the engine's own tax-payment schedule and realised-gain state"
+      ],
+      "data": {
+        "in_repo": [
+          "after_tax_tr_v1_usdtry_cbrt.csv",
+          "after_tax_tr_v1_yiufe.csv",
+          "the engine's instalment schedule (fe_tax)"
+        ],
+        "new_downloads": [],
+        "main_window": "after-tax stages only",
+        "oos": {
+          "evaluable": [],
+          "note": "same reduced gate as IB39 (no after-tax OOS exists)."
+        }
+      },
+      "plugin": {
+        "model": "kernel_option",
+        "detail": "the payment/funding interaction lives in fe_tax plus sim_one's cash routing; needs an enable flag with a parity cell (flag off = K bit-for-bit)."
+      },
+      "arms": [
+        {
+          "id": "A",
+          "rule": "route a band-permitted downsize's proceeds to the unpaid liability (up to the amount due) instead of to the target",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "B",
+          "rule": "suppress the next up-resize while a liability is unpaid and the cash is short",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        },
+        {
+          "id": "C",
+          "rule": "both A and B",
+          "targets_from_data": false,
+          "needs_kernel_option": true,
+          "kernel_scope": "all_stages",
+          "params_frozen": true
+        }
+      ],
+      "expected_evidence": "low: the effect is bounded by the ~1% of the base that instalment sales carry, but it can only remove a trade.",
+      "n_arms": 3
+    }
+  ]
+}

@@ -17,9 +17,19 @@ def test_append_is_append_only(tmp_path):
     assert [e["arm"] for e in lines] == ["a0", "a1", "a2"]
     registry.append({"arm": "a3", "batch": "b"}, path=p)
     assert registry.read(p)[:3] == lines
-    assert registry.n_trials(p) == 4
+    assert registry.n_lines(p) == 4
     # the previous bytes are untouched
     assert json.loads(p.read_text().splitlines()[0])["arm"] == "a0"
+
+
+def test_n_trials_counts_distinct_specs(tmp_path):
+    """A re-run of the same arm+spec is not a new trial; a re-specified arm is."""
+    p = tmp_path / "REGISTRY.jsonl"
+    h1, h2 = api.spec_hash({"p": 1}), api.spec_hash({"p": 2})
+    for batch, hash_ in (("b1", h1), ("b2", h1), ("b3", h2)):
+        registry.append(registry.entry_for("idea", "arm", {"p": 1}, hash_, "code", batch,
+                                           "screened", {"head": "x"}), path=p)
+    assert registry.n_lines(p) == 3 and registry.n_trials(p) == 2
 
 
 def test_ledger_queries(tmp_path):
@@ -97,7 +107,8 @@ def test_plan_registers_arms_and_needs_kernel(tmp_path, monkeypatch):
     assert by_arm["ok"]["status"] == "screened" and by_arm["later"]["status"] == "needs_kernel"
     assert by_arm["ok"]["spec_hash"] == api.spec_hash({"p": 1})
     assert by_arm["ok"]["code_hash"] == code
-    assert registry.n_trials() == 2  # needs_kernel still counts as a declared trial
+    assert registry.n_lines() == 2          # one line per declaration
+    assert registry.n_trials() == 2          # needs_kernel still counts as a distinct trial
 
 
 def test_plan_refuses_a_cash_yield_mismatch(tmp_path, monkeypatch):

@@ -75,6 +75,20 @@
    "reference": 0.23972,
    "reproduced": 0.23972
   },
+  "K_bootstrap_level_flat": {
+   "diff_pp": 4.1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.040376,
+   "reproduced": 0.040376
+  },
+  "K_bootstrap_level_progressive": {
+   "diff_pp": -4e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.038577,
+   "reproduced": 0.038577
+  },
   "K_e1_median_after_tax": {
    "diff_pp": -1e-05,
    "label": "",
@@ -211,10 +225,10 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 11.8s -> PARITY.json"
+  "tail": "parity PASS in 11.2s -> PARITY.json"
  },
  "failed": [],
- "n_checks": 49,
+ "n_checks": 53,
  "parity": {
   "boot_vs_engine": {
    "C0_pre_base": {
@@ -337,6 +351,13 @@
    "reference": 0.148961,
    "reproduced": 0.148961
   },
+  "p15_B1_level": {
+   "diff_pp": 2.9e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.04069,
+   "reproduced": 0.04069
+  },
   "p15_B1_median_delta": {
    "diff_pp": -4.8e-05,
    "label": "",
@@ -349,6 +370,13 @@
    "pass": true,
    "reference": 0.635,
    "reproduced": 0.635
+  },
+  "p15_B2_level": {
+   "diff_pp": -6e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.043851,
+   "reproduced": 0.043851
   },
   "p15_B2_median_delta": {
    "diff_pp": -4.9e-05,
@@ -441,5 +469,5 @@
    "reproduced": 5.484735
   }
  },
- "wall_s": 34.808338
+ "wall_s": 33.809328
 }

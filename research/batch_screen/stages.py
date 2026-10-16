@@ -325,8 +325,8 @@ def fresh_gate(rec, ctrl):
     ok = True
     for blk in rec["fresh"]:
         for md in ("progressive", "flat"):
-            a = rec["fresh"][blk]["tax"][md]
-            c = ctrl["fresh"][blk]["tax"][md]
+            a = np.asarray(rec["fresh"][blk]["tax"][md], dtype=np.float64)
+            c = np.asarray(ctrl["fresh"][blk]["tax"][md], dtype=np.float64)
             d = a - c
             cell = B.delta_stats(d)
             good = bool(cell["median_delta_pp"] >= 0 and cell["share_gt_0"] >= FRESH_SHARE)

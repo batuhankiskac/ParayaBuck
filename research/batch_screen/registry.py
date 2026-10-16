@@ -118,9 +118,18 @@ def is_rerun(idea_id: str, arm_id: str, spec_hash: str, code_hash: str, path=Non
                for e in history(idea_id, arm_id, path))
 
 
-def n_trials(path=None) -> int:
-    """N, the number of registered trials (the deflation's multiple-testing count)."""
+def n_lines(path=None) -> int:
+    """The number of ledger lines (one per declaration/screening run, never rewritable)."""
     return len(read(path))
+
+
+def n_trials(path=None) -> int:
+    """N, the multiple-testing count: the distinct `(idea, arm, spec_hash)` ever registered.
+
+    A re-run of the same arm with the same spec/code is the *same* hypothesis (the ledger still
+    gets its line), so it is not a second trial; an arm re-specified into a new `spec_hash` is.
+    """
+    return len({(e["idea"], e["arm"], e["spec_hash"]) for e in read(path)})
 
 
 def ledger_arms(path=None) -> list:
@@ -133,6 +142,7 @@ def ledger_arms(path=None) -> list:
 
 __all__ = [
     "REGISTRY",
+    "n_lines",
     "RegistryError",
     "append",
     "committed_bytes",

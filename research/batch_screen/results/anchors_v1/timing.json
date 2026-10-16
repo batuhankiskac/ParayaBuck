@@ -1,0 +1,9 @@
+{
+ "batch": "anchors_v1",
+ "total_wall_s": 16.508361,
+ "wall_s": {
+  "k_control/K": 0.0,
+  "r2_control/R2": 5.166783,
+  "vol_shape_p15/p15": 15.896808
+ }
+}

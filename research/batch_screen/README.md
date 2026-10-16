@@ -178,7 +178,7 @@ scale factor is the full holdout set, not the arm.
 ## 6. Tests
 
 `research/batch_screen/tests/run.sh` (the research venv's numba + the project venv's pytest, see
-the header of that script). 51 tests: the plugin contract and its validation, the leg
+the header of that script). 52 tests: the plugin contract and its validation, the leg
 constructions, the registry's append-only semantics and commit gate, every stage-1/stage-2 gate
 branch on synthetic records, the deflation's null control/power/monotonicity/DSR properties, and
 the parity cells (engine `fe_boot.boot`, old `boot_oos_market`, the production R2 target series,

@@ -126,11 +126,16 @@ def control_record(cash_yield="none", stage2=True, quiet=True):
     t0 = time.time()
     rec = stages.stage1(arm, cash_yield)
     b12 = stages.stage1_vectors(arm, cash_yield, quiet=quiet, label="control")
+    rec["boot"] = {"pre": {}, "tax": {}}
+    rec["boot_level"] = {"pre": {}, "tax": {}}
     for md in ("base", "calibrated"):
-        rec["boot"] = rec.get("boot", {"pre": {}, "tax": {}})
-        rec["boot"]["pre"][md] = B.delta_stats(b12["pre"][md][CONTROL_ARM])
+        v = b12["pre"][md][CONTROL_ARM]
+        rec["boot"]["pre"][md] = B.delta_stats(v - v)      # the control's Δ vs itself
+        rec["boot_level"]["pre"][md] = B.delta_stats(v)    # its own bootstrap level
     for md in ("progressive", "flat"):
-        rec["boot"]["tax"][md] = B.delta_stats(b12["tax"][GATE_CAPITAL][md][CONTROL_ARM])
+        v = b12["tax"][GATE_CAPITAL][md][CONTROL_ARM]
+        rec["boot"]["tax"][md] = B.delta_stats(v - v)
+        rec["boot_level"]["tax"][md] = B.delta_stats(v)
     rec["after_tax"].update({k: v for k, v in
                              stages.stage2_main_windows(arm, cash_yield).items()
                              if k not in rec["after_tax"]})
@@ -183,14 +188,19 @@ def _arm_task(payload):
     rec = stages.stage1(arm, cash_yield)
     b12 = stages.stage1_vectors(arm, cash_yield, quiet=quiet, label=arm["id"])
     rec["boot"] = {"pre": {}, "tax": {}}
+    rec["boot_level"] = {"pre": {}, "tax": {}}
     delta_vec = {}
     for md in ("base", "calibrated"):
-        d = b12["pre"][md][arm["id"]] - np.asarray(cvec["pre"][md], dtype=np.float64)
+        v = b12["pre"][md][arm["id"]]
+        d = v - np.asarray(cvec["pre"][md], dtype=np.float64)
         rec["boot"]["pre"][md] = B.delta_stats(d)
+        rec["boot_level"]["pre"][md] = B.delta_stats(v)
         delta_vec[f"pre_{md}"] = d
     for md in ("progressive", "flat"):
-        d = b12["tax"][GATE_CAPITAL][md][arm["id"]] - np.asarray(cvec["tax"][md], dtype=np.float64)
+        v = b12["tax"][GATE_CAPITAL][md][arm["id"]]
+        d = v - np.asarray(cvec["tax"][md], dtype=np.float64)
         rec["boot"]["tax"][md] = B.delta_stats(d)
+        rec["boot_level"]["tax"][md] = B.delta_stats(v)
         delta_vec[f"tax_{md}"] = d
     rec["after_tax"].update({k: v for k, v in stages.stage2_main_windows(arm, cash_yield).items()
                              if k not in rec["after_tax"]})
@@ -215,7 +225,8 @@ def _arm_task(payload):
         s2["fresh"] = {blk: {"tax": {md: list(fresh[blk]["tax"][GATE_CAPITAL][md][arm["id"]])
                                      for md in fresh[blk]["tax"][GATE_CAPITAL]}} for blk in fresh}
         pooled = stages.stage2_oos_pooled(arm, cash_yield)
-        s2["oos_pooled"] = B.delta_stats(pooled["pooled"][arm["id"]] - pooled["pooled"][CONTROL_ARM])
+        s2["oos_pooled"] = B.delta_stats(pooled["pooled"][arm["id"]]
+                                         - np.asarray(cvec["oos_pooled"], dtype=np.float64))
         joined = dict(rec)
         joined.update({"oos": s2["oos"], "etf_pre": s2["etf_pre"], "etf_after_tax": s2["etf_after_tax"],
                        "rolling": s2["rolling"], "fresh": s2["fresh"], "oos_pooled": s2["oos_pooled"]})
@@ -233,7 +244,7 @@ def _arm_task(payload):
 
 # ----------------------------------------------------------------------------- the batch
 def scoreboard(batch, batch_dir, control, arms, timing, defl=None):
-    n = len(registry.read())
+    n, lines_n = registry.n_trials(), registry.n_lines()
     lines = [
         f"# batch {batch} -- SCOREBOARD",
         "",
@@ -245,7 +256,9 @@ def scoreboard(batch, batch_dir, control, arms, timing, defl=None):
         f"fresh-seed bootstraps seed {stages.FRESH_SEED} blocks 10/40, 21 January rolling starts, "
         "pooled OOS bootstrap). Δ = arm − K in pp.",
         "",
-        f"registered trials N = {n} (`research/batch_screen/REGISTRY.jsonl`; the deflation's count).",
+        f"registered trials N = {n} ({lines_n} ledger lines; "
+        "`research/batch_screen/REGISTRY.jsonl` -- N counts distinct `(idea, arm, spec_hash)`, "
+        "the deflation's multiple-testing count).",
         "",
         "| arm | stage 1 | stage 2 | failed gates | AT2000 Δ | B1 med/share | B2 med/share | "
         "OOS med Δ | ETFs med Δ | fresh | RW p | wall s |",
@@ -319,7 +332,8 @@ def run_batch(batch, ideas, cash_yield="none", workers=None, stage2=True, allow_
         timing[CONTROL_ARM] = 0.0
     files = sorted(p for p in batch_dir.glob("*.json") if not p.name.startswith("_"))
     agg = {"batch": batch, "control": CONTROL_ARM, "cash_yield": cash_yield,
-           "n_registered_trials": len(registry.read()), "params": ctrl["params"],
+           "n_registered_trials": registry.n_trials(), "n_registry_lines": registry.n_lines(),
+           "params": ctrl["params"],
            "arms": [json.loads(p.read_text()) for p in files]}
     dump(batch_dir / "RESULTS.json", agg)
     defl = deflate_batch(batch) if stage2 else None
@@ -348,7 +362,8 @@ def deflate_batch(batch=None, alpha=0.05, resamples=2000):
     vecs = b1_vectors(batch)
     out = deflation.deflate(vecs, registry.n_trials(), alpha=alpha, resamples=resamples)
     out["batch"] = batch or "all"
-    out["registry_lines"] = registry.n_trials()
+    out["registry_lines"] = registry.n_lines()
+    out["registry_trials"] = registry.n_trials()
     dump(RESULTS / "DEFLATION.json", out)
     return out
 
@@ -403,6 +418,10 @@ def harness():
     for yr in ("2001", "2011", "2021"):
         an[f"K_rolling_{yr}"] = _anchor("", rec["rolling"][yr]["after_tax_cagr"],
                                         bh["E2_rolling_starts"][yr]["K"]["after_tax_cagr"])
+    for mode in ("progressive", "flat"):
+        an[f"K_bootstrap_level_{mode}"] = _anchor(
+            "", rec["boot_level"]["tax"][mode]["cagr_median"],
+            vs["bootstrap_b12"]["tax"]["100k"][mode]["C0"]["cagr_median"])
     checks["control_anchors"] = an
     checks["plugin_anchors"] = plugin_anchors(bh, vs, ctrl)
     checks["parity"] = {"boot_vs_engine": boot_parity(), "oos_pooled_vs_old_code": oos_pooled_parity()}
@@ -456,9 +475,13 @@ def plugin_anchors(bh, vs, ctrl):
                     vs["after_tax_windows"]["100k"][wn]["E3"]["after_tax_cagr"])
             b12 = stages.stage1_vectors(arm, "none", quiet=True, label="p15 anchor")
             for mode, key in (("progressive", "B1"), ("flat", "B2")):
-                d = b12["tax"][GATE_CAPITAL][mode][arm["id"]] - np.asarray(ctrl["vectors"]["tax"][mode])
+                v = b12["tax"][GATE_CAPITAL][mode][arm["id"]]
+                d = v - np.asarray(ctrl["vectors"]["tax"][mode])
                 cell = B.delta_stats(d)
                 pub = vs["bootstrap_b12"]["tax"]["100k"][mode]["E3_vs_C0"]
+                out[f"p15_{key}_level"] = _anchor(
+                    "", B.delta_stats(v)["cagr_median"],
+                    vs["bootstrap_b12"]["tax"]["100k"][mode]["E3"]["cagr_median"])
                 out[f"p15_{key}_median_delta"] = _anchor("", cell["median_delta_pp"],
                                                          pub["median_delta_cagr_pp"], tol_pp=0.02)
                 out[f"p15_{key}_share"] = {"reference": pub["share_gt_0"], "reproduced": cell["share_gt_0"],

@@ -414,7 +414,9 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
 def delta_stats(d, resamples=2000, seed=20261016):
     """The published Δ cells plus the bootstrap p-value of the mean.
 
-    `d` is the per-path difference (arm − control) of the CAGRs on the *same* resampled paths.
+    `d` is the per-path difference (arm − control) of the CAGRs on the *same* resampled paths --
+    or, for a *level* cell (`boot_level`, e.g. the control's own paths), the per-path CAGRs
+    themselves, in which case `cagr_median` is the published `cagr_median` cell.
     `p_mean` is the percentile-bootstrap one-sided p-value of H0: E[Δ] ≤ 0: the share of
     second-level resamples of the `len(d)` path values whose mean is ≤ 0.
     """
@@ -423,6 +425,7 @@ def delta_stats(d, resamples=2000, seed=20261016):
     rng = np.random.default_rng(seed)
     means = d[rng.integers(0, n, size=(resamples, n))].mean(axis=1)
     return {
+        "cagr_median": float(np.median(d)),
         "median_delta_pp": float(np.median(d) * 100),
         "mean_delta_pp": float(np.mean(d) * 100),
         "share_gt_0": float(np.mean(d > 0)),

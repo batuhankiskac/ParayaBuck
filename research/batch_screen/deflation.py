@@ -141,7 +141,11 @@ def arm_sharpe(delta, alpha=0.05) -> dict:
 
 
 def deflate(deltas: dict, n_trials: int, alpha=0.05, resamples=2000, seed=20261016) -> dict:
-    """The whole deflation pass over a batch's (or the ledger's) Δ vectors."""
+    """The whole deflation pass over a batch's (or the ledger's) Δ vectors.
+
+    `n_trials` is N, the number of *distinct* registered trials (`registry.n_trials`); the ledger's
+    line count (declarations, including re-runs) is reported separately by the caller.
+    """
     out = {"n_trials": int(n_trials), "n_arms_with_delta": len(deltas), "alpha": alpha,
            "resamples": resamples, "seed": seed}
     if not deltas:

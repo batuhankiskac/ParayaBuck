@@ -1,0 +1,61 @@
+vol_shape_v1 | I2 exposure-shape replication at matched average weight | control = production K (p = 1)
+main window 2000-03-09 -> 2026-09-29 (6679 sessions), m = 2, base unless stated
+run wall-clock: 31.9 s | git c59af704fbd5 | harness PASS
+
+calibration (1985-10-01 -> 2000-03-08, ^NDX, base financing, zero dividends):
+  C0  p = 1.0   c = 0.350000000000  mean(vt) = 0.8396819604 (K 0.8396819604)
+  E1  p = 0.75  c = 0.424458816537  mean(vt) = 0.8396819604 (K 0.8396819604)
+  E2  p = 1.25  c = 0.291964226271  mean(vt) = 0.8396819604 (K 0.8396819604)
+  E3  p = 1.5   c = 0.245931889543  mean(vt) = 0.8396819604 (K 0.8396819604)
+  E4  p = 2.0   c = 0.177063085536  mean(vt) = 0.8396819604 (K 0.8396819604)
+
+main window (pre-tax, base / calibrated):
+  arm   mean_w  drift_pp  mean|dw|  CAGR base  CAGR cal   maxDD base  maxDD cal  2017+ base  turn/yr  m1 base  m1 cal
+  C0    67.31%   +0.000    0.0237    15.76%   15.18%    46.67%   46.79%   33.23%    5.4561   16.02%   15.43%
+  E1    67.11%   -0.205    0.0240    15.22%   14.64%    51.21%   51.35%   32.95%    5.4067   15.47%   14.89%
+  E2    67.45%   +0.136    0.0236    16.23%   15.63%    42.89%   43.01%   33.34%    5.4420   16.47%   15.88%
+  E3    67.59%   +0.283    0.0235    16.53%   15.94%    39.88%   39.99%   33.70%    5.4847   16.79%   16.20%
+  E4    67.79%   +0.485    0.0233    16.96%   16.36%    38.67%   38.90%   33.64%    5.4970   17.22%   16.62%
+
+gates vs K (G1-G9 as ewma_band_v1 defines them; base/calibrated):
+  E1  G1_base=F G1_calibrated=F G2_base=F G2_calibrated=F G3_base=P G3_calibrated=P G5_base=F G5_calibrated=F G6_base=F G6_calibrated=F G4=F G7=P G8=P G9=P -> FAIL | tier N | diffs 5.20%
+  E2  G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=F G8=F G9=P -> FAIL | tier N | diffs 3.61%
+  E3  G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=P G8=F G9=P -> FAIL | tier N | diffs 5.35%
+  E4  G1_base=P G1_calibrated=P G2_base=P G2_calibrated=P G3_base=P G3_calibrated=P G5_base=P G5_calibrated=P G6_base=P G6_calibrated=P G4=P G7=P G8=F G9=P -> FAIL | tier N | diffs 6.77%
+
+after tax at $100k (progressive, liquidated, m = 2) delta vs K, and the clean bootstrap ($100k):
+  arm   d2000    d2010    d2017   | B1 med/share      B2 med/share      | verdict
+  E1    -0.186   +0.082   +0.281 |  -0.205/ 36.4%  -0.263/ 32.0% | reject (fails: G1_base,G1_calibrated,G2_base,G2_calibrated,G5_base,G5_calibrated,G6_base,G6_calibrated,G4,B1_progressive,B2_flat,2000_03_to_2026_09)
+  E2    +0.280   +0.216   +0.028 |  +0.158/ 66.6%  +0.200/ 70.3% | reject (tier-N non-inferior; strict set fails: G7,G8)
+  E3    +0.491   +0.440   +0.203 |  +0.251/ 63.5%  +0.331/ 68.3% | reject (tier-N non-inferior; strict set fails: G8)
+  E4    +0.805   +0.522   +0.010 |  +0.343/ 62.2%  +0.462/ 67.1% | reject (tier-N non-inferior; strict set fails: G8)
+
+clean bootstrap deltas vs K (median pp, share>0): pre-tax leg by model
+  E1  pre base  -0.329 ( 29.5%)  pre cal  -0.332 ( 29.2%)  G8 pooled OOS  +0.035
+  E2  pre base  +0.247 ( 70.5%)  pre cal  +0.247 ( 70.5%)  G8 pooled OOS  -0.013
+  E3  pre base  +0.423 ( 70.3%)  pre cal  +0.424 ( 70.5%)  G8 pooled OOS  -0.015
+  E4  pre base  +0.618 ( 68.2%)  pre cal  +0.623 ( 68.2%)  G8 pooled OOS  -0.029
+
+six OOS windows (pre-tax, calibrated, m = 2) -- delta vs K CAGR pp / max DD pp:
+  GSPC_1957_1999 K    9.97%   39.65% | E1  -0.163/-0.213  E2  +0.072/+0.044  E3  +0.097/+0.104  E4  +0.119/+0.256
+  M1             K   21.27%   41.22% | E1  +0.091/-0.075  E2  +0.032/-0.019  E3  +0.110/-0.034  E4  +0.013/-0.055
+  M2             K   11.73%   58.11% | E1  +0.440/-1.517  E2  -0.442/+2.468  E3  -0.526/+3.418  E4  -0.816/+5.136
+  M3             K    6.46%   65.18% | E1  +0.138/-1.684  E2  -0.046/-0.520  E3  -0.048/-1.203  E4  -0.011/-0.192
+  M4             K    9.71%   58.15% | E1  -0.026/+1.073  E2  -0.051/+0.008  E3  -0.177/-0.530  E4  -0.143/-2.474
+  M5             K   -0.62%   85.65% | E1  +0.084/-0.473  E2  +0.033/-0.009  E3  +0.106/-0.231  E4  +0.111/-0.107
+
+plateau (report only): c_p x (1 +/- 10 %) on the calibration window -- mean(vt) change
+  C0  c-10% -0.045142  c+10% +0.034473
+  E1  c-10% -0.055960  c+10% +0.042816
+  E2  c-10% -0.037295  c+10% +0.028803
+  E3  c-10% -0.030975  c+10% +0.025289
+  E4  c-10% -0.024455  c+10% +0.020490
+
+exposure-normalised CAGR diagnostic (base m=2, (1+CAGR)**(w_K/w_arm) - 1):
+  C0    15.76% (delta vs K +0.000 pp)
+  E1    15.27% (delta vs K -0.494 pp)
+  E2    16.19% (delta vs K +0.426 pp)
+  E3    16.46% (delta vs K +0.694 pp)
+  E4    16.83% (delta vs K +1.063 pp)
+
+harness checks: parity_quick=P, calibration_frozen=P, target_identity_main=P, vt_identity_ndx=P, anchor_pre_base_cagr=P, anchor_pre_base_max_dd=P, anchor_pre_base_turnover=P, anchor_pre_cal_cagr=P, anchor_pre_cal_max_dd=P, anchor_at_100k_2000=P, anchor_at_100k_2010=P, anchor_at_100k_2017=P, boot_option_off_equals_engine=P, anchor_boot_pre_base=P, anchor_boot_pre_cal=P, anchor_boot_tax_prog=P, anchor_boot_tax_flat=P, oos_kernel_equals_simulate=P, draw_reference=P

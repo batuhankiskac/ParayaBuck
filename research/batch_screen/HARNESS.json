@@ -1,0 +1,445 @@
+{
+ "all": true,
+ "behaviour": {
+  "cash_yield": {
+   "on_changes_numbers": {
+    "off_cagr": 0.157615,
+    "on_cagr": 0.165699,
+    "pass": true
+   },
+   "schedule_positive": {
+    "pass": true
+   },
+   "zero_schedule_inert": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   }
+  },
+  "leg": {
+   "1x_less_volatile": {
+    "pass": true,
+    "vol_1x": 0.163306,
+    "vol_2x": 0.326603
+   },
+   "1x_runs": {
+    "cagr_1x": 0.148515,
+    "pass": true
+   },
+   "leg_reaches_engine": {
+    "cagr_1x": 0.148515,
+    "cagr_2x": 0.157615,
+    "pass": true
+   }
+  }
+ },
+ "control_anchors": {
+  "K_after_tax_100k_2000_03_to_2026_09": {
+   "diff_pp": 6e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.107533,
+   "reproduced": 0.107533
+  },
+  "K_after_tax_100k_2010_01_to_end": {
+   "diff_pp": -4e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.152354,
+   "reproduced": 0.152354
+  },
+  "K_after_tax_100k_2017_01_to_end": {
+   "diff_pp": -2.6e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.23972,
+   "reproduced": 0.23972
+  },
+  "K_after_tax_matches_volshape_C0_2000_03_to_2026_09": {
+   "diff_pp": 6e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.107533,
+   "reproduced": 0.107533
+  },
+  "K_after_tax_matches_volshape_C0_2010_01_to_end": {
+   "diff_pp": -4e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.152354,
+   "reproduced": 0.152354
+  },
+  "K_after_tax_matches_volshape_C0_2017_01_to_end": {
+   "diff_pp": -2.6e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.23972,
+   "reproduced": 0.23972
+  },
+  "K_e1_median_after_tax": {
+   "diff_pp": -1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.016818,
+   "reproduced": 0.016818
+  },
+  "K_etf_median_cagr": {
+   "diff_pp": -3.1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.054568,
+   "reproduced": 0.054568
+  },
+  "K_maxdd_base": {
+   "diff_pp": -9e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.466698,
+   "reproduced": 0.466698
+  },
+  "K_maxdd_calibrated": {
+   "diff_pp": -1.7e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.467948,
+   "reproduced": 0.467948
+  },
+  "K_oos_GSPC_1957_1999": {
+   "diff_pp": -4.6e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.099674,
+   "reproduced": 0.099674
+  },
+  "K_oos_M1": {
+   "diff_pp": -1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.212731,
+   "reproduced": 0.212731
+  },
+  "K_oos_M2": {
+   "diff_pp": 4.5e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.117257,
+   "reproduced": 0.117257
+  },
+  "K_oos_M3": {
+   "diff_pp": 2.3e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.064568,
+   "reproduced": 0.064568
+  },
+  "K_oos_M4": {
+   "diff_pp": 2.7e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.097067,
+   "reproduced": 0.097067
+  },
+  "K_oos_M5": {
+   "diff_pp": 4.2e-05,
+   "label": "",
+   "pass": true,
+   "reference": -0.006233,
+   "reproduced": -0.006233
+  },
+  "K_pre_base_m1": {
+   "diff_pp": 1.1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.160173,
+   "reproduced": 0.160173
+  },
+  "K_pre_base_m2": {
+   "diff_pp": -8e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.157649,
+   "reproduced": 0.157649
+  },
+  "K_pre_calibrated_m1": {
+   "diff_pp": -3.1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.154303,
+   "reproduced": 0.154303
+  },
+  "K_pre_calibrated_m2": {
+   "diff_pp": 3.1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.151785,
+   "reproduced": 0.151785
+  },
+  "K_rolling_2001": {
+   "diff_pp": -4.1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.123881,
+   "reproduced": 0.123881
+  },
+  "K_rolling_2011": {
+   "diff_pp": -2.8e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.159417,
+   "reproduced": 0.159417
+  },
+  "K_rolling_2021": {
+   "diff_pp": 2.6e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.203052,
+   "reproduced": 0.203052
+  },
+  "K_turnover_base": {
+   "diff_pp": 2e-06,
+   "label": "",
+   "pass": true,
+   "reference": 5.456136,
+   "reproduced": 5.456136
+  },
+  "K_turnover_calibrated": {
+   "diff_pp": -3.1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 5.456216,
+   "reproduced": 5.456216
+  }
+ },
+ "engine_parity_quick": {
+  "pass": true,
+  "tail": "parity PASS in 11.8s -> PARITY.json"
+ },
+ "failed": [],
+ "n_checks": 49,
+ "parity": {
+  "boot_vs_engine": {
+   "C0_pre_base": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "C0_pre_calibrated": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "C0_tax_flat": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "C0_tax_progressive": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "K_pre_base": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "K_pre_calibrated": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "K_tax_flat": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "K_tax_progressive": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   }
+  },
+  "oos_pooled_vs_old_code": {
+   "M1": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "M2": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "M3": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "M4": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   },
+   "M5": {
+    "max_abs_diff": 0.0,
+    "pass": true
+   }
+  }
+ },
+ "plugin_anchors": {
+  "K_pre_base_m2_cagr": {
+   "diff_pp": -8e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.157649,
+   "reproduced": 0.157649
+  },
+  "R2_after_tax_2000_03_to_2026_09": {
+   "diff_pp": 7e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.1016,
+   "reproduced": 0.1016
+  },
+  "R2_after_tax_2010_01_to_end": {
+   "diff_pp": 2.2e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.147059,
+   "reproduced": 0.147059
+  },
+  "R2_after_tax_2017_01_to_end": {
+   "diff_pp": -4.3e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.228861,
+   "reproduced": 0.228861
+  },
+  "R2_m1_base": {
+   "diff_pp": 1.7e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.157538,
+   "reproduced": 0.157538
+  },
+  "R2_m1_calibrated": {
+   "diff_pp": -5e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.151719,
+   "reproduced": 0.151719
+  },
+  "R2_maxdd_base": {
+   "diff_pp": -3.9e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.467584,
+   "reproduced": 0.467584
+  },
+  "R2_pre_base_m2": {
+   "diff_pp": 4.4e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.154766,
+   "reproduced": 0.154766
+  },
+  "R2_pre_calibrated_m2": {
+   "diff_pp": 1.7e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.148961,
+   "reproduced": 0.148961
+  },
+  "p15_B1_median_delta": {
+   "diff_pp": -4.8e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.250699,
+   "reproduced": 0.250699
+  },
+  "p15_B1_share": {
+   "diff_pp": 0.0,
+   "pass": true,
+   "reference": 0.635,
+   "reproduced": 0.635
+  },
+  "p15_B2_median_delta": {
+   "diff_pp": -4.9e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.331078,
+   "reproduced": 0.331078
+  },
+  "p15_B2_share": {
+   "diff_pp": 0.0,
+   "pass": true,
+   "reference": 0.683,
+   "reproduced": 0.683
+  },
+  "p15_after_tax_2000_03_to_2026_09": {
+   "diff_pp": 1.8e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.112438,
+   "reproduced": 0.112438
+  },
+  "p15_after_tax_2010_01_to_end": {
+   "diff_pp": 1.4e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.156758,
+   "reproduced": 0.156758
+  },
+  "p15_after_tax_2017_01_to_end": {
+   "diff_pp": -4.2e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.241747,
+   "reproduced": 0.241747
+  },
+  "p15_maxdd_base": {
+   "diff_pp": -1.8e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.398756,
+   "reproduced": 0.398756
+  },
+  "p15_maxdd_calibrated": {
+   "diff_pp": 7e-06,
+   "label": "",
+   "pass": true,
+   "reference": 0.399865,
+   "reproduced": 0.399865
+  },
+  "p15_pre_base_m1": {
+   "diff_pp": -2.3e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.167883,
+   "reproduced": 0.167883
+  },
+  "p15_pre_base_m2": {
+   "diff_pp": -1e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.165333,
+   "reproduced": 0.165333
+  },
+  "p15_pre_calibrated_m1": {
+   "diff_pp": 4.9e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.161963,
+   "reproduced": 0.161963
+  },
+  "p15_pre_calibrated_m2": {
+   "diff_pp": 1.6e-05,
+   "label": "",
+   "pass": true,
+   "reference": 0.159416,
+   "reproduced": 0.159416
+  },
+  "p15_turnover_base": {
+   "diff_pp": 6e-06,
+   "label": "",
+   "pass": true,
+   "reference": 5.484678,
+   "reproduced": 5.484678
+  },
+  "p15_turnover_calibrated": {
+   "diff_pp": -3.3e-05,
+   "label": "",
+   "pass": true,
+   "reference": 5.484735,
+   "reproduced": 5.484735
+  }
+ },
+ "wall_s": 34.808338
+}

@@ -95,7 +95,10 @@
         "M5": "^FTSE-HL-LOW",
         "main": "QQQ-HL-LOW"
       }
-    }
+    },
+    "hyg": "HYG",
+    "hyoas": "BAMLH0A0HYM2",
+    "nfci": "NFCI"
   },
   "note": "Extra series for batch_screen plugins, one CSV per series. Sources: the Yahoo chart API (period1=0, daily, `events=div,split`: columns `date,close,adjclose`) and FRED CSV (columns `date,value`). Refresh with `python -m research.batch_screen.extra --fetch-all`, add a series with --fetch/--fetch-fred, check every hash and range with --verify. A key is a series name or a {\"windows\": {window: series}} map; `data.extra(key)` returns the series aligned to the panel's own sessions (the drawn source session inside a bootstrap chunk), NaN where the series has no value on that date. Nothing is forward-filled unless the plugin asks for `ffill=True`.",
   "schema": "parayabuck.batch_screen.extradata/v1",
@@ -1074,6 +1077,52 @@
       "sha256": "a381a2e304e76072fa0b720fdbcbbfb8818b8548935e9ed4b58cfb1140fea5e5",
       "source": "derived from data/historical/ewma_band_v1_index.csv (^N225 OHLC)",
       "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EN225"
+    },
+    "BAMLH0A0HYM2": {
+      "bytes": 12497,
+      "column": "value",
+      "fetched": "2026-10-16",
+      "file": "data/historical/plugins_c2_hyoas.csv",
+      "note": "FRED's graph CSV endpoint serves only the trailing three years of every ICE BofA series (BAMLH0A0HYM2 here), so this series' registered range is what FRED exposes, not 1996-12-31.",
+      "price": "level",
+      "range": [
+        "2023-10-16",
+        "2026-10-14"
+      ],
+      "rows": 786,
+      "sha256": "eb70e77a58ed8f765dc64f2c8cae1751cb3838ebaa5daed72daf029c969c5fba",
+      "source": "FRED CSV",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2"
+    },
+    "HYG": {
+      "bytes": 112424,
+      "column": "adjclose",
+      "fetched": "2026-10-16",
+      "file": "data/historical/plugins_c2_hyg.csv",
+      "price": "adjclose",
+      "range": [
+        "2007-04-11",
+        "2026-10-15"
+      ],
+      "rows": 4911,
+      "sha256": "aef8f6110ee9cec9d8c57a24edeb5035c981f1f7872b8b4f05e9cef90dcef403",
+      "source": "Yahoo chart API",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/HYG?period1=0&period2=1792156388&interval=1d&events=div%2Csplit"
+    },
+    "NFCI": {
+      "bytes": 51243,
+      "column": "value",
+      "fetched": "2026-10-16",
+      "file": "data/historical/plugins_c2_nfci.csv",
+      "price": "level",
+      "range": [
+        "1971-01-08",
+        "2026-10-09"
+      ],
+      "rows": 2910,
+      "sha256": "84a6a007499d027f5f5c06fd777ccceb0a1e75a47602ccfbf3898d440ce8ba20",
+      "source": "FRED CSV",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NFCI"
     }
   }
 }

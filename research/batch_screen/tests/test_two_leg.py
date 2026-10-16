@@ -64,9 +64,14 @@ def test_two_leg_return_value_requires_the_spec_declaration(tmp_path, monkeypatc
     with pytest.raises(api.PluginError, match="single-leg"):
         api.call_targets(api.load_idea("missing"), p, {"params": {"leg_b": "1x"}, "leg": "2x"})
     # a returned leg_b that disagrees with the spec is refused
-    write_idea(tmp_path, "mismatch", body % "'leg_b': '2x'")
+    write_idea(tmp_path, "mismatch", body % "'leg_b': 'shy'")
     with pytest.raises(api.PluginError, match="declares"):
-        api.call_targets(api.load_idea("mismatch"), p, {"params": {"leg_b": "2x"}, "leg": "2x"})
+        api.call_targets(api.load_idea("mismatch"), p,
+                         {"params": {"leg_b": "1x"}, "leg_b": "shy", "leg": "2x"})
+    # leg B may not be leg A's own instrument (one FIFO book per instrument)
+    write_idea(tmp_path, "same", body % "'leg': '2x', 'leg_b': '2x'")
+    with pytest.raises(api.PluginError, match="own instrument"):
+        api.resolve_arm(api.load_idea("same"), "a")
     # an unknown leg_b key is refused at resolve time
     write_idea(tmp_path, "bad", "import numpy as np\nARMS = {'a': {'leg_b': 'nope'}}\n\n\n"
                                 "def targets(data, spec):\n"
@@ -125,10 +130,14 @@ def test_two_leg_arm_reaches_fast_engine2(probe):
     assert a["trades"] > 0 and b["trades"] > 0
     assert a["turnover_total"] > 0 and b["turnover_total"] > 0
     assert sum(b["realised_gain_try_by_reason"].values()) != 0.0
-    assert r["sells"] == a["sells"] + b["sells"]
+    # `sells` = strategy sells + tax-funding sales (the engine's definition), each split per leg
+    assert r["qld_sells"] == a["sells"] + b["sells"]
+    assert r["tax_funding_sales"] == a["tax_funding_sales"] + b["tax_funding_sales"]
+    assert r["sells"] == r["qld_sells"] + r["tax_funding_sales"]
     assert r["strategy_trades"] == a["trades"] + b["trades"]
     assert a["fees_usd"] > 0 and b["fees_usd"] > 0
-    assert r["fees_usd"] >= a["fees_usd"] + b["fees_usd"]   # the funding sales are pooled
+    # every fee belongs to one leg's fill (funding sales included), up to float summation order
+    assert r["fees_usd"] == pytest.approx(a["fees_usd"] + b["fees_usd"], rel=1e-12)
 
 
 def test_two_leg_stage1_is_not_applicable_without_leg_b_history(probe):
@@ -158,7 +167,7 @@ def test_two_leg_bootstrap_shares_the_control_paths(probe):
         assert np.array_equal(both["pre"][md][ctrl["id"]], alone["pre"][md][ctrl["id"]])
     assert np.array_equal(both["tax"]["100k"]["progressive"][ctrl["id"]],
                           alone["tax"]["100k"]["progressive"][ctrl["id"]])
-    theirs = fe_boot.boot(seed=fe_boot.SEED, block=fe_boot.BLOCK, arms=("K",), n_pre=4, n_tax=4,
+    theirs = fe_boot.boot(seed=fe_boot.SEED, block=fe_boot.BLOCK, arms=("C0", "K"), n_pre=4, n_tax=4,
                           capitals=("100k",), modes=("progressive",), anchor_e2=False,
                           deltas=("C0",), quiet=True, keep_paths=True)
     assert np.array_equal(both["pre"]["base"][ctrl["id"]],

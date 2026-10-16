@@ -229,7 +229,11 @@ def boot_panels(win, pos, legs, fins, cache=None):
     qo = np.concatenate([one, qc[:, :-1] * r_on_tr], axis=1)
     pc = np.concatenate([one, np.cumprod(r_on_p * r_id, axis=1)], axis=1)
     yyp = np.concatenate([yy, yy[:, -1:]], axis=1)
-    o1, c1, d1 = win.q[0][idx], win.q[1][idx], win.q[2][idx]
+    d1 = win.q[2][idx]
+    # the 1x leg: the chunk's own total-return QQQ path (`qo`/`qc`, dividends already in), so it
+    # has the 2x leg's width and no return across a block jump -- `total_return_1x` of the raw
+    # drawn prices would span the jumps (and is one column short)
+    o1, c1, d1_leg = qo, qc, np.zeros_like(qc)
     pool_days = windows.bars()[0]
     out = cache if cache is not None else {}
     for fin in fins:
@@ -244,7 +248,7 @@ def boot_panels(win, pos, legs, fins, cache=None):
                 d2=np.zeros_like(qc),
                 o1=o1,
                 c1=c1,
-                d1=d1,
+                d1=d1_leg,
                 fin=fin,
                 exp_q=EXP_Q,
                 leg=leg,
@@ -289,14 +293,18 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
     rng = np.random.default_rng(seed)
     groups = {}
     for arm in arms:
-        groups.setdefault(arm["leg"], []).append(arm)
+        groups.setdefault((arm["leg"], arm.get("leg_b")), []).append(arm)
     for p0 in range(0, n_paths, chunk):
         W = min(chunk, n_paths - p0)
         pos = fe_boot.draw_positions(rng, block, W, TAX_BOOT_L, win.npool, TAX_BOOT_EXT)
         panels = {}
-        for leg in groups:
+        for leg in sorted({g[0] for g in groups}):
             panels.update(boot_panels(win, pos, (leg,), (FIN["base"], FIN["calibrated"]), cache=panels))
-        for leg, arm_list in groups.items():
+        for (leg, leg_b), arm_list in groups.items():
+            if leg_b is not None:
+                _two_leg_chunk(arm_list, panels, leg, leg_b, win, env, cap_at, cost, mode_ids,
+                               rule_index, p0, W, n_pre, n_tax, pre, tax, capitals, modes)
+                continue
             wb = np.stack([_targets(a, panels[(leg, FIN["base"])]) for a in arm_list])
             wc = np.stack([_targets(a, panels[(leg, FIN["calibrated"])]) for a in arm_list])
             band, usd, defer = _rule_arrays(arm_list)
@@ -334,6 +342,35 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
                    "calendar": [win.dates[0], win.dates[-1]], "cash_yield": cash_yield,
                    "arms": ids},
     }
+
+
+def _two_leg_chunk(arm_list, panels, leg, leg_b, win, env, cap_at, cost, mode_ids, rule_index,
+                   p0, W, n_pre, n_tax, pre, tax, capitals, modes):
+    """One chunk of a two-leg group on the chunk's already drawn panels (`fe2_boot._boot_chunk2`)."""
+    pb, pc = panels[(leg, FIN["base"])], panels[(leg, FIN["calibrated"])]
+    ob, cb = two_leg_series(panels, leg, leg_b, FIN["base"], win.i0, win.i1)
+    oc, cc = two_leg_series(panels, leg, leg_b, FIN["calibrated"], win.i0, win.i1)
+    wb = np.ascontiguousarray(np.stack([_targets2(a, pb) for a in arm_list]))
+    wc = np.ascontiguousarray(np.stack([_targets2(a, pc) for a in arm_list]))
+    band, usd, defer = _rule_arrays(arm_list)
+    out_pre = np.empty((2, len(arm_list), W), dtype=np.float64)
+    out_at = np.empty((len(capitals), len(modes), len(arm_list), W), dtype=np.float64)
+    fe2_boot._boot_chunk2(
+        ob, cb, wb, oc, cc, wc, env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y,
+        env.dec_tail, env.pay_ptr, env.pay_yr, env.pay_part, TAX_CAPITALS["100k"], cap_at,
+        win.i0, win.i1, cost, win.yrs, env.Y0, env.M_lo, band, usd, defer, rule_index, mode_ids,
+        env.cash_rate, p0, n_pre, n_tax, DBG0, out_pre, out_at,
+    )
+    npre = max(0, min(W, n_pre - p0))
+    ntax = max(0, min(W, n_tax - p0))
+    for ai, arm in enumerate(arm_list):
+        for bi, mdi in enumerate(("base", "calibrated")):
+            if npre:
+                pre[mdi][arm["id"]][p0 : p0 + npre] = out_pre[bi, ai, :npre]
+        for ci, cl in enumerate(capitals):
+            for mi, md in enumerate(modes):
+                if ntax:
+                    tax[cl][md][arm["id"]][p0 : p0 + ntax] = out_at[ci, mi, ai, :ntax]
 
 
 def _targets(arm, p):

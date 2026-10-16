@@ -342,6 +342,8 @@ def resolve_arm(mod, arm_id: str) -> dict:
                               f"got {type(leg_b).__name__}")
         if leg_b not in leg_b_keys():
             raise PluginError(f"arm {arm_id!r}: unknown leg_b {leg_b!r}; known: {leg_b_keys()}")
+        if leg_b == leg:
+            raise PluginError(f"arm {arm_id!r}: leg_b {leg_b!r} is leg A's own instrument")
     return {"rule": rule, "leg": leg, "leg_b": leg_b, "two_leg": leg_b is not None,
             "cash_yield": cash,
             # `leg_b` stays in `params` (unlike the engine options `rule`/`leg`/`cash_yield`): a
@@ -428,10 +430,12 @@ def call_targets(mod, data: MarketData, arm: dict) -> Targets:
     leg = _leg_or_error(leg, arm["leg"], want_shape, "held")
     if leg not in LEGS:
         raise PluginError(f"targets() returned unknown leg {leg!r}; known: {LEGS}")
-    spec_leg_b = arm.get("leg_b")
+    # `resolve_arm` puts the declaration at the top level; a hand-built arm may carry it only in
+    # its params (the spec), which is what the registry pins.
+    spec_leg_b = arm.get("leg_b", (arm.get("params") or {}).get("leg_b"))
     if wb is None and leg_b is None:
         if spec_leg_b is not None:
-            raise PluginError(f"arm {arm['id']!r} declares leg_b = {spec_leg_b!r} but targets() "
+            raise PluginError(f"arm {arm.get('id')!r} declares leg_b = {spec_leg_b!r} but targets() "
                               "returned a single-leg target panel")
         return Targets(wants=wants, leg=str(leg))
     if wb is None or leg_b is None:
@@ -444,6 +448,9 @@ def call_targets(mod, data: MarketData, arm: dict) -> Targets:
     if str(leg_b) != spec_leg_b:
         raise PluginError(f"targets() named leg_b = {leg_b!r} but the spec declares "
                           f"{spec_leg_b!r}")
+    if str(leg_b) == str(leg):
+        raise PluginError(f"leg_b = {leg_b!r} is leg A's own instrument; one instrument has one "
+                          "FIFO book per taxpayer (two books of one instrument need a kernel option)")
     return Targets(wants=wants, leg=str(leg), wants_b=wb, leg_b=str(leg_b))
 
 

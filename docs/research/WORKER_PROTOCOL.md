@@ -97,7 +97,8 @@ Read docs/research/INDEX.md for everything already tested — don't repeat it.
 5. Report honestly; never change gates or arms after seeing data; bug fixes go in "Amendments".
 
 ## Process rule
-Run every long computation in the FOREGROUND and wait for it. Don't end your session with
+Run every long computation in the FOREGROUND and wait for it. Commit early and often (after each finished
+unit of work) so an interruption loses little; a resumed run starts by inspecting git status/diff. Don't end your session with
 background jobs running; you are done only when report and results are committed (check git log).
 
 ## Final answer (stdout)

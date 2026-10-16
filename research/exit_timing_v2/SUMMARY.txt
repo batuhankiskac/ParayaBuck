@@ -1,0 +1,219 @@
+exit_timing_v2 | exit-leg tax timing under K (idea_survey_v4 I4), Numba engine | main window 2000-03-09 -> 2026-09-29 (6679 sessions) | control = production K | arms = K + C0(R2) + A1u + H2 + X1 + X2 + X3
+harness PASS (0 outside tolerance); engine parity --quick PASS (12.6s, PARITY.json restored); X options off == fe_sim/fe_boot bit-for-bit PASS; control K anchors PASS; R2 reference anchor PASS
+deep reference block: 1893 cells (pre_tax_main, after_tax_windows, cost_stress_m4, clean_bootstrap, e1_e2_e3_oos_instruments, delta_rebase_on_C0_138_subtrees), 0 mismatches (tol 2e-06), max|diff| 5.00e-07 -> PASS
+ADOPTED: None -- no arm adopted; every candidate fails at least one pre-registered gate: X1: G4,T1,T2,T3; X2: G7,T1,T2,T3; X3: G4,G7,T1
+wall clock of this --run: 11.4 s
+
+per arm (pre-tax main window m = 2, R-INDEX; after tax at $100k, base, m = 2, liquidated; deltas vs the control K):
+  arm   CAGR base  CAGR cal   maxDD base  maxDD cal   turn/yr | dAT2000  dAT2010  dAT2017 (pp) | boot B1 med/share | boot B2 med/share | OOS med d (pp) | T1 T2 T3
+  K      15.76%   15.18%   46.67%   46.79%      5.46 |   +0.000   +0.000   +0.000 |         -       -  |         -       -  |       +0.000 |     -    -    -
+  C0     15.48%   14.90%   46.76%   46.88%      5.99 |   -0.593   -0.529   -1.086 |  -0.286   25.0% |  -0.131   36.0% |       -0.065 |     -    -    -
+  A1u    15.72%   15.12%   47.19%   47.31%      5.49 |   -0.139   -0.133   -0.271 |  -0.042   35.1% |  -0.025   36.6% |       -0.027 |     -    -    -
+  H2     15.52%   14.94%   46.25%   46.38%      5.95 |   -0.450   -0.396   -0.811 |  -0.210   27.1% |  -0.088   38.5% |       -0.029 |     -    -    -
+  X1     15.92%   15.33%   47.27%   47.39%      5.35 |   +0.144   +0.278   -0.191 |  +0.000   48.5% |  +0.000   48.9% |       +0.082 | T1=F  T2=F  T3=F
+  X2     15.97%   15.38%   46.67%   46.79%      5.34 |   -0.103   -0.228   -0.545 |  +0.000   44.0% |  +0.000   44.5% |       -0.112 | T1=F  T2=F  T3=F
+  X3     16.13%   15.54%   47.27%   47.39%      5.23 |   +0.051   +0.056   -0.720 |  +0.058   56.0% |  +0.068   56.7% |       -0.027 | T1=F  T2=P  T3=P
+
+  X1 gates: G1=PASS G2=PASS G3=PASS G4=FAIL G5=PASS G6=PASS G7=PASS G8=PASS G9=PASS T1=FAIL T2=FAIL T3=FAIL
+      G1 m2 base +0.155pp cal +0.153pp | G1 m1 base +0.150pp cal +0.148pp | G2 base +0.60pp cal +0.60pp | G3 base -0.263pp cal -0.263pp | G4 wins 1/3 | G9 ratio 0.9814
+      G5 pre-tax boot med/base +0.0406pp (share>0 52.2%) cal +0.0393pp (share>0 52.1%) | G7 median +0.082pp within 6/6 worst dDD +0.84pp | G8 median +0.000pp
+      T1 deltas 2000_03_to_2026_09 +0.144pp, 2010_01_to_end +0.278pp, 2017_01_to_end -0.191pp | dmaxDD 2000_03_to_2026_09 +0.60pp, 2010_01_to_end +0.05pp, 2017_01_to_end +1.24pp
+      T2 (progressive): median +0.0000pp mean +0.0347pp share>0 48.5% p05/p95 -1.13/+1.08 -> FAIL
+      T3 (flat): median +0.0000pp mean +0.0568pp share>0 48.9% p05/p95 -1.06/+1.11 -> FAIL
+      vs K report: E2 rolling starts median +0.186pp (12/21 >= 0) | E1 21 ETFs median +0.161pp (13/21 > 0, worst dmaxDD +2.09pp) | m=4 cost 2000_03_to_2026_09 +0.149pp, 2010_01_to_end +0.272pp, 2017_01_to_end -0.183pp
+  X2 gates: G1=PASS G2=PASS G3=PASS G4=PASS G5=PASS G6=PASS G7=FAIL G8=PASS G9=PASS T1=FAIL T2=FAIL T3=FAIL
+      G1 m2 base +0.206pp cal +0.205pp | G1 m1 base +0.201pp cal +0.200pp | G2 base +0.00pp cal +0.00pp | G3 base -0.672pp cal -0.669pp | G4 wins 2/3 | G9 ratio 0.9779
+      G5 pre-tax boot med/base +0.0000pp (share>0 42.2%) cal +0.0000pp (share>0 41.3%) | G7 median -0.112pp within 5/6 worst dDD +1.24pp | G8 median +0.000pp
+      T1 deltas 2000_03_to_2026_09 -0.103pp, 2010_01_to_end -0.228pp, 2017_01_to_end -0.545pp | dmaxDD 2000_03_to_2026_09 +0.00pp, 2010_01_to_end +0.14pp, 2017_01_to_end +2.12pp
+      T2 (progressive): median +0.0000pp mean +0.0319pp share>0 44.0% p05/p95 -0.26/+0.37 -> FAIL
+      T3 (flat): median +0.0000pp mean +0.0289pp share>0 44.5% p05/p95 -0.27/+0.35 -> FAIL
+      vs K report: E2 rolling starts median -0.277pp (0/21 >= 0) | E1 21 ETFs median +0.005pp (11/21 > 0, worst dmaxDD +0.88pp) | m=4 cost 2000_03_to_2026_09 -0.099pp, 2010_01_to_end -0.215pp, 2017_01_to_end -0.533pp
+  X3 gates: G1=PASS G2=PASS G3=PASS G4=FAIL G5=PASS G6=PASS G7=FAIL G8=PASS G9=PASS T1=FAIL T2=PASS T3=PASS
+      G1 m2 base +0.361pp cal +0.358pp | G1 m1 base +0.352pp cal +0.348pp | G2 base +0.60pp cal +0.60pp | G3 base -0.934pp cal -0.931pp | G4 wins 1/3 | G9 ratio 0.9593
+      G5 pre-tax boot med/base +0.1025pp (share>0 58.4%) cal +0.1011pp (share>0 58.3%) | G7 median -0.027pp within 6/6 worst dDD +2.06pp | G8 median +0.043pp
+      T1 deltas 2000_03_to_2026_09 +0.051pp, 2010_01_to_end +0.056pp, 2017_01_to_end -0.720pp | dmaxDD 2000_03_to_2026_09 +0.60pp, 2010_01_to_end +0.19pp, 2017_01_to_end +3.32pp
+      T2 (progressive): median +0.0583pp mean +0.0608pp share>0 56.0% p05/p95 -1.14/+1.17 -> PASS
+      T3 (flat): median +0.0683pp mean +0.0805pp share>0 56.7% p05/p95 -1.05/+1.16 -> PASS
+      vs K report: E2 rolling starts median +0.043pp (11/21 >= 0) | E1 21 ETFs median +0.137pp (13/21 > 0, worst dmaxDD +2.08pp) | m=4 cost 2000_03_to_2026_09 +0.060pp, 2010_01_to_end +0.069pp, 2017_01_to_end -0.708pp
+
+postponement / staging counters (main window, m = 2, base, $100k, progressive):
+  K    postponements  1917 (band  1836, December-resize   81, December-exit    0) sells/yr  10.66 staged events   0 sessions    0 (cap 0, gate 0, target-takeover 0)
+  C0   postponements     0 (band     0, December-resize    0, December-exit    0) sells/yr  30.69 staged events   0 sessions    0 (cap 0, gate 0, target-takeover 0)
+  A1u  postponements  1896 (band  1896, December-resize    0, December-exit    0) sells/yr  10.92 staged events   0 sessions    0 (cap 0, gate 0, target-takeover 0)
+  H2   postponements    53 (band     0, December-resize   53, December-exit    0) sells/yr  29.78 staged events   0 sessions    0 (cap 0, gate 0, target-takeover 0)
+  X1   postponements  1978 (band  1870, December-resize   84, December-exit   24) sells/yr  10.58 staged events   0 sessions    0 (cap 0, gate 0, target-takeover 0)
+  X2   postponements  1919 (band  1838, December-resize   81, December-exit    0) sells/yr  10.81 staged events   9 sessions    9 (cap 0, gate 5, target-takeover 4)
+  X3   postponements  1974 (band  1866, December-resize   84, December-exit   24) sells/yr  10.73 staged events   9 sessions    9 (cap 0, gate 5, target-takeover 4)
+
+named episodes (main window, base financing, m = 2, pre-tax; delta vs K):
+  episode              arm   total ret   d ret pp    max DD    d DD pp
+  2000_02_dotcom       K       -39.86%    +0.000    40.50%    +0.000
+  2000_02_dotcom       C0      -39.96%    -0.095    40.71%    +0.213
+  2000_02_dotcom       A1u     -40.45%    -0.584    41.07%    +0.575
+  2000_02_dotcom       H2      -39.39%    +0.473    40.13%    -0.366
+  2000_02_dotcom       X1      -40.89%    -1.024    41.24%    +0.742
+  2000_02_dotcom       X2      -39.86%    +0.000    40.50%    +0.000
+  2000_02_dotcom       X3      -40.89%    -1.024    41.24%    +0.742
+  2008_gfc             K       -32.28%    +0.000    32.41%    +0.000
+  2008_gfc             C0      -32.30%    -0.023    32.43%    +0.023
+  2008_gfc             A1u     -32.32%    -0.043    32.45%    +0.043
+  2008_gfc             H2      -32.04%    +0.236    32.17%    -0.236
+  2008_gfc             X1      -32.28%    +0.000    32.41%    -0.000
+  2008_gfc             X2      -32.28%    +0.000    32.41%    -0.000
+  2008_gfc             X3      -32.28%    -0.000    32.41%    +0.000
+  dec2015_jan2016      K       -15.22%    +0.000    16.26%    +0.000
+  dec2015_jan2016      C0      -14.53%    +0.682    15.58%    -0.673
+  dec2015_jan2016      A1u     -14.78%    +0.440    15.82%    -0.434
+  dec2015_jan2016      H2      -15.13%    +0.086    16.17%    -0.085
+  dec2015_jan2016      X1      -15.22%    +0.000    16.26%    +0.000
+  dec2015_jan2016      X2      -15.22%    -0.000    16.26%    +0.000
+  dec2015_jan2016      X3      -15.22%    -0.000    16.26%    +0.000
+  dec2018              K        +0.00%    +0.000     0.00%    +0.000
+  dec2018              C0       +0.00%    +0.000     0.00%    +0.000
+  dec2018              A1u      +0.00%    +0.000     0.00%    +0.000
+  dec2018              H2       +0.00%    +0.000     0.00%    +0.000
+  dec2018              X1       +0.00%    +0.000     0.00%    +0.000
+  dec2018              X2       +0.00%    +0.000     0.00%    +0.000
+  dec2018              X3       +0.00%    +0.000     0.00%    +0.000
+  dec2021_jan2022      K       -10.46%    +0.000    16.74%    +0.000
+  dec2021_jan2022      C0      -10.53%    -0.069    16.19%    -0.547
+  dec2021_jan2022      A1u     -10.71%    -0.249    16.66%    -0.079
+  dec2021_jan2022      H2      -10.08%    +0.382    16.29%    -0.448
+  dec2021_jan2022      X1      -10.46%    +0.000    16.74%    +0.000
+  dec2021_jan2022      X2      -13.21%    -2.755    19.30%    +2.562
+  dec2021_jan2022      X3      -13.21%    -2.755    19.30%    +2.562
+
+whole-path (main window, pre-tax, m = 2) max DD and the X counters:
+  K    cagr 15.7649% maxDD 46.670% (d vs K +0.000pp) deferred-exit   0 staged events   0
+  C0   cagr 15.4766% maxDD 46.758% (d vs K +0.089pp) deferred-exit   0 staged events   0
+  A1u  cagr 15.7213% maxDD 47.188% (d vs K +0.518pp) deferred-exit   0 staged events   0
+  H2   cagr 15.5171% maxDD 46.254% (d vs K -0.416pp) deferred-exit   0 staged events   0
+  X1   cagr 15.9198% maxDD 47.265% (d vs K +0.595pp) deferred-exit  24 staged events   0
+  X2   cagr 15.9712% maxDD 46.670% (d vs K +0.000pp) deferred-exit   0 staged events  10
+  X3   cagr 16.1264% maxDD 47.265% (d vs K +0.595pp) deferred-exit  24 staged events  10
+
+after-tax counters at $100k (base, m = 2, liquidated):
+  arm   tax USD 2017+    relief TRY 2017+   deferred-exit 2017+   staged 2017+   sells/yr 2017+
+  K          371487            11991766                     0             0           9.54
+  C0         360297            10411202                     0             0          35.60
+  A1u        370231            11724726                     0             0           9.64
+  H2         360065            10717684                     0             0          34.68
+  X1         363596            11858058                    10             0           9.54
+  X2         356077            11591837                     0             4           9.64
+  X3         348446            11473458                    10             4           9.64
+
+E1 after tax on the 21 quality-passing ETFs (R-INDEX, $100k, calibrated, m = 2, liquidated) -- delta vs K (report only, not gated):
+  instrument  window                     K AT     X1 d     X2 d     X3 d
+  DIA         2000-03-09..2026-10-12    2.28%   +0.343   +0.083   +0.423
+  EEM         2004-04-15..2026-10-13    1.49%   +0.177   -0.002   +0.175
+  EFA         2002-09-04..2026-10-13    4.91%   +0.523   -0.133   +0.396
+  EWA         2000-03-09..2026-10-13    1.43%   +0.036   +0.156   +0.186
+  EWG         2000-03-09..2026-10-13    1.65%   -0.114   +0.097   -0.017
+  EWH         2000-03-09..2026-10-13    1.68%   -0.064   -0.039   -0.102
+  EWJ         2000-03-09..2026-10-13   -2.78%   +0.364   -0.109   +0.256
+  EWL         2000-03-09..2026-10-13    2.23%   -0.066   +0.146   +0.066
+  EWS         2000-03-09..2026-10-13    4.42%   -0.062   -0.060   -0.122
+  EWU         2000-03-09..2026-10-13    0.25%   -0.196   +0.089   -0.107
+  IWM         2001-05-30..2026-10-12    0.84%   -0.071   -0.103   -0.173
+  SPY         2000-03-09..2026-10-12    6.67%   +0.209   -0.417   -0.211
+  XLB         2000-03-09..2026-10-13   -1.46%   +0.313   -0.006   +0.307
+  XLE         2000-03-09..2026-10-13    2.64%   +0.071   +0.005   +0.075
+  XLF         2000-03-09..2026-10-13    1.47%   +0.175   +0.209   +0.385
+  XLI         2000-03-09..2026-10-13    4.18%   +0.250   -0.178   +0.137
+  XLK         2000-03-09..2026-10-13    9.65%   +0.180   +0.051   +0.230
+  XLP         2000-03-09..2026-10-13    1.01%   -0.226   -0.018   -0.245
+  XLU         2000-03-09..2026-10-13    3.20%   +0.308   +0.182   +0.435
+  XLV         2000-03-09..2026-10-13   -1.74%   -0.158   +0.137   -0.022
+  XLY         2000-03-09..2026-10-13    3.60%   +0.161   +0.109   +0.238
+  median delta: X1 +0.161pp (13/21 > 0), X2 +0.005pp (11/21 > 0), X3 +0.137pp (13/21 > 0)
+
+E2 rolling January starts (after tax $100k, base, m = 2, to 2026-09-29) -- delta vs K:
+  year   start        K AT      X1 d      X2 d      X3 d
+  2001   2001-01-02    12.39%   +0.178   -0.115   +0.066
+  2002   2002-01-02    13.16%   +0.186   -0.125   +0.065
+  2003   2003-01-02    14.08%   +0.204   -0.137   +0.074
+  2004   2004-01-02    13.12%   +0.207   -0.106   +0.096
+  2005   2005-01-03    13.39%   +0.202   -0.144   +0.068
+  2006   2006-01-03    14.33%   +0.215   -0.163   +0.059
+  2007   2007-01-03    14.90%   +0.226   -0.175   +0.061
+  2008   2008-01-02    14.60%   +0.239   -0.203   +0.046
+  2009   2009-01-02    16.96%   +0.257   -0.195   +0.071
+  2010   2010-01-04    15.24%   +0.278   -0.228   +0.056
+  2011   2011-01-03    15.94%   +0.303   -0.277   +0.043
+  2012   2012-01-03    18.87%   +0.216   -0.299   -0.063
+  2013   2013-01-02    19.89%   -0.122   -0.408   -0.519
+  2014   2014-01-02    18.08%   -0.139   -0.406   -0.534
+  2015   2015-01-02    17.78%   -0.149   -0.427   -0.564
+  2016   2016-01-04    21.52%   -0.170   -0.485   -0.641
+  2017   2017-01-03    23.97%   -0.191   -0.545   -0.720
+  2018   2018-01-02    21.22%   -0.202   -0.588   -0.776
+  2019   2019-01-02    24.29%   -0.235   -0.670   -0.888
+  2020   2020-01-02    22.89%   -0.280   -0.710   -0.966
+  2021   2021-01-04    20.31%   -0.331   -0.803   -1.114
+
+E3 fresh after-tax bootstraps (seed 20261015, 1000 paths, $100k, blocks (10, 40)) -- delta vs K (report only):
+  run                    arm    median d  share>0     p05       p95
+  block10_flat         X1       +0.022    51.7%     -1.08     +1.15
+  block10_flat         X2       +0.000    32.5%     -0.22     +0.27
+  block10_flat         X3       +0.059    55.3%     -1.09     +1.20
+  block10_progressive  X1       +0.018    50.7%     -1.17     +1.14
+  block10_progressive  X2       +0.000    32.7%     -0.22     +0.28
+  block10_progressive  X3       +0.062    54.6%     -1.15     +1.18
+  block40_flat         X1       +0.000    47.1%     -0.95     +0.95
+  block40_flat         X2       +0.000    49.6%     -0.31     +0.45
+  block40_flat         X3       +0.094    59.2%     -0.94     +1.10
+  block40_progressive  X1       +0.000    45.7%     -1.11     +0.98
+  block40_progressive  X2       +0.007    51.0%     -0.29     +0.47
+  block40_progressive  X3       +0.097    57.9%     -1.04     +1.06
+
+E5 (report only): fill-decision differences on the main path (pre-tax, $100k, m = 2)
+  X1_vs_K     :    10 sessions differ (0.15%); X1 sells where K holds 3, X1 holds where K sells 5
+  X2_vs_K     :     7 sessions differ (0.10%); X2 sells where K holds 6, X2 holds where K sells 1
+  X3_vs_K     :    17 sessions differ (0.25%); X3 sells where K holds 9, X3 holds where K sells 6
+  K_vs_C0     :   790 sessions differ (11.83%); K sells where C0 holds 9, K holds where C0 sells 524
+  K_vs_A1u    :    19 sessions differ (0.28%); K sells where A1u holds 2, K holds where A1u sells 9
+  H2_vs_C0    :    45 sessions differ (0.67%); H2 sells where C0 holds 3, H2 holds where C0 sells 27
+  sells (downward resizes+exits) per arm: K 270, C0 785, A1u 277, H2 761, X1 268, X2 275, X3 273
+  postponements per arm: K 1239+71+0+0, C0 0+0+0+0, A1u 1289+0+0+0, H2 0+51+0+0, X1 1239+74+24+0, X2 1241+71+0+10, X3 1241+74+24+10
+  after tax at $10k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   12.18% | X1   12.31%  +0.131pp X2   12.29%  +0.113pp X3   12.21%  +0.032pp
+    2010_01_to_end       K   17.47% | X1   17.71%  +0.243pp X2   17.63%  +0.160pp X3   17.90%  +0.430pp
+    2017_01_to_end       K   26.92% | X1   26.72%  -0.201pp X2   26.37%  -0.549pp X3   26.18%  -0.738pp
+  after tax at $30k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   11.52% | X1   11.65%  +0.127pp X2   11.41%  -0.115pp X3   11.55%  +0.021pp
+    2010_01_to_end       K   16.40% | X1   16.65%  +0.250pp X2   16.21%  -0.189pp X3   16.48%  +0.076pp
+    2017_01_to_end       K   25.35% | X1   25.15%  -0.204pp X2   24.81%  -0.544pp X3   24.62%  -0.735pp
+  after tax at $300k (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K   10.19% | X1   10.36%  +0.166pp X2   10.07%  -0.121pp X3   10.25%  +0.053pp
+    2010_01_to_end       K   14.56% | X1   14.85%  +0.288pp X2   14.32%  -0.237pp X3   14.62%  +0.059pp
+    2017_01_to_end       K   23.20% | X1   23.06%  -0.140pp X2   22.65%  -0.554pp X3   22.52%  -0.675pp
+  after tax at $1M (progressive, liquidated, base, m = 2):
+    2000_03_to_2026_09   K    9.88% | X1   10.05%  +0.174pp X2    9.74%  -0.138pp X3    9.92%  +0.044pp
+    2010_01_to_end       K   14.16% | X1   14.46%  +0.293pp X2   13.93%  -0.240pp X3   14.23%  +0.069pp
+    2017_01_to_end       K   22.86% | X1   22.72%  -0.143pp X2   22.30%  -0.559pp X3   22.18%  -0.674pp
+
+m = 4 cost stress, after tax at $100k (delta vs K):
+  2000_03_to_2026_09   K   10.35% | X1   10.50%  +0.149pp X2   10.26%  -0.099pp X3   10.41%  +0.060pp
+  2010_01_to_end       K   14.82% | X1   15.09%  +0.272pp X2   14.61%  -0.215pp X3   14.89%  +0.069pp
+  2017_01_to_end       K   23.67% | X1   23.49%  -0.183pp X2   23.14%  -0.533pp X3   22.97%  -0.708pp
+
+six OOS windows (pre-tax, calibrated, m = 2, R-USD rule) -- delta vs K:
+  window            K CAGR    K maxDD     X1 d      X2 d      X3 d   (CAGR pp)
+  GSPC_1957_1999      9.97%    39.65%    +0.062    -0.076    +0.076
+  M1                 21.27%    41.22%    +0.227    -0.657    -0.276
+  M2                 11.73%    58.11%    +0.088    -0.218    -0.130
+  M3                  6.46%    65.18%    -0.136    -0.148    -0.284
+  M4                  9.71%    58.15%    +0.142    -0.057    +0.084
+  M5                 -0.62%    85.65%    +0.075    +0.230    +0.305
+
+G8 pooled OOS bootstrap (pre-tax, R-USD, M1-M5, 2,000 paths each) -- delta vs K:
+  X1 median +0.000pp (share>0 45.9%), X2 median +0.000pp (share>0 48.2%), X3 median +0.043pp (share>0 54.3%)
+
+realised / negative realised TRY gain by reason (main window, $100k, progressive, m = 2):
+  K    gain {"liquidation": 9083044, "resize": 58346619, "tax": 572538} | neg {"resize": -3181251}
+  H2   gain {"liquidation": 7780795, "resize": 53176275, "tax": 660682} | neg {"resize": -5308503}
+  X1   gain {"liquidation": 9404663, "resize": 60211101, "tax": 590776} | neg {"resize": -3499246}
+  X2   gain {"liquidation": 8834582, "resize": 56532170, "tax": 576586} | neg {"resize": -3225934}
+  X3   gain {"liquidation": 9169517, "resize": 58462646, "tax": 596420} | neg {"resize": -3545595}
+
+reference reproduction: 1893 cells, 0 mismatches, max|diff| 5.00e-07 -> PASS

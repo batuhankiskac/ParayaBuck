@@ -1,0 +1,315 @@
+{
+ "campaign": "plugins_c4",
+ "extra_data": {
+  "DCOILWTICO": {
+   "bytes": 161275,
+   "column": "value",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_dcoilwtico.csv",
+   "price": "level",
+   "range": [
+    "1986-01-02",
+    "2026-10-14"
+   ],
+   "rows": 9523,
+   "sha256": "ee2461867416fd1132c6f9836e79a82693623d96dca057789ccd9cebae62f1bc",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILWTICO"
+  },
+  "EEM": {
+   "bytes": 204670,
+   "column": "adjclose",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_eem.csv",
+   "price": "adjclose",
+   "range": [
+    "2003-04-14",
+    "2026-10-16"
+   ],
+   "rows": 5916,
+   "sha256": "1f7c27ba86e5f5b71abbca18d8e80c3687e000197946a739352b360cc5c780c3",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/EEM?period1=0&period2=1792159623&interval=1d&events=div%2Csplit"
+  },
+  "EEM-SPY-RS126": {
+   "bytes": 211224,
+   "column": "rs126",
+   "derived_from": {
+    "files": {
+     "data/historical/plugins_c4_eem.csv": "1f7c27ba86e5f5b71abbca18d8e80c3687e000197946a739352b360cc5c780c3",
+     "data/historical/plugins_c4_spy.csv": "74dfeddeb2dceb29c8b490f17879882f49ecb6b162e31164b0d763596b79ab4d"
+    }
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_eem_spy_rs126.csv",
+   "note": "adjclose 126-session returns on common sessions; same-day; calendar-day ffill",
+   "price": "ratio",
+   "range": [
+    "2003-10-13",
+    "2026-10-16"
+   ],
+   "rows": 8405,
+   "sha256": "f52a8c7f434c58041857cb3fcf6cf47a5b95c77cc0ba5851b125459e92d2b270",
+   "source": "derived (research/plugins_c4/signals.py rel_strength)",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/EEM?period1=0&period2=1792159623&interval=1d&events=div%2Csplit ; https://query1.finance.yahoo.com/v8/finance/chart/SPY?period1=0&period2=1792159624&interval=1d&events=div%2Csplit"
+  },
+  "ICSA": {
+   "bytes": 56173,
+   "column": "value",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_icsa.csv",
+   "price": "level",
+   "range": [
+    "1967-01-07",
+    "2026-10-10"
+   ],
+   "rows": 3119,
+   "sha256": "fbff19b4c44c4a821bf69dd121f4a3ff1aca7bf9cded966e1964daf31e9454dd",
+   "source": "FRED CSV",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=ICSA"
+  },
+  "ICSA-SHOCK": {
+   "bytes": 491302,
+   "column": "icsa_shock",
+   "derived_from": {
+    "files": {
+     "data/historical/plugins_c4_icsa.csv": "fbff19b4c44c4a821bf69dd121f4a3ff1aca7bf9cded966e1964daf31e9454dd"
+    }
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_icsa_shock.csv",
+   "note": "mean4/min26(mean4)-1 on weekly ICSA; dated week-end + 7 days; calendar-day ffill",
+   "price": "ratio",
+   "range": [
+    "1967-07-29",
+    "2026-10-17"
+   ],
+   "rows": 21631,
+   "sha256": "7aafd3401b8e71bcbb2948f2214596a4f8163314a037ceb7c5f95d855fa48928",
+   "source": "derived (research/plugins_c4/signals.py icsa_shock)",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=ICSA"
+  },
+  "SEC-CORR": {
+   "bytes": 632422,
+   "column": "corr",
+   "derived_from": {
+    "files": {
+     "data/historical/batch_screen_v1_xlb.csv": "1eadffeff63906869f96b41b807bf860bff0b765f21103c32fec4f6db9bf0ec6",
+     "data/historical/batch_screen_v1_xle.csv": "cda2a945c6b10df5f150d72f728d6f77d8dc4b44b04882b26a8b4efe6e3d3579",
+     "data/historical/batch_screen_v1_xlf.csv": "dcd6b2c861a54587c8a930016de8b377e965e1e3cf0d6b23a72f96f8cc37ab0a",
+     "data/historical/batch_screen_v1_xli.csv": "f75a2e3bc9755c2e3891ffa329c45d255f515305d5ad2a87e2ac0cf706b089fd",
+     "data/historical/batch_screen_v1_xlk.csv": "99c40210249a5e9db14d0b1d39000d381ad9ce7d0f59be9b8b0ab72644e5a337",
+     "data/historical/batch_screen_v1_xlp.csv": "aeeec25ee04d2dcaa010beada60b84d5342b9c62cc0094720afd36e1f504dd1b",
+     "data/historical/batch_screen_v1_xlu.csv": "e8a503381dc7c42dce456cef338bf2795628e4f75ed6d77584b97ec3777a5745",
+     "data/historical/batch_screen_v1_xlv.csv": "d77a9afdbceef78d7301dfcf7a0717e356c67d062b1db959ae9b9485300c67f7",
+     "data/historical/batch_screen_v1_xly.csv": "20d3464cba903883c0d9f29b93b3cba5ea42b5ed03eb31c1f167dd129aa7bbb0"
+    }
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_sector_stats.csv",
+   "note": "nine SPDR adjcloses on common sessions; same-day; calendar-day ffill",
+   "price": "ratio",
+   "range": [
+    "1999-04-19",
+    "2026-10-15"
+   ],
+   "rows": 10042,
+   "sha256": "2df1f51dacb2cf8505b0bbafd1a654582102375cfbe5b64d53d000a2dfb1e41a",
+   "source": "derived (research/plugins_c4/signals.py sector_stats)",
+   "url": "registered batch_screen sector SPDR series (Yahoo chart API)"
+  },
+  "SEC-CORR-REL": {
+   "bytes": 632422,
+   "column": "corr_rel",
+   "derived_from": {
+    "files": {
+     "data/historical/batch_screen_v1_xlb.csv": "1eadffeff63906869f96b41b807bf860bff0b765f21103c32fec4f6db9bf0ec6",
+     "data/historical/batch_screen_v1_xle.csv": "cda2a945c6b10df5f150d72f728d6f77d8dc4b44b04882b26a8b4efe6e3d3579",
+     "data/historical/batch_screen_v1_xlf.csv": "dcd6b2c861a54587c8a930016de8b377e965e1e3cf0d6b23a72f96f8cc37ab0a",
+     "data/historical/batch_screen_v1_xli.csv": "f75a2e3bc9755c2e3891ffa329c45d255f515305d5ad2a87e2ac0cf706b089fd",
+     "data/historical/batch_screen_v1_xlk.csv": "99c40210249a5e9db14d0b1d39000d381ad9ce7d0f59be9b8b0ab72644e5a337",
+     "data/historical/batch_screen_v1_xlp.csv": "aeeec25ee04d2dcaa010beada60b84d5342b9c62cc0094720afd36e1f504dd1b",
+     "data/historical/batch_screen_v1_xlu.csv": "e8a503381dc7c42dce456cef338bf2795628e4f75ed6d77584b97ec3777a5745",
+     "data/historical/batch_screen_v1_xlv.csv": "d77a9afdbceef78d7301dfcf7a0717e356c67d062b1db959ae9b9485300c67f7",
+     "data/historical/batch_screen_v1_xly.csv": "20d3464cba903883c0d9f29b93b3cba5ea42b5ed03eb31c1f167dd129aa7bbb0"
+    }
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_sector_stats.csv",
+   "note": "nine SPDR adjcloses on common sessions; same-day; calendar-day ffill",
+   "price": "ratio",
+   "range": [
+    "2000-04-13",
+    "2026-10-15"
+   ],
+   "rows": 9682,
+   "sha256": "2df1f51dacb2cf8505b0bbafd1a654582102375cfbe5b64d53d000a2dfb1e41a",
+   "source": "derived (research/plugins_c4/signals.py sector_stats)",
+   "url": "registered batch_screen sector SPDR series (Yahoo chart API)"
+  },
+  "SEC-DISP": {
+   "bytes": 632422,
+   "column": "disp",
+   "derived_from": {
+    "files": {
+     "data/historical/batch_screen_v1_xlb.csv": "1eadffeff63906869f96b41b807bf860bff0b765f21103c32fec4f6db9bf0ec6",
+     "data/historical/batch_screen_v1_xle.csv": "cda2a945c6b10df5f150d72f728d6f77d8dc4b44b04882b26a8b4efe6e3d3579",
+     "data/historical/batch_screen_v1_xlf.csv": "dcd6b2c861a54587c8a930016de8b377e965e1e3cf0d6b23a72f96f8cc37ab0a",
+     "data/historical/batch_screen_v1_xli.csv": "f75a2e3bc9755c2e3891ffa329c45d255f515305d5ad2a87e2ac0cf706b089fd",
+     "data/historical/batch_screen_v1_xlk.csv": "99c40210249a5e9db14d0b1d39000d381ad9ce7d0f59be9b8b0ab72644e5a337",
+     "data/historical/batch_screen_v1_xlp.csv": "aeeec25ee04d2dcaa010beada60b84d5342b9c62cc0094720afd36e1f504dd1b",
+     "data/historical/batch_screen_v1_xlu.csv": "e8a503381dc7c42dce456cef338bf2795628e4f75ed6d77584b97ec3777a5745",
+     "data/historical/batch_screen_v1_xlv.csv": "d77a9afdbceef78d7301dfcf7a0717e356c67d062b1db959ae9b9485300c67f7",
+     "data/historical/batch_screen_v1_xly.csv": "20d3464cba903883c0d9f29b93b3cba5ea42b5ed03eb31c1f167dd129aa7bbb0"
+    }
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_sector_stats.csv",
+   "note": "nine SPDR adjcloses on common sessions; same-day; calendar-day ffill",
+   "price": "ratio",
+   "range": [
+    "1999-01-22",
+    "2026-10-15"
+   ],
+   "rows": 10129,
+   "sha256": "2df1f51dacb2cf8505b0bbafd1a654582102375cfbe5b64d53d000a2dfb1e41a",
+   "source": "derived (research/plugins_c4/signals.py sector_stats)",
+   "url": "registered batch_screen sector SPDR series (Yahoo chart API)"
+  },
+  "SEC-DISP-REL": {
+   "bytes": 632422,
+   "column": "disp_rel",
+   "derived_from": {
+    "files": {
+     "data/historical/batch_screen_v1_xlb.csv": "1eadffeff63906869f96b41b807bf860bff0b765f21103c32fec4f6db9bf0ec6",
+     "data/historical/batch_screen_v1_xle.csv": "cda2a945c6b10df5f150d72f728d6f77d8dc4b44b04882b26a8b4efe6e3d3579",
+     "data/historical/batch_screen_v1_xlf.csv": "dcd6b2c861a54587c8a930016de8b377e965e1e3cf0d6b23a72f96f8cc37ab0a",
+     "data/historical/batch_screen_v1_xli.csv": "f75a2e3bc9755c2e3891ffa329c45d255f515305d5ad2a87e2ac0cf706b089fd",
+     "data/historical/batch_screen_v1_xlk.csv": "99c40210249a5e9db14d0b1d39000d381ad9ce7d0f59be9b8b0ab72644e5a337",
+     "data/historical/batch_screen_v1_xlp.csv": "aeeec25ee04d2dcaa010beada60b84d5342b9c62cc0094720afd36e1f504dd1b",
+     "data/historical/batch_screen_v1_xlu.csv": "e8a503381dc7c42dce456cef338bf2795628e4f75ed6d77584b97ec3777a5745",
+     "data/historical/batch_screen_v1_xlv.csv": "d77a9afdbceef78d7301dfcf7a0717e356c67d062b1db959ae9b9485300c67f7",
+     "data/historical/batch_screen_v1_xly.csv": "20d3464cba903883c0d9f29b93b3cba5ea42b5ed03eb31c1f167dd129aa7bbb0"
+    }
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_sector_stats.csv",
+   "note": "nine SPDR adjcloses on common sessions; same-day; calendar-day ffill",
+   "price": "ratio",
+   "range": [
+    "2000-01-20",
+    "2026-10-15"
+   ],
+   "rows": 9766,
+   "sha256": "2df1f51dacb2cf8505b0bbafd1a654582102375cfbe5b64d53d000a2dfb1e41a",
+   "source": "derived (research/plugins_c4/signals.py sector_stats)",
+   "url": "registered batch_screen sector SPDR series (Yahoo chart API)"
+  },
+  "SPY": {
+   "bytes": 287227,
+   "column": "adjclose",
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_spy.csv",
+   "price": "adjclose",
+   "range": [
+    "1993-01-29",
+    "2026-10-16"
+   ],
+   "rows": 8487,
+   "sha256": "74dfeddeb2dceb29c8b490f17879882f49ecb6b162e31164b0d763596b79ab4d",
+   "source": "Yahoo chart API",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/SPY?period1=0&period2=1792159624&interval=1d&events=div%2Csplit"
+  },
+  "WTI-MEDGAP": {
+   "bytes": 451477,
+   "column": "med_gap",
+   "derived_from": {
+    "files": {
+     "data/historical/plugins_c4_dcoilwtico.csv": "ee2461867416fd1132c6f9836e79a82693623d96dca057789ccd9cebae62f1bc"
+    }
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_wti_state.csv",
+   "note": "native FRED observations; same-day; calendar-day ffill",
+   "price": "level",
+   "range": [
+    "1987-02-09",
+    "2026-10-14"
+   ],
+   "rows": 14493,
+   "sha256": "60b0be419856901a6d6249b716cbae1cd9c4fdcf9b33fa0f987818aa6ec65e6e",
+   "source": "derived (research/plugins_c4/signals.py oil_state)",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILWTICO"
+  },
+  "WTI-R126": {
+   "bytes": 451477,
+   "column": "r126",
+   "derived_from": {
+    "files": {
+     "data/historical/plugins_c4_dcoilwtico.csv": "ee2461867416fd1132c6f9836e79a82693623d96dca057789ccd9cebae62f1bc"
+    }
+   },
+   "fetched": "2026-10-16",
+   "file": "data/historical/plugins_c4_wti_state.csv",
+   "note": "native FRED observations; same-day; calendar-day ffill",
+   "price": "ratio",
+   "range": [
+    "1986-07-17",
+    "2026-10-14"
+   ],
+   "rows": 14700,
+   "sha256": "60b0be419856901a6d6249b716cbae1cd9c4fdcf9b33fa0f987818aa6ec65e6e",
+   "source": "derived (research/plugins_c4/signals.py oil_state)",
+   "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILWTICO"
+  }
+ },
+ "files": {
+  "data/historical/plugins_c4_dcoilwtico.csv": {
+   "bytes": 161275,
+   "sha256": "ee2461867416fd1132c6f9836e79a82693623d96dca057789ccd9cebae62f1bc"
+  },
+  "data/historical/plugins_c4_eem.csv": {
+   "bytes": 204670,
+   "sha256": "1f7c27ba86e5f5b71abbca18d8e80c3687e000197946a739352b360cc5c780c3"
+  },
+  "data/historical/plugins_c4_eem_spy_rs126.csv": {
+   "bytes": 211224,
+   "sha256": "f52a8c7f434c58041857cb3fcf6cf47a5b95c77cc0ba5851b125459e92d2b270"
+  },
+  "data/historical/plugins_c4_icsa.csv": {
+   "bytes": 56173,
+   "sha256": "fbff19b4c44c4a821bf69dd121f4a3ff1aca7bf9cded966e1964daf31e9454dd"
+  },
+  "data/historical/plugins_c4_icsa_shock.csv": {
+   "bytes": 491302,
+   "sha256": "7aafd3401b8e71bcbb2948f2214596a4f8163314a037ceb7c5f95d855fa48928"
+  },
+  "data/historical/plugins_c4_sector_stats.csv": {
+   "bytes": 632422,
+   "sha256": "2df1f51dacb2cf8505b0bbafd1a654582102375cfbe5b64d53d000a2dfb1e41a"
+  },
+  "data/historical/plugins_c4_spy.csv": {
+   "bytes": 287227,
+   "sha256": "74dfeddeb2dceb29c8b490f17879882f49ecb6b162e31164b0d763596b79ab4d"
+  },
+  "data/historical/plugins_c4_wti_state.csv": {
+   "bytes": 451477,
+   "sha256": "60b0be419856901a6d6249b716cbae1cd9c4fdcf9b33fa0f987818aa6ec65e6e"
+  }
+ },
+ "keys": {
+  "eem": "EEM",
+  "eem_spy_rs126": "EEM-SPY-RS126",
+  "icsa": "ICSA",
+  "icsa_shock": "ICSA-SHOCK",
+  "oil": "DCOILWTICO",
+  "oil_med_gap": "WTI-MEDGAP",
+  "oil_r126": "WTI-R126",
+  "sec_corr": "SEC-CORR",
+  "sec_corr_rel": "SEC-CORR-REL",
+  "sec_disp": "SEC-DISP",
+  "sec_disp_rel": "SEC-DISP-REL",
+  "spy": "SPY"
+ },
+ "note": "Extra series for the plugins_c4 IC09/IC14/IC19/IC29/IC51 plugins: four new public downloads (FRED ICSA, FRED DCOILWTICO, Yahoo EEM, Yahoo SPY) and the state statistics derived from them and from the registered sector SPDRs (research/plugins_c4/signals.py). The framework registry research/batch_screen/EXTRA_DATA.json carries the series and the keys."
+}

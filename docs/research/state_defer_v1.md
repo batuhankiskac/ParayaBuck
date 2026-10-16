@@ -13,7 +13,7 @@
 defers a downsize whenever its estimated tax exceeds 0.05 % of NAV, capped at 21 sessions and 10 pp
 of drift — is the near-miss and the only arm that is a *pre-tax* improvement on production K:
 it passes **G1-G9 in full** (CAGR 15.8546 % base / 15.2667 % calibrated vs K's 15.7649 / 15.1785;
-max DD +0.51 pp; 2017+ +0.20 pp; sub-periods P1/P2/P3 all above K; pre-tax bootstrap +0.024 pp
+max DD +0.51 pp; 2017+ +0.20 pp; two of three sub-periods above K; pre-tax bootstrap +0.024 pp
 median on 53.1 %; six OOS windows and the pooled OOS bootstrap positive; turnover 0.98 × K) and
 fails **only the three after-tax gates**: after tax at $100k it is **+0.044 / +0.047 / −0.070 pp**
 against K on the 2000 / 2010 / 2017 windows (T1 fails on the 2017 window), the inflation-aware

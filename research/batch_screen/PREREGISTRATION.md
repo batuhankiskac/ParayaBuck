@@ -437,3 +437,49 @@ been reported — the numbers it repairs were already read then. The study is
   Δ > 0` and `B1-recent median Δ > 0`, the DD/turnover gates), Stage 2 the same holdout, the
   deflation the same three tests. The re-screen exists only to replace the corrupted bootstrap cells
   with real ones; a verdict that changes is reported, not adopted.
+
+### 6.7 2026-10-17 — the N-leg router, five legs and two books of one instrument (kernel_ext_v1)
+
+Committed **before any non-control arm of batch `kernel_ext_v1` is screened**. This amendment
+changes no gate, threshold, seed, sample size, control or window, and no existing arm's spec
+(`--verify-registry` PASSes; the only `stale` entries are the `_N`-twin modules of bank_v3/v4b,
+information per `verify_ledger`). It extends `research/fast_engine3` (the N-leg kernel; edited in
+place, this package only — `research/fast_engine/`, `fast_engine2/` and `fast_engine_opts/` are
+untouched), the `batch_screen` declaration layer, and the trial set. The study is
+`research/kernel_ext_v1/` and its report `docs/research/kernel_ext_v1.md`.
+
+* **Capacity.** `fe3_sim.N_LEGS` 4 → 5 (`LEG_NAMES` A..E); `api.MAX_LEGS` 4 → 5 (a test asserts the
+  two agree). The bank's `IC36/B` blend — leg A plus the four sleeves {GLD, IEF, SHY, XLU} — now
+  fits one cash pool.
+* **The gain-aware downsize router reaches the N-leg kernel.** `fe2_opts`'s two-leg `route_cap`
+  (the only implementation of "route a downsize to the leg whose FIFO head is cheaper") is
+  generalised to N legs as `fe3_sim.sim3(..., route_cap, route_score)`: on a session in which at
+  least two legs want to downsize, the units the *most expensive* selling leg would realise move to
+  the *cheapest* selling leg, bounded by `route_cap x nav_after` and by either leg's own sale — the
+  `fe2_opts` move verbatim, with the same (cheap, other) choice when two legs sell. `route_score`
+  selects the score: `indexed` is the indexed-TRY FIFO gain fraction (`fe2_opts`'s own, so the
+  two-leg router is `fe2_opts` **bit for bit**, proven by new `fe3_parity` cells), `usd` is the USD
+  FIFO gain fraction (IB28/IC41's wording). `route_cap = 0` is unreachable and the kernel is the
+  published one bit for bit. The declaration is `route_cap_pp` (≥ 0 percent points) + `route_score`
+  on a multi-leg arm; `bridge3.needs_kernel3` routes such an arm here and nothing else changes.
+* **Two books of one instrument.** A `"legs"` list may name one instrument **twice** (at most
+  twice): two units/FIFO books of the same price series in one cash pool, one per leg slot, exactly
+  `fe3_sim`'s per-leg construction. The legacy `leg` + `leg_b` form still refuses a repeat. This is
+  IB38-C's "routed split" in one pool.
+* **Harness and tests.** The framework harness grows to **143 checks** (the new declaration rules,
+  the router reaching `fe3` and moving the split, two books of one instrument running) and the
+  `fe3_parity` suite to **215 cells** (the router group: indexed == `fe2_opts` on the parity cells
+  including the two per-leg rows, off == the two-leg kernel, the split bounded by the cap, `usd` ≠
+  `indexed`, two books of one instrument; plus a five-books capacity cell). The framework's pytest
+  suite is **154** tests. One framework test is amended: `test_ledger_merge.py`'s
+  `stale == []` assertion — already red at this amendment's base commit because bank_v3/v4b added
+  `_N` arms to existing modules without re-registering the pinned old ones, and `verify_ledger`
+  reports that as `stale` *information* (its own docstring, and `batch_bank_v4b.md`) — is replaced by
+  "every stale name is a committed ledger arm".
+* **What the batch screens.** Batch **`kernel_ext_v1`** screens only the newly-runnable bank arms
+  (new names/specs, so every earlier line and `spec_hash` stands): `IC36_N/B5_N` (the five-instrument
+  blend, `IC36/B`), `IC41_R/{A_N_R,B_N_R,C_N_R}` (the router arms, `IC41/A-C`) and `ib38_C/C` (the
+  routed split, `IB38/C`). Gates, stage 1/2, the paired control, the bootstrap seeds/blocks and the
+  deflation are exactly §§ 1–5 / §6.1.
+
+

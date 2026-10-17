@@ -77,6 +77,14 @@ ARMS = {
             "start": "auto", "inputs": ["gld", "ief", "shy"],
             "assets": ["gld", "ief", "shy"], "total": "production_vt", "vol_n": 20,
             "rescale": "monthly"},
+    # --- kernel_ext_v1: `N_LEGS` is now 5, so the bank's IC36/B (the {GLD, IEF, SHY, XLU} blend)
+    #     is expressible -- leg A + four sleeves in one cash pool. `B_N` above is pinned in the
+    #     ledger as `needs_kernel` and its spec must not move, so the identical frozen parameters
+    #     travel under this new name (the `_N`/`_K` twin pattern); nothing is tuned.
+    "B5_N": {"rule": "K", "legs": ["2x", "gld", "ief", "shy", "sec_xlu"], "cash_yield": "none",
+             "start": "auto", "inputs": ["gld", "ief", "shy", "sec_xlu"],
+             "assets": ["gld", "ief", "shy", "sec_xlu"], "total": 0.98, "vol_n": 20,
+             "rescale": "monthly"},
 }
 
 

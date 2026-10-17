@@ -386,11 +386,14 @@ def test_an_option_arm_cannot_be_two_leg(tmp_path, monkeypatch):
     assert api.resolve_arm(api.load_idea("kopt_plain_twoleg"), "a")["two_leg"]
 
 
-def test_the_spy_leg_is_single_leg_only(tmp_path, monkeypatch):
+def test_a_two_leg_spy_arm_routes_to_the_n_leg_kernel(tmp_path, monkeypatch):
+    """Since three_leg_kernel_v1 a `2x_spy` leg beside another instrument is legal (IC41) and runs
+    on `fast_engine3`; a single-leg `2x_spy` arm keeps IC40's published path."""
+    from research.fast_engine3.bridge3 import needs_kernel3
     monkeypatch.setattr(api, "IDEAS_DIR", tmp_path)
     write_idea(tmp_path, "kopt_spy_two", TWO_LEG_BODY % ("K", "2x_spy"))
-    with pytest.raises(api.PluginError, match="single-leg"):
-        api.resolve_arm(api.load_idea("kopt_spy_two"), "a")
+    arm = api.resolve_arm(api.load_idea("kopt_spy_two"), "a")
+    assert arm["two_leg"] and needs_kernel3(arm)
 
 
 def test_a_targets_series_that_asks_for_an_option_alone_is_not_enough():

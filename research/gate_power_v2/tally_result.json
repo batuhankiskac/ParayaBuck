@@ -1,0 +1,295 @@
+{
+  "clones": [
+    {
+      "arm": "C",
+      "batch": "bank_v2",
+      "delta_pp": 6e-06,
+      "failed": [
+        "G1_base",
+        "G5_base",
+        "G6_calibrated",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "B2_flat",
+        "E1",
+        "FRESH"
+      ],
+      "idea": "IC26"
+    },
+    {
+      "arm": "A",
+      "batch": "bank_v3",
+      "delta_pp": 6e-06,
+      "failed": [
+        "G1_base",
+        "G5_base",
+        "G6_calibrated",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "B2_flat",
+        "E1",
+        "FRESH"
+      ],
+      "idea": "IC52"
+    },
+    {
+      "arm": "B",
+      "batch": "bank_v3",
+      "delta_pp": 6e-06,
+      "failed": [
+        "G1_base",
+        "G5_base",
+        "G6_calibrated",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "B2_flat",
+        "E1",
+        "FRESH"
+      ],
+      "idea": "IC57"
+    },
+    {
+      "arm": "A",
+      "batch": "bank_v3",
+      "delta_pp": 6e-06,
+      "failed": [
+        "G1_base",
+        "G5_base",
+        "G6_calibrated",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "B2_flat",
+        "E1",
+        "FRESH"
+      ],
+      "idea": "IC58"
+    },
+    {
+      "arm": "B",
+      "batch": "bank_v3",
+      "delta_pp": 6e-06,
+      "failed": [
+        "G1_base",
+        "G5_base",
+        "G6_calibrated",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "B2_flat",
+        "E1",
+        "FRESH"
+      ],
+      "idea": "IC58"
+    },
+    {
+      "arm": "C",
+      "batch": "bank_v3",
+      "delta_pp": 6e-06,
+      "failed": [
+        "G1_base",
+        "G5_base",
+        "G6_calibrated",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "B2_flat",
+        "E1",
+        "FRESH"
+      ],
+      "idea": "IC58"
+    },
+    {
+      "arm": "C",
+      "batch": "bank_v3",
+      "delta_pp": 6e-06,
+      "failed": [
+        "G1_base",
+        "G5_base",
+        "G6_calibrated",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "B2_flat",
+        "E1",
+        "FRESH"
+      ],
+      "idea": "IC52"
+    },
+    {
+      "arm": "C",
+      "batch": "bank_v1",
+      "delta_pp": 6e-06,
+      "failed": [
+        "G1_base",
+        "G5_base",
+        "G6_calibrated",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "B2_flat",
+        "E1",
+        "FRESH"
+      ],
+      "idea": "IB31"
+    }
+  ],
+  "gate_counts": {
+    "AT_2010_01_to_end": 11,
+    "AT_2017_01_to_end": 16,
+    "B1_recent": 11,
+    "B2_flat": 10,
+    "E1": 10,
+    "E2": 6,
+    "FRESH": 12,
+    "G1_base": 8,
+    "G2_base": 2,
+    "G2_calibrated": 2,
+    "G4": 3,
+    "G5_base": 10,
+    "G5_calibrated": 2,
+    "G6_calibrated": 8,
+    "G7": 3,
+    "G8": 4
+  },
+  "n_stage2_rejects": 19,
+  "near_misses": [
+    {
+      "arm": "p15",
+      "batch": "anchors_v1",
+      "delta_pp": 0.490518,
+      "failed": [
+        "G8",
+        "E1"
+      ],
+      "idea": "vol_shape_p15"
+    },
+    {
+      "arm": "B",
+      "batch": "bank_v2",
+      "delta_pp": 0.699743,
+      "failed": [
+        "AT_2017_01_to_end"
+      ],
+      "idea": "IC12"
+    },
+    {
+      "arm": "C",
+      "batch": "bank_v2",
+      "delta_pp": 0.119469,
+      "failed": [
+        "G7",
+        "AT_2017_01_to_end"
+      ],
+      "idea": "IC47"
+    },
+    {
+      "arm": "C",
+      "batch": "bank_v2",
+      "delta_pp": 0.110263,
+      "failed": [
+        "G2_base",
+        "G2_calibrated",
+        "G4",
+        "AT_2017_01_to_end",
+        "E2"
+      ],
+      "idea": "IC60"
+    },
+    {
+      "arm": "A",
+      "batch": "bank_v2",
+      "delta_pp": 0.174519,
+      "failed": [
+        "G2_base",
+        "G2_calibrated",
+        "G4",
+        "AT_2017_01_to_end",
+        "E2"
+      ],
+      "idea": "IC60"
+    },
+    {
+      "arm": "A",
+      "batch": "bank_v2",
+      "delta_pp": 0.707756,
+      "failed": [
+        "AT_2017_01_to_end",
+        "E2"
+      ],
+      "idea": "IC12"
+    },
+    {
+      "arm": "A",
+      "batch": "bank_v3",
+      "delta_pp": 0.006761,
+      "failed": [
+        "G8",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "E1",
+        "E2",
+        "FRESH"
+      ],
+      "idea": "IC57"
+    },
+    {
+      "arm": "A",
+      "batch": "bank_v1",
+      "delta_pp": 0.518984,
+      "failed": [
+        "G5_base",
+        "G5_calibrated",
+        "G7",
+        "G8",
+        "B2_flat",
+        "FRESH"
+      ],
+      "idea": "ib32"
+    },
+    {
+      "arm": "C",
+      "batch": "bank_v1",
+      "delta_pp": 0.044873,
+      "failed": [
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "E2"
+      ],
+      "idea": "IB10"
+    },
+    {
+      "arm": "B",
+      "batch": "bank_v1",
+      "delta_pp": 0.395987,
+      "failed": [
+        "G5_base",
+        "G5_calibrated",
+        "B1_recent",
+        "B2_flat",
+        "FRESH"
+      ],
+      "idea": "IB10"
+    },
+    {
+      "arm": "C",
+      "batch": "bank_v1",
+      "delta_pp": 0.023658,
+      "failed": [
+        "G4",
+        "G7",
+        "G8",
+        "AT_2010_01_to_end",
+        "AT_2017_01_to_end",
+        "B1_recent",
+        "E2",
+        "FRESH"
+      ],
+      "idea": "IB08"
+    }
+  ]
+}

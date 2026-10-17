@@ -84,8 +84,8 @@ def write(path: Path | None = None) -> Path:
     p = Path(path or (ROOT / REL))
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(["date", COLUMN])
+        w = csv.writer(fh, lineterminator="\n")  # LF: the repo's git normalisation would turn
+        w.writerow(["date", COLUMN])             # CRLF into LF and break the declared SHA-256
         for d, v in zip(days, vals):
             w.writerow([d, f"{v:.10f}"])
     return p

@@ -9,19 +9,25 @@
       "file": "data/historical/closeout_v1_bil_star.csv",
       "kind": "derived (no download)",
       "column": "close",
-      "range": ["1934-01-01", "2026-12-31"],
+      "range": [
+        "1934-01-01",
+        "2026-12-31"
+      ],
       "rows": 33968,
-      "bytes": 861035,
-      "sha256": "8a180a2c75f308298cf234e6e17e804539daf984d45ff31d489cc9c23a8b96fa",
+      "bytes": 827066,
+      "sha256": "54b4c2e1b4727859b04fbfd6af19ba314e96d95c3ff4fb20b7e3011ff833ea94",
       "builder": "PYTHONPATH=. ~/.venvs/pb-research/bin/python -m research.closeout_v1.make_bil_star --write",
-      "construction": "BIL*_d = BIL*_{d-1} * (1 + (DTB3_d - 0.1356 %/yr) / 365), on every calendar day; BIL*_0 = 1.0 at 1934-01-01 (tbill_sweep_v1's BIL* = DTB3 - 0.1356 %/yr, accrued per calendar day instead of per session so one date-keyed series answers every window's own session calendar)",
+      "construction": "BIL*_d = BIL*_{d-1} * (1 + (DTB3_d - 0.1356 %/yr) / 365), on every calendar day; BIL*_0 = 1.0 at 1934-01-01 (tbill_sweep_v1's BIL* = DTB3 - 0.1356 %/yr, accrued per calendar day instead of per session so one date-keyed series answers every window's own session calendar); written with LF line endings (the repository normalises CRLF, which would change the file's hash)",
       "rate_schedule": "fe_data.rate_on over fe_data.load_rates(): DTB3 forward-filled from 1954-01-04 on, TB3MS before that -- the same schedule every window reads into its own `rate` column",
       "sources": [
         {
           "file": "data/historical/stress_robustness_v1_dtb3.csv",
           "series": "DTB3 (3-month Treasury bill secondary market rate, daily)",
           "rows": 18976,
-          "range": ["1954-01-04", "2026-09-28"],
+          "range": [
+            "1954-01-04",
+            "2026-09-28"
+          ],
           "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3"
         },
         {
@@ -37,7 +43,10 @@
       "name": "closeout_v1_yahoo_qqq_30m.json",
       "file": "data/historical/closeout_v1_yahoo_qqq_30m.json",
       "kind": "download (evidence only, not a screening input)",
-      "range": ["2026-08-18", "2026-10-16"],
+      "range": [
+        "2026-08-18",
+        "2026-10-16"
+      ],
       "bars": 560,
       "bytes": 53740,
       "sha256": "e74e59b08e27c2627409632227a052d882f3d0a7c208760c41f21627ee119b34",

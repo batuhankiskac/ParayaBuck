@@ -1,0 +1,153 @@
+{
+ "K_anchors": {
+  "K_after_tax_2000_03_to_2026_09": {
+   "diff_pp": 6e-06,
+   "pass": true,
+   "reference": 0.107533,
+   "reproduced": 0.107533
+  },
+  "K_after_tax_2010_01_to_end": {
+   "diff_pp": -4e-05,
+   "pass": true,
+   "reference": 0.152354,
+   "reproduced": 0.152354
+  },
+  "K_after_tax_2017_01_to_end": {
+   "diff_pp": -2.6e-05,
+   "pass": true,
+   "reference": 0.23972,
+   "reproduced": 0.23972
+  },
+  "K_all_pass": {
+   "pass": true
+  },
+  "K_maxdd_base": {
+   "diff_pp": -9e-06,
+   "pass": true,
+   "reference": 0.466698,
+   "reproduced": 0.466698
+  },
+  "K_maxdd_calibrated": {
+   "diff_pp": -1.7e-05,
+   "pass": true,
+   "reference": 0.467948,
+   "reproduced": 0.467948
+  },
+  "K_pre_base_m1": {
+   "diff_pp": 1.1e-05,
+   "pass": true,
+   "reference": 0.160173,
+   "reproduced": 0.160173
+  },
+  "K_pre_base_m2": {
+   "diff_pp": -8e-06,
+   "pass": true,
+   "reference": 0.157649,
+   "reproduced": 0.157649
+  },
+  "K_pre_calibrated_m1": {
+   "diff_pp": -3.1e-05,
+   "pass": true,
+   "reference": 0.154303,
+   "reproduced": 0.154303
+  },
+  "K_pre_calibrated_m2": {
+   "diff_pp": 3.1e-05,
+   "pass": true,
+   "reference": 0.151785,
+   "reproduced": 0.151785
+  },
+  "K_turnover_base": {
+   "diff_pp": 2e-06,
+   "pass": true,
+   "reference": 5.456136,
+   "reproduced": 5.456136
+  },
+  "K_turnover_calibrated": {
+   "diff_pp": -3.1e-05,
+   "pass": true,
+   "reference": 5.456216,
+   "reproduced": 5.456216
+  }
+ },
+ "K_control_bit_identical": {
+  "after_tax": true,
+  "b1_vector_equal_at_published_6dp": true,
+  "b1_vector_max_abs_diff": "4.989e-07",
+  "main": true,
+  "pass": true
+ },
+ "all": true,
+ "engine_parity_quick": {
+  "pass": true,
+  "tail": "parity PASS in 28.3s -> PARITY.json"
+ },
+ "failed": [],
+ "synth_legs": {
+  "noise_mirrored": {
+   "kind": "mirror",
+   "pass": true
+  },
+  "syn_all_0000": {
+   "kind": "zero drift == 2x",
+   "pass": true
+  },
+  "syn_all_0250": {
+   "kind": "all",
+   "n_drifted_sessions": 6931,
+   "pass": true,
+   "per_session_log_inc": 1e-05,
+   "want": 1e-05
+  },
+  "syn_all_0500": {
+   "kind": "all",
+   "n_drifted_sessions": 6931,
+   "pass": true,
+   "per_session_log_inc": 2e-05,
+   "want": 2e-05
+  },
+  "syn_all_1000": {
+   "kind": "all",
+   "n_drifted_sessions": 6931,
+   "pass": true,
+   "per_session_log_inc": 4e-05,
+   "want": 4e-05
+  },
+  "syn_all_2000": {
+   "kind": "all",
+   "n_drifted_sessions": 6931,
+   "pass": true,
+   "per_session_log_inc": 7.9e-05,
+   "want": 7.9e-05
+  },
+  "syn_inv_2000": {
+   "kind": "invested",
+   "n_drifted_sessions": 5181,
+   "pass": true,
+   "per_session_log_inc": 7.9e-05,
+   "want": 7.9e-05
+  },
+  "syn_nm_0500": {
+   "inc_mean": 3e-05,
+   "inc_sd": 0.004994,
+   "kind": "noise",
+   "pass": true,
+   "want_sd": 0.005
+  },
+  "syn_np_0500": {
+   "inc_mean": -3e-05,
+   "inc_sd": 0.004994,
+   "kind": "noise",
+   "pass": true,
+   "want_sd": 0.005
+  },
+  "syn_pre_2000": {
+   "kind": "pre2013",
+   "n_drifted_sessions": 2185,
+   "pass": true,
+   "per_session_log_inc": 7.9e-05,
+   "want": 7.9e-05
+  }
+ },
+ "wall_s": 46.78188
+}

@@ -73,14 +73,29 @@ def dump(path: Path, obj) -> None:
 
 # ----------------------------------------------------------------------- controls (cached)
 def _control_file(tag: str) -> Path:
-    return RESULTS / f"_control_{tag}.json"
+    return RESULTS / f"_control_{tag}.pkl"
 
 
 def get_control(tag: str, quiet=True) -> dict:
+    """The control's record and raw vectors, cached **exactly** (pickle; float64).
+
+    The cache must not round the raw per-path CAGRs: `dump()`'s 6-dp JSON would perturb the
+    control's cells by ~1e-6 *fraction* and a Δ of exactly 0 (a K clone) would come out as
+    +6e-6 pp -- which is exactly the `b1_delta_pp`/after-tax Δ the campaign's own K-clone arms
+    carry (`research/batch_screen/results/.../IC58__A.json`), i.e. that signature is the
+    framework's rounded `_control.json`, not a real difference. A rounded copy is still written
+    next to the cache for inspection.
+    """
+    import pickle
+
     p = _control_file(tag)
     if not p.exists():
-        dump(p, engine.make_control(CONTROLS[tag], quiet=quiet))
-    return json.loads(p.read_text())
+        ctrl = engine.make_control(CONTROLS[tag], quiet=quiet)
+        with open(p, "wb") as fh:
+            pickle.dump(ctrl, fh)
+        dump(p.with_suffix(".json"), ctrl)
+    with open(p, "rb") as fh:
+        return pickle.load(fh)
 
 
 def _vec_np(ctrl):
@@ -149,29 +164,55 @@ def deflate_batch(name, quiet=True):
         r = json.loads(p.read_text())
         s2[r["arm"]] = bool(r.get("stage2_pass"))
     rec["stage2_pass"] = sorted(a for a, v in s2.items() if v)
-    rec["declared_framework"] = sorted(a for a in rec["deflation_rejected"] if s2.get(a))
+    rec["declared_framework"] = sorted(a for a in rec["declared"] if s2.get(a))
     rec["declared_null_dsr"] = sorted(a for a in rec["dsr_audit"]["pass_null"] if s2.get(a))
     rec["declared_rw_only"] = sorted(a for a in rec["rw_only_declared"] if s2.get(a))
     dump(RESULTS / f"DEFLATION_{name}.json", rec)
     return rec
 
 
+def _stage2_of(globs):
+    s2 = {}
+    for p in globs:
+        r = json.loads(p.read_text())
+        s2[r["arm"]] = bool(r.get("stage2_pass"))
+    return s2
+
+
+def _derive(rec, s2):
+    """The three declaration rules of one pool: framework DSR, corrected DSR, RW only."""
+    rec["stage2_pass"] = sorted(a for a, v in s2.items() if v)
+    rec["declared_framework"] = sorted(a for a in rec.get("declared", []) if s2.get(a))
+    rec["declared_null_dsr"] = sorted(a for a in rec["dsr_audit"]["pass_null"] if s2.get(a))
+    rec["declared_rw_only"] = sorted(
+        a for a in rec.get("rw_stepdown", {}).get("rejected", []) if s2.get(a))
+    return rec
+
+
 def dsr_pass():
-    """The DSR question over three pools: each PC batch, the synthetic batch, and all arms."""
+    """The DSR question over the pools: each PC batch, the synthetic batch, all this study's arms,
+    and the campaign's own arms (the DSR the campaign actually ran)."""
     out = {}
     for name in [p[0] for p in PC] + [SYNTH_BATCH]:
         if (RESULTS / name).exists():
             out[name] = deflate_batch(name)
-    vecs = load_arm_deltas(None)
-    out["all_arms"] = deflation.deflate(vecs, N_TRIALS, alpha=0.05)
-    out["all_arms"]["dsr_audit"] = dsr_audit.analyse(vecs, N_TRIALS)
-    dump(RESULTS / "DEFLATION_all.json", out["all_arms"])
-    # the campaign's own arms alone (the DSR the campaign actually ran)
+    # every arm on disk (pc + synth), with the derived declaration rules
+    allv = load_arm_deltas(None)
+    aa = deflation.deflate(allv, N_TRIALS, alpha=0.05)
+    aa["dsr_audit"] = dsr_audit.analyse(allv, N_TRIALS)
+    aa["batch"] = "all_arms"
+    _derive(aa, _stage2_of(sorted(RESULTS.glob("*/*__*.json"))))
+    dump(RESULTS / "DEFLATION_all.json", aa)
+    out["all_arms"] = aa
+    # the campaign's own arms alone: the DSR the campaign actually ran (B1 Δ vectors from the
+    # committed records), with the declarations filtered by the records' stage-2 verdicts.
     camp = tally.load_campaign_deltas()
-    a = dsr_audit.analyse(camp, N_TRIALS)
-    a["batch"] = "campaign_batch_screen"
-    dump(RESULTS / "DSR_campaign.json", a)
-    out["campaign"] = a
+    ca = {"batch": "campaign_batch_screen", "dsr_audit": dsr_audit.analyse(camp, N_TRIALS),
+          "rw_stepdown": deflation.rw_stepdown(camp), "declared": []}
+    dump(RESULTS / "DSR_campaign.json", ca["dsr_audit"] | {"rw_stepdown": ca["rw_stepdown"]})
+    _derive(ca, {r["arm"]: bool(r.get("stage2_pass"))
+                 for r in tally.load_latest_records()[0]})
+    out["campaign"] = ca
     dump(RESULTS / "DSR.json", out)
     return out
 
@@ -220,23 +261,31 @@ def harness():
     pub = json.loads(BS_CONTROL.read_text())
     same_main = rnd(rec["main"]) == rnd(pub["record"]["main"])
     same_at = rnd(rec["after_tax"]) == rnd(pub["record"]["after_tax"])
+    # The published `_control.json` is a 6-dp-rounded serialization, so the raw vector cannot be
+    # *exactly* equal; the identity is that this study's exact control rounds to the published
+    # record's cells and to its stored vectors at the published 6-dp precision (the residual
+    # |diff| <= 5e-7 *is* the rounding, and it is the source of the campaign's "+6e-6 pp" K clones).
     v_mine = np.asarray(ctrl["vec"]["tax"]["progressive"], dtype=float)
     v_pub = np.asarray(pub["vectors"]["tax"]["progressive"], dtype=float)
+    maxdiff = float(np.max(np.abs(v_mine - v_pub)))
     checks["K_control_bit_identical"] = {
         "main": same_main, "after_tax": same_at,
-        "b1_vector_max_abs_diff": float(np.max(np.abs(v_mine - v_pub))),
+        "b1_vector_max_abs_diff": f"{maxdiff:.3e}",   # a string: `dump` rounds floats to 6 dp
+        "b1_vector_equal_at_published_6dp": bool(v_mine.shape == v_pub.shape
+                                                 and np.array_equal(np.round(v_mine, 6), v_pub)),
         "pass": bool(same_main and same_at and v_mine.shape == v_pub.shape
-                     and np.array_equal(v_mine, v_pub))}
+                     and np.array_equal(np.round(v_mine, 6), v_pub) and maxdiff <= 1e-6)}
 
     # every synthetic leg's own price path: the per-arm drift/noise check (the v2 defect)
     checks["synth_legs"] = synth_leg_checks()
-    checks["all"] = all(v["pass"] for grp in checks.values() if isinstance(grp, dict)
-                        for k, v in grp.items() if isinstance(v, dict) and "pass" in v)
-    checks["wall_s"] = time.time() - t0
-    dump(HERE / "HARNESS.json", checks)
     failed = [f"{g}.{k}" for g, grp in checks.items() if isinstance(grp, dict)
               for k, v in grp.items() if isinstance(v, dict) and "pass" in v and not v["pass"]]
+    checks["all"] = bool(all(v["pass"] for grp in checks.values() if isinstance(grp, dict)
+                             for k, v in grp.items()
+                             if isinstance(v, dict) and "pass" in v))
     checks["failed"] = failed
+    checks["wall_s"] = time.time() - t0
+    dump(HERE / "HARNESS.json", checks)
     return checks
 
 
@@ -284,27 +333,50 @@ def synth_leg_checks():
 
 
 # ----------------------------------------------------------------------- main
-def run_all():
-    t0 = time.time()
-    pc_specs = [(idea, arm, ctrl) for (_n, idea, arm, ctrl) in PC]
-    print("positive controls:", flush=True)
-    run_batch("pc", pc_specs)
-    print("synthetic power:", flush=True)
-    run_batch(SYNTH_BATCH, synth_specs())
-    print("DSR / deflation:", flush=True)
-    dsr = dsr_pass()
-    print("tally:", flush=True)
-    tl = tally.main()
-    res = {"n_trials": N_TRIALS, "wall_s": time.time() - t0,
+def _assemble(dsr, tl, wall_s):
+    """`RESULTS.json` is deterministic (no wall clock); the wall clock goes to `RUN_TIMING.json`."""
+    res = {"n_trials": N_TRIALS,
            "deflation": {k: {"sr0_framework": v.get("dsr_audit", {}).get("sr0_framework"),
                              "sr0_null": v.get("dsr_audit", {}).get("sr0_null"),
                              "var_total": v.get("dsr_audit", {}).get("var_total"),
+                             "var_sr_null": v.get("dsr_audit", {}).get("var_sr_null_mean"),
                              "declared_framework": v.get("declared_framework"),
                              "declared_null_dsr": v.get("declared_null_dsr"),
                              "declared_rw_only": v.get("declared_rw_only")}
                          for k, v in dsr.items()},
            "tally": tl}
     dump(HERE / "RESULTS.json", res)
+    dump(HERE / "RUN_TIMING.json", {"wall_s": wall_s, "note": "wall clock of the --run/--dsr pass"})
+    return res
+
+
+def run_pc():
+    """Each positive control in its **own** batch dir (its own control, so the Δ stays paired)."""
+    for name, idea, arm, ctrl in PC:
+        print(f"positive control {name}:", flush=True)
+        run_batch(name, [(idea, arm, ctrl)])
+
+
+def run_all():
+    t0 = time.time()
+    run_pc()
+    print("synthetic power:", flush=True)
+    run_batch(SYNTH_BATCH, synth_specs())
+    print("DSR / deflation:", flush=True)
+    dsr = dsr_pass()
+    print("tally:", flush=True)
+    tl = tally.main()
+    res = _assemble(dsr, tl, time.time() - t0)
+    print(f"\nwall {res['wall_s']:.1f}s")
+    return res
+
+
+def run_dsr_only():
+    """Re-run the deflation / DSR audit / tally over the records already on disk."""
+    t0 = time.time()
+    dsr = dsr_pass()
+    tl = tally.main()
+    res = _assemble(dsr, tl, time.time() - t0)
     print(f"\nwall {res['wall_s']:.1f}s")
     return res
 
@@ -313,6 +385,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m research.gate_power_v3.screen")
     ap.add_argument("--harness", action="store_true")
     ap.add_argument("--run", action="store_true")
+    ap.add_argument("--pc", action="store_true", help="run the four positive controls")
+    ap.add_argument("--dsr", action="store_true",
+                    help="deflation/DSR audit + tally over the records already on disk")
     ap.add_argument("--tally", action="store_true")
     args = ap.parse_args(argv)
     if args.harness:
@@ -326,6 +401,12 @@ def main(argv=None) -> int:
         return 0
     if args.run:
         run_all()
+        return 0
+    if args.pc:
+        run_pc()
+        return 0
+    if args.dsr:
+        run_dsr_only()
         return 0
     ap.print_help()
     return 2

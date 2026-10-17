@@ -1,0 +1,106 @@
+gate_power_v3 | third-pass audit of research/batch_screen's power (is the screen able to detect a
+real improvement, or too strict / buggy?)
+
+verdict
+  The screen is WORKING as a filter and is NOT too strict: a real after-tax edge of **+0.25 pp/yr**
+  is detected at Stage 1 and passes the whole Stage 2 holdout (both the d = 0.25 and every larger
+  drift arm), pure noise and a pre-2013 edge that vanished are correctly rejected, and the four
+  positive controls reproduce their campaign verdicts (R2 vs E2 and K vs A1u pass Stage 2; A1u vs
+  R2 and K vs R2 fail on the pre-tax bootstrap gate G5, the documented owner-accepted tension).
+  The campaign's 0/303 is NOT a power failure: no real arm reached Stage 2 at all (245 reject_stage1,
+  19 reject_stage2, 8 not_applicable, 1 holdout_insufficient, 0 stage2_pass) because the idea bank's
+  median arm is -0.70 pp after tax versus K.
+  The ONE broken piece is the **deflation's deflated Sharpe**: its `var_sr` is the cross-sectional
+  variance of the trial Sharpes (~1.07 on the campaign pool, 360x the null sampling variance
+  0.00135), so its threshold sr0 is 1.82-6.69 -- larger than the best real arm's Sharpe (0.55) and
+  even larger than the +2.00 pp/yr arm's (5.30). Under the framework's rule NOTHING is declarable,
+  not even a 2 pp/yr edge. Correcting `var_sr` to the null sampling variance `(1+SR^2/2)/(n_obs-1)`
+  (Bailey & Lopez de Prado's own quantity; PROPOSED amendment, PREREGISTRATION SS7.2) declares the
+  five drift arms; it changes NO real arm's verdict (none passed Stage 2).
+
+minimum detectable edge (pre-registered d = 0.25/0.5/1/2 pp/yr; only "<= 0.25" is claimable)
+  Stage 1 (screen):            <= +0.25 pp/yr   (d = 0.25: after-tax 2000-window D +0.149 pp,
+                                                 B1 median +0.127 pp; d = 0 fails -- D is not > 0)
+  Stage 2 (holdout):           <= +0.25 pp/yr   (d = 0.25 passes every holdout gate)
+  Declaration, corrected DSR:  <= +0.25 pp/yr   (d = 0.25 advantage-Sharpe 4.70 >> sr0_null 0.24)
+  Declaration, framework DSR:  NONE            (even d = 2.00, Sharpe 5.30, fails: sr0_framework
+                                                 6.69 on the synthetic batch, 2.69 on the campaign)
+
+positive controls (candidate vs predecessor; reproduce gate_power_v1 within 0.0001 pp)
+  batch           cand   ctrl  stage1 stage2         failed gates                 AT2000  B1 med/share  OOS med  RW p
+  pc_r2_vs_e2     R2     E2    PASS   stage2_pass    -                            +0.6260 +0.4846/0.646 +0.0678  0.0000
+  pc_a1u_vs_r2    A1u    R2    PASS   reject_stage2  G5_calibrated                +0.4545 +0.2264/0.754 +0.0404  0.0000
+  pc_k_vs_a1u     K      A1u   PASS   stage2_pass    -                            +0.1388 +0.0416/0.610 +0.0272  0.0000
+  pc_k_vs_r2      K      R2    PASS   reject_stage2  G5_base, G5_calibrated       +0.5933 +0.2856/0.750 +0.0653  0.0000
+  The alternate-control machinery reproduces the published K-control record EXACTLY at the
+  published 6-dp precision (its main/after-tax cells and stored B1 vector; the residual 5e-7 is
+  that rounding -- the same rounding that gives the campaign's K clones their +6e-6 pp).
+  See HARNESS.json K_control_bit_identical.
+
+synthetic power (K's own targets, unchanged; the arm's leg is the edge; corrected per-arm drift)
+  d (pp/yr)  arm              stage1 stage2        after-tax 2000/2010/2017 D (pp)   B1 med/share  Sharpe  framework decl  corrected decl
+  0 (2x)     syn_null0        FAIL   -             0.0000 / 0.0000 / 0.0000           0.000/0.000   0.000   no                no
+  0 (d0 leg) syn_d0           FAIL   -             0.0000 / 0.0000 / 0.0000           0.000/0.000   0.000   no                no   (identity, exact)
+  0.25       syn_d025         PASS   stage2_pass   +0.149 / +0.184 / +0.189           0.127/1.000   4.697   no                YES
+  0.50       syn_d050         PASS   stage2_pass   +0.290 / +0.371 / +0.382           0.255/1.000   5.082   no                YES
+  1.00       syn_d100         PASS   stage2_pass   +0.592 / +0.746 / +0.769           0.504/1.000   5.240   no                YES
+  2.00       syn_d200         PASS   stage2_pass   +1.197 / +1.492 / +1.558           1.016/1.000   5.301   no                YES
+  2.00 inv   syn_inv200       PASS   stage2_pass   +1.183 / +1.466 / +1.545           0.981/1.000   5.042   no                YES
+  2.00 <2013 syn_pre200       PASS   reject_stage2 -0.000 (AT_2017) + E2 fails        0.431/1.000   4.018   no                no
+  noise +/-  syn_noise_p/m    FAIL   -             -0.389 / +0.103 (s1)              -0.051/0.479  ~0.00   no                no
+  d = 0 (leg 2x and the zero-magnitude drift leg) is EXACTLY K: D = 0.000000, b1_delta_pp all 0.0.
+
+deflation / DSR audit (N = 303)
+  pool                 n_arms  var_total  var_sr_null  sr0_framework  sr0_null  best Sharpe  framework declares  corrected declares
+  campaign (official)      41   1.065507     -           *2.692*        -         0.549        none                 -
+  campaign (this study)   265   0.485294    0.001350     1.8169         0.0958    0.558        none (no s2 pass)    (none; no s2 pass)
+  gp3_synth                 9   6.571229    0.008260     6.6861         0.2370    5.301        none (not even 2pp)  5 drift arms
+  all_arms (pc+synth)      13   6.003924    0.006625     6.3910         0.2123    5.301        none                  5 drift arms + R2
+  pc_* (1 arm each)           1   0.000000    0.0012       0.0000        0.084-0.092  -        R2vsE2, KvsA1u (degenerate var=0)
+  var_sr is ~360x the null sampling variance: the framework's threshold is the dispersion of
+  genuinely different arms' true effects, not a Sharpe estimate's sampling noise. With the
+  slide rule the framework is stricter than its own statistic intends and unbounded.
+
+the 303 real arms (273 latest records)
+  verdicts: 245 reject_stage1, 19 reject_stage2, 8 not_applicable, 1 holdout_insufficient.
+  **0 stage2_pass** -> no DSR correction can change any real verdict.
+  19 Stage-2 rejects: 8 are K clones (|after-tax D|<0.001 pp = the framework's ROUNDED `_control.json`
+  artifact -- this study's exact control gives them D = 0), 11 real near-misses. Gate counts:
+  AT_2017 16, FRESH 12, AT_2010 11, B1_recent 11, E1 10, G5_base 10, B2_flat 10, G1_base 8,
+  G6_calibrated 8, E2 6, G8 4, G7 3, G4 3, G2 2, G5_calibrated 2. Removing any SINGLE gate rescues
+  exactly one arm (IC12/B via AT_2017); the gates are redundant, not individually lethal.
+  Best real near-misses (after-tax D vs K, 2000/2010/2017): IC12/A +0.708/+0.190/-1.353 (AT_2017,E2);
+  IC12/B +0.700/+0.490/-0.347 (AT_2017 only); ib32/A +0.519/+0.575/+0.958 (G5,G7,G8,B2,FRESH);
+  vol_shape_p15 +0.490/+0.440/+0.203 (G8,E1).
+
+what was wrong in v1 / v2
+  v1: the positive controls' "declared" came from a **1-arm** batch deflation (var_sr = 0 -> sr0 = 0,
+  a degenerate pass); the committed results/DEFLATION.json is only for pc_synth and declares []. So
+  the v1 report's declaration column is unsupported. v1's synthetic power scaled the *weights*
+  (+5/+10 % exposure), not a return edge, and put the "null" in the weights -- it measured the wrong
+  object and found no Stage-2 power.
+  v2: the drift is an **env-global** (GATE_POWER_DRIFT): one batch-level drift applied to every
+  synthetic leg, so `syn_null0` was an exact copy of `syn_edge` and `syn_noise_p/m` were K clones
+  (the noise seed defaulted to -1, so no noise was ever applied). v2's whole synthetic-power table
+  is therefore invalid, and its Stage-2 minimum-detectable-edge (+2 pp/yr) is wrong: the corrected
+  per-arm drift shows Stage 1 and Stage 2 detect +0.25 pp/yr (v2 overstated the MDE ~8x). v2's
+  claim that the screen "declares a +2.0 pp/yr edge" is false under the framework's own deflation --
+  the +2 pp/yr arm is NOT declared (sr0_framework 6.69).
+
+harness
+  --harness PASS (parity --quick PASS + K's anchors through this copy + the published K-control
+  record bit-for-bit + each synthetic leg's own price path). HARNESS.json.
+
+runs / determinism
+  --run wall clock 374.5 s (10-core machine; controls cached) -> RUN_TIMING.json. Reruns are
+  byte-identical: RESULTS.json (e85ffca1..., no wall clock in it) and the aggregate SHA-256 of every
+  per-arm record and DEFLATION_*.json. The DSR/tally pass alone is 0.5 s.
+
+reproduction
+  R=~/.venvs/pb-research/bin/python
+  PYTHONPATH=. $R -m research.fast_engine.parity --quick
+  PYTHONPATH=. $R -m research.gate_power_v3.screen --harness
+  PYTHONPATH=. $R -m research.gate_power_v3.screen --run
+  PYTHONPATH=. $R -m research.gate_power_v3.screen --tally
+  records: research/gate_power_v3/results/ (pc_*/ and gp3_synth/ records, DEFLATION_*.json, DSR.json)
+  proposed amendment to batch_screen: research/gate_power_v3/PREREGISTRATION.md SS7.2

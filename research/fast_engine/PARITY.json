@@ -1,13 +1,13 @@
 {
   "generated_by": "research/fast_engine/parity.py",
-  "quick": false,
+  "quick": true,
   "arms": [
     "C0",
     "A1u",
     "H2",
     "K"
   ],
-  "wall_s": 48.70050311088562,
+  "wall_s": 24.080679893493652,
   "pass": true,
   "sections": [
     {
@@ -67,12 +67,12 @@
     {
       "section": "boot_side_by_side_wallclock",
       "paths": [
-        600,
-        300
+        60,
+        30
       ],
-      "old_s": 37.835119009017944,
-      "new_s": 0.44321107864379883,
-      "speedup": 85.3659144189069
+      "old_s": 8.048663139343262,
+      "new_s": 0.27614903450012207,
+      "speedup": 29.146084663713367
     },
     {
       "section": "published.pre_tax_main",
@@ -169,32 +169,6 @@
       "cells": 124,
       "mismatches": 0,
       "max_abs_diff": 4.959588064262777e-07,
-      "tolerance": 5e-07,
-      "pass": true,
-      "detail": []
-    },
-    {
-      "section": "published.bootstrap_clean_seed20261011",
-      "cells": 178,
-      "mismatches": 0,
-      "max_abs_diff": 4.999949520523295e-07,
-      "tolerance": 5e-07,
-      "pass": true,
-      "detail": []
-    },
-    {
-      "section": "clean_bootstrap_wallclock",
-      "paths": [
-        5000,
-        1000
-      ],
-      "new_s": 2.544713020324707
-    },
-    {
-      "section": "published.harness_reproduction_checks",
-      "cells": 15,
-      "mismatches": 0,
-      "max_abs_diff": 4.4429046838767583e-07,
       "tolerance": 5e-07,
       "pass": true,
       "detail": []

@@ -1,0 +1,14 @@
+{
+ "batch": "gp_synth_d2",
+ "registry_lines": 536,
+ "registry_trials": 309,
+ "total_wall_s": 131.264816,
+ "wall_s": {
+  "gate_power_synth/syn_edge": 91.171091,
+  "gate_power_synth/syn_edge_i": 91.362185,
+  "gate_power_synth/syn_edge_p": 91.156637,
+  "gate_power_synth/syn_noise_m": 90.880755,
+  "gate_power_synth/syn_noise_p": 91.095036,
+  "gate_power_synth/syn_null0": 89.97007
+ }
+}

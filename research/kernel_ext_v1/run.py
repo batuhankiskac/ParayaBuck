@@ -253,9 +253,9 @@ def summary(res, timing, batch=None, ctrl=None, recs=None, ctrl_rec=None, defl=N
         ft = bsrun.RESULTS / batch / "timing.json"
         if ft.exists():
             rec = json.loads(ft.read_text())
-            lines.append(f"* the batch itself (`results/{batch}/timing.json`): "
-                         f"**{rec['total_wall_s']:.1f} s** wall on its workers "
-                         f"(per arm "
+            lines.append(f"* the `--run` screening step (batch `{batch}` itself, "
+                         f"`results/{batch}/timing.json`): **{rec['total_wall_s']:.1f} s** wall on "
+                         f"its workers (per arm "
                          + ", ".join(f"`{k.split('/', 1)[-1]}` {v:.1f} s"
                                      for k, v in sorted(rec["wall_s"].items()) if v) + ")")
     lines.append("")

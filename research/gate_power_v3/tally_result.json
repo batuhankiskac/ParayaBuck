@@ -1,0 +1,357 @@
+{
+ "clones": [
+  {
+   "arm": "IC26/C",
+   "batch": "bank_v2",
+   "delta_pp": 6e-06,
+   "failed": [
+    "G1_base",
+    "G5_base",
+    "G6_calibrated",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "B2_flat",
+    "E1",
+    "FRESH"
+   ],
+   "idea": "IC26"
+  },
+  {
+   "arm": "IC52/A",
+   "batch": "bank_v3",
+   "delta_pp": 6e-06,
+   "failed": [
+    "G1_base",
+    "G5_base",
+    "G6_calibrated",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "B2_flat",
+    "E1",
+    "FRESH"
+   ],
+   "idea": "IC52"
+  },
+  {
+   "arm": "IC57/B",
+   "batch": "bank_v3",
+   "delta_pp": 6e-06,
+   "failed": [
+    "G1_base",
+    "G5_base",
+    "G6_calibrated",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "B2_flat",
+    "E1",
+    "FRESH"
+   ],
+   "idea": "IC57"
+  },
+  {
+   "arm": "IC58/A",
+   "batch": "bank_v3",
+   "delta_pp": 6e-06,
+   "failed": [
+    "G1_base",
+    "G5_base",
+    "G6_calibrated",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "B2_flat",
+    "E1",
+    "FRESH"
+   ],
+   "idea": "IC58"
+  },
+  {
+   "arm": "IC58/B",
+   "batch": "bank_v3",
+   "delta_pp": 6e-06,
+   "failed": [
+    "G1_base",
+    "G5_base",
+    "G6_calibrated",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "B2_flat",
+    "E1",
+    "FRESH"
+   ],
+   "idea": "IC58"
+  },
+  {
+   "arm": "IC58/C",
+   "batch": "bank_v3",
+   "delta_pp": 6e-06,
+   "failed": [
+    "G1_base",
+    "G5_base",
+    "G6_calibrated",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "B2_flat",
+    "E1",
+    "FRESH"
+   ],
+   "idea": "IC58"
+  },
+  {
+   "arm": "IC52/C",
+   "batch": "bank_v3",
+   "delta_pp": 6e-06,
+   "failed": [
+    "G1_base",
+    "G5_base",
+    "G6_calibrated",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "B2_flat",
+    "E1",
+    "FRESH"
+   ],
+   "idea": "IC52"
+  },
+  {
+   "arm": "IB31/C",
+   "batch": "bank_v1",
+   "delta_pp": 6e-06,
+   "failed": [
+    "G1_base",
+    "G5_base",
+    "G6_calibrated",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "B2_flat",
+    "E1",
+    "FRESH"
+   ],
+   "idea": "IB31"
+  }
+ ],
+ "gate_counts": {
+  "AT_2010_01_to_end": 11,
+  "AT_2017_01_to_end": 16,
+  "B1_recent": 11,
+  "B2_flat": 10,
+  "E1": 10,
+  "E2": 6,
+  "FRESH": 12,
+  "G1_base": 8,
+  "G2_base": 2,
+  "G2_calibrated": 2,
+  "G4": 3,
+  "G5_base": 10,
+  "G5_calibrated": 2,
+  "G6_calibrated": 8,
+  "G7": 3,
+  "G8": 4
+ },
+ "n_clones": 8,
+ "n_records": 273,
+ "n_stage2_rejects": 19,
+ "near_misses": [
+  {
+   "arm": "vol_shape_p15/p15",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.49049999999999927,
+    "2010_01_to_end": 0.4404000000000019,
+    "2017_01_to_end": 0.2027000000000001
+   },
+   "batch": "anchors_v1",
+   "delta_pp": 0.490518,
+   "failed": [
+    "G8",
+    "E1"
+   ],
+   "idea": "vol_shape_p15"
+  },
+  {
+   "arm": "IC12/B",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.6997000000000003,
+    "2010_01_to_end": 0.48980000000000135,
+    "2017_01_to_end": -0.3471000000000002
+   },
+   "batch": "bank_v2",
+   "delta_pp": 0.699743,
+   "failed": [
+    "AT_2017_01_to_end"
+   ],
+   "idea": "IC12"
+  },
+  {
+   "arm": "IC47/C",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.11950000000000016,
+    "2010_01_to_end": 0.03240000000000187,
+    "2017_01_to_end": -0.026699999999998947
+   },
+   "batch": "bank_v2",
+   "delta_pp": 0.119469,
+   "failed": [
+    "G7",
+    "AT_2017_01_to_end"
+   ],
+   "idea": "IC47"
+  },
+  {
+   "arm": "IC60/C",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.11029999999999929,
+    "2010_01_to_end": 0.27860000000000107,
+    "2017_01_to_end": -0.26569999999999927
+   },
+   "batch": "bank_v2",
+   "delta_pp": 0.110263,
+   "failed": [
+    "G2_base",
+    "G2_calibrated",
+    "G4",
+    "AT_2017_01_to_end",
+    "E2"
+   ],
+   "idea": "IC60"
+  },
+  {
+   "arm": "IC60/A",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.17449999999999966,
+    "2010_01_to_end": 0.3820000000000018,
+    "2017_01_to_end": -0.04649999999999932
+   },
+   "batch": "bank_v2",
+   "delta_pp": 0.174519,
+   "failed": [
+    "G2_base",
+    "G2_calibrated",
+    "G4",
+    "AT_2017_01_to_end",
+    "E2"
+   ],
+   "idea": "IC60"
+  },
+  {
+   "arm": "IC12/A",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.7078000000000001,
+    "2010_01_to_end": 0.19000000000000128,
+    "2017_01_to_end": -1.3528999999999987
+   },
+   "batch": "bank_v2",
+   "delta_pp": 0.707756,
+   "failed": [
+    "AT_2017_01_to_end",
+    "E2"
+   ],
+   "idea": "IC12"
+  },
+  {
+   "arm": "IC57/A",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.006799999999999862,
+    "2010_01_to_end": -0.004499999999998949,
+    "2017_01_to_end": -0.008299999999999974
+   },
+   "batch": "bank_v3",
+   "delta_pp": 0.006761,
+   "failed": [
+    "G8",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "E1",
+    "E2",
+    "FRESH"
+   ],
+   "idea": "IC57"
+  },
+  {
+   "arm": "ib32/A",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.519,
+    "2010_01_to_end": 0.5754000000000009,
+    "2017_01_to_end": 0.9580000000000005
+   },
+   "batch": "bank_v1",
+   "delta_pp": 0.518984,
+   "failed": [
+    "G5_base",
+    "G5_calibrated",
+    "G7",
+    "G8",
+    "B2_flat",
+    "FRESH"
+   ],
+   "idea": "ib32"
+  },
+  {
+   "arm": "IB10/C",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.04489999999999911,
+    "2010_01_to_end": -0.015599999999998948,
+    "2017_01_to_end": -0.030799999999997496
+   },
+   "batch": "bank_v1",
+   "delta_pp": 0.044873,
+   "failed": [
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "E2"
+   ],
+   "idea": "IB10"
+  },
+  {
+   "arm": "IB10/B",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.39599999999999913,
+    "2010_01_to_end": 0.39980000000000016,
+    "2017_01_to_end": 0.6579000000000002
+   },
+   "batch": "bank_v1",
+   "delta_pp": 0.395987,
+   "failed": [
+    "G5_base",
+    "G5_calibrated",
+    "B1_recent",
+    "B2_flat",
+    "FRESH"
+   ],
+   "idea": "IB10"
+  },
+  {
+   "arm": "IB08/C",
+   "at_deltas_pp": {
+    "2000_03_to_2026_09": 0.02370000000000011,
+    "2010_01_to_end": -0.02869999999999817,
+    "2017_01_to_end": -0.1358999999999999
+   },
+   "batch": "bank_v1",
+   "delta_pp": 0.023658,
+   "failed": [
+    "G4",
+    "G7",
+    "G8",
+    "AT_2010_01_to_end",
+    "AT_2017_01_to_end",
+    "B1_recent",
+    "E2",
+    "FRESH"
+   ],
+   "idea": "IB08"
+  }
+ ],
+ "remove_one_gate_rescues": {
+  "AT_2017_01_to_end": [
+   "IC12/IC12/B"
+  ]
+ }
+}

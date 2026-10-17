@@ -1,0 +1,41 @@
+{
+ "arm": "IC17/C",
+ "arm_id": "C",
+ "b1_delta_pp": [],
+ "batch": "bank_v2",
+ "boot_params": {
+  "block": 20,
+  "capital": "100k",
+  "n_pre": 5000,
+  "n_tax": 1000,
+  "seed": 20261011
+ },
+ "cash_yield": "none",
+ "date": "2026-10-16",
+ "gates": null,
+ "hashes": {
+  "code": "b2872841bed82bbaf5c854907e07c0db810698bfeb9cae8776479c8043c72c7e",
+  "spec": "89c96976d0e2992266efde8a0b47bea4861eaef0fdfff91b3bb87fc425314606"
+ },
+ "idea": "IC17",
+ "leg": "2x",
+ "not_applicable": {
+  "reason": "the registered BAMLH0A0HYM2 starts 2023-10-16, not 1996-12-31: FRED serves only the trailing three years of ICE BofA series, so the bank's full-history precondition fails",
+  "where": "main window (stage 1)"
+ },
+ "rule": "K",
+ "spec": {
+  "cash_yield": "none",
+  "leg": "2x",
+  "median_n": 252,
+  "mode": "vote3of4",
+  "ratio": 1.2,
+  "rule": "K"
+ },
+ "stage1": null,
+ "stage1_gates": null,
+ "stage1_pass": null,
+ "stage2": null,
+ "stage2_pass": null,
+ "verdict": "not_applicable"
+}

@@ -1,0 +1,189 @@
+batch_screen_v1 | batch screening framework on research/fast_engine (deliverable: the framework;
+no trading idea is evaluated by this study)
+
+verdict
+  Delivered and verified. `--harness` PASSes 59/59 checks in 36 s: it runs
+  `python -m research.fast_engine.parity --quick` (PASS, 17 s) and then reproduces every anchor of
+  the three example plugins through the plugin path, plus the framework's own parity cells. The
+  three example arms match their published numbers to <= 0.00005 pp (the published files' own
+  6-dp rounding). The `anchors_v1` batch runs stage 1 for every arm, stage 2 for the survivor,
+  writes the results + scoreboard, and a second run reproduces every output file byte for byte
+  (only `timing.json`, the wall-clock report, is allowed to differ).
+
+plugin API
+  idea = research/ideas/<idea_id>.py with ARMS = {arm_id: spec} and targets(data, spec), vectorised
+  numpy over a (P, T) MarketData panel (days/year/month, price, legs {2x, 1x}, leg, open/close/vol,
+  div, rate, high/low, meta); P = 1 on a real window, a bootstrap chunk otherwise. Spec options:
+  rule (K | C0/R2 | A1u | H2 | a name registered via rules.register_rule -> fe_sim.RULE, the
+  engine's own extension point), leg, cash_yield. targets may also return the held leg; a
+  per-session leg switch raises NeedsKernel, as does a module declaring NEEDS_KERNEL -- such a
+  trial is registered and never simulated (a new mechanism is a kernel change plus a parity cell,
+  i.e. a separate study, not a batch arm).
+
+registry / pre-registration
+  research/batch_screen/REGISTRY.jsonl: one append-only line per declaration (idea, arm, spec,
+  spec_hash, code_hash, batch, date, status, git). The runner REFUSES to screen an arm whose
+  module's bytes differ from its bytes at HEAD (registry.require_committed) and refuses an arm
+  whose declared cash_yield differs from the batch's. N (the deflation's multiple-testing count)
+  counts distinct (idea, arm, spec_hash): 3 for this batch (30 lines: the framework's own
+  repeated runs while it was being built -- one line per declaration, never deleted).
+
+stage 1 (screen; main window 2000-03-09 -> 2026-09-29 + its block-20 bootstrap)
+  PASS iff after-tax $100k 2000-window delta > 0 AND B1-recent (seed 20261011, block 20, 1000
+  after-tax paths) median delta > 0 AND pre-tax max DD <= K + 2 pp AND turnover <= 2 x K
+  (base and calibrated, m = 2).
+
+stage 2 (holdout; stage-1 survivors only)
+  G1-G9 vs K (ewma_band_v1's definitions, G9 = <= 2 x K), after tax at $100k on 2000/2010/2017,
+  B1/B2 median delta >= 0 with share > 0 >= 55 %, the 21 ETFs after tax (median > 0, share >= 60 %),
+  the 21 January rolling starts, the six OOS windows, the pooled OOS bootstrap (median >= 0), the
+  fresh-seed bootstraps (seed 20261016, blocks 10/40, median >= 0 and share >= 55 % in all four
+  cells). A failure writes its full record, so the registry counts it.
+
+deflation (5 %)
+  Over every screened arm's B1-recent delta vector (same 1000 resampled paths for every arm ->
+  paired): white_rc (p = P*(max t* >= max t)), rw_stepdown (Romano-Wolf stepM, studentized max
+  statistic, 2000 second-level resamples, seed 20261016, monotone p along the observed-t order) and
+  deflated_sharpe (Bailey & Lopez de Prado 2014, N = distinct trials, advantage-Sharpe statistic).
+  A candidate is declared iff stage 2 passes AND RW p_adjusted <= 0.05 AND DSR >= 0.95. Assumptions
+  (block bootstrap as the sampling distribution, paired arms, 20-session blocks cannot capture
+  longer memory) are listed in README.md section 4.
+
+example parity (harness; --harness, 59 checks, all PASS; max |diff| 4.9e-05 pp)
+  arm                    anchors checked                                             max |diff| pp
+  k_control/K            pre-tax base/cal m1+m2 CAGR, max DD, turnover, after-tax
+                         100k 2000/2010/2017, 6 OOS windows, 21 ETFs (pre+after tax),
+                         21 rolling starts, clean-bootstrap levels (B1/B2 + pre-tax)   4.6e-05
+  r2_control/R2          pre-tax base/cal m1+m2 CAGR, max DD, after-tax 2000/2010/2017 4.0e-05
+  vol_shape_p15/p15      pre-tax base/cal m1+m2 CAGR, max DD, turnover, after-tax
+                         2000/2010/2017, B1/B2 median delta and share, pre-tax
+                         bootstrap levels and median deltas                         4.9e-05
+  framework parity       plugin bootstrap driver == fe_boot.boot (K and C0 rows, every
+                         cell) and pooled-OOS driver == the old boot_oos_market         0.0
+
+anchors_v1 batch (the demonstration; pre-registered in PREREGISTRATION.md before the run)
+  arm                  stage 1  stage 2   failed gates  AT2000 delta  B1 med/share   B2 med/share  RW p    final
+  k_control/K          control  control   -             +0.0000       +0.0000/0.000  +0.0000/0.000  -       control
+  r2_control/R2        FAIL     reject_s1 -             -0.5933       -0.2856/0.250  -0.1311/0.360  1.0000  rejected (stage 1)
+  vol_shape_p15/p15    PASS     reject_s2 G8, E1        +0.4905       +0.2507/0.635  +0.3311/0.683  0.0000  rejected (stage 2)
+  R2 fails stage 1 on the after-tax window exactly as K's campaign recorded (10.1600 % vs K's
+  10.7533 % = -0.5933 pp). p15 passes every after-tax cell (delta +0.4905 / +0.4404 / +0.2027 pp,
+  B1 +0.2507/63.5 %, B2 +0.3311/68.3 %, fresh seeds all four cells PASS, E2 share 21/21) but dies
+  on G8 (pooled OOS median delta -0.0128 pp, share 48.6 %) and on the after-tax ETF gate
+  (median -0.1101 pp, share 42.9 %) -- the same arm `research/vol_shape_v1` rejected on G8.
+  Declared candidates: none (declared = stage-2 pass AND deflation at 5 %).
+
+wall clock (this machine, 10 cores; `results/anchors_v1/timing.json`)
+  --harness                  36 s (of which `parity --quick` 17 s)
+  --batch anchors_v1         cold (control computed) 33 s; warm (control cached) 17 s
+    k_control/K (control)    0 s (computed once per batch into _control.json)
+    r2_control/R2            5.7 s (stage 1 only)
+    vol_shape_p15/p15       16.9 s (stage 1 + the whole stage-2 holdout)
+  one arm therefore costs ~5.7 s of stage 1 and up to ~11 s more for stage 2; arms run in separate
+  processes (--workers, default = CPU count), so ~100 stage-1-only arms is ~1-2 minutes on this
+  machine.
+
+byte-identical reruns
+  $ python -m research.batch_screen.run --batch anchors_v1 --ideas k_control,r2_control,vol_shape_p15
+  $ cp -r research/batch_screen/results /tmp/bs_run1 ; (run again) ; cp -r ... /tmp/bs_run2
+  $ diff -r --exclude=timing.json /tmp/bs_run1 /tmp/bs_run2     # -> no output
+  RESULTS.json, SCOREBOARD.md, _control.json, the three per-arm files and DEFLATION.json are
+  byte-identical; timing.json (per-arm wall clock + the ledger's line count) is the documented
+  exception. Every float is rounded to 6 dp and every container sorted before serialising.
+
+tests
+  research/batch_screen/tests/run.sh (the research venv's numba + the project venv's pytest; the
+  script finds the project venv from any worktree layout): 52 tests, 9 s for v1 -- plugin contract
+  and validation, leg constructions, registry append-only semantics + the commit gate + the
+  planner's refusals, every stage-1/stage-2 gate branch on synthetic records, the deflation's null
+  control/power/monotonicity/DSR properties, and the parity cells (engine fe_boot.boot, old
+  boot_oos_market, the production R2 target series, vol_shape_v1's sizing, and the control's
+  published K cells stage by stage). v2 adds 47 more (99 in total) -- see the v2 section.
+
+how to run
+  R=~/.venvs/pb-research/bin/python
+  PYTHONPATH=. $R -m research.batch_screen.run --harness
+  PYTHONPATH=. $R -m research.batch_screen.run --batch <id> --ideas a,b,c [--stage1-only] [--workers N]
+  PYTHONPATH=. $R -m research.batch_screen.run --deflate [--batch <id>]
+  research/batch_screen/tests/run.sh
+
+caveats
+  * The pooled-OOS bootstrap's calendar is each market's real session list with i0 = 253,
+    i1 = OOS_BOOT_L (the published `boot_oos_market` convention, reproduced bit for bit); its G8
+    medians are therefore new evidence at the campaign's own seed, not a copy of vol_shape_v1's
+    fixed-calendar variant. The two implementations differ in the draw (chunked vs per-path) and in
+    the December calendar, so their numbers are close (both ~-0.01 pp for p15) but not identical.
+  * The deflated Sharpe is computed on the bootstrap advantage distribution, not on a daily return
+    series (the screening decision is made on the after-tax CAGR advantage); documented in
+    README.md section 4.
+  * `cash_yield = "tbill"` support is wired (stage runs and bootstraps) but off: it changes every
+    published cell, so it is a batch-level flag and this batch does not use it.
+  * A new execution mechanism (a second leg, a bracket budget, partial fills) is out of scope by
+    construction: an idea module declares NEEDS_KERNEL and is registered but not simulated.
+
+commits
+  framework + example plugins (pre-registration, committed before the batch ran): 4f516d37
+  bootstrap level cells, distinct-trial N, per-arm pooled-OOS delta fix:                 1e724255
+  results / docs / SUMMARY:                                                             see git log
+
+---------------------------------------- v2 follow-up (2026-10-16) ----------------------------------------
+Before the plugin-writing workers start, the framework gained the four things they need. The rules
+were pre-registered first (PREREGISTRATION.md section 6.1, commit 33a068ff, before any of it ran);
+nothing about the engine, the gates G1-G6/G8/G9, the seeds, the sample sizes or the control changed.
+
+extra data
+  data.extra(key[, ffill]) -> (P, T) aligned to the panel's sessions by date (NaN where the series
+  has no value on that date) and, inside a bootstrap chunk, to the drawn SOURCE session each column
+  replays. Registry EXTRA_DATA.json: 32 keys / 31 series -- ^VIX, ^VIX3M, ^VXN, FRED DGS10, T10YIE,
+  DTWEXBGS, BAA10Y, CPIAUCSL, SMH, SOXX, HG=F, SHY, GLD, TLT, IEF, XLB..XLY, ^STOXX50E, ^GDAXI,
+  ^N225, ^FTSE, ^IXIC, ^GSPC, ^NDX, and local_index (a window map). Each series: file, source URL,
+  date range, rows, SHA-256, all fetched from the Yahoo chart API / FRED CSV and pinned in
+  DATA_MANIFEST.json (extra_data, 31 files, 7.4 MB). extra.py --fetch-all refreshes; --verify
+  re-hashes every file and re-reads every declared range. No kernel, no engine edit, no published
+  number touched -- extra() is numpy evaluated inside targets().
+
+availability (NotApplicable)
+  stage 1 requires the MAIN window to be applicable: an arm that raises NotApplicable there (or in
+  its block bootstrap) is recorded verdict=not_applicable with the stage and the reason and is not
+  screened further. In stage 2 the six OOS windows and 21 ETFs are evaluated on the applicable ones
+  only: G7 then allows one outlier among the k >= 3 applicable windows (n_c >= k-1, n_d >= k-1; the
+  published 5-of-6 rule is unchanged at k = 6) and G8 (pooled OOS bootstrap) runs on the applicable
+  market subset with the control re-drawn in the SAME draw, so the delta stays paired. Fewer than 3
+  applicable OOS windows or fewer than 15 applicable instruments -> holdout_insufficient: NOT a
+  pass, never declared, listed in the scoreboard's "manual confirmation" section with the counts and
+  the reasons (the idea bank's pre-registered convention for its non-US arms). Registry and N are
+  unchanged: every such arm keeps its ledger line.
+
+smoke
+  python -m research.batch_screen.smoke --ideas a,b : each arm's targets() on a synthetic panel, the
+  real main window, the real M2 OOS window, the real XLK instrument window and a real block
+  bootstrap chunk. NO performance number (no return, no NAV, no gate), no registry line, no result
+  file read; reports shapes, the leg, the extra keys the arm touched and each key's NaN share per
+  panel, plus the traceback tail of a genuine bug. --keys prints the extra-data key table with
+  per-window coverage. 1.2 s for three arms.
+
+  merge safety
+  .gitattributes: research/batch_screen/REGISTRY.jsonl merge=union (append-only lines from parallel
+  plugin branches merge without conflict; proved on a throwaway worktree -- two branches each
+  appending a line merge automatically, both lines kept). The runner re-verifies the whole ledger
+  before every batch and aborts on any inconsistency (--verify-registry prints the report): every
+  line's code_hash must be the SHA-256 of that module at the commit the line names, every
+  registered (idea, arm) must still exist at HEAD with its latest recorded spec_hash, and a line
+  missing its fields is reported (malformed_line) rather than crashing the counter. A module that
+  changed after its last screen is reported 'stale' (information, not an error).
+
+evidence
+  --harness                                   PASS 59/59 checks (unchanged count), 33.8 s
+  control record vs committed _control.json   byte-identical, worst float diff 0.0
+  anchors_v1 SCOREBOARD.md regenerated        byte-identical
+  probes/run_probe_batch.py (isolated ledger) yield_veto -> reject_stage1;
+                                              coverage_gate/dgs10_gate (4 applicable OOS) -> G7 on
+                                              4 (n_within_required 3), G8 on {M1,M3,M4,M5},
+                                              reject_stage2 on E1;
+                                              coverage_gate/gld_gate (1 applicable OOS) ->
+                                              holdout_insufficient, 21 applicable ETFs, listed for
+                                              manual confirmation; 49 s for 3 arms
+  tests/run.sh                                99 passed, 10.6 s (52 in v1)
+
+  probes/ = two engineering fixtures (never registered as trials: outside research/ideas/);
+  TEMPLATE_plugin.py = the copy-me starting point exercising data.extra and NotApplicable.

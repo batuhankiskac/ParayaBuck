@@ -1,0 +1,11 @@
+{
+ "batch": "pc_synth",
+ "registry_lines": 533,
+ "registry_trials": 306,
+ "total_wall_s": 35.962083,
+ "wall_s": {
+  "synthetic_power/syn_edge_105": 17.866189,
+  "synthetic_power/syn_edge_110": 6.684428,
+  "synthetic_power/syn_null": 6.829723
+ }
+}

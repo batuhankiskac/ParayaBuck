@@ -1,0 +1,11 @@
+{
+ "batch": "anchors_v1",
+ "registry_lines": 36,
+ "registry_trials": 3,
+ "total_wall_s": 17.538946,
+ "wall_s": {
+  "k_control/K": 0.0,
+  "r2_control/R2": 5.636477,
+  "vol_shape_p15/p15": 16.887292
+ }
+}

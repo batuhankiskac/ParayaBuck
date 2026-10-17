@@ -203,3 +203,35 @@ strongest claim; the true MDE may be lower. (3) The deflation's `var_sr` is pool
 DSR audit is reported per pool; the RW-only verdict is pool-independent given paired arms. (4) The
 "pre-2013" arm's chunk semantics use the *drawn source* session's year (§ its builder), which is
 what the bootstrap resamples.
+
+## Orchestrator review (2026-10-17) — the proposed DSR amendment is NOT adopted
+
+The study's measurements stand (tally, positive controls, the plain-drift power table, the v1/v2 error list).
+Its proposed §7.2 amendment is rejected, for this reason:
+
+* The B1-Δ "path-Sharpe" is `mean/sd` of the **bootstrap distribution** of an arm's Δ. A block bootstrap
+  approximates the *sampling* distribution of the Δ estimator, so `mean/sd ≈ Δ̂ / se(Δ̂)` — a z-score.
+  Under the null (true Δ = 0) that z-score is ≈ N(0, 1) **whatever the number of paths**; 1,000 paths do not
+  make it 1,000 independent observations. The null variance of the statistic is therefore ≈ 1, not
+  `1/(n_obs − 1)`, and `sr0 = E[max of N ≈ 312 null z-scores] ≈ 2.7–2.9` — what the framework computes (its
+  cross-sectional `var_sr` ≈ 0.84–1.07 happens to sit near 1). The amendment would shrink sr0 ≈ 30× and
+  declare almost any arm with a positive median.
+* So the framework's DSR behaves as a multiple-testing bar: after ~300 trials an arm must have roughly
+  ≥ 99.5 % of bootstrap paths positive to be declared. The campaign's deployed winners (R2, A1u, H2, K) had
+  63–75 % (z 0.29–0.70): they were adopted on mechanism (Turkish-tax mechanics) plus robustness gates, not on
+  multiple-testing significance — and they would not be "declared" by this rule either.
+* The plain-drift synthetic arms reach path-Sharpe ≈ 5 because the drift is added identically on every
+  bootstrap path (no estimation noise), so the "minimum detectable edge ≤ +0.25 pp/yr" holds only for a
+  noise-free edge. A real edge must clear the Stage-2 robustness gates (as R2 vs E2 and H2 vs A1u do) and,
+  for declaration, a z of ≈ 2.8.
+* Conversely, `rw_stepdown` studentizes with `sd/sqrt(n_paths)` (t = path-Sharpe × √1000), treating
+  bootstrap paths as independent observations; it is lenient (p ≈ 0.0005 for a 50 %-share arm). Because a
+  declaration needs both RW and DSR, the DSR binds and the deflation as a whole is not lenient. Recorded as a
+  known issue; no verdict depends on it (no real arm has reached the deflation: 0 Stage-2 passes).
+
+**Answer to the owner's question.** The screen is not broken. Of the ~100 ideas (now 312 trials) none passed
+Stage 2 — the robustness/holdout stage that two of the campaign's four real winners pass. The fall in hit rate
+comes from the stronger baseline (K already captures the large tax-mechanics gains; the median idea is
+−0.70 pp/yr after tax vs K) and from the robustness gates (2017+ after tax, rolling starts, fresh seeds,
+21 ETFs), not from a defective gate. The final multiple-testing bar is strict by design and has not yet been
+the binding constraint for any real idea.

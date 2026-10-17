@@ -1,0 +1,13 @@
+{
+ "batch": "bank_v4b",
+ "registry_lines": 539,
+ "registry_trials": 312,
+ "total_wall_s": 91.857819,
+ "wall_s": {
+  "IC34/C_N": 20.18668,
+  "IC36_N/A_N": 23.35778,
+  "IC36_N/C_N": 23.535551,
+  "IC45/C_N": 28.340564,
+  "IC46/C_N": 18.693265
+ }
+}

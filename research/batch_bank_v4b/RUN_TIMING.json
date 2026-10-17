@@ -1,0 +1,27 @@
+{
+ "arm_wall_s": {
+  "IC34/C_N": 20.18668,
+  "IC36_N/A_N": 23.35778,
+  "IC36_N/C_N": 23.535551,
+  "IC45/C_N": 28.340564,
+  "IC46/C_N": 18.693265
+ },
+ "batch": "bank_v4b",
+ "batch_total_wall_s": 91.857819,
+ "control_wall_s": {
+  "default": 19.012,
+  "w20020731": 20.006,
+  "w20041119": 19.623
+ },
+ "control_wall_total_s": 58.641,
+ "date": "2026-10-17",
+ "engine_parity_quick": "PASS",
+ "harness_checks": 139,
+ "harness_failed": 0,
+ "registry_lines": 539,
+ "registry_trials_N": 312,
+ "rerun_records_byte_identical": 5,
+ "rerun_records_checked": 5,
+ "study": "batch_bank_v4b",
+ "workers": 6
+}

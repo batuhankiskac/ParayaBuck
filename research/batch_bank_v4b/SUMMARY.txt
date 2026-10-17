@@ -1,0 +1,156 @@
+batch_bank_v4b -- the 9 bank_v3 NEEDS_KERNEL arms on the N-leg declaration (batch `bank_v4b`)
+branch research/batch_bank_v4b, base commit 851bcbae (research/batch_run_v1), 2026-10-17
+
+verdict
+  NO CANDIDATE. The nine arms that bank_v3 refused as NEEDS_KERNEL are now declared on
+  research/fast_engine3 (`"legs": [...]`, `margin_spread`): 5 are simulated and 4 stay refused.
+  Of the 5 simulated, ONE passes Stage 1 (`IC45/C_N`, the gold sleeve + loan on w20041119) and
+  its whole holdout is not evaluable (0 of 6 OOS windows, 0 of 21 instruments -- GLD starts
+  2004-11), so it is `holdout_insufficient`, not a pass. The other four fail Stage 1. Nothing
+  passes Stage 2; `declared = []`; nothing is a candidate for an owner decision.
+
+counts
+  new arms declared (batch `bank_v4b`)                       9   (5 simulated, 4 needs_kernel)
+  screened                                                   5
+  refused: 5 instruments > N_LEGS = 4 (IC36_N/B_N)            1
+  refused: the gain-aware downsize router is not in fe3       3   (IC41/A_N, B_N, C_N)
+  Stage 1 pass (after-tax 2000 Δ > 0 AND B1 median Δ > 0 AND max DD ≤ K+2 pp AND turnover ≤ 2×K)
+                                                              1   (IC45/C_N)
+  Stage 2 pass                                                0
+  declared (stage 2 AND rw_stepdown ≤ 0.05 AND DSR ≥ 0.95)     0
+  ledger: 530 -> 539 lines; N (distinct (idea, arm, spec_hash)) 303 -> 312
+  old arms re-run or re-specified                             0   (all their specs/spec_hashes
+                                                                  unchanged; the pinned lines
+                                                                  stand; `--verify-registry` PASS)
+  NaN in any B1 Δ vector                                      0   (each 1000/1000 finite;
+                                                                  DEFLATION excluded_non_finite {})
+
+per-arm table (Δ = arm − K in pp, on the arm's own declared window, against K re-simulated on it)
+  arm           window      AT2000Δ   AT2010Δ   AT2017Δ   B1 medΔ/share   maxDDΔ b/c      TO×K b/c
+  IC34/C_N      default     -0.8236   +2.5593   +0.6504   +0.3521 / 0.559  +16.32/+16.26   2.084
+  IC36_N/A_N    w20041119   -0.5376   -0.4954   -0.4179   -0.7232 / 0.265  +1.35 /+1.34    1.998
+  IC36_N/C_N    w20041119   -0.4941   -0.4260   -0.3186   -0.8918 / 0.223  +1.54 /+1.54    1.924
+  IC45/C_N      w20041119   +0.5029   -0.0137   +0.0549   +0.8978 / 0.705  -5.73 /-5.83    0.975
+  IC46/C_N      w20020731   -0.5770   -0.9763   -2.3834   -0.0754 / 0.472  -4.84 /-4.86    0.922
+
+failed gates (read from the records: stage-1 gates from `stage1_gates`, stage-2 from `gates.failed`)
+  IC34/C_N    reject_stage1  AT2000 (-0.8236 pp), max DD (+16.32/+16.26 pp), turnover (2.084×K)
+  IC36_N/A_N  reject_stage1  AT2000 (-0.5376 pp), B1 median (-0.7232 pp)
+  IC36_N/C_N  reject_stage1  AT2000 (-0.4941 pp), B1 median (-0.8918 pp)
+  IC46/C_N    reject_stage1  AT2000 (-0.5770 pp), B1 median (-0.0754 pp)
+  IC45/C_N    holdout_insufficient: G4, G7, G8, AT_2010 (-0.0137 pp), E1, HOLDOUT_INSUFFICIENT
+              (G1_base/cal, G2_base/cal, G3_base/cal, G5_base/cal, G6_base/cal, G9 all pass;
+               E2 rolling starts n = 17, median +0.2432 pp, share ≥ 0 = 0.706; FRESH PASS:
+               block10 progressive +0.9059/0.721, block10 flat +0.6447/0.659,
+               block40 progressive +0.7765/0.665, block40 flat +0.5109/0.633)
+
+IC45/C_N -- the Stage-1 survivor, and why it is not declared
+  It is the only arm with a real after-tax edge on its own window: +0.5029 pp after tax at $100k,
+  2004-11-19 -> 2026-09-29 (14.0655 % vs K's 13.5626 %), with a LOWER max drawdown (-5.73 pp base /
+  -5.83 pp calibrated: 32.73 % vs K's 38.46 % on that window) and less turnover (0.975 x K);
+  after-tax 2017 +0.0549 pp, 2010 -0.0137 pp.
+  B1 median +0.8978 pp at 70.5 % share, B2 +0.6050 pp at 65.4 % -- the SAME order of magnitude as
+  its fixed-window Δs (pre-tax main +0.54 pp, after-tax 2000 +0.50 pp), which is what makes the
+  bootstrap number plausible after the rw_boot_audit_v1 leg-B defect: the pre-fix signature was a
+  bootstrap Δ 20x the window Δ (IC37/C: +12.2 pp against +0.59 pp); this is 1.8x, and its
+  1000-path Δ vector has no fat tail (mean +0.780 pp, sd 1.653 pp, p5/p95 -2.09/+3.28, max +5.43;
+  29.5 % of paths negative). Its only inputs are GLD (a Yahoo ETF print) and the panel's own
+  QQQ/SPY triple -- no revised macro series (the NFCI vintage trap does not apply). It is NOT
+  declared: it fails Stage 2 outright on the after-tax 2010 window and cannot be evaluated on any
+  OOS window or any of the 21 instruments (their windows all begin before GLD's 2004-11-18, the
+  latest being EEM's 2004-04-14), so G7/G8/E1 fail by construction and the arm is
+  `holdout_insufficient` -- exactly the IC37/C situation, and it would need its own pre-registered
+  confirmation study (>=3 OOS windows and >=15 instruments starting after 2004-11-18) before
+  anything is claimed. The deflation also fails it: rw_stepdown "rejects" it (p_adj 0.0000) but its
+  advantage-Sharpe 0.4717 is far below sr0 = 1.296996, so dsr = 0.0 (< 0.95).
+
+deflation (results/DEFLATION.json, batch bank_v4b, N = 312, seed 20261016, 2000 resamples, α 0.05)
+  5 arms with a finite B1 Δ vector; excluded_non_finite = {}
+  white_rc: best arm IC45/C_N, t_max = 14.916666, p = 0.0
+  rw_stepdown rejects: IC34/C_N (p_adj 0.0385), IC45/C_N (p_adj 0.0000)
+  deflated_sharpe: var(SR) = 0.245384, sr0 = 1.296996 (N = 312); best observed advantage-Sharpe
+    0.471706 (IC45/C_N) -> dsr = 0.0, pass_5pct = false for all five
+    (reported framework display bug, NOT fixed: arm_sharpe's mean_pp/sd_pp -- deflation.py lines
+     133/137 -- are the pp Δ sample's mean/sd times 100; 78.032/165.425 stand for 0.780/1.653 pp.
+     Every decision cell -- sharpe, var_sr, sr0, dsr, the White/RW p-values -- is scale-free.)
+  stage2_pass = [], declared = []
+  window_tags in play: default, w20020731, w20041119 (each arm's Δ is its paired advantage over K
+  on its own window; arms on different windows do not share a pool)
+
+what remains blocked, and why
+  * IC36_N/B_N (and the bank's IC36-B): the {GLD, IEF, SHY, XLU} blend is leg A + FOUR sleeves =
+    5 instruments in one cash pool; the N-leg kernel's capacity is N_LEGS = 4. Needs N_LEGS >= 5
+    (a kernel edit + parity), not a plugin.
+  * IC41/A_N, B_N, C_N (and the pinned IC41/A-C): the arms are *defined* by the tax router -- a
+    downsize fills in the leg with the lower USD FIFO gain fraction, bounded by a 10 pp per-session
+    cap. That router exists only as the two-leg fill option `route_cap_pp`
+    (research/fast_engine2/fe2_opts.py); `api.resolve_arm` refuses `fill_knobs` on any `"legs"` arm
+    (only `margin_spread` reaches the multi-leg kernel) and `fe3_sim.sim3` has no cross-leg routing
+    (checked in the code). Screening the 50/50 weight split alone would silently drop the mechanism
+    the idea exists for, so it is not done -- the arms are registered with that reason.
+  * The 8 old arms of these ideas (IC34/C, IC36/A-C, IC41/A-C, IC45/C, IC46/C) keep their pinned
+    `needs_kernel` ledger lines. IC34/C, IC45/C and IC46/C are pinned only by the ledger text --
+    their runnable twins are C_N here. IC36/A-C are also blocked by IC36.py's MODULE-LEVEL
+    NEEDS_KERNEL, which refuses every arm of that file; the runnable twins live in the new module
+    IC36_N.py (the pattern research/ideas/IC59_K.py documents for IC59).
+  * IC59/A-C and IC54/A-B (bank_v3) are untouched and still blocked as bank_v3 recorded.
+
+method / integrity
+  * registered on the N-leg kernel: `"legs": ["2x", ...]` (+ `margin_spread` 0.015 for
+    IC45/C_N/IC46/C_N -- the bank's arm text fixes no spread, so IC39's frozen broker rate over
+    DTB3 is used; documented at the top of each module). Simulation is fe3_sim/fe_boot/fe_tax --
+    no new per-day or per-path Python loop, no edit to research/fast_engine*, no gate changed.
+  * add-only: `git diff -U0 851bcbae -- research/ideas/ | grep '^-[^-]'` prints nothing; every old
+    arm's spec_hash is unchanged; the new arms live in new `spec["legs"]` branches and new modules.
+  * the batch screens ONLY the new arms. `run.plan` iterates every arm of a listed module and has
+    no per-arm selector, so the study drives the framework's own plan/control/worker/scoreboard/
+    deflation code with the arm set restricted (research/batch_bank_v4b/run_batch.py); no framework
+    file is edited, and no old arm is re-simulated or re-registered.
+  * fixed convention, documented in the modules: the blend/sleeve 20-session vol does not exist for
+    the reduced window's first 19 sessions (the window starts one session after the last input's
+    first), so the affected sleeve is held in cash (weight 0) there. The modules' NaN-aware
+    `_roll_vol` is bit-identical to `fe_signals.vol_n` on a gap-free series and recovers after a
+    leading gap (vol_n's cumsum never does) -- asserted by `run_batch.py --check`.
+  * determinism: the whole batch and all 5 arm records were re-run through the framework's own
+    worker (`run._arm_task`) and are byte-identical (cmp, 5/5 OK). The batch's control is
+    production K: default window pre-tax 15.7649 / 15.1785 % (base/cal), max DD 46.67 / 46.79 %,
+    after tax at $100k 10.7533 / 15.2354 / 23.9720 % on 2000/2010/2017 -- the published anchors.
+
+harness (all green before the batch ran)
+  python -m research.fast_engine.parity --quick   PASS  (`engine_parity_quick`, HARNESS.json)
+  python -m research.batch_screen.run --harness   PASS 139/139 checks, 0 failed, 87.1 s
+  python -m research.batch_screen.run --verify-registry  PASS (539 lines, 312 arms, N = 312;
+    `stale` lists the 12 old arms of the edited modules -- information, not an error)
+  smoke --ideas IC34,IC36,IC36_N,IC41,IC45,IC46: the 5 new arms OK on every panel (synthetic,
+    main, oos:M2, etf:XLK, boot); the NEEDS_KERNEL rows are the old pinned arms plus the 4 new
+    refusals (the smoke exits non-zero on any needs_kernel row by design)
+
+wall clock (this machine, 6 workers; results/bank_v4b/timing.json)
+  total 91.9 s including the three paired controls (default, w20020731, w20041119)
+  IC34/C_N 20.2 s | IC36_N/A_N 23.4 s | IC36_N/C_N 23.5 s | IC45/C_N 28.3 s | IC46/C_N 18.7 s
+  (a second, single-process pass through the same records: 10-16 s per arm)
+
+amendments
+  * 1 bug, found by `smoke` and fixed BEFORE any non-control arm was simulated: the first draft of
+    the modules' NaN-aware `_roll_vol` sliced a (P, T+1) cumulative array against a (P, T) output
+    (broadcast error on every panel). The fix builds the cumulative sums from the (T-1)-length
+    return series, exactly like `fe_signals.vol_n`; `run_batch.py --check` then asserted
+    bit-identity with `vol_n` on a gap-free series (2 path counts) and the leading-gap behaviour.
+    No arm, parameter, window or gate was changed after any number was seen.
+
+commits
+  plugins + pre-registration + driver (committed BEFORE the screen): 8817d43f
+  screen results (batch bank_v4b) + report + SUMMARY:                see git log
+
+caveats
+  1. Δ is arm − K on the same resampled paths and on the arm's own declared window; a Δ between
+     two arms on different windows is not a comparison.
+  2. Stage 1's pass rule is a strict `> 0`, so an arm equal to K would pass on rounding noise; none
+     of these five is numerically K (all |AT2000 Δ| >= 0.49 pp).
+  3. 20-session blocks cannot capture serial dependence beyond 20 sessions; the deflation's
+     p-values are optimistic under long memory, and N = 312 is the whole campaign ledger.
+  4. IC45/C_N's Stage-1 pass rests on a reduced window (2004-11-19 ->), where K itself compounds at
+     19.70 % pre-tax against 15.76 % on the published window; its Δ is paired against K on the same
+     window, but the level is not the published one.
+  5. GLD/IEF start in 2004-11 / 2002-07, so every arm in this batch has no OOS window and almost no
+     instrument window: a Stage-1 survivor here can never be more than `holdout_insufficient`.

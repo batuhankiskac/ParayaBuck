@@ -90,3 +90,23 @@ post-edit `smoke --ideas IC34,IC36,IC36_N,IC41,IC45,IC46`.
 
 *(bug fixes and any deviation from the above, added as they are found — nothing here changes an arm
 or a gate after data is seen.)*
+
+* **Pre-run bug fix (before any arm was simulated).** The first draft of the new modules' NaN-aware
+  `_roll_vol` sliced a `(P, T+1)` cumulative array against a `(P, T)` output, so `smoke` reported a
+  broadcast `ValueError` on every panel. Fixed by building the cumulative sums from the `(T-1)`
+  return series exactly as `fe_signals.vol_n` does; `run_batch.py --check` then asserted
+  bit-identity with `vol_n` on a gap-free series and the leading-gap behaviour. No arm, parameter,
+  window or gate was changed after any number existed.
+* **Deviation 1 — `IC36`'s runnable arms are in a new module (`IC36_N.py`).** `IC36.py`'s
+  *module-level* `NEEDS_KERNEL` refuses every arm of that file; it cannot be kept while new arms in
+  the same file become runnable, and adding a per-arm note to the three pinned old arms would
+  re-hash their specs (`verify_ledger` → `spec_drift`). The `research/ideas/IC59_K.py` precedent.
+  §2.1 above was written expecting this; recorded here as the outcome.
+* **Deviation 2 — the batch is driven by `run_batch.py`, not the CLI.** `research.batch_screen.run.plan`
+  iterates `mod.ARMS` and has no per-arm selector, so the CLI over the five modules would re-simulate
+  and re-register the pinned old arms, which §1 forbids. The driver rebinds the runner's `plan`
+  global in its own process with a restricted arm set and otherwise calls `run.run_batch` unchanged.
+* **Reported, not fixed (framework off-limits):** `arm_sharpe`'s `mean_pp`/`sd_pp`
+  (`research/batch_screen/deflation.py` lines 133/137) are the pp Δ sample's mean/sd multiplied by
+  100 — display-only, every decision cell is scale-free. See `docs/research/batch_bank_v4b.md`.
+

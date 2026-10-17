@@ -7653,6 +7653,9 @@
   }
  },
  "counts": {
+  "engine_cost_per_side": 0.0004,
+  "engine_default_m": 2,
+  "engine_start_session": 253,
   "framework_harness_checks": 143,
   "k_anchor_cells": 9,
   "parity_cells": 215,

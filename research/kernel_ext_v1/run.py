@@ -33,6 +33,7 @@ from pathlib import Path
 import numpy as np
 
 from research.batch_screen import run as bsrun
+from research.fast_engine import fe_sim, fe_study
 from research.fast_engine3 import fe3_parity
 
 from research.kernel_ext_v1 import run_batch as RB
@@ -105,6 +106,10 @@ def harness_cells(n_boot_paths=60):
             "router_cells": _n_cells(par["router"]),
             "framework_harness_checks": int(harness["n_checks"]),
             "k_anchor_cells": len(k),
+            # provenance: the fast engine this study runs on (fe3_sim imports these unchanged)
+            "engine_default_m": int(fe_sim.DEFAULT_M),
+            "engine_cost_per_side": float(fe_sim.COST_PER_SIDE),
+            "engine_start_session": int(fe_study.START),
         },
         "engine_parity_quick": {"pass": bool(par["engine_parity_quick"]["pass"])},
     }

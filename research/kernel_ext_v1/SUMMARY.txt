@@ -7,9 +7,9 @@
 ## Parity
 
 * `python -m research.fast_engine.parity --quick`: **PASS**
-* `research.fast_engine3.fe3_parity`: **PASS** (215 cells, 0 failed, 13.4 s)
+* `research.fast_engine3.fe3_parity`: **PASS** (215 cells, 0 failed, 13.5 s)
 * the router group: 8 cells -- `route_score = indexed` reproduces `fe2_opts` **bit for bit** on the two-leg parity cells (NAV and both per-leg rows), `route_cap = 0` is the two-leg kernel, the split moves within the cap, `usd` != `indexed`, and two books of one instrument keep two FIFO books
-* framework harness (`research.batch_screen.run --harness`): **PASS** (143 checks, 0 failed, 39.0 s)
+* framework harness (`research.batch_screen.run --harness`): **PASS** (143 checks, 0 failed, 39.4 s)
 
 ## K control anchors reproduced through the engine (tol 0.01 pp)
 
@@ -51,7 +51,7 @@ R2 reference (pre-tax CAGR, and max DD): `R2_m1_base` 0.1575, `R2_maxdd_base` 0.
 
 ## Timings
 
-* parity suite 13.4 s; framework harness 39.0 s
-* wall clock of this invocation (`--report`): **52.6 s**
+* parity suite 13.5 s; framework harness 39.4 s
+* wall clock of this invocation (`--report`): **53.2 s**
 * the `--run` screening step (batch `kernel_ext_v1` itself, `results/kernel_ext_v1/timing.json`): **69.1 s** wall on its workers (per arm `B5_N` 25.0 s, `A_N_R` 25.5 s, `B_N_R` 26.4 s, `C_N_R` 30.3 s, `C` 14.8 s)
 

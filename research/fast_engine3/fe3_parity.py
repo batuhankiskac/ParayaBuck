@@ -8,7 +8,12 @@ Three identities, each on the NAV path *and* on every reported scalar (`max_abs_
   (b) **N-leg with legs 3..N identically zero** vs `research/fast_engine2.fe2_sim.simulate2`, both
       with leg B at zero (the K anchors) and with a real leg B (`2x` + `1x`);
   (c) **margin off** is both of the above (the `mrate` array is empty), and **margin on a single
-      leg** reproduces `research.fast_engine_opts.fe_opts_sim.simulate_opts`' margin cells.
+      leg** reproduces `research.fast_engine_opts.fe_opts_sim.simulate_opts`' margin cells;
+  (d) **the gain-aware downsize router** (`route_cap`/`route_score`, `fe2_opts`'s `route_cap`
+      generalised to N legs) with `route_score = indexed` reproduces
+      `research.fast_engine2.fe2_opts.simulate2(knobs={"route_cap_pp": ...})` bit for bit on two
+      legs, its `route_cap = 0` off-state is the published kernel, and a two-book-of-one-instrument
+      run keeps two separate FIFO books.
 
 `engine_parity()` additionally runs the engine's own `python -m research.fast_engine.parity
 --quick` (the required PASS) and the engine's published K anchors through `fe_study`.
@@ -30,7 +35,7 @@ from . import fe3_boot, fe3_sim
 
 ARMS = ("C0", "A1u", "H2", "K")
 MODES = ("pre_tax", "progressive", "flat")
-NRT = fe3_sim.N_LEGS  # 4
+NRT = fe3_sim.N_LEGS  # 5
 MARGIN_SPREAD = 0.015
 
 
@@ -286,12 +291,32 @@ def multi_leg_holds_three_books():
         },
         "n_legs_are_capped": {
             "pass": bool(_raises(lambda: fe3_sim.simulate3(
-                _pad4([o, o1, o1, o1, o1]), _pad4([c, c1, c1, c1, c1]),
-                _pad4([w_r2, wb, wc, wc, wc]), env, 100_000.0, i0, i1, arm="K", mode="pre_tax",
-                m=2))),
+                _pad4([o, o1, o1, o1, o1, o1], NRT + 1), _pad4([c, c1, c1, c1, c1, c1], NRT + 1),
+                _pad4([w_r2, wb, wc, wc, wc, wc], NRT + 1), env, 100_000.0, i0, i1, arm="K",
+                mode="pre_tax", m=2))),
+            "n_max": NRT,
+        },
+        "five_books_trade": {
+            "pass": bool(_five_books_trade(o, c, o1, c1, w_r2, wb, wc, env, i0, i1)),
             "n_max": NRT,
         },
     }
+
+
+def _five_books_trade(o, c, o1, c1, w_r2, wb, wc, env, i0, i1):
+    """The capacity extension: a five-leg run really holds five books (and a sixth is refused)."""
+    z = _zeros(len(o))
+    wd = 0.10 * w_r2
+    r = fe3_sim.simulate3([o, o1, o, o1, o], [c, c1, c, c1, c], [w_r2, wb, wc, wd, wd], env,
+                          100_000.0, i0, i1, arm="K", mode="progressive", m=2)
+    legs = r["_legs"]
+    ok = bool(all(legs[k]["trades"] > 0 and legs[k]["turnover_total"] > 0 for k in "ABCDE")
+              and len(legs) == 5
+              and r["strategy_trades"] == sum(legs[k]["trades"] for k in "ABCDE"))
+    return bool(ok and _raises(lambda: fe3_sim.simulate3(
+        _pad4([o, o1, o, o1, o, z], NRT + 1), _pad4([c, c1, c, c1, c, z], NRT + 1),
+        _pad4([w_r2, wb, wc, wd, wd, z], NRT + 1), env, 100_000.0, i0, i1, arm="K",
+        mode="pre_tax", m=2)))
 
 
 def _raises(fn):
@@ -300,6 +325,103 @@ def _raises(fn):
     except Exception:
         return True
     return False
+
+
+# ----------------------------------------------------------------------------- the router
+def _two_leg_router_env():
+    """The two-leg arm the option-copy parity uses: leg A `fe_data.main_inputs`, leg B the 1x.
+
+    Imported from `fe2_opts_parity` so the router cell and the fe2_opts `p3_route_cap` cell run on
+    exactly the same two-leg setup (the same leg A R2 target and the same fixed 0.2-weight 1x leg
+    B), which is what makes the bit-for-bit comparison meaningful.
+    """
+    from research.fast_engine2 import fe2_opts_parity
+
+    days, env, la, lb, i0, i1 = fe2_opts_parity._main_env(0.0)
+    return days, env, la, lb, i0, i1
+
+
+def router_cells():
+    """The gain-aware downsize router: indexed == `fe2_opts` bit for bit, and its controls.
+
+    * `router_indexed_eq_fe2opts_*` -- `simulate3(route_cap=0.10, route_score=1)` reproduces
+      `fe2_opts.simulate2(knobs={"route_cap_pp": 10.0})` in the whole NAV path and every scalar,
+      including the two per-leg `_legs` rows (the required two-leg parity).
+    * `router_off_is_the_current_kernel` -- with the cap at 0 the score is ignored and the run is
+      the published two-leg kernel (`fe2_sim.simulate2`), bit for bit.
+    * `router_changes_the_split` -- the router moves turnover from one leg to the other, bounded by
+      the cap (the `fe2_opts` `p3_route_cap` structure).
+    * `router_usd_vs_indexed` -- the `usd` score is a genuinely different setting.
+    * `two_books_of_one_instrument_*` -- two legs sharing one price series run with separate FIFO
+      books, and the router really separates them.
+    """
+    from research.fast_engine2 import fe2_opts_parity, fe2_sim
+
+    days, env, la, lb, i0, i1 = _two_leg_router_env()
+    oa, ca, wa = la
+    ob, cb, wb = lb
+    out = {}
+    for arm in ("C0", "K"):
+        for mode in ("pre_tax", "progressive"):
+            theirs = fe2_opts_parity.main_run(arm=arm, mode=mode, m=2,
+                                              knobs={"route_cap_pp": 10.0})
+            mine = fe3_sim.simulate3([oa, ob], [ca, cb], [wa, wb], env, 100_000.0, i0, i1,
+                                     arm=arm, mode=mode, m=2, route_cap=0.10, route_score=1)
+            cell = _cell(theirs, mine)
+            cell["legs_A_equal"] = bool(theirs["_legs"]["A"] == mine["_legs"]["A"])
+            cell["legs_B_equal"] = bool(theirs["_legs"]["B"] == mine["_legs"]["B"])
+            cell["pass"] = bool(cell["pass"] and cell["legs_A_equal"] and cell["legs_B_equal"])
+            out[f"router_indexed_eq_fe2opts_{arm}_{mode}"] = cell
+    # the score is ignored when the router is off, and the run is the two-leg kernel exactly
+    plain = fe2_sim.simulate2(oa, ca, wa, ob, cb, wb, env, 100_000.0, i0, i1, arm="K",
+                              mode="progressive", m=2)
+    off_i = fe3_sim.simulate3([oa, ob], [ca, cb], [wa, wb], env, 100_000.0, i0, i1, arm="K",
+                              mode="progressive", m=2, route_cap=0.0, route_score=1)
+    off_u = fe3_sim.simulate3([oa, ob], [ca, cb], [wa, wb], env, 100_000.0, i0, i1, arm="K",
+                              mode="progressive", m=2, route_cap=0.0, route_score=0)
+    out["router_off_is_the_current_kernel"] = {
+        "nav_engine_max_abs_diff": float(np.max(np.abs(plain["_nav"] - off_i["_nav"]))),
+        "nav_score0_vs_score1": float(np.max(np.abs(off_i["_nav"] - off_u["_nav"]))),
+        "pass": bool(_cell(plain, off_i)["pass"] and _cell(off_i, off_u)["pass"])}
+    # the cap bounds the move: turnover shifts between the legs, total within 2 x cap x sessions
+    off = fe3_sim.simulate3([oa, ob], [ca, cb], [wa, wb], env, 100_000.0, i0, i1, arm="C0",
+                            mode="pre_tax", m=2)
+    on = fe3_sim.simulate3([oa, ob], [ca, cb], [wa, wb], env, 100_000.0, i0, i1, arm="C0",
+                           mode="pre_tax", m=2, route_cap=0.10, route_score=1)
+    nsess = i1 - i0 + 1
+    ta0, tb0 = off["_legs"]["A"]["turnover_total"], off["_legs"]["B"]["turnover_total"]
+    ta1, tb1 = on["_legs"]["A"]["turnover_total"], on["_legs"]["B"]["turnover_total"]
+    da, db = ta1 - ta0, tb1 - tb0
+    out["router_changes_the_split"] = {
+        "turnover_delta": {"A": da, "B": db}, "cap_bound_total_weight": 2.0 * 0.10 * nsess,
+        "nav_max_abs_diff": float(np.max(np.abs(on["_nav"] - off["_nav"]))),
+        "pass": bool(da * db < 0.0 and abs(da) <= ta0 and abs(db) <= tb0
+                     and abs((ta1 + tb1) - (ta0 + tb0)) <= 2.0 * 0.10 * nsess
+                     and float(np.max(np.abs(on["_nav"] - off["_nav"]))) > 0.0)}
+    usd = fe3_sim.simulate3([oa, ob], [ca, cb], [wa, wb], env, 100_000.0, i0, i1, arm="K",
+                            mode="progressive", m=2, route_cap=0.10, route_score=0)
+    idx = fe3_sim.simulate3([oa, ob], [ca, cb], [wa, wb], env, 100_000.0, i0, i1, arm="K",
+                            mode="progressive", m=2, route_cap=0.10, route_score=1)
+    out["router_usd_vs_indexed"] = {
+        "nav_max_abs_diff": float(np.max(np.abs(usd["_nav"] - idx["_nav"]))),
+        "pass": bool(not np.array_equal(usd["_nav"], idx["_nav"])
+                     and usd["cagr_usd_liquidated"] != idx["cagr_usd_liquidated"])}
+    # two books of one instrument: the same series in both legs, separate FIFO books
+    w = 0.49 * wa
+    obb = fe3_sim.simulate3([oa, oa], [ca, ca], [w, w], env, 100_000.0, i0, i1, arm="K",
+                            mode="progressive", m=2)
+    obb_on = fe3_sim.simulate3([oa, oa], [ca, ca], [w, w], env, 100_000.0, i0, i1, arm="K",
+                               mode="progressive", m=2, route_cap=0.10, route_score=1)
+    a1, b1 = obb["_legs"]["A"], obb["_legs"]["B"]
+    a2, b2 = obb_on["_legs"]["A"], obb_on["_legs"]["B"]
+    out["two_books_of_one_instrument"] = {
+        "books_trade": {"A": a1["trades"], "B": b1["trades"]},
+        "route_moves_between_same_series": {"A": a2["turnover_total"] - a1["turnover_total"],
+                                            "B": b2["turnover_total"] - b1["turnover_total"]},
+        "pass": bool(a1["trades"] > 0 and b1["trades"] > 0 and a1["turnover_total"] > 0
+                     and b1["turnover_total"] > 0
+                     and not np.array_equal(obb["_nav"], obb_on["_nav"]))}
+    return out
 
 
 def engine_anchors(tol_pp=0.01):
@@ -368,6 +490,7 @@ def run(n_boot_paths=300, quiet=False, engine_parity_result=None):
         "bootstrap": bootstrap(n_paths=n_boot_paths),
         "margin": margin_cells(),
         "multi_leg": multi_leg_holds_three_books(),
+        "router": router_cells(),
         "engine_anchors": engine_anchors(),
         "engine_parity_quick": (engine_parity_result if engine_parity_result is not None
                                 else engine_parity(quick=True)),

@@ -1,4 +1,4 @@
-"""fe3_sim -- the N-leg simulation kernel: `fe2_sim.sim2` generalised to N <= 4 instruments.
+"""fe3_sim -- the N-leg simulation kernel: `fe2_sim.sim2` generalised to N <= 5 instruments.
 
 One account, one cash pool, **N** instruments, each with its own units and its own FIFO lot book;
 one taxpayer, so every leg's realisation lands in the same annual net TRY gain (`year_gain`) and
@@ -27,6 +27,26 @@ applies. It lets a target that sums above the account's cap (a sleeve on top of 
 / IC46-C) hold a cash loan and pay for it. With `mrate` empty the branch is unreachable and the
 kernel is `fe2_sim.sim2` exactly.
 
+The second mechanism added over `fe2_sim` is the **gain-aware downsize router** of the two-leg
+option copy `research/fast_engine2/fe2_opts.py` (`route_cap`), generalised to N legs and with a
+selectable score. On a session in which at least two legs want to *downsize*, the units the most
+expensive selling leg would realise are moved to the cheapest selling leg, bounded by
+`route_cap * nav_after` of the cheap leg's own post-cost weight and by either leg's own sale (the
+`fe2_opts` move verbatim). `route_score` picks the score: 1 (`indexed`) is the indexed-TRY FIFO
+gain fraction -- exactly `fe2_opts`'s -- and 0 (`usd`) is the USD FIFO gain fraction, both from
+`fe_sim`'s read-only FIFO walks. With `route_cap = 0.0` the block is unreachable and the kernel is
+`fe2_sim.sim2`/`fe_sim.sim_one` bit for bit; `fe3_parity` proves the indexed router reproduces
+`fe2_opts`'s `route_cap` cell bit for bit on two legs. Routing changes only the *split* of a
+downsize between the books: `trade[l]`, the H2 deferral and the December rules are untouched, but a
+leg whose whole sale is moved becomes a no-op fill, so the fill count can fall while `trade[l]`
+stays set.
+
+The third is a **declaration** capability rather than a kernel branch: two legs may share one price
+series (the `"legs": ["2x", "2x"]` "two books of one instrument" of IB38-C). The kernel is already
+leg-index generic -- each leg has its own units/FIFO book and its own band -- so a duplicated key
+is exactly two books of one instrument; `batch_screen.api` and `bridge3` are what refuse and then
+resolve the duplicate declaration.
+
 Deliberate differences from `fe2_sim.sim2`: the units live in `un[leg]` for `leg` in
 `range(n)` rather than a two-row array; the per-leg `scal`/`yr2` blocks are `n` rows; the
 tax-funding sale walks legs in order `0..n-1` (with one leg that is the single-leg behaviour, with
@@ -51,10 +71,17 @@ from research.fast_engine.fe_tax import (
 )
 from research.fast_engine2.fe2_sim import _buy_leg, _sell_leg
 
-#: the account's leg capacity (N <= 4); a caller passes exactly as many rows as it holds.
-N_LEGS = 4
+#: the account's leg capacity (N <= 5); a caller passes exactly as many rows as it holds.
+N_LEGS = 5
 LEG_A, LEG_B = 0, 1
-LEG_NAMES = ("A", "B", "C", "D")
+LEG_NAMES = ("A", "B", "C", "D", "E")
+
+#: the downsize router's gain-fraction scores (`score_mode`'s convention: `usd` = the USD FIFO
+#: gain fraction `fe_sim._rule_sale_usd`, `indexed` = the YI-UFE-indexed TRY FIFO gain fraction
+#: `fe_sim._rule_sale(..., index_on=True)`). `indexed` is the two-leg option copy's own score
+#: (`research/fast_engine2/fe2_opts.py`, `route_cap`), so it is the one the parity cells prove
+#: bit-for-bit; the IC41/IB28 arms ask for `usd` (the bank's "lower USD FIFO gain fraction").
+ROUTE_SCORES = {"usd": 0, "indexed": 1}
 
 # `st` slots: `fe_sim`'s layout, so the shared kernels keep working. S_UNITS is fe_sim's
 # single-leg units scalar and is unused here (the legs' units live in `un`).
@@ -124,6 +151,8 @@ def sim3(
     M_lo,
     cash_rate,
     mrate,
+    route_cap,
+    route_score,
     trace,
     dbg,
 ):
@@ -132,8 +161,13 @@ def sim3(
     `oq`/`cq`/`wq` are `(n, T)` open/close/target panels (row `l` = leg `l`, row 0 = leg A), the
     target decided at the close of `i - 1` and filled at the open of `i`. `mrate` is an optional
     per-session margin rate on a negative cash balance (an empty array switches it off, which is
-    the `fe2_sim`/`fe_sim` behaviour). Returns `sim2`'s tuple plus the `n`-row per-leg blocks:
-    `(nav, dec, scal, yr, gbr, gbr_n, has_due, legscal, yr2)` with `gbr` `(n, N_REASONS)`.
+    the `fe2_sim`/`fe_sim` behaviour). `route_cap` (a weight fraction, 0 = off) is the gain-aware
+    downsize router: on a session where at least two legs want to *downsize*, the units the most
+    expensive leg (`route_score` = 0 `usd` / 1 `indexed`) would sell are moved to the cheapest
+    selling leg, bounded by `route_cap * nav_after` -- the `research/fast_engine2/fe2_opts.py`
+    `route_cap` mechanism, generalised from two legs to `n` and with a selectable score. Returns
+    `sim2`'s tuple plus the `n`-row per-leg blocks: `(nav, dec, scal, yr, gbr, gbr_n, has_due,
+    legscal, yr2)` with `gbr` `(n, N_REASONS)`.
     """
     dbg_on = dbg.shape[0] > 1
     n = oq.shape[0]
@@ -175,6 +209,7 @@ def sim3(
     fee_leg = np.zeros(n, dtype=np.float64)
     trade = np.zeros(n, dtype=np.bool_)
     blocked = np.zeros(n, dtype=np.int64)
+    fr = np.zeros(n, dtype=np.float64)  # the router's per-leg FIFO gain fractions
 
     has_cash_rate = cash_rate.shape[0] > 0
     has_mrate = mrate.shape[0] > 0
@@ -293,27 +328,78 @@ def sim3(
                 target_units = 0.0
             du[l] = target_units - un[l]
 
-        # ---- pass 2: the arm's rule per leg, on that leg's own lot book
+        # ---- pass 2a: the arm's H2 December deferral per leg (today's first branch, unchanged)
         for l in range(n):
             if trade[l] and tgt[l] > 1e-12:
                 if defer and dec_tail[i] and tgt[l] < w[l]:
                     trade[l] = False
                     blocked[l] = 1
-                elif du[l] < -1e-12 and band_on:
-                    if usd_rule:
-                        gain, proceeds = fe_sim._rule_sale_usd(lu[l], lp[l], lh[l], i, oq[l, i],
-                                                               -du[l], fee_leg[l])
-                    else:
-                        gain, proceeds = fe_sim._rule_sale(lu[l], lp[l], lf[l], lm[l], lh[l], fx,
-                                                           upm, mth_of, M_lo, i, oq[l, i], -du[l],
-                                                           fee_leg[l], rule_index)
-                    if proceeds > 0:
-                        g_frac = max(0.0, gain) / proceeds if usd_rule else gain / proceeds
-                    else:
-                        g_frac = 0.0
-                    if drift[l] <= fe_sim.gain_band(g_frac):
-                        trade[l] = False
-                        blocked[l] = 2
+
+        # ---- pass 2b: the optional gain-aware downsize router (N legs; off -> unreachable).
+        #      Generalises `fe2_opts`'s two-leg `route_cap`: with two selling legs it picks the
+        #      same (cheap, other) pair and applies the same single, cap-bounded move, so with
+        #      `route_score = 1` (indexed) it is `fe2_opts` bit for bit (fe3_parity proves it).
+        routed = False
+        if route_cap > 0.0:
+            nsell = 0
+            for l in range(n):
+                if trade[l] and tgt[l] > 1e-12 and du[l] < -1e-12 and oq[l, i] > 0:
+                    nsell += 1
+            if nsell >= 2:
+                cheap = -1
+                other = -1
+                for l in range(n):
+                    if trade[l] and tgt[l] > 1e-12 and du[l] < -1e-12 and oq[l, i] > 0:
+                        if route_score == 0:
+                            g_r, p_r = fe_sim._rule_sale_usd(lu[l], lp[l], lh[l], i, oq[l, i],
+                                                             -du[l], fee_leg[l])
+                        else:
+                            g_r, p_r = fe_sim._rule_sale(lu[l], lp[l], lf[l], lm[l], lh[l], fx,
+                                                         upm, mth_of, M_lo, i, oq[l, i], -du[l],
+                                                         fee_leg[l], True)
+                        fr[l] = g_r / p_r if p_r > 0 else 0.0
+                        if cheap < 0 or fr[l] < fr[cheap]:
+                            cheap = l
+                for l in range(n):
+                    if l != cheap and trade[l] and tgt[l] > 1e-12 and du[l] < -1e-12 and oq[l, i] > 0:
+                        if other < 0 or fr[l] > fr[other]:
+                            other = l
+                if cheap >= 0 and other >= 0:
+                    x = -du[other]
+                    capu = un[cheap] + du[cheap]  # the cheap leg's units after its own sale
+                    if capu < x:
+                        x = capu
+                    lim = route_cap * nav_after / oq[cheap, i]
+                    if lim < x:
+                        x = lim
+                    if x > 0:
+                        du[cheap] = du[cheap] - x
+                        du[other] = du[other] + x
+                        for l in range(n):
+                            if -du[l] > 0:
+                                drift[l] = (-du[l]) * oq[l, i] / nav_after
+                            else:
+                                drift[l] = 0.0
+                            fee_leg[l] = nav_open * cost * drift[l]
+                        routed = True
+
+        # ---- pass 2c: the A1u gain-scaled downsize band per leg, on that leg's own lot book
+        for l in range(n):
+            if trade[l] and blocked[l] == 0 and tgt[l] > 1e-12 and du[l] < -1e-12 and band_on:
+                if usd_rule:
+                    gain, proceeds = fe_sim._rule_sale_usd(lu[l], lp[l], lh[l], i, oq[l, i],
+                                                           -du[l], fee_leg[l])
+                else:
+                    gain, proceeds = fe_sim._rule_sale(lu[l], lp[l], lf[l], lm[l], lh[l], fx,
+                                                       upm, mth_of, M_lo, i, oq[l, i], -du[l],
+                                                       fee_leg[l], rule_index)
+                if proceeds > 0:
+                    g_frac = max(0.0, gain) / proceeds if usd_rule else gain / proceeds
+                else:
+                    g_frac = 0.0
+                if drift[l] <= fe_sim.gain_band(g_frac):
+                    trade[l] = False
+                    blocked[l] = 2
 
         # ---- execute; the surviving legs' cost is recomputed (a no-op with one leg, where the
         #      rule check either blocks the fill entirely or leaves the provisional cost intact)
@@ -329,6 +415,8 @@ def sim3(
                 else:
                     target_units = 0.0
                 d = target_units - un[l]
+                if routed:
+                    d = du[l]  # a routed session fills the routed units, not the recomputed ones
                 scal[SC_TURNOVER] = scal[SC_TURNOVER] + drift[l]
                 legscal[l, L_TURNOVER] = legscal[l, L_TURNOVER] + drift[l]
                 if d > 1e-12:
@@ -554,13 +642,17 @@ def simulate3(
     trace=False,
     dbg=None,
     mrate=None,
+    route_cap=0.0,
+    route_score=1,
 ):
-    """`fe2_sim.simulate2` over N legs (N <= 4): the same dict plus the per-leg blocks.
+    """`fe2_sim.simulate2` over N legs (N <= 5): the same dict plus the per-leg blocks.
 
     `opens`/`closes`/`wants` are `(N, T)` panels (or a sequence of 1-D arrays); row 0 is leg A.
     `mrate` is an optional `(T,)` (or `(P, T)`-row) margin rate: an empty/None array is the
-    `fe2_sim`/`fe_sim` behaviour. `arm` names the fill rule (`fe_sim.RULE`), applied to **all**
-    legs; `mode` and `m` are `fe_sim.simulate`'s.
+    `fe2_sim`/`fe_sim` behaviour. `route_cap`/`route_score` are the optional downsize router
+    (`route_cap = 0.0` -> off; `route_score` 0 `usd` / 1 `indexed`, the score is ignored when the
+    router is off). `arm` names the fill rule (`fe_sim.RULE`), applied to **all** legs; `mode` and
+    `m` are `fe_sim.simulate`'s.
     """
     spec = fe_sim.RULE["C0"] if arm in ("R2", "E2") else fe_sim.RULE[arm]
     mode_i = MODES.index(mode) if isinstance(mode, str) else int(mode)
@@ -580,6 +672,12 @@ def simulate3(
         mrate_a = np.ascontiguousarray(np.asarray(mrate, dtype=np.float64).ravel())
         if mrate_a.shape[0] != wq.shape[1]:
             raise ValueError(f"mrate must have one entry per session ({wq.shape[1]})")
+    route_cap = float(route_cap)
+    route_score = int(route_score)
+    if not np.isfinite(route_cap) or route_cap < 0.0:
+        raise ValueError(f"route_cap must be finite and >= 0; got {route_cap!r}")
+    if route_score not in (0, 1):
+        raise ValueError(f"route_score must be 0 (usd) or 1 (indexed); got {route_score!r}")
     nav, dec, scal, yr, gbr, gbr_n, has_due, legscal, yr2 = sim3(
         oq,
         cq,
@@ -606,6 +704,8 @@ def simulate3(
         env.M_lo,
         env.cash_rate,
         mrate_a,
+        float(route_cap),
+        int(route_score),
         bool(trace),
         np.zeros((0, 6), dtype=np.float64) if dbg is None else dbg,
     )
@@ -626,6 +726,7 @@ __all__ = [
     "N_ST",
     "N_YR",
     "N_YR2",
+    "ROUTE_SCORES",
     "SC_FEES",
     "SC_LIQ",
     "SC_MARGIN_USD",

@@ -67,9 +67,23 @@ def margin_spread(arm):
     return None if v is None else float(v)
 
 
+def route_cap(arm) -> float:
+    """The arm's downsize-router weight cap (`0.0` = off), from its resolved fields."""
+    v = arm.get("route_cap_pp")
+    if v is None:
+        v = (arm.get("opts") or {}).get("route_cap_pp")
+    return 0.0 if v is None else float(v) / 100.0
+
+
+def route_score(arm) -> int:
+    """The router's score: 1 (`indexed`) or 0 (`usd`) -- `fe3_sim.ROUTE_SCORES`."""
+    name = arm.get("route_score") or (arm.get("opts") or {}).get("route_score") or "indexed"
+    return int(fe3_sim.ROUTE_SCORES[name])
+
+
 def needs_kernel3(arm) -> bool:
-    """True when the arm must run on `fe3_sim`: > 2 legs, a margin loan on two, or a `2x_spy` leg
-    beside another instrument.
+    """True when the arm must run on `fe3_sim`: > 2 legs, a margin loan on two, a `2x_spy` leg
+    beside another instrument, or a gain-aware downsize router (a cross-leg fill decision).
 
     A *single*-leg arm keeps the published single-leg paths: a `2x_spy` leg A is IC40's
     `bridge.prepare_panel`, and a single-leg `margin_spread` (IC39) is the option kernel's own
@@ -79,7 +93,8 @@ def needs_kernel3(arm) -> bool:
     legs = arm_legs(arm)
     if len(legs) >= 3:
         return True
-    if len(legs) == 2 and (margin_spread(arm) is not None or LEG_SPY in legs):
+    if len(legs) == 2 and (margin_spread(arm) is not None or LEG_SPY in legs
+                           or route_cap(arm) > 0.0):
         return True
     return False
 
@@ -183,7 +198,8 @@ def simulate_multi(arm, t, data, env, capital, i0, i1, mode="pre_tax", m=fe_sim.
     wq = wants_panel(t, data.price.shape)
     return fe3_sim.simulate3(op[0], cl[0], wq[0], env, capital, i0, i1, arm=arm["rule"], mode=mode,
                              m=m, rule_index=rule_index, trace=trace,
-                             mrate=margin_rate(arm, data))
+                             mrate=margin_rate(arm, data), route_cap=route_cap(arm),
+                             route_score=route_score(arm))
 
 
 # ----------------------------------------------------------------------------- bootstrap
@@ -217,13 +233,15 @@ def boot_chunk(arm_list, panels, legs, win, env, cap_at, cost, mode_ids, rule_in
     defer = np.array([fe_sim.RULE[a["rule"]]["defer"] for a in arm_list], dtype=np.bool_)
     mb = mrate_panel(arm_list, pb)
     mc = mrate_panel(arm_list, pc)
+    route_caps = np.array([route_cap(a) for a in arm_list], dtype=np.float64)
+    route_scores = np.array([route_score(a) for a in arm_list], dtype=np.int64)
     out_pre = np.empty((2, len(arm_list), W), dtype=np.float64)
     out_at = np.empty((len(capitals), len(modes), len(arm_list), W), dtype=np.float64)
     fe3_boot._boot_chunk3(
         ob, cb, wb, oc, cc, wc, env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y, env.dec_tail,
         env.pay_ptr, env.pay_yr, env.pay_part, 100_000.0, cap_at, win.i0, win.i1, cost, win.yrs,
-        env.Y0, env.M_lo, band, usd, defer, rule_index, mode_ids, env.cash_rate, mb, mc, p0,
-        n_pre, n_tax, DBG0, out_pre, out_at,
+        env.Y0, env.M_lo, band, usd, defer, rule_index, mode_ids, env.cash_rate, mb, mc,
+        route_caps, route_scores, p0, n_pre, n_tax, DBG0, out_pre, out_at,
     )
     npre = max(0, min(W, n_pre - p0))
     ntax = max(0, min(W, n_tax - p0))
@@ -248,9 +266,12 @@ def pt_group(arm_list, panel, legs, env, i0, i1, cost, rule_index, capital, out)
     usd = np.array([fe_sim.RULE[a["rule"]]["usd_rule"] for a in arm_list], dtype=np.bool_)
     defer = np.array([fe_sim.RULE[a["rule"]]["defer"] for a in arm_list], dtype=np.bool_)
     mrate = mrate_panel(arm_list, panel)
+    route_caps = np.array([route_cap(a) for a in arm_list], dtype=np.float64)
+    route_scores = np.array([route_score(a) for a in arm_list], dtype=np.int64)
     fe3_boot._pt3(ob, cb, wq, env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y, env.dec_tail,
                   env.pay_ptr, env.pay_yr, env.pay_part, capital, i0, i1, cost, band, usd, defer,
-                  rule_index, env.Y0, env.M_lo, env.cash_rate, mrate, DBG0, out)
+                  rule_index, env.Y0, env.M_lo, env.cash_rate, mrate, route_caps, route_scores,
+                  DBG0, out)
 
 
 __all__ = [
@@ -264,6 +285,8 @@ __all__ = [
     "needs_kernel3",
     "prepare",
     "pt_group",
+    "route_cap",
+    "route_score",
     "simulate_multi",
     "wants_panel",
 ]

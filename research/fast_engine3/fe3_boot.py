@@ -76,6 +76,8 @@ def _boot_chunk3(
     cash_rate,
     mrate_b,
     mrate_c,
+    route_caps,
+    route_scores,
     p0,
     n_pre,
     n_tax,
@@ -86,8 +88,9 @@ def _boot_chunk3(
     """One chunk of N-leg paths, `prange` over them (`fe_boot._boot_chunk`, `n` legs).
 
     `ob`/`cb`/`oc`/`cc` are `(W, N, T)` and the wants panels `(n_arms, W, N, T)`; `mrate_b`/
-    `mrate_c` are `(n_arms, T)` (a zero-width row switches the loan off for that arm); `out_pre`
-    is `(2, n_arms, W)` and `out_at` `(n_caps, n_modes, n_arms, W)`.
+    `mrate_c` are `(n_arms, T)` (a zero-width row switches the loan off for that arm); `route_caps`
+    / `route_scores` are `(n_arms,)` downsize-router settings (a zero cap switches it off);
+    `out_pre` is `(2, n_arms, W)` and `out_at` `(n_caps, n_modes, n_arms, W)`.
     """
     W = ob.shape[0]
     n_arms = wb.shape[0]
@@ -101,13 +104,15 @@ def _boot_chunk3(
                 nav, _d, _s, _y, _g, _gn, _h, _ls, _y2 = fe3_sim.sim3(
                     ob[p], cb[p], wb[a, p], fx, upm, mth_of, yr_of, scale_y, dec_tail, pay_ptr,
                     pay_yr, pay_part, cap_pre, i0, i1, cost, band[a], usd_rule[a], defer[a],
-                    MODE_PRE_TAX, rule_index, Y0, M_lo, cash_rate, mrate_b[a], False, dbg0,
+                    MODE_PRE_TAX, rule_index, Y0, M_lo, cash_rate, mrate_b[a], route_caps[a],
+                    route_scores[a], False, dbg0,
                 )
                 out_pre[0, a, p] = (nav[k] / nav[0]) ** (252 / k) - 1
                 nav, _d, _s, _y, _g, _gn, _h, _ls, _y2 = fe3_sim.sim3(
                     oc[p], cc[p], wc[a, p], fx, upm, mth_of, yr_of, scale_y, dec_tail, pay_ptr,
                     pay_yr, pay_part, cap_pre, i0, i1, cost, band[a], usd_rule[a], defer[a],
-                    MODE_PRE_TAX, rule_index, Y0, M_lo, cash_rate, mrate_c[a], False, dbg0,
+                    MODE_PRE_TAX, rule_index, Y0, M_lo, cash_rate, mrate_c[a], route_caps[a],
+                    route_scores[a], False, dbg0,
                 )
                 out_pre[1, a, p] = (nav[k] / nav[0]) ** (252 / k) - 1
         if pg < n_tax:
@@ -118,7 +123,8 @@ def _boot_chunk3(
                         _nav, _d, scal, _y, _g, _gn, _h, _ls, _y2 = fe3_sim.sim3(
                             ob[p], cb[p], wb[a, p], fx, upm, mth_of, yr_of, scale_y, dec_tail,
                             pay_ptr, pay_yr, pay_part, cap_at[ci], i0, i1, cost, band[a], usd_rule[a],
-                            defer[a], mode, rule_index, Y0, M_lo, cash_rate, mrate_b[a], False, dbg0,
+                            defer[a], mode, rule_index, Y0, M_lo, cash_rate, mrate_b[a], route_caps[a],
+                            route_scores[a], False, dbg0,
                         )
                         out_at[ci, mi, a, p] = (scal[fe3_sim.SC_LIQ] / cap_at[ci]) ** (1 / yrs) - 1
 
@@ -149,12 +155,15 @@ def _pt3(
     M_lo,
     cash_rate,
     mrate,
+    route_caps,
+    route_scores,
     dbg0,
     out,
 ):
     """Pre-tax N-leg paths, `prange` over paths: the pooled OOS bootstrap's inner loop.
 
-    `ob`/`cb` are `(W, N, T)`, `wq` `(n_arms, W, N, T)`, `mrate` `(n_arms, T)`, `out` `(n_arms, W)`.
+    `ob`/`cb` are `(W, N, T)`, `wq` `(n_arms, W, N, T)`, `mrate` `(n_arms, T)`, `route_caps`/
+    `route_scores` `(n_arms,)`, `out` `(n_arms, W)`.
     """
     k = i1 - i0 + 1
     n_arms = wq.shape[0]
@@ -163,7 +172,8 @@ def _pt3(
             nav, _d, _s, _y, _g, _gn, _h, _ls, _y2 = fe3_sim.sim3(
                 ob[p], cb[p], wq[a, p], fx, upm, mth_of, yr_of, scale_y, dec_tail, pay_ptr,
                 pay_yr, pay_part, capital, i0, i1, cost, band[a], usd_rule[a], defer[a],
-                MODE_PRE_TAX, rule_index, Y0, M_lo, cash_rate, mrate[a], False, dbg0,
+                MODE_PRE_TAX, rule_index, Y0, M_lo, cash_rate, mrate[a], route_caps[a],
+                route_scores[a], False, dbg0,
             )
             out[a, p] = (nav[k] / nav[0]) ** (252 / k) - 1
 
@@ -240,6 +250,8 @@ def boot3(
     band = np.array([fe_sim.RULE[a["rule"]]["band"] for a in arms], dtype=np.bool_)
     usd_rule = np.array([fe_sim.RULE[a["rule"]]["usd_rule"] for a in arms], dtype=np.bool_)
     defer = np.array([fe_sim.RULE[a["rule"]]["defer"] for a in arms], dtype=np.bool_)
+    route_caps = np.array([float(a.get("route_cap", 0.0)) for a in arms], dtype=np.float64)
+    route_scores = np.array([int(a.get("route_score", 1)) for a in arms], dtype=np.int64)
     any_mrate = any(a.get("mrate") is not None for a in arms)
     mrate = np.zeros((len(arms), 0), dtype=np.float64) if not any_mrate else None
     pre = {md: {a: np.empty(n_pre) for a in ids} for md in ("base", "calibrated")}
@@ -271,7 +283,8 @@ def boot3(
             ob, cb, wb, oc, cc, wc, env.fx, env.upm, env.mth_of, env.yr_of, env.scale_y,
             env.dec_tail, env.pay_ptr, env.pay_yr, env.pay_part, TAX_CAPITALS["100k"], cap_at,
             win.i0, win.i1, cost, win.yrs, env.Y0, env.M_lo, band, usd_rule, defer, rule_index,
-            mode_ids, cash_rate, mrate, mrate, p0, n_pre, n_tax, DBG0, out_pre, out_at,
+            mode_ids, cash_rate, mrate, mrate, route_caps, route_scores, p0, n_pre, n_tax, DBG0,
+            out_pre, out_at,
         )
         npre = max(0, min(W, n_pre - p0))
         ntax = max(0, min(W, n_tax - p0))

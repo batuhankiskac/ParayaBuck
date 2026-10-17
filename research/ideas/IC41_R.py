@@ -82,11 +82,16 @@ def production_wants(data):
     return fe_signals.sized_wants(on_eff, factor, data.vol)
 
 
-def _inv_vol(a, n):
-    """`1/vol_n` of one price panel, its own series (0 where the estimate does not exist)."""
-    v = fe_signals.vol_n(a, n)
+def _inv_of(vol):
+    """`1/vol` of an **already computed** vol panel, 0 where the estimate does not exist."""
+    v = np.asarray(vol, dtype=np.float64)
     ok = np.isfinite(v) & (v > 0)
     return np.where(ok, 1.0 / np.where(ok, v, 1.0), 0.0)
+
+
+def _inv_vol(a, n):
+    """`1/vol_n` of one **price** panel, its own series (0 where the estimate does not exist)."""
+    return _inv_of(fe_signals.vol_n(a, n))
 
 
 def targets(data, spec):
@@ -104,8 +109,8 @@ def targets(data, spec):
         return [wa, wb]
     if spec.get("split") == "inverse_vol20":
         n = int(spec["vol_n"])
-        ia = _inv_vol(data.vol, n)
-        ib = _inv_vol(data.leg_series(LEG_B)[1], n)
+        ia = _inv_of(data.vol)                      # leg A: the 2x leg's own vol20
+        ib = _inv_vol(data.leg_series(LEG_B)[1], n)  # leg B: the 2x_spy leg's own vol20
         s = ia + ib
         ok = s > 0
         sa = np.where(ok, ia / np.where(ok, s, 1.0), 0.5)

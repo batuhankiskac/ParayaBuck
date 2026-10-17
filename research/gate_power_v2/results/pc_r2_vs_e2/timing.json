@@ -1,0 +1,9 @@
+{
+ "batch": "pc_r2_vs_e2",
+ "registry_lines": 531,
+ "registry_trials": 303,
+ "total_wall_s": 26.375451,
+ "wall_s": {
+  "r2_control/R2": 17.602024
+ }
+}

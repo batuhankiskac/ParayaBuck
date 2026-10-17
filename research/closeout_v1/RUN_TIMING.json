@@ -1,0 +1,20 @@
+{
+ "arm_wall_s": {
+  "IB24_2L/A_2L": 17.62144684791565,
+  "IB24_2L/B_2L": 17.39983892440796,
+  "IB24_2L/C_2L": 17.53919792175293,
+  "IB35_K/C_K": 16.388904333114624
+ },
+ "arm_wall_s_run1": {
+  "IB24_2L/A_2L": 14.72,
+  "IB24_2L/B_2L": 14.93,
+  "IB24_2L/C_2L": 14.74,
+  "IB35_K/C_K": 13.52
+ },
+ "batch": "closeout_v1",
+ "note": "run 1 with a cold numba cache (the timing.json the framework wrote); run 2 is the byte-identity pass. RESULTS.json sha256 4db323f61562d4da63c466dd3aa7366d057e1d0e8e4efa913ea7a67f7824dda4 on both.",
+ "run1_wall_s": 39.5,
+ "run2_wall_s": 23.27056121826172,
+ "study": "closeout_v1",
+ "workers": 6
+}

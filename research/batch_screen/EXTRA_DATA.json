@@ -4,6 +4,7 @@
     "aaa_m": "AAA",
     "baa10y": "BAA10Y",
     "baa_m": "BAA",
+    "bilstar": "BILSTAR_DAILY",
     "cfnai": "CFNAI",
     "copper": "HG=F",
     "cpi": "CPIAUCSL",
@@ -164,6 +165,21 @@
       "sha256": "fdb2a99185024e2f50bacf23aede38eeaa01d265da0e57391c6f4d1ce7e024be",
       "source": "FRED CSV",
       "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAA10Y"
+    },
+    "BILSTAR_DAILY": {
+      "bytes": 827066,
+      "column": "close",
+      "fetched": "2026-10-17",
+      "file": "data/historical/closeout_v1_bil_star.csv",
+      "price": "close",
+      "range": [
+        "1934-01-01",
+        "2026-12-31"
+      ],
+      "rows": 33968,
+      "sha256": "54b4c2e1b4727859b04fbfd6af19ba314e96d95c3ff4fb20b7e3011ff833ea94",
+      "source": "derived: BIL* = DTB3 - 0.1356 %/yr (tbill_sweep_v1's construction), accrued per calendar day, from data/historical/stress_robustness_v1_dtb3.csv and data/historical/ewma_band_v1_tb3ms.csv",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3"
     },
     "CFNAI": {
       "bytes": 11661,

@@ -1,0 +1,41 @@
+{
+ "arms": [
+  "IC54/A",
+  "IC54/B"
+ ],
+ "closure": "no 30-minute series exists for the screening window and none can be sourced: the arms need the fill price of every decision session of 2000-2026",
+ "mechanism": "implemented and tested (`research/fast_engine_opts`: `fill_mode = 2` + a `fill` array, `check_fill_reference`); the gap is the series, not the kernel",
+ "scan": {
+  "alpaca_sip_bars": "not reachable offline: no credentials, no vendored bars",
+  "csv_files_checked": 98,
+  "extra_keys": 63,
+  "extra_series": 82,
+  "extra_series_not_daily": [],
+  "files_with_a_time_of_day": []
+ },
+ "study": "closeout_v1",
+ "verdict": "NEEDS_DATA",
+ "yahoo_30m": {
+  "conclusion": "Yahoo serves 30-minute bars only inside a short recent window (its own refusal above); the fill price of every 2000-2026 decision session is not obtainable there, and the Alpaca SIP bars API is not reachable offline. IC54/A and IC54/B close as NEEDS_DATA.",
+  "long_range_requested": {
+   "api_message": "30m data not available for startTime=1634552166 and endTime=1792232166. The requested range must be within the last 60 days.",
+   "range": [
+    "2021-10-18",
+    "2026-10-17"
+   ],
+   "status": "refused: HTTP 422"
+  },
+  "sixty_day_request": {
+   "bars": 560,
+   "bytes": 53740,
+   "file": "data/historical/closeout_v1_yahoo_qqq_30m.json",
+   "range": [
+    "2026-08-18",
+    "2026-10-16"
+   ],
+   "sha256": "cf162f5f3245d7d0d40b6759341973501abd60ca8a00ad8d4e8ffc0ef6cd7745",
+   "status": "ok",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=1787048166&period2=1792232166&interval=30m"
+  }
+ }
+}

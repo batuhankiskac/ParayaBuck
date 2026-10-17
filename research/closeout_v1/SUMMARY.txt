@@ -1,0 +1,91 @@
+closeout_v1 -- the last non-kernel-blocked arms (batch `closeout_v1`)
+branch research/closeout_v1, base commit fc5dcfa3 (research/batch_bank_v4b), 2026-10-17
+
+verdict
+  NO CANDIDATE. Four arms are screened (IB35's plain 3 pp band; IB24's three T-bill-sleeve
+  hysteresis arms on the two-leg kernel) and all four are rejected in Stage 1: the after-tax
+  2000-window delta and the B1-recent bootstrap median are both negative for every arm. No arm
+  reaches Stage 2, `declared = []`, nothing is a candidate for an owner decision. The two
+  report-only arms are computed outside the ledger: IB38/A's regime matrix (K's execution layer
+  pays in every regime and capital, largest under the progressive tariff: K - R2 = +0.59 pp at
+  $100k, +0.29 pp pre-tax, +0.41 pp flat), IB38/B's split (exactly neutral for one aggregating
+  taxpayer; +0.40 / +0.64 / +0.80 pp at two $50k accounts and +0.69 / +1.06 / +1.25 pp at three
+  $33.3k ones under *separate* ladders -- the engine's own rule aggregates, so the split only pays
+  if the accounts are separate taxpayers). IB38/C stays NEEDS_KERNEL. IC54/A and IC54/B close as
+  NEEDS_DATA, with the source's own refusal as the evidence.
+
+counts
+  new arms declared (batch `closeout_v1`)                       4   (all simulated)
+  Stage 1 pass                                                  0
+  Stage 2 pass                                                  0
+  declared (Stage 2 AND rw_stepdown <= 0.05 AND DSR >= 0.95)    0
+  ledger: 539 -> 547 lines; N (distinct (idea, arm, spec_hash)) 312 -> 316
+  old arms re-run or re-specified                               0   (both new modules are new
+                                                                  files; every pinned spec_hash
+                                                                  stands; --verify-registry PASS)
+  NaN in any B1 delta vector                                    0   (each 1000/1000 finite;
+                                                                  DEFLATION excluded_non_finite {})
+
+per-arm table (delta = arm - K in pp; K re-simulated with the batch; window = published)
+  arm           AT2000d   AT2010d   AT2017d   B1 medd/share   B2 medd/share   maxDDd b/c   TOxK
+  IB35_K/C_K    -0.5742   -0.5085   -0.9538   -0.1944 / 0.305 -0.1218 / 0.355 +1.12/+1.11  1.025
+  IB24_2L/A_2L  -0.2463   -0.0623   -0.0500   -0.4175 / 0.145 -0.8229 / 0.019 -2.63/-2.62  1.563
+  IB24_2L/B_2L  -0.1129   +0.0203   -0.0284   -0.3091 / 0.189 -0.6699 / 0.031 -2.78/-2.77  1.376
+  IB24_2L/C_2L  -0.2533   -0.2015   +0.0970   -0.7510 / 0.052 -1.2373 / 0.003 -2.89/-2.88  1.918
+
+  pre-tax CAGR %, m = 2 (K = 15.7649 base / 15.1785 calibrated, max DD 46.67 / 46.79)
+  IB35_K/C_K    15.3006 / 14.7204   (delta -0.46 / -0.46 pp)   max DD 47.79 / 47.90
+  IB24_2L/A_2L  16.0155 / 15.4278   (delta +0.25 / +0.25 pp)   max DD 44.04 / 44.17
+  IB24_2L/B_2L  16.0678 / 15.4799   (delta +0.30 / +0.30 pp)   max DD 43.89 / 44.02
+  IB24_2L/C_2L  15.8974 / 15.3104   (delta +0.13 / +0.13 pp)   max DD 43.78 / 43.91
+  R2 reference  15.4766 / 14.8961   (the same target series under C0's plain 0.5 pp band)
+
+failed gates (read from the records: `stage1_gates`, the framework's own numbers)
+  IB35_K/C_K    reject_stage1  after-tax 2000 delta -0.5742 pp; B1 median -0.1944 pp
+  IB24_2L/A_2L  reject_stage1  after-tax 2000 delta -0.2463 pp; B1 median -0.4175 pp
+  IB24_2L/B_2L  reject_stage1  after-tax 2000 delta -0.1129 pp; B1 median -0.3091 pp
+  IB24_2L/C_2L  reject_stage1  after-tax 2000 delta -0.2533 pp; B1 median -0.7510 pp
+  (max DD <= K + 2 pp and turnover <= 2 x K pass for all four; Stage 2 was never reached, so
+   `gates` is null in every record.)
+
+reading of the two mechanisms
+  IB35/C  the *plain* band at 3 pp (band_up = band_down = 0.03, no A1u, no H2): it trades less than
+          the plain 0.5 pp band (744 trades against 1645, turnover 148.5 against 159.1) and loses
+          0.46 pp/yr pre-tax and 0.57-0.95 pp after tax -- ewma_band_v1's finding at the one width
+          that family had not tested.
+  IB24    the sleeve as an instrument (BIL*, tbill_sweep_v1's DTB3 - 0.1356 %/yr), weight
+          max(0, 0.98 - w_A) while the hysteresis state is on: pre-tax the sleeve *helps*
+          (+0.13..+0.30 pp/yr and 2.6-2.9 pp of drawdown) and every arm's after-tax 2000 window is
+          negative, with the clean bootstraps decisive (B1 medians -0.31..-0.75 pp, shares
+          0.05-0.19). The tariff does not tax the sleeve *more* (its USD tax is 822-829k against
+          K's 831k) -- it taxes it *earlier*: every sleeve flip is a realisation, and K's layer is
+          built to defer them (47.6 % of A_2L's assessed TRY tax falls in the final year against
+          49.4 % for K), while the round trips add 43 % more fees (45.5k against 31.8k USD).
+          The family's own prior ("the family loses after tax; this arm attacks the measured cost,
+          not the tax") is confirmed at every hysteresis setting.
+
+harness, suites, timing, determinism
+  python -m research.fast_engine.parity --quick   PASS (17.2 s; PARITY.json restored)
+  python -m research.batch_screen.run --harness   139 checks, 0 failed (67.7 s) -- K's anchors
+  run_batch --check                               PASS (state machine, routing, the 3 pp band
+                                                  against the plain-band control, sleeve states)
+  smoke --ideas IB35_K,IB24_2L                    OK, 4 arms, 0 % NaN on every window
+  research/batch_screen/tests/run.sh -q           150 passed, 1 failed: test_ledger_merge's
+                                                  `stale == []` -- PRE-EXISTING, not this study:
+                                                  the same 12 arms (IC34/A-C, IC41/A-C, IC45/A-C,
+                                                  IC46/A-C) are stale at base commit fc5dcfa3,
+                                                  because later commits added arms to those modules
+                                                  after their ledger lines. `--verify-registry`
+                                                  reports them as information and PASSES.
+  research/fast_engine_opts/tests/run.sh -q       36 passed
+  run 1 (6 workers) 39.5 s (arms 13.5 / 14.7 / 14.9 / 14.7 s); run 2 23.3 s (warm numba cache)
+  RESULTS.json byte-identical across the two runs (sha256 4db323f61562d4da63c466dd3aa7366d05
+  7e1d0e8e4efa913ea7a67f7824dda4), SCOREBOARD.md too (6a8a677b05ffdaf2315f1907c6dbcbca816447
+  fea43c9c9a51dff860f001a574); RUN_TIMING.json holds both wall clocks.
+
+artifacts
+  research/closeout_v1/{PREREGISTRATION.md (committed first), DATA_MANIFEST.json, run_batch.py,
+    make_bil_star.py, ib38_report.py, ic54_closure.py, summarise.py, ARM_TABLE.json,
+    ib38_report.json, RUN_STDOUT.txt, IC54_STDOUT.txt, IB38_STDOUT.txt, RUN_TIMING.json}
+  data/historical/closeout_v1_bil_star.csv (BIL*, key `bilstar`), closeout_v1_yahoo_qqq_30m.json
+  research/batch_screen/results/closeout_v1/, docs/research/closeout_v1.md

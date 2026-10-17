@@ -69,7 +69,8 @@ extra keys the arm touched and how much of each series is missing:
 ARMS = {"arm_id": {"rule": "K", "leg": "2x", "cash_yield": "none", ...fixed params...}}
 
 def targets(data, spec):
-    """(P, T) target weights of the held leg, or (wants, leg), or (wants_a, wants_b, leg_b)."""
+    """(P, T) weights of the held leg; or (wants, leg); or (wants_a, wants_b, leg_b); or the
+    N-leg forms of §1c (`{leg: wants}` / `(weights, legs)` / a list, with `spec["legs"]`)."""
 ```
 
 `targets` gets a `MarketData` panel whose arrays are all `(P, T)` — `P = 1` for a real window, a
@@ -109,9 +110,10 @@ main and `M2` windows and the first/last session each series reaches; `data.extr
   writing its `date,value` CSV and its registry entry, then `--verify`.
 
 Two legs are supported: `2x` is the campaign's published synthetic daily-reset 2x (this is what
-every published number used) and `1x` is the same underlying at gearing 1 with no cost. The leg is
-constant per arm; `targets` may *return* a per-session leg selection, but a varying one raises
-`NeedsKernel` — an arm's instruments are fixed, only their weights vary.
+every published number used) and `1x` is the same underlying at gearing 1 with no cost (`2x_spy` is
+the third, the S&P 500 2x leg of IC40/IC41). An account may hold two of them (above) or up to four
+(§1c). The leg is constant per arm; `targets` may *return* a per-session leg selection, but a
+varying one raises `NeedsKernel` — an arm's instruments are fixed, only their weights vary.
 
 **Two-leg arms** (`research/fast_engine2`, task `two_leg_kernel_v1`). An arm whose spec declares
 `"leg_b": key` — a panel leg (`2x`/`1x`) or a registered extra key (`shy`, `ief`, `gld`, `tlt`, …,
@@ -135,10 +137,10 @@ arm declares a reduced window** that begins after GLD's first session (§1a). Bo
 identically zero the kernel is bit-identical to the engine (`fe2_parity`, in the harness). Fill
 options that go beyond the three rule booleans live in a **copy** of the kernel
 (`research/fast_engine2/fe2_opts.py`, §1b): `fe2_sim`/`fe2_boot` are untouched and the copy with
-every option off reproduces them bit for bit. Not expressible yet (still `NEEDS_KERNEL`): a
-per-session instrument switch (the off-state ideas no longer need one — a *fixed* leg B with a
-state-dependent weight is enough, §1b), three instruments in one account, two books of the *same*
-instrument, several cash pools/accounts, a cash loan and per-arm tax regime or capital.
+every option off reproduces them bit for bit. A **three- or four-instrument** arm (§1c) is routed
+to the N-leg kernel `research/fast_engine3`; not expressible even there: two books of the *same*
+instrument, more than four instruments in one account, a per-session instrument switch, several
+cash pools/accounts and a per-arm tax regime or capital.
 
 **Availability.** `targets` may raise `api.NotApplicable(reason)` for a window whose inputs do not
 exist (`^VIX` before 1990 for `M2`, a European index for `^N225`, a series that starts after the
@@ -179,8 +181,8 @@ reference) plus two things that are properties of the *window* rather than of th
 `margin_spread` (the loan rate over the window's own DTB3 column) and `wht` (dividend withholding
 in the leg's construction). `resolve_arm` returns the dict as `arm["opts"]`, and `stages.run_one`,
 `boot.boot` and `boot.oos_pooled` route a non-empty one to `research.fast_engine_opts.bridge`;
-with `{}` every call site is the engine's own path, unchanged. An arm cannot combine `opts` with
-`leg_b` (options are single-leg).
+with `{}` every call site is the engine's own path, unchanged. An arm may not combine these
+options with `leg_b`/`legs` — the only option a multi-leg arm carries is `margin_spread` (§1c).
 * `cash_yield` — `"none"` (default) or `"tbill"` (the session-folded DTB3 schedule of
   `engine README`). It changes every published cell, so it is a batch-level flag: an arm whose
   declaration disagrees with `--cash-yield` is refused.
@@ -265,12 +267,12 @@ ARMS = {"A": {"rule": "K", "leg": "2x", "leg_b": "1x", "cash_yield": "none",
 | `kernel_scope` | `"all_stages"` (default) or `"after_tax_stage_only"`: the latter runs every pre-tax stage on the published kernel |
 
 The routed quantity is what the band test and the fill use, so a routed leg is judged on what it
-really sells. `NEEDS_KERNEL` still covers: three instruments in one account (IC36, IC34 arm C) and
-two books of the *same* instrument (IB38). The rest of §6.2's list is now expressible: a cash loan
-is the bridge's `margin_spread` (IC39), the S&P 500 2x leg is the `2x_spy` option leg (IC40 — its
-panels are built with `bridge.base_leg(leg)`, `stages.panel_leg`, see `PREREGISTRATION.md` §6.3),
-and an off-state idea is a *fixed* leg B whose weight varies (IC31–IC38,
-`probes/two_leg.py::gld_offstate`/`onex_offstate`).
+really sells. `NEEDS_KERNEL` still covers two books of the *same* instrument (IB38) and several
+cash pools/accounts. The rest of §6.2's list is now expressible: a cash loan is the bridge's
+`margin_spread` (IC39), the S&P 500 2x leg is the `2x_spy` option leg (IC40 — its panels are built
+with `bridge.base_leg(leg)`, `stages.panel_leg`, see `PREREGISTRATION.md` §6.3), an off-state idea
+is a *fixed* leg B whose weight varies (IC31–IC38, `probes/two_leg.py::gld_offstate`/
+`onex_offstate`), and three or four instruments in one account are the N-leg arms of §1c.
 
 **The off-state recipe** (IC31–IC37). "While the trend vote is off, hold 0.98 in X; production
 target otherwise" is a fixed leg B with a state-dependent weight — no instrument switch:
@@ -284,6 +286,59 @@ def targets(data, spec):
 With `leg_b` an extra-data key (LQD/HYG/TIP/XLU/GDX/IEF) the arm also declares `start = "auto"`;
 with `leg_b = "1x"` (IC38) it does not. `probes/two_leg.py::gld_offstate` and `onex_offstate` are
 the working fixtures of both forms.
+
+## 1c. N-leg arms (`legs`, `margin_spread`)
+
+An arm that holds **three or four instruments at once** — or a second book on top of production
+*above* the 0.98 cap, i.e. a cash loan — declares them as a list:
+
+```python
+ARMS = {
+    # IC36: while the trend vote is off, an inverse-vol blend of three instruments, rescaled
+    # monthly; production target otherwise
+    "A": {"rule": "K", "legs": ["2x", "gld", "ief", "shy"], "cash_yield": "none",
+          "start": "auto", "inputs": ["gld", "ief", "shy"]},
+    # IC45-C / IC46-C: production plus a sleeve, funded past the cap by a margin loan
+    "C": {"rule": "k_margin", "legs": ["2x", "shy"], "cash_yield": "none",
+          "margin_spread": 0.015, "start": "auto"},
+}
+
+def targets(data, spec):
+    ...
+    return {"2x": w_on, "gld": w_gld, "ief": w_ief, "shy": w_shy}     # or a list, or ([..], [..])
+```
+
+* `legs` names 2..4 instrument keys (leg A first; the panel legs `2x`/`1x`/`2x_spy` and the extra
+  keys of `api.leg_b_keys()`), all distinct, and must agree with `leg`/`leg_b` if those are also
+  given. The keys are pinned by `spec_hash`, like `leg_b`.
+* `targets` may return a `{leg: wants}` dict, `(weights_list, legs_list)`, or a bare sequence of one
+  weight panel per declared leg **in the spec's order**. The legacy `wants` / `(wants, leg)` /
+  `(wants_a, wants_b, leg_b)` forms keep their meaning.
+* The runner routes the arm to `research/fast_engine3.fe3_sim.simulate3` (one window) and
+  `fe3_boot._boot_chunk3` (bootstraps): one cash pool, next-open fills, **one units/FIFO book per
+  leg**, the rule's 0.5 pp band / A1u gain band / H2 deferral applied per leg on that leg's own
+  book, per-leg costs, and one taxpayer — every leg's realisation (Yİ-ÜFE indexed per lot) adds into
+  one annual net TRY gain. Tax-funding sales walk the legs in order A, B, C, D.
+* `margin_spread` (a number ≥ 0, in the rule's `opts` or directly in the spec; both must agree)
+  charges interest on a negative cash balance at `session_fold(DTB3 + spread)`, one per-session
+  rate over the window's own rate column — the same schedule IC39's single-leg option uses. A
+  target that sums above the cap therefore holds a loan and pays for it. The loan is **only**
+  available to a multi-leg arm (the single-leg option kernel carries its own `mrate`).
+* A multi-leg arm may not carry any *other* kernel option: `register_rule(..., opts={"band_up":
+  ...})` and a `legs` declaration is refused (`PluginError`).
+* `2x_spy` (IC41: QLD\* beside the S&P 500 2x leg) is built on demand from the window's own SPY
+  column; on a window with no SPY series it degenerates to that window's own `2x` leg, exactly as
+  IC40's single-leg option does. A **single**-leg `2x_spy` arm keeps the older single-leg path.
+* Reduced windows (`start = "auto"`) now cover **every** declared leg's inputs: the window begins
+  after the last-starting extra-data leg (§1a).
+* Everything else is unchanged: the two staged protocol, the paired-control bootstrap (a multi-leg
+  group shares the chunk's drawn paths with the control), `NotApplicable`, the gates and the
+  deflation. A two-leg arm with no loan still runs `fe2_sim` — the routing is a single `if`.
+
+The N-leg kernel's own parity (legs 2..N == 0 is the engine, legs 3..N == 0 is `fe2_sim`, margin
+off is both, margin on a single leg is `fast_engine_opts`, all `max |diff| == 0`) is
+`research/fast_engine3/fe3_parity.py`, in the harness; its engineering probe is
+`probes/multi_leg.py` (`zeros`, `offstate_blend`, `margin_qqq`, `sleeve_margin`, `spy_pair`).
 
 
 Three example plugins reproduce published results exactly (`--harness`, and the `anchors_v1`
@@ -457,7 +512,7 @@ PYTHONPATH=. $R -m research.batch_screen.probes.run_probe_batch --ideas two_leg 
 
 `research/batch_screen/tests/run.sh` (the research venv's numba + the project venv's pytest, see
 the header of that script; it finds the project venv whether or not the worktree sits next to the
-main checkout). 136 tests: the plugin contract and its validation, the leg constructions, the
+main checkout). 151 tests: the plugin contract and its validation, the leg constructions, the
 registry's append-only semantics and commit gate, every stage-1/stage-2 gate branch on synthetic
 records, the deflation's null control/power/monotonicity/DSR properties, the extra-data layer
 (registry resolution, date alignment, the bootstrap chunk convention, ffill, downloads and hashing
@@ -470,8 +525,11 @@ the parity cells (engine `fe_boot.boot`, old `boot_oos_market`, the production R
 contract, the chunk leg-B price path (the drawn sessions' own returns, the contiguous-draw
 isolation, the synthetic/constant series and the preserved availability rule), the fill-knob
 routing and the panel column calendar (`tests/test_two_leg.py`, probe
-`probes/two_leg.py`), and the `2x_spy` option leg's panel plumbing (`tests/test_spy_leg.py`,
-`PREREGISTRATION.md` §6.3). The harness is **116 checks**: the original 59, the two-leg routing checks,
+`probes/two_leg.py`), the `2x_spy` option leg's panel plumbing (`tests/test_spy_leg.py`,
+`PREREGISTRATION.md` §6.3), and the N-leg contract, routing, loan and option leg
+(`tests/test_multi_leg.py`, probe `probes/multi_leg.py`). The harness is **139 checks**: the
+original 59, the two-leg routing checks,
 the two-leg kernel's parity groups, the reduced-window cells (the resolved window, the clipped
-after-tax windows, the dropped rolling starts, the restricted pool and the paired control) and the
-option copy's own parity and positive controls (`fe2_opts_parity`, 28 cells).
+after-tax windows, the dropped rolling starts, the restricted pool and the paired control), the
+option copy's own parity and positive controls (`fe2_opts_parity`, 28 cells), and the N-leg
+kernel's parity (`fe3_parity`, 206 cells) plus the N-leg routing cells.

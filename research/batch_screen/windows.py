@@ -196,6 +196,18 @@ def input_start_index(days, key: str, window: str = "main"):
     return int(fin[0]) if fin.size else None
 
 
+def input_legs(arm) -> tuple:
+    """The extra-data instruments an arm's declaration adds to its inputs (`leg_b`, `legs`).
+
+    A panel leg (`1x`/`2x`/`2x_spy`) has the window's own history and never moves the window; an
+    extra-data key (LQD, IEF, XLU, GLD, ...) does.
+    """
+    legs = arm.get("legs")
+    if not legs:
+        legs = (arm.get("leg"), arm.get("leg_b"))
+    return tuple(k for k in legs if k and k not in LEGS)
+
+
 def arm_window(arm, days=None) -> Window:
     """The main window an arm declared (`spec["start"]`), resolved against the data.
 
@@ -208,11 +220,11 @@ def arm_window(arm, days=None) -> Window:
     * `start = "auto"` -> the later of the published start and the **first session every declared
       input covers**, moved one session forward (the engine reads the previous close at `i0 - 1`,
       so the input must reach `i0 - 1` for the fill to be defined). The inputs are the arm's
-      `inputs` list plus its `leg_b` when that is an extra-data key (a panel leg has the window's
-      own history). This is the rule that unblocks an idea whose second instrument starts after
-      2000-03-09 (LQD 2002-07, IEF 2002-07, TIP 2003-12, GLD 2004-11, GDX 2006-05, HYG 2007-04
-      ...): before its own start the arm has no price, and the framework refuses a leg-B series
-      with a hole rather than invent one.
+      `inputs` list plus every declared leg (`leg_b`, or each key of `legs`) that is an extra-data
+      series (a panel leg has the window's own history). This is the rule that unblocks an idea
+      whose second instrument starts after 2000-03-09 (LQD 2002-07, IEF 2002-07, TIP 2003-12, GLD
+      2004-11, GDX 2006-05, HYG 2007-04 ...): before its own start the arm has no price, and the
+      framework refuses a leg-B series with a hole rather than invent one.
 
     A window shorter than `MIN_WINDOW_YEARS` calendar years is `NotApplicable`, and so is an
     `"auto"` window whose declared input has no value anywhere in the panel.
@@ -226,9 +238,9 @@ def arm_window(arm, days=None) -> Window:
         days = bars()[0]
     i0 = START
     inputs = tuple(arm.get("inputs") or ())
-    leg_b = arm.get("leg_b")
-    if leg_b is not None and leg_b not in LEGS:
-        inputs = inputs + (leg_b,)
+    for key in input_legs(arm):
+        if key not in inputs:
+            inputs = inputs + (key,)
     if declared == "auto":
         for key in inputs:
             j = input_start_index(days, key)

@@ -1,0 +1,59 @@
+# three_leg_kernel_v1 -- the N-leg kernel (N <= 4) for the batch-screen framework
+
+**Verdict: built and parity-proven. Engineering only -- no idea's performance was computed.**
+
+`research/fast_engine3/` generalises `fe2_sim.sim2` to N <= 4 instruments in one cash pool (per-leg FIFO books and costs, the A1u band / H2 deferral applied per leg on that leg's own book, one Turkish taxpayer) and adds the margin loan of `research/fast_engine_opts` (interest on a negative cash balance). `research/fast_engine/` and `research/fast_engine2/` are not edited: the per-leg primitives (`_buy_leg` / `_sell_leg`) and the tax engine are imported unchanged.
+
+## Parity (bit for bit, `max_abs_diff == 0.0`)
+
+* `python -m research.fast_engine.parity --quick`: PASS
+* N-leg parity suite: PASS (206 cells, 0 failed, 15.2s)
+
+| identity | cells | diff |
+|---|---:|---|
+| legs 2..N == 0 vs `fe_sim.simulate` (main window, the after-tax windows, cash yield) | 111 | 0.0 |
+| legs 3..N == 0 vs `fe2_sim.simulate2` (leg B real and zero) | 60 | 0.0 |
+| the clean bootstrap, legs 2..N == 0 (vs `fe_boot.boot` and `fe2_boot.boot2`) | 16 | 0.0 |
+| margin **off** == the engine and `fe2_sim` | 3 | 0.0 |
+| margin **on** a single leg vs `fe_opts_sim.simulate_opts` | 3 | 0.0 |
+| positive controls (three books, the capacity refusal, the loan bites) | 3 | n/a |
+| published K anchors through `simulate3` (tolerance 0.01 pp) | 9 | 3.08e-05 pp |
+| `python -m research.fast_engine.parity --quick` | 1 | PASS |
+
+## Speed (main window, warm cache, median of 30)
+
+| run | ms |
+|---|---:|
+| engine (1 leg) | 0.160 |
+| N-leg, 2 legs (leg B at zero) | 0.313 |
+| N-leg, 3 legs (legs B/C at zero) | 0.342 |
+| N-leg, 4 legs (legs B/C/D at zero) | 0.382 |
+| N-leg, 4 real books | 0.767 |
+| N-leg, 1 leg with a margin loan | 0.492 |
+| clean bootstrap 256 paths, engine | 0.23 s |
+| clean bootstrap 256 paths, 4-leg kernel | 0.32 s (1.43x) |
+
+## The framework harness
+
+`python -m research.batch_screen.run --harness`: PASS (139 checks, 0 failed) -- the published 116 cells plus the multi-leg routing cells; `research/batch_screen/HARNESS.json`.
+
+## What is now expressible
+
+* IC36 A/B/C -- a 3/4-instrument inverse-vol blend in the off state, rescaled monthly
+* IC34-C -- QLD* with XLU and XLP held at once
+* IC45-C / IC46-C -- a sleeve on top of production past the 0.98 cap, funded by a cash loan with interest
+* IC41 A/B/C -- QLD* plus the S&P 500 2x leg (`2x_spy`) as leg B
+
+## What remains blocked
+
+* two books of the same instrument (one FIFO queue per symbol per taxpayer)
+* more than 4 instruments in one account
+* a per-session instrument switch inside one leg
+* several cash pools / accounts, or a per-arm tax regime
+* the single-leg execution options (band_up, slicing, the DD governor, T+1, FX cost, withholding) on a multi-leg arm
+
+## Timings of this run
+
+* `--run` wall clock: **65.1 s**
+* N-leg parity suite: 15.2 s; framework harness: 49.2 s; speed cells + bootstrap timings: 0.8 s
+

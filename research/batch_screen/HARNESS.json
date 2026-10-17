@@ -239,10 +239,123 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 11.2s -> PARITY.json"
+  "tail": "parity PASS in 13.8s -> PARITY.json"
  },
  "failed": [],
- "n_checks": 116,
+ "multi_leg": {
+  "a_four_leg_off_state_blend_runs": {
+   "inputs": [
+    "gld",
+    "ief",
+    "shy"
+   ],
+   "n_legs": 4,
+   "pass": true,
+   "window": "w20041119"
+  },
+  "a_margin_arm_bootstraps": {
+   "pass": true
+  },
+  "a_single_leg_loan_keeps_the_option_kernel": {
+   "margin_usd": 256480.58701,
+   "n_legs": 1,
+   "pass": true
+  },
+  "margin_arm_carries_the_loan": {
+   "cagr_off": 0.131071,
+   "cagr_on": 0.106566,
+   "margin_usd": 256480.58701,
+   "pass": true
+  },
+  "sleeve_over_the_cap_is_funded_by_the_loan": {
+   "leg_b_trades": 355,
+   "margin_usd": 81841.966238,
+   "pass": true
+  },
+  "the_2x_spy_leg_is_a_real_second_book": {
+   "cagr": 0.10699,
+   "leg_a_trades": 654,
+   "leg_b_trades": 713,
+   "pass": true
+  },
+  "the_blend_stage1_is_finite_on_its_window": {
+   "cagr": 0.19617,
+   "pass": true,
+   "window": "2004-11-19"
+  },
+  "the_legs_declaration_is_validated": {
+   "pass": true,
+   "rule": "each refusal names its own defect"
+  },
+  "the_n_leg_bootstrap_keeps_the_control_paths": {
+   "pass": true
+  },
+  "three_leg_arm_with_two_empty_books_is_the_control": {
+   "cagr": 0.107533,
+   "legs": [
+    "2x",
+    "1x",
+    "2x_spy"
+   ],
+   "pass": true
+  },
+  "three_leg_empty_books_are_the_control_pretax": {
+   "pass": true
+  }
+ },
+ "multi_leg_kernel_parity": {
+  "after_tax_windows": {
+   "cells": 72,
+   "pass": true
+  },
+  "all": {
+   "failed": [],
+   "n_cells": 206,
+   "pass": true,
+   "wall_s": 1.433559
+  },
+  "bootstrap": {
+   "cells": 16,
+   "pass": true
+  },
+  "cash_yield": {
+   "cells": 3,
+   "pass": true
+  },
+  "engine_anchors": {
+   "cells": 9,
+   "pass": true
+  },
+  "engine_parity_quick": {
+   "pass": true,
+   "tail": "parity PASS in 13.8s -> PARITY.json"
+  },
+  "main_window": {
+   "cells": 96,
+   "pass": true
+  },
+  "margin": {
+   "cells": 7,
+   "pass": true
+  },
+  "margin_margin_on_flat": {
+   "margin_usd": 610289.88045,
+   "pass": true
+  },
+  "margin_margin_on_pre_tax": {
+   "margin_usd": 1489789.951479,
+   "pass": true
+  },
+  "margin_margin_on_progressive": {
+   "margin_usd": 256480.58701,
+   "pass": true
+  },
+  "multi_leg": {
+   "cells": 2,
+   "pass": true
+  }
+ },
+ "n_checks": 139,
  "parity": {
   "boot_vs_engine": {
    "C0_pre_base": {
@@ -571,7 +684,7 @@
    ]
   },
   "the_control_shares_the_reduced_pool": {
-   "delta_median_pp": 0.071417,
+   "delta_median_pp": 14.035128,
    "n": 10,
    "pass": true,
    "pool": [
@@ -603,9 +716,9 @@
   "chunk_leg_b_gap_names_the_failing_column": {
    "columns": 2777,
    "days": 2776,
-   "label": "2016-09-02",
+   "label": "2016-09-28",
    "pass": true,
-   "reason": "the leg-B instrument 'dgs10' has no price on 2016-09-02 (the series covers 2015-09-01..2016-02-17 of this window)"
+   "reason": "the leg-B instrument 'dgs10' has no price on 2016-09-28 (the series covers 2015-09-01..2026-09-16 of this window)"
   },
   "fill_knobs_off_is_the_published_kernel": {
    "cagr_off": 0.090773,
@@ -621,7 +734,7 @@
    "reason": "the leg-B instrument 'gld' has no price on 2000-03-08 (the series covers 2004-11-18..2026-09-29 of this window)"
   },
   "the_reduced_pool_makes_a_late_leg_b_usable": {
-   "default_pool_reason": "the leg-B instrument 'gld' has no price on 2016-09-07 (the series covers 2015-09-01..2016-09-06 of this window)",
+   "default_pool_reason": "the leg-B instrument 'gld' has no price on 2016-09-07 (the series covers 2015-09-01..2026-09-16 of this window)",
    "pass": true,
    "pool": [
     1433,
@@ -663,7 +776,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 11.2s -> PARITY.json"
+   "tail": "parity PASS in 13.8s -> PARITY.json"
   },
   "failed": [],
   "riskoff_divergence_pp": {
@@ -686,7 +799,7 @@
    "failed": [],
    "n_cells": 28,
    "pass": true,
-   "wall_s": 0.633243
+   "wall_s": 0.695903
   },
   "p1_off_identity.base_flat_m1": {
    "max_abs_diff": 0.0,
@@ -981,5 +1094,5 @@
    "tax_same_both_ways": 0.0
   }
  },
- "wall_s": 37.050676
+ "wall_s": 49.193375
 }

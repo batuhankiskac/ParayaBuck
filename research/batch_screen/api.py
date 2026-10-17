@@ -60,6 +60,10 @@ LEGS = ("2x", "1x", LEG_SPY)
 DEFAULT_LEG = "2x"
 DEFAULT_RULE = "K"
 CASH_YIELDS = ("none", "tbill")
+#: the N-leg account's leg capacity. The `research/fast_engine3` kernel holds at most this many
+#: instruments in one cash pool (a test asserts it equals `fe3_sim.N_LEGS`); a `"legs"` declaration
+#: names between 2 and this many keys.
+MAX_LEGS = 4
 
 
 class NeedsKernel(Exception):
@@ -74,16 +78,37 @@ class Targets:
     instrument of a *two-leg* arm -- one cash pool, two units/FIFO books, one taxpayer -- and are
     `None` for a single-leg arm. `leg_b` is a panel leg (`LEGS`) or a registered extra-data key
     (`EXTRA_DATA.json`); the arm's spec declares it (`"leg_b": "shy"`) and the two must agree.
+
+    `more` carries legs C and D of an **N-leg** arm (a `"legs": [k1, k2, k3]` declaration) as
+    `((leg, wants), ...)`; the arm then runs on `research.fast_engine3` (one cash pool, one FIFO
+    book per leg, one taxpayer). `n_legs` is 1, 2 or up to `MAX_LEGS`.
     """
 
     wants: np.ndarray
     leg: str = DEFAULT_LEG
     wants_b: "np.ndarray | None" = None
     leg_b: "str | None" = None
+    more: tuple = ()
 
     @property
     def two_leg(self) -> bool:
         return self.wants_b is not None
+
+    @property
+    def n_legs(self) -> int:
+        return 1 + (0 if self.wants_b is None else 1) + len(self.more)
+
+    @property
+    def multi_leg(self) -> bool:
+        return self.n_legs > 2
+
+    def leg_wants(self) -> list:
+        """`[(leg, wants), ...]` in declaration order (leg A first)."""
+        out = [(self.leg, self.wants)]
+        if self.wants_b is not None:
+            out.append((self.leg_b, self.wants_b))
+        out.extend(self.more)
+        return out
 
 
 class NotApplicable(Exception):
@@ -409,6 +434,31 @@ def resolve_arm(mod, arm_id: str) -> dict:
     if cash not in CASH_YIELDS:
         raise PluginError(f"arm {arm_id!r}: unknown cash_yield {cash!r}; known: {CASH_YIELDS}")
     leg_b = spec.get("leg_b")
+    leg_more = ()
+    legs = spec.get("legs")
+    if legs is not None:
+        if not isinstance(legs, (list, tuple)) or not all(isinstance(k, str) for k in legs):
+            raise PluginError(f"arm {arm_id!r}: legs must be a list of instrument key strings")
+        keys = list(legs)
+        if not (2 <= len(keys) <= MAX_LEGS):
+            raise PluginError(f"arm {arm_id!r}: legs must name 2..{MAX_LEGS} instruments; got "
+                              f"{len(keys)}")
+        if len(set(keys)) != len(keys):
+            raise PluginError(f"arm {arm_id!r}: legs names an instrument twice: {keys}")
+        known = leg_b_keys()
+        for k in keys:
+            if k not in known:
+                raise PluginError(f"arm {arm_id!r}: unknown leg {k!r}; known: {known}")
+        if keys[0] not in LEGS:
+            raise PluginError(f"arm {arm_id!r}: leg A (legs[0]) must be a panel leg "
+                              f"{LEGS}; got {keys[0]!r}")
+        if "leg" in spec and spec["leg"] != keys[0]:
+            raise PluginError(f"arm {arm_id!r}: leg {spec['leg']!r} disagrees with legs[0] "
+                              f"{keys[0]!r}")
+        if "leg_b" in spec and spec["leg_b"] != keys[1]:
+            raise PluginError(f"arm {arm_id!r}: leg_b {spec['leg_b']!r} disagrees with legs[1] "
+                              f"{keys[1]!r}")
+        leg, leg_b, leg_more = keys[0], keys[1], tuple(keys[2:])
     if leg_b is not None:
         if not isinstance(leg_b, str):
             raise PluginError(f"arm {arm_id!r}: leg_b must be a string (a leg or an extra key), "
@@ -417,11 +467,28 @@ def resolve_arm(mod, arm_id: str) -> dict:
             raise PluginError(f"arm {arm_id!r}: unknown leg_b {leg_b!r}; known: {leg_b_keys()}")
         if leg_b == leg:
             raise PluginError(f"arm {arm_id!r}: leg_b {leg_b!r} is leg A's own instrument")
-    if leg == LEG_SPY and leg_b is not None:
-        raise PluginError(f"arm {arm_id!r}: the option leg {LEG_SPY!r} is single-leg only")
-    if leg_b is not None and opts_of(rule):
-        raise PluginError(f"arm {arm_id!r}: the kernel options of rule {rule!r} are single-leg "
-                          f"only; a two-leg arm cannot carry them")
+    # the kernel options of the rule: the multi-leg kernel (`research/fast_engine3`) carries only
+    # the margin loan, so a multi-leg arm may declare `margin_spread` and nothing else. The loan may
+    # be declared by the rule's `opts` (as IC39 does) or directly in the arm's spec; both must agree.
+    opts = opts_of(rule)
+    multi = leg_b is not None or bool(leg_more)
+    spec_margin = spec.get("margin_spread")
+    if spec_margin is not None:
+        if "margin_spread" in opts and float(opts["margin_spread"]) != float(spec_margin):
+            raise PluginError(f"arm {arm_id!r}: margin_spread {spec_margin!r} disagrees with the "
+                              f"rule's {opts['margin_spread']!r}")
+        opts = {**opts, "margin_spread": spec_margin}
+    margin_spread = opts.get("margin_spread")
+    if margin_spread is not None:
+        if isinstance(margin_spread, bool) or not isinstance(margin_spread,
+                                                           (int, float)):
+            raise PluginError(f"arm {arm_id!r}: margin_spread must be a number")
+        margin_spread = float(margin_spread)
+        if not np.isfinite(margin_spread) or margin_spread < 0.0:
+            raise PluginError(f"arm {arm_id!r}: margin_spread must be finite and >= 0")
+    if multi and opts and set(opts) != {"margin_spread"}:
+        raise PluginError(f"arm {arm_id!r}: only the margin loan (margin_spread) reaches the "
+                          f"multi-leg kernel; {sorted(opts)} are single-leg options")
     start = spec.get("start")
     if start is not None:
         if start != "auto":
@@ -457,12 +524,18 @@ def resolve_arm(mod, arm_id: str) -> dict:
         raise PluginError(f"arm {arm_id!r}: kernel_scope must be \"all_stages\" or "
                           f"\"after_tax_stage_only\"; got {scope!r}")
     return {"rule": rule, "leg": leg, "leg_b": leg_b, "two_leg": leg_b is not None,
+            #: every declared instrument, leg A first (1..MAX_LEGS keys). A `"legs"` declaration or
+            #: `leg`+`leg_b`; `multi_leg`/`n_legs` say whether `research.fast_engine3` is needed.
+            "legs": (leg,) + ((leg_b,) if leg_b is not None else ()) + tuple(leg_more),
+            "n_legs": 1 + (1 if leg_b is not None else 0) + len(leg_more),
+            "multi_leg": bool(leg_b is not None or leg_more),
+            "margin_spread": margin_spread,
             "cash_yield": cash, "start": start, "inputs": tuple(inputs),
             "fill_knobs": knobs, "kernel_scope": scope,
             "fill_knobs_pretax": scope == "all_stages",
             #: the rule's kernel options (`research/fast_engine_opts.bridge`), {} for the engine's
             #: four rules. Empty means "the engine", which is what every driver branches on.
-            "opts": opts_of(rule),
+            "opts": opts,
             # `leg_b` stays in `params` (unlike the engine options `rule`/`leg`/`cash_yield`): a
             # two-leg plugin has to *return* it, so its `targets(data, spec)` must be able to read
             # the instrument the arm was registered with.
@@ -513,6 +586,81 @@ def _panel_weights(wants, want_shape, what):
     return wants
 
 
+def _spec_legs(arm) -> tuple:
+    """The declared instruments of an arm dict (`resolve_arm` sets `arm["legs"]`; hand-built arms
+    may carry only `params`)."""
+    legs = arm.get("legs")
+    if legs:
+        return tuple(legs)
+    sp = arm.get("params") or {}
+    legs = sp.get("legs")
+    if legs:
+        return tuple(legs)
+    out = [sp.get("leg") or arm.get("leg") or DEFAULT_LEG]
+    lb = sp.get("leg_b") or arm.get("leg_b")
+    if lb:
+        out.append(lb)
+    return tuple(out)
+
+
+def _is_multi_return(out, spec_legs) -> bool:
+    """True for the N-leg return forms.
+
+    `{leg: wants}`, `(weights_list, legs_list)`, or a bare sequence of one weight panel per
+    declared leg (in the spec's order) -- the last only when the spec declares the legs, so the
+    legacy `wants` / `(wants, leg)` / `(wants_a, wants_b, leg_b)` forms keep their meaning.
+    """
+    if isinstance(out, dict):
+        return True
+    if not isinstance(out, (list, tuple)) or len(out) == 0:
+        return False
+    if len(out) == 2 and isinstance(out[0], (list, tuple)) and not (
+            out[0] and isinstance(out[0][0], str)):
+        return True
+    if spec_legs and len(spec_legs) >= 2 and len(out) == len(spec_legs) and all(
+            np.ndim(x) == 2 for x in out):
+        return True
+    return False
+
+
+def _multi_targets(out, want_shape, arm, spec_legs) -> Targets:
+    """Normalise an N-leg `targets()` return, in the declared leg order."""
+    if isinstance(out, dict):
+        pairs = [(str(k), w) for k, w in out.items()]
+    elif len(out) == 2 and isinstance(out[0], (list, tuple)) and not (
+            out[0] and isinstance(out[0][0], str)):
+        weights, keys = list(out[0]), out[1]
+        if isinstance(keys, str) or not isinstance(keys, (list, tuple)):
+            raise PluginError("the N-leg return must be (weights_list, legs_list) or a "
+                              "{leg: wants} dict")
+        if len(weights) != len(keys):
+            raise PluginError(f"targets() returned {len(weights)} weight panels for "
+                              f"{len(keys)} legs")
+        pairs = [(str(k), w) for k, w in zip(keys, weights)]
+    else:
+        if spec_legs is None:
+            raise PluginError("targets() returned several weight panels but the arm's spec "
+                              "declares no \"legs\"; add legs to ARMS[arm_id]")
+        pairs = list(zip(tuple(spec_legs), list(out)))
+    if spec_legs is None:
+        raise PluginError("targets() returned more than two legs but the arm's spec declares no "
+                          "\"legs\"; add legs to ARMS[arm_id] so the registry pins the instruments")
+    spec_legs = tuple(spec_legs)
+    named = [k for k, _w in pairs]
+    if len(set(named)) != len(named):
+        raise PluginError(f"targets() named a leg twice: {named}")
+    if sorted(named) != sorted(spec_legs):
+        raise PluginError(f"targets() named legs {sorted(named)} but the spec declares "
+                          f"{list(spec_legs)}")
+    by_leg = dict(pairs)
+    if len(by_leg) < 2:
+        raise PluginError("an N-leg return must name at least two instruments; a single "
+                          "instrument is the plain `wants` return")
+    rows = [(k, _panel_weights(by_leg[k], want_shape, f"leg {k}")) for k in spec_legs]
+    return Targets(wants=rows[0][1], leg=rows[0][0], wants_b=rows[1][1], leg_b=rows[1][0],
+                   more=tuple(rows[2:]))
+
+
 def call_targets(mod, data: MarketData, arm: dict) -> Targets:
     """`targets(data, spec)` normalised to a `Targets`.
 
@@ -525,11 +673,18 @@ def call_targets(mod, data: MarketData, arm: dict) -> Targets:
       `research.fast_engine2.fe2_sim.simulate2`. The arm's spec must declare `leg_b` and it must
       agree with the returned one (the registry pins the spec, so the declaration is what the
       trial is registered with).
+    * `{leg: wants}` or `([wants, ...], [leg, ...])` -- **N legs** (up to `MAX_LEGS`): the arm's
+      spec must declare `"legs": [k1, k2, ...]` and the returned keys must be exactly those
+      (in any order), simulated in one cash pool by `research.fast_engine3.fe3_sim.simulate3`.
 
     A per-session instrument selection is still refused (`NeedsKernel`): an arm's instruments are
     fixed, only their weights vary.
     """
     out = mod.targets(data, arm["params"])
+    want_shape = data.price.shape
+    spec_legs = _spec_legs(arm)
+    if _is_multi_return(out, spec_legs):
+        return _multi_targets(out, want_shape, arm, spec_legs)
     wb = leg_b = None
     leg = None
     if isinstance(out, tuple):
@@ -538,11 +693,10 @@ def call_targets(mod, data: MarketData, arm: dict) -> Targets:
         elif len(out) == 3:
             wants, wb, leg_b = out
         else:
-            raise PluginError("targets() must return wants, (wants, leg) or "
-                              "(wants_a, wants_b, leg_b)")
+            raise PluginError("targets() must return wants, (wants, leg), "
+                              "(wants_a, wants_b, leg_b) or the N-leg forms")
     else:
         wants, leg = out, None
-    want_shape = data.price.shape
     wants = _panel_weights(wants, want_shape, "leg-A")
     leg = _leg_or_error(leg, arm["leg"], want_shape, "held")
     if leg not in LEGS:

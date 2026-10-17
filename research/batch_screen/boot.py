@@ -39,7 +39,7 @@ from research.fast_engine.fe_config import (
 from research.fast_engine.fe_tax import MODE_FLAT, MODE_PRE_TAX, MODE_PROGRESSIVE
 
 from . import windows
-from .api import NotApplicable, call_targets, panel
+from .api import LEGS, NotApplicable, call_targets, panel
 from .rules import cash_rates, rule_of
 
 TAX_MODES = ("progressive", "flat")
@@ -291,19 +291,39 @@ def _rule_arrays(arm_list):
     return band, usd, defer
 
 
+def _arm_legs(arm) -> tuple:
+    """The arm's declared instruments (leg A first), from its resolved `legs`."""
+    legs = arm.get("legs")
+    if legs:
+        return tuple(legs)
+    return (arm["leg"],) if not arm.get("leg_b") else (arm["leg"], arm["leg_b"])
+
+
+def _group_key(arm) -> tuple:
+    """The bootstrap grouping key: the instruments, the panel construction and the loan."""
+    from research.fast_engine3 import bridge3
+
+    return (_arm_legs(arm), kernel_opts.panel_key(arm), bridge3.margin_spread(arm))
+
+
 def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATHS,
          capitals=("100k",), modes=TAX_MODES, m=fe_sim.DEFAULT_M, chunk=DEFAULT_CHUNK,
          cash_yield="none", rule_index=True, label="boot", quiet=True, pool=None):
     """The clean/fresh block bootstrap over arbitrary plugin targets.
 
-    Arms are grouped by `(leg, leg_b)`: a single-leg group runs the engine's kernel, a two-leg
-    group (`leg_b` declared) runs `fe2_boot._boot_chunk2`. Both groups share the chunk's drawn
-    paths -- the same `draw_positions` call per chunk -- so every arm's per-path CAGRs, and
-    therefore the Δ against the control, stay paired.
+    Arms are grouped by their instruments (`(leg,)`, `(leg, leg_b)` or the `legs` tuple) plus the
+    panel construction and, for a multi-leg arm, the loan: a single-leg group runs the engine's
+    kernel, a two-leg group (`leg_b` declared) runs `fe2_boot._boot_chunk2`, and a group with more
+    than two instruments, a `margin_spread` loan or a `2x_spy` leg beside another instrument runs
+    `research.fast_engine3` (`fe3_boot._boot_chunk3`). Every group shares the chunk's drawn paths
+    -- the same `draw_positions` call per chunk -- so every arm's per-path CAGRs, and therefore the
+    Δ against the control, stay paired.
 
     Returns `{"pre": {model: {arm_id: (n_pre,)}}, "tax": {cap: {mode: {arm_id: (n_tax,)}}},
     "params": {...}}` -- raw per-path CAGRs, the input of `delta_stats` and the deflation.
     """
+    from research.fast_engine3 import bridge3
+
     win = BootWindow(cash_yield, pool)
     env = win.env
     n_paths = max(n_pre, n_tax)
@@ -316,16 +336,25 @@ def boot(arms, seed=SEED, block=BLOCK, n_pre=PRE_BOOT_PATHS, n_tax=TAX_BOOT_PATH
     rng = np.random.default_rng(seed)
     groups = {}
     for arm in arms:
-        # the group key carries the arm's panel construction too (`kernel_opts.panel_key`): two
-        # arms that build their legs differently are not the same group, even at the same leg.
-        groups.setdefault((arm["leg"], arm.get("leg_b"), kernel_opts.panel_key(arm)), []).append(arm)
+        # the group key carries the arm's panel construction too (`kernel_opts.panel_key`) and the
+        # loan (`bridge3.margin_spread`): arms that build their legs differently, or that run a
+        # different margin schedule, are not the same group even at the same instruments.
+        groups.setdefault(_group_key(arm), []).append(arm)
     for p0 in range(0, n_paths, chunk):
         W = min(chunk, n_paths - p0)
         pos = win.positions(rng, block, W)
         panels = {}
-        for leg in sorted({kernel_opts.base_leg(g[0]) for g in groups}):
+        bases = sorted({kernel_opts.base_leg(l) for g in groups for l in g[0]
+                        if l in LEGS})
+        for leg in bases:
             panels.update(boot_panels(win, pos, (leg,), (FIN["base"], FIN["calibrated"]), cache=panels))
-        for (leg, leg_b, _pkey), arm_list in groups.items():
+        for (legs, _pkey, _ms), arm_list in groups.items():
+            if bridge3.needs_kernel3(arm_list[0]):
+                bridge3.boot_chunk(arm_list, panels, legs, win, env, cap_at, cost, mode_ids,
+                                   rule_index, p0, W, n_pre, n_tax, pos, pre, tax, capitals, modes)
+                continue
+            leg = legs[0]
+            leg_b = legs[1] if len(legs) == 2 else None
             if leg_b is not None:
                 _two_leg_chunk(arm_list, panels, leg, leg_b, win, env, cap_at, cost, mode_ids,
                                rule_index, p0, W, n_pre, n_tax, pre, tax, capitals, modes)
@@ -510,13 +539,15 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
     function's per-path CAGRs bit for bit; the calendar is each market's own real session list
     with `i0 = START`, `i1 = OOS_BOOT_L - 1`, exactly as the published run did.
     """
+    from research.fast_engine3 import bridge3
+
     rng = np.random.default_rng(seed)
     ids = [a["id"] for a in arms]
     groups = {}
     for a in arms:
-        groups.setdefault((a["leg"], a.get("leg_b"), kernel_opts.panel_key(a)), []).append(a)
-    legs = sorted({kernel_opts.base_leg(g[0]) for g in groups})
-    leg_of = {a["id"]: (a["leg"], a.get("leg_b"), kernel_opts.panel_key(a)) for a in arms}
+        groups.setdefault(_group_key(a), []).append(a)
+    legs = sorted({kernel_opts.base_leg(l) for g in groups for l in g[0] if l in LEGS})
+    leg_of = {a["id"]: _group_key(a) for a in arms}
     per = {g: {k: {a["id"]: [] for a in g_arms} for k in markets} for g, g_arms in groups.items()}
     for key in markets:
         days, o, c, y, start = fe_data.load_market(key)
@@ -531,7 +562,17 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
             for t in range(1, OOS_BOOT_L):
                 pos[:, t] = np.where(jump[:, t], fresh[:, t], (pos[:, t - 1] + 1) % npool)
             panels = _oos_market_panels(days, o, c, y, start, pos, tuple(legs), {}, key)
-            for (leg, leg_b, _pkey), arm_list in groups.items():
+            for (legs_t, _pkey, _ms), arm_list in groups.items():
+                if bridge3.needs_kernel3(arm_list[0]):
+                    out = np.empty((len(arm_list), P), dtype=np.float64)
+                    bridge3.pt_group(arm_list, panels[kernel_opts.base_leg(legs_t[0])], legs_t, env,
+                                     253, OOS_BOOT_L, fe_sim.COST_PER_SIDE * m, rule_index, 1.0,
+                                     out)
+                    for ai, arm in enumerate(arm_list):
+                        per[(legs_t, _pkey, _ms)][key][arm["id"]].append(out[ai])
+                    continue
+                leg = legs_t[0]
+                leg_b = legs_t[1] if len(legs_t) == 2 else None
                 p = kernel_opts.prepare_panel(panels[kernel_opts.base_leg(leg)], arm_list[0])
                 if leg_b is not None:
                     ok, why = p.leg_b_usable(leg_b, 253, OOS_BOOT_L)
@@ -551,7 +592,7 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
                         env.M_lo, env.cash_rate, DBG0, out,
                     )
                     for ai, arm in enumerate(arm_list):
-                        per[(leg, leg_b, _pkey)][key][arm["id"]].append(out[ai])
+                        per[(legs_t, _pkey, _ms)][key][arm["id"]].append(out[ai])
                     continue
                 wq = np.stack([_targets(a, p) for a in arm_list])
                 band, usd, defer = _rule_arrays(arm_list)
@@ -569,7 +610,7 @@ def oos_pooled(arms, markets=("M1", "M2", "M3", "M4", "M5"), per_market=OOS_PATH
                 else:
                     kernel_opts.pt(bundle, *args)
                 for ai, arm in enumerate(arm_list):
-                    per[(leg, leg_b, _pkey)][key][arm["id"]].append(out[ai])
+                    per[(legs_t, _pkey, _ms)][key][arm["id"]].append(out[ai])
         if not quiet:
             print(f"  oos_boot {key} {per_market} paths", flush=True)
     per_market_out = {k: {} for k in markets}

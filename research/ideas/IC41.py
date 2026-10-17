@@ -34,6 +34,16 @@ counts it in the multiple-testing ledger and simulates no arm). The follow-up ke
 what the bank's `new_downloads` names: the Yahoo `SSO` series (plus SPY's dividend/OHLC triple for
 the synthetic-2x cross-check), a `leg` construction for an arbitrary index at 2x, and the router
 the framework already carries.
+
+**`_N` arms (batch_bank_v4b): the same specs on the N-leg declaration, still refused.** The old
+refusal above is now out of date: `research/fast_engine3` builds the S&P 500 daily-reset 2x leg on
+demand from the window's own SPY column (`2x_spy`), so `"legs": ["2x", "2x_spy"]` really is two
+books with one FIFO queue each. What is *not* available is the arm's own mechanism: the downsize
+router that fills in the leg with the lower USD FIFO gain fraction under a 10 pp cap. It exists only
+as the two-leg fill option `route_cap_pp` (`research/fast_engine2/fe2_opts.py`); `api.resolve_arm`
+refuses `fill_knobs` on any `legs` arm, and `fe3_sim.sim3` has no cross-leg routing at all. The arm
+is therefore registered with its frozen spec and refused (`NEEDS_KERNEL_ROUTER`) rather than
+approximated by the weight split alone, which would drop the reason the idea exists.
 """
 
 from __future__ import annotations
@@ -48,6 +58,17 @@ NEEDS_KERNEL = (
     "IC40 boundary, not a plugin"
 )
 
+#: `_N` (batch_bank_v4b) -- the reason the same specs are still refused now that the second book is
+#: available: the arm's tax router (downsizes to the leg with the lower USD FIFO gain fraction,
+#: `route_cap_pp` 10 pp) is a two-leg fill option and has no counterpart in the N-leg kernel.
+NEEDS_KERNEL_ROUTER = (
+    "the arm's defining mechanism -- every downsize fills in the leg whose lower USD FIFO gain "
+    "fraction makes it the cheaper sale, bounded by a 10 pp per-session route cap -- is the two-leg "
+    "fill option `route_cap_pp` (`research/fast_engine2/fe2_opts.py`) and does not reach "
+    "`research/fast_engine3`: a multi-leg arm may carry only `margin_spread`, and `fe3_sim.sim3` "
+    "fills each leg's own band on that leg's own lot book with no cross-leg routing"
+)
+
 ARMS = {
     "A": {"rule": "K", "leg": "2x", "leg_b": "sso", "cash_yield": "none",
           "split": "equal", "leg_b_gearing": 2, "route_cap_pp": 10.0,
@@ -58,6 +79,27 @@ ARMS = {
     "C": {"rule": "K", "leg": "2x", "leg_b": "sso", "cash_yield": "none",
           "split": "equal", "early_leg": "nasdaq_only", "leg_b_gearing": 2,
           "route_cap_pp": 10.0, "route_score": "usd", "kernel_scope": "all_stages"},
+    # --- batch_bank_v4b: the same three specs on the N-leg declaration, which removes the *old*
+    #     blocker (the S&P-500 2x leg is now built on demand from the window's own SPY column:
+    #     `"legs": ["2x", "2x_spy"]`, one FIFO book per index). They are refused for the arm's
+    #     *defining* mechanism, which no kernel implements: every downsize must fill in the leg
+    #     whose **USD FIFO gain fraction** is lower, bounded by a 10 pp per-session route cap
+    #     (IB28's tax routing). That router lives only in the two-leg option copy
+    #     (`research/fast_engine2/fe2_opts.py`, `route_cap_pp`), and it does not reach
+    #     `research/fast_engine3`: a multi-leg arm cannot declare `fill_knobs` (`api.resolve_arm`
+    #     refuses every kernel option but `margin_spread`), and `fe3_sim.sim3` has no cross-leg
+    #     routing -- each leg's own band is judged and filled on its own lot book. Screening the
+    #     weight split alone would silently drop the arm's reason for existing, so it is not done.
+    "A_N": {"rule": "K", "legs": ["2x", "2x_spy"], "cash_yield": "none", "split": "equal",
+            "route_cap_pp": 10.0, "route_score": "usd", "up_resize": "furthest_below_share",
+            "kernel_scope": "all_stages", "needs_kernel": NEEDS_KERNEL_ROUTER},
+    "B_N": {"rule": "K", "legs": ["2x", "2x_spy"], "cash_yield": "none", "split": "inverse_vol20",
+            "route_cap_pp": 10.0, "route_score": "usd", "up_resize": "furthest_below_share",
+            "kernel_scope": "all_stages", "needs_kernel": NEEDS_KERNEL_ROUTER},
+    "C_N": {"rule": "K", "legs": ["2x", "2x_spy"], "cash_yield": "none", "split": "equal",
+            "early_leg": "nasdaq_only", "route_cap_pp": 10.0, "route_score": "usd",
+            "up_resize": "furthest_below_share", "kernel_scope": "all_stages",
+            "needs_kernel": NEEDS_KERNEL_ROUTER},
 }
 
 def targets(data, spec):

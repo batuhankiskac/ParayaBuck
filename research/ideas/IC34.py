@@ -47,6 +47,13 @@ ARMS = {
     "C": {"rule": "K", "leg": "2x", "leg_b": "sec_xlu", "cash_yield": "none", "start": "auto",
           "inputs": [], "form": "split", "weight": 0.49, "leg_b2": "sec_xlp",
           "needs_kernel": _ARM_C_NEEDS_KERNEL},
+    # --- batch_bank_v4b: the *same* IC34-C arm on the N-leg kernel (`research/fast_engine3`),
+    #     which holds leg A's QLD* and the two defensive sectors in one cash pool. A new arm name
+    #     (`C_N`) keeps the pinned `C` spec byte-identical (the old arm's spec_hash must not move).
+    #     `targets` returns the `{leg: wants}` form only for a spec that declares `"legs"`, so arms
+    #     A/B/C take the unchanged two-leg code path.
+    "C_N": {"rule": "K", "legs": ["2x", "sec_xlu", "sec_xlp"], "cash_yield": "none",
+            "start": "auto", "inputs": ["sec_xlu", "sec_xlp"], "form": "split", "weight": 0.49},
 }
 
 def production_wants(data):
@@ -61,8 +68,21 @@ def off_vote(data):
     return ~fe_signals.e2_up(data.price)
 
 def targets(data, spec):
+    if spec.get("legs"):
+        return _three_leg_targets(data, spec)
     wants = production_wants(data)
     off = off_vote(data)
     return wants * (~off), float(spec["weight"]) * off, spec["leg_b"]
+
+def _three_leg_targets(data, spec):
+    """`C_N`: the same substitution on the N-leg kernel, as `{leg: wants}`.
+
+    While E2 is off, leg A's QLD* is zero and the one fixed defensive split holds `0.49` XLU and
+    `0.49` XLP (the bank's "fixed equal split, no selection"), so the account never exceeds 0.98.
+    """
+    wants = production_wants(data)
+    off = off_vote(data)
+    w = float(spec["weight"])
+    return {"2x": wants * (~off), "sec_xlu": w * off, "sec_xlp": w * off}
 
 __all__ = ["ARMS", "off_vote", "production_wants", "targets"]

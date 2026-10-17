@@ -239,7 +239,7 @@
  },
  "engine_parity_quick": {
   "pass": true,
-  "tail": "parity PASS in 11.4s -> PARITY.json"
+  "tail": "parity PASS in 11.2s -> PARITY.json"
  },
  "failed": [],
  "multi_leg": {
@@ -255,6 +255,13 @@
   },
   "a_margin_arm_bootstraps": {
    "pass": true
+  },
+  "a_router_arm_reaches_the_n_leg_kernel": {
+   "pass": true,
+   "turnover_delta": {
+    "A": 0.414898,
+    "B": 51.814807
+   }
   },
   "a_single_leg_loan_keeps_the_option_kernel": {
    "margin_usd": 256480.58701,
@@ -301,6 +308,22 @@
   },
   "three_leg_empty_books_are_the_control_pretax": {
    "pass": true
+  },
+  "two_books_of_one_instrument_is_a_legal_declaration": {
+   "legs": [
+    "2x",
+    "2x"
+   ],
+   "pass": true,
+   "route_cap_pp": 10.0
+  },
+  "two_books_of_one_instrument_run": {
+   "cagr": 0.10448,
+   "legs": {
+    "A": 1125,
+    "B": 1404
+   },
+   "pass": true
   }
  },
  "multi_leg_kernel_parity": {
@@ -310,9 +333,9 @@
   },
   "all": {
    "failed": [],
-   "n_cells": 206,
+   "n_cells": 215,
    "pass": true,
-   "wall_s": 1.256322
+   "wall_s": 2.333128
   },
   "bootstrap": {
    "cells": 16,
@@ -328,7 +351,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 11.4s -> PARITY.json"
+   "tail": "parity PASS in 11.2s -> PARITY.json"
   },
   "main_window": {
    "cells": 96,
@@ -351,11 +374,15 @@
    "pass": true
   },
   "multi_leg": {
-   "cells": 2,
+   "cells": 3,
+   "pass": true
+  },
+  "router": {
+   "cells": 8,
    "pass": true
   }
  },
- "n_checks": 139,
+ "n_checks": 143,
  "parity": {
   "boot_vs_engine": {
    "C0_pre_base": {
@@ -776,7 +803,7 @@
   },
   "engine_parity_quick": {
    "pass": true,
-   "tail": "parity PASS in 11.4s -> PARITY.json"
+   "tail": "parity PASS in 11.2s -> PARITY.json"
   },
   "failed": [],
   "riskoff_divergence_pp": {
@@ -799,7 +826,7 @@
    "failed": [],
    "n_cells": 28,
    "pass": true,
-   "wall_s": 0.652355
+   "wall_s": 0.664642
   },
   "p1_off_identity.base_flat_m1": {
    "max_abs_diff": 0.0,
@@ -1094,5 +1121,5 @@
    "tax_same_both_ways": 0.0
   }
  },
- "wall_s": 40.32152
+ "wall_s": 40.795672
 }

@@ -883,6 +883,30 @@ def multi_leg_checks():
                      and sum(rsp["_legs"]["B"]["realised_gain_try_by_reason"].values()) != 0.0),
         "leg_a_trades": rsp["_legs"]["A"]["trades"], "leg_b_trades": rsp["_legs"]["B"]["trades"],
         "cagr": rsp["cagr_usd_liquidated"]}
+    # the gain-aware downsize router reaches the N-leg kernel and really moves the split
+    rp_pair = multi_leg_probe("router_pair")
+    rout = stages.run_one(rp_pair, p, env, i0, i1, "progressive", 2, 100_000.0)
+    plain_pair = dict(rp_pair, route_cap_pp=None, route_score=None)
+    rplain_pair = stages.run_one(plain_pair, p, env, i0, i1, "progressive", 2, 100_000.0)
+    la_on, lb_on = rout["_legs"]["A"], rout["_legs"]["B"]
+    la_off, lb_off = rplain_pair["_legs"]["A"], rplain_pair["_legs"]["B"]
+    out["a_router_arm_reaches_the_n_leg_kernel"] = {
+        "pass": bool(bridge3.needs_kernel3(rp_pair) and rp_pair["route_cap_pp"] == 10.0
+                     and la_on["trades"] > 0 and lb_on["trades"] > 0
+                     and not np.array_equal(rout["_nav"], rplain_pair["_nav"])
+                     and (la_on["turnover_total"] != la_off["turnover_total"]
+                          or lb_on["turnover_total"] != lb_off["turnover_total"])),
+        "turnover_delta": {"A": la_on["turnover_total"] - la_off["turnover_total"],
+                           "B": lb_on["turnover_total"] - lb_off["turnover_total"]}}
+    rp_two = multi_leg_probe("two_books")
+    rtwo = stages.run_one(rp_two, p, env, i0, i1, "progressive", 2, 100_000.0)
+    out["two_books_of_one_instrument_run"] = {
+        "pass": bool(list(rp_two["legs"]) == ["2x", "2x"]
+                     and rtwo["_legs"]["A"]["trades"] > 0 and rtwo["_legs"]["B"]["trades"] > 0
+                     and rtwo["_legs"]["A"]["turnover_total"] > 0
+                     and rtwo["_legs"]["B"]["turnover_total"] > 0),
+        "cagr": rtwo["cagr_usd_liquidated"],
+        "legs": {k: rtwo["_legs"][k]["trades"] for k in ("A", "B")}}
     # the off-state blend of three extra-data instruments, on its own reduced window
     bl = multi_leg_probe("offstate_blend")
     win = windows.arm_window(bl)
@@ -901,15 +925,25 @@ def multi_leg_checks():
     # the declaration contract
     out["the_legs_declaration_is_validated"] = {
         "pass": bool(
-            _refuses({"legs": ["2x"]}, "2..4")
-            and _refuses({"legs": ["2x", "2x"]}, "twice")
+            _refuses({"legs": ["2x"]}, "2..5")
+            and _refuses({"legs": ["2x", "2x", "2x"]}, "twice")
             and _refuses({"legs": ["2x", "nope"]}, "unknown leg")
             and _refuses({"legs": ["gld", "2x"]}, "panel leg")
             and _refuses({"legs": ["2x", "1x"], "leg": "1x"}, "disagrees")
             and _refuses({"legs": ["2x", "1x"], "leg_b": "2x"}, "disagrees")
             and _refuses({"legs": ["2x", "1x"], "rule": "probe_band0_k"}, "multi-leg kernel")
-            and _refuses({"legs": ["2x", "1x"], "margin_spread": float("nan")}, "finite")),
+            and _refuses({"legs": ["2x", "1x"], "margin_spread": float("nan")}, "finite")
+            and _refuses({"legs": ["2x", "1x"], "route_cap_pp": -1.0}, "finite and >= 0")
+            and _refuses({"legs": ["2x", "1x"], "route_score": "indexed"}, "needs route_cap_pp")
+            and _refuses({"leg": "2x", "route_cap_pp": 10.0}, "multi-leg arm")),
         "rule": "each refusal names its own defect"}
+    # two books of *one* instrument (IB38-C) are a legal declaration: same key twice
+    two = api.resolve_arm(_ProbeMod({"a": {"rule": "K", "legs": ["2x", "2x"],
+                                           "route_cap_pp": 10.0}}), "a")
+    out["two_books_of_one_instrument_is_a_legal_declaration"] = {
+        "pass": bool(two["n_legs"] == 2 and list(two["legs"]) == ["2x", "2x"]
+                     and two["route_cap_pp"] == 10.0 and bridge3.needs_kernel3(two)),
+        "legs": list(two["legs"]), "route_cap_pp": two["route_cap_pp"]}
     # a *single*-leg loan is the option kernel's own `mrate` (IC39): it must keep that path
     one = multi_leg_probe("one_leg_loan")
     r1 = stages.run_one(one, p, env, i0, i1, "progressive", 2, 100_000.0)
@@ -950,7 +984,7 @@ def multi_leg_kernel_parity(n_boot_paths=40, engine_parity_result=None):
     out = {"all": {"pass": bool(res["all"]), "n_cells": int(res["n_checks"]),
                    "failed": list(res["failed"]), "wall_s": float(res["wall_s"])}}
     for group in ("main_window", "after_tax_windows", "cash_yield", "bootstrap", "margin",
-                  "multi_leg", "engine_anchors"):
+                  "multi_leg", "router", "engine_anchors"):
         out[group] = {"pass": _group_pass(res[group]),
                       "cells": len([c for c in res[group].values()
                                     if isinstance(c, dict) and "pass" in c])}

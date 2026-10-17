@@ -63,7 +63,7 @@ CASH_YIELDS = ("none", "tbill")
 #: the N-leg account's leg capacity. The `research/fast_engine3` kernel holds at most this many
 #: instruments in one cash pool (a test asserts it equals `fe3_sim.N_LEGS`); a `"legs"` declaration
 #: names between 2 and this many keys.
-MAX_LEGS = 4
+MAX_LEGS = 5
 
 
 class NeedsKernel(Exception):
@@ -443,8 +443,13 @@ def resolve_arm(mod, arm_id: str) -> dict:
         if not (2 <= len(keys) <= MAX_LEGS):
             raise PluginError(f"arm {arm_id!r}: legs must name 2..{MAX_LEGS} instruments; got "
                               f"{len(keys)}")
-        if len(set(keys)) != len(keys):
-            raise PluginError(f"arm {arm_id!r}: legs names an instrument twice: {keys}")
+        counts = {}
+        for k in keys:
+            counts[k] = counts.get(k, 0) + 1
+        for k, cnt in counts.items():
+            if cnt > 2:
+                raise PluginError(f"arm {arm_id!r}: an instrument may be declared twice at most "
+                                  f"(two FIFO books of one instrument); {k!r} appears {cnt} times")
         known = leg_b_keys()
         for k in keys:
             if k not in known:
@@ -465,7 +470,9 @@ def resolve_arm(mod, arm_id: str) -> dict:
                               f"got {type(leg_b).__name__}")
         if leg_b not in leg_b_keys():
             raise PluginError(f"arm {arm_id!r}: unknown leg_b {leg_b!r}; known: {leg_b_keys()}")
-        if leg_b == leg:
+        # a `"legs"` declaration may name the same instrument twice (two FIFO books of one
+        # instrument, IB38-C); the legacy `leg`+`leg_b` form may not
+        if leg_b == leg and legs is None:
             raise PluginError(f"arm {arm_id!r}: leg_b {leg_b!r} is leg A's own instrument")
     # the kernel options of the rule: the multi-leg kernel (`research/fast_engine3`) carries only
     # the margin loan, so a multi-leg arm may declare `margin_spread` and nothing else. The loan may
@@ -489,6 +496,33 @@ def resolve_arm(mod, arm_id: str) -> dict:
     if multi and opts and set(opts) != {"margin_spread"}:
         raise PluginError(f"arm {arm_id!r}: only the margin loan (margin_spread) reaches the "
                           f"multi-leg kernel; {sorted(opts)} are single-leg options")
+    # the N-leg kernel's other option is the gain-aware downsize router (`fe3_sim.route_cap`):
+    # `route_cap_pp` (>= 0 percent points, 0/absent = off) and `route_score` ("usd" | "indexed").
+    # It is a cross-leg fill decision, so it needs a multi-leg arm and cannot be combined with the
+    # two-leg `fill_knobs` (which route to the option copy instead).
+    route_cap_pp = spec.get("route_cap_pp")
+    route_score = spec.get("route_score")
+    if route_cap_pp is not None:
+        if isinstance(route_cap_pp, bool) or not isinstance(route_cap_pp, (int, float)):
+            raise PluginError(f"arm {arm_id!r}: route_cap_pp must be a number")
+        route_cap_pp = float(route_cap_pp)
+        if not np.isfinite(route_cap_pp) or route_cap_pp < 0.0:
+            raise PluginError(f"arm {arm_id!r}: route_cap_pp must be finite and >= 0")
+        if not multi:
+            raise PluginError(f"arm {arm_id!r}: route_cap_pp needs a multi-leg arm (2.."
+                              f"{MAX_LEGS} instruments)")
+    if route_score is not None:
+        from research.fast_engine3.fe3_sim import ROUTE_SCORES
+
+        if route_score not in ROUTE_SCORES:
+            raise PluginError(f"arm {arm_id!r}: unknown route_score {route_score!r}; known: "
+                              f"{sorted(ROUTE_SCORES)}")
+        if route_cap_pp is None:
+            raise PluginError(f"arm {arm_id!r}: route_score needs route_cap_pp (the router off "
+                              "ignores the score)")
+    if route_cap_pp is not None and spec.get("fill_knobs") is not None:
+        raise PluginError(f"arm {arm_id!r}: route_cap_pp and fill_knobs are two different fill "
+                          "mechanisms; declare one")
     start = spec.get("start")
     if start is not None:
         if start != "auto":
@@ -530,6 +564,10 @@ def resolve_arm(mod, arm_id: str) -> dict:
             "n_legs": 1 + (1 if leg_b is not None else 0) + len(leg_more),
             "multi_leg": bool(leg_b is not None or leg_more),
             "margin_spread": margin_spread,
+            #: the N-leg downsize router (`research/fast_engine3.bridge3`); `route_cap_pp` in
+            #: percent points and `route_score` in `fe3_sim.ROUTE_SCORES`. `None` = off.
+            "route_cap_pp": route_cap_pp,
+            "route_score": route_score,
             "cash_yield": cash, "start": start, "inputs": tuple(inputs),
             "fill_knobs": knobs, "kernel_scope": scope,
             "fill_knobs_pretax": scope == "all_stages",
@@ -647,16 +685,24 @@ def _multi_targets(out, want_shape, arm, spec_legs) -> Targets:
                           "\"legs\"; add legs to ARMS[arm_id] so the registry pins the instruments")
     spec_legs = tuple(spec_legs)
     named = [k for k, _w in pairs]
-    if len(set(named)) != len(named):
-        raise PluginError(f"targets() named a leg twice: {named}")
     if sorted(named) != sorted(spec_legs):
         raise PluginError(f"targets() named legs {sorted(named)} but the spec declares "
                           f"{list(spec_legs)}")
-    by_leg = dict(pairs)
-    if len(by_leg) < 2:
-        raise PluginError("an N-leg return must name at least two instruments; a single "
-                          "instrument is the plain `wants` return")
-    rows = [(k, _panel_weights(by_leg[k], want_shape, f"leg {k}")) for k in spec_legs]
+    if len(set(spec_legs)) != len(spec_legs):
+        # two books of one instrument: the return must be positional (a dict cannot repeat a key),
+        # so the weight panels are matched to the declaration order
+        if named != list(spec_legs):
+            raise PluginError("an arm with two books of one instrument must return its weight "
+                              f"panels in declaration order {list(spec_legs)}; got {named}")
+        rows = [(spec_legs[i],
+                 _panel_weights(pairs[i][1], want_shape, f"leg {spec_legs[i]} book {i + 1}"))
+                for i in range(len(spec_legs))]
+    else:
+        by_leg = dict(pairs)
+        if len(by_leg) < 2:
+            raise PluginError("an N-leg return must name at least two instruments; a single "
+                              "instrument is the plain `wants` return")
+        rows = [(k, _panel_weights(by_leg[k], want_shape, f"leg {k}")) for k in spec_legs]
     return Targets(wants=rows[0][1], leg=rows[0][0], wants_b=rows[1][1], leg_b=rows[1][0],
                    more=tuple(rows[2:]))
 

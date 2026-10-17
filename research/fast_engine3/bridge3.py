@@ -91,7 +91,7 @@ def needs_kernel3(arm) -> bool:
     loan this kernel's job.
     """
     legs = arm_legs(arm)
-    if len(legs) >= 3:
+    if len(legs) >= 3 or len(set(legs)) != len(legs):
         return True
     if len(legs) == 2 and (margin_spread(arm) is not None or LEG_SPY in legs
                            or route_cap(arm) > 0.0):

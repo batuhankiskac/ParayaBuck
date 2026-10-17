@@ -56,6 +56,13 @@ ARMS = {
                       "kind": "sleeve", "sleeve": 0.25},
     "spy_pair": {"rule": "K", "legs": ["2x", "2x_spy"], "cash_yield": "none", "kind": "pair",
                  "share_a": 0.5},
+    # the gain-aware downsize router on the IC41 pattern (two real books, downsizes routed to the
+    # cheaper FIFO head under a 10 pp cap; the bank's IB28/IC41 mechanism)
+    "router_pair": {"rule": "K", "legs": ["2x", "2x_spy"], "cash_yield": "none", "kind": "pair",
+                    "share_a": 0.5, "route_cap_pp": 10.0, "route_score": "usd"},
+    # two books of the *same* instrument in one cash pool (IB38-C), downsizes routed
+    "two_books": {"rule": "K", "legs": ["2x", "2x"], "cash_yield": "none", "kind": "pair",
+                  "share_a": 0.5, "route_cap_pp": 10.0, "route_score": "indexed"},
     # a *single*-leg loan (IC39's shape): the published option kernel's own `mrate`, not this one
     "one_leg_loan": {"rule": MARGIN_RULE, "leg": "2x", "cash_yield": "none", "kind": "one_leg",
                      "gross": 2.0},

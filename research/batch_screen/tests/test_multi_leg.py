@@ -43,7 +43,7 @@ def probe_arm(probe, arm_id):
 def test_max_legs_matches_the_kernel():
     from research.fast_engine3 import fe3_sim
 
-    assert api.MAX_LEGS == fe3_sim.N_LEGS == 4
+    assert api.MAX_LEGS == fe3_sim.N_LEGS == 5
 
 
 def test_the_legs_declaration_is_validated(tmp_path, monkeypatch):
@@ -55,12 +55,12 @@ def test_the_legs_declaration_is_validated(tmp_path, monkeypatch):
                                   % extra)
         return api.load_idea("m")
 
-    with pytest.raises(api.PluginError, match="2..4"):
+    with pytest.raises(api.PluginError, match="2..5"):
         api.resolve_arm(mod("'legs': ['2x']"), "a")
-    with pytest.raises(api.PluginError, match="2..4"):
-        api.resolve_arm(mod("'legs': ['2x', '1x', '2x', '1x', '2x']"), "a")
+    with pytest.raises(api.PluginError, match="2..5"):
+        api.resolve_arm(mod("'legs': ['2x', '1x', '2x', '1x', '2x', '1x']"), "a")
     with pytest.raises(api.PluginError, match="twice"):
-        api.resolve_arm(mod("'legs': ['2x', '2x']"), "a")
+        api.resolve_arm(mod("'legs': ['2x', '2x', '2x']"), "a")
     with pytest.raises(api.PluginError, match="unknown leg"):
         api.resolve_arm(mod("'legs': ['2x', 'nope']"), "a")
     with pytest.raises(api.PluginError, match="panel leg"):
@@ -120,13 +120,29 @@ def test_n_leg_return_forms(tmp_path, monkeypatch):
     m = load("    w = np.zeros((data.P, data.T))\n    return {'1x': w, '2x': w}\n")
     t = api.call_targets(m, p, arm)
     assert [k for k, _w in t.leg_wants()] == ["2x", "1x"]
-    # a leg the spec does not declare, and a duplicate
+    # a leg the spec does not declare, and a duplicate the spec does not declare
     m = load("    w = np.zeros((data.P, data.T))\n    return [w, w], ['2x', 'shy']\n")
     with pytest.raises(api.PluginError, match="spec declares"):
         api.call_targets(m, p, arm)
     m = load("    w = np.zeros((data.P, data.T))\n    return [w, w], ['2x', '2x']\n")
-    with pytest.raises(api.PluginError, match="twice"):
+    with pytest.raises(api.PluginError, match="spec declares"):
         api.call_targets(m, p, arm)
+    # two books of one instrument: the spec repeats the key, the return is positional
+    two = {"params": {"legs": ["2x", "2x"]}, "legs": ("2x", "2x"), "leg": "2x", "leg_b": "2x"}
+    m = load("    w = np.zeros((data.P, data.T))\n    return [w, np.ones_like(w)]\n")
+    t = api.call_targets(m, p, two)
+    assert t.n_legs == 2 and [k for k, _w in t.leg_wants()] == ["2x", "2x"]
+    assert t.more == () and np.array_equal(t.wants_b, np.ones_like(t.wants))
+    # a dict return cannot name the same instrument twice (the spec declares it twice)
+    m = load("    w = np.zeros((data.P, data.T))\n    return {'2x': w}\n")
+    with pytest.raises(api.PluginError, match="spec declares"):
+        api.call_targets(m, p, two)
+    # panels named in a different order than a repeated-key declaration are refused
+    three = {"params": {"legs": ["2x", "gld", "2x"]}, "legs": ("2x", "gld", "2x"), "leg": "2x",
+             "leg_b": "gld"}
+    m = load("    w = np.zeros((data.P, data.T))\n    return [w, w, w], ['2x', '2x', 'gld']\n")
+    with pytest.raises(api.PluginError, match="declaration order"):
+        api.call_targets(m, p, three)
     # non-finite and wrong-shape panels
     m = load("    w = np.zeros((data.P, data.T))\n    return [w, np.full_like(w, np.nan)]\n")
     with pytest.raises(api.PluginError, match="non-finite"):
@@ -243,6 +259,62 @@ def test_a_two_leg_arm_without_a_loan_stays_on_fe2(probe):
     assert not bridge3.needs_kernel3(dict(arm, legs=("2x",), n_legs=1))
     assert bridge3.needs_kernel3(dict(arm, legs=("2x", "1x"), n_legs=2, margin_spread=0.01))
     assert bridge3.needs_kernel3(dict(arm, legs=("2x", "2x_spy"), n_legs=2))
+    # the router and two books of one instrument route here too
+    assert bridge3.needs_kernel3(dict(arm, legs=("2x", "1x"), n_legs=2, route_cap_pp=10.0))
+    assert bridge3.needs_kernel3(dict(arm, legs=("2x", "2x"), n_legs=2))
+
+
+def test_the_router_moves_the_split_between_two_books(probe):
+    """The gain-aware downsize router fires on a real two-leg arm and changes the split."""
+    from research.fast_engine3 import bridge3, fe3_sim
+
+    days, p, i0, i1 = windows.main_panel(0.0)
+    env = windows.try_env(days, i0, i1)
+    arm = probe_arm(probe, "router_pair")
+    assert bridge3.needs_kernel3(arm) and arm["route_cap_pp"] == 10.0
+    off = stages.run_one(dict(arm, route_cap_pp=None, route_score=None), p, env, i0, i1,
+                         "progressive", 2, 100_000.0)
+    on = stages.run_one(arm, p, env, i0, i1, "progressive", 2, 100_000.0)
+    assert not np.array_equal(on["_nav"], off["_nav"])
+    moved = [on["_legs"][k]["turnover_total"] - off["_legs"][k]["turnover_total"]
+             for k in ("A", "B")]
+    assert any(abs(v) > 0 for v in moved)
+    # the kernel's own router is off at cap 0 and the score is validated
+    with pytest.raises(ValueError, match="route_cap"):
+        fe3_sim.simulate3([p.legs["2x"][0][0], p.legs["1x"][0][0]],
+                          [p.legs["2x"][1][0], p.legs["1x"][1][0]],
+                          [p.close[0], p.close[0]], env, 100_000.0, i0, i1, route_cap=-1.0)
+    with pytest.raises(ValueError, match="route_score"):
+        fe3_sim.simulate3([p.legs["2x"][0][0], p.legs["1x"][0][0]],
+                          [p.legs["2x"][1][0], p.legs["1x"][1][0]],
+                          [p.close[0], p.close[0]], env, 100_000.0, i0, i1, route_cap=0.1,
+                          route_score=7)
+
+
+def test_two_books_of_one_instrument_run(probe):
+    """IB38-C: two legs of the same instrument, separate FIFO books, in one cash pool."""
+    from research.fast_engine3 import bridge3
+
+    days, p, i0, i1 = windows.main_panel(0.0)
+    env = windows.try_env(days, i0, i1)
+    arm = probe_arm(probe, "two_books")
+    assert arm["legs"] == ("2x", "2x") and bridge3.needs_kernel3(arm)
+    r = stages.run_one(arm, p, env, i0, i1, "progressive", 2, 100_000.0)
+    a, b = r["_legs"]["A"], r["_legs"]["B"]
+    assert a["trades"] > 0 and b["trades"] > 0 and a["turnover_total"] > 0 and b["turnover_total"] > 0
+    assert r["strategy_trades"] == a["trades"] + b["trades"]
+
+
+def test_the_router_bootstraps(probe):
+    from research.batch_screen import boot as B
+
+    ctrl = api.load_arm("k_control", "K")
+    arm = probe_arm(probe, "router_pair")
+    b = B.boot([ctrl, arm], n_pre=8, n_tax=8, capitals=("100k",), modes=("progressive",),
+               quiet=True)
+    v = b["tax"]["100k"]["progressive"][arm["id"]]
+    assert np.isfinite(v).all()
+    assert not np.array_equal(v, b["tax"]["100k"]["progressive"][ctrl["id"]])
 
 
 def test_the_n_leg_bootstrap_keeps_the_control_paths(probe):

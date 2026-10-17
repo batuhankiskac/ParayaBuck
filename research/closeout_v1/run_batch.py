@@ -98,20 +98,27 @@ def check() -> int:
         and all(routed[k]["window"] == "default" for k in routed)
     )
 
-    # (3) the 3 pp band really behaves as a 3 pp band on real data, and the engine's own band is
-    #     untouched: fewer trades than K on the main window
+    # (3) the 3 pp band really behaves as a wide *plain* band on real data, and the engine's own
+    #     band constant is untouched. The reference is the *plain-band* control R2 (C0: the same
+    #     target series with the 0.5 pp band), which is the family the arm belongs to: a wider
+    #     plain band must trade fewer times and turn over less. K is not that reference (A1u/H2
+    #     gate its downsizes), so K's row is reported for information only.
     days, p, i0, i1 = windows.main_panel(0.0)
     env = windows.try_env(days, i0, i1, "none")
+    r0 = stages.run_one(api.load_arm("r2_control", "R2"), p, env, i0, i1, "pre_tax", 2, 1.0)
     rk = stages.run_one(api.load_arm("k_control", "K"), p, env, i0, i1, "pre_tax", 2, 1.0)
     r3 = stages.run_one(api.load_arm("IB35_K", "C_K"), p, env, i0, i1, "pre_tax", 2, 1.0)
     out["band_3pp"] = {
         "engine_C0_BAND": float(BAND),
-        "trades_K": int(rk["strategy_trades"]),
-        "trades_3pp": int(r3["strategy_trades"]),
-        "qld_sells_K": int(rk["qld_sells"]),
-        "qld_sells_3pp": int(r3["qld_sells"]),
-        "pass": bool(BAND == 0.005 and r3["strategy_trades"] < rk["strategy_trades"]
-                     and r3["qld_sells"] < rk["qld_sells"]),
+        "trades": {"R2_plain_0.5pp": int(r0["strategy_trades"]),
+                   "K": int(rk["strategy_trades"]), "3pp": int(r3["strategy_trades"])},
+        "qld_sells": {"R2_plain_0.5pp": int(r0["qld_sells"]), "K": int(rk["qld_sells"]),
+                      "3pp": int(r3["qld_sells"])},
+        "turnover_total": {"R2_plain_0.5pp": float(r0["turnover_total"]),
+                           "K": float(rk["turnover_total"]), "3pp": float(r3["turnover_total"])},
+        "pass": bool(BAND == 0.005 and r3["strategy_trades"] < r0["strategy_trades"]
+                     and r3["turnover_total"] < r0["turnover_total"]
+                     and r3["strategy_trades"] < rk["strategy_trades"]),
     }
 
     # (4) the sleeve really trades, and the three states nest as the arms claim

@@ -170,3 +170,8 @@ a parameter, a window or a gate after data is seen.)*
   `NotApplicable` and reduced G7 to five windows. The series now starts where the campaign's own
   rate schedule starts (TB3MS, 1934-01), which is the same schedule the `M2` panel itself reads
   into `rate`; `smoke` reports 0 % NaN on every window. No arm, parameter, window or gate changed.
+* **Pre-run: the BIL* CSV is written with LF line endings.** `csv.writer` defaults to CRLF and the
+  repository normalises that to LF in the committed blob, so the declared SHA-256 (computed on the
+  working copy) would have stopped matching after a fresh checkout and `extra --verify` would have
+  failed. Same values, same 33,968 rows; the declaration and `DATA_MANIFEST.json` were updated.
+  Nothing had been simulated.

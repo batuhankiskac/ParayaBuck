@@ -53,7 +53,10 @@ SPLITS = {"two_50k": (2, 50_000.0), "three_33333k": (3, 100_000.0 / 3.0)}
 def _cell(r: dict) -> dict:
     yrs = float(r["years"])
     return {
+        # the campaign's two conventions: pre-tax rows are quoted as the un-liquidated `cagr`
+        # (the published pre-tax cells), taxed rows as `cagr_usd_liquidated`
         "cagr_pct": float(r["cagr_usd_liquidated"]) * 100.0,
+        "cagr_pre_liquidation_pct": float(r["cagr_usd_unliquidated"]) * 100.0,
         "max_dd_pct": float(r["max_dd_nav_usd"]) * 100.0,
         "terminal_usd": float(r["terminal_usd_liquidated"]),
         "tax_usd": float(r["tax_total_usd_at_payment_fx"]),
@@ -156,17 +159,18 @@ def main(argv=None) -> int:
         print(f"wrote {OUT}")
     for wn, blk in rep["A_regime_matrix"]["windows"].items():
         print(f"\nIB38/A -- {wn} ({blk['range'][0]} -> {blk['range'][1]}), CAGR % liquidated, m = 2")
-        print(f"  {'mode':<11} {'cap':>5}  " + "  ".join(f"{r:>7}" for r in RULES)
-              + "   |  max DD % (mode=progressive)")
+        print(f"  {'mode':<11} {'cap':>6}  " + "  ".join(f"{r:>7}" for r in RULES)
+              + "   |  max DD % (same mode)")
         for mode in MODES:
             for cap in sorted(blk["cells"]):
                 c = blk["cells"][cap]
-                line = "  ".join(f"{c[f'{mode}|{r}']['cagr_pct']:7.2f}" for r in RULES)
-                dd = "  ".join(f"{c[f'progressive|{r}']['max_dd_pct']:7.2f}" for r in RULES)
-                print(f"  {mode:<11} {cap:>5}  {line}   |  {dd}")
-    print("\nIB38/A -- main window 2000-03-09 -> 2026-09-29, pre-tax (tau = 0), m = 2")
+                key = "cagr_pre_liquidation_pct" if mode == "pre_tax" else "cagr_pct"
+                line = "  ".join(f"{c[f'{mode}|{r}'][key]:7.2f}" for r in RULES)
+                dd = "  ".join(f"{c[f'{mode}|{r}']['max_dd_pct']:7.2f}" for r in RULES)
+                print(f"  {mode:<11} {cap:>6}  {line}   |  {dd}")
+    print("\nIB38/A -- main window 2000-03-09 -> 2026-09-29, pre-tax (tau = 0, un-liquidated), m = 2")
     for md, blk in rep["A_regime_matrix"]["main_window_pre_tax"].items():
-        line = "  ".join(f"{blk[r]['cagr_pct']:7.2f}" for r in RULES)
+        line = "  ".join(f"{blk[r]['cagr_pre_liquidation_pct']:7.2f}" for r in RULES)
         dd = "  ".join(f"{blk[r]['max_dd_pct']:7.2f}" for r in RULES)
         print(f"  {md:<11} {'':>5}  {line}   |  {dd}")
     for wn, blk in rep["B_split"]["splits"].items():

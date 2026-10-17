@@ -1,0 +1,1470 @@
+{
+ "A_regime_matrix": {
+  "capitals": [
+   "100k",
+   "10k",
+   "1M"
+  ],
+  "main_window_pre_tax": {
+   "base": {
+    "A1u": {
+     "cagr_pct": 15.717860554167551,
+     "cagr_pre_liquidation_pct": 15.721283046156431,
+     "max_dd_pct": 47.18766288014622,
+     "sells_per_year": 10.429259870116482,
+     "tax_usd": 0.0,
+     "terminal_usd": 4829559.981150089,
+     "trades_per_year": 33.50917431192661
+    },
+    "H2": {
+     "cagr_pct": 15.513704608771173,
+     "cagr_pre_liquidation_pct": 15.517121062607542,
+     "max_dd_pct": 46.2542334827199,
+     "sells_per_year": 28.652226574579938,
+     "tax_usd": 0.0,
+     "terminal_usd": 4608283.886165679,
+     "trades_per_year": 60.39181527677559
+    },
+    "K": {
+     "cagr_pct": 15.761468673052882,
+     "cagr_pre_liquidation_pct": 15.764892454803213,
+     "max_dd_pct": 46.669791033866915,
+     "sells_per_year": 10.165704566539532,
+     "tax_usd": 0.0,
+     "terminal_usd": 4878132.857840878,
+     "trades_per_year": 33.01971446242655
+    },
+    "R2": {
+     "cagr_pct": 15.473229172319147,
+     "cagr_pre_liquidation_pct": 15.476644429046837,
+     "max_dd_pct": 46.758360812233924,
+     "sells_per_year": 29.55584475827234,
+     "tax_usd": 0.0,
+     "terminal_usd": 4565588.595503034,
+     "trades_per_year": 61.93549634058344
+    }
+   },
+   "calibrated": {
+    "A1u": {
+     "cagr_pct": 15.115830999997382,
+     "cagr_pre_liquidation_pct": 15.11923564887967,
+     "max_dd_pct": 47.309644884126115,
+     "sells_per_year": 10.429259870116482,
+     "tax_usd": 0.0,
+     "terminal_usd": 4204751.2740882635,
+     "trades_per_year": 33.50917431192661
+    },
+    "H2": {
+     "cagr_pct": 14.932534997012059,
+     "cagr_pre_liquidation_pct": 14.93593422475874,
+     "max_dd_pct": 46.378608601206025,
+     "sells_per_year": 28.652226574579938,
+     "tax_usd": 0.0,
+     "terminal_usd": 4030501.4608445507,
+     "trades_per_year": 60.39181527677559
+    },
+    "K": {
+     "cagr_pct": 15.175124388966532,
+     "cagr_pre_liquidation_pct": 15.178530791501355,
+     "max_dd_pct": 46.79478317924301,
+     "sells_per_year": 10.165704566539532,
+     "tax_usd": 0.0,
+     "terminal_usd": 4262654.033438146,
+     "trades_per_year": 33.01971446242655
+    },
+    "R2": {
+     "cagr_pct": 14.892719225518825,
+     "cagr_pre_liquidation_pct": 14.896117275680076,
+     "max_dd_pct": 46.87973812800197,
+     "sells_per_year": 29.55584475827234,
+     "tax_usd": 0.0,
+     "terminal_usd": 3993580.2489382373,
+     "trades_per_year": 61.93549634058344
+    }
+   }
+  },
+  "windows": {
+   "2000_03_to_2026_09": {
+    "cells": {
+     "100k": {
+      "flat|A1u": {
+       "cagr_pct": 12.041249792358212,
+       "cagr_pre_liquidation_pct": 12.439612440076274,
+       "max_dd_pct": 47.18766288014622,
+       "sells_per_year": 10.730465931347283,
+       "tax_usd": 743093.3170627228,
+       "terminal_usd": 2048673.7448005134,
+       "trades_per_year": 33.84803113081126
+      },
+      "flat|H2": {
+       "cagr_pct": 11.792976506392016,
+       "cagr_pre_liquidation_pct": 12.162417920007872,
+       "max_dd_pct": 46.2542334827199,
+       "sells_per_year": 29.14168642407999,
+       "tax_usd": 705837.6099204458,
+       "terminal_usd": 1931453.8473835494,
+       "trades_per_year": 60.61771982269869
+      },
+      "flat|K": {
+       "cagr_pct": 12.12721510567798,
+       "cagr_pre_liquidation_pct": 12.525577513786379,
+       "max_dd_pct": 46.669791033866915,
+       "sells_per_year": 10.504561385424182,
+       "tax_usd": 735028.0349603671,
+       "terminal_usd": 2090834.5379184932,
+       "trades_per_year": 33.32092052365735
+      },
+      "flat|R2": {
+       "cagr_pct": 11.720852706361429,
+       "cagr_pre_liquidation_pct": 12.084750274071187,
+       "max_dd_pct": 46.758360812233924,
+       "sells_per_year": 30.045304607772394,
+       "tax_usd": 707845.7361532073,
+       "terminal_usd": 1898629.3509904332,
+       "trades_per_year": 62.19905164416039
+      },
+      "pre_tax|A1u": {
+       "cagr_pct": 15.717860554167551,
+       "cagr_pre_liquidation_pct": 15.721283046156431,
+       "max_dd_pct": 47.18766288014622,
+       "sells_per_year": 10.429259870116482,
+       "tax_usd": 0.0,
+       "terminal_usd": 4829559.981150089,
+       "trades_per_year": 33.50917431192661
+      },
+      "pre_tax|H2": {
+       "cagr_pct": 15.513704608771173,
+       "cagr_pre_liquidation_pct": 15.517121062607542,
+       "max_dd_pct": 46.2542334827199,
+       "sells_per_year": 28.652226574579938,
+       "tax_usd": 0.0,
+       "terminal_usd": 4608283.886165679,
+       "trades_per_year": 60.39181527677559
+      },
+      "pre_tax|K": {
+       "cagr_pct": 15.761468673052882,
+       "cagr_pre_liquidation_pct": 15.764892454803213,
+       "max_dd_pct": 46.669791033866915,
+       "sells_per_year": 10.165704566539532,
+       "tax_usd": 0.0,
+       "terminal_usd": 4878132.857840878,
+       "trades_per_year": 33.01971446242655
+      },
+      "pre_tax|R2": {
+       "cagr_pct": 15.473229172319147,
+       "cagr_pre_liquidation_pct": 15.476644429046837,
+       "max_dd_pct": 46.758360812233924,
+       "sells_per_year": 29.55584475827234,
+       "tax_usd": 0.0,
+       "terminal_usd": 4565588.595503034,
+       "trades_per_year": 61.93549634058344
+      },
+      "progressive|A1u": {
+       "cagr_pct": 10.614553260931991,
+       "cagr_pre_liquidation_pct": 11.284274896639124,
+       "max_dd_pct": 47.18766288014622,
+       "sells_per_year": 10.918719719616533,
+       "tax_usd": 819007.8204527469,
+       "terminal_usd": 1457635.9972553626,
+       "trades_per_year": 33.4338727966189
+      },
+      "progressive|H2": {
+       "cagr_pct": 10.303334627021886,
+       "cagr_pre_liquidation_pct": 10.936485588668754,
+       "max_dd_pct": 46.2542334827199,
+       "sells_per_year": 29.781749304195444,
+       "tax_usd": 775619.832007185,
+       "terminal_usd": 1352538.5958795282,
+       "trades_per_year": 61.10717967219874
+      },
+      "progressive|K": {
+       "cagr_pct": 10.75330571258888,
+       "cagr_pre_liquidation_pct": 11.430700764876466,
+       "max_dd_pct": 46.669791033866915,
+       "sells_per_year": 10.655164416039582,
+       "tax_usd": 830902.6614114628,
+       "terminal_usd": 1506985.360426084,
+       "trades_per_year": 32.94441294711885
+      },
+      "progressive|R2": {
+       "cagr_pct": 10.160007014437822,
+       "cagr_pre_liquidation_pct": 10.78327031530577,
+       "max_dd_pct": 46.758360812233924,
+       "sells_per_year": 30.685367487887845,
+       "tax_usd": 766159.9335904098,
+       "terminal_usd": 1306627.035617263,
+       "trades_per_year": 62.65086073600659
+      }
+     },
+     "10k": {
+      "flat|A1u": {
+       "cagr_pct": 12.041249792358212,
+       "cagr_pre_liquidation_pct": 12.439612440076274,
+       "max_dd_pct": 47.18766288014623,
+       "sells_per_year": 10.730465931347283,
+       "tax_usd": 74309.33170627218,
+       "terminal_usd": 204867.374480051,
+       "trades_per_year": 33.84803113081126
+      },
+      "flat|H2": {
+       "cagr_pct": 11.792976506392016,
+       "cagr_pre_liquidation_pct": 12.162417920007872,
+       "max_dd_pct": 46.254233482719876,
+       "sells_per_year": 29.14168642407999,
+       "tax_usd": 70583.76099204464,
+       "terminal_usd": 193145.38473835515,
+       "trades_per_year": 60.61771982269869
+      },
+      "flat|K": {
+       "cagr_pct": 12.12721510567798,
+       "cagr_pre_liquidation_pct": 12.525577513786379,
+       "max_dd_pct": 46.669791033866936,
+       "sells_per_year": 10.504561385424182,
+       "tax_usd": 73502.80349603668,
+       "terminal_usd": 209083.45379184923,
+       "trades_per_year": 33.32092052365735
+      },
+      "flat|R2": {
+       "cagr_pct": 11.720852706361429,
+       "cagr_pre_liquidation_pct": 12.084750274071187,
+       "max_dd_pct": 46.7583608122339,
+       "sells_per_year": 30.045304607772394,
+       "tax_usd": 70784.57361532075,
+       "terminal_usd": 189862.93509904336,
+       "trades_per_year": 62.19905164416039
+      },
+      "pre_tax|A1u": {
+       "cagr_pct": 15.717860554167551,
+       "cagr_pre_liquidation_pct": 15.721283046156408,
+       "max_dd_pct": 47.18766288014623,
+       "sells_per_year": 10.429259870116482,
+       "tax_usd": 0.0,
+       "terminal_usd": 482955.99811500806,
+       "trades_per_year": 33.50917431192661
+      },
+      "pre_tax|H2": {
+       "cagr_pct": 15.513704608771173,
+       "cagr_pre_liquidation_pct": 15.517121062607565,
+       "max_dd_pct": 46.254233482719876,
+       "sells_per_year": 28.652226574579938,
+       "tax_usd": 0.0,
+       "terminal_usd": 460828.38861656905,
+       "trades_per_year": 60.39181527677559
+      },
+      "pre_tax|K": {
+       "cagr_pct": 15.761468673052882,
+       "cagr_pre_liquidation_pct": 15.764892454803213,
+       "max_dd_pct": 46.669791033866936,
+       "sells_per_year": 10.165704566539532,
+       "tax_usd": 0.0,
+       "terminal_usd": 487813.28578408714,
+       "trades_per_year": 33.01971446242655
+      },
+      "pre_tax|R2": {
+       "cagr_pct": 15.473229172319147,
+       "cagr_pre_liquidation_pct": 15.476644429046837,
+       "max_dd_pct": 46.7583608122339,
+       "sells_per_year": 29.55584475827234,
+       "tax_usd": 0.0,
+       "terminal_usd": 456558.85955030407,
+       "trades_per_year": 61.93549634058344
+      },
+      "progressive|A1u": {
+       "cagr_pct": 12.0630517568872,
+       "cagr_pre_liquidation_pct": 12.614974589568728,
+       "max_dd_pct": 47.18766288014623,
+       "sells_per_year": 10.881068961962683,
+       "tax_usd": 82027.09394805407,
+       "terminal_usd": 205928.81866285336,
+       "trades_per_year": 33.50917431192661
+      },
+      "progressive|H2": {
+       "cagr_pct": 11.80497601167847,
+       "cagr_pre_liquidation_pct": 12.325254023547693,
+       "max_dd_pct": 46.254233482719876,
+       "sells_per_year": 29.744098546541593,
+       "tax_usd": 77685.0315970367,
+       "terminal_usd": 193696.77018510093,
+       "trades_per_year": 61.06952891454489
+      },
+      "progressive|K": {
+       "cagr_pct": 12.17879662271011,
+       "cagr_pre_liquidation_pct": 12.737080755431185,
+       "max_dd_pct": 46.669791033866936,
+       "sells_per_year": 10.617513658385732,
+       "tax_usd": 82959.11071275156,
+       "terminal_usd": 211653.16546629995,
+       "trades_per_year": 33.01971446242655
+      },
+      "progressive|R2": {
+       "cagr_pct": 11.687444363256262,
+       "cagr_pre_liquidation_pct": 12.1987559291161,
+       "max_dd_pct": 46.7583608122339,
+       "sells_per_year": 30.647716730233995,
+       "tax_usd": 77026.7349695907,
+       "terminal_usd": 188360.73308141483,
+       "trades_per_year": 62.61320997835274
+      }
+     },
+     "1M": {
+      "flat|A1u": {
+       "cagr_pct": 12.041249792358212,
+       "cagr_pre_liquidation_pct": 12.439612440076298,
+       "max_dd_pct": 47.187662880146206,
+       "sells_per_year": 10.730465931347283,
+       "tax_usd": 7430933.17062724,
+       "terminal_usd": 20486737.448005162,
+       "trades_per_year": 33.84803113081126
+      },
+      "flat|H2": {
+       "cagr_pct": 11.792976506392016,
+       "cagr_pre_liquidation_pct": 12.162417920007872,
+       "max_dd_pct": 46.25423348271986,
+       "sells_per_year": 29.14168642407999,
+       "tax_usd": 7058376.099204467,
+       "terminal_usd": 19314538.473835517,
+       "trades_per_year": 60.61771982269869
+      },
+      "flat|K": {
+       "cagr_pct": 12.127215105678001,
+       "cagr_pre_liquidation_pct": 12.525577513786379,
+       "max_dd_pct": 46.66979103386687,
+       "sells_per_year": 10.504561385424182,
+       "tax_usd": 7350280.349603689,
+       "terminal_usd": 20908345.379184976,
+       "trades_per_year": 33.32092052365735
+      },
+      "flat|R2": {
+       "cagr_pct": 11.720852706361429,
+       "cagr_pre_liquidation_pct": 12.084750274071187,
+       "max_dd_pct": 46.75836081223391,
+       "sells_per_year": 30.045304607772394,
+       "tax_usd": 7078457.361532075,
+       "terminal_usd": 18986293.509904325,
+       "trades_per_year": 62.19905164416039
+      },
+      "pre_tax|A1u": {
+       "cagr_pct": 15.717860554167551,
+       "cagr_pre_liquidation_pct": 15.721283046156408,
+       "max_dd_pct": 47.187662880146206,
+       "sells_per_year": 10.429259870116482,
+       "tax_usd": 0.0,
+       "terminal_usd": 48295599.81150081,
+       "trades_per_year": 33.50917431192661
+      },
+      "pre_tax|H2": {
+       "cagr_pct": 15.513704608771173,
+       "cagr_pre_liquidation_pct": 15.517121062607565,
+       "max_dd_pct": 46.25423348271986,
+       "sells_per_year": 28.652226574579938,
+       "tax_usd": 0.0,
+       "terminal_usd": 46082838.8616569,
+       "trades_per_year": 60.39181527677559
+      },
+      "pre_tax|K": {
+       "cagr_pct": 15.761468673052882,
+       "cagr_pre_liquidation_pct": 15.764892454803213,
+       "max_dd_pct": 46.66979103386687,
+       "sells_per_year": 10.165704566539532,
+       "tax_usd": 0.0,
+       "terminal_usd": 48781328.57840889,
+       "trades_per_year": 33.01971446242655
+      },
+      "pre_tax|R2": {
+       "cagr_pct": 15.473229172319147,
+       "cagr_pre_liquidation_pct": 15.476644429046837,
+       "max_dd_pct": 46.75836081223391,
+       "sells_per_year": 29.55584475827234,
+       "tax_usd": 0.0,
+       "terminal_usd": 45655885.95503035,
+       "trades_per_year": 61.93549634058344
+      },
+      "progressive|A1u": {
+       "cagr_pct": 9.738506939401148,
+       "cagr_pre_liquidation_pct": 10.424233598375121,
+       "max_dd_pct": 47.187662880146206,
+       "sells_per_year": 10.918719719616533,
+       "tax_usd": 7333366.544595812,
+       "terminal_usd": 11801354.86874771,
+       "trades_per_year": 33.3585712813112
+      },
+      "progressive|H2": {
+       "cagr_pct": 9.35046416878016,
+       "cagr_pre_liquidation_pct": 10.000539027851495,
+       "max_dd_pct": 46.25423348271986,
+       "sells_per_year": 29.932352334810844,
+       "tax_usd": 6887442.355418054,
+       "terminal_usd": 10741667.482878452,
+       "trades_per_year": 61.10717967219874
+      },
+      "progressive|K": {
+       "cagr_pct": 9.87732626340767,
+       "cagr_pre_liquidation_pct": 10.570097899204779,
+       "max_dd_pct": 46.66979103386687,
+       "sells_per_year": 10.617513658385732,
+       "tax_usd": 7439936.499839087,
+       "terminal_usd": 12204337.239369985,
+       "trades_per_year": 32.7561591588496
+      },
+      "progressive|R2": {
+       "cagr_pct": 9.1949832870859,
+       "cagr_pre_liquidation_pct": 9.835872656495216,
+       "max_dd_pct": 46.75836081223391,
+       "sells_per_year": 30.835970518503245,
+       "tax_usd": 6793740.213310694,
+       "terminal_usd": 10343300.941031726,
+       "trades_per_year": 62.65086073600659
+      }
+     }
+    },
+    "range": [
+     "2000-03-09",
+     "2026-09-29"
+    ]
+   },
+   "2010_01_to_end": {
+    "cells": {
+     "100k": {
+      "flat|A1u": {
+       "cagr_pct": 16.70152386938042,
+       "cagr_pre_liquidation_pct": 17.360361389653868,
+       "max_dd_pct": 40.93255009884729,
+       "sells_per_year": 10.630232177894047,
+       "tax_usd": 475948.9686003146,
+       "terminal_usd": 1327932.5443804546,
+       "trades_per_year": 32.905943427076515
+      },
+      "flat|H2": {
+       "cagr_pct": 16.378657599944212,
+       "cagr_pre_liquidation_pct": 16.98928132010824,
+       "max_dd_pct": 40.956021959327,
+       "sells_per_year": 29.561600719424458,
+       "tax_usd": 457738.4904480177,
+       "terminal_usd": 1267736.723911245,
+       "trades_per_year": 60.0787279267495
+      },
+      "flat|K": {
+       "cagr_pct": 16.766248447735222,
+       "cagr_pre_liquidation_pct": 17.42494505284067,
+       "max_dd_pct": 41.094222933990345,
+       "sells_per_year": 10.451070961412688,
+       "tax_usd": 465442.8625054237,
+       "terminal_usd": 1340318.889760616,
+       "trades_per_year": 32.42818018312622
+      },
+      "flat|R2": {
+       "cagr_pct": 16.342699902699565,
+       "cagr_pre_liquidation_pct": 16.944354563249586,
+       "max_dd_pct": 40.736445323021144,
+       "sells_per_year": 30.576847612818835,
+       "tax_usd": 464780.3371975945,
+       "terminal_usd": 1261193.8459071899,
+       "trades_per_year": 61.63145846958796
+      },
+      "pre_tax|A1u": {
+       "cagr_pct": 22.346388083886026,
+       "cagr_pre_liquidation_pct": 22.352127741543804,
+       "max_dd_pct": 38.14285614385749,
+       "sells_per_year": 10.152468933943753,
+       "tax_usd": 0.0,
+       "terminal_usd": 2928782.841207156,
+       "trades_per_year": 32.36845977763244
+      },
+      "pre_tax|H2": {
+       "cagr_pct": 22.128434067875702,
+       "cagr_pre_liquidation_pct": 22.134163500618342,
+       "max_dd_pct": 38.38873294101497,
+       "sells_per_year": 28.904676258992804,
+       "tax_usd": 0.0,
+       "terminal_usd": 2842632.2708732584,
+       "trades_per_year": 59.839846304774355
+      },
+      "pre_tax|K": {
+       "cagr_pct": 22.34354130014655,
+       "cagr_pre_liquidation_pct": 22.34928082425265,
+       "max_dd_pct": 38.4619249940275,
+       "sells_per_year": 9.913587311968605,
+       "tax_usd": 0.0,
+       "terminal_usd": 2927641.939586116,
+       "trades_per_year": 31.95041693917593
+      },
+      "pre_tax|R2": {
+       "cagr_pct": 22.158696822489233,
+       "cagr_pre_liquidation_pct": 22.164427674953792,
+       "max_dd_pct": 37.956642684387134,
+       "sells_per_year": 29.919923152387177,
+       "tax_usd": 0.0,
+       "terminal_usd": 2854450.0806789882,
+       "trades_per_year": 61.332856442119024
+      },
+      "progressive|A1u": {
+       "cagr_pct": 15.102111183897948,
+       "cagr_pre_liquidation_pct": 16.194066548992936,
+       "max_dd_pct": 44.41356303268377,
+       "sells_per_year": 10.869113799869195,
+       "tax_usd": 562804.6119534692,
+       "terminal_usd": 1053952.5935920344,
+       "trades_per_year": 32.24901896664486
+      },
+      "progressive|H2": {
+       "cagr_pct": 14.839476836888288,
+       "cagr_pre_liquidation_pct": 15.872493646996233,
+       "max_dd_pct": 44.07218796090254,
+       "sells_per_year": 30.337965990843685,
+       "tax_usd": 551338.3338857206,
+       "terminal_usd": 1014399.2764041781,
+       "trades_per_year": 60.67593198168737
+      },
+      "progressive|K": {
+       "cagr_pct": 15.23535983083324,
+       "cagr_pre_liquidation_pct": 16.33958579077852,
+       "max_dd_pct": 44.62718259812316,
+       "sells_per_year": 10.630232177894047,
+       "tax_usd": 562872.8893469702,
+       "terminal_usd": 1074570.295464504,
+       "trades_per_year": 31.830976128188354
+      },
+      "progressive|R2": {
+       "cagr_pct": 14.70592236245627,
+       "cagr_pre_liquidation_pct": 15.723128383053432,
+       "max_dd_pct": 43.78391010303966,
+       "sells_per_year": 31.35321288423806,
+       "tax_usd": 553536.0615807374,
+       "terminal_usd": 994825.1735722306,
+       "trades_per_year": 62.16894211903204
+      }
+     },
+     "10k": {
+      "flat|A1u": {
+       "cagr_pct": 16.70152386938042,
+       "cagr_pre_liquidation_pct": 17.360361389653868,
+       "max_dd_pct": 40.932550098847265,
+       "sells_per_year": 10.630232177894047,
+       "tax_usd": 47594.896860031404,
+       "terminal_usd": 132793.25443804535,
+       "trades_per_year": 32.905943427076515
+      },
+      "flat|H2": {
+       "cagr_pct": 16.378657599944212,
+       "cagr_pre_liquidation_pct": 16.98928132010822,
+       "max_dd_pct": 40.956021959327046,
+       "sells_per_year": 29.561600719424458,
+       "tax_usd": 45773.849044801704,
+       "terminal_usd": 126773.6723911243,
+       "trades_per_year": 60.0787279267495
+      },
+      "flat|K": {
+       "cagr_pct": 16.7662484477352,
+       "cagr_pre_liquidation_pct": 17.42494505284067,
+       "max_dd_pct": 41.094222933990345,
+       "sells_per_year": 10.451070961412688,
+       "tax_usd": 46544.28625054228,
+       "terminal_usd": 134031.88897606137,
+       "trades_per_year": 32.42818018312622
+      },
+      "flat|R2": {
+       "cagr_pct": 16.342699902699543,
+       "cagr_pre_liquidation_pct": 16.944354563249586,
+       "max_dd_pct": 40.73644532302113,
+       "sells_per_year": 30.576847612818835,
+       "tax_usd": 46478.0337197594,
+       "terminal_usd": 126119.38459071885,
+       "trades_per_year": 61.63145846958796
+      },
+      "pre_tax|A1u": {
+       "cagr_pct": 22.346388083886026,
+       "cagr_pre_liquidation_pct": 22.352127741543804,
+       "max_dd_pct": 38.142856143857465,
+       "sells_per_year": 10.152468933943753,
+       "tax_usd": 0.0,
+       "terminal_usd": 292878.28412071563,
+       "trades_per_year": 32.36845977763244
+      },
+      "pre_tax|H2": {
+       "cagr_pct": 22.128434067875702,
+       "cagr_pre_liquidation_pct": 22.13416350061832,
+       "max_dd_pct": 38.388732941015036,
+       "sells_per_year": 28.904676258992804,
+       "tax_usd": 0.0,
+       "terminal_usd": 284263.2270873256,
+       "trades_per_year": 59.839846304774355
+      },
+      "pre_tax|K": {
+       "cagr_pct": 22.34354130014655,
+       "cagr_pre_liquidation_pct": 22.34928082425265,
+       "max_dd_pct": 38.4619249940275,
+       "sells_per_year": 9.913587311968605,
+       "tax_usd": 0.0,
+       "terminal_usd": 292764.1939586117,
+       "trades_per_year": 31.95041693917593
+      },
+      "pre_tax|R2": {
+       "cagr_pct": 22.158696822489233,
+       "cagr_pre_liquidation_pct": 22.164427674953792,
+       "max_dd_pct": 37.95664268438714,
+       "sells_per_year": 29.919923152387177,
+       "tax_usd": 0.0,
+       "terminal_usd": 285445.0080678987,
+       "trades_per_year": 61.332856442119024
+      },
+      "progressive|A1u": {
+       "cagr_pct": 17.357801869037594,
+       "cagr_pre_liquidation_pct": 18.23938753067429,
+       "max_dd_pct": 41.701517621973025,
+       "sells_per_year": 10.809393394375407,
+       "tax_usd": 52717.15976785091,
+       "terminal_usd": 145866.8843587039,
+       "trades_per_year": 32.36845977763244
+      },
+      "progressive|H2": {
+       "cagr_pct": 17.133709374501404,
+       "cagr_pre_liquidation_pct": 17.964658356521348,
+       "max_dd_pct": 41.34825829065905,
+       "sells_per_year": 30.2782455853499,
+       "tax_usd": 51363.580263120966,
+       "terminal_usd": 141272.4381231762,
+       "trades_per_year": 60.67593198168737
+      },
+      "progressive|K": {
+       "cagr_pct": 17.466965027465097,
+       "cagr_pre_liquidation_pct": 18.35848778985383,
+       "max_dd_pct": 41.958402453627144,
+       "sells_per_year": 10.57051177240026,
+       "tax_usd": 52596.58079062229,
+       "terminal_usd": 148155.54375325216,
+       "trades_per_year": 31.95041693917593
+      },
+      "progressive|R2": {
+       "cagr_pct": 17.029046097700153,
+       "cagr_pre_liquidation_pct": 17.845993075728984,
+       "max_dd_pct": 40.99705833202925,
+       "sells_per_year": 31.35321288423806,
+       "tax_usd": 51766.55690470795,
+       "terminal_usd": 139173.52303468878,
+       "trades_per_year": 62.16894211903204
+      }
+     },
+     "1M": {
+      "flat|A1u": {
+       "cagr_pct": 16.70152386938042,
+       "cagr_pre_liquidation_pct": 17.360361389653868,
+       "max_dd_pct": 40.932550098847265,
+       "sells_per_year": 10.630232177894047,
+       "tax_usd": 4759489.686003147,
+       "terminal_usd": 13279325.44380455,
+       "trades_per_year": 32.905943427076515
+      },
+      "flat|H2": {
+       "cagr_pct": 16.378657599944212,
+       "cagr_pre_liquidation_pct": 16.98928132010822,
+       "max_dd_pct": 40.95602195932708,
+       "sells_per_year": 29.561600719424458,
+       "tax_usd": 4577384.90448017,
+       "terminal_usd": 12677367.239112427,
+       "trades_per_year": 60.0787279267495
+      },
+      "flat|K": {
+       "cagr_pct": 16.766248447735222,
+       "cagr_pre_liquidation_pct": 17.42494505284067,
+       "max_dd_pct": 41.094222933990345,
+       "sells_per_year": 10.451070961412688,
+       "tax_usd": 4654428.625054236,
+       "terminal_usd": 13403188.897606153,
+       "trades_per_year": 32.42818018312622
+      },
+      "flat|R2": {
+       "cagr_pct": 16.342699902699565,
+       "cagr_pre_liquidation_pct": 16.944354563249586,
+       "max_dd_pct": 40.73644532302115,
+       "sells_per_year": 30.576847612818835,
+       "tax_usd": 4647803.371975945,
+       "terminal_usd": 12611938.459071906,
+       "trades_per_year": 61.63145846958796
+      },
+      "pre_tax|A1u": {
+       "cagr_pct": 22.346388083886026,
+       "cagr_pre_liquidation_pct": 22.352127741543804,
+       "max_dd_pct": 38.14285614385751,
+       "sells_per_year": 10.152468933943753,
+       "tax_usd": 0.0,
+       "terminal_usd": 29287828.41207159,
+       "trades_per_year": 32.36845977763244
+      },
+      "pre_tax|H2": {
+       "cagr_pct": 22.128434067875723,
+       "cagr_pre_liquidation_pct": 22.134163500618342,
+       "max_dd_pct": 38.388732941015014,
+       "sells_per_year": 28.904676258992804,
+       "tax_usd": 0.0,
+       "terminal_usd": 28426322.708732612,
+       "trades_per_year": 59.839846304774355
+      },
+      "pre_tax|K": {
+       "cagr_pct": 22.34354130014653,
+       "cagr_pre_liquidation_pct": 22.34928082425265,
+       "max_dd_pct": 38.461924994027505,
+       "sells_per_year": 9.913587311968605,
+       "tax_usd": 0.0,
+       "terminal_usd": 29276419.395861153,
+       "trades_per_year": 31.95041693917593
+      },
+      "pre_tax|R2": {
+       "cagr_pct": 22.158696822489233,
+       "cagr_pre_liquidation_pct": 22.164427674953792,
+       "max_dd_pct": 37.956642684387134,
+       "sells_per_year": 29.919923152387177,
+       "tax_usd": 0.0,
+       "terminal_usd": 28544500.806789882,
+       "trades_per_year": 61.332856442119024
+      },
+      "progressive|A1u": {
+       "cagr_pct": 14.02783332520543,
+       "cagr_pre_liquidation_pct": 15.158578028757464,
+       "max_dd_pct": 45.99329767070463,
+       "sells_per_year": 10.869113799869195,
+       "tax_usd": 5401797.21232264,
+       "terminal_usd": 9008027.24658328,
+       "trades_per_year": 32.18929856115108
+      },
+      "progressive|H2": {
+       "cagr_pct": 13.763980407303912,
+       "cagr_pre_liquidation_pct": 14.83731629627625,
+       "max_dd_pct": 45.63482580514871,
+       "sells_per_year": 30.457406801831258,
+       "tax_usd": 5320528.320534166,
+       "terminal_usd": 8665287.250662312,
+       "trades_per_year": 60.67593198168737
+      },
+      "progressive|K": {
+       "cagr_pct": 14.164991202023703,
+       "cagr_pre_liquidation_pct": 15.307274273521676,
+       "max_dd_pct": 46.19190137296167,
+       "sells_per_year": 10.630232177894047,
+       "tax_usd": 5403005.264839525,
+       "terminal_usd": 9191188.703212187,
+       "trades_per_year": 31.77125572269457
+      },
+      "progressive|R2": {
+       "cagr_pct": 13.623696610927482,
+       "cagr_pre_liquidation_pct": 14.682096786346088,
+       "max_dd_pct": 45.366796489296654,
+       "sells_per_year": 31.472653695225635,
+       "tax_usd": 5338306.898169293,
+       "terminal_usd": 8488091.977249503,
+       "trades_per_year": 62.16894211903204
+      }
+     }
+    },
+    "range": [
+     "2010-01-04",
+     "2026-09-29"
+    ]
+   },
+   "2017_01_to_end": {
+    "cells": {
+     "100k": {
+      "flat|A1u": {
+       "cagr_pct": 24.950807606531168,
+       "cagr_pre_liquidation_pct": 26.165138818760635,
+       "max_dd_pct": 36.933235981852484,
+       "sells_per_year": 9.74683988764045,
+       "tax_usd": 292118.07843212073,
+       "terminal_usd": 876781.5252410602,
+       "trades_per_year": 34.47303370786517
+      },
+      "flat|H2": {
+       "cagr_pct": 24.38138127236005,
+       "cagr_pre_liquidation_pct": 25.504666462621216,
+       "max_dd_pct": 36.323741822679864,
+       "sells_per_year": 34.16523876404494,
+       "tax_usd": 280732.11746114196,
+       "terminal_usd": 838603.8303436369,
+       "trades_per_year": 68.94606741573034
+      },
+      "flat|K": {
+       "cagr_pct": 25.104709606686605,
+       "cagr_pre_liquidation_pct": 26.319600780025752,
+       "max_dd_pct": 36.847689524575514,
+       "sells_per_year": 9.644241573033709,
+       "tax_usd": 286085.1545308349,
+       "terminal_usd": 887364.235527401,
+       "trades_per_year": 33.96004213483146
+      },
+      "flat|R2": {
+       "cagr_pct": 24.265108450160522,
+       "cagr_pre_liquidation_pct": 25.37117166195546,
+       "max_dd_pct": 36.72145967571841,
+       "sells_per_year": 35.19122191011236,
+       "tax_usd": 284085.61469517474,
+       "terminal_usd": 830994.1818156419,
+       "trades_per_year": 70.5876404494382
+      },
+      "pre_tax|A1u": {
+       "cagr_pct": 32.95984118132482,
+       "cagr_pre_liquidation_pct": 32.97055736422712,
+       "max_dd_pct": 31.309170297204602,
+       "sells_per_year": 9.13125,
+       "tax_usd": 0.0,
+       "terminal_usd": 1606469.6130072402,
+       "trades_per_year": 34.16523876404494
+      },
+      "pre_tax|H2": {
+       "cagr_pct": 32.56801015992137,
+       "cagr_pre_liquidation_pct": 32.57869476236408,
+       "max_dd_pct": 30.786263226571144,
+       "sells_per_year": 33.344452247191015,
+       "tax_usd": 0.0,
+       "terminal_usd": 1560916.3113092533,
+       "trades_per_year": 68.63827247191011
+      },
+      "pre_tax|K": {
+       "cagr_pct": 33.021481112368136,
+       "cagr_pre_liquidation_pct": 33.032202263272566,
+       "max_dd_pct": 31.117247496906643,
+       "sells_per_year": 9.028651685393259,
+       "tax_usd": 0.0,
+       "terminal_usd": 1613743.3004197094,
+       "trades_per_year": 33.75484550561798
+      },
+      "pre_tax|R2": {
+       "cagr_pct": 32.532983299301655,
+       "cagr_pre_liquidation_pct": 32.54366507867958,
+       "max_dd_pct": 31.1340212149683,
+       "sells_per_year": 34.26783707865169,
+       "tax_usd": 0.0,
+       "terminal_usd": 1556901.1769429336,
+       "trades_per_year": 70.17724719101123
+      },
+      "progressive|A1u": {
+       "cagr_pct": 23.70131695284472,
+       "cagr_pre_liquidation_pct": 25.69055202351671,
+       "max_dd_pct": 35.82276854546902,
+       "sells_per_year": 9.644241573033709,
+       "tax_usd": 370230.6649274576,
+       "terminal_usd": 794967.4092181455,
+       "trades_per_year": 33.75484550561798
+      },
+      "progressive|H2": {
+       "cagr_pct": 23.160853163380214,
+       "cagr_pre_liquidation_pct": 25.03497614186678,
+       "max_dd_pct": 34.86301699787803,
+       "sells_per_year": 34.67823033707865,
+       "tax_usd": 360065.0932794927,
+       "terminal_usd": 761753.6962193303,
+       "trades_per_year": 69.3564606741573
+      },
+      "progressive|K": {
+       "cagr_pct": 23.971974297500708,
+       "cagr_pre_liquidation_pct": 25.98682130318648,
+       "max_dd_pct": 34.97743378542989,
+       "sells_per_year": 9.541643258426966,
+       "tax_usd": 371486.9639002972,
+       "terminal_usd": 812083.8672154722,
+       "trades_per_year": 33.344452247191015
+      },
+      "progressive|R2": {
+       "cagr_pct": 22.88605715773928,
+       "cagr_pre_liquidation_pct": 24.727994531420517,
+       "max_dd_pct": 36.24259636507027,
+       "sells_per_year": 35.601615168539325,
+       "tax_usd": 360296.618407541,
+       "terminal_usd": 745348.6280374103,
+       "trades_per_year": 70.89543539325842
+      }
+     },
+     "10k": {
+      "flat|A1u": {
+       "cagr_pct": 24.950807606531168,
+       "cagr_pre_liquidation_pct": 26.165138818760635,
+       "max_dd_pct": 36.9332359818525,
+       "sells_per_year": 9.74683988764045,
+       "tax_usd": 29211.807843212082,
+       "terminal_usd": 87678.15252410603,
+       "trades_per_year": 34.47303370786517
+      },
+      "flat|H2": {
+       "cagr_pct": 24.38138127236005,
+       "cagr_pre_liquidation_pct": 25.504666462621216,
+       "max_dd_pct": 36.32374182267989,
+       "sells_per_year": 34.16523876404494,
+       "tax_usd": 28073.211746114175,
+       "terminal_usd": 83860.3830343636,
+       "trades_per_year": 68.94606741573034
+      },
+      "flat|K": {
+       "cagr_pct": 25.104709606686583,
+       "cagr_pre_liquidation_pct": 26.31960078002573,
+       "max_dd_pct": 36.847689524575536,
+       "sells_per_year": 9.644241573033709,
+       "tax_usd": 28608.51545308348,
+       "terminal_usd": 88736.42355274005,
+       "trades_per_year": 33.96004213483146
+      },
+      "flat|R2": {
+       "cagr_pct": 24.265108450160522,
+       "cagr_pre_liquidation_pct": 25.37117166195546,
+       "max_dd_pct": 36.72145967571839,
+       "sells_per_year": 35.19122191011236,
+       "tax_usd": 28408.561469517474,
+       "terminal_usd": 83099.41818156416,
+       "trades_per_year": 70.5876404494382
+      },
+      "pre_tax|A1u": {
+       "cagr_pct": 32.95984118132482,
+       "cagr_pre_liquidation_pct": 32.97055736422712,
+       "max_dd_pct": 31.309170297204624,
+       "sells_per_year": 9.13125,
+       "tax_usd": 0.0,
+       "terminal_usd": 160646.96130072407,
+       "trades_per_year": 34.16523876404494
+      },
+      "pre_tax|H2": {
+       "cagr_pct": 32.56801015992137,
+       "cagr_pre_liquidation_pct": 32.57869476236408,
+       "max_dd_pct": 30.786263226571165,
+       "sells_per_year": 33.344452247191015,
+       "tax_usd": 0.0,
+       "terminal_usd": 156091.63113092526,
+       "trades_per_year": 68.63827247191011
+      },
+      "pre_tax|K": {
+       "cagr_pct": 33.021481112368136,
+       "cagr_pre_liquidation_pct": 33.032202263272566,
+       "max_dd_pct": 31.117247496906618,
+       "sells_per_year": 9.028651685393259,
+       "tax_usd": 0.0,
+       "terminal_usd": 161374.3300419711,
+       "trades_per_year": 33.75484550561798
+      },
+      "pre_tax|R2": {
+       "cagr_pct": 32.532983299301655,
+       "cagr_pre_liquidation_pct": 32.54366507867958,
+       "max_dd_pct": 31.13402121496829,
+       "sells_per_year": 34.26783707865169,
+       "tax_usd": 0.0,
+       "terminal_usd": 155690.11769429335,
+       "trades_per_year": 70.17724719101123
+      },
+      "progressive|A1u": {
+       "cagr_pct": 26.67366099042745,
+       "cagr_pre_liquidation_pct": 28.20772444930839,
+       "max_dd_pct": 34.20859563398885,
+       "sells_per_year": 9.644241573033709,
+       "tax_usd": 30153.824793788986,
+       "terminal_usd": 100197.70827946468,
+       "trades_per_year": 33.96004213483146
+      },
+      "progressive|H2": {
+       "cagr_pct": 26.263182964070108,
+       "cagr_pre_liquidation_pct": 27.69718892902473,
+       "max_dd_pct": 33.37478032751905,
+       "sells_per_year": 34.57563202247191,
+       "tax_usd": 29112.582269825274,
+       "terminal_usd": 97077.56590694135,
+       "trades_per_year": 69.15126404494382
+      },
+      "progressive|K": {
+       "cagr_pct": 26.915737807197317,
+       "cagr_pre_liquidation_pct": 28.470212816688402,
+       "max_dd_pct": 33.57202886339509,
+       "sells_per_year": 9.439044943820225,
+       "tax_usd": 30046.67374052767,
+       "terminal_usd": 102079.69628705454,
+       "trades_per_year": 33.344452247191015
+      },
+      "progressive|R2": {
+       "cagr_pct": 26.037610504729123,
+       "cagr_pre_liquidation_pct": 27.44268962261083,
+       "max_dd_pct": 34.520962819602275,
+       "sells_per_year": 35.601615168539325,
+       "tax_usd": 29255.406798178978,
+       "terminal_usd": 95400.31826320496,
+       "trades_per_year": 70.89543539325842
+      }
+     },
+     "1M": {
+      "flat|A1u": {
+       "cagr_pct": 24.950807606531168,
+       "cagr_pre_liquidation_pct": 26.165138818760635,
+       "max_dd_pct": 36.9332359818525,
+       "sells_per_year": 9.74683988764045,
+       "tax_usd": 2921180.7843212076,
+       "terminal_usd": 8767815.2524106,
+       "trades_per_year": 34.47303370786517
+      },
+      "flat|H2": {
+       "cagr_pct": 24.381381272360024,
+       "cagr_pre_liquidation_pct": 25.504666462621195,
+       "max_dd_pct": 36.323741822679864,
+       "sells_per_year": 34.16523876404494,
+       "tax_usd": 2807321.174611417,
+       "terminal_usd": 8386038.303436356,
+       "trades_per_year": 68.94606741573034
+      },
+      "flat|K": {
+       "cagr_pct": 25.104709606686605,
+       "cagr_pre_liquidation_pct": 26.319600780025752,
+       "max_dd_pct": 36.847689524575514,
+       "sells_per_year": 9.644241573033709,
+       "tax_usd": 2860851.5453083487,
+       "terminal_usd": 8873642.355274012,
+       "trades_per_year": 33.96004213483146
+      },
+      "flat|R2": {
+       "cagr_pct": 24.265108450160522,
+       "cagr_pre_liquidation_pct": 25.37117166195546,
+       "max_dd_pct": 36.72145967571837,
+       "sells_per_year": 35.19122191011236,
+       "tax_usd": 2840856.1469517476,
+       "terminal_usd": 8309941.818156417,
+       "trades_per_year": 70.5876404494382
+      },
+      "pre_tax|A1u": {
+       "cagr_pct": 32.95984118132482,
+       "cagr_pre_liquidation_pct": 32.97055736422712,
+       "max_dd_pct": 31.30917029720467,
+       "sells_per_year": 9.13125,
+       "tax_usd": 0.0,
+       "terminal_usd": 16064696.130072387,
+       "trades_per_year": 34.16523876404494
+      },
+      "pre_tax|H2": {
+       "cagr_pct": 32.56801015992137,
+       "cagr_pre_liquidation_pct": 32.57869476236408,
+       "max_dd_pct": 30.786263226571155,
+       "sells_per_year": 33.344452247191015,
+       "tax_usd": 0.0,
+       "terminal_usd": 15609163.113092529,
+       "trades_per_year": 68.63827247191011
+      },
+      "pre_tax|K": {
+       "cagr_pct": 33.021481112368136,
+       "cagr_pre_liquidation_pct": 33.032202263272566,
+       "max_dd_pct": 31.117247496906618,
+       "sells_per_year": 9.028651685393259,
+       "tax_usd": 0.0,
+       "terminal_usd": 16137433.004197117,
+       "trades_per_year": 33.75484550561798
+      },
+      "pre_tax|R2": {
+       "cagr_pct": 32.532983299301655,
+       "cagr_pre_liquidation_pct": 32.54366507867958,
+       "max_dd_pct": 31.1340212149683,
+       "sells_per_year": 34.26783707865169,
+       "tax_usd": 0.0,
+       "terminal_usd": 15569011.769429337,
+       "trades_per_year": 70.17724719101123
+      },
+      "progressive|A1u": {
+       "cagr_pct": 22.581212915667837,
+       "cagr_pre_liquidation_pct": 24.674115570581744,
+       "max_dd_pct": 36.311169051768466,
+       "sells_per_year": 9.644241573033709,
+       "tax_usd": 3823748.358661758,
+       "terminal_usd": 7275212.460663673,
+       "trades_per_year": 33.75484550561798
+      },
+      "progressive|H2": {
+       "cagr_pct": 22.00680368879837,
+       "cagr_pre_liquidation_pct": 23.988042995737977,
+       "max_dd_pct": 35.36993015680805,
+       "sells_per_year": 34.7808286516854,
+       "tax_usd": 3740497.2657907866,
+       "terminal_usd": 6949661.200401908,
+       "trades_per_year": 69.3564606741573
+      },
+      "progressive|K": {
+       "cagr_pct": 22.858107685414076,
+       "cagr_pre_liquidation_pct": 24.97476196121513,
+       "max_dd_pct": 35.46580445322625,
+       "sells_per_year": 9.541643258426966,
+       "tax_usd": 3835704.511790178,
+       "terminal_usd": 7436979.655436498,
+       "trades_per_year": 33.344452247191015
+      },
+      "progressive|R2": {
+       "cagr_pct": 21.72461804570174,
+       "cagr_pre_liquidation_pct": 23.675968653591383,
+       "max_dd_pct": 36.74800108305752,
+       "sells_per_year": 35.70421348314607,
+       "tax_usd": 3742184.443734398,
+       "terminal_usd": 6794570.628373715,
+       "trades_per_year": 70.89543539325842
+      }
+     }
+    },
+    "range": [
+     "2017-01-03",
+     "2026-09-29"
+    ]
+   }
+  }
+ },
+ "B_split": {
+  "scale_invariance": {
+   "2000_03_to_2026_09": {
+    "max_rel_diff_2x50k_vs_100k": 0.0,
+    "ok": true
+   },
+   "2010_01_to_end": {
+    "max_rel_diff_2x50k_vs_100k": 0.0,
+    "ok": true
+   },
+   "2017_01_to_end": {
+    "max_rel_diff_2x50k_vs_100k": 0.0,
+    "ok": true
+   }
+  },
+  "splits": {
+   "2000_03_to_2026_09": {
+    "aggregate_one_taxpayer": {
+     "accounts": 1,
+     "cagr_pct": 10.75330571258888,
+     "cagr_pre_liquidation_pct": 11.430700764876466,
+     "capital_per_account": 100000.0,
+     "delta_vs_K_100k_pp": 0.0,
+     "household_tax_usd_aggregate": 830902.6614114628,
+     "max_dd_pct": 46.669791033866915,
+     "sells_per_year": 10.655164416039582,
+     "tax_usd": 830902.6614114628,
+     "terminal_usd": 1506985.360426084,
+     "trades_per_year": 32.94441294711885
+    },
+    "ladder_per_year": {
+     "2003": {
+      "assessed_100k_try": 3799.496765897938,
+      "assessed_2x50k_try": 3094.9073579122205,
+      "ratio": 1.227660904351277
+     },
+     "2006": {
+      "assessed_100k_try": 4234.121183413616,
+      "assessed_2x50k_try": 3388.9620512190545,
+      "ratio": 1.2493858353741514
+     },
+     "2007": {
+      "assessed_100k_try": 5474.558905017454,
+      "assessed_2x50k_try": 4424.002242077767,
+      "ratio": 1.2374674797737637
+     },
+     "2009": {
+      "assessed_100k_try": 3003.284933748031,
+      "assessed_2x50k_try": 2589.7243880810092,
+      "ratio": 1.1596928798950188
+     },
+     "2010": {
+      "assessed_100k_try": 5056.258525419431,
+      "assessed_2x50k_try": 4130.935783481454,
+      "ratio": 1.2239983360763205
+     },
+     "2011": {
+      "assessed_100k_try": 10962.011473386337,
+      "assessed_2x50k_try": 9266.891737249043,
+      "ratio": 1.182922147382344
+     },
+     "2012": {
+      "assessed_100k_try": 3268.8698193503883,
+      "assessed_2x50k_try": 2819.6433136863657,
+      "ratio": 1.159320330867208
+     },
+     "2013": {
+      "assessed_100k_try": 2.6399146981280865,
+      "assessed_2x50k_try": 2.026058172948228,
+      "ratio": 1.302980700838714
+     },
+     "2014": {
+      "assessed_100k_try": 96688.02410235684,
+      "assessed_2x50k_try": 92877.87987151416,
+      "ratio": 1.0410231611241942
+     },
+     "2015": {
+      "assessed_100k_try": 52639.42192558107,
+      "assessed_2x50k_try": 48333.914672994026,
+      "ratio": 1.0890783889886886
+     },
+     "2018": {
+      "assessed_100k_try": 381751.5454021342,
+      "assessed_2x50k_try": 380884.5998304349,
+      "ratio": 1.0022761371084188
+     },
+     "2019": {
+      "assessed_100k_try": 106939.07352220919,
+      "assessed_2x50k_try": 101824.53965515053,
+      "ratio": 1.0502288926066357
+     },
+     "2020": {
+      "assessed_100k_try": 837755.6142063314,
+      "assessed_2x50k_try": 865142.1986017703,
+      "ratio": 0.9683444126992063
+     },
+     "2021": {
+      "assessed_100k_try": 646240.3662816159,
+      "assessed_2x50k_try": 657432.060582751,
+      "ratio": 0.9829766526883179
+     },
+     "2023": {
+      "assessed_100k_try": 708197.1235192968,
+      "assessed_2x50k_try": 722973.3288221199,
+      "ratio": 0.979561894313727
+     },
+     "2024": {
+      "assessed_100k_try": 4742613.215689239,
+      "assessed_2x50k_try": 4936927.829060496,
+      "ratio": 0.960640580519032
+     },
+     "2025": {
+      "assessed_100k_try": 5591451.703244917,
+      "assessed_2x50k_try": 5804096.287369315,
+      "ratio": 0.9633630157743682
+     },
+     "2026": {
+      "assessed_100k_try": 12890693.373864397,
+      "assessed_2x50k_try": 13760013.796819547,
+      "ratio": 0.9368227070269303
+     }
+    },
+    "ladder_ratio_mean": 1.0954302476337956,
+    "tax_total_try_100k": 26090770.70327901,
+    "tax_total_try_2x50k": 27400223.52821797,
+    "three_33333k": {
+     "accounts": 3,
+     "cagr_pct": 11.443306398505548,
+     "cagr_pre_liquidation_pct": 12.088177010771295,
+     "capital_per_account": 33333.333333333336,
+     "delta_vs_K_100k_pp": 0.6900006859166687,
+     "household_cagr_pct": 11.443306398505548,
+     "household_tax_usd_separate": 861865.4387912146,
+     "household_terminal_usd": 1777251.073380155,
+     "max_dd_pct": 46.669791033866915,
+     "sells_per_year": 10.617513658385732,
+     "tax_usd": 287288.47959707153,
+     "terminal_usd": 592417.0244600517,
+     "trades_per_year": 32.94441294711885
+    },
+    "two_50k": {
+     "accounts": 2,
+     "cagr_pct": 11.156567170858644,
+     "cagr_pre_liquidation_pct": 11.8170904254556,
+     "capital_per_account": 50000.0,
+     "delta_vs_K_100k_pp": 0.403261458269764,
+     "household_cagr_pct": 11.156567170858644,
+     "household_tax_usd_separate": 854846.740296691,
+     "household_terminal_usd": 1659708.8810545048,
+     "max_dd_pct": 46.669791033866915,
+     "sells_per_year": 10.617513658385732,
+     "tax_usd": 427423.3701483455,
+     "terminal_usd": 829854.4405272524,
+     "trades_per_year": 32.94441294711885
+    }
+   },
+   "2010_01_to_end": {
+    "aggregate_one_taxpayer": {
+     "accounts": 1,
+     "cagr_pct": 15.23535983083324,
+     "cagr_pre_liquidation_pct": 16.33958579077852,
+     "capital_per_account": 100000.0,
+     "delta_vs_K_100k_pp": 0.0,
+     "household_tax_usd_aggregate": 562872.8893469702,
+     "max_dd_pct": 44.62718259812316,
+     "sells_per_year": 10.630232177894047,
+     "tax_usd": 562872.8893469702,
+     "terminal_usd": 1074570.295464504,
+     "trades_per_year": 31.830976128188354
+    },
+    "ladder_per_year": {
+     "2011": {
+      "assessed_100k_try": 6415.284278102211,
+      "assessed_2x50k_try": 5081.68684417518,
+      "ratio": 1.2624320377899023
+     },
+     "2012": {
+      "assessed_100k_try": 2026.6135850603923,
+      "assessed_2x50k_try": 1793.6517060470082,
+      "ratio": 1.1298813355056563
+     },
+     "2013": {
+      "assessed_100k_try": 1.5335048767361683,
+      "assessed_2x50k_try": 1.233850919942256,
+      "ratio": 1.2428607475593048
+     },
+     "2014": {
+      "assessed_100k_try": 63728.563286992896,
+      "assessed_2x50k_try": 58916.405097362614,
+      "ratio": 1.081677729346825
+     },
+     "2015": {
+      "assessed_100k_try": 34328.26501761947,
+      "assessed_2x50k_try": 28358.413931845575,
+      "ratio": 1.2105142798226085
+     },
+     "2018": {
+      "assessed_100k_try": 259582.73648565047,
+      "assessed_2x50k_try": 245218.98546920912,
+      "ratio": 1.0585751995872479
+     },
+     "2019": {
+      "assessed_100k_try": 71160.51143013268,
+      "assessed_2x50k_try": 62093.88933875221,
+      "ratio": 1.1460147236375815
+     },
+     "2020": {
+      "assessed_100k_try": 579005.2274257767,
+      "assessed_2x50k_try": 577812.2070837549,
+      "ratio": 1.0020647198646822
+     },
+     "2021": {
+      "assessed_100k_try": 443469.6726114976,
+      "assessed_2x50k_try": 432264.85715335165,
+      "ratio": 1.02592118066672
+     },
+     "2023": {
+      "assessed_100k_try": 486788.2034827587,
+      "assessed_2x50k_try": 477109.26237578836,
+      "ratio": 1.0202866342581018
+     },
+     "2024": {
+      "assessed_100k_try": 3290343.9588962966,
+      "assessed_2x50k_try": 3324251.9486525175,
+      "ratio": 0.9897998135279832
+     },
+     "2025": {
+      "assessed_100k_try": 3874001.5311439224,
+      "assessed_2x50k_try": 3896949.623350452,
+      "ratio": 0.9941112679340207
+     },
+     "2026": {
+      "assessed_100k_try": 9052275.563707793,
+      "assessed_2x50k_try": 9497773.720001588,
+      "ratio": 0.9530944651423302
+     }
+    },
+    "ladder_ratio_mean": 1.085941087280228,
+    "tax_total_try_100k": 18163127.66485648,
+    "tax_total_try_2x50k": 18607625.884855762,
+    "three_33333k": {
+     "accounts": 3,
+     "cagr_pct": 16.294420287038424,
+     "cagr_pre_liquidation_pct": 17.321666326318464,
+     "capital_per_account": 33333.333333333336,
+     "delta_vs_K_100k_pp": 1.0590604562051844,
+     "household_cagr_pct": 16.294420287038424,
+     "household_tax_usd_separate": 555786.7985050406,
+     "household_terminal_usd": 1252458.792520976,
+     "max_dd_pct": 43.38836970367949,
+     "sells_per_year": 10.57051177240026,
+     "tax_usd": 185262.26616834686,
+     "terminal_usd": 417486.2641736586,
+     "trades_per_year": 31.830976128188354
+    },
+    "two_50k": {
+     "accounts": 2,
+     "cagr_pct": 15.878506252622238,
+     "cagr_pre_liquidation_pct": 16.943437443080956,
+     "capital_per_account": 50000.0,
+     "delta_vs_K_100k_pp": 0.6431464217889982,
+     "household_cagr_pct": 15.878506252622238,
+     "household_tax_usd_separate": 563570.6980998652,
+     "household_terminal_usd": 1179529.6686513666,
+     "max_dd_pct": 43.90929428633012,
+     "sells_per_year": 10.57051177240026,
+     "tax_usd": 281785.3490499326,
+     "terminal_usd": 589764.8343256833,
+     "trades_per_year": 31.830976128188354
+    }
+   },
+   "2017_01_to_end": {
+    "aggregate_one_taxpayer": {
+     "accounts": 1,
+     "cagr_pct": 23.971974297500708,
+     "cagr_pre_liquidation_pct": 25.98682130318648,
+     "capital_per_account": 100000.0,
+     "delta_vs_K_100k_pp": 0.0,
+     "household_tax_usd_aggregate": 371486.9639002972,
+     "max_dd_pct": 34.97743378542989,
+     "sells_per_year": 9.541643258426966,
+     "tax_usd": 371486.9639002972,
+     "terminal_usd": 812083.8672154722,
+     "trades_per_year": 33.344452247191015
+    },
+    "ladder_per_year": {
+     "2018": {
+      "assessed_100k_try": 127484.78875302839,
+      "assessed_2x50k_try": 118030.8893726425,
+      "ratio": 1.080096824065592
+     },
+     "2019": {
+      "assessed_100k_try": 44361.58244595936,
+      "assessed_2x50k_try": 35388.4649013535,
+      "ratio": 1.2535605194974893
+     },
+     "2020": {
+      "assessed_100k_try": 421864.4797973939,
+      "assessed_2x50k_try": 390954.26086639,
+      "ratio": 1.0790635172066012
+     },
+     "2021": {
+      "assessed_100k_try": 320379.6762196884,
+      "assessed_2x50k_try": 299091.8484788655,
+      "ratio": 1.0711748844011946
+     },
+     "2023": {
+      "assessed_100k_try": 352387.6210052958,
+      "assessed_2x50k_try": 315898.8844713874,
+      "ratio": 1.1155076460461935
+     },
+     "2024": {
+      "assessed_100k_try": 2408781.3100433364,
+      "assessed_2x50k_try": 2266838.0212104875,
+      "ratio": 1.0626173054733974
+     },
+     "2025": {
+      "assessed_100k_try": 2831467.6374403555,
+      "assessed_2x50k_try": 2657664.906615886,
+      "ratio": 1.065396781359385
+     },
+     "2026": {
+      "assessed_100k_try": 6722262.891265407,
+      "assessed_2x50k_try": 6701993.244338658,
+      "ratio": 1.0030244206742334
+     }
+    },
+    "ladder_ratio_mean": 1.0913052373405105,
+    "tax_total_try_100k": 13228989.986970466,
+    "tax_total_try_2x50k": 12785860.52025567,
+    "three_33333k": {
+     "accounts": 3,
+     "cagr_pct": 25.225869685596724,
+     "cagr_pre_liquidation_pct": 27.030480184660654,
+     "capital_per_account": 33333.333333333336,
+     "delta_vs_K_100k_pp": 1.2538953880960158,
+     "household_cagr_pct": 25.225869685596724,
+     "household_tax_usd_separate": 343300.00706479,
+     "household_terminal_usd": 895776.0121531335,
+     "max_dd_pct": 34.46384482033149,
+     "sells_per_year": 9.541643258426966,
+     "tax_usd": 114433.33568826334,
+     "terminal_usd": 298592.0040510445,
+     "trades_per_year": 33.44705056179775
+    },
+    "two_50k": {
+     "accounts": 2,
+     "cagr_pct": 24.768563700372525,
+     "cagr_pre_liquidation_pct": 26.676575870962218,
+     "capital_per_account": 50000.0,
+     "delta_vs_K_100k_pp": 0.7965894028718168,
+     "household_cagr_pct": 24.768563700372525,
+     "household_tax_usd_separate": 354482.9133447397,
+     "household_terminal_usd": 864396.5116137066,
+     "max_dd_pct": 34.6213142447598,
+     "sells_per_year": 9.541643258426966,
+     "tax_usd": 177241.45667236985,
+     "terminal_usd": 432198.2558068533,
+     "trades_per_year": 33.344452247191015
+    }
+   }
+  }
+ },
+ "arm": "IB38",
+ "kind": "report-only (not a trial, outside the gates)",
+ "registered": false,
+ "study": "closeout_v1"
+}

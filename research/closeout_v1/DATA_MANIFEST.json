@@ -49,11 +49,12 @@
       ],
       "bars": 560,
       "bytes": 53740,
-      "sha256": "e74e59b08e27c2627409632227a052d882f3d0a7c208760c41f21627ee119b34",
+      "sha256": "cf162f5f3245d7d0d40b6759341973501abd60ca8a00ad8d4e8ffc0ef6cd7745",
       "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=1787047116&period2=1792231116&interval=30m",
       "fetched": "2026-10-17",
       "purpose": "IC54/A-B closure: the same API refuses a 5-year 30-minute range with \"30m data not available ... The requested range must be within the last 60 days.\" (see research/closeout_v1/ic54_closure.py --fetch). The 60-day sample is kept so the refusal and the served range are on the record.",
-      "fetch_command": "PYTHONPATH=. ~/.venvs/pb-research/bin/python -m research.closeout_v1.ic54_closure --fetch"
+      "fetch_command": "PYTHONPATH=. ~/.venvs/pb-research/bin/python -m research.closeout_v1.ic54_closure --fetch",
+      "rows": 560
     }
   ],
   "not_downloaded": {

@@ -1,0 +1,62 @@
+wrote /Users/batuhankiskac/Desktop/ParayaBuck-wt/closeout_v1/research/closeout_v1/ib38_report.json
+
+IB38/A -- 2000_03_to_2026_09 (2000-03-09 -> 2026-09-29), CAGR % liquidated, m = 2
+  mode           cap       R2      A1u       H2        K   |  max DD % (same mode)
+  pre_tax       100k    15.48    15.72    15.52    15.76   |    46.76    47.19    46.25    46.67
+  pre_tax        10k    15.48    15.72    15.52    15.76   |    46.76    47.19    46.25    46.67
+  pre_tax         1M    15.48    15.72    15.52    15.76   |    46.76    47.19    46.25    46.67
+  progressive   100k    10.16    10.61    10.30    10.75   |    46.76    47.19    46.25    46.67
+  progressive    10k    11.69    12.06    11.80    12.18   |    46.76    47.19    46.25    46.67
+  progressive     1M     9.19     9.74     9.35     9.88   |    46.76    47.19    46.25    46.67
+  flat          100k    11.72    12.04    11.79    12.13   |    46.76    47.19    46.25    46.67
+  flat           10k    11.72    12.04    11.79    12.13   |    46.76    47.19    46.25    46.67
+  flat            1M    11.72    12.04    11.79    12.13   |    46.76    47.19    46.25    46.67
+
+IB38/A -- 2010_01_to_end (2010-01-04 -> 2026-09-29), CAGR % liquidated, m = 2
+  mode           cap       R2      A1u       H2        K   |  max DD % (same mode)
+  pre_tax       100k    22.16    22.35    22.13    22.35   |    37.96    38.14    38.39    38.46
+  pre_tax        10k    22.16    22.35    22.13    22.35   |    37.96    38.14    38.39    38.46
+  pre_tax         1M    22.16    22.35    22.13    22.35   |    37.96    38.14    38.39    38.46
+  progressive   100k    14.71    15.10    14.84    15.24   |    43.78    44.41    44.07    44.63
+  progressive    10k    17.03    17.36    17.13    17.47   |    41.00    41.70    41.35    41.96
+  progressive     1M    13.62    14.03    13.76    14.16   |    45.37    45.99    45.63    46.19
+  flat          100k    16.34    16.70    16.38    16.77   |    40.74    40.93    40.96    41.09
+  flat           10k    16.34    16.70    16.38    16.77   |    40.74    40.93    40.96    41.09
+  flat            1M    16.34    16.70    16.38    16.77   |    40.74    40.93    40.96    41.09
+
+IB38/A -- 2017_01_to_end (2017-01-03 -> 2026-09-29), CAGR % liquidated, m = 2
+  mode           cap       R2      A1u       H2        K   |  max DD % (same mode)
+  pre_tax       100k    32.54    32.97    32.58    33.03   |    31.13    31.31    30.79    31.12
+  pre_tax        10k    32.54    32.97    32.58    33.03   |    31.13    31.31    30.79    31.12
+  pre_tax         1M    32.54    32.97    32.58    33.03   |    31.13    31.31    30.79    31.12
+  progressive   100k    22.89    23.70    23.16    23.97   |    36.24    35.82    34.86    34.98
+  progressive    10k    26.04    26.67    26.26    26.92   |    34.52    34.21    33.37    33.57
+  progressive     1M    21.72    22.58    22.01    22.86   |    36.75    36.31    35.37    35.47
+  flat          100k    24.27    24.95    24.38    25.10   |    36.72    36.93    36.32    36.85
+  flat           10k    24.27    24.95    24.38    25.10   |    36.72    36.93    36.32    36.85
+  flat            1M    24.27    24.95    24.38    25.10   |    36.72    36.93    36.32    36.85
+
+IB38/A -- main window 2000-03-09 -> 2026-09-29, pre-tax (tau = 0, un-liquidated), m = 2
+  base                 15.48    15.72    15.52    15.76   |    46.76    47.19    46.25    46.67
+  calibrated           14.90    15.12    14.94    15.18   |    46.88    47.31    46.38    46.79
+
+IB38/B -- 2000_03_to_2026_09
+  aggregate_one_taxpayer  CAGR  10.75%  delta vs K@100k +0.00 pp  accounts 1
+                 two_50k  CAGR  11.16%  delta vs K@100k +0.40 pp  accounts 2
+            three_33333k  CAGR  11.44%  delta vs K@100k +0.69 pp  accounts 3
+  scale invariance: max rel diff 0.00e+00 (ok True)
+  ladder: tax(100k) 26090771 TRY vs 2x tax(50k) 27400224 TRY  (mean per-year ratio 1.095)
+
+IB38/B -- 2010_01_to_end
+  aggregate_one_taxpayer  CAGR  15.24%  delta vs K@100k +0.00 pp  accounts 1
+                 two_50k  CAGR  15.88%  delta vs K@100k +0.64 pp  accounts 2
+            three_33333k  CAGR  16.29%  delta vs K@100k +1.06 pp  accounts 3
+  scale invariance: max rel diff 0.00e+00 (ok True)
+  ladder: tax(100k) 18163128 TRY vs 2x tax(50k) 18607626 TRY  (mean per-year ratio 1.086)
+
+IB38/B -- 2017_01_to_end
+  aggregate_one_taxpayer  CAGR  23.97%  delta vs K@100k +0.00 pp  accounts 1
+                 two_50k  CAGR  24.77%  delta vs K@100k +0.80 pp  accounts 2
+            three_33333k  CAGR  25.23%  delta vs K@100k +1.25 pp  accounts 3
+  scale invariance: max rel diff 0.00e+00 (ok True)
+  ladder: tax(100k) 13228990 TRY vs 2x tax(50k) 12785861 TRY  (mean per-year ratio 1.091)

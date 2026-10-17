@@ -1,0 +1,12 @@
+{
+ "batch": "closeout_v1",
+ "registry_lines": 547,
+ "registry_trials": 316,
+ "total_wall_s": 23.26639,
+ "wall_s": {
+  "IB24_2L/A_2L": 17.621447,
+  "IB24_2L/B_2L": 17.399839,
+  "IB24_2L/C_2L": 17.539198,
+  "IB35_K/C_K": 16.388904
+ }
+}

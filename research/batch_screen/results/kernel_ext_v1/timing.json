@@ -1,0 +1,13 @@
+{
+ "batch": "kernel_ext_v1",
+ "registry_lines": 544,
+ "registry_trials": 317,
+ "total_wall_s": 69.14959,
+ "wall_s": {
+  "IC36_N/B5_N": 24.953181,
+  "IC41_R/A_N_R": 25.535051,
+  "IC41_R/B_N_R": 26.388504,
+  "IC41_R/C_N_R": 30.262199,
+  "ib38_C/C": 14.760516
+ }
+}

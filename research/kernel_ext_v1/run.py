@@ -83,18 +83,19 @@ def harness_cells(n_boot_paths=60):
               "pass": bool(v["pass"])} for k_, v in sorted(anchors.items())}
     ref = json.loads(ANCHOR_K.read_text())
     r2 = {}
-    for md, key, want in (("base", "m2", ref["pre_tax_main"]["base"]["m2"]["C0"]["cagr"]),
-                          ("calibrated", "m2",
-                           ref["pre_tax_main"]["calibrated"]["m2"]["C0"]["cagr"]),
-                          ("base", "m1", ref["pre_tax_main"]["base"]["m1"]["C0"]["cagr"])):
-        got = harness["plugin_anchors"][f"R2_pre_{md}_{key}"]["reproduced"]
-        r2[f"R2_pre_{md}_{key}"] = {"reference": float(want), "reproduced": float(got),
-                                    "diff_pp": (float(got) - float(want)) * 100,
-                                    "pass": bool(harness["plugin_anchors"][f"R2_pre_{md}_{key}"]
-                                                 ["pass"])}
-    r2["R2_max_dd_base"] = dict(harness["plugin_anchors"]["R2_maxdd_base"])
+    for label, want in (("R2_pre_base_m2", ref["pre_tax_main"]["base"]["m2"]["C0"]["cagr"]),
+                        ("R2_pre_calibrated_m2",
+                         ref["pre_tax_main"]["calibrated"]["m2"]["C0"]["cagr"]),
+                        ("R2_m1_base", ref["pre_tax_main"]["base"]["m1"]["C0"]["cagr"]),
+                        ("R2_maxdd_base", ref["pre_tax_main"]["base"]["m2"]["C0"]["max_dd"])):
+        cell = harness["plugin_anchors"][label]
+        r2[label] = {"reference": float(want), "reproduced": float(cell["reproduced"]),
+                     "diff_pp": (float(cell["reproduced"]) - float(want)) * 100,
+                     "pass": bool(cell["pass"])}
     out = {
-        "parity": {k_: v for k_, v in par.items() if k_ != "wall_s"},
+        # the engine subprocess reports its own wall clock in its tail: keep only the verdict
+        "parity": {k_: v for k_, v in par.items()
+                   if k_ not in ("wall_s", "engine_parity_quick")},
         "framework_harness": {"all": bool(harness["all"]), "n_checks": int(harness["n_checks"]),
                               "failed": list(harness["failed"])},
         "k_anchors": k,
@@ -105,8 +106,7 @@ def harness_cells(n_boot_paths=60):
             "framework_harness_checks": int(harness["n_checks"]),
             "k_anchor_cells": len(k),
         },
-        "engine_parity_quick": {"pass": bool(par["engine_parity_quick"]["pass"]),
-                                "tail": par["engine_parity_quick"]["tail"]},
+        "engine_parity_quick": {"pass": bool(par["engine_parity_quick"]["pass"])},
     }
     timing = {"parity_s": t_par, "harness_s": t_har}
     ok = bool(par["all"] and harness["all"]
@@ -141,6 +141,21 @@ def batch_controls(batch=RB.BATCH):
     return out
 
 
+def _stage1_failed(g1) -> list:
+    """The stage-1 gates an arm failed, **read from** its record's `stage1_gates`."""
+    s = bsrun.stages
+    out = []
+    if (g1.get("after_tax_2000_delta_pp") or 0.0) <= 0.0:
+        out.append("AT2000")
+    if (g1.get("b1_median_delta_pp") or 0.0) <= 0.0:
+        out.append("B1")
+    if any(v > s.S1_MAX_DD_PP + 1e-9 for v in (g1.get("max_dd_delta_pp") or {}).values()):
+        out.append("maxDD")
+    if any(v > s.S1_TURNOVER_MULT + 1e-9 for v in (g1.get("turnover_ratio") or {}).values()):
+        out.append("turnover")
+    return out
+
+
 def arm_state(rec, ctrl):
     """The report row of one arm, read from its record (never recomputed)."""
     if rec is None:
@@ -155,6 +170,7 @@ def arm_state(rec, ctrl):
     cat = {k: (ctrl.get("after_tax") or {}).get(k, {}).get("after_tax_cagr")
            for k in ("2000_03_to_2026_09", "2010_01_to_end", "2017_01_to_end")}
     g7 = g.get("G7_detail") or {}
+    failed = g.get("failed") if g else _stage1_failed(g1)
     return {
         "registered": True,
         "window": (rec.get("win") or {}).get("tag"),
@@ -169,7 +185,8 @@ def arm_state(rec, ctrl):
         "max_dd_delta_pp": g1.get("max_dd_delta_pp"),
         "oos_median_pp": g7.get("median_cagr_pp"),
         "etf_median_pp": (g.get("E1") or {}).get("median_delta_pp"),
-        "failed": g.get("failed"),
+        "failed": failed,
+        "failed_source": "gates.failed" if g else "stage1_gates",
         "b1_delta_pp_n": len(rec.get("b1_delta_pp") or []),
         "b1_delta_pp_nonfinite": int(np.sum(~np.isfinite(np.asarray(rec.get("b1_delta_pp") or [],
                                                                     dtype=np.float64)))),
@@ -186,7 +203,7 @@ def summary(res, timing, batch=None, ctrl=None, recs=None, ctrl_rec=None, defl=N
         "instrument",
         "",
         f"**Verdict: {'kernel extension built and parity-proven' if ok else 'PARITY FAILED'}"
-        + (", and the batch screened." if batch else " (harness only).**"),
+        + (", and the batch screened.**" if batch else " (harness only).**"),
         "",
         "`research/fast_engine3/` (edited in place, this package only) now holds **five** instruments "
         "in one cash pool and the `fe2_opts` `route_cap` downsize router generalised to N legs "
@@ -218,10 +235,9 @@ def summary(res, timing, batch=None, ctrl=None, recs=None, ctrl_rec=None, defl=N
     for k_, v in sorted(res["k_anchors"].items()):
         lines.append(f"| `{k_}` | {v['reference']*100:.4f} % | {v['reproduced']*100:.4f} % | "
                      f"{v['diff_pp']:+.2e} |")
-    lines += ["", "R2 reference (pre-tax m = 2 base / calibrated, m = 1, max DD): "
-              + ", ".join(f"`{k_}` {v['reproduced']*100:.2f} %" if "max_dd" not in k_
-                          else f"`{k_}` {v['reproduced']*100:.2f} %"
-                          for k_, v in sorted(res["r2_reference"].items())), ""]
+    lines += ["", "R2 reference (pre-tax CAGR, and max DD): "
+              + ", ".join(f"`{k_}` {v['reproduced']:.4f}" for k_, v in
+                          sorted(res["r2_reference"].items())) + " (tolerance 0.01 pp each)", ""]
     if batch:
         lines += batch_section(batch, ctrl, recs, defl)
     else:
@@ -230,9 +246,19 @@ def summary(res, timing, batch=None, ctrl=None, recs=None, ctrl_rec=None, defl=N
         "## Timings",
         "",
         f"* parity suite {timing['parity_s']:.1f} s; framework harness {timing['harness_s']:.1f} s",
-        f"* `--run` wall clock: **{timing['wall_s']:.1f} s**",
-        "",
+        f"* wall clock of this invocation (`{timing.get('mode', '--harness')}`): "
+        f"**{timing['wall_s']:.1f} s**",
     ]
+    if batch:
+        ft = bsrun.RESULTS / batch / "timing.json"
+        if ft.exists():
+            rec = json.loads(ft.read_text())
+            lines.append(f"* the batch itself (`results/{batch}/timing.json`): "
+                         f"**{rec['total_wall_s']:.1f} s** wall on its workers "
+                         f"(per arm "
+                         + ", ".join(f"`{k.split('/', 1)[-1]}` {v:.1f} s"
+                                     for k, v in sorted(rec["wall_s"].items()) if v) + ")")
+    lines.append("")
     return "\n".join(lines) + "\n"
 
 
@@ -263,21 +289,31 @@ def batch_section(batch, ctrls, recs, defl) -> list:
             f"{to.get('base', float('nan')):.3f} | {', '.join(st['failed'] or []) or '-'} | "
             f"{st['verdict']} |")
     lines += ["",
-              "`Δ` read from the records (`stage1_gates`, `gates.failed`); `maxDD Δ` pre-tax "
+              "`Δ` read from the records (`stage1_gates` / `gates.failed`); `maxDD Δ` pre-tax "
               "base/calibrated at m = 2; `TO ×K` the base model.", ""]
     if defl is not None:
-        lines += ["### Deflation (`results/DEFLATION.json`, batch `kernel_ext_v1`)", "",
-                  f"* N (distinct (idea, arm, spec_hash) over the whole campaign ledger) = "
-                  f"{defl.get('registry_trials')}",
-                  f"* arms with a finite B1 Δ vector: {len(defl.get('stage2_pass', []))} stage-2 "
-                  f"passers; `excluded_non_finite` = {defl.get('excluded_non_finite')}",
-                  f"* `white_rc`: {json.dumps(defl.get('white_rc', {}), sort_keys=True)[:220]}",
-                  f"* `rw_stepdown` rejects: "
-                  f"{sorted((defl.get('rw_stepdown') or {}).get('p_adjusted', {}))} "
-                  f"(p_adj ≤ 0.05: "
-                  f"{sorted(k for k, v in ((defl.get('rw_stepdown') or {}).get('p_adjusted') or {}).items() if v <= 0.05)})",
-                  f"* `deflated_sharpe`: {json.dumps({k: v for k, v in (defl.get('deflated_sharpe') or {}).items() if k != 'arms'}, sort_keys=True)[:260]}",
-                  f"* `declared` = {defl.get('declared')}", ""]
+        rw = defl.get("rw_stepdown") or {}
+        ds = defl.get("deflated_sharpe") or {}
+        wrc = defl.get("white_rc") or {}
+        lines += [
+            "### Deflation (`results/DEFLATION.json`, batch `kernel_ext_v1`)", "",
+            f"* N (distinct (idea, arm, spec_hash) over the whole campaign ledger) = "
+            f"**{defl.get('registry_trials')}** (was 312 before this batch's five arms)",
+            f"* stage-2 passers: {defl.get('stage2_pass')}; arms with a finite B1 Δ vector: "
+            f"{defl.get('n_arms_with_delta')}; `excluded_non_finite` = "
+            f"{defl.get('excluded_non_finite')} (no NaN Δ anywhere)",
+            f"* `white_rc`: best arm `{wrc.get('best_arm')}`, `t_max` = "
+            f"{wrc.get('t_max'):.6f}, p = {wrc.get('p_value')}, n_arms = {wrc.get('n_arms')}",
+            f"* `rw_stepdown` (alpha {rw.get('alpha')}, {rw.get('resamples')} resamples): "
+            f"**rejected = {rw.get('rejected')}**; p_adjusted = "
+            + ", ".join(f"`{k}` {v:.4f}" for k, v in sorted((rw.get("p_adjusted") or {}).items())),
+            f"* `deflated_sharpe`: `var_sr` = {defl.get('var_sr')}",
+        ]
+        lines += [f"* `deflated_sharpe` (per arm, N = {defl.get('n_trials')}): "
+                  + ", ".join(f"`{a}`: sr_obs {c.get('sr_obs'):.4f}, sr0 {c.get('sr0'):.6f}, "
+                              f"dsr {c.get('dsr')}, pass_5pct {c.get('pass_5pct')}"
+                              for a, c in sorted(ds.items())) if defl.get("deflated_sharpe") else "",
+                  f"* **`declared` = {defl.get('declared')}**", ""]
     return lines
 
 
@@ -285,21 +321,24 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m research.kernel_ext_v1.run")
     ap.add_argument("--harness", action="store_true", help="parity + anchors only")
     ap.add_argument("--run", action="store_true", help="the harness plus the kernel_ext_v1 batch")
+    ap.add_argument("--report", action="store_true",
+                    help="the harness plus the batch's committed records (screen nothing)")
     ap.add_argument("--boot-paths", type=int, default=60,
                     help="paths for the parity suite's bootstrap cells")
     ap.add_argument("--workers", type=int, default=6)
     args = ap.parse_args(argv)
-    if not (args.harness or args.run):
+    if not (args.harness or args.run or args.report):
         ap.print_help()
         return 2
     t0 = time.perf_counter()
     res, timing, ok = harness_cells(args.boot_paths)
     batch = ctrls = recs = defl = None
-    if args.run:
-        t1 = time.perf_counter()
-        RB.main(["--workers", str(args.workers)])
+    if args.run or args.report:
+        if args.run:
+            t1 = time.perf_counter()
+            RB.main(["--workers", str(args.workers)])
+            timing["batch_s"] = time.perf_counter() - t1
         batch = RB.BATCH
-        timing["batch_s"] = time.perf_counter() - t1
         ctrls = batch_controls(batch)
         recs = batch_records(batch)
         defl_path = bsrun.RESULTS / "DEFLATION.json"
@@ -308,6 +347,7 @@ def main(argv=None) -> int:
                         "control_windows": sorted(ctrls), "deflation": defl}
         res["batch_records"] = recs
     timing["wall_s"] = time.perf_counter() - t0
+    timing["mode"] = "--run" if args.run else ("--report" if args.report else "--harness")
     dump(HERE / "RESULTS.json", res)
     dump(HERE / "TIMING.json", timing)
     (HERE / "SUMMARY.txt").write_text(summary(res, timing, batch, ctrls, recs, None, defl))

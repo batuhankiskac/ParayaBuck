@@ -1,0 +1,57 @@
+# kernel_ext_v1 -- N_LEGS = 5, the N-leg gain-aware downsize router, two books of one instrument
+
+**Verdict: kernel extension built and parity-proven, and the batch screened.**
+
+`research/fast_engine3/` (edited in place, this package only) now holds **five** instruments in one cash pool and the `fe2_opts` `route_cap` downsize router generalised to N legs (`route_score` = `usd` | `indexed`); `batch_screen` accepts a `"legs"` list that names one instrument twice (two FIFO books of one instrument). `research/fast_engine/`, `fast_engine2/` and `fast_engine_opts/` are untouched.
+
+## Parity
+
+* `python -m research.fast_engine.parity --quick`: **PASS**
+* `research.fast_engine3.fe3_parity`: **PASS** (215 cells, 0 failed, 13.2 s)
+* the router group: 8 cells -- `route_score = indexed` reproduces `fe2_opts` **bit for bit** on the two-leg parity cells (NAV and both per-leg rows), `route_cap = 0` is the two-leg kernel, the split moves within the cap, `usd` != `indexed`, and two books of one instrument keep two FIFO books
+* framework harness (`research.batch_screen.run --harness`): **PASS** (143 checks, 0 failed, 39.5 s)
+
+## K control anchors reproduced through the engine (tol 0.01 pp)
+
+| cell | reference | reproduced | diff (pp) |
+|---|---:|---:|---:|
+| `K_after_tax_100k_2000_03_to_2026_09` | 10.7533 % | 10.7533 % | +5.71e-06 |
+| `K_after_tax_100k_2010_01_to_end` | 15.2354 % | 15.2354 % | -4.02e-05 |
+| `K_after_tax_100k_2017_01_to_end` | 23.9720 % | 23.9720 % | -2.57e-05 |
+| `K_pre_base_m2_cagr` | 15.7649 % | 15.7649 % | -7.55e-06 |
+| `K_pre_base_m2_max_dd` | 46.6698 % | 46.6698 % | -8.97e-06 |
+| `K_pre_base_m2_turnover` | 545.6136 % | 545.6136 % | +1.92e-06 |
+| `K_pre_calibrated_m2_cagr` | 15.1785 % | 15.1785 % | +3.08e-05 |
+| `K_pre_calibrated_m2_max_dd` | 46.7948 % | 46.7948 % | -1.68e-05 |
+| `K_pre_calibrated_m2_turnover` | 545.6216 % | 545.6216 % | -3.13e-05 |
+
+R2 reference (pre-tax CAGR, and max DD): `R2_m1_base` 0.1575, `R2_maxdd_base` 0.4676, `R2_pre_base_m2` 0.1548, `R2_pre_calibrated_m2` 0.1490 (tolerance 0.01 pp each)
+
+## The batch (`kernel_ext_v1`) -- Δ vs K in pp, on the arm's own declared window
+
+| arm | window | AT2000 Δ | AT2010 Δ | AT2017 Δ | B1 med / share | B2 med / share | maxDD Δ b/c | TO ×K | failed gates | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `IC36_N/B5_N` | w20041119 | -0.5584 | -0.3439 | -0.3464 | -0.6726 / 0.278 | -1.0793 / 0.159 | +0.8803 / +0.8765 | 2.006 | AT2000, B1, turnover | reject_stage1 |
+| `IC41_R/A_N_R` | default | -0.9891 | -2.7127 | -4.3665 | -0.0334 / 0.490 | -0.2893 / 0.442 | -10.9310 / -10.8804 | 1.327 | AT2000, B1 | reject_stage1 |
+| `IC41_R/B_N_R` | default | -1.2076 | -3.2089 | -5.1543 | -0.1049 / 0.481 | -0.2058 / 0.459 | -10.7107 / -10.6602 | 1.649 | AT2000, B1 | reject_stage1 |
+| `IC41_R/C_N_R` | default | -0.8848 | -2.5832 | -4.1710 | -0.0237 / 0.494 | -0.2380 / 0.454 | -10.9310 / -10.8804 | 1.326 | AT2000, B1 | reject_stage1 |
+| `ib38_C/C` | default | -0.3345 | -0.5191 | -0.8814 | -0.1217 / 0.312 | -0.0870 / 0.371 | +0.3040 / +0.3032 | 1.103 | AT2000, B1 | reject_stage1 |
+
+`Δ` read from the records (`stage1_gates` / `gates.failed`); `maxDD Δ` pre-tax base/calibrated at m = 2; `TO ×K` the base model.
+
+### Deflation (`results/DEFLATION.json`, batch `kernel_ext_v1`)
+
+* N (distinct (idea, arm, spec_hash) over the whole campaign ledger) = **317** (was 312 before this batch's five arms)
+* stage-2 passers: []; arms with a finite B1 Δ vector: 5; `excluded_non_finite` = {} (no NaN Δ anywhere)
+* `white_rc`: best arm `IC41_R/C_N_R`, `t_max` = -2.019318, p = 0.9995, n_arms = 5
+* `rw_stepdown` (alpha 0.05, 2000 resamples): **rejected = []**; p_adjusted = `IC36_N/B5_N` 1.0000, `IC41_R/A_N_R` 1.0000, `IC41_R/B_N_R` 1.0000, `IC41_R/C_N_R` 0.9995, `ib38_C/C` 1.0000
+* `deflated_sharpe`: `var_sr` = 0.056993
+* `deflated_sharpe` (per arm, N = 317): `IC36_N/B5_N`: sr_obs -0.5522, sr0 0.626364, dsr 0.0, pass_5pct False, `IC41_R/A_N_R`: sr_obs -0.0872, sr0 0.626364, dsr 0.0, pass_5pct False, `IC41_R/B_N_R`: sr_obs -0.1331, sr0 0.626364, dsr 0.0, pass_5pct False, `IC41_R/C_N_R`: sr_obs -0.0639, sr0 0.626364, dsr 0.0, pass_5pct False, `ib38_C/C`: sr_obs -0.5017, sr0 0.626364, dsr 0.0, pass_5pct False
+* **`declared` = []**
+
+## Timings
+
+* parity suite 13.2 s; framework harness 39.5 s
+* wall clock of this invocation (`--report`): **53.0 s**
+* the batch itself (`results/kernel_ext_v1/timing.json`): **69.1 s** wall on its workers (per arm `B5_N` 25.0 s, `A_N_R` 25.5 s, `B_N_R` 26.4 s, `C_N_R` 30.3 s, `C` 14.8 s)
+

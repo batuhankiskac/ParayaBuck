@@ -182,4 +182,9 @@ Nothing here touches `src/`, `config/`, `tests/`, `scripts/`, `benchmarks/`, `da
 
 ## 10. Amendments
 
-(none at pre-registration; any later change is disclosed here and in the report)
+**A1 (2026-10-22, before any non-control arm ran on real data).** §7's EPI definition is clarified,
+not changed: in addition to the drawdown measured from the peak on or before 2026-10-05, the report
+also states the **peak-to-trough inside the episode** (running peak from 2026-10-06 onward). The
+original measure understates a decline that makes a new high early in the episode; both are
+reported so the reader can see which peak the owner's "~6 % QQQ" refers to. No gate uses EPI.
+

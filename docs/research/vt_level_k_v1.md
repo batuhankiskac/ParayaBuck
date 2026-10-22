@@ -346,6 +346,7 @@ Wall clock of `--run`: **25.2 s** (second recorded run; the harness includes
   inside `RESULTS.json`, which made two runs differ. Timing now lives in `SUMMARY.txt` only; the
   two recorded `RESULTS.json` files are byte-identical.
 - No arm, parameter, stage, seed, threshold, gate or selection rule was changed after seeing data.
-  The pre-registration is commit **94fae0b4**; the code commit is **40fa364d**.
+  The pre-registration is commit **94fae0b4**; the first screen commit is **40fa364d** and the
+final code/results commit is **963ffd26**.
 
 Not tax advice. Production K is unchanged; no Stage B replay was run.

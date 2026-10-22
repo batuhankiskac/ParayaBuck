@@ -1,0 +1,86 @@
+{
+ "campaign": "short_term_reentry_v1",
+ "note": "All inputs are existing committed research files except the two report-only Yahoo October-2026 files, downloaded for this study on 2026-10-22. SHA-256 computed in this worktree. No production file is read or written.",
+ "files": {
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "bytes": 2671225,
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+   "source": "reused from existing research data",
+   "source_url": "Yahoo Finance chart API daily bars, as recorded by stress_robustness_v1",
+   "date_range": "1999-03-10 .. 2026-09-29",
+   "used_by": "fe_data.load(): QQQ/SPY/QLD open, close, dividend; QQQ closes drive the overlay, the E2 vote and K's weight; the synthetic QLD* 2x leg"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "bytes": 301157,
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+   "source": "reused from existing research data",
+   "source_url": "FRED DTB3 (3-Month Treasury Bill, secondary market rate), as recorded by stress_robustness_v1",
+   "date_range": "1954-01-04 .. 2026-09-28",
+   "used_by": "QLD* financing; the October-2026 extension's rate series (forward-filled)"
+  },
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "bytes": 172726,
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+   "source": "reused from existing research data",
+   "source_url": "CBRT USD/TRY forex buying rate, as recorded by after_tax_tr_v1",
+   "date_range": "2000-01-03 .. 2026-10-09",
+   "used_by": "RunEnv.fx: USD/TRY conversion of gains, tax payments and terminal liquidation"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "bytes": 17845,
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+   "source": "reused from existing research data",
+   "source_url": "TUIK YI-UFE monthly index (TURPPDMMINMEI, chained), as recorded by after_tax_tr_v1",
+   "date_range": "1999-01 .. 2026-09",
+   "used_by": "YI-UFE indexation and deflated tariff ceilings in fe_tax"
+  },
+  "data/historical/ewma_band_v1_gspc.csv": {
+   "bytes": 1145471,
+   "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+   "source": "reused from existing research data",
+   "source_url": "Yahoo ^GSPC daily closes as recorded by ewma_band_v1",
+   "date_range": "1957-01-02 .. 1999-12-31 (measured window)",
+   "used_by": "gate G7 window ^GSPC 1957-1999"
+  },
+  "data/historical/ewma_band_v1_index.csv": {
+   "bytes": 4114163,
+   "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+   "source": "reused from existing research data",
+   "source_url": "^IXIC/^GSPC/^N225/^GDAXI/^FTSE OHLC as recorded by ewma_band_v1",
+   "date_range": "windows M1-M5",
+   "used_by": "gate G7 windows M1-M5 and the pooled OOS bootstrap (G8)"
+  },
+  "data/historical/ewma_band_v1_tb3ms.csv": {
+   "bytes": 4439,
+   "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+   "source": "reused from existing research data",
+   "source_url": "FRED TB3MS as recorded by ewma_band_v1",
+   "date_range": "pre-1954",
+   "used_by": "gate G7: pre-1954 T-bill rate for the M2 window"
+  },
+  "data/historical/short_term_reentry_v1_qqq_2026q4.csv": {
+   "bytes": 2120,
+   "sha256": "a9c753771f16f79980a7105bfd2bd601eb665aed34f876a67b8c3eb6e5e86720",
+   "source": "downloaded for this study",
+   "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/QQQ?period1=1789084800&period2=1796000000&interval=1d&events=div&includeAdjustedClose=true",
+   "date_range": "2026-09-11 .. 2026-10-22",
+   "overlap_check": "13 shared sessions 2026-09-11..2026-09-29: QQQ closes identical to 3e-5, no dividend differences",
+   "used_by": "stage EPI only (report-only October 2026 episode); never a gate"
+  },
+  "data/historical/short_term_reentry_v1_qld_2026q4.csv": {
+   "bytes": 1980,
+   "sha256": "855063f1ff0847468af194ec7e26137d204f7c4a0dd21121ee51a4668c7caabb",
+   "source": "downloaded for this study",
+   "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/QLD?period1=1789084800&period2=1796000000&interval=1d&events=div&includeAdjustedClose=true",
+   "date_range": "2026-09-11 .. 2026-10-22",
+   "used_by": "stage EPI context (real QLD buy-and-hold), not a strategy input"
+  }
+ },
+ "implementation": {
+  "research/fast_engine": "restored from archive/research/fast-engine-v1-2026-10 (unchanged; simulation, tax, bootstrap)",
+  "research/band_h2_combo_v1": "restored from archive/research/fast-engine-v1-2026-10 (K harness / parity reference)",
+  "research/short_term_oracle_v1/engine/fe_boot_targets.py": "the parent branch's bootstrap extension (exogenous per-path targets, masked prices); imported unchanged",
+  "research/short_term_reentry_v1/engine/fe_overlay.py": "new: the numba overlay signal kernel (target construction only)"
+ },
+ "verified_on": "2026-10-22"
+}

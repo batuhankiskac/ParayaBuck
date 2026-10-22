@@ -182,6 +182,15 @@ Nothing here touches `src/`, `config/`, `tests/`, `scripts/`, `benchmarks/`, `da
 
 ## 10. Amendments
 
+**A2 (2026-10-22, after the first complete exploratory `--run`, before the two recorded runs).**
+A descriptive supplement was added: five fixed crash windows (dotcom 2000-03→2003-03, GFC
+2007-10→2009-03, 2015-16, COVID 2020-02→2020-04, 2022) reported for every arm on the pre-tax and
+after-tax $100k paths. Reason: with taxes charged, an arm's own "max DD" can belong to a different
+crash (V30/V25's worst after-tax episode is 2015-16, K's is 2000-02), so the §7 cost-per-point
+ratio compares different events. The pre-registered ratio is kept and reported; the fixed-window
+table is additional description. **No gate, arm, parameter or selection rule changed**, and the
+supplement is not used by any gate.
+
 **A1 (2026-10-22, before any non-control arm ran on real data).** §7's EPI definition is clarified,
 not changed: in addition to the drawdown measured from the peak on or before 2026-10-05, the report
 also states the **peak-to-trough inside the episode** (running peak from 2026-10-06 onward). The

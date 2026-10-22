@@ -1,0 +1,94 @@
+vt_level_k_v1 -- lowering production K's vol target (measurement study)
+window 2000-03-09 -> 2026-09-29 (6679 sessions), m = 2, base financing unless stated
+
+PRE-TAX MAIN (m = 2)
+arm     vt  CAGR base  CAGR cal  DD base  DD cal  Calmar b       m1   turn sells/yr
+K     0.35   15.7649%  15.1785%  46.670% 46.795%    0.3378  16.017%  5.456    10.17
+V30   0.30   14.7293%  14.1788%  41.392% 41.510%    0.3558  14.983%  5.569    13.48
+V25   0.25   13.3466%  12.7811%  35.693% 35.952%    0.3739  13.605%  5.657    17.28
+R2    0.35   15.4766%  14.8961%  46.758% 46.880%    0.3310  15.754%  5.992    29.56
+
+AFTER TAX at $100k (progressive, liquidated)
+arm   2000_03_to_2026_09     2010_01_to_end     2017_01_to_end
+K       10.7533% d+0.000   15.2354% d+0.000   23.9720% d+0.000
+V30      9.8876% d-0.866   14.1708% d-1.065   22.1433% d-1.829
+V25      8.7834% d-1.970   12.7466% d-2.489   19.3909% d-4.581
+R2      10.1600% d-0.593   14.7059% d-0.529   22.8861% d-1.086
+
+CLEAN BOOTSTRAP $100k, seed 20261011, block 20 (5,000 pre / 1,000 tax)
+  progressive:
+    K     median  3.8577%
+    V30   median  3.6338%   d vs K -0.1042 pp  share>0  45.7%
+    V25   median  3.4219%   d vs K -0.4905 pp  share>0  40.5%
+    R2    median  3.5155%   d vs K -0.2856 pp  share>0  25.0%
+  flat:
+    K     median  4.0376%
+    V30   median  3.9083%   d vs K -0.0619 pp  share>0  47.7%
+    V25   median  3.7244%   d vs K -0.3811 pp  share>0  43.0%
+    R2    median  3.9678%   d vs K -0.1311 pp  share>0  36.0%
+  pre-tax legs: K 7.7761% / 7.3137%  V30 7.6580% / 7.2265%  V25 7.1279% / 6.7451%  R2 7.8106% / 7.3469%
+
+DRAWDOWN PROFILE (main window)
+  pre-tax base m2:
+    arm     maxDD    vol      w21      w63         > 10%         > 15%         > 20%         > 30%         > 40%
+    K     46.670% 26.70%  -29.90%  -31.95% 29/102.5/1423 23/121.5/1423 13/185.0/1423  7/391.0/1423  1/1423.0/1423
+    V30   41.392% 24.84%  -29.80%  -31.72% 29/109.0/ 956 21/156.0/ 956 13/269.0/ 956  4/503.5/ 956  1/956.0/ 956
+    V25   35.693% 22.24%  -27.06%  -28.75% 29/105.0/ 952 19/179.0/ 952  9/391.0/ 952  2/706.0/ 952  0/None/None
+    R2    46.758% 26.47%  -29.88%  -31.93% 29/103.0/1453 23/122.0/1453 13/183.0/1453  7/392.0/1453  1/1453.0/1453
+  after tax $100k:
+    arm     maxDD    vol      w21      w63         > 10%         > 15%         > 20%         > 30%         > 40%
+    K     46.670% 27.10%  -34.05%  -36.19% 26/103.0/1453 21/127.0/1453 14/186.5/1453  6/558.5/1453  2/1015.0/1453
+    V30   44.683% 25.20%  -34.09%  -36.01% 27/111.5/ 956 20/183.0/ 956 14/261.0/ 956  6/561.0/ 956  2/768.0/ 956
+    V25   41.716% 22.57%  -30.60%  -32.44% 28/124.0/ 952 21/183.0/ 952 13/278.0/ 952  3/673.0/ 952  1/673.0/ 673
+    R2    46.758% 26.83%  -33.45%  -35.57% 25/104.0/1675 20/126.0/1675 13/190.0/1675  6/559.5/1675  2/1126.0/1675
+    (episode cells = count/median recovery days/max recovery days; censored excluded)
+    worst-episode dates: K pre 2000-03-27->2003-03-31 / after 2000-03-27->2003-03-31  V30 pre 2000-03-27->2003-03-31 / after 2015-07-20->2016-07-06  V25 pre 2000-03-27->2003-03-31 / after 2015-03-02->2016-07-06  R2 pre 2000-03-27->2003-03-31 / after 2000-03-27->2003-03-31
+
+FIXED CRASH WINDOWS (return / max DD inside the window, same event for every arm)
+  pre-tax base m2:
+    arm              dotcom               gfc        china_2015             covid         bear_2022
+    K           -44.8/ 46.7       -23.4/ 32.4       -23.3/ 38.5       -12.2/ 28.3       -20.7/ 23.1
+    V30         -39.7/ 41.4       -19.9/ 28.6       -23.9/ 38.3        -9.5/ 25.4       -17.9/ 20.1
+    V25         -34.1/ 35.7       -17.6/ 24.7       -22.8/ 35.6        -6.4/ 20.9       -15.5/ 17.5
+    R2          -44.8/ 46.8       -23.5/ 32.4       -22.7/ 38.0       -11.7/ 27.8       -20.2/ 22.6
+  after tax $100k:
+    arm              dotcom               gfc        china_2015             covid         bear_2022
+    K           -44.8/ 46.7       -26.6/ 35.2       -31.2/ 44.9       -14.0/ 29.8       -25.4/ 26.9
+    V30         -39.7/ 41.4       -23.8/ 32.0       -31.7/ 44.7       -11.8/ 27.3       -22.5/ 23.8
+    V25         -34.1/ 35.7       -21.3/ 28.1       -29.4/ 41.2        -8.6/ 22.7       -22.0/ 23.3
+    R2          -44.8/ 46.8       -27.4/ 35.9       -30.2/ 44.0       -14.0/ 29.7       -26.4/ 27.9
+    (cells = total return % / max DD % within the window; the window boundaries are fixed)
+
+COST PER POINT OF DRAWDOWN REMOVED (main window, $100k)
+  V30: after tax +0.866 pp CAGR for +1.99 pp max DD removed -> +0.436 pp/pp
+       pre-tax +1.036 pp CAGR for +5.28 pp max DD removed -> +0.196 pp/pp
+  V25: after tax +1.970 pp CAGR for +4.95 pp max DD removed -> +0.398 pp/pp
+       pre-tax +2.418 pp CAGR for +10.98 pp max DD removed -> +0.220 pp/pp
+
+OCTOBER 2026 EPISODE (report only; downloaded extension, pre-tax)
+  data end 2026-10-22; episode 2026-10-06 -> end; reference 2026-10-05
+  arm           return  DD prior peak  DD inside
+  K            -13.42%         13.42%     14.17%
+  V30          -13.33%         13.33%     14.08%
+  V25          -11.20%         11.20%     11.84%
+  R2           -13.38%         13.38%     14.13%
+  QQQ           -6.84%          6.84%      7.27%
+  QLD          -13.60%         13.60%     14.40%
+
+GATES (vs K)
+  V30: G1=FAIL G2=PASS G3=FAIL G4=FAIL G5=FAIL G6=FAIL G7=FAIL G8=FAIL G9=PASS AT=FAIL BOOT=FAIL
+        failed: G1, G3, G4, G5, G6, G7, G8, AT, BOOT
+  V25: G1=FAIL G2=PASS G3=FAIL G4=FAIL G5=FAIL G6=FAIL G7=FAIL G8=FAIL G9=PASS AT=FAIL BOOT=FAIL
+        failed: G1, G3, G4, G5, G6, G7, G8, AT, BOOT
+  selected: none
+
+HARNESS
+  engine_parity_quick                                     PASS
+  local_targets_bitwise_vs_fe_signals_at_0.35             PASS
+  K_and_reference_anchors                                 PASS
+  deep_reference_K_and_R2                                 PASS
+  local_boot_bitwise_vs_fe_boot_at_0.35                   PASS
+  clean_bootstrap_medians                                 PASS
+  runtime 24.9 s (--run wall clock)
+
+Not tax advice. Production K is unchanged; no Stage B replay was run.

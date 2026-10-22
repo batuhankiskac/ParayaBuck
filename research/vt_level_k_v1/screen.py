@@ -247,7 +247,7 @@ def oos_boot_market(key, rng, arms=ARMS):
         wants = tg.arm_targets(cc, e2, fe_signals.vol_n(sc_c)[0], VTS, comps)
         for arm in arms:
             spec = fe_sim.RULE[RULE_KEY[arm]]
-            out_pre = np.empty((1, 1, P), dtype=np.float64)
+            out_pre = np.empty((2, 1, P), dtype=np.float64)  # the kernel fills base and calibrated
             out_at = np.empty((1, 1, 1, P), dtype=np.float64)
             fe_boot._boot_chunk(
                 so_c, sc_c, wants[arm], so_c, sc_c, wants[arm], wants[CONTROL],
@@ -355,7 +355,7 @@ def episodes(nav):
     return out
 
 
-def profile(nav):
+def profile(nav, days=None, off=0):
     nav = np.asarray(nav, dtype=float)
     eps = episodes(nav)
     thr = {}
@@ -373,7 +373,7 @@ def profile(nav):
         if len(nav) <= h:
             return None
         return float(np.min(nav[h:] / nav[:-h] - 1.0))
-    return {
+    out = {
         "sessions": int(len(nav)),
         "max_dd": float(fe_sim.max_dd(nav)[0]),
         "annual_vol": float(np.std(ret, ddof=1) * math.sqrt(252)),
@@ -383,6 +383,61 @@ def profile(nav):
         "n_episodes_all": len(eps),
         "max_episode_dd": float(max(e["dd"] for e in eps)) if eps else 0.0,
     }
+    if days is not None and eps:
+        big = max(eps, key=lambda e: e["dd"])
+        out["max_dd_peak_date"] = days[off + big["peak_index"]]
+        out["max_dd_trough_date"] = days[off + big["trough_index"]]
+    return out
+
+
+EPI_WINDOWS = (
+    ("dotcom", "2000-03-09", "2003-03-31"),
+    ("gfc", "2007-10-01", "2009-03-31"),
+    ("china_2015", "2015-07-01", "2016-07-31"),
+    ("covid", "2020-02-01", "2020-04-30"),
+    ("bear_2022", "2022-01-01", "2022-10-31"),
+)
+
+
+def stress_episodes():
+    """Descriptive supplement: five fixed crash windows, pre-tax and after-tax $100k.
+
+    The max-DD comparison in the cost-per-point table uses each arm's own worst episode, which can
+    be a different crash once taxes are charged. This table pins the episode so the arms are
+    compared on the same event.
+    """
+    days, o, c, e2, wants, _e2w = tg.main_inputs_vt(0.0, VTS)
+    T = len(days) - 1
+    fx, ufe = fe_study.try_market(days)
+    env = fe_sim.RunEnv(days, fx, ufe, START, T)
+    off = START - 1
+    out = {"pre_tax_base_m2": {}, "after_tax_100k": {}}
+    idx = []
+    for name, a1, b1 in EPI_WINDOWS:
+        j0 = bisect.bisect_left(days, a1)
+        j1 = bisect.bisect_right(days, b1) - 1
+        idx.append((name, j0, j1, days[j0], days[j1]))
+
+    def measure(nav):
+        res = {}
+        for name, j0, j1, d0, d1 in idx:
+            base = nav[j0 - 1 - off]
+            seg = np.asarray(nav[j0 - off : j1 - off + 1], dtype=float)
+            peak = np.maximum.accumulate(np.concatenate([[base], seg]))
+            res[name] = {
+                "start": d0,
+                "end": d1,
+                "return": float(seg[-1] / base - 1.0),
+                "max_dd": float(1.0 - np.min(seg / peak[1:])),
+            }
+        return res
+
+    for arm in ARMS:
+        rp = sim(o, c, wants[arm], env, TAX_CAPITALS[GATE_CAPITAL], START, T, arm, "pre_tax")
+        rq = sim(o, c, wants[arm], env, TAX_CAPITALS[GATE_CAPITAL], START, T, arm, "progressive")
+        out["pre_tax_base_m2"][arm] = measure(rp["_nav"])
+        out["after_tax_100k"][arm] = measure(rq["_nav"])
+    return out
 
 
 def profiles():
@@ -394,8 +449,8 @@ def profiles():
     for arm in ARMS:
         rp = sim(o, c, wants[arm], env, TAX_CAPITALS[GATE_CAPITAL], START, T, arm, "pre_tax")
         rq = sim(o, c, wants[arm], env, TAX_CAPITALS[GATE_CAPITAL], START, T, arm, "progressive")
-        out["pre_tax_base_m2"][arm] = profile(rp["_nav"])
-        out["after_tax_100k"][arm] = profile(rq["_nav"])
+        out["pre_tax_base_m2"][arm] = profile(rp["_nav"], days, START - 1)
+        out["after_tax_100k"][arm] = profile(rq["_nav"], days, START - 1)
         out["after_tax_100k"][arm]["max_dd_check"] = float(rq["max_dd_nav_usd"])
     out["window"] = {"start": days[START], "end": days[-1], "sessions": T - START + 1}
     return out
@@ -540,13 +595,12 @@ def run_parity():
         capture_output=True,
         text=True,
     )
-    wall = time.time() - t0
     if before is not None:
         PARITY.write_bytes(before)
     ok = proc.returncode == 0
-    tail = [ln for ln in proc.stdout.strip().splitlines() if ln.strip()][-3:]
+    line = [ln for ln in proc.stdout.strip().splitlines() if ln.startswith("parity ")]
     return {"command": "python -m research.fast_engine.parity --quick", "returncode": proc.returncode,
-            "pass": ok, "wall_s": wall, "tail": tail}
+            "pass": ok, "result": line[-1].split(" in ")[0] if line else ""}
 
 
 def harness(deep_bootstrap=True):
@@ -830,7 +884,7 @@ def cost_per_point(pre, at, prof):
 
 
 # ----------------------------------------------------------------------------- summary
-def write_summary(res):
+def write_summary(res, wall=None):
     lines = []
     p = res["params"]
     lines.append("vt_level_k_v1 -- lowering production K's vol target (measurement study)")
@@ -886,6 +940,24 @@ def write_summary(res):
             lines.append(f"    {a:5s} {v['max_dd']*100:6.3f}% {v['annual_vol']*100:5.2f}% "
                          f"{v['worst_21_session']*100:7.2f}% {v['worst_63_session']*100:7.2f}% {eps}")
     lines.append("    (episode cells = count/median recovery days/max recovery days; censored excluded)")
+    lines.append("    worst-episode dates: " + "  ".join(
+        f"{a} pre {res['profiles']['pre_tax_base_m2'][a].get('max_dd_peak_date','?')}->"
+        f"{res['profiles']['pre_tax_base_m2'][a].get('max_dd_trough_date','?')} / "
+        f"after {res['profiles']['after_tax_100k'][a].get('max_dd_peak_date','?')}->"
+        f"{res['profiles']['after_tax_100k'][a].get('max_dd_trough_date','?')}"
+        for a in ARMS))
+    lines.append("")
+    lines.append("FIXED CRASH WINDOWS (return / max DD inside the window, same event for every arm)")
+    for label, key in (("pre-tax base m2", "pre_tax_base_m2"), ("after tax $100k", "after_tax_100k")):
+        lines.append(f"  {label}:")
+        lines.append(f"    {'arm':5s} " + " ".join(f"{n:>17s}" for n, _, _ in EPI_WINDOWS))
+        for a in ARMS:
+            cells = []
+            for n, _, _ in EPI_WINDOWS:
+                v = res["stress_episodes"][key][a][n]
+                cells.append(f"{v['return']*100:7.1f}/{v['max_dd']*100:5.1f}")
+            lines.append(f"    {a:5s} " + " ".join(f"{c:>17s}" for c in cells))
+    lines.append("    (cells = total return % / max DD % within the window; the window boundaries are fixed)")
     lines.append("")
     lines.append("COST PER POINT OF DRAWDOWN REMOVED (main window, $100k)")
     for a in CANDIDATES:
@@ -923,7 +995,8 @@ def write_summary(res):
     lines.append("HARNESS")
     for c in res["harness"]["checks"]:
         lines.append(f"  {c['check']:55s} {'PASS' if c['pass'] else 'FAIL'}")
-    lines.append(f"  runtime {res['wall_clock_s']:.1f} s")
+    if wall is not None:
+        lines.append(f"  runtime {wall:.1f} s (--run wall clock)")
     lines.append("")
     lines.append("Not tax advice. Production K is unchanged; no Stage B replay was run.")
     SUMMARY.write_text("\n".join(lines) + "\n")
@@ -947,6 +1020,7 @@ def run():
     e2 = stage_e2()
     cs = cost_stress()
     prof = profiles()
+    epis = stress_episodes()
     cpp = cost_per_point(pre, at, prof)
     epi = episode_2026()
     g = gates(pre, clean, at, oos, oosb, prof)
@@ -980,15 +1054,16 @@ def run():
         "oos_bootstrap": oosb,
         "E2_rolling_starts": e2,
         "profiles": prof,
+        "stress_episodes": epis,
         "cost_per_point": cpp,
         "episode_2026": epi,
         "gates": g,
         "smoke": smoke(),
-        "wall_clock_s": time.time() - t0,
     }
+    wall = time.time() - t0
     OUT.write_text(json.dumps(res, indent=1, default=float) + "\n")
-    write_summary(res)
-    print(f"wrote {OUT.name} and {SUMMARY.name} in {res['wall_clock_s']:.1f} s")
+    write_summary(res, wall)
+    print(f"wrote {OUT.name} and {SUMMARY.name} in {wall:.1f} s")
     for a in CANDIDATES:
         print(f"  {a}: " + " ".join(f"{k}={'P' if g[a][k]['pass'] else 'F'}"
                                    for k in ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "AT", "BOOT")))

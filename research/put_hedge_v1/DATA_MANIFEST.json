@@ -1,0 +1,73 @@
+{
+ "campaign": "put_hedge_v1",
+ "files": {
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "bytes": 172726,
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+   "used_by": "CBRT USD/TRY buying rate (Turkish tax)"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "bytes": 17845,
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+   "used_by": "TUIK YI-UFE monthly index (equity indexation)"
+  },
+  "data/historical/ewma_band_v1_tb3ms.csv": {
+   "bytes": 4439,
+   "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+   "used_by": "TB3MS (pre-1954 rate fallback; load_rates)"
+  },
+  "data/historical/put_hedge_v1_ndx.csv": {
+   "bytes": 826984,
+   "sha256": "8fd2eb06b996f4896a5d7b5baa1f22f6e711b932ad1de9c9bbfbbb0b3512a926",
+   "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX",
+   "used_by": "Yahoo ^NDX daily OHLC; provenance/report only (not an engine input)"
+  },
+  "data/historical/put_hedge_v1_pput.csv": {
+   "bytes": 193401,
+   "sha256": "fd2f8b679f61b357af286224e384feadf8aacceb69d172772a0cb2b2d6074f69",
+   "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/PPUT_History.csv",
+   "used_by": "Cboe PPUT index history (daily closes); the pricing-model sanity target"
+  },
+  "data/historical/put_hedge_v1_sp500tr.csv": {
+   "bytes": 777212,
+   "sha256": "fa6c58fc4ad9ae4e0b682861c5fea7bcbbc05673dbdb170ebcabdebb965273ac",
+   "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ESP500TR",
+   "used_by": "Yahoo ^SP500TR daily closes; S&P 500 total return for the PPUT dividend leg"
+  },
+  "data/historical/put_hedge_v1_spx.csv": {
+   "bytes": 963884,
+   "sha256": "01e53f83a2cbd7b32c69fc3cd5d7c4fc6145de8e127f4091a48a47ca93b9da17",
+   "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX",
+   "used_by": "Yahoo ^SPX daily OHLC; the PPUT sanity check and the 1990-1999 OOS underlying"
+  },
+  "data/historical/put_hedge_v1_vix.csv": {
+   "bytes": 783558,
+   "sha256": "054f4b874be5b866dd893d6829e9ec4b79a0c6b30c8a57f57ee906614130da6b",
+   "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX",
+   "used_by": "Yahoo ^VIX daily closes; the pre-registered fallback and the PPUT sanity input"
+  },
+  "data/historical/put_hedge_v1_vxn.csv": {
+   "bytes": 547179,
+   "sha256": "a219399882c7ac5480d22008019bba2aec091e75e01b7e4c5b3df6a72ac6da08",
+   "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVXN",
+   "used_by": "Yahoo ^VXN daily closes; QQQ/NDX 30-day implied vol, 2001-01-23 -> 2026-10-22"
+  },
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "bytes": 2671225,
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+   "used_by": "QQQ/SPY/QLD bars (the fast engine's main-window input)"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "bytes": 301157,
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+   "used_by": "DTB3 rate (financing and option discounting)"
+  },
+  "research/band_h2_combo_v1/RESULTS.json": {
+   "bytes": 260050,
+   "sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
+   "used_by": "published K anchors (pre-tax and after-tax cells)"
+  }
+ },
+ "note": "The six put_hedge_v1_* CSVs were converted from the raw public downloads kept in data/historical/raw_put_hedge_v1/ (Yahoo chart JSON, Cboe PPUT CSV); the conversion is research/put_hedge_v1/prep_data.py. No other network access. The engine inputs are the fast_engine_v1 archive data, unchanged. band_h2_combo_v1/RESULTS.json is published evidence, not an input: it supplies the K anchors the harness asserts.",
+ "verified_on": "2026-10-22"
+}

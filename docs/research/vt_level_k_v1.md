@@ -326,7 +326,7 @@ after tax (11 pp pre-tax).** If the objective is a smaller *October-style* loss,
 `--smoke` PASS (synthetic prices only) → pre-registration commit **94fae0b4** (before any
 non-control arm ran on real data) → `--harness` PASS → `--run` twice, **byte-identical**
 `RESULTS.json` (`4afc8b9e2db8cc3e3027350c0ea0d15e74588e4990011e13eb7321118e12ecf9`).
-Wall clock of `--run`: **25.2 s** (second recorded run; the harness includes
+Wall clock of `--run`: **~25 s** (the committed `SUMMARY.txt` records 24.9 s; the harness includes
 `parity --quick`). `RESULTS.json` and `SUMMARY.txt` are in `research/vt_level_k_v1/`;
 `DATA_MANIFEST.json` records every input.
 

@@ -321,6 +321,61 @@
       }));
     }
 
+    // ---------- trend status ----------
+    function renderTrendStatus(t) {
+      const badge = byId("trendStateBadge");
+      if (!badge) return;
+      const drawdownRow = byId("trendDrawdownRow");
+      if (!t || t.available === false) {
+        badge.textContent = "—";
+        badge.className = "badge";
+        setText("trendStateText", "Veri yok");
+        setText("trendLevelText", "—");
+        setText("trendVolText", "—");
+        if (drawdownRow) drawdownRow.hidden = true;
+        return;
+      }
+      const votes = isNum(t.votes_up) && isNum(t.votes_total)
+        ? " (" + Number(t.votes_up) + "/" + Number(t.votes_total) + " gösterge)" : "";
+      const trendText = t.in_trend === true ? "Yukarı"
+        : t.state === "early_reentry" ? "Erken giriş"
+        : t.in_trend === false ? "Aşağı"
+        : t.state === "insufficient_history" ? "Veri yetersiz" : "—";
+      badge.textContent = trendText;
+      badge.className = "badge" + (t.in_trend === true ? " ok" : t.state === "early_reentry" ? " info" : t.in_trend === false ? " warn" : "");
+      setText("trendStateText", trendText + votes);
+
+      const symbol = t.signal_symbol ? t.signal_symbol + " " : "";
+      const close = isNum(t.signal_close) ? fmt.num(t.signal_close, 2) : "—";
+      let level;
+      if (t.in_trend === true && isNum(t.exit_price)) {
+        level = symbol + close + " — çıkış seviyesi ≈ " + fmt.num(t.exit_price, 2) + " (" + fmt.signedPct(t.exit_distance_pct, 1) + ")";
+      } else if (isNum(t.reentry_price)) {
+        level = symbol + close + " — yeniden giriş ≈ " + fmt.num(t.reentry_price, 2) + " (" + fmt.signedPct(t.reentry_distance_pct, 1) + ")";
+      } else {
+        level = "—";
+      }
+      setText("trendLevelText", level);
+
+      let vol = "—";
+      if (isNum(t.volatility) && isNum(t.vol_target) && Number(t.vol_target) > 0) {
+        vol = fmt.pct(Number(t.volatility) * 100, 1) + " / sınır " + fmt.pct(Number(t.vol_target) * 100, 0)
+          + (t.vol_trim === true ? " — pozisyon küçültülüyor" : " — pozisyon küçültme yok");
+      } else if (isNum(t.volatility)) {
+        vol = fmt.pct(Number(t.volatility) * 100, 1) + " — oynaklık hedefi kapalı";
+      }
+      setText("trendVolText", vol);
+
+      if (drawdownRow) {
+        if (isNum(t.drawdown_pct)) {
+          drawdownRow.hidden = false;
+          setText("trendDrawdownText", fmt.pct(t.drawdown_pct, 1) + " — en yüksek bakiyeye göre");
+        } else {
+          drawdownRow.hidden = true;
+        }
+      }
+    }
+
     // ---------- risk ----------
     function meter(label, value, limit, opts) {
       opts = opts || {};
@@ -515,6 +570,7 @@
       view.overview = data;
       if (data.account) renderAccount(data.account);
       renderStrategy("equity", data.equity);
+      renderTrendStatus(data.trend_status);
       renderAllocation(data.risk);
       renderRisk(data.risk);
       renderExecution(data.execution);

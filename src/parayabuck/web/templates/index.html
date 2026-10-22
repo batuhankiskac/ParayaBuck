@@ -149,6 +149,19 @@
             </table>
         </div>
     </article>
+    <article class="card" aria-label="Trend durumu">
+        <div class="card-head">
+            <div><h2>Trend durumu</h2><p>Stratejinin trend eşikleri ve oynaklık ayarı.</p></div>
+            <span id="trendStateBadge" class="badge">—</span>
+        </div>
+        <div class="card-body status-list">
+            <div class="status-row"><span>Trend</span><b id="trendStateText">—</b></div>
+            <div class="status-row"><span>Seviye</span><b id="trendLevelText">—</b></div>
+            <div class="status-row"><span>Oynaklık</span><b id="trendVolText">—</b></div>
+            <div id="trendDrawdownRow" class="status-row" hidden><span>Zirveden düşüş</span><b id="trendDrawdownText">—</b></div>
+            <div class="chart-note" id="trendNote">Seviyeler her gün güncellenir; yaklaşık değerdir.</div>
+        </div>
+    </article>
 </section>
 
 <div class="section-title" id="risk" data-section="risk">

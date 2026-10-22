@@ -23,6 +23,7 @@ from typing import Any
 
 from parayabuck.config import DEFAULT_DECISION_DB_PATH, RiskLimits, load_config
 from parayabuck.logger import get_logger
+from parayabuck.web.services.trend_status import trend_status_from_metadata
 
 log = get_logger("parayabuck.web.services.dashboard")
 
@@ -822,6 +823,11 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
         except Exception:
             meta = {}
     equity_meta = dict(meta.get("equity") or {})
+    equity_decision = decisions.get("equity")
+    equity_target_value = equity_decision.get("target") if isinstance(equity_decision, dict) else None
+    equity_target = equity_target_value if isinstance(equity_target_value, dict) else {}
+    trend_metadata_value = equity_target.get("metadata")
+    trend_metadata = trend_metadata_value if isinstance(trend_metadata_value, dict) else {}
     return {
         "as_of": datetime.now(UTC).isoformat(),
         "engine_state": engine_state,
@@ -853,6 +859,10 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
                 decision=decisions.get("equity"),
                 engine_state=engine_state,
             ),
+        ),
+        "trend_status": _dashboard_safe_panel(
+            "trend_status",
+            lambda: trend_status_from_metadata(trend_metadata, account),
         ),
         "risk": _dashboard_safe_panel("risk", lambda: _dashboard_risk(cfg, health, account)),
         "execution": _dashboard_safe_panel("execution", _dashboard_execution),

@@ -52,7 +52,7 @@ def yahoo_to_csv(sym: str) -> tuple[Path, int, tuple[str, str]]:
     rows = [dedup[k] for k in sorted(dedup)]
     path = OUT / f"put_hedge_v1_{sym}.csv"
     with path.open("w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(["date", "open", "high", "low", "close"])
         w.writerows(rows)
     return path, len(rows), (rows[0][0], rows[-1][0])
@@ -67,7 +67,7 @@ def pput_to_csv() -> tuple[Path, int, tuple[str, str]]:
     rows.sort()
     path = OUT / "put_hedge_v1_pput.csv"
     with path.open("w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(["date", "close"])
         w.writerows(rows)
     return path, len(rows), (rows[0][0], rows[-1][0])

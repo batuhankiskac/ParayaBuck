@@ -27,7 +27,7 @@
       "source_url": "CBRT USD/TRY forex buying rate, as recorded by after_tax_tr_v1",
       "restored_from": "archive/research/gain-band-v3-2026-10",
       "date_range": "2000-01-03 .. 2026-10-09",
-      "used_by": "fe_data.fx_at -> usd_market / RunEnv.fx: USD/TRY conversion of gains, tax payments and liquidation"
+      "used_by": "RunEnv.fx: USD/TRY conversion of gains, tax payments and liquidation"
     },
     "data/historical/after_tax_tr_v1_yiufe.csv": {
       "bytes": 17845,

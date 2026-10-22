@@ -194,3 +194,17 @@ class is worth building; if it is positive, the precision frontier is the bar.
   `--run` is recorded in `SUMMARY.txt`.
 * No change to `src/`, `config/`, `tests/`, `scripts/`, `benchmarks/`, `.env*`,
   `data/runtime/`, `logs/`, or `research/fast_engine/`.
+
+## Amendments (after the run; no arm, parameter or gate changed)
+
+1. **Pre-tax leg of the after-tax windows.** The report needs the pre-tax Δ CAGR and Δ max
+   DD on each of the three windows, not only on the main window. `stage_after_tax` therefore
+   also runs each arm pre-tax at capital 1.0 (the published convention) and records
+   `pre_tax_cagr`, `max_dd_pre_tax`, `delta_pre_tax_pp`, `delta_max_dd_pre_tax_pp`. This is
+   an additional reporting row; no arm, target, fill rule or gate changed.
+2. **Descriptive prize attribution.** For the report's plain-language conclusion, the census
+   computes (without simulating anything) K's target weight at each trigger close times the
+   2x leg's decline from the sell fill to the buy fill, split by whether the episode ended by
+   regaining its high or by the E2 vote turning off. It is a decomposition of the
+   pre-registered episode set, not an arm, and it is labelled descriptive in `RESULTS.json`.
+

@@ -1,0 +1,3515 @@
+{
+ "after_tax": {
+  "2000_03_to_2026_09": {
+   "H_f0": {
+    "after_tax_cagr": 0.14737468270202525,
+    "after_tax_cagr_unliquidated": 0.1542808426810638,
+    "delta_after_tax_pp": 3.9841625576136463,
+    "delta_max_dd_pp": 0.21305793844440535,
+    "delta_max_dd_pre_tax_pp": 0.21305793844440535,
+    "delta_pre_tax_pp": 5.044563055046769,
+    "delta_tax_usd": 1303382.830904462,
+    "extra_sells_per_year": -0.4141583341923507,
+    "max_dd_after_tax": 0.4688284897231132,
+    "max_dd_pre_tax": 0.4688284897231131,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.2080603172809965,
+    "qld_sells_per_year": 9.864498505308731,
+    "sells_per_year": 10.241006081847232,
+    "tax_usd": 2134285.4923159247,
+    "terminal_usd": 3852700.4217420667,
+    "years": 26.559890485968516
+   },
+   "H_f100": {
+    "after_tax_cagr": 0.14469291658604666,
+    "after_tax_cagr_unliquidated": 0.14979837520777206,
+    "delta_after_tax_pp": 3.7159859460157874,
+    "delta_max_dd_pp": -4.097524112559103,
+    "delta_max_dd_pre_tax_pp": -4.097524112559081,
+    "delta_pre_tax_pp": 5.786176894554407,
+    "delta_tax_usd": 1497683.498720584,
+    "extra_sells_per_year": 1.6566333367694046,
+    "max_dd_after_tax": 0.4257226692130781,
+    "max_dd_pre_tax": 0.4257226692130782,
+    "n_episodes_fired": 56,
+    "pre_tax_cagr": 0.21547645567607288,
+    "qld_sells_per_year": 11.935290176270486,
+    "sells_per_year": 12.387099268116689,
+    "tax_usd": 2328586.160132047,
+    "terminal_usd": 3620539.5031477306,
+    "years": 26.559890485968516
+   },
+   "H_f25": {
+    "after_tax_cagr": 0.1392343506493936,
+    "after_tax_cagr_unliquidated": 0.14379052420466265,
+    "delta_after_tax_pp": 3.1701293523504814,
+    "delta_max_dd_pp": 0.21305793844440535,
+    "delta_max_dd_pre_tax_pp": 0.21305793844440535,
+    "delta_pre_tax_pp": 4.299570378589257,
+    "delta_tax_usd": 990113.28482141,
+    "extra_sells_per_year": 0.6777136377693029,
+    "max_dd_after_tax": 0.4688284897231132,
+    "max_dd_pre_tax": 0.4688284897231131,
+    "n_episodes_fired": 22,
+    "pre_tax_cagr": 0.20061039051642138,
+    "qld_sells_per_year": 10.956370477270385,
+    "sells_per_year": 11.370528811462735,
+    "tax_usd": 1821015.9462328728,
+    "terminal_usd": 3188871.208561426,
+    "years": 26.559890485968516
+   },
+   "H_f50": {
+    "after_tax_cagr": 0.13216627303609685,
+    "after_tax_cagr_unliquidated": 0.13664028147257956,
+    "delta_after_tax_pp": 2.463321591020806,
+    "delta_max_dd_pp": 0.8564558082106988,
+    "delta_max_dd_pre_tax_pp": 0.8564558082106877,
+    "delta_pre_tax_pp": 3.563648169249345,
+    "delta_tax_usd": 764950.4630783712,
+    "extra_sells_per_year": 1.242475002577054,
+    "max_dd_after_tax": 0.47526246842077613,
+    "max_dd_pre_tax": 0.4752624684207759,
+    "n_episodes_fired": 33,
+    "pre_tax_cagr": 0.19325116842302226,
+    "qld_sells_per_year": 11.521131842078136,
+    "sells_per_year": 11.897639418616636,
+    "tax_usd": 1595853.124489834,
+    "terminal_usd": 2703020.621603486,
+    "years": 26.559890485968516
+   },
+   "H_f75": {
+    "after_tax_cagr": 0.1407527829519335,
+    "after_tax_cagr_unliquidated": 0.14527668828817086,
+    "delta_after_tax_pp": 3.321972582604471,
+    "delta_max_dd_pp": 0.8564558082106988,
+    "delta_max_dd_pre_tax_pp": 0.8564558082106877,
+    "delta_pre_tax_pp": 4.6809234452176,
+    "delta_tax_usd": 1172728.2643364372,
+    "extra_sells_per_year": 1.6566333367694046,
+    "max_dd_after_tax": 0.47526246842077613,
+    "max_dd_pre_tax": 0.4752624684207759,
+    "n_episodes_fired": 44,
+    "pre_tax_cagr": 0.2044239211827048,
+    "qld_sells_per_year": 11.935290176270486,
+    "sells_per_year": 12.349448510462839,
+    "tax_usd": 2003630.9257479,
+    "terminal_usd": 3303702.6967713647,
+    "years": 26.559890485968516
+   },
+   "K": {
+    "after_tax_cagr": 0.10753305712588879,
+    "after_tax_cagr_unliquidated": 0.11430700764876467,
+    "max_dd_after_tax": 0.46669791033866914,
+    "max_dd_pre_tax": 0.46669791033866903,
+    "n_episodes_fired": null,
+    "pre_tax_cagr": 0.1576146867305288,
+    "qld_sells_per_year": 10.278656839501082,
+    "sells_per_year": 10.655164416039582,
+    "tax_usd": 830902.6614114628,
+    "terminal_usd": 1506985.360426084,
+    "years": 26.559890485968516
+   },
+   "O_d2_k0_X10": {
+    "after_tax_cagr": 0.15715608201064346,
+    "after_tax_cagr_unliquidated": 0.16557394981921703,
+    "delta_after_tax_pp": 4.962302488475467,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "delta_max_dd_pre_tax_pp": 0.21305793844434984,
+    "delta_pre_tax_pp": 6.54188953455801,
+    "delta_tax_usd": 1989398.7781312694,
+    "extra_sells_per_year": -0.6400628801154529,
+    "max_dd_after_tax": 0.46882848972311275,
+    "max_dd_pre_tax": 0.46882848972311253,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.2230335820761089,
+    "qld_sells_per_year": 9.638593959385629,
+    "sells_per_year": 10.090403051231831,
+    "tax_usd": 2820301.439542732,
+    "terminal_usd": 4827063.881626962,
+    "years": 26.559890485968516
+   },
+   "O_d2_k0_X8": {
+    "after_tax_cagr": 0.1795889123532577,
+    "after_tax_cagr_unliquidated": 0.18916225596051195,
+    "delta_after_tax_pp": 7.20558552273689,
+    "delta_max_dd_pp": -4.5762792942634185,
+    "delta_max_dd_pre_tax_pp": -4.576279294263463,
+    "delta_pre_tax_pp": 9.729551573263183,
+    "delta_tax_usd": 3979576.7330824933,
+    "extra_sells_per_year": -0.6400628801154529,
+    "max_dd_after_tax": 0.42093511739603495,
+    "max_dd_pre_tax": 0.4209351173960344,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.25491020246316065,
+    "qld_sells_per_year": 9.638593959385629,
+    "sells_per_year": 10.052752293577981,
+    "tax_usd": 4810479.394493956,
+    "terminal_usd": 8038204.497035866,
+    "years": 26.559890485968516
+   },
+   "O_d2_k3_X10": {
+    "after_tax_cagr": 0.14757150605184277,
+    "after_tax_cagr_unliquidated": 0.15491188628107744,
+    "delta_after_tax_pp": 4.003844892595398,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "delta_max_dd_pre_tax_pp": 0.21305793844442755,
+    "delta_pre_tax_pp": 5.2872006536386795,
+    "delta_tax_usd": 1412405.9717149213,
+    "extra_sells_per_year": -0.37650757653850064,
+    "max_dd_after_tax": 0.46882848972311275,
+    "max_dd_pre_tax": 0.4688284897231133,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.2104866932669156,
+    "qld_sells_per_year": 9.902149262962581,
+    "sells_per_year": 10.278656839501082,
+    "tax_usd": 2243308.633126384,
+    "terminal_usd": 3870292.424102423,
+    "years": 26.559890485968516
+   },
+   "O_d2_k3_X8": {
+    "after_tax_cagr": 0.1648289459703145,
+    "after_tax_cagr_unliquidated": 0.173314631639246,
+    "delta_after_tax_pp": 5.729588884442571,
+    "delta_max_dd_pp": -4.57627929426343,
+    "delta_max_dd_pre_tax_pp": -4.57627929426333,
+    "delta_pre_tax_pp": 7.918145374183916,
+    "delta_tax_usd": 2601064.333099502,
+    "extra_sells_per_year": -0.4141583341923507,
+    "max_dd_after_tax": 0.42093511739603484,
+    "max_dd_pre_tax": 0.42093511739603573,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.23679614047236797,
+    "qld_sells_per_year": 9.864498505308731,
+    "sells_per_year": 10.278656839501082,
+    "tax_usd": 3431966.994510965,
+    "terminal_usd": 5753280.677011333,
+    "years": 26.559890485968516
+   },
+   "O_d2_k5_X10": {
+    "after_tax_cagr": 0.1371669445143886,
+    "after_tax_cagr_unliquidated": 0.14430366758504087,
+    "delta_after_tax_pp": 2.9633887388499813,
+    "delta_max_dd_pp": 0.0,
+    "delta_max_dd_pre_tax_pp": 0.0,
+    "delta_pre_tax_pp": 4.07704278268024,
+    "delta_tax_usd": 932581.0706553969,
+    "extra_sells_per_year": -0.11295227296155019,
+    "max_dd_after_tax": 0.46669791033866914,
+    "max_dd_pre_tax": 0.46669791033866903,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.1983851145573312,
+    "qld_sells_per_year": 10.165704566539532,
+    "sells_per_year": 10.542212143078032,
+    "tax_usd": 1763483.7320668597,
+    "terminal_usd": 3038682.7175568473,
+    "years": 26.559890485968516
+   },
+   "O_d2_k5_X8": {
+    "after_tax_cagr": 0.15394088527671013,
+    "after_tax_cagr_unliquidated": 0.1622163985032572,
+    "delta_after_tax_pp": 4.640782815082134,
+    "delta_max_dd_pp": -4.808547719294043,
+    "delta_max_dd_pre_tax_pp": -4.808547719294043,
+    "delta_pre_tax_pp": 6.699021950947137,
+    "delta_tax_usd": 1866744.5694283019,
+    "extra_sells_per_year": -0.26355530357695045,
+    "max_dd_after_tax": 0.4186124331457287,
+    "max_dd_pre_tax": 0.4186124331457286,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.22460490624000018,
+    "qld_sells_per_year": 10.015101535924131,
+    "sells_per_year": 10.429259870116482,
+    "tax_usd": 2697647.2308397647,
+    "terminal_usd": 4483204.743741123,
+    "years": 26.559890485968516
+   },
+   "O_d3_k0_X10": {
+    "after_tax_cagr": 0.15763316960095164,
+    "after_tax_cagr_unliquidated": 0.16605755586863613,
+    "delta_after_tax_pp": 5.010011247506285,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "delta_max_dd_pre_tax_pp": 0.21305793844434984,
+    "delta_pre_tax_pp": 6.4471028062003555,
+    "delta_tax_usd": 1928811.667625783,
+    "extra_sells_per_year": -0.6777136377693029,
+    "max_dd_after_tax": 0.46882848972311275,
+    "max_dd_pre_tax": 0.46882848972311253,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.22208571479253236,
+    "qld_sells_per_year": 9.600943201731779,
+    "sells_per_year": 10.052752293577981,
+    "tax_usd": 2759714.329037246,
+    "terminal_usd": 4880201.921795775,
+    "years": 26.559890485968516
+   },
+   "O_d3_k0_X8": {
+    "after_tax_cagr": 0.17418230896704245,
+    "after_tax_cagr_unliquidated": 0.18316406947931596,
+    "delta_after_tax_pp": 6.664925184115367,
+    "delta_max_dd_pp": -4.5762792942634185,
+    "delta_max_dd_pre_tax_pp": -4.576279294263463,
+    "delta_pre_tax_pp": 8.829971247694779,
+    "delta_tax_usd": 3279027.8162283893,
+    "extra_sells_per_year": -0.6777136377693029,
+    "max_dd_after_tax": 0.42093511739603495,
+    "max_dd_pre_tax": 0.4209351173960344,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.2459143992074766,
+    "qld_sells_per_year": 9.600943201731779,
+    "sells_per_year": 10.015101535924131,
+    "tax_usd": 4109930.477639852,
+    "terminal_usd": 7114888.718951678,
+    "years": 26.559890485968516
+   },
+   "O_d3_k3_X10": {
+    "after_tax_cagr": 0.1480624519893312,
+    "after_tax_cagr_unliquidated": 0.15540913567339953,
+    "delta_after_tax_pp": 4.0529394863442425,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "delta_max_dd_pre_tax_pp": 0.21305793844442755,
+    "delta_pre_tax_pp": 5.193386325842009,
+    "delta_tax_usd": 1358160.9208281403,
+    "extra_sells_per_year": -0.4141583341923507,
+    "max_dd_after_tax": 0.46882848972311275,
+    "max_dd_pre_tax": 0.4688284897231133,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.2095485499889489,
+    "qld_sells_per_year": 9.864498505308731,
+    "sells_per_year": 10.241006081847232,
+    "tax_usd": 2189063.582239603,
+    "terminal_usd": 3914510.5438380274,
+    "years": 26.559890485968516
+   },
+   "O_d3_k3_X8": {
+    "after_tax_cagr": 0.15964721877995425,
+    "after_tax_cagr_unliquidated": 0.1675210616004268,
+    "delta_after_tax_pp": 5.211416165406546,
+    "delta_max_dd_pp": -4.57627929426343,
+    "delta_max_dd_pre_tax_pp": -4.57627929426333,
+    "delta_pre_tax_pp": 7.031550084318505,
+    "delta_tax_usd": 2100653.552235086,
+    "extra_sells_per_year": -0.45180909184620077,
+    "max_dd_after_tax": 0.42093511739603484,
+    "max_dd_pre_tax": 0.42093511739603573,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.22793018757371386,
+    "qld_sells_per_year": 9.826847747654881,
+    "sells_per_year": 10.241006081847232,
+    "tax_usd": 2931556.213646549,
+    "terminal_usd": 5110796.792876903,
+    "years": 26.559890485968516
+   },
+   "O_d3_k5_X10": {
+    "after_tax_cagr": 0.13771488207142513,
+    "after_tax_cagr_unliquidated": 0.14485814649307094,
+    "delta_after_tax_pp": 3.018182494553634,
+    "delta_max_dd_pp": 0.0,
+    "delta_max_dd_pre_tax_pp": 0.0,
+    "delta_pre_tax_pp": 3.9841663433198837,
+    "delta_tax_usd": 888159.1271934442,
+    "extra_sells_per_year": -0.15060303061540026,
+    "max_dd_after_tax": 0.46669791033866914,
+    "max_dd_pre_tax": 0.46669791033866903,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.19745635016372765,
+    "qld_sells_per_year": 10.128053808885682,
+    "sells_per_year": 10.504561385424182,
+    "tax_usd": 1719061.788604907,
+    "terminal_usd": 3077811.39362118,
+    "years": 26.559890485968516
+   },
+   "O_d3_k5_X8": {
+    "after_tax_cagr": 0.14893545092311755,
+    "after_tax_cagr_unliquidated": 0.15660339968387427,
+    "delta_after_tax_pp": 4.1402393797228765,
+    "delta_max_dd_pp": -4.808547719294043,
+    "delta_max_dd_pre_tax_pp": -4.808547719294043,
+    "delta_pre_tax_pp": 5.82116592739601,
+    "delta_tax_usd": 1473656.8611759986,
+    "extra_sells_per_year": -0.3012060612308005,
+    "max_dd_after_tax": 0.4186124331457287,
+    "max_dd_pre_tax": 0.4186124331457286,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.2158263460044889,
+    "qld_sells_per_year": 9.977450778270281,
+    "sells_per_year": 10.391609112462632,
+    "tax_usd": 2304559.5225874614,
+    "terminal_usd": 3994342.759894332,
+    "years": 26.559890485968516
+   },
+   "R2": {
+    "after_tax_cagr": 0.10160007014437822,
+    "after_tax_cagr_unliquidated": 0.10783270315305771,
+    "delta_after_tax_pp": -0.5932986981510568,
+    "delta_max_dd_pp": 0.08856977836700919,
+    "delta_pre_tax_pp": -0.2882395007337335,
+    "max_dd_after_tax": 0.46758360812233923,
+    "max_dd_pre_tax": 0.46758360812233857,
+    "n_episodes_fired": null,
+    "pre_tax_cagr": 0.15473229172319147,
+    "qld_sells_per_year": 30.384161426657045,
+    "sells_per_year": 30.685367487887845,
+    "tax_usd": 766159.9335904098,
+    "terminal_usd": 1306627.035617263,
+    "years": 26.559890485968516
+   },
+   "S_f100": {
+    "after_tax_cagr": 0.14965084400233697,
+    "after_tax_cagr_unliquidated": 0.15504378091105475,
+    "delta_after_tax_pp": 4.211778687644818,
+    "delta_max_dd_pp": -4.147909707161324,
+    "delta_max_dd_pre_tax_pp": -4.147909707161245,
+    "delta_pre_tax_pp": 6.573610234280469,
+    "delta_tax_usd": 1803773.9810703238,
+    "extra_sells_per_year": 1.6942840944232547,
+    "max_dd_after_tax": 0.4252188132670559,
+    "max_dd_pre_tax": 0.4252188132670566,
+    "n_episodes_fired": 56,
+    "pre_tax_cagr": 0.2233507890733335,
+    "qld_sells_per_year": 11.972940933924336,
+    "sells_per_year": 12.462400783424389,
+    "tax_usd": 2634676.6424817867,
+    "terminal_usd": 4060928.3859275314,
+    "years": 26.559890485968516
+   },
+   "S_f25": {
+    "after_tax_cagr": 0.14215820297816717,
+    "after_tax_cagr_unliquidated": 0.147240250617656,
+    "delta_after_tax_pp": 3.4625145852278383,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "delta_max_dd_pre_tax_pp": 0.21305793844442755,
+    "delta_pre_tax_pp": 4.773648673661235,
+    "delta_tax_usd": 1146644.3972024983,
+    "extra_sells_per_year": 0.6777136377693029,
+    "max_dd_after_tax": 0.46882848972311275,
+    "max_dd_pre_tax": 0.4688284897231133,
+    "n_episodes_fired": 22,
+    "pre_tax_cagr": 0.20535117346714116,
+    "qld_sells_per_year": 10.956370477270385,
+    "sells_per_year": 11.408179569116585,
+    "tax_usd": 1977547.058613961,
+    "terminal_usd": 3413526.1094923704,
+    "years": 26.559890485968516
+   },
+   "S_f50": {
+    "after_tax_cagr": 0.13468175355010548,
+    "after_tax_cagr_unliquidated": 0.1396695512969759,
+    "delta_after_tax_pp": 2.714869642421669,
+    "delta_max_dd_pp": 0.6059978789817899,
+    "delta_max_dd_pre_tax_pp": 0.6059978789818454,
+    "delta_pre_tax_pp": 3.999146029580025,
+    "delta_tax_usd": 882412.510195713,
+    "extra_sells_per_year": 1.242475002577054,
+    "max_dd_after_tax": 0.47275788912848704,
+    "max_dd_pre_tax": 0.4727578891284875,
+    "n_episodes_fired": 33,
+    "pre_tax_cagr": 0.19760614702632906,
+    "qld_sells_per_year": 11.521131842078136,
+    "sells_per_year": 11.935290176270486,
+    "tax_usd": 1713315.1716071758,
+    "terminal_usd": 2867142.7800368434,
+    "years": 26.559890485968516
+   },
+   "S_f75": {
+    "after_tax_cagr": 0.14565393677122884,
+    "after_tax_cagr_unliquidated": 0.15071970819599034,
+    "delta_after_tax_pp": 3.8120879645340056,
+    "delta_max_dd_pp": 0.6059978789817899,
+    "delta_max_dd_pre_tax_pp": 0.6059978789818454,
+    "delta_pre_tax_pp": 5.4648899103564075,
+    "delta_tax_usd": 1444439.0895313644,
+    "extra_sells_per_year": 1.6566333367694046,
+    "max_dd_after_tax": 0.47275788912848704,
+    "max_dd_pre_tax": 0.4727578891284875,
+    "n_episodes_fired": 44,
+    "pre_tax_cagr": 0.21226358583409288,
+    "qld_sells_per_year": 11.935290176270486,
+    "sells_per_year": 12.424750025770539,
+    "tax_usd": 2275341.750942827,
+    "terminal_usd": 3702143.1926007094,
+    "years": 26.559890485968516
+   }
+  },
+  "2010_01_to_end": {
+   "H_f0": {
+    "after_tax_cagr": 0.21620466585153575,
+    "after_tax_cagr_unliquidated": 0.22776448799087,
+    "delta_after_tax_pp": 6.3851067543203355,
+    "delta_max_dd_pp": -9.847991650373855,
+    "delta_max_dd_pre_tax_pp": -3.682734046278202,
+    "delta_pre_tax_pp": 8.23717996914155,
+    "delta_tax_usd": 866926.2940273404,
+    "extra_sells_per_year": -0.4180428384565076,
+    "max_dd_after_tax": 0.34779190947749306,
+    "max_dd_pre_tax": 0.34779190947749306,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.305807212692881,
+    "qld_sells_per_year": 9.67470568999346,
+    "sells_per_year": 10.21218933943754,
+    "tax_usd": 1429799.1833743106,
+    "terminal_usd": 2651006.0391718983,
+    "years": 16.744695414099933
+   },
+   "H_f100": {
+    "after_tax_cagr": 0.19894977790264567,
+    "after_tax_cagr_unliquidated": 0.20732445435817715,
+    "delta_after_tax_pp": 4.659617959431328,
+    "delta_max_dd_pp": -11.64626422514301,
+    "delta_max_dd_pre_tax_pp": -8.288389929758432,
+    "delta_pre_tax_pp": 7.748789721859373,
+    "delta_tax_usd": 725800.3741033915,
+    "extra_sells_per_year": 1.4332897318508824,
+    "max_dd_after_tax": 0.3298091837298015,
+    "max_dd_pre_tax": 0.30173535064269075,
+    "n_episodes_fired": 56,
+    "pre_tax_cagr": 0.30092331022005925,
+    "qld_sells_per_year": 11.526038260300849,
+    "sells_per_year": 12.182962720732505,
+    "tax_usd": 1288673.2634503618,
+    "terminal_usd": 2086885.407438993,
+    "years": 16.744695414099933
+   },
+   "H_f25": {
+    "after_tax_cagr": 0.20654425564009116,
+    "after_tax_cagr_unliquidated": 0.21413886372117896,
+    "delta_after_tax_pp": 5.419065733175876,
+    "delta_max_dd_pp": -13.576689658704266,
+    "delta_max_dd_pre_tax_pp": -7.411432054608613,
+    "delta_pre_tax_pp": 7.296104879704135,
+    "delta_tax_usd": 723973.2747995164,
+    "extra_sells_per_year": 0.5972040549378672,
+    "max_dd_after_tax": 0.31050492939418894,
+    "max_dd_pre_tax": 0.31050492939418894,
+    "n_episodes_fired": 22,
+    "pre_tax_cagr": 0.29639646179850687,
+    "qld_sells_per_year": 10.689952583387834,
+    "sells_per_year": 11.227436232831915,
+    "tax_usd": 1286846.1641464867,
+    "terminal_usd": 2319620.776698508,
+    "years": 16.744695414099933
+   },
+   "H_f50": {
+    "after_tax_cagr": 0.19472055338193361,
+    "after_tax_cagr_unliquidated": 0.20213837801524392,
+    "delta_after_tax_pp": 4.236695507360122,
+    "delta_max_dd_pp": -9.02040793937634,
+    "delta_max_dd_pre_tax_pp": -2.8551503352806984,
+    "delta_pre_tax_pp": 6.244387247680683,
+    "delta_tax_usd": 564928.8540252082,
+    "extra_sells_per_year": 1.493010137344669,
+    "max_dd_after_tax": 0.3560677465874682,
+    "max_dd_pre_tax": 0.3560677465874681,
+    "n_episodes_fired": 33,
+    "pre_tax_cagr": 0.28587928547827235,
+    "qld_sells_per_year": 11.585758665794636,
+    "sells_per_year": 12.182962720732505,
+    "tax_usd": 1127801.7433721784,
+    "terminal_usd": 1966985.9045242001,
+    "years": 16.744695414099933
+   },
+   "H_f75": {
+    "after_tax_cagr": 0.19864003237077799,
+    "after_tax_cagr_unliquidated": 0.20608579950638894,
+    "delta_after_tax_pp": 4.628643406244559,
+    "delta_max_dd_pp": -14.453647533854086,
+    "delta_max_dd_pre_tax_pp": -8.288389929758411,
+    "delta_pre_tax_pp": 6.808235010695629,
+    "delta_tax_usd": 652554.2460825602,
+    "extra_sells_per_year": 1.493010137344669,
+    "max_dd_after_tax": 0.30173535064269075,
+    "max_dd_pre_tax": 0.30173535064269097,
+    "n_episodes_fired": 44,
+    "pre_tax_cagr": 0.2915177631084218,
+    "qld_sells_per_year": 11.585758665794636,
+    "sells_per_year": 12.242683126226291,
+    "tax_usd": 1215427.1354295304,
+    "terminal_usd": 2077875.9867133498,
+    "years": 16.744695414099933
+   },
+   "K": {
+    "after_tax_cagr": 0.1523535983083324,
+    "after_tax_cagr_unliquidated": 0.1633958579077852,
+    "max_dd_after_tax": 0.4462718259812316,
+    "max_dd_pre_tax": 0.3846192499402751,
+    "n_episodes_fired": null,
+    "pre_tax_cagr": 0.22343541300146552,
+    "qld_sells_per_year": 10.092748528449967,
+    "sells_per_year": 10.630232177894047,
+    "tax_usd": 562872.8893469702,
+    "terminal_usd": 1074570.295464504,
+    "years": 16.744695414099933
+   },
+   "O_d2_k0_X10": {
+    "after_tax_cagr": 0.23202090578991008,
+    "after_tax_cagr_unliquidated": 0.2462065551924446,
+    "delta_after_tax_pp": 7.966730748157769,
+    "delta_max_dd_pp": -9.847991650373833,
+    "delta_max_dd_pre_tax_pp": -3.682734046278191,
+    "delta_pre_tax_pp": 10.692675494864323,
+    "delta_tax_usd": 1318794.1118829679,
+    "extra_sells_per_year": -0.8360856769130152,
+    "max_dd_after_tax": 0.3477919094774933,
+    "max_dd_pre_tax": 0.34779190947749317,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.33036216795010875,
+    "qld_sells_per_year": 9.256662851536952,
+    "sells_per_year": 9.913587311968605,
+    "tax_usd": 1881667.0012299381,
+    "terminal_usd": 3291335.116413367,
+    "years": 16.744695414099933
+   },
+   "O_d2_k0_X8": {
+    "after_tax_cagr": 0.25980996190493655,
+    "after_tax_cagr_unliquidated": 0.27601065219142673,
+    "delta_after_tax_pp": 10.745636359660416,
+    "delta_max_dd_pp": -12.699387072587676,
+    "delta_max_dd_pre_tax_pp": -6.534129468492045,
+    "delta_pre_tax_pp": 14.632251887103664,
+    "delta_tax_usd": 2240644.544702623,
+    "extra_sells_per_year": -1.6124509483322438,
+    "max_dd_after_tax": 0.31927795525535485,
+    "max_dd_pre_tax": 0.31927795525535463,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.36975793187250217,
+    "qld_sells_per_year": 8.480297580117723,
+    "sells_per_year": 9.137222040549378,
+    "tax_usd": 2803517.4340495933,
+    "terminal_usd": 4781644.814089069,
+    "years": 16.744695414099933
+   },
+   "O_d2_k3_X10": {
+    "after_tax_cagr": 0.21599932976464742,
+    "after_tax_cagr_unliquidated": 0.22828596230780795,
+    "delta_after_tax_pp": 6.3645731456315024,
+    "delta_max_dd_pp": -9.847991650373833,
+    "delta_max_dd_pre_tax_pp": -3.682734046278191,
+    "delta_pre_tax_pp": 8.574990217750745,
+    "delta_tax_usd": 929348.0656441168,
+    "extra_sells_per_year": -0.35832243296272104,
+    "max_dd_after_tax": 0.3477919094774933,
+    "max_dd_pre_tax": 0.34779190947749317,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.30918531517897296,
+    "qld_sells_per_year": 9.734426095487246,
+    "sells_per_year": 10.271909744931326,
+    "tax_usd": 1492220.954991087,
+    "terminal_usd": 2643521.4243891183,
+    "years": 16.744695414099933
+   },
+   "O_d2_k3_X8": {
+    "after_tax_cagr": 0.23816446953637493,
+    "after_tax_cagr_unliquidated": 0.252434432261307,
+    "delta_after_tax_pp": 8.581087122804254,
+    "delta_max_dd_pp": -12.699387072587687,
+    "delta_max_dd_pre_tax_pp": -6.534129468492034,
+    "delta_pre_tax_pp": 11.849540244573031,
+    "delta_tax_usd": 1515901.785220654,
+    "extra_sells_per_year": -1.1944081098757362,
+    "max_dd_after_tax": 0.31927795525535474,
+    "max_dd_pre_tax": 0.31927795525535474,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.34193081544719583,
+    "qld_sells_per_year": 8.89834041857423,
+    "sells_per_year": 9.435824068018311,
+    "tax_usd": 2078774.6745676242,
+    "terminal_usd": 3577214.638167714,
+    "years": 16.744695414099933
+   },
+   "O_d2_k5_X10": {
+    "after_tax_cagr": 0.20199738706023407,
+    "after_tax_cagr_unliquidated": 0.21390559965130018,
+    "delta_after_tax_pp": 4.964378875190167,
+    "delta_max_dd_pp": -9.847991650373833,
+    "delta_max_dd_pre_tax_pp": -3.682734046278191,
+    "delta_pre_tax_pp": 6.918360771463217,
+    "delta_tax_usd": 664303.654174218,
+    "extra_sells_per_year": 0.059720405493786544,
+    "max_dd_after_tax": 0.3477919094774933,
+    "max_dd_pre_tax": 0.34779190947749317,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.2926190207160977,
+    "qld_sells_per_year": 10.152468933943753,
+    "sells_per_year": 10.689952583387834,
+    "tax_usd": 1227176.5435211882,
+    "terminal_usd": 2177510.0340982834,
+    "years": 16.744695414099933
+   },
+   "O_d2_k5_X8": {
+    "after_tax_cagr": 0.22347475310907794,
+    "after_tax_cagr_unliquidated": 0.23734649107888295,
+    "delta_after_tax_pp": 7.1121154800745545,
+    "delta_max_dd_pp": -12.699387072587697,
+    "delta_max_dd_pre_tax_pp": -6.5341294684920115,
+    "delta_pre_tax_pp": 10.177892552910329,
+    "delta_tax_usd": 1148000.1857037623,
+    "extra_sells_per_year": -0.8958060824068017,
+    "max_dd_after_tax": 0.31927795525535463,
+    "max_dd_pre_tax": 0.31927795525535496,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.3252143385305688,
+    "qld_sells_per_year": 9.196942446043165,
+    "sells_per_year": 9.794146500981032,
+    "tax_usd": 1710873.0750507326,
+    "terminal_usd": 2929218.678001015,
+    "years": 16.744695414099933
+   },
+   "O_d3_k0_X10": {
+    "after_tax_cagr": 0.23281969452446338,
+    "after_tax_cagr_unliquidated": 0.24702034943363116,
+    "delta_after_tax_pp": 8.046609621613099,
+    "delta_max_dd_pp": -9.847991650373833,
+    "delta_max_dd_pre_tax_pp": -3.682734046278191,
+    "delta_pre_tax_pp": 10.529171112885871,
+    "delta_tax_usd": 1277538.3231050596,
+    "extra_sells_per_year": -0.8958060824068017,
+    "max_dd_after_tax": 0.3477919094774933,
+    "max_dd_pre_tax": 0.34779190947749317,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.32872712413032423,
+    "qld_sells_per_year": 9.196942446043165,
+    "sells_per_year": 9.853866906474819,
+    "tax_usd": 1840411.2124520298,
+    "terminal_usd": 3327250.5647569103,
+    "years": 16.744695414099933
+   },
+   "O_d3_k0_X8": {
+    "after_tax_cagr": 0.2516415871298141,
+    "after_tax_cagr_unliquidated": 0.26680244328531977,
+    "delta_after_tax_pp": 9.928798882148172,
+    "delta_max_dd_pp": -12.699387072587676,
+    "delta_max_dd_pre_tax_pp": -6.534129468492022,
+    "delta_pre_tax_pp": 13.303860490591358,
+    "delta_tax_usd": 1859623.3282241896,
+    "extra_sells_per_year": -1.6721713538260303,
+    "max_dd_after_tax": 0.31927795525535485,
+    "max_dd_pre_tax": 0.31927795525535485,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.3564740179073791,
+    "qld_sells_per_year": 8.420577174623936,
+    "sells_per_year": 9.07750163505559,
+    "tax_usd": 2422496.21757116,
+    "terminal_usd": 4288176.488421895,
+    "years": 16.744695414099933
+   },
+   "O_d3_k3_X10": {
+    "after_tax_cagr": 0.21682918669507534,
+    "after_tax_cagr_unliquidated": 0.22913038610465475,
+    "delta_after_tax_pp": 6.447558838674294,
+    "delta_max_dd_pp": -9.847991650373833,
+    "delta_max_dd_pre_tax_pp": -3.682734046278191,
+    "delta_pre_tax_pp": 8.414088516687324,
+    "delta_tax_usd": 892595.9883794347,
+    "extra_sells_per_year": -0.4180428384565076,
+    "max_dd_after_tax": 0.3477919094774933,
+    "max_dd_pre_tax": 0.34779190947749317,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.30757629816833876,
+    "qld_sells_per_year": 9.67470568999346,
+    "sells_per_year": 10.21218933943754,
+    "tax_usd": 1455468.877726405,
+    "terminal_usd": 2673892.821371567,
+    "years": 16.744695414099933
+   },
+   "O_d3_k3_X8": {
+    "after_tax_cagr": 0.23029137263913713,
+    "after_tax_cagr_unliquidated": 0.24349525239971137,
+    "delta_after_tax_pp": 7.793777433080473,
+    "delta_max_dd_pp": -12.699387072587687,
+    "delta_max_dd_pre_tax_pp": -6.534129468492022,
+    "delta_pre_tax_pp": 10.548135588702268,
+    "delta_tax_usd": 1229599.892746637,
+    "extra_sells_per_year": -1.2541285153695227,
+    "max_dd_after_tax": 0.31927795525535474,
+    "max_dd_pre_tax": 0.31927795525535485,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.3289167688884882,
+    "qld_sells_per_year": 8.838620013080444,
+    "sells_per_year": 9.376103662524525,
+    "tax_usd": 1792472.7820936074,
+    "terminal_usd": 3214816.4774506385,
+    "years": 16.744695414099933
+   },
+   "O_d3_k5_X10": {
+    "after_tax_cagr": 0.20292084355085893,
+    "after_tax_cagr_unliquidated": 0.21484444867355013,
+    "delta_after_tax_pp": 5.056724524252654,
+    "delta_max_dd_pp": -9.847991650373833,
+    "delta_max_dd_pre_tax_pp": -3.682734046278191,
+    "delta_pre_tax_pp": 6.759495103747004,
+    "delta_tax_usd": 632731.2817847515,
+    "extra_sells_per_year": 0.0,
+    "max_dd_after_tax": 0.3477919094774933,
+    "max_dd_pre_tax": 0.34779190947749317,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.29103036403893556,
+    "qld_sells_per_year": 10.092748528449967,
+    "sells_per_year": 10.630232177894047,
+    "tax_usd": 1195604.1711317217,
+    "terminal_usd": 2205692.497426947,
+    "years": 16.744695414099933
+   },
+   "O_d3_k5_X8": {
+    "after_tax_cagr": 0.21587262413230635,
+    "after_tax_cagr_unliquidated": 0.2286891872355572,
+    "delta_after_tax_pp": 6.351902582397395,
+    "delta_max_dd_pp": -12.699387072587676,
+    "delta_max_dd_pre_tax_pp": -6.534129468492022,
+    "delta_pre_tax_pp": 8.892699538234927,
+    "delta_tax_usd": 911509.0164133387,
+    "extra_sells_per_year": -0.9555264879005883,
+    "max_dd_after_tax": 0.31927795525535485,
+    "max_dd_pre_tax": 0.31927795525535485,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.3123624083838148,
+    "qld_sells_per_year": 9.137222040549378,
+    "sells_per_year": 9.67470568999346,
+    "tax_usd": 1474381.905760309,
+    "terminal_usd": 2638912.8514956343,
+    "years": 16.744695414099933
+   },
+   "R2": {
+    "after_tax_cagr": 0.1470592236245627,
+    "after_tax_cagr_unliquidated": 0.1572312838305343,
+    "delta_after_tax_pp": -0.5294374683769698,
+    "delta_max_dd_pp": -0.8432724950835024,
+    "delta_pre_tax_pp": -0.18484447765731993,
+    "max_dd_after_tax": 0.4378391010303966,
+    "max_dd_pre_tax": 0.379566426843871,
+    "n_episodes_fired": null,
+    "pre_tax_cagr": 0.22158696822489232,
+    "qld_sells_per_year": 30.875449640287766,
+    "sells_per_year": 31.35321288423806,
+    "tax_usd": 553536.0615807374,
+    "terminal_usd": 994825.1735722306,
+    "years": 16.744695414099933
+   },
+   "S_f100": {
+    "after_tax_cagr": 0.2045589040796052,
+    "after_tax_cagr_unliquidated": 0.21341854441070773,
+    "delta_after_tax_pp": 5.22053057712728,
+    "delta_max_dd_pp": -13.05697154416241,
+    "delta_max_dd_pre_tax_pp": -8.288389929758456,
+    "delta_pre_tax_pp": 8.647896144491241,
+    "delta_tax_usd": 843450.3424140243,
+    "extra_sells_per_year": 1.4332897318508824,
+    "max_dd_after_tax": 0.3157021105396075,
+    "max_dd_pre_tax": 0.3017353506426905,
+    "n_episodes_fired": 56,
+    "pre_tax_cagr": 0.3099143744463779,
+    "qld_sells_per_year": 11.526038260300849,
+    "sells_per_year": 12.182962720732505,
+    "tax_usd": 1406323.2317609945,
+    "terminal_usd": 2256529.1529066553,
+    "years": 16.744695414099933
+   },
+   "S_f25": {
+    "after_tax_cagr": 0.21068595669737333,
+    "after_tax_cagr_unliquidated": 0.21917488044538258,
+    "delta_after_tax_pp": 5.833235838904094,
+    "delta_max_dd_pp": -14.453647533854108,
+    "delta_max_dd_pre_tax_pp": -8.288389929758445,
+    "delta_pre_tax_pp": 7.9854691492521335,
+    "delta_tax_usd": 820837.1118672844,
+    "extra_sells_per_year": 0.5972040549378672,
+    "max_dd_after_tax": 0.3017353506426905,
+    "max_dd_pre_tax": 0.30173535064269064,
+    "n_episodes_fired": 22,
+    "pre_tax_cagr": 0.30329010449398686,
+    "qld_sells_per_year": 10.689952583387834,
+    "sells_per_year": 11.227436232831915,
+    "tax_usd": 1383710.0012142546,
+    "terminal_usd": 2456615.9013651935,
+    "years": 16.744695414099933
+   },
+   "S_f50": {
+    "after_tax_cagr": 0.19889988346398257,
+    "after_tax_cagr_unliquidated": 0.20719416777749666,
+    "delta_after_tax_pp": 4.654628515565018,
+    "delta_max_dd_pp": -11.318907079860441,
+    "delta_max_dd_pre_tax_pp": -5.153649475764855,
+    "delta_pre_tax_pp": 6.963771462573032,
+    "delta_tax_usd": 648789.2820260364,
+    "extra_sells_per_year": 1.493010137344669,
+    "max_dd_after_tax": 0.3330827551826272,
+    "max_dd_pre_tax": 0.33308275518262653,
+    "n_episodes_fired": 33,
+    "pre_tax_cagr": 0.29307312762719584,
+    "qld_sells_per_year": 11.585758665794636,
+    "sells_per_year": 12.182962720732505,
+    "tax_usd": 1211662.1713730067,
+    "terminal_usd": 2085431.6741651227,
+    "years": 16.744695414099933
+   },
+   "S_f75": {
+    "after_tax_cagr": 0.20494896609943103,
+    "after_tax_cagr_unliquidated": 0.21331164973280603,
+    "delta_after_tax_pp": 5.2595367791098635,
+    "delta_max_dd_pp": -14.45364753385412,
+    "delta_max_dd_pre_tax_pp": -8.288389929758456,
+    "delta_pre_tax_pp": 7.81054660193039,
+    "delta_tax_usd": 782972.2014786389,
+    "extra_sells_per_year": 1.493010137344669,
+    "max_dd_after_tax": 0.3017353506426904,
+    "max_dd_pre_tax": 0.3017353506426905,
+    "n_episodes_fired": 44,
+    "pre_tax_cagr": 0.3015408790207694,
+    "qld_sells_per_year": 11.585758665794636,
+    "sells_per_year": 12.242683126226291,
+    "tax_usd": 1345845.0908256092,
+    "terminal_usd": 2268795.9531561206,
+    "years": 16.744695414099933
+   }
+  },
+  "2017_01_to_end": {
+   "H_f0": {
+    "after_tax_cagr": 0.3137061526373859,
+    "after_tax_cagr_unliquidated": 0.3348607968959969,
+    "delta_after_tax_pp": 7.398640966237879,
+    "delta_max_dd_pp": -7.193962670523613,
+    "delta_max_dd_pre_tax_pp": -7.832972411422501,
+    "delta_pre_tax_pp": 9.640056266815256,
+    "delta_tax_usd": 326512.66227611364,
+    "extra_sells_per_year": -1.436376404494382,
+    "max_dd_after_tax": 0.2778347111490628,
+    "max_dd_pre_tax": 0.2328427508548413,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.4266153737918339,
+    "qld_sells_per_year": 7.694873595505618,
+    "sells_per_year": 8.207865168539326,
+    "tax_usd": 697999.6261764108,
+    "terminal_usd": 1428803.545833078,
+    "years": 9.74674880219028
+   },
+   "H_f100": {
+    "after_tax_cagr": 0.2859334674486318,
+    "after_tax_cagr_unliquidated": 0.30098926762197076,
+    "delta_after_tax_pp": 4.621372447362471,
+    "delta_max_dd_pp": -5.350636498941997,
+    "delta_max_dd_pre_tax_pp": -7.8329724114225225,
+    "delta_pre_tax_pp": 8.144592581516097,
+    "delta_tax_usd": 263669.18756092736,
+    "extra_sells_per_year": 1.949367977528091,
+    "max_dd_after_tax": 0.29626797286487894,
+    "max_dd_pre_tax": 0.23284275085484107,
+    "n_episodes_fired": 56,
+    "pre_tax_cagr": 0.4116607369388423,
+    "qld_sells_per_year": 11.08061797752809,
+    "sells_per_year": 11.593609550561798,
+    "tax_usd": 635156.1514612245,
+    "terminal_usd": 1160179.7408449384,
+    "years": 9.74674880219028
+   },
+   "H_f25": {
+    "after_tax_cagr": 0.29044513745846623,
+    "after_tax_cagr_unliquidated": 0.30399998266239425,
+    "delta_after_tax_pp": 5.072539448345914,
+    "delta_max_dd_pp": -7.321781576333375,
+    "delta_max_dd_pre_tax_pp": -7.467330352016166,
+    "delta_pre_tax_pp": 7.134652839957423,
+    "delta_tax_usd": 219793.84430910717,
+    "extra_sells_per_year": 0.307794943820225,
+    "max_dd_after_tax": 0.27655652209096515,
+    "max_dd_pre_tax": 0.23649917144890464,
+    "n_episodes_fired": 22,
+    "pre_tax_cagr": 0.40156133952325557,
+    "qld_sells_per_year": 9.439044943820225,
+    "sells_per_year": 9.952036516853932,
+    "tax_usd": 591280.8082094043,
+    "terminal_usd": 1200467.8465246174,
+    "years": 9.74674880219028
+   },
+   "H_f50": {
+    "after_tax_cagr": 0.2864243770595871,
+    "after_tax_cagr_unliquidated": 0.29980243042022736,
+    "delta_after_tax_pp": 4.670463408458003,
+    "delta_max_dd_pp": -6.561090882119247,
+    "delta_max_dd_pre_tax_pp": -7.467330352016166,
+    "delta_pre_tax_pp": 7.111577795560087,
+    "delta_tax_usd": 226153.0791444959,
+    "extra_sells_per_year": 1.5389747191011232,
+    "max_dd_after_tax": 0.28416342903310643,
+    "max_dd_pre_tax": 0.23649917144890464,
+    "n_episodes_fired": 33,
+    "pre_tax_cagr": 0.4013305890792822,
+    "qld_sells_per_year": 10.670224719101123,
+    "sells_per_year": 11.183216292134832,
+    "tax_usd": 597640.0430447931,
+    "terminal_usd": 1164503.816386921,
+    "years": 9.74674880219028
+   },
+   "H_f75": {
+    "after_tax_cagr": 0.2824163940273563,
+    "after_tax_cagr_unliquidated": 0.2957023424479672,
+    "delta_after_tax_pp": 4.269665105234921,
+    "delta_max_dd_pp": -5.715263229416578,
+    "delta_max_dd_pre_tax_pp": -7.570517255406095,
+    "delta_pre_tax_pp": 6.535035472749717,
+    "delta_tax_usd": 213559.50835797552,
+    "extra_sells_per_year": 2.462359550561798,
+    "max_dd_after_tax": 0.2926217055601331,
+    "max_dd_pre_tax": 0.23546730241500535,
+    "n_episodes_fired": 44,
+    "pre_tax_cagr": 0.3955651658511785,
+    "qld_sells_per_year": 11.593609550561798,
+    "sells_per_year": 12.106601123595505,
+    "tax_usd": 585046.4722582727,
+    "terminal_usd": 1129619.351214686,
+    "years": 9.74674880219028
+   },
+   "K": {
+    "after_tax_cagr": 0.2397197429750071,
+    "after_tax_cagr_unliquidated": 0.2598682130318648,
+    "max_dd_after_tax": 0.3497743378542989,
+    "max_dd_pre_tax": 0.3111724749690663,
+    "n_episodes_fired": null,
+    "pre_tax_cagr": 0.33021481112368134,
+    "qld_sells_per_year": 9.13125,
+    "sells_per_year": 9.541643258426966,
+    "tax_usd": 371486.9639002972,
+    "terminal_usd": 812083.8672154722,
+    "years": 9.74674880219028
+   },
+   "O_d2_k0_X10": {
+    "after_tax_cagr": 0.3326401898866622,
+    "after_tax_cagr_unliquidated": 0.3587566162291078,
+    "delta_after_tax_pp": 9.292044691165513,
+    "delta_max_dd_pp": -6.731032164432915,
+    "delta_max_dd_pre_tax_pp": -7.275335262184745,
+    "delta_pre_tax_pp": 12.70548271250249,
+    "delta_tax_usd": 488338.6492910106,
+    "extra_sells_per_year": -1.5389747191011232,
+    "max_dd_after_tax": 0.28246401620996975,
+    "max_dd_pre_tax": 0.23841912234721885,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.45726963824870626,
+    "qld_sells_per_year": 7.5922752808988765,
+    "sells_per_year": 8.105266853932584,
+    "tax_usd": 859825.6131913078,
+    "terminal_usd": 1642651.2679454754,
+    "years": 9.74674880219028
+   },
+   "O_d2_k0_X8": {
+    "after_tax_cagr": 0.34974194263023883,
+    "after_tax_cagr_unliquidated": 0.37930532075992573,
+    "delta_after_tax_pp": 11.002219965523174,
+    "delta_max_dd_pp": -6.711103120639206,
+    "delta_max_dd_pre_tax_pp": -7.275335262184701,
+    "delta_pre_tax_pp": 15.489948966919131,
+    "delta_tax_usd": 626651.055873753,
+    "extra_sells_per_year": -1.6415730337078651,
+    "max_dd_after_tax": 0.28266330664790684,
+    "max_dd_pre_tax": 0.2384191223472193,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.48511430079287265,
+    "qld_sells_per_year": 7.4896769662921345,
+    "sells_per_year": 8.002668539325843,
+    "tax_usd": 998138.0197740502,
+    "terminal_usd": 1860035.697446425,
+    "years": 9.74674880219028
+   },
+   "O_d2_k3_X10": {
+    "after_tax_cagr": 0.31122305867131517,
+    "after_tax_cagr_unliquidated": 0.33368165278372475,
+    "delta_after_tax_pp": 7.150331569630808,
+    "delta_max_dd_pp": -6.91592702188768,
+    "delta_max_dd_pre_tax_pp": -7.275335262184745,
+    "delta_pre_tax_pp": 9.946568117443789,
+    "delta_tax_usd": 346410.3702124561,
+    "extra_sells_per_year": -1.3337780898876401,
+    "max_dd_after_tax": 0.2806150676354221,
+    "max_dd_pre_tax": 0.23841912234721885,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.4296804922981192,
+    "qld_sells_per_year": 7.7974719101123595,
+    "sells_per_year": 8.310463483146068,
+    "tax_usd": 717897.3341127533,
+    "terminal_usd": 1402697.5723343133,
+    "years": 9.74674880219028
+   },
+   "O_d2_k3_X8": {
+    "after_tax_cagr": 0.3228476003579399,
+    "after_tax_cagr_unliquidated": 0.34870351504824115,
+    "delta_after_tax_pp": 8.312785738293282,
+    "delta_max_dd_pp": -6.908770520247332,
+    "delta_max_dd_pre_tax_pp": -7.2753352621847345,
+    "delta_pre_tax_pp": 12.114992265287805,
+    "delta_tax_usd": 430841.4630813163,
+    "extra_sells_per_year": -1.5389747191011232,
+    "max_dd_after_tax": 0.2806866326518256,
+    "max_dd_pre_tax": 0.23841912234721896,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.4513647337765594,
+    "qld_sells_per_year": 7.5922752808988765,
+    "sells_per_year": 8.105266853932584,
+    "tax_usd": 802328.4269816135,
+    "terminal_usd": 1528711.8518409408,
+    "years": 9.74674880219028
+   },
+   "O_d2_k5_X10": {
+    "after_tax_cagr": 0.28679794657369473,
+    "after_tax_cagr_unliquidated": 0.30832879692754656,
+    "delta_after_tax_pp": 4.707820359868764,
+    "delta_max_dd_pp": -7.1036760162701995,
+    "delta_max_dd_pre_tax_pp": -7.275335262184724,
+    "delta_pre_tax_pp": 6.917033987290178,
+    "delta_tax_usd": 213814.67367146024,
+    "extra_sells_per_year": -0.5129915730337071,
+    "max_dd_after_tax": 0.2787375776915969,
+    "max_dd_pre_tax": 0.23841912234721907,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.3993851509965831,
+    "qld_sells_per_year": 8.618258426966293,
+    "sells_per_year": 9.13125,
+    "tax_usd": 585301.6375717574,
+    "terminal_usd": 1167804.0104097847,
+    "years": 9.74674880219028
+   },
+   "O_d2_k5_X8": {
+    "after_tax_cagr": 0.30020250760423517,
+    "after_tax_cagr_unliquidated": 0.32512690660276644,
+    "delta_after_tax_pp": 6.048276462922808,
+    "delta_max_dd_pp": -7.088619562730947,
+    "delta_max_dd_pre_tax_pp": -7.275335262184712,
+    "delta_pre_tax_pp": 9.455534442900838,
+    "delta_tax_usd": 298731.5489400561,
+    "extra_sells_per_year": -0.8207865168539321,
+    "max_dd_after_tax": 0.27888814222698943,
+    "max_dd_pre_tax": 0.23841912234721918,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.4247701555526897,
+    "qld_sells_per_year": 8.310463483146068,
+    "sells_per_year": 8.823455056179775,
+    "tax_usd": 670218.5128403533,
+    "terminal_usd": 1291922.8239271427,
+    "years": 9.74674880219028
+   },
+   "O_d3_k0_X10": {
+    "after_tax_cagr": 0.33276786911591283,
+    "after_tax_cagr_unliquidated": 0.3588889544347036,
+    "delta_after_tax_pp": 9.304812614090574,
+    "delta_max_dd_pp": -6.730615111238958,
+    "delta_max_dd_pre_tax_pp": -7.275335262184712,
+    "delta_pre_tax_pp": 12.34630024277541,
+    "delta_tax_usd": 459882.09717264445,
+    "extra_sells_per_year": -1.5389747191011232,
+    "max_dd_after_tax": 0.2824681867419093,
+    "max_dd_pre_tax": 0.23841912234721918,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.45367781355143544,
+    "qld_sells_per_year": 7.5922752808988765,
+    "sells_per_year": 8.105266853932584,
+    "tax_usd": 831369.0610729416,
+    "terminal_usd": 1644185.8653975734,
+    "years": 9.74674880219028
+   },
+   "O_d3_k0_X8": {
+    "after_tax_cagr": 0.34140491586857014,
+    "after_tax_cagr_unliquidated": 0.36903602639121824,
+    "delta_after_tax_pp": 10.168517289356306,
+    "delta_max_dd_pp": -6.718873638302647,
+    "delta_max_dd_pre_tax_pp": -7.275335262184701,
+    "delta_pre_tax_pp": 13.921723433030886,
+    "delta_tax_usd": 528861.1447001572,
+    "extra_sells_per_year": -1.6415730337078651,
+    "max_dd_after_tax": 0.28258560147127243,
+    "max_dd_pre_tax": 0.2384191223472193,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.4694320454539902,
+    "qld_sells_per_year": 7.4896769662921345,
+    "sells_per_year": 8.002668539325843,
+    "tax_usd": 900348.1086004544,
+    "terminal_usd": 1751032.6331540563,
+    "years": 9.74674880219028
+   },
+   "O_d3_k3_X10": {
+    "after_tax_cagr": 0.3122786944057381,
+    "after_tax_cagr_unliquidated": 0.334768350385499,
+    "delta_after_tax_pp": 7.255895143073099,
+    "delta_max_dd_pp": -6.9153833155033535,
+    "delta_max_dd_pre_tax_pp": -7.275335262184701,
+    "delta_pre_tax_pp": 9.594185719110593,
+    "delta_tax_usd": 324753.5253385699,
+    "extra_sells_per_year": -1.436376404494382,
+    "max_dd_after_tax": 0.28062050469926536,
+    "max_dd_pre_tax": 0.2384191223472193,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.42615666831478727,
+    "qld_sells_per_year": 7.694873595505618,
+    "sells_per_year": 8.207865168539326,
+    "tax_usd": 696240.4892388671,
+    "terminal_usd": 1413743.2132200329,
+    "years": 9.74674880219028
+   },
+   "O_d3_k3_X8": {
+    "after_tax_cagr": 0.3157061437536455,
+    "after_tax_cagr_unliquidated": 0.3396170736448463,
+    "delta_after_tax_pp": 7.5986400778638385,
+    "delta_max_dd_pp": -6.917132349375244,
+    "delta_max_dd_pre_tax_pp": -7.275335262184679,
+    "delta_pre_tax_pp": 10.582405020468899,
+    "delta_tax_usd": 354412.8967010671,
+    "extra_sells_per_year": -1.6415730337078651,
+    "max_dd_after_tax": 0.28060301436054647,
+    "max_dd_pre_tax": 0.23841912234721951,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.43603886132837033,
+    "qld_sells_per_year": 7.4896769662921345,
+    "sells_per_year": 8.002668539325843,
+    "tax_usd": 725899.8606013643,
+    "terminal_usd": 1450146.5433351458,
+    "years": 9.74674880219028
+   },
+   "O_d3_k5_X10": {
+    "after_tax_cagr": 0.28801985098800986,
+    "after_tax_cagr_unliquidated": 0.30958497742019975,
+    "delta_after_tax_pp": 4.830010801300277,
+    "delta_max_dd_pp": -7.103272033342057,
+    "delta_max_dd_pre_tax_pp": -7.275335262184701,
+    "delta_pre_tax_pp": 6.572118673444516,
+    "delta_tax_usd": 195170.34958574187,
+    "extra_sells_per_year": -0.6155898876404482,
+    "max_dd_after_tax": 0.27874161752087834,
+    "max_dd_pre_tax": 0.2384191223472193,
+    "n_episodes_fired": 11,
+    "pre_tax_cagr": 0.3959359978581265,
+    "qld_sells_per_year": 8.515660112359551,
+    "sells_per_year": 9.028651685393259,
+    "tax_usd": 566657.313486039,
+    "terminal_usd": 1178657.2861117595,
+    "years": 9.74674880219028
+   },
+   "O_d3_k5_X8": {
+    "after_tax_cagr": 0.29346180094175356,
+    "after_tax_cagr_unliquidated": 0.3164752142258316,
+    "delta_after_tax_pp": 5.374205796674647,
+    "delta_max_dd_pp": -7.097956970940434,
+    "delta_max_dd_pre_tax_pp": -7.275335262184712,
+    "delta_pre_tax_pp": 7.951030084773825,
+    "delta_tax_usd": 233732.49640658614,
+    "extra_sells_per_year": -0.9233848314606732,
+    "max_dd_after_tax": 0.27879476814489457,
+    "max_dd_pre_tax": 0.23841912234721918,
+    "n_episodes_fired": 18,
+    "pre_tax_cagr": 0.4097251119714196,
+    "qld_sells_per_year": 8.207865168539326,
+    "sells_per_year": 8.720856741573034,
+    "tax_usd": 605219.4603068833,
+    "terminal_usd": 1228101.7205153818,
+    "years": 9.74674880219028
+   },
+   "R2": {
+    "after_tax_cagr": 0.2288605715773928,
+    "after_tax_cagr_unliquidated": 0.24727994531420516,
+    "delta_after_tax_pp": -1.0859171397614276,
+    "delta_max_dd_pp": 1.2651625796403776,
+    "delta_pre_tax_pp": -0.48849781306647966,
+    "max_dd_after_tax": 0.3624259636507027,
+    "max_dd_pre_tax": 0.3113402121496833,
+    "n_episodes_fired": null,
+    "pre_tax_cagr": 0.32532983299301654,
+    "qld_sells_per_year": 35.19122191011236,
+    "sells_per_year": 35.601615168539325,
+    "tax_usd": 360296.618407541,
+    "terminal_usd": 745348.6280374103,
+    "years": 9.74674880219028
+   },
+   "S_f100": {
+    "after_tax_cagr": 0.2860046303687518,
+    "after_tax_cagr_unliquidated": 0.30184456033901297,
+    "delta_after_tax_pp": 4.62848873937447,
+    "delta_max_dd_pp": -4.892673456157359,
+    "delta_max_dd_pre_tax_pp": -7.275335262184701,
+    "delta_pre_tax_pp": 8.442580023932633,
+    "delta_tax_usd": 268287.0148789806,
+    "extra_sells_per_year": 1.949367977528091,
+    "max_dd_after_tax": 0.3008476032927253,
+    "max_dd_pre_tax": 0.2384191223472193,
+    "n_episodes_fired": 56,
+    "pre_tax_cagr": 0.41464061136300767,
+    "qld_sells_per_year": 11.08061797752809,
+    "sells_per_year": 11.593609550561798,
+    "tax_usd": 639773.9787792778,
+    "terminal_usd": 1160805.6703484124,
+    "years": 9.74674880219028
+   },
+   "S_f25": {
+    "after_tax_cagr": 0.29299429143897804,
+    "after_tax_cagr_unliquidated": 0.3081649733377978,
+    "delta_after_tax_pp": 5.327454846397095,
+    "delta_max_dd_pp": -7.054492515052457,
+    "delta_max_dd_pre_tax_pp": -7.275335262184712,
+    "delta_pre_tax_pp": 7.696635198776325,
+    "delta_tax_usd": 241241.04822611308,
+    "extra_sells_per_year": 0.307794943820225,
+    "max_dd_after_tax": 0.2792294127037743,
+    "max_dd_pre_tax": 0.23841912234721918,
+    "n_episodes_fired": 22,
+    "pre_tax_cagr": 0.4071811631114446,
+    "qld_sells_per_year": 9.439044943820225,
+    "sells_per_year": 9.952036516853932,
+    "tax_usd": 612728.0121264103,
+    "terminal_usd": 1223782.110383705,
+    "years": 9.74674880219028
+   },
+   "S_f50": {
+    "after_tax_cagr": 0.2862472123473758,
+    "after_tax_cagr_unliquidated": 0.3011638987481646,
+    "delta_after_tax_pp": 4.6527469372368735,
+    "delta_max_dd_pp": -6.158435447699251,
+    "delta_max_dd_pre_tax_pp": -7.275335262184712,
+    "delta_pre_tax_pp": 7.3379976520789425,
+    "delta_tax_usd": 231582.12550265505,
+    "extra_sells_per_year": 1.5389747191011232,
+    "max_dd_after_tax": 0.2881899833773064,
+    "max_dd_pre_tax": 0.23841912234721918,
+    "n_episodes_fired": 33,
+    "pre_tax_cagr": 0.40359478764447076,
+    "qld_sells_per_year": 10.670224719101123,
+    "sells_per_year": 11.183216292134832,
+    "tax_usd": 603069.0894029522,
+    "terminal_usd": 1162941.6327224583,
+    "years": 9.74674880219028
+   },
+   "S_f75": {
+    "after_tax_cagr": 0.28368700581010264,
+    "after_tax_cagr_unliquidated": 0.29856317316793657,
+    "delta_after_tax_pp": 4.3967262835095555,
+    "delta_max_dd_pp": -5.202545591797502,
+    "delta_max_dd_pre_tax_pp": -7.27533526218469,
+    "delta_pre_tax_pp": 7.043189832843044,
+    "delta_tax_usd": 227185.86117216467,
+    "extra_sells_per_year": 2.462359550561798,
+    "max_dd_after_tax": 0.2977488819363239,
+    "max_dd_pre_tax": 0.2384191223472194,
+    "n_episodes_fired": 44,
+    "pre_tax_cagr": 0.4006467094521118,
+    "qld_sells_per_year": 11.593609550561798,
+    "sells_per_year": 12.106601123595505,
+    "tax_usd": 598672.8250724619,
+    "terminal_usd": 1140575.509540846,
+    "years": 9.74674880219028
+   }
+  }
+ },
+ "bootstrap": {
+  "pre": {
+   "base": {
+    "H_f0": {
+     "cagr_median": 0.15610614956224744,
+     "mean_delta_pp": 7.532745996107863,
+     "median_delta_pp": 7.263032476373999,
+     "p05_delta_pp": 2.5038599356416524,
+     "p95_delta_pp": 13.369524525398715,
+     "share_gt_0": 0.998
+    },
+    "H_f100": {
+     "cagr_median": 0.1260768565116297,
+     "mean_delta_pp": 4.729428700709105,
+     "median_delta_pp": 4.643935031845537,
+     "p05_delta_pp": -1.9883466880328837,
+     "p95_delta_pp": 11.869284243616876,
+     "share_gt_0": 0.869
+    },
+    "H_f25": {
+     "cagr_median": 0.14686841896170577,
+     "mean_delta_pp": 6.877193818195713,
+     "median_delta_pp": 6.602072965760608,
+     "p05_delta_pp": 1.7106521138106834,
+     "p95_delta_pp": 13.04067355468308,
+     "share_gt_0": 0.99
+    },
+    "H_f50": {
+     "cagr_median": 0.1399841755738963,
+     "mean_delta_pp": 6.16100182597877,
+     "median_delta_pp": 6.026052262055115,
+     "p05_delta_pp": 0.6332792035053625,
+     "p95_delta_pp": 12.191667653457843,
+     "share_gt_0": 0.973
+    },
+    "H_f75": {
+     "cagr_median": 0.13437030743174905,
+     "mean_delta_pp": 5.436107668313563,
+     "median_delta_pp": 5.331642095432921,
+     "p05_delta_pp": -0.3293387024554539,
+     "p95_delta_pp": 12.172521870632295,
+     "share_gt_0": 0.939
+    },
+    "K": {
+     "cagr_median": 0.07680700211937197,
+     "mean_delta_pp": 0.0,
+     "median_delta_pp": 0.0,
+     "p05_delta_pp": 0.0,
+     "p95_delta_pp": 0.0,
+     "share_gt_0": 0.0
+    },
+    "O_d2_k0_X10": {
+     "cagr_median": 0.17259235530521588,
+     "mean_delta_pp": 9.28122610769702,
+     "median_delta_pp": 8.891542833982802,
+     "p05_delta_pp": 3.255988169435974,
+     "p95_delta_pp": 16.63243242568063,
+     "share_gt_0": 1.0
+    },
+    "O_d2_k0_X8": {
+     "cagr_median": 0.20121722024505884,
+     "mean_delta_pp": 12.17784446441204,
+     "median_delta_pp": 11.834938420747132,
+     "p05_delta_pp": 5.5812655071291895,
+     "p95_delta_pp": 20.17281166127873,
+     "share_gt_0": 1.0
+    },
+    "O_d2_k3_X10": {
+     "cagr_median": 0.16384901458921264,
+     "mean_delta_pp": 8.276879352632415,
+     "median_delta_pp": 7.9002309799805825,
+     "p05_delta_pp": 2.8498372336223277,
+     "p95_delta_pp": 14.722491302230909,
+     "share_gt_0": 0.999
+    },
+    "O_d2_k3_X8": {
+     "cagr_median": 0.18252928835390303,
+     "mean_delta_pp": 10.319941273157848,
+     "median_delta_pp": 9.96104319463051,
+     "p05_delta_pp": 4.460092434389688,
+     "p95_delta_pp": 17.280209635006962,
+     "share_gt_0": 0.999
+    },
+    "O_d2_k5_X10": {
+     "cagr_median": 0.16214982115428167,
+     "mean_delta_pp": 7.9236441169905305,
+     "median_delta_pp": 7.578103485795829,
+     "p05_delta_pp": 2.5298648561039827,
+     "p95_delta_pp": 14.260739190881159,
+     "share_gt_0": 0.997
+    },
+    "O_d2_k5_X8": {
+     "cagr_median": 0.17561970393560178,
+     "mean_delta_pp": 9.698450711897559,
+     "median_delta_pp": 9.485516800032023,
+     "p05_delta_pp": 3.887527384579506,
+     "p95_delta_pp": 16.685228890430366,
+     "share_gt_0": 1.0
+    },
+    "O_d3_k0_X10": {
+     "cagr_median": 0.16428909959033366,
+     "mean_delta_pp": 8.364868997052422,
+     "median_delta_pp": 7.9978510807129695,
+     "p05_delta_pp": 3.014292284497995,
+     "p95_delta_pp": 15.19133665202814,
+     "share_gt_0": 1.0
+    },
+    "O_d3_k0_X8": {
+     "cagr_median": 0.1889316092855472,
+     "mean_delta_pp": 10.67392057157102,
+     "median_delta_pp": 10.336117482671735,
+     "p05_delta_pp": 4.72855898345678,
+     "p95_delta_pp": 17.81448663651087,
+     "share_gt_0": 1.0
+    },
+    "O_d3_k3_X10": {
+     "cagr_median": 0.15336778706869747,
+     "mean_delta_pp": 7.370416521688912,
+     "median_delta_pp": 7.035540663666179,
+     "p05_delta_pp": 2.4366417196974455,
+     "p95_delta_pp": 13.3301116685689,
+     "share_gt_0": 0.998
+    },
+    "O_d3_k3_X8": {
+     "cagr_median": 0.16806612276203747,
+     "mean_delta_pp": 8.843977274419776,
+     "median_delta_pp": 8.627919624976332,
+     "p05_delta_pp": 3.6494760075389063,
+     "p95_delta_pp": 15.290364218278041,
+     "share_gt_0": 0.999
+    },
+    "O_d3_k5_X10": {
+     "cagr_median": 0.1497821668598448,
+     "mean_delta_pp": 7.020965151113703,
+     "median_delta_pp": 6.750184912162882,
+     "p05_delta_pp": 2.13844630936346,
+     "p95_delta_pp": 12.75997168226845,
+     "share_gt_0": 0.997
+    },
+    "O_d3_k5_X8": {
+     "cagr_median": 0.15928341404692803,
+     "mean_delta_pp": 8.232203215808722,
+     "median_delta_pp": 7.957147823056188,
+     "p05_delta_pp": 2.9888729580431064,
+     "p95_delta_pp": 14.504900851550776,
+     "share_gt_0": 0.997
+    },
+    "R2": {
+     "cagr_median": 0.07606103570078315,
+     "mean_delta_pp": -0.02091692844637245,
+     "median_delta_pp": 0.0061949295753371825,
+     "p05_delta_pp": -0.7458377933463711,
+     "p95_delta_pp": 0.6734633492133846,
+     "share_gt_0": 0.509
+    },
+    "S_f100": {
+     "cagr_median": 0.13045040630512494,
+     "mean_delta_pp": 5.016860223795523,
+     "median_delta_pp": 5.0483133534319435,
+     "p05_delta_pp": -1.4345832183081064,
+     "p95_delta_pp": 12.041547488066598,
+     "share_gt_0": 0.897
+    },
+    "S_f25": {
+     "cagr_median": 0.14633385664748588,
+     "mean_delta_pp": 6.811356622384386,
+     "median_delta_pp": 6.574726771230033,
+     "p05_delta_pp": 1.7765997038416543,
+     "p95_delta_pp": 12.998486120909039,
+     "share_gt_0": 0.992
+    },
+    "S_f50": {
+     "cagr_median": 0.13998832074423928,
+     "mean_delta_pp": 6.199480075365337,
+     "median_delta_pp": 5.995797435378824,
+     "p05_delta_pp": 0.6972716949740777,
+     "p95_delta_pp": 12.435382505727624,
+     "share_gt_0": 0.971
+    },
+    "S_f75": {
+     "cagr_median": 0.13598430808566186,
+     "mean_delta_pp": 5.586826606912326,
+     "median_delta_pp": 5.45586702748952,
+     "p05_delta_pp": -0.19842230024726387,
+     "p95_delta_pp": 12.216318585419158,
+     "share_gt_0": 0.94
+    }
+   },
+   "calibrated": {
+    "H_f0": {
+     "cagr_median": 0.15156931006744256,
+     "mean_delta_pp": 7.529058410804702,
+     "median_delta_pp": 7.259886922120251,
+     "p05_delta_pp": 2.5220232691114592,
+     "p95_delta_pp": 13.356731863933552,
+     "share_gt_0": 0.998
+    },
+    "H_f100": {
+     "cagr_median": 0.12193262953323025,
+     "mean_delta_pp": 4.778006998705332,
+     "median_delta_pp": 4.696858086195621,
+     "p05_delta_pp": -1.8792374388371744,
+     "p95_delta_pp": 11.89282467558028,
+     "share_gt_0": 0.87
+    },
+    "H_f25": {
+     "cagr_median": 0.14268484977132556,
+     "mean_delta_pp": 6.885961964113941,
+     "median_delta_pp": 6.605574248162438,
+     "p05_delta_pp": 1.7368647745746604,
+     "p95_delta_pp": 13.051760711319774,
+     "share_gt_0": 0.99
+    },
+    "H_f50": {
+     "cagr_median": 0.13552236638840676,
+     "mean_delta_pp": 6.1827032047558586,
+     "median_delta_pp": 6.042078187970834,
+     "p05_delta_pp": 0.6606418930148317,
+     "p95_delta_pp": 12.19791704749576,
+     "share_gt_0": 0.974
+    },
+    "H_f75": {
+     "cagr_median": 0.130164819860507,
+     "mean_delta_pp": 5.470694529937417,
+     "median_delta_pp": 5.36695474157689,
+     "p05_delta_pp": -0.2667094516259514,
+     "p95_delta_pp": 12.239508956231274,
+     "share_gt_0": 0.94
+    },
+    "K": {
+     "cagr_median": 0.07170502333756001,
+     "mean_delta_pp": 0.0,
+     "median_delta_pp": 0.0,
+     "p05_delta_pp": 0.0,
+     "p95_delta_pp": 0.0,
+     "share_gt_0": 0.0
+    },
+    "O_d2_k0_X10": {
+     "cagr_median": 0.16789203097562877,
+     "mean_delta_pp": 9.26996881958311,
+     "median_delta_pp": 8.887477681977618,
+     "p05_delta_pp": 3.2433420202567698,
+     "p95_delta_pp": 16.608549128728214,
+     "share_gt_0": 1.0
+    },
+    "O_d2_k0_X8": {
+     "cagr_median": 0.1963914252760781,
+     "mean_delta_pp": 12.166510906675136,
+     "median_delta_pp": 11.840215951962307,
+     "p05_delta_pp": 5.581517850391526,
+     "p95_delta_pp": 20.146336403336704,
+     "share_gt_0": 1.0
+    },
+    "O_d2_k3_X10": {
+     "cagr_median": 0.15914814937622357,
+     "mean_delta_pp": 8.271825568512671,
+     "median_delta_pp": 7.899905791087702,
+     "p05_delta_pp": 2.844994665508007,
+     "p95_delta_pp": 14.710162520699251,
+     "share_gt_0": 0.999
+    },
+    "O_d2_k3_X8": {
+     "cagr_median": 0.1781830635804188,
+     "mean_delta_pp": 10.319770507846894,
+     "median_delta_pp": 9.994886938002617,
+     "p05_delta_pp": 4.493557777602091,
+     "p95_delta_pp": 17.26624175488726,
+     "share_gt_0": 0.999
+    },
+    "O_d2_k5_X10": {
+     "cagr_median": 0.15721998845226814,
+     "mean_delta_pp": 7.921458080955765,
+     "median_delta_pp": 7.590190775559691,
+     "p05_delta_pp": 2.5391240137154294,
+     "p95_delta_pp": 14.235521248753589,
+     "share_gt_0": 0.997
+    },
+    "O_d2_k5_X8": {
+     "cagr_median": 0.1709138254168987,
+     "mean_delta_pp": 9.702732298252394,
+     "median_delta_pp": 9.49175553834417,
+     "p05_delta_pp": 3.8890960674007364,
+     "p95_delta_pp": 16.642987602436815,
+     "share_gt_0": 1.0
+    },
+    "O_d3_k0_X10": {
+     "cagr_median": 0.15942422596789962,
+     "mean_delta_pp": 8.355715632907069,
+     "median_delta_pp": 7.999578413204733,
+     "p05_delta_pp": 3.0127302367892006,
+     "p95_delta_pp": 15.174545699410768,
+     "share_gt_0": 1.0
+    },
+    "O_d3_k0_X8": {
+     "cagr_median": 0.1838818405787841,
+     "mean_delta_pp": 10.665798581078667,
+     "median_delta_pp": 10.32921315325278,
+     "p05_delta_pp": 4.710941715183059,
+     "p95_delta_pp": 17.79709117347027,
+     "share_gt_0": 1.0
+    },
+    "O_d3_k3_X10": {
+     "cagr_median": 0.14886823867442722,
+     "mean_delta_pp": 7.367424510126809,
+     "median_delta_pp": 7.039189907798582,
+     "p05_delta_pp": 2.433693928531275,
+     "p95_delta_pp": 13.29641027467477,
+     "share_gt_0": 0.998
+    },
+    "O_d3_k3_X8": {
+     "cagr_median": 0.1635804675594168,
+     "mean_delta_pp": 8.846894172038535,
+     "median_delta_pp": 8.615717606393202,
+     "p05_delta_pp": 3.6365477683661287,
+     "p95_delta_pp": 15.270572563970731,
+     "share_gt_0": 0.999
+    },
+    "O_d3_k5_X10": {
+     "cagr_median": 0.14529383654631123,
+     "mean_delta_pp": 7.02082012769389,
+     "median_delta_pp": 6.751907249005884,
+     "p05_delta_pp": 2.1397350473394017,
+     "p95_delta_pp": 12.780245795555464,
+     "share_gt_0": 0.997
+    },
+    "O_d3_k5_X8": {
+     "cagr_median": 0.15472981051329393,
+     "mean_delta_pp": 8.239524131355157,
+     "median_delta_pp": 7.9767093346095495,
+     "p05_delta_pp": 3.001042540143796,
+     "p95_delta_pp": 14.50592360551551,
+     "share_gt_0": 0.997
+    },
+    "R2": {
+     "cagr_median": 0.07213741628652126,
+     "mean_delta_pp": -0.014739569589655277,
+     "median_delta_pp": 0.006061068613816278,
+     "p05_delta_pp": -0.7328989722365253,
+     "p95_delta_pp": 0.6649784059484816,
+     "share_gt_0": 0.508
+    },
+    "S_f100": {
+     "cagr_median": 0.1267681418937564,
+     "mean_delta_pp": 5.064336481630812,
+     "median_delta_pp": 5.092073294832161,
+     "p05_delta_pp": -1.331618095198689,
+     "p95_delta_pp": 12.074155943423095,
+     "share_gt_0": 0.9
+    },
+    "S_f25": {
+     "cagr_median": 0.14213262840139163,
+     "mean_delta_pp": 6.820388934854817,
+     "median_delta_pp": 6.589664883608226,
+     "p05_delta_pp": 1.7888348847761453,
+     "p95_delta_pp": 13.001207522339001,
+     "share_gt_0": 0.992
+    },
+    "S_f50": {
+     "cagr_median": 0.1350989402249032,
+     "mean_delta_pp": 6.221090083860128,
+     "median_delta_pp": 6.011244802102245,
+     "p05_delta_pp": 0.7324477456727918,
+     "p95_delta_pp": 12.470599064607862,
+     "share_gt_0": 0.971
+    },
+    "S_f75": {
+     "cagr_median": 0.1315491695634745,
+     "mean_delta_pp": 5.620858933284347,
+     "median_delta_pp": 5.485062195509843,
+     "p05_delta_pp": -0.16932756327182596,
+     "p95_delta_pp": 12.227267302235306,
+     "share_gt_0": 0.943
+    }
+   }
+  },
+  "settings": {
+   "block": 20,
+   "calendar": [
+    "2015-09-01",
+    "2026-09-16"
+   ],
+   "capital": "100k",
+   "chunk": 128,
+   "modes": [
+    "progressive",
+    "flat"
+   ],
+   "paths": 1000,
+   "pre_models": [
+    "base",
+    "calibrated"
+   ],
+   "seed": 20261011
+  },
+  "tax": {
+   "100k": {
+    "flat": {
+     "H_f0": {
+      "cagr_median": 0.10690491243975142,
+      "mean_delta_pp": 6.446708501308573,
+      "median_delta_pp": 6.203472337673388,
+      "p05_delta_pp": 2.1607045131622384,
+      "p95_delta_pp": 11.471519736581635,
+      "share_gt_0": 0.998
+     },
+     "H_f100": {
+      "cagr_median": 0.08267612034809924,
+      "mean_delta_pp": 3.990962566020894,
+      "median_delta_pp": 3.957794742341425,
+      "p05_delta_pp": -1.7618110298006573,
+      "p95_delta_pp": 9.986025391587646,
+      "share_gt_0": 0.863
+     },
+     "H_f25": {
+      "cagr_median": 0.10020862925615492,
+      "mean_delta_pp": 5.833659750223142,
+      "median_delta_pp": 5.6543910966976085,
+      "p05_delta_pp": 1.302616176290527,
+      "p95_delta_pp": 11.009779629282136,
+      "share_gt_0": 0.986
+     },
+     "H_f50": {
+      "cagr_median": 0.093498064136325,
+      "mean_delta_pp": 5.179450671698621,
+      "median_delta_pp": 5.044394544143927,
+      "p05_delta_pp": 0.4041438483655702,
+      "p95_delta_pp": 10.24712662254855,
+      "share_gt_0": 0.968
+     },
+     "H_f75": {
+      "cagr_median": 0.08835520074938197,
+      "mean_delta_pp": 4.575575264245193,
+      "median_delta_pp": 4.495859292193249,
+      "p05_delta_pp": -0.3077772463271999,
+      "p95_delta_pp": 10.354982077071668,
+      "share_gt_0": 0.932
+     },
+     "K": {
+      "cagr_median": 0.04037640863345959,
+      "mean_delta_pp": 0.0,
+      "median_delta_pp": 0.0,
+      "p05_delta_pp": 0.0,
+      "p95_delta_pp": 0.0,
+      "share_gt_0": 0.0
+     },
+     "O_d2_k0_X10": {
+      "cagr_median": 0.12113244784850874,
+      "mean_delta_pp": 7.941509407496966,
+      "median_delta_pp": 7.59964377219754,
+      "p05_delta_pp": 2.8235577538753116,
+      "p95_delta_pp": 14.234724676389668,
+      "share_gt_0": 1.0
+     },
+     "O_d2_k0_X8": {
+      "cagr_median": 0.14794542670342492,
+      "mean_delta_pp": 10.403002169107689,
+      "median_delta_pp": 10.10250727262637,
+      "p05_delta_pp": 4.749545086279841,
+      "p95_delta_pp": 17.02989824582923,
+      "share_gt_0": 1.0
+     },
+     "O_d2_k3_X10": {
+      "cagr_median": 0.11475868723949079,
+      "mean_delta_pp": 7.079763261085594,
+      "median_delta_pp": 6.770310839245147,
+      "p05_delta_pp": 2.4340524975554905,
+      "p95_delta_pp": 12.60731561528918,
+      "share_gt_0": 0.999
+     },
+     "O_d2_k3_X8": {
+      "cagr_median": 0.13117142546909333,
+      "mean_delta_pp": 8.812324027002404,
+      "median_delta_pp": 8.526091780616351,
+      "p05_delta_pp": 3.8541789225560357,
+      "p95_delta_pp": 14.877418277295282,
+      "share_gt_0": 0.999
+     },
+     "O_d2_k5_X10": {
+      "cagr_median": 0.11173647903344086,
+      "mean_delta_pp": 6.780433390656262,
+      "median_delta_pp": 6.528665066152311,
+      "p05_delta_pp": 2.130246785850632,
+      "p95_delta_pp": 12.258463623030021,
+      "share_gt_0": 0.996
+     },
+     "O_d2_k5_X8": {
+      "cagr_median": 0.12514148342431253,
+      "mean_delta_pp": 8.288105476819654,
+      "median_delta_pp": 8.076229827716919,
+      "p05_delta_pp": 3.2649587452128843,
+      "p95_delta_pp": 14.13768873745014,
+      "share_gt_0": 0.999
+     },
+     "O_d3_k0_X10": {
+      "cagr_median": 0.11362914728282303,
+      "mean_delta_pp": 7.163753686395335,
+      "median_delta_pp": 6.839364192844971,
+      "p05_delta_pp": 2.554763251650959,
+      "p95_delta_pp": 12.869695412843402,
+      "share_gt_0": 1.0
+     },
+     "O_d3_k0_X8": {
+      "cagr_median": 0.13619213950067544,
+      "mean_delta_pp": 9.124664903278076,
+      "median_delta_pp": 8.78079568524618,
+      "p05_delta_pp": 4.040014394701159,
+      "p95_delta_pp": 15.153720167515708,
+      "share_gt_0": 1.0
+     },
+     "O_d3_k3_X10": {
+      "cagr_median": 0.10613802015387153,
+      "mean_delta_pp": 6.3108179973542375,
+      "median_delta_pp": 6.0285517439821135,
+      "p05_delta_pp": 2.0512849839113634,
+      "p95_delta_pp": 11.367507924791928,
+      "share_gt_0": 0.998
+     },
+     "O_d3_k3_X8": {
+      "cagr_median": 0.11868964842824492,
+      "mean_delta_pp": 7.559089607566831,
+      "median_delta_pp": 7.343916057494637,
+      "p05_delta_pp": 3.1652854263153154,
+      "p95_delta_pp": 13.042655168600456,
+      "share_gt_0": 0.999
+     },
+     "O_d3_k5_X10": {
+      "cagr_median": 0.10243847183193255,
+      "mean_delta_pp": 6.0151242542063414,
+      "median_delta_pp": 5.836427341399491,
+      "p05_delta_pp": 1.7352426778182377,
+      "p95_delta_pp": 10.870824375954038,
+      "share_gt_0": 0.996
+     },
+     "O_d3_k5_X8": {
+      "cagr_median": 0.11272528663916392,
+      "mean_delta_pp": 7.043766899237886,
+      "median_delta_pp": 6.845710725378929,
+      "p05_delta_pp": 2.530008847866796,
+      "p95_delta_pp": 12.330654627221378,
+      "share_gt_0": 0.997
+     },
+     "R2": {
+      "cagr_median": 0.03967828098243864,
+      "mean_delta_pp": -0.17090206221421395,
+      "median_delta_pp": -0.13107063606154767,
+      "p05_delta_pp": -0.9099725411672888,
+      "p95_delta_pp": 0.45961185097871576,
+      "share_gt_0": 0.36
+     },
+     "S_f100": {
+      "cagr_median": 0.08697063639793967,
+      "mean_delta_pp": 4.230831051846391,
+      "median_delta_pp": 4.251067761366567,
+      "p05_delta_pp": -1.4844069905001012,
+      "p95_delta_pp": 10.1922701262055,
+      "share_gt_0": 0.891
+     },
+     "S_f25": {
+      "cagr_median": 0.09913799219694697,
+      "mean_delta_pp": 5.7798413453240505,
+      "median_delta_pp": 5.61801070932772,
+      "p05_delta_pp": 1.4502248108360796,
+      "p95_delta_pp": 10.712819618865453,
+      "share_gt_0": 0.986
+     },
+     "S_f50": {
+      "cagr_median": 0.09402367549226398,
+      "mean_delta_pp": 5.212657793362712,
+      "median_delta_pp": 5.081748532175706,
+      "p05_delta_pp": 0.5117932284367644,
+      "p95_delta_pp": 10.624519041428027,
+      "share_gt_0": 0.968
+     },
+     "S_f75": {
+      "cagr_median": 0.0912125585219633,
+      "mean_delta_pp": 4.702318785621875,
+      "median_delta_pp": 4.483106563265382,
+      "p05_delta_pp": -0.4900697384318619,
+      "p95_delta_pp": 10.451235226521806,
+      "share_gt_0": 0.934
+     }
+    },
+    "progressive": {
+     "H_f0": {
+      "cagr_median": 0.09737029749418724,
+      "mean_delta_pp": 5.867519842644504,
+      "median_delta_pp": 5.665922974149861,
+      "p05_delta_pp": 1.9063169305070127,
+      "p95_delta_pp": 10.542244211791656,
+      "share_gt_0": 0.998
+     },
+     "H_f100": {
+      "cagr_median": 0.0707863609267565,
+      "mean_delta_pp": 3.1631407358708765,
+      "median_delta_pp": 3.1332358692462647,
+      "p05_delta_pp": -2.3952022433150955,
+      "p95_delta_pp": 9.050817675540562,
+      "share_gt_0": 0.823
+     },
+     "H_f25": {
+      "cagr_median": 0.09149397104361734,
+      "mean_delta_pp": 5.177583406581346,
+      "median_delta_pp": 5.0531564449023625,
+      "p05_delta_pp": 0.9620838475796336,
+      "p95_delta_pp": 9.878811677105396,
+      "share_gt_0": 0.978
+     },
+     "H_f50": {
+      "cagr_median": 0.08381911946345644,
+      "mean_delta_pp": 4.426868647209508,
+      "median_delta_pp": 4.332041647855195,
+      "p05_delta_pp": -0.05195772652367808,
+      "p95_delta_pp": 9.441888398897328,
+      "share_gt_0": 0.947
+     },
+     "H_f75": {
+      "cagr_median": 0.07749071805095342,
+      "mean_delta_pp": 3.7753475102917244,
+      "median_delta_pp": 3.637497727258887,
+      "p05_delta_pp": -1.2873744010508423,
+      "p95_delta_pp": 9.187358163403823,
+      "share_gt_0": 0.894
+     },
+     "K": {
+      "cagr_median": 0.03857695835924235,
+      "mean_delta_pp": 0.0,
+      "median_delta_pp": 0.0,
+      "p05_delta_pp": 0.0,
+      "p95_delta_pp": 0.0,
+      "share_gt_0": 0.0
+     },
+     "O_d2_k0_X10": {
+      "cagr_median": 0.11007883353975623,
+      "mean_delta_pp": 7.210747951868353,
+      "median_delta_pp": 6.917009134550939,
+      "p05_delta_pp": 2.6201737161774754,
+      "p95_delta_pp": 12.824701624969109,
+      "share_gt_0": 1.0
+     },
+     "O_d2_k0_X8": {
+      "cagr_median": 0.13231246348943182,
+      "mean_delta_pp": 9.401074443967152,
+      "median_delta_pp": 9.244002017999053,
+      "p05_delta_pp": 4.424278348864325,
+      "p95_delta_pp": 15.482266444004972,
+      "share_gt_0": 1.0
+     },
+     "O_d2_k3_X10": {
+      "cagr_median": 0.10406194878498398,
+      "mean_delta_pp": 6.427891546269554,
+      "median_delta_pp": 6.160370405767823,
+      "p05_delta_pp": 2.1626295448417254,
+      "p95_delta_pp": 11.463674187603324,
+      "share_gt_0": 0.999
+     },
+     "O_d2_k3_X8": {
+      "cagr_median": 0.11955240259522004,
+      "mean_delta_pp": 7.961804881005043,
+      "median_delta_pp": 7.742989506653874,
+      "p05_delta_pp": 3.4160188183124767,
+      "p95_delta_pp": 13.308509604608526,
+      "share_gt_0": 0.999
+     },
+     "O_d2_k5_X10": {
+      "cagr_median": 0.10128675961079558,
+      "mean_delta_pp": 6.152009881756289,
+      "median_delta_pp": 5.966124445368504,
+      "p05_delta_pp": 1.8425074926925313,
+      "p95_delta_pp": 10.982952761942688,
+      "share_gt_0": 0.996
+     },
+     "O_d2_k5_X8": {
+      "cagr_median": 0.1147735689980065,
+      "mean_delta_pp": 7.479160084570941,
+      "median_delta_pp": 7.32767704384244,
+      "p05_delta_pp": 2.7128576909844995,
+      "p95_delta_pp": 12.726332423528595,
+      "share_gt_0": 0.999
+     },
+     "O_d3_k0_X10": {
+      "cagr_median": 0.10304652932348823,
+      "mean_delta_pp": 6.519812717077551,
+      "median_delta_pp": 6.228380592759558,
+      "p05_delta_pp": 2.3449491624307157,
+      "p95_delta_pp": 11.621262283238972,
+      "share_gt_0": 1.0
+     },
+     "O_d3_k0_X8": {
+      "cagr_median": 0.12126686903265382,
+      "mean_delta_pp": 8.255098182488364,
+      "median_delta_pp": 7.9728185356564785,
+      "p05_delta_pp": 3.724944300153736,
+      "p95_delta_pp": 13.613100200631493,
+      "share_gt_0": 1.0
+     },
+     "O_d3_k3_X10": {
+      "cagr_median": 0.09625301292394872,
+      "mean_delta_pp": 5.744280181790512,
+      "median_delta_pp": 5.540655152970986,
+      "p05_delta_pp": 1.8739424493884267,
+      "p95_delta_pp": 10.42243463712756,
+      "share_gt_0": 0.998
+     },
+     "O_d3_k3_X8": {
+      "cagr_median": 0.10820101108356805,
+      "mean_delta_pp": 6.838600881460469,
+      "median_delta_pp": 6.66218185676764,
+      "p05_delta_pp": 2.6399522908799966,
+      "p95_delta_pp": 11.788571724427864,
+      "share_gt_0": 0.999
+     },
+     "O_d3_k5_X10": {
+      "cagr_median": 0.09327459669328364,
+      "mean_delta_pp": 5.471353063863111,
+      "median_delta_pp": 5.2871659321823135,
+      "p05_delta_pp": 1.5276156040158053,
+      "p95_delta_pp": 9.963189227678553,
+      "share_gt_0": 0.995
+     },
+     "O_d3_k5_X8": {
+      "cagr_median": 0.1043281772619209,
+      "mean_delta_pp": 6.362347563012717,
+      "median_delta_pp": 6.187304034482699,
+      "p05_delta_pp": 2.0111233643307966,
+      "p95_delta_pp": 11.201638046469368,
+      "share_gt_0": 0.996
+     },
+     "R2": {
+      "cagr_median": 0.03515539641841858,
+      "mean_delta_pp": -0.3406637264406897,
+      "median_delta_pp": -0.2855618781361646,
+      "p05_delta_pp": -1.2204760366074463,
+      "p95_delta_pp": 0.381667877499931,
+      "share_gt_0": 0.25
+     },
+     "S_f100": {
+      "cagr_median": 0.07259624103170148,
+      "mean_delta_pp": 3.3685350858991407,
+      "median_delta_pp": 3.3178667902924786,
+      "p05_delta_pp": -2.1211122231796296,
+      "p95_delta_pp": 9.100909200409813,
+      "share_gt_0": 0.833
+     },
+     "S_f25": {
+      "cagr_median": 0.09043669234467944,
+      "mean_delta_pp": 5.126809105676891,
+      "median_delta_pp": 4.991801971013254,
+      "p05_delta_pp": 0.9274680561747218,
+      "p95_delta_pp": 9.811722422135487,
+      "share_gt_0": 0.98
+     },
+     "S_f50": {
+      "cagr_median": 0.08418840969064556,
+      "mean_delta_pp": 4.450930456300211,
+      "median_delta_pp": 4.377079580949972,
+      "p05_delta_pp": -0.0014143000250086948,
+      "p95_delta_pp": 9.559057348258785,
+      "share_gt_0": 0.95
+     },
+     "S_f75": {
+      "cagr_median": 0.0789065750619895,
+      "mean_delta_pp": 3.881792508529362,
+      "median_delta_pp": 3.7596410478149767,
+      "p05_delta_pp": -1.2398528796592327,
+      "p95_delta_pp": 9.10627282838699,
+      "share_gt_0": 0.895
+     }
+    }
+   }
+  }
+ },
+ "campaign": "short_term_oracle_v1",
+ "census": {
+  "classes": {
+   "10": {
+    "count": 11,
+    "max_duration_sessions": 96,
+    "median_depth": 0.10851540627425782,
+    "median_duration_sessions": 38.0,
+    "median_duration_to_low_sessions": 17.0,
+    "members_10pct": [
+     {
+      "by": "regain",
+      "depth": 0.1054,
+      "dur": 10,
+      "end": "2000-03-23",
+      "low": "2000-03-15",
+      "start": "2000-03-09"
+     },
+     {
+      "by": "regain",
+      "depth": 0.1149,
+      "dur": 96,
+      "end": "2012-08-17",
+      "low": "2012-06-01",
+      "start": "2012-04-02"
+     },
+     {
+      "by": "e2off",
+      "depth": 0.1016,
+      "dur": 24,
+      "end": "2015-08-21",
+      "low": "2015-08-21",
+      "start": "2015-07-20"
+     },
+     {
+      "by": "regain",
+      "depth": 0.1023,
+      "dur": 29,
+      "end": "2018-03-09",
+      "low": "2018-02-08",
+      "start": "2018-01-26"
+     },
+     {
+      "by": "regain",
+      "depth": 0.1067,
+      "dur": 58,
+      "end": "2018-06-04",
+      "low": "2018-04-02",
+      "start": "2018-03-12"
+     },
+     {
+      "by": "regain",
+      "depth": 0.1098,
+      "dur": 42,
+      "end": "2019-07-03",
+      "low": "2019-06-03",
+      "start": "2019-05-03"
+     },
+     {
+      "by": "e2off",
+      "depth": 0.1832,
+      "dur": 13,
+      "end": "2020-03-09",
+      "low": "2020-03-09",
+      "start": "2020-02-19"
+     },
+     {
+      "by": "regain",
+      "depth": 0.1085,
+      "dur": 38,
+      "end": "2021-04-09",
+      "low": "2021-03-08",
+      "start": "2021-02-12"
+     },
+     {
+      "by": "e2off",
+      "depth": 0.1035,
+      "dur": 17,
+      "end": "2022-01-20",
+      "low": "2022-01-20",
+      "start": "2021-12-27"
+     },
+     {
+      "by": "regain",
+      "depth": 0.1091,
+      "dur": 86,
+      "end": "2023-11-16",
+      "low": "2023-10-26",
+      "start": "2023-07-18"
+     },
+     {
+      "by": "regain",
+      "depth": 0.1132,
+      "dur": 77,
+      "end": "2026-09-22",
+      "low": "2026-07-29",
+      "start": "2026-06-02"
+     }
+    ],
+    "sessions_in_class": 501,
+    "share_of_K_drawdown_time": 0.07885476647472808,
+    "share_of_sessions": 0.07501122922593202,
+    "unresolved_e2off": 3
+   },
+   "15": {
+    "count": 1,
+    "max_duration_sessions": 13,
+    "median_depth": 0.18317996955839977,
+    "median_duration_sessions": 13.0,
+    "median_duration_to_low_sessions": 13.0,
+    "members_10pct": [],
+    "sessions_in_class": 14,
+    "share_of_K_drawdown_time": 0.0020793346129238644,
+    "share_of_sessions": 0.0020961221739781402,
+    "unresolved_e2off": 1
+   },
+   "5": {
+    "count": 34,
+    "max_duration_sessions": 96,
+    "median_depth": 0.08056311883285155,
+    "median_duration_sessions": 34.5,
+    "median_duration_to_low_sessions": 16.5,
+    "members_10pct": [],
+    "sessions_in_class": 1229,
+    "share_of_K_drawdown_time": 0.19353806781829813,
+    "share_of_sessions": 0.18400958227279532,
+    "unresolved_e2off": 13
+   },
+   "8": {
+    "count": 18,
+    "max_duration_sessions": 96,
+    "median_depth": 0.10288181968306792,
+    "median_duration_sessions": 35.0,
+    "median_duration_to_low_sessions": 16.0,
+    "members_10pct": [],
+    "sessions_in_class": 691,
+    "share_of_K_drawdown_time": 0.10860524632117723,
+    "share_of_sessions": 0.10345860158706394,
+    "unresolved_e2off": 7
+   }
+  },
+  "depth_histogram": {
+   "0_to_2pct": 168,
+   "2_to_5pct": 45,
+   "5_to_8pct": 16,
+   "8_to_10pct": 7,
+   "ge_10pct": 11,
+   "le_0": 345
+  },
+  "k_underwater_sessions": 6252,
+  "k_underwater_share_of_sessions": 0.9360682736936667,
+  "n_episodes": 592,
+  "open_at_end": 0,
+  "prize_attribution": {
+   "X10_d2_k0": {
+    "by_end_reason": {
+     "e2off": {
+      "n": 3,
+      "sessions": 41,
+      "share_of_total": 0.3707704502859873,
+      "sum_weighted_avoided_loss": 0.5437486460287171
+     },
+     "regain": {
+      "n": 8,
+      "sessions": 185,
+      "share_of_total": 0.6292295497140127,
+      "sum_weighted_avoided_loss": 0.9227885216698037
+     }
+    },
+    "note": "descriptive only: K's target weight at the cut close x the 2x leg's decline from the sell fill to the buy fill; not a simulated arm",
+    "total_weighted_avoided_loss": 1.4665371676985208
+   },
+   "X10_d3_k3": {
+    "by_end_reason": {
+     "e2off": {
+      "n": 3,
+      "sessions": 48,
+      "share_of_total": 0.44905948764303383,
+      "sum_weighted_avoided_loss": 0.46884763164088533
+     },
+     "regain": {
+      "n": 8,
+      "sessions": 197,
+      "share_of_total": 0.5509405123569661,
+      "sum_weighted_avoided_loss": 0.5752181203193125
+     }
+    },
+    "note": "descriptive only: K's target weight at the cut close x the 2x leg's decline from the sell fill to the buy fill; not a simulated arm",
+    "total_weighted_avoided_loss": 1.044065751960198
+   },
+   "X8_d2_k0": {
+    "by_end_reason": {
+     "e2off": {
+      "n": 7,
+      "sessions": 88,
+      "share_of_total": 0.4274633523177864,
+      "sum_weighted_avoided_loss": 0.9059897082465027
+     },
+     "regain": {
+      "n": 11,
+      "sessions": 226,
+      "share_of_total": 0.5725366476822136,
+      "sum_weighted_avoided_loss": 1.2134661546574321
+     }
+    },
+    "note": "descriptive only: K's target weight at the cut close x the 2x leg's decline from the sell fill to the buy fill; not a simulated arm",
+    "total_weighted_avoided_loss": 2.119455862903935
+   },
+   "X8_d3_k3": {
+    "by_end_reason": {
+     "e2off": {
+      "n": 7,
+      "sessions": 102,
+      "share_of_total": 0.5339516254415598,
+      "sum_weighted_avoided_loss": 0.8308584479243838
+     },
+     "regain": {
+      "n": 11,
+      "sessions": 245,
+      "share_of_total": 0.46604837455844006,
+      "sum_weighted_avoided_loss": 0.7251972101837678
+     }
+    },
+    "note": "descriptive only: K's target weight at the cut close x the 2x leg's decline from the sell fill to the buy fill; not a simulated arm",
+    "total_weighted_avoided_loss": 1.5560556581081517
+   }
+  },
+  "trigger_2pct": {
+   "n_events_ge_10": 11,
+   "n_shallow_d_to_10": 68,
+   "precision_at_f": {
+    "0.0": 1.0,
+    "0.25": 0.39285714285714285,
+    "0.5": 0.24444444444444444,
+    "0.75": 0.1774193548387097,
+    "1.0": 0.13924050632911392
+   }
+  },
+  "trigger_3pct": {
+   "n_events_ge_10": 11,
+   "n_shallow_d_to_10": 45,
+   "precision_at_f": {
+    "0.0": 1.0,
+    "0.25": 0.4943820224719101,
+    "0.5": 0.3283582089552239,
+    "0.75": 0.24581005586592178,
+    "1.0": 0.19642857142857142
+   }
+  },
+  "unresolved_e2off": 29,
+  "window": {
+   "end": "2026-09-29",
+   "sessions": 6679,
+   "start": "2000-03-09"
+  }
+ },
+ "frontier": {
+  "break_even_f_hedge": null,
+  "break_even_f_sell": null,
+  "break_even_note": "No crossing: every pre-registered false-alarm fraction keeps a positive three-window after-tax delta vs K. In this construction each trigger is followed by a known low, so a false alarm still avoids the decline from the trigger to that low; the sweep therefore measures the cost of extra round trips, not the cost of an imprecise trigger. Precision is not the binding constraint -- knowing the low is.",
+  "n_events_ge_10": 11,
+  "n_shallow_3_to_10": 45,
+  "points": {
+   "0.0": {
+    "after_tax_delta_hedge_min_pp": 3.9841625576136463,
+    "after_tax_delta_hedge_pp": {
+     "2000_03_to_2026_09": 3.9841625576136463,
+     "2010_01_to_end": 6.3851067543203355,
+     "2017_01_to_end": 7.398640966237879
+    },
+    "after_tax_delta_sell_min_pp": 4.0529394863442425,
+    "after_tax_delta_sell_pp": {
+     "2000_03_to_2026_09": 4.0529394863442425,
+     "2010_01_to_end": 6.447558838674294,
+     "2017_01_to_end": 7.255895143073099
+    },
+    "boot_B1_median_hedge_pp": 5.665922974149861,
+    "boot_B1_median_sell_pp": 5.540655152970986,
+    "boot_B2_median_hedge_pp": 6.203472337673388,
+    "boot_B2_median_sell_pp": 6.0285517439821135,
+    "label_hedge": "H_f0",
+    "label_sell": "O_d3_k3_X10",
+    "precision": 1.0
+   },
+   "0.25": {
+    "after_tax_delta_hedge_min_pp": 3.1701293523504814,
+    "after_tax_delta_hedge_pp": {
+     "2000_03_to_2026_09": 3.1701293523504814,
+     "2010_01_to_end": 5.419065733175876,
+     "2017_01_to_end": 5.072539448345914
+    },
+    "after_tax_delta_sell_min_pp": 3.4625145852278383,
+    "after_tax_delta_sell_pp": {
+     "2000_03_to_2026_09": 3.4625145852278383,
+     "2010_01_to_end": 5.833235838904094,
+     "2017_01_to_end": 5.327454846397095
+    },
+    "boot_B1_median_hedge_pp": 5.0531564449023625,
+    "boot_B1_median_sell_pp": 4.991801971013254,
+    "boot_B2_median_hedge_pp": 5.6543910966976085,
+    "boot_B2_median_sell_pp": 5.61801070932772,
+    "label_hedge": "H_f25",
+    "label_sell": "S_f25",
+    "precision": 0.4943820224719101
+   },
+   "0.5": {
+    "after_tax_delta_hedge_min_pp": 2.463321591020806,
+    "after_tax_delta_hedge_pp": {
+     "2000_03_to_2026_09": 2.463321591020806,
+     "2010_01_to_end": 4.236695507360122,
+     "2017_01_to_end": 4.670463408458003
+    },
+    "after_tax_delta_sell_min_pp": 2.714869642421669,
+    "after_tax_delta_sell_pp": {
+     "2000_03_to_2026_09": 2.714869642421669,
+     "2010_01_to_end": 4.654628515565018,
+     "2017_01_to_end": 4.6527469372368735
+    },
+    "boot_B1_median_hedge_pp": 4.332041647855195,
+    "boot_B1_median_sell_pp": 4.377079580949972,
+    "boot_B2_median_hedge_pp": 5.044394544143927,
+    "boot_B2_median_sell_pp": 5.081748532175706,
+    "label_hedge": "H_f50",
+    "label_sell": "S_f50",
+    "precision": 0.3283582089552239
+   },
+   "0.75": {
+    "after_tax_delta_hedge_min_pp": 3.321972582604471,
+    "after_tax_delta_hedge_pp": {
+     "2000_03_to_2026_09": 3.321972582604471,
+     "2010_01_to_end": 4.628643406244559,
+     "2017_01_to_end": 4.269665105234921
+    },
+    "after_tax_delta_sell_min_pp": 3.8120879645340056,
+    "after_tax_delta_sell_pp": {
+     "2000_03_to_2026_09": 3.8120879645340056,
+     "2010_01_to_end": 5.2595367791098635,
+     "2017_01_to_end": 4.3967262835095555
+    },
+    "boot_B1_median_hedge_pp": 3.637497727258887,
+    "boot_B1_median_sell_pp": 3.7596410478149767,
+    "boot_B2_median_hedge_pp": 4.495859292193249,
+    "boot_B2_median_sell_pp": 4.483106563265382,
+    "label_hedge": "H_f75",
+    "label_sell": "S_f75",
+    "precision": 0.24581005586592178
+   },
+   "1.0": {
+    "after_tax_delta_hedge_min_pp": 3.7159859460157874,
+    "after_tax_delta_hedge_pp": {
+     "2000_03_to_2026_09": 3.7159859460157874,
+     "2010_01_to_end": 4.659617959431328,
+     "2017_01_to_end": 4.621372447362471
+    },
+    "after_tax_delta_sell_min_pp": 4.211778687644818,
+    "after_tax_delta_sell_pp": {
+     "2000_03_to_2026_09": 4.211778687644818,
+     "2010_01_to_end": 5.22053057712728,
+     "2017_01_to_end": 4.62848873937447
+    },
+    "boot_B1_median_hedge_pp": 3.1332358692462647,
+    "boot_B1_median_sell_pp": 3.3178667902924786,
+    "boot_B2_median_hedge_pp": 3.957794742341425,
+    "boot_B2_median_sell_pp": 4.251067761366567,
+    "label_hedge": "H_f100",
+    "label_sell": "S_f100",
+    "precision": 0.19642857142857142
+   }
+  }
+ },
+ "harness": {
+  "R1_parity_quick": {
+   "pass": true,
+   "returncode": 0
+  },
+  "R2_K_anchors": {
+   "detail": {
+    "after_tax": {
+     "2000_03_to_2026_09": {
+      "diff_pp": 5.7125888783260415e-06,
+      "max_dd": 0.46669791033866914,
+      "reference": 0.107533,
+      "reproduced": 0.10753305712588879
+     },
+     "2010_01_to_end": {
+      "diff_pp": -4.016916675952942e-05,
+      "max_dd": 0.4462718259812316,
+      "reference": 0.152354,
+      "reproduced": 0.1523535983083324
+     },
+     "2017_01_to_end": {
+      "diff_pp": -2.5702499290014558e-05,
+      "max_dd": 0.3497743378542989,
+      "reference": 0.23972,
+      "reproduced": 0.2397197429750071
+     }
+    },
+    "pre_tax": {
+     "base": {
+      "diff_dd_pp": -8.966133085985817e-06,
+      "diff_pp": -7.545196786806763e-06,
+      "reference_cagr": 0.157649,
+      "reference_max_dd": 0.466698,
+      "reproduced_cagr": 0.15764892454803214,
+      "reproduced_max_dd": 0.46669791033866914
+     },
+     "calibrated": {
+      "diff_dd_pp": -1.6820756981728024e-05,
+      "diff_pp": 3.079150135421038e-05,
+      "reference_cagr": 0.151785,
+      "reference_max_dd": 0.467948,
+      "reproduced_cagr": 0.15178530791501355,
+      "reproduced_max_dd": 0.46794783179243016
+     }
+    }
+   },
+   "n_failed_cells": 0,
+   "pass": true
+  },
+  "R2b_K_minus_R2": {
+   "cells": {
+    "2000_03_to_2026_09": {
+     "K_minus_R2_pp": 0.5932986981510568,
+     "reference_pp": 0.5932999999999999
+    },
+    "2010_01_to_end": {
+     "K_minus_R2_pp": 0.5294374683769698,
+     "reference_pp": 0.5294
+    },
+    "2017_01_to_end": {
+     "K_minus_R2_pp": 1.0859171397614276,
+     "reference_pp": 1.0859
+    }
+   },
+   "pass": true
+  },
+  "R4_boot_extension_parity": {
+   "cells": 8,
+   "mismatches": 0,
+   "note": "raw per-path arrays, 200 paths, seed/block published, arms C0 and K",
+   "pass": true
+  },
+  "R5_hedge_identity": {
+   "never_firing_oracle_equals_K": true,
+   "pass": true,
+   "prices_identical": true
+  },
+  "chunk_legs_pc_parity": {
+   "pass": true
+  },
+  "mask_reference": {
+   "mismatches": 0,
+   "pass": true,
+   "specs": 16
+  },
+  "n_failed": 0,
+  "pass": true
+ },
+ "params": {
+  "after_tax_windows": {
+   "2000_03_to_2026_09": [
+    "2000-03-09",
+    "2026-09-29"
+   ],
+   "2010_01_to_end": [
+    "2010-01-01",
+    "2026-09-29"
+   ],
+   "2017_01_to_end": [
+    "2017-01-03",
+    "2026-09-29"
+   ]
+  },
+  "arms": {
+   "H_f0": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.0,
+    "k": 3,
+    "kind": "hedge"
+   },
+   "H_f100": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 1.0,
+    "k": 3,
+    "kind": "hedge"
+   },
+   "H_f25": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.25,
+    "k": 3,
+    "kind": "hedge"
+   },
+   "H_f50": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.5,
+    "k": 3,
+    "kind": "hedge"
+   },
+   "H_f75": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.75,
+    "k": 3,
+    "kind": "hedge"
+   },
+   "O_d2_k0_X10": {
+    "X": 0.1,
+    "cut": 0.02,
+    "f": 0.0,
+    "k": 0,
+    "kind": "sell"
+   },
+   "O_d2_k0_X8": {
+    "X": 0.08,
+    "cut": 0.02,
+    "f": 0.0,
+    "k": 0,
+    "kind": "sell"
+   },
+   "O_d2_k3_X10": {
+    "X": 0.1,
+    "cut": 0.02,
+    "f": 0.0,
+    "k": 3,
+    "kind": "sell"
+   },
+   "O_d2_k3_X8": {
+    "X": 0.08,
+    "cut": 0.02,
+    "f": 0.0,
+    "k": 3,
+    "kind": "sell"
+   },
+   "O_d2_k5_X10": {
+    "X": 0.1,
+    "cut": 0.02,
+    "f": 0.0,
+    "k": 5,
+    "kind": "sell"
+   },
+   "O_d2_k5_X8": {
+    "X": 0.08,
+    "cut": 0.02,
+    "f": 0.0,
+    "k": 5,
+    "kind": "sell"
+   },
+   "O_d3_k0_X10": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.0,
+    "k": 0,
+    "kind": "sell"
+   },
+   "O_d3_k0_X8": {
+    "X": 0.08,
+    "cut": 0.03,
+    "f": 0.0,
+    "k": 0,
+    "kind": "sell"
+   },
+   "O_d3_k3_X10": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.0,
+    "k": 3,
+    "kind": "sell"
+   },
+   "O_d3_k3_X8": {
+    "X": 0.08,
+    "cut": 0.03,
+    "f": 0.0,
+    "k": 3,
+    "kind": "sell"
+   },
+   "O_d3_k5_X10": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.0,
+    "k": 5,
+    "kind": "sell"
+   },
+   "O_d3_k5_X8": {
+    "X": 0.08,
+    "cut": 0.03,
+    "f": 0.0,
+    "k": 5,
+    "kind": "sell"
+   },
+   "S_f100": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 1.0,
+    "k": 3,
+    "kind": "sell"
+   },
+   "S_f25": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.25,
+    "k": 3,
+    "kind": "sell"
+   },
+   "S_f50": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.5,
+    "k": 3,
+    "kind": "sell"
+   },
+   "S_f75": {
+    "X": 0.1,
+    "cut": 0.03,
+    "f": 0.75,
+    "k": 3,
+    "kind": "sell"
+   }
+  },
+  "bootstrap": {
+   "block": 20,
+   "calendar": [
+    "2015-09-01",
+    "2026-09-30"
+   ],
+   "paths": 1000,
+   "seed": 20261011
+  },
+  "capital_usd": 100000.0,
+  "episode_rule": "QQQ close is a 20-session high with the E2 vote on and no episode open; ends at the first close >= the start high or the first E2-off close; depth = max decline to the minimum close; classes 5/8/10/15 %.",
+  "m": 2,
+  "main_window": {
+   "end": "2026-09-29",
+   "sessions": 6679,
+   "start": "2000-03-09"
+  },
+  "mode": "progressive, liquidated"
+ },
+ "pre_tax": {
+  "base": {
+   "H_f0": {
+    "cagr": 0.20809604708742513,
+    "delta_cagr_pp": 5.044712253939299,
+    "delta_max_dd_pp": 0.21305793844440535,
+    "extra_sells_per_year": -0.37650757653850064,
+    "max_dd": 0.4688284897231132,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.789196990001031,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.0031440057726,
+    "turnover_annual": 5.78322544922463
+   },
+   "H_f100": {
+    "cagr": 0.21551240482352774,
+    "delta_cagr_pp": 5.786348027549559,
+    "delta_max_dd_pp": -4.097524112559103,
+    "extra_sells_per_year": 1.5436810638078544,
+    "max_dd": 0.4257226692130781,
+    "n_episodes_fired": 56,
+    "sells_per_year": 11.709385630347386,
+    "tax_usd": 0.0,
+    "trades_per_year": 35.57996598288836,
+    "turnover_annual": 7.881664925209778
+   },
+   "H_f25": {
+    "cagr": 0.2006458999824936,
+    "delta_cagr_pp": 4.299697543446146,
+    "delta_max_dd_pp": 0.21305793844440535,
+    "extra_sells_per_year": 0.602412122461601,
+    "max_dd": 0.4688284897231132,
+    "n_episodes_fired": 22,
+    "sells_per_year": 10.768116689001133,
+    "tax_usd": 0.0,
+    "trades_per_year": 33.3585712813112,
+    "turnover_annual": 6.350422303715189
+   },
+   "H_f50": {
+    "cagr": 0.19328646023143503,
+    "delta_cagr_pp": 3.563753568340289,
+    "delta_max_dd_pp": 0.8564558082106988,
+    "extra_sells_per_year": 1.1671734872693538,
+    "max_dd": 0.47526246842077613,
+    "n_episodes_fired": 33,
+    "sells_per_year": 11.332878053808885,
+    "tax_usd": 0.0,
+    "trades_per_year": 34.63869704154211,
+    "turnover_annual": 6.908734164443518
+   },
+   "H_f75": {
+    "cagr": 0.20445954343843686,
+    "delta_cagr_pp": 4.681061889040472,
+    "delta_max_dd_pp": 0.8564558082106988,
+    "extra_sells_per_year": 1.5436810638078544,
+    "max_dd": 0.47526246842077613,
+    "n_episodes_fired": 44,
+    "sells_per_year": 11.709385630347386,
+    "tax_usd": 0.0,
+    "trades_per_year": 35.39171219461911,
+    "turnover_annual": 7.300304055925156
+   },
+   "K": {
+    "cagr": 0.15764892454803214,
+    "max_dd": 0.46669791033866914,
+    "n_episodes_fired": null,
+    "sells_per_year": 10.165704566539532,
+    "tax_usd": 0.0,
+    "trades_per_year": 33.01971446242655,
+    "turnover_annual": 5.456136019214536
+   },
+   "O_d2_k0_X10": {
+    "cagr": 0.22306975473447554,
+    "delta_cagr_pp": 6.54208301864434,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "extra_sells_per_year": -0.6024121224616028,
+    "max_dd": 0.46882848972311275,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.563292444077929,
+    "tax_usd": 0.0,
+    "trades_per_year": 31.701937944541797,
+    "turnover_annual": 5.8331832417516845
+   },
+   "O_d2_k0_X8": {
+    "cagr": 0.2549473179101116,
+    "delta_cagr_pp": 9.729839336207945,
+    "delta_max_dd_pp": -4.5762792942634185,
+    "extra_sells_per_year": -0.6024121224616028,
+    "max_dd": 0.42093511739603495,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.563292444077929,
+    "tax_usd": 0.0,
+    "trades_per_year": 31.814890217503347,
+    "turnover_annual": 6.031959480942725
+   },
+   "O_d2_k3_X10": {
+    "cagr": 0.2105224948362714,
+    "delta_cagr_pp": 5.287357028823925,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "extra_sells_per_year": -0.37650757653850064,
+    "max_dd": 0.46882848972311275,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.789196990001031,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.0031440057726,
+    "turnover_annual": 5.783353902821495
+   },
+   "O_d2_k3_X8": {
+    "cagr": 0.23683272017460544,
+    "delta_cagr_pp": 7.9183795626573295,
+    "delta_max_dd_pp": -4.57627929426343,
+    "extra_sells_per_year": -0.4141583341923507,
+    "max_dd": 0.42093511739603484,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.75154623234718,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.34200082465725,
+    "turnover_annual": 5.972830664564068
+   },
+   "O_d2_k5_X10": {
+    "cagr": 0.19842055820824656,
+    "delta_cagr_pp": 4.077163366021441,
+    "delta_max_dd_pp": 0.0,
+    "extra_sells_per_year": -0.18825378826925032,
+    "max_dd": 0.46669791033866914,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.977450778270281,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.56790537058035,
+    "turnover_annual": 5.78364141817368
+   },
+   "O_d2_k5_X8": {
+    "cagr": 0.22464112537212944,
+    "delta_cagr_pp": 6.699220082409729,
+    "delta_max_dd_pp": -4.808547719294043,
+    "extra_sells_per_year": -0.3388568188846506,
+    "max_dd": 0.4186124331457287,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.826847747654881,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.71850840119575,
+    "turnover_annual": 5.969691564669885
+   },
+   "O_d3_k0_X10": {
+    "cagr": 0.22212185941660811,
+    "delta_cagr_pp": 6.447293486857597,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "extra_sells_per_year": -0.6024121224616028,
+    "max_dd": 0.46882848972311275,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.563292444077929,
+    "tax_usd": 0.0,
+    "trades_per_year": 31.701937944541797,
+    "turnover_annual": 5.833170469811546
+   },
+   "O_d3_k0_X8": {
+    "cagr": 0.24595124859295336,
+    "delta_cagr_pp": 8.830232404492122,
+    "delta_max_dd_pp": -4.5762792942634185,
+    "extra_sells_per_year": -0.6024121224616028,
+    "max_dd": 0.42093511739603495,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.563292444077929,
+    "tax_usd": 0.0,
+    "trades_per_year": 31.814890217503347,
+    "turnover_annual": 6.031822824920824
+   },
+   "O_d3_k3_X10": {
+    "cagr": 0.2095843238116124,
+    "delta_cagr_pp": 5.193539926358026,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "extra_sells_per_year": -0.37650757653850064,
+    "max_dd": 0.46882848972311275,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.789196990001031,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.0031440057726,
+    "turnover_annual": 5.783341130881357
+   },
+   "O_d3_k3_X8": {
+    "cagr": 0.22796650505495442,
+    "delta_cagr_pp": 7.031758050692227,
+    "delta_max_dd_pp": -4.57627929426343,
+    "extra_sells_per_year": -0.4141583341923507,
+    "max_dd": 0.42093511739603484,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.75154623234718,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.34200082465725,
+    "turnover_annual": 5.9726940085421685
+   },
+   "O_d3_k5_X10": {
+    "cagr": 0.19749176634534238,
+    "delta_cagr_pp": 3.9842841797310236,
+    "delta_max_dd_pp": 0.0,
+    "extra_sells_per_year": -0.18825378826925032,
+    "max_dd": 0.46669791033866914,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.977450778270281,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.56790537058035,
+    "turnover_annual": 5.783628646233543
+   },
+   "O_d3_k5_X8": {
+    "cagr": 0.21586230550036212,
+    "delta_cagr_pp": 5.821338095232997,
+    "delta_max_dd_pp": -4.808547719294043,
+    "extra_sells_per_year": -0.3388568188846506,
+    "max_dd": 0.4186124331457287,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.826847747654881,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.71850840119575,
+    "turnover_annual": 5.969554908647985
+   },
+   "R2": {
+    "cagr": 0.15476644429046837,
+    "delta_cagr_pp": -0.28824802575637687,
+    "delta_max_dd_pp": 0.08856977836700919,
+    "max_dd": 0.46758360812233923,
+    "sells_per_year": 29.55584475827234,
+    "tax_usd": 0.0,
+    "trades_per_year": 61.93549634058344,
+    "turnover_annual": 5.991521730435626
+   },
+   "S_f100": {
+    "cagr": 0.22338697111347106,
+    "delta_cagr_pp": 6.573804656543891,
+    "delta_max_dd_pp": -4.147909707161324,
+    "extra_sells_per_year": 1.5436810638078544,
+    "max_dd": 0.4252188132670559,
+    "n_episodes_fired": 56,
+    "sells_per_year": 11.709385630347386,
+    "tax_usd": 0.0,
+    "trades_per_year": 35.57996598288836,
+    "turnover_annual": 7.882374005787819
+   },
+   "S_f25": {
+    "cagr": 0.20538682314745182,
+    "delta_cagr_pp": 4.773789859941968,
+    "delta_max_dd_pp": 0.21305793844436094,
+    "extra_sells_per_year": 0.602412122461601,
+    "max_dd": 0.46882848972311275,
+    "n_episodes_fired": 22,
+    "sells_per_year": 10.768116689001133,
+    "tax_usd": 0.0,
+    "trades_per_year": 33.3585712813112,
+    "turnover_annual": 6.350913934554847
+   },
+   "S_f50": {
+    "cagr": 0.1976415676383625,
+    "delta_cagr_pp": 3.999264309033035,
+    "delta_max_dd_pp": 0.6059978789817899,
+    "extra_sells_per_year": 1.1671734872693538,
+    "max_dd": 0.47275788912848704,
+    "n_episodes_fired": 33,
+    "sells_per_year": 11.332878053808885,
+    "tax_usd": 0.0,
+    "trades_per_year": 34.63869704154211,
+    "turnover_annual": 6.909213388217568
+   },
+   "S_f75": {
+    "cagr": 0.21229943995713896,
+    "delta_cagr_pp": 5.4650515409106815,
+    "delta_max_dd_pp": 0.6059978789817899,
+    "extra_sells_per_year": 1.5436810638078544,
+    "max_dd": 0.47275788912848704,
+    "n_episodes_fired": 44,
+    "sells_per_year": 11.709385630347386,
+    "tax_usd": 0.0,
+    "trades_per_year": 35.39171219461911,
+    "turnover_annual": 7.300835288683975
+   }
+  },
+  "calibrated": {
+   "H_f0": {
+    "cagr": 0.20224959986304492,
+    "delta_cagr_pp": 5.046429194803137,
+    "delta_max_dd_pp": 0.21252984602255776,
+    "extra_sells_per_year": -0.37650757653850064,
+    "max_dd": 0.47007313025265574,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.789196990001031,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.0031440057726,
+    "turnover_annual": 5.7833117957137
+   },
+   "H_f100": {
+    "cagr": 0.21016376123040637,
+    "delta_cagr_pp": 5.837845331539282,
+    "delta_max_dd_pp": -4.091876449728127,
+    "extra_sells_per_year": 1.5436810638078544,
+    "max_dd": 0.4270290672951489,
+    "n_episodes_fired": 56,
+    "sells_per_year": 11.709385630347386,
+    "tax_usd": 0.0,
+    "trades_per_year": 35.57996598288836,
+    "turnover_annual": 7.881746200865249
+   },
+   "H_f25": {
+    "cagr": 0.19488923240840617,
+    "delta_cagr_pp": 4.310392449339262,
+    "delta_max_dd_pp": 0.21252984602255776,
+    "extra_sells_per_year": 0.602412122461601,
+    "max_dd": 0.47007313025265574,
+    "n_episodes_fired": 22,
+    "sells_per_year": 10.768116689001133,
+    "tax_usd": 0.0,
+    "trades_per_year": 33.3585712813112,
+    "turnover_annual": 6.35050768229749
+   },
+   "H_f50": {
+    "cagr": 0.18763519407425644,
+    "delta_cagr_pp": 3.5849886159242894,
+    "delta_max_dd_pp": 0.8551251125065051,
+    "extra_sells_per_year": 1.1671734872693538,
+    "max_dd": 0.4764990829174952,
+    "n_episodes_fired": 33,
+    "sells_per_year": 11.332878053808885,
+    "tax_usd": 0.0,
+    "trades_per_year": 34.63869704154211,
+    "turnover_annual": 6.908819602004217
+   },
+   "H_f75": {
+    "cagr": 0.19896812973101952,
+    "delta_cagr_pp": 4.718282181600597,
+    "delta_max_dd_pp": 0.8551251125065051,
+    "extra_sells_per_year": 1.5436810638078544,
+    "max_dd": 0.4764990829174952,
+    "n_episodes_fired": 44,
+    "sells_per_year": 11.709385630347386,
+    "tax_usd": 0.0,
+    "trades_per_year": 35.39171219461911,
+    "turnover_annual": 7.300384262755023
+   },
+   "K": {
+    "cagr": 0.15178530791501355,
+    "max_dd": 0.46794783179243016,
+    "n_episodes_fired": null,
+    "sells_per_year": 10.165704566539532,
+    "tax_usd": 0.0,
+    "trades_per_year": 33.01971446242655,
+    "turnover_annual": 5.456215687305925
+   },
+   "O_d2_k0_X10": {
+    "cagr": 0.21714451604572105,
+    "delta_cagr_pp": 6.53592081307075,
+    "delta_max_dd_pp": 0.21252984602265768,
+    "extra_sells_per_year": -0.6024121224616028,
+    "max_dd": 0.47007313025265673,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.563292444077929,
+    "tax_usd": 0.0,
+    "trades_per_year": 31.701937944541797,
+    "turnover_annual": 5.833278226073069
+   },
+   "O_d2_k0_X8": {
+    "cagr": 0.2489860588316608,
+    "delta_cagr_pp": 9.720075091664725,
+    "delta_max_dd_pp": -4.570322221778156,
+    "extra_sells_per_year": -0.6024121224616028,
+    "max_dd": 0.4222446095746486,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.563292444077929,
+    "tax_usd": 0.0,
+    "trades_per_year": 31.814890217503347,
+    "turnover_annual": 6.03205742327279
+   },
+   "O_d2_k3_X10": {
+    "cagr": 0.20468306608379683,
+    "delta_cagr_pp": 5.289775816878328,
+    "delta_max_dd_pp": 0.21252984602265768,
+    "extra_sells_per_year": -0.37650757653850064,
+    "max_dd": 0.47007313025265673,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.789196990001031,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.0031440057726,
+    "turnover_annual": 5.783440507858777
+   },
+   "O_d2_k3_X8": {
+    "cagr": 0.2309959412781779,
+    "delta_cagr_pp": 7.921063336316436,
+    "delta_max_dd_pp": -4.5703222217781665,
+    "extra_sells_per_year": -0.4141583341923507,
+    "max_dd": 0.4222446095746485,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.75154623234718,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.34200082465725,
+    "turnover_annual": 5.972921061998446
+   },
+   "O_d2_k5_X10": {
+    "cagr": 0.1927463329477932,
+    "delta_cagr_pp": 4.096102503277965,
+    "delta_max_dd_pp": -1.1102230246251565e-14,
+    "extra_sells_per_year": -0.15060303061540026,
+    "max_dd": 0.46794783179243005,
+    "n_episodes_fired": 11,
+    "sells_per_year": 10.015101535924131,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.6055561282342,
+    "turnover_annual": 5.786094596686774
+   },
+   "O_d2_k5_X8": {
+    "cagr": 0.2189795835982724,
+    "delta_cagr_pp": 6.719427568325886,
+    "delta_max_dd_pp": -4.802033937442585,
+    "extra_sells_per_year": -0.3012060612308005,
+    "max_dd": 0.4199274924180043,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.864498505308731,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.7561591588496,
+    "turnover_annual": 5.972149279501634
+   },
+   "O_d3_k0_X10": {
+    "cagr": 0.21618225109985434,
+    "delta_cagr_pp": 6.439694318484079,
+    "delta_max_dd_pp": 0.21252984602265768,
+    "extra_sells_per_year": -0.6024121224616028,
+    "max_dd": 0.47007313025265673,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.563292444077929,
+    "tax_usd": 0.0,
+    "trades_per_year": 31.701937944541797,
+    "turnover_annual": 5.833265206965325
+   },
+   "O_d3_k0_X8": {
+    "cagr": 0.24000383536757508,
+    "delta_cagr_pp": 8.821852745256153,
+    "delta_max_dd_pp": -4.570322221778156,
+    "extra_sells_per_year": -0.6024121224616028,
+    "max_dd": 0.4222446095746486,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.563292444077929,
+    "tax_usd": 0.0,
+    "trades_per_year": 31.814890217503347,
+    "turnover_annual": 6.031920190623187
+   },
+   "O_d3_k3_X10": {
+    "cagr": 0.20373065306291926,
+    "delta_cagr_pp": 5.194534514790572,
+    "delta_max_dd_pp": 0.21252984602265768,
+    "extra_sells_per_year": -0.37650757653850064,
+    "max_dd": 0.47007313025265673,
+    "n_episodes_fired": 11,
+    "sells_per_year": 9.789196990001031,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.0031440057726,
+    "turnover_annual": 5.783427488751031
+   },
+   "O_d3_k3_X8": {
+    "cagr": 0.22214309576420477,
+    "delta_cagr_pp": 7.035778784919122,
+    "delta_max_dd_pp": -4.5703222217781665,
+    "extra_sells_per_year": -0.4141583341923507,
+    "max_dd": 0.4222446095746485,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.75154623234718,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.34200082465725,
+    "turnover_annual": 5.972783829348843
+   },
+   "O_d3_k5_X10": {
+    "cagr": 0.19180335701488138,
+    "delta_cagr_pp": 4.001804909986784,
+    "delta_max_dd_pp": -1.1102230246251565e-14,
+    "extra_sells_per_year": -0.15060303061540026,
+    "max_dd": 0.46794783179243005,
+    "n_episodes_fired": 11,
+    "sells_per_year": 10.015101535924131,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.6055561282342,
+    "turnover_annual": 5.78608157757903
+   },
+   "O_d3_k5_X8": {
+    "cagr": 0.2102131550696147,
+    "delta_cagr_pp": 5.842784715460114,
+    "delta_max_dd_pp": -4.802033937442585,
+    "extra_sells_per_year": -0.3012060612308005,
+    "max_dd": 0.4199274924180043,
+    "n_episodes_fired": 18,
+    "sells_per_year": 9.864498505308731,
+    "tax_usd": 0.0,
+    "trades_per_year": 32.7561591588496,
+    "turnover_annual": 5.972012046852031
+   },
+   "R2": {
+    "cagr": 0.14896117275680076,
+    "delta_cagr_pp": -0.28241351582127816,
+    "delta_max_dd_pp": 0.08495494875895293,
+    "max_dd": 0.4687973812800197,
+    "sells_per_year": 29.55584475827234,
+    "tax_usd": 0.0,
+    "trades_per_year": 61.93549634058344,
+    "turnover_annual": 5.991495886085498
+   },
+   "S_f100": {
+    "cagr": 0.21800352882245266,
+    "delta_cagr_pp": 6.621822090743912,
+    "delta_max_dd_pp": -4.142127926420369,
+    "extra_sells_per_year": 1.5436810638078544,
+    "max_dd": 0.42652655252822647,
+    "n_episodes_fired": 56,
+    "sells_per_year": 11.709385630347386,
+    "tax_usd": 0.0,
+    "trades_per_year": 35.57996598288836,
+    "turnover_annual": 7.882455375860101
+   },
+   "S_f25": {
+    "cagr": 0.199607377369712,
+    "delta_cagr_pp": 4.782206945469847,
+    "delta_max_dd_pp": 0.21252984602265768,
+    "extra_sells_per_year": 0.602412122461601,
+    "max_dd": 0.47007313025265673,
+    "n_episodes_fired": 22,
+    "sells_per_year": 10.768116689001133,
+    "tax_usd": 0.0,
+    "trades_per_year": 33.3585712813112,
+    "turnover_annual": 6.35099933744051
+   },
+   "S_f50": {
+    "cagr": 0.19196961729415163,
+    "delta_cagr_pp": 4.018430937913808,
+    "delta_max_dd_pp": 0.6052767876229215,
+    "extra_sells_per_year": 1.1671734872693538,
+    "max_dd": 0.4740005996686594,
+    "n_episodes_fired": 33,
+    "sells_per_year": 11.332878053808885,
+    "tax_usd": 0.0,
+    "trades_per_year": 34.63869704154211,
+    "turnover_annual": 6.909298850350974
+   },
+   "S_f75": {
+    "cagr": 0.20677212866629424,
+    "delta_cagr_pp": 5.49868207512807,
+    "delta_max_dd_pp": 0.6052767876229215,
+    "extra_sells_per_year": 1.5436810638078544,
+    "max_dd": 0.4740005996686594,
+    "n_episodes_fired": 44,
+    "sells_per_year": 11.709385630347386,
+    "tax_usd": 0.0,
+    "trades_per_year": 35.39171219461911,
+    "turnover_annual": 7.300915599495309
+   }
+  },
+  "window": {
+   "end": "2026-09-29",
+   "sessions": 6679,
+   "start": "2000-03-09"
+  }
+ },
+ "status": "DIAGNOSTIC (upper bound). No gates. Nothing tradeable. ORACLE arms use future knowledge.",
+ "verdict": {
+  "best_after_tax_grid_cell": {
+   "2000_03_to_2026_09": {
+    "arm": "O_d2_k0_X8",
+    "delta_pp": 7.20558552273689
+   },
+   "2010_01_to_end": {
+    "arm": "O_d2_k0_X8",
+    "delta_pp": 10.745636359660416
+   },
+   "2017_01_to_end": {
+    "arm": "O_d2_k0_X8",
+    "delta_pp": 11.002219965523174
+   }
+  },
+  "best_pre_tax_grid_cell": {
+   "arm": "O_d2_k0_X8",
+   "value_pp": 9.729839336207945
+  },
+  "census_headline": {
+   "10": {
+    "count": 11,
+    "share_of_K_drawdown_time": 0.07885476647472808
+   },
+   "15": {
+    "count": 1,
+    "share_of_K_drawdown_time": 0.0020793346129238644
+   },
+   "5": {
+    "count": 34,
+    "share_of_K_drawdown_time": 0.19353806781829813
+   },
+   "8": {
+    "count": 18,
+    "share_of_K_drawdown_time": 0.10860524632117723
+   }
+  },
+  "frontier": {
+   "break_even_f_hedge": null,
+   "break_even_f_sell": null,
+   "break_even_note": "No crossing: every pre-registered false-alarm fraction keeps a positive three-window after-tax delta vs K. In this construction each trigger is followed by a known low, so a false alarm still avoids the decline from the trigger to that low; the sweep therefore measures the cost of extra round trips, not the cost of an imprecise trigger. Precision is not the binding constraint -- knowing the low is.",
+   "n_events_ge_10": 11,
+   "n_shallow_3_to_10": 45,
+   "points": {
+    "0.0": {
+     "after_tax_delta_hedge_min_pp": 3.9841625576136463,
+     "after_tax_delta_hedge_pp": {
+      "2000_03_to_2026_09": 3.9841625576136463,
+      "2010_01_to_end": 6.3851067543203355,
+      "2017_01_to_end": 7.398640966237879
+     },
+     "after_tax_delta_sell_min_pp": 4.0529394863442425,
+     "after_tax_delta_sell_pp": {
+      "2000_03_to_2026_09": 4.0529394863442425,
+      "2010_01_to_end": 6.447558838674294,
+      "2017_01_to_end": 7.255895143073099
+     },
+     "boot_B1_median_hedge_pp": 5.665922974149861,
+     "boot_B1_median_sell_pp": 5.540655152970986,
+     "boot_B2_median_hedge_pp": 6.203472337673388,
+     "boot_B2_median_sell_pp": 6.0285517439821135,
+     "label_hedge": "H_f0",
+     "label_sell": "O_d3_k3_X10",
+     "precision": 1.0
+    },
+    "0.25": {
+     "after_tax_delta_hedge_min_pp": 3.1701293523504814,
+     "after_tax_delta_hedge_pp": {
+      "2000_03_to_2026_09": 3.1701293523504814,
+      "2010_01_to_end": 5.419065733175876,
+      "2017_01_to_end": 5.072539448345914
+     },
+     "after_tax_delta_sell_min_pp": 3.4625145852278383,
+     "after_tax_delta_sell_pp": {
+      "2000_03_to_2026_09": 3.4625145852278383,
+      "2010_01_to_end": 5.833235838904094,
+      "2017_01_to_end": 5.327454846397095
+     },
+     "boot_B1_median_hedge_pp": 5.0531564449023625,
+     "boot_B1_median_sell_pp": 4.991801971013254,
+     "boot_B2_median_hedge_pp": 5.6543910966976085,
+     "boot_B2_median_sell_pp": 5.61801070932772,
+     "label_hedge": "H_f25",
+     "label_sell": "S_f25",
+     "precision": 0.4943820224719101
+    },
+    "0.5": {
+     "after_tax_delta_hedge_min_pp": 2.463321591020806,
+     "after_tax_delta_hedge_pp": {
+      "2000_03_to_2026_09": 2.463321591020806,
+      "2010_01_to_end": 4.236695507360122,
+      "2017_01_to_end": 4.670463408458003
+     },
+     "after_tax_delta_sell_min_pp": 2.714869642421669,
+     "after_tax_delta_sell_pp": {
+      "2000_03_to_2026_09": 2.714869642421669,
+      "2010_01_to_end": 4.654628515565018,
+      "2017_01_to_end": 4.6527469372368735
+     },
+     "boot_B1_median_hedge_pp": 4.332041647855195,
+     "boot_B1_median_sell_pp": 4.377079580949972,
+     "boot_B2_median_hedge_pp": 5.044394544143927,
+     "boot_B2_median_sell_pp": 5.081748532175706,
+     "label_hedge": "H_f50",
+     "label_sell": "S_f50",
+     "precision": 0.3283582089552239
+    },
+    "0.75": {
+     "after_tax_delta_hedge_min_pp": 3.321972582604471,
+     "after_tax_delta_hedge_pp": {
+      "2000_03_to_2026_09": 3.321972582604471,
+      "2010_01_to_end": 4.628643406244559,
+      "2017_01_to_end": 4.269665105234921
+     },
+     "after_tax_delta_sell_min_pp": 3.8120879645340056,
+     "after_tax_delta_sell_pp": {
+      "2000_03_to_2026_09": 3.8120879645340056,
+      "2010_01_to_end": 5.2595367791098635,
+      "2017_01_to_end": 4.3967262835095555
+     },
+     "boot_B1_median_hedge_pp": 3.637497727258887,
+     "boot_B1_median_sell_pp": 3.7596410478149767,
+     "boot_B2_median_hedge_pp": 4.495859292193249,
+     "boot_B2_median_sell_pp": 4.483106563265382,
+     "label_hedge": "H_f75",
+     "label_sell": "S_f75",
+     "precision": 0.24581005586592178
+    },
+    "1.0": {
+     "after_tax_delta_hedge_min_pp": 3.7159859460157874,
+     "after_tax_delta_hedge_pp": {
+      "2000_03_to_2026_09": 3.7159859460157874,
+      "2010_01_to_end": 4.659617959431328,
+      "2017_01_to_end": 4.621372447362471
+     },
+     "after_tax_delta_sell_min_pp": 4.211778687644818,
+     "after_tax_delta_sell_pp": {
+      "2000_03_to_2026_09": 4.211778687644818,
+      "2010_01_to_end": 5.22053057712728,
+      "2017_01_to_end": 4.62848873937447
+     },
+     "boot_B1_median_hedge_pp": 3.1332358692462647,
+     "boot_B1_median_sell_pp": 3.3178667902924786,
+     "boot_B2_median_hedge_pp": 3.957794742341425,
+     "boot_B2_median_sell_pp": 4.251067761366567,
+     "label_hedge": "H_f100",
+     "label_sell": "S_f100",
+     "precision": 0.19642857142857142
+    }
+   }
+  },
+  "lag5_d3_X10": {
+   "after_tax_delta_pp": {
+    "2000_03_to_2026_09": 3.018182494553634,
+    "2010_01_to_end": 5.056724524252654,
+    "2017_01_to_end": 4.830010801300277
+   },
+   "pre_tax_delta_pp": {
+    "base": 3.9842841797310236
+   }
+  },
+  "note": "Diagnostic. Positive = the oracle arm beats K; these are upper bounds with future knowledge.",
+  "perfect_no_lag_d2_X10": {
+   "after_tax_delta_pp": {
+    "2000_03_to_2026_09": 4.962302488475467,
+    "2010_01_to_end": 7.966730748157769,
+    "2017_01_to_end": 9.292044691165513
+   },
+   "boot_B1_median_pp": 6.917009134550939,
+   "boot_B2_median_pp": 7.59964377219754,
+   "max_dd_delta_pp": {
+    "base": 0.21305793844436094,
+    "calibrated": 0.21252984602265768
+   },
+   "pre_tax_delta_pp": {
+    "base": 6.54208301864434,
+    "calibrated": 6.53592081307075
+   },
+   "sells_per_year_extra": -0.6400628801154529
+  },
+  "perfect_no_lag_d2_X8": {
+   "after_tax_delta_pp": {
+    "2000_03_to_2026_09": 7.20558552273689,
+    "2010_01_to_end": 10.745636359660416,
+    "2017_01_to_end": 11.002219965523174
+   },
+   "pre_tax_delta_pp": {
+    "base": 9.729839336207945
+   }
+  },
+  "tax_free_vs_sell_O3310": {
+   "hedge_boot_B1_pp": 5.665922974149861,
+   "hedge_min_after_tax_delta_pp": 3.9841625576136463,
+   "sell_boot_B1_pp": 5.540655152970986,
+   "sell_extra_tax_usd": {
+    "2000_03_to_2026_09": 1358160.9208281403,
+    "2010_01_to_end": 892595.9883794347,
+    "2017_01_to_end": 324753.5253385699
+   },
+   "sell_min_after_tax_delta_pp": 4.0529394863442425
+  },
+  "tax_wedge": {
+   "O_d2_k0_X8": {
+    "2000_03_to_2026_09": {
+     "after_tax_pp": 7.20558552273689,
+     "pre_tax_pp": 9.729551573263183,
+     "tax_wedge_share": 0.2594123718365555
+    },
+    "2010_01_to_end": {
+     "after_tax_pp": 10.745636359660416,
+     "pre_tax_pp": 14.632251887103664,
+     "tax_wedge_share": 0.26561978001955866
+    },
+    "2017_01_to_end": {
+     "after_tax_pp": 11.002219965523174,
+     "pre_tax_pp": 15.489948966919131,
+     "tax_wedge_share": 0.2897187725395419
+    }
+   },
+   "O_d3_k3_X10": {
+    "2000_03_to_2026_09": {
+     "after_tax_pp": 4.0529394863442425,
+     "pre_tax_pp": 5.193386325842009,
+     "tax_wedge_share": 0.21959599535720353
+    },
+    "2010_01_to_end": {
+     "after_tax_pp": 6.447558838674294,
+     "pre_tax_pp": 8.414088516687324,
+     "tax_wedge_share": 0.23371868195977374
+    },
+    "2017_01_to_end": {
+     "after_tax_pp": 7.255895143073099,
+     "pre_tax_pp": 9.594185719110593,
+     "tax_wedge_share": 0.24371954478428215
+    }
+   },
+   "O_d3_k5_X10": {
+    "2000_03_to_2026_09": {
+     "after_tax_pp": 3.018182494553634,
+     "pre_tax_pp": 3.9841663433198837,
+     "tax_wedge_share": 0.2424557022790682
+    },
+    "2010_01_to_end": {
+     "after_tax_pp": 5.056724524252654,
+     "pre_tax_pp": 6.759495103747004,
+     "tax_wedge_share": 0.2519079536799206
+    },
+    "2017_01_to_end": {
+     "after_tax_pp": 4.830010801300277,
+     "pre_tax_pp": 6.572118673444516,
+     "tax_wedge_share": 0.2650755348018057
+    }
+   }
+  }
+ }
+}

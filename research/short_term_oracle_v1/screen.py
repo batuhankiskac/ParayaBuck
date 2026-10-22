@@ -303,6 +303,38 @@ def census(built):
         "8_to_10pct": int(sum(1 for e in eps if 0.08 <= e["depth"] < 0.10)),
         "ge_10pct": int(sum(1 for e in eps if e["depth"] >= 0.10)),
     }
+    # ---- descriptive attribution (no new arm): where would the avoided loss come from?
+    # For each episode of the 8 % / 10 % classes, the QLD leg's move between the oracle's
+    # sell fill (open of cut+1) and buy fill (open of low+k+1), weighted by K's target at the
+    # cut close. Purely a decomposition of the census; it is not simulated.
+    oq = built["models"]["base"]["o"]
+    cq = built["models"]["base"]["c"]
+    wq = built["models"]["base"]["w"]
+    out["prize_attribution"] = {}
+    for X in (0.08, 0.10):
+        for (dd, kk) in ((0.02, 0), (0.03, 3)):
+            epsx = add_crossings([dict(e) for e in eps if e["depth"] >= X], qqq, dd)
+            agg = {}
+            for e in epsx:
+                c = e["cross"]
+                r = max(e["low"] + kk, c + 1)
+                if r + 1 > T or c + 1 > T:
+                    continue
+                avoided = 1.0 - oq[r + 1] / oq[c + 1]     # positive = a loss the arm did not take
+                contrib = float(wq[c]) * avoided
+                a = agg.setdefault(e["by"], {"n": 0, "sum_weighted_avoided_loss": 0.0, "sessions": 0})
+                a["n"] += 1
+                a["sum_weighted_avoided_loss"] += contrib
+                a["sessions"] += int(r - c)
+            tot = sum(a["sum_weighted_avoided_loss"] for a in agg.values())
+            for a in agg.values():
+                a["share_of_total"] = (a["sum_weighted_avoided_loss"] / tot) if tot else None
+            out["prize_attribution"][f"X{int(X*100)}_d{int(dd*100)}_k{kk}"] = {
+                "by_end_reason": agg,
+                "total_weighted_avoided_loss": float(tot),
+                "note": "descriptive only: K's target weight at the cut close x the 2x leg's decline "
+                        "from the sell fill to the buy fill; not a simulated arm",
+            }
     return out
 
 
@@ -323,6 +355,7 @@ def stage_pre_tax(built, labels):
                 "sells_per_year": float(r["qld_sells"] / yrs),
                 "trades_per_year": float(r["strategy_trades"] / yrs),
                 "tax_usd": float(r["tax_total_usd_at_payment_fx"]),
+                "n_episodes_fired": int(built["counts"][_spec_key(SPECS[label])]) if label in SPECS else None,
             }
     for md in FIN:
         for label in labels:
@@ -345,19 +378,27 @@ def stage_after_tax(built, labels):
         out[wn] = {}
         for label in labels:
             r = run_arm(built, label, "base", "progressive", TAX_CAPITALS[GATE_CAPITAL], i0, i1, env)
+            rp = run_arm(built, label, "base", "pre_tax", 1.0, i0, i1, env)
             out[wn][label] = {
+                "pre_tax_cagr": float(rp["cagr_usd_liquidated"]),
                 "after_tax_cagr": float(r["cagr_usd_liquidated"]),
                 "after_tax_cagr_unliquidated": float(r["cagr_usd_unliquidated"]),
                 "max_dd_after_tax": float(r["max_dd_nav_usd"]),
+                "max_dd_pre_tax": float(rp["max_dd_nav_usd"]),
                 "tax_usd": float(r["tax_total_usd_at_payment_fx"]),
                 "sells_per_year": float(r["sells"] / r["years"]),
                 "qld_sells_per_year": float(r["qld_sells"] / r["years"]),
                 "terminal_usd": float(r["terminal_usd_liquidated"]),
                 "years": float(r["years"]),
+                "n_episodes_fired": int(built["counts"][_spec_key(SPECS[label])]) if label in SPECS else None,
             }
         for label in labels:
             if label == CONTROL:
                 continue
+            out[wn][label]["delta_pre_tax_pp"] = (
+                out[wn][label]["pre_tax_cagr"] - out[wn][CONTROL]["pre_tax_cagr"]) * 100
+            out[wn][label]["delta_max_dd_pre_tax_pp"] = (
+                out[wn][label]["max_dd_pre_tax"] - out[wn][CONTROL]["max_dd_pre_tax"]) * 100
             out[wn][label]["delta_after_tax_pp"] = (
                 out[wn][label]["after_tax_cagr"] - out[wn][CONTROL]["after_tax_cagr"]) * 100
             out[wn][label]["delta_max_dd_pp"] = (
@@ -753,14 +794,21 @@ def run():
         rr = fe_sim.simulate(built["models"]["base"]["o"], built["models"]["base"]["c"],
                              built["models"]["base"]["w"], env, TAX_CAPITALS[GATE_CAPITAL],
                              i0, i1, arm="C0", mode="progressive", m=M)
-        at[wn][R2] = {"after_tax_cagr": rr["cagr_usd_liquidated"],
+        rr_pre = fe_sim.simulate(built["models"]["base"]["o"], built["models"]["base"]["c"],
+                                 built["models"]["base"]["w"], env, 1.0,
+                                 i0, i1, arm="C0", mode="pre_tax", m=M)
+        at[wn][R2] = {"pre_tax_cagr": rr_pre["cagr_usd_liquidated"],
+                      "after_tax_cagr": rr["cagr_usd_liquidated"],
                       "after_tax_cagr_unliquidated": rr["cagr_usd_unliquidated"],
                       "max_dd_after_tax": rr["max_dd_nav_usd"],
+                      "max_dd_pre_tax": rr_pre["max_dd_nav_usd"],
                       "tax_usd": rr["tax_total_usd_at_payment_fx"],
                       "sells_per_year": rr["sells"] / rr["years"],
                       "qld_sells_per_year": rr["qld_sells"] / rr["years"],
                       "terminal_usd": rr["terminal_usd_liquidated"],
-                      "years": rr["years"]}
+                      "years": rr["years"],
+                      "n_episodes_fired": None}
+        at[wn][R2]["delta_pre_tax_pp"] = (at[wn][R2]["pre_tax_cagr"] - at[wn][CONTROL]["pre_tax_cagr"]) * 100
         at[wn][R2]["delta_after_tax_pp"] = (at[wn][R2]["after_tax_cagr"] - at[wn][CONTROL]["after_tax_cagr"]) * 100
         at[wn][R2]["delta_max_dd_pp"] = (at[wn][R2]["max_dd_after_tax"] - at[wn][CONTROL]["max_dd_after_tax"]) * 100
 
@@ -819,7 +867,7 @@ def precision_frontier(cen, at, boot):
            "points": {}}
     for f in (0.0,) + SWEEP_F:
         if f == 0.0:
-            sell, hedge = "O_d3_k3_X10", "H_f00"
+            sell, hedge = "O_d3_k3_X10", "H_f0"
         else:
             sell, hedge = _label("S", **{"f": int(f * 100)}), _label("H", **{"f": int(f * 100)})
         n_ev = d10["n_events_ge_10"]
@@ -843,6 +891,12 @@ def precision_frontier(cen, at, boot):
     pts_h = [(float(f), v["after_tax_delta_hedge_min_pp"]) for f, v in out["points"].items()]
     pts_h.sort()
     out["break_even_f_hedge"] = _crossing(pts_h)
+    out["break_even_note"] = (
+        "No crossing: every pre-registered false-alarm fraction keeps a positive three-window "
+        "after-tax delta vs K. In this construction each trigger is followed by a known low, so a "
+        "false alarm still avoids the decline from the trigger to that low; the sweep therefore "
+        "measures the cost of extra round trips, not the cost of an imprecise trigger. Precision is "
+        "not the binding constraint -- knowing the low is.")
     return out
 
 
@@ -872,8 +926,17 @@ def make_verdict(cen, pre, at, boot, frontier):
     perfect = "O_d2_k0_X10"
     no_lag = "O_d2_k0_X8"
     lag5 = "O_d3_k5_X10"
+    wedge = {}
+    for lab in (no_lag, "O_d3_k3_X10", lag5):
+        wedge[lab] = {}
+        for wn in TAX_WINDOWS:
+            pre_d = at[wn][lab]["delta_pre_tax_pp"]
+            post_d = at[wn][lab]["delta_after_tax_pp"]
+            wedge[lab][wn] = {"pre_tax_pp": pre_d, "after_tax_pp": post_d,
+                              "tax_wedge_share": (1.0 - post_d / pre_d) if pre_d > 0 else None}
     return {
         "note": "Diagnostic. Positive = the oracle arm beats K; these are upper bounds with future knowledge.",
+        "tax_wedge": wedge,
         "best_pre_tax_grid_cell": best("cagr"),
         "best_after_tax_grid_cell": at_best,
         "perfect_no_lag_d2_X10": {
@@ -896,9 +959,9 @@ def make_verdict(cen, pre, at, boot, frontier):
         },
         "tax_free_vs_sell_O3310": {
             "sell_min_after_tax_delta_pp": min(at[wn]["O_d3_k3_X10"]["delta_after_tax_pp"] for wn in TAX_WINDOWS),
-            "hedge_min_after_tax_delta_pp": min(at[wn]["H_f00"]["delta_after_tax_pp"] for wn in TAX_WINDOWS),
+            "hedge_min_after_tax_delta_pp": min(at[wn]["H_f0"]["delta_after_tax_pp"] for wn in TAX_WINDOWS),
             "sell_boot_B1_pp": boot["tax"][GATE_CAPITAL]["progressive"]["O_d3_k3_X10"]["median_delta_pp"],
-            "hedge_boot_B1_pp": boot["tax"][GATE_CAPITAL]["progressive"]["H_f00"]["median_delta_pp"],
+            "hedge_boot_B1_pp": boot["tax"][GATE_CAPITAL]["progressive"]["H_f0"]["median_delta_pp"],
             "sell_extra_tax_usd": {wn: at[wn]["O_d3_k3_X10"]["delta_tax_usd"] for wn in TAX_WINDOWS},
         },
         "frontier": frontier,
@@ -929,6 +992,12 @@ def write_summary(res, elapsed):
                  f"{(c['median_depth'] or 0):>7.3f}   {(c['median_duration_sessions'] or 0):>6.0f}   "
                  f"{c['share_of_K_drawdown_time']:>7.1%}")
     L.append("")
+    L.append("== prize attribution (descriptive; K weight x avoided 2x decline, by episode end) ==")
+    for key, v in res["census"]["prize_attribution"].items():
+        parts = " ".join(f"{k}: n={a['n']} share={a['share_of_total']:.0%}"
+                         for k, a in sorted(v["by_end_reason"].items()))
+        L.append(f"  {key:<12} {parts}")
+    L.append("")
     L.append("== pre-tax main window (CAGR %, max DD %) ==")
     L.append("  arm                 base CAGR  cal CAGR   base DD   cal DD  sells/yr  turn/yr")
     for lab in [CONTROL, R2] + [a for a in ARMS]:
@@ -937,16 +1006,21 @@ def write_summary(res, elapsed):
                  f"{b['max_dd']*100:>8.2f}  {c['max_dd']*100:>8.2f}  {b['sells_per_year']:>8.2f}  "
                  f"{b['turnover_annual']:>7.2f}")
     L.append("")
-    L.append("== after tax $100k: delta vs K (pp) and delta max DD (pp) ==")
-    L.append("  arm                 2000 CAGR(d)   2010 CAGR(d)   2017 CAGR(d)   2000 DD(d)")
+    L.append("== pre-tax delta vs K per window (pp), and fired episodes (main window) ==")
+    L.append("  arm                 fired   2000     2010     2017")
+    for lab in [R2] + list(ARMS):
+        cells = " ".join(f"{at[wn][lab]['delta_pre_tax_pp']:>+7.2f}" for wn in TAX_WINDOWS)
+        fired = pre["base"][lab].get("n_episodes_fired")
+        fired = "  -  " if fired is None else f"{fired:>4d} "
+        L.append(f"  {lab:<20} {fired} {cells}")
+    L.append("")
+    L.append("== after tax $100k: CAGR (%) with delta vs K (pp); max-DD delta on the 2000 window ==")
+    L.append("  arm                 2000 CAGR(d)        2010 CAGR(d)        2017 CAGR(d)      2000 DD(d)")
     for lab in [R2] + list(ARMS):
         cells = []
         for wn in TAX_WINDOWS:
             r = at[wn][lab]
-            if lab == R2:
-                cells.append(f"{r['after_tax_cagr']*100:>7.2f}({r['delta_after_tax_pp']:+.2f})")
-            else:
-                cells.append(f"{r['after_tax_cagr']*100:>7.2f}({r['delta_after_tax_pp']:+.2f})")
+            cells.append(f"{r['after_tax_cagr']*100:>7.2f}({r['delta_after_tax_pp']:+.2f})")
         dd = at["2000_03_to_2026_09"][lab]["delta_max_dd_pp"]
         L.append(f"  {lab:<20} " + " ".join(f"{c:>18}" for c in cells) + f"  {dd:>+7.2f}")
     L.append("")
@@ -970,6 +1044,13 @@ def write_summary(res, elapsed):
                  f"{p['after_tax_delta_sell_min_pp']:>+8.2f}  {p['after_tax_delta_hedge_min_pp']:>+8.2f}")
     L.append(f"  break-even f (sell, three-window minimum) = {res['frontier']['break_even_f_sell']}")
     L.append(f"  break-even f (hedge)                      = {res['frontier']['break_even_f_hedge']}")
+    L.append("  " + res["frontier"]["break_even_note"])
+    L.append("")
+    L.append("== tax wedge on the prize (after-tax delta / pre-tax delta) ==")
+    for lab in ("O_d2_k0_X8", "O_d3_k3_X10", "O_d3_k5_X10"):
+        w = res["verdict"]["tax_wedge"][lab]
+        cells = " ".join(f"{wn}: {w[wn]['tax_wedge_share']:.0%}" for wn in TAX_WINDOWS)
+        L.append(f"  {lab:<16} {cells}")
     L.append("")
     L.append("== harness ==")
     L.append(f"  pass = {res['harness']['pass']}; R1 parity --quick = {res['harness']['R1_parity_quick']['pass']}")

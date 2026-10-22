@@ -1,0 +1,101 @@
+put_hedge_v1 — protective-put overlays on production K (A1u + H2), Turkish after tax
+
+VERDICT: declared: none
+
+The pricing sanity check passed first (see below). Every overlay arm loses after tax
+versus K in all three windows and in both clean bootstraps; none cuts the drawdown
+materially, and none makes vol target 0.45 affordable. K stays production.
+
+SANITY (PPUT, SPX+VIX, s = 2.00):
+  1990_1999: synthetic 12.65% vs PPUT 11.97% (+0.68 pp), monthly corr 0.9946, RMSE 0.382 pp
+  2001_2026: synthetic 6.37% vs PPUT 6.80% (-0.43 pp), monthly corr 0.9835, RMSE 0.647 pp
+  s_minus_50 (s=1.0): diff +1.22 / -0.11 pp
+  s_plus_50 (s=3.0): diff +0.11 / -0.79 pp
+
+MAIN WINDOW (VXN-covered reduced window 2001-01-23 -> 2026-09-29), after tax at $100k, m=2:
+arm  pre CAGR  pre DD  AT CAGR  AT DD  AT Δ vs K  boot B1 Δ (share)  boot B2 Δ (share)  turnover
+K     17.90%  38.46%   12.42%  45.24%    +0.00 pp  -  -  5.41
+H1    14.91%  40.86%    9.45%  46.87%    -2.97 pp  -6.453 (1%)  -6.417 (1%)  5.43
+H2    13.96%  43.33%    8.20%  49.34%    -4.22 pp  -3.686 (10%)  -3.631 (12%)  5.43
+H3    17.36%  38.94%   11.78%  45.67%    -0.64 pp  -0.521 (23%)  -0.522 (24%)  5.42
+H4    14.85%  43.81%    9.07%  49.78%    -3.35 pp  -4.391 (6%)  -4.359 (8%)  5.33
+H5    14.29%  40.88%    8.50%  47.07%    -3.92 pp  -3.389 (12%)  -3.273 (14%)  5.43
+
+AFTER-TAX WINDOWS ($100k, progressive; Δ vs K in pp):
+arm  2001-2026   2010-2026   2017-2026
+K      +0.00     +0.00     +0.00
+H1     -2.97     -2.28     -2.47
+H2     -4.22     -3.83     -3.81
+H3     -0.64     -1.03     -1.09
+H4     -3.35     -2.91     -1.62
+H5     -3.92     -3.44     -3.44
+
+DRAWDOWN PROFILE (pre-tax, base, m=2):
+arm  maxDD  >10%  >20%  >30%  worst21  worst63  hedge cost pp/yr
+K    38.46%   32   14    6  -29.90%  -31.95% +0.00
+H1   40.86%   28   14    7  -31.18%  -33.68% +3.79
+H2   43.33%   27   13    3  -31.06%  -34.54% +4.28
+H3   38.94%   31   14    5  -30.12%  -32.30% +0.85
+H4   43.81%   28   12    6  -31.08%  -34.62% +4.67
+H5   40.88%   29   13    4  -30.35%  -32.46% +4.33
+
+CRASH FLOWS (net option P&L, $k; QQQ return; NAV return arm vs K):
+  2001_2002_dotcom: QQQ -64.0%
+    K: prem      0.0  pay      0.0  net     +0.0  NAV  -13.03%
+    H1: prem      6.4  pay      0.5  net     -6.0  NAV  -18.52%
+    H2: prem      2.2  pay      0.0  net     -2.2  NAV  -15.00%
+    H3: prem      0.7  pay      0.2  net     -0.5  NAV  -13.33%
+    H4: prem      2.7  pay      0.0  net     -2.7  NAV  -19.09%
+    H5: prem      0.0  pay      0.0  net     +0.0  NAV  -13.03%
+  2008_gfc: QQQ -33.4%
+    K: prem      0.0  pay      0.0  net     +0.0  NAV   -0.20%
+    H1: prem      0.0  pay      1.5  net     +1.5  NAV   +0.20%
+    H2: prem      0.0  pay     27.1  net    +27.1  NAV  +21.14%
+    H3: prem      0.0  pay     10.2  net    +10.2  NAV   +6.72%
+    H4: prem      0.0  pay     34.1  net    +34.1  NAV  +27.40%
+    H5: prem      0.0  pay     28.2  net    +28.2  NAV  +21.14%
+  2020_covid: QQQ -1.6%
+    K: prem      0.0  pay      0.0  net     +0.0  NAV  -14.69%
+    H1: prem     11.4  pay    223.2  net   +211.8  NAV  +18.90%
+    H2: prem     20.5  pay      0.0  net    -20.5  NAV  -16.54%
+    H3: prem      3.0  pay      0.0  net     -3.0  NAV  -14.80%
+    H4: prem     25.0  pay      0.0  net    -25.0  NAV  -21.73%
+    H5: prem     22.6  pay      0.0  net    -22.6  NAV  -16.54%
+  2022_bear: QQQ -33.7%
+    K: prem      0.0  pay      0.0  net     +0.0  NAV  -24.25%
+    H1: prem      4.9  pay      3.7  net     -1.1  NAV  -24.32%
+    H2: prem      9.3  pay     54.3  net    +45.0  NAV  -20.78%
+    H3: prem      4.7  pay      3.0  net     -1.7  NAV  -24.36%
+    H4: prem     12.2  pay     76.9  net    +64.7  NAV  -26.12%
+    H5: prem      0.0  pay     22.7  net    +22.7  NAV  -22.86%
+
+GATES (vs K on the reduced window; G7 is the pre-registered one-window OOS, G8 n/a):
+arm  G1 G2 G3 G4 G5 G6 G7 G9 AT1 AT2  all
+H1   .  .  .  .  .  .  .  Y  .  .   N
+H2   .  .  .  .  .  .  .  Y  .  .   N
+H3   .  Y  .  .  .  .  .  Y  .  .   N
+H4   .  .  .  .  .  .  .  Y  .  .   N
+H5   .  .  .  .  .  .  .  Y  .  .   N
+
+SENSITIVITY (option losses offset equity gains; Δ vs conservative, pp):
+  H1: +0.87  +0.89  +1.30
+  H2: +1.25  +1.32  +1.77
+  H3: +0.20  +0.22  +0.26
+  H4: +1.23  +1.31  +1.71
+  H5: +1.20  +1.24  +1.65
+
+OOS (SPX+VIX 1990-06-01 -> 1999-12-29, pre-tax, calibrated, m=2):
+  K: CAGR  16.03%  DD 25.49%  ΔCAGR  +0.00 pp  ΔDD +0.00 pp
+  H1: CAGR  13.01%  DD 27.04%  ΔCAGR  -3.01 pp  ΔDD +1.55 pp
+  H2: CAGR  11.30%  DD 27.77%  ΔCAGR  -4.72 pp  ΔDD +2.28 pp
+  H3: CAGR  14.99%  DD 25.57%  ΔCAGR  -1.03 pp  ΔDD +0.08 pp
+  H4: CAGR  11.89%  DD 30.01%  ΔCAGR  -4.13 pp  ΔDD +4.52 pp
+  H5: CAGR  11.41%  DD 27.77%  ΔCAGR  -4.61 pp  ΔDD +2.28 pp
+
+Reproduction: parity --quick PASS; K anchors PASS; zero-flow parity PASS; bootstrap parity PASS.
+Wall clock: 23.9 s (--run).
+
+Caveats: BS prices from VXN with a fixed multiplicative skew and no term structure;
+5 % of premium per side; monthly rolls at the close; option marks are model values;
+the tax treatment of options is pre-registered, not adviser-confirmed; the OOS has no
+after-tax leg (TRY data starts 2000); G8 is not run on the reduced OOS.

@@ -58,13 +58,19 @@ def base_inputs():
         days, qqq, vxn, vix, rate = sd.engine_market()
         d, o, c, w_e2, w_r2, e2 = fe_data.main_inputs(0.0)
         _d, _o, _c, _we, w45, _e = sd.main_inputs_vt(0.0, 0.45)
+        d_c, o_c, c_c, we_c, wr_c, e_c = fe_data.main_inputs(fe_config.FIN["calibrated"])
+        _d, _o, _c, _we, w45_c, _e = sd.main_inputs_vt(fe_config.FIN["calibrated"], 0.45)
         fx, ufe = fe_study.try_market(days)
-        _BASE_CACHE["v"] = (days, qqq, vxn, rate, o, c, w_e2, w_r2, w45, e2, fx, ufe)
+        _BASE_CACHE["v"] = (
+            days, qqq, vxn, rate, o, c, w_e2, w_r2, w45, e2, fx, ufe,
+            o_c, c_c, wr_c, w45_c, e_c,
+        )
     return _BASE_CACHE["v"]
 
 
 def load_window(a=None, b=None):
-    days, qqq, vxn, rate, o, c, w_e2, w_r2, w45, e2, fx, ufe = base_inputs()
+    (days, qqq, vxn, rate, o, c, w_e2, w_r2, w45, e2, fx, ufe,
+     o_cal, c_cal, w_r2_cal, w45_cal, e2_cal) = base_inputs()
     if a is None:
         i0 = sd.vxn_index(days)
     else:
@@ -87,6 +93,11 @@ def load_window(a=None, b=None):
         "env": env,
         "i0": i0,
         "i1": i1,
+        "o_cal": o_cal,
+        "c_cal": c_cal,
+        "w_r2_cal": w_r2_cal,
+        "w45_cal": w45_cal,
+        "e2_cal": e2_cal,
     }
 
 
@@ -117,15 +128,21 @@ def arm_overlay(win, arm):
     }
 
 
-def run_arm(win, arm, mode="pre_tax", m=fe_config.M, capital=100_000.0, offset=0, flows=None):
+def run_arm(win, arm, mode="pre_tax", m=fe_config.M, capital=100_000.0, offset=0, flows=None,
+            financing="base"):
     spec = C.ARM_SPEC[arm]
-    wants = win["w45"] if spec["vt"] == 0.45 else win["w_r2"]
+    if financing == "calibrated":
+        o, c = win["o_cal"], win["c_cal"]
+        wants = win["w45_cal"] if spec["vt"] == 0.45 else win["w_r2_cal"]
+    else:
+        o, c = win["o"], win["c"]
+        wants = win["w45"] if spec["vt"] == 0.45 else win["w_r2"]
     overlay = arm_overlay(win, arm)
     if overlay is not None:
         overlay = dict(overlay, offset=offset)
     return ov.simulate(
-        win["o"],
-        win["c"],
+        o,
+        c,
         wants,
         win["env"],
         capital,
@@ -712,14 +729,16 @@ def k_anchors():
 
 
 def parity_quick():
-    t0 = time.time()
     p = subprocess.run(
         [sys.executable, "-m", "research.fast_engine.parity", "--quick"],
         cwd=str(ROOT), capture_output=True, text=True,
     )
-    tail = (p.stdout or "")[-4000:]
-    return {"returncode": p.returncode, "pass": p.returncode == 0, "seconds": round(time.time() - t0, 1),
-            "stdout_tail": tail}
+    # deterministic evidence only: the per-check PASS/FAIL lines, not the wall clock
+    checks = [
+        ln.strip() for ln in (p.stdout or "").splitlines()
+        if ("-> PASS" in ln or "-> FAIL" in ln) and "wallclock" not in ln
+    ]
+    return {"returncode": p.returncode, "pass": p.returncode == 0, "checks": checks}
 
 
 def bootstrap_parity():
@@ -938,7 +957,7 @@ def build_results(harness_out=None):
     for arm in ARMS:
         rec = {}
         for md, m in (("base", 1), ("base", 2), ("base", 4), ("calibrated", 1), ("calibrated", 2)):
-            r = run_arm(win, arm, "pre_tax", m=m, capital=100_000.0)
+            r = run_arm(win, arm, "pre_tax", m=m, capital=100_000.0, financing=md)
             rec[f"{md}_m{m}"] = clean_stats(fe_study.pre_stats(win["days"], i0, i1, r))
         rec["base"] = rec["base_m2"]
         rec["calibrated"] = rec["calibrated_m2"]
@@ -1057,7 +1076,6 @@ def build_results(harness_out=None):
         "crash_flows": crashes,
         "gates": gates,
         "selection": selection,
-        "run_seconds": elapsed,
     }
     return res
 
@@ -1222,7 +1240,6 @@ def main():
         (ROOT / "research/put_hedge_v1/HARNESS.json").write_text(json.dumps(h, indent=1, sort_keys=True) + "\n")
         res = build_results(harness_out=h)
         elapsed = time.time() - t0
-        res["run_seconds"] = round(elapsed, 1)
         (ROOT / "research/put_hedge_v1/RESULTS.json").write_text(json.dumps(res, indent=1, sort_keys=True) + "\n")
         (ROOT / "research/put_hedge_v1/SUMMARY.txt").write_text(_summary(res, h, elapsed) + "\n")
         print(_summary(res, h, elapsed))

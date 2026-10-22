@@ -129,10 +129,27 @@
   "pass": true
  },
  "parity_quick": {
+  "checks": [
+   "signals                                         173 cells     0 mismatches  max|diff| 0.000e+00  -> PASS",
+   "engine_side_by_side                            1009 cells     0 mismatches  max|diff| 0.000e+00  -> PASS",
+   "invariants                                       48 cells     0 mismatches  max|diff| 0.000e+00  -> PASS",
+   "cash_yield                                        2 cells     0 mismatches  max|diff| 0.000e+00  -> PASS",
+   "behaviour                                         1 cells     0 mismatches  max|diff| 0.000e+00  -> PASS",
+   "boot_side_by_side                               178 cells     0 mismatches  max|diff| 0.000e+00  -> PASS",
+   "published.pre_tax_main                          554 cells     0 mismatches  max|diff| 4.990e-07  -> PASS",
+   "published.pre_tax_main_r_usd                    184 cells     0 mismatches  max|diff| 4.917e-07  -> PASS",
+   "published.after_tax_windows                    1630 cells     0 mismatches  max|diff| 4.997e-07  -> PASS",
+   "published.cost_stress_m4                         60 cells     0 mismatches  max|diff| 4.987e-07  -> PASS",
+   "published.oos                                   186 cells     0 mismatches  max|diff| 5.000e-07  -> PASS",
+   "published.instruments                           630 cells     0 mismatches  max|diff| 5.000e-07  -> PASS",
+   "published.quality                                44 cells     0 mismatches  max|diff| 3.917e-07  -> PASS",
+   "published.E1_after_tax_etfs_rindex             1050 cells     0 mismatches  max|diff| 4.996e-07  -> PASS",
+   "published.E2_rolling_starts                     672 cells     0 mismatches  max|diff| 4.992e-07  -> PASS",
+   "published.E5                                     33 cells     0 mismatches  max|diff| 4.644e-07  -> PASS",
+   "published.E3_fresh_bootstraps                   124 cells     0 mismatches  max|diff| 4.960e-07  -> PASS"
+  ],
   "pass": true,
-  "returncode": 0,
-  "seconds": 11.5,
-  "stdout_tail": "  parity-new path 60/60\n  signals                                         173 cells     0 mismatches  max|diff| 0.000e+00  -> PASS\n  engine_side_by_side                            1009 cells     0 mismatches  max|diff| 0.000e+00  -> PASS\n  invariants                                       48 cells     0 mismatches  max|diff| 0.000e+00  -> PASS\n  cash_yield                                        2 cells     0 mismatches  max|diff| 0.000e+00  -> PASS\n  behaviour                                         1 cells     0 mismatches  max|diff| 0.000e+00  -> PASS\n  boot_side_by_side                               178 cells     0 mismatches  max|diff| 0.000e+00  -> PASS\n  boot_side_by_side_wallclock                  {\"paths\": [60, 30], \"old_s\": 3.7579538822174072, \"new_s\": 0.1011650562286377, \"speedup\": 37.146758202004634}\n  published.pre_tax_main                          554 cells     0 mismatches  max|diff| 4.990e-07  -> PASS\n  published.pre_tax_main_r_usd                    184 cells     0 mismatches  max|diff| 4.917e-07  -> PASS\n  published.after_tax_windows                    1630 cells     0 mismatches  max|diff| 4.997e-07  -> PASS\n  published.cost_stress_m4                         60 cells     0 mismatches  max|diff| 4.987e-07  -> PASS\n  published.oos                                   186 cells     0 mismatches  max|diff| 5.000e-07  -> PASS\n  published.instruments                           630 cells     0 mismatches  max|diff| 5.000e-07  -> PASS\n  published.quality                                44 cells     0 mismatches  max|diff| 3.917e-07  -> PASS\n  published.E1_after_tax_etfs_rindex             1050 cells     0 mismatches  max|diff| 4.996e-07  -> PASS\n  published.E2_rolling_starts                     672 cells     0 mismatches  max|diff| 4.992e-07  -> PASS\n  published.E5                                     33 cells     0 mismatches  max|diff| 4.644e-07  -> PASS\n  published.E3_fresh_bootstraps                   124 cells     0 mismatches  max|diff| 4.960e-07  -> PASS\nparity PASS in 11.1s -> PARITY.json\n"
+  "returncode": 0
  },
  "pass": true,
  "pput_sanity": {

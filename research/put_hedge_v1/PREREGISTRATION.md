@@ -188,4 +188,12 @@ numbers are not reported as results.
 
 ## 12. Amendments
 
-*(none yet)*
+**A1. Calibrated pre-tax rows used the base synthetic QLD basket (bug fix, after the first complete
+run).** The first complete `--run` produced identical base and calibrated pre-tax rows: `run_arm`
+always used `win["o"], win["c"]`, which are `main_inputs(0.0)`. The fix loads the
+`main_inputs(0.0075)` / `main_inputs_vt(0.0075, 0.45)` basket and selects it for the calibrated
+rows. This changes only the calibrated pre-tax cells (K 17.901 → 17.289 %, and the arms
+similarly); the base rows, the after-tax windows, the bootstrap (which already had its own
+calibrated legs) and every gate outcome are unchanged. No arm, parameter, gate, window or
+selection rule was changed. The run was repeated twice after the fix; `RESULTS.json` is
+byte-identical (`60ee19f7…8de19a2`).

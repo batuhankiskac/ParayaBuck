@@ -58,8 +58,8 @@
    "used_by": "gate G7: pre-1954 T-bill rate for the M2 window"
   },
   "data/historical/vt_level_k_v1_qqq_2026q4.csv": {
-   "bytes": 3587,
-   "sha256": "79a541c8831d41f446b26c8dd34c3cd3e2e8fa9dbdc49262fa0b7e2bc5c61564",
+   "bytes": 3555,
+   "sha256": "8e2b3c274b6fd2312e6f2554ba3efd556c21180a05209071732cb45db320c8e3",
    "source": "downloaded for this study",
    "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/QQQ?period1=1789000000&period2=1793000000&interval=1d&events=div&includeAdjustedClose=true",
    "range": "2026-09-10 through 2026-10-22",
@@ -67,8 +67,8 @@
    "used_by": "stage EPI only (report-only October 2026 episode); never a gate"
   },
   "data/historical/vt_level_k_v1_qld_2026q4.csv": {
-   "bytes": 3629,
-   "sha256": "22970d0c309323ebdb8fa33b4f8d1b37017520d6ac23817f0b48ed0d788924a7",
+   "bytes": 3597,
+   "sha256": "ffeae33c4738efb8dc26d06326056663f9f1e356730648cbc8a672e43e07e033",
    "source": "downloaded for this study",
    "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/QLD?period1=1789000000&period2=1793000000&interval=1d&events=div&includeAdjustedClose=true",
    "range": "2026-09-10 through 2026-10-22",

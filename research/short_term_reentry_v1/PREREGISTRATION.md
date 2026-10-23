@@ -175,4 +175,22 @@ during it.
 
 ## Amendments (after the run; no arm, parameter or gate changed)
 
-*(none at pre-registration time)*
+1. **Pre-run implementation fix (hedge price assembly).** The committed code assembled the
+   six diagnostic hedge price paths with a 1-D output buffer where the kernel expects a
+   `(1, T)` row; the arrays came back length 1. The harness caught it before any graded run
+   (the NAV-validity sweep over every arm and window). Fixed by allocating the buffer as
+   `np.empty_like(o)[None, :]`, and `R5` was extended with an assembled-hedge-path check
+   (length, zero return on exactly the masked sessions, the real return elsewhere, the hedge
+   target equal to K's) — 4,958 masked sessions verified. The registered arms, the rules,
+   the gates and the selection rule are untouched; the pre-registration commit `27bc4e22`
+   remains the fixed specification.
+2. **Report-only diagnostics added after the run.** The diagnostics block also reports the
+   2x leg's mean and compounded close-to-close return on the sessions the tax-free variant
+   masks ("out-day ret"), and the SUMMARY's after-tax table also shows sells/yr and tax
+   paid. Neither is a gate; both describe the pre-registered rule.
+3. **Report-only sensitivity (not an arm).** The reference-high truncation (§3.1) was the
+   one interpretive choice. The untruncated variant (a full trailing-20 high after every
+   re-entry) gives pre-tax CAGR 4.89 / 8.95 / 10.20 % for A / C / F against the registered
+   7.59 / 10.56 / 11.61 % — the registered convention is the *generous* one, so the verdict
+   does not depend on it.
+

@@ -229,9 +229,9 @@ def build_main():
             prices[md][arm] = (o, c)
             hm = np.zeros_like(msk)
             hm[1:] = msk[:-1]
-            oo = np.empty_like(o)
-            cc = np.empty_like(c)
-            fbt.masked_prices(o[None, :], c[None, :], hm[None, :], oo[None, :], cc[None, :])
+            oo = np.empty_like(o)[None, :]
+            cc = np.empty_like(c)[None, :]
+            fbt.masked_prices(o[None, :], c[None, :], hm[None, :], oo, cc)
             targets[md][HEDGES[arm]] = w
             prices[md][HEDGES[arm]] = (np.ascontiguousarray(oo[0]), np.ascontiguousarray(cc[0]))
 
@@ -252,6 +252,11 @@ def diagnostics(built):
     days, T = built["days"], built["T"]
     qqq = built["qqq"]
     o = built["models"]["base"]["o"]
+    c = built["models"]["base"]["c"]
+    ret = np.empty(T, dtype=float)
+    ret[0] = 0.0
+    ret[1:] = c[1:] / c[:-1] - 1.0
+    all_mean = float(ret[1:].mean())
     years = fe_sim.calendar_years(days[START - 1], days[T - 1])
     out = {}
     for arm in ARMS:
@@ -288,6 +293,10 @@ def diagnostics(built):
                     if chg > 0:
                         above += 1
         mask = built["masks"][("base", arm)]
+        hm = np.zeros_like(mask)
+        hm[1:] = mask[:-1]
+        out_sessions = hm.astype(bool)
+        out_ret = ret[out_sessions]
         out[arm] = {
             "exits": int(n_ex),
             "exits_per_year": float(n_ex / years),
@@ -304,13 +313,18 @@ def diagnostics(built):
             "mean_reentry_vs_exit_pct": float(np.mean(re_prices) * 100) if re_prices else None,
             "median_reentry_vs_exit_pct": float(np.median(re_prices) * 100) if re_prices else None,
             "share_reentry_above_exit": float(above / len(re_prices)) if re_prices else None,
+            "out_session_mean_return_pct": float(out_ret.mean() * 100) if len(out_ret) else None,
+            "out_session_compounded_return_pct": float((np.exp(np.log1p(out_ret).sum()) - 1.0) * 100)
+                                                 if len(out_ret) else None,
+            "all_session_mean_return_pct": float(all_mean * 100),
             "episodes": [
                 {"exit": days[r["ex"]], "reentry": (days[r["re"]] if r["re"] >= 0 else None),
                  "depth_pct": round(100.0 * (1.0 - r["lo_v"] / r["hi"]), 2)}
                 for r in recs
             ],
         }
-    return {"window_years": float(years), "arms": out}
+    return {"window_years": float(years), "arms": out,
+            "all_session_mean_return_pct": float(all_mean * 100)}
 
 
 # ----------------------------------------------------------------------------- stages
@@ -452,19 +466,20 @@ def boot_run(specs, n_pre, n_tax, seed=SEED, block=BLOCK, capitals=(GATE_CAPITAL
                     pre[(md, label)][p0:p0 + n] = got[:n]
 
         so, sc, w = legs["base"]
-        for label, sp in specs.items():
-            oo, cc, wq = arrays(label, sp, "base")
-            for mode in modes:
-                mi = MODE_PROGRESSIVE if mode == "progressive" else MODE_FLAT
-                for cl in capitals:
-                    got = np.empty(W, dtype=float)
-                    fbt.run_tax(oo, cc, wq, env.fx, env.upm, env.mth_of, env.yr_of,
-                                env.scale_y, env.dec_tail, env.pay_ptr, env.pay_yr,
-                                env.pay_part, TAX_CAPITALS[cl], win.i0, win.i1, cost,
-                                sp["rule"][0], sp["rule"][1], sp["rule"][2], mi,
-                                win.yrs, fbt._SC_LIQ, env.Y0, env.M_lo, got)
-                    n = min(W, n_tax - p0)
-                    at[cl][mode][label][p0:p0 + n] = got[:n]
+        if p0 < n_tax:
+            for label, sp in specs.items():
+                oo, cc, wq = arrays(label, sp, "base")
+                for mode in modes:
+                    mi = MODE_PROGRESSIVE if mode == "progressive" else MODE_FLAT
+                    for cl in capitals:
+                        got = np.empty(W, dtype=float)
+                        fbt.run_tax(oo, cc, wq, env.fx, env.upm, env.mth_of, env.yr_of,
+                                    env.scale_y, env.dec_tail, env.pay_ptr, env.pay_yr,
+                                    env.pay_part, TAX_CAPITALS[cl], win.i0, win.i1, cost,
+                                    sp["rule"][0], sp["rule"][1], sp["rule"][2], mi,
+                                    win.yrs, fbt._SC_LIQ, env.Y0, env.M_lo, got)
+                        n = min(W, n_tax - p0)
+                        at[cl][mode][label][p0:p0 + n] = got[:n]
         if not quiet:
             print(f"  bootstrap path {min(p0 + W, n_paths)}/{n_paths}", flush=True)
 
@@ -603,7 +618,7 @@ def oos_boot_market(key, rng):
         sma10 = fe_signals.sma_up(cc, 10)
         for lab in (CONTROL,) + ARMS:
             if lab == CONTROL:
-                wq = w
+                wq = np.ascontiguousarray(np.broadcast_to(w, cc.shape))
             else:
                 sp = SPEC[lab]
                 msk = np.zeros(cc.shape, dtype=np.int8)
@@ -943,10 +958,35 @@ def harness(deep=True):
     fbt.masked_prices(o[None, :], c[None, :], hm, oo, cc)
     zero_ret = (abs(cc[0, 1000] / cc[0, 999] - 1.0) < 1e-15
                 and abs(cc[0, 1001] / cc[0, 1000] - c[1001] / c[1000]) < 1e-12)
-    checks["R5_hedge_identities"] = {"pass": bool(ok_px and zero_ret),
+    # the six hedge arms' assembled price paths: length T, zero return on the out sessions only
+    ok_arm = True
+    n_masked = 0
+    for arm in ARMS:
+        ho, hc = built["prices"]["base"][HEDGES[arm]]
+        msk = built["masks"][("base", arm)]
+        hmk = np.zeros_like(msk)
+        hmk[1:] = msk[:-1]
+        if ho.shape != o.shape or hc.shape != c.shape:
+            ok_arm = False
+            continue
+        idx = np.nonzero(hmk[1:])[0] + 1
+        n_masked += len(idx)
+        if len(idx) and not np.allclose(hc[idx] / hc[idx - 1], 1.0, rtol=0, atol=1e-15):
+            ok_arm = False
+        keep = np.ones(o.shape[0], dtype=bool)
+        keep[1:] = hmk[1:] == 0
+        keep[0] = False
+        j = np.nonzero(keep)[0]
+        if len(j) and not np.allclose(hc[j] / hc[j - 1], c[j] / c[j - 1], rtol=1e-12, atol=0.0):
+            ok_arm = False
+        if not np.array_equal(built["targets"]["base"][HEDGES[arm]], built["models"]["base"]["w"]):
+            ok_arm = False
+    checks["R5_hedge_identities"] = {"pass": bool(ok_px and zero_ret and ok_arm),
                                      "all_zero_mask_identity": bool(ok_px),
-                                     "masked_session_zero_return": bool(zero_ret)}
-    if not (ok_px and zero_ret):
+                                     "masked_session_zero_return": bool(zero_ret),
+                                     "assembled_hedge_paths": bool(ok_arm),
+                                     "masked_sessions_checked": int(n_masked)}
+    if not (ok_px and zero_ret and ok_arm):
         bad += 1
 
     # R6: chunk_legs_pc == fe_boot.chunk_legs
@@ -1095,15 +1135,14 @@ def run():
         "oos_bootstrap": oos_boot,
         "episode_2026": epi,
         "gates": g,
-        "wall_clock_s": float(elapsed),
     }
     FULL_OUT.write_text(json.dumps(res, indent=1, sort_keys=True, default=_jsonable))
-    write_summary(res)
+    write_summary(res, elapsed)
     return res
 
 
 # ----------------------------------------------------------------------------- summary
-def write_summary(res):
+def write_summary(res, elapsed):
     pre, at, boot, diag = res["pre_tax"], res["after_tax"], res["bootstrap"], res["diagnostics"]
     g, oos, ob = res["gates"], res["oos"], res["oos_bootstrap"]
     L = []
@@ -1111,7 +1150,7 @@ def write_summary(res):
     L.append("")
     L.append(f"main window {res['params']['main_window']['start']} .. {res['params']['main_window']['end']}"
              f"  ({res['params']['main_window']['sessions']} sessions); after tax $100k progressive, m=2")
-    L.append(f"wall clock of --run: {res['wall_clock_s']:.1f} s")
+    L.append(f"wall clock of --run: {elapsed:.1f} s")
     L.append(f"harness pass = {res['harness']['pass']} (parity --quick = "
              f"{res['harness']['R1_parity_quick']['pass']})")
     L.append("")
@@ -1124,12 +1163,13 @@ def write_summary(res):
                  f"{b['max_dd']*100:>8.2f}  {c['max_dd']*100:>8.2f}  {b['sells_per_year']:>8.2f}  "
                  f"{b['turnover_annual']:>7.2f}  {ex:>5}")
     L.append("")
-    L.append("== after tax $100k: CAGR (%) with delta vs K (pp) ==")
-    L.append("  arm                     2000(d)            2010(d)            2017(d)        tax$ (2000)")
+    L.append("== after tax $100k: CAGR (%) with delta vs K (pp), sells/yr and tax paid (2000 window) ==")
+    L.append("  arm                     2000(d)            2010(d)            2017(d)   sells/yr  tax$")
     for lab in (R2REF,) + ARMS + tuple(HEDGES[a] for a in ARMS):
         cells = " ".join(f"{at[wn][lab]['after_tax_cagr']*100:>7.2f}({at[wn][lab]['delta_after_tax_pp']:+.2f})"
                          for wn in TAX_WINDOWS)
-        L.append(f"  {_til(lab):<18} {cells}  {at['2000_03_to_2026_09'][lab]['tax_usd']:>10,.0f}")
+        r = at["2000_03_to_2026_09"][lab]
+        L.append(f"  {_til(lab):<18} {cells}  {r['sells_per_year']:>8.2f}  {r['tax_usd']:>10,.0f}")
     L.append("")
     L.append("== clean bootstrap, median delta vs K (pp) / share > 0 ==")
     L.append("  arm                 pre base  pre cal   B1 recent    B2 flat")
@@ -1143,12 +1183,14 @@ def write_summary(res):
                  f"{b2['median_delta_pp']:>+7.2f}/{b2['share_gt_0']:.0%}")
     L.append("")
     L.append("== overlay diagnostics (base model, main window) ==")
-    L.append("  arm                exits/yr  false<8%  med depth  mean re-entry vs exit  above")
+    L.append("  arm                exits/yr  false<8%  med depth  mean re-entry vs exit  above  out-day ret")
     for arm in ARMS:
         d = diag["arms"][arm]
         L.append(f"  {_til(arm):<18} {d['exits_per_year']:>8.2f}  {d['false_alarm_share']:.0%}"
                  f"  {d['median_depth']*100:>8.2f}%  {d['mean_reentry_vs_exit_pct']:>+19.2f}%"
-                 f"  {d['share_reentry_above_exit']:.0%}")
+                 f"  {d['share_reentry_above_exit']:.0%}  {d['out_session_mean_return_pct']:>+7.3f}%")
+    L.append(f"  (2x leg's mean daily return on the sessions the hedge masks: the 'out-day ret' column; "
+             f"unconditional mean {diag['all_session_mean_return_pct']:+.3f}%/session)")
     L.append("")
     L.append("== OOS (calibrated, m=2): delta CAGR (pp) and delta max DD (pp) vs K ==")
     L.append("  arm                  " + " ".join(f"{w:>14s}" for w in oos))

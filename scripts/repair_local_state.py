@@ -346,7 +346,7 @@ def repair_runtime_db(ledger: str | Path | None = None, config: Any | None = Non
             print(f"  HALT STILL ACTIVE: keeping {remaining} decision_worker_crashed incident(s).")
             print("  Broker reconciliation did NOT verify, so the halt is not lifted.")
             print("  Run broker.reconcile() with working credentials (or re-run this script")
-            print("  with ALPACA_API_KEY/ALPACA_SECRET_KEY set) and confirm the incident")
+            print("  with the mode's Alpaca credentials set) and confirm the incident")
             print("  before considering any manual clearing.")
     if reconcile_ok:
         # Account-scoped: the key is (account_id, session_date), so an
@@ -401,8 +401,12 @@ def _run_broker_reconcile(
     try:
         cfg = config if config is not None else _load_config(config_path)
         # Only attempt if keys exist
-        api_key = os.getenv("ALPACA_API_KEY")
-        secret = os.getenv("ALPACA_SECRET_KEY")
+        # Mode-scoped names only: LIVE never falls back to the PAPER key.
+        from parayabuck.live_safety import credential_env_names
+
+        key_env, secret_env = credential_env_names(live=cfg.runtime.mode.value == "live")
+        api_key = os.getenv(key_env)
+        secret = os.getenv(secret_env)
         if not (api_key and secret):
             print("  No Alpaca keys, skipping broker reconcile")
             return False

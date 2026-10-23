@@ -437,9 +437,11 @@
         box.hidden = true;
       }
     };
+    let configDigest = null;
     const open = async function () {
       try {
         const data = await api.fetchJson("/api/settings");
+        configDigest = data.config_digest || null;
         byId("apiKey").value = data.api_key || "";
         byId("secretKey").value = data.secret_key || "";
         if (data.has_credentials) {
@@ -480,14 +482,19 @@
         host: byId("host").value.trim(),
         port: parseInt(byId("port").value, 10),
         open_browser: byId("openBrowser").checked,
-        log_level: byId("logLevel").value
+        log_level: byId("logLevel").value,
+        expected_config_digest: configDigest
       };
       btn.disabled = true;
       btn.textContent = "Kaydediliyor…";
       try {
         const data = await postControl("/api/settings", payload);
         setOpen(false);
-        toast(data.engine_restarted ? "Ayarlar uygulandı; motor yeniden başlatıldı." : "Ayarlar kaydedildi.", "success");
+        if (data.restart_error) {
+          toast("Ayarlar kaydedildi ancak motor yeniden başlatılamadı: " + data.restart_error, "error");
+        } else {
+          toast(data.engine_restarted ? "Ayarlar uygulandı; motor yeniden başlatıldı." : "Ayarlar kaydedildi.", "success");
+        }
         if (data.app_restart_required) toast("Adres/port değişikliği bir sonraki açılışta etkinleşir.", "warning");
         refreshStatus();
       } catch (err) {

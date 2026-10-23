@@ -116,7 +116,12 @@
     "t10y3m": "T10Y3M",
     "lqd": "LQD",
     "tip": "TIP",
-    "gdx": "GDX"
+    "gdx": "GDX",
+    "mf_proxy": {
+      "windows": {
+        "main": "MF_PROXY"
+      }
+    }
   },
   "note": "Extra series for batch_screen plugins, one CSV per series. Sources: the Yahoo chart API (period1=0, daily, `events=div,split`: columns `date,close,adjclose`) and FRED CSV (columns `date,value`). Refresh with `python -m research.batch_screen.extra --fetch-all`, add a series with --fetch/--fetch-fred, check every hash and range with --verify. A key is a series name or a {\"windows\": {window: series}} map; `data.extra(key)` returns the series aligned to the panel's own sessions (the drawn source session inside a bootstrap chunk), NaN where the series has no value on that date. Nothing is forward-filled unless the plugin asks for `ffill=True`.",
   "schema": "parayabuck.batch_screen.extradata/v1",
@@ -1492,6 +1497,21 @@
       "bytes": 198910,
       "sha256": "08dd15c8a5375e5691c7ba9e039c01933a58547d5d7fd78b32db3bb8e13a83f3",
       "source": "Yahoo chart API"
+    },
+    "MF_PROXY": {
+      "file": "data/historical/mf_sleeve_v1_proxy.csv",
+      "column": "close",
+      "price": "close",
+      "source": "hand-made",
+      "url": "research/mf_sleeve_v1/build_proxy.py",
+      "fetched": "2026-10-23",
+      "range": [
+        "1990-01-02",
+        "2026-10-15"
+      ],
+      "rows": 9265,
+      "bytes": 231637,
+      "sha256": "4260aed1cac08fbc1372ed0447fe6f697e1c1ff2fa7156c14d6776832bcb5369"
     }
   }
 }

@@ -16,6 +16,9 @@ were still on `main` before 2026-10-16 (`research/<name>/` paths in older report
 `archive/research/main-research-dir-2026-10`. New studies are built on the Numba research
 engine (`fast_engine_v1.md`, `WORKER_PROTOCOL.md`).
 
+For the short-term drawdown question (October 2026) start with
+[`short_term_summary.md`](short_term_summary.md): what was tested, why it fails, and what is left.
+
 | Doc | Date | One-line conclusion | Status |
 |---|---|---|---|
 | [`short_term_boost_v1.md`](short_term_boost_v1.md) | 2026-10-23 | Buying more after a deep short-term drop on K (E2 on, QQQ ≤ −8/−10/−5 % from the 20-session high → 0.98 cap or 1.5×w for 5/10 sessions, optional −15 % guard): all 6 arms fail; max DD 54–71 % (boosts into the spring-2000 crash), after tax −0.02…−2.48 pp, both bootstraps negative. Fixed-horizon post-drop edge is +0.32 %/session over 5 sessions and ≈0 over 10. Buy-the-dip on K closed. Evidence: commit `c7e4e59c`. | current evidence |

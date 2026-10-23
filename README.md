@@ -154,3 +154,4 @@ journal and snapshot inside `tmp_path`.
 | `docs/deferred_refactor_seams.md` | Deferred refactor seams |
 | `docs/OPERATIONS_LOG.md` | Every deploy, config change and incident |
 | `docs/research/INDEX.md` | Research evidence index |
+| `docs/research/short_term_summary.md` | Short-term drawdown question: what was tested and what is left |

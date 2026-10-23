@@ -270,3 +270,5 @@ def test_overview_payload_carries_trend_status(tmp_path: Path, monkeypatch: pyte
     assert trend["exit_price"] == pytest.approx(676.488)
     # drawdown is the dollar gap below peak, so peak = equity + drawdown.
     assert trend["drawdown_pct"] == pytest.approx(5000.0 / 105000.0 * 100.0)
+    assert trend["drawdown_context"]["available"] is True
+    assert trend["drawdown_context"]["drawdown_pct"] == pytest.approx(5000.0 / 105000.0 * 100.0)

@@ -326,6 +326,7 @@
       const badge = byId("trendStateBadge");
       if (!badge) return;
       const drawdownRow = byId("trendDrawdownRow");
+      const historyRow = byId("trendHistoryRow");
       if (!t || t.available === false) {
         badge.textContent = "—";
         badge.className = "badge";
@@ -333,6 +334,7 @@
         setText("trendLevelText", "—");
         setText("trendVolText", "—");
         if (drawdownRow) drawdownRow.hidden = true;
+        if (historyRow) historyRow.hidden = true;
         return;
       }
       const votes = isNum(t.votes_up) && isNum(t.votes_total)
@@ -372,6 +374,24 @@
           setText("trendDrawdownText", fmt.pct(t.drawdown_pct, 1) + " — en yüksek bakiyeye göre");
         } else {
           drawdownRow.hidden = true;
+        }
+      }
+
+      if (historyRow) {
+        const h = t.drawdown_context;
+        if (h && h.available === true && isNum(h.deeper_count)) {
+          historyRow.hidden = false;
+          const from = String(h.backtest_start || "").slice(0, 4) + "–" + String(h.backtest_end || "").slice(0, 4);
+          let text;
+          if (Number(h.deeper_count) > 0) {
+            text = "Backtest " + from + ": bu kadar derin " + Number(h.deeper_count) + " düşüş (yılda ≈"
+              + fmt.num(h.deeper_per_year, 1) + "); medyan toparlanma " + Number(h.median_sessions_to_recover) + " seans";
+          } else {
+            text = "Backtest " + from + ": bu kadar derin düşüş yok (en derin " + fmt.pct(h.deepest_pct, 1) + ")";
+          }
+          setText("trendHistoryText", text);
+        } else {
+          historyRow.hidden = true;
         }
       }
     }

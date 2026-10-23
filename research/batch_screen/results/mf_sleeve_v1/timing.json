@@ -1,0 +1,11 @@
+{
+ "batch": "mf_sleeve_v1",
+ "registry_lines": 580,
+ "registry_trials": 324,
+ "total_wall_s": 81.395157,
+ "wall_s": {
+  "MF1/S10": 78.991,
+  "MF1/S20": 77.543293,
+  "MF1/S30": 78.965364
+ }
+}

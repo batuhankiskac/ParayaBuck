@@ -120,9 +120,7 @@ def trend_status_from_metadata(
     state = state_value if isinstance(state_value, str) else None
 
     evaluated = [
-        key
-        for key in _VOTE_KEYS
-        if isinstance(signals.get(key), dict) and isinstance(signals[key].get("up"), bool)
+        key for key in _VOTE_KEYS if isinstance(signals.get(key), dict) and isinstance(signals[key].get("up"), bool)
     ]
     votes_total: int | None
     if evaluated:

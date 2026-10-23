@@ -26,9 +26,10 @@ the thing it targets but still loses to K:
 
 The diagnostic that explains all six: the 2x leg's mean return on the sessions the overlay is cut
 is **above** the unconditional +0.099 %/session in every arm, and for the deep arms it is
-**+0.51 % (C1) and +0.62 % (C2) per session** — six times the average. After an 8 % fall in under
-20 sessions, the next sessions are the strongest of the whole history (mean reversion inside the
-uptrend). Whatever the restore rule, a cut on a short-term pullback is on the wrong side of that.
+**+0.51 % (C1) and +0.62 % (C2) per session**. That figure is conditioned on the episode ending
+on a rebound (see Amendment 1); the fixed-horizon measurement in `short_term_boost_v1` is
++0.32 %/session over the 5 sessions after an 8 % drop and about zero over 10. Either way the
+sessions right after a deep pullback are better than average, so a cut there is on the wrong side.
 **The short-term exit family on K is closed on all three remaining axes** (restore, size, depth).
 
 Control = production **K** reproduced cell-for-cell (pre-tax 15.7649 / 15.1785 %, DD 46.6698 /
@@ -125,8 +126,9 @@ window where the −5 % arms gain (+1.5…+2.8 pp); M2 costs them 2.7–5.4 pp w
 2. **Half size halves the loss, it does not change its sign.** B1 vs `short_term_reentry_v1` D is a
    clean comparison (same trigger, same restore): −1.9…−3.9 pp instead of −4.3…−7.2 pp after tax.
 3. **Depth makes it worse per session, not better.** The deep trigger is never a false alarm in
-   the < 8 % sense, but the sessions after an 8 % 20-session drop are the best in the sample
-   (+0.5–0.6 %/session on the 2x leg). C2 survives only because its restore usually fires the next
+   the < 8 % sense, but the sessions after an 8 % 20-session drop are better than average
+   (+0.5–0.6 %/session while cut, a rebound-conditioned figure; +0.32 % over a fixed 5 sessions,
+   `short_term_boost_v1`). C2 survives only because its restore usually fires the next
    session (the first bounce regains the cut close), i.e. it is out for ~1 session per cut.
 4. **October 2026** (report only, Yahoo extension): K −14.17 % from the 2026-10-06 peak. B1
    −12.29 % (cut 5 sessions), A1/A2 −13.26 %, B2 −13.70 % (1 session), C1/C2 do not fire
@@ -159,8 +161,7 @@ With `short_term_oracle_v1` and `short_term_reentry_v1`, this closes the questio
 
 * The prize exists only with knowledge of the low. Every causal way to cut K on a pullback —
   any trigger depth (3 / 5 / 8 %), any size (all / half / staged), any restore (rebound, SMA10,
-  bracket at the cut price, buy lower) — is on the wrong side of the post-pullback rebound, which
-  is the strongest return pattern in the sample.
+  bracket at the cut price, buy lower) — is on the wrong side of the post-pullback rebound.
 * The drawdown benefit is real (up to −4.5 pp max DD, −1.9 pp in October 2026) and has a price.
   In-sample, after tax on the 2000 window per pp of pre-tax max DD removed: A2 0.63, B1 0.43,
   B2 0.55, C1 1.3 pp/yr; `vt_level_k_v1`'s lower vol target costs ~0.4. C2 looks cheap (0.12:
@@ -198,3 +199,13 @@ With `short_term_oracle_v1` and `short_term_reentry_v1`, this closes the questio
 * Built on tag `archive/research/short-term-reentry-v1-2026-10` (engine, data, the reentry study's
   screen and `fe_overlay.rolling_max`, the oracle study's `fe_boot_targets`); numba 0.68.0,
   numpy 2.5.2, pandas 3.0.5, Python 3.13.
+
+## Amendments (after publication; no arm, parameter or gate changed)
+
+1. **"Cut-session return" is rebound-conditioned (2026-10-23).** The diagnostic averages the 2x
+   leg's return over the sessions an arm was cut, and the deep arms' episodes end on a rebound
+   (C2: the first close back at the cut close). The +0.51 / +0.62 %/session figures therefore
+   include the bounce that ends each episode and overstate the post-drop edge. The follow-up
+   `short_term_boost_v1` measured it over fixed horizons: +0.32 %/session for the first 5
+   sessions after an 8 % drop, −0.06 %/session over 10. The verdict is unchanged.
+

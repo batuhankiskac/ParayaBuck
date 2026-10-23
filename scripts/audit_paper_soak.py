@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from parayabuck.markets.nyse_calendar import NEW_YORK, nyse_sessions, session_close_utc  # noqa: E402
+from parayabuck.portfolio.runtime_service import EXIT_SELL_RETRY_SUFFIX, is_exit_sell_retry  # noqa: E402
 
 EXPECTED = {
     "equity": ("equity_leveraged_trend_v1", 0.98),
@@ -384,9 +385,23 @@ def audit(
             flag("S3", f"orphan rebalance {rebalance['decision_id']}")
     if len(order_ids) != len(orders):
         flag("S4", "duplicate client order ID")
-    logical = [(row["decision_id"], row["market"], row["symbol"], row["side"]) for row in orders]
+    # The one documented second submission is the -retry1 of a broker-rejected
+    # exit SELL: it is keyed apart, and only valid when its original was a
+    # rejected SELL of the same decision.
+    statuses = {str(row["client_order_id"]): (str(row["status"]), str(row["side"])) for row in orders}
+    logical = [
+        (row["decision_id"], row["market"], row["symbol"], row["side"], is_exit_sell_retry(str(row["client_order_id"])))
+        for row in orders
+    ]
     if len(logical) != len(set(logical)):
         flag("S4", "duplicate logical submission")
+    for row in orders:
+        client_order_id = str(row["client_order_id"])
+        if not is_exit_sell_retry(client_order_id):
+            continue
+        original = statuses.get(client_order_id.removesuffix(EXIT_SELL_RETRY_SUFFIX))
+        if str(row["side"]) != "sell" or original != ("rejected", "sell"):
+            flag("S4", f"retry without a rejected original SELL: {client_order_id}")
     for event in journal_events:
         kind = str(event.get("kind", ""))
         if event.get("mode") == "live":

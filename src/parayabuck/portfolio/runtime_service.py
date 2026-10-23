@@ -67,6 +67,7 @@ from parayabuck.portfolio.runtime_rebalance import (
 )
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 from parayabuck.portfolio.signal_cross_check import CrossCheckOutcome
+from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.portfolio.runtime_service")
 
@@ -2675,7 +2676,13 @@ class PortfolioRuntime:
         open_symbols = {
             canonical_symbol(order.symbol, order.market) for order in self.repository.open_orders(self.account_id)
         }
-        open_symbols |= {canonical_symbol(str(symbol), self.market) for symbol in self.broker.all_open_order_symbols()}
+        # Broker-wide symbols include foreign crypto orders, which must not be
+        # canonicalized as equities (that raises), as in TargetToOrderPlanner.
+        open_symbols |= {
+            canonical_symbol(str(symbol), self.market)
+            for symbol in self.broker.all_open_order_symbols()
+            if is_crypto(str(symbol)) == (self.market == Market.CRYPTO)
+        }
         positions = {
             canonical_symbol(position.symbol, position.market): position
             for position in account.positions

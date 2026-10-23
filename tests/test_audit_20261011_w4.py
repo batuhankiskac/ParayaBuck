@@ -353,7 +353,15 @@ def test_overview_keys_match_frontend_readers(tmp_path: Path) -> None:
     state = WebState(engine_manager=manager, backtest_manager=None)
     payload = dashboard_svc.get_overview_payload(state)
     assert set(payload) == {
-        "as_of", "engine_state", "account", "equity", "trend_status", "risk", "execution", "universe", "health",
+        "as_of",
+        "engine_state",
+        "account",
+        "equity",
+        "trend_status",
+        "risk",
+        "execution",
+        "universe",
+        "health",
     }
     for key in ("account", "equity", "trend_status", "risk", "execution", "health", "universe"):
         assert f"data.{key}" in dashboard_js or f"({key}" in dashboard_js or key in dashboard_js

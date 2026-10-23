@@ -51,9 +51,7 @@ def test_uptrend_exit_is_the_second_highest_threshold() -> None:
     assert status["in_trend"] is True
     assert status["votes_up"] == 3
     assert status["votes_total"] == 3
-    assert status["thresholds"] == pytest.approx(
-        {"sma": 676.488, "tsm": 725.25 / 1.18594, "don": 705.54}
-    )
+    assert status["thresholds"] == pytest.approx({"sma": 676.488, "tsm": 725.25 / 1.18594, "don": 705.54})
     # Sorted [TSM base, SMA, DON]: the middle level is where the second vote flips.
     assert status["exit_price"] == pytest.approx(676.488)
     assert status["exit_distance_pct"] == pytest.approx(-6.724, abs=0.01)
@@ -270,3 +268,5 @@ def test_overview_payload_carries_trend_status(tmp_path: Path, monkeypatch: pyte
     assert trend["exit_price"] == pytest.approx(676.488)
     # drawdown is the dollar gap below peak, so peak = equity + drawdown.
     assert trend["drawdown_pct"] == pytest.approx(5000.0 / 105000.0 * 100.0)
+    assert trend["drawdown_context"]["available"] is True
+    assert trend["drawdown_context"]["drawdown_pct"] == pytest.approx(5000.0 / 105000.0 * 100.0)

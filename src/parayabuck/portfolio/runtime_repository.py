@@ -27,12 +27,14 @@ from parayabuck.portfolio.ownership_rebase import (
     ADJUST,
     BUY,
     FOREIGN_SELL_KIND,
+    QUANTITY_TOLERANCE,
     SELL,
     SPLIT,
     SPLIT_ADJUST,
     SPLIT_REBASE_KIND,
-    classify_share_change,
     LotBookInconsistency,
+    _replay_lots,
+    classify_share_change,
     open_position_cost_bases,
     open_position_lots,
 )
@@ -1302,6 +1304,22 @@ class PortfolioStateRepository:
                 )
                 direction = 1.0 if side == "buy" else -1.0
                 slippage = (fill_price - reference) * fill_delta * direction
+                # A SELL's realized P&L is computed here, inside this
+                # transaction and BEFORE this fill is inserted, so the FIFO
+                # replay sees the lots as they stood before the sale. The
+                # caller's ``realized_pnl`` applies to buys only.
+                booked_realized = (
+                    self.fifo_realized_pnl(
+                        account_id,
+                        symbol,
+                        Market(market),
+                        fill_delta,
+                        fill_price,
+                        float(fee or 0.0),
+                    )
+                    if side == "sell"
+                    else realized_pnl
+                )
                 self.store.connection.execute(
                     """INSERT OR IGNORE INTO portfolio_fills(
                         activity_id, client_order_id, occurred_at, quantity, price,
@@ -1314,7 +1332,7 @@ class PortfolioStateRepository:
                         fill_delta,
                         fill_price,
                         float(fee or 0.0),
-                        realized_pnl,
+                        booked_realized,
                         unrealized_pnl,
                         slippage,
                         delay_seconds,
@@ -1590,13 +1608,62 @@ class PortfolioStateRepository:
         policy reads the same gain fraction in PAPER/LIVE as in the backtest.
         Returns ``()`` when nothing is open.
         """
+        return open_position_lots(self._fifo_replay_events(account_id, symbol, market))
+
+    def _fifo_replay_events(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+    ) -> list[tuple[str, float, float | None]]:
+        """Ownership events in the FIFO replay's shape: a buy's price is its
+        effective unit cost (fill price plus that fill's fee per unit)."""
         events: list[tuple[str, float, float | None]] = []
         for _, kind, quantity, price, fee in self._owned_events(account_id, symbol, market):
             if kind == BUY and price is not None and quantity > 0:
                 events.append((kind, quantity, price + fee / quantity))
             else:
                 events.append((kind, quantity, price))
-        return open_position_lots(events)
+        return events
+
+    def fifo_realized_pnl(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        sell_quantity: float,
+        sell_price: float,
+        sell_fee: float,
+    ) -> float:
+        """Realized P&L of one SELL, FIFO against the bot's own lots.
+
+        The ownership events are replayed as they stand BEFORE the sale (a buy
+        lot's unit cost includes its fee, as in ``owned_fifo_lots``) and the
+        sale consumes the oldest lots first. Returns the net proceeds
+        ``sell_price * sell_quantity - sell_fee`` minus the cost of the lots
+        consumed. Returns 0.0 for a non-sale or non-finite input, and 0.0 with
+        a warning when the lot book cannot cover the sale: the audit value
+        must never block booking the fill.
+        """
+        quantity = float(sell_quantity)
+        if not (math.isfinite(quantity) and quantity > 0 and math.isfinite(sell_price) and math.isfinite(sell_fee)):
+            return 0.0
+        try:
+            lots, open_quantity, _ = _replay_lots(self._fifo_replay_events(account_id, symbol, market))
+            remaining = quantity
+            cost_of_consumed = 0.0
+            for lot_quantity, unit_cost in lots:
+                if remaining <= 1e-12:
+                    break
+                taken = min(remaining, lot_quantity)
+                cost_of_consumed += taken * unit_cost
+                remaining -= taken
+            if remaining > max(1e-9, quantity * QUANTITY_TOLERANCE):
+                raise LotBookInconsistency(sell_quantity=quantity, open_quantity=open_quantity, symbol=symbol)
+        except LotBookInconsistency as error:
+            log.warning("Realized P&L for %s booked as 0.0: %s", symbol, error)
+            return 0.0
+        return (sell_price * quantity - sell_fee) - cost_of_consumed
 
     def reconcile_broker_quantity(
         self,

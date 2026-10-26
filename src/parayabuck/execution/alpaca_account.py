@@ -29,6 +29,9 @@ from __future__ import annotations
 import math
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
@@ -41,7 +44,24 @@ from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.execution.alpaca_account")
 
-__all__ = ["AccountService"]
+__all__ = ["AccountService", "flat_broker_reconcile_scope"]
+
+# Set only by the reconcile path (see ``flat_broker_reconcile_scope``): the
+# reconciler must read a flat broker to clear stale ownership. Every other
+# snapshot treats an empty position read while the bot owns inventory as a
+# broker fault, not as a flat account.
+_FLAT_BROKER_ALLOWED: ContextVar[bool] = ContextVar("parayabuck_flat_broker_allowed", default=False)
+
+
+@contextmanager
+def flat_broker_reconcile_scope() -> Iterator[None]:
+    """Allow ``AccountService.account`` to accept a flat broker while the
+    bot still owns inventory, for the duration of the reconcile call."""
+    token = _FLAT_BROKER_ALLOWED.set(True)
+    try:
+        yield
+    finally:
+        _FLAT_BROKER_ALLOWED.reset(token)
 
 
 class AccountService:
@@ -273,6 +293,18 @@ class AccountService:
         unrealized = 0.0
         intraday_unrealized = 0.0
         raw_positions: Any = client.get_all_positions()
+        if not raw_positions and not _FLAT_BROKER_ALLOWED.get():
+            held_by_bot = sorted(symbol for symbol, qty in owned_quantities.items() if float(qty) > 1e-12)
+            if held_by_bot:
+                # An empty read while the bot's own ledger holds inventory is
+                # not proof of a flat account: re-read once, then fail closed.
+                raw_positions = client.get_all_positions()
+                if not raw_positions:
+                    raise OwnershipDriftError(
+                        f"Broker reported no positions while the portfolio still owns {held_by_bot}; "
+                        "snapshot refused, reconciliation is required before trading resumes"
+                    )
+        raw_positions = raw_positions or []
         drift_candidates: list[tuple[str, float, float, Market]] = []
         seen_position_keys: set[tuple[Market, str]] = set()
         open_sell_orders: dict[str, list[object]] | None = None

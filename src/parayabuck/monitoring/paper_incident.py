@@ -455,21 +455,32 @@ def _fill_accounting(
 ) -> tuple[float, float]:
     broker_orders = {order.order_id: order for order in orders}
     seed = opening or {}
-    quantity: dict[str, float] = {symbol: held for symbol, (held, _) in seed.items()}
-    average: dict[str, float] = {symbol: cost for symbol, (_, cost) in seed.items()}
+    # FIFO lots ``[quantity, unit price]`` per symbol, oldest first, matching
+    # the ledger's FIFO realized P&L (``fifo_realized_pnl``). The opening
+    # inventory is one lot at its recorded average cost: the window does not
+    # carry the individual lots that predate it.
+    lots: dict[str, list[list[float]]] = {
+        symbol: [[held, cost]] for symbol, (held, cost) in seed.items() if held > 1e-12
+    }
     realized = 0.0
     slippage = 0.0
     for fill in sorted(fills, key=lambda item: (item.occurred_at, item.activity_id)):
         symbol = fill.symbol
+        book = lots.setdefault(symbol, [])
         if fill.side.lower() == "buy":
-            old_qty = quantity.get(symbol, 0.0)
-            new_qty = old_qty + fill.quantity
-            average[symbol] = (average.get(symbol, 0.0) * old_qty + fill.price * fill.quantity) / new_qty
-            quantity[symbol] = new_qty
+            if fill.quantity > 0:
+                book.append([fill.quantity, fill.price])
         else:
-            sold = min(quantity.get(symbol, 0.0), fill.quantity)
-            realized += (fill.price - average.get(symbol, fill.price)) * sold
-            quantity[symbol] = max(0.0, quantity.get(symbol, 0.0) - sold)
+            # A sale beyond the held quantity realises nothing on the excess,
+            # as before: only the lots actually held are consumed.
+            remaining = fill.quantity
+            while remaining > 1e-12 and book:
+                taken = min(remaining, book[0][0])
+                realized += (fill.price - book[0][1]) * taken
+                book[0][0] -= taken
+                remaining -= taken
+                if book[0][0] <= 1e-12:
+                    book.pop(0)
         local = by_broker_id.get(fill.order_id)
         if local is None and fill.order_id in broker_orders:
             local = by_client_id.get(broker_orders[fill.order_id].client_order_id)

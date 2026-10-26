@@ -31,6 +31,7 @@ from alpaca.trading.requests import GetOrdersRequest
 
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.alerting import emit_execution_alert
+from parayabuck.execution.alpaca_account import flat_broker_reconcile_scope
 from parayabuck.execution.alpaca_models import TERMINAL_BROKER_ORDER_STATUSES
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -501,7 +502,9 @@ class ReconciliationService:
                 raise ReconciliationResultError("Broker account has no identity")
         broker_orders = broker._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
         self._recover_portfolio_orders(broker_orders)
-        account: AccountSnapshot = broker.account()
+        # Reconcile must see a flat broker to clear stale ownership.
+        with flat_broker_reconcile_scope():
+            account: AccountSnapshot = broker.account()
         # One provider read; a failure propagates to the caller's
         # transient-failure path instead of inventing quantities.
         owned_provider = getattr(broker, "portfolio_owned_quantities", None)

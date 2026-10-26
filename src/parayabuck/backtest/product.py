@@ -6,7 +6,7 @@ import json
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from uuid import uuid4
@@ -82,7 +82,12 @@ def _canonical_csv_timeframe(raw_timeframe: object) -> str:
     raise ValueError(f"Unsupported CSV timeframe: {timeframe}")
 
 
-def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
+def load_csv_bars(path: str | Path, *, default_market: Market, strict: bool = True) -> list[Bar]:
+    """Load priced equity bars; ``strict`` fails closed on a NYSE calendar error.
+
+    ``strict=False`` restores the degraded lookup (weekday fallback when the
+    calendar is unavailable) for offline exploration only.
+    """
     source = Path(path)
     parsed = _read_priced_csv_rows(source, default_market=default_market)
     # One batched NYSE range lookup per load: a per-row session_bounds call
@@ -102,10 +107,16 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
         try:
             session_dates = {day for day, _, _ in nyse_sessions(min(daily_dates), max(daily_dates))}
             batched = True
-        except Exception:
-            # A calendar failure must not stop a backtest: fall through to
-            # the degraded per-date lookup, which carries its own fallback.
-            pass
+        except Exception as exc:
+            if strict:
+                # A product run must not silently keep holidays as sessions
+                # through a weekday-only fallback.
+                raise ValueError(
+                    "NYSE calendar unavailable; cannot validate daily bar sessions "
+                    f"(pass strict=False to use the weekday fallback): {exc}"
+                ) from exc
+            # Non-strict: fall through to the degraded per-date lookup, which
+            # carries its own fallback.
     rows: list[Bar] = []
     for row_number, timestamp, raw, market in parsed:
         timeframe = _canonical_csv_timeframe(raw.get("timeframe") or "1d")
@@ -345,6 +356,8 @@ def default_evaluation_start(
     config: Config,
     minimum_history_bars: int,
     decision_symbols: tuple[str, ...] | None = None,
+    *,
+    strict: bool = False,
 ) -> datetime | None:
     """First session on which every symbol the strategy reads has a full warmup.
 
@@ -356,7 +369,7 @@ def default_evaluation_start(
     series the strategy never reads cannot delay the window); ``None`` falls
     back to every configured universe symbol. Returns ``None`` (evaluate
     everything, with a warning) when a required symbol is absent or shorter
-    than its warmup.
+    than its warmup. ``strict`` (product runs) raises ``ValueError`` instead.
     """
     by_symbol: dict[str, set[datetime]] = {}
     for bar in bars:
@@ -368,6 +381,12 @@ def default_evaluation_start(
     for symbol in symbols:
         timestamps = sorted(by_symbol.get(symbol, ()))
         if len(timestamps) < required:
+            if strict:
+                raise ValueError(
+                    f"Insufficient strategy warmup for {symbol}: {len(timestamps)} of {required} required "
+                    "bars before the evaluation window; pass an explicit start= or strict=False to "
+                    "evaluate every bar"
+                )
             log.warning(
                 "No default backtest warmup: %s has %d of %d required bars; every bar is evaluated",
                 symbol,
@@ -377,6 +396,67 @@ def default_evaluation_start(
             return None
         starts.append(timestamps[required - 1])
     return max(starts) if starts else None
+
+
+_MISSING_SESSION_TOLERANCE = 0.01
+_MISSING_SESSION_MINIMUM = 2
+
+
+def _reject_split_actions(corporate_actions: list[CorporateAction] | None) -> None:
+    """Product bars are split-adjusted, so a SPLIT event would apply it twice."""
+    split_symbols = sorted(
+        {action.symbol for action in corporate_actions or () if action.action_type == CorporateActionType.SPLIT}
+    )
+    if split_symbols:
+        raise ValueError(
+            "Product backtests run on split-adjusted bars; SPLIT corporate actions would apply the "
+            f"split a second time (symbols: {', '.join(split_symbols)}). Supply dividends only; split "
+            "events belong to engine runs on raw, unadjusted bars."
+        )
+
+
+def _require_complete_daily_sessions(
+    bars: list[Bar],
+    *,
+    market: Market,
+    timeframe: str,
+    symbols: tuple[str, ...] | None,
+) -> None:
+    """Fail closed on gappy daily history for the symbols a strategy reads.
+
+    Each symbol is compared with the NYSE sessions between its own first and
+    last daily bar, so a listing that begins later is not a gap. The run fails
+    only when at least two sessions and more than 1% of the range are missing.
+    """
+    if timeframe != "1d":
+        return
+    dates: dict[str, set[date]] = {}
+    for bar in bars:
+        if bar.market != market or bar.timeframe != timeframe:
+            continue
+        dates.setdefault(canonical_symbol(bar.symbol, bar.market), set()).add(bar.timestamp.astimezone(NEW_YORK).date())
+    checked = (
+        dict.fromkeys(canonical_symbol(symbol, Market.EQUITY) for symbol in symbols)
+        if symbols
+        else dict.fromkeys(dates)
+    )
+    for symbol in checked:
+        present = dates.get(symbol)
+        if not present:
+            # A decision symbol with no bars is reported by the warmup check.
+            continue
+        first, last = min(present), max(present)
+        try:
+            sessions = [day for day, _, _ in nyse_sessions(first, last)]
+        except Exception as exc:
+            raise ValueError(f"NYSE calendar unavailable; cannot check {symbol} for missing sessions: {exc}") from exc
+        missing = [day for day in sessions if day not in present]
+        if len(missing) >= _MISSING_SESSION_MINIMUM and len(missing) > _MISSING_SESSION_TOLERANCE * len(sessions):
+            raise ValueError(
+                f"{symbol} is missing {len(missing)} of {len(sessions)} NYSE sessions between "
+                f"{first.isoformat()} and {last.isoformat()} (first missing: {missing[0].isoformat()}); "
+                "repair the daily history or pass strict=False"
+            )
 
 
 def run_product_backtest(
@@ -398,10 +478,19 @@ def run_product_backtest(
     prepared_inputs: tuple[list[Bar], list[Bar], tuple[list[Bar], list[Bar]]] | None = None,
     terminal_lifecycles: Mapping[str, TerminalLifecycle] | None = None,
     build_report: bool = True,
+    strict: bool = True,
 ) -> ProductBacktestResult:
+    """Run the product strategy over ``bars``.
+
+    ``strict`` (default) fails closed: a missing strategy warmup, a NYSE
+    calendar failure, or a gappy daily history for a decision symbol raises
+    ``ValueError``. ``strict=False`` keeps the degraded behaviour (every bar is
+    evaluated with a warning, weekday calendar fallback, no gap check).
+    """
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
     _require_equity(market)
+    _reject_split_actions(corporate_actions)
     selection = config.strategy.equity
     # Explicit None-check: {} means "use requested strategy defaults", None means "use configured selection"
     # This keeps an explicitly requested strategy's defaults from inheriting
@@ -423,10 +512,21 @@ def run_product_backtest(
             # decide are warmup, not forced-cash evaluation sessions that
             # dilute CAGR/Sharpe.
             start = default_evaluation_start(
-                available, config, strategy.minimum_history_bars, strategy.decision_symbols
+                available,
+                config,
+                strategy.minimum_history_bars,
+                strategy.decision_symbols,
+                strict=strict,
             )
             if start is not None:
                 evaluation_start_source = f"first bar + {strategy.minimum_history_bars}-bar strategy warmup"
+        if strict:
+            _require_complete_daily_sessions(
+                available,
+                market=market,
+                timeframe=strategy.timeframe,
+                symbols=strategy.decision_symbols,
+            )
         filtered = [bar for bar in available if start is None or bar.timestamp >= start]
         if not filtered:
             raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
@@ -589,6 +689,7 @@ def optimize_grid(
     output_dir: str | None = None,
     corporate_actions: list[CorporateAction] | None = None,
     data_feed: str | None = None,
+    strict: bool = True,
 ) -> dict[str, object]:
     if not grid or any(not values for values in grid.values()):
         raise ValueError("Optimization grid must contain at least one value per parameter")
@@ -599,6 +700,7 @@ def optimize_grid(
             f"Optimization grid has {combination_count} combinations; maximum is {_MAX_OPTIMIZATION_COMBINATIONS}"
         )
     _require_equity(market)
+    _reject_split_actions(corporate_actions)
     selection = config.strategy.equity
     baseline = dict(base_parameters or selection.parameters)
     keys = tuple(sorted(grid))
@@ -607,30 +709,40 @@ def optimize_grid(
         parameters=baseline,
         timeframe=selection.timeframe,
     ).timeframe
-    if train_start is None:
-        # Same warmup rule as ``run_product_backtest``: bars before the
-        # longest candidate's first decidable session are warmup, over the
-        # symbols any candidate reads (every configured symbol as soon as
-        # one candidate does not narrow its decision symbols).
-        candidates = [
-            portfolio_strategy_from(
-                strategy_name or selection.name,
-                parameters={**baseline, **dict(zip(keys, values, strict=True))},
-                timeframe=selection.timeframe,
-            )
-            for values in itertools.product(*(grid[key] for key in keys))
-        ]
-        declared = [candidate.decision_symbols for candidate in candidates]
-        decision_symbols = (
-            None
-            if any(symbols is None for symbols in declared)
-            else tuple(dict.fromkeys(symbol for symbols in declared if symbols is not None for symbol in symbols))
+    # Same warmup rule as ``run_product_backtest``: bars before the longest
+    # candidate's first decidable session are warmup, over the symbols any
+    # candidate reads (every configured symbol as soon as one candidate does
+    # not narrow its decision symbols).
+    candidates = [
+        portfolio_strategy_from(
+            strategy_name or selection.name,
+            parameters={**baseline, **dict(zip(keys, values, strict=True))},
+            timeframe=selection.timeframe,
         )
+        for values in itertools.product(*(grid[key] for key in keys))
+    ]
+    declared = [candidate.decision_symbols for candidate in candidates]
+    decision_symbols = (
+        None
+        if any(symbols is None for symbols in declared)
+        else tuple(dict.fromkeys(symbol for symbols in declared if symbols is not None for symbol in symbols))
+    )
+    if strict:
+        # Once per optimization: the trials below run on prepared inputs and
+        # would otherwise skip the calendar check.
+        _require_complete_daily_sessions(
+            bars,
+            market=market,
+            timeframe=strategy_timeframe,
+            symbols=decision_symbols,
+        )
+    if train_start is None:
         train_start = default_evaluation_start(
             [bar for bar in bars if bar.market == market and bar.timeframe == strategy_timeframe],
             config,
             max(candidate.minimum_history_bars for candidate in candidates),
             decision_symbols,
+            strict=strict,
         )
     # The eligible pool and requested baseline observation basis are
     # trial-invariant: build them once per window and reuse them so candidate
@@ -664,6 +776,7 @@ def optimize_grid(
             universe=train_universe,
             prepared_inputs=train_prepared,
             build_report=False,
+            strict=strict,
         )
         result = run.result
         ranked.append(
@@ -713,6 +826,7 @@ def optimize_grid(
             data_feed=data_feed,
             universe=oos_universe,
             prepared_inputs=oos_prepared,
+            strict=strict,
         )
         payload["out_of_sample"] = {
             "parameters": best["parameters"],

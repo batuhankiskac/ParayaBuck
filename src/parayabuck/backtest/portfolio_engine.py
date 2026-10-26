@@ -214,6 +214,12 @@ class PortfolioBacktestResult:
     # split-adjusted price-only return is always kept here.
     benchmark_price_return: float = 0.0
     benchmark_return_basis: str = "price"
+    # Share of equity-curve points on which the account held any managed
+    # position (the complement of fully-in-cash time).
+    time_in_market: float = 0.0
+    # Price-only, close-to-close total return of buy-and-hold for each strategy
+    # decision symbol (other than the benchmark) over the evaluated curve window.
+    benchmarks: dict[str, float] = field(default_factory=dict)
 
 
 def _adverse_bps(slippage_bps: float, spread_bps: float) -> float:
@@ -1687,6 +1693,25 @@ class PortfolioBacktestEngine:
                     benchmark_max_drawdown,
                     (benchmark_peak - bar.close) / benchmark_peak,
                 )
+        # One holdings snapshot per curve point, so the two series align.
+        time_in_market = (
+            sum(1 for count in holdings_counts if count > 0) / len(holdings_counts) if holdings_counts else 0.0
+        )
+        benchmarks: dict[str, float] = {}
+        if curve_timestamps:
+            window_start, window_end = curve_timestamps[0], curve_timestamps[-1]
+            benchmark_symbol = canonical_symbol(self.benchmark_symbol, self.strategy.market)
+            declared = getattr(self.strategy, "decision_symbols", None) or ()
+            for symbol in dict.fromkeys(canonical_symbol(item, self.strategy.market) for item in declared):
+                if symbol == benchmark_symbol:
+                    continue
+                series = [
+                    bar
+                    for bar in self._history.get((symbol, self.strategy.timeframe), ())
+                    if window_start <= bar.timestamp <= window_end
+                ]
+                if series and series[0].close > 0:
+                    benchmarks[symbol] = series[-1].close / series[0].close - 1
         self._sync_state_bookkeeping()
         return PortfolioBacktestResult(
             starting_equity=self.starting_equity,
@@ -1695,6 +1720,8 @@ class PortfolioBacktestEngine:
             benchmark_return=benchmark_return,
             benchmark_price_return=(benchmark_return if benchmark_price_return is None else benchmark_price_return),
             benchmark_return_basis=benchmark_return_basis,
+            time_in_market=time_in_market,
+            benchmarks=benchmarks,
             excess_return=total_return - benchmark_return,
             gross_return=gross_return,
             net_return=total_return,

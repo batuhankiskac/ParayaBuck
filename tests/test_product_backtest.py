@@ -332,7 +332,7 @@ def test_backtest_cli_runs_offline_csv_end_to_end(tmp_path, monkeypatch, capsys)
     rows.extend(
         ",".join(
             (
-                bar.timestamp.isoformat(),
+                bar.timestamp.date().isoformat() if bar.timeframe == "1d" else bar.timestamp.isoformat(),
                 bar.symbol,
                 bar.timeframe,
                 str(bar.open),
@@ -723,11 +723,13 @@ def test_direct_run_normalizes_unsorted_warmup_like_the_optimizer(tmp_path) -> N
 
 
 def _csv_bars(path: Path, bars: list[Bar]) -> Path:
+    # Daily stamps name the New York session date (a naive date), as the
+    # loader reads them; a 00:00 UTC stamp is the previous New York date.
     rows = ["timestamp,symbol,timeframe,open,high,low,close,volume,market"]
     rows.extend(
         ",".join(
             (
-                bar.timestamp.isoformat(),
+                bar.timestamp.date().isoformat() if bar.timeframe == "1d" else bar.timestamp.isoformat(),
                 bar.symbol,
                 bar.timeframe,
                 str(bar.open),
@@ -876,7 +878,8 @@ def test_backtest_without_start_treats_the_strategy_warmup_as_warmup(tmp_path) -
 def test_backtest_without_enough_history_evaluates_every_bar(tmp_path) -> None:
     config = _config(tmp_path)
     bars = [bar for bar in _bars(30) if bar.symbol != "QLD" or bar.timestamp.day == 1]
-    run = run_product_backtest(config, bars, market=Market.EQUITY, persist_artifacts=False)
+    # Intentionally short history: strict mode (default) fails closed here.
+    run = run_product_backtest(config, bars, market=Market.EQUITY, persist_artifacts=False, strict=False)
     assert run.result.start_date == min(bar.timestamp for bar in bars).isoformat()
     assert run.report.summary["evaluation_start_source"] == "full history"
 

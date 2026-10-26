@@ -37,6 +37,10 @@ import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+from parayabuck.logger import get_logger
+
+log = get_logger("parayabuck.portfolio.ownership_rebase")
+
 # Standard split and reverse-split ratios a US equity issuer uses (n-for-1
 # and its reciprocal). A non-standard ratio is deliberately absent: it must
 # halt for an operator, never be guessed at.
@@ -68,6 +72,7 @@ __all__ = [
     "FOREIGN_SELL",
     "FOREIGN_SELL_KIND",
     "KNOWN_SPLIT_RATIOS",
+    "LotBookInconsistency",
     "MATCH",
     "QUANTITY_TOLERANCE",
     "SELL",
@@ -92,11 +97,34 @@ ADJUST = "adjust"
 SPLIT_ADJUST = "split_adjust"
 
 
+class LotBookInconsistency(ValueError):
+    """A sale or reducing adjustment exceeds the open lots the bot owns.
+
+    The lot book then cannot be trusted, so nothing derived from it (cost
+    basis, gain fraction) may be used. ``symbol`` is empty when the replay was
+    not given one; the caller that knows the symbol re-raises with it set.
+    """
+
+    def __init__(self, *, sell_quantity: float, open_quantity: float, symbol: str = "") -> None:
+        self.symbol = symbol
+        self.sell_quantity = sell_quantity
+        self.open_quantity = open_quantity
+        super().__init__(
+            f"Lot book inconsistent for {symbol or '<unknown symbol>'}: a reduction of "
+            f"{sell_quantity:g} exceeds the {open_quantity:g} open lot quantity"
+        )
+
+
 def _replay_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[list[list[float]], float, float]:
     """Replay ownership events into ``(open FIFO lots, quantity, average cost total)``.
 
     ``lots`` are ``[quantity, unit cost]`` pairs, oldest first, exactly as
     :func:`open_position_cost_bases` and :func:`open_position_lots` need them.
+
+    Raises :class:`LotBookInconsistency` when a sale or reducing adjustment
+    is larger than the open quantity by more than the relative
+    :data:`QUANTITY_TOLERANCE` (with a 1e-9 absolute floor). Such a fill
+    cannot come from a consistent book; truncating it silently would hide it.
     """
     lots: list[list[float]] = []  # FIFO [quantity, price]
     quantity = 0.0
@@ -126,7 +154,10 @@ def _replay_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[lis
             cost += amount * float(price)
             continue
         # sell, or a reducing adjustment
-        reduce = min(abs(amount), quantity)
+        requested = abs(amount)
+        if requested - quantity > max(1e-9, requested * QUANTITY_TOLERANCE):
+            raise LotBookInconsistency(sell_quantity=requested, open_quantity=quantity)
+        reduce = min(requested, quantity)
         if reduce <= 0:
             continue
         cost -= cost / quantity * reduce
@@ -153,8 +184,29 @@ def open_position_lots(events: Iterable[tuple[str, float, float | None]]) -> tup
     is the lot's effective per-unit cost, so the A1u caller passes the fill
     price plus the buy's fees (the research engine's ``usd_price_with_fee``).
     Returns ``()`` when nothing is open.
+
+    This is the downsize gain band's input and it must never raise into
+    planning. An inconsistent lot book (see :class:`LotBookInconsistency`)
+    returns ``()`` after logging an error and emitting a ``paper_incident``
+    alert, so the band keeps its constant fallback.
     """
-    lots, quantity, _ = _replay_lots(events)
+    try:
+        lots, quantity, _ = _replay_lots(events)
+    except LotBookInconsistency as error:
+        # Imported here: the execution package imports the reconciler, which
+        # imports this module, so a module-level import would cycle.
+        from parayabuck.execution.alerting import emit_execution_alert
+
+        log.error("Downsize gain band lot book unavailable: %s; keeping the constant band", error)
+        emit_execution_alert(
+            "paper_incident",
+            message=f"{error}. The downsize gain band falls back to the constant band until the lot book is repaired.",
+            category="lot_book_inconsistency",
+            incident_id=f"lot_book_inconsistency:{error.sell_quantity:.9g}:{error.open_quantity:.9g}",
+            sell_quantity=error.sell_quantity,
+            open_quantity=error.open_quantity,
+        )
+        return ()
     if quantity <= 1e-9:
         return ()
     return tuple((lot_quantity, lot_price) for lot_quantity, lot_price in lots if lot_quantity > 1e-12)
@@ -171,7 +223,8 @@ def open_position_cost_bases(events: Iterable[tuple[str, float, float | None]]) 
     same way (fewer shares, same total cost). Any other reduction depletes
     like a sell. Lots are discarded whenever the position goes flat.
     Returns ``(fifo, average_cost)`` — the same value twice when no sell
-    touched the open lots — or ``()`` when nothing is open.
+    touched the open lots — or ``()`` when nothing is open. Raises
+    :class:`LotBookInconsistency` when the replay is not self-consistent.
     """
     lots, quantity, cost = _replay_lots(events)
     if quantity <= 1e-9:

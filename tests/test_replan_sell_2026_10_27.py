@@ -68,29 +68,34 @@ def _status_of(repository, decision_id: str, client_order_id: str) -> str:
     return next(str(row["status"]) for row in rows if str(row["client_order_id"]) == client_order_id)
 
 
-# (a) partial SELL, then the re-plan submits the residual with a new id and no BUY
+# (a) partial fill then cancel: the residual is a SELL with a new id, no BUY
 
 
-def test_partial_sell_replan_submits_residual_sell_then_buys_after_it_settles(tmp_path) -> None:
-    broker = _SimBroker((_position("AAPL", 400),))
+def _residual_runtime_after_partial_cancel(tmp_path, broker, fraction=0.5):
+    """Submit the sell phase, then cancel the SELL after a partial fill."""
     runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
     first = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
     assert first.status == "sell_phase_submitted"
     original_sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     assert original_sell.quantity == 300
-
-    # 200 shares fill, the rest is canceled; the broker now holds 200 AAPL.
-    _fill(repository, original_sell, cumulative=200.0, status="canceled", activity_id="sell-partial")
+    filled = 300 * fraction
+    _fill(repository, original_sell, cumulative=filled, status="canceled", activity_id="sell-partial")
     broker.open_symbols.discard("AAPL")
-    broker.positions = [_position("AAPL", 200)]
+    broker.positions = [_position("AAPL", 300 - filled)]
+    return runtime, repository, original_sell
+
+
+def test_partial_then_cancel_sends_residual_sell_then_buys_after_it_fills(tmp_path) -> None:
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository, original_sell = _residual_runtime_after_partial_cancel(tmp_path, broker)
+
     resumed = runtime.advance_rebalance()
 
-    assert resumed is not None and resumed.status == "replan_sell_submitted"
-    assert [order.side for order in broker.submitted[1:]] == [PortfolioOrderSide.SELL]
+    assert resumed is not None and resumed.status == "residual_sell_submitted"
     residual = broker.submitted[-1]
-    assert residual.symbol == "AAPL"
-    assert residual.quantity == 100
-    assert residual.client_order_id == f"{original_sell.client_order_id}-replan1"
+    assert residual.side == PortfolioOrderSide.SELL and residual.symbol == "AAPL"
+    assert residual.quantity == 150
+    assert residual.client_order_id == f"{original_sell.client_order_id}-residual1"
     assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
     state = repository.current_rebalance_execution(runtime.account_id, runtime.market)
     assert state is not None and state.phase == REBALANCE_PHASE_SELL_PENDING
@@ -113,18 +118,92 @@ def test_partial_sell_replan_submits_residual_sell_then_buys_after_it_settles(tm
     assert complete is not None and complete.status == "rebalance_complete"
 
 
-def test_residual_replan_id_is_derived_from_persisted_rows() -> None:
-    """The id depends only on rows already recorded for the leg, so a restart
-    that re-plans the same leg reproduces it, and each replanned row moves the
-    next id on by one."""
+def test_residual_restart_while_working_does_not_resubmit(tmp_path) -> None:
+    """The residual id comes from the persisted rows, so a restart while the
+    residual works finds it and sends nothing new."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository, original_sell = _residual_runtime_after_partial_cancel(tmp_path, broker)
+    assert runtime.advance_rebalance().status == "residual_sell_submitted"
+    runtime.close()
+
+    restarted, _ = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    assert restarted.advance_rebalance() is None
+    sells = [order.client_order_id for order in broker.submitted if order.side == PortfolioOrderSide.SELL]
+    assert sells == [original_sell.client_order_id, f"{original_sell.client_order_id}-residual1"]
+    assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
+
+
+def test_residual_leg_helpers_map_retry_and_residual_ids_to_their_leg() -> None:
     base = "parayabuck-d-AAPL-sell"
-    assert runtime_service._replan_sell_client_order_id(base, []) == (f"{base}-replan1", 0)
-    rows = [{"client_order_id": base}]
-    assert runtime_service._replan_sell_client_order_id(base, rows) == (f"{base}-replan1", 0)
-    rows.append({"client_order_id": f"{base}-replan1"})
-    assert runtime_service._replan_sell_client_order_id(base, rows) == (f"{base}-replan2", 1)
-    other = [{"client_order_id": "parayabuck-d-MSFT-sell-replan1"}]
-    assert runtime_service._replan_sell_client_order_id(base, other) == (f"{base}-replan1", 0)
+    assert runtime_service._sell_leg_root(base) == base
+    assert runtime_service._sell_leg_root(f"{base}-residual2") == base
+    assert runtime_service._sell_leg_root(f"{base}-retry1") == base
+    assert runtime_service._sell_leg_root(f"{base}-residual1-retry1") == base
+    assert runtime_service._sell_chain_position(base, base) == (0, 0)
+    assert runtime_service._sell_chain_position(f"{base}-residual2", base) == (2, 0)
+    assert runtime_service._sell_chain_position(f"{base}-residual2-retry1", base) == (2, 1)
+
+
+# (b) a fully filled SELL and a stale snapshot still showing the position: no extra SELL
+
+
+def test_fully_filled_sell_with_stale_snapshot_sends_no_extra_sell(tmp_path) -> None:
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    first = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(repository, sell, activity_id="sell-full")
+    broker.open_symbols.discard("AAPL")
+    # Stale: the account still shows the position the SELL just sold.
+    broker.positions = [_position("AAPL", 400)]
+
+    resumed = runtime.advance_rebalance()
+
+    assert resumed is not None and resumed.status != "residual_sell_submitted"
+    sells = [order.client_order_id for order in broker.submitted if order.side == PortfolioOrderSide.SELL]
+    assert sells == [sell.client_order_id]
+    assert not any("-residual" in order.client_order_id for order in broker.submitted)
+
+
+# (c) a rejected SELL leaves no residual: the retry path owns it
+
+
+def test_rejected_sell_sends_no_residual(tmp_path) -> None:
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    first = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(repository, sell, cumulative=0.0, status="rejected", activity_id="sell-rejected")
+    broker.open_symbols.discard("AAPL")
+
+    runtime.advance_rebalance()
+
+    assert not any("-residual" in order.client_order_id for order in broker.submitted)
+
+
+# (d) residual rounds are capped: after three rounds the rebalance closes with an alert
+
+
+def test_residual_rounds_are_capped_and_close_with_alert(tmp_path, _captured_alerts) -> None:
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository, _original = _residual_runtime_after_partial_cancel(tmp_path, broker)
+    residual = None
+    for round_index in range(1, runtime_service.RESIDUAL_SELL_MAX_ROUNDS + 1):
+        result = runtime.advance_rebalance()
+        assert result is not None and result.status == "residual_sell_submitted", round_index
+        residual = result.orders[0]
+        assert residual.client_order_id.endswith(f"-residual{round_index}")
+        # Each residual is also partially filled and canceled.
+        _fill(repository, residual, cumulative=residual.quantity / 2, status="canceled", activity_id=f"r-{round_index}")
+        broker.open_symbols.discard("AAPL")
+
+    closed = runtime.advance_rebalance()
+
+    assert closed is not None and closed.status == "rebalance_complete"
+    assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
+    state = repository.current_rebalance_execution(runtime.account_id, runtime.market)
+    assert state is not None and state.phase == "complete"
+    assert any(alert.get("category") == "residual_sell_exhausted" for alert in _captured_alerts)
 
 
 # (b) a re-plan without a SELL behaves as before
@@ -143,7 +222,7 @@ def test_replan_without_sell_submits_buys_as_before(tmp_path) -> None:
 
     assert resumed is not None and resumed.status == "buy_phase_submitted"
     assert [order.symbol for order in broker.submitted if order.side == PortfolioOrderSide.BUY] == ["MSFT"]
-    assert not any("-replan" in order.client_order_id for order in broker.submitted)
+    assert not any("-residual" in order.client_order_id for order in broker.submitted)
 
 
 # (c) a stuck submitting row escalates after the threshold, once

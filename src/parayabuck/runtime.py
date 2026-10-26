@@ -48,9 +48,12 @@ from parayabuck.live_safety import (
     LiveOperatorApproval,
     LiveStartupProof,
     StandingLiveAuthorization,
+    operator_halt_active,
+    operator_halt_marker_path,
     verify_account_environment,
 )
 from parayabuck.logger import get_logger
+from parayabuck.markets.nyse_calendar import sessions_around
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
     NEW_YORK,
@@ -67,6 +70,7 @@ from parayabuck.monitoring.health import (  # single liveness source of truth (R
     _SIGNAL_ADJUSTMENT_WORKER,
 )
 from parayabuck.monitoring.journal import configure_global_journal
+from parayabuck.monitoring.premarket import premarket_probe
 
 try:
     from parayabuck.monitoring import observe as _observe
@@ -99,7 +103,7 @@ from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.storage import SQLiteStore
 from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
 from parayabuck.universe import equity_universe_digest
-from parayabuck.utils import is_crypto, sd_notify
+from parayabuck.utils import is_crypto
 from parayabuck.utils.http import is_network_failure
 
 log = get_logger("parayabuck.runtime")
@@ -343,6 +347,11 @@ class EngineRuntime:
         self.secret_key = secret_key
         self.app_config = config
         self.config = config.engine
+        # Written by the account loop after each fully successful pass; the
+        # web watchdog pinger reads it (stale = the account loop is hung).
+        self.last_successful_account_iteration_at: datetime | None = None
+        # NYSE session dates already probed this process (premarket probe).
+        self._premarket_probed_sessions: set[date] = set()
         self.mode = config.runtime.mode
         active_equities = config.universe.equity.symbols if config.universe.equity.enabled else ()
         self._product_universes_by_market: dict[Market, ActiveProductUniverse] = {}
@@ -421,6 +430,12 @@ class EngineRuntime:
             portfolio_ownership_resolved=self._resolve_portfolio_ownership,
             bot_tradable_symbols=self._bot_tradable_symbols,
             runtime_state_dir=runtime_state_dir,
+        )
+        # Cost-basis drift check (alpaca_reconciliation._cost_basis_drift) reads
+        # this provider. AlpacaBroker takes no constructor argument for it, so
+        # it is attached right after construction.
+        self.broker.portfolio_owned_cost_bases = lambda symbol, market: self._portfolio_repository.owned_cost_bases(
+            self.broker.account_id or "unknown", symbol, market
         )
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_stream_feed)
@@ -566,6 +581,11 @@ class EngineRuntime:
             )
         return tuple(digests)
 
+    def _expected_broker_account_id(self) -> str | None:
+        """``broker.expected_account_id`` pin; None keeps the historical check."""
+        broker_config = getattr(getattr(self, "app_config", None), "broker", None)
+        return getattr(broker_config, "expected_account_id", None)
+
     def _verify_live_startup_proof(
         self, expected_digests: tuple[str, ...]
     ) -> LiveOperatorApproval | StandingLiveAuthorization:
@@ -606,6 +626,7 @@ class EngineRuntime:
             live=True,
             account_number=str(getattr(self.broker, "account_number", "") or ""),
             api_key=self.api_key,
+            expected_account_id=self._expected_broker_account_id(),
         )
         return approval
 
@@ -1216,6 +1237,15 @@ class EngineRuntime:
             raise
 
     def _start_impl(self) -> None:
+        # A sticky operator halt (OPERATOR_HALT marker) refuses every start,
+        # including one reached without the web manager's own gate.
+        decision_db_path = getattr(
+            getattr(getattr(self, "app_config", None), "runtime", None), "decision_db_path", None
+        )
+        if decision_db_path:
+            halt_marker = operator_halt_marker_path(Path(decision_db_path).parent)
+            if operator_halt_active(halt_marker):
+                raise RuntimeError("operator halt is in force")
         if self._running:
             raise RuntimeError("Engine runtime is already running")
         if self._state == "stop_failed":
@@ -1291,6 +1321,7 @@ class EngineRuntime:
                 live=False,
                 account_number=str(getattr(self.broker, "account_number", "") or ""),
                 api_key=str(getattr(self, "api_key", "") or ""),
+                expected_account_id=self._expected_broker_account_id(),
             )
         with self._state_lock:
             self._pin_managed_symbols()
@@ -1500,8 +1531,6 @@ class EngineRuntime:
                 )
         except Exception:
             pass
-        # systemd Type=notify: startup finished (no-op outside systemd).
-        sd_notify.ready()
         runtime_metrics_store.record_event("runtime_started")
         alerts.emit(
             "runtime_started",
@@ -2144,7 +2173,8 @@ class EngineRuntime:
                         worker.last_error = str(exc)
                         log.warning("Readiness refresh failed: %s", exc, exc_info=True)
                 if iteration_ok:
-                    sd_notify.watchdog()
+                    # Read by the web watchdog pinger (utils/sd_notify.py).
+                    self.last_successful_account_iteration_at = datetime.now(UTC)
                 self._stop_event.wait(self.config.account_poll_interval_seconds)
         finally:
             worker.alive = False
@@ -2998,6 +3028,7 @@ class EngineRuntime:
                     portfolio_pending.setdefault(portfolio_key, {})[item.bar.symbol] = item.bar
                     portfolio_first_seen.setdefault(portfolio_key, time.monotonic())
                 self._flush_aggregators()
+                self._maybe_run_premarket_probe()
                 now_mono = time.monotonic()
                 # RuntimeHealth is expensive to build; build it ONCE per loop
                 # iteration (lazily, only when a batch is actually processed)
@@ -4933,6 +4964,56 @@ class EngineRuntime:
             self._reconcile_pending_reason = reason
             self._reconcile_pending_seq = int(getattr(self, "_reconcile_pending_seq", 0)) + 1
         self._schedule_reconcile()
+
+    def _maybe_run_premarket_probe(self, now: datetime | None = None) -> None:
+        """Once per NYSE session, 30 to 5 minutes before the open: check the
+        broker clock, calendar and open orders (monitoring/premarket.py).
+
+        A failure alerts and latches the reconcile-pending gate, so new entries
+        wait for a clean reconcile. Exits are never blocked and nothing halts.
+        The session is marked before the probe runs, so a probe that raises is
+        not retried every loop pass. Never raises (called from the decision loop).
+        """
+        try:
+            moment = now or datetime.now(UTC)
+            sessions = sessions_around(moment)
+            due = [
+                (session_date, opened)
+                for session_date, opened, _closed in sessions
+                if opened - timedelta(minutes=30) <= moment < opened - timedelta(minutes=5)
+                and session_date not in self._premarket_probed_sessions
+            ]
+            if not due:
+                return
+            session_date, opened = min(due, key=lambda item: item[1])
+            self._premarket_probed_sessions.add(session_date)
+            account_id = self.broker.account_id or "unknown"
+            open_local = [order.client_order_id for order in self._portfolio_repository.open_orders(account_id)]
+            result = premarket_probe(
+                self.broker,
+                now=moment,
+                calendar_sessions=sessions,
+                open_orders_local=open_local,
+            )
+            if result.ok:
+                log.info(
+                    "Premarket probe passed: session=%s open=%s",
+                    session_date.isoformat(),
+                    opened.isoformat(),
+                )
+                return
+            detail = "; ".join(result.reasons)
+            log.error("Premarket probe failed: session=%s reasons=%s", session_date.isoformat(), detail)
+            alerts.emit(
+                "reconciliation_failure",
+                message="Premarket probe failed; new entries wait for a clean reconcile",
+                reason="premarket_probe_failed",
+                session=session_date.isoformat(),
+                detail=detail,
+            )
+            self._set_reconcile_pending("premarket_probe_failed")
+        except Exception:
+            log.exception("Premarket probe could not run")
 
     def _maybe_check_trade_feed_freshness(self, now: datetime | None = None) -> None:
         """Latch and reconcile when open orders outlive a silent trade feed.

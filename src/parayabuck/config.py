@@ -319,6 +319,38 @@ class ExecutionConfig:
 
 
 @dataclass(frozen=True)
+class DrawdownLiquidationConfig:
+    """Optional catastrophe-brake liquidation (``risk.drawdown_liquidation``).
+
+    Off by default. When enabled, a drawdown from peak equity at or above
+    ``threshold_pct`` sets every MANAGED target to zero (external inventory is
+    never sold). The brake re-arms once the drawdown recovers below
+    ``rearm_recovery_pct`` and ``cooldown_sessions`` sessions have passed in
+    cash. Research (IC49 drawdown governor) rejected exposure-scaling
+    governors; this is a catastrophe brake, not a scaling rule.
+    """
+
+    enabled: bool = False
+    threshold_pct: float = 0.45
+    rearm_recovery_pct: float = 0.30
+    cooldown_sessions: int = 5
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.enabled, bool):
+            raise ValueError("risk.drawdown_liquidation.enabled must be a boolean")
+        if not math.isfinite(self.threshold_pct) or not 0 < self.threshold_pct < 1:
+            raise ValueError("risk.drawdown_liquidation.threshold_pct must be in (0, 1)")
+        if not math.isfinite(self.rearm_recovery_pct) or not 0 <= self.rearm_recovery_pct < self.threshold_pct:
+            raise ValueError("risk.drawdown_liquidation.rearm_recovery_pct must be in [0, threshold_pct)")
+        if (
+            isinstance(self.cooldown_sessions, bool)
+            or not isinstance(self.cooldown_sessions, int)
+            or self.cooldown_sessions < 0
+        ):
+            raise ValueError("risk.drawdown_liquidation.cooldown_sessions must be a non-negative integer")
+
+
+@dataclass(frozen=True)
 class RiskLimits:
     # Defaults mirror the shipped identity (config/settings.yaml, VT35
     # paper_config_v2): a deleted yaml key must not install the pre-VT35
@@ -329,8 +361,12 @@ class RiskLimits:
     max_positions: int = 8
     daily_loss_limit_pct: float = 0.20
     max_drawdown_pct: float = 0.75
+    # Default-off catastrophe brake; absent key keeps the shipped behaviour.
+    drawdown_liquidation: DrawdownLiquidationConfig = field(default_factory=DrawdownLiquidationConfig)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.drawdown_liquidation, DrawdownLiquidationConfig):
+            raise ValueError("risk.drawdown_liquidation must be a mapping")
         ratios = (
             self.max_position_pct,
             self.max_gross_exposure_pct,
@@ -1018,7 +1054,13 @@ def load_config(config_path: str | None = None) -> Config:
         raise ValueError(
             "Obsolete risk settings have no portfolio effect and must be removed: " + ", ".join(sorted(obsolete_risk))
         )
-    risk = RiskLimits(**risk_raw)
+    liquidation_raw = risk_raw.pop("drawdown_liquidation", None)
+    if liquidation_raw is not None and not isinstance(liquidation_raw, Mapping):
+        raise ValueError("risk.drawdown_liquidation must be a mapping")
+    risk = RiskLimits(
+        **risk_raw,
+        drawdown_liquidation=DrawdownLiquidationConfig(**_block(liquidation_raw)),
+    )
     universe_raw = raw.get("universe")
     if universe_raw is None:
         legacy = tuple(raw.get("symbols", ()))
@@ -1103,6 +1145,7 @@ __all__ = [
     "Config",
     "DataConfig",
     "DownsizeGainBand",
+    "DrawdownLiquidationConfig",
     "EngineConfig",
     "EquityUniverseConfig",
     "ExecutionConfig",

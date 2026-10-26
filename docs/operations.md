@@ -189,11 +189,20 @@ closes included).
 
 ### systemd watchdog and the reconcile-pending latch
 
-The unit is `Type=notify` with `WatchdogSec=300`. The runtime sends `READY=1`
-when startup finishes and `WATCHDOG=1` from the account loop after each
-successful pass, never from a timer thread. A process whose account loop
-stalls for 300 s is killed and `Restart=on-failure` starts it again. Outside
-systemd `NOTIFY_SOCKET` is unset and the sends are no-ops.
+The unit is `Type=notify` with `WatchdogSec=300`. The web process (`parayabuck
+web`) sends `READY=1` from its lifespan once the app is serving, whether or not
+the engine starts. A pinger thread sends `WATCHDOG=1` every 30 s while the
+engine gate allows it: no engine running (stopped, halted, never started), or
+a running engine whose account loop completed a successful pass within the last
+120 s. A hung account loop therefore stops the pings and systemd restarts the
+unit after `WatchdogSec`. Outside systemd `NOTIFY_SOCKET` is unset and the
+sends are no-ops.
+
+A premarket probe runs once per NYSE session, 30 to 5 minutes before the open
+(broker clock, calendar and open-order parity against the local non-terminal
+orders). A failure raises a `reconciliation_failure` alert with
+`reason=premarket_probe_failed` and sets the reconcile-pending latch below;
+exits are never blocked.
 
 Alpaca does not replay trade updates, so a fill can be missed while the
 stream is down. Three events set the reconcile-pending latch
@@ -203,6 +212,7 @@ stream is down. Three events set the reconcile-pending latch
 |---|---|
 | `trade_updates_restart` | the `pb-trade-updates` worker failed or returned |
 | `trade_feed_stale` | open orders exist, the regular session is open, and no trade update arrived for 300 s |
+| `premarket_probe_failed` | the premarket probe found clock, calendar or open-order disagreement |
 | `account_fetch_failures` (breaker, not latch) | 5 account fetches in a row failed; the halt clears only through the operator reset, which reconciles first |
 
 While the latch is set, new buys and rejected-SELL retries wait, the same gate

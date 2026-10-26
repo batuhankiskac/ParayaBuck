@@ -223,7 +223,15 @@ def test_deferred_replacement_requires_fresh_free_slot(tmp_path, sell_status: st
     broker.open_symbols.discard("AAPL")
     resumed = runtime.advance_rebalance()
     assert resumed is not None
-    if remaining_aapl:
+    if remaining_aapl and sell_status == "canceled" and sell.quantity - remaining_aapl > 0:
+        # Behaviour change (2026-10-27): a partially filled, then canceled SELL
+        # leaves a residual that is sold first under ``-residual1``; no BUY is
+        # sent while it works, so the BUY waits on the residual, not on a slot.
+        assert resumed.status == "residual_sell_submitted"
+        assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL, PortfolioOrderSide.SELL]
+        assert broker.submitted[-1].client_order_id == f"{sell.client_order_id}-residual1"
+        assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
+    elif remaining_aapl:
         assert resumed.status == "rebalance_waiting_for_slot"
         assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
         assert runtime.advance_rebalance().status == "rebalance_waiting_for_slot"
@@ -273,16 +281,27 @@ def test_partial_sell_keeps_buy_deferred(tmp_path) -> None:
     _fill(repository, sell, cumulative=sell.quantity / 2, status="partial_fill")
     assert runtime.advance_rebalance() is None
     assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
-    # The sell goes terminal partially filled: the BUY is re-planned against
-    # the fresh (still-heavy) account instead of blindly replaying.
+    # Behaviour change (2026-10-27): the sell goes terminal partially filled and
+    # canceled. The unsold remainder is no longer left unsold: it is sent as a
+    # residual SELL under the deterministic ``-residual1`` id, and the dependent
+    # BUY stays held until that residual settles. Previously the BUY was
+    # re-planned against the still-heavy account and the residual was dropped.
     _fill(repository, sell, cumulative=sell.quantity / 2, status="canceled")
+    broker.open_symbols.discard("AAPL")
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "residual_sell_submitted"
+    residual = resumed.orders[0]
+    assert residual.client_order_id == f"{sell.client_order_id}-residual1"
+    assert residual.side == PortfolioOrderSide.SELL and 0 < residual.quantity <= sell.quantity / 2
+    assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
+    _fill(repository, residual)
     broker.open_symbols.discard("AAPL")
     resumed = runtime.advance_rebalance()
     assert resumed is not None and resumed.status == "buy_phase_submitted"
     buys = [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
     assert [order.symbol for order in buys] == ["MSFT"]
-    # The account still holds AAPL 400 - 200 = 200 shares; the BUY must not
-    # push gross above the safe level: 200 shares (0.20) + BUY <= 0.60 gross.
+    # The BUY must not push gross above the safe level: the AAPL position still
+    # held at the re-plan (at most 200 shares, 0.20) + BUY <= 0.60 gross.
     buy = buys[0]
     assert buy.quantity * buy.reference_price <= (0.60 - 0.20) * 100_000 + 1e-6
 

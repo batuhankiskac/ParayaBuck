@@ -6,12 +6,12 @@ import math
 from bisect import bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 from functools import lru_cache
 
-from parayabuck.config import DownsizeGainBand, ExecutionConfig, RiskLimits
+from parayabuck.config import DownsizeGainBand, DrawdownLiquidationConfig, ExecutionConfig, RiskLimits
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.data.adjustment import signal_session_date
 from parayabuck.logger import get_logger
@@ -404,6 +404,59 @@ def portfolio_risk_limits_from_config(risk: RiskLimits) -> PortfolioRiskLimits:
     )
 
 
+DRAWDOWN_LIQUIDATION_REASON = "drawdown_liquidation"
+
+
+@dataclass(frozen=True)
+class DrawdownLiquidationState:
+    """RED-state of the drawdown liquidation brake, persisted by the caller.
+
+    ``liquidated_at`` is the session the current liquidation episode began
+    (``None`` when not latched); ``rearmed`` records that the drawdown has since
+    recovered below ``rearm_recovery_pct``. The overlay is otherwise stateless:
+    with no state object it holds RED only while drawdown >= threshold, so a
+    recovered account is re-admitted at once. Passing the object back each
+    decision adds the cooldown and re-arm rules.
+    """
+
+    liquidated_at: date | None = None
+    rearmed: bool = False
+
+
+def _sessions_in_cash(liquidated_at: date, session: date) -> int:
+    """NYSE sessions after ``liquidated_at`` up to and including ``session``."""
+    if session <= liquidated_at:
+        return 0
+    try:
+        return sum(1 for day, _, _ in nyse_sessions(liquidated_at, session) if liquidated_at < day <= session)
+    except Exception:
+        log.warning("NYSE calendar unavailable; counting weekdays for the liquidation cooldown", exc_info=True)
+        days = (liquidated_at + timedelta(days=offset) for offset in range(1, (session - liquidated_at).days + 1))
+        return sum(1 for day in days if day.weekday() < 5)
+
+
+def _drawdown_liquidation_step(
+    policy: DrawdownLiquidationConfig,
+    drawdown: float,
+    session: date,
+    state: DrawdownLiquidationState | None,
+) -> tuple[bool, DrawdownLiquidationState | None]:
+    """``(RED, next state)`` of the brake for one decision. Caller ensures enabled."""
+    if state is None:
+        return drawdown >= policy.threshold_pct, None
+    if drawdown >= policy.threshold_pct:
+        # A breach while latched and not yet re-armed continues the episode;
+        # otherwise (fresh, or re-armed and breached again) it starts now.
+        started = state.liquidated_at if state.liquidated_at is not None and not state.rearmed else session
+        return True, DrawdownLiquidationState(liquidated_at=started, rearmed=False)
+    if state.liquidated_at is None:
+        return False, state
+    rearmed = state.rearmed or drawdown < policy.rearm_recovery_pct
+    if rearmed and _sessions_in_cash(state.liquidated_at, session) >= policy.cooldown_sessions:
+        return False, DrawdownLiquidationState()
+    return True, DrawdownLiquidationState(liquidated_at=state.liquidated_at, rearmed=rearmed)
+
+
 @dataclass(frozen=True)
 class RiskOverlayDecision:
     target: TargetPortfolio
@@ -411,11 +464,21 @@ class RiskOverlayDecision:
     reasons: tuple[str, ...]
     gross_before: float
     gross_after: float
+    # Next RED-state when the caller passed one in; ``None`` when stateless.
+    drawdown_liquidation_state: DrawdownLiquidationState | None = None
 
 
 class PortfolioRiskOverlay:
-    def __init__(self, limits: PortfolioRiskLimits | None = None) -> None:
+    def __init__(
+        self,
+        limits: PortfolioRiskLimits | None = None,
+        *,
+        drawdown_liquidation: DrawdownLiquidationConfig | None = None,
+    ) -> None:
         self.limits = limits or PortfolioRiskLimits()
+        # Kept outside PortfolioRiskLimits: that dataclass is hashed into the
+        # LIVE configuration digest, and the default-off brake must not move it.
+        self.drawdown_liquidation = drawdown_liquidation
 
     def apply(
         self,
@@ -429,6 +492,8 @@ class PortfolioRiskOverlay:
         enforce_drawdown_halt: bool = True,
         reserved_position_keys: tuple[tuple[Market, str], ...] = (),
         open_order_symbols: tuple[str, ...] = (),
+        drawdown_liquidation_state: DrawdownLiquidationState | None = None,
+        session_date: date | None = None,
     ) -> RiskOverlayDecision:
         """Apply the portfolio risk overlay to a strategy target.
 
@@ -438,6 +503,13 @@ class PortfolioRiskOverlay:
         halted) but the target is not capped, so the alpha curve keeps
         trading. Production (paper/live) always enforces the halt until an
         operator starts a new risk epoch.
+
+        Drawdown liquidation (``drawdown_liquidation`` on the overlay, default
+        off) follows the same shadow rule: its reason is recorded, and managed
+        targets are zeroed only when ``enforce_drawdown_halt`` is True.
+        ``drawdown_liquidation_state`` is the caller's persisted RED-state
+        (``None`` = stateless); ``session_date`` defaults to the decision's
+        signal session. The next state is returned on the decision.
         """
         _validate_unique_account_positions(account)
         equity = account.equity
@@ -468,6 +540,22 @@ class PortfolioRiskOverlay:
             # Daily-loss breaches are always enforced (session-scoped, they
             # self-recover; the drawdown peak does not).
             halted = False
+        # Catastrophe brake: evaluated only when enabled, so the default path
+        # never reads the decision timestamp. Its reason does not set ``halted``
+        # (no circuit-breaker side effect); the zeroing below is the action.
+        liquidation_policy = self.drawdown_liquidation
+        liquidation_red = False
+        next_liquidation_state = drawdown_liquidation_state
+        if liquidation_policy is not None and liquidation_policy.enabled:
+            liquidation_red, next_liquidation_state = _drawdown_liquidation_step(
+                liquidation_policy,
+                account.drawdown_pct,
+                session_date or signal_session_date(target.decision_timestamp),
+                drawdown_liquidation_state,
+            )
+        if liquidation_red:
+            halted_reasons.append(DRAWDOWN_LIQUIDATION_REASON)
+        liquidate = liquidation_red and enforce_drawdown_halt
 
         # Only the external portion of a mixed position is immutable: the
         # managed quantity remains mutable inventory the bot may rebalance.
@@ -542,6 +630,14 @@ class PortfolioRiskOverlay:
                 halted_reasons.append(f"external_exceeds_asset_limit:{symbol}")
             if halted:
                 desired[symbol] = min(desired[symbol], current)
+            if liquidate:
+                # Managed exposure goes to zero; the external floor is kept and
+                # the planner only ever sells managed units. A symbol with no
+                # external floor leaves the target entirely.
+                if external_weight <= 1e-12:
+                    desired.pop(symbol)
+                    continue
+                desired[symbol] = external_weight
             # External quantities are exposure, never inventory this runtime
             # is authorized to sell; for mixed positions keep the floor.
             desired[symbol] = max(desired[symbol], external_weight)
@@ -678,6 +774,12 @@ class PortfolioRiskOverlay:
         }
         if halted:
             reduced.update(weight.symbol for weight in weights)
+        if liquidate:
+            # Every managed position the brake zeroes (zero-weight targets are
+            # dropped from ``weights``, so they are named explicitly) is a
+            # risk-driven reduction: the gain band and December deferral do not
+            # hold it.
+            reduced.update(set(strategy_desired) | set(current_weights))
         # gross_after is the actual expected account gross: immutable external
         # exposure plus the managed weights. The external floor carried inside
         # the target weights must not be counted a second time.
@@ -710,6 +812,7 @@ class PortfolioRiskOverlay:
             tuple(halted_reasons),
             gross_before,
             gross_after,
+            drawdown_liquidation_state=next_liquidation_state,
         )
 
 
@@ -998,6 +1101,8 @@ def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide, sa
 
 __all__ = [
     "DECEMBER_DEFERRAL_KEY",
+    "DRAWDOWN_LIQUIDATION_REASON",
+    "DrawdownLiquidationState",
     "GAIN_BAND_BYPASS_KEY",
     "AssetTradingRules",
     "DecemberDeferralHold",
@@ -1020,4 +1125,74 @@ __all__ = [
     "portfolio_execution_policy_from_config",
     "record_december_deferral_holds",
     "record_gain_band_holds",
+    "validate_order_batch",
 ]
+
+
+def validate_order_batch(
+    orders: Sequence[PortfolioOrderRequest],
+    rules_by_symbol: Mapping[str, AssetTradingRules],
+    *,
+    minimum_order_notional: float,
+) -> list[tuple[str, str]]:
+    """Problems in one planned order batch, as ``(client_order_id, reason)``.
+
+    Checked before any order of the batch is recorded as ``submitting``. Each
+    order must have a positive finite quantity that is a whole multiple of its
+    symbol's quantity increment, at least the symbol's minimum size, and a
+    notional at or above both ``minimum_order_notional`` and the symbol's
+    minimum notional. Conflicting orders are reported together: the same
+    (symbol, side) twice, or a BUY and a SELL for one symbol, leaves the batch
+    ambiguous, so every order of the conflict is listed and the caller drops
+    them all rather than guessing which one is right. An empty list means the
+    batch may be sent.
+    """
+    problems: list[tuple[str, str]] = []
+    legs: dict[tuple[str, str], list[str]] = {}
+    sides_by_symbol: dict[str, set[str]] = {}
+    for order in orders:
+        legs.setdefault((order.symbol, order.side.value), []).append(order.client_order_id)
+        sides_by_symbol.setdefault(order.symbol, set()).add(order.side.value)
+    for (symbol, side), client_order_ids in legs.items():
+        if len(client_order_ids) > 1:
+            for client_order_id in client_order_ids:
+                problems.append((client_order_id, f"duplicate {side} order for {symbol} in batch"))
+    for order in orders:
+        if len(sides_by_symbol[order.symbol]) > 1:
+            problems.append((order.client_order_id, f"BUY and SELL both planned for {order.symbol}"))
+    for order in orders:
+        quantity = order.quantity
+        price = order.reference_price
+        if not math.isfinite(quantity) or quantity <= 0:
+            problems.append((order.client_order_id, f"quantity must be positive and finite, got {quantity!r}"))
+            continue
+        rule = rules_by_symbol.get(order.symbol)
+        if rule is None:
+            problems.append((order.client_order_id, f"no trading rules for {order.symbol}"))
+            continue
+        if rule.quantity_increment <= 0:
+            problems.append((order.client_order_id, f"non-positive quantity increment for {order.symbol}"))
+            continue
+        steps = quantity / rule.quantity_increment
+        if abs(steps - round(steps)) > 1e-6:
+            problems.append(
+                (
+                    order.client_order_id,
+                    f"quantity {quantity!r} is not a multiple of increment {rule.quantity_increment!r}",
+                )
+            )
+        if floor_increment(quantity, rule.quantity_increment) <= 0 or quantity < rule.minimum_order_size:
+            problems.append(
+                (order.client_order_id, f"quantity {quantity!r} below minimum size {rule.minimum_order_size!r}")
+            )
+        if not math.isfinite(price) or price <= 0:
+            problems.append((order.client_order_id, f"reference price must be positive and finite, got {price!r}"))
+            continue
+        if quantity * price < max(minimum_order_notional, rule.minimum_order_notional):
+            problems.append(
+                (
+                    order.client_order_id,
+                    f"notional {quantity * price!r} below minimum {max(minimum_order_notional, rule.minimum_order_notional)!r}",
+                )
+            )
+    return problems

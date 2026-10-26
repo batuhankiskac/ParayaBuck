@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -14,6 +14,7 @@ from parayabuck.data.adjustment import signal_session_date
 from parayabuck.execution.alpaca_models import DefiniteOrderRejection
 from parayabuck.execution.portfolio import (
     DECEMBER_DEFERRAL_KEY,
+    AssetTradingRules,
     DecemberDeferralHold,
     GainBandHold,
     PortfolioExecutionPolicy,
@@ -28,6 +29,7 @@ from parayabuck.execution.portfolio import (
     record_december_deferral_holds,
     record_gain_band_holds,
     reserve_opening_order_slots,
+    validate_order_batch,
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -75,6 +77,13 @@ log = get_logger("parayabuck.portfolio.runtime_service")
 # next broker reconciliation; one still ambiguous after this long is raised
 # to the operator (once per episode, never per bar).
 STUCK_DEFERRED_BUY_ALERT_SECONDS = 900.0
+
+# A ``submitting`` row whose broker lookup stays unresolved this long (the
+# clock starts at the first unresolved lookup) is raised to the operator and
+# moved to ``reconciliation_required``, the ambiguous state a rebalance blocks
+# on and reconciliation resolves. Below this it is retried silently.
+STUCK_SUBMITTING_LOOKUP_ESCALATION_SECONDS = 1800.0
+
 
 # Entry-latch reason EngineRuntime sets when the equity signal's
 # corporate-action basis is unverified. Any target computed on that basis is
@@ -263,6 +272,36 @@ def is_exit_sell_retry(client_order_id: str) -> bool:
 
 def exit_sell_retry_client_order_id(client_order_id: str) -> str:
     return f"{client_order_id}{EXIT_SELL_RETRY_SUFFIX}"
+
+
+# A SELL that ends canceled or expired with part of its quantity unfilled leaves
+# a residual on the bot's own ledger. The residual is sent as
+# ``{leg}-residual{n}``; one SELL leg may take at most this many residual rounds.
+RESIDUAL_SELL_SUFFIX = "-residual"
+RESIDUAL_SELL_MAX_ROUNDS = 3
+RESIDUAL_SELL_STATUSES = frozenset({"canceled", "cancelled", "expired"})
+
+
+def _sell_leg_root(client_order_id: str) -> str:
+    """Planned id of the SELL leg a row belongs to, without its retry or residual suffixes."""
+    root = str(client_order_id)
+    if root.endswith(EXIT_SELL_RETRY_SUFFIX):
+        root = root[: -len(EXIT_SELL_RETRY_SUFFIX)]
+    head, separator, index = root.rpartition(RESIDUAL_SELL_SUFFIX)
+    if separator and index.isdigit():
+        return head
+    return root
+
+
+def _sell_chain_position(client_order_id: str, root: str) -> tuple[int, int]:
+    """(residual round, retry flag) of a SELL row within its leg; a later row sorts higher."""
+    rest = str(client_order_id)[len(root) :]
+    retry = 1 if rest.endswith(EXIT_SELL_RETRY_SUFFIX) else 0
+    if retry:
+        rest = rest[: -len(EXIT_SELL_RETRY_SUFFIX)]
+    if not rest:
+        return (0, retry)
+    return (int(rest[len(RESIDUAL_SELL_SUFFIX) :]), retry)
 
 
 def emit_exit_sell_rejected_safe(
@@ -1732,6 +1771,13 @@ class PortfolioRuntime:
         rejected/canceled/expired/partially-filled SELL therefore yields the
         re-planned (smaller) BUY quantities; an ambiguous SELL outcome blocks
         the rebalance with ``reconciliation_required`` and submits nothing.
+        A SELL that ends canceled or expired with unfilled quantity leaves a
+        residual, read from the decision's own order rows (never from an
+        account snapshot). The residual is submitted under a deterministic
+        ``-residual{n}`` id, the phase stays ``sell_pending`` and no BUY is
+        sent until it settles; at most ``RESIDUAL_SELL_MAX_ROUNDS`` rounds per
+        leg, after which the rebalance closes without its BUYs and the operator
+        is alerted.
 
         ``buy_pending``: once every deferred BUY is terminal the rebalance is
         marked complete.
@@ -1811,6 +1857,9 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_blocked")
         if not is_sell_phase_complete(statuses):
             return None
+        residual = self._residual_sell_result(current.decision_id, tuple(sells))
+        if residual is not None:
+            return residual
         self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
         if not submit_deferred_buys:
             self._log_deferred_buy_withheld(current.decision_id)
@@ -1819,6 +1868,146 @@ class PortfolioRuntime:
             current.decision_id,
             account=account,
         )
+
+    def _residual_sell_result(
+        self,
+        decision_id: str,
+        sell_rows: tuple[dict[str, object], ...],
+    ) -> PortfolioRuntimeResult | None:
+        """Submit the residual SELLs left by partially filled, then canceled or expired, SELLs.
+
+        Read only from this decision's order rows, never from an account
+        snapshot: a SELL that filled completely leaves no residual, so a stale
+        position cannot trigger a second SELL. The latest row of a leg is the
+        one that matters; it leaves a residual only when it ended canceled or
+        expired with unfilled quantity. A leg with a rejected row that has no
+        retry yet belongs to ``retry_rejected_exit_sells`` and is skipped.
+
+        Returns the submit result when residuals were sent (the rebalance stays
+        ``sell_pending``, so no BUY is sent), the closing result when a leg has
+        used its rounds, or ``None`` when nothing needs selling. Runs even when
+        the engine is halted: a residual SELL only reduces exposure.
+        """
+        legs: dict[str, list[dict[str, object]]] = {}
+        for row in sell_rows:
+            legs.setdefault(_sell_leg_root(str(row["client_order_id"])), []).append(row)
+        candidates: list[tuple[str, dict[str, object], float, int]] = []
+        for root, rows in legs.items():
+            ids = {str(row["client_order_id"]) for row in rows}
+            if any(
+                str(row["status"]) == "rejected" and f"{row['client_order_id']}{EXIT_SELL_RETRY_SUFFIX}" not in ids
+                for row in rows
+            ):
+                continue
+            tail = max(rows, key=lambda row: _sell_chain_position(str(row["client_order_id"]), root))
+            if str(tail["status"]) not in RESIDUAL_SELL_STATUSES:
+                continue
+            filled = float(str(tail.get("cumulative_filled_quantity") or 0.0))
+            remaining = float(str(tail["quantity"])) - filled
+            # Only a partial fill leaves a residual. A SELL that ended with nothing
+            # filled left the position as it was and keeps the original handling.
+            if filled <= 1e-12 or remaining <= 1e-12:
+                continue
+            rounds = max(_sell_chain_position(str(row["client_order_id"]), root)[0] for row in rows)
+            if rounds >= RESIDUAL_SELL_MAX_ROUNDS:
+                return self._close_residual_exhausted(decision_id, root)
+            candidates.append((root, tail, remaining, rounds + 1))
+        if not candidates:
+            return None
+        decision = self.repository.decision_row(decision_id)
+        try:
+            target = TargetPortfolio.from_dict(json.loads(str(decision["target_json"])))
+        except (KeyError, TypeError, ValueError):
+            log.error("Residual SELL skipped: decision %s target unreadable; rebalance blocked", decision_id)
+            self.repository.update_rebalance_execution(
+                decision_id, REBALANCE_PHASE_BLOCKED, status="reconciliation_required"
+            )
+            return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_blocked")
+        residuals: list[PortfolioOrderRequest] = []
+        for root, tail, remaining, round_index in candidates:
+            residual = self._residual_sell_request(decision_id, target, tail, root, round_index, remaining)
+            if residual is not None:
+                residuals.append(residual)
+        if not residuals:
+            return None
+        for residual in residuals:
+            log.warning(
+                "Residual SELL submitted; BUYs held until it settles: market=%s decision=%s client_order_id=%s qty=%s",
+                self._market_name(),
+                decision_id,
+                residual.client_order_id,
+                residual.quantity,
+            )
+        submitted = self._submit_orders(tuple(residuals))
+        return PortfolioRuntimeResult(decision_id, None, None, tuple(residuals), submitted, "residual_sell_submitted")
+
+    def _residual_sell_request(
+        self,
+        decision_id: str,
+        target: TargetPortfolio,
+        tail: dict[str, object],
+        root: str,
+        round_index: int,
+        remaining: float,
+    ) -> PortfolioOrderRequest | None:
+        """The residual SELL for one leg, or ``None`` when it is not tradable.
+
+        The quantity is the unfilled remainder floored to the asset increment.
+        A residual that fails ``validate_order_batch`` (below minimum size or
+        notional) is not sent: it is dust that cannot be sold, and the leg
+        closes as before.
+        """
+        symbol = canonical_symbol(str(tail["symbol"]), self.market)
+        rules = self.broker.asset_trading_rules(symbol, self.market)
+        order = PortfolioOrderRequest(
+            client_order_id=f"{root}{RESIDUAL_SELL_SUFFIX}{round_index}",
+            decision_id=decision_id,
+            symbol=symbol,
+            market=self.market,
+            side=PortfolioOrderSide.SELL,
+            quantity=floor_increment(remaining, rules.quantity_increment),
+            reference_price=float(str(tail["reference_price"] or 0.0)),
+            decision_timestamp=target.decision_timestamp,
+            strategy_name=target.strategy_name,
+            strategy_version=target.strategy_version,
+        )
+        problems = validate_order_batch(
+            (order,),
+            {symbol: rules},
+            minimum_order_notional=self.planner.policy.minimum_order_notional,
+        )
+        if problems:
+            log.warning(
+                "Residual SELL not sent (not tradable): market=%s client_order_id=%s reason=%s",
+                self._market_name(),
+                order.client_order_id,
+                "; ".join(reason for _, reason in problems),
+            )
+            return None
+        return order
+
+    def _close_residual_exhausted(self, decision_id: str, root: str) -> PortfolioRuntimeResult:
+        """Close the rebalance without its BUYs once a leg has used its residual rounds."""
+        self._raise_operator_alert_once(
+            (decision_id, "residual_sell_exhausted"),
+            message="Residual SELL still unfilled after the round limit; deferred BUYs discarded",
+            category="residual_sell_exhausted",
+            decision_id=decision_id,
+            client_order_id=root,
+        )
+        self.repository.update_rebalance_execution(
+            decision_id, REBALANCE_PHASE_COMPLETE, status=REBALANCE_STATUS_CLOSED_UNRESOLVED
+        )
+        _emit_rebalance_phase_safe(
+            decision_id,
+            REBALANCE_PHASE_SELL_PENDING,
+            REBALANCE_PHASE_COMPLETE,
+            market=self._market_name(),
+            account_id=self.account_id,
+            session_id=self.session_id,
+            reason=REBALANCE_STATUS_CLOSED_UNRESOLVED,
+        )
+        return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_complete")
 
     def _log_deferred_buy_withheld(self, decision_id: str) -> None:
         """Record that a ready BUY side was held back by a halt (F12).
@@ -1991,7 +2180,8 @@ class PortfolioRuntime:
         """Resolve each ``submitting`` row against the broker.
 
         Returns whether any row changed, or ``None`` when the broker lacks the
-        lookup. A row whose lookup fails stays ``submitting``.
+        lookup. A row whose lookup fails stays ``submitting`` until the lookup
+        has stayed unresolved past the escalation threshold.
         """
         resolver = getattr(self.broker, "resolve_portfolio_submission", None)
         if resolver is None:
@@ -2010,9 +2200,14 @@ class PortfolioRuntime:
                     client_order_id,
                     exc_info=True,
                 )
-                continue
+                outcome = None
             if outcome is None:
+                # No verdict yet: retry on a later advance, escalating once the
+                # lookup has stayed unresolved past the threshold.
+                if self._escalate_unresolved_submission(client_order_id):
+                    changed = True
                 continue
+            self._submission_lookup_failures().pop(client_order_id, None)
             if isinstance(outcome, tuple):
                 status, broker_order_id = outcome
             else:
@@ -2020,6 +2215,38 @@ class PortfolioRuntime:
             self.repository.update_order(client_order_id, status, broker_order_id)
             changed = True
         return changed
+
+    def _escalate_unresolved_submission(self, client_order_id: str) -> bool:
+        """Escalate a ``submitting`` row whose broker lookup stays unresolved.
+
+        The first unresolved lookup starts the clock. A restart restarts it,
+        which only delays escalation. Past ``STUCK_SUBMITTING_LOOKUP_ESCALATION_SECONDS``
+        the operator is alerted once and the row moves to ``reconciliation_required``:
+        a rebalance then blocks (halting entries pending reconciliation) and
+        reconciliation resolves the order. Returns True when the row was escalated.
+        """
+        now = _utcnow()
+        failures = self._submission_lookup_failures()
+        age = (now - failures.setdefault(client_order_id, now)).total_seconds()
+        if age < STUCK_SUBMITTING_LOOKUP_ESCALATION_SECONDS:
+            return False
+        failures.pop(client_order_id, None)
+        self._raise_operator_alert_once(
+            (client_order_id, "stuck_submission_lookup"),
+            message="Submitting order unresolved after repeated broker lookup failures; escalated to reconciliation",
+            category="stuck_submission_lookup",
+            client_order_id=client_order_id,
+            age_seconds=round(age),
+        )
+        self.repository.update_order(client_order_id, "reconciliation_required")
+        log.critical("Submitting order escalated to reconciliation_required: client_order_id=%s", client_order_id)
+        return True
+
+    def _submission_lookup_failures(self) -> dict[str, datetime]:
+        failures: dict[str, datetime] | None = getattr(self, "_submission_lookup_failed_since", None)
+        if failures is None:
+            failures = self._submission_lookup_failed_since = {}
+        return failures
 
     def _resolve_stale_submitting_rows(self) -> None:
         """Resolve rows of earlier decisions still at ``submitting``.
@@ -2190,6 +2417,7 @@ class PortfolioRuntime:
             reserved_position_keys=reserved_slots,
             open_order_symbols=tuple(sorted(open_order_symbols)),
         )
+        buy_orders = self._validated_batch(buy_orders, rules)
         if not buy_orders:
             log.warning(
                 "Deferred BUY phase has no safe capacity; decision=%s submits nothing",
@@ -2224,8 +2452,63 @@ class PortfolioRuntime:
         for order in buy_orders:
             self.repository.record_order(order, "submitting")
             self._record_buy_admission_observation(decision_id, admission, buy_orders, linked=(order,))
-            submitted += self._submit_orders((order,))
+            submitted += self._submit_orders((order,), rules)
         return self._enter_buy_pending(decision_id, risk, buy_orders, submitted)
+
+    def _validated_batch(
+        self,
+        orders: tuple[PortfolioOrderRequest, ...],
+        rules_by_symbol: Mapping[str, AssetTradingRules] | None = None,
+    ) -> tuple[PortfolioOrderRequest, ...]:
+        """Drop the orders of a planned batch that ``validate_order_batch`` rejects.
+
+        Only the offending orders are dropped (a conflicting pair is dropped as
+        a whole). A dropped row still ``submitting`` is marked ``rejected`` so it
+        never counts as working, and the order-rejected alert is raised for it.
+        Valid orders are returned unchanged and nothing is sent for the rest.
+        """
+        if not orders:
+            return orders
+        rules: dict[str, AssetTradingRules] = dict(rules_by_symbol or {})
+        for order in orders:
+            if order.symbol not in rules:
+                rules[order.symbol] = self.broker.asset_trading_rules(order.symbol, order.market)
+        problems = validate_order_batch(
+            orders,
+            rules,
+            minimum_order_notional=self.planner.policy.minimum_order_notional,
+        )
+        if not problems:
+            return orders
+        reasons: dict[str, list[str]] = {}
+        for client_order_id, reason in problems:
+            reasons.setdefault(client_order_id, []).append(reason)
+        recorded = {
+            str(row["client_order_id"]): str(row["status"])
+            for row in self.repository.orders_for_decision(orders[0].decision_id)
+        }
+        for order in orders:
+            if order.client_order_id not in reasons:
+                continue
+            reason = "; ".join(reasons[order.client_order_id])
+            log.error(
+                "Order batch validation dropped order; it is not sent: market=%s client_order_id=%s reason=%s",
+                self._market_name(),
+                order.client_order_id,
+                reason,
+            )
+            if recorded.get(order.client_order_id) == "submitting":
+                self.repository.update_order(order.client_order_id, "rejected")
+            _emit_order_rejected_safe(
+                client_order_id=order.client_order_id,
+                symbol=order.symbol,
+                market=self._market_name(),
+                decision_id=order.decision_id,
+                reason="invalid_batch_order",
+                error=reason,
+                side=order.side.value,
+            )
+        return tuple(order for order in orders if order.client_order_id not in reasons)
 
     def _enter_buy_pending(
         self,
@@ -2546,7 +2829,11 @@ class PortfolioRuntime:
             except Exception:
                 pass
 
-    def _submit_orders(self, orders: tuple[PortfolioOrderRequest, ...]) -> tuple[str, ...]:
+    def _submit_orders(
+        self,
+        orders: tuple[PortfolioOrderRequest, ...],
+        rules_by_symbol: Mapping[str, AssetTradingRules] | None = None,
+    ) -> tuple[str, ...]:
         """Persist and submit one order batch with broker idempotency keys.
 
         The client order id is deterministic ``parayabuck-{decision_id}-{salt}-{symbol}-{side}``
@@ -2559,6 +2846,9 @@ class PortfolioRuntime:
         work, and a broker timeout marks ``reconciliation_required`` and
         requires ``reconcile()`` before retry.
         """
+        # A malformed order never reaches the broker: invalid ones are dropped
+        # here, before any of the batch is recorded as ``submitting``.
+        orders = self._validated_batch(orders, rules_by_symbol)
         submitted: list[str] = []
         # Every order in a batch shares one decision id, so the ledger is read
         # once. The map is keyed by client order id, which is stable per

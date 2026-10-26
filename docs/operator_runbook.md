@@ -299,6 +299,46 @@ verified reset. A reset verifies one reason at a time (plus the migrated set
 above): after resetting, check `ops status` for remaining rows and resolve each
 one.
 
+## Drawdown liquidation (`risk.drawdown_liquidation`, default off)
+
+A catastrophe brake for a deep drawdown from peak equity. The shipped default
+is **off**, and the brake is not a scaling rule: the research governors that
+scale exposure with drawdown were rejected (the drawdown-budget governor IC49
+failed stage 1 in `docs/research/batch_bank_v3.md`), so the existing
+`daily_loss_limit_pct` and `max_drawdown_pct` latches keep their current
+meaning: they cap targets at their current weight and never sell.
+
+When enabled, a drawdown at or above `threshold_pct` (for example 0.45) sets
+every managed target to zero and records the reason `drawdown_liquidation` on
+the decision. External or manual units are never sold, and the managed
+reductions bypass the gain band and the December deferral. The brake re-arms
+once the drawdown falls below `rearm_recovery_pct` (for example 0.30) and at
+least `cooldown_sessions` (for example 5) NYSE sessions have passed in cash.
+
+```yaml
+risk:
+  drawdown_liquidation:
+    enabled: false
+    threshold_pct: 0.45
+    rearm_recovery_pct: 0.30
+    cooldown_sessions: 5
+```
+
+Limitations, read before enabling:
+
+- The overlay is stateless by default. Without a persisted state object the
+  brake holds only while drawdown is at or above the threshold, so a recovered
+  account is re-admitted at once and there is no cooldown.
+- The liquidation state is not yet persisted or passed by the runtime. Until a
+  runtime change wires it in, setting `enabled: true` has no effect on the
+  running engine.
+- Changing any setting, including this block, changes the loaded configuration
+  fingerprint. A standing LIVE authorization bound to the old fingerprint must
+  be re-approved.
+- A managed position whose gap to zero is below `execution.rebalance_band_pct`
+  (0.5 % of equity by default) is not sold by the planner, so a small residual
+  may stay after a liquidation.
+
 ## `repair_local_state.py` and a stuck halt
 
 `scripts/repair_local_state.py` is a one-shot local repair: it quarantines the

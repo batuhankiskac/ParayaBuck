@@ -1020,4 +1020,74 @@ __all__ = [
     "portfolio_execution_policy_from_config",
     "record_december_deferral_holds",
     "record_gain_band_holds",
+    "validate_order_batch",
 ]
+
+
+def validate_order_batch(
+    orders: Sequence[PortfolioOrderRequest],
+    rules_by_symbol: Mapping[str, AssetTradingRules],
+    *,
+    minimum_order_notional: float,
+) -> list[tuple[str, str]]:
+    """Problems in one planned order batch, as ``(client_order_id, reason)``.
+
+    Checked before any order of the batch is recorded as ``submitting``. Each
+    order must have a positive finite quantity that is a whole multiple of its
+    symbol's quantity increment, at least the symbol's minimum size, and a
+    notional at or above both ``minimum_order_notional`` and the symbol's
+    minimum notional. Conflicting orders are reported together: the same
+    (symbol, side) twice, or a BUY and a SELL for one symbol, leaves the batch
+    ambiguous, so every order of the conflict is listed and the caller drops
+    them all rather than guessing which one is right. An empty list means the
+    batch may be sent.
+    """
+    problems: list[tuple[str, str]] = []
+    legs: dict[tuple[str, str], list[str]] = {}
+    sides_by_symbol: dict[str, set[str]] = {}
+    for order in orders:
+        legs.setdefault((order.symbol, order.side.value), []).append(order.client_order_id)
+        sides_by_symbol.setdefault(order.symbol, set()).add(order.side.value)
+    for (symbol, side), client_order_ids in legs.items():
+        if len(client_order_ids) > 1:
+            for client_order_id in client_order_ids:
+                problems.append((client_order_id, f"duplicate {side} order for {symbol} in batch"))
+    for order in orders:
+        if len(sides_by_symbol[order.symbol]) > 1:
+            problems.append((order.client_order_id, f"BUY and SELL both planned for {order.symbol}"))
+    for order in orders:
+        quantity = order.quantity
+        price = order.reference_price
+        if not math.isfinite(quantity) or quantity <= 0:
+            problems.append((order.client_order_id, f"quantity must be positive and finite, got {quantity!r}"))
+            continue
+        rule = rules_by_symbol.get(order.symbol)
+        if rule is None:
+            problems.append((order.client_order_id, f"no trading rules for {order.symbol}"))
+            continue
+        if rule.quantity_increment <= 0:
+            problems.append((order.client_order_id, f"non-positive quantity increment for {order.symbol}"))
+            continue
+        steps = quantity / rule.quantity_increment
+        if abs(steps - round(steps)) > 1e-6:
+            problems.append(
+                (
+                    order.client_order_id,
+                    f"quantity {quantity!r} is not a multiple of increment {rule.quantity_increment!r}",
+                )
+            )
+        if floor_increment(quantity, rule.quantity_increment) <= 0 or quantity < rule.minimum_order_size:
+            problems.append(
+                (order.client_order_id, f"quantity {quantity!r} below minimum size {rule.minimum_order_size!r}")
+            )
+        if not math.isfinite(price) or price <= 0:
+            problems.append((order.client_order_id, f"reference price must be positive and finite, got {price!r}"))
+            continue
+        if quantity * price < max(minimum_order_notional, rule.minimum_order_notional):
+            problems.append(
+                (
+                    order.client_order_id,
+                    f"notional {quantity * price!r} below minimum {max(minimum_order_notional, rule.minimum_order_notional)!r}",
+                )
+            )
+    return problems

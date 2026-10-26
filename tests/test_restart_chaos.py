@@ -452,14 +452,24 @@ def test_restart_with_partially_filled_order_stays_non_terminal(tmp_path: Path) 
     runtime_b, _ = _restarted_runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
     assert runtime_b.advance_rebalance() is None
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
-    # The SELL is canceled terminal: the BUY is re-planned and submitted once.
+    # The SELL is canceled half filled: the unfilled half goes out once as a
+    # residual SELL, and the BUY waits until that residual settles.
     _fill(repository, sell, cumulative=sell.quantity / 2, status="canceled")
     broker.open_symbols.discard("AAPL")
     resumed = runtime_b.advance_rebalance()
-    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    assert resumed is not None and resumed.status == "residual_sell_submitted"
+    residual = broker.submitted[-1]
+    assert residual.side == PortfolioOrderSide.SELL
+    assert residual.client_order_id == f"{sell.client_order_id}-residual1"
+    assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
+    _fill(repository, residual, activity_id="activity-residual")
+    broker.open_symbols.discard("AAPL")
+    broker.positions = [_position("AAPL", 150)]
+    buy_phase = runtime_b.advance_rebalance()
+    assert buy_phase is not None and buy_phase.status == "buy_phase_submitted"
     buys = [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
     assert [order.symbol for order in buys] == ["MSFT"]
-    assert len(broker.submitted) == 2
+    assert len(broker.submitted) == 3
 
 
 # ---------------------------------------------------------------------------

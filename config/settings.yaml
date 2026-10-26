@@ -93,6 +93,13 @@ risk:
   max_positions: 8
   daily_loss_limit_pct: 0.20
   max_drawdown_pct: 0.75
+  # Optional catastrophe brake, default off (docs/operator_runbook.md,
+  # "Drawdown liquidation"). Uncomment to enable; the runtime wiring is pending.
+  # drawdown_liquidation:
+  #   enabled: false
+  #   threshold_pct: 0.45
+  #   rearm_recovery_pct: 0.30
+  #   cooldown_sessions: 5
 backtest:
   initial_cash: 100000
   slippage_bps: 2

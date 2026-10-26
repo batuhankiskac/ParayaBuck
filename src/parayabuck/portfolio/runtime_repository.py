@@ -32,6 +32,7 @@ from parayabuck.portfolio.ownership_rebase import (
     SPLIT_ADJUST,
     SPLIT_REBASE_KIND,
     classify_share_change,
+    LotBookInconsistency,
     open_position_cost_bases,
     open_position_lots,
 )
@@ -1565,9 +1566,15 @@ class PortfolioStateRepository:
     def owned_cost_bases(self, account_id: str, symbol: str, market: Market) -> tuple[float, ...]:
         """``(fifo, average_cost)`` entry price of the current owned position,
         or ``()`` when nothing is open (see ``open_position_cost_bases``)."""
-        return open_position_cost_bases(
-            (kind, quantity, price) for _, kind, quantity, price, _ in self._owned_events(account_id, symbol, market)
-        )
+        try:
+            return open_position_cost_bases(
+                (kind, quantity, price) for _, kind, quantity, price, _ in self._owned_events(account_id, symbol, market)
+            )
+        except LotBookInconsistency as error:
+            # An inconsistent book cannot corroborate a split: callers treat
+            # the empty result as "not provable" and halt for the operator.
+            log.error("Owned cost bases unavailable for %s: %s", symbol, error)
+            return ()
 
     def owned_fifo_lots(
         self,

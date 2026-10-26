@@ -99,7 +99,7 @@ from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.storage import SQLiteStore
 from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
 from parayabuck.universe import equity_universe_digest
-from parayabuck.utils import is_crypto
+from parayabuck.utils import is_crypto, sd_notify
 from parayabuck.utils.http import is_network_failure
 
 log = get_logger("parayabuck.runtime")
@@ -257,6 +257,13 @@ _ENTRY_BLOCKING_STATES = frozenset({"halted", "error", "stop_failed", "stopping"
 # sparse blips over weeks cannot add up to the restart-limit halt. A crash
 # loop never runs this long and still hits the limit.
 _SHARED_WORKER_HEALTHY_RESET_SECONDS = 600.0
+# Alpaca does not replay trade updates. Open orders with no update for this
+# long during the regular session may hide a missed fill: the runtime then
+# latches new entries and reconciles (see _maybe_check_trade_feed_freshness).
+_TRADE_FEED_STALE_SECONDS = 300.0
+# Consecutive failed account fetches (pb-account) before the breaker trips.
+_ACCOUNT_FETCH_FAILURE_LIMIT = 5
+_ACCOUNT_FETCH_HALT_REASON = "account_fetch_failures"
 _RECONCILIATION_INCIDENT_REASONS = frozenset({"reconciliation_failed", "reconciliation_bug_suspected"})
 # Halt reasons a fresh process cannot still be in: they describe in-process
 # worker or queue state (a crashed decision worker, a trade-update callback
@@ -510,6 +517,14 @@ class EngineRuntime:
         # ledger's runtime_sessions table so restart counts are persisted.
         self._runtime_session_id: str | None = None
         self._reconcile_failed = False
+        # Reconcile-pending latch: gates new entries exactly like
+        # _reconcile_failed until a reconcile that started after the latch
+        # was set completes cleanly (_reconcile_pending_seq orders the two).
+        self._reconcile_pending_reason: str | None = None
+        self._reconcile_pending_seq = 0
+        self._last_trade_update_at: datetime | None = None
+        self._trade_feed_probe_at: datetime | None = None
+        self._consecutive_account_failures = 0
         self._live_startup_proof = live_startup_proof
         self._startup_committed = False
         self._snapshot_writer_started = False
@@ -721,6 +736,8 @@ class EngineRuntime:
             "reconciliation_status": (
                 "failed"
                 if getattr(self, "_reconcile_failed", False)
+                else "pending"
+                if self._reconcile_pending()
                 else "complete"
                 if getattr(self, "_last_reconciliation_at", None) is not None
                 else "pending"
@@ -897,7 +914,7 @@ class EngineRuntime:
             return
         if getattr(self, "_warming_up", False) or getattr(self, "_circuit_breaker_reason", None) is not None:
             return
-        if getattr(self, "_reconcile_failed", False):
+        if getattr(self, "_reconcile_failed", False) or self._reconcile_pending():
             return
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             if getattr(self, "_market_entry_halts", {}).get(portfolio_runtime.market) is not None:
@@ -1483,6 +1500,8 @@ class EngineRuntime:
                 )
         except Exception:
             pass
+        # systemd Type=notify: startup finished (no-op outside systemd).
+        sd_notify.ready()
         runtime_metrics_store.record_event("runtime_started")
         alerts.emit(
             "runtime_started",
@@ -2062,9 +2081,14 @@ class EngineRuntime:
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
+                # systemd watchdog ping: only after a fully successful pass.
+                iteration_ok = False
+                fetched = False
                 try:
                     _, _, fetch_generation = self._account_snapshot_cache_state()
                     account = self.broker.account()
+                    fetched = True
+                    self._consecutive_account_failures = 0
                     now = datetime.now(UTC)
                     if not self._publish_account_snapshot(
                         account,
@@ -2084,6 +2108,7 @@ class EngineRuntime:
                         )
                         self._persist_risk_state(account)
                         self._maybe_retry_rejected_exit_sells(account)
+                        iteration_ok = True
                 except OwnershipDriftError:
                     # Ownership drift is not a transient broker/API error: the
                     # broker holds fewer shares than the repository claims as
@@ -2104,6 +2129,9 @@ class EngineRuntime:
                     # poll; only drift escalates to a runtime halt here.
                     worker.last_error = str(exc)
                     log.warning("Account refresh failed: %s", exc)
+                    if not fetched:
+                        self._note_account_fetch_failure(exc)
+                self._maybe_check_trade_feed_freshness()
                 self._maybe_run_intent_watchdog()
                 self._maybe_check_standing_authorization()
                 # The periodic readiness refresh (warming_up -> running
@@ -2115,9 +2143,41 @@ class EngineRuntime:
                     except Exception as exc:
                         worker.last_error = str(exc)
                         log.warning("Readiness refresh failed: %s", exc, exc_info=True)
+                if iteration_ok:
+                    sd_notify.watchdog()
                 self._stop_event.wait(self.config.account_poll_interval_seconds)
         finally:
             worker.alive = False
+
+    def _note_account_fetch_failure(self, exc: BaseException) -> None:
+        """Count one failed account fetch; trip the breaker at the limit.
+
+        A broker outage that outlasts the 15 s poll cadence would otherwise
+        leave entries running on a stale account snapshot forever. The halt
+        goes through ``_raise_halt`` like the other account-loop breakers and
+        alerts once, on the transition into the halt.
+        """
+        failures = int(getattr(self, "_consecutive_account_failures", 0)) + 1
+        self._consecutive_account_failures = failures
+        if failures < _ACCOUNT_FETCH_FAILURE_LIMIT:
+            return
+        with getattr(self, "_state_lock", threading.RLock()):
+            before = getattr(self, "_circuit_breaker_reason", None)
+            self._raise_halt(_ACCOUNT_FETCH_HALT_REASON)
+            tripped = (
+                before != _ACCOUNT_FETCH_HALT_REASON and self._circuit_breaker_reason == _ACCOUNT_FETCH_HALT_REASON
+            )
+        if not tripped:
+            return
+        log.error("Account fetch failed %d times in a row; runtime halted: %s", failures, exc)
+        runtime_metrics_store.record_event("circuit_breaker")
+        alerts.emit(
+            "circuit_breaker",
+            message=f"Account fetch failed {failures} times in a row; runtime halted",
+            reason=_ACCOUNT_FETCH_HALT_REASON,
+            consecutive_failures=failures,
+            error=str(exc),
+        )
 
     def _evaluate_entry_risk_latch(self, account: AccountSnapshot) -> None:
         """Re-evaluate the entry-risk latch from the latest account state.
@@ -2456,6 +2516,7 @@ class EngineRuntime:
         submit_buys = (
             getattr(self, "_circuit_breaker_reason", None) is None
             and not getattr(self, "_reconcile_failed", False)
+            and not self._reconcile_pending()
             and not getattr(self, "_warming_up", False)
             and getattr(self, "_entry_risk_latch", {}).get(market) is None
             and getattr(self, "_market_entry_halts", {}).get(market) is None
@@ -2578,6 +2639,8 @@ class EngineRuntime:
                 await asyncio.sleep(_TRADE_UPDATE_LOCK_BACKOFF_SECONDS * (attempt + 1))
 
     async def _handle_trade_update(self, update: TradeUpdate) -> None:
+        # Freshness stamp for the stale-feed check, before any early return.
+        self._last_trade_update_at = datetime.now(UTC)
         portfolio_repository = getattr(self, "_portfolio_repository", None)
         if portfolio_repository is not None and portfolio_repository.has_order(update.client_order_id):
             status = str(update.event).lower()
@@ -2736,6 +2799,15 @@ class EngineRuntime:
                     raise RuntimeError("stream worker returned unexpectedly")
                 except Exception as exc:
                     worker.last_error = str(exc)
+                    if name == "pb-trade-updates":
+                        # Alpaca does not replay updates missed while the
+                        # stream was down: latch entries and reconcile. The
+                        # reconcile is best-effort here; the latch holds and
+                        # the periodic reconcile retries it.
+                        try:
+                            self._set_reconcile_pending("trade_updates_restart")
+                        except Exception:
+                            log.warning("Reconcile after a trade-update restart could not be scheduled", exc_info=True)
                     market = _MARKET_BY_STREAM_WORKER.get(name)
                     # Market workers reset on a verified live event instead
                     # (_mark_market_stream_recovered).
@@ -3308,10 +3380,14 @@ class EngineRuntime:
                 len(bars),
             )
             return True
-        if breaker is not None or getattr(self, "_reconcile_failed", False):
+        if breaker is not None or getattr(self, "_reconcile_failed", False) or self._reconcile_pending():
             # A reconciliation-owned gate clears on the next clean reconcile:
             # re-queue the session for the bounded retry.
-            reason = breaker or "reconciliation_failed"
+            reason = breaker or (
+                "reconciliation_failed"
+                if getattr(self, "_reconcile_failed", False)
+                else getattr(self, "_reconcile_pending_reason", None)
+            )
             deferred_any = False
             for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
                 relevant = [
@@ -3859,7 +3935,9 @@ class EngineRuntime:
         if blocked_only:
             runtimes = tuple(runtime for runtime in runtimes if _catch_up_blocked(runtime))
         breaker = self._circuit_breaker_reason or (
-            "reconciliation_failed" if getattr(self, "_reconcile_failed", False) else None
+            "reconciliation_failed"
+            if getattr(self, "_reconcile_failed", False)
+            else getattr(self, "_reconcile_pending_reason", None)
         )
         if breaker is not None:
             # Recorded as blocked so reset_safety_lock knows to retry it.
@@ -4678,6 +4756,8 @@ class EngineRuntime:
     def _reconcile_safely(self) -> None:
         reconcile_lock = getattr(self, "_reconcile_lock", threading.Lock())
         with reconcile_lock:
+            # A latch set after this point is not covered by this scan.
+            requested_seq = int(getattr(self, "_reconcile_pending_seq", 0))
             try:
                 report = ReconciliationReport.from_result(self.broker.reconcile())
                 if report.has_drift:
@@ -4722,6 +4802,12 @@ class EngineRuntime:
                         message="Periodic reconciliation recovered",
                         account_id=account_id,
                     )
+                with getattr(self, "_state_lock", threading.RLock()):
+                    if int(getattr(self, "_reconcile_pending_seq", 0)) == requested_seq:
+                        cleared_reason = getattr(self, "_reconcile_pending_reason", None)
+                        self._reconcile_pending_reason = None
+                        if cleared_reason is not None:
+                            log.info("Reconcile-pending latch cleared after a clean reconciliation: %s", cleared_reason)
                 self._clear_reconciliation_incidents()
             except ReconciliationResultError as exc:
                 if _is_transient_network_error(exc):
@@ -4829,6 +4915,67 @@ class EngineRuntime:
                     reason=failure_reason,
                     consecutive_failures=self._generic_reconcile_failures,
                 )
+
+    def _reconcile_pending(self) -> bool:
+        """True while the reconcile-pending latch gates new entries."""
+        return getattr(self, "_reconcile_pending_reason", None) is not None
+
+    def _set_reconcile_pending(self, reason: str) -> None:
+        """Latch new entries until a reconcile started from here on is clean.
+
+        Same gate as ``_reconcile_failed`` (buys and rejected-SELL retries
+        wait), but not a halt: a clean reconcile clears it without an
+        operator. The latch is set under the state lock and the reconcile is
+        scheduled only after it is released, because the reconcile spawn lock
+        is never taken while the state lock is held.
+        """
+        with getattr(self, "_state_lock", threading.RLock()):
+            self._reconcile_pending_reason = reason
+            self._reconcile_pending_seq = int(getattr(self, "_reconcile_pending_seq", 0)) + 1
+        self._schedule_reconcile()
+
+    def _maybe_check_trade_feed_freshness(self, now: datetime | None = None) -> None:
+        """Latch and reconcile when open orders outlive a silent trade feed.
+
+        Only during the NYSE regular session, and only while the account holds
+        non-terminal portfolio orders. The reference is the later of the last
+        trade update and the last trigger, so one silent window causes at most
+        one reconcile. Resting orders that simply have no fills also go quiet;
+        that costs one reconcile per TTL, never a halt. Never raises.
+        """
+        try:
+            now = now or datetime.now(UTC)
+            if not getattr(self, "_running", False) or not is_session_open(now):
+                return
+            repository = getattr(self, "_portfolio_repository", None)
+            if repository is None:
+                return
+            account_id = getattr(getattr(self, "broker", None), "account_id", None) or "unknown"
+            if not repository.open_orders(account_id):
+                return
+            references = [
+                stamp
+                for stamp in (
+                    getattr(self, "_last_trade_update_at", None),
+                    getattr(self, "_trade_feed_probe_at", None),
+                )
+                if stamp is not None
+            ]
+            if not references:
+                # First observation of open orders: start the silence clock.
+                self._trade_feed_probe_at = now
+                return
+            silent_seconds = (now - max(references)).total_seconds()
+            if silent_seconds < _TRADE_FEED_STALE_SECONDS:
+                return
+            self._trade_feed_probe_at = now
+            log.warning(
+                "No trade update for %.0fs with open orders; latching entries and reconciling",
+                silent_seconds,
+            )
+            self._set_reconcile_pending("trade_feed_stale")
+        except Exception:
+            log.warning("Trade-feed freshness check failed", exc_info=True)
 
     def _schedule_reconcile(self) -> None:
         """Run the expensive broker scan without stalling finalized-bar decisions."""
@@ -4943,6 +5090,9 @@ class EngineRuntime:
             "ambiguous_order_state",
             "protection_failure",
             "ownership_drift",
+            # Verified by the broker reconcile below: an unreachable broker
+            # fails that reconcile, so the halt cannot clear while it persists.
+            _ACCOUNT_FETCH_HALT_REASON,
             "final_market_event_queue_overflow",
             "reconciliation_failed",
             "reconciliation_bug_suspected",

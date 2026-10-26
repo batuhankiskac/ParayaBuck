@@ -4,7 +4,13 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=notify
+# READY=1 is sent when the runtime finishes startup; WATCHDOG=1 comes from the
+# account loop after each successful pass. A hung process is killed after
+# 300 s and Restart=on-failure brings it back. NotifyAccess=main accepts
+# notifications from the main process only.
+NotifyAccess=main
+WatchdogSec=300
 User=parayabuck
 Group=parayabuck
 WorkingDirectory=/opt/parayabuck

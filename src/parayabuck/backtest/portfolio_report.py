@@ -263,8 +263,12 @@ def build_portfolio_report(
         "average_holding_hours": holding_hours,
         "average_exposure": 1.0 - result.average_cash_ratio,
         "maximum_exposure": maximum_exposure,
+        "time_in_market": result.time_in_market,
         "average_positions": result.average_holdings_count,
         "maximum_positions": maximum_positions,
+        # Price-only buy-and-hold total return per decision symbol (not SPY),
+        # close-to-close over the same curve window as the strategy.
+        "benchmarks": dict(sorted(result.benchmarks.items())),
     }
     fills: list[dict[str, object]] = [
         {

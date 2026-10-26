@@ -14,7 +14,7 @@ from alpaca.trading.requests import GetOrdersRequest
 
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.alerting import emit_execution_alert
-from parayabuck.execution.alpaca_client import AlpacaClient
+from parayabuck.execution.alpaca_client import AlpacaClient, BrokerClock
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -234,6 +234,10 @@ class AlpacaBroker:
             for order in orders or ()
             if self._field(order, "symbol", "")
         }
+
+    def clock(self) -> BrokerClock:
+        """The broker market clock (timestamp, is_open, next_open, next_close)."""
+        return self._client_adapter.clock()
 
     def _get_open_orders(self, request: Any) -> Any:
         """Use the adapter's exhaustive OPEN-order query for every broker path."""

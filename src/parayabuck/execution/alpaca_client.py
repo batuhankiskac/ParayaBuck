@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from alpaca.trading.client import TradingClient
@@ -20,6 +22,29 @@ _MAX_ORDERS_PAGE_SIZE = 500
 # Asset metadata is re-read from Alpaca at least once a day.
 _ASSET_CACHE_TTL_SECONDS = 24 * 60 * 60.0
 _ORDER_LIST_ADAPTER: TypeAdapter[list[Order]] = TypeAdapter(list[Order])
+
+
+@dataclass(frozen=True)
+class BrokerClock:
+    """Broker's own view of the market clock (Alpaca ``get_clock``).
+
+    All datetimes are timezone-aware. ``timestamp`` is the broker's current
+    time; ``next_open`` / ``next_close`` are the next session boundaries.
+    """
+
+    timestamp: datetime
+    is_open: bool
+    next_open: datetime
+    next_close: datetime
+
+
+def _aware_datetime(value: Any, name: str) -> datetime:
+    parsed = value
+    if isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if not isinstance(parsed, datetime) or parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"Broker clock {name} is not a timezone-aware datetime")
+    return parsed
 
 
 class AlpacaClient:
@@ -67,6 +92,18 @@ class AlpacaClient:
             session.close()
         except Exception as exc:
             log.warning("Alpaca session close warning: %s", exc)
+
+    # -- market clock ----------------------------------------------------
+
+    def clock(self) -> BrokerClock:
+        """Read the broker market clock (one REST call, no side effects)."""
+        raw: Any = self._client.get_clock()
+        return BrokerClock(
+            timestamp=_aware_datetime(self._field(raw, "timestamp"), "timestamp"),
+            is_open=bool(self._field(raw, "is_open", False)),
+            next_open=_aware_datetime(self._field(raw, "next_open"), "next_open"),
+            next_close=_aware_datetime(self._field(raw, "next_close"), "next_close"),
+        )
 
     # -- exhaustive OPEN-order query -------------------------------------
 
@@ -178,4 +215,4 @@ class AlpacaClient:
         return asset
 
 
-__all__ = ["AlpacaClient"]
+__all__ = ["AlpacaClient", "BrokerClock"]

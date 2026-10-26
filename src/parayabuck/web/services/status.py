@@ -67,12 +67,12 @@ def strategy_metadata(cfg: Any) -> dict[str, Any]:
 
 def build_status_snapshot(manager: Any) -> dict[str, Any]:
     """Aggregate read-only status from manager (no mutations, no secrets)."""
-    key, _ = manager.get_credentials()
+    key, secret = manager.get_credentials()
     result: dict[str, Any] = {
         "state": manager.current_engine_state(),
         "engine_error": getattr(manager, "last_engine_error", None),
         "paper": manager.is_paper_mode(),
-        "has_credentials": bool(key),
+        "has_credentials": bool(key and secret),
         "security_warning": getattr(manager, "security_warning", None),
     }
     cfg: Any = None

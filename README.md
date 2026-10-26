@@ -3,6 +3,26 @@
 Automated equity trading bot for Alpaca. One validated strategy, a strict risk
 overlay and one execution path shared by backtest, PAPER and LIVE.
 
+**In plain words:** once a day, after the US market closes, the bot checks
+whether the Nasdaq-100 (QQQ) is in an uptrend. If it is, it holds QLD, a 2x
+leveraged Nasdaq-100 fund, sized down when markets are volatile. If not, it
+holds cash. It runs on a paper (simulated) Alpaca account on one cloud VM;
+real money is disabled. The aim is to beat buying and holding the index over
+years, accepting deep drawdowns along the way (about 47 % in the 2000–2026
+backtest).
+
+**Start here.** New to the project: read this page, then
+[`docs/GLOSSARY.md`](docs/GLOSSARY.md) for the short names (VT35, E2, R2,
+A1u, H2, K, pp, Stage B). Then, depending on what you need:
+
+- *What does the strategy do, exactly?* `docs/validated_strategies.md`
+- *How is it run and watched?* `docs/operations.md`, then `docs/deployment.md`
+- *Something is wrong on the VM:* `docs/operator_runbook.md`
+- *Why this rule and not another?* `docs/research/INDEX.md`; for the
+  short-term drawdown question, `docs/research/short_term_summary.md`
+- *How the code is laid out:* `docs/runtime_architecture.md`,
+  `docs/execution_architecture.md`
+
 | | |
 |---|---|
 | Strategy | **VT35** with the E2 trend vote, the R2 early re-entry path, the A1u gain-scaled downsize band and the H2 December deferral — `equity_leveraged_trend_v1` 1.2.0 (Leveraged Index Trend v1) |
@@ -153,4 +173,6 @@ journal and snapshot inside `tmp_path`.
 | `docs/product_foundation.md` | Frozen product principles |
 | `docs/deferred_refactor_seams.md` | Deferred refactor seams |
 | `docs/OPERATIONS_LOG.md` | Every deploy, config change and incident |
+| `docs/GLOSSARY.md` | Short names used across the docs |
 | `docs/research/INDEX.md` | Research evidence index |
+| `docs/research/short_term_summary.md` | Short-term drawdown question: what was tested and what is left |

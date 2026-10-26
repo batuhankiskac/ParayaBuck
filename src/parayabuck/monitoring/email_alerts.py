@@ -55,6 +55,11 @@ _QUEUE_CAPACITY = 64
 _FIELD_VALUE_MAX = 400
 _THROTTLE_KEYS_MAX = 4096
 _DELIVERY_FAILED_KIND = "alert_delivery_failed"
+# One mail gets three attempts. Each retry waits longer than the last, so a
+# transient SMTP hiccup (timeout, 4xx, dropped connection) clears; a failure
+# that survives the last attempt is counted once and journaled, never raised.
+_DELIVERY_ATTEMPTS = 3
+_RETRY_BACKOFF_SECONDS: tuple[float, ...] = (1.0, 4.0)
 
 SmtpFactory = Callable[..., Any]
 
@@ -216,6 +221,7 @@ class EmailAlertSink:
         smtp_factory: SmtpFactory | None = None,
         smtp_ssl_factory: SmtpFactory | None = None,
         clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
         start_worker: bool = True,
     ) -> None:
         self.settings = settings
@@ -224,6 +230,7 @@ class EmailAlertSink:
         self._smtp_factory = smtp_factory
         self._smtp_ssl_factory = smtp_ssl_factory
         self._clock = clock
+        self._sleep = sleep
         self._queue: queue.Queue[_Outgoing | None] = queue.Queue(maxsize=_QUEUE_CAPACITY)
         self._lock = threading.Lock()
         self._last_sent: dict[str, float] = {}
@@ -296,6 +303,25 @@ class EmailAlertSink:
             smtp_ssl_factory=self._smtp_ssl_factory,
         )
 
+    def _deliver_with_retry(self, item: _Outgoing) -> None:
+        """Up to ``_DELIVERY_ATTEMPTS`` sends with backoff; re-raises the last error.
+
+        A rejected login is not retried: repeating a bad password only risks
+        locking the mail account, and it can never succeed on its own.
+        """
+        for attempt in range(1, _DELIVERY_ATTEMPTS + 1):
+            try:
+                self._deliver(item)
+                return
+            except smtplib.SMTPAuthenticationError:
+                raise
+            except Exception:
+                if attempt == _DELIVERY_ATTEMPTS:
+                    raise
+                delay = _RETRY_BACKOFF_SECONDS[attempt - 1]
+                log.info("Alert e-mail for kind=%s attempt %d failed; retrying in %.0fs", item.kind, attempt, delay)
+                self._sleep(delay)
+
     def process_one(self, timeout: float | None = None) -> bool:
         """Deliver the next queued e-mail (worker body; tests drive it)."""
         try:
@@ -306,7 +332,7 @@ class EmailAlertSink:
             if item is None:
                 return False
             try:
-                self._deliver(item)
+                self._deliver_with_retry(item)
                 with self._lock:
                     self.sent += 1
             except Exception as exc:

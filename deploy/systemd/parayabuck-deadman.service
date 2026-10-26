@@ -1,0 +1,37 @@
+[Unit]
+Description=ParayaBuck dead-man heartbeat (readiness ping to healthchecks.io)
+After=network-online.target parayabuck.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=parayabuck
+Group=parayabuck
+WorkingDirectory=/opt/parayabuck
+# The heartbeat URL is a secret: keep it in a root-owned, mode-0400 file and
+# expose it to this unit only as $CREDENTIALS_DIRECTORY/PARAYABUCK_HEALTHCHECK_URL.
+# Without the file the unit fails to start, which is the intended loud failure.
+LoadCredential=PARAYABUCK_HEALTHCHECK_URL:/etc/parayabuck/healthcheck-url
+ExecStart=/opt/parayabuck/.venv/bin/python -m parayabuck.monitoring.deadman
+# Pings the heartbeat URL (or <url>/fail) once; the external service alarms
+# when pings stop. Nothing is written locally.
+TimeoutStartSec=60
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CapabilityBoundingSet=
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+# AF_NETLINK: glibc getaddrinfo probes interfaces over netlink.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM

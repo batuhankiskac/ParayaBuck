@@ -21,6 +21,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from parayabuck.web.services.drawdown_context import drawdown_context
+
 _VOTE_KEYS = ("sma", "tsm", "don")
 
 
@@ -118,9 +120,7 @@ def trend_status_from_metadata(
     state = state_value if isinstance(state_value, str) else None
 
     evaluated = [
-        key
-        for key in _VOTE_KEYS
-        if isinstance(signals.get(key), dict) and isinstance(signals[key].get("up"), bool)
+        key for key in _VOTE_KEYS if isinstance(signals.get(key), dict) and isinstance(signals[key].get("up"), bool)
     ]
     votes_total: int | None
     if evaluated:
@@ -160,6 +160,7 @@ def trend_status_from_metadata(
     early_value = meta.get("early_reentry")
     early = early_value if isinstance(early_value, dict) else {}
 
+    drawdown_pct = _drawdown_pct(account)
     signal_symbol_value = meta.get("signal_symbol")
     rule_value = meta.get("trend_rule")
 
@@ -181,7 +182,8 @@ def trend_status_from_metadata(
         "vol_target": vol_target,
         "vol_trim": vol_trim,
         "vol_trim_at": vol_trim_at,
-        "drawdown_pct": _drawdown_pct(account),
+        "drawdown_pct": drawdown_pct,
+        "drawdown_context": drawdown_context(drawdown_pct),
         "early_reentry_active": bool(early.get("active")),
         "early_reentry_weight": _number(early.get("weight")),
     }

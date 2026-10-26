@@ -20,6 +20,11 @@ alpaca:
   # Historical bars/quotes: SIP for consolidated coverage where the account
   # entitlement allows; falls back to IEX gracefully otherwise.
   stock_historical_feed: sip
+# Optional broker identity pin (off by default). Set it to the Alpaca account
+# number (the PA... value) this engine must trade; any other account refuses
+# startup in PAPER and LIVE alike. Leave commented to keep the current behaviour.
+# broker:
+#   expected_account_id: "PA0000000000"
 universe:
   equity:
     enabled: true

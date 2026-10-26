@@ -394,3 +394,76 @@ restore). Do not delete the DB.
 Until it is fixed, any database loss restores from a stale snapshot and
 loses the decisions in between. A `parayabuck-keep-*.sqlite3` file (made
 with `--label`) is a manual snapshot; it is never auto-pruned.
+
+## Operator halt (`parayabuck halt` / `parayabuck resume`)
+
+A sticky halt keeps the engine down across restarts, deploys and reboots until
+an operator clears it. Use it when you want the bot to stay stopped and not
+just stopped for this run.
+
+```bash
+parayabuck halt --reason "investigating fill mismatch"   # writes the marker
+sudo systemctl stop parayabuck                            # or the console stop control
+parayabuck resume                                         # clears the marker
+sudo systemctl start parayabuck                           # or the console start control
+```
+
+- The marker is `data/runtime/OPERATOR_HALT` for the PAPER config (a LIVE
+  config writes `data/runtime/live/OPERATOR_HALT`). It is JSON: `reason`,
+  `created_at`, `user`.
+- While it exists, the automatic start and the console start are refused, and
+  the log shows `operator halt is in force` as an ERROR. Any unreadable marker
+  still counts as a halt.
+- `halt` does not stop a running engine, cancel orders or close positions.
+  Stop the engine as shown above.
+- `resume` only removes the marker. Check `parayabuck doctor` and the
+  dashboard before starting again.
+
+## Credentials from systemd (`LoadCredentialEncrypted=`)
+
+Alpaca keys are read first from `$CREDENTIALS_DIRECTORY/<ENV_NAME>` (systemd's
+private credentials directory), then from `.env`, then from the process
+environment. The SMTP login is still read from the environment only. Put the secret in systemd
+credentials to keep it out of plain-text files:
+
+```bash
+# Encrypt with the host key. Paste the value at the prompt; it is not echoed
+# and does not appear in shell history.
+read -rs -p "ALPACA_API_KEY: " V && printf '%s' "$V" | \
+  sudo systemd-creds encrypt --name=ALPACA_API_KEY - /etc/parayabuck/ALPACA_API_KEY.cred && unset V
+```
+
+Then add one line per secret to the unit with a drop-in
+(`sudo systemctl edit parayabuck`), not by editing the shipped unit file:
+
+```ini
+[Service]
+LoadCredentialEncrypted=ALPACA_API_KEY:/etc/parayabuck/ALPACA_API_KEY.cred
+```
+
+Run `sudo systemctl daemon-reload && sudo systemctl restart parayabuck`. Use
+the same pattern for `ALPACA_SECRET_KEY` (and the `ALPACA_LIVE_*` pair in LIVE).
+The file name in the credentials directory is the variable name, so no other
+change is needed.
+
+`parayabuck doctor --strict` (the unit's `ExecStartPre`) now FAILS when the
+`.env` credential file is readable by group or other users. Fix it with
+`chmod 600 .env`; a plain `doctor` only warns. Leave `.env` mode 600 on the VM
+before you deploy this change, or the service will not start.
+
+## Pin the broker account (`broker.expected_account_id`)
+
+By default the engine trusts whichever Alpaca account the keys resolve to. To
+refuse any other account, set the account number (the `PA...` value) in
+`config/settings.yaml`:
+
+```yaml
+broker:
+  expected_account_id: "PA0000000000"   # placeholder: use your own PA number
+```
+
+With the pin set, a mismatched account is refused with
+`broker account does not match broker.expected_account_id`, and so is an
+account number that cannot be read. Leave the block out to keep the previous
+behaviour. The pin is checked by the `authorize-live` command and the LIVE arm
+in the console; the PAPER runtime start check is not wired to it yet.

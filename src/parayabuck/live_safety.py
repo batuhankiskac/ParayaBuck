@@ -11,6 +11,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from parayabuck.config import read_credential
+
 
 class LiveApprovalError(RuntimeError):
     pass
@@ -33,10 +35,14 @@ def credential_env_names(*, live: bool) -> tuple[str, str]:
 
 
 def mode_credentials(*, live: bool, env: Mapping[str, str | None] | None = None) -> tuple[str, str]:
-    """The stripped (key, secret) pair of one mode from ``env`` (default os.environ)."""
+    """The stripped (key, secret) pair of one mode.
+
+    Each name is read from ``$CREDENTIALS_DIRECTORY/<name>`` (systemd
+    credentials) first and from ``env`` (default os.environ) second.
+    """
     source: Mapping[str, str | None] = os.environ if env is None else env
     key_name, secret_name = credential_env_names(live=live)
-    return str(source.get(key_name) or "").strip(), str(source.get(secret_name) or "").strip()
+    return read_credential(key_name, source), read_credential(secret_name, source)
 
 
 # Alpaca account numbers of paper accounts start with "PA"; paper API key ids
@@ -65,13 +71,26 @@ def classify_account_environment(account_number: str, api_key: str) -> str:
     return ACCOUNT_ENVIRONMENT_UNKNOWN
 
 
-def verify_account_environment(*, live: bool, account_number: str, api_key: str) -> None:
+def verify_account_environment(
+    *,
+    live: bool,
+    account_number: str,
+    api_key: str,
+    expected_account_id: str | None = None,
+    account_id: str | None = None,
+) -> None:
     """Fail closed when the broker account is not the mode's environment.
 
     LIVE requires the account endpoint to report a live account (a non-``PA``
     account number) and no paper marker on the key. PAPER is refused only on
     unambiguous live evidence (a live ``AK`` key id with no ``PA`` account
     number), so PAPER behaviour is otherwise unchanged.
+
+    ``expected_account_id`` (``broker.expected_account_id``) pins the account:
+    when set, the broker account number must equal it, or the broker
+    ``account_id`` when the caller supplies one. ``None`` skips the pin. The
+    pin applies in PAPER and LIVE alike and fails closed when no identifier
+    is available to compare.
     """
     environment = classify_account_environment(account_number, api_key)
     if live and (environment != ACCOUNT_ENVIRONMENT_LIVE or not str(account_number or "").strip()):
@@ -82,6 +101,77 @@ def verify_account_environment(*, live: bool, account_number: str, api_key: str)
     number = str(account_number or "").strip().upper()
     if not live and str(api_key or "").strip().upper().startswith("AK") and not number.startswith("PA"):
         raise LiveApprovalError(f"PAPER start refused: the configured {PAPER_API_KEY_ENV} is a LIVE key")
+    pinned = str(expected_account_id or "").strip()
+    if pinned:
+        mode = "LIVE" if live else "PAPER"
+        observed = {str(value).strip() for value in (account_number, account_id) if str(value or "").strip()}
+        if not observed:
+            raise LiveApprovalError(
+                f"{mode} start refused: broker.expected_account_id is set but the broker account id could not be read"
+            )
+        if pinned not in observed:
+            raise LiveApprovalError(
+                f"{mode} start refused: the broker account does not match broker.expected_account_id "
+                f"(pinned account is not the account the credentials resolve to)"
+            )
+
+
+# --- Sticky operator halt (cli `halt` / `resume`) ---------------------------
+#
+# A marker file in the runtime data directory that refuses every automatic
+# and manual engine start until `parayabuck resume` removes it. Any existing
+# marker, however unreadable, counts as a halt (fail closed).
+HALT_MARKER_FILENAME = "OPERATOR_HALT"
+
+
+def operator_halt_marker_path(runtime_dir: str | os.PathLike[str]) -> Path:
+    """The halt marker inside one runtime data directory."""
+    return Path(runtime_dir) / HALT_MARKER_FILENAME
+
+
+def operator_halt_active(marker: str | os.PathLike[str]) -> bool:
+    """True while the halt marker exists (a broken symlink counts too)."""
+    return os.path.lexists(os.fspath(marker))
+
+
+def read_operator_halt(marker: str | os.PathLike[str]) -> dict[str, Any] | None:
+    """Parsed halt record, or ``None`` when no marker exists.
+
+    A marker that cannot be parsed still halts; it is reported with an
+    ``unreadable`` reason instead of being ignored.
+    """
+    path = Path(marker)
+    if not os.path.lexists(os.fspath(path)):
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"reason": "unreadable halt marker", "created_at": None, "user": None}
+    return data if isinstance(data, dict) else {"reason": "unreadable halt marker", "created_at": None, "user": None}
+
+
+def write_operator_halt(marker: str | os.PathLike[str], *, reason: str, user: str) -> dict[str, Any]:
+    """Create or replace the halt marker and return the record written."""
+    from parayabuck.utils.io import atomic_write
+
+    record = {
+        "reason": str(reason or "").strip() or "operator halt",
+        "created_at": datetime.now(UTC).isoformat(),
+        "user": str(user or "").strip() or "unknown",
+    }
+    path = Path(marker)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(path, json.dumps(record, indent=2, sort_keys=True) + "\n")
+    return record
+
+
+def clear_operator_halt(marker: str | os.PathLike[str]) -> bool:
+    """Remove the halt marker. Returns False when there was none to remove."""
+    path = Path(marker)
+    if not os.path.lexists(os.fspath(path)):
+        return False
+    path.unlink()
+    return True
 
 
 @dataclass(frozen=True)
@@ -391,6 +481,7 @@ __all__ = [
     "ACCOUNT_ENVIRONMENT_PAPER",
     "ACCOUNT_ENVIRONMENT_UNKNOWN",
     "LIVE_API_KEY_ENV",
+    "HALT_MARKER_FILENAME",
     "LIVE_SECRET_KEY_ENV",
     "PAPER_API_KEY_ENV",
     "PAPER_SECRET_KEY_ENV",
@@ -402,9 +493,14 @@ __all__ = [
     "LiveStartupProof",
     "StandingLiveAuthorization",
     "classify_account_environment",
+    "clear_operator_halt",
     "config_fingerprint",
     "credential_env_names",
     "mode_credentials",
+    "operator_halt_active",
+    "operator_halt_marker_path",
+    "read_operator_halt",
     "standing_authorization_path",
     "verify_account_environment",
+    "write_operator_halt",
 ]

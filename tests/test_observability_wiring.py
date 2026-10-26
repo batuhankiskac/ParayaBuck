@@ -158,6 +158,9 @@ def test_shared_worker_failure_emits_one_degraded_and_one_recovered_event() -> N
     # "pb-stocks" is the only market-owned worker; any other name is the
     # shared worker whose failure degrades the whole runtime.
     runtime._workers = {"pb-trade-updates": WorkerHealth(last_heartbeat=now)}  # type: ignore[attr-defined]
+    # A trade-updates restart schedules a reconcile; this test pins only the
+    # health transitions, so keep the reconcile from reaching a real broker.
+    runtime._schedule_reconcile = lambda: None  # type: ignore[method-assign]
 
     class _FlakyWorker:
         def __init__(self) -> None:

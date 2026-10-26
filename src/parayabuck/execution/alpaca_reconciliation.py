@@ -20,7 +20,7 @@ Responsibility:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import isfinite
@@ -34,6 +34,7 @@ from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_models import TERMINAL_BROKER_ORDER_STATUSES
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.portfolio.ownership_rebase import LotBookInconsistency
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.execution.alpaca_reconciliation")
@@ -61,6 +62,14 @@ _WORKING_BROKER_STATUSES = frozenset(
 
 # Absolute floor for repository-vs-broker position quantity agreement.
 QUANTITY_MATCH_FLOOR = 1e-8
+
+# Cost-basis drift band: the bot's average cost may differ from the broker's
+# avg_entry_price by max(relative, floor) before it is reported. Read-only.
+COST_BASIS_DRIFT_RELATIVE = 0.005
+COST_BASIS_DRIFT_FLOOR = 0.02
+# Informational key in the reconcile result: symbols whose cost basis drifted.
+# It is not a drift category, so it never halts orders.
+COST_BASIS_DRIFT_KEY = "COST_BASIS_DRIFT"
 
 # A local portfolio order still ``submitting`` or ``reconciliation_required``
 # whose client order id Alpaca definitively does not know (404) is closed as
@@ -93,13 +102,21 @@ class ReconciliationReport:
     """Validated, immutable view of the broker reconciliation result."""
 
     categories: tuple[tuple[str, tuple[str, ...]], ...]
+    cost_basis_drift: tuple[str, ...] = ()
 
     @classmethod
     def from_result(cls, result: object) -> ReconciliationReport:
         if not isinstance(result, Mapping):
             raise ReconciliationResultError("Reconciliation returned a non-mapping result")
-        if set(result) != set(RECONCILIATION_CATEGORIES):
+        if not set(RECONCILIATION_CATEGORIES) <= set(result) or (
+            set(result) - set(RECONCILIATION_CATEGORIES) - {COST_BASIS_DRIFT_KEY}
+        ):
             raise ReconciliationResultError("Reconciliation result has an unexpected category shape")
+        drifted = result.get(COST_BASIS_DRIFT_KEY, [])
+        if not isinstance(drifted, (list, tuple)) or any(
+            not isinstance(value, str) or not value.strip() for value in drifted
+        ):
+            raise ReconciliationResultError("Reconciliation cost-basis drift list is invalid")
         normalized: list[tuple[str, tuple[str, ...]]] = []
         for category in RECONCILIATION_CATEGORIES:
             values = result[category]
@@ -108,7 +125,7 @@ class ReconciliationReport:
             if any(not isinstance(value, str) or not value.strip() for value in values):
                 raise ReconciliationResultError(f"Reconciliation category {category} contains an invalid value")
             normalized.append((category, tuple(values)))
-        return cls(tuple(normalized))
+        return cls(tuple(normalized), tuple(drifted))
 
     def as_dict(self) -> dict[str, list[str]]:
         return {category: list(values) for category, values in self.categories}
@@ -140,6 +157,8 @@ class ReconciliationService:
 
     def __init__(self, broker: Any) -> None:
         self._broker = broker
+        # Symbols already alerted for cost-basis drift in this session.
+        self._cost_basis_alerted: set[str] = set()
 
     # -- helpers ---------------------------------------------------------
 
@@ -386,6 +405,86 @@ class ReconciliationService:
             log.warning("Bot tradable symbols unavailable; equity positions stay fail-closed", exc_info=True)
             return None
 
+    def _cost_basis_drift(
+        self,
+        positions: Sequence[Any],
+        matched: Sequence[str],
+        foreign_positions: Mapping[str, str],
+    ) -> dict[str, dict[str, float]]:
+        """Read-only check of the bot's average cost against the broker's.
+
+        Only a MATCH symbol is compared: the bot then owns the whole broker
+        position, so no external units distort the broker's avg_entry_price.
+        The bot's cost comes from the optional ``portfolio_owned_cost_bases``
+        provider ``(symbol, market) -> (fifo, average_cost)``. It is never a
+        halt or an order block: a drifted symbol is alerted once per session
+        and returned. A lot book that cannot be replayed is a reconciliation
+        failure (fail closed), not a drift.
+        """
+        provider = getattr(self._broker, "portfolio_owned_cost_bases", None)
+        if provider is None or not matched:
+            return {}
+        drift: dict[str, dict[str, float]] = {}
+        for symbol in matched:
+            if symbol in foreign_positions:
+                continue
+            equity = [
+                position
+                for position in positions
+                if not position.is_flat
+                and position.market == Market.EQUITY
+                and canonical_symbol(position.symbol, position.market) == symbol
+            ]
+            if len(equity) != 1:
+                continue
+            broker_average = float(equity[0].avg_price)
+            if not isfinite(broker_average) or broker_average <= 0:
+                continue
+            try:
+                bases = provider(symbol, Market.EQUITY)
+            except LotBookInconsistency as error:
+                raise ReconciliationResultError(
+                    f"Lot book inconsistent for {symbol}; reconciliation cannot verify cost basis: {error}"
+                ) from error
+            if not bases or len(bases) < 2:
+                continue
+            bot_average = float(bases[1])
+            if not isfinite(bot_average) or bot_average <= 0:
+                continue
+            tolerance = max(COST_BASIS_DRIFT_RELATIVE * broker_average, COST_BASIS_DRIFT_FLOOR)
+            if abs(bot_average - broker_average) <= tolerance:
+                continue
+            drift[symbol] = {
+                "bot_average_cost": bot_average,
+                "broker_avg_entry_price": broker_average,
+                "tolerance": tolerance,
+            }
+            if symbol in self._cost_basis_alerted:
+                continue
+            self._cost_basis_alerted.add(symbol)
+            log.warning(
+                "Cost basis drift for %s: bot average %.4f vs broker avg_entry_price %.4f (tolerance %.4f); "
+                "orders are not blocked",
+                symbol,
+                bot_average,
+                broker_average,
+                tolerance,
+            )
+            emit_execution_alert(
+                "paper_incident",
+                message=(
+                    f"Cost basis drift for {symbol}: bot average {bot_average:.4f} differs from broker "
+                    f"avg_entry_price {broker_average:.4f} by more than {tolerance:.4f}. Read-only; "
+                    "orders are not blocked. Verify the fills and any corporate action."
+                ),
+                category="cost_basis_drift",
+                incident_id=f"cost_basis_drift:{symbol}",
+                symbol=symbol,
+                bot_average_cost=bot_average,
+                broker_avg_entry_price=broker_average,
+            )
+        return drift
+
     # -- public ----------------------------------------------------------
 
     def reconcile(self) -> dict[str, list[str]]:
@@ -456,6 +555,7 @@ class ReconciliationService:
             elif abs(broker_qty) > 1e-12:
                 categories["BROKER_STALE"].append(symbol)
                 categories["MISSING_LOCAL_ORDER"].append(symbol)
+        cost_basis_drift = self._cost_basis_drift(account.positions, categories["MATCH"], foreign_positions)
         if categories["QUANTITY_MISMATCH"]:
             # A share count the runtime could not prove: a non-standard
             # corporate action, or a foreign trade on the shared key. Name
@@ -507,4 +607,6 @@ class ReconciliationService:
             # the reconciliation buckets in docs/execution_architecture.md and
             # the recovery steps in docs/operations.md).
             categories["MISSING_LOCAL_ORDER"].append(client_id)
+        if cost_basis_drift:
+            categories[COST_BASIS_DRIFT_KEY] = sorted(cost_basis_drift)
         return categories

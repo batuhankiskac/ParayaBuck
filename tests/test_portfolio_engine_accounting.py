@@ -643,6 +643,23 @@ def test_benchmark_stays_price_only_without_corporate_actions(corporate_actions)
     assert report.summary["benchmark_return_basis"] == "price"
 
 
+def test_benchmark_stays_labelled_price_when_no_dividend_is_reinvested() -> None:
+    from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
+
+    # Corporate actions are supplied, but neither earns the SPY benchmark: one
+    # is another symbol, the other sits on the first bar (no prior close).
+    actions = [
+        CorporateAction(datetime(2025, 3, 5, tzinfo=UTC), "QQQ", CorporateActionType.DIVIDEND, 5.0),
+        CorporateAction(datetime(2025, 3, 3, tzinfo=UTC), "SPY", CorporateActionType.DIVIDEND, 7.0),
+    ]
+    result, report = _benchmark_run(actions)
+
+    assert result.benchmark_return == pytest.approx(0.01)
+    assert result.benchmark_return_basis == "price"
+    assert [bar.close for bar in result.benchmark_bars] == [100.0, 102.0, 99.0, 101.0]
+    assert report.summary["benchmark_return_basis"] == "price"
+
+
 def _gap_bar(timestamp: datetime, open_: float, close: float, volume: float = 5_000_000) -> Bar:
     return Bar(timestamp, "SPY", "1d", open_, max(open_, close), min(open_, close), close, volume, Market.EQUITY)
 

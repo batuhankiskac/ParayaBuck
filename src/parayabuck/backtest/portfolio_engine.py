@@ -573,7 +573,10 @@ class PortfolioBacktestEngine:
         benchmark = price_benchmark
         if corporate_actions:
             benchmark = self._total_return_benchmark(price_benchmark, action_queue)
-            benchmark_basis = "total_return"
+            # The helper returns the price bars unchanged unless a dividend was
+            # actually reinvested, so only then is the series total return.
+            if benchmark != price_benchmark:
+                benchmark_basis = "total_return"
         return self._result(
             curve,
             curve_timestamps,

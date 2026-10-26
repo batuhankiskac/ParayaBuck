@@ -398,13 +398,15 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
             ):
                 active = True
         sma50 = sum(closes[last - _R2_SMA_BARS + 1 : last + 1]) / _R2_SMA_BARS
+        # A zero base close (Bar allows close == 0) has no return to report.
+        momentum_base = closes[last - _R2_MOMENTUM_BARS]
         detail.update(
             active=active,
             sma50=sma50,
             above_sma50=closes[last] > sma50,
             vol20=volumes[last],
             vol20_median252=medians[last],
-            momentum20=closes[last] / closes[last - _R2_MOMENTUM_BARS] - 1.0,
+            momentum20=closes[last] / momentum_base - 1.0 if momentum_base > 0 else None,
         )
         return active, detail
 

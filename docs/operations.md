@@ -187,6 +187,29 @@ closes included).
 `fail_readiness` (true: active alarms make `/readyz` 503),
 `evaluation_interval_seconds` (60).
 
+### systemd watchdog and the reconcile-pending latch
+
+The unit is `Type=notify` with `WatchdogSec=300`. The runtime sends `READY=1`
+when startup finishes and `WATCHDOG=1` from the account loop after each
+successful pass, never from a timer thread. A process whose account loop
+stalls for 300 s is killed and `Restart=on-failure` starts it again. Outside
+systemd `NOTIFY_SOCKET` is unset and the sends are no-ops.
+
+Alpaca does not replay trade updates, so a fill can be missed while the
+stream is down. Three events set the reconcile-pending latch
+(`reason` in the runtime state):
+
+| Reason | Set when |
+|---|---|
+| `trade_updates_restart` | the `pb-trade-updates` worker failed or returned |
+| `trade_feed_stale` | open orders exist, the regular session is open, and no trade update arrived for 300 s |
+| `account_fetch_failures` (breaker, not latch) | 5 account fetches in a row failed; the halt clears only through the operator reset, which reconciles first |
+
+While the latch is set, new buys and rejected-SELL retries wait, the same gate
+as `reconciliation_failed`. It clears only after a reconcile that started after
+the latch was set completes with no drift. The periodic 60 s reconcile retries
+it, and it is not a halt: no operator action is needed.
+
 ### Decision retry (deferred session-close decisions)
 
 A session-close decision blocked by a **recoverable** condition is re-queued,

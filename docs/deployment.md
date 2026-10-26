@@ -33,6 +33,8 @@ console, settings and backtests work and the engine refuses to start — see
 | `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `TimeoutStopSec=120`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/`, plus the sandbox below |
 | `parayabuck-backup.service` | Oneshot `parayabuck backup`, same env file and sandbox; `ReadWritePaths` = `data/` only (it reads `config/` and writes `data/backups` and the event journal) |
 | `parayabuck-backup.timer` | `OnBootSec=10min`, `OnUnitActiveSec=6h`, `Persistent=true` |
+| `parayabuck-deadman.service` | Oneshot `python -m parayabuck.monitoring.deadman`: pings the external heartbeat (see the dead-man section); `LoadCredential=` for the URL, no writes |
+| `parayabuck-deadman.timer` | `OnBootSec=3min`, `OnUnitActiveSec=5min`, `Persistent=true` |
 
 Both services share one sandbox: `NoNewPrivileges`, `PrivateTmp`,
 `ProtectSystem=strict`, `ProtectHome=true`, an empty `CapabilityBoundingSet=`,
@@ -114,12 +116,15 @@ Disabled by default. When enabled, the engine e-mails the alerts that need the
 owner: engine stopped/halted/start failed, safety incidents and halts
 (`circuit_breaker`, `drawdown_halt`, `risk_incident`, `ambiguous_order`,
 `paper_incident`), `order_rejected` and `exit_sell_rejected`, `intent_alarm`,
-`reconciliation_failure`, `live_rearm_required`,
+`reconciliation_failure` (which also carries the ownership-drift and
+protection-failure halts in its `reason`), `market_data_degraded`,
+`data_provider_unavailable`, `backup_failed`, `live_rearm_required`,
 `live_authorization_expiring`/`live_authorization_expired`, and the daily
 summary (`alerting.email.daily_summary`). SMTP runs over TLS only (STARTTLS on
 587 or implicit TLS on 465), in a background thread with a 10 s timeout: a slow
-or broken mail server never blocks or stops trading. The same incident is
-mailed at most once per `min_interval_minutes` (30) and at most
+or broken mail server never blocks or stops trading. A transient send failure
+is retried up to three attempts (1 s, then 4 s apart); a rejected login is not
+retried. The same incident is mailed at most once per `min_interval_minutes` (30) and at most
 `max_per_hour` (20) mails leave per hour. A failed or dropped mail is recorded
 locally as `alert_delivery_failed` (`parayabuck ops events --kind
 alert_delivery_failed`).
@@ -164,6 +169,74 @@ Setup with Gmail (the owner does this; nothing here needs a developer):
 Other providers work the same way (`security: ssl` with port 465 for implicit
 TLS). In PAPER a broken e-mail setup is a `WARN` row and never stops the
 engine; in LIVE `doctor --configured-mode` requires valid e-mail alerts.
+
+### Dead-man switch (optional, healthchecks.io)
+
+The e-mail channel cannot report that the VM itself is down. The unit
+`parayabuck-deadman.timer` runs every 5 minutes: it GETs the loopback
+readiness endpoint (`PARAYABUCK_READYZ_URL`, default
+`http://127.0.0.1:8000/readyz`) and pings the heartbeat URL on HTTP 200, or
+`<url>/fail` on any other status or error. The external service e-mails the
+owner when pings stop. With no URL configured the unit does nothing. Its only
+outbound traffic is one HTTPS request per run.
+
+1. In healthchecks.io create a check with period 5 minutes and grace 10
+   minutes, attach the owner's e-mail, and copy the ping URL
+   (`https://hc-ping.com/<uuid>`).
+2. On the VM, as root, store the URL where systemd reads it (the unit exposes it
+   only through `LoadCredential=`):
+
+   ```bash
+   sudo mkdir -p /etc/parayabuck
+   sudo sh -c 'umask 077; printf "%s\n" "https://hc-ping.com/<uuid>" > /etc/parayabuck/healthcheck-url'
+   ```
+
+3. Install and start the timer (the unit paths follow the same rewrite rules as
+   `parayabuck.service`):
+
+   ```bash
+   sudo cp deploy/systemd/parayabuck-deadman.service deploy/systemd/parayabuck-deadman.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now parayabuck-deadman.timer
+   sudo systemctl start parayabuck-deadman.service
+   journalctl -u parayabuck-deadman -n 3    # "deadman: pinged success; ready"
+   ```
+
+Without the credential file the service fails to start, by design. A failed run
+in journald with `ping failed` means the heartbeat host itself was unreachable;
+the external check then alarms on the missing ping.
+
+### Off-host backup copy and monthly restore drill (optional)
+
+Local snapshots stay on the VM disk. Set `PARAYABUCK_BACKUP_OFFHOST_CMD` in the
+env file to copy each verified snapshot off the host, for example:
+
+```bash
+PARAYABUCK_BACKUP_OFFHOST_CMD=gsutil cp {path} gs://<bucket>/parayabuck/
+```
+
+`{path}` is shell-quoted and the command runs without a shell, with a
+900 s timeout. Unset (the default) means no copy. A failed copy keeps the
+verified local snapshot and emits `backup_failed` (reason
+`offhost_copy_failed`), which the e-mail channel forwards. The backup unit runs
+with `ProtectHome=true`, so the copy tool cannot read credentials from the
+deploy user's home: point it at a service-account key the `parayabuck` user can
+read (for example `GOOGLE_APPLICATION_CREDENTIALS` in the env file, with the key
+file mode `0400` and owned by `parayabuck`). Check the tool once by hand as the
+`parayabuck` user before relying on the timer.
+
+Monthly restore drill (about 20 minutes, record the result in the operations log):
+
+1. List the newest off-host object: `gsutil ls -l gs://<bucket>/parayabuck/ | tail -3`.
+2. Download it to a scratch directory outside `data/`, for example
+   `/var/tmp/restore-drill/`. Do not restore into the live `data/` path.
+3. Verify it: `.venv/bin/parayabuck backup --verify-only /var/tmp/restore-drill/<file>`
+   must print `Backup OK`.
+4. Compare the row counts of the decision tables with the newest local
+   snapshot in `data/backups/`; they should differ only by activity since that
+   snapshot.
+5. Run `.venv/bin/parayabuck doctor` and confirm the backup freshness row is OK.
+6. Delete the scratch copy and record the date, the object name and the result.
 
 ### Changing API keys on the VM
 

@@ -108,8 +108,12 @@ WARNING_KINDS: frozenset[str] = frozenset(
 # Kinds forwarded by the opt-in e-mail channel: the engine stopped, halted or
 # failed to start, safety incidents and halts, rejected orders (a rejected
 # exit SELL above all), intent/over-target alarms, reconciliation drift and
-# the LIVE re-arm / standing-authorization notices. ``daily_summary`` is
-# added only when ``alerting.email.daily_summary`` is true.
+# the LIVE re-arm / standing-authorization notices, plus market-data
+# degradation, provider outages and backup failures (the last two are the
+# unattended-failure signals the owner would otherwise only find in the
+# journal). ``reconciliation_failure`` already covers the reconciliation and
+# ownership/protection halts (their reasons travel in the ``reason`` field).
+# ``daily_summary`` is added only when ``alerting.email.daily_summary`` is true.
 EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
     {
         "runtime_stopped_unexpected",
@@ -126,6 +130,12 @@ EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
         "live_rearm_required",
         "live_authorization_expiring",
         "live_authorization_expired",
+        # Market data fell back to a lower feed (and recovered), a provider
+        # outage that did not halt the engine, and a backup that could not be
+        # written, verified or copied off-host (the timer's unattended failure).
+        "market_data_degraded",
+        "data_provider_unavailable",
+        "backup_failed",
     }
 )
 

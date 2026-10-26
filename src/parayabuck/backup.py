@@ -9,15 +9,30 @@ is enforced so a verified backup survives a crash.
 from __future__ import annotations
 
 import errno
+import logging
 import math
 import os
 import re
+import shlex
 import sqlite3
+import subprocess
 import tempfile
+from collections.abc import Callable, Mapping
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+log = logging.getLogger("parayabuck.backup")
+
+# Optional off-host copy of each verified snapshot, e.g.
+# ``gsutil cp {path} gs://bucket/``. Unset (the default) means no copy. The
+# template is formatted with the quoted snapshot path, split with shlex and run
+# without a shell; a non-zero exit, timeout or malformed template is recorded as
+# ``backup_failed`` (reason ``offhost_copy_failed``) and never fails the local backup.
+OFFHOST_CMD_ENV = "PARAYABUCK_BACKUP_OFFHOST_CMD"
+OFFHOST_TIMEOUT_SECONDS = 900.0
+_OFFHOST_STDERR_MAX = 300
 BACKUP_PREFIX = "parayabuck-"
 BACKUP_SUFFIX = ".sqlite3"
 # A labelled backup (the pre-deploy snapshot the runbook requires) is
@@ -43,6 +58,10 @@ class BackupDurabilityError(RuntimeError):
     The new snapshot is removed (or marked unusable) and previous verified
     backups are preserved; pruning is not performed.
     """
+
+
+class OffhostCopyError(RuntimeError):
+    """The configured off-host copy command failed, timed out or was malformed."""
 
 
 def _validate_retention(retention_days: float) -> float:
@@ -209,7 +228,77 @@ def backup_database(
     assert destination is not None
     # Only after successful verification do we prune expired backups.
     prune_backups(target_dir, retention_days=retention, now=stamp)
+    # The local snapshot is verified and kept either way; an off-host failure is
+    # recorded as an alert (backup_failed) instead of discarding it.
+    try:
+        copy_offhost(destination)
+    except OffhostCopyError as exc:
+        _record_offhost_failure(destination, exc)
     return destination
+
+
+def offhost_command(template: str, path: str | Path) -> list[str]:
+    """Format the copy template with the quoted snapshot path and split it into argv."""
+    try:
+        formatted = template.format(path=shlex.quote(str(path)))
+    except (KeyError, IndexError, ValueError) as exc:
+        raise OffhostCopyError(f"{OFFHOST_CMD_ENV} has an invalid placeholder: {exc}") from None
+    try:
+        argv = shlex.split(formatted)
+    except ValueError as exc:
+        raise OffhostCopyError(f"{OFFHOST_CMD_ENV} is not a valid command: {exc}") from None
+    if not argv:
+        raise OffhostCopyError(f"{OFFHOST_CMD_ENV} formats to an empty command")
+    return argv
+
+
+def copy_offhost(
+    path: str | Path,
+    *,
+    env: Mapping[str, str] | None = None,
+    runner: Callable[..., Any] | None = None,
+    timeout: float = OFFHOST_TIMEOUT_SECONDS,
+) -> bool:
+    """Copy one verified snapshot off the host with ``PARAYABUCK_BACKUP_OFFHOST_CMD``.
+
+    Returns False (nothing run) when the variable is unset or empty. Returns True
+    after a zero exit. Raises ``OffhostCopyError`` otherwise. ``runner`` is the
+    injectable ``subprocess.run``.
+    """
+    source = os.environ if env is None else env
+    template = (source.get(OFFHOST_CMD_ENV) or "").strip()
+    if not template:
+        return False
+    argv = offhost_command(template, path)
+    run = runner or subprocess.run
+    try:
+        completed = run(argv, capture_output=True, text=True, timeout=timeout, check=False)
+    except subprocess.TimeoutExpired:
+        raise OffhostCopyError(f"off-host copy timed out after {timeout:g}s") from None
+    except OSError as exc:
+        raise OffhostCopyError(f"off-host copy could not start: {type(exc).__name__}") from None
+    if completed.returncode != 0:
+        stderr = str(completed.stderr or "").strip()[-_OFFHOST_STDERR_MAX:]
+        detail = f": {stderr}" if stderr else ""
+        raise OffhostCopyError(f"off-host copy exited {completed.returncode}{detail}")
+    log.info("Off-host copy of %s completed", Path(path).name)
+    return True
+
+
+def _record_offhost_failure(path: Path, error: OffhostCopyError) -> None:
+    """Journal the failure as the same ``backup_failed`` alert the timer already raises."""
+    log.error("Off-host backup copy failed for %s: %s", path.name, error)
+    try:
+        from parayabuck.monitoring.alerts import emit
+
+        emit(
+            "backup_failed",
+            message=f"Off-host backup copy failed for {path.name}: {error}",
+            reason="offhost_copy_failed",
+            backup_path=str(path),
+        )
+    except Exception:  # pragma: no cover - alerting must never mask the backup result
+        log.exception("Could not emit backup_failed for the off-host copy failure")
 
 
 def verify_backup(path: str | Path) -> bool:
@@ -306,10 +395,14 @@ __all__ = [
     "BACKUP_SUFFIX",
     "KEEP_PREFIX",
     "MAX_BACKUP_AGE_HOURS",
+    "OFFHOST_CMD_ENV",
     "BackupDurabilityError",
     "BackupVerificationError",
+    "OffhostCopyError",
     "backup_database",
+    "copy_offhost",
     "latest_backup_age_hours",
+    "offhost_command",
     "prune_backups",
     "verify_backup",
 ]

@@ -350,6 +350,11 @@ class EngineRuntime:
         # Written by the account loop after each fully successful pass; the
         # web watchdog pinger reads it (stale = the account loop is hung).
         self.last_successful_account_iteration_at: datetime | None = None
+        # Stamped after every completed account-loop pass, failed or not: the
+        # watchdog detects a hung loop, while broker outages are handled by the
+        # account-fetch breaker. ``_watchdog_started_at`` gives startup a grace.
+        self.last_account_loop_pass_at: datetime | None = None
+        self._watchdog_started_at: datetime | None = None
         # NYSE session dates already probed this process (premarket probe).
         self._premarket_probed_sessions: set[date] = set()
         self.mode = config.runtime.mode
@@ -1248,6 +1253,7 @@ class EngineRuntime:
                 raise RuntimeError("operator halt is in force")
         if self._running:
             raise RuntimeError("Engine runtime is already running")
+        self._watchdog_started_at = datetime.now(UTC)
         if self._state == "stop_failed":
             raise RuntimeError("Previous runtime workers did not stop; process restart required")
         if self.mode == RuntimeMode.DISABLED:
@@ -2110,7 +2116,6 @@ class EngineRuntime:
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
-                # systemd watchdog ping: only after a fully successful pass.
                 iteration_ok = False
                 fetched = False
                 try:
@@ -2173,8 +2178,9 @@ class EngineRuntime:
                         worker.last_error = str(exc)
                         log.warning("Readiness refresh failed: %s", exc, exc_info=True)
                 if iteration_ok:
-                    # Read by the web watchdog pinger (utils/sd_notify.py).
                     self.last_successful_account_iteration_at = datetime.now(UTC)
+                # Read by the web watchdog gate (EngineManager.watchdog_healthy).
+                self.last_account_loop_pass_at = datetime.now(UTC)
                 self._stop_event.wait(self.config.account_poll_interval_seconds)
         finally:
             worker.alive = False

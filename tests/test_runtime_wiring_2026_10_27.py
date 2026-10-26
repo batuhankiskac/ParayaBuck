@@ -106,25 +106,37 @@ def test_gate_pings_when_no_engine_is_running() -> None:
 
 
 def test_gate_pings_when_engine_runtime_is_stopped_even_with_stale_loop() -> None:
-    stopped = SimpleNamespace(_running=False, last_successful_account_iteration_at=None)
+    stopped = SimpleNamespace(_running=False, last_account_loop_pass_at=None)
     assert EngineManager.watchdog_healthy(_runtime_stub(runtime=stopped)) is True
 
 
 def test_gate_pings_while_account_loop_is_fresh() -> None:
     now = datetime(2026, 10, 27, 15, 0, tzinfo=UTC)
-    running = SimpleNamespace(_running=True, last_successful_account_iteration_at=now - timedelta(seconds=119))
+    running = SimpleNamespace(_running=True, last_account_loop_pass_at=now - timedelta(seconds=119))
     assert EngineManager.watchdog_healthy(_runtime_stub(runtime=running), now=now) is True
 
 
 def test_gate_stops_when_account_loop_is_stale() -> None:
     now = datetime(2026, 10, 27, 15, 0, tzinfo=UTC)
-    hung = SimpleNamespace(_running=True, last_successful_account_iteration_at=now - timedelta(seconds=121))
+    hung = SimpleNamespace(_running=True, last_account_loop_pass_at=now - timedelta(seconds=121))
     assert EngineManager.watchdog_healthy(_runtime_stub(runtime=hung), now=now) is False
 
 
 def test_gate_stops_when_running_engine_never_completed_an_iteration() -> None:
-    running = SimpleNamespace(_running=True, last_successful_account_iteration_at=None)
+    running = SimpleNamespace(_running=True, last_account_loop_pass_at=None)
     assert EngineManager.watchdog_healthy(_runtime_stub(runtime=running)) is False
+
+
+def test_gate_gives_startup_a_grace_before_the_first_pass() -> None:
+    now = datetime(2026, 10, 27, 15, 0, tzinfo=UTC)
+    starting = SimpleNamespace(
+        _running=True, last_account_loop_pass_at=None, _watchdog_started_at=now - timedelta(seconds=599)
+    )
+    assert EngineManager.watchdog_healthy(_runtime_stub(runtime=starting), now=now) is True
+    stuck = SimpleNamespace(
+        _running=True, last_account_loop_pass_at=None, _watchdog_started_at=now - timedelta(seconds=601)
+    )
+    assert EngineManager.watchdog_healthy(_runtime_stub(runtime=stuck), now=now) is False
 
 
 def test_pinger_sends_only_while_healthy() -> None:
@@ -169,7 +181,7 @@ def test_gate_uses_the_runtime_running_flag_not_only_the_timestamp(tmp_path: Pat
     # A stopped runtime keeps its last timestamp; that must not hold the pings.
     runtime = _runtime(tmp_path)
     runtime._running = False
-    runtime.last_successful_account_iteration_at = datetime(2020, 1, 1, tzinfo=UTC)
+    runtime.last_account_loop_pass_at = datetime(2020, 1, 1, tzinfo=UTC)
     assert EngineManager.watchdog_healthy(SimpleNamespace(runtime=runtime)) is True
 
 

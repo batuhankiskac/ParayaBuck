@@ -56,9 +56,11 @@ _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
 # first attempts, then repeats the alert every
 # ``_AUTO_START_RETRY_ALERT_REPEAT`` attempts so an endless retry loop
 # cannot flood the log/journal while still reporting itself.
-# A running engine whose account loop has not completed an iteration this long
-# is hung: the systemd watchdog pings stop (see watchdog_healthy).
+# A running engine whose account loop has not completed a pass this long is
+# hung: the systemd watchdog pings stop (see watchdog_healthy). Before the first
+# pass, startup gets the longer grace.
 _WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS = 120.0
+_WATCHDOG_STARTUP_GRACE_SECONDS = 600.0
 _AUTO_START_RETRY_ALERT_AFTER = 3
 _AUTO_START_RETRY_ALERT_REPEAT = 10
 
@@ -444,18 +446,21 @@ class EngineManager:
 
         No running engine (stopped, never started, halted before start) keeps
         the web process alive. A running engine must have finished an account
-        loop iteration within ``_WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS``; a hung
+        loop pass (successful or not) within ``_WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS``; a hung
         account loop therefore stops the pings and systemd restarts the unit.
         Lock-free on purpose: a blocked pinger would be a false watchdog kill.
         """
         runtime = self.runtime
         if runtime is None or not getattr(runtime, "_running", False):
             return True
-        last = getattr(runtime, "last_successful_account_iteration_at", None)
-        if not isinstance(last, datetime):
-            return False
         moment = now if now is not None else datetime.now(UTC)
-        return (moment - last).total_seconds() <= _WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS
+        last = getattr(runtime, "last_account_loop_pass_at", None)
+        if isinstance(last, datetime):
+            return (moment - last).total_seconds() <= _WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS
+        started = getattr(runtime, "_watchdog_started_at", None)
+        if isinstance(started, datetime):
+            return (moment - started).total_seconds() <= _WATCHDOG_STARTUP_GRACE_SECONDS
+        return False
 
     def has_active_runtime(self) -> bool:
         with self._state_lock:

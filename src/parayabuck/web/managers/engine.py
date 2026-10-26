@@ -22,13 +22,21 @@ from typing import Any
 import yaml
 from dotenv import dotenv_values
 
-from parayabuck.config import credential_file_mode_warning, load_config
+from parayabuck.config import (
+    DEFAULT_DECISION_DB_PATH,
+    credential_file_mode_warning,
+    credential_from_directory,
+    load_config,
+)
 from parayabuck.live_safety import (
     LIVE_API_KEY_ENV,
     LIVE_SECRET_KEY_ENV,
     LiveOperatorApproval,
     LiveStartupProof,
     credential_env_names,
+    operator_halt_active,
+    operator_halt_marker_path,
+    read_operator_halt,
 )
 from parayabuck.logger import get_logger
 from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
@@ -264,8 +272,9 @@ class EngineManager:
         values = dotenv_values(self.env_path) if self.env_path.exists() else {}
         if values:
             self._warn_loose_credential_file()
-        key = values.get(key_name) or os.getenv(key_name)
-        secret = values.get(secret_name) or os.getenv(secret_name)
+        # systemd credential files ($CREDENTIALS_DIRECTORY/<name>) win first.
+        key = credential_from_directory(key_name) or values.get(key_name) or os.getenv(key_name)
+        secret = credential_from_directory(secret_name) or values.get(secret_name) or os.getenv(secret_name)
         return key, secret
 
     def configure_alert_delivery(self) -> None:
@@ -294,13 +303,43 @@ class EngineManager:
             self._credential_mode_warned = key
             log.warning("%s", warning)
 
+    def operator_halt_marker(self) -> Path:
+        """Halt marker of the configured runtime data directory.
+
+        The directory is the parent of ``runtime.decision_db_path`` (the same
+        rule the CLI uses), so PAPER's ``data/runtime`` and LIVE's
+        ``data/runtime/live`` each have their own marker. An unreadable config
+        falls back to the PAPER default directory.
+        """
+        try:
+            decision_path = load_config(str(self.config_path)).runtime.decision_db_path
+        except Exception:
+            decision_path = DEFAULT_DECISION_DB_PATH
+        return operator_halt_marker_path(Path(decision_path).parent)
+
+    def _operator_halt_refusal(self) -> str | None:
+        """Refusal text while an operator halt is in force, else None."""
+        marker = self.operator_halt_marker()
+        if not operator_halt_active(marker):
+            return None
+        record = read_operator_halt(marker) or {}
+        return (
+            f"Engine start refused: operator halt is in force ({marker}; reason: "
+            f"{record.get('reason') or 'unspecified'}). Run `parayabuck resume` to clear it."
+        )
+
     def should_auto_start(self) -> bool:
         """Auto-start configured paper engines without weakening live safeguards.
 
         LIVE auto-starts only with a valid standing LIVE authorization
         (docs/live_readiness_v1.md B2); otherwise the engine stays stopped and
         ``live_rearm_required`` tells the owner a manual re-arm is needed.
+        An operator halt marker keeps the engine stopped across restarts.
         """
+        halt_refusal = self._operator_halt_refusal()
+        if halt_refusal is not None:
+            log.error("%s", halt_refusal)
+            return False
         if not trading_host_authorized():
             log.warning("%s", TRADING_HOST_REFUSAL)
             return False
@@ -598,6 +637,12 @@ class EngineManager:
         # UI keeps reporting 'stopped' instead of a failed start.
         if not trading_host_authorized():
             raise ValueError(TRADING_HOST_REFUSAL)
+        # A sticky operator halt refuses manual and automatic starts alike;
+        # checked before any state change so the console keeps 'stopped'.
+        halt_refusal = self._operator_halt_refusal()
+        if halt_refusal is not None:
+            log.error("%s", halt_refusal)
+            raise ValueError(halt_refusal)
         # Mutual exclusion with the Web backtest runner: the engine must not
         # start while an expensive in-process backtest is using the process.
         # The backtest lock is taken FIRST on both paths (BacktestManager.start
@@ -1099,6 +1144,7 @@ class EngineManager:
                     live=True,
                     account_number=str(getattr(live_broker, "account_number", "") or ""),
                     api_key=key,
+                    expected_account_id=load_config(str(self.config_path)).broker.expected_account_id,
                 )
             except LiveApprovalError as exc:
                 raise ValueError(str(exc)) from exc

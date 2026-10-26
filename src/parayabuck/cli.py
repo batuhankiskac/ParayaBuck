@@ -90,6 +90,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="delete the standing LIVE authorization (LIVE then needs a manual re-arm after every restart)",
     )
+    halt = commands.add_parser(
+        "halt",
+        help="set the sticky operator halt: engine starts are refused until `parayabuck resume`",
+    )
+    halt.add_argument("--reason", default="operator halt", help="free-text reason stored in the halt marker")
+    commands.add_parser("resume", help="clear the operator halt so the engine may start again")
     backtest = commands.add_parser("backtest", help="run a production-strategy backtest")
     _add_backtest_arguments(backtest, include_cost_stress=True)
     optimize = commands.add_parser("optimize", help="grid search on TRAIN and optional OOS data")
@@ -254,6 +260,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.command == "authorize-live":
         return _authorize_live(config, args)
+    if args.command in {"halt", "resume"}:
+        return _run_halt(config, args)
     if args.command == "backup":
         return _run_backup(config, args)
     market = Market(args.market)
@@ -362,7 +370,12 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
     from parayabuck.live_safety import LiveApprovalError, verify_account_environment
 
     try:
-        verify_account_environment(live=True, account_number=account_number, api_key=key)
+        verify_account_environment(
+            live=True,
+            account_number=account_number,
+            api_key=key,
+            expected_account_id=config.broker.expected_account_id,
+        )
     except LiveApprovalError as exc:
         raise SystemExit(str(exc)) from None
     if not account_id:
@@ -523,6 +536,55 @@ def _prune_decision_receipts() -> None:
     print(f"Receipts: {len(removed)} older than {receipt_module.MIN_RECEIPT_RETENTION_DAYS:g} day(s) pruned")
 
 
+def _operator_halt_marker(config: Config) -> Path:
+    """The halt marker of the runtime data directory the settings name."""
+    from parayabuck.live_safety import operator_halt_marker_path
+
+    return operator_halt_marker_path(Path(config.runtime.decision_db_path).parent)
+
+
+def _run_halt(config: Config, args: argparse.Namespace) -> int:
+    """`halt` writes the sticky marker; `resume` removes it. No broker calls.
+
+    Halting does not stop a running engine: stop it with the console stop
+    control or `systemctl stop parayabuck`. The marker then keeps it from
+    restarting (automatic or manual) until `resume`.
+    """
+    import getpass
+
+    from parayabuck.live_safety import clear_operator_halt, read_operator_halt, write_operator_halt
+
+    marker = _operator_halt_marker(config)
+    if args.command == "halt":
+        try:
+            user = getpass.getuser()
+        except Exception:
+            user = "unknown"
+        record = write_operator_halt(marker, reason=args.reason, user=user)
+        print(f"Operator halt set: {marker}")
+        print(f"reason={record['reason']} user={record['user']} created_at={record['created_at']}")
+        print("Engine starts are refused while the marker exists. Stop a running engine with the console stop")
+        print("control or `systemctl stop parayabuck`; `parayabuck resume` clears the halt.")
+        return 0
+    previous = read_operator_halt(marker)
+    if clear_operator_halt(marker):
+        print(f"Operator halt cleared: {marker} (was: {previous.get('reason') if previous else 'n/a'})")
+    else:
+        print(f"No operator halt present at {marker}; nothing to clear.")
+    return 0
+
+
+def _credential_permission_row(warning: str | None, *, strict: bool) -> tuple[str, str] | None:
+    """(status, detail) for the credential file mode, None when owner-only.
+
+    A loose credential file is a WARN normally and a FAIL under ``--strict``
+    (the unit's ExecStartPre), so an insecure file blocks the engine start.
+    """
+    if warning is None:
+        return None
+    return ("FAIL" if strict else "WARN", warning)
+
+
 def _run_doctor(args: argparse.Namespace) -> int:
     """Read-only deployment preflight. No orders."""
     import importlib.metadata
@@ -574,10 +636,13 @@ def _run_doctor(args: argparse.Namespace) -> int:
 
         load_env_file()
         mode_warning = credential_file_mode_warning(dotenv_path()) if dotenv_path().is_file() else None
-        if mode_warning is not None:
-            # Informational WARN that does NOT set the warning flag: a loose
-            # .env must not fail the --strict ExecStartPre and stop the VM.
-            checks.append(("credential file owner-only", "WARN", mode_warning))
+        permission_row = _credential_permission_row(mode_warning, strict=bool(args.strict))
+        if permission_row is not None:
+            # Plain doctor: WARN only. --strict (the unit's ExecStartPre): FAIL
+            # and a blocker, so a group/other-readable credential file stops start.
+            checks.append(("credential file owner-only", *permission_row))
+            if permission_row[0] == "FAIL":
+                blocker = True
         from parayabuck.live_safety import credential_env_names, mode_credentials
 
         live_mode_config = config.runtime.mode == RuntimeMode.LIVE

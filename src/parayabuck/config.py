@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
@@ -440,6 +441,22 @@ class AlpacaConfig:
 
 
 @dataclass(frozen=True)
+class BrokerConfig:
+    """Broker identity pins (``broker:`` block).
+
+    ``expected_account_id`` is the Alpaca account number (the ``PA...`` value)
+    the engine must trade. ``None`` keeps the historical behaviour; when set,
+    any other broker account refuses startup in PAPER and LIVE alike.
+    """
+
+    expected_account_id: str | None = None
+
+    def __post_init__(self) -> None:
+        value = str(self.expected_account_id or "").strip()
+        object.__setattr__(self, "expected_account_id", value or None)
+
+
+@dataclass(frozen=True)
 class DataConfig:
     """Placeholder ``data:`` block (kept so old configs still parse)."""
 
@@ -458,6 +475,37 @@ def load_env_file(*, override: bool = False) -> None:
     path = dotenv_path()
     if path.is_file():
         load_dotenv(path, override=override)
+
+
+CREDENTIALS_DIRECTORY_ENV = "CREDENTIALS_DIRECTORY"
+
+
+def credential_from_directory(name: str, env: Mapping[str, str | None] | None = None) -> str | None:
+    """Secret read from ``$CREDENTIALS_DIRECTORY/<name>`` (systemd credentials).
+
+    ``LoadCredential=`` and ``LoadCredentialEncrypted=`` expose each secret as
+    a file in the unit's private credentials directory. Returns ``None`` when
+    the variable is unset, the file is missing or unreadable, or it is empty,
+    so callers fall back to the plain environment variable.
+    """
+    source: Mapping[str, str | None] = os.environ if env is None else env
+    directory = str(source.get(CREDENTIALS_DIRECTORY_ENV) or "").strip()
+    if not directory or not name or "/" in name or name in {".", ".."}:
+        return None
+    try:
+        value = (Path(directory) / name).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    return value or None
+
+
+def read_credential(name: str, env: Mapping[str, str | None] | None = None) -> str:
+    """Credential ``name``: the systemd credential file first, then the env var.
+
+    Returns the stripped value, or an empty string when neither is set.
+    """
+    source: Mapping[str, str | None] = os.environ if env is None else env
+    return credential_from_directory(name, source) or str(source.get(name) or "").strip()
 
 
 def credential_file_mode_warning(path: Path) -> str | None:
@@ -634,6 +682,7 @@ class Config:
     app: AppConfig = field(default_factory=AppConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     alpaca: AlpacaConfig = field(default_factory=AlpacaConfig)
+    broker: BrokerConfig = field(default_factory=BrokerConfig)
     data: DataConfig = field(default_factory=DataConfig)
     universe: UniverseConfig = field(default_factory=UniverseConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
@@ -1024,6 +1073,7 @@ def load_config(config_path: str | None = None) -> Config:
         app=AppConfig(**dict(raw.get("app") or {})),
         runtime=RuntimeConfig(**runtime_raw),
         alpaca=AlpacaConfig(**alpaca_raw),
+        broker=BrokerConfig(**_block(raw.get("broker"))),
         data=DataConfig(),
         universe=UniverseConfig(equity=equity),
         strategy=StrategyConfig(equity_strategy),
@@ -1049,6 +1099,7 @@ __all__ = [
     "AppConfig",
     "BacktestConfig",
     "BackupConfig",
+    "BrokerConfig",
     "Config",
     "DataConfig",
     "DownsizeGainBand",

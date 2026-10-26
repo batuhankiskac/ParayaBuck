@@ -32,7 +32,7 @@ from parayabuck.execution.alpaca import (
     OwnershipDriftError,
     ProtectionReconciliationError,
 )
-from parayabuck.execution.alpaca_models import TERMINAL_BROKER_ORDER_STATUSES
+from parayabuck.execution.alpaca_models import TERMINAL_BROKER_ORDER_STATUSES, EmptyPositionsReadError
 from parayabuck.execution.alpaca_reconciliation import (
     _WORKING_BROKER_STATUSES,
     ReconciliationReport,
@@ -2165,6 +2165,10 @@ class EngineRuntime:
                     log.warning("Account refresh failed: %s", exc)
                     if not fetched:
                         self._note_account_fetch_failure(exc)
+                    if isinstance(exc, EmptyPositionsReadError):
+                        # Only a reconcile may accept a flat broker while the
+                        # ledger owns inventory; it clears the stale ownership.
+                        self._set_reconcile_pending("empty_positions_read")
                 self._maybe_check_trade_feed_freshness()
                 self._maybe_run_intent_watchdog()
                 self._maybe_check_standing_authorization()

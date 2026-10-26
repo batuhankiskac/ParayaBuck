@@ -37,7 +37,7 @@ from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.execution.alerting import emit_execution_alert
-from parayabuck.execution.alpaca_models import OwnershipDriftError
+from parayabuck.execution.alpaca_models import EmptyPositionsReadError, OwnershipDriftError
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.utils import is_crypto
@@ -300,9 +300,9 @@ class AccountService:
                 # not proof of a flat account: re-read once, then fail closed.
                 raw_positions = client.get_all_positions()
                 if not raw_positions:
-                    raise OwnershipDriftError(
+                    raise EmptyPositionsReadError(
                         f"Broker reported no positions while the portfolio still owns {held_by_bot}; "
-                        "snapshot refused, reconciliation is required before trading resumes"
+                        "snapshot refused until a reconcile confirms the account is flat"
                     )
         raw_positions = raw_positions or []
         drift_candidates: list[tuple[str, float, float, Market]] = []

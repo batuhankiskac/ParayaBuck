@@ -32,6 +32,12 @@ class OwnershipDriftError(ProtectionReconciliationError):
     the bot safely, so entries halt until an operator reconciles manually."""
 
 
+class EmptyPositionsReadError(RuntimeError):
+    """The broker returned no positions twice while the bot's ledger owns
+    inventory. Treated as a failed snapshot (retried, and a reconcile is
+    scheduled), not as proof that the account is flat."""
+
+
 class DefiniteOrderRejection(RuntimeError):
     """The broker definitively refused the order; the outcome is KNOWN.
 

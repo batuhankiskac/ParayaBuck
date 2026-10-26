@@ -11,7 +11,7 @@ import pytest
 
 from parayabuck.core.models import Market
 from parayabuck.execution.alpaca_account import flat_broker_reconcile_scope
-from parayabuck.execution.alpaca_models import OwnershipDriftError
+from parayabuck.execution.alpaca_models import EmptyPositionsReadError
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide, RiskOverlayDecision
 from parayabuck.monitoring.paper_incident import BrokerFillRecord, _fill_accounting
@@ -245,7 +245,7 @@ def test_empty_positions_with_owned_quantity_fail_closed_after_one_retry(tmp_pat
     fake.script_get_all_positions = empty_positions
     broker = _owned_broker(tmp_path, fake, {"AAPL": 5.0})
 
-    with pytest.raises(OwnershipDriftError, match="AAPL"):
+    with pytest.raises(EmptyPositionsReadError, match="AAPL"):
         broker.account()
     assert len(reads) == 2, "exactly one re-read before failing closed"
 
@@ -314,7 +314,7 @@ def test_reconcile_scope_accepts_empty_positions_while_owning(tmp_path: Path) ->
     with flat_broker_reconcile_scope():
         assert broker.account().positions == ()
     assert len(reads) == 1
-    with pytest.raises(OwnershipDriftError):
+    with pytest.raises(EmptyPositionsReadError):
         broker.account()  # the scope ends with the reconcile call
 
 
@@ -336,7 +336,7 @@ def test_reconcile_still_clears_stale_ownership_on_flat_broker(tmp_path: Path) -
     broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
 
     # A normal snapshot refuses the flat read while the ledger still owns shares.
-    with pytest.raises(OwnershipDriftError):
+    with pytest.raises(EmptyPositionsReadError):
         broker.account()
 
     broker.reconcile()

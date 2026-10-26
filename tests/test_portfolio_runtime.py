@@ -1409,10 +1409,18 @@ def test_ownership_drift_below_repository_quantity_is_fail_closed(tmp_path) -> N
 def test_flat_position_with_stale_ownership_does_not_raise_drift(tmp_path) -> None:
     """A fully flat stale position is the reconcile-heal path, not a drift
     halt: the heal books the missing exit leg and clears ownership."""
+    from parayabuck.execution.alpaca_account import flat_broker_reconcile_scope
+    from parayabuck.execution.alpaca_models import EmptyPositionsReadError
+
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
     broker = _portfolio_broker(FakeTradingClient(), repo, tmp_path)
-    snapshot = broker.account()
+    # A normal snapshot refuses the flat read while the ledger owns shares; it
+    # is a retryable snapshot failure, not a drift halt.
+    with pytest.raises(EmptyPositionsReadError):
+        broker.account()
+    with flat_broker_reconcile_scope():
+        snapshot = broker.account()
     assert snapshot.positions == ()
 
 

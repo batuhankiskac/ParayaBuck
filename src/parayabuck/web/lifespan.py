@@ -22,11 +22,18 @@ from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any
 
 from parayabuck.logger import get_logger
+from parayabuck.utils import sd_notify
 
 if TYPE_CHECKING:
     pass
 
 log = get_logger("parayabuck.web.lifespan")
+
+
+def _watchdog_gate(manager: Any) -> Any:
+    """Predicate for the systemd watchdog pinger (manager-less apps always pass)."""
+    gate = getattr(manager, "watchdog_healthy", None) if manager is not None else None
+    return gate if callable(gate) else (lambda: True)
 
 
 async def _auto_start_paper_engine(manager: Any) -> None:
@@ -94,6 +101,13 @@ def create_lifespan(state_provider: Any) -> Any:
         if manager is not None and should_auto_start():
             log.info("Starting configured paper engine automatically")
             auto_start_task = asyncio.create_task(_auto_start_paper_engine(manager))
+        # systemd Type=notify: the app is serving (no-op outside systemd).
+        # Independent of the engine: a stopped or halted engine must not
+        # time the unit out. The pinger keeps WATCHDOG=1 flowing only while
+        # the engine gate allows it.
+        sd_notify.ready()
+        watchdog = sd_notify.WatchdogPinger(_watchdog_gate(manager))
+        watchdog.start()
         try:
             yield
         finally:
@@ -122,5 +136,7 @@ def create_lifespan(state_provider: Any) -> Any:
                         await asyncio.to_thread(stop)
                     except Exception as exc:  # pragma: no cover
                         log.warning("Engine stop during lifespan shutdown failed: %s", exc)
+            # Stopped last: the unit keeps its watchdog while the engine stops.
+            await asyncio.to_thread(watchdog.stop)
 
     return app_lifespan

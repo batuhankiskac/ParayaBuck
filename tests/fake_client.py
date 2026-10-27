@@ -37,6 +37,17 @@ class _FakeOrder:
     legs: list[Any] = field(default_factory=list)
 
 
+class FakeNotFound(Exception):
+    """An unknown order, shaped like the SDK's APIError for HTTP 404.
+
+    The SDK raises on a missing order rather than returning None, and the
+    broker tells a 404 (never accepted) from a transport failure by
+    ``status_code``, so the fake must raise too.
+    """
+
+    status_code = 404
+
+
 class FakeTradingClient:
     """Deterministic fake for AlpacaBroker tests.
 
@@ -91,16 +102,19 @@ class FakeTradingClient:
         self._session: Any = None
 
     # Helpers
+    def _count_submission(self, request: Any) -> None:
+        if "stop" in str(type(request).__name__).lower() or "Stop" in str(type(request).__name__):
+            self.submitted_stops += 1
+        else:
+            self.submitted_market_orders += 1
+
     def _make_order(self, request: Any) -> SimpleNamespace:
         client_id = getattr(request, "client_order_id", f"parayabuck-{uuid4().hex[:8]}")
         symbol = getattr(request, "symbol", "IWM")
         side = str(getattr(request, "side", "buy"))
         qty = float(getattr(request, "qty", 1.0))
         broker_id = f"broker-{client_id}"
-        if "stop" in str(type(request).__name__).lower() or "Stop" in str(type(request).__name__):
-            self.submitted_stops += 1
-        else:
-            self.submitted_market_orders += 1
+        self._count_submission(request)
         order = _FakeOrder(id=broker_id, client_order_id=client_id, symbol=symbol, side=side, qty=qty)
         self.orders_by_id[broker_id] = order
         self.orders_by_client_id[client_id] = order
@@ -265,9 +279,16 @@ class FakeTradingClient:
             return result
         o = self.orders_by_id.get(order_id)
         if o is None:
-            return None
+            raise FakeNotFound(f"order {order_id} not found")
         return SimpleNamespace(
-            id=o.id, client_order_id=o.client_order_id, symbol=o.symbol, side=o.side, qty=str(o.qty), status=o.status
+            id=o.id,
+            client_order_id=o.client_order_id,
+            symbol=o.symbol,
+            side=o.side,
+            qty=str(o.qty),
+            status=o.status,
+            filled_qty=str(o.filled_qty),
+            filled_avg_price=str(o.filled_avg_price) if o.filled_avg_price else None,
         )
 
     def get_order_by_client_id(self, client_order_id: str) -> Any:
@@ -281,8 +302,7 @@ class FakeTradingClient:
             raise self.lookup_then_raise
         order = self.orders_by_client_id.get(client_order_id)
         if order is None:
-            # Simulate 404 by returning None (caller treats as not found)
-            return None
+            raise FakeNotFound(f"order with client_order_id {client_order_id} not found")
         # Return SimpleNamespace with same shape as broker
         return SimpleNamespace(
             id=order.id,
@@ -300,6 +320,9 @@ class FakeTradingClient:
             result = self.script_submit(request)
             if isinstance(result, Exception):
                 raise result
+            # An accepted scripted submit is an economic action like any other,
+            # so a duplicate submit shows in the counters the tests assert on.
+            self._count_submission(request)
             return result
         # Default: create order then maybe raise to simulate network drop after accept
         created = self._make_order(request)

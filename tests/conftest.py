@@ -5,14 +5,18 @@ from __future__ import annotations
 import builtins
 import contextlib
 import io
+import ipaddress
 import os
 import shutil
 import socket
+import sys
 import tempfile
 import threading
+import webbrowser
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from urllib.parse import unquote
 
 import pytest
 import yaml
@@ -40,6 +44,7 @@ _PROTECTED_STATE_DIRS = (
     _REPO_ROOT / "data" / "cache",
     _REPO_ROOT / "data" / "backups",
     _REPO_ROOT / "data" / "research_runs",
+    _REPO_ROOT / "data" / "tax",
     _REPO_ROOT / "logs",
 )
 
@@ -79,7 +84,14 @@ def _is_loopback(address: object) -> bool:
         text = str(host)
     except Exception:
         return False
-    return text in _LOOPBACK_HOSTS or text.startswith("127.")
+    if text in _LOOPBACK_HOSTS:
+        return True
+    # Parse the address rather than prefix-match it: "127.example.com" is a
+    # hostname that a prefix test would admit, and resolving it is a network call.
+    try:
+        return ipaddress.ip_address(text).is_loopback
+    except ValueError:
+        return False
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -118,6 +130,7 @@ def _block_outbound_network():
 _saved_credential_env: dict[str, str] = {}
 _session_env_dir: str | None = None
 _real_load_dotenv = None
+_real_dotenv_values = None
 
 
 def _inside_repo(path: Path) -> bool:
@@ -154,7 +167,7 @@ def _install_dotenv_guard() -> None:
     from a worktree checkout reaches the main checkout's real ``.env``, so
     an implicit search never loads anything during tests.
     """
-    global _real_load_dotenv
+    global _real_load_dotenv, _real_dotenv_values
     import dotenv
     import dotenv.main
 
@@ -177,6 +190,7 @@ def _install_dotenv_guard() -> None:
     dotenv.load_dotenv = _guarded_load_dotenv  # type: ignore[assignment]
 
     real_dotenv_values = dotenv.main.dotenv_values
+    _real_dotenv_values = real_dotenv_values
 
     def _guarded_dotenv_values(dotenv_path=None, stream=None, **kwargs):  # type: ignore[no-untyped-def]
         if stream is None and (dotenv_path is None or not _dotenv_allowed(Path(dotenv_path))):
@@ -185,6 +199,19 @@ def _install_dotenv_guard() -> None:
 
     dotenv.main.dotenv_values = _guarded_dotenv_values  # type: ignore[assignment]
     dotenv.dotenv_values = _guarded_dotenv_values  # type: ignore[assignment]
+
+    # A module that ran ``from dotenv import load_dotenv`` before this point
+    # (config.py does, through the conftest import chain) still holds the real
+    # function, and calling it reads the repo .env. Repoint those bindings.
+    for module in list(sys.modules.values()):
+        if not getattr(module, "__name__", "").startswith("parayabuck"):
+            continue
+        for name, real, guarded in (
+            ("load_dotenv", _real_load_dotenv, _guarded_load_dotenv),
+            ("dotenv_values", real_dotenv_values, _guarded_dotenv_values),
+        ):
+            if vars(module).get(name) is real:
+                setattr(module, name, guarded)
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -206,13 +233,34 @@ def pytest_unconfigure(config: pytest.Config) -> None:
         shutil.rmtree(_session_env_dir, ignore_errors=True)
 
 
-def protected_state_path(path: object) -> Path | None:
-    """Return ``path`` resolved when it names a file under a production state dir."""
+def _path_text(path: object) -> str | None:
+    """The file path ``path`` names as text, with a sqlite ``file:`` URI unwrapped.
+
+    ``sqlite3.connect(uri, uri=True)`` names a file through a ``file:`` URI, so
+    the scheme, the query string (``?mode=ro``) and any authority are not part
+    of the path. Without this, ``file:data/runtime/...`` resolved to a file
+    literally called ``file:...`` under the cwd and every read-only open of
+    production state passed the guard.
+    """
     if path is None or isinstance(path, int):
         return None
     try:
         raw = os.fsdecode(os.fspath(path))
     except TypeError:
+        return None
+    if raw.startswith("file:"):
+        rest = raw[len("file:") :].split("?", 1)[0]
+        if rest.startswith("//"):
+            slash = rest.find("/", 2)
+            rest = rest[slash:] if slash != -1 else ""
+        raw = unquote(rest)
+    return raw
+
+
+def protected_state_path(path: object) -> Path | None:
+    """Return ``path`` resolved when it names a file under a production state dir."""
+    raw = _path_text(path)
+    if raw is None:
         return None
     if not any(marker in raw for marker in _STATE_MARKERS):
         return None
@@ -235,13 +283,8 @@ def _display(path: str) -> str:
 
 def _protected_config_path(path: object) -> Path | None:
     """Return ``path`` resolved when it names a file under the shipped config dir."""
-    if path is None or isinstance(path, int):
-        return None
-    try:
-        raw = os.fsdecode(os.fspath(path))
-    except TypeError:
-        return None
-    if "config/" not in raw:
+    raw = _path_text(path)
+    if raw is None or "config/" not in raw:
         return None
     try:
         resolved = Path(raw).resolve()
@@ -399,10 +442,27 @@ def _restore_process_singletons():
             setattr(backtest, name, value)
 
 
+# Production-state accesses the guard refused during the running test. Teardown
+# fails the test on any entry, so a test that refuses one on purpose consumes
+# it with ``_STATE_ACCESSES.clear()`` after asserting the refusal.
+_STATE_ACCESSES: list[str] = []
+
+
+def _refuse_browser(*_args: object, **_kwargs: object) -> bool:
+    """Stand-in for webbrowser.open: a test never launches a browser tab."""
+    return False
+
+
 @pytest.fixture(autouse=True)
 def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     tree_before = _state_tree_signature()
     threads_before = set(threading.enumerate())
+    _STATE_ACCESSES.clear()
+
+    # web.app.main opens the dashboard in the default browser unless
+    # OPEN_BROWSER is off, so a test that reaches it opened a real tab.
+    for name in ("open", "open_new", "open_new_tab"):
+        monkeypatch.setattr(webbrowser, name, _refuse_browser)
     iso_cache = tmp_path / "warmup_isolated.sqlite3"
     iso_journal = tmp_path / "observability_isolated.sqlite3"
     iso_snapshot = tmp_path / "health_snapshot_isolated.json"
@@ -414,14 +474,12 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # Access guard: refuse every open of production state before it happens,
     # so no byte is read or written. The access is also recorded, so the
     # teardown still reports it even if the code under test swallowed the error.
-    state_accesses: list[str] = []
-
     def _check(path: object, *, writing: bool) -> None:
         hit = protected_state_path(path)
         if hit is None and writing:
             hit = _protected_config_path(path)
         if hit is not None:
-            state_accesses.append(_display(str(hit)))
+            _STATE_ACCESSES.append(_display(str(hit)))
             raise ProductionStateAccessError(
                 f"test tried to open production state {_display(str(hit))}: tests must use tmp_path"
             )
@@ -683,6 +741,8 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             f"Production state changed during test (created={created}, removed={removed}, "
             f"changed={changed}) — isolation failed; tests must use tmp_path"
         )
+    state_accesses = list(_STATE_ACCESSES)
+    _STATE_ACCESSES.clear()
     if state_accesses:
         pytest.fail(
             f"Test opened production state paths {sorted(set(state_accesses))} — isolation failed; "

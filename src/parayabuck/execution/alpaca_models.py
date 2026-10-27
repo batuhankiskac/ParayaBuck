@@ -29,7 +29,16 @@ class ProtectionReconciliationError(RuntimeError):
 class OwnershipDriftError(ProtectionReconciliationError):
     """The broker holds fewer shares than the portfolio repository claims as
     managed. With mixed inventory the remaining shares cannot be attributed to
-    the bot safely, so entries halt until an operator reconciles manually."""
+    the bot safely, so entries halt until an operator reconciles manually.
+
+    ``symbols`` names the canonical symbols the drift was found on (empty when
+    the raise site cannot attribute it). With ``runtime.per_symbol_drift_lock``
+    off the runtime halts as before; the attribute is diagnostic only there.
+    """
+
+    def __init__(self, message: str = "", *, symbols: tuple[str, ...] = ()) -> None:
+        super().__init__(message)
+        self.symbols: tuple[str, ...] = tuple(symbols)
 
 
 class EmptyPositionsReadError(RuntimeError):

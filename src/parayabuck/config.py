@@ -39,6 +39,11 @@ class RuntimeConfig:
     # blocker allows a sell-only decision (buys held, sells capped at the bot's
     # owned quantity) instead of holding the whole rebalance, sells included.
     stale_account_sell_only: bool = False
+    # Default off (whole-runtime ownership-drift halt). When on, an unexplained
+    # broker shortfall locks only the drifting symbol: its buys and sells are
+    # refused while other symbols keep trading, and the lock clears itself when
+    # the broker again covers the owned quantity. Locks are in memory only.
+    per_symbol_drift_lock: bool = False
 
     def __post_init__(self) -> None:
         # LIVE and PAPER state must never mix: the PAPER default ledger path

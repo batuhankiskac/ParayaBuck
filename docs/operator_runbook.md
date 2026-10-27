@@ -254,6 +254,29 @@ never delete the DB to "fix" drift. After a rebase, reconciliation is clean:
 reset the safety lock from the dashboard (`docs/operations.md`, section
 "Splits and foreign sells").
 
+## Per-symbol drift lock (`runtime.per_symbol_drift_lock`, default off)
+
+With the flag off, an ownership shortfall halts the whole runtime, as described
+above. With `runtime: per_symbol_drift_lock: true`, an unexplained shortfall
+(the broker holds fewer shares than the repository owns for a symbol) locks
+only that symbol:
+
+- Alert: `circuit_breaker` with `reason=symbol_ownership_drift` and the
+  `symbol` field, once per newly locked symbol. A reconcile is scheduled.
+- While locked, the bot refuses every BUY and SELL for that symbol locally
+  (no broker call; the order row is booked `rejected`). Other symbols trade
+  normally and the runtime is not halted.
+- Unlock is automatic: on the first account pass where the broker again covers
+  the owned quantity, the lock clears and a `reconciliation_recovered` alert
+  with `reason=symbol_ownership_drift_cleared` is sent. Nothing to reset.
+- Locks are in memory only. After a restart the first account snapshot
+  re-detects the shortfall and re-locks the symbol (alert again).
+- Short positions and duplicate broker positions still halt the whole runtime
+  as before, and so does any drift with no symbol attached.
+
+Check the broker and `ops bundle` as in the section above; fix the shortfall
+(or rebase it with `ops rebase-ownership`) and the lock clears by itself.
+
 ## Ambiguous order
 
 An order's broker outcome is unknown; dependent BUYs are blocked.

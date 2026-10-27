@@ -680,7 +680,7 @@ def test_gap_up_buy_partially_fills_to_available_cash_and_reports_shortfall() ->
     engine.minimum_cash = 0.01
     bars = [
         _gap_bar(epoch, 100.0, 100.0),
-        # +10% gap: 990 shares at ~110 cost ~108.9k against 100k cash.
+        # +10% gap: 980 shares at ~110 cost ~107.8k against 100k cash.
         _gap_bar(epoch + timedelta(days=1), 110.0, 110.0),
         _gap_bar(epoch + timedelta(days=2), 110.0, 110.0),
     ]
@@ -688,7 +688,10 @@ def test_gap_up_buy_partially_fills_to_available_cash_and_reports_shortfall() ->
 
     assert len(result.fills) == 1
     fill = result.fills[0]
-    decided_qty = 0.99 * 100_000.0 / 100.0
+    # The engine is built without risk limits, so the shipped 0.98 gross cap
+    # now applies (audit T2-2-1: None must not disable the overlay). The 0.99
+    # target is therefore decided as 0.98.
+    decided_qty = 0.98 * 100_000.0 / 100.0
     assert 0 < fill.qty < decided_qty
     # The fill spent the cash down to the 1% buffer (marked at the decision
     # close, when the book was all cash), never below it.

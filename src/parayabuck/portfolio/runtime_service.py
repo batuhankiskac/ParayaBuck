@@ -23,6 +23,7 @@ from parayabuck.execution.portfolio import (
     AssetTradingRules,
     DecemberDeferralHold,
     DrawdownLiquidationState,
+    GainBandFallback,
     GainBandHold,
     PortfolioExecutionPolicy,
     PortfolioOrderRequest,
@@ -35,6 +36,7 @@ from parayabuck.execution.portfolio import (
     floor_increment,
     gain_band_bypass_metadata,
     record_december_deferral_holds,
+    record_gain_band_fallbacks,
     record_gain_band_holds,
     reserve_opening_order_slots,
     validate_order_batch,
@@ -84,6 +86,10 @@ from parayabuck.tax.rates import RateBook, load_rate_book
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.portfolio.runtime_service")
+
+# Same value as ``parayabuck.runtime.STALE_ACCOUNT_SELL_ONLY_LATCH``; repeated
+# here because runtime imports this module (audit T2-10-2).
+_STALE_ACCOUNT_SELL_ONLY_LATCH = "account_snapshot_stale_sell_only"
 
 # A deferred BUY left at ``reconciliation_required`` normally resolves at the
 # next broker reconciliation; one still ambiguous after this long is raised
@@ -481,7 +487,6 @@ def _emit_no_trade_safe(
         day = (decision_timestamp or datetime.now(UTC)).date().isoformat()
         if _no_trade_last.get(key) == day:
             return
-        _no_trade_last[key] = day
         from parayabuck.monitoring.journal import emit_journal
         from parayabuck.monitoring.operational_event import create_event
 
@@ -531,7 +536,10 @@ def _emit_no_trade_safe(
             deterministic_extra=det_extra,
             fields=fields,
         )
-        emit_journal(evt)
+        # Mark the day only after the write succeeded, so a failed write retries
+        # on the next decision instead of suppressing the day's reason.
+        if emit_journal(evt):
+            _no_trade_last[key] = day
     except Exception:
         pass
 
@@ -1681,9 +1689,13 @@ class PortfolioRuntime:
                 metadata=gain_band_bypass_metadata(
                     {**raw_target.metadata, "entry_risk_latch": entry_latch},
                     (
-                        weight.symbol
-                        for weight in raw_target.weights
-                        if min(weight.weight, current_weights.get(weight.symbol, 0.0)) > 0
+                        ()
+                        if set(entry_latch.split("|")) == {_STALE_ACCOUNT_SELL_ONLY_LATCH}
+                        else (
+                            weight.symbol
+                            for weight in raw_target.weights
+                            if min(weight.weight, current_weights.get(weight.symbol, 0.0)) > 0
+                        )
                     ),
                     self.market,
                 ),
@@ -1858,6 +1870,7 @@ class PortfolioRuntime:
         decision_id = _decision_id(self.account_id, self.configuration_digest, timestamp, self.market)
         gain_band_holds: list[GainBandHold] = []
         december_deferral_holds: list[DecemberDeferralHold] = []
+        gain_band_fallbacks: list[GainBandFallback] = []
         planned = self.planner.plan(
             risk.target,
             account,
@@ -1872,12 +1885,15 @@ class PortfolioRuntime:
             open_lots=self._managed_open_lots(held_symbols | targeted_symbols),
             gain_band_holds=gain_band_holds,
             december_deferral_holds=december_deferral_holds,
+            gain_band_fallbacks=gain_band_fallbacks,
             gain_band_tl_shadow=self._gain_band_tl_shadow_probe(),
         )
         if gain_band_holds:
             risk = replace(risk, target=record_gain_band_holds(risk.target, gain_band_holds))
         if december_deferral_holds:
             risk = replace(risk, target=record_december_deferral_holds(risk.target, december_deferral_holds))
+        if gain_band_fallbacks:
+            risk = replace(risk, target=record_gain_band_fallbacks(risk.target, gain_band_fallbacks))
         if not any(order.side == PortfolioOrderSide.SELL for order in planned):
             planned = reserve_opening_order_slots(
                 planned,
@@ -3037,6 +3053,7 @@ class PortfolioRuntime:
             return self._close_unsettled_sell_legs(decision_id, untradable_held)
         gain_band_holds: list[GainBandHold] = []
         december_deferral_holds: list[DecemberDeferralHold] = []
+        gain_band_fallbacks: list[GainBandFallback] = []
         planned = self.planner.plan(
             risk.target,
             account,
@@ -3051,6 +3068,7 @@ class PortfolioRuntime:
             open_lots=self._managed_open_lots(held_or_targeted),
             gain_band_holds=gain_band_holds,
             december_deferral_holds=december_deferral_holds,
+            gain_band_fallbacks=gain_band_fallbacks,
             gain_band_tl_shadow=self._gain_band_tl_shadow_probe(),
         )
         # A re-plan that planned a SELL still owes that exit even when the SELL is
@@ -3084,6 +3102,8 @@ class PortfolioRuntime:
             risk = replace(risk, target=record_gain_band_holds(risk.target, gain_band_holds))
         if december_deferral_holds:
             risk = replace(risk, target=record_december_deferral_holds(risk.target, december_deferral_holds))
+        if gain_band_fallbacks:
+            risk = replace(risk, target=record_gain_band_fallbacks(risk.target, gain_band_fallbacks))
         # Sells before buys (C-2): a re-plan that still needs a SELL submits it and
         # keeps every BUY deferred until that SELL settles.
         replan_sells = tuple(order for order in planned if order.side == PortfolioOrderSide.SELL)

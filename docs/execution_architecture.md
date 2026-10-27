@@ -74,3 +74,23 @@ credentials.
 faults) backs `tests/execution/` — characterization, fault matrix, chaos,
 concurrency, order boundary/pagination, reconciliation repair and unknown
 orders, terminal fill recovery, client-order salt.
+
+## Backtest and LIVE parity
+
+The shared planner (`execution/portfolio.py`) decides order existence for the
+backtest and the runtime alike. The known remaining differences are:
+
+- **Live-only BUY caps.** The LIVE gap-safe BUY cap and the pro-rata BUY
+  scaling (`docs/live_readiness_v1.md` R1, `runtime_service.py`) exist only in
+  LIVE. A backtest that rotates into a position at the open can therefore be
+  slightly optimistic on rotation days. The LIVE dollar cap is also absent from
+  research. Both are documented deviations, not parity bugs.
+- **Held downsizes.** The December deferral and the gain band record their holds
+  with the same floors in both paths (an order below the increment or minimum
+  notional is not recorded as a hold). A downsize whose gain lot book is
+  unusable falls back to the constant band in both paths.
+- **Full exits.** An exit to zero is never held inside the band. In LIVE a
+  mixed position whose target keeps only the external units counts as a full
+  exit of the bot's own units.
+- **Initial holdings.** A backtest refuses an initial holding with no bar on
+  the first session instead of valuing it at a later close.

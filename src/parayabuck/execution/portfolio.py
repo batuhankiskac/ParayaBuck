@@ -87,14 +87,19 @@ class PortfolioExecutionPolicy:
     ``downsize_gain_band`` (A1u, ``docs/research/gain_band_v3.md``) widens that
     band for one case only: a downward resize between two positive weights,
     whose band becomes ``B_down(g_frac)`` of the USD FIFO gain fraction of the
-    units the sell would consume. Entries, exits to zero and up-resizes keep
-    ``rebalance_band_pct``. The code default is inactive; the packaged
-    configuration ships the schedule, mirroring the shipped YAML (the same
-    split R2's ``early_reentry_weight`` uses). ``december_deferral_sessions``
+    units the sell would consume. Entries and up-resizes keep
+    ``rebalance_band_pct``; an exit to zero is never held inside the band
+    (T7-2). The code default is inactive; the packaged configuration ships
+    the schedule, mirroring the shipped YAML (the same split R2's
+    ``early_reentry_weight`` uses). ``december_deferral_sessions``
     (H2, ``docs/research/band_h2_combo_v1.md``) postpones the same case out of
     the year end entirely: a downward resize whose fill session falls in the
     last N NYSE sessions of December waits for the first January decision.
-    Zero (the code default) disables it; the packaged configuration ships 10.
+    The deferral is deliberately sign-blind (audit T2-10-1, owner decision
+    8.3 of ``docs/audit/FINDINGS-2026-10-27.md``): a loss-realising trim is
+    postponed too, so its loss is booked in the next tax year. Changing that
+    is a research candidate, not a fix. Zero (the code default) disables it;
+    the packaged configuration ships 10.
     """
 
     rebalance_band_pct: float = 0.005
@@ -173,6 +178,25 @@ class DecemberDeferralHold:
 # ``docs/research/band_h2_combo_v1.md``). Read by the intent watchdog, which
 # must tolerate the deliberately held weight, and by the summaries.
 DECEMBER_DEFERRAL_KEY = "december_deferral"
+
+
+@dataclass(frozen=True)
+class GainBandFallback:
+    """One downsize the constant band decided because its lot book was unusable."""
+
+    symbol: str
+    reason: str
+    band: float
+
+    def as_metadata(self) -> dict[str, object]:
+        """Round-trippable decision-metadata entry (``TargetPortfolio.metadata``)."""
+        return {"symbol": self.symbol, "reason": self.reason, "band": float(self.band)}
+
+
+# Metadata key recording the downsizes that fell back to the constant band
+# because the gain band had no usable lot book (audit T2-10-4). Diagnostic only:
+# the order decision itself is unchanged.
+GAIN_BAND_FALLBACK_KEY = "gain_band_fallback"
 
 
 # Metadata key naming the symbols whose current target the RISK layer produced
@@ -386,6 +410,20 @@ def record_gain_band_holds(target: TargetPortfolio, holds: Sequence[GainBandHold
     return replace(
         target,
         metadata={**target.metadata, "gain_band": tuple(hold.as_metadata() for hold in holds)},
+    )
+
+
+def record_gain_band_fallbacks(target: TargetPortfolio, fallbacks: Sequence[GainBandFallback]) -> TargetPortfolio:
+    """Attach the gain-band downsizes decided by the constant band fallback.
+
+    Only non-empty lists add the key, so decisions without a fallback keep
+    byte-identical metadata.
+    """
+    if not fallbacks:
+        return target
+    return replace(
+        target,
+        metadata={**target.metadata, GAIN_BAND_FALLBACK_KEY: tuple(item.as_metadata() for item in fallbacks)},
     )
 
 
@@ -889,6 +927,7 @@ class TargetToOrderPlanner:
         open_lots: Mapping[str, Sequence[Sequence[float]]] | None = None,
         gain_band_holds: list[GainBandHold] | None = None,
         december_deferral_holds: list[DecemberDeferralHold] | None = None,
+        gain_band_fallbacks: list[GainBandFallback] | None = None,
         gain_band_tl_shadow: Callable[[str, Sequence[Sequence[float]], float, float, datetime], float | None]
         | None = None,
     ) -> tuple[PortfolioOrderRequest, ...]:
@@ -908,6 +947,8 @@ class TargetToOrderPlanner:
         optional diagnostics sinks: one hold is appended per suppressed or
         postponed downsize, which the caller records with the decision
         (metadata / summary) instead of silently dropping the order.
+        ``gain_band_fallbacks`` receives one entry per downsize decided by the
+        constant band because the gain band's lot book was unusable.
         """
         _validate_unique_account_positions(account)
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
@@ -984,11 +1025,13 @@ class TargetToOrderPlanner:
                 and symbol not in risk_reduced
                 and not deferral_case
             )
-            if (
-                gap < self.policy.rebalance_band_pct
-                and not gain_band_case
-                and not (target_weight == 0.0 and current_qty > 0.0)
-            ):
+            # A full exit is never held inside the band (T7-2). A mixed position
+            # whose target keeps only the external units is a full exit of the
+            # bot's own units, so it is exempt as well.
+            full_exit = (target_weight == 0.0 and current_qty > 0.0) or (
+                managed_qty > 1e-12 and target_qty <= current_qty - managed_qty + 1e-9
+            )
+            if gap < self.policy.rebalance_band_pct and not gain_band_case and not full_exit:
                 continue
             delta = target_qty - current_qty
             if delta < 0:
@@ -998,7 +1041,13 @@ class TargetToOrderPlanner:
                 if abs(delta) <= 1e-12:
                     continue
                 if deferral_case:
-                    if december_deferral_holds is not None:
+                    # Record only a downsize that would have been an order: the
+                    # same increment and minimum checks as the order floor below.
+                    preview = floor_increment(abs(delta), rule.quantity_increment)
+                    clears_floor = preview >= rule.minimum_order_size and preview * price >= max(
+                        self.policy.minimum_order_notional, rule.minimum_order_notional
+                    )
+                    if december_deferral_holds is not None and clears_floor:
                         december_deferral_holds.append(
                             DecemberDeferralHold(symbol, target_weight, current_weight, deferral_sessions)
                         )
@@ -1017,12 +1066,16 @@ class TargetToOrderPlanner:
                     if not verdict.applied:
                         # FAIL-SAFE: without a consistent lot book the resize is
                         # decided by the constant band, i.e. exactly as before.
-                        log.info(
+                        log.warning(
                             "Downsize gain band unavailable for %s (%s); using the %.4f band",
                             symbol,
                             verdict.fallback,
                             self.policy.rebalance_band_pct,
                         )
+                        if gain_band_fallbacks is not None:
+                            gain_band_fallbacks.append(
+                                GainBandFallback(symbol, verdict.fallback, self.policy.rebalance_band_pct)
+                            )
                     if gap < verdict.band:
                         if verdict.applied and gap >= self.policy.rebalance_band_pct and gain_band_holds is not None:
                             tl_fraction, tl_verdict = None, None
@@ -1216,6 +1269,7 @@ __all__ = [
     "in_december_deferral_window",
     "portfolio_execution_policy_from_config",
     "record_december_deferral_holds",
+    "record_gain_band_fallbacks",
     "record_gain_band_holds",
     "validate_order_batch",
 ]

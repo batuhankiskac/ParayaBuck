@@ -294,6 +294,16 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         sma = sum(closes[-self.sma_bars :]) / self.sma_bars
         return closes[-1] > sma, closes[-1], sma
 
+    def sma_vote(self, closes: list[float]) -> bool | None:
+        """Whether the last close is above the ``sma_bars`` average; ``None`` while history is short.
+
+        The live trend_state returns no trend below the window, so the replay must
+        not average a shorter prefix (audit T2-6-1).
+        """
+        if len(closes) < self.sma_bars:
+            return None
+        return closes[-1] > sum(closes[-self.sma_bars :]) / self.sma_bars
+
     def tsm_vote(self, closes: list[float]) -> tuple[bool | None, float | None]:
         """(``tsm_bars``-session price return > 0, that return); ``None`` vote when short or degenerate."""
         lookback = self.tsm_bars or 0
@@ -393,7 +403,7 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
             prefix = closes[: index + 1]
             tsm_up, _ = self.tsm_vote(prefix)
             don_up, _ = self.donchian_vote(prefix)
-            votes = (prefix[-1] > sum(prefix[-self.sma_bars :]) / self.sma_bars, tsm_up, don_up)
+            votes = (self.sma_vote(prefix), tsm_up, don_up)
             if any(vote is None for vote in votes):
                 active = False
                 continue
@@ -418,7 +428,9 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         detail.update(
             active=active,
             sma50=sma50,
-            above_sma50=closes[last] > sma50,
+            # The loop's running sum at the last session, so the metadata agrees
+            # with the state it describes (sma50 above is a fresh sum for display).
+            above_sma50=above_sma50,
             vol20=volumes[last],
             vol20_median252=medians[last],
             momentum20=closes[last] / momentum_base - 1.0 if momentum_base > 0 else None,

@@ -785,14 +785,15 @@ def forward_metrics(
 
 
 # ``TargetToOrderPlanner`` stamps ``portfolio_orders.reference_price`` with the
-# DECISION close while every market order fills at the NEXT SESSION OPEN. A
+# DECISION close (for a BUY, the larger of that close and the position mark,
+# audit T2-2-4) while every market order fills at the NEXT SESSION OPEN. A
 # fill minus that reference is therefore the overnight gap plus any execution
 # slippage, so it can never prove anything about the backtest cost model. The
 # open-aligned, model-comparing measurement is
 # ``shadow_comparator.paper_vs_zero_cost_open_bps``.
 _GAP_BASIS = "decision_close_reference"
 _GAP_NOTE = (
-    "portfolio_orders.reference_price is the DECISION close; market orders fill at the "
+    "portfolio_orders.reference_price is the DECISION close (BUY: max of close and mark); market orders fill at the "
     "next session OPEN, so this distribution is a next-open-vs-decision-close gap, not slippage"
 )
 _BACKTEST_ALIGNED_METRIC = "shadow_comparator.paper_vs_zero_cost_open_bps"

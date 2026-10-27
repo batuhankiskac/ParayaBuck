@@ -38,6 +38,8 @@ class RuntimeConfig:
     # Default off. When on, a stale account snapshot that is the ONLY readiness
     # blocker allows a sell-only decision (buys held, sells capped at the bot's
     # owned quantity) instead of holding the whole rebalance, sells included.
+    # Those sells are the strategy's own trims: they keep the gain band and the
+    # December deferral (audit T2-10-2), and only a risk-driven target bypasses them.
     stale_account_sell_only: bool = False
     # Default off (whole-runtime ownership-drift halt). When on, an unexplained
     # broker shortfall locks only the drifting symbol: its buys and sells are

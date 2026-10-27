@@ -9,6 +9,7 @@ event journal).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from parayabuck.core.models import AccountSnapshot, Market
@@ -98,6 +99,21 @@ def _december_deferral(entry: object) -> str | None:
     return "; ".join(described) if described else None
 
 
+def format_tax_ytd(status: Mapping[str, Any]) -> str:
+    """One YTD tax line from ``parayabuck.tax.export.ytd_status`` (pure formatting).
+
+    ``tax: rates missing`` when the USD/TRY or Yİ-ÜFE inputs cannot be used, so
+    the operator sees the gap instead of a silent omission.
+    """
+    if status.get("status") != "ok":
+        return "tax: rates missing" if status.get("status") == "rates_missing" else f"tax: {status.get('status')}"
+    net = _number(status.get("net_gain_tl"))
+    tax = _number(status.get("estimated_tax_tl"))
+    if net is None or tax is None:
+        return "tax: rates missing"
+    return f"tax YTD {status.get('year')}: net gain {net:+,.2f} TL, est. tax {tax:,.2f} TL"
+
+
 def build_equity_daily_summary(
     target: TargetPortfolio,
     account: AccountSnapshot | None,
@@ -106,12 +122,14 @@ def build_equity_daily_summary(
     decision_id: str | None,
     orders: int = 0,
     submitted: int = 0,
+    tax_ytd: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Return ``(one_line_message, structured_fields)`` for one decision.
 
     Weights are fractions of ACCOUNT equity: ``target`` is the post-risk
     target actually planned (sleeve cap applied); ``held`` is the position
-    at decision time, before the decision's orders fill.
+    at decision time, before the decision's orders fill. ``tax_ytd`` (from
+    :func:`format_tax_ytd`) is appended as the last segment when given.
     """
     metadata = target.metadata or {}
     signal_symbol = str(metadata.get("signal_symbol") or "signal")
@@ -199,6 +217,8 @@ def build_equity_daily_summary(
         f"{target.strategy_name} {session}: {trend_part} | {weight_part} | "
         f"{positions_part} | {equity_part} | {order_part}"
     )
+    if tax_ytd:
+        message = f"{message} | {tax_ytd}"
     fields: dict[str, Any] = {
         "market": Market.EQUITY.value,
         "strategy": target.strategy_name,
@@ -227,4 +247,4 @@ def build_equity_daily_summary(
     return message, fields
 
 
-__all__ = ["build_equity_daily_summary"]
+__all__ = ["build_equity_daily_summary", "format_tax_ytd"]

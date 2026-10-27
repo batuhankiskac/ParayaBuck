@@ -71,11 +71,14 @@ def main(config_path: str | os.PathLike[str] | None = None) -> None:
 
     host = os.getenv("HOST", str(app_config.get("host", "127.0.0.1")))
     container_bind = os.getenv("PARAYABUCK_CONTAINER") == "YES" and host == "0.0.0.0"
-    if container_bind and trading_host_authorized():
-        # The trading host serves the control API; it never listens off-loopback.
+    # systemd sets INVOCATION_ID for every unit it starts. The container bind is for
+    # the Docker image only, so a systemd-managed process (the trading host, whose
+    # unit env can be overridden by an EnvironmentFile line) never listens off-loopback.
+    if container_bind and (trading_host_authorized() or os.getenv("INVOCATION_ID")):
         raise ValueError(
-            "The designated trading host (PARAYABUCK_TRADING_HOST) must bind a loopback "
-            "address; the container 0.0.0.0 bind is only allowed on non-trading machines."
+            "The designated trading host (PARAYABUCK_TRADING_HOST) or a systemd-managed "
+            "process must bind a loopback address; the container 0.0.0.0 bind is only "
+            "allowed inside the container image, not under systemd."
         )
     if container_bind:
         import logging

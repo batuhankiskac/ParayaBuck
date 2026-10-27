@@ -19,12 +19,17 @@ COPY requirements.lock ./
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY config ./config
-RUN python -m pip install --upgrade pip \
+# pip is pinned (same version CI uses); the build tooling is not hashed yet (open item
+# S2-3-1 in docs/audit/raw-r7.md).
+RUN python -m pip install pip==26.2.1 \
     && python -m pip install --require-hashes -r requirements.lock \
     && python -m pip install . --no-deps
 
+# Only the state directories are writable by the service user. The source and the
+# installed package stay root-owned, so a compromised process cannot rewrite the code
+# it runs.
 RUN mkdir -p /app/data/runtime /app/reports \
-    && chown -R parayabuck:parayabuck /app
+    && chown -R parayabuck:parayabuck /app/config /app/data /app/reports
 
 USER parayabuck
 # config is a volume as well as data and reports: the operator UI persists

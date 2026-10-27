@@ -241,7 +241,8 @@ def test_backup_retention_days_rejects_values_that_prune_or_alert_wrongly(
 ) -> None:
     with pytest.raises(SystemExit) as exc:
         _parser().parse_args(["backup", "--retention-days", value])
-    assert exc.value.code == 2
+    # L1 (D2-6-4): argparse usage errors exit 64 (EX_USAGE); 2 is reserved for CRITICAL health.
+    assert exc.value.code == 64
 
 
 def test_backup_retention_days_accepts_one_day_and_more() -> None:
@@ -257,7 +258,7 @@ def test_halt_refuses_to_write_when_the_runtime_directory_is_missing(tmp_path: P
 
     code, _, err = _run("--config", str(config), "halt", "--reason", "test")
 
-    assert code == 2
+    assert code == 3  # EXIT_MISSING (L1: a missing directory is not CRITICAL health)
     assert "does not exist" in err
     assert not (tmp_path / "absent_dir").exists()
 
@@ -294,7 +295,7 @@ def test_verify_only_on_a_missing_file_reports_not_found_without_an_alert(
 
     code, _, err = _run("--config", str(config), "backup", "--verify-only", str(tmp_path / "nope.sqlite3"))
 
-    assert code == 2
+    assert code == 3  # EXIT_MISSING (L1)
     assert "Backup not found" in err
     assert alerts == []
 
@@ -307,7 +308,7 @@ def test_backup_refuses_a_missing_runtime_database_without_creating_the_backup_d
 
     code, _, err = _run("--config", str(config), "backup")
 
-    assert code == 2
+    assert code == 3  # EXIT_MISSING (L1)
     assert "runtime database not found" in err
     assert alerts == ["backup_failed"]
     assert not (tmp_path / "backups").exists()

@@ -153,6 +153,15 @@ def _import_activities(args: argparse.Namespace) -> int:
     load_env_file()
     # Resolve the ledger before any network call, so a mode mismatch fails closed.
     database = _database_path(args.config, live=bool(args.live), writing=True)
+    if not database.is_file():
+        # F2-9-6: the engine creates the ledger; an import must not create an empty one that a
+        # later start would take for an existing ledger. Refused before any network call.
+        print(
+            f"tax import-activities: ledger {database} does not exist; nothing was created. Point --config at the "
+            "configuration whose ledger the engine writes.",
+            file=sys.stderr,
+        )
+        return 1
     key, secret = mode_credentials(live=bool(args.live))
     if not key or not secret:
         print("tax import-activities: Alpaca credentials are not configured for this mode", file=sys.stderr)
@@ -169,7 +178,6 @@ def _import_activities(args: argparse.Namespace) -> int:
         adapter.close()
     parsed = [parse_activity(row, account_id) for row in raw_rows]
     raw_by_id = {str(row.get("id")): row for row in raw_rows}
-    database.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(database), timeout=5.0)
     try:
         ensure_table(connection)

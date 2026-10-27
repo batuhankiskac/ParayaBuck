@@ -7,6 +7,9 @@ no credentials and no production paths.
 
 from __future__ import annotations
 
+import contextlib
+import io
+import re
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -88,8 +91,30 @@ def _adjustments(repo: PortfolioStateRepository) -> list[tuple[str, float, float
     ]
 
 
+def _with_plan_digest(argv: tuple[str, ...]) -> tuple[str, ...]:
+    """Add the ``--plan-digest`` that the dry run prints for the same flags to a confirm run (F2-9-1)."""
+    if "--confirm" not in argv or "--plan-digest" in argv:
+        return argv
+    flags = list(argv)
+    index = flags.index("--confirm")
+    del flags[index]
+    if index < len(flags) and not flags[index].startswith("--"):
+        del flags[index]
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
+        main(["ops", "rebase-ownership", *flags])
+    match = re.search(r"Plan digest : (\w+)", buffer.getvalue())
+    return (*argv, "--plan-digest", match.group(1) if match else "0" * 12)
+
+
+@pytest.fixture(autouse=True)
+def _no_live_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A confirm run refuses while the engine heartbeat is live (F2-9-3); these tests have no engine."""
+    monkeypatch.setattr("parayabuck.cli._engine_may_be_running", lambda config: False)
+
+
 def _cli(*argv: str) -> int:
-    return main(["ops", "rebase-ownership", *argv])
+    return main(["ops", "rebase-ownership", *_with_plan_digest(argv)])
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +428,7 @@ def test_dry_run_on_a_missing_database_creates_nothing(tmp_path: Path, capsys: p
 
     exit_code = _cli(SYMBOL, "--broker-qty", "200", "--db", str(missing), "--account-id", ACCOUNT)
 
-    assert exit_code == 1
+    assert exit_code == 3  # EXIT_MISSING (L1)
     assert "Nothing was created" in capsys.readouterr().err
     assert not missing.parent.exists()
 
@@ -459,7 +484,7 @@ def test_confirm_needs_the_owned_quantity_value(tmp_path: Path, capsys: pytest.C
 
     exit_code = _cli(SYMBOL, "--broker-qty", "200", "--db", str(tmp_path / "runtime.sqlite3"), "--confirm")
 
-    assert exit_code == 2
+    assert exit_code == 64  # EXIT_USAGE (L1)
     assert "needs the owned quantity" in capsys.readouterr().err
     assert _owned(repo) == pytest.approx(100.0)
 
@@ -505,7 +530,7 @@ def test_cli_acquisition_flag_books_the_extra_shares(tmp_path: Path, capsys: pyt
 
 def _fake_config(db: str, *, universe: list[str], expected_account: str | None = None) -> SimpleNamespace:
     return SimpleNamespace(
-        runtime=SimpleNamespace(decision_db_path=db),
+        runtime=SimpleNamespace(decision_db_path=db, mode="paper"),
         broker=SimpleNamespace(expected_account_id=expected_account),
         universe=SimpleNamespace(equity=SimpleNamespace(symbols=universe)),
     )

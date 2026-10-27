@@ -1009,8 +1009,10 @@ def test_ops_explain_health_reads_the_configured_snapshot(tmp_path: Path) -> Non
         captured.update(kwargs)
         return {"checks": []}
 
+    # The decision must exist: an unknown explicit id exits 1 (D2-6-6), and this test is about health.
+    known = {"decision": {"decision_id": "dec-1"}, "orders": [], "fills": [], "rebalance": None}
     with (
-        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}),
+        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value=known),
         patch("parayabuck.monitoring.health.evaluate_health", side_effect=fake_health),
     ):
         code, _, _ = _run_cli("--config", str(config_path), "ops", "explain", "dec-1")
@@ -1089,8 +1091,9 @@ def test_ops_explain_health_uses_the_resolved_config(tmp_path: Path) -> None:
         captured.update(kwargs)
         return {"checks": []}
 
+    known = {"decision": {"decision_id": "dec-1"}, "orders": [], "fills": [], "rebalance": None}
     with (
-        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}),
+        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value=known),
         patch("parayabuck.monitoring.health.evaluate_health", side_effect=fake_health),
     ):
         code, _, _ = _run_cli("--config", str(config_path), "ops", "explain", "dec-1")
@@ -1102,7 +1105,7 @@ def test_ops_explain_health_uses_the_resolved_config(tmp_path: Path) -> None:
     # An unloadable config falls back to defaults rather than CONFIG_PATH.
     captured.clear()
     with (
-        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value={}),
+        patch("parayabuck.monitoring.forensics.decision_reconstruction", return_value=known),
         patch("parayabuck.monitoring.health.evaluate_health", side_effect=fake_health),
     ):
         code, _, _ = _run_cli(
@@ -1159,7 +1162,11 @@ def test_ops_explain_json_without_decisions_prints_one_json_object(tmp_path: Pat
 
     code, out, _ = _run_cli("--config", str(tmp_path / "missing.yaml"), "ops", "explain", "--json", "--db", str(db))
     assert code == 0
-    assert json.loads(out) == {"decision": None, "message": message}
+    # D2-6-6: the empty payload keeps the normal explain keys next to the message.
+    payload = json.loads(out)
+    assert payload["decision"] is None
+    assert payload["message"] == message
+    assert {"decision_id", "orders", "fills", "no_trade_reason", "summary_events"} <= set(payload)
 
     code, out, _ = _run_cli("--config", str(tmp_path / "missing.yaml"), "ops", "explain", "--db", str(db))
     assert code == 0

@@ -10,6 +10,9 @@ network and no production paths.
 
 from __future__ import annotations
 
+import contextlib
+import io
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -375,8 +378,34 @@ def test_a_working_exit_keeps_ownership_until_it_completes(tmp_path: Path) -> No
 # ---------------------------------------------------------------------------
 
 
+def _with_plan_digest(argv: tuple[str, ...]) -> tuple[str, ...]:
+    """Add the ``--plan-digest`` that the dry run prints for the same flags to a confirm run.
+
+    ``--confirm`` now needs the digest (F2-9-1). The dry run runs first, silently, so the
+    confirm books the plan an operator would have reviewed.
+    """
+    if "--confirm" not in argv or "--plan-digest" in argv:
+        return argv
+    flags = list(argv)
+    index = flags.index("--confirm")
+    del flags[index]
+    if index < len(flags) and not flags[index].startswith("--"):
+        del flags[index]
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
+        main(["ops", "rebase-ownership", *flags])
+    match = re.search(r"Plan digest : (\w+)", buffer.getvalue())
+    return (*argv, "--plan-digest", match.group(1) if match else "0" * 12)
+
+
+@pytest.fixture(autouse=True)
+def _no_live_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A confirm run refuses while the engine heartbeat is live (F2-9-3); these tests have no engine."""
+    monkeypatch.setattr("parayabuck.cli._engine_may_be_running", lambda config: False)
+
+
 def _cli(tmp_path: Path, *argv: str) -> int:
-    return main(["ops", "rebase-ownership", *argv])
+    return main(["ops", "rebase-ownership", *_with_plan_digest(argv)])
 
 
 def test_rebase_cli_is_a_dry_run_by_default(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -427,10 +456,12 @@ def test_rebase_cli_confirm_writes_the_audited_adjustment(tmp_path: Path, capsys
     assert _owned(repo) == pytest.approx(200.0)
     rows = repo.ownership_adjustments(ACCOUNT)
     # The corroborated split is booked as a split (the old test accepted any
-    # increase as an operator_rebase that rescaled every lot).
-    assert [(row["kind"], row["sign"], row["note"]) for row in rows] == [
-        ("split_rebase", 1.0, "QLD 2:1 split verified on the broker")
-    ]
+    # increase as an operator_rebase that rescaled every lot). The operator note
+    # now carries the proof the booking rested on (F2-9-4).
+    assert [(row["kind"], row["sign"]) for row in rows] == [("split_rebase", 1.0)]
+    note = rows[0]["note"]
+    assert note.startswith("QLD 2:1 split verified on the broker [proof: broker_average_cost=25")
+    assert "plan_digest=" in note
 
 
 def test_rebase_cli_books_a_corroborated_reverse_split_as_a_split_rebase(
@@ -481,7 +512,7 @@ def test_rebase_cli_rejects_an_invalid_broker_average_cost(
         "--confirm",
     )
 
-    assert exit_code == 2
+    assert exit_code == 64  # EXIT_USAGE (L1)
     assert "Invalid --broker-average-cost" in capsys.readouterr().err
     assert _owned(repo) == pytest.approx(100.0)
 
@@ -565,7 +596,7 @@ def test_rebase_cli_rejects_a_negative_broker_quantity(tmp_path: Path, capsys: p
         "--confirm",
     )
 
-    assert exit_code == 2
+    assert exit_code == 64  # EXIT_USAGE (L1)
     assert "Invalid --broker-qty" in capsys.readouterr().err
     assert _owned(repo) == pytest.approx(100.0)
 
@@ -580,10 +611,22 @@ def test_rebase_cli_fails_instead_of_falling_back_to_the_default_config(
     broken.write_text("runtime: {mode: backtest}\n", encoding="utf-8")
 
     exit_code = main(
-        ["--config", str(broken), "ops", "rebase-ownership", SYMBOL, "--broker-qty", "200", "--confirm", "100"]
+        [
+            "--config",
+            str(broken),
+            "ops",
+            "rebase-ownership",
+            SYMBOL,
+            "--broker-qty",
+            "200",
+            "--confirm",
+            "100",
+            "--plan-digest",
+            "0" * 12,
+        ]
     )
 
-    assert exit_code == 2
+    assert exit_code == 1  # EXIT_FAILURE (L1)
     assert "Cannot load the configuration" in capsys.readouterr().err
     assert not (tmp_path / "data").exists()
 

@@ -283,8 +283,11 @@ def test_doctor_exit_code_is_two_on_a_missing_decision(tmp_path: Path) -> None:
     """The deploy gate reads the exit code, so the alarm has to reach it."""
     snapshot = _snapshot(tmp_path, runtime_health=_runtime_health(alarms=["equity_decision_missing"]))
 
-    code, _ = _run_cli("ops", "doctor", "--config", str(tmp_path / "absent.yaml"), "--snapshot", str(snapshot))
+    # --config is a top-level option: placed after `ops doctor` it was an argparse usage error (exit 2),
+    # which made this test pass without running the doctor at all (L1 moved usage errors to 64).
+    code, out = _run_cli("--config", str(tmp_path / "absent.yaml"), "ops", "doctor", "--snapshot", str(snapshot))
 
+    assert "CRITICAL" in out
     assert code == 2
 
 

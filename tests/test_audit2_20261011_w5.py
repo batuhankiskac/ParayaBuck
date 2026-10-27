@@ -261,7 +261,7 @@ def test_cli_events_severity_is_case_insensitive(tmp_path: Path) -> None:
 def test_cli_events_rejects_an_unknown_severity(tmp_path: Path) -> None:
     code, _, err = _run_cli("ops", "events", "--severity", "error", "--journal", str(tmp_path / "j.sqlite3"))
 
-    assert code == 2
+    assert code == 64  # a usage error (L1: argparse exits EXIT_USAGE, not the CRITICAL code 2)
     assert "WARNING" in err
 
 

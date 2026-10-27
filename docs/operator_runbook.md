@@ -15,7 +15,7 @@ shared account.
 
 ```bash
 parayabuck ops status
-parayabuck ops doctor                 # exit 0 ok, 1 degraded, 2 critical
+parayabuck ops doctor                 # exit 0 ok, 1 degraded, 2 critical (all exit codes: docs/operations.md, "Exit codes")
 parayabuck ops events --since 2h
 parayabuck ops bundle --output /tmp/pb_bundle.zip   # sanitized; share status.json + recent_events.jsonl first
 curl -s http://127.0.0.1:8000/readyz | python3 -m json.tool
@@ -271,15 +271,23 @@ Then compare `ops bundle` with the Alpaca dashboard:
 - Neither explains the numbers → adopt the broker's count explicitly:
 
 ```bash
-.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty>   # dry run: prints "Owned now"
-.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty> --confirm <owned qty>
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty>   # dry run: prints "Owned now" and "Plan digest"
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty> --confirm <owned qty> --plan-digest <digest>
 ```
 
-`--confirm` takes the owned quantity the dry run printed (`Owned now`); a bare
-`--confirm` is refused, and so is a write when the ledger has changed since the dry run.
-A share increase is refused unless `--broker-average-cost` (a split, proven by the
+`--confirm` takes the owned quantity the dry run printed (`Owned now`), and
+`--plan-digest` takes the `Plan digest` that the dry run printed for the same flags.
+Both are required: a bare `--confirm` is refused, and so is a write when the
+ledger has changed since the dry run or when the flags differ (for example,
+`--broker-average-cost` left out on the confirm run, which would turn a split into a
+sale). A share increase is refused unless `--broker-average-cost` (a split, proven by the
 broker's average entry price) or `--acquisition-unit-cost` (shares bought outside the bot)
-is given; see `docs/operations.md`, "Splits and foreign sells".
+is given; the dry run prints the broker average cost it was given. The write is
+refused while the engine heartbeat is live: stop the engine first. A successful write
+journals `ownership_rebased` and stores the proof (broker average cost, expected owned,
+digest) in the adjustment note. When `broker.expected_account_id` holds the PA account
+number, the CLI checks it against the broker account for the configured mode, so the
+PA pin works; an unreachable broker refuses. See `docs/operations.md`, "Splits and foreign sells".
 
 Never edit `portfolio_ownership_adjustments`, never flatten the position and
 never delete the DB to "fix" drift. After a rebase, reconciliation is clean:
@@ -511,7 +519,8 @@ restore). Do not delete the DB.
 
 Until it is fixed, any database loss restores from a stale snapshot and
 loses the decisions in between. A `parayabuck-keep-*.sqlite3` file (made
-with `--label`) is a manual snapshot; it is never auto-pruned.
+with `--label`) is a manual snapshot; it is never auto-pruned, and `backup --label`
+prints how many labelled snapshots exist and their size. Delete old ones by hand.
 
 ## Operator halt (`parayabuck halt` / `parayabuck resume`)
 
@@ -528,7 +537,10 @@ sudo systemctl start parayabuck                           # or the console start
 
 - The marker is `data/runtime/OPERATOR_HALT` for the PAPER config (a LIVE
   config writes `data/runtime/live/OPERATOR_HALT`). It is JSON: `reason`,
-  `created_at`, `user`.
+  `created_at`, `user`. `halt` prints the mode and the marker path it wrote:
+  that is the engine the marker stops, so check it matches the engine you mean.
+  A broken settings file makes `halt` and `resume` change nothing (exit 1, with a
+  stderr line saying so).
 - While it exists, the automatic start and the console start are refused, and
   the log shows `operator halt is in force` as an ERROR. Any unreadable marker
   still counts as a halt.
@@ -537,8 +549,9 @@ sudo systemctl start parayabuck                           # or the console start
   persisted as a safety incident) and takes no new decision. `halt` does not
   cancel open orders or close positions, and it does not stop the process:
   stop the engine as shown above when it must go down.
-- `resume` only removes the marker. A restart after `resume` still starts
-  halted while the persisted `operator_halt` incident exists. Reset is refused
+- `resume` only removes the marker, and it prints whether a persisted
+  `operator_halt` incident row still exists in the decision database. A restart
+  after `resume` still starts halted while that row exists. Reset is refused
   while the marker exists and succeeds once it is gone and reconciliation
   passes (dashboard, or `POST /api/engine/reset-safety-lock`). Check
   `parayabuck doctor` and the dashboard before starting again.

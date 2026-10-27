@@ -395,15 +395,34 @@ maximum events and queue size come from the `observability:` block in
 
 ```bash
 parayabuck ops status [--json]            # overall health, trading state, per-check lines; exit 0 OK, 1 BLOCKED/DEGRADED/UNKNOWN, 2 CRITICAL
-parayabuck ops doctor [--json] [--journal PATH]   # exit 0 ok, 1 degraded, 2 critical
+parayabuck ops doctor [--json] [--journal PATH]   # exit 0 ok, 1 degraded, 2 critical (same mapping as ops status)
 parayabuck ops events --since 2h [--kind K] [--severity DEBUG|INFO|WARNING|CRITICAL] [--decision ID] [--order ID]
-    # --since / --until take ISO timestamps; a timestamp without an offset is read as UTC, not New York time
+    # --since / --until take ISO timestamps or 30m/2h/1d; a timestamp without an offset is read as UTC, not New York time
 parayabuck ops timeline --decision ID | --order ID
-parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not trade (latest = current account)
-parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys or secrets; account ids masked)
-parayabuck ops rebase-ownership SYMBOL --broker-qty QTY [--account-id ID] [--note TEXT]
-    # adopt the broker's share count for one symbol; dry run unless --confirm
+parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not trade (latest = current account); an unknown DECISION_ID exits 1
+parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys or secrets; account ids masked); prints what the bundle directory holds
+parayabuck ops rebase-ownership SYMBOL --broker-qty QTY [--broker-average-cost P] [--account-id ID] [--note TEXT]
+    # adopt the broker's share count for one symbol; dry run unless --confirm --plan-digest DIGEST (see the rebase steps below)
 ```
+
+### Exit codes
+
+Every parayabuck command uses the same five codes. Scripts, the unit's
+`ExecStartPre` (`doctor --strict`) and monitors can rely on them.
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success, OK health, or nothing to do. |
+| 1 | Refused or failed: a rebase or halt refusal, a failed backup or bundle, a `doctor` blocker (and `--strict` warnings), DEGRADED, BLOCKED or UNKNOWN health, an unknown `ops explain` decision id. |
+| 2 | CRITICAL health (`ops status`, `ops doctor`). Known exception, not yet fixed: `parayabuck tax` with no subcommand also exits 2. |
+| 3 | A file or database the command needs does not exist: the `backup --verify-only` target, the runtime database for `backup`, the halt directory, the decision database for `ops rebase-ownership`. Nothing was created. |
+| 64 | Usage error: an unknown or malformed argument, a bad `--since`/`--until` value, a bad `--broker-qty`, `--broker-average-cost` or `--acquisition-unit-cost`. |
+
+Known gaps, not yet fixed: a failed event-journal read makes `ops events` print
+`[]` and exit 0; WARNING log lines share stdout, so a `--json` output can be
+preceded by a log line on the paths that warn; and a cleanly stopped engine
+whose last snapshot is older than the tolerance reports CRITICAL (exit 2).
+Read those three before you page on exit 2 or parse `--json`.
 
 Sharing a bundle: the bundle masks account ids to `***` plus their last four
 characters (`expected_account_id`, `account_id`, `account_number` in the
@@ -463,6 +482,13 @@ next start, so that row never fails `--strict`. `--strict` does fail when
 the tracked-file scan cannot run (`git ls-files` fails, for example under a
 service user with dubious ownership), because a scan that cannot run is not
 a clean scan.
+
+It also warns (never a blocker) when an unquoted credential-file value holds an
+inline `#`, which systemd keeps in the value while the engine does not. The row
+names the key only, never the value. The `backup path writable` row checks the
+directory's permission and writes no probe file into the restore points. A
+reports directory that is missing on a read-only root is a note with the
+`install -d` command, not a start blocker.
 
 It also reports backup freshness: the age of the newest *automatic* snapshot in
 `backup.path`. Labelled `parayabuck-keep-*` snapshots do not count: they are
@@ -571,7 +597,7 @@ Failures are visible on the VM: `parayabuck backup` logs an ERROR, records
 `backup_failed` in the journal and exits non-zero (the unit shows `failed` in
 `systemctl status parayabuck-backup`) when the configuration does not load or
 a snapshot cannot be written or verified. A missing runtime database (no
-decision has been written yet) exits 2 with one `backup_failed` alert and
+decision has been written yet) exits 3 (a missing input, see "Exit codes") with one `backup_failed` alert and
 writes no backup directory. `parayabuck doctor` prints a
 `backup stale` row when the newest backup is older than 12 h, i.e. when the
 timer itself has stopped working.
@@ -580,7 +606,9 @@ timer itself has stopped working.
 `parayabuck-keep-<name>-<stamp>.sqlite3`, outside the retention prune glob:
 the pre-deploy/rollback snapshot the runbook tells you to keep is never
 auto-pruned, and it stays a valid restore candidate. Use it before every
-deploy and rollback; delete it yourself when the release is stable.
+deploy and rollback; delete it yourself when the release is stable. Nothing
+prunes labelled snapshots or `ops bundle` zips, so each run prints how many
+such files the directory holds and how many megabytes they take.
 
 Restore (never overwrite in place unverified). The units run with
 `UMask=0077`, so the ledger and the backups are mode `0600` and owned by the
@@ -740,9 +768,11 @@ actionable incident for the rest:
 .venv/bin/parayabuck ops rebase-ownership QLD --broker-qty 197.6 --broker-average-cost <broker avg price> \
   --note "QLD 2:1 split 2025-11-20 verified on the broker"
 # 2. apply it with the owned quantity the dry run printed (refused while any portfolio order is still open,
-#    and refused if the ledger has changed since the dry run); a bare --confirm is refused
+#    and refused if the ledger has changed since the dry run); a bare --confirm is refused.
+#    The dry run also prints "Plan digest"; --confirm needs that digest with the same flags, so the write
+#    books exactly the plan you reviewed (a confirm run without --broker-average-cost is refused, for example)
 .venv/bin/parayabuck ops rebase-ownership QLD --broker-qty 197.6 --broker-average-cost <broker avg price> \
-  --note "QLD 2:1 split 2025-11-20 verified on the broker" --confirm 98.8
+  --note "QLD 2:1 split 2025-11-20 verified on the broker" --confirm 98.8 --plan-digest <digest from step 1>
 # 3. reconciliation is now clean: reset the safety lock from the dashboard
 ```
 

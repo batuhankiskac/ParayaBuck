@@ -6,6 +6,7 @@ strategy decisions, risk policy, or broker APIs.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import sqlite3
@@ -223,6 +224,39 @@ class OwnershipRebasePlan:
     @property
     def refused(self) -> bool:
         return self.booking_kind == REFUSED_BOOKING
+
+
+def ownership_rebase_plan_digest(
+    account_id: str,
+    symbol: str,
+    market: Market,
+    broker_quantity: float,
+    plan: OwnershipRebasePlan,
+    *,
+    broker_average_cost: float | None = None,
+    unit_cost: float | None = None,
+) -> str:
+    """Short digest binding one rebase plan and every input that shaped it (F2-9-1).
+
+    The dry run prints it and ``--confirm`` must repeat it, so a confirm run
+    that drops ``--broker-average-cost`` (which turns a split into a sale-like
+    depletion) or runs after the ledger moved books nothing.
+    """
+    payload = {
+        "account_id": account_id,
+        "symbol": symbol,
+        "market": market.value,
+        "broker_quantity": broker_quantity,
+        "broker_average_cost": broker_average_cost,
+        "unit_cost": unit_cost,
+        "owned_quantity": plan.owned_quantity,
+        "booking_kind": plan.booking_kind,
+        "adjustment_quantity": plan.adjustment_quantity,
+        "split_effective_at": plan.split_effective_at.isoformat() if plan.split_effective_at else None,
+        "reason": plan.reason,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
 
 class _ReadOnlyStore(SQLiteStore):
@@ -2324,6 +2358,7 @@ class PortfolioStateRepository:
         broker_average_cost: float | None = None,
         unit_cost: float | None = None,
         expected_owned: float | None = None,
+        plan_digest: str | None = None,
     ) -> float:
         """Operator-verified adoption of the broker's share count.
 
@@ -2332,6 +2367,11 @@ class PortfolioStateRepository:
         order check, the owned read and the adjustment insert see one state even
         against another process (F8-3). A refused plan raises
         :class:`OwnershipRebaseRefused` and leaves the ledger unchanged.
+
+        ``plan_digest`` (from :func:`ownership_rebase_plan_digest`, printed by the
+        dry run) binds the write to the plan the operator reviewed: a different
+        plan inside the transaction is refused (F2-9-1). The note records the
+        proof used (broker average cost, unit cost, expected owned, digest).
         Returns the broker quantity.
         """
         with self.store.lock:
@@ -2351,18 +2391,38 @@ class PortfolioStateRepository:
                 )
                 if plan.refused:
                     raise OwnershipRebaseRefused(plan.reason)
+                digest = ownership_rebase_plan_digest(
+                    account_id,
+                    symbol,
+                    market,
+                    broker_quantity,
+                    plan,
+                    broker_average_cost=broker_average_cost,
+                    unit_cost=unit_cost,
+                )
+                if plan_digest is not None and plan_digest != digest:
+                    raise OwnershipRebaseRefused(
+                        f"the rebase plan is {digest}, not the {plan_digest} the dry run showed (the inputs or the "
+                        "ledger changed); run the dry run again and confirm with its digest"
+                    )
                 if plan.booking_kind != NO_BOOKING:
+                    base = note or (
+                        f"operator rebase onto the broker count: {format_quantity(plan.owned_quantity)} -> "
+                        f"{format_quantity(broker_quantity)}; {plan.reason}"
+                    )
+                    # F2-9-4: the proof the booking rested on stays in the ledger row.
+                    proof = (
+                        f"proof: broker_average_cost={broker_average_cost if broker_average_cost is not None else 'none'}; "
+                        f"unit_cost={unit_cost if unit_cost is not None else 'none'}; "
+                        f"expected_owned={format_quantity(plan.owned_quantity)}; plan_digest={digest}"
+                    )
                     self._insert_ownership_adjustment_tx(
                         account_id,
                         symbol,
                         market,
                         abs(plan.adjustment_quantity),
                         kind=plan.booking_kind,
-                        note=note
-                        or (
-                            f"operator rebase onto the broker count: {format_quantity(plan.owned_quantity)} -> "
-                            f"{format_quantity(broker_quantity)}; {plan.reason}"
-                        ),
+                        note=f"{base} [{proof}]",
                         sign=1.0 if plan.adjustment_quantity > 0 else -1.0,
                         effective_at=plan.split_effective_at,
                         unit_cost=unit_cost if plan.booking_kind == ACQUISITION_KIND else None,

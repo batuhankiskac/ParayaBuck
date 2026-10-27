@@ -1,0 +1,36 @@
+{
+  "study": "vol_regime_leverage_v1",
+  "restored_from": {
+    "engine_and_harness": "git tag archive/research/gates-v2-2026-10 (research/gates_v2, research/fast_engine, research/band_h2_combo_v1, research/trend_robustness_v2, data/historical)",
+    "dsr_stats": "git tag archive/research/gates-v1-2026-10 (research/gates_v1)"
+  },
+  "sources": {
+    "stress_robustness_v1_daily.csv": "QQQ, SPY, QLD daily bars with dividends (Yahoo chart API, 1999-03-10 onward), restored from archive/research/gates-v2-2026-10",
+    "ewma_band_v1_index.csv": "^IXIC (from 1971-02-05), ^GSPC-family index windows M1-M5 (Yahoo chart API), restored from archive/research/gates-v2-2026-10",
+    "ewma_band_v1_gspc.csv": "^GSPC daily 1950-1999 (Yahoo chart API), restored from archive/research/gates-v2-2026-10",
+    "stress_robustness_v1_dtb3.csv": "3-month T-bill daily (FRED DTB3), restored from archive/research/gates-v2-2026-10",
+    "ewma_band_v1_tb3ms.csv": "3-month T-bill monthly (FRED TB3MS, 1934-), restored from archive/research/gates-v2-2026-10",
+    "after_tax_tr_v1_usdtry_cbrt.csv": "USD-TRY (CBRT), restored from archive/research/gates-v2-2026-10",
+    "after_tax_tr_v1_yiufe.csv": "Turkish YI-UFE index (TCMB), restored from archive/research/gates-v2-2026-10",
+    "equity_entity_lifetimes_full_v5.csv": "restored with the data directory; not read by this study",
+    "equity_pit_symmetric_2016_2026_v5.manifest.json": "restored with the data directory; not read by this study",
+    "equity_survivorship_full_corporate_actions_v5.manifest.json": "restored with the data directory; not read by this study"
+  },
+  "sha256": {
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+    "data/historical/after_tax_tr_v1_yiufe.csv": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+    "data/historical/equity_entity_lifetimes_full_v5.csv": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+    "data/historical/ewma_band_v1_gspc.csv": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+    "data/historical/ewma_band_v1_index.csv": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+    "data/historical/ewma_band_v1_tb3ms.csv": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+    "data/historical/stress_robustness_v1_daily.csv": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+    "data/historical/stress_robustness_v1_dtb3.csv": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+    "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f",
+    "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json": "514cc2f608b043da2608fe87753aa45cdfbe71a99ef970aee82c1d3361955953"
+  },
+  "windows": {
+    "main": "2000-03-09 to 2026-09-29 (QQQ calendar from 1999-03-10, measured from session START)",
+    "bootstrap_calendar": "2015-09-01 to 2026-09-30 (fe_config.TAX_BOOT_LO/HI)",
+    "oos": "GSPC 1957-01-02 to 1999-12-31; M1 ^IXIC 1971-2000-first; M2 ^GSPC 1934-1956; M3 ^N225; M4 ^GDAXI; M5 ^FTSE (fe_config.MARKETS)"
+  }
+}

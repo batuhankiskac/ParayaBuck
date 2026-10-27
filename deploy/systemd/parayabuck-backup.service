@@ -14,6 +14,10 @@ WorkingDirectory=/opt/parayabuck
 EnvironmentFile=/opt/parayabuck/.env.backup
 Environment=ENV_PATH=/opt/parayabuck/.env.backup
 ExecStart=/opt/parayabuck/.venv/bin/parayabuck backup
+# The off-host copy may take up to 900 s per artifact (backup.OFFHOST_TIMEOUT_SECONDS)
+# and runs sequentially. systemd's default start timeout (90 s) would SIGTERM a copy
+# mid-upload with no backup_failed alert, so the start budget is one hour (S2-7-1).
+TimeoutStartSec=3600
 # A failed run exits non-zero (the unit shows failed in `systemctl status`)
 # and records a `backup_failed` alert in the log and the event journal
 # (`parayabuck ops events --kind backup_failed`). `parayabuck doctor` reports

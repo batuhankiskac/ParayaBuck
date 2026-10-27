@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -498,10 +499,14 @@ def create_bundle_zip(
     out.parent.mkdir(parents=True, exist_ok=True)
 
     # Written beside the target and renamed into place: a write that fails
-    # part-way leaves no partial archive that looks like a complete bundle.
-    staging = out.with_name(f".{out.name}.{os.getpid()}.tmp")
+    # part-way leaves no partial archive that looks like a complete bundle. The
+    # staging name is unpredictable and created with O_EXCL (mkstemp), so a
+    # planted symlink at that path is never followed (S2-4-6).
+    descriptor, staging_name = tempfile.mkstemp(prefix=f".{out.name}.", suffix=".tmp", dir=out.parent)
+    staging = Path(staging_name)
     try:
-        _write_bundle_archive(staging, data)
+        with os.fdopen(descriptor, "wb") as handle:
+            _write_bundle_archive(handle, data)
         os.replace(staging, out)
     except BaseException:
         staging.unlink(missing_ok=True)
@@ -509,9 +514,9 @@ def create_bundle_zip(
     return out
 
 
-def _write_bundle_archive(path: Path, data: dict[str, Any]) -> None:
-    """Write the sanitized, size-bounded bundle members of ``data`` to ``path``."""
-    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+def _write_bundle_archive(target: Any, data: dict[str, Any]) -> None:
+    """Write the sanitized, size-bounded bundle members of ``data`` to ``target`` (a path or open binary file)."""
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         # manifest
         zf.writestr("manifest.json", _dump_section(data.get("manifest")))
         zf.writestr("status.json", _dump_section(data.get("status")))

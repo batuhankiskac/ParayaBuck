@@ -201,7 +201,9 @@ current VM, `.env` in the checkout) is mode `0600` and holds every secret. The
 config loader also reads `.env`, but only from the path in `ENV_PATH` or from
 the working directory — never from a parent directory. If that credential file
 is accessible by group or other users, `doctor` prints a WARN line with the
-`chmod 600` fix (the start is not refused).
+`chmod 600` fix. Under systemd the unit's `ExecStartPre` runs `doctor --strict`,
+where the same line is a FAIL, so the start is refused until the mode is fixed.
+The engine itself only logs the warning.
 
 | Variable | Required | Notes |
 |---|---|---|
@@ -220,7 +222,11 @@ is accessible by group or other users, `doctor` prints a WARN line with the
 `parayabuck-backup.service` does not read `.env`. It reads
 `/opt/parayabuck/.env.backup` (mode `0600`, owned by `parayabuck`) and sets
 `ENV_PATH` to that file, so the backup process and the off-host copy command it
-starts inherit only what the file holds. The Alpaca keys,
+starts inherit only what the file holds. The copy command does not get the
+secret-looking names from it (`PARAYABUCK_SMTP_*`, and any name containing
+PASSWORD, SECRET, TOKEN or API_KEY). When the off-host copy is configured and
+the file is group- or other-readable, the backup logs a warning that names the
+`chmod 600` fix; the copy still runs (S2-4-4, S2-7-4). The Alpaca keys,
 `PARAYABUCK_OPERATOR_APPROVAL_KEY` and `PARAYABUCK_ENABLE_LIVE` stay in `.env` only.
 
 | Variable | Required | Notes |
@@ -365,7 +371,9 @@ PARAYABUCK_BACKUP_OFFHOST_CMD=gsutil cp {path} gs://<bucket>/parayabuck/
 ```
 
 `{path}` is shell-quoted and the command runs without a shell, with a
-900 s timeout. Unset (the default) means no copy. A failed copy keeps the
+900 s timeout per artifact (the snapshot, its peak copies and sidecars run one
+after another). The backup unit sets `TimeoutStartSec=3600` so systemd's 90 s
+default cannot kill a copy mid-upload. Unset (the default) means no copy. A failed copy keeps the
 verified local snapshot and emits `backup_failed` (reason
 `offhost_copy_failed`), which the e-mail channel forwards.
 

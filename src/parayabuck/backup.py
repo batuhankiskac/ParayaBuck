@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from parayabuck.config import credential_file_mode_warning
 from parayabuck.execution.alpaca_models import RiskStatePersistenceError
 from parayabuck.execution.risk_peak import check_peak_record
 from parayabuck.live_safety import HALT_MARKER_FILENAME, operator_halt_marker_path, read_operator_halt
@@ -39,6 +40,10 @@ log = logging.getLogger("parayabuck.backup")
 OFFHOST_CMD_ENV = "PARAYABUCK_BACKUP_OFFHOST_CMD"
 OFFHOST_TIMEOUT_SECONDS = 900.0
 _OFFHOST_STDERR_MAX = 300
+# The copy command inherits the backup environment, which also holds the SMTP
+# login. Names with these markers, and every PARAYABUCK_SMTP_* name, are not
+# passed to the child: a copy tool needs none of them (S2-7-4).
+_OFFHOST_SECRET_MARKERS = ("PASSWORD", "PASSWD", "SECRET", "TOKEN", "API_KEY", "APIKEY", "PRIVATE_KEY")
 BACKUP_PREFIX = "parayabuck-"
 BACKUP_SUFFIX = ".sqlite3"
 # A labelled backup (the pre-deploy snapshot the runbook requires) is
@@ -475,6 +480,17 @@ def offhost_command(template: str, path: str | Path) -> list[str]:
     return argv
 
 
+def _offhost_child_env(source: Mapping[str, str]) -> dict[str, str]:
+    """The backup environment minus the secret-looking names (S2-7-4)."""
+    kept: dict[str, str] = {}
+    for name, value in source.items():
+        upper = name.upper()
+        if upper.startswith("PARAYABUCK_SMTP_") or any(marker in upper for marker in _OFFHOST_SECRET_MARKERS):
+            continue
+        kept[name] = value
+    return kept
+
+
 def copy_offhost(
     path: str | Path,
     *,
@@ -486,16 +502,31 @@ def copy_offhost(
 
     Returns False (nothing run) when the variable is unset or empty. Returns True
     after a zero exit. Raises ``OffhostCopyError`` otherwise. ``runner`` is the
-    injectable ``subprocess.run``.
+    injectable ``subprocess.run``. The child gets the backup environment without
+    its secret-looking names, and a group/other-readable backup env file is logged
+    (the unit documents it as mode 0600; the copy still runs).
     """
     source = os.environ if env is None else env
     template = (source.get(OFFHOST_CMD_ENV) or "").strip()
     if not template:
         return False
+    env_file = str(source.get("ENV_PATH") or "").strip()
+    if env_file:
+        loose = credential_file_mode_warning(Path(env_file))
+        if loose:
+            log.warning("Backup environment file is not owner-only: %s", loose)
     argv = offhost_command(template, path)
     run = runner or subprocess.run
     try:
-        completed = run(argv, capture_output=True, text=True, timeout=timeout, check=False)
+        completed = run(
+            argv,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+            check=False,
+            env=_offhost_child_env(source),
+        )
     except subprocess.TimeoutExpired:
         raise OffhostCopyError(f"off-host copy timed out after {timeout:g}s") from None
     except OSError as exc:

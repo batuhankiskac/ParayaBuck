@@ -12,6 +12,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN groupadd --system parayabuck && useradd --system --gid parayabuck --home /app parayabuck
+# Note: this image has no git and .git is excluded, so the engine's tracked-secret
+# start gate cannot list tracked files and refuses engine starts (fail closed, S2-7-2).
 
 # Install the SAME locked dependency versions CI tests against, then the
 # package itself without re-resolving dependencies.

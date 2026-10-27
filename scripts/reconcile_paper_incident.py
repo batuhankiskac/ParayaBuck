@@ -254,6 +254,8 @@ def _env_path() -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Reports and fixtures are owner-only whatever the shell umask (S2-4-1).
+    os.umask(0o077)
     load_dotenv(_env_path(), override=False)
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", required=True)

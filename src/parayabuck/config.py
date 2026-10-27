@@ -625,8 +625,10 @@ def read_credential(name: str, env: Mapping[str, str | None] | None = None) -> s
 def credential_file_mode_warning(path: Path) -> str | None:
     """Warning text when the credential file is group- or world-readable.
 
-    New files are written ``0o600``; a pre-existing looser file is reported
-    (not refused, so a VM restart never fails on it).
+    New files are written ``0o600``; a pre-existing looser file is reported.
+    This function only returns the text. The engine logs it, and `parayabuck
+    doctor` shows it as WARN. Under the unit's ExecStartPre (`doctor --strict`)
+    it is a FAIL, so the systemd start is refused (S2-4-5).
     """
     try:
         mode = path.stat().st_mode

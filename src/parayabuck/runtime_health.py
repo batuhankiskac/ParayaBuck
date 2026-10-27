@@ -43,6 +43,10 @@ class RuntimeHealth:
     # Configured vs effective market-data feeds and any pending session-close
     # fallback. Observability only; never part of ``healthy``.
     market_data: dict[str, object] = field(default_factory=dict)
+    # Every halt reason in force, the breaker reason first. The breaker shows only
+    # the strongest one, so a reconciliation halt behind ownership_drift is listed here.
+    # Observability only; never part of ``healthy``.
+    halt_reasons: tuple[str, ...] = ()
 
 
 def _portfolio_catch_up_health(runtime: object) -> dict[str, str | None]:

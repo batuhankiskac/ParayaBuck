@@ -62,8 +62,7 @@
     return detail ? String(detail) : fallback;
   }
 
-  async function fetchJson(url, opts) {
-    const r = opts && opts.control ? await controlFetch(url, opts) : await fetch(url, { cache: "no-store" });
+  async function readJson(r) {
     if (!r.ok) {
       const payload = await responsePayload(r);
       const err = new Error(detailText(payload, "istek ba\u015far\u0131s\u0131z"));
@@ -72,6 +71,20 @@
       throw err;
     }
     return r.json();
+  }
+
+  // Reads give up after READ_TIMEOUT_MS: a request that never answers must not hold a poll's busy flag forever.
+  const READ_TIMEOUT_MS = 15000;
+
+  async function fetchJson(url, opts) {
+    if (opts && opts.control) return readJson(await controlFetch(url, opts));
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = controller ? global.setTimeout(function () { controller.abort(); }, READ_TIMEOUT_MS) : null;
+    try {
+      return await readJson(await fetch(url, { cache: "no-store", signal: controller ? controller.signal : undefined }));
+    } finally {
+      if (timer !== null) global.clearTimeout(timer);
+    }
   }
 
   global.PBApi = { controlFetch, responsePayload, detailText, fetchJson };

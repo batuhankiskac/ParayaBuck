@@ -998,6 +998,7 @@ class EngineRuntime:
             state=state,
             healthy=healthy,
             circuit_breaker_reason=self._circuit_breaker_reason,
+            halt_reasons=self._active_halt_reasons(),
             queue_size=self._events.qsize(),
             queue_age_seconds=queue_age,
             dropped_events=self._dropped_events,

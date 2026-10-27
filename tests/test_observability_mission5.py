@@ -752,36 +752,44 @@ def test_alert_unknown_kind_rejected() -> None:
 
 def test_journal_failure_does_not_crash_trading(tmp_path: Path) -> None:
     # Simulate trading decision that emits journal but journal fails
-    with patch("parayabuck.monitoring.journal.emit_journal", side_effect=Exception("journal down")):
-        # trading code that calls observe should not raise
-        from parayabuck.monitoring import observe
+    from parayabuck.monitoring import observe
 
+    observe.reset_dedup_for_tests()
+    # observe binds emit_journal at import, so the patch must target observe's own name
+    with patch("parayabuck.monitoring.observe.emit_journal", side_effect=Exception("journal down")) as emit:
+        # trading code that calls observe should not raise
         try:
             observe.on_decision_summary(decision_id="dec", market="equity")
             observe.on_account_stale()
             observe.on_rebalance_phase_changed(decision_id="dec", from_phase="SELL_PENDING", to_phase="BUY_READY")
         except Exception:
             pytest.fail("observe should never raise")
+    assert emit.call_count == 3, "the failing journal must actually be reached"
+    observe.reset_dedup_for_tests()
 
 
-def test_snapshot_failure_does_not_crash() -> None:
-    with patch("parayabuck.monitoring.snapshot.write_snapshot_atomic", side_effect=Exception("disk full")):
-        writer = SnapshotWriter(path="/tmp/bad/snap.json", interval_seconds=0.1, provider=lambda: {})
+def test_snapshot_failure_does_not_crash(tmp_path: Path) -> None:
+    target = tmp_path / "snap.json"
+    with patch("parayabuck.monitoring.snapshot.write_snapshot_atomic", side_effect=Exception("disk full")) as write:
+        writer = SnapshotWriter(path=str(target), interval_seconds=0.1, provider=lambda: {})
         # write_once should not raise
         try:
             writer.write_once()
         except Exception:
             pytest.fail("snapshot write should not raise")
+    assert write.call_count == 1, "the failing writer must actually be reached"
+    assert not target.exists()
 
 
 def test_alert_failure_does_not_crash() -> None:
     alerts.reset_for_tests()
     alerts.configure_alerting(throttle_seconds=0)
-    with patch("parayabuck.monitoring.journal.emit_journal", side_effect=Exception("journal down")):
+    with patch("parayabuck.monitoring.journal.emit_journal", side_effect=Exception("journal down")) as emit:
         try:
             alerts.emit("runtime_started", message="x")
         except Exception:
             pytest.fail("alert emit should never raise")
+    assert emit.call_count == 1, "the failing journal must actually be reached"
     alerts.reset_for_tests()
 
 

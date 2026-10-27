@@ -20,6 +20,15 @@ def default_receipt_dir() -> Path:
     return Path("data/runtime/paper_receipts")
 
 
+def _fsync_directory(directory: Path) -> None:
+    """Persist the directory entry: a link is not durable until its directory is synced."""
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def write_decision_receipt_v2(payload: dict[str, Any], directory: str | Path) -> Path:
     """Publish an immutable decision snapshot; SQLite owns later order/fill truth."""
     if payload.get("schema_version") != 2 or not payload.get("decision_id"):
@@ -49,6 +58,7 @@ def write_decision_receipt_v2(payload: dict[str, Any], directory: str | Path) ->
             identity = ("schema_version", "receipt_id", "decision_id", "market", "origin", "configuration_digest")
             if any(existing.get(key) != payload.get(key) for key in identity):
                 raise ValueError(f"Decision receipt conflict for {decision_id}") from None
+        _fsync_directory(root)
     finally:
         Path(temp_name).unlink(missing_ok=True)
     return path

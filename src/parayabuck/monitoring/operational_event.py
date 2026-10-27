@@ -79,11 +79,39 @@ _REDACTED_KEYS: frozenset[str] = frozenset(
         "alpaca_api_key",
         "alpaca_secret_key",
         "live_approval_key",
+        # Bearer/session credentials and the alert e-mail routing (addresses and
+        # the SMTP relay) are operator-private: they never reach a journal row or
+        # a diagnostic bundle in the clear.
+        "token",
+        "access_token",
+        "credential",
+        "credentials",
+        "bearer",
+        "bearer_token",
+        "smtp_host",
+        "from_address",
+        "to_addresses",
+        "to_address",
+        "email_address",
+        "recipients",
     }
 )
 
+# Account numbers are not secrets the trading path needs, but they identify the
+# live account: the value is masked to its last four characters, never dropped.
+_ACCOUNT_NUMBER_KEYS: frozenset[str] = frozenset({"account_number", "account_id", "expected_account_id"})
 
-_SENSITIVE_SUBSTRINGS: tuple[str, ...] = ("secret", "webhook", "password", "approval_key", "api_key")
+
+_SENSITIVE_SUBSTRINGS: tuple[str, ...] = (
+    "secret",
+    "webhook",
+    "password",
+    "approval_key",
+    "api_key",
+    "credential",
+    "bearer",
+    "token",
+)
 
 
 def _is_sensitive(key: str) -> bool:
@@ -92,23 +120,37 @@ def _is_sensitive(key: str) -> bool:
     return low in _REDACTED_KEYS or any(fragment in low for fragment in _SENSITIVE_SUBSTRINGS)
 
 
+def mask_account_number(value: object) -> str:
+    """``***`` plus the last four characters of an account number (``***`` alone when shorter)."""
+    text = str(value or "")
+    return f"***{text[-4:]}" if len(text) > 4 else ("***" if text else "")
+
+
+def _redact_item(key: str, value: object) -> object:
+    if _is_sensitive(key):
+        return "***REDACTED***"
+    if key.lower() in _ACCOUNT_NUMBER_KEYS and value not in (None, ""):
+        return mask_account_number(value)
+    return _redact_value(value)
+
+
 def _redact_value(value: object) -> object:
     """Recursively redact sensitive keys inside nested mappings and lists."""
     if isinstance(value, Mapping):
-        return {
-            key: ("***REDACTED***" if _is_sensitive(str(key)) else _redact_value(item)) for key, item in value.items()
-        }
+        return {str(key): _redact_item(str(key), item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_redact_value(item) for item in value]
     return value
 
 
 def redact_fields(fields: Mapping[str, object]) -> dict[str, object]:
-    """Return copy with secret keys redacted, nested values included."""
-    redacted: dict[str, object] = {}
-    for key, value in fields.items():
-        redacted[key] = "***REDACTED***" if _is_sensitive(str(key)) else _redact_value(value)
-    return redacted
+    """Return copy with secret keys redacted, nested values included.
+
+    Account numbers are masked to their last four characters and e-mail
+    routing (addresses, SMTP host) is redacted. Diagnostic bundles pass the
+    whole config through this function, so they share the same policy.
+    """
+    return {str(key): _redact_item(str(key), value) for key, value in fields.items()}
 
 
 # ---------------------------------------------------------------------------

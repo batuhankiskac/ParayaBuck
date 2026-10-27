@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
-from parayabuck.markets.nyse_calendar import NEW_YORK
+from parayabuck.markets.nyse_calendar import NEW_YORK, calendar_degraded_reason
 from parayabuck.utils.objects import field_value
 
 
@@ -33,6 +33,7 @@ def premarket_probe(
     calendar_sessions: Iterable[tuple[date, datetime, datetime]],
     open_orders_local: Iterable[str],
     max_clock_skew_seconds: float = 2.0,
+    calendar_degraded: bool | None = None,
 ) -> ProbeResult:
     """Check the broker against local time, the NYSE calendar and local orders.
 
@@ -40,6 +41,11 @@ def premarket_probe(
     returned by ``parayabuck.markets.nyse_calendar.sessions_around``. The
     expected ``next_open`` / ``next_close`` are the first session boundaries
     strictly after ``now``, which is what Alpaca reports for the clock.
+
+    While the calendar is degraded (``calendar_degraded``; default: the calendar
+    module's own state) the fallback counts every weekday, holidays included,
+    so the next_open/next_close comparison would fail on every holiday. Those
+    comparisons are skipped; clock skew and open-order parity still run.
     """
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("premarket_probe needs a timezone-aware now")
@@ -54,6 +60,8 @@ def premarket_probe(
     if abs(skew) > max_clock_skew_seconds:
         reasons.append(f"clock skew {skew:+.3f}s exceeds {max_clock_skew_seconds:.3f}s")
 
+    if calendar_degraded is None:
+        calendar_degraded = calendar_degraded_reason() is not None
     sessions = tuple(calendar_sessions)
     expected_next_open = next((opened for _, opened, _ in sorted(sessions, key=lambda s: s[1]) if opened > now), None)
     expected_next_close = next((closed for _, _, closed in sorted(sessions, key=lambda s: s[2]) if closed > now), None)
@@ -61,7 +69,7 @@ def premarket_probe(
         reasons.append(
             f"NYSE calendar has no session after {now.astimezone(NEW_YORK).date().isoformat()}; cannot verify broker clock"
         )
-    else:
+    elif not calendar_degraded:
         if clock.next_open != expected_next_open:
             reasons.append(
                 f"broker next_open {clock.next_open.isoformat()} disagrees with NYSE calendar "

@@ -181,10 +181,12 @@ class _Http:
 _HC = "https://hc-ping.example/0000-test-uuid"
 
 
-def test_deadman_is_a_no_op_without_a_url() -> None:
+def test_deadman_fails_loudly_without_a_url(capsys: pytest.CaptureFixture[str]) -> None:
+    """DD5-3: no heartbeat URL is a configuration error (non-zero exit), never a silent no-op."""
     http = _Http(200)
-    assert deadman.run({}, http=http, credentials_dir="") == 0
+    assert deadman.run({}, http=http, credentials_dir="") == 1
     assert http.calls == []
+    assert "no heartbeat URL" in capsys.readouterr().err
 
 
 def test_deadman_pings_success_when_readiness_is_200() -> None:

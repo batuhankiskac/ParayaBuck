@@ -123,6 +123,7 @@ def build_equity_daily_summary(
     orders: int = 0,
     submitted: int = 0,
     tax_ytd: str | None = None,
+    order_sides: Mapping[str, tuple[int, int]] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Return ``(one_line_message, structured_fields)`` for one decision.
 
@@ -130,6 +131,11 @@ def build_equity_daily_summary(
     target actually planned (sleeve cap applied); ``held`` is the position
     at decision time, before the decision's orders fill. ``tax_ytd`` (from
     :func:`format_tax_ytd`) is appended as the last segment when given.
+
+    ``order_sides`` maps a side (``"sell"``, ``"buy"``) to ``(submitted,
+    planned)``. When given, the order segment reports each side on its own, so
+    submitted SELLs are not netted against BUYs that the rebalance deferred.
+    Without it the segment keeps the combined ``submitted/orders`` count.
     """
     metadata = target.metadata or {}
     signal_symbol = str(metadata.get("signal_symbol") or "signal")
@@ -212,7 +218,11 @@ def build_equity_daily_summary(
             equity_part += f", {daily_change_pct:+.2f}% d/d)" if daily_change_pct is not None else " d/d)"
     else:
         equity_part = "equity n/a"
-    order_part = f"{status} orders {submitted}/{orders}"
+    if order_sides:
+        split = " ".join(f"{side} {done}/{planned}" for side, (done, planned) in order_sides.items())
+        order_part = f"{status} orders {split}"
+    else:
+        order_part = f"{status} orders {submitted}/{orders}"
     message = (
         f"{target.strategy_name} {session}: {trend_part} | {weight_part} | "
         f"{positions_part} | {equity_part} | {order_part}"
@@ -244,6 +254,10 @@ def build_equity_daily_summary(
         "orders_planned": orders,
         "orders_submitted": submitted,
     }
+    if order_sides:
+        fields["orders_by_side"] = {
+            side: {"submitted": done, "planned": planned} for side, (done, planned) in order_sides.items()
+        }
     return message, fields
 
 

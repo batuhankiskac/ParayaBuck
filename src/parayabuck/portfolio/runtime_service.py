@@ -1805,11 +1805,12 @@ class PortfolioRuntime:
             if position.market == self.market and not position.is_flat
         }
         targeted_symbols = {canonical_symbol(weight.symbol, self.market) for weight in risk.target.weights}
-        rules = {
-            symbol: self.broker.asset_trading_rules(symbol, self.market)
-            for symbol in self.symbols
-            if symbol in held_symbols or symbol in targeted_symbols
-        }
+        # Wrapped like the deferred path: a held symbol the broker refuses is
+        # left out (and alerted once), so it cannot fail the whole decision and
+        # block the exits of every other symbol.
+        rules = self._trading_rules_for(
+            symbol for symbol in self.symbols if symbol in held_symbols or symbol in targeted_symbols
+        )
         # The order idempotency key must be scoped to the account-local
         # decision identity (account + configuration digest + timestamp +
         # market), otherwise two configurations sharing a strategy name,
@@ -2071,6 +2072,14 @@ class PortfolioRuntime:
         if current is None or current.phase == REBALANCE_PHASE_COMPLETE:
             return None
         if current.phase == REBALANCE_PHASE_BLOCKED:
+            # Closing a settled block sends nothing. It runs here only while the
+            # market is ACTIVE (``submit_deferred_buys``: no halt, reconciliation
+            # verified), so a late trade event after an operator reset does not
+            # re-raise the halt the reset just cleared (the decision path is
+            # otherwise the only closer, and it is halted too).
+            if submit_deferred_buys and self._close_settled_blocked_rebalance(current.decision_id):
+                # Closed, so there is nothing in flight: ``None`` lets the caller plan as usual.
+                return None
             return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_blocked")
         if current.phase == REBALANCE_PHASE_BUY_READY:
             if not submit_deferred_buys:
@@ -2466,9 +2475,9 @@ class PortfolioRuntime:
     def _close_settled_blocked_rebalance(self, decision_id: str) -> bool:
         """Close a BLOCKED rebalance whose orders have all settled.
 
-        Only the decision path calls this, and the engine runs that path only
-        while the market has no entry halt, i.e. after reconciliation verified
-        the blocked decision. The stale deferred BUYs are never submitted: the
+        Called by the decision path and by ``advance_rebalance`` when the market
+        is ACTIVE (no entry halt, i.e. after reconciliation verified the blocked
+        decision). Closing sends nothing. The stale deferred BUYs are never submitted: the
         rebalance is closed as ``complete``/``closed_unresolved`` and the next
         scheduled decision re-plans from a fresh target. A block whose decision
         cannot be restored is raised to the operator once and closed the same
@@ -2483,14 +2492,19 @@ class PortfolioRuntime:
                 category="rebalance_unrecoverable",
                 decision_id=decision_id,
             )
+        # No order rows means nothing of this decision was ever sent, so the
+        # block has settled already (an empty ``all`` is true). Requiring rows
+        # left such a block unclosable: the reset could not clear its halt and
+        # every restart re-halted.
         orders = self.repository.orders_for_decision(decision_id)
-        if not orders or not all(is_terminal_order_status(str(item["status"])) for item in orders):
+        if not all(is_terminal_order_status(str(item["status"])) for item in orders):
             return False
         self.repository.update_rebalance_execution(
             decision_id, REBALANCE_PHASE_COMPLETE, status=REBALANCE_STATUS_CLOSED_UNRESOLVED
         )
         log.warning(
-            "Blocked rebalance closed after its orders settled; deferred BUYs discarded: market=%s decision=%s",
+            "Blocked rebalance closed after its orders settled; deferred BUYs discarded "
+            "(SELLs keep their own outcomes and any owed exit is retried): market=%s decision=%s",
             self._market_name(),
             decision_id,
         )
@@ -2595,12 +2609,13 @@ class PortfolioRuntime:
         try:
             from parayabuck.monitoring import alerts
 
+            # ``market`` may also arrive in ``fields``: one keyword, never two (a
+            # duplicate raised TypeError and the alert was silently lost).
             alerts.emit(
                 "paper_incident",
                 message=message,
                 incident_id=f"{key[1]}:{key[0]}",
-                market=self._market_name(),
-                **fields,
+                **{**fields, "market": self._market_name()},
             )
         except Exception:
             # Not recorded as raised: the next occurrence retries the alert.
@@ -2667,11 +2682,15 @@ class PortfolioRuntime:
                 status, broker_order_id = outcome, str(item.get("broker_order_id") or "")
             self.repository.update_order(client_order_id, status, broker_order_id)
             if status == "canceled":
-                # The broker has no such order, so it was never sent and is not re-sent here: the
-                # work it belonged to is not retried this session. Raise it rather than drop it silently.
+                # The broker has no such order, so it never reached the broker under this id. It is
+                # not re-sent here; a re-plan may still send the same work under a new id (``-replan``),
+                # so the alert says that instead of claiming the work was dropped. Raise it rather than drop it silently.
                 self._raise_operator_alert_once(
                     (client_order_id, "submission_resolved_canceled"),
-                    message="Submitting order resolved as canceled by the broker lookup; it was not re-sent",
+                    message=(
+                        "Submitting order resolved as canceled by the broker lookup: it never reached the broker "
+                        "under this id; a re-plan may send the same work under a new id"
+                    ),
                     category="submission_resolved_canceled",
                     client_order_id=client_order_id,
                     side=str(item.get("side") or ""),
@@ -3664,25 +3683,53 @@ class PortfolioRuntime:
                     side=order.side.value,
                 )
                 continue
-            except Exception:
+            except Exception as exc:
                 try:
                     self.repository.record_submit_call_returned(order.client_order_id, datetime.now(UTC))
                 except Exception:
                     log.warning("Could not record order submit return for %s", order.client_order_id, exc_info=True)
                 self.repository.update_order(order.client_order_id, "reconciliation_required")
-                # The batch's later orders were never sent: their rows, written
-                # at ``submitting`` with the decision, are canceled now. Left
-                # as is they are missing at the broker, so reconciliation
-                # reports drift and halts decisions before any resolver runs.
+                # The batch's later orders were never sent. Left at ``submitting``
+                # they would be reported as drift before any resolver runs, so
+                # they are booked now. A later BUY is canceled (its side is
+                # re-planned). A later SELL is booked ``rejected`` instead: that
+                # is a definite not-sent outcome, the exit is retried once by
+                # ``retry_rejected_exit_sells``, and the operator is alerted.
+                # Canceling it quietly would drop an exit the book still owes.
                 for untried in orders[index + 1 :]:
-                    if existing_by_client.get(untried.client_order_id) == "submitting":
+                    if existing_by_client.get(untried.client_order_id) != "submitting":
+                        continue
+                    if untried.side == PortfolioOrderSide.SELL:
+                        self.repository.update_order(untried.client_order_id, "rejected")
+                        _emit_order_rejected_safe(
+                            client_order_id=untried.client_order_id,
+                            symbol=untried.symbol,
+                            market=self._market_name(),
+                            decision_id=untried.decision_id,
+                            reason="batch_not_sent",
+                            error=f"an earlier order of the batch failed before this SELL was sent: {exc}",
+                            side=untried.side.value,
+                        )
+                    else:
                         self.repository.update_order(untried.client_order_id, "canceled")
                 raise
             try:
                 self.repository.record_submit_call_returned(order.client_order_id, datetime.now(UTC))
             except Exception:
                 log.warning("Could not record order submit return for %s", order.client_order_id, exc_info=True)
-            self.repository.update_order(order.client_order_id, "submitted", broker_order_id)
+            try:
+                self.repository.update_order(order.client_order_id, "submitted", broker_order_id)
+            except Exception:
+                # The broker accepted the order, so it is not a failed submit: a
+                # row left at ``submitting`` is resolved by its client id lookup
+                # on a later advance, and it must not be treated as not sent.
+                log.critical(
+                    "Accepted order could not be recorded as submitted; row stays submitting: "
+                    "client_order_id=%s broker_order_id=%s",
+                    order.client_order_id,
+                    broker_order_id,
+                    exc_info=True,
+                )
             submitted.append(broker_order_id)
         return tuple(submitted)
 

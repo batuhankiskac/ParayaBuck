@@ -1078,6 +1078,9 @@ class EngineRuntime:
                     self._invalidate_account_snapshot_after_execution()
             except Exception as exc:
                 log.exception("Rejected SELL retry failed: market=%s", portfolio_runtime.market.value)
+                # The retry may have submitted some SELLs before it raised: their
+                # fills must reach the next account snapshot, so drop the cache.
+                self._invalidate_account_snapshot_after_execution()
                 alerts.emit(
                     "exit_sell_rejected",
                     message=f"Retry of a rejected SELL could not be submitted: {exc}",
@@ -3006,7 +3009,7 @@ class EngineRuntime:
                     if account is not None:
                         advance_kwargs["account"] = account
                     result = portfolio_runtime.advance_rebalance(**advance_kwargs)
-            except Exception:
+            except Exception as exc:
                 # The persisted two-phase state stays pending and every later
                 # trade update retries — so the traceback is the only forensic
                 # record of a persistent failure.
@@ -3014,7 +3017,13 @@ class EngineRuntime:
                     "Two-phase rebalance advance failed: market=%s",
                     market.value,
                 )
+                # Not silent: an unadvanced rebalance is otherwise closed as
+                # superseded by the next session and its deferred BUYs discarded.
+                self._note_rebalance_advance_failure(market, exc)
                 continue
+            failures = getattr(self, "_rebalance_advance_failures", None)
+            if failures:
+                failures.pop(market, None)
             if result is not None and result.status == "rebalance_blocked":
                 with getattr(self, "_state_lock", threading.RLock()):
                     self._market_entry_halts[market] = "rebalance_reconciliation_required"
@@ -3032,6 +3041,34 @@ class EngineRuntime:
                 )
             return result
         return None
+
+    def _note_rebalance_advance_failure(self, market: Market, exc: Exception) -> None:
+        """Alert the operator and latch the market pending reconciliation.
+
+        The persisted rebalance is left as it is, so every later advance
+        retries it. The entry halt is the reconcile-pending latch: entries
+        stay blocked (exits are not) until a verified reset, which also
+        re-runs the advance. The alert throttles per market, and the count of
+        consecutive failures is carried in its fields.
+        """
+        failures = getattr(self, "_rebalance_advance_failures", None)
+        if failures is None:
+            failures = self._rebalance_advance_failures = {}
+        failures[market] = failures.get(market, 0) + 1
+        with getattr(self, "_state_lock", threading.RLock()):
+            self._market_entry_halts[market] = "rebalance_reconciliation_required"
+        try:
+            alerts.emit(
+                "paper_incident",
+                message="Two-phase rebalance advance failed; entries halted pending reconciliation",
+                incident_id=f"rebalance_advance_failed:{market.value}",
+                category="rebalance_advance_failed",
+                market=market.value,
+                failures=failures[market],
+                error=str(exc),
+            )
+        except Exception:
+            log.warning("Rebalance advance failure alert could not be emitted", exc_info=True)
 
     def _resume_startup_rebalances(self, *, account: AccountSnapshot) -> None:
         """Resume pending rebalances against one account snapshot."""
@@ -4325,7 +4362,10 @@ class EngineRuntime:
         Only a network-class failure qualifies, and only while no decision
         row exists for the batch's session: the decision row and its order
         rows are persisted in one transaction, so no decision row means no
-        order was persisted (nor submitted) for it. Anything else — a domain
+        order of THIS session's decision was persisted (nor submitted). A
+        previous decision's open rebalance may still send its residual SELLs
+        before the retry; that is safe to repeat because residual ids are
+        deterministic and an existing row is never sent again. Anything else — a domain
         or database failure, or a failure after the decision was written —
         fails closed. A repository that cannot answer fails closed too.
         """
@@ -6205,8 +6245,10 @@ class EngineRuntime:
         current = repository.current_rebalance_execution(self.broker.account_id or "unknown", market)
         if current is None or current.phase != REBALANCE_PHASE_BLOCKED:
             return True
+        # No order rows: nothing of the block was sent, so it is resolved (an
+        # empty ``all`` is true). Requiring rows kept the halt set forever.
         orders = repository.orders_for_decision(current.decision_id)
-        return bool(orders) and all(is_terminal_order_status(str(order["status"])) for order in orders)
+        return all(is_terminal_order_status(str(order["status"])) for order in orders)
 
     def _warmup(self) -> None:
         history = AlpacaHistoricalData(

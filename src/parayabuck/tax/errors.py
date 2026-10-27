@@ -15,8 +15,12 @@ class MissingIndexError(TaxDataError):
     """No Yİ-ÜFE index value is available for a required month."""
 
 
+class MissingTableError(TaxDataError):
+    """No bracket table or declaration threshold is defined for a tax year."""
+
+
 class LedgerError(TaxDataError):
     """The bot's own fill book cannot be matched FIFO for tax purposes."""
 
 
-__all__ = ["LedgerError", "MissingIndexError", "MissingRateError", "TaxDataError"]
+__all__ = ["LedgerError", "MissingIndexError", "MissingRateError", "MissingTableError", "TaxDataError"]

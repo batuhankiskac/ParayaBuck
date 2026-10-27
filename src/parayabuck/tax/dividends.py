@@ -5,14 +5,16 @@ withheld from a non-resident, negative), ``INT`` (interest). Activities are
 stored idempotently by Alpaca's activity id in the ``tax_activities`` table,
 which this package creates in the runtime SQLite database.
 
-Each USD amount is converted at the rate of its payment date (rule 4). The US
-withholding is creditable against the Turkish tax on the same income (rule 5),
+Each USD amount is converted at the rate published on the previous business day
+before its payment date (rule 4, the same rule as the trade legs). The US
+withholding is creditable against the Turkish tax on the dividends (rule 5),
 capped there by :mod:`parayabuck.tax.export`.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -23,6 +25,10 @@ from parayabuck.tax.errors import TaxDataError
 from parayabuck.tax.rates import RateBook
 
 TAX_ACTIVITY_TYPES = ("DIV", "DIVNRA", "INT")
+# Alpaca income types this package does not import (capital-gain distributions and
+# return of capital). The decision record has no rule for them, and a return of
+# capital also changes the cost basis, so they are reported as missing, not guessed.
+NOT_IMPORTED_INCOME_TYPES = ("DIVCGL", "DIVCGS", "DIVROC")
 ACTIVITIES_PATH = "/account/activities"
 ACCOUNT_PATH = "/account"
 _PAGE_SIZE = 100
@@ -81,9 +87,12 @@ def _number(value: Any) -> float | None:
     if value is None or value == "":
         return None
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError) as exc:
         raise TaxDataError(f"activity amount is not a number: {value!r}") from exc
+    if not math.isfinite(parsed):
+        raise TaxDataError(f"activity amount is not a finite number: {value!r}")
+    return parsed
 
 
 def fetch_account_id(get: Get) -> str:
@@ -229,7 +238,8 @@ def load_activities(connection: sqlite3.Connection, account_id: str, year: int |
 
 
 def income_records(activities: Sequence[ActivityRow], rates: RateBook) -> list[IncomeRecord]:
-    """Convert stored activities to TL at the rate of each payment date (rule 4).
+    """Convert stored activities to TL at the rate published on the previous business day
+    before each payment date (rule 4; :meth:`RateBook.usd_try_for_trade_date`).
 
     ``DIVNRA`` is recorded as a positive withheld amount (the negative Alpaca
     net is sign-flipped), so the withholding totals read as "tax withheld".
@@ -260,6 +270,7 @@ __all__ = [
     "ACTIVITIES_PATH",
     "ActivityRow",
     "IncomeRecord",
+    "NOT_IMPORTED_INCOME_TYPES",
     "TAX_ACTIVITY_TYPES",
     "ensure_table",
     "fetch_account_id",

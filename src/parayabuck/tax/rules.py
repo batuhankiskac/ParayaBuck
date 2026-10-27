@@ -6,7 +6,7 @@ change that record first. This module is arithmetic on the record's rules, not t
 
 from __future__ import annotations
 
-from parayabuck.tax.errors import TaxDataError
+from parayabuck.tax.errors import MissingTableError
 
 # Rule 1-2: Yİ-ÜFE indexation applies when the index rise is at least 10%.
 INDEXATION_MIN_RISE = 0.10
@@ -36,7 +36,7 @@ def progressive_tax(base_tl: float, year: int) -> float:
     A non-positive base has no tax; a net loss is never carried forward.
     """
     if year not in _BRACKETS_BY_YEAR:
-        raise TaxDataError(f"no bracket table for tax year {year}; add it to docs/tax/turkish_tax_rules.md first")
+        raise MissingTableError(f"no bracket table for tax year {year}; add it to docs/tax/turkish_tax_rules.md first")
     if base_tl <= 0:
         return 0.0
     tax = 0.0
@@ -54,7 +54,7 @@ def progressive_tax(base_tl: float, year: int) -> float:
 def declaration_threshold_tl(year: int) -> float:
     """GVK 86 threshold above which dividends and interest must be declared."""
     if year not in _DECLARATION_THRESHOLD_BY_YEAR:
-        raise TaxDataError(f"no declaration threshold for tax year {year}; add it to the decision record first")
+        raise MissingTableError(f"no declaration threshold for tax year {year}; add it to the decision record first")
     return _DECLARATION_THRESHOLD_BY_YEAR[year]
 
 

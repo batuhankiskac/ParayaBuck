@@ -6,9 +6,12 @@ Rules applied (decision record):
   is not carried forward and no tax is due on it.
 * Rule 6: the estimated income tax applies the year's bracket table to the net
   gain only. Other income is ignored, so the figure is an estimate.
-* Dividends and interest: the Turkish tax on them is the progressive tax on the
-  gain base plus that income minus the tax on the gain base (a marginal figure).
-  The US withholding is credited up to that amount (rule 5).
+* Dividends: the Turkish tax on them is the progressive tax on the gain base plus
+  the dividends minus the tax on the gain base (a marginal figure). The US
+  withholding is credited up to that amount (rule 5).
+* Interest: its Turkish tax is the progressive tax on the gain base plus the
+  dividends and the interest, minus the tax on the gain base plus the dividends.
+  It is reported separately and is not creditable, since no US tax is withheld.
 * Rule 6: dividends plus interest above the GVK 86 threshold must be declared.
 """
 
@@ -17,18 +20,18 @@ from __future__ import annotations
 import csv
 import io
 import json
-import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from parayabuck.tax.dividends import IncomeRecord, income_records, load_activities
-from parayabuck.tax.errors import LedgerError, MissingIndexError, MissingRateError, TaxDataError
+from parayabuck.tax.dividends import NOT_IMPORTED_INCOME_TYPES, IncomeRecord, income_records, load_activities
+from parayabuck.tax.errors import LedgerError, MissingIndexError, MissingRateError, MissingTableError, TaxDataError
 from parayabuck.tax.ledger import TURKEY_TIME, LotDisposal, build_disposals
 from parayabuck.tax.rates import DEFAULT_USDTRY_PATH, DEFAULT_YIUFE_PATH, RateBook, load_rate_book
 from parayabuck.tax.rules import US_TREATY_WITHHOLDING_CAP, declaration_threshold_tl, progressive_tax
+from parayabuck.utils.io import atomic_write
 
 COLUMNS: tuple[str, ...] = (
     "section",
@@ -90,6 +93,7 @@ class YearReport:
     income_threshold_tl: float
     income_declaration_required: bool
     dividend_tax_estimate_tl: float
+    interest_tax_estimate_tl: float
     foreign_tax_credit_tl: float
     dividend_tax_due_tl: float
     notes: tuple[str, ...]
@@ -116,6 +120,7 @@ class YearReport:
             "income_threshold_tl": self.income_threshold_tl,
             "income_declaration_required": self.income_declaration_required,
             "dividend_tax_estimate_tl": _r(self.dividend_tax_estimate_tl),
+            "interest_tax_estimate_tl": _r(self.interest_tax_estimate_tl),
             "foreign_tax_credit_tl": _r(self.foreign_tax_credit_tl),
             "dividend_tax_due_tl": _r(self.dividend_tax_due_tl),
             "notes": list(self.notes),
@@ -135,8 +140,7 @@ def build_year_report(
     """Compute one tax year. Missing rates, indices, tariffs or a bad book raise."""
     threshold = declaration_threshold_tl(year)
     progressive_tax(0.0, year)  # fails early when the year has no bracket table
-    all_disposals = build_disposals(connection, account_id, rates)
-    disposals = tuple(item for item in all_disposals if item.disposed_on.year == year)
+    disposals = tuple(build_disposals(connection, account_id, rates, year=year))
     income = tuple(income_records(load_activities(connection, account_id, year), rates))
 
     gains = sum(item.gain_tl for item in disposals if item.gain_tl > 0)
@@ -152,8 +156,13 @@ def build_year_report(
     interest_tl = sum(item.tl_amount for item in income if item.kind == "interest")
 
     income_total_tl = dividend_gross_tl + interest_tl
-    dividend_tax = progressive_tax(gain_base + max(income_total_tl, 0.0), year) - estimated_tax
-    dividend_tax = max(dividend_tax, 0.0)
+    # Dividends are stacked on the gain base first; interest sits on top of them. The
+    # US withholding can only be credited against the dividend part (rule 5).
+    dividend_base = gain_base + max(dividend_gross_tl, 0.0)
+    dividend_tax = max(progressive_tax(dividend_base, year) - estimated_tax, 0.0)
+    interest_tax = max(
+        progressive_tax(dividend_base + max(interest_tl, 0.0), year) - progressive_tax(dividend_base, year), 0.0
+    )
     credit = min(max(withholding_tl, 0.0), dividend_tax)
 
     notes: list[str] = []
@@ -165,6 +174,10 @@ def build_year_report(
         notes.append("net loss for the year; not carried forward and no tax is due on it (rule 3)")
     if not disposals:
         notes.append(f"no disposals in {year}")
+    notes.append(
+        f"income types {', '.join(NOT_IMPORTED_INCOME_TYPES)} (capital-gain distributions, return of capital) "
+        "are not imported; any such income is missing from these figures"
+    )
 
     return YearReport(
         year=year,
@@ -185,6 +198,7 @@ def build_year_report(
         income_threshold_tl=threshold,
         income_declaration_required=income_total_tl > threshold,
         dividend_tax_estimate_tl=dividend_tax,
+        interest_tax_estimate_tl=interest_tax,
         foreign_tax_credit_tl=credit,
         dividend_tax_due_tl=dividend_tax - credit,
         notes=tuple(notes),
@@ -222,13 +236,6 @@ def _income_row(item: IncomeRecord) -> dict[str, Any]:
     return {key: _cell(value) for key, value in row.items()}
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.parent / (path.name + ".tmp")
-    temporary.write_text(text, encoding="utf-8")
-    os.replace(temporary, path)
-
-
 def export_year(report: YearReport, out: Path) -> tuple[Path, Path]:
     """Write one CSV row per disposal, then dividend/interest rows, and the summary JSON.
 
@@ -243,8 +250,8 @@ def export_year(report: YearReport, out: Path) -> tuple[Path, Path]:
     for row in rows:
         writer.writerow({key: row.get(key, "") for key in COLUMNS})
     summary_path = out.parent / f"{out.stem}.summary.json"
-    _atomic_write(out, buffer.getvalue())
-    _atomic_write(summary_path, json.dumps(report.to_dict(), ensure_ascii=False, indent=2) + "\n")
+    atomic_write(out, buffer.getvalue())
+    atomic_write(summary_path, json.dumps(report.to_dict(), ensure_ascii=False, indent=2) + "\n")
     return out, summary_path
 
 
@@ -258,8 +265,12 @@ def ytd_status(
 ) -> dict[str, Any]:
     """The YTD figures for dashboards and the daily summary; never raises.
 
-    ``status`` is one of ``ok``, ``rates_missing``, ``ledger_error``,
-    ``unavailable`` (no database) or ``error``.
+    ``status`` is one of ``ok``, ``rates_missing`` (rate or index file missing,
+    unreadable or short), ``tables_missing`` (no bracket table for the year),
+    ``ledger_error``, ``unavailable`` (no database), or ``error`` (a bad value).
+    An ``ok`` status with ``income_row_count`` 0 means the dividend and interest
+    activities were never imported; ``income_declaration_status`` then reads
+    ``veri eksik`` (data missing) instead of a threshold verdict.
     """
     base: dict[str, Any] = {"year": year, "account_id": account_id}
     if connection is None:
@@ -269,12 +280,24 @@ def ytd_status(
         report = build_year_report(connection, account_id, year, rates)
     except (MissingRateError, MissingIndexError) as exc:
         return {**base, "status": "rates_missing", "error": str(exc)}
+    except MissingTableError as exc:
+        return {**base, "status": "tables_missing", "error": str(exc)}
+    except LedgerError as exc:
+        return {**base, "status": "ledger_error", "error": str(exc)}
     except TaxDataError as exc:
-        if isinstance(exc, LedgerError):
-            return {**base, "status": "ledger_error", "error": str(exc)}
+        return {**base, "status": "rates_missing", "error": str(exc)}
+    except OSError as exc:
         return {**base, "status": "rates_missing", "error": str(exc)}
     except sqlite3.Error as exc:
         return {**base, "status": "unavailable", "error": str(exc)}
+    except (ValueError, TypeError) as exc:
+        return {**base, "status": "error", "error": str(exc)}
+    if not report.income:
+        income_status = "veri eksik"
+    elif report.income_declaration_required:
+        income_status = "aşıldı, beyan gerekir"
+    else:
+        income_status = "aşılmadı"
     return {
         **base,
         "status": "ok",
@@ -287,7 +310,11 @@ def ytd_status(
         "dividend_net_tl": _r(report.dividend_net_tl),
         "interest_tl": _r(report.interest_tl),
         "income_declaration_required": report.income_declaration_required,
+        "income_declaration_status": income_status,
+        "income_row_count": len(report.income),
         "dividend_tax_due_tl": _r(report.dividend_tax_due_tl),
+        "interest_tax_estimate_tl": _r(report.interest_tax_estimate_tl),
+        "notes": list(report.notes),
     }
 
 

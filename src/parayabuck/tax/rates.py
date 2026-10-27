@@ -6,7 +6,9 @@ Two operator-supplied CSV files (format of the research copies):
 * ``yiufe.csv``: ``month,yiufe_index[,source]`` with ``YYYY-MM`` months.
 
 Rule 4 (decision record): a trade's leg uses the rate published on the previous
-business day, i.e. the latest published rate strictly before the trade date.
+business day, i.e. the latest published rate strictly before the trade date. The
+search looks back at most :data:`FX_LOOKBACK_CALENDAR_DAYS` calendar days, so a
+file that ends too early, or a gap longer than a holiday block, raises.
 Missing data raises :class:`MissingRateError` or :class:`MissingIndexError`
 naming the date or month; no value is ever guessed.
 
@@ -19,7 +21,9 @@ from __future__ import annotations
 
 import bisect
 import csv
+import io
 import json
+import math
 import os
 import re
 import urllib.request
@@ -30,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from parayabuck.tax.errors import MissingIndexError, MissingRateError, TaxDataError
+from parayabuck.utils.io import atomic_write
 
 DEFAULT_USDTRY_PATH = Path("data/tax/usdtry.csv")
 DEFAULT_YIUFE_PATH = Path("data/tax/yiufe.csv")
@@ -42,12 +47,17 @@ EVDS_BASE_URL = "https://evds2.tcmb.gov.tr/service/evds/"
 EVDS_USD_BUYING_SERIES = "TP.DK.USD.A.YTL"
 EVDS_YIUFE_SERIES = "TP.TUFE1YI.T1"
 EVDS_YIUFE_SERIES_ENV = "PARAYABUCK_EVDS_YIUFE_SERIES"
+# Rule 4 lookback. TCMB publishes no rate on public holidays and a Turkish holiday
+# block can run nine days, so a shorter window would refuse valid trade dates. The
+# bound still refuses a file that ends well before the trade date.
+FX_LOOKBACK_CALENDAR_DAYS = 10
 
 
 def evds_yiufe_series(env: Mapping[str, str] | None = None) -> str:
     """Yİ-ÜFE series code: ``PARAYABUCK_EVDS_YIUFE_SERIES`` when set, else the default."""
     source = os.environ if env is None else env
     return str(source.get(EVDS_YIUFE_SERIES_ENV) or "").strip() or EVDS_YIUFE_SERIES
+
 
 USDTRY_COLUMN = "usdtry_forex_buying"
 YIUFE_COLUMN = "yiufe_index"
@@ -92,19 +102,17 @@ class RateBook:
     def usd_try_for_trade_date(self, trade_date: date) -> RateQuote:
         """Rule 4: the latest rate published strictly before ``trade_date``.
 
-        Raises when the file does not reach the previous weekday, because the
-        rate of that day could then be missing rather than absent by holiday.
+        The rate must be published within :data:`FX_LOOKBACK_CALENDAR_DAYS` before
+        the trade date; a bigger gap, or a file that ends earlier, raises.
         """
-        needed = previous_weekday(trade_date)
-        if not self._dates or self._dates[-1] < needed:
+        earliest = trade_date - timedelta(days=FX_LOOKBACK_CALENDAR_DAYS)
+        position = bisect.bisect_left(self._dates, trade_date) - 1
+        if position < 0 or self._dates[position] < earliest:
             latest = self._dates[-1].isoformat() if self._dates else "none"
             raise MissingRateError(
-                f"no TCMB USD/TRY rate for {needed.isoformat()} (needed for trade date "
-                f"{trade_date.isoformat()}); latest rate in file is {latest}"
+                f"no TCMB USD/TRY rate published between {earliest.isoformat()} and the day before trade date "
+                f"{trade_date.isoformat()}; latest rate in file is {latest}"
             )
-        position = bisect.bisect_left(self._dates, trade_date) - 1
-        if position < 0:
-            raise MissingRateError(f"no TCMB USD/TRY rate published before trade date {trade_date.isoformat()}")
         published = self._dates[position]
         return RateQuote(rate=self.usd_try[published], published_on=published)
 
@@ -120,8 +128,8 @@ def _parse_positive(value: str, where: str) -> float:
         parsed = float(value)
     except (TypeError, ValueError) as exc:
         raise TaxDataError(f"{where}: not a number: {value!r}") from exc
-    if parsed <= 0:
-        raise TaxDataError(f"{where}: rate or index must be positive, got {value!r}")
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise TaxDataError(f"{where}: rate or index must be a positive finite number, got {value!r}")
     return parsed
 
 
@@ -177,10 +185,22 @@ def load_rate_book(usdtry_path: Path = DEFAULT_USDTRY_PATH, yiufe_path: Path = D
 
 
 def default_http_get(url: str, headers: Mapping[str, str]) -> Any:
-    """GET ``url`` and decode the JSON body (stdlib only, 20 s timeout)."""
+    """GET ``url`` and decode the JSON body (stdlib only, 20 s timeout).
+
+    Transport and decoding failures raise :class:`TaxDataError` (URLError and
+    HTTPError are OSError subclasses). The key is in the headers only, so the
+    messages carry no credential.
+    """
     request = urllib.request.Request(url, headers={**headers, "Accept": "application/json"})  # noqa: S310
-    with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - fixed TCMB host
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - fixed TCMB host
+            body = response.read()
+    except OSError as exc:
+        raise TaxDataError(f"EVDS request failed: {exc}") from exc
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise TaxDataError(f"EVDS response is not JSON: {exc}") from exc
 
 
 def _evds_date(text: str) -> date | str:
@@ -251,13 +271,19 @@ def fetch_yiufe(start: date, end: date, api_key: str, http_get: HttpGet = defaul
 
 
 def _write_csv_atomic(path: Path, header: list[str], rows: list[list[str]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(header)
-        writer.writerows(rows)
-    os.replace(temporary, path)
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow(header)
+    writer.writerows(rows)
+    atomic_write(path, buffer.getvalue())
+
+
+def _yiufe_sources(path: Path) -> dict[str, str]:
+    """The ``source`` label of each month already in the Yİ-ÜFE file (empty when none)."""
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8", newline="") as handle:
+        return {(row.get("month") or "").strip(): (row.get("source") or "").strip() for row in csv.DictReader(handle)}
 
 
 def fetch_rates_to_files(
@@ -271,14 +297,26 @@ def fetch_rates_to_files(
 ) -> dict[str, int]:
     """Download both series and merge them into the CSV files.
 
-    Existing rows are kept; a fetched value replaces an older value for the same
-    date or month. Returns the number of rows in each file afterwards.
+    USD/TRY: existing rows are kept and a fetched rate replaces an older one for
+    the same date. Yİ-ÜFE: the series code is not confirmed, so a fetched month
+    that already holds a different index refuses the whole run and nothing is
+    written. Rows keep their own ``source``; only new months get the series label.
+    Returns the number of rows in each file afterwards.
     """
     key = os.getenv(EVDS_KEY_ENV, "") if api_key is None else api_key
     usd: dict[date, float] = load_usdtry_csv(Path(usdtry_path)) if Path(usdtry_path).exists() else {}
     usd.update(fetch_usd_try(start, end, key, http_get))
     indices: dict[str, float] = load_yiufe_csv(Path(yiufe_path)) if Path(yiufe_path).exists() else {}
-    indices.update(fetch_yiufe(start, end, key, http_get))
+    fetched = fetch_yiufe(start, end, key, http_get)
+    differing = sorted(month for month, value in fetched.items() if month in indices and indices[month] != value)
+    if differing:
+        raise TaxDataError(
+            f"EVDS Yİ-ÜFE series {evds_yiufe_series()} differs from the yiufe file for {len(differing)} month(s), "
+            f"e.g. {', '.join(differing[:3])}; nothing was written. Check the series code, or remove those rows first."
+        )
+    sources = _yiufe_sources(Path(yiufe_path))
+    label = f"TCMB EVDS {evds_yiufe_series()}"
+    indices.update(fetched)
     _write_csv_atomic(
         Path(usdtry_path),
         ["date", USDTRY_COLUMN],
@@ -287,7 +325,7 @@ def fetch_rates_to_files(
     _write_csv_atomic(
         Path(yiufe_path),
         ["month", YIUFE_COLUMN, "source"],
-        [[month, repr(indices[month]), f"TCMB EVDS {evds_yiufe_series()}"] for month in sorted(indices)],
+        [[month, repr(indices[month]), sources.get(month) or label] for month in sorted(indices)],
     )
     return {"usdtry_rows": len(usd), "yiufe_rows": len(indices)}
 
@@ -296,6 +334,7 @@ __all__ = [
     "DEFAULT_USDTRY_PATH",
     "DEFAULT_YIUFE_PATH",
     "EVDS_KEY_ENV",
+    "FX_LOOKBACK_CALENDAR_DAYS",
     "RateBook",
     "RateQuote",
     "fetch_rates_to_files",

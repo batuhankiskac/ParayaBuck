@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from parayabuck.tax.dividends import (
+    NOT_IMPORTED_INCOME_TYPES,
     ensure_table,
     fetch_account_id,
     fetch_activities,
@@ -54,6 +55,7 @@ def add_tax_parser(commands: Any) -> None:
     export.add_argument("--year", type=int, required=True)
     export.add_argument("--out", required=True, help="CSV path; the summary is written next to it")
     export.add_argument("--account-id", default=None, help="Alpaca account id (default: latest in the ledger)")
+    export.add_argument("--live", action="store_true", help="read the LIVE ledger (default: the config's ledger)")
     export.add_argument("--usdtry", default=str(DEFAULT_USDTRY_PATH))
     export.add_argument("--yiufe", default=str(DEFAULT_YIUFE_PATH))
 
@@ -68,17 +70,45 @@ def run_tax(args: argparse.Namespace) -> int:
             return _import_activities(args)
         if command == "export":
             return _export(args)
-    except TaxDataError as exc:
+    except (TaxDataError, OSError) as exc:
         print(f"tax {command}: {exc}", file=sys.stderr)
         return 1
     print("usage: parayabuck tax {rates-fetch,import-activities,export} ...", file=sys.stderr)
     return 2
 
 
-def _database_path(config_path: str | None) -> Path:
+def _database_path(config_path: str | None, *, live: bool = False, writing: bool = False) -> Path:
     from parayabuck.config import load_config
 
-    return Path(load_config(config_path).runtime.decision_db_path)
+    return _ledger_for_mode(load_config(config_path).runtime, live=live, writing=writing)
+
+
+def _ledger_for_mode(runtime: Any, *, live: bool, writing: bool) -> Path:
+    """The ledger an import or export of one credential mode may use.
+
+    ``--live`` targets the LIVE ledger, resolved the way the runtime resolves a LIVE
+    configuration (``parayabuck.config.RuntimeConfig``). A PAPER configuration whose
+    ledger is that same path refuses, because LIVE activities would land in the
+    PAPER ledger. A PAPER import (``writing``) into a LIVE configuration's ledger
+    also refuses, for the reverse reason. Refusals raise before any network call.
+    """
+    from parayabuck.config import RuntimeConfig, RuntimeMode
+
+    configured = Path(runtime.decision_db_path)
+    if live:
+        target = Path(RuntimeConfig(mode=RuntimeMode.LIVE, decision_db_path=str(configured)).decision_db_path)
+        if runtime.mode != RuntimeMode.LIVE and os.path.normpath(str(target)) == os.path.normpath(str(configured)):
+            raise TaxDataError(
+                f"the config's ledger {configured} is the PAPER ledger; LIVE activities need the LIVE ledger, "
+                "so use a LIVE configuration"
+            )
+        return target
+    if writing and runtime.mode == RuntimeMode.LIVE:
+        raise TaxDataError(
+            f"the config is LIVE, so its ledger {configured} is the LIVE ledger; PAPER activities are not "
+            "stored there (use --live)"
+        )
+    return configured
 
 
 def _rates_fetch(args: argparse.Namespace) -> int:
@@ -102,6 +132,8 @@ def _import_activities(args: argparse.Namespace) -> int:
     from parayabuck.live_safety import mode_credentials
 
     load_env_file()
+    # Resolve the ledger before any network call, so a mode mismatch fails closed.
+    database = _database_path(args.config, live=bool(args.live), writing=True)
     key, secret = mode_credentials(live=bool(args.live))
     if not key or not secret:
         print("tax import-activities: Alpaca credentials are not configured for this mode", file=sys.stderr)
@@ -117,7 +149,6 @@ def _import_activities(args: argparse.Namespace) -> int:
         adapter.close()
     parsed = [parse_activity(row, account_id) for row in raw_rows]
     raw_by_id = {str(row.get("id")): row for row in raw_rows}
-    database = _database_path(args.config)
     database.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(database), timeout=5.0)
     try:
@@ -135,6 +166,12 @@ def _import_activities(args: argparse.Namespace) -> int:
                 "inserted": inserted,
                 "already_present": existing,
                 "database": str(database),
+                "live": bool(args.live),
+                "not_imported_types": list(NOT_IMPORTED_INCOME_TYPES),
+                "completeness_note": (
+                    "capital-gain distributions and return of capital are not imported; "
+                    "check the broker's year-end tax statement for them"
+                ),
             },
             indent=2,
         )
@@ -155,7 +192,7 @@ def _latest_account(connection: sqlite3.Connection) -> str:
 def _export(args: argparse.Namespace) -> int:
     if args.year < 2000 or args.year > 2100:
         raise TaxDataError(f"--year {args.year} is out of range")
-    database = _database_path(args.config)
+    database = _database_path(args.config, live=bool(args.live))
     try:
         connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True, timeout=5.0)
     except sqlite3.Error as exc:

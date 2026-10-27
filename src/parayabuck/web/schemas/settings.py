@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 @dataclass(frozen=True)
@@ -19,24 +20,40 @@ class ValidatedSettings:
     credentials_changed: bool
 
 
+_RISK_PERCENT_CAPS = {"daily_loss_limit_pct": 50.0, "max_drawdown_pct": 90.0}
+
+
 class SettingsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    api_key: str = Field("", description="Alpaca API Key")
-    secret_key: str = Field("", description="Alpaca Secret Key")
+    api_key: str = Field("", max_length=256, description="Alpaca API Key")
+    secret_key: str = Field("", max_length=256, description="Alpaca Secret Key")
     paper_mode: bool = Field(True, description="Paper mode toggle")
-    # Below 100 %: a 100 % latch can never trip (RiskLimits rejects it).
-    daily_loss_limit_pct: float = Field(1.5, gt=0, lt=100)
-    max_drawdown_pct: float = Field(10.0, gt=0, lt=100)
+    # Percent limits. No made-up default: an omitted limit is left unchanged
+    # (PATCH semantics), and an explicit null is refused by the validator below.
+    # Caps match the config.py bounds (0.5 and 0.9 as fractions).
+    daily_loss_limit_pct: float | None = Field(None, description="Daily loss limit, percent (0 < x <= 50)")
+    max_drawdown_pct: float | None = Field(None, description="Drawdown halt, percent (0 < x <= 90)")
     host: Literal["127.0.0.1", "localhost", "::1"] = "127.0.0.1"
     port: int = Field(8000, ge=1, le=65535)
     open_browser: bool = True
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    restart_engine: bool = True
+    # Off by default: a save restarts the engine only when the caller asks for it.
+    restart_engine: bool = False
     equity_trading_enabled: bool = True
     live_trading_enabled: bool = False
-    live_dollar_cap: float = Field(0.0, ge=0)
+    # Upper bound is a schema sanity limit, not a trading policy; the shipped default stays 0.
+    live_dollar_cap: float = Field(0.0, ge=0, le=1_000_000, allow_inf_nan=False)
     live_operator_approval_path: str = Field("", max_length=4096)
-    expected_config_digest: str | None = Field(default=None, description="Optimistic concurrency digest")
+    expected_config_digest: str | None = Field(default=None, max_length=128, description="Optimistic concurrency digest")
+
+    @field_validator("daily_loss_limit_pct", "max_drawdown_pct")
+    @classmethod
+    def _risk_percent_when_sent(cls, value: float | None, info: ValidationInfo) -> float:
+        """A sent limit must be a finite percent in (0, cap]; null is refused."""
+        cap = _RISK_PERCENT_CAPS[str(info.field_name)]
+        if value is None or not math.isfinite(value) or not 0 < value <= cap:
+            raise ValueError(f"must be a finite percent greater than 0 and at most {cap:g}")
+        return value
 
 
 class ModePayload(BaseModel):
@@ -46,7 +63,7 @@ class ModePayload(BaseModel):
 
 class LiveConfirmationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    phrase: str
+    phrase: str = Field(..., max_length=256)
 
 
 class WebSocketTicketPayload(BaseModel):

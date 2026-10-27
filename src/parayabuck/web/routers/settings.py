@@ -13,6 +13,8 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 
 from parayabuck.logger import get_logger
 from parayabuck.web.deps import resolve_web_state
@@ -21,7 +23,28 @@ from parayabuck.web.services.settings import SettingsService
 
 log = get_logger("parayabuck.web.routers.settings")
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+class _NoEchoValidationRoute(APIRoute):
+    """Settings routes: a 422 must not echo the submitted body back.
+
+    FastAPI's default error entries carry ``input`` (the whole rejected
+    payload, API key and secret included). Those keys are dropped here.
+    """
+
+    def get_route_handler(self) -> Any:
+        handler = super().get_route_handler()
+
+        async def no_echo_handler(request: Request) -> Any:
+            try:
+                return await handler(request)
+            except RequestValidationError as exc:
+                errors = [{key: value for key, value in error.items() if key != "input"} for error in exc.errors()]
+                raise RequestValidationError(errors) from None
+
+        return no_echo_handler
+
+
+router = APIRouter(prefix="/api/settings", tags=["settings"], route_class=_NoEchoValidationRoute)
 
 
 def get_settings_service(request: Request) -> SettingsService:

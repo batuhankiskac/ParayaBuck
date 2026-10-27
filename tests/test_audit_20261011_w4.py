@@ -360,6 +360,7 @@ def test_overview_keys_match_frontend_readers(tmp_path: Path) -> None:
         "trend_status",
         "risk",
         "execution",
+        "ownership",
         "universe",
         "health",
     }

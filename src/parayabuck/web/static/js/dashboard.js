@@ -150,14 +150,9 @@
       setText("legendPortfolio", fmt.signedPct(last, 2));
       setText("legendBench", fmt.signedPct(benchLast, 2));
 
-      let note = "";
-      if (!data.available) note = "";
-      else if (data.benchmark_error) note = "VOO karşılaştırma verisi alınamadı.";
-      else if (last !== null && benchLast !== null) {
-        const diff = last - benchLast;
-        note = Math.abs(diff) < 0.05 ? "Bu dönemde portföy VOO ile başa baş."
-          : "Bu dönemde portföy VOO'dan " + fmt.pct(Math.abs(diff), 2).replace("%", "") + " puan " + (diff > 0 ? "daha iyi." : "geride.");
-      }
+      // The period figure is the equity change: deposits and withdrawals are included,
+      // so it is not a time-weighted return and is not compared with VOO here.
+      const note = data.available ? "Özkaynak değişimi; yatırma ve çekmeler dahildir." : "";
       setText("perfNote", note);
 
       const options = {
@@ -262,7 +257,8 @@
     function renderAllocation(risk) {
       if (!risk || risk.unavailable) return;
       const eq = Math.max(0, Number(risk.equity_exposure_pct) || 0);
-      const cash = Math.max(0, 100 - eq);
+      // Cash is the same figure the cash meter shows; 100 - equity would count other holdings as cash.
+      const cash = Math.max(0, Number(risk.cash_pct) || 0);
       const C = 2 * Math.PI * 50;
       let offset = 0;
       [["donutEquity", eq], ["donutCash", cash]].forEach(function (pair) {
@@ -327,7 +323,8 @@
       if (!badge) return;
       const drawdownRow = byId("trendDrawdownRow");
       const historyRow = byId("trendHistoryRow");
-      if (!t || t.available === false) {
+      // A failed panel carries `unavailable`; the trend payload carries `available`.
+      if (!t || t.available === false || t.unavailable === true) {
         badge.textContent = "—";
         badge.className = "badge";
         setText("trendStateText", "Veri yok");
@@ -358,6 +355,8 @@
         level = "—";
       }
       setText("trendLevelText", level);
+      // The signal is as old as its last persisted decision (the engine may be stopped).
+      setText("trendNote", (t.as_of ? "Son karar: " + fmt.dateTime(t.as_of) + ". " : "") + "Seviyeler her gün güncellenir; yaklaşık değerdir.");
 
       let vol = "—";
       if (isNum(t.volatility) && isNum(t.vol_target) && Number(t.vol_target) > 0) {
@@ -443,7 +442,8 @@
       const latch = Object.entries(risk.entry_risk_latch || {}).filter(function (e) { return e[1]; }).map(function (e) { return e[0] + ": " + e[1]; }).join(", ");
       setText("riskEntryLatch", latch || "Yok — alım serbest", latch ? "neg" : "pos");
       const epoch = risk.risk_epoch;
-      setText("riskEpoch", epoch ? fmt.date(epoch.session_date) + " · taban " + fmt.money(epoch.day_start_equity) : "—");
+      // The reset rebases the peak, so the baseline shown is the peak equity.
+      setText("riskEpoch", epoch ? fmt.date(epoch.session_date) + " · taban " + (isNum(epoch.peak_equity) ? fmt.money(epoch.peak_equity) : "—") : "—");
       const cap = risk.buy_capacity || {};
       const ready = !cap.unavailable;
       const reasons = Object.entries(cap.suppression_reasons || {}).concat(Object.entries(cap.halt_reasons || {})).map(function (e) { return e[0] + ": " + e[1]; }).join(", ");
@@ -574,12 +574,13 @@
       }));
       const events = data.events || [];
       const evBox = byId("opsRecentEvents");
-      if (!events.length) evBox.replaceChildren(el("li", { className: "empty-note", text: "Son olay yok" }));
+      if (data.eventsFailed) evBox.replaceChildren(el("li", { className: "empty-note", text: "Olaylar alınamadı" }));
+      else if (!events.length) evBox.replaceChildren(el("li", { className: "empty-note", text: "Son olay yok" }));
       else evBox.replaceChildren.apply(evBox, events.slice(0, 12).map(function (ev) {
         return el("li", null, [el("time", { text: fmt.dateTime(ev.occurred_at) }), el("span", { text: (ev.kind || "olay") + (ev.message ? " — " + ev.message : "") })]);
       }));
       const decision = data.decision;
-      let text = "Karar açıklaması yok";
+      let text = data.decisionFailed ? "Karar açıklaması alınamadı" : "Karar açıklaması yok";
       if (decision) { try { text = JSON.stringify(decision, null, 2); } catch (_) { text = String(decision); } }
       setText("opsDecisionExplanation", text);
     }
@@ -594,9 +595,26 @@
       renderAllocation(data.risk);
       renderRisk(data.risk);
       renderExecution(data.execution);
+      renderOwnership(data.ownership);
       renderHealth(data.health);
       renderUniverse(data.universe);
       renderStory();
+    }
+    // ---------- ownership adjustments ----------
+    function renderOwnership(panel) {
+      const box = byId("ownershipAdjustments");
+      if (!box) return;
+      if (!panel || panel.unavailable) { box.replaceChildren(el("li", { className: "empty-note", text: "Sahiplik düzeltmeleri alınamadı" })); return; }
+      const rows = panel.adjustments || [];
+      if (!rows.length) { box.replaceChildren(el("li", { className: "empty-note", text: "Bekleyen sahiplik düzeltmesi yok" })); return; }
+      box.replaceChildren.apply(box, rows.map(function (adj) {
+        const qty = Number(adj.outstanding_quantity) || 0;
+        return el("li", null, [
+          el("span", { text: adj.symbol + " · " + adj.market + " · " + adj.kind }),
+          el("span", { className: qty >= 0 ? "pos" : "neg", text: (qty >= 0 ? "+" : "") + fmt.num(qty, 6) + " adet" }),
+          el("small", { text: adj.note || "" })
+        ]);
+      }));
     }
     let taxBusy = false;
     async function refreshTax() {
@@ -610,7 +628,9 @@
       const set = function (id, text) { const el = document.getElementById(id); if (el) el.textContent = text; };
       if (!t || t.unavailable) { set("taxStatus", "—"); return; }
       if (t.status !== "ok") {
-        set("taxStatus", t.status === "rates_missing" ? "oran eksik" : "bekliyor");
+        // Read failures are not "waiting": say what failed.
+        const labels = { rates_missing: "oran eksik", ledger_error: "defter hatası", unavailable: "alınamadı", error: "hata", tables_missing: "tablo yok" };
+        set("taxStatus", t.income_declaration_status || labels[t.status] || "bekliyor");
         set("taxNote", t.error || "");
         return;
       }
@@ -621,7 +641,8 @@
       set("taxNetGain", tl(t.net_gain_tl));
       set("taxEstimate", tl(t.estimated_tax_tl));
       set("taxDividends", tl(t.dividend_gross_tl) + " / " + tl(t.dividend_withheld_tl));
-      set("taxThreshold", t.income_declaration_required ? "aşıldı, beyan gerekir" : "aşılmadı");
+      // "veri eksik" when the ledger has no income rows: "aşılmadı" would read as a verified zero.
+      set("taxThreshold", t.income_declaration_status || (t.income_declaration_required ? "aşıldı, beyan gerekir" : "aşılmadı"));
       set("taxNote", "Tahmini değerlerdir; yalnızca bu yılın net kazancı üzerinden hesaplanır.");
     }
     let overviewBusy = false;
@@ -629,7 +650,12 @@
       if (overviewBusy) return;
       overviewBusy = true;
       try { renderOverview(await api.fetchJson("/api/dashboard/overview")); }
-      catch (e) { console.error("overview", e); }
+      catch (e) {
+        // The panels keep the last good values; mark them stale instead of silently aging.
+        console.error("overview", e);
+        const fresh = byId("accountFreshness");
+        if (fresh) { fresh.className = "freshness stale"; fresh.title = "Son güncelleme başarısız; gösterilen değerler eski olabilir."; }
+      }
       finally { overviewBusy = false; }
     }
     let opsBusy = false;
@@ -638,11 +664,14 @@
       opsBusy = true;
       try {
         const status = await api.fetchJson("/api/ops/status");
+        // A failed read is flagged, never shown as "no events" or "no explanation".
         let events = [];
         let decision = null;
-        try { events = (await api.fetchJson("/api/ops/events?limit=12")).events || []; } catch (_) {}
-        try { decision = (await api.fetchJson("/api/ops/decisions/latest")).decision || null; } catch (_) {}
-        renderOps(Object.assign({}, status, { events: events, decision: decision }));
+        let eventsFailed = false;
+        let decisionFailed = false;
+        try { events = (await api.fetchJson("/api/ops/events?limit=12")).events || []; } catch (_) { eventsFailed = true; }
+        try { decision = (await api.fetchJson("/api/ops/decisions/latest")).decision || null; } catch (_) { decisionFailed = true; }
+        renderOps(Object.assign({}, status, { events: events, decision: decision, eventsFailed: eventsFailed, decisionFailed: decisionFailed }));
       }
       catch (e) { const box = byId("opsChecks"); if (box) box.replaceChildren(el("p", { className: "empty-note", text: "Operasyon durumu alınamadı: " + e.message })); }
       finally { opsBusy = false; }

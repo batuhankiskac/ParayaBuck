@@ -80,7 +80,11 @@ def is_trusted_client(client_host: str | None) -> bool:
 
 
 _TICKET_QUERY = re.compile(r"(ticket=)[^&\s\"']+")
-_UVICORN_LOGGERS = ("uvicorn.error", "uvicorn.access")
+# The websockets library logs the handshake request line (with ?ticket=) at DEBUG
+# under its own logger names; a filter on a parent logger does not see child records.
+_UVICORN_LOGGERS = ("uvicorn.error", "uvicorn.access", "websockets", "websockets.server", "websockets.client")
+# Largest request body any control route accepts (settings and backtest payloads are a few KB).
+_MAX_REQUEST_BODY_BYTES = 64 * 1024
 
 
 class TicketRedactionFilter(logging.Filter):
@@ -139,6 +143,9 @@ def build_protect_middleware(
     async def protect_local_control_api(request: Request, call_next: Any) -> Any:
         if not is_trusted_host(request.headers.get("host") or ""):
             return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
+        declared_length = request.headers.get("content-length") or ""
+        if declared_length.isdigit() and int(declared_length) > _MAX_REQUEST_BODY_BYTES:
+            return JSONResponse(status_code=413, content={"detail": "Request body too large"})
         mutating = request.method not in {"GET", "HEAD", "OPTIONS"}
         if (mutating or request.url.path in _PEER_GATED_GET_PATHS) and not is_trusted_client(
             request.client.host if request.client is not None else None

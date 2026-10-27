@@ -14,6 +14,10 @@ log = get_logger("parayabuck.web.ops")
 _OPS_LIMIT_MAX = 1000
 
 
+class OpsReadUnavailable(RuntimeError):
+    """A journal or ledger read failed. Callers must answer "unavailable", never an empty list."""
+
+
 def manager_config(manager: Any) -> Any | None:
     """The configuration an engine manager runs from (None when unavailable)."""
     from parayabuck.config import load_config
@@ -67,7 +71,7 @@ def get_ops_status(config: Any | None = None) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover
         log.warning("ops status probe failed: %s", exc)
         return {
-            "error": str(exc),
+            "error": "ops status probe failed",
             "overall_health": "UNKNOWN",
             "trading_state": "UNKNOWN",
             "checks": [],
@@ -129,10 +133,11 @@ def query_events(limit: int = 100, config: Any | None = None, **filters: Any) ->
         return out
     except Exception as exc:  # pragma: no cover
         log.warning("event query failed: %s", exc)
-        return []
+        raise OpsReadUnavailable("event query failed") from exc
 
 
-def get_incidents(limit: int = 100, config: Any | None = None) -> list[dict[str, Any]]:
+def get_incidents(limit: int = 100, config: Any | None = None, *, account_id: str) -> list[dict[str, Any]]:
+    """Safety incidents of one account (the dashboard's account, never another's)."""
     try:
         limit = max(1, min(int(limit), _OPS_LIMIT_MAX))
     except Exception:
@@ -149,15 +154,16 @@ def get_incidents(limit: int = 100, config: Any | None = None) -> list[dict[str,
             if cur.fetchone() is None:
                 return []
             rows = conn.execute(
-                "SELECT id, account_id, reason, scope, activated_at, updated_at FROM safety_incidents ORDER BY activated_at DESC, id DESC LIMIT ?",
-                (limit,),
+                "SELECT id, account_id, reason, scope, activated_at, updated_at FROM safety_incidents "
+                "WHERE account_id = ? ORDER BY activated_at DESC, id DESC LIMIT ?",
+                (account_id, limit),
             ).fetchall()
             return [dict(r) for r in rows]
         finally:
             conn.close()
     except Exception as exc:
         log.warning("incidents query failed: %s", exc)
-        return []
+        raise OpsReadUnavailable("incidents query failed") from exc
 
 
 def get_timeline(decision_id: str, config: Any | None = None) -> dict[str, Any]:
@@ -174,7 +180,7 @@ def get_timeline(decision_id: str, config: Any | None = None) -> dict[str, Any]:
         return decision_reconstruction(db_path, decision_id, journal_path=_resolve_journal_path(cfg))
     except Exception as exc:  # pragma: no cover
         log.warning("timeline reconstruction failed: %s", exc)
-        return {"error": str(exc), "decision_id": decision_id, "unavailable": True}
+        return {"error": "timeline unavailable", "decision_id": decision_id, "unavailable": True}
 
 
 def get_latest_decision(config: Any | None = None) -> dict[str, Any]:
@@ -211,4 +217,4 @@ def get_latest_decision(config: Any | None = None) -> dict[str, Any]:
             conn.close()
     except Exception as exc:  # pragma: no cover
         log.warning("latest decision query failed: %s", exc)
-        return {"decision": None, "unavailable": True, "error": str(exc)}
+        return {"decision": None, "unavailable": True, "error": "latest decision unavailable"}

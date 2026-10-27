@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from parayabuck.config import DEFAULT_DECISION_DB_PATH
+from parayabuck.monitoring.operational_event import mask_account_number
 
 log = logging.getLogger("parayabuck.monitoring.metrics")
 
@@ -262,7 +263,7 @@ def _risk_state_metrics(connection: sqlite3.Connection, account_id: str | None) 
             try:
                 payload = json.loads(str(row[2]))
             except (TypeError, ValueError):
-                log.warning("Ignoring corrupt risk_state payload for account=%s", account)
+                log.warning("Ignoring corrupt risk_state payload for account=%s", mask_account_number(account))
                 continue
             latest.append(
                 {

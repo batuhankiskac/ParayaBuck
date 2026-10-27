@@ -23,6 +23,8 @@ from urllib.parse import urlparse
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
+from parayabuck.monitoring.operational_event import redact_text
+
 _TRUSTED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 _CONTROL_TOKEN_HEADER = "x-parayabuck-control-token"
 _CONTROL_TOKEN_PATH = "/api/control-token"
@@ -87,6 +89,9 @@ _UVICORN_LOGGERS = ("uvicorn.error", "uvicorn.access", "websockets", "websockets
 _MAX_REQUEST_BODY_BYTES = 64 * 1024
 
 
+_TRACEBACK_FORMATTER = logging.Formatter()
+
+
 class TicketRedactionFilter(logging.Filter):
     """Redact single-use WebSocket ``?ticket=`` values from server log lines.
 
@@ -94,15 +99,22 @@ class TicketRedactionFilter(logging.Filter):
     (``uvicorn.access``) with the full query string; a logged ticket could be
     replayed within its TTL. Only string arguments are rewritten, so the
     access formatter still receives its positional args.
+
+    The same pass scrubs the other credential shapes (``redact_text``) from the
+    message, the string arguments and the traceback. The traceback is rendered
+    here, so the handler's formatter prints the scrubbed copy.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, str):
-            record.msg = _TICKET_QUERY.sub(r"\1[redacted]", record.msg)
+            record.msg = redact_text(_TICKET_QUERY.sub(r"\1[redacted]", record.msg))
         if isinstance(record.args, tuple):
             record.args = tuple(
-                _TICKET_QUERY.sub(r"\1[redacted]", arg) if isinstance(arg, str) else arg for arg in record.args
+                redact_text(_TICKET_QUERY.sub(r"\1[redacted]", arg)) if isinstance(arg, str) else arg
+                for arg in record.args
             )
+        if record.exc_info and not record.exc_text:
+            record.exc_text = redact_text(_TRACEBACK_FORMATTER.formatException(record.exc_info))
         return True
 
 

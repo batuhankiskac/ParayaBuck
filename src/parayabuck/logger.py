@@ -5,6 +5,8 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from parayabuck.monitoring.operational_event import redact_text
+
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 # 10 MB per file, five rotated backups: bounded disk use even under a
@@ -15,13 +17,38 @@ _FILE_BACKUP_COUNT = 5
 _configured = False
 
 
+class RedactingFormatter(logging.Formatter):
+    """Formatter that scrubs the complete formatted record, traceback included.
+
+    The scrub runs at the sink, so a ``log.exception`` traceback or a ``%s`` of an
+    exception text is redacted before stdout, the log file or journald sees it,
+    whatever the call site logged.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        return redact_text(super().format(record))
+
+
+def _pin_library_loggers() -> None:
+    """Keep the ``websockets.*`` loggers at WARNING.
+
+    At DEBUG the library logs the Alpaca auth frame, which carries the secret key.
+    Nothing in ParayaBuck wants those frames, so the level is pinned on the parent
+    and on every child already created; later children inherit it.
+    """
+    names = [name for name in list(logging.Logger.manager.loggerDict) if name.startswith("websockets.")]
+    for name in ("websockets", *names):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def _install_stdout_handler(logger: logging.Logger) -> None:
     global _configured
+    _pin_library_loggers()
     if _configured:
         return
     logger.propagate = False
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
+    handler.setFormatter(RedactingFormatter(LOG_FORMAT, DATE_FORMAT))
     logger.addHandler(handler)
     _configured = True
 
@@ -35,6 +62,7 @@ def setup_logging(level: str = "INFO", log_file: str | None = None) -> logging.L
     """
     logger = logging.getLogger("parayabuck")
     _install_stdout_handler(logger)
+    _pin_library_loggers()
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
     if log_file:
         target = str(Path(log_file).resolve())
@@ -49,7 +77,7 @@ def setup_logging(level: str = "INFO", log_file: str | None = None) -> logging.L
                 backupCount=_FILE_BACKUP_COUNT,
                 encoding="utf-8",
             )
-            fh.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
+            fh.setFormatter(RedactingFormatter(LOG_FORMAT, DATE_FORMAT))
             logger.addHandler(fh)
     return logger
 

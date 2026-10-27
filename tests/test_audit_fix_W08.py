@@ -432,7 +432,7 @@ def _persist_runtime(account_fees: dict[str, float]) -> tuple[EngineRuntime, _Le
     ledger = _Ledger()
     runtime.ledger = ledger
     runtime.broker = SimpleNamespace(account_id="acct", _peak_epoch=0)
-    runtime._evaluate_entry_risk_latch = lambda _account: None  # type: ignore[method-assign]
+    runtime._evaluate_entry_risk_latch = lambda _account, **_kwargs: None  # type: ignore[method-assign]
     account = SimpleNamespace(
         equity=100.0, daily_pnl=1.0, peak_equity=100.0, realized_pnl=0.0, unrealized_pnl=0.0, **account_fees
     )

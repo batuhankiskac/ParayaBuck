@@ -15,6 +15,7 @@ import threading
 from contextlib import suppress
 from typing import Any
 
+from parayabuck.monitoring.operational_event import redact_text
 from parayabuck.web.security import WebSocketTicketStore
 
 # Shared ticket store — single instance ensures concurrent issuance is safe
@@ -70,7 +71,7 @@ class WebSocketLogHandler(logging.Handler):
                 "level": record.levelname,
                 "levelno": record.levelno,
                 "name": record.name,
-                "message": record.getMessage(),
+                "message": redact_text(record.getMessage()),
                 "time": self.formatter.formatTime(record) if self.formatter else "",
             }
         except Exception:

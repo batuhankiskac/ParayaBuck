@@ -373,6 +373,9 @@ def emit_exit_sell_rejected_safe(
         alerts.emit(
             "exit_sell_rejected",
             message=message,
+            # The episode names the order and the symbol: two rejected SELLs in one
+            # decision (or one rejection and its retry) are separate incidents.
+            episode_key=f"{client_order_id}:{symbol}",
             client_order_id=client_order_id,
             symbol=symbol,
             market=market,

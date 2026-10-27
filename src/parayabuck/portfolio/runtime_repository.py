@@ -11,8 +11,11 @@ import json
 import math
 import sqlite3
 import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -26,6 +29,7 @@ from parayabuck.execution.portfolio import (
     _client_order_id,
 )
 from parayabuck.logger import get_logger
+from parayabuck.monitoring.operational_event import mask_account_number
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.ownership_rebase import (
     ACQUIRE,
@@ -141,6 +145,20 @@ def _emit_invalid_fill_alert(client_order_id: str, message: str) -> None:
         )
     except Exception:
         log.warning("Alert emission failed for rejected fill facts of %s", client_order_id, exc_info=True)
+
+
+@contextmanager
+def _alerts_after_release(pending: list[Callable[[], None]]) -> Iterator[None]:
+    """Run the alert callbacks collected in a locked block once the locks are released.
+
+    Enter it outside ``store.lock``: it exits after the lock and the transaction,
+    so the journal write never runs under either.
+    """
+    try:
+        yield
+    finally:
+        for callback in pending:
+            callback()
 
 
 def _parse_instant(value: object) -> datetime:
@@ -1603,7 +1621,8 @@ class PortfolioStateRepository:
                 f"fee={fee!r}); order left unbooked for the operator.",
             )
             return False
-        with self.store.lock, self.store.connection:
+        after_release: list[Callable[[], None]] = []
+        with _alerts_after_release(after_release), self.store.lock, self.store.connection:
             row = self.store.connection.execute(
                 """SELECT o.cumulative_filled_quantity, o.reference_price, o.side,
                           o.market, s.account_id, o.created_at, o.symbol,
@@ -1665,11 +1684,14 @@ class PortfolioStateRepository:
                 # leave the lot book short, so refuse: the raw event stays
                 # journaled, the order keeps its status and quantity, and the
                 # operator is alerted.
-                _emit_invalid_fill_alert(
-                    client_order_id,
-                    f"Refused fill without a cumulative average for {client_order_id} "
-                    f"(status={status} cumulative={cumulative_filled_quantity!r} previous={previous!r}); "
-                    "order left non-terminal for the operator.",
+                after_release.append(
+                    partial(
+                        _emit_invalid_fill_alert,
+                        client_order_id,
+                        f"Refused fill without a cumulative average for {client_order_id} "
+                        f"(status={status} cumulative={cumulative_filled_quantity!r} previous={previous!r}); "
+                        "order left non-terminal for the operator.",
+                    )
                 )
                 return False
             reference = float(row[1] or 0.0)
@@ -2211,7 +2233,8 @@ class PortfolioStateRepository:
         Read and write share one lock hold, so a concurrent fill can never be
         rebased onto a stale owned quantity.
         """
-        with self.store.lock, self.store.connection:
+        after_release: list[Callable[[], None]] = []
+        with _alerts_after_release(after_release), self.store.lock, self.store.connection:
             owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
             if owned <= 1e-12 or not math.isfinite(broker_quantity) or broker_quantity <= 0:
                 return None
@@ -2222,7 +2245,17 @@ class PortfolioStateRepository:
                 self._resolve_surplus_alerts(account_id, symbol, market)
                 return None
             if not change.rebasable and broker_quantity > owned:
-                self._alert_unconfirmed_surplus(account_id, symbol, market, owned, broker_quantity, change.reason)
+                after_release.append(
+                    partial(
+                        self._alert_unconfirmed_surplus,
+                        account_id,
+                        symbol,
+                        market,
+                        owned,
+                        broker_quantity,
+                        change.reason,
+                    )
+                )
             if not change.rebasable:
                 log.warning(
                     "Ownership rebase declined: account=%s symbol=%s owned=%s broker=%s reason=%s",
@@ -2345,7 +2378,7 @@ class PortfolioStateRepository:
             "If the bot did not buy these shares, book them as an acquisition with "
             "--acquisition-unit-cost <price> instead."
         )
-        log.error("Unconfirmed ownership surplus: account=%s %s", account_id, message)
+        log.error("Unconfirmed ownership surplus: account=%s %s", mask_account_number(account_id), message)
         try:
             from parayabuck.monitoring import alerts
 
@@ -2354,6 +2387,8 @@ class PortfolioStateRepository:
                 message=message,
                 category="ownership_surplus_unconfirmed",
                 incident_id=f"ownership_surplus:{market.value}:{symbol}:{format_quantity(broker_quantity)}",
+                # One episode per symbol: a moving broker quantity is the same surplus, not a new one.
+                episode_key=f"ownership_surplus:{account_id}:{market.value}:{symbol}",
                 symbol=symbol,
                 market=market.value,
                 owned_quantity=owned,

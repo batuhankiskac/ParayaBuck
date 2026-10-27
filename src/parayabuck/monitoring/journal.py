@@ -37,15 +37,45 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from parayabuck.monitoring.events import EMAIL_ALERT_KINDS
-from parayabuck.monitoring.operational_event import OperationalEvent, redact_fields
+from parayabuck.monitoring.operational_event import OperationalEvent, mask_account_number, redact_fields
 
 if TYPE_CHECKING:
     from parayabuck.config import ObservabilityConfig
 
 # Halts, incidents and operator-attention signals. emit() commits these before it
 # reports them written, so a crash right after the call cannot lose them.
-SAFETY_JOURNAL_KINDS: frozenset[str] = EMAIL_ALERT_KINDS
+# An explicit set, not the e-mail routing list: adding an e-mailed kind must not
+# silently move it onto the caller's thread. Kinds that short-lived CLI processes
+# emit (backup_failed, safety_lock_reset, risk_epoch_reset, ...) stay here, since
+# an async queue would drop them when the process exits. Decision (2026-10-28): the
+# set equals the EMAIL_ALERT_KINDS membership as of this audit, so today's durability
+# is unchanged.
+SAFETY_JOURNAL_KINDS: frozenset[str] = frozenset(
+    {
+        "runtime_stopped_unexpected",
+        "runtime_start_failed",
+        "circuit_breaker",
+        "drawdown_halt",
+        "risk_incident",
+        "ambiguous_order",
+        "paper_incident",
+        "order_rejected",
+        "exit_sell_rejected",
+        "intent_alarm",
+        "intent_recovered",
+        "reconciliation_failure",
+        "live_rearm_required",
+        "live_authorization_expiring",
+        "live_authorization_expired",
+        "safety_lock_reset",
+        "risk_epoch_reset",
+        "live_started",
+        "signal_adjustment_failure",
+        "market_data_degraded",
+        "data_provider_unavailable",
+        "backup_failed",
+    }
+)
 
 log = logging.getLogger("parayabuck.monitoring.journal")
 
@@ -269,8 +299,13 @@ class EventJournal:
             self._flush_batch(batch)
             batch.clear()
 
-    def _flush_batch(self, batch: list[OperationalEvent]) -> bool:
-        """Write one batch in a single transaction; True only once it is committed."""
+    def _flush_batch(self, batch: list[OperationalEvent], *, maintain: bool = True) -> bool:
+        """Write one batch in a single transaction; True only once it is committed.
+
+        ``maintain`` runs the retention sweep. Only the writer thread passes True:
+        a synchronous safety write runs on the caller's thread, which may hold a
+        trading lock, and must not pay for a DELETE sweep.
+        """
         if not batch:
             return True
         try:
@@ -312,9 +347,11 @@ class EventJournal:
                 with self._lock:
                     self._stats.written += len(rows)
                     self._stats.last_success_at = now_iso
-                self._writes_since_cleanup += len(rows)
-                if self._writes_since_cleanup >= 100:
-                    self._writes_since_cleanup = 0
+                    self._writes_since_cleanup += len(rows)
+                    run_cleanup = maintain and self._writes_since_cleanup >= 100
+                    if run_cleanup:
+                        self._writes_since_cleanup = 0
+                if run_cleanup:
                     self._retention_cleanup(conn)
             finally:
                 conn.close()
@@ -358,9 +395,12 @@ class EventJournal:
         if getattr(self, "_read_only", False):
             return False
         try:
-            event = replace(event, fields=redact_fields(event.fields))
+            # The top-level account id is masked like the fields, so the column and
+            # every reader carry the same last-four form.
+            account_id = mask_account_number(event.account_id) if event.account_id else None
+            event = replace(event, fields=redact_fields(event.fields), account_id=account_id)
             if event.kind in SAFETY_JOURNAL_KINDS:
-                return self._flush_batch([event])
+                return self._flush_batch([event], maintain=False)
             # ensure writer started lazily
             if not self._started:
                 self.start()

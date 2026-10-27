@@ -12,6 +12,8 @@ approval keys). ``_REDACTED_KEYS`` enforce allowlist/redaction when needed.
 from __future__ import annotations
 
 import hashlib
+import re
+import threading
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -111,6 +113,16 @@ _SENSITIVE_SUBSTRINGS: tuple[str, ...] = (
     "credential",
     "bearer",
     "token",
+    # Alpaca's header names (APCA-API-KEY-ID), camel-case apiKey, and the
+    # other provider credential spellings a config or payload may use.
+    "api-key",
+    "apikey",
+    "private_key",
+    "private-key",
+    "access_key",
+    "access-key",
+    "passphrase",
+    "ticket",
 )
 
 
@@ -126,6 +138,11 @@ def mask_account_number(value: object) -> str:
     return f"***{text[-4:]}" if len(text) > 4 else ("***" if text else "")
 
 
+def _masked_account(value: object) -> str | None:
+    """The top-level account id as the journal and the operator surfaces show it (masked)."""
+    return mask_account_number(value) if value not in (None, "") else None
+
+
 def _redact_item(key: str, value: object) -> object:
     if _is_sensitive(key):
         return "***REDACTED***"
@@ -134,12 +151,56 @@ def _redact_item(key: str, value: object) -> object:
     return _redact_value(value)
 
 
+# Free text (alert messages, command stderr, log lines) can carry a credential
+# as an assignment or inside a header. The name is kept and the value replaced,
+# so the text stays readable. ``(?!***|[redacted])`` leaves an already-masked
+# value alone, so a second pass changes nothing.
+# The key starts at a word boundary and both affixes are bounded: free text can be
+# megabytes of one word run (a bundled blob), and an unbounded lazy prefix is
+# quadratic on it.
+_TEXT_SECRET_ASSIGNMENT = re.compile(
+    r"""(?i)((?<![\w-])[\w-]{0,40}(?:secret|passw(?:or)?d|passphrase|token|ticket|api[-_]?key|private[-_]?key|"""
+    r"""access[-_]?key|authorization|credential|signature)[\w-]{0,20}["']?\s*[:=]\s*["']?)"""
+    r"""(?!\*\*\*|\[redacted\])[^\s"',&;}\]]+"""
+)
+_TEXT_BEARER = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]+=*")
+_TEXT_SECRET_MIN_LENGTH = 8
+_text_secret_values: set[str] = set()
+_text_secret_lock = threading.Lock()
+
+
+def register_secret_text(value: object) -> None:
+    """Add one literal credential value to the set ``redact_text`` scrubs from free text.
+
+    Used for values a regex cannot recognise (the running engine's key after a
+    rotation). Short values are ignored: they would scrub ordinary words.
+    """
+    text = str(value or "")
+    if len(text) < _TEXT_SECRET_MIN_LENGTH:
+        return
+    with _text_secret_lock:
+        _text_secret_values.add(text)
+
+
+def redact_text(text: str) -> str:
+    """Scrub credentials from free text: assignments, Bearer tokens and registered literal values."""
+    scrubbed = _TEXT_SECRET_ASSIGNMENT.sub(r"\1***REDACTED***", text)
+    scrubbed = _TEXT_BEARER.sub("Bearer ***REDACTED***", scrubbed)
+    with _text_secret_lock:
+        values = tuple(_text_secret_values)
+    for value in values:
+        scrubbed = scrubbed.replace(value, "***REDACTED***")
+    return scrubbed
+
+
 def _redact_value(value: object) -> object:
-    """Recursively redact sensitive keys inside nested mappings and lists."""
+    """Recursively redact sensitive keys inside nested mappings and lists; scrub free text."""
     if isinstance(value, Mapping):
         return {str(key): _redact_item(str(key), item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_redact_value(item) for item in value]
+    if isinstance(value, str):
+        return redact_text(value)
     return value
 
 
@@ -147,7 +208,8 @@ def redact_fields(fields: Mapping[str, object]) -> dict[str, object]:
     """Return copy with secret keys redacted, nested values included.
 
     Account numbers are masked to their last four characters and e-mail
-    routing (addresses, SMTP host) is redacted. Diagnostic bundles pass the
+    routing (addresses, SMTP host) is redacted. String values are scrubbed of
+    credentials as free text (``redact_text``). Diagnostic bundles pass the
     whole config through this function, so they share the same policy.
     """
     return {str(key): _redact_item(str(key), value) for key, value in fields.items()}
@@ -241,7 +303,7 @@ class OperationalEvent:
             "severity": self.severity,
             "message": self.message,
             "session_id": self.session_id,
-            "account_id": self.account_id,
+            "account_id": _masked_account(self.account_id),
             "mode": self.mode,
             "market": self.market,
             "strategy": self.strategy,
@@ -301,7 +363,7 @@ def create_event(
         severity=sev,
         message=message,
         session_id=session_id,
-        account_id=account_id,
+        account_id=_masked_account(account_id),
         mode=mode,
         market=market,
         strategy=strategy,
@@ -321,5 +383,7 @@ __all__ = [
     "deterministic_event_id",
     "random_event_id",
     "redact_fields",
+    "redact_text",
+    "register_secret_text",
     "severity_for_kind",
 ]

@@ -632,6 +632,7 @@ class AccountService:
             broker.drift_locked_symbols = frozenset(locked_shortfalls)
         # Account-scoped peak merge (serialized: the peak is shared mutable
         # state across the account, trade-update and decision threads).
+        sidecar_failed = False
         with peak_lock:
             if peak_epoch_read is not None and getattr(broker, "_peak_epoch", None) != peak_epoch_read:
                 # A risk-epoch reset committed while this snapshot's broker reads
@@ -655,12 +656,16 @@ class AccountService:
                     # even if the peak does not move again.
                     self._peak_save_pending = True
                     log.warning("Peak sidecar write failed; keeping the fetched snapshot: %s", exc)
-                    emit_execution_alert(
-                        "paper_incident",
-                        message="Peak sidecar write failed; snapshot kept, retry next poll",
-                        category="peak_sidecar_write_failed",
-                        incident_id="peak_sidecar_write_failed",
-                    )
+                    sidecar_failed = True
+        # Alert after the peak lock is released: the journal write must not hold
+        # the lock that every peak read and reset waits on.
+        if sidecar_failed:
+            emit_execution_alert(
+                "paper_incident",
+                message="Peak sidecar write failed; snapshot kept, retry next poll",
+                category="peak_sidecar_write_failed",
+                incident_id="peak_sidecar_write_failed",
+            )
         daily_pnl = equity - previous_equity - cash_flows
         snapshot = AccountSnapshot(
             cash=cash,

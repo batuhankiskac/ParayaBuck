@@ -27,7 +27,7 @@ import time
 
 from parayabuck.monitoring.events import ALERT_KINDS
 from parayabuck.monitoring.events import WARNING_KINDS as _WARNING_KINDS
-from parayabuck.monitoring.operational_event import redact_fields
+from parayabuck.monitoring.operational_event import redact_fields, redact_text
 
 log = logging.getLogger("parayabuck.monitoring.alerts")
 
@@ -43,6 +43,18 @@ _last_emitted_at: dict[str, float] = {}
 _suppressed_by_key: dict[str, int] = {}
 _suppressed_count = 0
 _delivered_counts: dict[str, int] = {}
+# Process-wide mode and account, stamped on alerts that do not name them, so a
+# journal row or an e-mail says which engine and account it came from.
+_alert_context: dict[str, str] = {}
+
+
+def set_alert_context(*, mode: str | None = None, account_id: str | None = None) -> None:
+    """Record the engine mode and account every later alert is stamped with (unless it names its own)."""
+    with _lock:
+        if mode:
+            _alert_context["mode"] = str(mode)
+        if account_id:
+            _alert_context["account_id"] = str(account_id)
 
 
 def _throttle_key(kind: str, fields: dict[str, object]) -> str:
@@ -96,6 +108,36 @@ def _severity(kind: str, fields: dict[str, object] | None = None) -> int:
     return logging.WARNING if kind in _WARNING_KINDS else logging.INFO
 
 
+def _journal_alert(kind: str, message: str, fields: dict[str, object]) -> bool:
+    """Write one accepted alert to the operational journal; True only if it was accepted.
+
+    Never raises. A safety kind returns True once committed (the synchronous
+    path); any other kind returns True once queued. False means the event was not
+    recorded, so the caller must not treat the alert as journaled.
+    """
+    try:
+        from parayabuck.monitoring.journal import emit_journal
+        from parayabuck.monitoring.operational_event import create_event
+
+        ev = create_event(
+            event_id=str(fields.get("event_id") or "") or None,
+            kind=kind,
+            message=message,
+            fields=dict(fields),
+            session_id=str(fields.get("session_id") or "") or None,
+            decision_id=str(fields.get("decision_id") or "") or None,
+            client_order_id=str(fields.get("client_order_id") or "") or None,
+            incident_id=str(fields.get("incident_id") or "") or None,
+            account_id=str(fields.get("account_id") or "") or None,
+            mode=str(fields.get("mode") or "") or None,
+            market=str(fields.get("market") or "") or None,
+        )
+        return bool(emit_journal(ev))
+    except Exception:
+        log.warning("journal emit failed for alert kind=%s", kind, exc_info=True)
+        return False
+
+
 def emit(kind: str, *, message: str, **fields: object) -> None:
     """Emit one alert event to the log and the event journal. Never raises.
 
@@ -113,6 +155,11 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
             from parayabuck.monitoring import observe
 
             observe.note_reconciliation_alert()
+        # Free text can carry a credential (command stderr, a signed URL): scrub it
+        # once, so the log line, the journal and the e-mail all carry the same text.
+        message = redact_text(str(message))
+        with _lock:
+            fields = {**_alert_context, **fields}
         throttle_key = _throttle_key(kind, dict(fields))
         with _lock:
             throttle = _throttle_seconds
@@ -131,38 +178,24 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
                     message,
                 )
                 return
-            _last_emitted_at[throttle_key] = now
-            _suppressed_by_key.pop(throttle_key, None)
-            if len(_last_emitted_at) > _THROTTLE_KEYS_MAX:
-                # Keys carry per-incident/order ids, so the map grows for the life
-                # of the process; an entry past its window can never suppress again
-                for key in [k for k, t in _last_emitted_at.items() if now - t >= throttle]:
-                    del _last_emitted_at[key]
-                    _suppressed_by_key.pop(key, None)
-            _delivered_counts[kind] = _delivered_counts.get(kind, 0) + 1
         # The journal redacts its copy; the log line must never carry a
         # secret-named field in the clear either
         log.log(_severity(kind, fields), "ALERT %s: %s fields=%s", kind, message, redact_fields(fields))
-        # Durable operational journal — best effort, never raises, isolated from trading
-        try:
-            from parayabuck.monitoring.journal import emit_journal
-            from parayabuck.monitoring.operational_event import create_event
-
-            ev = create_event(
-                event_id=str(fields.get("event_id") or "") or None,
-                kind=kind,
-                message=message,
-                fields=dict(fields),
-                session_id=str(fields.get("session_id") or "") or None,
-                decision_id=str(fields.get("decision_id") or "") or None,
-                client_order_id=str(fields.get("client_order_id") or "") or None,
-                incident_id=str(fields.get("incident_id") or "") or None,
-                account_id=str(fields.get("account_id") or "") or None,
-                market=str(fields.get("market") or "") or None,
-            )
-            emit_journal(ev)
-        except Exception:
-            log.warning("journal emit failed for alert kind=%s", kind, exc_info=True)
+        # Durable operational journal — best effort, never raises, isolated from trading.
+        # The throttle key is recorded only once the journal holds the event: a failed
+        # write leaves the next repeat free to be journaled instead of suppressed.
+        journaled = _journal_alert(kind, message, fields)
+        with _lock:
+            if journaled:
+                _last_emitted_at[throttle_key] = now
+                _suppressed_by_key.pop(throttle_key, None)
+                if len(_last_emitted_at) > _THROTTLE_KEYS_MAX:
+                    # Keys carry per-incident/order ids, so the map grows for the life
+                    # of the process; an entry past its window can never suppress again
+                    for key in [k for k, t in _last_emitted_at.items() if now - t >= throttle]:
+                        del _last_emitted_at[key]
+                        _suppressed_by_key.pop(key, None)
+            _delivered_counts[kind] = _delivered_counts.get(kind, 0) + 1
         # Opt-in off-host copy (e-mail): enqueue only, never blocks or raises.
         try:
             from parayabuck.monitoring import email_alerts
@@ -196,7 +229,7 @@ def alert_stats() -> dict[str, object]:
 
 
 def reset_for_tests() -> None:
-    """Clear throttle state and counters (test helper only)."""
+    """Clear throttle state, counters and the alert context (test helper only)."""
     global _throttle_seconds, _suppressed_count
     with _lock:
         _throttle_seconds = _DEFAULT_THROTTLE_SECONDS
@@ -204,6 +237,7 @@ def reset_for_tests() -> None:
         _suppressed_by_key.clear()
         _suppressed_count = 0
         _delivered_counts.clear()
+        _alert_context.clear()
 
 
 __all__ = [
@@ -211,4 +245,5 @@ __all__ = [
     "alert_stats",
     "emit",
     "reset_for_tests",
+    "set_alert_context",
 ]

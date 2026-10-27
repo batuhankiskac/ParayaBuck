@@ -117,8 +117,9 @@ WARNING_KINDS: frozenset[str] = frozenset(
 # journal). ``reconciliation_failure`` already covers the reconciliation and
 # ownership/protection halts (their reasons travel in the ``reason`` field).
 # ``daily_summary`` is added only when ``alerting.email.daily_summary`` is true.
-# NOTE: ``monitoring.journal.SAFETY_JOURNAL_KINDS`` is this same set, so every kind
-# here is also committed to the journal synchronously, in the caller's thread.
+# NOTE: ``monitoring.journal.SAFETY_JOURNAL_KINDS`` is its own explicit set, not this
+# one: adding a kind here does NOT make it synchronous. Add a kind to that set too
+# when its journal row must be committed before the emitting call returns.
 EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
     {
         "runtime_stopped_unexpected",

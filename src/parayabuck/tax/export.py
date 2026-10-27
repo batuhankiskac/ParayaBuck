@@ -35,7 +35,7 @@ from parayabuck.tax.dividends import (
     load_activities,
 )
 from parayabuck.tax.errors import LedgerError, MissingIndexError, MissingRateError, MissingTableError, TaxDataError
-from parayabuck.tax.ledger import TURKEY_TIME, LotDisposal, build_disposals
+from parayabuck.tax.ledger import TURKEY_TIME, LotDisposal, build_disposals, read_fills, unobserved_fee_symbols
 from parayabuck.tax.rates import DEFAULT_USDTRY_PATH, DEFAULT_YIUFE_PATH, RateBook, load_rate_book
 from parayabuck.tax.rules import US_TREATY_WITHHOLDING_CAP, declaration_threshold_tl, progressive_tax
 from parayabuck.utils.io import atomic_write
@@ -201,6 +201,12 @@ def build_year_report(
         notes.append(
             "temettü ve faiz toplamı beyan eşiğinin altında; beyan zorunluluğu görünmüyor. "
             "dividend_tax_due_tl yine de ihtiyatlı olarak gösteriliyor."
+        )
+    fee_gaps = unobserved_fee_symbols(disposals, read_fills(connection, account_id)) if disposals else []
+    if fee_gaps:
+        notes.append(
+            f"{', '.join(fee_gaps)}: bazı dolumların broker komisyonu gözlenmedi ve 0 sayıldı; "
+            "kazanç ve vergi bu yüzden olduğundan biraz yüksek (ihtiyatlı) olabilir."
         )
     if net_gain < 0:
         notes.append("net loss for the year; not carried forward and no tax is due on it (rule 3)")

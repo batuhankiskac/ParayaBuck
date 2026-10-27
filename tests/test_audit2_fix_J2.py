@@ -23,7 +23,14 @@ from parayabuck.monitoring.metrics import _risk_state_metrics
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 from parayabuck.storage import RUNTIME_SCHEMA_VERSION, SQLiteStore
 from parayabuck.tax.errors import LedgerError
-from parayabuck.tax.ledger import Fill, assert_fees_observed, build_disposals, match_disposals, read_fills
+from parayabuck.tax.ledger import (
+    Fill,
+    assert_fees_observed,
+    build_disposals,
+    match_disposals,
+    read_fills,
+    unobserved_fee_symbols,
+)
 from parayabuck.tax.rates import RateBook
 
 ACCOUNT = "ACC-J2"
@@ -531,7 +538,7 @@ def test_assert_fees_observed_refuses_only_disposals_that_use_an_unobserved_fill
     assert_fees_observed(clean, fills)
 
 
-def test_build_disposals_refuses_an_unobserved_fee_in_the_reported_year(tmp_path: Path) -> None:
+def test_build_disposals_keeps_and_flags_an_unobserved_fee_in_the_reported_year(tmp_path: Path) -> None:
     path = tmp_path / "runtime.sqlite3"
     repo = PortfolioStateRepository(path)
     _seed_session(repo)
@@ -562,9 +569,11 @@ def test_build_disposals_refuses_an_unobserved_fee_in_the_reported_year(tmp_path
 
     with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as connection:
         assert [fill.fee_observed for fill in read_fills(connection, ACCOUNT)] == [False, True]
-        with pytest.raises(LedgerError):
-            build_disposals(connection, ACCOUNT, _rates(), year=2026)
-        # A year without the unobserved sale's disposal is not refused by it.
+        # A zero unobserved fee can only overstate the gain, so the disposal is
+        # kept (conservative) and the symbol is reported for a note.
+        disposals = build_disposals(connection, ACCOUNT, _rates(), year=2026)
+        assert [item.symbol for item in disposals] == ["QLD"]
+        assert unobserved_fee_symbols(disposals, read_fills(connection, ACCOUNT)) == ["QLD"]
         assert build_disposals(connection, ACCOUNT, _rates(), year=2025) == []
 
 

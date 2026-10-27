@@ -175,19 +175,22 @@ def assert_no_ownership_adjustments(
         )
 
 
-def assert_fees_observed(disposals: Sequence[LotDisposal], fills: Sequence[Fill]) -> None:
-    """Fail closed when a reported disposal rests on a fill whose fee was not observed.
+def unobserved_fee_symbols(disposals: Sequence[LotDisposal], fills: Sequence[Fill]) -> list[str]:
+    """Symbols whose disposals rest on a fill whose broker fee was never observed.
 
-    The fill book stores a missing fee as 0.0, and a fee-free cost or proceeds figure
-    would be wrong, not conservative. Only disposals that use such a fill are refused;
-    the other symbols and years keep their figures.
+    The fill book stores a missing fee as 0.0. A zero buy fee understates the cost
+    and a zero sell fee overstates the proceeds, so the gain (and the tax) can only
+    come out too high: the report keeps the figure and says so in a note.
     """
     unobserved = {fill.fill_id for fill in fills if not fill.fee_observed}
-    if not unobserved:
-        return
-    affected = sorted(
+    return sorted(
         {item.symbol for item in disposals if item.buy_fill_id in unobserved or item.sell_fill_id in unobserved}
     )
+
+
+def assert_fees_observed(disposals: Sequence[LotDisposal], fills: Sequence[Fill]) -> None:
+    """Raise when a disposal rests on an unobserved fee (for callers that need exact fees)."""
+    affected = unobserved_fee_symbols(disposals, fills)
     if affected:
         raise LedgerError(
             f"{', '.join(affected)} için broker komisyonu gözlenmemiş dolum(lar) var; bu ücretler 0 sayılamaz, "
@@ -295,11 +298,9 @@ def build_disposals(
     disposals = match_disposals(fills, rates)
     if year is None:
         assert_no_ownership_adjustments(connection, account_id)
-        assert_fees_observed(disposals, fills)
         return disposals
     selected = [item for item in disposals if item.disposed_on.year == year]
     assert_no_ownership_adjustments(connection, account_id, {item.symbol for item in selected})
-    assert_fees_observed(selected, fills)
     return selected
 
 
@@ -314,4 +315,5 @@ __all__ = [
     "parse_instant",
     "read_fills",
     "turkey_date",
+    "unobserved_fee_symbols",
 ]

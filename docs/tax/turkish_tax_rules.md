@@ -22,7 +22,10 @@ On 2026-02-12, sell at $100. The rate is 43.00, so the TL proceeds are 43,000.
 Yİ-ÜFE was 3,200 in February 2025 and 3,700 in January 2026. The ratio is 1.15625,
 which is a rise of at least 10%, so the indexed cost is 28,800 × 1.15625 = 33,300 TL.
 The taxable gain is 43,000 − 33,300 = 9,700 TL. Fees are added to the cost and
-subtracted from the proceeds at the same rates.
+subtracted from the proceeds at the same rates. A fill whose broker fee was not
+observed (stored with `fee_observed = 0`) is never booked as a free fill: the ledger
+refuses every disposal that uses it, and no figure is produced for that symbol until
+the fee is known.
 
 ## Open points to revisit
 

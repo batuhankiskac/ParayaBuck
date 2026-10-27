@@ -43,6 +43,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from parayabuck.logger import get_logger
+
+log = get_logger("parayabuck.backtest.regulatory_fees")
+
+# The last trade date the schedule below was checked against. Later dates
+# reuse the newest anchored rates, which can be stale (the SEC and CAT rates
+# change every year), so they are flagged. They are not refused: the live
+# telemetry and shadow comparator call this on every fill, and a refusal there
+# would break reporting in the running process.
+_SCHEDULE_VERIFIED_THROUGH = date(2026, 12, 31)
+_beyond_horizon_flagged = False
+
 # FINRA TAF equity rate: per share sold, capped per trade. Effective dates
 # are the January 1 implementation dates from SR-FINRA-2020-032 (2022-2024
 # phase-in), the five-year schedule SR-FINRA-2024-019 (2025 unchanged) and
@@ -90,7 +102,20 @@ class RegulatoryFeeRates:
 
 
 def rates_for_trade_date(trade_date: date) -> RegulatoryFeeRates:
-    """Effective regulatory rates for one equity trade date."""
+    """Effective regulatory rates for one equity trade date.
+
+    A date after ``_SCHEDULE_VERIFIED_THROUGH`` gets the newest anchored rates
+    and a one-time warning, so the modelled fee is not silently treated as
+    current.
+    """
+    global _beyond_horizon_flagged
+    if trade_date > _SCHEDULE_VERIFIED_THROUGH and not _beyond_horizon_flagged:
+        _beyond_horizon_flagged = True
+        log.warning(
+            "Regulatory fee schedule is verified through %s; trade date %s uses the newest anchored rates",
+            _SCHEDULE_VERIFIED_THROUGH.isoformat(),
+            trade_date.isoformat(),
+        )
     taf, cap = _TAF_SCHEDULE[0][1], _TAF_SCHEDULE[0][2]
     for effective, rate, maximum in _TAF_SCHEDULE:
         if trade_date >= effective:

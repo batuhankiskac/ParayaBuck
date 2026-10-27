@@ -4,6 +4,9 @@ import sqlite3
 import threading
 from pathlib import Path
 
+# Largest WAL file SQLite keeps on disk after a checkpoint (64 MiB).
+_WAL_SIZE_LIMIT_BYTES = 64 * 1024 * 1024
+
 
 class StorageInitializationError(RuntimeError):
     """Raised when the SQLite runtime store cannot be initialized safely.
@@ -77,6 +80,9 @@ class SQLiteStore:
         try:
             # WAL must be set before any other pragma that depends on it.
             self.connection.execute("PRAGMA journal_mode=WAL")
+            # Cap the -wal file left behind by a write burst: a checkpoint then
+            # truncates it to this size instead of keeping its peak size.
+            self.connection.execute(f"PRAGMA journal_size_limit={_WAL_SIZE_LIMIT_BYTES}")
             self.connection.execute("PRAGMA synchronous=NORMAL")
             self.connection.execute("PRAGMA foreign_keys=ON")
             self.connection.execute("PRAGMA busy_timeout=5000")

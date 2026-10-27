@@ -15,7 +15,6 @@ from parayabuck.storage import (
     SQLiteStore,
     check_runtime_schema_version,
     migrate_legacy_decision_orders,
-    stamp_runtime_schema_version,
 )
 
 log = get_logger("parayabuck.execution.ledger")
@@ -172,7 +171,9 @@ class ExecutionLedger:
             self._migrate_v4_circuit_breaker_backfill()
             self._migrate_v5_execution_quality_columns()
             self._migrate_v6_watermark()
-            stamp_runtime_schema_version(self.connection)
+            # The schema version is stamped once, by PortfolioStateRepository,
+            # after its own migrations finish. Stamping here would mark the
+            # database as current while those migrations have not run yet.
             self.connection.commit()
 
     def _create_initial_schema(self) -> None:

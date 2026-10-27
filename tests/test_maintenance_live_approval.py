@@ -23,6 +23,7 @@ def _approval() -> LiveOperatorApproval:
         approved_at=START,
         expires_at=START + timedelta(minutes=15),
         nonce="offline-nonce",
+        config_fingerprint="fp-test",
     )
 
 
@@ -55,6 +56,7 @@ def test_verified_approval_enforces_both_time_bounds(tmp_path: Path, offset: tim
         "secret": SECRET,
         "account_id": approval.account_id,
         "configuration_digests": approval.configuration_digests,
+        "config_fingerprint": "fp-test",
         "now": START + offset,
     }
     if valid:
@@ -77,6 +79,7 @@ def test_approval_time_bound_compares_instants_across_offsets(tmp_path: Path) ->
         secret=SECRET,
         account_id=approval.account_id,
         configuration_digests=approval.configuration_digests,
+        config_fingerprint="fp-test",
         now=START,
     )
     assert loaded.approved_at == START
@@ -98,5 +101,6 @@ def test_signed_approval_binding_remains_fail_closed(tmp_path: Path, field: str)
             configuration_digests=("wrong-digest",)
             if field == "configuration_digests"
             else approval.configuration_digests,
+            config_fingerprint="fp-test",
             now=START,
         )

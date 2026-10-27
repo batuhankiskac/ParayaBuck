@@ -27,7 +27,7 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.data import AlpacaHistoricalData
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.portfolio import portfolio_execution_policy_from_config, portfolio_risk_limits_from_config
-from parayabuck.live_safety import LiveOperatorApproval
+from parayabuck.live_safety import LiveOperatorApproval, config_fingerprint
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.monitoring.operational_event import Severity
@@ -537,6 +537,7 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         approved_at=now,
         expires_at=now + timedelta(minutes=args.expires_minutes),
         nonce=secrets.token_hex(16),
+        config_fingerprint=config_fingerprint(config),
     ).signed(hmac_secret)
     atomic_write(
         Path(config.live.operator_approval_path),
@@ -736,6 +737,8 @@ def _run_halt(config: Config, args: argparse.Namespace) -> int:
         print(f"created_at={record['created_at']}")
         print("Engine starts are refused while the marker exists. Stop a running engine with the console stop")
         print("control or `systemctl stop parayabuck`; `parayabuck resume` removes the marker.")
+        # The marker belongs to one runtime directory: only the engine that uses it is halted.
+        print(f"Scope: only the engine that uses {marker.parent} is halted; an engine with another config is not.")
         _journal_operator_action(
             config,
             "operator_halt_set",
@@ -744,9 +747,19 @@ def _run_halt(config: Config, args: argparse.Namespace) -> int:
         )
         return EXIT_OK
     previous = read_operator_halt(marker)
-    cleared = clear_operator_halt(marker)
+    try:
+        cleared = clear_operator_halt(marker)
+    except OSError as exc:
+        # A marker that cannot be removed (for example a directory) leaves the halt in force.
+        print(f"Operator halt NOT cleared: {marker}: {exc}", file=sys.stderr)
+        print("The halt stays in force. Fix the path by hand, then run `parayabuck resume` again.", file=sys.stderr)
+        return EXIT_FAILURE
     if cleared:
         print(f"Operator halt cleared: {marker} (was: {previous.get('reason') if previous else 'n/a'})")
+        # resume never touches the persisted operator_halt incident (the runbook covers it).
+        print("A persisted operator_halt incident is not removed by resume. If the engine refuses to start,")
+        print("clear it with the safety-lock reset (dashboard, or POST /api/engine/reset-safety-lock) once")
+        print("reconciliation passes.")
     else:
         print(f"No operator halt present at {marker}; nothing to clear.")
     # resume removes only the marker. A persisted operator_halt incident row still
@@ -1146,6 +1159,12 @@ def _run_doctor(args: argparse.Namespace) -> int:
             add("config state writable", os.access(cfg_p.parent, os.W_OK), str(cfg_p.parent))
         except Exception as exc:
             add("config state writable", False, str(exc))
+        # R2-9-9: the runbook asks for doctor before a start; an operator halt must show there.
+        from parayabuck.live_safety import operator_halt_active
+
+        halt_marker = _operator_halt_marker(config)
+        if operator_halt_active(halt_marker):
+            checks.append(("operator halt", "WARN", f"ACTIVE at {halt_marker}; `parayabuck resume` removes it"))
         db_path = Path(config.runtime.decision_db_path)
         if db_path.exists():
             try:

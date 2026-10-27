@@ -575,18 +575,27 @@ class ExecutionLedger:
         now = datetime.now(UTC)
         activated = activated_at if activated_at is not None else now
         with self._lock:
-            self.connection.execute(
-                """
-                INSERT INTO safety_incidents(
-                    account_id, reason, scope, activated_at, updated_at
+            # The store runs WAL at synchronous=NORMAL, which survives a process
+            # crash but can lose the newest commits on an OS or power crash
+            # before a checkpoint. A halt row must survive that, so this one
+            # commit runs at FULL (fsync per commit) and the store's level is
+            # restored afterwards (R2-9-2). PRAGMA runs outside the transaction.
+            self.connection.execute("PRAGMA synchronous=FULL")
+            try:
+                self.connection.execute(
+                    """
+                    INSERT INTO safety_incidents(
+                        account_id, reason, scope, activated_at, updated_at
+                    )
+                    VALUES (?, ?, 'global', ?, ?)
+                    ON CONFLICT(account_id, reason) DO UPDATE SET
+                        scope=excluded.scope, updated_at=excluded.updated_at
+                    """,
+                    (account_id, reason, activated.isoformat(), now.isoformat()),
                 )
-                VALUES (?, ?, 'global', ?, ?)
-                ON CONFLICT(account_id, reason) DO UPDATE SET
-                    scope=excluded.scope, updated_at=excluded.updated_at
-                """,
-                (account_id, reason, activated.isoformat(), now.isoformat()),
-            )
-            self.connection.commit()
+                self.connection.commit()
+            finally:
+                self.connection.execute("PRAGMA synchronous=NORMAL")
 
     def load_safety_incidents(self, account_id: str) -> tuple[SafetyIncident, ...]:
         """Return the persistent incidents for an account, most recent first."""

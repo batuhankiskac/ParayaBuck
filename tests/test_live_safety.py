@@ -17,6 +17,7 @@ def _approval(now: datetime, *, exposure: float = 500.0) -> LiveOperatorApproval
         approved_at=now,
         expires_at=now + timedelta(minutes=15),
         nonce="nonce",
+        config_fingerprint="fp-test",
     )
 
 
@@ -38,6 +39,7 @@ def test_live_approval_is_bound_to_account_configuration_and_cap(tmp_path) -> No
         secret=secret,
         account_id="live-account",
         configuration_digests=("config-a",),
+        config_fingerprint="fp-test",
         now=now,
     )
     assert loaded.maximum_dollar_exposure == 500
@@ -48,6 +50,7 @@ def test_live_approval_is_bound_to_account_configuration_and_cap(tmp_path) -> No
             secret=secret,
             account_id="live-account",
             configuration_digests=("changed",),
+            config_fingerprint="fp-test",
             now=now,
         )
 
@@ -72,6 +75,7 @@ def test_live_approval_rejects_outside_validity_window(tmp_path, offset: timedel
             secret=secret,
             account_id=approval.account_id,
             configuration_digests=approval.configuration_digests,
+            config_fingerprint="fp-test",
             now=approved_at + offset,
         )
 
@@ -88,6 +92,7 @@ def test_live_approval_accepts_at_approval_boundary(tmp_path) -> None:
         secret=secret,
         account_id=approval.account_id,
         configuration_digests=approval.configuration_digests,
+        config_fingerprint="fp-test",
         now=approved_at,
     )
 
@@ -104,6 +109,7 @@ def test_live_approval_rejects_expiry_and_bad_signature(tmp_path) -> None:
         approved_at=now - timedelta(hours=1),
         expires_at=now - timedelta(minutes=1),
         nonce="nonce",
+        config_fingerprint="fp-test",
     ).signed("a" * 32)
     path = tmp_path / "approval.json"
     path.write_text(json.dumps(approval.to_dict()), encoding="utf-8")
@@ -114,6 +120,7 @@ def test_live_approval_rejects_expiry_and_bad_signature(tmp_path) -> None:
             secret="a" * 32,
             account_id="account",
             configuration_digests=("digest",),
+            config_fingerprint="fp-test",
             now=now,
         )
     with pytest.raises(LiveApprovalError, match="signature"):
@@ -122,5 +129,6 @@ def test_live_approval_rejects_expiry_and_bad_signature(tmp_path) -> None:
             secret="b" * 32,
             account_id="account",
             configuration_digests=("digest",),
+            config_fingerprint="fp-test",
             now=now - timedelta(minutes=30),
         )

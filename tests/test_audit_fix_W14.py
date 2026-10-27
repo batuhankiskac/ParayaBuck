@@ -334,6 +334,7 @@ def _approval(now: datetime) -> LiveOperatorApproval:
         approved_at=now - timedelta(minutes=1),
         expires_at=now + timedelta(hours=1),
         nonce="n1",
+        config_fingerprint="fp",
     )
 
 
@@ -353,12 +354,22 @@ def test_tracked_placeholder_key_cannot_sign_or_verify_a_live_approval(tmp_path:
     path.write_text(json.dumps(approval.signed(_KEY).to_dict()), encoding="utf-8")
     with pytest.raises(LiveApprovalError, match="unusable"):
         LiveOperatorApproval.load_verified(
-            path, secret=placeholder, account_id="acct", configuration_digests=("digest-a",), now=now
+            path,
+            secret=placeholder,
+            account_id="acct",
+            configuration_digests=("digest-a",),
+            config_fingerprint="fp",
+            now=now,
         )
     # ... and the same file verifies with the real key (the check is not a blanket refusal).
     assert (
         LiveOperatorApproval.load_verified(
-            path, secret=_KEY, account_id="acct", configuration_digests=("digest-a",), now=now
+            path,
+            secret=_KEY,
+            account_id="acct",
+            configuration_digests=("digest-a",),
+            config_fingerprint="fp",
+            now=now,
         ).nonce
         == "n1"
     )
@@ -392,7 +403,7 @@ def test_non_ascii_signature_is_refused_as_an_approval_error(tmp_path: Path) -> 
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     with pytest.raises(LiveApprovalError, match="signature is invalid"):
         LiveOperatorApproval.load_verified(
-            path, secret=_KEY, account_id="acct", configuration_digests=("digest-a",), now=now
+            path, secret=_KEY, account_id="acct", configuration_digests=("digest-a",), config_fingerprint="fp", now=now
         )
 
 

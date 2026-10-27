@@ -7,6 +7,7 @@ from functools import lru_cache
 from parayabuck.logger import get_logger
 from parayabuck.markets.nyse_calendar import (
     NEW_YORK,
+    calendar_degraded_reason,
     is_session_open,
     session_close_utc,
 )
@@ -57,7 +58,12 @@ def equity_day_bar_is_closed(timestamp: datetime, now: datetime) -> bool:
     if local.date() > today.date():
         return False
     close = session_close_utc(local.date())
-    if close is None:  # calendar unavailable: the regular close is the safe default
+    if close is None:
+        if calendar_degraded_reason() is None:
+            # The calendar is healthy and this date is not a session: there is
+            # no close to wait for and no bar to trust, so it is not closed.
+            return False
+        # Calendar unavailable: the regular close is the safe default.
         return now >= local.replace(hour=16, minute=0, second=0, microsecond=0)
     return now >= close
 

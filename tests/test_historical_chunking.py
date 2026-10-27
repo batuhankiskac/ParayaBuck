@@ -26,7 +26,7 @@ class _RecordingFetcher:
         self.requests: list[tuple[list[str], datetime, datetime]] = []
         self.bars_per_request: list[int] = []
 
-    def __call__(self, symbols, timeframe, start, end, adjustment) -> dict[str, list[Bar]]:
+    def __call__(self, symbols, timeframe, start, end, adjustment, outcome=None) -> dict[str, list[Bar]]:
         self.requests.append((list(symbols), start, end))
         step = timedelta(minutes=TIMEFRAME_MINUTES[timeframe])
         result: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}

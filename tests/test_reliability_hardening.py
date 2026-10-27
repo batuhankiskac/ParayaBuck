@@ -282,7 +282,7 @@ class FakeHistory:
         self.calls: list[tuple[tuple[str, ...], str, str, str, str]] = []
         self.provider_calls = 0
 
-    def get_bars_batch(self, symbols, timeframe, start=None, end=None, adjustment="raw"):  # noqa: ANN001
+    def get_bars_batch(self, symbols, timeframe, start=None, end=None, adjustment="raw", outcome=None):  # noqa: ANN001
         self.calls.append((tuple(sorted(symbols)), timeframe, str(start), str(end), adjustment))
         self.provider_calls += 1
         if self.fail is not None:
@@ -449,7 +449,7 @@ def test_signal_retries_bounded_on_transient() -> None:
     call_n = 0
 
     class TransientFake:
-        def get_bars_batch(self, symbols, timeframe, start=None, end=None, adjustment="raw"):  # noqa: ANN001
+        def get_bars_batch(self, symbols, timeframe, start=None, end=None, adjustment="raw", outcome=None):  # noqa: ANN001
             nonlocal call_n
             call_n += 1
             if call_n == 1:
@@ -467,7 +467,7 @@ def test_signal_retries_bounded_on_transient() -> None:
 
     # Non-transient error should not retry
     class NonTransientFake:
-        def get_bars_batch(self, symbols, timeframe, start=None, end=None, adjustment="raw"):  # noqa: ANN001
+        def get_bars_batch(self, symbols, timeframe, start=None, end=None, adjustment="raw", outcome=None):  # noqa: ANN001
             raise ValueError("permanent bad request")
 
     engine2, _ = _engine_with_symbols(("AAA",))

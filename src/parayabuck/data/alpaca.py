@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from parayabuck.markets.nyse_calendar import NEW_YORK, nyse_sessions
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
     TIMEFRAME_MINUTES,
+    provider_day_bar_is_final,
     weekday_count,
 )
 from parayabuck.utils import is_crypto
@@ -116,15 +118,28 @@ def _session_bounds_for(dates: list[date]) -> dict[date, tuple[datetime, datetim
     return bounds
 
 
+@dataclass
+class BatchOutcome:
+    """Per-call result of one ``get_bars_batch``, owned by the caller.
+
+    ``degraded`` is set when any part of the answer came from the local cache
+    or the IEX downgrade instead of the provider's SIP basis (the split-basis
+    verifier treats such an answer as unverified). ``incomplete`` lists the
+    symbols whose provider window failed the completeness gate (missing
+    sessions or dropped rows); warmup must not seed them. Kept per call, so
+    concurrent warmup and verifier calls on one client cannot clear each
+    other's flags.
+    """
+
+    degraded: bool = False
+    incomplete: set[str] = field(default_factory=set)
+
+
 class AlpacaHistoricalData:
     """Bounded Alpaca equity REST client used to warm up the streaming engine.
 
-    ``_last_batch_degraded`` tells the caller of the latest ``get_bars_batch``
-    whether any part of its answer came from the local cache or the IEX
-    downgrade instead of the provider's SIP basis (the split-basis verifier
-    treats such an answer as unverified). ``last_incomplete_symbols`` lists
-    the symbols whose provider window failed the completeness gate (missing
-    sessions or dropped rows); warmup must not seed them.
+    Batch answers report their degraded and incomplete state through the
+    ``BatchOutcome`` passed to ``get_bars_batch``, never through client state.
     """
 
     def __init__(
@@ -173,8 +188,6 @@ class AlpacaHistoricalData:
         # outage cache fallback or an empty response), so the split-basis
         # verifier never counts cache rows as provider coverage.
         self._provider_fallbacks: int = 0
-        self._last_batch_degraded: bool = False
-        self.last_incomplete_symbols: frozenset[str] = frozenset()
 
     def feed_status(self) -> dict[str, object]:
         """Configured and effective equity historical feed for reporting."""
@@ -221,12 +234,13 @@ class AlpacaHistoricalData:
         start: datetime | str | None = None,
         end: datetime | str | None = None,
         adjustment: str = "raw",
+        outcome: BatchOutcome | None = None,
     ) -> dict[str, list[Bar]]:
         if not symbols:
             return {}
         symbols, start_at, end_at = self._resolve_batch_request(symbols, timeframe, start, end, adjustment)
-        fallbacks_before = getattr(self, "_provider_fallbacks", 0)
-        self.last_incomplete_symbols = frozenset()
+        if outcome is None:
+            outcome = BatchOutcome()
         minutes = TIMEFRAME_MINUTES.get(timeframe)
         if minutes is not None:
             # Alpaca caps a single bars response at 10,000 ROWS total, across
@@ -247,8 +261,9 @@ class AlpacaHistoricalData:
                     end_at,
                     minutes,
                     adjustment,
+                    outcome,
                 )
-                self._last_batch_degraded = self._batch_degraded_since(fallbacks_before)
+                self._mark_sip_downgrade(outcome)
                 return result
         result = self._fetch_window(
             symbols,
@@ -256,20 +271,19 @@ class AlpacaHistoricalData:
             start_at,
             end_at,
             adjustment,
+            outcome,
         )
-        self._last_batch_degraded = self._batch_degraded_since(fallbacks_before)
+        self._mark_sip_downgrade(outcome)
         return result
 
-    def _batch_degraded_since(self, fallbacks_before: int) -> bool:
-        """Whether the batch just answered was not provider SIP-basis data.
+    def _mark_sip_downgrade(self, outcome: BatchOutcome) -> None:
+        """An answer taken while the IEX downgrade is active is not SIP basis.
 
-        A cache fallback is degraded, and so is an answer served by the IEX
-        downgrade: IEX daily closes are not the SIP basis the split verifier
-        checks against, so they must not be adopted as authoritative.
+        IEX daily closes are not the SIP basis the split verifier checks
+        against, so they must not be adopted as authoritative.
         """
-        return getattr(self, "_provider_fallbacks", 0) != fallbacks_before or bool(
-            getattr(self, "_sip_fallback_active", False)
-        )
+        if getattr(self, "_sip_fallback_active", False):
+            outcome.degraded = True
 
     def get_session_daily_bars(
         self,
@@ -287,6 +301,8 @@ class AlpacaHistoricalData:
         and the sticky SIP->IEX entitlement fallback of ``get_bars_batch``:
         the caller wants THIS feed or nothing, and a failure here must not
         change the feed the signal history is fetched from. Errors propagate.
+        A row that fails validation is skipped; when the NEWEST row of a symbol
+        is invalid the symbol gets no bar, never an older session in its place.
         """
         if not symbols:
             return {}
@@ -304,23 +320,34 @@ class AlpacaHistoricalData:
         result: dict[str, Bar] = {}
         if frame.empty:
             return result
+        invalid: set[str] = set()
         for row in frame.reset_index().sort_values("timestamp").itertuples(index=False):
-            timestamp = row.timestamp
-            if hasattr(timestamp, "to_pydatetime"):
-                timestamp = timestamp.to_pydatetime()
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-            symbol = canonical_symbol(str(getattr(row, "symbol", symbols[0])), Market.EQUITY)
-            result[symbol] = Bar(
-                timestamp=timestamp.astimezone(UTC),
-                symbol=symbol,
-                timeframe="1d",
-                open=float(row.open),
-                high=float(row.high),
-                low=float(row.low),
-                close=float(row.close),
-                volume=float(row.volume),
-                market=Market.EQUITY,
+            row_symbol = str(getattr(row, "symbol", symbols[0]))
+            symbol = row_symbol
+            try:
+                symbol = canonical_symbol(row_symbol, Market.EQUITY)
+                bar = Bar(
+                    timestamp=_normalize_row_timestamp(row.timestamp),
+                    symbol=symbol,
+                    timeframe="1d",
+                    open=float(row.open),
+                    high=float(row.high),
+                    low=float(row.low),
+                    close=float(row.close),
+                    volume=float(row.volume),
+                    market=Market.EQUITY,
+                )
+            except (TypeError, ValueError, OverflowError):
+                # Rows are ascending, so dropping the symbol's entry here keeps
+                # only a newer valid bar if one follows.
+                invalid.add(row_symbol)
+                result.pop(symbol, None)
+                continue
+            result[symbol] = bar
+        if invalid:
+            log.warning(
+                "SIP daily cross-check returned invalid rows for %s; skipped",
+                ",".join(sorted(invalid)),
             )
         return result
 
@@ -384,7 +411,9 @@ class AlpacaHistoricalData:
         end_at: datetime,
         minutes: int,
         adjustment: str,
+        outcome: BatchOutcome | None = None,
     ) -> dict[str, list[Bar]]:
+        outcome = outcome if outcome is not None else BatchOutcome()
         span = (end_at - start_at).total_seconds()
         step_seconds = minutes * 60
         total_steps = max(1, int(span // step_seconds))
@@ -428,6 +457,7 @@ class AlpacaHistoricalData:
                 chunk_start,
                 chunk_end,
                 adjustment,
+                outcome,
             ).items():
                 merged[symbol].extend(bars)
         for symbol in symbols:
@@ -538,7 +568,9 @@ class AlpacaHistoricalData:
         start_at: datetime,
         end_at: datetime,
         adjustment: str,
+        outcome: BatchOutcome | None = None,
     ) -> dict[str, list[Bar]]:
+        outcome = outcome if outcome is not None else BatchOutcome()
         self._reprobe_sip_if_due()
         end_at = self._clamp_recent_end(end_at)
         feed_name = self._effective_stock_feed_name
@@ -557,6 +589,15 @@ class AlpacaHistoricalData:
             ):
                 log.warning(message)
                 self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
+                outcome.degraded = True
+                # A cached window with holes must not stand in for a complete
+                # provider window: warmup must not seed it and the verifier
+                # must not adopt it.
+                outcome.incomplete.update(
+                    symbol
+                    for symbol, bars in fresh_cached.items()
+                    if not self._window_is_complete(bars, start_at, end_at)
+                )
                 return fresh_cached
             return None
 
@@ -601,6 +642,7 @@ class AlpacaHistoricalData:
                     start_at,
                     end_at,
                     adjustment,
+                    outcome,
                 )
             served = _fallback(f"Historical API failed ({exc}); using feed-matched local warmup cache")
             if served is not None:
@@ -612,6 +654,12 @@ class AlpacaHistoricalData:
             if served is not None:
                 return served
             self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
+            outcome.degraded = True
+            # An empty answer is a hole for every session the window expects;
+            # a window with no sessions at all is genuinely empty.
+            expected = self._expected_session_slots(timeframe, start_at, end_at)
+            if expected is None or expected:
+                outcome.incomplete.update(symbols)
             return {symbol: [] for symbol in symbols}
         bars: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
         intraday_bounds: dict[date, tuple[datetime, datetime] | None] | None = None
@@ -686,7 +734,16 @@ class AlpacaHistoricalData:
             deduped = {bar.timestamp: bar for bar in items}
             bars[symbol] = [deduped[key] for key in sorted(deduped)]
         total = sum(len(items) for items in bars.values())
-        fetched = [bar for items in bars.values() for bar in items]
+        # A daily bar for a session still inside the SIP embargo is partial (its
+        # close is the last trade). It is answered to the caller, but never cached
+        # as the window's final bar, where a later cache fallback would serve it.
+        now = datetime.now(UTC)
+        fetched = [
+            bar
+            for items in bars.values()
+            for bar in items
+            if timeframe != "1d" or provider_day_bar_is_final(bar.timestamp, now, self._sip_embargo)
+        ]
         # A partial provider window must never evict good cached bars: only
         # replace the cached [start, end] window when every answered symbol
         # covers it — spanning the window AND containing every cached
@@ -702,9 +759,7 @@ class AlpacaHistoricalData:
         }
         # Accumulated across the chunks of one batch: warmup must not seed a
         # symbol whose provider history has a hole (missing session or dropped row).
-        self.last_incomplete_symbols = getattr(self, "last_incomplete_symbols", frozenset()) | (
-            frozenset(symbols) - complete
-        )
+        outcome.incomplete.update(set(symbols) - complete)
         replaced = False
         if fetched and complete == set(symbols):
             try:
@@ -737,6 +792,7 @@ class AlpacaHistoricalData:
                 ",".join(cache_only),
             )
             self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
+            outcome.degraded = True
         log.info("Fetched %d %s bars for %d symbols", total, timeframe, len(symbols))
         return bars
 

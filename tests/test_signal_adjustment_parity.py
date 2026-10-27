@@ -179,7 +179,7 @@ class FakeHistory:
         self.calls: list[tuple[tuple[str, ...], str]] = []
         self.requested_windows: list[tuple[datetime, datetime]] = []
 
-    def get_bars_batch(self, symbols, timeframe, *, start, end, adjustment):  # noqa: ANN001
+    def get_bars_batch(self, symbols, timeframe, *, start, end, adjustment, outcome=None):  # noqa: ANN001
         self.calls.append((tuple(symbols), adjustment))
         self.requested_windows.append((start, end))
         if self.error is not None:
@@ -361,7 +361,8 @@ def test_signal_adjustment_does_not_race_startup_warmup(monkeypatch) -> None:
     truncated = _bare_runtime()
     truncated.seed([_bar("AAA", dates[-1], 100.0)])  # WRONG order: tail first
     truncated.seed([_bar("AAA", d, 100.0) for d in dates])
-    assert len(truncated.history["AAA"]) < 30  # warmup bars lost forever
+    # The full warmup backfills the older bars instead of being rejected.
+    assert len(truncated.history["AAA"]) == 30
 
     # (b) monitor pass must not fetch during warmup:
     from parayabuck.runtime import WorkerHealth

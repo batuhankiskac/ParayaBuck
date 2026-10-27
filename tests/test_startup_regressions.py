@@ -41,7 +41,7 @@ def test_warmup_fetches_only_the_strategy_signal_cadence_on_the_splits_basis() -
     fetched: list[tuple[str, str]] = []
 
     class _History:
-        def get_bars_batch(self, symbols, timeframe, *, start=None, end=None, adjustment="raw"):
+        def get_bars_batch(self, symbols, timeframe, *, start=None, end=None, adjustment="raw", outcome=None):
             fetched.append((timeframe, adjustment))
             return {
                 symbol: [Bar(datetime(2025, 1, 1, tzinfo=UTC), symbol, timeframe, 1, 1, 1, 1, 1000, Market.EQUITY)]

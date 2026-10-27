@@ -153,20 +153,33 @@ class WarmupCache:
                     end.isoformat(),
                 ),
             ).fetchall()
-        return [
-            Bar(
-                timestamp=datetime.fromisoformat(row[0]),
-                symbol=canonical,
-                timeframe=timeframe,
-                open=float(row[1]),
-                high=float(row[2]),
-                low=float(row[3]),
-                close=float(row[4]),
-                volume=float(row[5]),
-                market=Market(row[6]),
+        bars: list[Bar] = []
+        invalid = 0
+        for row in rows:
+            # A cached row that no longer passes Bar validation (a pre-W17
+            # non-positive price, for example) is skipped and logged. Raising
+            # here would fail every warmup batch before the provider is asked.
+            try:
+                bars.append(
+                    Bar(
+                        timestamp=datetime.fromisoformat(row[0]),
+                        symbol=canonical,
+                        timeframe=timeframe,
+                        open=float(row[1]),
+                        high=float(row[2]),
+                        low=float(row[3]),
+                        close=float(row[4]),
+                        volume=float(row[5]),
+                        market=Market(row[6]),
+                    )
+                )
+            except (TypeError, ValueError):
+                invalid += 1
+        if invalid:
+            log.warning(
+                "Warmup cache %s: skipped %d invalid %s row(s) for %s", self.path, invalid, timeframe, canonical
             )
-            for row in rows
-        ]
+        return bars
 
     def replace_window(
         self,

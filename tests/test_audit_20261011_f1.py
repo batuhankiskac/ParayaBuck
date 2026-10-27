@@ -29,7 +29,7 @@ class _FakeHistory:
         self.provider_by_symbol = provider_by_symbol
         self.calls = 0
 
-    def get_bars_batch(self, symbols, timeframe, start=None, end=None, adjustment="raw"):  # noqa: ANN001
+    def get_bars_batch(self, symbols, timeframe, start=None, end=None, adjustment="raw", outcome=None):  # noqa: ANN001
         self.calls += 1
         return {symbol: list(self.provider_by_symbol.get(symbol, [])) for symbol in symbols}
 
@@ -274,7 +274,7 @@ def test_warmup_double_uses_the_plain_batch_shape() -> None:
     fetched: list[tuple[str, str]] = []
 
     class _History:
-        def get_bars_batch(self, symbols, timeframe, *, start=None, end=None, adjustment="raw"):
+        def get_bars_batch(self, symbols, timeframe, *, start=None, end=None, adjustment="raw", outcome=None):
             fetched.append((timeframe, adjustment))
             return {symbol: [_bar(symbol, datetime(2025, 1, 1, tzinfo=UTC))] for symbol in symbols}
 

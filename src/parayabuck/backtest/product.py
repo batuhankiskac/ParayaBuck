@@ -128,9 +128,9 @@ def load_csv_bars(path: str | Path, *, default_market: Market, strict: bool = Tr
         if not raw_volume:
             raise ValueError(f"CSV row {row_number} has no volume for {raw['symbol']}")
         if timestamp.weekday() >= 5:
-            raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
+            raise ValueError(f"CSV row {row_number} is a weekend bar: {timestamp.isoformat()}")
         if timeframe != "1d" and not is_regular_equity_time(timestamp):
-            raise ValueError(f"Equity CSV contains an out-of-session bar: {timestamp.isoformat()}")
+            raise ValueError(f"CSV row {row_number} is an out-of-session bar: {timestamp.isoformat()}")
         if timeframe == "1d":
             if batched:
                 in_session = timestamp.astimezone(NEW_YORK).date() in session_dates
@@ -141,8 +141,8 @@ def load_csv_bars(path: str | Path, *, default_market: Market, strict: bool = Tr
                 # backtest must not decide on one either: drop it, loudly.
                 log.warning("Equity CSV contains a non-session bar (holiday); dropped: %s", timestamp.isoformat())
                 continue
-        rows.append(
-            Bar(
+        try:
+            bar = Bar(
                 timestamp=timestamp,
                 symbol=str(raw["symbol"]),
                 timeframe=timeframe,
@@ -153,7 +153,9 @@ def load_csv_bars(path: str | Path, *, default_market: Market, strict: bool = Tr
                 volume=float(raw_volume),
                 market=market,
             )
-        )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"CSV row {row_number} is not a valid bar: {exc}") from exc
+        rows.append(bar)
     return rows
 
 

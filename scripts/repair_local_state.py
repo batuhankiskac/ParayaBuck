@@ -82,6 +82,10 @@ ENGINE_HEARTBEAT_MIN_TTL_SECONDS = 60.0
 SYSTEMD_UNIT = "parayabuck"
 _UNIT_INACTIVE_STATES = frozenset({"inactive", "failed"})
 _SYSTEMCTL_TIMEOUT_SECONDS = 10
+# The broker account whose reconciliation last verified with no drift. Set by
+# _run_broker_reconcile and cleared before each reconcile, so the halt clear is
+# scoped to the account that was actually checked.
+_VERIFIED_ACCOUNT_ID: str | None = None
 
 
 def _systemd_unit_state() -> str | None:
@@ -289,17 +293,24 @@ def backup_ledger(qdir: Path, ledger: str | Path | None = None):
     return dst
 
 
-def _record_resolutions(con: sqlite3.Connection, reason: str, now: str, ledger: str | Path | None = None) -> int:
-    """Append the incident rows about to be cleared to the resolution log.
+def _incident_rows(con: sqlite3.Connection, reason: str, account_id: str) -> list[tuple[Any, ...]]:
+    """The incident rows of one account and reason, read before they are cleared."""
+    return con.execute(
+        "SELECT account_id, reason, scope, activated_at, updated_at FROM safety_incidents"
+        " WHERE reason=? AND account_id=?",
+        (reason, account_id),
+    ).fetchall()
+
+
+def _record_resolutions(rows: list[tuple[Any, ...]], reason: str, now: str, ledger: str | Path | None = None) -> int:
+    """Append the cleared incident rows to the resolution log.
 
     ``safety_incidents`` holds only ACTIVE halts (the runtime restores every
     row), so a resolved incident cannot stay in the table; this append-only
-    log next to the ledger is its audit trail.
+    log next to the ledger is its audit trail. Call it only after the clearing
+    transaction has committed, so the log never records a clear that did not
+    happen.
     """
-    rows = con.execute(
-        "SELECT account_id, reason, scope, activated_at, updated_at FROM safety_incidents WHERE reason=?",
-        (reason,),
-    ).fetchall()
     if not rows:
         return 0
     ledger_path = Path(str(ledger)) if ledger is not None else LEDGER
@@ -330,6 +341,7 @@ def repair_runtime_db(ledger: str | Path | None = None, config: Any | None = Non
     halt stays active, because the script cannot know the crash left no
     unknown broker-side orders or foreign inventory.
     """
+    global _VERIFIED_ACCOUNT_ID
     ledger_path = Path(str(ledger)) if ledger is not None else LEDGER
     print("[6] Repairing runtime DB: close open sessions, clear halt if reconciled...")
     if not ledger_path.exists():
@@ -359,19 +371,40 @@ def repair_runtime_db(ledger: str | Path | None = None, config: Any | None = Non
     # file and an open write transaction here would make it "database is locked".
     con.commit()
     # Try broker reconciliation to verify holdings==broker (no creds => no verify)
+    _VERIFIED_ACCOUNT_ID = None
     try:
         reconcile_ok = _run_broker_reconcile(ledger_path, config)
     except TypeError:  # a zero-arg test stub replaces the reconciler
         reconcile_ok = _run_broker_reconcile()
+    reconciled_accounts: list[str] = []
+    cleared_rows: list[tuple[Any, ...]] = []
+    if reconcile_ok and not check_engine_not_running(config):
+        # The engine can start while the reconcile runs. Its halt must not be
+        # cleared underneath it, so the clear is refused when it is live now.
+        print("  Engine is live after the reconcile: the halt is NOT cleared.")
+        reconcile_ok = False
     if reconcile_ok:
-        reconciled_accounts = [
-            row[0]
-            for row in con.execute(
-                "SELECT DISTINCT account_id FROM safety_incidents WHERE reason='decision_worker_crashed'"
-            ).fetchall()
-        ]
-        _record_resolutions(con, "decision_worker_crashed", now, ledger_path)
-        cleared = con.execute("DELETE FROM safety_incidents WHERE reason='decision_worker_crashed'").rowcount
+        # Scoped to the account the verified reconcile checked: the broker proves
+        # nothing about another account's incidents, so those keep their halt.
+        # With no verified account recorded (a stubbed reconcile) the accounts
+        # that hold the incident are used.
+        reconciled_accounts = (
+            [_VERIFIED_ACCOUNT_ID]
+            if _VERIFIED_ACCOUNT_ID
+            else [
+                row[0]
+                for row in con.execute(
+                    "SELECT DISTINCT account_id FROM safety_incidents WHERE reason='decision_worker_crashed'"
+                ).fetchall()
+            ]
+        )
+        cleared = 0
+        for account_id in reconciled_accounts:
+            cleared_rows.extend(_incident_rows(con, "decision_worker_crashed", account_id))
+            cleared += con.execute(
+                "DELETE FROM safety_incidents WHERE reason='decision_worker_crashed' AND account_id=?",
+                (account_id,),
+            ).rowcount
         if cleared:
             print(f"  Cleared {cleared} decision_worker_crashed incident (reconcile verified)")
         else:
@@ -412,6 +445,9 @@ def repair_runtime_db(ledger: str | Path | None = None, config: Any | None = Non
             )
             print(f"  Cleared decision_worker_crashed breaker for {account_id} risk_state {latest_date}")
     con.commit()
+    # The audit trail is written only now that the clear has committed.
+    if reconcile_ok:
+        _record_resolutions(cleared_rows, "decision_worker_crashed", now, ledger_path)
     # Verify
     open_port2 = con.execute("SELECT COUNT(*) FROM portfolio_runtime_sessions WHERE ended_at IS NULL").fetchone()[0]
     open_rt2 = con.execute("SELECT COUNT(*) FROM runtime_sessions WHERE ended_at IS NULL").fetchone()[0]
@@ -436,6 +472,7 @@ def _run_broker_reconcile(
     ownership/open-order providers and the tradable universe; without them
     every bot-owned position reads as BROKER_STALE.
     """
+    global _VERIFIED_ACCOUNT_ID
     try:
         cfg = config if config is not None else _load_config(config_path)
         # Only attempt if keys exist
@@ -494,6 +531,11 @@ def _run_broker_reconcile(
         if drift:
             print(f"  Reconciliation reported drift, NOT verified: {drift}")
             return False
+        account_id = str(broker.account_id or "").strip()
+        if not account_id:
+            print("  Reconciliation ran but the broker account is unknown, NOT verified")
+            return False
+        _VERIFIED_ACCOUNT_ID = account_id
         print("  Reconciliation succeeded with no drift")
         return True
     except Exception as e:
@@ -555,6 +597,13 @@ def main(argv: list[str] | None = None) -> int:
         backup_ledger(qdir, ledger)
     except RuntimeError as exc:
         print(f"Abort: {exc}. The ledger was not repaired; quarantined files stay in {qdir}.")
+        return 1
+    # Restart=on-failure can bring the engine back while the backup ran: check
+    # again right before the ledger is written, and never write under a live engine.
+    if not check_engine_not_running(config_path=args.config):
+        print(
+            f"Abort: engine started during the repair. The ledger was not repaired; quarantined files stay in {qdir}."
+        )
         return 1
     reconciled = repair_runtime_db(ledger, config)
     print("\nDone. Quarantine at", qdir)

@@ -521,7 +521,7 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
     the ``backup_failed`` alert: the timer runs unattended, so a silent
     failure would only surface when a restore is already needed.
     """
-    from parayabuck.backup import backup_database, verify_backup
+    from parayabuck.backup import backup_database, verify_backup_set
 
     if args.verify_only:
         target = Path(args.verify_only).absolute()
@@ -529,7 +529,8 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
             # Nothing to verify is not a corrupt backup: no alert, exit 2.
             print(f"Backup not found: {target}", file=sys.stderr)
             return 2
-        ok = verify_backup(target)
+        # The set's peak sidecars and halt copy are part of the restore candidate.
+        ok = verify_backup_set(target)
         if ok:
             print(f"Backup OK: {target}")
             return 0
@@ -562,7 +563,7 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
             retention_days=retention_days,
             label=getattr(args, "label", None),
         )
-        verified = verify_backup(destination)
+        verified = verify_backup_set(destination)
     except Exception as exc:
         _emit_ops_alert(
             "backup_failed",

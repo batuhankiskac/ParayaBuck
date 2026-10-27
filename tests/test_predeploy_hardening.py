@@ -762,8 +762,12 @@ def test_peak_account_scoped_B_legacy_max(tmp_path):
     assert json.loads(peak.read_text())["peak_equity"] == 100000.0
 
 
-def test_peak_account_scoped_C_sidecar_mismatch_ignored(tmp_path):
-    """C: sidecar bound to acct-A is ignored when current account is B."""
+def test_peak_account_scoped_C_sidecar_mismatch_fails_closed(tmp_path):
+    """C: sidecar bound to acct-A fails closed when the current account is B (R2-6-1).
+
+    The foreign sidecar is neither ignored nor overwritten: the operator must
+    verify the account and move the sidecar aside.
+    """
     from parayabuck.execution.ledger import ExecutionLedger
     from parayabuck.portfolio.runtime_service import PortfolioStateRepository
 
@@ -773,16 +777,13 @@ def test_peak_account_scoped_C_sidecar_mismatch_ignored(tmp_path):
     repo.update_high_water("acct-B", 70000.0)
     peak = tmp_path / "paper_equity_peak.json"
     # Sidecar bound to A with 120k
-    peak.write_text(json.dumps({"account_id": "acct-A", "peak_equity": 120000.0, "epoch": 0}))
+    original = json.dumps({"account_id": "acct-A", "peak_equity": 120000.0, "epoch": 0})
+    peak.write_text(original)
     broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-B", 70000.0)
-    snap = broker.account()
-    # Must ignore A's 120k and use B's 70k
-    assert snap.peak_equity == 70000.0
-    assert broker._peak_account_id == "acct-B"
-    # Sidecar rewritten to B
-    data = json.loads(peak.read_text())
-    assert data["account_id"] == "acct-B"
-    assert data["peak_equity"] == 70000.0
+    with pytest.raises(RiskStatePersistenceError):
+        broker.account()
+    # Neither used nor rewritten: A's sidecar stays as it was.
+    assert peak.read_text() == original
 
 
 def test_peak_account_scoped_D_no_cross_account_pollution(tmp_path):
@@ -801,10 +802,16 @@ def test_peak_account_scoped_D_no_cross_account_pollution(tmp_path):
     broker_a = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 200000.0)
     snap_a = broker_a.account()
     assert snap_a.peak_equity == 200000.0
-    # Now switch to B, sidecar still bound to A, but B should get 30k not 200k
+    # Now switch to B, sidecar still bound to A: B fails closed rather than
+    # reading A's 200k (R2-6-1).
     broker_b = _make_broker_for_account(tmp_path, ledger, peak, "acct-B", 30000.0)
-    # Before account(), peak is 0; after, should be 30k
     assert broker_b._peak_equity == 0.0
+    with pytest.raises(RiskStatePersistenceError):
+        broker_b.account()
+    # Once the operator has moved A's sidecar aside, B bootstraps from its own
+    # persisted high-water (30k), never from A's peak.
+    peak.unlink()
+    broker_b = _make_broker_for_account(tmp_path, ledger, peak, "acct-B", 30000.0)
     snap_b = broker_b.account()
     assert snap_b.peak_equity == 30000.0
     assert snap_b.peak_equity != 200000.0

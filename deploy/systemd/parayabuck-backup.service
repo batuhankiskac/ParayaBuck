@@ -7,12 +7,18 @@ Type=oneshot
 User=parayabuck
 Group=parayabuck
 WorkingDirectory=/opt/parayabuck
-EnvironmentFile=/opt/parayabuck/.env
+# Narrow env file, not .env: the backup and the off-host copy command it starts
+# inherit only what it holds (no Alpaca keys, approval key or LIVE switch).
+# ENV_PATH makes the config loader read the same file (docs/deployment.md,
+# "Backup environment file").
+EnvironmentFile=/opt/parayabuck/.env.backup
+Environment=ENV_PATH=/opt/parayabuck/.env.backup
 ExecStart=/opt/parayabuck/.venv/bin/parayabuck backup
 # A failed run exits non-zero (the unit shows failed in `systemctl status`)
 # and records a `backup_failed` alert in the log and the event journal
 # (`parayabuck ops events --kind backup_failed`). `parayabuck doctor` reports
-# a backup set that is merely stale. Nothing is delivered off-host.
+# a backup set that is merely stale. The off-host copy runs only when
+# PARAYABUCK_BACKUP_OFFHOST_CMD is set in .env.backup.
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

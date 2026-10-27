@@ -2,6 +2,10 @@
 Description=ParayaBuck Trading Engine (PAPER; LIVE only when configured and authorized)
 After=network-online.target
 Wants=network-online.target
+# Five failed starts within 600 s stop the Restart= loop; the unit then stays failed
+# until `systemctl reset-failed parayabuck` and a manual start. No OnFailure= unit ships.
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=notify
@@ -39,7 +43,9 @@ ProtectSystem=strict
 ProtectHome=true
 # State persistence (settings drawer, runtime DB/journal, backtest reports);
 # everything else is read-only. The app refuses a non-loopback bind.
-ReadWritePaths=/opt/parayabuck/config /opt/parayabuck/data /opt/parayabuck/reports
+# reports/ may be missing on a fresh host (the First install step creates it); the
+# '-' prefix keeps the namespace setup from failing before ExecStartPre runs.
+ReadWritePaths=/opt/parayabuck/config /opt/parayabuck/data -/opt/parayabuck/reports
 CapabilityBoundingSet=
 PrivateDevices=true
 ProtectKernelTunables=true

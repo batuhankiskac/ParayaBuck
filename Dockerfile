@@ -20,7 +20,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY config ./config
 RUN python -m pip install --upgrade pip \
-    && python -m pip install -r requirements.lock \
+    && python -m pip install --require-hashes -r requirements.lock \
     && python -m pip install . --no-deps
 
 RUN mkdir -p /app/data/runtime /app/reports \

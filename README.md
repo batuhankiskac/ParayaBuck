@@ -84,7 +84,7 @@ Python 3.12+.
 
 ```bash
 python -m venv .venv
-.venv/bin/python -m pip install -r requirements-dev.lock   # runtime + dev tools
+.venv/bin/python -m pip install --require-hashes -r requirements-dev.lock   # runtime + dev tools, hash-checked
 .venv/bin/python -m pip install -e . --no-deps
 cp .env.example .env   # credentials live only in .env, never in YAML or git
 ```
@@ -96,13 +96,13 @@ drift. After changing `pyproject.toml` dependencies:
 
 ```bash
 uv lock
-uv export --locked --no-hashes --no-emit-project --no-dev --format requirements.txt -o requirements.lock
-uv export --locked --no-hashes --no-emit-project --no-dev --extra dev --format requirements.txt -o requirements-dev.lock
+uv export --locked --no-emit-project --no-dev --format requirements.txt -o requirements.lock
+uv export --locked --no-emit-project --no-dev --extra dev --format requirements.txt -o requirements-dev.lock
 ```
 
 Configuration: `config/settings.yaml` (`runtime`, `universe`, `strategy.equity`,
 `risk`, `execution`, `backtest`, `live`, `engine`, `backup`, `alerting`,
-`intent_watchdog`). Old crypto keys are rejected by the loader.
+`intent_watchdog`, `signal_cross_check`, `app`, `alpaca`). Old crypto keys are rejected by the loader.
 
 ## Backtest
 

@@ -23,8 +23,8 @@ jobs:
         run: uv lock --check
       - name: Requirement files are current exports of uv.lock
         run: |
-          uv export --locked --no-hashes --no-emit-project --no-dev --format requirements.txt -o requirements.lock
-          uv export --locked --no-hashes --no-emit-project --no-dev --extra dev --format requirements.txt -o requirements-dev.lock
+          uv export --locked --no-emit-project --no-dev --format requirements.txt -o requirements.lock
+          uv export --locked --no-emit-project --no-dev --extra dev --format requirements.txt -o requirements-dev.lock
           git diff --exit-code -- requirements.lock requirements-dev.lock
       - name: Dependency audit (runtime lock)
         if: always()
@@ -45,7 +45,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -r requirements-dev.lock
+      - run: python -m pip install --require-hashes -r requirements-dev.lock
       - run: python -m pip install --no-deps .
       - run: python -m pip install build pip-audit
         if: always()

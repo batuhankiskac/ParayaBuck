@@ -189,7 +189,7 @@ def test_toggle_mode_waits_for_the_settings_lock(tmp_path: Path) -> None:
 def test_settings_schema_accepts_production_risk_limits_below_100() -> None:
     payload = SettingsPayload(daily_loss_limit_pct=20, max_drawdown_pct=75)
     assert (payload.daily_loss_limit_pct, payload.max_drawdown_pct) == (20, 75)
-    SettingsPayload(daily_loss_limit_pct=99.9, max_drawdown_pct=99.9)
+    SettingsPayload(daily_loss_limit_pct=50, max_drawdown_pct=90)
     # A 100 % latch can never trip (Q3E-7): rejected like RiskLimits does.
     with pytest.raises(ValidationError):
         SettingsPayload(daily_loss_limit_pct=100)

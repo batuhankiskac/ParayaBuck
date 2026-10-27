@@ -101,7 +101,7 @@
       svg.appendChild(axis);
 
       // bench first so the portfolio line sits on top
-      series.slice().sort(function (a) { return a.cls === "main" ? 1 : -1; }).forEach(function (s) {
+      series.slice().sort(function (a, b) { return (a.cls === "main") - (b.cls === "main"); }).forEach(function (s) {
         const d = s.points.map(function (p, i) { return (i ? "L" : "M") + x(p.t).toFixed(1) + " " + y(p.v).toFixed(1); }).join("");
         if (s.area) {
           const base = y(Math.max(vMin, Math.min(vMax, opts.areaBase === undefined ? vMin : opts.areaBase)));

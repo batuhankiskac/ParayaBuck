@@ -229,8 +229,9 @@ def _dashboard_safe_panel(name: str, builder: Callable[[], dict[str, Any] | None
         payload = builder()
         return payload if isinstance(payload, dict) else {"unavailable": True}
     except Exception as exc:
+        # The browser gets a fixed reason; the exception text stays in the log.
         log.warning("Dashboard panel %s failed: %s", name, exc)
-        return {"unavailable": True, "error": str(exc)}
+        return {"unavailable": True, "error": "panel unavailable"}
 
 
 def _dashboard_market_decisions(account_id: str) -> dict[str, dict[str, Any]]:
@@ -358,6 +359,22 @@ def _dashboard_market_status(
     return "active"
 
 
+def _managed_share(position: dict[str, Any]) -> tuple[float, float]:
+    """(managed quantity, managed market value) of one account position.
+
+    Market value is pro-rated by the managed share of the total quantity. A
+    position without the managed split (older payloads) counts in full.
+    """
+    total_qty = float(position.get("total_qty") or position.get("qty") or 0.0)
+    market_value = float(position.get("market_value") or 0.0)
+    if position.get("managed_qty") is None:
+        return total_qty, market_value
+    if total_qty <= 0.0:
+        return 0.0, 0.0
+    managed_qty = min(max(float(position.get("managed_qty") or 0.0), 0.0), total_qty)
+    return managed_qty, market_value * managed_qty / total_qty
+
+
 def _dashboard_market_card(
     market_key: str,
     *,
@@ -389,24 +406,31 @@ def _dashboard_market_card(
     enabled = bool(selection.enabled)
     market_health = dict((health or {}).get("markets", {}).get(market_key, {}) or {})
     catch_up = dict(market_health.get("catch_up") or {})
-    positions = [position for position in account.get("positions", []) if position.get("market") == market_key]
+    # The strategy card counts only the bot-managed slice of each position:
+    # shares the bot did not open (external or manual) are not its allocation.
+    positions = [
+        (position, *_managed_share(position))
+        for position in account.get("positions", [])
+        if position.get("market") == market_key
+    ]
+    positions = [entry for entry in positions if entry[1] > 1e-12]
     equity = max(float(account.get("equity") or 0.0), 1e-9)
-    market_value = sum(float(position.get("market_value") or 0.0) for position in positions)
+    market_value = sum(entry[2] for entry in positions)
     target = dict((decision or {}).get("target") or {})
     weights = {str(weight.get("symbol")): weight for weight in target.get("weights", [])}
     metadata = dict(target.get("metadata") or {})
     hypothesis = str(metadata.get("hypothesis") or "")
     holdings: list[dict[str, Any]] = []
-    for position in positions:
+    for position, managed_qty, managed_value in positions:
         symbol = str(position.get("symbol", ""))
         weight = weights.get(symbol)
         holdings.append(
             {
                 "symbol": symbol,
                 "direction": position.get("direction"),
-                "qty": position.get("total_qty") or position.get("qty") or 0,
-                "market_value": position.get("market_value"),
-                "current_weight_pct": (float(position.get("market_value") or 0.0) / equity) * 100,
+                "qty": managed_qty,
+                "market_value": managed_value,
+                "current_weight_pct": (managed_value / equity) * 100,
                 "target_weight_pct": (float((weight or {}).get("weight") or 0.0) * 100 if weight else None),
                 "reason": (weight or {}).get("reason") if weight else None,
                 "hypothesis": hypothesis,
@@ -520,7 +544,7 @@ def _dashboard_buy_capacity() -> dict[str, Any]:
         capacity = dict(runtime.capacity_health())
     except Exception as exc:
         log.warning("Dashboard capacity probe failed: %s", exc)
-        capacity = {"unavailable": True, "reason": str(exc)}
+        capacity = {"unavailable": True, "reason": "capacity probe failed"}
     with _dashboard_capacity_cache_lock:
         _dashboard_capacity_cache = (time.monotonic() + 10.0, id(runtime), capacity)
     return capacity
@@ -662,6 +686,50 @@ def _dashboard_execution() -> dict[str, Any]:
     }
 
 
+# Outstanding ownership adjustments are rare; the cap only bounds the poll read.
+_DASHBOARD_OWNERSHIP_LIMIT = 50
+
+
+def _dashboard_ownership(account_id: str) -> dict[str, Any]:
+    """Ownership adjustments whose quantity no lot has consumed yet.
+
+    A positive ``outstanding_quantity`` adds shares to ownership (a split
+    rebase); a negative one removes them. Display only: the ownership
+    resolver reads the same rows on the trading side.
+    """
+    connection = _dashboard_readonly_connection()
+    if connection is None:
+        return {"adjustments": []}
+    try:
+        rows = connection.execute(
+            """
+            SELECT symbol, market, kind, sign, quantity, consumed_quantity, note, created_at
+            FROM portfolio_ownership_adjustments
+            WHERE account_id = ? AND consumed_quantity < quantity
+            ORDER BY created_at DESC LIMIT ?
+            """,
+            (account_id, _DASHBOARD_OWNERSHIP_LIMIT),
+        ).fetchall()
+    except sqlite3.Error:
+        return {"unavailable": True, "adjustments": []}
+    finally:
+        _dashboard_release(connection)
+    adjustments = []
+    for symbol, market, kind, sign, quantity, consumed, note, created_at in rows:
+        outstanding = float(sign or 0.0) * (float(quantity or 0.0) - float(consumed or 0.0))
+        adjustments.append(
+            {
+                "symbol": str(symbol),
+                "market": str(market),
+                "kind": str(kind),
+                "outstanding_quantity": outstanding,
+                "note": str(note or ""),
+                "created_at": str(created_at),
+            }
+        )
+    return {"adjustments": adjustments}
+
+
 def _dashboard_universe(cfg: Any) -> dict[str, Any]:
     """Universe panel: the static equity symbols."""
     if cfg is None:
@@ -716,13 +784,22 @@ def _dashboard_degraded_reasons(health: dict[str, Any] | None) -> list[str]:
     return degraded_reasons(health)
 
 
+# Breaker reasons that mean the account state could not be reconciled or protected.
+_RECONCILIATION_BREAKER_REASONS = frozenset(
+    {"reconciliation_failed", "reconciliation_bug_suspected", "protection_failure"}
+)
+
+
 def _dashboard_health(
     health: dict[str, Any] | None,
     account: dict[str, Any],
 ) -> dict[str, Any]:
     """System health panel: workers, freshness, reconciliation, DB."""
     workers = dict((health or {}).get("workers") or {})
-    heartbeats = [str(worker.get("last_heartbeat")) for worker in workers.values() if worker.get("last_heartbeat")]
+    # Newest beat compared as datetimes, then emitted as ISO 8601 (the str()
+    # form used a space separator and mis-sorted mixed microsecond precision).
+    heartbeats = [worker.get("last_heartbeat") for worker in workers.values() if worker.get("last_heartbeat")]
+    heartbeats = [beat for beat in heartbeats if isinstance(beat, datetime)]
     # Only the restart count is read from the ledger here: one COUNT on the
     # build's shared connection, not a full runtime_metrics() pass over a
     # second connection.
@@ -742,10 +819,11 @@ def _dashboard_health(
         },
         "reconciliation": {
             "last_at": (health or {}).get("last_reconciliation_at"),
-            "failed": (health or {}).get("circuit_breaker_reason") == "reconciliation_failed",
+            # Every breaker reason a reconciliation or protection failure latches.
+            "failed": (health or {}).get("circuit_breaker_reason") in _RECONCILIATION_BREAKER_REASONS,
         },
         "database": _dashboard_database_state(),
-        "last_heartbeat": max(heartbeats) if heartbeats else None,
+        "last_heartbeat": max(heartbeats).isoformat() if heartbeats else None,
     }
 
 
@@ -801,6 +879,21 @@ def _dashboard_payload(context: DashboardContext | None = None) -> dict[str, Any
     return payload
 
 
+def _trend_panel(
+    trend_metadata: dict[str, Any],
+    account: dict[str, Any],
+    decision: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Trend card plus the time its signal was computed (the last persisted decision).
+
+    With the engine stopped the card shows the last decision, which can be
+    days old; ``as_of`` lets the card say so.
+    """
+    panel = dict(trend_status_from_metadata(trend_metadata, account))
+    panel["as_of"] = (decision or {}).get("timestamp")
+    return panel
+
+
 def _build_dashboard_payload(engine_state: str) -> dict[str, Any]:
     """Assemble the full dashboard payload (called on snapshot-cache miss)."""
     with _dashboard_shared_connection():
@@ -828,26 +921,35 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
     equity_target = equity_target_value if isinstance(equity_target_value, dict) else {}
     trend_metadata_value = equity_target.get("metadata")
     trend_metadata = trend_metadata_value if isinstance(trend_metadata_value, dict) else {}
+    account_view: dict[str, Any] = {
+        "equity": account.get("equity"),
+        "cash": account.get("cash"),
+        "gross_exposure": account.get("gross_exposure"),
+        "daily_pnl": account.get("daily_pnl"),
+        "realized_pnl": account.get("realized_pnl"),
+        "unrealized_pnl": account.get("unrealized_pnl"),
+        "total_pnl": (float(account.get("realized_pnl") or 0.0) + float(account.get("unrealized_pnl") or 0.0))
+        if account.get("realized_pnl") is not None or account.get("unrealized_pnl") is not None
+        else None,
+        "drawdown": account.get("drawdown"),
+        "account_suffix": account.get("account_suffix"),
+        "snapshot_at": account.get("snapshot_at"),
+        "age_seconds": account.get("age_seconds"),
+        "stale": account.get("stale"),
+        "source": account.get("source"),
+        # Positions ride with the balances so the positions table refreshes on every poll.
+        "positions": list(account.get("positions") or []),
+    }
+    if account.get("source") == "unavailable":
+        # The zero fallback is not a balance: send nulls so no client renders it as one.
+        account_view = {
+            key: (None if key not in {"stale", "source", "account_suffix"} else value)
+            for key, value in account_view.items()
+        }
     return {
         "as_of": datetime.now(UTC).isoformat(),
         "engine_state": engine_state,
-        "account": {
-            "equity": account.get("equity"),
-            "cash": account.get("cash"),
-            "gross_exposure": account.get("gross_exposure"),
-            "daily_pnl": account.get("daily_pnl"),
-            "realized_pnl": account.get("realized_pnl"),
-            "unrealized_pnl": account.get("unrealized_pnl"),
-            "total_pnl": (float(account.get("realized_pnl") or 0.0) + float(account.get("unrealized_pnl") or 0.0))
-            if account.get("realized_pnl") is not None or account.get("unrealized_pnl") is not None
-            else None,
-            "drawdown": account.get("drawdown"),
-            "account_suffix": account.get("account_suffix"),
-            "snapshot_at": account.get("snapshot_at"),
-            "age_seconds": account.get("age_seconds"),
-            "stale": account.get("stale"),
-            "source": account.get("source"),
-        },
+        "account": account_view,
         "equity": _dashboard_safe_panel(
             "equity",
             lambda: _dashboard_market_card(
@@ -862,10 +964,11 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
         ),
         "trend_status": _dashboard_safe_panel(
             "trend_status",
-            lambda: trend_status_from_metadata(trend_metadata, account),
+            lambda: _trend_panel(trend_metadata, account, equity_decision),
         ),
         "risk": _dashboard_safe_panel("risk", lambda: _dashboard_risk(cfg, health, account)),
         "execution": _dashboard_safe_panel("execution", _dashboard_execution),
+        "ownership": _dashboard_safe_panel("ownership", lambda: _dashboard_ownership(account_id)),
         "universe": _dashboard_safe_panel("universe", lambda: _dashboard_universe(cfg)),
         "health": _dashboard_safe_panel(
             "health",
@@ -885,7 +988,7 @@ def get_tax_ytd_payload(state: Any | None = None) -> dict[str, Any]:
             return _dashboard_tax_ytd(_dashboard_account_id())
     except Exception as exc:
         log.exception("Dashboard tax payload failed: %s", exc)
-        return {"unavailable": True, "error": str(exc)}
+        return {"unavailable": True, "error": "tax payload unavailable"}
 
 
 def _dashboard_tax_ytd(account_id: str) -> dict[str, Any]:
@@ -909,9 +1012,15 @@ def _dashboard_tax_ytd(account_id: str) -> dict[str, Any]:
     connection = _dashboard_readonly_connection()
     try:
         status = ytd_status(connection, account_id, year)
+    except Exception as exc:
+        # The card must render a failure, not a 500: report it as a status payload.
+        log.warning("Dashboard tax status failed: %s", exc)
+        return {"year": year, "status": "error", "error": "tax status unavailable"}
     finally:
         _dashboard_release(connection)
-    _dashboard_tax_cache[key] = (now, status)
+    # Only a clean result is cached; an error payload is recomputed on the next poll.
+    if isinstance(status, dict) and status.get("status") == "ok":
+        _dashboard_tax_cache[key] = (now, status)
     return status
 
 
@@ -960,4 +1069,10 @@ def get_overview_payload(state: Any | None = None) -> dict[str, Any]:
         return _dashboard_payload(context=_context(state))
     except Exception as exc:
         log.exception("Dashboard overview payload failed: %s", exc)
-        return {"unavailable": True, "error": str(exc)}
+        return {"unavailable": True, "error": "overview unavailable"}
+
+
+def account_id_for(state: Any | None = None) -> str:
+    """Ledger account the dashboard scopes its reads to, for one request's WebState."""
+    with _dashboard_context_scope(_context(state)):
+        return _dashboard_account_id()

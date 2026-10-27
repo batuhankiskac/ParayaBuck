@@ -292,14 +292,14 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkey
 
 
 def test_overview_surfaces_the_payload_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A failing overview reports its real cause, not an empty payload."""
+    """A failing overview is explicit about being unavailable, without leaking internals."""
 
     def _boom(**_kwargs: Any) -> dict[str, Any]:
         raise RuntimeError("ledger locked")
 
     monkeypatch.setattr(svc, "_dashboard_payload", _boom)
 
-    assert svc.get_overview_payload() == {"unavailable": True, "error": "ledger locked"}
+    assert svc.get_overview_payload() == {"unavailable": True, "error": "overview unavailable"}
 
 
 def test_market_decisions_failure_reaches_the_operator(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -311,7 +311,7 @@ def test_market_decisions_failure_reaches_the_operator(monkeypatch: pytest.Monke
     monkeypatch.setattr(svc, "_dashboard_market_decisions", _boom)
 
     svc._dashboard_snapshot_reset()
-    assert svc.get_overview_payload() == {"unavailable": True, "error": "ledger locked"}
+    assert svc.get_overview_payload() == {"unavailable": True, "error": "overview unavailable"}
 
 
 # ---------------------------------------------------------------------------

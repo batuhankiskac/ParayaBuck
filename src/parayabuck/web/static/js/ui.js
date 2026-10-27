@@ -6,6 +6,8 @@
 
   const api = global.PBApi;
   const byId = function (id) { return document.getElementById(id); };
+  // Number of engine start/stop/reset requests awaiting a response (see withButton).
+  let controlPending = 0;
   const isNum = function (v) { return v !== undefined && v !== null && v !== "" && Number.isFinite(Number(v)); };
 
   // ---------- formatting ----------
@@ -262,6 +264,8 @@
     if (reset) reset.hidden = shell.state !== "halted" && shell.state !== "degraded";
     if (epoch) epoch.hidden = !active;
     if (!start || !stop) return;
+    // A control request in flight owns the buttons: a poll must not re-enable them mid-request.
+    if (controlPending > 0) { start.disabled = true; stop.disabled = true; return; }
     if (active) { start.disabled = true; stop.disabled = false; }
     else if (shell.state === "stopped" || shell.state === "error") { start.disabled = false; stop.disabled = true; }
     else if (shell.state === "starting" || shell.state === "stopping") { start.disabled = true; stop.disabled = shell.state === "stopping"; }
@@ -331,7 +335,9 @@
   }
   async function withButton(button, fn) {
     if (button) button.disabled = true;
+    controlPending += 1;
     try { await fn(); } catch (err) { toast("İşlem başarısız: " + err.message, "error"); } finally {
+      controlPending -= 1;
       if (button) button.disabled = false;
       refreshStatus();
     }
@@ -450,8 +456,9 @@
         }
         byId("paperModeCheck").checked = !!data.paper_mode;
         byId("equityTradingCheck").checked = data.equity_trading_enabled !== false;
-        byId("maxDailyLoss").value = data.daily_loss_limit_pct || 1.5;
-        byId("maxDrawdown").value = data.max_drawdown_pct || 10;
+        // No made-up defaults: a missing limit leaves the field empty, so the save is refused.
+        byId("maxDailyLoss").value = data.daily_loss_limit_pct ?? "";
+        byId("maxDrawdown").value = data.max_drawdown_pct ?? "";
         byId("host").value = data.host || "127.0.0.1";
         byId("port").value = data.port || 8000;
         byId("openBrowser").checked = data.open_browser !== false;
@@ -472,7 +479,13 @@
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
       const btn = byId("saveSettingsBtn");
+      // A save restarts the engine only when the operator says so (the server default is off).
+      const restartEngine = await dialog.confirm({
+        title: "Motor yeniden başlatılsın mı?",
+        message: "Evet: kayıttan sonra motor yeniden başlatılır ve yeni ayarlarla çalışır. Hayır: ayarlar kaydedilir, çalışan motor mevcut ayarlarla devam eder."
+      });
       const payload = {
+        restart_engine: restartEngine === true,
         api_key: byId("apiKey").value.trim(),
         secret_key: byId("secretKey").value.trim(),
         paper_mode: byId("paperModeCheck").checked,

@@ -167,6 +167,7 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_
             SettingsPayload(
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
+                restart_engine=True,
                 max_drawdown_pct=12.0,
                 host="127.0.0.1",
                 port=8000,
@@ -192,7 +193,7 @@ def test_settings_save_succeeds_when_automatic_restart_times_out(tmp_path: Path,
     manager = _RestartFailureManagerStub(tmp_path)
     manager.config_path.write_text(yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {}, **_LOADABLE_MARKETS}))
 
-    result = asyncio.run(SettingsService(manager).save_settings(SettingsPayload(daily_loss_limit_pct=2.0)))
+    result = asyncio.run(SettingsService(manager).save_settings(SettingsPayload(daily_loss_limit_pct=2.0, restart_engine=True)))
 
     assert result["status"] == "success"
     assert result["engine_restarted"] is False
@@ -220,6 +221,7 @@ def test_settings_save_strips_obsolete_engine_keys_so_config_loads_again(tmp_pat
             SettingsPayload(
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
+                restart_engine=True,
                 max_drawdown_pct=12.0,
             )
         )
@@ -254,6 +256,7 @@ def test_settings_save_strips_obsolete_risk_keys_so_config_loads_again(tmp_path:
             SettingsPayload(
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
+                restart_engine=True,
                 max_drawdown_pct=12.0,
             )
         )

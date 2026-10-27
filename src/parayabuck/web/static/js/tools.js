@@ -42,7 +42,7 @@
     byId("clearLogsBtn").addEventListener("click", function () { logView.replaceChildren(); });
     appendLog("Konsol bağlandı; motor logları burada akacak.", "info");
     if (global.PBWebSocket) {
-      global.PBWebSocket.connectLogs(function (payload) { appendLog(payload.message, payload.level); });
+      global.PBWebSocket.connectLogs(function (payload) { appendLog(payload.message, payload.level, payload.time); });
     }
 
     // ---------- raw operations state ----------

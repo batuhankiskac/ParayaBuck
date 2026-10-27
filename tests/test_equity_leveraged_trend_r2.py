@@ -252,9 +252,12 @@ def test_the_early_path_is_unavailable_on_a_shorter_history() -> None:
     assert early["replay_bars"] == 126 and early["weight"] == 0.5
 
 
-def test_zero_base_close_reports_no_momentum_instead_of_dividing() -> None:
-    # Bar allows close == 0: the close 20 sessions back has no return to
-    # report, so momentum20 is None and decide() must not divide by it.
+def test_zero_base_close_reports_no_momentum_instead_of_dividing(monkeypatch) -> None:
+    # A zero close 20 sessions back has no return to report, so momentum20 is
+    # None and decide() must not divide by it.
+    # Bar now refuses non-positive prices; this pins the strategy's own guard
+    # (defence in depth for bars built elsewhere), so the model check is bypassed.
+    monkeypatch.setattr(Bar, "__post_init__", lambda self: None)
     closes = _fixture_closes()
     closes[-21] = 0.0
     target = _strategy(vol_target=0.0).decide(_context(closes))

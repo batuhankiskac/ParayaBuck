@@ -200,7 +200,12 @@ def _bars(symbol: str, closes: list[float], start: datetime) -> tuple:
     )
 
 
-def test_equity_volatility_treats_zero_close_as_insufficient_history():
+def test_equity_volatility_treats_zero_close_as_insufficient_history(monkeypatch):
+    from parayabuck.core.models import Bar
+
+    # Bar now refuses non-positive prices; this pins the strategy's own guard
+    # (defence in depth for bars built elsewhere), so the model check is bypassed.
+    monkeypatch.setattr(Bar, "__post_init__", lambda self: None)
     strategy = EquityLeveragedTrendV1({"vol_target": 0.35, "vol_window": 2, "sma_bars": 0})
     closes = [0.0, 100.0, 101.0]
     context = PortfolioContext(

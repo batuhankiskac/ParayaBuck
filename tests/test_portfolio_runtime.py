@@ -2057,7 +2057,11 @@ class _PositionedBroker(_Broker):
 
 
 def test_paper_runtime_blocks_opening_when_all_six_positions_remain(tmp_path) -> None:
-    """An omitted sub-band position must not be spent as a free slot."""
+    """An omitted sub-band position must not be spent as a free slot.
+
+    Omitted positions are full exits, which bypass the band (T7-2): they sell
+    in the SELL phase, and the opening BUY waits until those exits fill.
+    """
     held = ("AAPL", "CMG", "EME", "ETN", "GDDY", "SPY")
     broker = _PositionedBroker(
         tuple(
@@ -2084,10 +2088,10 @@ def test_paper_runtime_blocks_opening_when_all_six_positions_remain(tmp_path) ->
 
     result = runtime.process_closed_bars(bars, force_scheduled=True)
 
-    assert result.status == "submitted"
+    assert result.status == "sell_phase_submitted"
     assert result.risk is not None and result.risk.target.weight_for("MSFT", Market.EQUITY) == 0.05
-    assert result.orders == ()
-    assert broker.submitted == []
+    assert sorted(order.symbol for order in broker.submitted) == sorted(held)
+    assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
 
 
 def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:

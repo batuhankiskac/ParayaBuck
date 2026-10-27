@@ -208,7 +208,10 @@ def test_the_vote_without_the_early_path_needs_253_sessions() -> None:
     assert strategy.decide(_context(rising[1:])).metadata["trend_state"] == "insufficient_history"
 
 
-def test_degenerate_momentum_base_is_insufficient_not_long() -> None:
+def test_degenerate_momentum_base_is_insufficient_not_long(monkeypatch) -> None:
+    # Bar now refuses non-positive prices; this pins the strategy's own guard
+    # (defence in depth for bars built elsewhere), so the model check is bypassed.
+    monkeypatch.setattr(Bar, "__post_init__", lambda self: None)
     target = _e2().decide(_context([0.0, 101.0, 102.0, 103.0]))
     assert target.metadata["trend_state"] == "insufficient_history"
     assert target.weights == ()

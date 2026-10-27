@@ -263,10 +263,16 @@ def test_production_overlay_and_band_suppressed_exit_cannot_open_seventh_slot() 
         approved_symbols=tradable,
         decision_id="slot-decision",
     )
-    assert [(order.symbol, order.side.value) for order in planned] == [("GDDY", "buy"), ("NEW1", "buy")]
+    # TDG's sub-band residual is a full exit, which bypasses the band (T7-2).
+    assert [(order.symbol, order.side.value) for order in planned] == [
+        ("TDG", "sell"),
+        ("GDDY", "buy"),
+        ("NEW1", "buy"),
+    ]
     assert TargetToOrderPlanner().policy.rebalance_band_pct == 0.005
     admitted = reserve_opening_order_slots(planned, account, maximum_positions=6)
-    assert [(order.symbol, order.side.value) for order in admitted] == [("GDDY", "buy")]
+    # The pending TDG exit does not free its slot: NEW1 still cannot open.
+    assert [(order.symbol, order.side.value) for order in admitted] == [("TDG", "sell"), ("GDDY", "buy")]
 
 
 def test_executed_sell_still_needs_fresh_zero_position_before_replacement() -> None:

@@ -198,7 +198,8 @@ def test_final_buy_observation_is_durable_and_idempotent(tmp_path: Path) -> None
         row = repository.store.connection.execute(
             "SELECT admitted_batch_notional FROM portfolio_buy_admission_observations WHERE client_order_id='o' ORDER BY observed_at, observation_id"
         ).fetchall()
-        assert [item[0] for item in row] == [100, 200]
+        # One observation per (decision, order): the repeat keeps the first (P7-5).
+        assert [item[0] for item in row] == [100]
     finally:
         repository.close()
 

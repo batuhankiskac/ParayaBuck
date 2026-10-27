@@ -98,7 +98,7 @@ def test_engine_start_rescans_tracked_secrets(tmp_path: Path, monkeypatch: pytes
         _git(repo, "commit", "-qm", "leaked")
         monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
 
-        with pytest.raises(ValueError, match="SECURITY BLOCK"):
+        with pytest.raises(ValueError, match="GÜVENLİK ENGELİ"):
             manager.start_engine()
 
 
@@ -196,6 +196,8 @@ def test_control_token_validation_uses_constant_time():
 
 def test_mutating_without_token_rejected_with_token_with_allowed():
     app, mgr, _ = _app_with_fake_manager()
+    # Keep the operator Stop record out of the repo's data/runtime.
+    mgr._write_operator_stop_marker = lambda: None
     client = TestClient(app, raise_server_exceptions=False)
     # No token
     r = client.post("/api/engine/stop", headers={"Host": "testserver"})

@@ -82,7 +82,7 @@ def test_engine_manager_refuses_second_runtime(state: str) -> None:
     manager.engine_state = state
     manager.runtime = object()
 
-    with pytest.raises(ValueError, match=f"already {state}"):
+    with pytest.raises(ValueError, match="Motor zaten"):
         manager.start_engine()
 
 
@@ -506,6 +506,8 @@ def test_stop_failure_returns_json_http_error_and_marks_manager_failed(
             raise RuntimeError("worker shutdown failed")
 
     manager = EngineManager()
+    # The operator Stop record would land in the repo's data/runtime; keep it out of tests.
+    manager._write_operator_stop_marker = lambda: None  # type: ignore[method-assign]
     manager.engine_state = "running"
     manager.runtime = FailingRuntime()
     response = web_client(manager).post("/api/engine/stop")
@@ -608,7 +610,7 @@ def test_engine_start_refused_while_web_backtest_running(monkeypatch: Any) -> No
     """The engine must not start while a Web backtest is running."""
     manager = EngineManager()
     monkeypatch.setattr(BacktestManager, "is_running", property(lambda self: True))
-    with pytest.raises(ValueError, match="Web backtest is still running"):
+    with pytest.raises(ValueError, match="Web backtesti hâlâ çalışıyor"):
         manager.start_engine()
     assert manager.engine_state == "stopped"
 
@@ -621,7 +623,7 @@ def test_engine_start_allowed_when_web_backtest_idle(monkeypatch: Any) -> None:
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
     monkeypatch.delenv("ALPACA_SECRET_KEY", raising=False)
     monkeypatch.setattr(BacktestManager, "is_running", property(lambda self: False))
-    with pytest.raises(ValueError, match="Alpaca API key/secret missing"):
+    with pytest.raises(ValueError, match="Alpaca API anahtarı/secret eksik"):
         manager.start_engine()
 
 

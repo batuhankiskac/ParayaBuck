@@ -114,6 +114,31 @@ def _cached_config(manager: Any) -> tuple[Any, dict[str, Any] | None]:
     return cfg, metadata
 
 
+def _operator_halt_status(manager: Any) -> dict[str, Any] | None:
+    """The OPERATOR_HALT marker in force (``None`` when absent). Never raises.
+
+    An unreadable marker still reports as active: the halt is fail-closed.
+    """
+    marker_for = getattr(manager, "operator_halt_marker", None)
+    if not callable(marker_for):
+        return None
+    try:
+        from parayabuck.live_safety import operator_halt_active, read_operator_halt
+
+        marker = marker_for()
+        if not operator_halt_active(marker):
+            return None
+        record = read_operator_halt(marker) or {}
+    except Exception:
+        log.warning("Status operator halt check failed", exc_info=True)
+        return {"active": True, "reason": "unreadable halt marker", "created_at": None}
+    return {
+        "active": True,
+        "reason": str(record.get("reason") or "belirtilmemiş"),
+        "created_at": record.get("created_at"),
+    }
+
+
 def build_status_snapshot(manager: Any) -> dict[str, Any]:
     """Aggregate read-only status from manager (no mutations, no secrets)."""
     key, secret = manager.get_credentials()
@@ -133,6 +158,7 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
         "paper": manager.is_paper_mode(),
         "has_credentials": bool(key and secret),
         "security_warning": getattr(manager, "security_warning", None),
+        "operator_halt": _operator_halt_status(manager),
     }
     cfg: Any = None
     try:

@@ -606,7 +606,7 @@ def test_manual_start_while_retry_pending_is_refused(monkeypatch: Any) -> None:
     async def scenario() -> None:
         task = asyncio.create_task(manager.auto_start_engine())
         await _wait_for_retry_pending(manager)
-        with pytest.raises(ValueError, match="auto-start retry is in progress"):
+        with pytest.raises(ValueError, match="yeniden deneniyor"):
             manager.start_engine()  # manual start is refused, not duplicated
         assert manager.runtime is None
         assert manager.engine_state == "starting"

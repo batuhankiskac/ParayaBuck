@@ -105,7 +105,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
             summary="no health snapshot found — runtime may not have started",
             observed=None,
             threshold=heartbeat_tolerance_s,
-            action="check if runtime process is running",
+            action="Botun çalışan bir süreci olup olmadığını kontrol edin.",
         )
     try:
         data = json.loads(snapshot_path.read_text(encoding="utf-8"))
@@ -116,7 +116,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
             summary=f"snapshot unreadable: {exc}",
             observed="corrupt",
             threshold=heartbeat_tolerance_s,
-            action="inspect data/runtime/health_snapshot.json",
+            action="data/runtime/health_snapshot.json dosyasını inceleyin; bozuk olabilir.",
         )
     written_at = _parse_iso(data.get("written_at") or data.get("as_of"))
     if written_at is None:
@@ -137,7 +137,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
             observed=age,
             threshold=heartbeat_tolerance_s,
             since=written_at,
-            action="restart runtime if process dead",
+            action="Süreç ölmüşse botu yeniden başlatın.",
         )
     if state in {"stopped", "stop_failed"}:
         return HealthCheck(
@@ -225,7 +225,7 @@ def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config
             summary=f"dead workers: {', '.join(dead)}",
             observed=dead,
             threshold=ttl,
-            action="check worker logs, restart if stuck",
+            action="İşçi günlüklerini kontrol edin; takılı kalmışsa botu yeniden başlatın.",
         )
     if stale:
         return HealthCheck(
@@ -331,7 +331,7 @@ def _check_account(health_snapshot: dict[str, Any] | None, now: datetime, config
             summary=f"account/reconciliation stale {age:.0f}s ago",
             observed=age,
             threshold=max_age,
-            action="check broker connectivity",
+            action="Alpaca bağlantısını kontrol edin.",
         )
     return HealthCheck(
         code="account", status=HealthStatus.OK, summary=f"fresh {age:.0f}s ago", observed=age, threshold=max_age
@@ -365,7 +365,7 @@ def _check_reconciliation(health_snapshot: dict[str, Any] | None, now: datetime,
             summary=f"reconciliation stale {age:.0f}s ago",
             observed=age,
             threshold=threshold,
-            action="check broker / ledger locks",
+            action="Alpaca bağlantısını ve defter kilitlerini kontrol edin.",
         )
     # check if last failure exists via journal? Offline we can't; just OK if recent success
     return HealthCheck(
@@ -387,7 +387,7 @@ def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCh
             status=HealthStatus.DEGRADED,
             summary="signal adjustment stale — entries may be blocked",
             observed=sa,
-            action="check adjustment verifier logs",
+            action="Düzeltme doğrulayıcısının günlüklerini kontrol edin.",
         )
     if healthy is False:
         return HealthCheck(
@@ -420,7 +420,7 @@ def _check_market_halts(health_snapshot: dict[str, Any] | None) -> HealthCheck:
             status=HealthStatus.DEGRADED,
             summary="entries halted: " + ", ".join(f"{m}={reason}" for m, reason in sorted(halts.items())),
             observed=halts,
-            action="resolve the halt reason; reset_safety_lock verifies and clears it",
+            action="Durdurma nedenini giderin; ardından “Kilidi doğrula” ile kilit sistem kontrolünden sonra açılır.",
         )
     return HealthCheck(code="market_halts", status=HealthStatus.OK, summary="no market entry halts")
 
@@ -467,7 +467,7 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
             status=HealthStatus.BLOCKED,
             summary=f"entry latch active: {latch}",
             observed=latch,
-            action="risk latch blocks new entries; check drawdown/daily loss",
+            action="Risk kilidi yeni alımları engelliyor; zirveden düşüşü ve günlük zararı kontrol edin.",
         )
     # Fail closed: with no explicitly configured, readable ledger the persisted
     # incidents are unknown — never "no risk block". runtime_metrics(None) would
@@ -501,7 +501,7 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
                 status=HealthStatus.BLOCKED,
                 summary=f"{len(active)} active safety incidents",
                 observed=active[:3],
-                action="review safety_incidents table",
+                action="Güvenlik olayı kayıtlarını (safety_incidents) inceleyin.",
             )
     except Exception:
         pass
@@ -533,7 +533,7 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
                 status=HealthStatus.CRITICAL,
                 summary=f"{len(ambiguous)} ambiguous orders require manual intervention",
                 observed=len(ambiguous),
-                action="resolve ambiguous orders before trading resumes",
+                action="İşlem devam etmeden önce belirsiz emirleri çözümleyin.",
             )
         # submitting: an order that never got an ack and is older than 10 minutes
         now = datetime.now(UTC)
@@ -586,7 +586,7 @@ def _check_observability(journal_state: dict[str, Any] | None) -> HealthCheck:
             status=HealthStatus.DEGRADED,
             summary=f"journal failing (failed={failed} dropped={dropped}; last failure {last_failure.isoformat()})",
             observed=journal_state,
-            action="check data/runtime disk space and permissions; `parayabuck ops doctor`",
+            action="data/runtime klasörünün disk alanını ve izinlerini kontrol edin; `parayabuck ops doctor` çalıştırın.",
         )
     summary = (
         "journal healthy"
@@ -633,7 +633,7 @@ def _check_intent_watchdog(health_snapshot: dict[str, Any] | None) -> HealthChec
             status=HealthStatus.CRITICAL,
             summary=summary,
             observed=codes,
-            action="check the decision schedule and the engine journal for the named session",
+            action="Adı geçen oturum için karar takvimini ve motor günlüğünü kontrol edin.",
         )
     return HealthCheck(code="intent_watchdog", status=HealthStatus.DEGRADED, summary=summary, observed=codes)
 
@@ -687,7 +687,7 @@ def _check_signal_cross_check(health_snapshot: dict[str, Any] | None) -> HealthC
         status=HealthStatus.DEGRADED,
         summary=detail,
         observed={"session_date": session, "status": status},
-        action="confirm the IEX and SIP daily bars agree before relying on the position",
+        action="Pozisyona güvenmeden önce IEX ve SIP günlük mumlarının uyuştuğunu doğrulayın.",
     )
 
 

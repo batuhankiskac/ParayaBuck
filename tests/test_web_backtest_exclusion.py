@@ -55,7 +55,7 @@ def test_engine_rejected_while_backtest_running():
         bm.start({"strategy": "equity"})
         assert bm.is_running
         # Engine start must fail while backtest holds the lock/is_running
-        with pytest.raises(ValueError, match="Web backtest is still running"):
+        with pytest.raises(ValueError, match="Web backtesti hâlâ çalışıyor"):
             mgr.start_engine()
         # Wait for backtest to finish, then engine can start (or at least not blocked by backtest)
         release.set()
@@ -160,5 +160,5 @@ def test_engine_start_uses_its_bound_backtest_guard(monkeypatch):
     local._thread = AliveThread()
     local.state = "running"
 
-    with pytest.raises(ValueError, match="Web backtest is still running"):
+    with pytest.raises(ValueError, match="Web backtesti hâlâ çalışıyor"):
         mgr.start_engine()

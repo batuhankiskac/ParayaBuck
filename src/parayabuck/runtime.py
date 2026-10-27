@@ -3999,17 +3999,17 @@ class EngineRuntime:
                 len(bars),
             )
             return not self._defer_portfolio_bars(bars, breaker)
-        if breaker is not None or getattr(self, "_reconcile_failed", False) or self._reconcile_pending():
+        if breaker is not None or getattr(self, "_reconcile_failed", False):
             # A reconciliation-owned gate clears on the next clean reconcile:
-            # re-queue the session for the bounded retry.
-            reason = breaker or (
-                "reconciliation_failed"
-                if getattr(self, "_reconcile_failed", False)
-                else getattr(self, "_reconcile_pending_reason", None)
-            )
+            # re-queue the session for the bounded retry. The soft
+            # reconcile-pending latch does not park the session: the decision
+            # runs, its planned SELLs go out, and every BUY is held by the
+            # submit gate until the latch clears (see the decision loop below).
+            reason = breaker or "reconciliation_failed"
             return not self._defer_portfolio_bars(bars, str(reason or "reconciliation_pending"))
-        # Fail-closed: a pending reconciliation (material drift detected) blocks
-        # new portfolio orders until a verified ``reconcile()`` clears it.
+        # Fail-closed: a pending reconciliation (material drift detected) holds
+        # new BUY orders until a verified ``reconcile()`` clears it (the submit
+        # gate passed below holds them; planned SELLs still go out).
         # This is the engine-side complement to the broker's 7-category
         # ``reconcile()`` — holdings==broker is enforced before any new
         # decision can emit orders (restart scenarios A-G).
@@ -4209,24 +4209,23 @@ class EngineRuntime:
                                 portfolio_runtime.market.value,
                             )
                             continue
-                        if (
-                            live_breaker is not None
-                            or getattr(self, "_reconcile_failed", False)
-                            or self._reconcile_pending()
-                        ):
-                            live_reason = (
-                                live_breaker
-                                or ("reconciliation_failed" if getattr(self, "_reconcile_failed", False) else None)
-                                or getattr(self, "_reconcile_pending_reason", None)
-                                or "reconcile_pending"
-                            )
+                        if live_breaker is not None or getattr(self, "_reconcile_failed", False):
+                            live_reason = live_breaker or "reconciliation_failed"
                             if self._defer_portfolio_batch(relevant, portfolio_runtime.market, live_reason):
                                 deferred_any = True
                             continue
                         live_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
                         if live_latch is not None and (entry_latch is None or live_latch not in entry_latch.split("|")):
                             entry_latch = live_latch if entry_latch is None else f"{entry_latch}|{live_latch}"
-                        kwargs: dict[str, Any] = {"entry_latch": entry_latch}
+                        kwargs: dict[str, Any] = {
+                            "entry_latch": entry_latch,
+                            # Per-order re-read of the permission flags (BUYs only, plus
+                            # stop/breaker for everything): a halt or latch raised during
+                            # the broker calls holds the BUY before it is sent.
+                            "submit_gate": lambda order, market=portfolio_runtime.market: (
+                                self._advance_submit_block_reason(market, order)
+                            ),
+                        }
                         if stale_sell_only_account is not None:
                             kwargs["account"] = stale_sell_only_account
                         elif account is not None:
@@ -4680,7 +4679,13 @@ class EngineRuntime:
                 # other decision-path fetch in this file.
                 account = self.broker.account()
             with self._portfolio_lock:
-                result = portfolio_runtime.startup_catch_up(entry_latch=entry_latch, account=account)
+                result = portfolio_runtime.startup_catch_up(
+                    entry_latch=entry_latch,
+                    account=account,
+                    submit_gate=lambda order, market=portfolio_runtime.market: self._advance_submit_block_reason(
+                        market, order
+                    ),
+                )
             self._record_paper_decision_receipt(portfolio_runtime, result, account)
             self._emit_equity_daily_summary(portfolio_runtime, result, account)
             log.info(

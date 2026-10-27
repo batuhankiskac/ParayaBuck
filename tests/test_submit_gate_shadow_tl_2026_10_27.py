@@ -171,7 +171,8 @@ def test_closed_clock_queues_a_day_order_for_the_next_open(tmp_path) -> None:
     assert _status_of(repository, decision_id, "closed-aapl") == "submitted"
 
 
-def test_open_clock_submits_the_batch(tmp_path) -> None:
+def test_day_batch_submits_without_a_clock_read(tmp_path) -> None:
+    # A DAY batch is never refused by the clock, so the REST clock is not read at all.
     broker = _ClockBroker(OPEN_CLOCK)
     runtime, repository, decision_id = _runtime_with_decision(tmp_path, broker)
     sent_before = len(broker.submitted)
@@ -180,12 +181,12 @@ def test_open_clock_submits_the_batch(tmp_path) -> None:
     submitted = runtime._submit_orders((order,))
 
     assert len(submitted) == 1
-    assert broker.clock_calls >= 1
+    assert broker.clock_calls == 0
     assert [sent.client_order_id for sent in broker.submitted[sent_before:]] == ["open-aapl"]
     assert _status_of(repository, decision_id, "open-aapl") == "submitted"
 
 
-def test_clock_read_failure_submits_and_logs_a_warning(tmp_path, monkeypatch) -> None:
+def test_failing_clock_does_not_affect_a_day_batch(tmp_path, monkeypatch) -> None:
     warnings: list[str] = []
     monkeypatch.setattr(runtime_service.log, "warning", lambda message, *args, **kwargs: warnings.append(message))
     broker = _ClockBroker(RuntimeError("clock endpoint down"))
@@ -196,9 +197,10 @@ def test_clock_read_failure_submits_and_logs_a_warning(tmp_path, monkeypatch) ->
     submitted = runtime._submit_orders((order,))
 
     assert len(submitted) == 1
+    assert broker.clock_calls == 0
     assert [sent.client_order_id for sent in broker.submitted[sent_before:]] == ["exit-aapl"]
     assert _status_of(repository, decision_id, "exit-aapl") == "submitted"
-    assert any("clock" in message.lower() for message in warnings)
+    assert not any("clock" in message.lower() for message in warnings)
 
 
 def test_broker_without_clock_keeps_todays_behaviour(tmp_path) -> None:

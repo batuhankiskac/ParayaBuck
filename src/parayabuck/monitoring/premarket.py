@@ -1,19 +1,23 @@
 """Premarket broker probe: clock skew, session calendar and open-order parity.
 
-A pure, read-only check. It reads the broker clock and the broker's working
-orders, compares them with the local clock, the NYSE calendar and the local
-non-terminal client order ids, and reports every disagreement as a reason.
+The probe itself is read-only. It reads the broker clock and the broker's
+working orders, compares them with the local clock, the NYSE calendar and the
+local non-terminal client order ids, and reports every disagreement as a reason.
 
-It has no side effects and is not wired into the runtime here. It also gates
-nothing on market hours: the bot intentionally submits DAY market orders
-after the close and Alpaca queues them for the next session.
+The runtime wires it in: ``EngineRuntime._maybe_run_premarket_probe`` runs it
+once per NYSE session, 30 to 5 minutes before the open. A failure latches the
+reconcile-pending gate, so new BUY orders wait for a clean reconciliation.
+Exits are not blocked and nothing halts. The probe gates nothing on market
+hours: the bot intentionally submits DAY market orders after the close and
+Alpaca queues them for the next session.
 """
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from parayabuck.markets.nyse_calendar import NEW_YORK, calendar_degraded_reason
@@ -51,13 +55,20 @@ def premarket_probe(
         raise ValueError("premarket_probe needs a timezone-aware now")
     reasons: list[str] = []
 
+    started = time.monotonic()
     try:
         clock = broker.clock()
     except Exception as exc:
         return ProbeResult(ok=False, reasons=[f"broker clock unavailable: {type(exc).__name__}: {exc}"])
+    ended_at = now + timedelta(seconds=time.monotonic() - started)
 
-    skew = (clock.timestamp - now).total_seconds()
-    if abs(skew) > max_clock_skew_seconds:
+    # The broker stamped its clock somewhere inside the REST round trip, so the
+    # true skew lies between these two bounds. Only a skew that is over the
+    # limit on the whole interval is reported: a slow response is not skew.
+    skew_low = (clock.timestamp - ended_at).total_seconds()
+    skew_high = (clock.timestamp - now).total_seconds()
+    if skew_low > max_clock_skew_seconds or skew_high < -max_clock_skew_seconds:
+        skew = (skew_low + skew_high) / 2
         reasons.append(f"clock skew {skew:+.3f}s exceeds {max_clock_skew_seconds:.3f}s")
 
     if calendar_degraded is None:

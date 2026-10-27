@@ -302,9 +302,17 @@ stream is down. Three events set the reconcile-pending latch
 | `premarket_probe_failed` | the premarket probe found clock, calendar or open-order disagreement |
 | `account_fetch_failures` (breaker, not latch) | 5 account fetches in a row failed; the halt clears only through the operator reset, which reconciles first |
 
-While the latch is set, new buys and rejected-SELL retries wait, the same gate
-as `reconciliation_failed`. It clears only after a reconcile that started after
-the latch was set completes with no drift. The periodic 60 s reconcile retries
+While the latch is set, new BUYs wait and rejected-SELL retries wait, the same
+gate as `reconciliation_failed`. The session decision still runs, and its
+planned SELLs (exits and rebalance sells) go out; each BUY is held by the submit
+gate before it is sent, whether it comes from the decision or a deferred BUY release.
+The startup catch-up is not run while the latch is set: it stays `blocked:` as
+before and the operator reset retries it. A deferred BUY side of a mixed rebalance stays deferred
+and is released by a later advance once the latch clears. A BUY-only decision that
+is held is not sent; its rows are closed as canceled by the next broker lookup, and
+the session is not decided again. A hard halt (`CIRCUIT_BREAKER`) is
+different: it holds exits too, see `docs/operator_runbook.md`. The latch clears only after a reconcile that started
+after the latch was set completes with no drift. The periodic 60 s reconcile retries
 it, and it is not a halt: no operator action is needed.
 
 ### Decision retry (deferred session-close decisions)

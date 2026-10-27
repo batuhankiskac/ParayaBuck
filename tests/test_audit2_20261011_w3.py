@@ -509,11 +509,15 @@ def _live_decision(tmp_path: Path, working_remaining: float) -> _SimBroker:
 
 
 def test_live_cap_counts_working_buy_commitments(tmp_path: Path) -> None:
-    """Q5E-1: $20k managed + $5k working BUY under a $30k cap leaves $5k:
-    the $8k MSFT BUY is scaled to 50 shares, not admitted at 80."""
+    """Q5E-1: $20k managed + $5k working BUY under a $30k cap leaves $5k of
+    fill-basis room: the $8k MSFT BUY is scaled to 47 shares, not admitted at 80.
+
+    The cap is priced at the 3 % LIVE gap (worker C, audit wave 2): the room is
+    (30k - 20k - 5k x 1.03) / 1.03 = 4,709 reference dollars, so 47 shares.
+    """
     broker = _live_decision(tmp_path, 50)
     buys = [(order.symbol, order.quantity) for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
-    assert buys == [("MSFT", 50.0)]
+    assert buys == [("MSFT", 47.0)]
 
 
 def test_live_cap_exhausted_by_working_buy_suppresses_new_buy(tmp_path: Path) -> None:

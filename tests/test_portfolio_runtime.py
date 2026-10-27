@@ -1302,7 +1302,7 @@ def test_decision_path_drift_halts_with_resettable_reason() -> None:
     runtime._state = "running"
     runtime._portfolio_lock = threading.RLock()
 
-    def process_closed_bars(_bars, *, entry_latch=None):
+    def process_closed_bars(_bars, *, entry_latch=None, submit_gate=None):
         raise OwnershipDriftError("Ownership drift for QLD")
 
     drift_runtime = SimpleNamespace(
@@ -2861,7 +2861,7 @@ def test_engine_run_startup_catch_up_propagates_invariant_failure() -> None:
     runtime = _catch_up_engine()
 
     class _BoomCatchUp(_CatchUpRecorder):
-        def startup_catch_up(self, *, entry_latch=None, account=None):
+        def startup_catch_up(self, *, entry_latch=None, account=None, submit_gate=None):
             raise RuntimeError("catch-up boom")
 
     fake = _BoomCatchUp()
@@ -2918,7 +2918,9 @@ class _CatchUpRecorder:
     def adopt_authoritative_signal_history(self, provider, watermarks) -> int:
         return 0
 
-    def startup_catch_up(self, *, entry_latch: str | None = None, account: object = None) -> object:
+    def startup_catch_up(
+        self, *, entry_latch: str | None = None, account: object = None, submit_gate: object = None
+    ) -> object:
         self.calls.append(entry_latch)
         return SimpleNamespace(status=self.result_status, decision_id=self.result_decision_id)
 

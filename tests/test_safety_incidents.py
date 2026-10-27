@@ -190,9 +190,9 @@ def test_account_loop_survives_a_failed_drift_persist() -> None:
 
 
 def test_operator_reset_refuses_while_a_shared_worker_is_stopped(tmp_path: Path) -> None:
-    """decision_worker_crashed is resettable (for the restored incident after
-    a restart), but in the crashing process the decision loop has exited: a
-    reset would report "running" with nothing processing decisions."""
+    """A stopped account or trade-update worker still refuses the reset: a
+    reset would report "running" with nothing processing account or fills.
+    (A stopped decision worker is respawned by the reset instead, R9-9.)"""
     from parayabuck.runtime_health import WorkerHealth
 
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
@@ -203,8 +203,8 @@ def test_operator_reset_refuses_while_a_shared_worker_is_stopped(tmp_path: Path)
     runtime._running = True
     runtime._state = "halted"
     runtime._workers = {
-        "pb-decisions": WorkerHealth(now, alive=False),
-        "pb-account": WorkerHealth(now, alive=True),
+        "pb-decisions": WorkerHealth(now, alive=True),
+        "pb-account": WorkerHealth(now, alive=False),
         "pb-stocks": WorkerHealth(now, alive=False),
     }
     runtime._events = SimpleNamespace(empty=lambda: True)
@@ -213,7 +213,7 @@ def test_operator_reset_refuses_while_a_shared_worker_is_stopped(tmp_path: Path)
     runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
     runtime.ledger = ledger
 
-    with pytest.raises(ValueError, match="pb-decisions"):
+    with pytest.raises(ValueError, match="pb-account"):
         runtime.reset_safety_lock()
 
     assert runtime._circuit_breaker_reason == "decision_worker_crashed"
@@ -890,10 +890,13 @@ def test_reconcile_failures_still_raise_and_escalate_reconciliation_reasons(tmp_
     runtime._reconcile_safely()
     assert runtime._circuit_breaker_reason == "protection_failure"
 
-    runtime._circuit_breaker_reason = "reconciliation_failed"
+    # protection_failure needs its own operator reset: a clean reconcile clears
+    # only the reconciliation-owned reasons and leaves it in force (R9-3 keeps
+    # every raised reason in the active set).
     runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
     runtime._reconcile_safely()
-    assert runtime._circuit_breaker_reason is None
+    assert runtime._circuit_breaker_reason == "protection_failure"
+    assert runtime._active_halt_reasons() == ("protection_failure",)
     ledger.close()
 
 
